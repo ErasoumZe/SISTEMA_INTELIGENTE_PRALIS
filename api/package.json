@@ -1,0 +1,65 @@
+{
+  "name": "@padaria/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "development": "./src/server.ts",
+      "default": "./dist/server.js"
+    },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "development": "./src/app.ts",
+      "default": "./dist/app.js"
+    },
+    "./regras": {
+      "types": "./dist/regras.d.ts",
+      "development": "./src/regras.ts",
+      "default": "./dist/regras.js"
+    },
+    "./perfis": {
+      "types": "./dist/perfis.d.ts",
+      "development": "./src/perfis.ts",
+      "default": "./dist/perfis.js"
+    }
+  },
+  "scripts": {
+    "dev": "node --conditions=development --import tsx --watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.check.json --noEmit",
+    "start": "node dist/server.js",
+    "db:migrate": "better-auth migrate --config src/auth.ts --yes",
+    "db:migrate:dev": "node --conditions=development ../node_modules/@better-auth/cli/dist/index.mjs migrate --config src/auth.ts --yes",
+    "db:generate": "better-auth generate --config src/auth.ts --output ../db/migrations/better-auth.sql --yes",
+    "db:push": "npm run db:push --workspace @padaria/db",
+    "db:generate:drizzle": "npm run db:generate --workspace @padaria/db",
+    "db:migrate:drizzle": "npm run db:migrate --workspace @padaria/db",
+    "db:setup": "npm run setup:dev --workspace @padaria/db",
+    "db:seed": "npm run seed:dev --workspace @padaria/db",
+    "api:dev:prepare": "npm run db:setup && npm run db:seed",
+    "api:prod:migrate": "npm run db:migrate && npm run db:migrate:drizzle"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.6.20",
+    "@fastify/cors": "^11.1.0",
+    "@padaria/db": "0.1.0",
+    "@padaria/shared": "0.1.0",
+    "better-auth": "^1.6.11",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.6.2",
+    "pg": "^8.16.3",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

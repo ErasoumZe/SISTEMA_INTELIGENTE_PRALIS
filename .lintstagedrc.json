@@ -1,0 +1,4 @@
+{
+  "*.{ts,vue,js,mjs,cjs,json,css,md,yml,yaml}": ["prettier --write --ignore-unknown"],
+  "*.{ts,vue,js,mjs,cjs}": ["eslint"]
+}

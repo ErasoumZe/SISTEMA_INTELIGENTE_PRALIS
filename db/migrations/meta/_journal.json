@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1782656024010,
+      "tag": "0000_salty_alex_wilder",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782669600000,
+      "tag": "0001_permissoes_por_cargo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782673200000,
+      "tag": "0002_roles_conta",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782676800000,
+      "tag": "0003_tema_por_empresa",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782680400000,
+      "tag": "0004_lacres_por_empresa",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782684000000,
+      "tag": "0005_uuidv7_ids",
+      "breakpoints": true
+    }
+  ]
+}

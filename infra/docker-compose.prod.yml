@@ -1,0 +1,40 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    command: ["npm", "run", "api:prod:migrate", "--workspace", "@padaria/api"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL obrigatorio}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET obrigatorio}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL obrigatorio}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET obrigatorio}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
+      PORT: ${API_PORT:-4100}
+      HOST: 0.0.0.0
+    ports:
+      - "${API_PORT:-4100}:${API_PORT:-4100}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:${API_PORT:-4100}/health'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30

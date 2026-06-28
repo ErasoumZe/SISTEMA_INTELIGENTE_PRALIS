@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+.nuxt
+.output
+.svelte-kit
+coverage
+web/build
+package-lock.json
+

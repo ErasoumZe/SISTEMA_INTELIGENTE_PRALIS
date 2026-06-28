@@ -1,0 +1,1 @@
+import{aN as a,bw as o,a0 as e,aK as c,bt as l}from"./DJJ4xheo.js";function f(n){e===null&&a(),c&&e.l!==null?u(e).m.push(n):o(()=>{const t=l(n);if(typeof t=="function")return t})}function u(n){var t=n.l;return t.u??={a:[],b:[],m:[]}}export{f as o};

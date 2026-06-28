@@ -1,0 +1,82 @@
+{
+  "name": "@padaria/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./app": {
+      "types": "./dist/app/index.d.ts",
+      "development": "./src/app/index.ts",
+      "default": "./dist/app/index.js"
+    },
+    "./autenticacao": {
+      "types": "./dist/autenticacao/index.d.ts",
+      "development": "./src/autenticacao/index.ts",
+      "default": "./dist/autenticacao/index.js"
+    },
+    "./caixa": {
+      "types": "./dist/caixa/index.d.ts",
+      "development": "./src/caixa/index.ts",
+      "default": "./dist/caixa/index.js"
+    },
+    "./cadastros": {
+      "types": "./dist/cadastros/index.d.ts",
+      "development": "./src/cadastros/index.ts",
+      "default": "./dist/cadastros/index.js"
+    },
+    "./catalogos": {
+      "types": "./dist/catalogos/index.d.ts",
+      "development": "./src/catalogos/index.ts",
+      "default": "./dist/catalogos/index.js"
+    },
+    "./colaboradores": {
+      "types": "./dist/colaboradores/index.d.ts",
+      "development": "./src/colaboradores/index.ts",
+      "default": "./dist/colaboradores/index.js"
+    },
+    "./copia": {
+      "types": "./dist/copia/index.d.ts",
+      "development": "./src/copia/index.ts",
+      "default": "./dist/copia/index.js"
+    },
+    "./malotes": {
+      "types": "./dist/malotes/index.d.ts",
+      "development": "./src/malotes/index.ts",
+      "default": "./dist/malotes/index.js"
+    },
+    "./movimentacao": {
+      "types": "./dist/movimentacao/index.d.ts",
+      "development": "./src/movimentacao/index.ts",
+      "default": "./dist/movimentacao/index.js"
+    },
+    "./relatorios": {
+      "types": "./dist/relatorios/index.d.ts",
+      "development": "./src/relatorios/index.ts",
+      "default": "./dist/relatorios/index.js"
+    },
+    "./saude": {
+      "types": "./dist/saude/index.d.ts",
+      "development": "./src/saude/index.ts",
+      "default": "./dist/saude/index.js"
+    },
+    "./tema": {
+      "types": "./dist/tema/index.d.ts",
+      "development": "./src/tema/index.ts",
+      "default": "./dist/tema/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  }
+}

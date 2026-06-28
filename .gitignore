@@ -1,0 +1,11 @@
+node_modules
+dist
+.svelte-kit
+.nuxt
+.output
+.vite
+coverage
+.env
+*.log
+playwright-report
+test-results

@@ -1,0 +1,73 @@
+{
+  "name": "@padaria/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schema": {
+      "types": "./dist/src/schema/index.d.ts",
+      "development": "./src/schema/index.ts",
+      "default": "./dist/src/schema/index.js"
+    },
+    "./schema/autenticacao": {
+      "types": "./dist/src/schema/autenticacao/autenticacao.schema.d.ts",
+      "development": "./src/schema/autenticacao/autenticacao.schema.ts",
+      "default": "./dist/src/schema/autenticacao/autenticacao.schema.js"
+    },
+    "./schema/cadastro": {
+      "types": "./dist/src/schema/cadastro/cadastro.schema.d.ts",
+      "development": "./src/schema/cadastro/cadastro.schema.ts",
+      "default": "./dist/src/schema/cadastro/cadastro.schema.js"
+    },
+    "./schema/caixa": {
+      "types": "./dist/src/schema/caixa/caixa.schema.d.ts",
+      "development": "./src/schema/caixa/caixa.schema.ts",
+      "default": "./dist/src/schema/caixa/caixa.schema.js"
+    },
+    "./schema/movimentacao": {
+      "types": "./dist/src/schema/movimentacao/movimentacao.schema.d.ts",
+      "development": "./src/schema/movimentacao/movimentacao.schema.ts",
+      "default": "./dist/src/schema/movimentacao/movimentacao.schema.js"
+    },
+    "./schema/tema": {
+      "types": "./dist/src/schema/tema/tema.schema.d.ts",
+      "development": "./src/schema/tema/tema.schema.ts",
+      "default": "./dist/src/schema/tema/tema.schema.js"
+    },
+    "./schema/venda": {
+      "types": "./dist/src/schema/venda/venda.schema.d.ts",
+      "development": "./src/schema/venda/venda.schema.ts",
+      "default": "./dist/src/schema/venda/venda.schema.js"
+    },
+    "./schema/*": {
+      "types": "./dist/src/schema/*.d.ts",
+      "development": "./src/schema/*.ts",
+      "default": "./dist/src/schema/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.check.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:push:force": "drizzle-kit push --force",
+    "db:migrate": "drizzle-kit migrate",
+    "seed:dev": "tsx --conditions=development seed.ts",
+    "setup": "drizzle-kit push",
+    "setup:dev": "node setup-dev.mjs"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.6.20",
+    "@padaria/shared": "0.1.0",
+    "better-auth": "^1.6.11",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.6",
+    "drizzle-kit": "^0.31.8",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": "..",
+    "paths": {
+      "@padaria/api/regras": ["api/src/regras.ts"],
+      "@padaria/api/*": ["api/src/*.ts"],
+      "@padaria/shared": ["shared/src/index.ts"],
+      "@padaria/shared/*": ["shared/src/*/index.ts"],
+      "@padaria/db/schema": ["db/src/schema/index.ts"],
+      "@padaria/db/schema/autenticacao": ["db/src/schema/autenticacao/autenticacao.schema.ts"],
+      "@padaria/db/schema/cadastro": ["db/src/schema/cadastro/cadastro.schema.ts"],
+      "@padaria/db/schema/caixa": ["db/src/schema/caixa/caixa.schema.ts"],
+      "@padaria/db/schema/movimentacao": ["db/src/schema/movimentacao/movimentacao.schema.ts"],
+      "@padaria/db/schema/tema": ["db/src/schema/tema/tema.schema.ts"],
+      "@padaria/db/schema/venda": ["db/src/schema/venda/venda.schema.ts"]
+    }
+  },
+  "include": ["**/*.test.ts"]
+}
