@@ -4,7 +4,8 @@ import { criarPerfil, requisitar, usuarioId } from "./_helpers.js";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  buscarPerfilUsuario: vi.fn()
+  buscarPerfilUsuario: vi.fn(),
+  listarEmpresas: vi.fn()
 }));
 
 vi.mock("../../api/src/auth.js", () => ({
@@ -18,6 +19,10 @@ vi.mock("../../api/src/auth.js", () => ({
 
 vi.mock("../../api/src/perfis.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
+}));
+
+vi.mock("../../api/src/catalogos/catalogos.service.js", () => ({
+  listarEmpresas: mocks.listarEmpresas
 }));
 
 describe("sessao", () => {
@@ -35,7 +40,8 @@ describe("sessao", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["entradas"]));
+    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["entradas_criar"]));
+    mocks.listarEmpresas.mockResolvedValue([]);
   });
 
   it("Deve_Retornar401_Quando_ConsultarMeSemSessao", async () => {
@@ -60,7 +66,7 @@ describe("sessao", () => {
       ok: true,
       data: {
         user: { id: usuarioId },
-        perfil: { usuarioId, permissoes: ["entradas"] }
+        perfil: { usuarioId, permissoes: ["entradas_criar"] }
       }
     });
   });
@@ -98,4 +104,5 @@ describe("sessao", () => {
     expect(resposta.json()).toMatchObject({ ok: true, data: { perfil: { usuarioId } } });
   });
 });
+
 

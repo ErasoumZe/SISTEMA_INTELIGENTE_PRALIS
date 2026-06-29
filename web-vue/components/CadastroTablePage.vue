@@ -41,7 +41,7 @@ const emit = defineEmits<{
 }>();
 
 const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
-const podeEditar = computed(() => props.tela !== "permissoes");
+const podeEditar = computed(() => true);
 const podeCopia = computed(() => !["permissoes", "malotes"].includes(props.tela));
 const acoesExtras = computed(() => (props.tela === "malotes" ? [{ label: "Editar", event: "maloteEditar" }] : []));
 </script>

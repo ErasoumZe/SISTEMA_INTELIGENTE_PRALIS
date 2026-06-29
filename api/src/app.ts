@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 import { ZodError } from "zod";
@@ -20,6 +21,7 @@ import { registrarRotasSessao } from "./sessao/sessao.controller.js";
 import { registrarRotasTema } from "./tema/tema.controller.js";
 import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
+import { registrarRotasVendasComprovantes } from "./vendas-comprovantes/vendas-comprovantes.controller.js";
 import { erro } from "./respostas.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -49,11 +51,20 @@ export async function buildApp(): Promise<FastifyInstance> {
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
   });
+  await app.register(multipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024,
+      files: 1,
+      fields: 10,
+      parts: 12
+    }
+  });
 
   await registrarRotasSaude(app);
   await registrarRotasSessao(app);
   await registrarRotasTema(app);
   await registrarRotasVendas(app);
+  await registrarRotasVendasComprovantes(app);
   await registrarRotasDespesas(app);
   await registrarRotasMercadorias(app);
   await registrarRotasRetiradas(app);

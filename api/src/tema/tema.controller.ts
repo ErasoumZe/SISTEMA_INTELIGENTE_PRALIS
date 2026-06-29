@@ -14,7 +14,7 @@ export async function registrarRotasTema(app: AplicacaoFastify) {
     return ok(await carregarTema(query));
   });
 
-  app.put("/api/tema", { preHandler: exigirPermissao("configurar_tema") }, async (request, reply) => {
+  app.put("/api/tema", { preHandler: exigirPermissao("aparencia_editar") }, async (request, reply) => {
     const body = temaPayloadSchema.parse(request.body);
     if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");

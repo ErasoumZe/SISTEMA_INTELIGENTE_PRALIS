@@ -1,0 +1,13 @@
+{
+  "name": "@padaria/integracoes-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:teste_integracao": "node --env-file=.env.desenvolvimento src/dev-teste-integracao.js",
+    "check": "node --check src/api-client.js && node --check src/creare-repository.js && node --check src/database.js && node --check src/dev-teste-integracao.js && node --check src/env.js && node --check src/payload.js && node --check src/query-loader.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.15.3"
+  }
+}

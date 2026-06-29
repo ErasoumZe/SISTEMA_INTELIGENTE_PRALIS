@@ -71,7 +71,10 @@ describe("rotas operacionais por entidade", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
     mocks.buscarPerfilUsuario.mockResolvedValue(
-      criarPerfil(["entradas", "despesas", "mercadorias", "retiradas", "transferencias"], { empresaIds: [empresaA] })
+      criarPerfil(
+        ["entradas_visualizar", "entradas_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar", "transferencias_criar"],
+        { empresaIds: [empresaA] }
+      )
     );
     mocks.listarVendas.mockResolvedValue([]);
     mocks.criarVenda.mockResolvedValue({ id: "venda-1", computar: true });
@@ -116,3 +119,4 @@ describe("rotas operacionais por entidade", () => {
     expect(mocks.criarDespesa).toHaveBeenCalled();
   });
 });
+

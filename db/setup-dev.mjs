@@ -97,8 +97,8 @@ async function aplicarMigracaoLegadaSemPrompt() {
         if to_regclass('public.cargos') is not null and to_regclass('public.permissoes') is not null then
           create table if not exists permissoes_cargos (
             cargo_id uuid not null references cargos(id) on delete cascade,
-            permissao_codigo text not null references permissoes(codigo) on delete cascade,
-            constraint permissoes_cargos_cargo_id_permissao_codigo_pk primary key (cargo_id, permissao_codigo)
+            regras jsonb not null default '{}'::jsonb,
+            constraint permissoes_cargos_cargo_id_pk primary key (cargo_id)
           );
         end if;
 

@@ -29,7 +29,7 @@ export async function listarMercadorias(
 }
 
 export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUsuario): Promise<MercadoriaCriada> {
-  exigirPermissaoLancamento(perfil.permissoes, "mercadorias");
+  exigirPermissaoLancamento(perfil.permissoes, "mercadorias_criar");
   validarMercadoria(dados);
   const referenciaInvalida = await validarReferenciasMercadoria(dados);
   if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

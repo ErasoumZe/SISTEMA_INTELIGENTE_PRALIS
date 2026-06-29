@@ -71,7 +71,7 @@ const perfil: PerfilUsuario = {
   cargoIds: [],
   cargos: [],
   role: "admin",
-  permissoes: ["entradas", "despesas", "mercadorias", "retiradas", "transferencias"]
+  permissoes: ["entradas_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar", "transferencias_criar"]
 };
 
 beforeEach(() => {
@@ -125,7 +125,7 @@ describe("services operacionais por entidade", () => {
           computar: true,
           itensDespesa: [{ descricao: "Item", valor: 1 }]
         },
-        { ...perfil, permissoes: ["entradas"] }
+        { ...perfil, permissoes: ["entradas_criar"] }
       )
     ).rejects.toThrow("Permissao insuficiente");
   });
@@ -194,3 +194,4 @@ describe("services operacionais por entidade", () => {
     await expect(listarDespesas({}, [])).resolves.toEqual([]);
   });
 });
+

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, mensagemTelaFutura, rotaTela } from "~/utils/domain";
+import { itemPorTela, rotaTela } from "~/utils/domain";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -11,7 +11,7 @@ const props = defineProps<{
   empresaId: string;
   caixaStatus?: CaixaStatus | null;
   telasDesabilitadas?: string[];
-  telasFuturas?: string[];
+  motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
   saindo: boolean;
 }>();
@@ -32,13 +32,12 @@ const telaAtual = computed(() => itemPorTela[props.telaAtiva] ?? props.telas.fin
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
 const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
 const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
-const telasFuturasSet = computed(() => new Set(props.telasFuturas ?? []));
 const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
 const drawerToggleIcon = computed(() => (viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"));
 
 function textoTooltipTela(telaId: string) {
-  return telasFuturasSet.value.has(telaId) ? mensagemTelaFutura : "E necessario abrir caixa para acessar esta tela.";
+  return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
 }
 
 function alternarDrawer() {

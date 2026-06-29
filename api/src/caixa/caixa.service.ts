@@ -96,7 +96,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
 
 function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
   return (
-    perfil.permissoes.includes("gerenciar_caixas") ||
+    perfil.permissoes.includes("caixas_gerenciar") ||
     caixa.usuarioId === perfil.usuarioId ||
     caixa.usuarioCaixaId === perfil.usuarioId
   );

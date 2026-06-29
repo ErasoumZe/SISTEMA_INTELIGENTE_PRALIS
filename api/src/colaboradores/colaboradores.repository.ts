@@ -5,7 +5,6 @@ import {
   colaboradoresCargos,
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
-  feriados,
   setores
 } from "@padaria/db/schema/cadastro";
 import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
@@ -276,29 +275,4 @@ export async function criarFaltaJustificadaRepository(input: {
     })
     .returning({ id: colaboradoresFaltasJustificadas.id });
   return criada;
-}
-
-export async function listarFeriadosRepository() {
-  return banco
-    .select({
-      id: feriados.id,
-      empresaId: feriados.empresaId,
-      nome: feriados.nome,
-      dia: feriados.dia,
-      mes: feriados.mes,
-      ano: feriados.ano
-    })
-    .from(feriados)
-    .orderBy(asc(feriados.mes), asc(feriados.dia), asc(feriados.ano), asc(feriados.nome));
-}
-
-export async function criarFeriadoRepository(input: {
-  empresaId: string;
-  nome: string;
-  dia: number;
-  mes: number;
-  ano: number | null;
-}) {
-  const [criado] = await banco.insert(feriados).values(input).onConflictDoNothing().returning({ id: feriados.id });
-  return criado ?? null;
 }

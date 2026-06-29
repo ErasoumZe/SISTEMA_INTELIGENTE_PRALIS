@@ -49,9 +49,6 @@ function payloadVenda() {
       idCliente: "CLI-1",
       nomeCliente: "Cliente",
       documentoCliente: "123",
-      idVendedor: "VEN-1",
-      nomeVendedor: "Vendedor",
-      documentoVendedor: "456",
       dataHoraVenda: "2026-06-28T10:00:00.000Z",
       valorOriginal: 100,
       desconto: 0,
@@ -85,7 +82,7 @@ function payloadVenda() {
   };
 }
 
-describe("integracoes", () => {
+describe("integracoes_visualizar", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
@@ -100,7 +97,7 @@ describe("integracoes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["integracoes"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["integracoes_visualizar"], { empresaIds: [empresaA] }));
     mocks.listarIntegracoes.mockResolvedValue({ integracoes: [], chaves: [] });
     mocks.receberVendaIntegracao.mockResolvedValue({
       status: "criado",
@@ -115,7 +112,7 @@ describe("integracoes", () => {
     const resposta = await requisitar(app, { method: "GET", url: `/api/integracoes?empresaId=${empresaA}` });
 
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "integracoes" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "integracoes_visualizar" } });
     expect(mocks.listarIntegracoes).not.toHaveBeenCalled();
   });
 
@@ -162,5 +159,6 @@ describe("integracoes", () => {
     expect(resposta.json()).toMatchObject({ title: "Chave de integracao invalida", status: resposta.statusCode });
   });
 });
+
 
 

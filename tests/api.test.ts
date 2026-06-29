@@ -1,22 +1,12 @@
-import { APP_NAME } from "@padaria/shared";
+import { APP_NAME, temaPadraoAplicacao, type ConfiguracaoAparenciaEmpresa } from "@padaria/shared";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 interface TemaLinhaMock {
-  empresaId: string;
-  tela: string;
-  corPrimaria: string;
-  corSecundaria: string;
-  corFundo: string;
-  corCartao: string;
-  corSucesso: string;
-  corAviso: string;
-  corErro: string;
-  atualizadoPor: string | null;
-  atualizadoEm: Date;
+  configuracoesAparencia: ConfiguracaoAparenciaEmpresa;
 }
 
-type TemaSalvoMock = Omit<TemaLinhaMock, "atualizadoEm">;
+type TemaSalvoMock = ConfiguracaoAparenciaEmpresa;
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -95,6 +85,16 @@ vi.mock("../api/src/banco/conexao.js", () => ({
         };
       })
     })),
+    update: vi.fn(() => ({
+      set: vi.fn((payload: { configuracoesAparencia: ConfiguracaoAparenciaEmpresa }) => {
+        mocks.temaSalvo = payload.configuracoesAparencia;
+        return {
+          where: vi.fn(() => ({
+            returning: vi.fn(() => Promise.resolve([{ configuracoesAparencia: payload.configuracoesAparencia }]))
+          }))
+        };
+      })
+    })),
     transaction: vi.fn()
   },
   executarEmTransacao: vi.fn((callback: (tx: object) => unknown) => Promise.resolve(callback({})))
@@ -131,7 +131,7 @@ beforeEach(() => {
     cargoIds: ["cargo-tesouraria"],
     cargos: [{ id: "cargo-tesouraria", nome: "Tesouraria" }],
     role: "usuario_comum",
-    permissoes: ["cadastro_malotes", "transferencias"]
+    permissoes: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_visualizar", "relatorio_vendas_visualizar"]
   });
   mocks.criarMaloteRepository.mockResolvedValue({ id: null });
   mocks.buscarLacrePorEmpresaRepository.mockResolvedValue(null);
@@ -339,7 +339,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "despesas" } });
+    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "despesas_criar" } });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -366,7 +366,7 @@ describe("api", () => {
       cargoIds: ["cargo-gerencia"],
       cargos: [{ id: "cargo-gerencia", nome: "Gerencia" }],
       role: "usuario_comum",
-      permissoes: ["transferencias"]
+      permissoes: ["transferencias_criar"]
     });
     mocks.listarContasRepository.mockResolvedValueOnce([
       { id: "conta-a", empresaId: empresaA, nome: "Conta A" },
@@ -394,7 +394,7 @@ describe("api", () => {
       cargoIds: ["cargo-diretor"],
       cargos: [{ id: "cargo-diretor", nome: "Diretor Geral" }],
       role: "usuario_comum",
-      permissoes: ["cadastro_empresas", "cadastro_usuarios"]
+      permissoes: ["cadastro_empresas_criar", "cadastro_usuarios_criar"]
     });
     mocks.listarEmpresasRepository.mockResolvedValueOnce([
       { id: empresaA, nome: "Empresa A" },
@@ -414,17 +414,23 @@ describe("api", () => {
     mocks.temaSelectResults = [
       [
         {
-          empresaId: empresaA,
-          tela: "caixa",
-          corPrimaria: "#111111",
-          corSecundaria: "#222222",
-          corFundo: "#333333",
-          corCartao: "#444444",
-          corSucesso: "#555555",
-          corAviso: "#666666",
-          corErro: "#777777",
-          atualizadoPor: null,
-          atualizadoEm: new Date()
+          configuracoesAparencia: {
+            padrao: temaPadraoAplicacao,
+            especifico: [
+              {
+                pagina: "caixa",
+                propriedades: {
+                  corPrimaria: "#111111",
+                  corSecundaria: "#222222",
+                  corFundo: "#333333",
+                  corCartao: "#444444",
+                  corSucesso: "#555555",
+                  corAviso: "#666666",
+                  corErro: "#777777"
+                }
+              }
+            ]
+          }
         }
       ]
     ];
@@ -451,20 +457,12 @@ describe("api", () => {
 
   it("falls back to default theme when screen theme does not exist", async () => {
     mocks.temaSelectResults = [
-      [],
       [
         {
-          empresaId: empresaA,
-          tela: "padrao",
-          corPrimaria: "#6d28d9",
-          corSecundaria: "#0891b2",
-          corFundo: "#eaf1f9",
-          corCartao: "#ffffff",
-          corSucesso: "#16a34a",
-          corAviso: "#f59e0b",
-          corErro: "#ef4444",
-          atualizadoPor: null,
-          atualizadoEm: new Date()
+          configuracoesAparencia: {
+            padrao: temaPadraoAplicacao,
+            especifico: []
+          }
         }
       ]
     ];
@@ -496,7 +494,7 @@ describe("api", () => {
       cargoIds: ["cargo-diretor"],
       cargos: [{ id: "cargo-diretor", nome: "Diretor Geral" }],
       role: "usuario_comum",
-      permissoes: ["configurar_tema"]
+      permissoes: ["aparencia_editar"]
     });
 
     const payload = {
@@ -519,7 +517,18 @@ describe("api", () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.body).toBe("");
-    expect(mocks.temaSalvo).toMatchObject({ ...payload, atualizadoPor: "usuario-teste" });
+    expect(mocks.temaSalvo).toMatchObject({
+      padrao: {
+        corPrimaria: "#111111",
+        corSecundaria: "#222222",
+        corFundo: "#333333",
+        corCartao: "#444444",
+        corSucesso: "#555555",
+        corAviso: "#666666",
+        corErro: "#777777"
+      },
+      especifico: []
+    });
   });
 
   it("blocks theme update without permission", async () => {
@@ -540,8 +549,9 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "configurar_tema" } });
+    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "aparencia_editar" } });
   });
 });
+
 
 

@@ -95,3 +95,4 @@ describe("copia service", () => {
     ).resolves.toEqual({ tipo: "contas", inseridos: 2 });
   });
 });
+

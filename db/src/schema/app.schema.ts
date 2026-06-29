@@ -16,8 +16,9 @@ import {
   uuid,
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
-import type { Permissao } from "@padaria/shared";
+import type { Permissao, RegrasPermissoes } from "@padaria/shared";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
+import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -30,6 +31,13 @@ const valorMonetario = (nome: string) => numeric(nome, { precision: 14, scale: 2
 export const empresas = pgTable("empresas", {
   id: idUuid,
   nome: text("nome").notNull(),
+  cnpj: text("cnpj"),
+  configuracoesAparencia: jsonb("configuracoes_aparencia")
+    .$type<ConfiguracaoAparenciaEmpresa>()
+    .notNull()
+    .default(
+      sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
+    ),
   criadoEm
 });
 
@@ -59,12 +67,9 @@ export const permissoesUsuarios = pgTable(
     usuarioId: text("usuario_id")
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
-    permissaoCodigo: text("permissao_codigo")
-      .$type<Permissao>()
-      .notNull()
-      .references(() => permissoesTabela.codigo, { onDelete: "cascade" })
+    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
   },
-  (table) => [primaryKey({ columns: [table.usuarioId, table.permissaoCodigo] })]
+  (table) => [primaryKey({ columns: [table.usuarioId] })]
 );
 
 export const usuariosEmpresas = pgTable(
@@ -77,41 +82,6 @@ export const usuariosEmpresas = pgTable(
     criadoEm
   },
   (table) => [primaryKey({ columns: [table.usuarioId, table.empresaId] })]
-);
-
-export const configuracoesTema = pgTable(
-  "configuracoes_tema",
-  {
-    id: boolean("id").primaryKey().default(true),
-    corPrimaria: text("cor_primaria").notNull().default("#6d28d9"),
-    corSecundaria: text("cor_secundaria").notNull().default("#0891b2"),
-    corFundo: text("cor_fundo").notNull().default("#eaf1f9"),
-    corCartao: text("cor_cartao").notNull().default("#ffffff"),
-    corSucesso: text("cor_sucesso").notNull().default("#16a34a"),
-    corAviso: text("cor_aviso").notNull().default("#f59e0b"),
-    corErro: text("cor_erro").notNull().default("#ef4444"),
-    atualizadoPor: text("atualizado_por"),
-    atualizadoEm
-  },
-  (table) => [check("configuracoes_tema_unica", sql`${table.id}`)]
-);
-
-export const configuracoesTemasTelas = pgTable(
-  "configuracoes_temas_telas",
-  {
-    empresaId,
-    tela: text("tela").notNull(),
-    corPrimaria: text("cor_primaria").notNull().default("#6d28d9"),
-    corSecundaria: text("cor_secundaria").notNull().default("#0891b2"),
-    corFundo: text("cor_fundo").notNull().default("#eaf1f9"),
-    corCartao: text("cor_cartao").notNull().default("#ffffff"),
-    corSucesso: text("cor_sucesso").notNull().default("#16a34a"),
-    corAviso: text("cor_aviso").notNull().default("#f59e0b"),
-    corErro: text("cor_erro").notNull().default("#ef4444"),
-    atualizadoPor: text("atualizado_por"),
-    atualizadoEm
-  },
-  (table) => [primaryKey({ columns: [table.empresaId, table.tela] })]
 );
 
 export const contas = pgTable("contas", {
@@ -177,6 +147,16 @@ export const clientes = pgTable(
     empresaId,
     nome: text("nome").notNull(),
     documento: text("documento"),
+    dataNascimento: text("data_nascimento"),
+    whatsapp: text("whatsapp"),
+    email: text("email"),
+    cep: text("cep"),
+    rua: text("rua"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    cidade: text("cidade"),
+    estado: text("estado"),
     criadoEm,
     atualizadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
@@ -249,12 +229,9 @@ export const permissoesCargos = pgTable(
     cargoId: uuid("cargo_id")
       .notNull()
       .references(() => cargos.id, { onDelete: "cascade" }),
-    permissaoCodigo: text("permissao_codigo")
-      .$type<Permissao>()
-      .notNull()
-      .references(() => permissoesTabela.codigo, { onDelete: "cascade" })
+    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
   },
-  (table) => [primaryKey({ columns: [table.cargoId, table.permissaoCodigo] })]
+  (table) => [primaryKey({ columns: [table.cargoId] })]
 );
 
 export const gruposDespesas = pgTable("grupos_despesas", {
@@ -282,6 +259,16 @@ export const gruposRetiradas = pgTable("grupos_retiradas", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposRetiradas.id),
+  criadoEm,
+  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+  idImportado: uuid("id_importado")
+});
+
+export const gruposVendas = pgTable("grupos_vendas", {
+  id: idUuid,
+  empresaId,
+  nome: text("nome").notNull(),
+  grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposVendas.id),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -377,46 +364,15 @@ export const colaboradoresFaltasJustificadas = pgTable(
   (table) => [check("colaboradores_faltas_justificadas_fim_check", sql`${table.fim} > ${table.inicio}`)]
 );
 
-export const feriados = pgTable(
-  "feriados",
-  {
-    id: idUuid,
-    empresaId,
-    nome: text("nome").notNull(),
-    dia: integer("dia").notNull(),
-    mes: integer("mes").notNull(),
-    ano: integer("ano"),
-    criadoEm,
-    atualizadoEm,
-    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-    idImportado: uuid("id_importado")
-  },
-  (table) => [
-    check("feriados_dia_check", sql`${table.dia} between 1 and 31`),
-    check("feriados_mes_check", sql`${table.mes} between 1 and 12`),
-    check("feriados_ano_check", sql`${table.ano} between 1900 and 9999`),
-    uniqueIndex("feriados_empresa_data_unica_idx").on(
-      table.empresaId,
-      table.dia,
-      table.mes,
-      sql`coalesce(${table.ano}, 0)`,
-      sql`lower(${table.nome})`
-    )
-  ]
-);
-
 export const permissoesSetores = pgTable(
   "permissoes_setores",
   {
     setorId: uuid("setor_id")
       .notNull()
       .references(() => setores.id, { onDelete: "cascade" }),
-    permissaoCodigo: text("permissao_codigo")
-      .$type<Permissao>()
-      .notNull()
-      .references(() => permissoesTabela.codigo, { onDelete: "cascade" })
+    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
   },
-  (table) => [primaryKey({ columns: [table.setorId, table.permissaoCodigo] })]
+  (table) => [primaryKey({ columns: [table.setorId] })]
 );
 
 export const produtos = pgTable("produtos", {
@@ -424,13 +380,37 @@ export const produtos = pgTable("produtos", {
   empresaId,
   grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
   unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
+  unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
   codigo: text("codigo"),
   codigoBarras: text("codigo_barras"),
   descricao: text("descricao").notNull(),
+  marca: text("marca"),
+  quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+export const produtosConversoes = pgTable(
+  "produtos_conversoes",
+  {
+    id: idUuid,
+    produtoId: uuid("produto_id")
+      .notNull()
+      .references(() => produtos.id, { onDelete: "cascade" }),
+    unidadeMedidaId: uuid("unidade_medida_id")
+      .notNull()
+      .references(() => unidadesMedida.id),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    unidadesIndividuais: numeric("unidades_individuais", { precision: 14, scale: 3 }).notNull(),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("produtos_conversoes_quantidade_check", sql`${table.quantidade} > 0`),
+    check("produtos_conversoes_unidades_individuais_check", sql`${table.unidadesIndividuais} > 0`)
+  ]
+);
 
 export const integracoesChaves = pgTable(
   "integracoes_chaves",
@@ -446,7 +426,7 @@ export const integracoesChaves = pgTable(
   },
   (table) => [
     unique("integracoes_chaves_codigo_unico").on(table.codigo),
-    check("integracoes_chaves_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`)
+    check("integracoes_chaves_tipo_check", sql`${table.tipo} in ('vendas')`)
   ]
 );
 
@@ -463,10 +443,10 @@ export const integracoesCamposConfig = pgTable(
   },
   (table) => [
     unique("integracoes_campos_config_empresa_tipo_campo_unico").on(table.empresaId, table.tipo, table.campo),
-    check("integracoes_campos_config_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check("integracoes_campos_config_tipo_check", sql`${table.tipo} in ('vendas')`),
     check(
       "integracoes_campos_config_campo_check",
-      sql`${table.campo} in ('pdv', 'cliente', 'vendedor', 'produto', 'forma_pagamento')`
+      sql`${table.campo} in ('pdv', 'cliente', 'produto', 'forma_pagamento')`
     )
   ]
 );
@@ -492,10 +472,10 @@ export const integracoesVinculos = pgTable(
       table.tipoRegistro,
       table.identificadorExterno
     ),
-    check("integracoes_vinculos_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check("integracoes_vinculos_tipo_check", sql`${table.tipo} in ('vendas')`),
     check(
       "integracoes_vinculos_tipo_registro_check",
-      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'colaborador', 'produto', 'forma_pagamento')`
+      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'produto', 'forma_pagamento')`
     )
   ]
 );
@@ -525,7 +505,7 @@ export const integracoesRegistros = pgTable(
     ),
     check(
       "integracoes_registros_tipo_registro_check",
-      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'colaborador', 'produto', 'forma_pagamento')`
+      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'produto', 'forma_pagamento')`
     )
   ]
 );
@@ -547,7 +527,7 @@ export const integracoesHistorico = pgTable(
     criadoEm
   },
   (table) => [
-    check("integracoes_historico_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check("integracoes_historico_tipo_check", sql`${table.tipo} in ('vendas')`),
     check("integracoes_historico_status_check", sql`${table.status} in ('criado', 'atualizado', 'sem_novidade', 'erro')`)
   ]
 );
@@ -626,9 +606,6 @@ export const vendas = pgTable(
     numeroNotaFiscal: text("numero_nota_fiscal"),
     pdvAutomacaoId: text("pdv_automacao_id"),
     pdvAutomacao: text("pdv_automacao"),
-    vendedorAutomacaoId: text("vendedor_automacao_id"),
-    vendedorAutomacao: text("vendedor_automacao"),
-    vendedorAutomacaoDocumento: text("vendedor_automacao_documento"),
     clienteAutomacaoId: text("cliente_automacao_id"),
     clienteAutomacao: text("cliente_automacao"),
     clienteAutomacaoDocumento: text("cliente_automacao_documento"),
@@ -695,6 +672,20 @@ export const vendasPagamentos = pgTable(
     check("vendas_pagamentos_total_pago_check", sql`${table.totalPago} >= 0`)
   ]
 );
+
+export const vendasComprovantes = pgTable("vendas_comprovantes", {
+  id: idUuid,
+  vendaId: uuid("venda_id")
+    .notNull()
+    .references(() => vendas.id, { onDelete: "cascade" }),
+  nomeOriginal: text("nome_original").notNull(),
+  nomeArquivo: text("nome_arquivo").notNull(),
+  caminho: text("caminho").notNull(),
+  mimeType: text("mime_type").notNull(),
+  tamanhoBytes: integer("tamanho_bytes").notNull(),
+  criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId),
+  criadoEm
+});
 
 export const despesas = pgTable(
   "despesas",

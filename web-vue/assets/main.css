@@ -423,23 +423,23 @@ body {
 }
 
 .card-entradas {
-  background: var(--padaria-card-entrada, #f5b400);
+  background: var(--padaria-card-entrada);
 }
 
 .card-transferencias {
-  background: var(--padaria-card-transferencia, #fb4b0b);
+  background: var(--padaria-card-transferencia);
 }
 
 .card-despesas {
-  background: var(--padaria-card-despesa, #ef0018);
+  background: var(--padaria-card-despesa);
 }
 
 .card-retiradas {
-  background: var(--padaria-card-retirada, #2463f5);
+  background: var(--padaria-card-retirada);
 }
 
 .card-saldo {
-  background: var(--padaria-card-saldo, #9700df);
+  background: var(--padaria-card-saldo);
 }
 
 .svelte-table-card {

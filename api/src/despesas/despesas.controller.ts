@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema } from "@padaria/shared/despesas";
-import { exigirAutenticacao } from "../autorizacao.js";
+import { exigirAlgumaPermissao, exigirAutenticacao } from "../autorizacao.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "../respostas.js";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
 import { criarDespesa, listarDespesas } from "./despesas.service.js";
 
 export async function registrarRotasDespesas(app: FastifyInstance): Promise<void> {
-  app.get("/api/despesas", { preHandler: exigirAutenticacao }, async (request, reply) => {
+  app.get("/api/despesas", { preHandler: exigirAlgumaPermissao(["despesas_visualizar", "contas_pagar_visualizar"]) }, async (request, reply) => {
     const query = despesasQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     let escopoDados: string[] | null;

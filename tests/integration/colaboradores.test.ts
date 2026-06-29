@@ -14,9 +14,7 @@ const mocks = vi.hoisted(() => ({
   listarJornadasColaborador: vi.fn(),
   criarJornadasColaborador: vi.fn(),
   listarFaltasJustificadas: vi.fn(),
-  criarFaltaJustificada: vi.fn(),
-  listarFeriados: vi.fn(),
-  criarFeriado: vi.fn()
+  criarFaltaJustificada: vi.fn()
 }));
 
 vi.mock("../../api/src/auth.js", () => ({
@@ -42,9 +40,7 @@ vi.mock("../../api/src/colaboradores/colaboradores.service.js", () => ({
   listarJornadasColaborador: mocks.listarJornadasColaborador,
   criarJornadasColaborador: mocks.criarJornadasColaborador,
   listarFaltasJustificadas: mocks.listarFaltasJustificadas,
-  criarFaltaJustificada: mocks.criarFaltaJustificada,
-  listarFeriados: mocks.listarFeriados,
-  criarFeriado: mocks.criarFeriado
+  criarFaltaJustificada: mocks.criarFaltaJustificada
 }));
 
 describe("colaboradores", () => {
@@ -62,7 +58,11 @@ describe("colaboradores", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["cadastro_colaboradores"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValue(
+      criarPerfil(["cadastro_colaboradores_visualizar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"], {
+        empresaIds: [empresaA]
+      })
+    );
     for (const mock of Object.values(mocks)) {
       if (typeof mock === "function" && mock !== mocks.getSession && mock !== mocks.buscarPerfilUsuario) {
         mock.mockResolvedValue([]);
@@ -74,7 +74,6 @@ describe("colaboradores", () => {
     mocks.atualizarStatusCargoColaborador.mockResolvedValue({ id: registroId, ativo: false });
     mocks.criarJornadasColaborador.mockResolvedValue({ ok: true });
     mocks.criarFaltaJustificada.mockResolvedValue({ id: registroId });
-    mocks.criarFeriado.mockResolvedValue({ id: registroId });
   });
 
   it("Deve_Retornar403_Quando_ListarCargosSemPermissao", async () => {
@@ -93,8 +92,7 @@ describe("colaboradores", () => {
     ["/api/cargos", mocks.listarCargos],
     [`/api/colaboradores/${colaboradorId}/cargos`, mocks.listarCargosColaborador],
     [`/api/colaboradores/${colaboradorId}/jornadas`, mocks.listarJornadasColaborador],
-    [`/api/colaboradores/${colaboradorId}/faltas-justificadas`, mocks.listarFaltasJustificadas],
-    ["/api/feriados", mocks.listarFeriados]
+    [`/api/colaboradores/${colaboradorId}/faltas-justificadas`, mocks.listarFaltasJustificadas]
   ])("Deve_ListarRecursoDeColaborador_Quando_TiverPermissao", async (url, listar) => {
     // Arrange / Act
     const resposta = await requisitar(app, { method: "GET", url: `${url}${url.includes("?") ? "&" : "?"}empresaId=${empresaA}` });
@@ -104,10 +102,7 @@ describe("colaboradores", () => {
     expect(listar).toHaveBeenCalled();
   });
 
-  it.each([
-    ["/api/cargos", mocks.listarCargos],
-    ["/api/feriados", mocks.listarFeriados]
-  ])("Deve_Retornar403_Quando_ListarRecursoDeEmpresaNaoPermitida", async (url, listar) => {
+  it.each([["/api/cargos", mocks.listarCargos]])("Deve_Retornar403_Quando_ListarRecursoDeEmpresaNaoPermitida", async (url, listar) => {
     // Arrange / Act
     const resposta = await requisitar(app, { method: "GET", url: `${url}?empresaId=${empresaB}` });
 
@@ -156,8 +151,7 @@ describe("colaboradores", () => {
       `/api/colaboradores/${colaboradorId}/faltas-justificadas`,
       { empresaId: empresaB, inicio: "2026-06-28T08:00:00.000Z", fim: "2026-06-28T18:00:00.000Z", motivo: "Atestado" },
       mocks.criarFaltaJustificada
-    ],
-    ["POST", "/api/feriados", { empresaId: empresaB, nome: "Feriado", dia: 1, mes: 1, ano: 2026 }, mocks.criarFeriado]
+    ]
   ])("Deve_Retornar403_Quando_GravarRecursoEmEmpresaNaoPermitida", async (method, url, payload, gravar) => {
     // Arrange / Act
     const resposta = await requisitar(app, { method: method as "POST" | "PUT", url, payload });
@@ -274,19 +268,6 @@ describe("colaboradores", () => {
     expect(mocks.criarFaltaJustificada).toHaveBeenCalledWith(colaboradorId, payload);
   });
 
-  it("Deve_CriarFeriado_Quando_EmpresaPermitida", async () => {
-    // Arrange
-    const payload = { empresaId: empresaA, nome: "Feriado municipal", dia: 28, mes: 6, ano: 2026 };
-
-    // Act
-    const resposta = await requisitar(app, { method: "POST", url: "/api/feriados", payload });
-
-    // Assert
-    expect(resposta.statusCode).toBe(201);
-    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
-    expect(mocks.criarFeriado).toHaveBeenCalledWith(payload);
-  });
-
   it("Deve_Retornar400_Quando_ServiceRejeitarFaltaJustificada", async () => {
     // Arrange
     mocks.criarFaltaJustificada.mockRejectedValueOnce(new Error("Fim deve ser posterior ao inicio"));
@@ -303,4 +284,5 @@ describe("colaboradores", () => {
     expect(resposta.json()).toMatchObject({ title: "Fim deve ser posterior ao inicio", status: resposta.statusCode });
   });
 });
+
 

@@ -41,7 +41,7 @@ describe("relatorios", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
     mocks.buscarPerfilUsuario.mockResolvedValue(
-      criarPerfil(["relatorio_produtos_mais_vendidos"], { empresaIds: [empresaA] })
+      criarPerfil(["relatorio_produtos_visualizar"], { empresaIds: [empresaA] })
     );
     mocks.obterProdutosMaisVendidos.mockResolvedValue([{ produtoId: "p-1", nome: "Pao", quantidade: 10 }]);
   });
@@ -61,7 +61,7 @@ describe("relatorios", () => {
     expect(resposta.json()).toMatchObject({
       title: "Permissao insuficiente",
       status: resposta.statusCode,
-      details: { permissao: "relatorio_produtos_mais_vendidos" }
+      details: { permissao: "relatorio_produtos_visualizar" }
     });
     expect(mocks.obterProdutosMaisVendidos).not.toHaveBeenCalled();
   });
@@ -91,4 +91,5 @@ describe("relatorios", () => {
     expect(mocks.obterProdutosMaisVendidos).not.toHaveBeenCalled();
   });
 });
+
 

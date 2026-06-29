@@ -12,6 +12,7 @@ import {
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
+  gruposVendas,
   pdvs,
   permissoesCargos,
   permissoesSetores,
@@ -19,6 +20,7 @@ import {
   permissoesUsuarios,
   perfisUsuarios,
   produtos,
+  produtosConversoes,
   setores,
   unidadesMedida,
   usuariosEmpresas
@@ -70,7 +72,15 @@ function ordenarGrupos(linhas: GrupoLinhaBase[]): GrupoLinha[] {
 }
 
 export async function listarEmpresasRepository() {
-  return banco.select({ id: empresas.id, nome: empresas.nome }).from(empresas).orderBy(asc(empresas.nome));
+  return banco
+    .select({
+      id: empresas.id,
+      nome: empresas.nome,
+      cnpj: empresas.cnpj,
+      configuracoesAparencia: empresas.configuracoesAparencia
+    })
+    .from(empresas)
+    .orderBy(asc(empresas.nome));
 }
 
 export async function listarContasRepository() {
@@ -103,14 +113,34 @@ export async function listarPdvsRepository() {
 
 export async function listarFornecedoresRepository() {
   return banco
-    .select({ id: fornecedores.id, empresaId: fornecedores.empresaId, nome: fornecedores.nome })
+    .select({
+      id: fornecedores.id,
+      empresaId: fornecedores.empresaId,
+      nome: fornecedores.nome,
+      documento: fornecedores.documento
+    })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
 }
 
 export async function listarClientesRepository() {
   return banco
-    .select({ id: clientes.id, empresaId: clientes.empresaId, nome: clientes.nome, documento: clientes.documento })
+    .select({
+      id: clientes.id,
+      empresaId: clientes.empresaId,
+      nome: clientes.nome,
+      documento: clientes.documento,
+      dataNascimento: clientes.dataNascimento,
+      whatsapp: clientes.whatsapp,
+      email: clientes.email,
+      cep: clientes.cep,
+      rua: clientes.rua,
+      numero: clientes.numero,
+      complemento: clientes.complemento,
+      bairro: clientes.bairro,
+      cidade: clientes.cidade,
+      estado: clientes.estado
+    })
     .from(clientes)
     .orderBy(asc(clientes.nome));
 }
@@ -130,7 +160,7 @@ export async function listarColaboradoresRepository() {
 }
 
 export async function listarGruposRepository() {
-  const [despesas, mercadorias, retiradas] = await Promise.all([
+  const [despesas, mercadorias, retiradas, vendas] = await Promise.all([
     banco
       .select({
         id: gruposDespesas.id,
@@ -154,12 +184,21 @@ export async function listarGruposRepository() {
         nome: gruposRetiradas.nome,
         grupoPaiId: gruposRetiradas.grupoPaiId
       })
-      .from(gruposRetiradas)
+      .from(gruposRetiradas),
+    banco
+      .select({
+        id: gruposVendas.id,
+        empresaId: gruposVendas.empresaId,
+        nome: gruposVendas.nome,
+        grupoPaiId: gruposVendas.grupoPaiId
+      })
+      .from(gruposVendas)
   ]);
   return {
     gruposDespesas: ordenarGrupos(despesas),
     gruposMercadorias: ordenarGrupos(mercadorias),
-    gruposRetiradas: ordenarGrupos(retiradas)
+    gruposRetiradas: ordenarGrupos(retiradas),
+    gruposVendas: ordenarGrupos(vendas)
   };
 }
 
@@ -196,10 +235,34 @@ export async function listarSetoresRepository() {
 }
 
 export async function listarProdutosRepository() {
-  return banco
-    .select({ id: produtos.id, empresaId: produtos.empresaId, descricao: produtos.descricao })
+  const linhas = await banco
+    .select({
+      id: produtos.id,
+      empresaId: produtos.empresaId,
+      grupoMercadoriaId: produtos.grupoMercadoriaId,
+      unidadeMedidaId: produtos.unidadeMedidaId,
+      unidadeIndividualId: produtos.unidadeIndividualId,
+      codigo: produtos.codigo,
+      codigoBarras: produtos.codigoBarras,
+      descricao: produtos.descricao,
+      marca: produtos.marca,
+      quantidadeIndividual: produtos.quantidadeIndividual
+    })
     .from(produtos)
     .orderBy(asc(produtos.descricao));
+  const conversoes = await banco
+    .select({
+      id: produtosConversoes.id,
+      produtoId: produtosConversoes.produtoId,
+      unidadeMedidaId: produtosConversoes.unidadeMedidaId,
+      quantidade: produtosConversoes.quantidade,
+      unidadesIndividuais: produtosConversoes.unidadesIndividuais
+    })
+    .from(produtosConversoes);
+  return linhas.map((produto) => ({
+    ...produto,
+    conversoes: conversoes.filter((conversao) => conversao.produtoId === produto.id)
+  }));
 }
 
 export async function listarUsuariosRepository(): Promise<UsuarioCatalogoLinha[]> {
@@ -263,19 +326,19 @@ export async function listarPermissoesRepository() {
         .from(cargos)
         .orderBy(asc(cargos.nome)),
       banco
-        .select({ cargoId: permissoesCargos.cargoId, permissaoCodigo: permissoesCargos.permissaoCodigo })
+        .select({ cargoId: permissoesCargos.cargoId, regras: permissoesCargos.regras })
         .from(permissoesCargos)
-        .orderBy(asc(permissoesCargos.cargoId), asc(permissoesCargos.permissaoCodigo)),
+        .orderBy(asc(permissoesCargos.cargoId)),
       listarSetoresRepository(),
       banco
-        .select({ setorId: permissoesSetores.setorId, permissaoCodigo: permissoesSetores.permissaoCodigo })
+        .select({ setorId: permissoesSetores.setorId, regras: permissoesSetores.regras })
         .from(permissoesSetores)
-        .orderBy(asc(permissoesSetores.setorId), asc(permissoesSetores.permissaoCodigo)),
+        .orderBy(asc(permissoesSetores.setorId)),
       listarUsuariosRepository(),
       banco
-        .select({ usuarioId: permissoesUsuarios.usuarioId, permissaoCodigo: permissoesUsuarios.permissaoCodigo })
+        .select({ usuarioId: permissoesUsuarios.usuarioId, regras: permissoesUsuarios.regras })
         .from(permissoesUsuarios)
-        .orderBy(asc(permissoesUsuarios.usuarioId), asc(permissoesUsuarios.permissaoCodigo))
+        .orderBy(asc(permissoesUsuarios.usuarioId))
     ]);
 
   return {

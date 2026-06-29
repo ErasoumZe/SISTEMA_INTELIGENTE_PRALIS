@@ -3,7 +3,6 @@ import type {
   ColaboradorCargoPayload,
   ColaboradorCargoStatusPayload,
   FaltaJustificadaPayload,
-  FeriadoPayload,
   JornadaPayload
 } from "@padaria/shared/colaboradores";
 import { diasSemana } from "@padaria/shared/colaboradores";
@@ -16,7 +15,6 @@ import {
   criarCargoColaboradorRepository,
   criarCargoRepository,
   criarFaltaJustificadaRepository,
-  criarFeriadoRepository,
   criarJornadasColaboradorRepository,
   existeCargoAtivoColaboradorRepository,
   existeCargoNaEmpresaRepository,
@@ -25,7 +23,6 @@ import {
   listarCargosColaboradorRepository,
   listarCargosRepository,
   listarFaltasJustificadasRepository,
-  listarFeriadosRepository,
   listarJornadasColaboradorRepository
 } from "./colaboradores.repository.js";
 
@@ -176,19 +173,5 @@ export async function criarFaltaJustificada(colaboradorId: string, payload: Falt
     inicio: payload.inicio,
     fim: payload.fim,
     motivo: payload.motivo.trim()
-  });
-}
-
-export async function listarFeriados(escopoDados: string[] | null) {
-  return filtrarPorEmpresas(await listarFeriadosRepository(), escopoDados);
-}
-
-export async function criarFeriado(payload: FeriadoPayload) {
-  return criarFeriadoRepository({
-    empresaId: payload.empresaId,
-    nome: payload.nome.trim(),
-    dia: payload.dia,
-    mes: payload.mes,
-    ano: payload.ano ?? null
   });
 }

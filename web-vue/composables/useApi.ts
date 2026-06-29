@@ -100,11 +100,16 @@ export function useApi() {
     return isApiSuccess<AuthSession>(payload) ? payload.data : (payload as AuthSession);
   }
 
-  function aplicarTema(tema: TemaAplicacao) {
+  function aplicarTema(tema: TemaAplicacao, temaResumoCaixa: TemaAplicacao = tema) {
     document.documentElement.style.setProperty("--padaria-background", tema.corFundo);
     document.documentElement.style.setProperty("--padaria-card", tema.corCartao);
     document.documentElement.style.setProperty("--v-theme-primary", tema.corPrimaria);
     document.documentElement.style.setProperty("--v-theme-secondary", tema.corSecundaria);
+    document.documentElement.style.setProperty("--padaria-card-entrada", temaResumoCaixa.corAviso);
+    document.documentElement.style.setProperty("--padaria-card-transferencia", temaResumoCaixa.corSecundaria);
+    document.documentElement.style.setProperty("--padaria-card-despesa", temaResumoCaixa.corErro);
+    document.documentElement.style.setProperty("--padaria-card-retirada", temaResumoCaixa.corPrimaria);
+    document.documentElement.style.setProperty("--padaria-card-saldo", temaResumoCaixa.corSucesso);
   }
 
   return { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiDelete, carregarSessao, aplicarTema };

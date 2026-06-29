@@ -1,4 +1,3 @@
-import { permissoes } from "@padaria/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buscarPerfilUsuario } from "../../api/src/perfis/perfil.service.js";
 
@@ -18,7 +17,11 @@ const perfilBase = {
   cargos: [{ id: "cargo-1", nome: "Caixa" }],
   nome: "Usuario",
   email: "usuario@email.com",
-  permissoes: ["entradas"]
+  regras_permissoes: {
+    setor: null,
+    cargos: [],
+    usuario: null
+  }
 };
 
 beforeEach(() => {
@@ -26,30 +29,30 @@ beforeEach(() => {
 });
 
 describe("perfil service", () => {
-  it("concede todas as permissoes para usuario_admin", async () => {
-    mocks.obterPerfilPorUsuarioId.mockResolvedValueOnce({ ...perfilBase, role: "usuario_admin" });
+  it("resolve permissoes em camadas usuario sobre cargo sobre setor", async () => {
+    mocks.obterPerfilPorUsuarioId.mockResolvedValueOnce({
+      ...perfilBase,
+      role: "usuario_comum",
+      regras_permissoes: {
+        setor: { entradas_criar: true, despesas_criar: true },
+        cargos: [{ entradas_criar: false, mercadorias_criar: true }],
+        usuario: { entradas_criar: true, mercadorias_criar: false }
+      }
+    });
 
     await expect(buscarPerfilUsuario("usuario-1")).resolves.toMatchObject({
-      role: "usuario_admin",
-      permissoes
+      role: "usuario_comum",
+      permissoes: ["entradas_criar", "despesas_criar"]
     });
   });
 
-  it("nao concede permissoes extras para usuario_comum", async () => {
+  it("nega por padrao quando nenhuma camada define a permissao", async () => {
     mocks.obterPerfilPorUsuarioId.mockResolvedValueOnce({ ...perfilBase, role: "usuario_comum" });
 
     await expect(buscarPerfilUsuario("usuario-1")).resolves.toMatchObject({
       role: "usuario_comum",
-      permissoes: ["entradas"]
-    });
-  });
-
-  it("nao concede permissoes extras para admin enquanto o role esta reservado", async () => {
-    mocks.obterPerfilPorUsuarioId.mockResolvedValueOnce({ ...perfilBase, role: "admin" });
-
-    await expect(buscarPerfilUsuario("usuario-1")).resolves.toMatchObject({
-      role: "admin",
-      permissoes: ["entradas"]
+      permissoes: []
     });
   });
 });
+

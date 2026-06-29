@@ -42,7 +42,7 @@ describe("tema", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["configurar_tema"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["aparencia_editar"], { empresaIds: [empresaA] }));
     mocks.carregarTema.mockResolvedValue({ corPrimaria: "#005f73" });
     mocks.atualizarTema.mockResolvedValue({ corPrimaria: "#005f73" });
   });
@@ -96,7 +96,7 @@ describe("tema", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "configurar_tema" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "aparencia_editar" } });
     expect(mocks.atualizarTema).not.toHaveBeenCalled();
   });
 
@@ -123,5 +123,6 @@ describe("tema", () => {
     expect(mocks.atualizarTema).not.toHaveBeenCalled();
   });
 });
+
 
 

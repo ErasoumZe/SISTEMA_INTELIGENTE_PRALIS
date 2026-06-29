@@ -33,7 +33,6 @@ async function login() {
     <v-card width="100%" max-width="448">
       <v-card-title>
         <div class="text-h5">Entrar</div>
-        <div class="text-body-2 text-muted">Acesse o painel financeiro da padaria.</div>
       </v-card-title>
       <v-card-text>
         <v-form class="d-grid ga-4" @submit.prevent="login">

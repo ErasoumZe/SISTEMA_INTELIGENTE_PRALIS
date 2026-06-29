@@ -54,7 +54,7 @@ describe("caixa", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["fechamento_com_diferenca"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["fechamento_com_diferenca_visualizar"], { empresaIds: [empresaA] }));
     mocks.obterResumoCaixa.mockResolvedValue({
       totalEntradas: 100,
       totalTransferencias: 20,
@@ -91,7 +91,7 @@ describe("caixa", () => {
 
   it("Deve_ConsultarStatus_Quando_UsuarioPodeOperarCaixa", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/status?empresaId=${empresaA}` });
@@ -103,7 +103,7 @@ describe("caixa", () => {
 
   it("Deve_AbrirCaixa_Quando_PayloadValido", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     const payload = {
       empresaId: empresaA,
       pdvId: "66666666-6666-4666-8666-666666666666",
@@ -122,7 +122,7 @@ describe("caixa", () => {
 
   it("Deve_Retornar400_Quando_AberturaSobreporPeriodo", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     mocks.abrirCaixa.mockRejectedValueOnce(
       new Error("A data e hora de abertura ja pertence a outro caixa aberto/fechado")
     );
@@ -146,7 +146,7 @@ describe("caixa", () => {
 
   it("Deve_EditarAbertura_Quando_TokenInformado", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     const caixaId = "66666666-6666-4666-8666-666666666666";
     const payload = {
       tokenEdicao: "ABC123",
@@ -167,7 +167,7 @@ describe("caixa", () => {
 
   it("Deve_Retornar400_Quando_TokenDeEdicaoInvalido", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     mocks.editarAberturaCaixa.mockRejectedValueOnce(new Error("Token de edicao invalido"));
 
     // Act
@@ -189,7 +189,7 @@ describe("caixa", () => {
 
   it("Deve_AcertarSaldoOperacional_Quando_CaixaAberto", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     const caixaId = "66666666-6666-4666-8666-666666666666";
 
     // Act
@@ -210,7 +210,7 @@ describe("caixa", () => {
 
   it("Deve_FecharCaixa_Quando_AcertoNaoPendente", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
     const caixaId = "66666666-6666-4666-8666-666666666666";
 
     // Act
@@ -232,7 +232,7 @@ describe("caixa", () => {
 
   it("Deve_Retornar403_Quando_ConsultarHistoricoSemGerenciarCaixas", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixa_operar"], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/historico?empresaId=${empresaA}` });
@@ -244,7 +244,7 @@ describe("caixa", () => {
 
   it("Deve_ListarHistoricoComToken_Quando_Gerente", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["gerenciar_caixas"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["caixas_gerenciar"], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/historico?empresaId=${empresaA}` });
@@ -349,5 +349,6 @@ describe("caixa", () => {
     expect(resposta.json()).toMatchObject({ title: "Nao ha diferenca para acertar", status: resposta.statusCode });
   });
 });
+
 
 

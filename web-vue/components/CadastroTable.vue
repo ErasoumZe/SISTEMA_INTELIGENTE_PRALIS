@@ -159,17 +159,6 @@ function proximaPagina() {
           @update:model-value="emit('update:tipoPermissaoFiltro', String($event || ''))"
         />
         <v-select
-          :model-value="alvoFiltro"
-          :items="alvosFiltro"
-          item-title="nome"
-          item-value="id"
-          label="Alvo"
-          density="compact"
-          hide-details
-          clearable
-          @update:model-value="emit('update:alvoFiltro', String($event || ''))"
-        />
-        <v-select
           :model-value="permissaoFiltro"
           :items="permissoesFiltro"
           label="Permissao"

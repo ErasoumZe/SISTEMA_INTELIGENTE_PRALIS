@@ -17,3 +17,4 @@ describe("caixa shared contracts", () => {
     expect(() => resumoCaixaQuerySchema.parse({ data: "2026-06-10" })).toThrow();
   });
 });
+

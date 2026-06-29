@@ -102,7 +102,7 @@ export async function registrarRotasCatalogos(app: AplicacaoFastify) {
     return escopo ? paginadoDeArray(await listarProdutos(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
-  app.get("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios") }, async (request, reply) => {
+  app.get("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios_visualizar") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
     return escopo
       ? paginadoDeArray(
@@ -113,7 +113,7 @@ export async function registrarRotasCatalogos(app: AplicacaoFastify) {
       : undefined;
   });
 
-  app.get("/api/permissoes", { preHandler: exigirPermissao("cadastro_permissoes") }, async (request, reply) => {
+  app.get("/api/permissoes", { preHandler: exigirPermissao("cadastro_permissoes_visualizar") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
     return escopo ? ok(await listarPermissoes(escopo.empresasLiberadas, escopo.escopoDados)) : undefined;
   });

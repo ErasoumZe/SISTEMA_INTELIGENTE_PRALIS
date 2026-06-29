@@ -19,7 +19,7 @@ import {
 } from "@padaria/shared/malotes";
 
 export async function registrarRotasMalotes(app: FastifyInstance): Promise<void> {
-  app.get("/api/malotes", { preHandler: exigirAlgumaPermissao(["cadastro_malotes", "transferencias"]) }, async (request, reply) => {
+  app.get("/api/malotes", { preHandler: exigirAlgumaPermissao(["cadastro_malotes_visualizar", "transferencias_visualizar"]) }, async (request, reply) => {
     const query = malotesQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     try {
@@ -33,7 +33,7 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
     }
   });
 
-  app.get("/api/malotes/:maloteId/lacres", { preHandler: exigirPermissao("transferencias") }, async (request) => {
+  app.get("/api/malotes/:maloteId/lacres", { preHandler: exigirPermissao("transferencias_visualizar") }, async (request) => {
     const { maloteId } = maloteParamsSchema.parse(request.params);
     const query = malotesQuerySchema.parse(request.query);
     return paginadoDeArray(
@@ -43,7 +43,7 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
     );
   });
 
-  app.get("/api/lacres/validar", { preHandler: exigirPermissao("transferencias") }, async (request, reply) => {
+  app.get("/api/lacres/validar", { preHandler: exigirPermissao("transferencias_visualizar") }, async (request, reply) => {
     const { numero, empresaId } = validarLacreQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     try {
@@ -53,7 +53,7 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
     }
   });
 
-  app.post("/api/malotes", { preHandler: exigirPermissao("cadastro_malotes") }, async (request, reply) => {
+  app.post("/api/malotes", { preHandler: exigirPermissao("cadastro_malotes_criar") }, async (request, reply) => {
     const body = criarMaloteSchema.parse(request.body);
     if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -68,7 +68,7 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
     }
   });
 
-  app.put("/api/malotes/:maloteId", { preHandler: exigirPermissao("cadastro_malotes") }, async (request, reply) => {
+  app.put("/api/malotes/:maloteId", { preHandler: exigirPermissao("cadastro_malotes_editar") }, async (request, reply) => {
     const { maloteId } = maloteParamsSchema.parse(request.params);
     const body = atualizarMaloteSchema.parse(request.body);
 

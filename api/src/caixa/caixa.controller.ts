@@ -33,7 +33,7 @@ function statusErro(mensagem: string) {
 export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/caixa/status",
-    { preHandler: exigirPermissao("operar_caixa") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const query = caixaStatusQuerySchema.parse(request.query);
       try {
@@ -47,7 +47,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/caixa/abrir",
-    { preHandler: exigirPermissao("operar_caixa") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const body = abrirCaixaPayloadSchema.parse(request.body);
       try {
@@ -62,7 +62,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.put(
     "/api/caixa/:caixaId/abertura",
-    { preHandler: exigirPermissao("operar_caixa") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = editarAberturaCaixaPayloadSchema.parse(request.body);
@@ -78,7 +78,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/caixa/:caixaId/acertar-saldo",
-    { preHandler: exigirPermissao("operar_caixa") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = acertarSaldoCaixaPayloadSchema.parse(request.body);
@@ -94,7 +94,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/caixa/:caixaId/fechar",
-    { preHandler: exigirPermissao("operar_caixa") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = fecharCaixaPayloadSchema.parse(request.body);
@@ -110,7 +110,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/api/caixa/historico",
-    { preHandler: exigirPermissao("gerenciar_caixas") },
+    { preHandler: exigirPermissao("caixas_gerenciar") },
     async (request, reply) => {
       const query = historicoCaixaQuerySchema.parse(request.query);
       try {
@@ -128,7 +128,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/api/fechamento-caixa/resumo",
-    { preHandler: exigirPermissao("fechamento_com_diferenca") },
+    { preHandler: exigirPermissao("fechamento_com_diferenca_visualizar") },
     async (request, reply) => {
       const query = resumoCaixaQuerySchema.parse(request.query);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {
@@ -141,7 +141,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.post(
     "/api/fechamento-caixa/acertar-saldo",
-    { preHandler: exigirPermissao("fechamento_com_diferenca") },
+    { preHandler: exigirPermissao("fechamento_com_diferenca_visualizar") },
     async (request, reply) => {
       const body = ajusteSaldoSchema.parse(request.body);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {

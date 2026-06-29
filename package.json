@@ -5,6 +5,7 @@
   "workspaces": [
     "api",
     "db",
+    "integracoes-scripts",
     "web-vue",
     "shared",
     "tests"
@@ -32,6 +33,7 @@
     "dev:api": "set DATABASE_URL=postgresql://padaria:padaria@localhost:5543/padaria&& set BETTER_AUTH_SECRET=dev-secret-change-me-dev-secret-change-me&& set AUTH_BASE_URL=http://localhost:4100&& set WEB_ORIGIN=http://localhost:5174&& set PORT=4100&& set HOST=0.0.0.0&& npm run api:dev:prepare --workspace @padaria/api && npm run dev --workspace @padaria/api",
     "dev:web": "npm run dev:vue",
     "dev:vue": "set PUBLIC_API_URL=http://localhost:4100&& set NUXT_PUBLIC_API_URL=http://localhost:4100&& npm run dev --workspace @padaria/web-vue -- --host 0.0.0.0 --port 5174",
+    "dev:teste_integracao": "npm run dev:teste_integracao --workspace @padaria/integracoes-scripts",
     "dev": "node scripts/dev.mjs",
     "dev:destroy": "node scripts/dev-destroy.mjs",
     "dev:down": "docker compose -p padaria-dev -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down --remove-orphans",

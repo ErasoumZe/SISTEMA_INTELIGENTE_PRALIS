@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { AuthSession } from "@padaria/shared";
 import type {
+  AuthSession,
   CampoVinculoIntegracao,
   IntegracaoCampoConfigDto,
   IntegracaoChaveDto,
@@ -8,9 +8,9 @@ import type {
   IntegracaoVinculoDto,
   TipoIntegracao,
   TipoRegistroIntegracao
-} from "@padaria/shared/integracoes";
-import type { ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, mensagemErro, telasFuturas } from "~/utils/domain";
+} from "@padaria/shared";
+import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
+import { itemPorTela, mensagemErro, motivoTelaDesabilitada, telaDesabilitadaNoMenu, telaVisivelNoMenu } from "~/utils/domain";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -22,12 +22,15 @@ type DicionarioResposta = {
   vinculos: IntegracaoVinculoDto[];
 };
 
+type TipoRegistroManual = Exclude<TipoRegistroIntegracao, "venda">;
+
 const router = useRouter();
 const { apiGet, apiPost, apiPut, carregarSessao } = useApi();
 
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
 const empresaId = ref("");
+const caixaStatus = ref<CaixaStatus | null>(null);
 const carregando = ref(true);
 const empresaCarregando = ref(false);
 const saindo = ref(false);
@@ -42,31 +45,84 @@ const vinculos = ref<IntegracaoVinculoDto[]>([]);
 const catalogos = reactive({
   pdvs: [] as Opcao[],
   clientes: [] as Opcao[],
-  colaboradores: [] as Opcao[],
   produtos: [] as Opcao[],
   formasPagamento: [] as Opcao[]
 });
+type RegistrosDisponiveis = Record<TipoRegistroIntegracao, Opcao[]>;
 const salvandoChave = ref(false);
 const salvandoCampo = ref("");
 const salvandoVinculo = ref("");
+const salvandoVinculoManual = ref(false);
 const dicionarioCarregando = ref(false);
 const dicionarioSolicitacao = ref(0);
 const snackbar = reactive({ show: false, text: "", color: "success" });
+const tiposRegistroManual: Array<{ tipo: TipoRegistroManual; nome: string }> = [
+  { tipo: "cliente", nome: "Cliente" },
+  { tipo: "forma_pagamento", nome: "Forma de pagamento" },
+  { tipo: "pdv", nome: "PDV" },
+  { tipo: "produto", nome: "Produto" }
+];
+const tiposFiltroPendente: Array<{ tipo: TipoRegistroManual | "todos"; nome: string }> = [
+  { tipo: "produto", nome: "Produto" },
+  { tipo: "todos", nome: "Todos" },
+  ...tiposRegistroManual.filter((item) => item.tipo !== "produto")
+];
+const filtroTipoPendente = ref<TipoRegistroManual | "todos">("produto");
+const formVinculoManual = reactive<{
+  tipoRegistro: TipoRegistroManual;
+  identificadorExterno: string;
+  descricaoExterna: string;
+  registroSistemaId: string;
+}>({
+  tipoRegistro: "cliente",
+  identificadorExterno: "",
+  descricaoExterna: "",
+  registroSistemaId: ""
+});
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const telasPermitidas = computed<ItemMenu[]>(() =>
-  Object.values(itemPorTela).filter((item) => permissoesUsuario.value.includes(item.permissao))
+  Object.values(itemPorTela).filter((item) => telaVisivelNoMenu(permissoesUsuario.value, item))
 );
-const telasFuturasMenu = computed(() => [...telasFuturas].filter((tela) => telasPermitidas.value.some((item) => item.id === tela)));
+const telasDesabilitadasMenu = computed(() =>
+  telasPermitidas.value
+    .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto)))
+    .map((item) => item.id)
+);
+const motivosTelasDesabilitadas = computed(() =>
+  Object.fromEntries(
+    telasPermitidas.value
+      .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto)))
+      .map((item) => [
+        item.id,
+        motivoTelaDesabilitada(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto))
+      ])
+  )
+);
 const chavesDaEmpresa = computed(() => chaves.value.filter((chave) => chave.empresaId === empresaId.value));
-const registrosDisponiveis = computed(() => ({
+const registrosDisponiveis = computed<RegistrosDisponiveis>(() => ({
   pdv: catalogos.pdvs,
   cliente: catalogos.clientes,
-  colaborador: catalogos.colaboradores,
   produto: catalogos.produtos,
   forma_pagamento: catalogos.formasPagamento,
   venda: [] as Opcao[]
 }));
+const registrosVinculoManual = computed(() => registrosDisponiveis.value[formVinculoManual.tipoRegistro]);
+const vinculosSemConversao = computed(() =>
+  vinculos.value.filter((vinculo) => vinculo.pendente || !vinculo.registroSistemaId)
+);
+const vinculosSemConversaoFiltrados = computed(() =>
+  filtroTipoPendente.value === "todos"
+    ? vinculosSemConversao.value
+    : vinculosSemConversao.value.filter((vinculo) => vinculo.tipoRegistro === filtroTipoPendente.value)
+);
+const podeSalvarVinculoManual = computed(
+  () =>
+    Boolean(empresaId.value) &&
+    Boolean(formVinculoManual.tipoRegistro) &&
+    Boolean(formVinculoManual.identificadorExterno.trim()) &&
+    Boolean(formVinculoManual.registroSistemaId)
+);
 
 function notificar(text: string, color = "success") {
   snackbar.text = text;
@@ -82,7 +138,6 @@ function tituloCampo(campo: CampoVinculoIntegracao) {
   const mapa: Record<CampoVinculoIntegracao, string> = {
     pdv: "PDV",
     cliente: "Cliente",
-    vendedor: "Vendedor",
     produto: "Produto",
     forma_pagamento: "Forma de pagamento"
   };
@@ -94,7 +149,6 @@ function tituloRegistro(tipo: TipoRegistroIntegracao) {
     venda: "Venda",
     pdv: "PDV",
     cliente: "Cliente",
-    colaborador: "Colaborador",
     produto: "Produto",
     forma_pagamento: "Forma de pagamento"
   };
@@ -129,14 +183,20 @@ async function carregarEmpresas() {
 
 async function carregarCatalogos() {
   const query = `?empresaId=${empresaId.value}`;
-  [catalogos.pdvs, catalogos.clientes, catalogos.colaboradores, catalogos.produtos, catalogos.formasPagamento] =
-    await Promise.all([
-      apiGet<Opcao[]>(`/api/pdvs${query}`),
-      apiGet<Opcao[]>(`/api/clientes${query}`),
-      apiGet<Opcao[]>(`/api/colaboradores${query}`),
-      apiGet<Opcao[]>(`/api/produtos${query}`),
-      apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
-    ]);
+  [catalogos.pdvs, catalogos.clientes, catalogos.produtos, catalogos.formasPagamento] = await Promise.all([
+    apiGet<Opcao[]>(`/api/pdvs${query}`),
+    apiGet<Opcao[]>(`/api/clientes${query}`),
+    apiGet<Opcao[]>(`/api/produtos${query}`),
+    apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
+  ]);
+}
+
+async function carregarStatusCaixa() {
+  if (!empresaId.value || !permissoesUsuario.value.includes("caixa_operar")) {
+    caixaStatus.value = null;
+    return;
+  }
+  caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${empresaId.value}`);
 }
 
 async function carregarDados() {
@@ -147,6 +207,7 @@ async function carregarDados() {
     const [integracoesResposta, historicoResposta] = await Promise.all([
       apiGet<IntegracoesResposta>(`/api/integracoes${query}`),
       apiGet<IntegracaoHistoricoDto[]>(`/api/integracoes/historico${query}`),
+      carregarStatusCaixa(),
       carregarCatalogos()
     ]);
     integracoes.value = integracoesResposta.integracoes;
@@ -239,9 +300,40 @@ async function salvarVinculo(vinculo: IntegracaoVinculoDto, registroSistemaId: s
   }
 }
 
+async function criarVinculoManual() {
+  if (!podeSalvarVinculoManual.value) return;
+  salvandoVinculoManual.value = true;
+  try {
+    await apiPut("/api/integracoes/vinculos", {
+      empresaId: empresaId.value,
+      tipo: tipoSelecionado.value,
+      tipoRegistro: formVinculoManual.tipoRegistro,
+      identificadorExterno: formVinculoManual.identificadorExterno.trim(),
+      descricaoExterna: formVinculoManual.descricaoExterna.trim() || null,
+      registroSistemaId: formVinculoManual.registroSistemaId
+    });
+    notificar("Vinculo criado.");
+    formVinculoManual.identificadorExterno = "";
+    formVinculoManual.descricaoExterna = "";
+    formVinculoManual.registroSistemaId = "";
+    await carregarDicionario();
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    salvandoVinculoManual.value = false;
+  }
+}
+
 watch(tipoSelecionado, () => {
   if (empresaId.value) void carregarDicionario();
 });
+
+watch(
+  () => formVinculoManual.tipoRegistro,
+  () => {
+    formVinculoManual.registroSistemaId = "";
+  }
+);
 
 onMounted(async () => {
   try {
@@ -250,7 +342,7 @@ onMounted(async () => {
       await router.push("/login");
       return;
     }
-    if (!permissoesUsuario.value.includes("integracoes")) {
+    if (!permissoesUsuario.value.includes("integracoes_visualizar")) {
       erro.value = "Sem permissao para acessar esta pagina.";
       return;
     }
@@ -274,8 +366,9 @@ onMounted(async () => {
     tela-ativa="integracoes"
     :empresas="empresas"
     :empresa-id="empresaId"
-    :telas-desabilitadas="telasFuturasMenu"
-    :telas-futuras="telasFuturasMenu"
+    :caixa-status="caixaStatus"
+    :telas-desabilitadas="telasDesabilitadasMenu"
+    :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="trocarEmpresa"
@@ -304,6 +397,7 @@ onMounted(async () => {
         <v-tab value="chaves">Chaves</v-tab>
         <v-tab value="historico">Historico</v-tab>
         <v-tab value="dicionario">Dicionario</v-tab>
+        <v-tab value="pendentes">Sem conversao ({{ vinculosSemConversao.length }})</v-tab>
       </v-tabs>
 
       <v-window v-model="aba">
@@ -423,6 +517,46 @@ onMounted(async () => {
 
             <v-card>
               <v-card-title>Vinculos externos</v-card-title>
+              <v-card-text>
+                <v-row dense>
+                  <v-col cols="12" md="3">
+                    <v-select
+                      v-model="formVinculoManual.tipoRegistro"
+                      :items="tiposRegistroManual"
+                      item-title="nome"
+                      item-value="tipo"
+                      label="Tipo"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="3">
+                    <v-text-field v-model="formVinculoManual.identificadorExterno" label="Identificador externo" />
+                  </v-col>
+                  <v-col cols="12" md="3">
+                    <v-text-field v-model="formVinculoManual.descricaoExterna" label="Descricao externa" />
+                  </v-col>
+                  <v-col cols="12" md="3">
+                    <v-select
+                      v-model="formVinculoManual.registroSistemaId"
+                      :items="registrosVinculoManual"
+                      :item-title="tituloOpcao"
+                      item-value="id"
+                      label="Registro do sistema"
+                      clearable
+                    />
+                  </v-col>
+                  <v-col cols="12" class="d-flex justify-end">
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-link-plus"
+                      :disabled="!podeSalvarVinculoManual"
+                      :loading="salvandoVinculoManual"
+                      @click="criarVinculoManual"
+                    >
+                      Criar vinculo
+                    </v-btn>
+                  </v-col>
+                </v-row>
+              </v-card-text>
               <v-progress-linear v-if="dicionarioCarregando" indeterminate />
               <div class="responsive-table-shell">
                 <v-table>
@@ -458,6 +592,61 @@ onMounted(async () => {
               </div>
             </v-card>
           </div>
+        </v-window-item>
+
+        <v-window-item value="pendentes">
+          <v-card>
+            <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-3">
+              <span>Itens sem conversao</span>
+              <v-select
+                v-model="filtroTipoPendente"
+                :items="tiposFiltroPendente"
+                item-title="nome"
+                item-value="tipo"
+                label="Tipo"
+                hide-details
+                max-width="260"
+              />
+            </v-card-title>
+            <v-progress-linear v-if="dicionarioCarregando" indeterminate />
+            <div class="responsive-table-shell">
+              <v-table>
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Identificador externo</th>
+                    <th>Descricao</th>
+                    <th>Registro do sistema</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="vinculo in vinculosSemConversaoFiltrados" :key="vinculo.id">
+                    <td>{{ tituloRegistro(vinculo.tipoRegistro) }}</td>
+                    <td class="font-monospace">{{ vinculo.identificadorExterno }}</td>
+                    <td>{{ vinculo.descricaoExterna || "-" }}</td>
+                    <td>
+                      <v-select
+                        :model-value="vinculo.registroSistemaId"
+                        :items="itensVinculo(vinculo)"
+                        :item-title="tituloOpcao"
+                        item-value="id"
+                        density="compact"
+                        hide-details
+                        clearable
+                        :loading="salvandoVinculo === vinculo.id"
+                        @update:model-value="salvarVinculo(vinculo, String($event || ''))"
+                      />
+                    </td>
+                  </tr>
+                  <tr v-if="!vinculosSemConversaoFiltrados.length">
+                    <td colspan="4" class="text-center text-muted">
+                      {{ dicionarioCarregando ? "Carregando..." : "Nenhum item encontrado." }}
+                    </td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+          </v-card>
         </v-window-item>
       </v-window>
     </div>

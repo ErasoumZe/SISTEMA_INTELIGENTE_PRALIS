@@ -81,3 +81,4 @@ describe("contratos operacionais por entidade", () => {
     expect(() => vendasQuerySchema.strict().parse({ tipo: "entrada" })).toThrow();
   });
 });
+

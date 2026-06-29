@@ -63,7 +63,7 @@ describe("catalogos", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
     mocks.buscarPerfilUsuario.mockResolvedValue(
-      criarPerfil(["cadastro_usuarios", "cadastro_permissoes"], { empresaIds: [empresaA] })
+      criarPerfil(["cadastro_usuarios_visualizar", "cadastro_permissoes_visualizar"], { empresaIds: [empresaA] })
     );
     mocks.listarEmpresas.mockResolvedValue([{ id: empresaA, nome: "Padaria A" }]);
     mocks.listarContas.mockResolvedValue([{ id: "conta-1", empresaId: empresaA }]);
@@ -150,7 +150,7 @@ describe("catalogos", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_usuarios" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_usuarios_visualizar" } });
     expect(mocks.listarUsuarios).not.toHaveBeenCalled();
   });
 
@@ -165,14 +165,14 @@ describe("catalogos", () => {
 
   it("Deve_Retornar403_Quando_ListarPermissoesSemPermissao", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["cadastro_usuarios"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["cadastro_usuarios_visualizar"], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/permissoes?empresaId=${empresaA}` });
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_permissoes" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_permissoes_visualizar" } });
     expect(mocks.listarPermissoes).not.toHaveBeenCalled();
   });
 
@@ -185,5 +185,6 @@ describe("catalogos", () => {
     expect(mocks.listarPermissoes).toHaveBeenCalledWith([empresaA], [empresaA]);
   });
 });
+
 
 

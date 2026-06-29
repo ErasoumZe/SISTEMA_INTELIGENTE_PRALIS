@@ -7,6 +7,7 @@ export {
   integracoesVinculos,
   itensVendas,
   vendas,
+  vendasComprovantes,
   vendasPagamentos,
   vendasProdutos
 } from "../app.schema.js";

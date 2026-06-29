@@ -6,14 +6,23 @@ describe("permissoes", () => {
   it("mantem permissoes operacionais usadas pela aplicacao", () => {
     expect(permissoes).toEqual(
       expect.arrayContaining([
-        "entradas",
-        "transferencias",
-        "despesas",
-        "mercadorias",
-        "retiradas",
-        "fechamento_com_diferenca",
-        "relatorio_produtos_mais_vendidos",
-        "cadastro_permissoes"
+        "entradas_criar",
+        "transferencias_criar",
+        "despesas_criar",
+        "mercadorias_criar",
+        "retiradas_criar",
+        "fechamento_com_diferenca_visualizar",
+        "relatorio_produtos_visualizar",
+        "cadastro_permissoes_visualizar",
+        "cadastro_permissoes_criar",
+        "cadastro_permissoes_editar",
+        "cadastro_permissoes_excluir",
+        "relatorio_vendas_visualizar",
+        "relatorio_vendas_comprovantes_criar",
+        "contas_pagar_visualizar",
+        "menu_entradas_somente_caixa_aberto",
+        "menu_transferencias_somente_caixa_aberto",
+        "menu_relatorio_produtos_somente_caixa_aberto"
       ])
     );
   });
@@ -36,3 +45,4 @@ describe("regras financeiras", () => {
     ).toBe(0);
   });
 });
+

@@ -6,7 +6,11 @@ const dinheiroSchema = z.coerce.number().min(0);
 
 export const despesasQuerySchema = z
   .object({
-    empresaId: uuidSchema.optional()
+    empresaId: uuidSchema.optional(),
+    dataInicio: z.string().min(10).optional(),
+    dataFim: z.string().min(10).optional(),
+    pdvId: uuidSchema.optional(),
+    somentePendentes: z.coerce.boolean().optional().default(false)
   })
   .merge(paginationQuerySchema);
 
@@ -42,6 +46,8 @@ export const despesaDtoSchema = z.object({
   id: z.string(),
   empresaId: z.string(),
   dataReferencia: z.string(),
+  dataVencimento: z.string().optional(),
+  dataPagamento: z.string().nullable().optional(),
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),

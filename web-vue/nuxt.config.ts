@@ -7,6 +7,11 @@ export default defineNuxtConfig({
   alias: {
     "@padaria/shared": fileURLToPath(new URL("../shared/src/index.ts", import.meta.url))
   },
+  vite: {
+    optimizeDeps: {
+      include: ["@vue/devtools-core", "@vue/devtools-kit", "zod"]
+    }
+  },
   modules: ["vuetify-nuxt-module"],
   css: ["@mdi/font/css/materialdesignicons.css", "~/assets/main.css"],
   runtimeConfig: {

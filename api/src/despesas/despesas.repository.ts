@@ -1,5 +1,5 @@
-import { and } from "drizzle-orm";
-import { debitosColaboradores } from "@padaria/db/schema/caixa";
+import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import type { DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
 import { banco } from "../banco/conexao.js";
@@ -10,11 +10,25 @@ export async function listarDespesasRepository(
   empresasPermitidasIds: string[] | null
 ): Promise<DespesaDto[]> {
   const filtros = filtrosEmpresa(despesas, query, empresasPermitidasIds);
+  if (query.somentePendentes) filtros.push(isNull(despesas.dataPagamento));
+  if (query.dataInicio) filtros.push(gte(despesas.dataVencimento, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(despesas.dataVencimento, query.dataFim));
+  if (query.pdvId) {
+    const caixas = await banco
+      .select({ id: fechamentosCaixa.id })
+      .from(fechamentosCaixa)
+      .where(eq(fechamentosCaixa.pdvId, query.pdvId));
+    const caixaIds = caixas.map((caixa) => caixa.id);
+    if (!caixaIds.length) return [];
+    filtros.push(inArray(despesas.caixaId, caixaIds));
+  }
   return banco
     .select({
       id: despesas.id,
       empresaId: despesas.empresaId,
       dataReferencia: despesas.dataReferencia,
+      dataVencimento: despesas.dataVencimento,
+      dataPagamento: despesas.dataPagamento,
       descricao: despesas.descricao,
       valorOriginal: despesas.valorOriginal,
       computar: despesas.computar,

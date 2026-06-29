@@ -5,9 +5,9 @@ const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 const textoObrigatorioSchema = z.string().trim().min(1);
 
-export const tiposIntegracao = ["vendas", "produtos_vendas"] as const;
-export const tiposRegistroIntegracao = ["venda", "pdv", "cliente", "colaborador", "produto", "forma_pagamento"] as const;
-export const camposVinculoIntegracao = ["pdv", "cliente", "vendedor", "produto", "forma_pagamento"] as const;
+export const tiposIntegracao = ["vendas"] as const;
+export const tiposRegistroIntegracao = ["venda", "pdv", "cliente", "produto", "forma_pagamento"] as const;
+export const camposVinculoIntegracao = ["pdv", "cliente", "produto", "forma_pagamento"] as const;
 
 export const integracaoQuerySchema = z.object({
   empresaId: uuidSchema.optional()
@@ -52,9 +52,6 @@ export const vendaIntegracaoPayloadSchema = z.object({
   idCliente: z.string().trim().optional().nullable(),
   nomeCliente: z.string().trim().optional().nullable(),
   documentoCliente: z.string().trim().optional().nullable(),
-  idVendedor: z.string().trim().optional().nullable(),
-  nomeVendedor: z.string().trim().optional().nullable(),
-  documentoVendedor: z.string().trim().optional().nullable(),
   dataHoraVenda: z.coerce.date(),
   valorOriginal: dinheiroSchema,
   desconto: dinheiroSchema.default(0),

@@ -26,7 +26,7 @@ function idCadastroSalvo(resultado: CadastroSalvo, fallback: string) {
 export async function registrarRotasCadastros(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/cadastros/permissoes",
-    { preHandler: exigirPermissao("cadastro_permissoes") },
+    { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
     async (request, reply) => {
       try {
         return paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario));
@@ -39,7 +39,7 @@ export async function registrarRotasCadastros(app: FastifyInstance): Promise<voi
 
   app.delete(
     "/api/cadastros/permissoes",
-    { preHandler: exigirPermissao("cadastro_permissoes") },
+    { preHandler: exigirPermissao("cadastro_permissoes_excluir") },
     async (request, reply) => {
       try {
         await excluirPermissaoCadastro(request.query, request.perfilUsuario);
@@ -56,7 +56,7 @@ export async function registrarRotasCadastros(app: FastifyInstance): Promise<voi
     {
       preHandler: async (request, reply) => {
         const { tipo } = tipoCadastroParamsSchema.parse(request.params);
-        const permissao = permissaoCadastro(tipo);
+        const permissao = permissaoCadastro(tipo, "criar");
         if (!permissao) return erro(reply, 404, "Cadastro nao encontrado", "NOT_FOUND");
         await exigirPermissao(permissao)(request, reply);
       }
@@ -85,7 +85,7 @@ export async function registrarRotasCadastros(app: FastifyInstance): Promise<voi
     {
       preHandler: async (request, reply) => {
         const { tipo } = tipoCadastroParamsSchema.parse(request.params);
-        const permissao = permissaoCadastro(tipo);
+        const permissao = permissaoCadastro(tipo, "editar");
         if (!permissao) return erro(reply, 404, "Cadastro nao encontrado", "NOT_FOUND");
         await exigirPermissao(permissao)(request, reply);
       }

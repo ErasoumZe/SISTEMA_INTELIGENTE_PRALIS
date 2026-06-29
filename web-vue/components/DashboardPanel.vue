@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { AuthSession, Permissao, TemaAplicacao } from "@padaria/shared";
+import {
+  TELA_TEMA_RESUMO_CAIXA,
+  type AuthSession,
+  type ConfiguracaoAparenciaEmpresa,
+  type Permissao,
+  type TemaAplicacao
+} from "@padaria/shared";
 import type {
   CadastroForm,
   CaixaStatus,
@@ -18,6 +24,7 @@ import {
   endpointOperacaoPorEntidade,
   formCadastroVazio,
   formOperacaoVazio,
+  itemTemaResumoCaixa,
   itemPorTela,
   mensagemErro,
   entidadePorTela,
@@ -27,12 +34,23 @@ import {
   permissoes,
   rotaTela,
   secoesPermissoes,
+  motivoTelaDesabilitada,
+  telaDesabilitadaNoMenu,
+  telaVisivelNoMenu,
   temaPadrao,
-  telasFuturas,
   tipoEndpointCadastro
 } from "~/utils/domain";
 
-type TipoPagina = "operacoes" | "caixa" | "relatorio_produtos" | "tree" | "cadastro" | "placeholder";
+type TipoPagina =
+  | "operacoes"
+  | "caixa"
+  | "fechamento"
+  | "relatorio_produtos"
+  | "relatorio_vendas"
+  | "contas_pagar"
+  | "tree"
+  | "cadastro"
+  | "placeholder";
 
 const props = withDefaults(
   defineProps<{
@@ -125,7 +143,10 @@ const permissoesCarregandoBusca = ref(false);
 const permissaoExcluindoId = ref("");
 
 const tema = ref<TemaAplicacao>(temaPadrao());
+const temaAtual = ref<TemaAplicacao>(temaPadrao());
+const temaResumoCaixa = ref<TemaAplicacao>(temaPadrao());
 const temaTelaAtual = ref("");
+const temaResumoCaixaAtual = ref("");
 const temaTelaEdicao = ref("entradas");
 const temaSalvando = ref(false);
 
@@ -138,15 +159,15 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
-const telasDependemCaixa = new Set([
-  "entradas",
-  "transferencias",
-  "despesas",
-  "mercadorias",
-  "retiradas",
-  "fechamento",
-  "relatorio_produtos"
-]);
+const camposTema = [
+  "corPrimaria",
+  "corSecundaria",
+  "corFundo",
+  "corCartao",
+  "corSucesso",
+  "corAviso",
+  "corErro"
+] as const satisfies ReadonlyArray<keyof TemaAplicacao>;
 
 const empresasDisponiveis = computed(() => empresas.value);
 const empresaId = computed(() => empresaSelecionadaId.value);
@@ -164,25 +185,41 @@ const colaboradoresSelectUsuario = computed(() => [
   ...colaboradoresDisponiveisUsuario.value
 ]);
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
-const podeConfigurarTema = computed(() => permissoesUsuario.value.includes("configurar_tema"));
+const podeConfigurarTema = computed(() => permissoesUsuario.value.includes("aparencia_editar"));
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
 const perfilCaixaOperacional = computed(
   () =>
     Boolean(sessao.value?.perfil) &&
-    sessao.value?.perfil?.role === "usuario_comum" &&
-    permissoesUsuario.value.includes("operar_caixa") &&
-    !permissoesUsuario.value.includes("gerenciar_caixas")
+    permissoesUsuario.value.includes("caixa_operar") &&
+    !permissoesUsuario.value.includes("caixas_gerenciar")
 );
-const telaBloqueadaPorCaixa = computed(() => telasDependemCaixa.has(telaAtiva.value) && !caixaAberto.value);
-const telasPermitidas = computed(() => {
-  return Object.values(itemPorTela).filter((item) => permissoesUsuario.value.includes(item.permissao));
+const telaBloqueadaPorCaixa = computed(() => {
+  const item = itemPorTela[telaAtiva.value];
+  return item ? telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaAberto.value)) : false;
 });
+const telasPermitidas = computed(() => {
+  return Object.values(itemPorTela).filter((item) => telaVisivelNoMenu(permissoesUsuario.value, item));
+});
+const telasTemaPermitidas = computed(() => [...telasPermitidas.value, itemTemaResumoCaixa]);
 const telasShell = computed(() => {
   return telasPermitidas.value.filter((item) => item.id !== "caixa");
 });
-const telasDesabilitadasPorCaixa = computed(() => (!caixaAberto.value ? [...telasDependemCaixa] : []));
-const telasFuturasMenu = computed(() => [...telasFuturas].filter((tela) => telasPermitidas.value.some((item) => item.id === tela)));
-const telasDesabilitadasMenu = computed(() => [...new Set([...telasDesabilitadasPorCaixa.value, ...telasFuturasMenu.value])]);
+const telasDesabilitadasMenu = computed(() =>
+  telasPermitidas.value
+    .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaAberto.value)))
+    .map((item) => item.id)
+);
+const motivosTelasDesabilitadas = computed(() =>
+  Object.fromEntries(
+    telasPermitidas.value
+      .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaAberto.value)))
+      .map((item) => [
+        item.id,
+        motivoTelaDesabilitada(permissoesUsuario.value, item, Boolean(caixaAberto.value))
+      ])
+  )
+);
+const motivoTelaAtivaDesabilitada = computed(() => motivosTelasDesabilitadas.value[telaAtiva.value] ?? "Tela indisponivel para este perfil.");
 const telaAtual = computed(() => itemPorTela[telaAtiva.value] ?? telasPermitidas.value[0]);
 const operacoesDaTela = computed(() => operacoes.value);
 const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTela.value.length / 10)));
@@ -265,8 +302,20 @@ watch(
 );
 
 watch([telaAtiva, empresaId], ([tela, idEmpresa]) => {
-  if (sessao.value && tela && idEmpresa && temaTelaAtual.value !== `${idEmpresa}:${tela}`) void carregarTemaTela(tela);
+  if (!sessao.value || !tela || !idEmpresa) return;
+  if (temaTelaAtual.value !== `${idEmpresa}:${tela}`) void carregarTemaTela(tela);
+  if (temaResumoCaixaAtual.value !== `${idEmpresa}:${TELA_TEMA_RESUMO_CAIXA}`) void carregarTemaResumoCaixa();
 });
+
+watch(
+  () => props.telaInicial,
+  async (novaTela) => {
+    if (!novaTela || novaTela === telaAtiva.value || !itemPorTela[novaTela]) return;
+    telaAtiva.value = novaTela;
+    paginaOperacoes.value = 1;
+    if (sessao.value) await carregarDadosTela(novaTela, empresaId.value);
+  }
+);
 
 function notificar(text: string, color = "success") {
   snackbar.text = text;
@@ -278,6 +327,55 @@ function dataHoraLocal(valor: Date | string = new Date()) {
   const data = new Date(valor);
   data.setMinutes(data.getMinutes() - data.getTimezoneOffset());
   return data.toISOString().slice(0, 16);
+}
+
+function apenasDigitos(valor: string) {
+  return valor.replace(/\D/g, "");
+}
+
+function mascararCpf(valor: string) {
+  const digitos = apenasDigitos(valor).slice(0, 11);
+  return digitos
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+function mascararCnpj(valor: string) {
+  const digitos = apenasDigitos(valor).slice(0, 14);
+  return digitos
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+function mascararDocumento(valor: string) {
+  return apenasDigitos(valor).length > 11 ? mascararCnpj(valor) : mascararCpf(valor);
+}
+
+function documentoEhCpf(valor: string) {
+  const digitos = apenasDigitos(valor);
+  return digitos.length > 0 && digitos.length <= 11;
+}
+
+function atualizarDocumentoCadastro(valor: string) {
+  const documento = mascararDocumento(valor);
+  formCadastro.value.documento = documento;
+  if (cadastroTela.value === "clientes" && !documentoEhCpf(documento)) formCadastro.value.dataNascimento = "";
+}
+
+function mascararWhatsapp(valor: string) {
+  const digitos = apenasDigitos(valor).slice(0, 11);
+  if (digitos.length <= 2) return digitos;
+  const prefixo = digitos.length > 10 ? digitos.slice(2, 7) : digitos.slice(2, 6);
+  const sufixo = digitos.length > 10 ? digitos.slice(7) : digitos.slice(6);
+  return `(${digitos.slice(0, 2)}) ${prefixo}${sufixo ? `-${sufixo}` : ""}`;
+}
+
+function mascararCep(valor: string) {
+  const digitos = apenasDigitos(valor).slice(0, 8);
+  return digitos.length > 5 ? `${digitos.slice(0, 5)}-${digitos.slice(5)}` : digitos;
 }
 
 function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
@@ -333,7 +431,7 @@ async function selecionarEmpresa(id: string) {
 }
 
 async function carregarEmpresas() {
-  empresas.value = await apiGet<Opcao[]>("/api/empresas");
+  empresas.value = sessao.value?.empresas?.length ? sessao.value.empresas : await apiGet<Opcao[]>("/api/empresas");
   opcoes.value.empresas = empresas.value;
   if (empresas.value.length && !empresaSelecionadaId.value) empresaSelecionadaId.value = empresas.value[0]?.id ?? "";
 }
@@ -357,6 +455,7 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
 async function trocarEmpresa(idEmpresa = empresaId.value) {
   await carregarDadosTela(telaAtiva.value, idEmpresa);
   await carregarTemaTela(telaAtiva.value);
+  await carregarTemaResumoCaixa();
 }
 
 async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva.value) {
@@ -385,7 +484,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/contas${query}`),
       apiGet<Opcao[]>(`/api/malotes${query}`)
     ]);
-  } else if (tela === "despesas" || tela === "contas_pagar") {
+  } else if (tela === "despesas") {
     const grupos = await apiGet<Pick<Opcoes, "gruposDespesas" | "gruposMercadorias" | "gruposRetiradas">>(
       `/api/grupos${query}`
     );
@@ -394,6 +493,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/contas${query}`),
       apiGet<Opcao[]>(`/api/fornecedores${query}`)
     ]);
+  } else if (tela === "contas_pagar") {
+    [dados.pdvs] = await Promise.all([apiGet<Opcao[]>(`/api/pdvs${query}`)]);
   } else if (tela === "mercadorias" || tela === "pedidos") {
     const grupos = await apiGet<Pick<Opcoes, "gruposDespesas" | "gruposMercadorias" | "gruposRetiradas">>(
       `/api/grupos${query}`
@@ -455,10 +556,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/cargos${query}`),
       apiGet<Opcao[]>(`/api/setores${query}`)
     ]);
-  } else if (tela === "feriados") {
-    dados.feriados = await apiGet<Opcao[]>(`/api/feriados${query}`);
   } else if (tela === "fornecedores") {
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+  } else if (tela === "clientes") {
+    dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
   } else if (tela === "produtos") {
@@ -470,9 +571,16 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.produtos = produtos;
     dados.gruposMercadorias = grupos.gruposMercadorias;
     dados.unidadesMedida = unidades;
+  } else if (tela === "relatorio_vendas") {
+    [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento] = await Promise.all([
+      apiGet<Opcao[]>(`/api/pdvs${query}`),
+      apiGet<Opcao[]>(`/api/clientes${query}`),
+      apiGet<Opcao[]>(`/api/colaboradores${query}`),
+      apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
+    ]);
   }
 
-  if (permissoesUsuario.value.includes("operar_caixa") && idEmpresa) {
+  if (permissoesUsuario.value.includes("caixa_operar") && idEmpresa) {
     const cargas: Promise<unknown>[] = [];
     if (!dados.pdvs.length) cargas.push(apiGet<Opcao[]>(`/api/pdvs${query}`).then((pdvs) => (dados.pdvs = pdvs)));
     if (!dados.contas.length) cargas.push(apiGet<Opcao[]>(`/api/contas${query}`).then((contas) => (dados.contas = contas)));
@@ -504,6 +612,7 @@ async function carregarTudo() {
     await carregarStatusCaixa(empresaId.value);
     await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(telaAtiva.value);
+    await carregarTemaResumoCaixa();
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {
@@ -520,7 +629,7 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
 
 async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
-  if (!permissoesUsuario.value.includes("operar_caixa")) {
+  if (!permissoesUsuario.value.includes("caixa_operar")) {
     caixaStatus.value = null;
     resumo.value = null;
     return;
@@ -686,6 +795,182 @@ async function salvarMalote() {
   }
 }
 
+function upsertOpcao(lista: Opcao[], item: Opcao) {
+  const indice = lista.findIndex((opcao) => opcao.id === item.id);
+  if (indice >= 0) lista.splice(indice, 1, { ...lista[indice], ...item });
+  else lista.unshift(item);
+}
+
+function removerOpcao(lista: Opcao[], id: string) {
+  const indice = lista.findIndex((opcao) => opcao.id === id);
+  if (indice >= 0) lista.splice(indice, 1);
+}
+
+function listaGrupoCadastro(tipoGrupo: CadastroForm["tipoGrupo"]) {
+  if (tipoGrupo === "mercadoria") return opcoes.value.gruposMercadorias;
+  if (tipoGrupo === "retirada") return opcoes.value.gruposRetiradas;
+  if (tipoGrupo === "vendas") return opcoes.value.gruposVendas;
+  return opcoes.value.gruposDespesas;
+}
+
+function atualizarCadastroLocal(tela: string, form: CadastroForm, id: string | undefined) {
+  if (!id) return false;
+  const empresaAtual = empresaId.value;
+  const empresaDoItem = tela === "empresas" ? undefined : empresaAtual;
+  const itemBase: Opcao = { id, ...(empresaDoItem ? { empresaId: empresaDoItem } : {}) };
+
+  if (tela === "empresas") {
+    const item = { ...itemBase, nome: form.nome, cnpj: form.cnpj || null };
+    upsertOpcao(empresas.value, item);
+    upsertOpcao(opcoes.value.empresas, item);
+    return true;
+  }
+
+  if (tela === "contas") {
+    upsertOpcao(opcoes.value.contas, { ...itemBase, nome: form.nome });
+    return true;
+  }
+
+  if (tela === "formas_pagamento") {
+    upsertOpcao(opcoes.value.formasPagamento, { ...itemBase, nome: form.nome });
+    return true;
+  }
+
+  if (tela === "pdv") {
+    upsertOpcao(opcoes.value.pdvs, { ...itemBase, nome: form.nome, contaId: form.contaId, ativo: form.ativo });
+    return true;
+  }
+
+  if (tela === "fornecedores") {
+    upsertOpcao(opcoes.value.fornecedores, { ...itemBase, nome: form.nome, documento: form.documento || undefined });
+    return true;
+  }
+
+  if (tela === "clientes") {
+    upsertOpcao(opcoes.value.clientes, {
+      ...itemBase,
+      nome: form.nome,
+      documento: form.documento || undefined,
+      dataNascimento: documentoEhCpf(form.documento) ? form.dataNascimento || undefined : undefined,
+      whatsapp: form.whatsapp || undefined,
+      email: form.email || undefined,
+      cep: form.cep || undefined,
+      rua: form.rua || undefined,
+      numero: form.numero || undefined,
+      complemento: form.complemento || undefined,
+      bairro: form.bairro || undefined,
+      cidade: form.cidade || undefined,
+      estado: form.estado || undefined
+    });
+    return true;
+  }
+
+  if (tela === "produtos") {
+    upsertOpcao(opcoes.value.produtos, {
+      ...itemBase,
+      codigo: form.codigo || undefined,
+      codigoBarras: form.codigoBarras || undefined,
+      descricao: form.descricao || form.nome,
+      marca: form.marca || null,
+      unidadeIndividualId: form.unidadeIndividualId,
+      quantidadeIndividual: String(Number(form.quantidadeIndividual || 1)),
+      grupoMercadoriaId: form.grupoMercadoriaId || null,
+      conversoes: form.produtoConversoes
+        .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
+        .map((conversao) => ({
+          unidadeMedidaId: conversao.unidadeMedidaId,
+          quantidade: String(Number(conversao.quantidade || 0)),
+          unidadesIndividuais: String(Number(conversao.unidadesIndividuais || 0))
+        }))
+    });
+    return true;
+  }
+
+  if (tela === "colaboradores") {
+    const cargo = opcoes.value.cargos.find((opcao) => opcao.id === form.cargoId);
+    const setor = opcoes.value.setores.find((opcao) => opcao.id === form.setorId);
+    upsertOpcao(opcoes.value.colaboradores, {
+      ...itemBase,
+      nome: form.nome,
+      cpf: form.cpf || undefined,
+      setorId: form.setorId || null,
+      descricao: setor?.nome ?? setor?.descricao,
+      cargoId: form.cargoId,
+      cargoIds: [form.cargoId],
+      cargoNome: cargo?.nome,
+      cargos: cargo?.nome ? [cargo.nome] : []
+    });
+    return true;
+  }
+
+  if (tela === "unidades") {
+    upsertOpcao(opcoes.value.unidadesMedida, { ...itemBase, nome: form.nome, sigla: form.sigla });
+    return true;
+  }
+
+  if (tela === "grupos") {
+    [
+      opcoes.value.gruposDespesas,
+      opcoes.value.gruposMercadorias,
+      opcoes.value.gruposRetiradas,
+      opcoes.value.gruposVendas
+    ].forEach((lista) => removerOpcao(lista, id));
+    upsertOpcao(listaGrupoCadastro(form.tipoGrupo), {
+      ...itemBase,
+      nome: form.nome,
+      tipoGrupo: form.tipoGrupo,
+      grupoPaiId: form.grupoPaiId || null
+    });
+    return true;
+  }
+
+  if (tela === "areas_setores") {
+    removerOpcao(opcoes.value.areas, id);
+    removerOpcao(opcoes.value.setores, id);
+    if (form.tipoAreaSetor === "setor") {
+      upsertOpcao(opcoes.value.setores, {
+        ...itemBase,
+        nome: form.nome,
+        tipoAreaSetor: "setor",
+        areaId: form.areaId || null,
+        setorPaiId: form.setorPaiId || null
+      });
+    } else {
+      upsertOpcao(opcoes.value.areas, { ...itemBase, nome: form.nome, tipoAreaSetor: "area" });
+    }
+    return true;
+  }
+
+  if (tela === "usuarios") {
+    if (form.novoColaborador) return false;
+    const empresaIds = form.empresaIds.length ? form.empresaIds : [empresaAtual].filter(Boolean);
+    const usuarioAtual = opcoes.value.usuarios.find((opcao) => (opcao.usuarioId ?? opcao.id) === id);
+    const colaboradorAnterior = opcoes.value.colaboradores.find((opcao) => opcao.id === usuarioAtual?.colaboradorId);
+    const colaborador = opcoes.value.colaboradores.find((opcao) => opcao.id === form.colaboradorId);
+    if (colaboradorAnterior && colaboradorAnterior.id !== colaborador?.id) colaboradorAnterior.usuarioId = undefined;
+    upsertOpcao(opcoes.value.usuarios, {
+      ...itemBase,
+      usuarioId: id,
+      empresaIds,
+      empresaId: empresaIds[0] ?? empresaAtual,
+      nome: form.nome,
+      email: form.email,
+      colaboradorId: form.colaboradorId,
+      setorId: colaborador?.setorId ?? null,
+      cargos: colaborador?.cargos ?? (colaborador?.cargoNome ? [colaborador.cargoNome] : [])
+    });
+    if (colaborador) colaborador.usuarioId = id;
+    return true;
+  }
+
+  if (tela === "permissoes") {
+    if (permissoesBuscou.value) void buscarPermissoes(permissoesPagina.value.page || 1);
+    return true;
+  }
+
+  return false;
+}
+
 function abrirCadastroNovo(tela: string, valores: Partial<CadastroForm> = {}) {
   cadastroTela.value = tela;
   cadastroEditandoId.value = "";
@@ -711,13 +996,46 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
-  formCadastro.value = {
-    ...formCadastroVazio(),
-    nome: linha.nome ?? "",
-    email: linha.email ?? "",
-    cpf: linha.cpf ?? "",
-    sigla: linha.sigla ?? "",
-    codigo: linha.codigo ?? "",
+	formCadastro.value = {
+	  ...formCadastroVazio(),
+	  nome: linha.nome ?? "",
+	  documento: linha.documento ? mascararDocumento(linha.documento) : "",
+    dataNascimento: linha.dataNascimento ?? "",
+    whatsapp: linha.whatsapp ? mascararWhatsapp(linha.whatsapp) : "",
+    cep: linha.cep ? mascararCep(linha.cep) : "",
+    rua: linha.rua ?? "",
+    numero: linha.numero ?? "",
+    complemento: linha.complemento ?? "",
+    bairro: linha.bairro ?? "",
+    cidade: linha.cidade ?? "",
+    estado: linha.estado ?? "",
+	  cnpj: linha.cnpj ?? "",
+	  email: linha.email ?? "",
+	  cpf: linha.cpf ?? "",
+	  sigla: linha.sigla ?? "",
+	  codigo: linha.codigo ?? "",
+	  codigoBarras: linha.codigoBarras ?? "",
+	  descricao: linha.descricao ?? linha.nome ?? "",
+	  marca: linha.marca ?? "",
+	  unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
+	  quantidadeIndividual: linha.quantidadeIndividual ?? "1",
+	  grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
+	  produtoConversoes: (() => {
+	    try {
+	      const conversoes = JSON.parse(linha.conversoes ?? "[]") as Array<{
+	        unidadeMedidaId?: string;
+	        quantidade?: string;
+	        unidadesIndividuais?: string;
+	      }>;
+	      return conversoes.map((conversao) => ({
+	        unidadeMedidaId: conversao.unidadeMedidaId ?? "",
+	        quantidade: String(conversao.quantidade ?? ""),
+	        unidadesIndividuais: String(conversao.unidadesIndividuais ?? "")
+	      }));
+	    } catch {
+	      return [];
+	    }
+	  })(),
     contaId: linha.contaId ?? "",
     ativo: linha.ativo !== "Nao",
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
@@ -731,7 +1049,7 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
     cargoId: linha.cargoId ?? "",
     empresaIds: linha.empresaIds ? String(linha.empresaIds).split(",") : [],
     usuarioId: linha.usuarioId ?? "",
-    permissoes: permissaoCodigosDaLinha(linha)
+    regras: regrasDaLinha(linha)
   };
   modalCadastroAberto.value = true;
 }
@@ -740,14 +1058,24 @@ async function salvarCadastro() {
   cadastroSalvando.value = true;
   try {
     const endpoint = tipoEndpointCadastro(cadastroTela.value, formCadastro.value);
-    const payload = cadastroPayload(cadastroTela.value, formCadastro.value, empresaId.value);
-    const resultado = cadastroEditandoId.value
-      ? await apiPut<{ id?: string }>(`/api/cadastros/${endpoint}/${cadastroEditandoId.value}`, payload)
+    const formSnapshot: CadastroForm = {
+      ...formCadastro.value,
+      empresaIds: [...formCadastro.value.empresaIds],
+      produtoConversoes: formCadastro.value.produtoConversoes.map((conversao) => ({ ...conversao })),
+      regras: { ...formCadastro.value.regras }
+    };
+    const idEditando = cadastroEditandoId.value;
+    const payload = cadastroPayload(cadastroTela.value, formSnapshot, empresaId.value);
+    const resultado = idEditando
+      ? await apiPut<{ id?: string } | undefined>(`/api/cadastros/${endpoint}/${idEditando}`, payload)
       : await apiPost<{ id?: string }>(`/api/cadastros/${endpoint}`, payload);
     modalCadastroAberto.value = false;
-    notificar(cadastroEditandoId.value ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
-    const empresaParaRecarregar = cadastroTela.value === "empresas" && resultado?.id ? resultado.id : empresaId.value;
-    await carregarDadosTela(cadastroTela.value || telaAtiva.value, empresaParaRecarregar);
+    notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
+    const idSalvo = idEditando || resultado?.id;
+    if (!atualizarCadastroLocal(cadastroTela.value || telaAtiva.value, formSnapshot, idSalvo)) {
+      const empresaParaRecarregar = cadastroTela.value === "empresas" && resultado?.id ? resultado.id : empresaId.value;
+      await carregarDadosTela(cadastroTela.value || telaAtiva.value, empresaParaRecarregar);
+    }
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -830,32 +1158,114 @@ function atualizarColaboradorUsuario(valor: string) {
   formCadastro.value.colaboradorId = valor;
 }
 
+async function buscarTema(tela: string) {
+  const temaLocal = resolverTemaEmpresa(tela);
+  if (temaLocal) return temaLocal;
+  const params = new URLSearchParams({ tela, empresaId: empresaId.value });
+  return apiGet<TemaAplicacao>(`/api/tema?${params.toString()}`);
+}
+
+function resolverTemaEmpresa(tela: string) {
+  const configuracao = empresaAtiva.value?.configuracoesAparencia;
+  if (!configuracao) return null;
+  if (tela === "padrao") return { ...configuracao.padrao };
+  const especifico = configuracao.especifico.find((item) => item.pagina === tela);
+  return { ...configuracao.padrao, ...(especifico?.propriedades ?? {}) };
+}
+
+function diferencasTema(temaSalvo: TemaAplicacao, padrao: TemaAplicacao): Partial<TemaAplicacao> {
+  return Object.fromEntries(
+    camposTema.filter((campo) => temaSalvo[campo] !== padrao[campo]).map((campo) => [campo, temaSalvo[campo]])
+  ) as Partial<TemaAplicacao>;
+}
+
+function aplicarTemaNaConfiguracaoLocal(tela: string, temaSalvo: TemaAplicacao) {
+  const empresa = empresaAtiva.value;
+  if (!empresa?.configuracoesAparencia) return;
+
+  const configuracao: ConfiguracaoAparenciaEmpresa =
+    tela === "padrao"
+      ? {
+          padrao: temaSalvo,
+          especifico: empresa.configuracoesAparencia.especifico
+            .map((item) => ({
+              pagina: item.pagina,
+              propriedades: diferencasTema({ ...temaSalvo, ...item.propriedades }, temaSalvo)
+            }))
+            .filter((item) => Object.keys(item.propriedades).length > 0)
+        }
+      : {
+          padrao: empresa.configuracoesAparencia.padrao,
+          especifico: empresa.configuracoesAparencia.especifico.filter((item) => item.pagina !== tela)
+        };
+
+  if (tela !== "padrao") {
+    const propriedades = diferencasTema(temaSalvo, configuracao.padrao);
+    if (Object.keys(propriedades).length > 0) configuracao.especifico.push({ pagina: tela, propriedades });
+  }
+
+  empresa.configuracoesAparencia = configuracao;
+}
+
 async function carregarTemaTela(tela: string) {
   try {
-    const params = new URLSearchParams({ tela, empresaId: empresaId.value });
-    tema.value = await apiGet<TemaAplicacao>(`/api/tema?${params.toString()}`);
+    const temaCarregado = await buscarTema(tela);
+    temaAtual.value = temaCarregado;
+    tema.value = temaCarregado;
     temaTelaAtual.value = `${empresaId.value}:${tela}`;
-    aplicarTema(tema.value);
+    aplicarTema(temaAtual.value, temaResumoCaixa.value);
   } catch {
-    tema.value = temaPadrao();
+    temaAtual.value = temaPadrao();
+    tema.value = temaAtual.value;
+    aplicarTema(temaAtual.value, temaResumoCaixa.value);
+  }
+}
+
+async function carregarTemaResumoCaixa() {
+  try {
+    temaResumoCaixa.value = await buscarTema(TELA_TEMA_RESUMO_CAIXA);
+    temaResumoCaixaAtual.value = `${empresaId.value}:${TELA_TEMA_RESUMO_CAIXA}`;
+  } catch {
+    temaResumoCaixa.value = temaPadrao();
+  } finally {
+    aplicarTema(temaAtual.value, temaResumoCaixa.value);
   }
 }
 
 async function abrirTema(tela = telaAtiva.value) {
   temaTelaEdicao.value = tela;
-  await carregarTemaTela(tela);
+  try {
+    tema.value = await buscarTema(tela);
+    if (tela === TELA_TEMA_RESUMO_CAIXA) {
+      temaResumoCaixa.value = tema.value;
+    } else if (tela === telaAtiva.value) {
+      temaAtual.value = tema.value;
+    }
+    aplicarTema(temaAtual.value, temaResumoCaixa.value);
+  } catch {
+    tema.value = tela === TELA_TEMA_RESUMO_CAIXA ? temaResumoCaixa.value : temaAtual.value;
+  }
   modalTemaAberto.value = true;
 }
 
 async function salvarTema() {
   temaSalvando.value = true;
   try {
-    tema.value = await apiPut<TemaAplicacao>("/api/tema", {
+    const temaSalvo = { ...tema.value };
+    await apiPut<void>("/api/tema", {
       empresaId: empresaId.value,
       tela: temaTelaEdicao.value,
-      ...tema.value
+      ...temaSalvo
     });
-    aplicarTema(tema.value);
+    aplicarTemaNaConfiguracaoLocal(temaTelaEdicao.value, temaSalvo);
+    if (temaTelaEdicao.value === TELA_TEMA_RESUMO_CAIXA) {
+      temaResumoCaixa.value = temaSalvo;
+      temaResumoCaixaAtual.value = `${empresaId.value}:${TELA_TEMA_RESUMO_CAIXA}`;
+    } else if (temaTelaEdicao.value === telaAtiva.value) {
+      temaAtual.value = temaSalvo;
+      temaTelaAtual.value = `${empresaId.value}:${temaTelaEdicao.value}`;
+    }
+    aplicarTema(temaAtual.value, temaResumoCaixa.value);
     modalTemaAberto.value = false;
     notificar("Aparencia salva com sucesso.");
   } catch (error) {
@@ -955,26 +1365,49 @@ async function logout() {
 
 function dadosCadastro(tela: string): Array<Record<string, string | undefined>> {
   const listas = tela === "empresas" ? opcoes.value : opcoesEmpresa.value;
-  if (tela === "empresas") return empresas.value.map((item) => ({ id: item.id, nome: item.nome }));
+  if (tela === "empresas")
+    return empresas.value.map((item) => ({ id: item.id, nome: item.nome ?? "", cnpj: item.cnpj ? String(item.cnpj) : undefined }));
   if (tela === "contas") return listas.contas.map((item) => ({ id: item.id, nome: item.nome }));
   if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
   if (tela === "pdv")
     return listas.pdvs.map((item) => ({
       id: item.id,
       nome: item.nome,
-      codigo: item.codigo,
       conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
       contaId: item.contaId,
       ativo: item.ativo === false ? "Nao" : "Sim"
     }));
   if (tela === "fornecedores")
-    return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, email: item.email }));
+    return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
+  if (tela === "clientes")
+    return listas.clientes.map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      documento: item.documento,
+      dataNascimento: item.dataNascimento,
+      whatsapp: item.whatsapp,
+      email: item.email,
+      cep: item.cep,
+      rua: item.rua,
+      numero: item.numero,
+      complemento: item.complemento,
+      bairro: item.bairro,
+      cidade: item.cidade,
+      estado: item.estado
+    }));
   if (tela === "produtos")
     return listas.produtos.map((item) => ({
       id: item.id,
-      nome: item.nome,
-      grupo: item.descricao,
-      unidade: item.sigla
+      nome: item.descricao,
+      descricao: item.descricao,
+      codigo: item.codigo,
+      codigoBarras: item.codigoBarras,
+      marca: item.marca ?? "",
+      grupoMercadoriaId: item.grupoMercadoriaId ?? "",
+      unidadeIndividualId: item.unidadeIndividualId ?? item.unidadeMedidaId ?? "",
+      unidade: listas.unidadesMedida.find((unidade) => unidade.id === (item.unidadeIndividualId ?? item.unidadeMedidaId))?.sigla ?? "",
+      quantidadeIndividual: String(item.quantidadeIndividual ?? "1"),
+      conversoes: JSON.stringify(item.conversoes ?? [])
     }));
   if (tela === "colaboradores")
     return listas.colaboradores.map((item) => ({
@@ -982,15 +1415,9 @@ function dadosCadastro(tela: string): Array<Record<string, string | undefined>> 
       nome: item.nome,
       cpf: item.cpf,
       setor: item.descricao,
-      setorId: item.setorId ?? undefined
-    }));
-  if (tela === "feriados")
-    return listas.feriados.map((item) => ({
-      id: item.id,
-      nome: item.nome,
-      dia: String(item.dia ?? ""),
-      mes: String(item.mes ?? ""),
-      ano: item.ano ? String(item.ano) : ""
+      setorId: item.setorId ?? undefined,
+      cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
+      cargoId: item.cargoIds?.[0] ?? item.cargoId ?? ""
     }));
   if (tela === "unidades")
     return listas.unidadesMedida.map((item) => ({ id: item.id, nome: item.nome, sigla: item.sigla }));
@@ -1031,14 +1458,21 @@ function dadosCadastro(tela: string): Array<Record<string, string | undefined>> 
         tipoGrupo: "mercadoria",
         grupoPaiId: item.grupoPaiId ?? ""
       })),
-      ...listas.gruposRetiradas.map((item) => ({
-        id: item.id,
-        nome: item.nome,
-        tipo: "Retirada",
-        tipoGrupo: "retirada",
-        grupoPaiId: item.grupoPaiId ?? ""
-      }))
-    ];
+	      ...listas.gruposRetiradas.map((item) => ({
+	        id: item.id,
+	        nome: item.nome,
+	        tipo: "Retirada",
+	        tipoGrupo: "retirada",
+	        grupoPaiId: item.grupoPaiId ?? ""
+	      })),
+	      ...listas.gruposVendas.map((item) => ({
+	        id: item.id,
+	        nome: item.nome,
+	        tipo: "Vendas",
+	        tipoGrupo: "vendas",
+	        grupoPaiId: item.grupoPaiId ?? ""
+	      }))
+	    ];
   }
   if (tela === "areas_setores") {
     return [
@@ -1068,8 +1502,8 @@ function descricaoTela(tela: string) {
     permissoes: "Permissoes por cargo, setor ou usuario.",
     malotes: "Malotes e lacres para transferencias.",
     colaboradores: "Cadastro de colaboradores.",
-    feriados: "Feriados por empresa.",
     fornecedores: "Cadastro de fornecedores.",
+    clientes: "Cadastro de clientes.",
     produtos: "Cadastro de produtos.",
     pdv: "Pontos de venda vinculados a uma conta de caixa."
   };
@@ -1078,20 +1512,20 @@ function descricaoTela(tela: string) {
 
 function colunasCadastro(tela: string) {
   const colunas: Record<string, string[]> = {
-    empresas: ["Nome"],
+    empresas: ["Nome", "CNPJ"],
     contas: ["Nome"],
     formas_pagamento: ["Nome"],
-    pdv: ["Nome", "Codigo", "Conta", "Ativo"],
+    pdv: ["Nome", "Conta", "Ativo"],
     grupos: ["Nome", "Tipo"],
     unidades: ["Nome", "Sigla"],
     areas_setores: ["Nome", "Tipo"],
     usuarios: ["Nome", "Email", "Role", "Cargos"],
-    permissoes: ["Tipo", "Alvo", "Permissao"],
+    permissoes: ["Tipo", "Alvo", "Regras"],
     malotes: ["Codigo", "Total lacres"],
-    colaboradores: ["Nome", "CPF", "Setor"],
-    feriados: ["Nome", "Dia", "Mes", "Ano"],
-    fornecedores: ["Nome", "Email"],
-    produtos: ["Nome", "Grupo", "Unidade"]
+    colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
+    fornecedores: ["Nome", "Documento"],
+    clientes: ["Nome", "Documento"],
+    produtos: ["Codigo", "Nome", "Marca", "Unidade"]
   };
   return colunas[tela] ?? ["Nome"];
 }
@@ -1120,15 +1554,20 @@ function treeAreasSetores() {
   return ordenarArvore(itens);
 }
 
-function permissaoCodigosDaLinha(linha: Record<string, string | undefined>) {
-  return String(linha.permissao ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+function regrasDaLinha(linha: Record<string, string | undefined>) {
+  try {
+    const regras = JSON.parse(linha.regrasJson ?? linha.regras_json ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(regras).filter(([, valor]) => typeof valor === "boolean")) as Record<
+      string,
+      boolean
+    >;
+  } catch {
+    return {};
+  }
 }
 
 function permissoesDaSecao(secao: (typeof secoesPermissoes)[number]) {
-  const usadas = new Set(formCadastro.value.permissoes);
+  const usadas = new Set(Object.keys(formCadastro.value.regras));
   return permissoes
     .filter((permissao) => {
       if (secao.prefixos.length) return secao.prefixos.some((prefixo) => permissao.startsWith(prefixo));
@@ -1143,11 +1582,19 @@ function permissoesDaSecao(secao: (typeof secoesPermissoes)[number]) {
     });
 }
 
-function alternarPermissao(permissao: string, marcado: boolean) {
-  const atual = new Set(formCadastro.value.permissoes);
-  if (marcado) atual.add(permissao);
-  else atual.delete(permissao);
-  formCadastro.value.permissoes = [...atual];
+function estadoRegraPermissao(permissao: string) {
+  const valor = formCadastro.value.regras[permissao];
+  if (valor === true) return "permitir";
+  if (valor === false) return "negar";
+  return "herdar";
+}
+
+function definirRegraPermissao(permissao: string, estado: string) {
+  const regras = { ...formCadastro.value.regras };
+  if (estado === "permitir") regras[permissao] = true;
+  else if (estado === "negar") regras[permissao] = false;
+  else delete regras[permissao];
+  formCadastro.value.regras = regras;
 }
 
 function abrirImportacao(tela = telaAtiva.value) {
@@ -1237,14 +1684,14 @@ onMounted(() => {
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
     :telas-desabilitadas="telasDesabilitadasMenu"
-    :telas-futuras="telasFuturasMenu"
+    :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
     @logout="logout"
   >
     <template #caixa>
-      <div v-if="permissoesUsuario.includes('operar_caixa')" class="caixa-card">
+	      <div v-if="permissoesUsuario.includes('caixa_operar')" class="caixa-card">
         <div v-if="caixaAberto" class="d-flex align-start justify-space-between ga-2">
           <div>
             <div class="caixa-title">Caixa: {{ caixaAberto.pdvNome }}</div>
@@ -1302,7 +1749,7 @@ onMounted(() => {
       <v-alert v-if="empresaCarregando" type="info" variant="tonal" class="mb-4">Carregando dados...</v-alert>
 
       <v-alert v-if="telaBloqueadaPorCaixa" type="warning" variant="tonal" class="mb-4">
-        Abra um caixa antes de acessar esta tela.
+        {{ motivoTelaAtivaDesabilitada }}
       </v-alert>
 
       <OperacoesPage
@@ -1333,9 +1780,33 @@ onMounted(() => {
         @fechar-caixa="fecharCaixaOperacional"
       />
 
-      <RelatorioProdutos v-else-if="tipoPagina === 'relatorio_produtos'" :empresa-id="empresaId" />
+      <FechamentoCaixaPage
+        v-else-if="tipoPagina === 'fechamento'"
+        :resumo="resumo"
+        :status="caixaStatus"
+        :salvando="caixaSalvando"
+        @acertar-saldo="acertarSaldoOperacional"
+        @fechar-caixa="fecharCaixaOperacional"
+      />
 
-      <TreeCadastroPage
+	      <RelatorioProdutos v-else-if="tipoPagina === 'relatorio_produtos'" :empresa-id="empresaId" />
+
+	      <RelatorioVendasPage
+	        v-else-if="tipoPagina === 'relatorio_vendas'"
+	        :empresa-id="empresaId"
+	        :pdvs="opcoesEmpresa.pdvs"
+	        :clientes="opcoesEmpresa.clientes"
+	        :colaboradores="opcoesEmpresa.colaboradores"
+	        :formas-pagamento="opcoesEmpresa.formasPagamento"
+	      />
+
+	      <ContasPagarPage
+	        v-else-if="tipoPagina === 'contas_pagar'"
+	        :empresa-id="empresaId"
+	        :pdvs="opcoesEmpresa.pdvs"
+	      />
+
+	      <TreeCadastroPage
         v-else-if="tipoPagina === 'tree'"
         :tela="telaAtiva === 'areas_setores' ? 'areas_setores' : 'grupos'"
         :descricao="descricaoTela(telaAtiva)"
@@ -1367,7 +1838,7 @@ onMounted(() => {
         :total-servidor="permissoesPagina.total"
         :pagina-servidor="permissoesPagina.page"
         :itens-por-pagina-servidor="permissoesPagina.pageSize"
-        :pode-excluir="telaAtiva === 'permissoes'"
+        :pode-excluir="false"
         :excluindo-id="permissaoExcluindoId"
         @acionar="telaAtiva === 'malotes' ? abrirMaloteNovo() : abrirCadastroNovo(telaAtiva)"
         @importar="abrirImportacao(telaAtiva)"
@@ -1798,7 +2269,7 @@ onMounted(() => {
             <v-col v-if="cadastroTela === 'grupos'" cols="12">
               <v-select
                 v-model="formCadastro.tipoGrupo"
-                :items="['despesa', 'mercadoria', 'retirada']"
+	                :items="['despesa', 'mercadoria', 'retirada', 'vendas']"
                 label="Tipo de grupo"
                 :disabled="Boolean(cadastroEditandoId)"
               />
@@ -1811,12 +2282,75 @@ onMounted(() => {
                 :disabled="Boolean(cadastroEditandoId)"
               />
             </v-col>
-            <v-col cols="12" :md="cadastroTela === 'unidades' || cadastroTela === 'pdv' ? 6 : 12"
-              ><v-text-field v-model="formCadastro.nome" label="Nome"
-            /></v-col>
-            <v-col v-if="cadastroTela === 'pdv'" cols="12" md="6">
-              <v-text-field v-model="formCadastro.codigo" label="Codigo" />
-            </v-col>
+	            <v-col
+	              v-if="cadastroTela !== 'produtos'"
+	              cols="12"
+	              :md="['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes'].includes(cadastroTela) ? 6 : 12"
+	              ><v-text-field v-model="formCadastro.nome" label="Nome"
+	            /></v-col>
+	            <v-col v-if="cadastroTela === 'empresas'" cols="12" md="6">
+	              <v-text-field
+	                :model-value="formCadastro.cnpj"
+	                label="CNPJ"
+	                maxlength="18"
+	                @update:model-value="formCadastro.cnpj = mascararCnpj(String($event || ''))"
+	              />
+	            </v-col>
+	            <v-col v-if="cadastroTela === 'fornecedores' || cadastroTela === 'clientes'" cols="12" md="6">
+	              <v-text-field
+	                :model-value="formCadastro.documento"
+	                label="Documento"
+	                maxlength="18"
+	                @update:model-value="atualizarDocumentoCadastro(String($event || ''))"
+	              />
+	            </v-col>
+            <template v-if="cadastroTela === 'clientes'">
+              <v-col v-if="documentoEhCpf(formCadastro.documento)" cols="12" md="6">
+                <v-text-field v-model="formCadastro.dataNascimento" type="date" label="Data de nascimento" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  :model-value="formCadastro.whatsapp"
+                  label="WhatsApp"
+                  maxlength="15"
+                  @update:model-value="formCadastro.whatsapp = mascararWhatsapp(String($event || ''))"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="formCadastro.email" type="email" label="Email" />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  :model-value="formCadastro.cep"
+                  label="CEP"
+                  maxlength="9"
+                  @update:model-value="formCadastro.cep = mascararCep(String($event || ''))"
+                />
+              </v-col>
+              <v-col cols="12" md="8">
+                <v-text-field v-model="formCadastro.rua" label="Rua" />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field v-model="formCadastro.numero" label="Numero" />
+              </v-col>
+              <v-col cols="12" md="8">
+                <v-text-field v-model="formCadastro.complemento" label="Complemento" />
+              </v-col>
+              <v-col cols="12" md="5">
+                <v-text-field v-model="formCadastro.bairro" label="Bairro" />
+              </v-col>
+              <v-col cols="12" md="5">
+                <v-text-field v-model="formCadastro.cidade" label="Cidade" />
+              </v-col>
+              <v-col cols="12" md="2">
+                <v-text-field
+                  :model-value="formCadastro.estado"
+                  label="Estado"
+                  maxlength="2"
+                  @update:model-value="formCadastro.estado = String($event || '').toUpperCase().slice(0, 2)"
+                />
+              </v-col>
+            </template>
             <v-col v-if="cadastroTela === 'pdv'" cols="12" md="8">
               <v-select
                 v-model="formCadastro.contaId"
@@ -1832,9 +2366,71 @@ onMounted(() => {
             <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
               ><v-text-field v-model="formCadastro.sigla" label="Sigla"
             /></v-col>
-            <v-col v-if="cadastroTela === 'colaboradores'" cols="12" md="6"
-              ><v-text-field v-model="formCadastro.cpf" label="CPF"
-            /></v-col>
+	            <v-col v-if="cadastroTela === 'colaboradores'" cols="12" md="6"
+	              ><v-text-field
+	                :model-value="formCadastro.cpf"
+	                label="CPF"
+	                maxlength="14"
+	                @update:model-value="formCadastro.cpf = mascararCpf(String($event || ''))"
+	            /></v-col>
+	            <template v-if="cadastroTela === 'produtos'">
+	              <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigo" label="Codigo" /></v-col>
+	              <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigoBarras" label="Codigo de barras" /></v-col>
+	              <v-col cols="12" md="4"><v-text-field v-model="formCadastro.marca" label="Marca" /></v-col>
+	              <v-col cols="12"><v-text-field v-model="formCadastro.descricao" label="Descricao" /></v-col>
+	              <v-col cols="12" md="4">
+	                <v-select
+	                  v-model="formCadastro.grupoMercadoriaId"
+	                  :items="opcoesEmpresa.gruposMercadorias"
+	                  item-title="nome"
+	                  item-value="id"
+	                  label="Grupo"
+	                  clearable
+	                />
+	              </v-col>
+	              <v-col cols="12" md="4">
+	                <v-select
+	                  v-model="formCadastro.unidadeIndividualId"
+	                  :items="opcoesEmpresa.unidadesMedida"
+	                  item-title="nome"
+	                  item-value="id"
+	                  label="Unidade individual"
+	                />
+	              </v-col>
+	              <v-col cols="12" md="4">
+	                <v-text-field v-model="formCadastro.quantidadeIndividual" type="number" label="Quantidade individual" />
+	              </v-col>
+	              <v-col cols="12">
+	                <div class="d-flex align-center justify-space-between mb-2">
+	                  <div class="text-body-2 font-weight-bold">Conversoes</div>
+	                  <v-btn
+	                    size="small"
+	                    variant="outlined"
+	                    prepend-icon="mdi-plus"
+	                    @click="formCadastro.produtoConversoes.push({ unidadeMedidaId: '', quantidade: '1', unidadesIndividuais: '1' })"
+	                    >Adicionar conversao</v-btn
+	                  >
+	                </div>
+	                <v-row v-for="(conversao, index) in formCadastro.produtoConversoes" :key="index" dense>
+	                  <v-col cols="12" md="4">
+	                    <v-select
+	                      v-model="conversao.unidadeMedidaId"
+	                      :items="opcoesEmpresa.unidadesMedida"
+	                      item-title="nome"
+	                      item-value="id"
+	                      label="Unidade"
+	                    />
+	                  </v-col>
+	                  <v-col cols="6" md="3"><v-text-field v-model="conversao.quantidade" type="number" label="Quantidade" /></v-col>
+	                  <v-col cols="6" md="4">
+	                    <v-text-field v-model="conversao.unidadesIndividuais" type="number" label="Unidades individuais" />
+	                  </v-col>
+	                  <v-col cols="12" md="1" class="d-flex align-center justify-end">
+	                    <v-btn icon="mdi-delete" variant="text" @click="formCadastro.produtoConversoes.splice(index, 1)" />
+	                  </v-col>
+	                </v-row>
+	              </v-col>
+	            </template>
             <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6"
               ><v-text-field v-model="formCadastro.email" type="email" label="Email"
             /></v-col>
@@ -1853,7 +2449,12 @@ onMounted(() => {
                 <v-text-field v-model="formCadastro.novoColaboradorNome" label="Nome do colaborador" />
               </v-col>
               <v-col cols="12" md="6">
-                <v-text-field v-model="formCadastro.novoColaboradorCpf" label="CPF do colaborador" />
+	                <v-text-field
+	                  :model-value="formCadastro.novoColaboradorCpf"
+	                  label="CPF do colaborador"
+	                  maxlength="14"
+	                  @update:model-value="formCadastro.novoColaboradorCpf = mascararCpf(String($event || ''))"
+	                />
               </v-col>
               <v-col cols="12" md="6">
                 <v-select
@@ -1874,30 +2475,29 @@ onMounted(() => {
                   label="Cargo inicial"
                 />
               </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="formCadastro.novoColaboradorRemuneracaoMinuto"
-                  type="number"
-                  label="Remuneracao por minuto"
-                />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field v-model="formCadastro.novoColaboradorDataInicio" type="date" label="Data de inicio" />
-              </v-col>
-            </template>
+	            </template>
             <v-col v-if="cadastroTela === 'usuarios' && !cadastroEditandoId" cols="12"
               ><v-text-field v-model="formCadastro.senha" type="password" label="Senha"
             /></v-col>
-            <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
-              <v-select
-                v-model="formCadastro.setorId"
+	            <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
+	              <v-select
+	                v-model="formCadastro.setorId"
                 :items="opcoesEmpresa.setores"
                 item-title="nome"
                 item-value="id"
                 label="Setor"
                 clearable
-              />
-            </v-col>
+	              />
+	            </v-col>
+	            <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
+	              <v-select
+	                v-model="formCadastro.cargoId"
+	                :items="opcoesEmpresa.cargos"
+	                item-title="nome"
+	                item-value="id"
+	                label="Cargo"
+	              />
+	            </v-col>
             <v-col v-if="cadastroTela === 'areas_setores' && formCadastro.tipoAreaSetor === 'setor'" cols="12" md="6">
               <v-select
                 v-model="formCadastro.areaId"
@@ -1976,14 +2576,21 @@ onMounted(() => {
                 <v-sheet class="pa-3 rounded-lg soft-bg">
                   <div class="text-body-2 font-weight-bold mb-2">{{ secao.titulo }}</div>
                   <v-row dense>
-                    <v-col v-for="permissao in permissoesDaSecao(secao)" :key="permissao" cols="12" md="6">
-                      <v-checkbox
-                        :model-value="formCadastro.permissoes.includes(permissao)"
-                        :label="permissao.replaceAll('_', ' ')"
-                        hide-details
-                        density="compact"
-                        @update:model-value="alternarPermissao(permissao, Boolean($event))"
-                      />
+                    <v-col v-for="permissao in permissoesDaSecao(secao)" :key="permissao" cols="12">
+                      <div class="permission-rule-row">
+                        <span class="permission-rule-label">{{ permissao.replaceAll("_", " ") }}</span>
+                        <v-btn-toggle
+                          :model-value="estadoRegraPermissao(permissao)"
+                          density="compact"
+                          divided
+                          mandatory
+                          @update:model-value="definirRegraPermissao(permissao, String($event || 'herdar'))"
+                        >
+                          <v-btn size="small" value="herdar">Herdar</v-btn>
+                          <v-btn size="small" value="permitir">Permitir</v-btn>
+                          <v-btn size="small" value="negar">Negar</v-btn>
+                        </v-btn-toggle>
+                      </div>
                     </v-col>
                   </v-row>
                 </v-sheet>
@@ -2006,22 +2613,31 @@ onMounted(() => {
         <v-card-text>
           <v-select
             v-model="temaTelaEdicao"
-            :items="telasPermitidas"
+            :items="telasTemaPermitidas"
             item-title="titulo"
             item-value="id"
             label="Pagina/secao"
             @update:model-value="abrirTema(String($event))"
           />
           <v-row dense>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corPrimaria" type="color" label="Primaria" /></v-col>
-            <v-col cols="12" md="6"
-              ><v-text-field v-model="tema.corSecundaria" type="color" label="Secundaria"
-            /></v-col>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corFundo" type="color" label="Fundo" /></v-col>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corCartao" type="color" label="Cartao" /></v-col>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corSucesso" type="color" label="Sucesso" /></v-col>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corAviso" type="color" label="Aviso" /></v-col>
-            <v-col cols="12" md="6"><v-text-field v-model="tema.corErro" type="color" label="Erro" /></v-col>
+            <template v-if="temaTelaEdicao === TELA_TEMA_RESUMO_CAIXA">
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corAviso" type="color" label="Entradas" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corSecundaria" type="color" label="Transferencias" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corErro" type="color" label="Despesas" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corPrimaria" type="color" label="Retiradas" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corSucesso" type="color" label="Saldo" /></v-col>
+            </template>
+            <template v-else>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corPrimaria" type="color" label="Primaria" /></v-col>
+              <v-col cols="12" md="6"
+                ><v-text-field v-model="tema.corSecundaria" type="color" label="Secundaria"
+              /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corFundo" type="color" label="Fundo" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corCartao" type="color" label="Cartao" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corSucesso" type="color" label="Sucesso" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corAviso" type="color" label="Aviso" /></v-col>
+              <v-col cols="12" md="6"><v-text-field v-model="tema.corErro" type="color" label="Erro" /></v-col>
+            </template>
           </v-row>
         </v-card-text>
         <v-card-actions>
@@ -2066,4 +2682,26 @@ onMounted(() => {
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
+
+<style scoped>
+.permission-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.permission-rule-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .permission-rule-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>
 

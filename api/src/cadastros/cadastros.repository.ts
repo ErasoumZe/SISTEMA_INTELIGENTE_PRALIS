@@ -2,43 +2,128 @@ import { and, eq, ilike, ne } from "drizzle-orm";
 import {
   areas,
   cargos,
+  clientes,
   colaboradoresCargos,
   colaboradores,
   contas,
   empresas,
   formasPagamento,
+  fornecedores,
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
+  gruposVendas,
   pdvs,
   permissoesCargos,
   permissoesSetores,
   permissoesUsuarios,
   perfisUsuarios,
+  produtos,
+  produtosConversoes,
   setores,
   unidadesMedida,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import { usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
-import type { Permissao, RoleUsuario } from "@padaria/shared";
+import type { Permissao, RegrasPermissoes, RoleUsuario } from "@padaria/shared";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
-type GrupoTipo = "despesa" | "mercadoria" | "retirada";
-type TabelaGrupo = typeof gruposDespesas | typeof gruposMercadorias | typeof gruposRetiradas;
+type GrupoTipo = "despesa" | "mercadoria" | "retirada" | "vendas";
+type TabelaGrupo = typeof gruposDespesas | typeof gruposMercadorias | typeof gruposRetiradas | typeof gruposVendas;
 
 function tabelaGrupo(tipo: GrupoTipo): TabelaGrupo {
   if (tipo === "despesa") return gruposDespesas;
   if (tipo === "mercadoria") return gruposMercadorias;
-  return gruposRetiradas;
+  if (tipo === "retirada") return gruposRetiradas;
+  return gruposVendas;
 }
 
-export async function salvarEmpresaRepository(input: { id?: string; nome: string }, db: ExecutorBanco = banco) {
+export async function salvarEmpresaRepository(input: { id?: string; nome: string; cnpj: string | null }, db: ExecutorBanco = banco) {
   if (input.id) {
-    await db.update(empresas).set({ nome: input.nome }).where(eq(empresas.id, input.id));
-    return { id: input.id, nome: input.nome };
+    await db.update(empresas).set({ nome: input.nome, cnpj: input.cnpj }).where(eq(empresas.id, input.id));
+    return { id: input.id, nome: input.nome, cnpj: input.cnpj };
   }
-  const [criada] = await db.insert(empresas).values({ nome: input.nome }).returning({ id: empresas.id });
+  const [criada] = await db.insert(empresas).values({ nome: input.nome, cnpj: input.cnpj }).returning({ id: empresas.id });
   return criada;
+}
+
+export async function salvarFornecedorRepository(
+  input: { id?: string; empresaId: string; nome: string; documento: string | null },
+  db: ExecutorBanco = banco
+) {
+  if (input.id) {
+    await db
+      .update(fornecedores)
+      .set({ nome: input.nome, documento: input.documento })
+      .where(and(eq(fornecedores.id, input.id), eq(fornecedores.empresaId, input.empresaId)));
+    return input;
+  }
+  const [criado] = await db
+    .insert(fornecedores)
+    .values({ empresaId: input.empresaId, nome: input.nome, documento: input.documento })
+    .returning({ id: fornecedores.id });
+  return criado;
+}
+
+export async function salvarClienteRepository(
+  input: {
+    id?: string;
+    empresaId: string;
+    nome: string;
+    documento: string | null;
+    dataNascimento: string | null;
+    whatsapp: string | null;
+    email: string | null;
+    cep: string | null;
+    rua: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    estado: string | null;
+  },
+  db: ExecutorBanco = banco
+) {
+  if (input.id) {
+    await db
+      .update(clientes)
+      .set({
+        nome: input.nome,
+        documento: input.documento,
+        dataNascimento: input.dataNascimento,
+        whatsapp: input.whatsapp,
+        email: input.email,
+        cep: input.cep,
+        rua: input.rua,
+        numero: input.numero,
+        complemento: input.complemento,
+        bairro: input.bairro,
+        cidade: input.cidade,
+        estado: input.estado,
+        atualizadoEm: new Date()
+      })
+      .where(and(eq(clientes.id, input.id), eq(clientes.empresaId, input.empresaId)));
+    return input;
+  }
+  const [criado] = await db
+    .insert(clientes)
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      documento: input.documento,
+      dataNascimento: input.dataNascimento,
+      whatsapp: input.whatsapp,
+      email: input.email,
+      cep: input.cep,
+      rua: input.rua,
+      numero: input.numero,
+      complemento: input.complemento,
+      bairro: input.bairro,
+      cidade: input.cidade,
+      estado: input.estado
+    })
+    .returning({ id: clientes.id });
+  return criado;
 }
 
 export async function salvarColaboradorRepository(
@@ -138,7 +223,7 @@ export async function buscarContaEmpresaRepository(contaId: string, db: Executor
 }
 
 export async function salvarPdvRepository(
-  input: { id?: string; empresaId: string; nome: string; codigo: string | null; contaId: string; ativo: boolean },
+  input: { id?: string; empresaId: string; nome: string; contaId: string; ativo: boolean },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
@@ -146,7 +231,6 @@ export async function salvarPdvRepository(
       .update(pdvs)
       .set({
         nome: input.nome,
-        codigo: input.codigo,
         contaId: input.contaId,
         ativo: input.ativo,
         atualizadoEm: new Date()
@@ -159,12 +243,67 @@ export async function salvarPdvRepository(
     .values({
       empresaId: input.empresaId,
       nome: input.nome,
-      codigo: input.codigo,
       contaId: input.contaId,
       ativo: input.ativo
     })
     .returning({ id: pdvs.id });
   return criado;
+}
+
+export async function salvarProdutoRepository(
+  input: {
+    id?: string;
+    empresaId: string;
+    codigo: string | null;
+    codigoBarras: string | null;
+    descricao: string;
+    marca: string | null;
+    unidadeIndividualId: string;
+    quantidadeIndividual: number;
+    grupoMercadoriaId: string | null;
+    conversoes: Array<{ unidadeMedidaId: string; quantidade: number; unidadesIndividuais: number }>;
+  }
+) {
+  return banco.transaction(async (tx) => {
+    const valores = {
+      empresaId: input.empresaId,
+      codigo: input.codigo,
+      codigoBarras: input.codigoBarras,
+      descricao: input.descricao,
+      marca: input.marca,
+      unidadeMedidaId: input.unidadeIndividualId,
+      unidadeIndividualId: input.unidadeIndividualId,
+      quantidadeIndividual: String(input.quantidadeIndividual),
+      grupoMercadoriaId: input.grupoMercadoriaId
+    };
+    const produtoId = input.id
+      ? input.id
+      : (
+          await tx
+            .insert(produtos)
+            .values(valores)
+            .returning({ id: produtos.id })
+        )[0]?.id;
+    if (!produtoId) throw new Error("Produto nao criado");
+    if (input.id) {
+      await tx
+        .update(produtos)
+        .set(valores)
+        .where(and(eq(produtos.id, input.id), eq(produtos.empresaId, input.empresaId)));
+    }
+    await tx.delete(produtosConversoes).where(eq(produtosConversoes.produtoId, produtoId));
+    if (input.conversoes.length) {
+      await tx.insert(produtosConversoes).values(
+        input.conversoes.map((conversao) => ({
+          produtoId,
+          unidadeMedidaId: conversao.unidadeMedidaId,
+          quantidade: String(conversao.quantidade),
+          unidadesIndividuais: String(conversao.unidadesIndividuais)
+        }))
+      );
+    }
+    return { id: produtoId, empresaId: input.empresaId };
+  });
 }
 
 export async function salvarUnidadeRepository(
@@ -374,53 +513,60 @@ export async function vincularUsuarioColaboradorRepository(
 
 export async function substituirPermissoesCargoRepository(
   cargoId: string,
-  permissoes: Permissao[],
+  regras: RegrasPermissoes,
   db: ExecutorBanco = banco
 ) {
   await db.delete(permissoesCargos).where(eq(permissoesCargos.cargoId, cargoId));
-  if (!permissoes.length) return;
-  await db
-    .insert(permissoesCargos)
-    .values(permissoes.map((permissaoCodigo) => ({ cargoId, permissaoCodigo })))
-    .onConflictDoNothing();
+  if (!Object.keys(regras).length) return;
+  await db.insert(permissoesCargos).values({ cargoId, regras }).onConflictDoNothing();
 }
 
 export async function substituirPermissoesSetorRepository(
   setorId: string,
-  permissoes: Permissao[],
+  regras: RegrasPermissoes,
   db: ExecutorBanco = banco
 ) {
   await db.delete(permissoesSetores).where(eq(permissoesSetores.setorId, setorId));
-  if (!permissoes.length) return;
-  await db
-    .insert(permissoesSetores)
-    .values(permissoes.map((permissaoCodigo) => ({ setorId, permissaoCodigo })))
-    .onConflictDoNothing();
+  if (!Object.keys(regras).length) return;
+  await db.insert(permissoesSetores).values({ setorId, regras }).onConflictDoNothing();
 }
 
 export async function substituirPermissoesUsuarioRepository(
   usuarioId: string,
-  permissoes: Permissao[],
+  regras: RegrasPermissoes,
   db: ExecutorBanco = banco
 ) {
   await db.delete(permissoesUsuarios).where(eq(permissoesUsuarios.usuarioId, usuarioId));
-  if (!permissoes.length) return;
-  await db
-    .insert(permissoesUsuarios)
-    .values(permissoes.map((permissaoCodigo) => ({ usuarioId, permissaoCodigo })))
-    .onConflictDoNothing();
+  if (!Object.keys(regras).length) return;
+  await db.insert(permissoesUsuarios).values({ usuarioId, regras }).onConflictDoNothing();
+}
+
+function removerRegraPermissao(regras: RegrasPermissoes | null | undefined, permissao: Permissao): RegrasPermissoes {
+  const proximas = { ...(regras ?? {}) };
+  delete proximas[permissao];
+  return proximas;
 }
 
 export async function excluirPermissaoCargoRepository(cargoId: string, permissao: Permissao, db: ExecutorBanco = banco) {
-  await db
-    .delete(permissoesCargos)
-    .where(and(eq(permissoesCargos.cargoId, cargoId), eq(permissoesCargos.permissaoCodigo, permissao)));
+  const [linha] = await db
+    .select({ regras: permissoesCargos.regras })
+    .from(permissoesCargos)
+    .where(eq(permissoesCargos.cargoId, cargoId))
+    .limit(1);
+  const regras = removerRegraPermissao(linha?.regras, permissao);
+  await db.delete(permissoesCargos).where(eq(permissoesCargos.cargoId, cargoId));
+  if (Object.keys(regras).length) await db.insert(permissoesCargos).values({ cargoId, regras }).onConflictDoNothing();
 }
 
 export async function excluirPermissaoSetorRepository(setorId: string, permissao: Permissao, db: ExecutorBanco = banco) {
-  await db
-    .delete(permissoesSetores)
-    .where(and(eq(permissoesSetores.setorId, setorId), eq(permissoesSetores.permissaoCodigo, permissao)));
+  const [linha] = await db
+    .select({ regras: permissoesSetores.regras })
+    .from(permissoesSetores)
+    .where(eq(permissoesSetores.setorId, setorId))
+    .limit(1);
+  const regras = removerRegraPermissao(linha?.regras, permissao);
+  await db.delete(permissoesSetores).where(eq(permissoesSetores.setorId, setorId));
+  if (Object.keys(regras).length) await db.insert(permissoesSetores).values({ setorId, regras }).onConflictDoNothing();
 }
 
 export async function excluirPermissaoUsuarioRepository(
@@ -428,7 +574,12 @@ export async function excluirPermissaoUsuarioRepository(
   permissao: Permissao,
   db: ExecutorBanco = banco
 ) {
-  await db
-    .delete(permissoesUsuarios)
-    .where(and(eq(permissoesUsuarios.usuarioId, usuarioId), eq(permissoesUsuarios.permissaoCodigo, permissao)));
+  const [linha] = await db
+    .select({ regras: permissoesUsuarios.regras })
+    .from(permissoesUsuarios)
+    .where(eq(permissoesUsuarios.usuarioId, usuarioId))
+    .limit(1);
+  const regras = removerRegraPermissao(linha?.regras, permissao);
+  await db.delete(permissoesUsuarios).where(eq(permissoesUsuarios.usuarioId, usuarioId));
+  if (Object.keys(regras).length) await db.insert(permissoesUsuarios).values({ usuarioId, regras }).onConflictDoNothing();
 }

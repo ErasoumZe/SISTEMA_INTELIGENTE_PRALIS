@@ -1,4 +1,4 @@
-import type { Permissao, TemaAplicacao } from "@padaria/shared";
+import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 
 export type Opcao = {
   id: string;
@@ -6,6 +6,24 @@ export type Opcao = {
   email?: string;
   descricao?: string;
   codigo?: string;
+  codigoBarras?: string;
+  documento?: string;
+  dataNascimento?: string;
+  whatsapp?: string;
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  cnpj?: string | null;
+  configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
+  marca?: string | null;
+  grupoMercadoriaId?: string | null;
+  unidadeMedidaId?: string | null;
+  unidadeIndividualId?: string | null;
+  quantidadeIndividual?: string;
   sigla?: string;
   empresaId?: string;
   empresaIds?: string[];
@@ -15,7 +33,7 @@ export type Opcao = {
   totalLacres?: number;
   cpf?: string;
   tipo?: string;
-  tipoGrupo?: "despesa" | "mercadoria" | "retirada";
+  tipoGrupo?: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId?: string | null;
   areaId?: string | null;
   setorPaiId?: string | null;
@@ -27,6 +45,7 @@ export type Opcao = {
   contaId?: string;
   cargoIds?: string[];
   cargos?: string[];
+  conversoes?: ProdutoConversao[];
   role?: string;
   cargoNome?: string;
   remuneracaoMinuto?: string;
@@ -67,10 +86,10 @@ export type Opcoes = {
   colaboradoresCargos: Opcao[];
   colaboradoresJornadas: Opcao[];
   colaboradoresFaltasJustificadas: Opcao[];
-  feriados: Opcao[];
   gruposDespesas: Opcao[];
   gruposMercadorias: Opcao[];
   gruposRetiradas: Opcao[];
+  gruposVendas: Opcao[];
   unidadesMedida: Opcao[];
   areas: Opcao[];
   setores: Opcao[];
@@ -90,10 +109,25 @@ export type OperacaoResumo = {
   id: string;
   empresaId: string;
   dataReferencia: string;
+  dataVencimento?: string;
+  dataPagamento?: string | null;
   descricao: string;
   valorOriginal: string;
   computar: boolean;
   status: string;
+  pdvId?: string | null;
+  pdvNome?: string | null;
+  clienteId?: string | null;
+  clienteNome?: string | null;
+  colaboradorId?: string | null;
+  colaboradorNome?: string | null;
+  pagamentos?: Array<{
+    id: string;
+    formaPagamentoId: string | null;
+    formaPagamentoNome: string | null;
+    totalPago: string;
+  }>;
+  totalComprovantes?: number;
 };
 
 export type ResumoCaixa = {
@@ -134,6 +168,8 @@ export type ItemMenu = {
   id: string;
   titulo: string;
   permissao: Permissao;
+  permissaoMenu?: Permissao;
+  permissaoMenuDesabilitado?: Permissao;
   icone: string;
 };
 
@@ -157,14 +193,32 @@ export type TreeItem = {
 
 export type CadastroForm = {
   nome: string;
+  documento: string;
+  dataNascimento: string;
+  whatsapp: string;
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cnpj: string;
   email: string;
   senha: string;
   cpf: string;
   sigla: string;
   codigo: string;
+  codigoBarras: string;
+  descricao: string;
+  marca: string;
+  unidadeIndividualId: string;
+  quantidadeIndividual: string;
+  grupoMercadoriaId: string;
+  produtoConversoes: ProdutoConversaoForm[];
   contaId: string;
   ativo: boolean;
-  tipoGrupo: "despesa" | "mercadoria" | "retirada";
+  tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId: string;
   tipoAreaSetor: "area" | "setor";
   areaId: string;
@@ -176,13 +230,25 @@ export type CadastroForm = {
   novoColaboradorCpf: string;
   novoColaboradorSetorId: string;
   novoColaboradorCargoId: string;
-  novoColaboradorRemuneracaoMinuto: string;
-  novoColaboradorDataInicio: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
   usuarioId: string;
-  permissoes: string[];
+  regras: Record<string, boolean>;
+};
+
+export type ProdutoConversao = {
+  id?: string;
+  produtoId?: string;
+  unidadeMedidaId: string;
+  quantidade: string;
+  unidadesIndividuais: string;
+};
+
+export type ProdutoConversaoForm = {
+  unidadeMedidaId: string;
+  quantidade: string;
+  unidadesIndividuais: string;
 };
 
 export type OperacaoForm = {

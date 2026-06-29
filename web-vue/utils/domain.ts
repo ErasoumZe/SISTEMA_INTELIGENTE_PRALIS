@@ -1,158 +1,158 @@
-import { permissoes, type Permissao, type TemaAplicacao } from "@padaria/shared";
+import { TELA_TEMA_RESUMO_CAIXA, permissoes, type Permissao, type TemaAplicacao } from "@padaria/shared";
 import type { AcaoNovo, CadastroForm, EntidadeOperacional, ItemMenu, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
 export { permissoes };
 
 export const itemPorTela: Record<string, ItemMenu> = {
-  entradas: { id: "entradas", titulo: "Entradas", permissao: "entradas", icone: "mdi-arrow-down-left" },
+  entradas: { id: "entradas", titulo: "Entradas", permissao: "entradas_visualizar", icone: "mdi-arrow-down-left" },
   transferencias: {
     id: "transferencias",
     titulo: "Transferencias",
-    permissao: "transferencias",
+    permissao: "transferencias_visualizar",
     icone: "mdi-swap-horizontal"
   },
-  despesas: { id: "despesas", titulo: "Despesas", permissao: "despesas", icone: "mdi-receipt-text" },
+  despesas: { id: "despesas", titulo: "Despesas", permissao: "despesas_visualizar", icone: "mdi-receipt-text" },
   mercadorias: {
     id: "mercadorias",
     titulo: "Mercadorias",
-    permissao: "mercadorias",
+    permissao: "mercadorias_visualizar",
     icone: "mdi-package-variant-closed"
   },
-  retiradas: { id: "retiradas", titulo: "Retiradas", permissao: "retiradas", icone: "mdi-wallet" },
+  retiradas: { id: "retiradas", titulo: "Retiradas", permissao: "retiradas_visualizar", icone: "mdi-wallet" },
   fechamento: {
     id: "fechamento",
     titulo: "Fechamento com diferenca",
-    permissao: "fechamento_com_diferenca",
+    permissao: "fechamento_com_diferenca_visualizar",
     icone: "mdi-cash-register"
   },
   relatorio_produtos: {
     id: "relatorio_produtos",
     titulo: "Produtos mais vendidos",
-    permissao: "relatorio_produtos_mais_vendidos",
+    permissao: "relatorio_produtos_visualizar",
     icone: "mdi-chart-bar"
   },
-  malotes: { id: "malotes", titulo: "Malotes", permissao: "cadastro_malotes", icone: "mdi-briefcase" },
-  caixa: { id: "caixa", titulo: "Caixa", permissao: "operar_caixa", icone: "mdi-store" },
-  promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes", icone: "mdi-hand-coin" },
+  malotes: { id: "malotes", titulo: "Malotes", permissao: "cadastro_malotes_visualizar", icone: "mdi-briefcase" },
+  caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-store" },
+  promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",
     titulo: "Faltas e atestados",
-    permissao: "relatorio_faltas_atestados_colaboradores",
+    permissao: "relatorio_faltas_visualizar",
     icone: "mdi-chart-box"
   },
   relatorio_advertencias: {
     id: "relatorio_advertencias",
     titulo: "Advertencias e suspensoes",
-    permissao: "relatorio_advertencia_suspensao_colaboradores",
+    permissao: "relatorio_advertencias_visualizar",
     icone: "mdi-clipboard-check"
   },
-  pedidos: { id: "pedidos", titulo: "Pedidos", permissao: "pedidos", icone: "mdi-clipboard-list" },
+  pedidos: { id: "pedidos", titulo: "Pedidos", permissao: "pedidos_visualizar", icone: "mdi-clipboard-list" },
   perdas_sobras: {
     id: "perdas_sobras",
     titulo: "Perdas e sobras",
-    permissao: "perdas_sobras",
+    permissao: "perdas_sobras_visualizar",
     icone: "mdi-package-variant"
   },
   estoque_produtos: {
     id: "estoque_produtos",
     titulo: "Estoque de produtos",
-    permissao: "estoque_produtos",
+    permissao: "estoque_produtos_visualizar",
     icone: "mdi-warehouse"
   },
   relatorio_dre: {
     id: "relatorio_dre",
     titulo: "Relatorio de DRE",
-    permissao: "relatorio_dre",
+    permissao: "relatorio_dre_visualizar",
     icone: "mdi-chart-bar"
   },
   clientes: {
     id: "clientes",
     titulo: "Clientes",
-    permissao: "cadastro_avaliacao_clientes",
+    permissao: "cadastro_clientes_visualizar",
     icone: "mdi-account-group"
   },
-  fornecedores: { id: "fornecedores", titulo: "Fornecedores", permissao: "cadastro_fornecedores", icone: "mdi-domain" },
-  produtos: { id: "produtos", titulo: "Produtos", permissao: "cadastro_produtos", icone: "mdi-basket" },
+  fornecedores: { id: "fornecedores", titulo: "Fornecedores", permissao: "cadastro_fornecedores_visualizar", icone: "mdi-domain" },
+  produtos: { id: "produtos", titulo: "Produtos", permissao: "cadastro_produtos_visualizar", icone: "mdi-basket" },
   colaboradores: {
     id: "colaboradores",
     titulo: "Colaboradores",
-    permissao: "cadastro_colaboradores",
+    permissao: "cadastro_colaboradores_visualizar",
     icone: "mdi-account-group"
   },
-  feriados: { id: "feriados", titulo: "Feriados", permissao: "cadastro_colaboradores", icone: "mdi-calendar-clock" },
-  folha_ponto: { id: "folha_ponto", titulo: "Folha ponto", permissao: "folha_ponto", icone: "mdi-calendar-clock" },
+  folha_ponto: { id: "folha_ponto", titulo: "Folha ponto", permissao: "folha_ponto_visualizar", icone: "mdi-calendar-clock" },
   avaliacao_qualidade: {
     id: "avaliacao_qualidade",
     titulo: "Avaliacao de qualidade",
-    permissao: "avaliacao_qualidade",
+    permissao: "avaliacao_qualidade_visualizar",
     icone: "mdi-clipboard-check"
   },
   avaliacao_colaboradores: {
     id: "avaliacao_colaboradores",
     titulo: "Avaliacao de colaboradores",
-    permissao: "avaliacao_colaboradores",
+    permissao: "avaliacao_colaboradores_visualizar",
     icone: "mdi-clipboard-check"
   },
   relatorio_fiscal: {
     id: "relatorio_fiscal",
     titulo: "Relatorio fiscal dos produtos",
-    permissao: "relatorio_fiscal_produtos",
+    permissao: "relatorio_fiscal_visualizar",
     icone: "mdi-file-document"
   },
   fiscal_produtos: {
     id: "fiscal_produtos",
     titulo: "Fiscal de produtos",
-    permissao: "cadastro_fiscal_produtos",
+    permissao: "cadastro_fiscal_produtos_visualizar",
     icone: "mdi-file-text"
   },
-  patrimonio: { id: "patrimonio", titulo: "Patrimonio", permissao: "cadastro_patrimonio", icone: "mdi-bank" },
+  patrimonio: { id: "patrimonio", titulo: "Patrimonio", permissao: "cadastro_patrimonio_visualizar", icone: "mdi-bank" },
   ficha_tecnica: {
     id: "ficha_tecnica",
     titulo: "Ficha tecnica",
-    permissao: "cadastro_ficha_tecnica",
+    permissao: "cadastro_ficha_tecnica_visualizar",
     icone: "mdi-clipboard-list"
   },
-  ingredientes: { id: "ingredientes", titulo: "Ingredientes", permissao: "cadastro_ingredientes", icone: "mdi-basket" },
-  contas_pagar: { id: "contas_pagar", titulo: "Contas a pagar", permissao: "contas_pagar", icone: "mdi-receipt-text" },
-  vendas_crediario: {
-    id: "vendas_crediario",
-    titulo: "Vendas no crediario",
-    permissao: "vendas_crediario",
+  ingredientes: { id: "ingredientes", titulo: "Ingredientes", permissao: "cadastro_ingredientes_visualizar", icone: "mdi-basket" },
+  contas_pagar: { id: "contas_pagar", titulo: "Contas a pagar", permissao: "contas_pagar_visualizar", icone: "mdi-receipt-text" },
+  relatorio_vendas: {
+    id: "relatorio_vendas",
+    titulo: "Relatorio de Vendas",
+    permissao: "relatorio_vendas_visualizar",
     icone: "mdi-hand-coin"
   },
   notas_fiscais: {
     id: "notas_fiscais",
     titulo: "Notas fiscais",
-    permissao: "notas_fiscais",
+    permissao: "notas_fiscais_visualizar",
     icone: "mdi-file-document"
   },
-  grupos_vendas: {
-    id: "grupos_vendas",
-    titulo: "Grupos de vendas",
-    permissao: "cadastro_grupos_vendas",
-    icone: "mdi-layers"
-  },
-  pdv: { id: "pdv", titulo: "PDV", permissao: "cadastro_pdv", icone: "mdi-store" },
+  pdv: { id: "pdv", titulo: "PDV", permissao: "cadastro_pdv_visualizar", icone: "mdi-store" },
   formas_pagamento: {
     id: "formas_pagamento",
     titulo: "Formas de pagamento",
-    permissao: "cadastro_formas_pagamento",
+    permissao: "cadastro_formas_pagamento_visualizar",
     icone: "mdi-credit-card"
   },
-  integracoes: { id: "integracoes", titulo: "Integracoes", permissao: "integracoes", icone: "mdi-connection" },
-  contas: { id: "contas", titulo: "Contas", permissao: "cadastro_contas", icone: "mdi-domain" },
-  empresas: { id: "empresas", titulo: "Empresas", permissao: "cadastro_empresas", icone: "mdi-domain" },
-  grupos: { id: "grupos", titulo: "Grupos", permissao: "cadastro_grupos_despesas", icone: "mdi-layers" },
-  unidades: { id: "unidades", titulo: "Unidades de medida", permissao: "cadastro_unidades_medida", icone: "mdi-ruler" },
+  integracoes: { id: "integracoes", titulo: "Integracoes", permissao: "integracoes_visualizar", icone: "mdi-connection" },
+  contas: { id: "contas", titulo: "Contas", permissao: "cadastro_contas_visualizar", icone: "mdi-domain" },
+  empresas: { id: "empresas", titulo: "Empresas", permissao: "cadastro_empresas_visualizar", icone: "mdi-domain" },
+  grupos: { id: "grupos", titulo: "Grupos", permissao: "cadastro_grupos_visualizar", icone: "mdi-layers" },
+  unidades: { id: "unidades", titulo: "Unidades de medida", permissao: "cadastro_unidades_medida_visualizar", icone: "mdi-ruler" },
   areas_setores: {
     id: "areas_setores",
     titulo: "Areas e setores",
-    permissao: "cadastro_areas_setores",
+    permissao: "cadastro_areas_setores_visualizar",
     icone: "mdi-map-marker"
   },
-  usuarios: { id: "usuarios", titulo: "Usuarios", permissao: "cadastro_usuarios", icone: "mdi-account-group" },
-  permissoes: { id: "permissoes", titulo: "Permissoes", permissao: "cadastro_permissoes", icone: "mdi-shield-check" },
-  aparencia: { id: "aparencia", titulo: "Aparencia", permissao: "configurar_tema", icone: "mdi-palette" }
+  usuarios: { id: "usuarios", titulo: "Usuarios", permissao: "cadastro_usuarios_visualizar", icone: "mdi-account-group" },
+  permissoes: { id: "permissoes", titulo: "Permissoes", permissao: "cadastro_permissoes_visualizar", icone: "mdi-shield-check" },
+  aparencia: { id: "aparencia", titulo: "Aparencia", permissao: "aparencia_visualizar", icone: "mdi-palette" }
+};
+
+export const itemTemaResumoCaixa: ItemMenu = {
+  id: TELA_TEMA_RESUMO_CAIXA,
+  titulo: "Resumo do caixa",
+  permissao: "aparencia_visualizar",
+  icone: "mdi-view-dashboard"
 };
 
 export const entidadePorTela: Record<string, EntidadeOperacional> = {
@@ -182,34 +182,47 @@ export const telasCrudDiretoria = [
   "colaboradores"
 ];
 
-export const telasFuturas = new Set([
-  "promocoes",
-  "relatorio_faltas",
-  "relatorio_advertencias",
-  "pedidos",
-  "perdas_sobras",
-  "estoque_produtos",
-  "relatorio_dre",
-  "clientes",
-  "folha_ponto",
-  "avaliacao_qualidade",
-  "avaliacao_colaboradores",
-  "relatorio_fiscal",
-  "fiscal_produtos",
-  "patrimonio",
-  "ficha_tecnica",
-  "ingredientes",
-  "notas_fiscais"
-]);
+export function permissaoMenuMostrar(telaId: string) {
+  return `menu_${telaId}_mostrar` as Permissao;
+}
 
-export const mensagemTelaFutura = "Será desenvolvido futuramente.";
+export function permissaoMenuDesabilitado(telaId: string) {
+  return `menu_${telaId}_desabilitado` as Permissao;
+}
+
+export function permissaoMenuSomenteCaixaAberto(telaId: string) {
+  return `menu_${telaId}_somente_caixa_aberto` as Permissao;
+}
+
+export function telaVisivelNoMenu(permissoesUsuario: readonly Permissao[], item: ItemMenu) {
+  return (
+    permissoesUsuario.includes(item.permissao) ||
+    permissoesUsuario.includes(permissaoMenuMostrar(item.id)) ||
+    permissoesUsuario.includes(permissaoMenuDesabilitado(item.id)) ||
+    permissoesUsuario.includes(permissaoMenuSomenteCaixaAberto(item.id))
+  );
+}
+
+export function telaDesabilitadaNoMenu(permissoesUsuario: readonly Permissao[], item: ItemMenu, caixaAberto: boolean) {
+  const temAcesso = permissoesUsuario.includes(item.permissao);
+  if (!temAcesso) return true;
+  return permissoesUsuario.includes(permissaoMenuSomenteCaixaAberto(item.id)) && !caixaAberto;
+}
+
+export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], item: ItemMenu, caixaAberto: boolean) {
+  const dependeCaixa = permissoesUsuario.includes(permissaoMenuSomenteCaixaAberto(item.id));
+  if (dependeCaixa && !caixaAberto && permissoesUsuario.includes(item.permissao)) {
+    return "Abra um caixa para acessar esta tela.";
+  }
+  return "Tela indisponivel para este perfil.";
+}
 
 export const opcoesNovo: AcaoNovo[] = [
   {
     entidade: "despesa",
     titulo: "Despesa",
     subtitulo: "Fornecedor, grupo e itens discriminados",
-    permissao: "despesas",
+    permissao: "despesas_criar",
     icone: "mdi-receipt-text",
     cor: "error"
   },
@@ -217,7 +230,7 @@ export const opcoesNovo: AcaoNovo[] = [
     entidade: "mercadoria",
     titulo: "Mercadoria",
     subtitulo: "Compra, nota fiscal e documento",
-    permissao: "mercadorias",
+    permissao: "mercadorias_criar",
     icone: "mdi-package-variant-closed",
     cor: "info"
   },
@@ -225,7 +238,7 @@ export const opcoesNovo: AcaoNovo[] = [
     entidade: "transferencia",
     titulo: "Transferencia",
     subtitulo: "Contas, malote e lacre",
-    permissao: "transferencias",
+    permissao: "transferencias_criar",
     icone: "mdi-swap-horizontal",
     cor: "primary"
   },
@@ -233,7 +246,7 @@ export const opcoesNovo: AcaoNovo[] = [
     entidade: "retirada",
     titulo: "Retirada",
     subtitulo: "Colaborador, fornecedor ou retirada operacional",
-    permissao: "retiradas",
+    permissao: "retiradas_criar",
     icone: "mdi-wallet",
     cor: "warning"
   },
@@ -241,15 +254,16 @@ export const opcoesNovo: AcaoNovo[] = [
     tela: "malote",
     titulo: "Malote",
     subtitulo: "Cadastro de malote e lacres",
-    permissao: "cadastro_malotes",
+    permissao: "cadastro_malotes_criar",
     icone: "mdi-briefcase",
     cor: "secondary"
   }
 ];
 
 export const secoesPermissoes = [
+  { titulo: "Menu lateral", prefixos: ["menu_"] },
   { titulo: "Transferencias", prefixos: ["transferencias", "cadastro_malotes"] },
-  { titulo: "Despesas", prefixos: ["despesas", "contas_pagar", "cadastro_grupos_despesas"] },
+  { titulo: "Despesas", prefixos: ["despesas", "contas_pagar", "cadastro_grupos"] },
   {
     titulo: "Mercadorias",
     prefixos: [
@@ -257,23 +271,23 @@ export const secoesPermissoes = [
       "pedidos",
       "estoque_produtos",
       "perdas_sobras",
-      "cadastro_grupos_mercadorias",
+      "cadastro_grupos",
       "cadastro_produtos",
       "cadastro_unidades_medida",
       "cadastro_fornecedores"
     ]
   },
-  { titulo: "Retiradas", prefixos: ["retiradas", "cadastro_grupos_retiradas"] },
+  { titulo: "Retiradas", prefixos: ["retiradas", "cadastro_grupos"] },
   {
     titulo: "Caixa e vendas",
     prefixos: [
       "entradas",
       "fechamento_com_diferenca",
       "promocoes",
-      "vendas_crediario",
+      "relatorio_vendas",
       "cadastro_pdv",
       "cadastro_formas_pagamento",
-      "cadastro_grupos_vendas",
+      "cadastro_grupos",
       "integracoes"
     ]
   },
@@ -284,7 +298,7 @@ export const secoesPermissoes = [
       "cadastro_contas",
       "cadastro_areas_setores",
       "cadastro_colaboradores",
-      "cadastro_avaliacao_clientes",
+      "cadastro_clientes",
       "cadastro_fiscal_produtos",
       "cadastro_patrimonio",
       "cadastro_ficha_tecnica",
@@ -295,14 +309,14 @@ export const secoesPermissoes = [
   {
     titulo: "Relatorios",
     prefixos: [
-      "relatorio_produtos_mais_vendidos",
-      "relatorio_faltas_atestados_colaboradores",
-      "relatorio_advertencia_suspensao_colaboradores",
+      "relatorio_produtos",
+      "relatorio_faltas",
+      "relatorio_advertencias",
       "relatorio_dre",
       "relatorio_fiscal_produtos"
     ]
   },
-  { titulo: "Permissoes e aparencia", prefixos: ["cadastro_permissoes", "configurar_tema"] },
+  { titulo: "Permissoes e aparencia", prefixos: ["cadastro_permissoes", "aparencia"] },
   { titulo: "Outras", prefixos: [] }
 ];
 
@@ -318,10 +332,10 @@ export function opcoesVazias(): Opcoes {
     colaboradoresCargos: [],
     colaboradoresJornadas: [],
     colaboradoresFaltasJustificadas: [],
-    feriados: [],
     gruposDespesas: [],
     gruposMercadorias: [],
     gruposRetiradas: [],
+    gruposVendas: [],
     unidadesMedida: [],
     areas: [],
     setores: [],
@@ -367,14 +381,31 @@ export function formOperacaoVazio(): OperacaoForm {
 }
 
 export function formCadastroVazio(): CadastroForm {
-  const hoje = new Date().toISOString().slice(0, 10);
   return {
     nome: "",
+    documento: "",
+    dataNascimento: "",
+    whatsapp: "",
+    cep: "",
+    rua: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+    cnpj: "",
     email: "",
     senha: "",
     cpf: "",
     sigla: "",
     codigo: "",
+    codigoBarras: "",
+    descricao: "",
+    marca: "",
+    unidadeIndividualId: "",
+    quantidadeIndividual: "1",
+    grupoMercadoriaId: "",
+    produtoConversoes: [],
     contaId: "",
     ativo: true,
     tipoGrupo: "despesa",
@@ -389,13 +420,11 @@ export function formCadastroVazio(): CadastroForm {
     novoColaboradorCpf: "",
     novoColaboradorSetorId: "",
     novoColaboradorCargoId: "",
-    novoColaboradorRemuneracaoMinuto: "",
-    novoColaboradorDataInicio: hoje,
     cargoId: "",
     empresaIds: [],
     tipoPermissao: "cargo",
     usuarioId: "",
-    permissoes: []
+    regras: {}
   };
 }
 
@@ -450,10 +479,10 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     colaboradoresCargos: itensDaEmpresa(listas.colaboradoresCargos, idEmpresa),
     colaboradoresJornadas: itensDaEmpresa(listas.colaboradoresJornadas, idEmpresa),
     colaboradoresFaltasJustificadas: itensDaEmpresa(listas.colaboradoresFaltasJustificadas, idEmpresa),
-    feriados: itensDaEmpresa(listas.feriados, idEmpresa),
     gruposDespesas: itensDaEmpresa(listas.gruposDespesas, idEmpresa),
     gruposMercadorias: itensDaEmpresa(listas.gruposMercadorias, idEmpresa),
     gruposRetiradas: itensDaEmpresa(listas.gruposRetiradas, idEmpresa),
+    gruposVendas: itensDaEmpresa(listas.gruposVendas, idEmpresa),
     unidadesMedida: itensDaEmpresa(listas.unidadesMedida, idEmpresa),
     areas: itensDaEmpresa(listas.areas, idEmpresa),
     setores,
@@ -474,6 +503,8 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
       ? "grupos-mercadorias"
       : form?.tipoGrupo === "retirada"
         ? "grupos-retiradas"
+        : form?.tipoGrupo === "vendas"
+          ? "grupos-vendas"
         : "grupos-despesas";
   const mapa: Record<string, string> = {
     empresas: "empresas",
@@ -491,14 +522,56 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
   return mapa[tela] ?? tela.replaceAll("_", "-");
 }
 
+function documentoCadastroEhCpf(documento: string) {
+  const digitos = documento.replace(/\D/g, "");
+  return digitos.length > 0 && digitos.length <= 11;
+}
+
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
-  if (tela === "empresas") return { nome: form.nome };
+  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
   if (tela === "contas") return { empresaId, nome: form.nome };
   if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
   if (tela === "pdv")
-    return { empresaId, nome: form.nome, codigo: form.codigo || null, contaId: form.contaId, ativo: form.ativo };
-  if (tela === "grupos") return { empresaId, nome: form.nome, grupoPaiId: form.grupoPaiId || null };
+    return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
+  if (tela === "grupos")
+    return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
+  if (tela === "fornecedores")
+    return { empresaId, nome: form.nome, documento: form.documento || null };
+  if (tela === "clientes")
+    return {
+      empresaId,
+      nome: form.nome,
+      documento: form.documento || null,
+      dataNascimento: documentoCadastroEhCpf(form.documento) ? form.dataNascimento || null : null,
+      whatsapp: form.whatsapp || null,
+      email: form.email || null,
+      cep: form.cep || null,
+      rua: form.rua || null,
+      numero: form.numero || null,
+      complemento: form.complemento || null,
+      bairro: form.bairro || null,
+      cidade: form.cidade || null,
+      estado: form.estado || null
+    };
+  if (tela === "produtos")
+    return {
+      empresaId,
+      codigo: form.codigo || null,
+      codigoBarras: form.codigoBarras || null,
+      descricao: form.descricao || form.nome,
+      marca: form.marca || null,
+      unidadeIndividualId: form.unidadeIndividualId,
+      quantidadeIndividual: Number(form.quantidadeIndividual || 1),
+      grupoMercadoriaId: form.grupoMercadoriaId || null,
+      conversoes: form.produtoConversoes
+        .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
+        .map((conversao) => ({
+          unidadeMedidaId: conversao.unidadeMedidaId,
+          quantidade: Number(conversao.quantidade),
+          unidadesIndividuais: Number(conversao.unidadesIndividuais)
+        }))
+    };
   if (tela === "areas_setores") {
     return form.tipoAreaSetor === "setor"
       ? { empresaId, nome: form.nome, areaId: form.areaId || null, setorPaiId: form.setorPaiId || null }
@@ -517,9 +590,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         nome: form.novoColaboradorNome || form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId,
-        remuneracaoMinuto: Number(form.novoColaboradorRemuneracaoMinuto || 0),
-        dataInicio: form.novoColaboradorDataInicio
+        cargoId: form.novoColaboradorCargoId
       };
     } else {
       payload.colaboradorId = form.colaboradorId;
@@ -532,11 +603,11 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       cargoId: form.tipoPermissao === "cargo" ? form.cargoId : undefined,
       setorId: form.tipoPermissao === "setor" ? form.setorId : undefined,
       usuarioId: form.tipoPermissao === "usuario" ? form.usuarioId : undefined,
-      permissoes: form.permissoes
+      regras: form.regras
     };
   }
   if (tela === "colaboradores")
-    return { empresaId, nome: form.nome, cpf: form.cpf || null, setorId: form.setorId || null };
+    return { empresaId, nome: form.nome, cpf: form.cpf || null, setorId: form.setorId || null, cargoId: form.cargoId };
   return { empresaId, nome: form.nome, descricao: form.nome };
 }
 
@@ -547,3 +618,4 @@ export function rotaTela(tela: string) {
 export function temPermissao(permissoesUsuario: Permissao[], permissao: Permissao) {
   return permissoesUsuario.includes(permissao);
 }
+

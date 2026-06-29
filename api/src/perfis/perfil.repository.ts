@@ -9,7 +9,7 @@ import {
   perfisUsuarios,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
-import type { PerfilUsuario } from "@padaria/shared";
+import type { PerfilUsuario, RegrasPermissoes } from "@padaria/shared";
 import { banco } from "../banco/conexao.js";
 
 export interface PerfilLinha {
@@ -23,7 +23,11 @@ export interface PerfilLinha {
   nome: string;
   email: string;
   empresa_ids: string[];
-  permissoes: string[];
+  regras_permissoes: {
+    setor: RegrasPermissoes | null;
+    cargos: RegrasPermissoes[];
+    usuario: RegrasPermissoes | null;
+  };
 }
 
 export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<PerfilLinha | null> {
@@ -58,7 +62,7 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
       .from(usuariosEmpresas)
       .where(eq(usuariosEmpresas.usuarioId, usuarioId)),
     banco
-      .select({ permissaoCodigo: permissoesUsuarios.permissaoCodigo })
+      .select({ regras: permissoesUsuarios.regras })
       .from(permissoesUsuarios)
       .where(eq(permissoesUsuarios.usuarioId, usuarioId)),
     banco
@@ -71,7 +75,7 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
   const cargosPerfil = cargosAtivos.map((cargo) => ({ id: cargo.cargoId, nome: cargo.cargoNome }));
   const permissoesDosCargos = cargosPerfil.length
     ? await banco
-        .select({ permissaoCodigo: permissoesCargos.permissaoCodigo })
+        .select({ regras: permissoesCargos.regras })
         .from(permissoesCargos)
         .where(
           inArray(
@@ -83,7 +87,7 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
 
   const permissoesDoSetor = colaborador.setorId
     ? await banco
-        .select({ permissaoCodigo: permissoesSetores.permissaoCodigo })
+        .select({ regras: permissoesSetores.regras })
         .from(permissoesSetores)
         .where(eq(permissoesSetores.setorId, colaborador.setorId))
     : [];
@@ -99,12 +103,10 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
     nome: perfil.nome,
     email: perfil.email,
     empresa_ids: empresas.map((empresa) => empresa.empresaId),
-    permissoes: [
-      ...new Set([
-        ...permissoesDoSetor.map((permissao) => permissao.permissaoCodigo),
-        ...permissoesDosCargos.map((permissao) => permissao.permissaoCodigo),
-        ...permissoesDoUsuario.map((permissao) => permissao.permissaoCodigo)
-      ])
-    ]
+    regras_permissoes: {
+      setor: permissoesDoSetor[0]?.regras ?? null,
+      cargos: permissoesDosCargos.map((permissao) => permissao.regras),
+      usuario: permissoesDoUsuario[0]?.regras ?? null
+    }
   };
 }

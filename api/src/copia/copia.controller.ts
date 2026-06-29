@@ -19,7 +19,7 @@ const rotasCopia = {
 
 export async function registrarRotasCopia(app: FastifyInstance): Promise<void> {
   for (const [tipo, caminho] of Object.entries(rotasCopia)) {
-    const permissao = permissaoCadastro(tipo);
+    const permissao = permissaoCadastro(tipo, "criar");
     if (!permissao) continue;
 
     app.post(`${caminho}/importar`, { preHandler: exigirPermissao(permissao) }, async (request, reply) => {

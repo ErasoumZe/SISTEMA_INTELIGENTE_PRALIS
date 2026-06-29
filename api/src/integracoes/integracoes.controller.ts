@@ -32,13 +32,13 @@ const dicionarioQuerySchema = integracaoQuerySchema.extend({
 export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/integracoes",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_visualizar") },
     async (request) => ok(await listarIntegracoes(integracaoQuerySchema.parse(request.query), request.perfilUsuario!))
   );
 
   app.get(
     "/api/integracoes/historico",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_visualizar") },
     async (request) => {
       const query = integracaoQuerySchema.parse(request.query);
       return paginadoDeArray(await listarHistoricoIntegracao(query, request.perfilUsuario!), query.page, query.pageSize);
@@ -47,13 +47,13 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
 
   app.get(
     "/api/integracoes/dicionario",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_visualizar") },
     async (request) => ok(await listarDicionarioIntegracao(dicionarioQuerySchema.parse(request.query), request.perfilUsuario!))
   );
 
   app.post(
     "/api/integracoes/chaves",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_criar") },
     async (request, reply) => {
       try {
         const chave = await criarChaveIntegracao(criarIntegracaoChavePayloadSchema.parse(request.body), request.perfilUsuario!);
@@ -68,7 +68,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
 
   app.post(
     "/api/integracoes/chaves/:id/inativar",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_editar") },
     async (request, reply) => {
       const { id } = integracaoChaveParamsSchema.parse(request.params);
       try {
@@ -83,7 +83,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
 
   app.put(
     "/api/integracoes/campos",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_editar") },
     async (request, reply) => {
       try {
         await salvarCampoIntegracao(atualizarCampoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);
@@ -97,7 +97,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
 
   app.put(
     "/api/integracoes/vinculos",
-    { preHandler: exigirPermissao("integracoes") },
+    { preHandler: exigirPermissao("integracoes_editar") },
     async (request, reply) => {
       try {
         await salvarVinculoIntegracao(salvarVinculoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);

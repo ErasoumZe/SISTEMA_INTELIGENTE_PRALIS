@@ -4,7 +4,7 @@ import { vendaIntegracaoAgregadaSchema } from "../../shared/src/integracoes/inde
 
 describe("integracoes shared contracts", () => {
   it("inclui permissao de integracoes", () => {
-    expect(permissoes).toContain("integracoes");
+    expect(permissoes).toContain("integracoes_visualizar");
   });
 
   it("valida payload agregado de venda", () => {
@@ -17,9 +17,6 @@ describe("integracoes shared contracts", () => {
         idCliente: "CLI-1",
         nomeCliente: "Cliente",
         documentoCliente: "123",
-        idVendedor: "VEN-1",
-        nomeVendedor: "Vendedor",
-        documentoVendedor: "456",
         dataHoraVenda: "2026-06-28T10:00:00.000Z",
         valorOriginal: 100,
         desconto: 5,
@@ -57,3 +54,4 @@ describe("integracoes shared contracts", () => {
     expect(payload.ItensVenda[0]?.dataHoraItem).toBeInstanceOf(Date);
   });
 });
+

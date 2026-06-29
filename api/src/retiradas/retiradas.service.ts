@@ -13,7 +13,7 @@ export async function listarRetiradas(
 }
 
 export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuario): Promise<RetiradaCriada> {
-  exigirPermissaoLancamento(perfil.permissoes, "retiradas");
+  exigirPermissaoLancamento(perfil.permissoes, "retiradas_criar");
   const referenciaInvalida = await validarReferenciasRetirada(dados);
   if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 

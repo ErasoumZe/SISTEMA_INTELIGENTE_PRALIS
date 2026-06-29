@@ -58,14 +58,6 @@ export const faltaJustificadaPayloadSchema = z.object({
   motivo: z.string().min(1)
 });
 
-export const feriadoPayloadSchema = z.object({
-  empresaId: uuidSchema,
-  nome: z.string().min(1),
-  dia: z.coerce.number().int().min(1).max(31),
-  mes: z.coerce.number().int().min(1).max(12),
-  ano: z.coerce.number().int().min(1900).max(9999).optional().nullable()
-});
-
 export type DiaSemana = z.infer<typeof diaSemanaSchema>;
 export type IdParams = z.infer<typeof idParamsSchema>;
 export type ColaboradorParams = z.infer<typeof colaboradorParamsSchema>;
@@ -75,4 +67,3 @@ export type ColaboradorCargoPayload = z.infer<typeof colaboradorCargoPayloadSche
 export type ColaboradorCargoStatusPayload = z.infer<typeof colaboradorCargoStatusPayloadSchema>;
 export type JornadaPayload = z.infer<typeof jornadaPayloadSchema>;
 export type FaltaJustificadaPayload = z.infer<typeof faltaJustificadaPayloadSchema>;
-export type FeriadoPayload = z.infer<typeof feriadoPayloadSchema>;

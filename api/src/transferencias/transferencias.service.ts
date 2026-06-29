@@ -29,7 +29,7 @@ export async function criarTransferencia(
   dados: TransferenciaPayload,
   perfil: PerfilUsuario
 ): Promise<TransferenciaCriada> {
-  exigirPermissaoLancamento(perfil.permissoes, "transferencias");
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
   const referenciaInvalida = await validarReferenciasTransferencia(dados);
   if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

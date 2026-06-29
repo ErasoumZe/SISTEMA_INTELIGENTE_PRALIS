@@ -15,13 +15,39 @@ export const tipoCadastroComIdParamsSchema = z.object({
   id: z.string().min(1)
 });
 
-export const cadastroEmpresaPayloadSchema = z.object({ nome: z.string().min(1) });
+export const cadastroEmpresaPayloadSchema = z.object({
+  nome: z.string().min(1),
+  cnpj: z.string().optional().nullable()
+});
+
+export const cadastroFornecedorPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1),
+  documento: z.string().optional().nullable()
+});
+
+export const cadastroClientePayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1),
+  documento: z.string().optional().nullable(),
+  dataNascimento: z.string().optional().nullable(),
+  whatsapp: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  cep: z.string().optional().nullable(),
+  rua: z.string().optional().nullable(),
+  numero: z.string().optional().nullable(),
+  complemento: z.string().optional().nullable(),
+  bairro: z.string().optional().nullable(),
+  cidade: z.string().optional().nullable(),
+  estado: z.string().optional().nullable()
+});
 
 export const cadastroColaboradorPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
   cpf: z.string().optional().nullable(),
-  setorId: uuidSchema.optional().nullable()
+  setorId: uuidSchema.optional().nullable(),
+  cargoId: uuidSchema
 });
 
 export const cadastroContaPayloadSchema = z.object({
@@ -37,7 +63,6 @@ export const cadastroFormaPagamentoPayloadSchema = z.object({
 export const cadastroPdvPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
-  codigo: z.string().optional().nullable(),
   contaId: uuidSchema,
   ativo: z.boolean().optional().default(true)
 });
@@ -48,7 +73,7 @@ export const cadastroUnidadePayloadSchema = z.object({
   sigla: z.string().min(1)
 });
 
-export const tipoGrupoCadastroSchema = z.enum(["despesa", "mercadoria", "retirada"]);
+export const tipoGrupoCadastroSchema = z.enum(["despesa", "mercadoria", "retirada", "vendas"]);
 
 export const cadastroGrupoPayloadSchema = z.object({
   empresaId: uuidSchema,
@@ -69,14 +94,31 @@ export const cadastroSetorPayloadSchema = z.object({
   setorPaiId: uuidSchema.optional().nullable()
 });
 
+export const cadastroProdutoConversaoPayloadSchema = z.object({
+  id: uuidSchema.optional(),
+  unidadeMedidaId: uuidSchema,
+  quantidade: z.coerce.number().positive(),
+  unidadesIndividuais: z.coerce.number().positive()
+});
+
+export const cadastroProdutoPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  codigo: z.string().optional().nullable(),
+  codigoBarras: z.string().optional().nullable(),
+  descricao: z.string().min(1),
+  marca: z.string().optional().nullable(),
+  unidadeIndividualId: uuidSchema,
+  quantidadeIndividual: z.coerce.number().positive(),
+  grupoMercadoriaId: uuidSchema.optional().nullable(),
+  conversoes: z.array(cadastroProdutoConversaoPayloadSchema).default([])
+});
+
 export const cadastroUsuarioNovoColaboradorPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
   cpf: z.string().optional().nullable(),
   setorId: uuidSchema.optional().nullable(),
-  cargoId: uuidSchema,
-  remuneracaoMinuto: z.coerce.number().positive(),
-  dataInicio: z.string().min(1)
+  cargoId: uuidSchema
 });
 
 export const cadastroUsuarioPayloadSchema = z.object({
@@ -91,13 +133,14 @@ export const cadastroUsuarioPayloadSchema = z.object({
 });
 
 export const tipoPermissaoCadastroSchema = z.enum(["cargo", "setor", "usuario"]);
+export const regrasPermissoesSchema = z.partialRecord(z.enum(permissoes), z.boolean()).default({});
 
 export const cadastroPermissaoPayloadSchema = z.object({
   tipoPermissao: tipoPermissaoCadastroSchema.default("cargo"),
   cargoId: uuidSchema.optional(),
   setorId: uuidSchema.optional().nullable(),
   usuarioId: z.string().min(1).optional(),
-  permissoes: z.array(z.enum(permissoes))
+  regras: regrasPermissoesSchema
 });
 
 export const permissoesPaginadasQuerySchema = z.object({
@@ -134,6 +177,8 @@ export function empresasDoBody(body: EntradaExterna): string[] {
 export type TipoCadastroParams = z.infer<typeof tipoCadastroParamsSchema>;
 export type TipoCadastroComIdParams = z.infer<typeof tipoCadastroComIdParamsSchema>;
 export type CadastroEmpresaPayload = z.infer<typeof cadastroEmpresaPayloadSchema>;
+export type CadastroFornecedorPayload = z.infer<typeof cadastroFornecedorPayloadSchema>;
+export type CadastroClientePayload = z.infer<typeof cadastroClientePayloadSchema>;
 export type CadastroColaboradorPayload = z.infer<typeof cadastroColaboradorPayloadSchema>;
 export type CadastroContaPayload = z.infer<typeof cadastroContaPayloadSchema>;
 export type CadastroFormaPagamentoPayload = z.infer<typeof cadastroFormaPagamentoPayloadSchema>;
@@ -142,6 +187,8 @@ export type CadastroUnidadePayload = z.infer<typeof cadastroUnidadePayloadSchema
 export type CadastroGrupoPayload = z.infer<typeof cadastroGrupoPayloadSchema>;
 export type CadastroAreaPayload = z.infer<typeof cadastroAreaPayloadSchema>;
 export type CadastroSetorPayload = z.infer<typeof cadastroSetorPayloadSchema>;
+export type CadastroProdutoPayload = z.infer<typeof cadastroProdutoPayloadSchema>;
+export type CadastroProdutoConversaoPayload = z.infer<typeof cadastroProdutoConversaoPayloadSchema>;
 export type CadastroUsuarioPayload = z.infer<typeof cadastroUsuarioPayloadSchema>;
 export type CadastroUsuarioNovoColaboradorPayload = z.infer<typeof cadastroUsuarioNovoColaboradorPayloadSchema>;
 export type CadastroPermissaoPayload = z.infer<typeof cadastroPermissaoPayloadSchema>;

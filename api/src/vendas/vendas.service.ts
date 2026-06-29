@@ -25,7 +25,7 @@ export async function listarVendas(query: VendasQuery, empresasPermitidasIds: st
 }
 
 export async function criarVenda(dados: VendaPayload, perfil: PerfilUsuario): Promise<VendaCriada> {
-  exigirPermissaoLancamento(perfil.permissoes, "entradas");
+  exigirPermissaoLancamento(perfil.permissoes, "entradas_criar");
   validarVenda(dados);
   const referenciaInvalida = await validarReferenciasVenda(dados);
   if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

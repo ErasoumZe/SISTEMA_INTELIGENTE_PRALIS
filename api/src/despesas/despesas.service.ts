@@ -21,7 +21,7 @@ export async function listarDespesas(
 }
 
 export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario): Promise<DespesaCriada> {
-  exigirPermissaoLancamento(perfil.permissoes, "despesas");
+  exigirPermissaoLancamento(perfil.permissoes, "despesas_criar");
   validarDespesa(dados);
   const referenciaInvalida = await validarReferenciasDespesa(dados);
   if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

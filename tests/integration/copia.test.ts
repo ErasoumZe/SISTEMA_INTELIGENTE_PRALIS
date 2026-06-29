@@ -45,14 +45,14 @@ describe("copia", () => {
     mocks.buscarPerfilUsuario.mockResolvedValue(
       criarPerfil(
         [
-          "cadastro_contas",
-          "cadastro_fornecedores",
-          "cadastro_colaboradores",
-          "cadastro_grupos_despesas",
-          "cadastro_unidades_medida",
-          "cadastro_areas_setores",
-          "cadastro_produtos",
-          "cadastro_malotes"
+          "cadastro_contas_criar",
+          "cadastro_fornecedores_criar",
+          "cadastro_colaboradores_criar",
+          "cadastro_grupos_criar",
+          "cadastro_unidades_medida_criar",
+          "cadastro_areas_setores_criar",
+          "cadastro_produtos_criar",
+          "cadastro_malotes_criar"
         ],
         { empresaIds: [empresaA, empresaB] }
       )
@@ -118,7 +118,7 @@ describe("copia", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas_criar" } });
     expect(mocks.importarCadastroEmpresa).not.toHaveBeenCalled();
   });
 
@@ -167,5 +167,6 @@ describe("copia", () => {
     expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 });
+
 
 

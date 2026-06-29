@@ -8,7 +8,7 @@ import { obterProdutosMaisVendidos } from "./produtos.service.js";
 export async function registrarRotasRelatorioProdutos(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/relatorios/produtos-mais-vendidos",
-    { preHandler: exigirPermissao("relatorio_produtos_mais_vendidos") },
+    { preHandler: exigirPermissao("relatorio_produtos_visualizar") },
     async (request, reply) => {
       const query = relatorioProdutosQuerySchema.parse(request.query);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {

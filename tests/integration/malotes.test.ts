@@ -50,7 +50,9 @@ describe("malotes", () => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
     mocks.buscarPerfilUsuario.mockResolvedValue(
-      criarPerfil(["cadastro_malotes", "transferencias"], { empresaIds: [empresaA] })
+      criarPerfil(["cadastro_malotes_visualizar", "cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_visualizar"], {
+        empresaIds: [empresaA]
+      })
     );
     mocks.listarMalotes.mockResolvedValue([{ id: registroId, empresaId: empresaA, codigo: "M-001" }]);
     mocks.listarLacresMalote.mockResolvedValue([{ id: registroId, numero: "L-001" }]);
@@ -68,13 +70,13 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_malotes" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_malotes_visualizar" } });
     expect(mocks.listarMalotes).not.toHaveBeenCalled();
   });
 
   it("Deve_ListarMalotes_Quando_TiverPermissaoDeTransferencia", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["transferencias"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["transferencias_visualizar"], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/malotes?empresaId=${empresaA}` });
@@ -205,5 +207,6 @@ describe("malotes", () => {
     expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 });
+
 
 

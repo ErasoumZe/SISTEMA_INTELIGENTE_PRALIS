@@ -55,7 +55,7 @@ const perfil: PerfilUsuario = {
   cargoIds: [],
   cargos: [],
   role: "usuario_comum",
-  permissoes: ["operar_caixa"]
+  permissoes: ["caixa_operar"]
 };
 
 const caixaAberto = {
@@ -205,4 +205,5 @@ describe("caixa service", () => {
     );
   });
 });
+
 

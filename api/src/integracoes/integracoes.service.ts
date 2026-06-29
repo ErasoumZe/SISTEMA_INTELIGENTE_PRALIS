@@ -11,14 +11,13 @@ import type {
   TipoRegistroIntegracao,
   VendaIntegracaoAgregadaPayload
 } from "@padaria/shared/integracoes";
-import { camposVinculoIntegracao } from "@padaria/shared/integracoes";
+import { camposVinculoIntegracao, tiposRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../autorizacao/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import {
   buscarChavePorCodigoRepository,
   buscarClienteAutomaticoRepository,
-  buscarColaboradorAutomaticoRepository,
   buscarFormaPagamentoAutomaticoRepository,
   buscarPdvAutomaticoRepository,
   buscarProdutoAutomaticoRepository,
@@ -26,7 +25,6 @@ import {
   buscarVinculoResolvidoRepository,
   criarChaveIntegracaoRepository,
   criarClienteRepository,
-  criarColaboradorRepository,
   criarFormaPagamentoRepository,
   criarOuAtualizarVendaIntegradaRepository,
   criarPdvComContaRepository,
@@ -46,9 +44,10 @@ import {
 } from "./integracoes.repository.js";
 
 export const integracoesDisponiveis: Array<{ tipo: TipoIntegracao; nome: string }> = [
-  { tipo: "vendas", nome: "Vendas" },
-  { tipo: "produtos_vendas", nome: "Produtos das vendas" }
+  { tipo: "vendas", nome: "Vendas do PDV" }
 ];
+const tiposIntegracaoDisponiveis = new Set<string>(integracoesDisponiveis.map((integracao) => integracao.tipo));
+const tiposRegistroDisponiveis = new Set<string>(tiposRegistroIntegracao);
 
 const alfabetoUlid = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
@@ -109,7 +108,6 @@ function configPadrao(
 }
 
 function tipoRegistroDoCampo(campo: CampoVinculoIntegracao): TipoRegistroIntegracao {
-  if (campo === "vendedor") return "colaborador";
   if (campo === "forma_pagamento") return "forma_pagamento";
   return campo;
 }
@@ -233,23 +231,6 @@ async function resolverVinculosVenda(chave: IntegracaoChaveLinha, payload: Venda
       })
     : null;
 
-  const colaboradorId = venda.idVendedor
-    ? await resolverVinculo({
-        chave,
-        campo: "vendedor",
-        identificadorExterno: venda.idVendedor,
-        descricaoExterna: venda.nomeVendedor ?? venda.documentoVendedor ?? null,
-        configs,
-        db,
-        buscarAutomatico: () =>
-          buscarColaboradorAutomaticoRepository(chave.empresaId, venda.documentoVendedor, venda.nomeVendedor, db),
-        criarAutomatico: () =>
-          venda.nomeVendedor
-            ? criarColaboradorRepository(chave.empresaId, venda.nomeVendedor, venda.documentoVendedor, db)
-            : Promise.resolve(null)
-      })
-    : null;
-
   const produtosPorIdentificador = new Map<string, string | null>();
   for (const item of payload.ItensVenda) {
     if (produtosPorIdentificador.has(item.idProduto)) continue;
@@ -288,16 +269,20 @@ async function resolverVinculosVenda(chave: IntegracaoChaveLinha, payload: Venda
     );
   }
 
-  return { pdvId, clienteId, colaboradorId, produtosPorIdentificador, formasPagamentoPorIdentificador };
+  return { pdvId, clienteId, colaboradorId: null, produtosPorIdentificador, formasPagamentoPorIdentificador };
 }
 
 export async function listarIntegracoes(query: IntegracaoQuery, perfil: PerfilUsuario) {
   if (query.empresaId) validarEmpresa(perfil, query.empresaId);
   const empresasLiberadas = empresasPermitidas(perfil);
   const chaves = await listarChavesIntegracaoRepository(query);
+  const chavesDisponiveis = chaves.filter((chave) => tiposIntegracaoDisponiveis.has(chave.tipo));
   return {
     integracoes: integracoesDisponiveis,
-    chaves: empresasLiberadas === null ? chaves : chaves.filter((chave) => empresasLiberadas.includes(chave.empresaId))
+    chaves:
+      empresasLiberadas === null
+        ? chavesDisponiveis
+        : chavesDisponiveis.filter((chave) => empresasLiberadas.includes(chave.empresaId))
   };
 }
 
@@ -315,7 +300,8 @@ export async function inativarChaveIntegracao(id: string, perfil: PerfilUsuario)
 
 export async function listarHistoricoIntegracao(query: IntegracaoQuery, perfil: PerfilUsuario) {
   if (query.empresaId) validarEmpresa(perfil, query.empresaId);
-  return listarHistoricoIntegracaoRepository(query, empresasPermitidas(perfil));
+  const historico = await listarHistoricoIntegracaoRepository(query, empresasPermitidas(perfil));
+  return historico.filter((item) => tiposIntegracaoDisponiveis.has(item.tipo));
 }
 
 export async function listarDicionarioIntegracao(
@@ -337,7 +323,7 @@ export async function listarDicionarioIntegracao(
       vincularAutomaticamente: salvo?.vincularAutomaticamente ?? true
     };
   });
-  return { configs, vinculos };
+  return { configs, vinculos: vinculos.filter((vinculo) => tiposRegistroDisponiveis.has(vinculo.tipoRegistro)) };
 }
 
 export async function salvarCampoIntegracao(payload: AtualizarCampoIntegracaoPayload, perfil: PerfilUsuario) {

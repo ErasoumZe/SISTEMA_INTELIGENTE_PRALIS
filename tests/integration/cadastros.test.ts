@@ -43,12 +43,14 @@ describe("cadastros", () => {
     mocks.buscarPerfilUsuario.mockResolvedValue(
       criarPerfil(
         [
-          "cadastro_empresas",
-          "cadastro_contas",
-          "cadastro_pdv",
-          "cadastro_usuarios",
-          "cadastro_permissoes",
-          "cadastro_colaboradores"
+          "cadastro_empresas_criar",
+          "cadastro_contas_criar",
+          "cadastro_pdv_criar",
+          "cadastro_usuarios_criar",
+          "cadastro_permissoes_criar",
+          "cadastro_colaboradores_criar",
+          "cadastro_contas_editar",
+          "cadastro_empresas_editar"
         ],
         { empresaIds: [empresaA] }
       )
@@ -79,7 +81,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas" } });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas_criar" } });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -107,7 +109,6 @@ describe("cadastros", () => {
     const payload = {
       empresaId: empresaA,
       nome: "PDV 01",
-      codigo: "PDV-01",
       contaId: "77777777-7777-4777-8777-777777777777",
       ativo: true
     };
@@ -210,5 +211,6 @@ describe("cadastros", () => {
     expect(resposta.json()).toMatchObject({ title: "Email ja cadastrado", status: resposta.statusCode });
   });
 });
+
 
 

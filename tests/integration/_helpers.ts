@@ -100,3 +100,4 @@ export function payloadVenda(empresaId = empresaA) {
     tiposPagamento: []
   };
 }
+

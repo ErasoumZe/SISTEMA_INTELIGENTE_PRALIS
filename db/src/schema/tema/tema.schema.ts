@@ -1,1 +1,1 @@
-export { configuracoesTema, configuracoesTemasTelas } from "../app.schema.js";
+export { empresas } from "../app.schema.js";

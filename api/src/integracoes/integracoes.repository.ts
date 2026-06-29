@@ -1,7 +1,6 @@
 import { and, desc, eq, ilike, inArray, isNotNull } from "drizzle-orm";
 import {
   clientes,
-  colaboradores,
   contas,
   formasPagamento,
   pdvs,
@@ -410,43 +409,6 @@ export async function criarClienteRepository(
   return cliente;
 }
 
-export async function buscarColaboradorAutomaticoRepository(
-  empresaId: string,
-  documento: string | null | undefined,
-  nome: string | null | undefined,
-  db: ExecutorBanco = banco
-) {
-  if (documento) {
-    const [colaborador] = await db
-      .select({ id: colaboradores.id })
-      .from(colaboradores)
-      .where(and(eq(colaboradores.empresaId, empresaId), ilike(colaboradores.cpf, documento)))
-      .limit(1);
-    if (colaborador) return colaborador;
-  }
-  if (!nome) return null;
-  const [colaborador] = await db
-    .select({ id: colaboradores.id })
-    .from(colaboradores)
-    .where(and(eq(colaboradores.empresaId, empresaId), ilike(colaboradores.nome, nome)))
-    .limit(1);
-  return colaborador ?? null;
-}
-
-export async function criarColaboradorRepository(
-  empresaId: string,
-  nome: string,
-  cpf: string | null | undefined,
-  db: ExecutorBanco = banco
-) {
-  const [colaborador] = await db
-    .insert(colaboradores)
-    .values({ empresaId, nome, cpf: cpf ?? null })
-    .returning({ id: colaboradores.id });
-  if (!colaborador) throw new Error("Colaborador nao criado");
-  return colaborador;
-}
-
 export async function buscarProdutoAutomaticoRepository(
   empresaId: string,
   identificadorExterno: string,
@@ -538,9 +500,6 @@ export async function criarOuAtualizarVendaIntegradaRepository(
     numeroNotaFiscal: vendaPayload.numeroNotaFiscal ?? null,
     pdvAutomacaoId: vendaPayload.idCaixa,
     pdvAutomacao: vendaPayload.nomeCaixa,
-    vendedorAutomacaoId: vendaPayload.idVendedor ?? null,
-    vendedorAutomacao: vendaPayload.nomeVendedor ?? null,
-    vendedorAutomacaoDocumento: vendaPayload.documentoVendedor ?? null,
     clienteAutomacaoId: vendaPayload.idCliente ?? null,
     clienteAutomacao: vendaPayload.nomeCliente ?? null,
     clienteAutomacaoDocumento: vendaPayload.documentoCliente ?? null,

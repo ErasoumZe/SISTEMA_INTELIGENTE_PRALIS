@@ -1,12 +1,15 @@
 import {
   cadastroAreaPayloadSchema,
+  cadastroClientePayloadSchema,
   cadastroColaboradorPayloadSchema,
   cadastroContaPayloadSchema,
   cadastroEmpresaPayloadSchema,
   cadastroFormaPagamentoPayloadSchema,
+  cadastroFornecedorPayloadSchema,
   cadastroGrupoPayloadSchema,
   cadastroPermissaoPayloadSchema,
   cadastroPdvPayloadSchema,
+  cadastroProdutoPayloadSchema,
   cadastroSetorPayloadSchema,
   cadastroUnidadePayloadSchema,
   cadastroUsuarioPayloadSchema,
@@ -15,7 +18,7 @@ import {
   type ExcluirPermissaoQuery,
   type PermissoesPaginadasQuery
 } from "@padaria/shared/cadastros";
-import type { Permissao } from "@padaria/shared";
+import type { Permissao, RegrasPermissoes } from "@padaria/shared";
 import { auth } from "../auth.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import type { TransacaoBanco } from "../banco/conexao.js";
@@ -34,12 +37,15 @@ import {
   listarEmpresasUsuarioRepository,
   salvarAreaRepository,
   salvarCargoColaboradorRepository,
+  salvarClienteRepository,
   salvarColaboradorRepository,
   salvarContaRepository,
   salvarEmpresaRepository,
   salvarFormaPagamentoRepository,
+  salvarFornecedorRepository,
   salvarGrupoRepository,
   salvarPdvRepository,
+  salvarProdutoRepository,
   salvarSetorRepository,
   salvarUnidadeRepository,
   substituirEmpresasUsuarioRepository,
@@ -61,6 +67,11 @@ type EntradaExterna = Parameters<typeof cadastroEmpresaPayloadSchema.parse>[0];
 
 function erroCadastro(mensagem: string): never {
   throw new Error(mensagem);
+}
+
+function apenasDigitos(valor: string | null | undefined): string | null {
+  const digitos = String(valor ?? "").replace(/\D/g, "");
+  return digitos || null;
 }
 
 function empresasUsuario(empresaId: string | undefined, empresaIds: string[] | undefined): string[] {
@@ -95,58 +106,74 @@ function montarLinhasPermissoes(
   cargoId?: string;
   setorId?: string;
   usuarioId?: string;
-  permissao: Permissao;
+  permissao: string;
+  regras: string;
+  regrasJson: string;
 }> {
+  const linhaRegras = (regras: RegrasPermissoes | null | undefined) => {
+    const entradas = Object.entries(regras ?? {}).filter(
+      (entrada): entrada is [Permissao, boolean] => typeof entrada[1] === "boolean"
+    );
+    return {
+      permissao: entradas.map(([permissao]) => permissao).join(","),
+      regras: entradas.map(([permissao, permitir]) => `${permissao}: ${permitir ? "permitir" : "negar"}`).join("; "),
+      regrasJson: JSON.stringify(Object.fromEntries(entradas))
+    };
+  };
+
   return [
     ...dados.cargosPermissoes.flatMap((item) => {
       const cargo = dados.cargos.find((alvo) => alvo.id === item.cargoId);
       if (!cargo) return [];
-      const permissao = item.permissaoCodigo;
+      const regras = linhaRegras(item.regras);
+      if (!regras.permissao) return [];
       return [
         {
-          id: `cargo:${item.cargoId}:${permissao}`,
+          id: `cargo:${item.cargoId}`,
           tipo: "cargo" as const,
           tipoPermissao: "cargo" as const,
           alvoId: item.cargoId,
           alvo: cargo.nome ?? item.cargoId,
           cargoId: item.cargoId,
-          permissao: permissao as Permissao
+          ...regras
         }
       ];
     }),
     ...dados.setoresPermissoes.flatMap((item) => {
       const setor = dados.setores.find((alvo) => alvo.id === item.setorId);
       if (!setor?.id) return [];
-      const permissao = item.permissaoCodigo;
+      const regras = linhaRegras(item.regras);
+      if (!regras.permissao) return [];
       return [
         {
-          id: `setor:${setor.id}:${permissao}`,
+          id: `setor:${setor.id}`,
           tipo: "setor" as const,
           tipoPermissao: "setor" as const,
           alvoId: setor.id,
           alvo: setor.nome ?? setor.id,
           setorId: setor.id,
-          permissao: permissao as Permissao
+          ...regras
         }
       ];
     }),
     ...dados.usuariosPermissoes.flatMap((item) => {
       const usuario = dados.usuarios.find((alvo) => alvo.usuarioId === item.usuarioId);
       if (!usuario?.usuarioId) return [];
-      const permissao = item.permissaoCodigo;
+      const regras = linhaRegras(item.regras);
+      if (!regras.permissao) return [];
       return [
         {
-          id: `usuario:${usuario.usuarioId}:${permissao}`,
+          id: `usuario:${usuario.usuarioId}`,
           tipo: "usuario" as const,
           tipoPermissao: "usuario" as const,
           alvoId: usuario.usuarioId,
           alvo: usuario.nome ?? usuario.email ?? usuario.usuarioId,
           usuarioId: usuario.usuarioId,
-          permissao: permissao as Permissao
+          ...regras
         }
       ];
     })
-  ].sort((a, b) => a.tipo.localeCompare(b.tipo) || a.alvo.localeCompare(b.alvo) || a.permissao.localeCompare(b.permissao));
+  ].sort((a, b) => a.tipo.localeCompare(b.tipo) || a.alvo.localeCompare(b.alvo));
 }
 
 export async function listarPermissoesPaginadas(body: EntradaExterna, perfil?: PerfilComEmpresa) {
@@ -159,7 +186,7 @@ export async function listarPermissoesPaginadas(body: EntradaExterna, perfil?: P
   const linhas = montarLinhasPermissoes(dados).filter((linha) => {
     if (query.tipoPermissao && linha.tipoPermissao !== query.tipoPermissao) return false;
     if (query.alvoId && linha.alvoId !== query.alvoId) return false;
-    if (query.permissao && linha.permissao !== query.permissao) return false;
+    if (query.permissao && !linha.permissao.split(",").includes(query.permissao)) return false;
     if (!busca) return true;
     return normalizarBusca(`${linha.tipo} ${linha.alvo} ${linha.permissao}`).includes(busca);
   });
@@ -211,17 +238,70 @@ export async function salvarCadastro(
 ) {
   if (tipo === "empresas") {
     const dados = cadastroEmpresaPayloadSchema.parse(body);
-    return salvarEmpresaRepository({ ...(id ? { id } : {}), nome: dados.nome.trim() });
+    return salvarEmpresaRepository({ ...(id ? { id } : {}), nome: dados.nome.trim(), cnpj: apenasDigitos(dados.cnpj) });
+  }
+
+  if (tipo === "fornecedores") {
+    const dados = cadastroFornecedorPayloadSchema.parse(body);
+    return salvarFornecedorRepository({
+      ...(id ? { id } : {}),
+      empresaId: dados.empresaId,
+      nome: dados.nome.trim(),
+      documento: apenasDigitos(dados.documento)
+    });
+  }
+
+  if (tipo === "clientes") {
+    const dados = cadastroClientePayloadSchema.parse(body);
+    return salvarClienteRepository({
+      ...(id ? { id } : {}),
+      empresaId: dados.empresaId,
+      nome: dados.nome.trim(),
+      documento: apenasDigitos(dados.documento),
+      dataNascimento: dados.dataNascimento || null,
+      whatsapp: apenasDigitos(dados.whatsapp),
+      email: dados.email?.trim() || null,
+      cep: apenasDigitos(dados.cep),
+      rua: dados.rua?.trim() || null,
+      numero: dados.numero?.trim() || null,
+      complemento: dados.complemento?.trim() || null,
+      bairro: dados.bairro?.trim() || null,
+      cidade: dados.cidade?.trim() || null,
+      estado: dados.estado?.trim().toUpperCase() || null
+    });
   }
 
   if (tipo === "colaboradores") {
     const dados = cadastroColaboradorPayloadSchema.parse(body);
-    return salvarColaboradorRepository({
-      ...(id ? { id } : {}),
-      empresaId: dados.empresaId,
-      nome: dados.nome.trim(),
-      cpf: dados.cpf?.trim() || null,
-      setorId: dados.setorId ?? null
+    const cargo = await buscarCargoEmpresaRepository(dados.cargoId);
+    if (!cargo || cargo.empresaId !== dados.empresaId) erroCadastro("Cargo nao pertence a empresa");
+    return executarEmTransacao(async (tx) => {
+      const colaborador = await salvarColaboradorRepository(
+        {
+          ...(id ? { id } : {}),
+          empresaId: dados.empresaId,
+          nome: dados.nome.trim(),
+          cpf: apenasDigitos(dados.cpf),
+          setorId: dados.setorId ?? null
+        },
+        tx
+      );
+      if (!colaborador?.id) erroCadastro("Nao foi possivel cadastrar o colaborador");
+      if (!id || !(await colaboradorTemCargoAtivoRepository(colaborador.id, tx))) {
+        await salvarCargoColaboradorRepository(
+          {
+            empresaId: dados.empresaId,
+            colaboradorId: colaborador.id,
+            setorId: dados.setorId ?? null,
+            cargoId: dados.cargoId,
+            remuneracaoMinuto: 1,
+            dataInicio: new Date().toISOString().slice(0, 10),
+            ativo: true
+          },
+          tx
+        );
+      }
+      return colaborador;
     });
   }
 
@@ -247,13 +327,28 @@ export async function salvarCadastro(
       ...(id ? { id } : {}),
       empresaId: dados.empresaId,
       nome: dados.nome.trim(),
-      codigo: dados.codigo?.trim() || null,
       contaId: dados.contaId,
       ativo: dados.ativo
     });
   }
 
-  if (tipo === "unidades") {
+  if (tipo === "produtos") {
+    const dados = cadastroProdutoPayloadSchema.parse(body);
+    return salvarProdutoRepository({
+      ...(id ? { id } : {}),
+      empresaId: dados.empresaId,
+      codigo: dados.codigo?.trim() || null,
+      codigoBarras: apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null,
+      descricao: dados.descricao.trim(),
+      marca: dados.marca?.trim() || null,
+      unidadeIndividualId: dados.unidadeIndividualId,
+      quantidadeIndividual: dados.quantidadeIndividual,
+      grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
+      conversoes: dados.conversoes
+    });
+  }
+
+  if (tipo === "unidades" || tipo === "unidades-medida" || tipo === "unidades_medida") {
     const dados = cadastroUnidadePayloadSchema.parse(body);
     return salvarUnidadeRepository({
       ...(id ? { id } : {}),
@@ -263,12 +358,22 @@ export async function salvarCadastro(
     });
   }
 
-  if (tipo === "grupos") {
+  if (tipo === "grupos" || tipo.startsWith("grupos-")) {
     const dados = cadastroGrupoPayloadSchema.parse(body);
+    const tipoGrupo =
+      tipo === "grupos-despesas"
+        ? "despesa"
+        : tipo === "grupos-mercadorias"
+          ? "mercadoria"
+          : tipo === "grupos-retiradas"
+            ? "retirada"
+            : tipo === "grupos-vendas"
+              ? "vendas"
+              : dados.tipoGrupo;
     return salvarGrupoRepository({
       ...(id ? { id } : {}),
       empresaId: dados.empresaId,
-      tipoGrupo: dados.tipoGrupo,
+      tipoGrupo,
       nome: dados.nome.trim(),
       grupoPaiId: dados.grupoPaiId ?? null
     });
@@ -296,7 +401,7 @@ export async function salvarCadastro(
       ? {
           ...dados.novoColaborador,
           nome: dados.novoColaborador.nome.trim(),
-          cpf: dados.novoColaborador.cpf?.trim() || null,
+          cpf: apenasDigitos(dados.novoColaborador.cpf),
           setorId: dados.novoColaborador.setorId ?? null
         }
       : null;
@@ -348,8 +453,8 @@ export async function salvarCadastro(
           colaboradorId: criado.id,
           setorId: novoColaborador.setorId,
           cargoId: novoColaborador.cargoId,
-          remuneracaoMinuto: novoColaborador.remuneracaoMinuto,
-          dataInicio: novoColaborador.dataInicio,
+          remuneracaoMinuto: 1,
+          dataInicio: new Date().toISOString().slice(0, 10),
           ativo: true
         },
         tx
@@ -432,26 +537,26 @@ export async function salvarCadastro(
       if (!dados.cargoId) erroCadastro("Cargo obrigatorio");
       const cargo = await buscarCargoEmpresaRepository(dados.cargoId);
       if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) erroCadastro("Empresa nao permitida");
-      await substituirPermissoesCargoRepository(dados.cargoId, dados.permissoes);
-      return {
-        tipoPermissao: dados.tipoPermissao,
-        cargoId: dados.cargoId,
-        permissoes: dados.permissoes,
-        atualizadoPor: usuarioId
-      };
+    await substituirPermissoesCargoRepository(dados.cargoId, dados.regras);
+    return {
+      tipoPermissao: dados.tipoPermissao,
+      cargoId: dados.cargoId,
+      regras: dados.regras,
+      atualizadoPor: usuarioId
+    };
     }
 
     if (dados.tipoPermissao === "setor") {
       if (!dados.setorId) erroCadastro("Setor obrigatorio");
       const setor = await buscarSetorEmpresaRepository(dados.setorId);
       if (!setor || !empresaNoEscopo(perfil, setor.empresaId)) erroCadastro("Empresa nao permitida");
-      await substituirPermissoesSetorRepository(dados.setorId, dados.permissoes);
-      return {
-        tipoPermissao: dados.tipoPermissao,
-        setorId: dados.setorId,
-        permissoes: dados.permissoes,
-        atualizadoPor: usuarioId
-      };
+    await substituirPermissoesSetorRepository(dados.setorId, dados.regras);
+    return {
+      tipoPermissao: dados.tipoPermissao,
+      setorId: dados.setorId,
+      regras: dados.regras,
+      atualizadoPor: usuarioId
+    };
     }
 
     if (!dados.usuarioId) erroCadastro("Usuario obrigatorio");
@@ -465,11 +570,11 @@ export async function salvarCadastro(
     ) {
       erroCadastro("Empresa nao permitida");
     }
-    await substituirPermissoesUsuarioRepository(dados.usuarioId, dados.permissoes);
+    await substituirPermissoesUsuarioRepository(dados.usuarioId, dados.regras);
     return {
       tipoPermissao: dados.tipoPermissao,
       usuarioId: dados.usuarioId,
-      permissoes: dados.permissoes,
+      regras: dados.regras,
       atualizadoPor: usuarioId
     };
   }

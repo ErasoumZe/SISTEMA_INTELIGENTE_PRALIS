@@ -1,11 +1,14 @@
-import { permissoes, type PerfilUsuario, type Permissao } from "@padaria/shared";
+import { resolverPermissoesEfetivas, type PerfilUsuario } from "@padaria/shared";
 import { obterPerfilPorUsuarioId } from "./perfil.repository.js";
 
 export async function buscarPerfilUsuario(usuarioId: string): Promise<PerfilUsuario | null> {
   const perfil = await obterPerfilPorUsuarioId(usuarioId);
   if (!perfil) return null;
-  const permissoesEfetivas =
-    perfil.role === "usuario_admin" ? [...new Set([...perfil.permissoes, ...permissoes])] : perfil.permissoes;
+  const permissoesEfetivas = resolverPermissoesEfetivas([
+    [perfil.regras_permissoes.setor],
+    perfil.regras_permissoes.cargos,
+    [perfil.regras_permissoes.usuario]
+  ]);
 
   return {
     usuarioId: perfil.usuario_id,
@@ -18,6 +21,6 @@ export async function buscarPerfilUsuario(usuarioId: string): Promise<PerfilUsua
     role: perfil.role,
     nome: perfil.nome,
     email: perfil.email,
-    permissoes: permissoesEfetivas as Permissao[]
+    permissoes: permissoesEfetivas
   };
 }

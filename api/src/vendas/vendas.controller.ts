@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { vendaPayloadSchema, vendasQuerySchema } from "@padaria/shared/vendas";
-import { exigirAutenticacao } from "../autorizacao.js";
+import { exigirAlgumaPermissao, exigirAutenticacao } from "../autorizacao.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "../respostas.js";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
@@ -9,7 +9,7 @@ import { criarVenda, listarVendas } from "./vendas.service.js";
 export async function registrarRotasVendas(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/vendas",
-    { preHandler: exigirAutenticacao },
+      { preHandler: exigirAlgumaPermissao(["entradas_visualizar", "relatorio_vendas_visualizar"]) },
     async (request, reply) => {
       const query = vendasQuerySchema.parse(request.query);
       const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
