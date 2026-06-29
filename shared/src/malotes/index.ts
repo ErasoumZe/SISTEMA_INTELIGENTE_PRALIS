@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -8,7 +9,7 @@ export const maloteParamsSchema = z.object({
 
 export const malotesQuerySchema = z.object({
   empresaId: uuidSchema.optional()
-});
+}).merge(paginationQuerySchema);
 
 export const validarLacreQuerySchema = z.object({
   numero: z.string().min(1),

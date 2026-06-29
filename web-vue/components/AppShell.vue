@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, rotaTela } from "~/utils/domain";
+import { itemPorTela, mensagemTelaFutura, rotaTela } from "~/utils/domain";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -11,6 +11,7 @@ const props = defineProps<{
   empresaId: string;
   caixaStatus?: CaixaStatus | null;
   telasDesabilitadas?: string[];
+  telasFuturas?: string[];
   carregandoEmpresa: boolean;
   saindo: boolean;
 }>();
@@ -21,6 +22,8 @@ const emit = defineEmits<{
 }>();
 
 const drawerRecolhido = ref(false);
+const drawerMobileAberto = ref(false);
+const viewportMobile = ref(false);
 
 const empresaAtiva = computed(
   () => props.empresas.find((empresa) => empresa.id === props.empresaId) ?? props.empresas[0] ?? null
@@ -29,25 +32,63 @@ const telaAtual = computed(() => itemPorTela[props.telaAtiva] ?? props.telas.fin
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
 const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
 const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
+const telasFuturasSet = computed(() => new Set(props.telasFuturas ?? []));
+const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
+const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
+const drawerToggleIcon = computed(() => (viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"));
+
+function textoTooltipTela(telaId: string) {
+  return telasFuturasSet.value.has(telaId) ? mensagemTelaFutura : "E necessario abrir caixa para acessar esta tela.";
+}
 
 function alternarDrawer() {
+  if (viewportMobile.value) {
+    drawerMobileAberto.value = !drawerMobileAberto.value;
+    return;
+  }
   drawerRecolhido.value = !drawerRecolhido.value;
 }
 
+function atualizarDrawerAberto(aberto: boolean) {
+  if (viewportMobile.value) drawerMobileAberto.value = aberto;
+}
+
+function fecharDrawerMobile() {
+  if (viewportMobile.value) drawerMobileAberto.value = false;
+}
+
 onMounted(() => {
-  drawerRecolhido.value = window.matchMedia("(width < 1280px)").matches;
+  const mediaRail = window.matchMedia("(width < 1280px)");
+  const mediaMobile = window.matchMedia("(width <= 720px)");
+  const atualizar = () => {
+    const mobile = mediaMobile.matches;
+    drawerRecolhido.value = mediaRail.matches;
+    viewportMobile.value = mobile;
+    if (!mobile) drawerMobileAberto.value = false;
+  };
+  atualizar();
+  mediaRail.addEventListener("change", atualizar);
+  mediaMobile.addEventListener("change", atualizar);
+
+  onUnmounted(() => {
+    mediaRail.removeEventListener("change", atualizar);
+    mediaMobile.removeEventListener("change", atualizar);
+  });
 });
 </script>
 
 <template>
   <v-layout class="padaria-shell">
     <v-navigation-drawer
-      permanent
+      :model-value="drawerAberto"
+      :permanent="!viewportMobile"
+      :temporary="viewportMobile"
       width="300"
       rail-width="72"
-      :rail="drawerRecolhido"
+      :rail="drawerRail"
       class="padaria-sidebar"
-      :class="{ rail: drawerRecolhido }"
+      :class="{ rail: drawerRail }"
+      @update:model-value="atualizarDrawerAberto"
     >
       <div class="drawer-shell">
         <div class="drawer-top">
@@ -89,7 +130,7 @@ onMounted(() => {
         <div class="sidebar-scroll-shell">
           <nav class="sidebar-nav" aria-label="Menu principal">
             <template v-for="tela in telas" :key="tela.id">
-              <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" text="E necessario abrir caixa para acessar esta tela.">
+              <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" :text="textoTooltipTela(tela.id)">
                 <template #activator="{ props: tooltipProps }">
                   <span v-bind="tooltipProps" class="sidebar-disabled-wrapper">
                     <span class="sidebar-item disabled">
@@ -104,6 +145,7 @@ onMounted(() => {
                 :to="rotaTela(tela.id)"
                 class="sidebar-item"
                 :class="{ active: tela.id === telaAtiva }"
+                @click="fecharDrawerMobile"
               >
                 <v-icon :icon="tela.icone" size="21" />
                 <span>{{ tela.titulo }}</span>
@@ -131,9 +173,9 @@ onMounted(() => {
     <v-main class="padaria-main">
       <header class="padaria-topbar">
         <v-btn
-          :icon="drawerRecolhido ? 'mdi-menu-open' : 'mdi-menu'"
+          :icon="drawerToggleIcon"
           variant="text"
-          :title="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
+          :title="viewportMobile ? 'Abrir menu' : drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
           @click="alternarDrawer"
         />
         <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>

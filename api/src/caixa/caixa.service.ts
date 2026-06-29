@@ -24,7 +24,7 @@ import {
   buscarGrupoQuebraCaixa,
   buscarPdvEmpresaRepository,
   buscarPerfilUsuarioCaixaRepository,
-  caixaTemMovimentosRepository,
+  caixaTemLancamentosRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarAcertoSaldoCaixaRepository,
   criarAjusteSaldoCaixa,
@@ -122,9 +122,9 @@ export async function acertarSaldoCaixa(dados: AjusteSaldoPayload, usuarioId: st
   if (dados.valorDiferenca === 0) throw new Error("Nao ha diferenca para acertar");
 
   const grupo = await buscarGrupoQuebraCaixa(dados.empresaId);
-  const movimentacao = await criarAjusteSaldoCaixa(dados, grupo?.id ?? null, usuarioId);
+  const despesa = await criarAjusteSaldoCaixa(dados, grupo?.id ?? null, usuarioId);
 
-  return { movimentacaoId: movimentacao.id };
+  return { despesaId: despesa.id };
 }
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha): Promise<ResumoCaixa> {
@@ -206,8 +206,8 @@ export async function editarAberturaCaixa(
     if (!pdv || !pdv.ativo) throw new Error("PDV nao encontrado");
     const colaborador = await buscarColaboradorPorUsuarioRepository(dados.usuarioCaixaId, caixa.empresaId, tx);
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
-    if (caixa.pdvId !== dados.pdvId && (await caixaTemMovimentosRepository(caixa.id, tx))) {
-      throw new Error("Nao e possivel trocar PDV de caixa com movimentos");
+    if (caixa.pdvId !== dados.pdvId && (await caixaTemLancamentosRepository(caixa.id, tx))) {
+      throw new Error("Nao e possivel trocar PDV de caixa com lancamentos");
     }
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, caixa.id, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, caixa.id, tx)) throw new Error(erroPeriodo);
@@ -333,9 +333,9 @@ export async function listarHistoricoCaixa(empresaId: string, perfil: PerfilUsua
   }));
 }
 
-export async function obterCaixaAbertoParaMovimentacao(empresaId: string, usuarioId: string) {
+export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string) {
   const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId);
-  if (!caixa) throw new Error("Abra um caixa antes de registrar esta movimentacao");
+  if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;
 }

@@ -3,6 +3,7 @@ import { permissaoCadastro } from "../cadastros/cadastros.permissoes.js";
 import { exigirPermissao } from "../autorizacao.js";
 import { exportarCadastroSchema, idCadastroParamsSchema, importarCadastroSchema } from "@padaria/shared/copia";
 import { exportarCadastroEmpresa, importarCadastroEmpresa } from "./copia.service.js";
+import { erro, ok } from "../respostas.js";
 
 const rotasCopia = {
   contas: "/api/contas",
@@ -24,11 +25,11 @@ export async function registrarRotasCopia(app: FastifyInstance): Promise<void> {
     app.post(`${caminho}/importar`, { preHandler: exigirPermissao(permissao) }, async (request, reply) => {
       const body = importarCadastroSchema.parse(request.body);
       try {
-        return await importarCadastroEmpresa(tipo, body, request.perfilUsuario);
+        return ok(await importarCadastroEmpresa(tipo, body, request.perfilUsuario));
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Importacao invalida";
         const status = mensagem === "Empresa nao permitida" ? 403 : 400;
-        return reply.status(status).send({ erro: mensagem });
+        return erro(reply, status, mensagem);
       }
     });
 
@@ -36,11 +37,11 @@ export async function registrarRotasCopia(app: FastifyInstance): Promise<void> {
       const { id } = idCadastroParamsSchema.parse(request.params);
       const body = exportarCadastroSchema.parse(request.body);
       try {
-        return await exportarCadastroEmpresa(tipo, id, body, request.perfilUsuario);
+        return ok(await exportarCadastroEmpresa(tipo, id, body, request.perfilUsuario));
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Copia invalida";
         const status = mensagem === "Empresa nao permitida" ? 403 : 400;
-        return reply.status(status).send({ erro: mensagem });
+        return erro(reply, status, mensagem);
       }
     });
   }

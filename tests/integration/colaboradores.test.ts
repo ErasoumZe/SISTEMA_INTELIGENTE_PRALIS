@@ -113,7 +113,7 @@ describe("colaboradores", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(listar).not.toHaveBeenCalled();
   });
 
@@ -164,7 +164,7 @@ describe("colaboradores", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(gravar).not.toHaveBeenCalled();
   });
 
@@ -176,7 +176,8 @@ describe("colaboradores", () => {
     const resposta = await requisitar(app, { method: "POST", url: "/api/cargos", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: cargoId } });
     expect(mocks.criarCargo).toHaveBeenCalledWith(payload);
   });
 
@@ -188,7 +189,8 @@ describe("colaboradores", () => {
     const resposta = await requisitar(app, { method: "PUT", url: `/api/cargos/${cargoId}`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.atualizarCargo).toHaveBeenCalledWith(cargoId, payload);
   });
 
@@ -200,7 +202,8 @@ describe("colaboradores", () => {
     const resposta = await requisitar(app, { method: "POST", url: `/api/colaboradores/${colaboradorId}/cargos`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.criarCargoColaborador).toHaveBeenCalledWith(colaboradorId, payload);
   });
 
@@ -216,7 +219,8 @@ describe("colaboradores", () => {
     });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.atualizarStatusCargoColaborador).toHaveBeenCalledWith(colaboradorId, registroId, payload);
   });
 
@@ -244,7 +248,7 @@ describe("colaboradores", () => {
     const resposta = await requisitar(app, { method: "POST", url: `/api/colaboradores/${colaboradorId}/jornadas`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
     expect(mocks.criarJornadasColaborador).toHaveBeenCalledWith(colaboradorId, payload);
   });
 
@@ -265,7 +269,8 @@ describe("colaboradores", () => {
     });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.criarFaltaJustificada).toHaveBeenCalledWith(colaboradorId, payload);
   });
 
@@ -277,7 +282,8 @@ describe("colaboradores", () => {
     const resposta = await requisitar(app, { method: "POST", url: "/api/feriados", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.criarFeriado).toHaveBeenCalledWith(payload);
   });
 
@@ -294,6 +300,7 @@ describe("colaboradores", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(400);
-    expect(resposta.json()).toEqual({ erro: "Fim deve ser posterior ao inicio" });
+    expect(resposta.json()).toMatchObject({ title: "Fim deve ser posterior ao inicio", status: resposta.statusCode });
   });
 });
+

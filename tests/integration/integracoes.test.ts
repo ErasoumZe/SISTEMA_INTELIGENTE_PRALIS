@@ -115,7 +115,7 @@ describe("integracoes", () => {
     const resposta = await requisitar(app, { method: "GET", url: `/api/integracoes?empresaId=${empresaA}` });
 
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "integracoes" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "integracoes" } });
     expect(mocks.listarIntegracoes).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,10 @@ describe("integracoes", () => {
     const resposta = await requisitar(app, { method: "GET", url: `/api/integracoes?empresaId=${empresaA}` });
 
     expect(resposta.statusCode).toBe(200);
-    expect(mocks.listarIntegracoes).toHaveBeenCalledWith({ empresaId: empresaA }, expect.objectContaining({ usuarioId }));
+    expect(mocks.listarIntegracoes).toHaveBeenCalledWith(
+      { empresaId: empresaA, page: 1, pageSize: 10 },
+      expect.objectContaining({ usuarioId })
+    );
   });
 
   it("Deve_ReceberVendaAgregada_ComPayloadTipado", async () => {
@@ -134,7 +137,10 @@ describe("integracoes", () => {
     });
 
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual({ status: "criado", vendaId: registroId, identificadorExterno: "VENDA-1" });
+    expect(resposta.json()).toEqual({
+      ok: true,
+      data: { status: "criado", vendaId: registroId, identificadorExterno: "VENDA-1" }
+    });
     expect(mocks.receberVendaIntegracao).toHaveBeenCalledWith(
       "01JTESTEINTEGRACAO00000000",
       expect.objectContaining({
@@ -153,6 +159,8 @@ describe("integracoes", () => {
     });
 
     expect(resposta.statusCode).toBe(401);
-    expect(resposta.json()).toEqual({ erro: "Chave de integracao invalida" });
+    expect(resposta.json()).toMatchObject({ title: "Chave de integracao invalida", status: resposta.statusCode });
   });
 });
+
+

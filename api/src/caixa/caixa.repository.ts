@@ -6,7 +6,10 @@ import {
   edicoesCaixa,
   fechamentosCaixa
 } from "@padaria/db/schema/caixa";
-import { despesas, despesasItens, mercadorias, retiradas, transferencias } from "@padaria/db/schema/movimentacao";
+import { despesas, despesasItens } from "@padaria/db/schema/despesa";
+import { mercadorias } from "@padaria/db/schema/mercadoria";
+import { retiradas } from "@padaria/db/schema/retirada";
+import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
 import type { AjusteSaldoPayload, ResumoCaixaQuery } from "@padaria/shared/caixa";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -312,7 +315,7 @@ export async function registrarEdicaoCaixaRepository(
   await db.insert(edicoesCaixa).values(input);
 }
 
-export async function caixaTemMovimentosRepository(caixaId: string, db: ExecutorBanco = banco) {
+export async function caixaTemLancamentosRepository(caixaId: string, db: ExecutorBanco = banco) {
   const consultas = await Promise.all([
     db.select({ id: vendas.id }).from(vendas).where(eq(vendas.caixaId, caixaId)).limit(1),
     db.select({ id: transferencias.id }).from(transferencias).where(eq(transferencias.caixaId, caixaId)).limit(1),
@@ -458,7 +461,7 @@ export async function criarAcertoSaldoCaixaRepository(
     valorDiferenca: valor
   });
 
-  return { movimentacaoId: despesa.id, debitoId: debito.id };
+  return { despesaId: despesa.id, debitoId: debito.id };
 }
 
 export async function atualizarFechamentoCaixaRepository(

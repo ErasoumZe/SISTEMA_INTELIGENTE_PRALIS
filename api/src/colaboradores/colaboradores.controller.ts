@@ -13,6 +13,7 @@ import {
 import { empresaQuerySchema } from "@padaria/shared/catalogos";
 import { exigirPermissao } from "../autorizacao.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
+import { criadoId, erro, paginadoDeArray, semConteudo } from "../respostas.js";
 import type { AplicacaoFastify } from "../tipos/fastify.js";
 import {
   atualizarCargo,
@@ -36,7 +37,7 @@ async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   try {
     return { query, empresasLiberadas, escopoDados: escopoEmpresaAtiva(empresasLiberadas, query.empresaId) };
   } catch (error) {
-    reply.status(403).send({ erro: error instanceof Error ? error.message : "Empresa nao permitida" });
+    erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
     return null;
   }
 }
@@ -46,20 +47,22 @@ function empresaPermitida(request: FastifyRequest, empresaId: string) {
 }
 
 function erro400(reply: FastifyReply, error: Error, fallback: string) {
-  return reply.status(400).send({ erro: error.message || fallback });
+  return erro(reply, 400, error.message || fallback);
 }
 
 export async function registrarRotasColaboradores(app: AplicacaoFastify) {
   app.get("/api/cargos", { preHandler: exigirPermissao("cadastro_colaboradores") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarCargos(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarCargos(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.post("/api/cargos", { preHandler: exigirPermissao("cadastro_colaboradores") }, async (request, reply) => {
     const body = cargoPayloadSchema.parse(request.body);
-    if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
+    if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     try {
-      return await criarCargo(body);
+      const criado = await criarCargo(body);
+      if (!criado) return erro(reply, 400, "Cargo invalido", "INVALID_CARGO");
+      return criadoId(reply, criado.id);
     } catch (error) {
       return erro400(reply, error instanceof Error ? error : new Error("Cargo invalido"), "Cargo invalido");
     }
@@ -68,18 +71,21 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
   app.put("/api/cargos/:id", { preHandler: exigirPermissao("cadastro_colaboradores") }, async (request, reply) => {
     const { id } = idParamsSchema.parse(request.params);
     const body = cargoPayloadSchema.parse(request.body);
-    if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
-    return atualizarCargo(id, body);
+    if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    await atualizarCargo(id, body);
+    return semConteudo(reply);
   });
 
   app.get(
     "/api/colaboradores/:colaboradorId/cargos",
     { preHandler: exigirPermissao("cadastro_colaboradores") },
-    async (request) => {
+    async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      return listarCargosColaborador(
-        colaboradorId,
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
+      const query = empresaQuerySchema.parse(request.query);
+      return paginadoDeArray(
+        await listarCargosColaborador(colaboradorId, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []),
+        query.page,
+        query.pageSize
       );
     }
   );
@@ -90,9 +96,11 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
       const body = colaboradorCargoPayloadSchema.parse(request.body);
-      if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
+      if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        return await criarCargoColaborador(colaboradorId, body);
+        const criado = await criarCargoColaborador(colaboradorId, body);
+        if (!criado) return erro(reply, 400, "Cargo do colaborador invalido", "INVALID_COLLABORATOR_ROLE");
+        return criadoId(reply, criado.id);
       } catch (error) {
         return erro400(
           reply,
@@ -109,8 +117,9 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     async (request, reply) => {
       const { colaboradorId, cargoColaboradorId } = colaboradorCargoParamsSchema.parse(request.params);
       const body = colaboradorCargoStatusPayloadSchema.parse(request.body);
-      if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
-      return atualizarStatusCargoColaborador(colaboradorId, cargoColaboradorId, body);
+      if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      await atualizarStatusCargoColaborador(colaboradorId, cargoColaboradorId, body);
+      return semConteudo(reply);
     }
   );
 
@@ -119,9 +128,11 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     { preHandler: exigirPermissao("cadastro_colaboradores") },
     async (request) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      return listarJornadasColaborador(
-        colaboradorId,
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
+      const query = empresaQuerySchema.parse(request.query);
+      return paginadoDeArray(
+        await listarJornadasColaborador(colaboradorId, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []),
+        query.page,
+        query.pageSize
       );
     }
   );
@@ -132,9 +143,10 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
       const body = jornadaPayloadSchema.parse(request.body);
-      if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
+      if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        return await criarJornadasColaborador(colaboradorId, body);
+        const criado = await criarJornadasColaborador(colaboradorId, body);
+        return criadoId(reply, (criado as { ids?: string[] }).ids?.[0] ?? colaboradorId);
       } catch (error) {
         return erro400(reply, error instanceof Error ? error : new Error("Jornada invalida"), "Jornada invalida");
       }
@@ -146,9 +158,11 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     { preHandler: exigirPermissao("cadastro_colaboradores") },
     async (request) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      return listarFaltasJustificadas(
-        colaboradorId,
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
+      const query = empresaQuerySchema.parse(request.query);
+      return paginadoDeArray(
+        await listarFaltasJustificadas(colaboradorId, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []),
+        query.page,
+        query.pageSize
       );
     }
   );
@@ -159,9 +173,11 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
       const body = faltaJustificadaPayloadSchema.parse(request.body);
-      if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
+      if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        return await criarFaltaJustificada(colaboradorId, body);
+        const criado = await criarFaltaJustificada(colaboradorId, body);
+        if (!criado) return erro(reply, 400, "Falta justificada invalida", "INVALID_ABSENCE");
+        return criadoId(reply, criado.id);
       } catch (error) {
         return erro400(
           reply,
@@ -174,14 +190,15 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
 
   app.get("/api/feriados", { preHandler: exigirPermissao("cadastro_colaboradores") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarFeriados(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarFeriados(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.post("/api/feriados", { preHandler: exigirPermissao("cadastro_colaboradores") }, async (request, reply) => {
     const body = feriadoPayloadSchema.parse(request.body);
-    if (!empresaPermitida(request, body.empresaId)) return reply.status(403).send({ erro: "Empresa nao permitida" });
+    if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     try {
-      return await criarFeriado(body);
+      const criado = await criarFeriado(body);
+      return criadoId(reply, criado?.id ?? `${body.empresaId}:${body.dia}:${body.mes}:${body.ano ?? "anual"}`);
     } catch (error) {
       return erro400(reply, error instanceof Error ? error : new Error("Feriado invalido"), "Feriado invalido");
     }

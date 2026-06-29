@@ -68,7 +68,7 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_malotes" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_malotes" } });
     expect(mocks.listarMalotes).not.toHaveBeenCalled();
   });
 
@@ -99,7 +99,7 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.listarMalotes).not.toHaveBeenCalled();
   });
 
@@ -133,7 +133,7 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.validarLacre).not.toHaveBeenCalled();
   });
 
@@ -145,7 +145,8 @@ describe("malotes", () => {
     const resposta = await requisitar(app, { method: "POST", url: "/api/malotes", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.criarMalote).toHaveBeenCalledWith(payload, usuarioId);
   });
 
@@ -158,7 +159,7 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.criarMalote).not.toHaveBeenCalled();
   });
 
@@ -183,7 +184,8 @@ describe("malotes", () => {
     const resposta = await requisitar(app, { method: "PUT", url: `/api/malotes/${registroId}`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.atualizarMalote).toHaveBeenCalledWith(registroId, payload, [empresaA]);
   });
 
@@ -200,6 +202,8 @@ describe("malotes", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 });
+
+

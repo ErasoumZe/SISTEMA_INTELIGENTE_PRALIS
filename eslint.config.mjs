@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/.nuxt/**", "**/.output/**", "**/node_modules/**", "web/**"]
+    ignores: ["**/dist/**", "**/.nuxt/**", "**/.output/**", "**/node_modules/**"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

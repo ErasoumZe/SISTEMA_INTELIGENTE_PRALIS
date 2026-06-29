@@ -1,5 +1,6 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import type { PerfilUsuario, Permissao, RoleUsuario } from "@padaria/shared";
+import { expect } from "vitest";
 
 export const empresaA = "11111111-1111-4111-8111-111111111111";
 export const empresaB = "33333333-3333-4333-8333-333333333333";
@@ -39,6 +40,39 @@ export async function requisitar(app: FastifyInstance, options: InjectOptions) {
   });
 }
 
+export function expectProblem(body: unknown, status: number, title: string, details?: Record<string, unknown>) {
+  expect(body).toMatchObject({
+    type: "about:blank",
+    title,
+    status,
+    ...(details ? { details } : {})
+  });
+}
+
+export function expectOkData<T>(body: unknown, data: T) {
+  expect(body).toEqual({ ok: true, data });
+}
+
+export function expectPaginatedData<T>(body: unknown, data: T[], total = data.length) {
+  expect(body).toMatchObject({
+    ok: true,
+    data,
+    meta: {
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / 10))
+      }
+    }
+  });
+}
+
+export function expectNoContent(resposta: { statusCode: number; body: string }) {
+  expect(resposta.statusCode).toBe(204);
+  expect(resposta.body).toBe("");
+}
+
 export function payloadTema(empresaId = empresaA) {
   return {
     empresaId,
@@ -53,18 +87,16 @@ export function payloadTema(empresaId = empresaA) {
   };
 }
 
-export function payloadMovimentacao(empresaId = empresaA) {
+export function payloadVenda(empresaId = empresaA) {
   return {
     empresaId,
-    tipo: "entrada",
     dataReferencia: "2026-06-28",
-    dataVencimento: "2026-06-28",
     descricao: "Venda balcão",
     valorOriginal: 120,
     valorAcrescimo: 0,
     valorDesconto: 0,
     computar: true,
-    itensDespesa: [],
-    itensMercadoria: []
+    itensVenda: [],
+    tiposPagamento: []
   };
 }

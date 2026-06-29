@@ -1,24 +1,26 @@
 <script setup lang="ts">
-import type { AuthSession, Permissao, TemaAplicacao, TipoMovimentacao } from "@padaria/shared";
+import type { AuthSession, Permissao, TemaAplicacao } from "@padaria/shared";
 import type {
   CadastroForm,
   CaixaStatus,
-  Movimento,
-  MovimentoForm,
+  EntidadeOperacional,
+  OperacaoResumo,
+  OperacaoForm,
   Opcao,
   Opcoes,
+  PermissoesPaginadas,
   ResumoCaixa,
   TreeItem
 } from "~/types/padaria";
 import {
   cadastroPayload,
   dinheiro,
-  endpointMovimentoPorTipo,
+  endpointOperacaoPorEntidade,
   formCadastroVazio,
-  formMovimentoVazio,
+  formOperacaoVazio,
   itemPorTela,
   mensagemErro,
-  movimentoPorTela,
+  entidadePorTela,
   opcoesFiltradasPorEmpresa,
   opcoesNovo,
   opcoesVazias,
@@ -26,10 +28,11 @@ import {
   rotaTela,
   secoesPermissoes,
   temaPadrao,
+  telasFuturas,
   tipoEndpointCadastro
 } from "~/utils/domain";
 
-type TipoPagina = "movimentos" | "caixa" | "relatorio_produtos" | "tree" | "cadastro" | "placeholder";
+type TipoPagina = "operacoes" | "caixa" | "relatorio_produtos" | "tree" | "cadastro" | "placeholder";
 
 const props = withDefaults(
   defineProps<{
@@ -43,12 +46,12 @@ const props = withDefaults(
 const tipoPagina = computed(() => props.tipoPagina);
 
 const router = useRouter();
-const { apiUrl, apiGet, apiPost, apiPut, carregarSessao, aplicarTema } = useApi();
+const { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiDelete, carregarSessao, aplicarTema } = useApi();
 
 const sessao = ref<AuthSession | null>(null);
 const opcoes = ref<Opcoes>(opcoesVazias());
 const empresas = ref<Opcao[]>([]);
-const movimentos = ref<Movimento[]>([]);
+const operacoes = ref<OperacaoResumo[]>([]);
 const resumo = ref<ResumoCaixa | null>(null);
 const caixaStatus = ref<CaixaStatus | null>(null);
 const telaAtiva = ref(props.telaInicial && itemPorTela[props.telaInicial] ? props.telaInicial : "entradas");
@@ -60,14 +63,14 @@ const saindo = ref(false);
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
-const modalMovimentoAberto = ref(false);
+const modalOperacaoAberto = ref(false);
 const modalMaloteAberto = ref(false);
 const modalCadastroAberto = ref(false);
 const modalTemaAberto = ref(false);
 const modalCopiaAberto = ref(false);
 
-const tipoNovo = ref<TipoMovimentacao>("entrada");
-const form = ref<MovimentoForm>(formMovimentoVazio());
+const entidadeNova = ref<EntidadeOperacional>("venda");
+const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
 const itensDespesa = ref([{ descricao: "", valor: "", grupoDespesaId: "" }]);
@@ -84,7 +87,7 @@ const itensMercadoria = ref([
 ]);
 const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }]);
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
-const salvandoMovimento = ref(false);
+const salvandoOperacao = ref(false);
 const caixaSalvando = ref(false);
 const modalCaixaDrawerAberto = ref(false);
 const modoCaixaDrawer = ref<"abrir" | "editar">("abrir");
@@ -104,6 +107,22 @@ const cadastroTela = ref("");
 const cadastroEditandoId = ref("");
 const cadastroSalvando = ref(false);
 const formCadastro = ref<CadastroForm>(formCadastroVazio());
+const permissoesFiltros = reactive({
+  q: "",
+  tipoPermissao: "",
+  alvoId: "",
+  permissao: ""
+});
+const permissoesFiltrosAplicados = reactive({
+  q: "",
+  tipoPermissao: "",
+  alvoId: "",
+  permissao: ""
+});
+const permissoesPagina = ref<PermissoesPaginadas>({ itens: [], total: 0, page: 1, pageSize: 10 });
+const permissoesBuscou = ref(false);
+const permissoesCarregandoBusca = ref(false);
+const permissaoExcluindoId = ref("");
 
 const tema = ref<TemaAplicacao>(temaPadrao());
 const temaTelaAtual = ref("");
@@ -118,7 +137,7 @@ const copiaEmpresaOrigemId = ref("");
 const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
-const paginaMovimentos = ref(1);
+const paginaOperacoes = ref(1);
 const telasDependemCaixa = new Set([
   "entradas",
   "transferencias",
@@ -140,6 +159,10 @@ const colaboradoresDisponiveisUsuario = computed(() =>
     (colaborador) => !colaborador.usuarioId || colaborador.usuarioId === cadastroEditandoId.value
   )
 );
+const colaboradoresSelectUsuario = computed(() => [
+  { id: "__novo__", nome: "Novo" },
+  ...colaboradoresDisponiveisUsuario.value
+]);
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeConfigurarTema = computed(() => permissoesUsuario.value.includes("configurar_tema"));
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
@@ -158,14 +181,13 @@ const telasShell = computed(() => {
   return telasPermitidas.value.filter((item) => item.id !== "caixa");
 });
 const telasDesabilitadasPorCaixa = computed(() => (!caixaAberto.value ? [...telasDependemCaixa] : []));
+const telasFuturasMenu = computed(() => [...telasFuturas].filter((tela) => telasPermitidas.value.some((item) => item.id === tela)));
+const telasDesabilitadasMenu = computed(() => [...new Set([...telasDesabilitadasPorCaixa.value, ...telasFuturasMenu.value])]);
 const telaAtual = computed(() => itemPorTela[telaAtiva.value] ?? telasPermitidas.value[0]);
-const movimentosDaTela = computed(() => {
-  const tipo = movimentoPorTela[telaAtiva.value];
-  return tipo ? movimentos.value.filter((movimento) => movimento.tipo === tipo) : movimentos.value;
-});
-const totalPaginasMovimentos = computed(() => Math.max(1, Math.ceil(movimentosDaTela.value.length / 10)));
-const movimentosPaginados = computed(() =>
-  movimentosDaTela.value.slice((paginaMovimentos.value - 1) * 10, paginaMovimentos.value * 10)
+const operacoesDaTela = computed(() => operacoes.value);
+const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTela.value.length / 10)));
+const operacoesPaginadas = computed(() =>
+  operacoesDaTela.value.slice((paginaOperacoes.value - 1) * 10, paginaOperacoes.value * 10)
 );
 const acoesNovo = computed(() => {
   if (!caixaAberto.value) return [];
@@ -181,7 +203,7 @@ const totalItensVenda = computed(() => itensVenda.value.reduce((total, item) => 
 const totalTiposPagamento = computed(() =>
   tiposPagamento.value.reduce((total, item) => total + Number(item.totalPago || 0), 0)
 );
-const valorTotalMovimento = computed(() =>
+const valorTotalOperacao = computed(() =>
   Math.max(
     0,
     Number(form.value.valorOriginal || 0) +
@@ -189,9 +211,27 @@ const valorTotalMovimento = computed(() =>
       Number(form.value.valorDesconto || 0)
   )
 );
+const alvosFiltroPermissoes = computed(() => {
+  const tipo = permissoesFiltros.tipoPermissao;
+  if (tipo === "cargo") return opcoesEmpresa.value.cargos.map((item) => ({ id: item.id, nome: item.nome ?? item.id }));
+  if (tipo === "setor") return opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: item.nome ?? item.id }));
+  if (tipo === "usuario")
+    return opcoesEmpresa.value.usuarios.map((item) => ({
+      id: item.usuarioId ?? item.id,
+      nome: item.nome ?? item.email ?? item.usuarioId ?? item.id
+    }));
+  return [
+    ...opcoesEmpresa.value.cargos.map((item) => ({ id: item.id, nome: `Cargo: ${item.nome ?? item.id}` })),
+    ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` })),
+    ...opcoesEmpresa.value.usuarios.map((item) => ({
+      id: item.usuarioId ?? item.id,
+      nome: `Usuario: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
+    }))
+  ];
+});
 
-watch(totalPaginasMovimentos, (total) => {
-  if (paginaMovimentos.value > total) paginaMovimentos.value = total;
+watch(totalPaginasOperacoes, (total) => {
+  if (paginaOperacoes.value > total) paginaOperacoes.value = total;
 });
 
 watch([discriminandoDespesa, totalItensDespesa], () => {
@@ -204,8 +244,8 @@ watch([discriminandoMercadoria, totalItensMercadoria], () => {
     form.value.valorOriginal = totalItensMercadoria.value ? totalItensMercadoria.value.toFixed(2) : "";
 });
 
-watch([totalItensVenda, totalTiposPagamento, tipoNovo], () => {
-  if (tipoNovo.value !== "entrada") return;
+watch([totalItensVenda, totalTiposPagamento, entidadeNova], () => {
+  if (entidadeNova.value !== "venda") return;
   const totalDetalhado = totalItensVenda.value || totalTiposPagamento.value;
   if (totalDetalhado) form.value.valorOriginal = totalDetalhado.toFixed(2);
 });
@@ -214,6 +254,13 @@ watch(
   () => form.value.temNotaFiscal,
   (temNota) => {
     if (temNota) form.value.computar = true;
+  }
+);
+
+watch(
+  () => permissoesFiltros.tipoPermissao,
+  () => {
+    permissoesFiltros.alvoId = "";
   }
 );
 
@@ -301,7 +348,7 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
     } else {
       await carregarDadosPagina(idEmpresa, tela);
     }
-    await carregarMovimentos(idEmpresa);
+    await carregarOperacoes(idEmpresa);
   } finally {
     empresaCarregando.value = false;
   }
@@ -376,10 +423,11 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "areas_setores") {
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {
-    [dados.usuarios, dados.colaboradores, dados.setores] = await Promise.all([
+    [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos] = await Promise.all([
       apiGet<Opcao[]>(`/api/usuarios${query}`),
       apiGet<Opcao[]>(`/api/colaboradores${query}`),
-      apiGet<Opcao[]>(`/api/setores${query}`)
+      apiGet<Opcao[]>(`/api/setores${query}`),
+      apiGet<Opcao[]>(`/api/cargos${query}`)
     ]);
   } else if (tela === "permissoes") {
     Object.assign(
@@ -397,6 +445,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         >
       >(`/api/permissoes${query}`)
     );
+    permissoesBuscou.value = false;
+    permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
   } else if (tela === "malotes") {
     dados.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
   } else if (tela === "colaboradores") {
@@ -461,11 +511,11 @@ async function carregarTudo() {
   }
 }
 
-async function carregarMovimentos(idEmpresa = empresaId.value) {
+async function carregarOperacoes(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
-  const tipo = movimentoPorTela[telaAtiva.value];
-  if (!tipo) return;
-  movimentos.value = await apiGet<Movimento[]>(`/api/${endpointMovimentoPorTipo[tipo]}?empresaId=${idEmpresa}`);
+  const entidade = entidadePorTela[telaAtiva.value];
+  if (!entidade) return;
+  operacoes.value = await apiGet<OperacaoResumo[]>(`/api/${endpointOperacaoPorEntidade[entidade]}?empresaId=${idEmpresa}`);
 }
 
 async function carregarStatusCaixa(idEmpresa = empresaId.value) {
@@ -479,14 +529,14 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   resumo.value = caixaStatus.value.resumo;
 }
 
-function abrirMovimento(tipo: TipoMovimentacao) {
+function abrirOperacao(entidade: EntidadeOperacional) {
   if (!caixaAberto.value) {
-    notificar("Abra um caixa antes de registrar movimentacoes.", "warning");
+    notificar("Abra um caixa antes de registrar lancamentos.", "warning");
     void router.push("/caixa");
     return;
   }
-  tipoNovo.value = tipo;
-  form.value = formMovimentoVazio();
+  entidadeNova.value = entidade;
+  form.value = formOperacaoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
   itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
@@ -503,25 +553,25 @@ function abrirMovimento(tipo: TipoMovimentacao) {
       unidadeMedidaId: ""
     }
   ];
-  modalMovimentoAberto.value = true;
+  modalOperacaoAberto.value = true;
 }
 
 function executarAcaoNovo(acao: (typeof opcoesNovo)[number]) {
-  if (acao.tipo) abrirMovimento(acao.tipo);
+  if (acao.entidade) abrirOperacao(acao.entidade);
   if (acao.tela === "malote") abrirMaloteNovo();
 }
 
-async function salvarMovimento() {
-  salvandoMovimento.value = true;
+async function salvarOperacao() {
+  salvandoOperacao.value = true;
   try {
     const itensDespesaPayload =
-      tipoNovo.value === "despesa" && discriminandoDespesa.value
+      entidadeNova.value === "despesa" && discriminandoDespesa.value
         ? itensDespesa.value
             .filter((item) => item.descricao || item.valor)
             .map((item) => ({ ...item, valor: Number(item.valor || 0) }))
         : [];
     const itensMercadoriaPayload =
-      tipoNovo.value === "mercadoria" && discriminandoMercadoria.value
+      entidadeNova.value === "mercadoria" && discriminandoMercadoria.value
         ? itensMercadoria.value
             .filter((item) => item.descricao || item.produtoId)
             .map((item) => ({
@@ -532,7 +582,7 @@ async function salvarMovimento() {
             }))
         : [];
     const itensVendaPayload =
-      tipoNovo.value === "entrada"
+      entidadeNova.value === "venda"
         ? itensVenda.value
             .filter((item) => item.descricaoProduto || item.produtoId || item.valorTotal)
             .map((item) => {
@@ -547,7 +597,7 @@ async function salvarMovimento() {
             })
         : [];
     const tiposPagamentoPayload =
-      tipoNovo.value === "entrada"
+      entidadeNova.value === "venda"
         ? tiposPagamento.value
             .filter((item) => item.formaPagamentoId || item.totalPago)
             .map((item) => ({
@@ -557,7 +607,7 @@ async function salvarMovimento() {
             }))
         : [];
 
-    const movimentoSalvo = await apiPost<{ id: string; computar: boolean }>(`/api/${endpointMovimentoPorTipo[tipoNovo.value]}`, {
+    const operacaoSalva = await apiPost<{ id: string; computar: boolean }>(`/api/${endpointOperacaoPorEntidade[entidadeNova.value]}`, {
       empresaId: empresaId.value,
       ...form.value,
       dataPagamento: form.value.dataPagamento || null,
@@ -569,23 +619,22 @@ async function salvarMovimento() {
       itensDespesa: itensDespesaPayload,
       itensMercadoria: itensMercadoriaPayload
     });
-    movimentos.value.unshift({
-      id: movimentoSalvo.id,
+    operacoes.value.unshift({
+      id: operacaoSalva.id,
       empresaId: empresaId.value,
-      tipo: tipoNovo.value,
       dataReferencia: form.value.dataReferencia,
       descricao: form.value.descricao,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
-      computar: movimentoSalvo.computar,
+      computar: form.value.temNotaFiscal ? true : form.value.computar,
       status: "aprovado"
     });
-    modalMovimentoAberto.value = false;
-    notificar("Movimentacao salva com sucesso.");
+    modalOperacaoAberto.value = false;
+    notificar("Lancamento salvo com sucesso.");
     await carregarStatusCaixa(empresaId.value);
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
-    salvandoMovimento.value = false;
+    salvandoOperacao.value = false;
   }
 }
 
@@ -706,6 +755,81 @@ async function salvarCadastro() {
   }
 }
 
+function queryPermissoes(page = 1) {
+  const params = new URLSearchParams({
+    empresaId: empresaId.value,
+    page: String(page),
+    pageSize: String(permissoesPagina.value.pageSize)
+  });
+  if (permissoesFiltrosAplicados.q) params.set("q", permissoesFiltrosAplicados.q);
+  if (permissoesFiltrosAplicados.tipoPermissao)
+    params.set("tipoPermissao", permissoesFiltrosAplicados.tipoPermissao);
+  if (permissoesFiltrosAplicados.alvoId) params.set("alvoId", permissoesFiltrosAplicados.alvoId);
+  if (permissoesFiltrosAplicados.permissao) params.set("permissao", permissoesFiltrosAplicados.permissao);
+  return params;
+}
+
+async function buscarPermissoes(page = 1, aplicarFiltros = false) {
+  if (!empresaId.value) return;
+  if (aplicarFiltros) {
+    Object.assign(permissoesFiltrosAplicados, { ...permissoesFiltros });
+  }
+  permissoesCarregandoBusca.value = true;
+  try {
+    permissoesPagina.value = await apiGetPaginado<Record<string, string | undefined>>(
+      `/api/cadastros/permissoes?${queryPermissoes(page).toString()}`
+    );
+    permissoesBuscou.value = true;
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    permissoesCarregandoBusca.value = false;
+  }
+}
+
+function limparFiltrosPermissoes() {
+  Object.assign(permissoesFiltros, { q: "", tipoPermissao: "", alvoId: "", permissao: "" });
+  Object.assign(permissoesFiltrosAplicados, { q: "", tipoPermissao: "", alvoId: "", permissao: "" });
+  permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
+  permissoesBuscou.value = false;
+}
+
+async function excluirPermissao(linha: Record<string, string | undefined>) {
+  const tipoPermissao = linha.tipoPermissao || linha.tipo;
+  const alvoId = linha.alvoId || linha.cargoId || linha.setorId || linha.usuarioId;
+  const permissao = linha.permissao;
+  if (!tipoPermissao || !alvoId || !permissao) return;
+  if (!window.confirm(`Excluir a permissao ${permissao} de ${linha.alvo || alvoId}?`)) return;
+  permissaoExcluindoId.value = linha.id ?? `${tipoPermissao}:${alvoId}:${permissao}`;
+  try {
+    const params = new URLSearchParams({
+      empresaId: empresaId.value,
+      tipoPermissao,
+      alvoId,
+      permissao
+    });
+    await apiDelete(`/api/cadastros/permissoes?${params.toString()}`);
+    notificar("Permissao excluida com sucesso.");
+    await buscarPermissoes(permissoesPagina.value.page || 1);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    permissaoExcluindoId.value = "";
+  }
+}
+
+function atualizarColaboradorUsuario(valor: string) {
+  if (valor === "__novo__") {
+    formCadastro.value.novoColaborador = true;
+    formCadastro.value.colaboradorId = "";
+    if (!formCadastro.value.novoColaboradorNome) formCadastro.value.novoColaboradorNome = formCadastro.value.nome;
+    formCadastro.value.novoColaboradorSetorId = formCadastro.value.setorId || "";
+    return;
+  }
+  formCadastro.value.novoColaborador = false;
+  formCadastro.value.colaboradorId = valor;
+}
+
 async function carregarTemaTela(tela: string) {
   try {
     const params = new URLSearchParams({ tela, empresaId: empresaId.value });
@@ -811,7 +935,7 @@ async function fecharCaixaOperacional(payload: { caixaId: string; observacao: st
     });
     resumo.value = caixaStatus.value.resumo;
     notificar("Caixa fechado com sucesso.");
-    await carregarMovimentos(empresaId.value);
+    await carregarOperacoes(empresaId.value);
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -883,29 +1007,7 @@ function dadosCadastro(tela: string): Array<Record<string, string | undefined>> 
       setorId: item.setorId ?? undefined
     }));
   if (tela === "permissoes") {
-    return [
-      ...listas.cargosPermissoes.map((item) => ({
-        id: item.id,
-        tipo: "cargo",
-        alvo: listas.cargos.find((cargo) => cargo.id === item.cargoId)?.nome ?? item.cargoId,
-        cargoId: item.cargoId,
-        permissao: item.codigoPermissao ?? item.permissaoCodigo
-      })),
-      ...listas.setoresPermissoes.map((item) => ({
-        id: item.id,
-        tipo: "setor",
-        alvo: item.nome,
-        setorId: item.setorId ?? undefined,
-        permissao: item.codigoPermissao ?? item.permissaoCodigo
-      })),
-      ...listas.usuariosPermissoes.map((item) => ({
-        id: item.id,
-        tipo: "usuario",
-        alvo: item.nome ?? item.email,
-        usuarioId: item.usuarioId,
-        permissao: item.codigoPermissao ?? item.permissaoCodigo
-      }))
-    ];
+    return permissoesPagina.value.itens;
   }
   if (tela === "malotes")
     return listas.malotes.map((item) => ({
@@ -1134,7 +1236,8 @@ onMounted(() => {
     :empresas="empresasDisponiveis"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
-    :telas-desabilitadas="telasDesabilitadasPorCaixa"
+    :telas-desabilitadas="telasDesabilitadasMenu"
+    :telas-futuras="telasFuturasMenu"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
@@ -1202,19 +1305,19 @@ onMounted(() => {
         Abra um caixa antes de acessar esta tela.
       </v-alert>
 
-      <MovimentosPage
-        v-else-if="tipoPagina === 'movimentos'"
+      <OperacoesPage
+        v-else-if="tipoPagina === 'operacoes'"
         :resumo="resumo"
         :tela-atual="telaAtual"
         :tela-ativa="telaAtiva"
         :empresa-ativa="empresaAtiva"
-        :movimentos-paginados="movimentosPaginados"
-        :total-movimentos="movimentosDaTela.length"
-        :pagina="paginaMovimentos"
-        :total-paginas="totalPaginasMovimentos"
+        :operacoes-paginadas="operacoesPaginadas"
+        :total-operacoes="operacoesDaTela.length"
+        :pagina="paginaOperacoes"
+        :total-paginas="totalPaginasOperacoes"
         :descricao="descricaoTela(telaAtiva)"
-        @editar="abrirMovimento"
-        @update:pagina="paginaMovimentos = $event"
+        @editar="abrirOperacao"
+        @update:pagina="paginaOperacoes = $event"
       />
 
       <CaixaResumoPage
@@ -1252,11 +1355,33 @@ onMounted(() => {
         :colunas="colunasCadastro(telaAtiva)"
         :linhas="dadosCadastro(telaAtiva)"
         :editar-carregando-id="maloteEditandoCarregandoId"
+        :modo-servidor="telaAtiva === 'permissoes'"
+        :busca="permissoesFiltros.q"
+        :tipo-permissao-filtro="permissoesFiltros.tipoPermissao"
+        :alvo-filtro="permissoesFiltros.alvoId"
+        :permissao-filtro="permissoesFiltros.permissao"
+        :alvos-filtro="alvosFiltroPermissoes"
+        :permissoes-filtro="[...permissoes]"
+        :carregando-busca="permissoesCarregandoBusca"
+        :buscou="permissoesBuscou"
+        :total-servidor="permissoesPagina.total"
+        :pagina-servidor="permissoesPagina.page"
+        :itens-por-pagina-servidor="permissoesPagina.pageSize"
+        :pode-excluir="telaAtiva === 'permissoes'"
+        :excluindo-id="permissaoExcluindoId"
         @acionar="telaAtiva === 'malotes' ? abrirMaloteNovo() : abrirCadastroNovo(telaAtiva)"
         @importar="abrirImportacao(telaAtiva)"
         @exportar="abrirExportacao"
         @editar="abrirCadastroEditar"
         @extra="lidarExtraCadastro"
+        @update:busca="permissoesFiltros.q = $event"
+        @update:tipo-permissao-filtro="permissoesFiltros.tipoPermissao = $event"
+        @update:alvo-filtro="permissoesFiltros.alvoId = $event"
+        @update:permissao-filtro="permissoesFiltros.permissao = $event"
+        @buscar="buscarPermissoes(1, true)"
+        @limpar="limparFiltrosPermissoes"
+        @excluir="excluirPermissao"
+        @update:pagina-servidor="buscarPermissoes($event)"
       />
 
       <PlaceholderPage v-else :tela-atual="telaAtual" />
@@ -1332,9 +1457,9 @@ onMounted(() => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="modalMovimentoAberto" max-width="960" scrollable>
+    <v-dialog v-model="modalOperacaoAberto" max-width="960" scrollable>
       <v-card>
-        <v-card-title>{{ tipoNovo.charAt(0).toUpperCase() + tipoNovo.slice(1) }}</v-card-title>
+        <v-card-title>{{ entidadeNova.charAt(0).toUpperCase() + entidadeNova.slice(1) }}</v-card-title>
         <v-card-text>
           <v-row dense>
             <v-col cols="12" md="4"
@@ -1353,7 +1478,7 @@ onMounted(() => {
             <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao" /></v-col>
             <v-col cols="12"><v-textarea v-model="form.observacao" label="Observacao" rows="2" /></v-col>
             <v-col
-              v-if="['entrada', 'despesa', 'transferencia', 'mercadoria', 'retirada'].includes(tipoNovo)"
+              v-if="['venda', 'despesa', 'transferencia', 'mercadoria', 'retirada'].includes(entidadeNova)"
               cols="12"
               md="6"
             >
@@ -1365,10 +1490,10 @@ onMounted(() => {
                 label="Conta origem"
               />
             </v-col>
-            <v-col v-if="['entrada', 'despesa', 'mercadoria', 'retirada'].includes(tipoNovo)" cols="12" md="6"
+            <v-col v-if="['venda', 'despesa', 'mercadoria', 'retirada'].includes(entidadeNova)" cols="12" md="6"
               ><v-text-field v-model="form.dataPagamento" type="date" label="Data de pagamento"
             /></v-col>
-            <v-col v-if="tipoNovo === 'transferencia'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
               <v-select
                 v-model="form.contaDestinoId"
                 :items="opcoesEmpresa.contas"
@@ -1377,7 +1502,7 @@ onMounted(() => {
                 label="Conta destino"
               />
             </v-col>
-            <v-col v-if="['despesa', 'mercadoria'].includes(tipoNovo)" cols="12" md="6">
+            <v-col v-if="['despesa', 'mercadoria'].includes(entidadeNova)" cols="12" md="6">
               <v-select
                 v-model="form.fornecedorId"
                 :items="opcoesEmpresa.fornecedores"
@@ -1387,7 +1512,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'retirada'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'retirada'" cols="12" md="6">
               <v-select
                 v-model="form.colaboradorId"
                 :items="opcoesEmpresa.colaboradores"
@@ -1397,7 +1522,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'despesa'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'despesa'" cols="12" md="6">
               <v-select
                 v-model="form.grupoDespesaId"
                 :items="opcoesEmpresa.gruposDespesas"
@@ -1407,7 +1532,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'mercadoria'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'mercadoria'" cols="12" md="6">
               <v-select
                 v-model="form.grupoMercadoriaId"
                 :items="opcoesEmpresa.gruposMercadorias"
@@ -1417,7 +1542,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'retirada'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'retirada'" cols="12" md="6">
               <v-select
                 v-model="form.grupoRetiradaId"
                 :items="opcoesEmpresa.gruposRetiradas"
@@ -1427,7 +1552,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'transferencia'" cols="12" md="6">
+            <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
               <v-select
                 v-model="form.maloteId"
                 :items="opcoesEmpresa.malotes"
@@ -1437,7 +1562,7 @@ onMounted(() => {
                 clearable
               />
             </v-col>
-            <v-col v-if="tipoNovo === 'transferencia'" cols="12" md="6"
+            <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6"
               ><v-text-field v-model="form.numeroLacre" label="Numero do lacre"
             /></v-col>
             <v-col cols="12" md="4"
@@ -1456,11 +1581,11 @@ onMounted(() => {
             /></v-col>
             <v-col cols="12" md="4"
               ><div class="text-caption text-muted">Total</div>
-              <div class="text-h6">{{ dinheiro(valorTotalMovimento) }}</div></v-col
+              <div class="text-h6">{{ dinheiro(valorTotalOperacao) }}</div></v-col
 	            >
 	          </v-row>
 	          <v-divider class="my-4" />
-	          <div v-if="tipoNovo === 'entrada'" class="d-grid ga-4">
+		          <div v-if="entidadeNova === 'venda'" class="d-grid ga-4">
 	            <section>
 	              <div class="d-flex align-center justify-space-between mb-2">
 	                <h3 class="text-subtitle-1">Itens da venda</h3>
@@ -1539,7 +1664,7 @@ onMounted(() => {
 	            </section>
 	          </div>
 
-	          <section v-if="tipoNovo === 'despesa'" class="mt-2">
+	          <section v-if="entidadeNova === 'despesa'" class="mt-2">
 	            <v-switch v-model="discriminandoDespesa" label="Discriminar itens da despesa" color="primary" />
 	            <div v-if="discriminandoDespesa">
 	              <div class="d-flex justify-end mb-2">
@@ -1576,7 +1701,7 @@ onMounted(() => {
 	            </div>
 	          </section>
 
-	          <section v-if="tipoNovo === 'mercadoria'" class="mt-2">
+	          <section v-if="entidadeNova === 'mercadoria'" class="mt-2">
 	            <v-switch v-model="discriminandoMercadoria" label="Discriminar mercadorias" color="primary" />
 	            <div v-if="discriminandoMercadoria">
 	              <div class="d-flex justify-end mb-2">
@@ -1630,8 +1755,8 @@ onMounted(() => {
 	        </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="outlined" :disabled="salvandoMovimento" @click="modalMovimentoAberto = false">Cancelar</v-btn>
-          <v-btn color="primary" :loading="salvandoMovimento" @click="salvarMovimento">Salvar</v-btn>
+          <v-btn variant="outlined" :disabled="salvandoOperacao" @click="modalOperacaoAberto = false">Cancelar</v-btn>
+          <v-btn color="primary" :loading="salvandoOperacao" @click="salvarOperacao">Salvar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1715,13 +1840,51 @@ onMounted(() => {
             /></v-col>
             <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
               <v-select
-                v-model="formCadastro.colaboradorId"
-                :items="colaboradoresDisponiveisUsuario"
+                :model-value="formCadastro.novoColaborador ? '__novo__' : formCadastro.colaboradorId"
+                :items="colaboradoresSelectUsuario"
                 item-title="nome"
                 item-value="id"
                 label="Colaborador"
+                @update:model-value="atualizarColaboradorUsuario(String($event || ''))"
               />
             </v-col>
+            <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador">
+              <v-col cols="12" md="6">
+                <v-text-field v-model="formCadastro.novoColaboradorNome" label="Nome do colaborador" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="formCadastro.novoColaboradorCpf" label="CPF do colaborador" />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="formCadastro.novoColaboradorSetorId"
+                  :items="opcoesEmpresa.setores"
+                  item-title="nome"
+                  item-value="id"
+                  label="Setor"
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="formCadastro.novoColaboradorCargoId"
+                  :items="opcoesEmpresa.cargos"
+                  item-title="nome"
+                  item-value="id"
+                  label="Cargo inicial"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="formCadastro.novoColaboradorRemuneracaoMinuto"
+                  type="number"
+                  label="Remuneracao por minuto"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model="formCadastro.novoColaboradorDataInicio" type="date" label="Data de inicio" />
+              </v-col>
+            </template>
             <v-col v-if="cadastroTela === 'usuarios' && !cadastroEditandoId" cols="12"
               ><v-text-field v-model="formCadastro.senha" type="password" label="Senha"
             /></v-col>
@@ -1903,3 +2066,4 @@ onMounted(() => {
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>
 </template>
+

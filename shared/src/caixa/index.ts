@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 const dataHoraSchema = z.string().min(16);
@@ -51,7 +52,7 @@ export const fecharCaixaPayloadSchema = z.object({
 
 export const historicoCaixaQuerySchema = z.object({
   empresaId: uuidSchema
-});
+}).merge(paginationQuerySchema);
 
 export const resumoCaixaSchema = z.object({
   totalEntradas: z.number(),
@@ -65,7 +66,7 @@ export const resumoCaixaSchema = z.object({
 });
 
 export const ajusteSaldoResponseSchema = z.object({
-  movimentacaoId: z.string()
+  despesaId: z.string()
 });
 
 export const caixaOperacionalSchema = z.object({
@@ -92,7 +93,7 @@ export const caixaStatusSchema = z.object({
 });
 
 export const acertoSaldoCaixaResponseSchema = z.object({
-  movimentacaoId: uuidSchema,
+  despesaId: uuidSchema,
   debitoId: uuidSchema,
   valorDiferenca: z.number()
 });

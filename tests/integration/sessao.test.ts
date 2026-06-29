@@ -47,7 +47,7 @@ describe("sessao", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(401);
-    expect(resposta.json()).toEqual({ error: "Unauthorized" });
+    expect(resposta.json()).toMatchObject({ title: "Nao autenticado", status: resposta.statusCode });
   });
 
   it("Deve_RetornarSessaoComPerfil_Quando_ConsultarMeAutenticado", async () => {
@@ -57,8 +57,11 @@ describe("sessao", () => {
     // Assert
     expect(resposta.statusCode).toBe(200);
     expect(resposta.json()).toMatchObject({
-      user: { id: usuarioId },
-      perfil: { usuarioId, permissoes: ["entradas"] }
+      ok: true,
+      data: {
+        user: { id: usuarioId },
+        perfil: { usuarioId, permissoes: ["entradas"] }
+      }
     });
   });
 
@@ -71,7 +74,7 @@ describe("sessao", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(401);
-    expect(resposta.json()).toEqual({ erro: "Nao autenticado" });
+    expect(resposta.json()).toMatchObject({ title: "Nao autenticado", status: resposta.statusCode });
   });
 
   it("Deve_Retornar403_Quando_ConsultarSessaoSemPerfilConfigurado", async () => {
@@ -83,7 +86,7 @@ describe("sessao", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Perfil de usuario nao configurado" });
+    expect(resposta.json()).toMatchObject({ title: "Perfil de usuario nao configurado", status: resposta.statusCode });
   });
 
   it("Deve_RetornarPerfil_Quando_ConsultarSessaoAutenticado", async () => {
@@ -92,6 +95,7 @@ describe("sessao", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toMatchObject({ perfil: { usuarioId } });
+    expect(resposta.json()).toMatchObject({ ok: true, data: { perfil: { usuarioId } } });
   });
 });
+

@@ -19,6 +19,7 @@ import {
   listarUnidadesMedida,
   listarUsuarios
 } from "./catalogos.service.js";
+import { erro, ok, paginadoDeArray } from "../respostas.js";
 
 async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   const query = empresaQuerySchema.parse(request.query);
@@ -27,44 +28,51 @@ async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   try {
     return { query, empresasLiberadas, escopoDados: escopoEmpresaAtiva(empresasLiberadas, query.empresaId) };
   } catch (error) {
-    reply.status(403).send({ erro: error instanceof Error ? error.message : "Empresa nao permitida" });
+    erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
     return null;
   }
 }
 
 export async function registrarRotasCatalogos(app: AplicacaoFastify) {
-  app.get("/api/empresas", { preHandler: exigirAutenticacao }, async (request) =>
-    listarEmpresas(request.perfilUsuario)
-  );
+  app.get("/api/empresas", { preHandler: exigirAutenticacao }, async (request) => {
+    const query = empresaQuerySchema.parse(request.query);
+    return paginadoDeArray(await listarEmpresas(request.perfilUsuario), query.page, query.pageSize);
+  });
 
   app.get("/api/contas", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarContas(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarContas(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.get("/api/formas_pagamento", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarFormasPagamento(escopo.escopoDados) : undefined;
+    return escopo
+      ? paginadoDeArray(await listarFormasPagamento(escopo.escopoDados), escopo.query.page, escopo.query.pageSize)
+      : undefined;
   });
 
   app.get("/api/pdvs", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarPdvs(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarPdvs(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.get("/api/fornecedores", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarFornecedores(escopo.escopoDados) : undefined;
+    return escopo
+      ? paginadoDeArray(await listarFornecedores(escopo.escopoDados), escopo.query.page, escopo.query.pageSize)
+      : undefined;
   });
 
   app.get("/api/clientes", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarClientes(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarClientes(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.get("/api/colaboradores", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarColaboradores(escopo.escopoDados) : undefined;
+    return escopo
+      ? paginadoDeArray(await listarColaboradores(escopo.escopoDados), escopo.query.page, escopo.query.pageSize)
+      : undefined;
   });
 
   app.get("/api/grupos", { preHandler: exigirAutenticacao }, async (request, reply) => {
@@ -74,31 +82,39 @@ export async function registrarRotasCatalogos(app: AplicacaoFastify) {
 
   app.get("/api/unidades_medida", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarUnidadesMedida(escopo.escopoDados) : undefined;
+    return escopo
+      ? paginadoDeArray(await listarUnidadesMedida(escopo.escopoDados), escopo.query.page, escopo.query.pageSize)
+      : undefined;
   });
 
   app.get("/api/areas_setores", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarAreasSetores(escopo.escopoDados) : undefined;
+    return escopo ? ok(await listarAreasSetores(escopo.escopoDados)) : undefined;
   });
 
   app.get("/api/setores", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarSetores(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarSetores(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.get("/api/produtos", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarProdutos(escopo.escopoDados) : undefined;
+    return escopo ? paginadoDeArray(await listarProdutos(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
   });
 
   app.get("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarUsuarios(escopo.empresasLiberadas, escopo.escopoDados) : undefined;
+    return escopo
+      ? paginadoDeArray(
+          await listarUsuarios(escopo.empresasLiberadas, escopo.escopoDados),
+          escopo.query.page,
+          escopo.query.pageSize
+        )
+      : undefined;
   });
 
   app.get("/api/permissoes", { preHandler: exigirPermissao("cadastro_permissoes") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
-    return escopo ? listarPermissoes(escopo.empresasLiberadas, escopo.escopoDados) : undefined;
+    return escopo ? ok(await listarPermissoes(escopo.empresasLiberadas, escopo.escopoDados)) : undefined;
   });
 }

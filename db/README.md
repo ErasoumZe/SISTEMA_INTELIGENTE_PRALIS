@@ -16,4 +16,4 @@ Em producao, o seed nao roda automaticamente. O servico `migrate` do compose pro
 
 O seed recria usuarios de desenvolvimento vinculados a colaboradores e cargos ativos: Diretor Geral, Caixa, Gerencia, Tesouraria, Compras, DP, RH, Fiscal, Diretor de Operacoes e Financeiro. O `diretor@email.com` e criado com role `usuario_admin`; os demais usuarios seedados usam `usuario_comum`. Veja emails e senha padrao no `README.md` da raiz.
 
-O seed tambem cria `PDV 01` ligado a conta `Caixa loja`. O fluxo operacional de caixa usa `pdvs`, `fechamentos_caixa`, `edicoes_caixa`, `movimentacoes_financeiras.caixa_id` e `debitos_colaboradores`.
+O seed tambem cria `PDV 01` ligado a conta `Caixa loja`. O fluxo operacional de caixa usa `pdvs`, `fechamentos_caixa`, `edicoes_caixa`, `vendas`, `despesas`, `mercadorias`, `retiradas`, `transferencias` e `debitos_colaboradores`.

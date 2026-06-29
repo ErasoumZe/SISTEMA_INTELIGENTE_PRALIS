@@ -1,6 +1,6 @@
 # Padaria v2
 
-Monorepo inicial com API Fastify/TypeScript, Web SvelteKit estatico, pacote compartilhado, testes e Postgres efemero em containers.
+Monorepo inicial com API Fastify/TypeScript, Web Vue/Nuxt, pacote compartilhado, testes e Postgres efemero em containers.
 
 ## Instalacao
 
@@ -50,18 +50,10 @@ Subir producao com migracao separada da API:
 npm.cmd run compose:prod
 ```
 
-Gerar a Web estatica:
+Gerar a Web Vue:
 
 ```powershell
-npm.cmd run build --workspace @padaria/web
-```
-
-Os arquivos finais ficam em `web/build` e podem ser publicados em CDN, Nginx, S3/Cloudflare Pages/Vercel ou outro servidor estatico. Configure `PUBLIC_API_URL` no build para apontar para a API.
-
-Para testar localmente o build estatico:
-
-```powershell
-npm.cmd run preview --workspace @padaria/web
+npm.cmd run build --workspace @padaria/web-vue
 ```
 
 ## Fechar ambiente
@@ -144,10 +136,6 @@ Esta sessao nao tinha MCPs ativos. Para habilitar em uma proxima sessao do Codex
 ```toml
 [mcp_servers.context7]
 url = "https://mcp.context7.com/mcp"
-
-[mcp_servers.svelte]
-command = "npx"
-args = ["-y", "@sveltejs/mcp"]
 
 [mcp_servers.postgres]
 command = "npx"

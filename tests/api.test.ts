@@ -152,9 +152,12 @@ describe("api", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      status: "ok",
-      service: "api",
-      app: APP_NAME
+      ok: true,
+      data: {
+        status: "ok",
+        service: "api",
+        app: APP_NAME
+      }
     });
   });
 
@@ -167,7 +170,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json()).toEqual({ erro: "Nao autenticado" });
+    expect(response.json()).toMatchObject({ title: "Nao autenticado", status: response.statusCode });
     expect(mocks.buscarPerfilUsuario).not.toHaveBeenCalled();
   });
 
@@ -179,10 +182,13 @@ describe("api", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      user: { id: "usuario-teste" },
-      perfil: {
-        usuarioId: "usuario-teste",
-        colaboradorId: "colaborador-teste"
+      ok: true,
+      data: {
+        user: { id: "usuario-teste" },
+        perfil: {
+          usuarioId: "usuario-teste",
+          colaboradorId: "colaborador-teste"
+        }
       }
     });
   });
@@ -202,13 +208,8 @@ describe("api", () => {
       }
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      id: maloteId,
-      empresaId: empresaA,
-      codigo: "MALOTE-001",
-      lacres: ["LACRE-001", "LACRE-002"]
-    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({ ok: true, data: { id: maloteId } });
     expect(mocks.criarMaloteRepository).toHaveBeenCalledWith({
       empresaId: empresaA,
       codigo: "MALOTE-001",
@@ -229,7 +230,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ erro: "Lacre duplicado: lacre-001" });
+    expect(response.json()).toMatchObject({ title: "Lacre duplicado: lacre-001", status: response.statusCode });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -247,7 +248,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ erro: "Lacre ja cadastrado: LACRE-001" });
+    expect(response.json()).toMatchObject({ title: "Lacre ja cadastrado: LACRE-001", status: response.statusCode });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -262,7 +263,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ erro: "Lacre duplicado: lacre-003" });
+    expect(response.json()).toMatchObject({ title: "Lacre duplicado: lacre-003", status: response.statusCode });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -278,7 +279,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(response.json()).toMatchObject({ title: "Empresa nao permitida", status: response.statusCode });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -294,7 +295,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([{ id: empresaA, nome: "Empresa A" }]);
+    expect(response.json()).toMatchObject({ ok: true, data: [{ id: empresaA, nome: "Empresa A" }] });
   });
 
   it("filters account data to the authenticated user's company", async () => {
@@ -309,21 +310,21 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([{ id: "conta-a", empresaId: empresaA, nome: "Conta A" }]);
+    expect(response.json()).toMatchObject({ ok: true, data: [{ id: "conta-a", empresaId: empresaA, nome: "Conta A" }] });
   });
 
-  it("blocks entrada listing for another company", async () => {
+  it("blocks venda listing for another company", async () => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/entradas?empresaId=${empresaB}`
+      url: `/api/vendas?empresaId=${empresaB}`
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(response.json()).toMatchObject({ title: "Empresa nao permitida", status: response.statusCode });
     expect(mocks.listarContasRepository).not.toHaveBeenCalled();
   });
 
-  it("blocks despesa creation when the user lacks the movement permission", async () => {
+  it("blocks despesa creation when the user lacks the entity permission", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/despesas",
@@ -338,7 +339,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ erro: "Permissao insuficiente", permissao: "despesas" });
+    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "despesas" } });
     expect(mocks.criarMaloteRepository).not.toHaveBeenCalled();
   });
 
@@ -349,7 +350,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(response.json()).toMatchObject({ title: "Empresa nao permitida", status: response.statusCode });
     expect(mocks.listarContasRepository).not.toHaveBeenCalled();
   });
 
@@ -378,7 +379,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([{ id: "conta-b", empresaId: empresaB, nome: "Conta B" }]);
+    expect(response.json()).toMatchObject({ ok: true, data: [{ id: "conta-b", empresaId: empresaB, nome: "Conta B" }] });
   });
 
   it("does not grant global company access by cargo name", async () => {
@@ -406,7 +407,7 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([{ id: empresaA, nome: "Empresa A" }]);
+    expect(response.json()).toMatchObject({ ok: true, data: [{ id: empresaA, nome: "Empresa A" }] });
   });
 
   it("returns screen theme when configured", async () => {
@@ -435,13 +436,16 @@ describe("api", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      corPrimaria: "#111111",
-      corSecundaria: "#222222",
-      corFundo: "#333333",
-      corCartao: "#444444",
-      corSucesso: "#555555",
-      corAviso: "#666666",
-      corErro: "#777777"
+      ok: true,
+      data: {
+        corPrimaria: "#111111",
+        corSecundaria: "#222222",
+        corFundo: "#333333",
+        corCartao: "#444444",
+        corSucesso: "#555555",
+        corAviso: "#666666",
+        corErro: "#777777"
+      }
     });
   });
 
@@ -472,8 +476,11 @@ describe("api", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      corPrimaria: "#6d28d9",
-      corSecundaria: "#0891b2"
+      ok: true,
+      data: {
+        corPrimaria: "#6d28d9",
+        corSecundaria: "#0891b2"
+      }
     });
   });
 
@@ -510,8 +517,8 @@ describe("api", () => {
       payload
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(payload);
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
     expect(mocks.temaSalvo).toMatchObject({ ...payload, atualizadoPor: "usuario-teste" });
   });
 
@@ -533,6 +540,8 @@ describe("api", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ erro: "Permissao insuficiente", permissao: "configurar_tema" });
+    expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "configurar_tema" } });
   });
 });
+
+

@@ -62,12 +62,12 @@ describe("caixa", () => {
       totalRetiradas: 10,
       saldo: 80
     });
-    mocks.acertarSaldoCaixa.mockResolvedValue({ movimentacaoId: "mov-ajuste" });
+    mocks.acertarSaldoCaixa.mockResolvedValue({ despesaId: "mov-ajuste" });
     mocks.obterStatusCaixa.mockResolvedValue({ caixaAberto: null, resumo: null });
     mocks.abrirCaixa.mockResolvedValue({ caixaAberto: { id: "66666666-6666-4666-8666-666666666666" }, resumo: null });
     mocks.editarAberturaCaixa.mockResolvedValue({ caixaAberto: { id: "66666666-6666-4666-8666-666666666666" }, resumo: null });
     mocks.acertarSaldoCaixaOperacional.mockResolvedValue({
-      movimentacaoId: "77777777-7777-4777-8777-777777777777",
+      despesaId: "77777777-7777-4777-8777-777777777777",
       debitoId: "88888888-8888-4888-8888-888888888888",
       valorDiferenca: 10
     });
@@ -141,7 +141,7 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(400);
-    expect(resposta.json()).toEqual({ erro: "A data e hora de abertura ja pertence a outro caixa aberto/fechado" });
+    expect(resposta.json()).toMatchObject({ title: "A data e hora de abertura ja pertence a outro caixa aberto/fechado", status: resposta.statusCode });
   });
 
   it("Deve_EditarAbertura_Quando_TokenInformado", async () => {
@@ -160,7 +160,8 @@ describe("caixa", () => {
     const resposta = await requisitar(app, { method: "PUT", url: `/api/caixa/${caixaId}/abertura`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.editarAberturaCaixa).toHaveBeenCalledWith(caixaId, payload, expect.objectContaining({ usuarioId }));
   });
 
@@ -183,7 +184,7 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(400);
-    expect(resposta.json()).toEqual({ erro: "Token de edicao invalido" });
+    expect(resposta.json()).toMatchObject({ title: "Token de edicao invalido", status: resposta.statusCode });
   });
 
   it("Deve_AcertarSaldoOperacional_Quando_CaixaAberto", async () => {
@@ -220,7 +221,8 @@ describe("caixa", () => {
     });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.fecharCaixa).toHaveBeenCalledWith(
       caixaId,
       { observacao: "fim" },
@@ -249,7 +251,10 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([{ id: "66666666-6666-4666-8666-666666666666", tokenEdicao: "ABC123" }]);
+    expect(resposta.json()).toMatchObject({
+      ok: true,
+      data: [{ id: "66666666-6666-4666-8666-666666666666", tokenEdicao: "ABC123" }]
+    });
   });
 
   it("Deve_Retornar403_Quando_ConsultarResumoSemPermissao", async () => {
@@ -288,7 +293,7 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.obterResumoCaixa).not.toHaveBeenCalled();
   });
 
@@ -306,7 +311,7 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(201);
-    expect(resposta.json()).toEqual({ movimentacaoId: "mov-ajuste" });
+    expect(resposta.json()).toEqual({ ok: true, data: { id: "mov-ajuste" } });
     expect(mocks.acertarSaldoCaixa).toHaveBeenCalledWith(payload, usuarioId);
   });
 
@@ -324,7 +329,7 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.acertarSaldoCaixa).not.toHaveBeenCalled();
   });
 
@@ -341,6 +346,8 @@ describe("caixa", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(400);
-    expect(resposta.json()).toEqual({ erro: "Nao ha diferenca para acertar" });
+    expect(resposta.json()).toMatchObject({ title: "Nao ha diferenca para acertar", status: resposta.statusCode });
   });
 });
+
+

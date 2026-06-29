@@ -43,21 +43,21 @@ module.exports = {
       to: { path: "\\.controller\\.ts$" }
     },
     {
-      name: "db-does-not-import-api-or-web",
+      name: "db-does-not-import-api-or-web-vue",
       severity: "error",
       from: { path: "^db/src/" },
-      to: { path: "^(api|web|web-vue)/" }
+      to: { path: "^(api|web-vue)/" }
     },
     {
       name: "shared-does-not-import-app-layers",
       severity: "error",
       from: { path: "^shared/src/" },
-      to: { path: "^(api|db|web|web-vue)/" }
+      to: { path: "^(api|db|web-vue)/" }
     }
   ],
   options: {
     doNotFollow: { path: "node_modules" },
-    exclude: "(^|/)(dist|build|\\.nuxt|\\.output|node_modules|web/build)(/|$)",
+    exclude: "(^|/)(dist|build|\\.nuxt|\\.output|node_modules)(/|$)",
     tsConfig: { fileName: "tsconfig.base.json" },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {

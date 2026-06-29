@@ -1,3 +1,4 @@
 <template>
-  <DashboardPanel tela-inicial="transferencias" tipo-pagina="movimentos" />
+  <DashboardPanel tela-inicial="transferencias" tipo-pagina="operacoes" />
 </template>
+

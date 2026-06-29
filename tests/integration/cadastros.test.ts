@@ -62,7 +62,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(404);
-    expect(resposta.json()).toEqual({ erro: "Cadastro nao encontrado" });
+    expect(resposta.json()).toMatchObject({ title: "Cadastro nao encontrado", status: resposta.statusCode });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -79,7 +79,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_contas" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas" } });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -91,7 +91,8 @@ describe("cadastros", () => {
     const resposta = await requisitar(app, { method: "POST", url: "/api/cadastros/contas", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.salvarCadastro).toHaveBeenCalledWith(
       "contas",
       null,
@@ -115,7 +116,8 @@ describe("cadastros", () => {
     const resposta = await requisitar(app, { method: "POST", url: "/api/cadastros/pdvs", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({ ok: true, data: { id: registroId } });
     expect(mocks.salvarCadastro).toHaveBeenCalledWith(
       "pdvs",
       null,
@@ -135,7 +137,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -155,7 +157,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -167,7 +169,8 @@ describe("cadastros", () => {
     const resposta = await requisitar(app, { method: "PUT", url: `/api/cadastros/contas/${registroId}`, payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.salvarCadastro).toHaveBeenCalledWith(
       "contas",
       registroId,
@@ -187,7 +190,7 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.salvarCadastro).not.toHaveBeenCalled();
   });
 
@@ -204,6 +207,8 @@ describe("cadastros", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(400);
-    expect(resposta.json()).toEqual({ erro: "Email ja cadastrado" });
+    expect(resposta.json()).toMatchObject({ title: "Email ja cadastrado", status: resposta.statusCode });
   });
 });
+
+

@@ -103,6 +103,41 @@ async function descreverUsoDaPorta(porta) {
   }
 }
 
+async function pidsNaPorta(porta) {
+  try {
+    const netstat = await executarCapturando("netstat", ["-ano"]);
+    return [
+      ...new Set(
+        netstat
+          .split(/\r?\n/)
+          .map((item) => item.trim().replace(/\s+/g, " "))
+          .filter((item) => item.includes(`:${porta} `) && item.includes("LISTENING"))
+          .map((item) => item.split(" ").at(-1))
+          .filter(Boolean)
+      )
+    ];
+  } catch {
+    return [];
+  }
+}
+
+async function encerrarPid(pid) {
+  if (!pid || pid === String(process.pid)) return;
+  try {
+    await executarCapturando(isWindows ? "taskkill" : "kill", isWindows ? ["/PID", pid, "/T", "/F"] : ["-TERM", pid]);
+  } catch {
+    // O processo pode ter encerrado entre o netstat e o kill.
+  }
+}
+
+async function liberarPortaDev(nome, porta) {
+  const pids = await pidsNaPorta(porta);
+  if (!pids.length) return;
+  aviso(`${nome} ja tinha processo em localhost:${porta}; encerrando processo local antigo (${pids.join(", ")}).`);
+  for (const pid of pids) await encerrarPid(pid);
+  await esperar(1_000);
+}
+
 async function exigirPortaLivre(nome, porta) {
   if (await portaDisponivel(porta)) {
     ok(`${nome} livre em localhost:${porta}`);
@@ -231,6 +266,8 @@ async function main() {
   info(`Web Vue planejada em ${webUrl}`);
   info(`Postgres planejado em localhost:${dbPort}`);
 
+  await liberarPortaDev("API", apiPort);
+  await liberarPortaDev("Web Vue", webPort);
   await exigirPortaLivre("API", apiPort);
   await exigirPortaLivre("Web Vue", webPort);
 
@@ -242,26 +279,29 @@ async function main() {
   await executarNpm(["run", "api:dev:prepare", "--workspace", "@padaria/api"], apiEnv);
   ok("banco preparado e seed aplicado");
 
-  info("subindo API e Web Vue localmente...");
-  for (const [nome, processo] of [
-    ["API", spawnNpm(["run", "dev", "--workspace", "@padaria/api"], apiEnv)],
-    [
-      "Web Vue",
-      spawnNpm(["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort], webEnv)
-    ]
-  ]) {
-    processo.once("exit", (codigo) => {
-      if (encerrando) return;
-      if (codigo === 0) return;
-      erro(`${nome} encerrou com codigo ${codigo ?? "desconhecido"}`);
-      encerrar(codigo ?? 1);
-    });
-  }
-
+  info("subindo API localmente...");
+  const apiProcesso = spawnNpm(["run", "dev", "--workspace", "@padaria/api"], apiEnv);
+  apiProcesso.once("exit", (codigo) => {
+    if (encerrando) return;
+    if (codigo === 0) return;
+    erro(`API encerrou com codigo ${codigo ?? "desconhecido"}`);
+    encerrar(codigo ?? 1);
+  });
   info("aguardando API /health...");
   await aguardarHttp("API", `${apiUrl}/health`, { aceitarStatus: (status) => status === 200 });
   ok(`API pronta em ${apiUrl}`);
 
+  info("subindo Web Vue localmente...");
+  const webProcesso = spawnNpm(
+    ["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort],
+    webEnv
+  );
+  webProcesso.once("exit", (codigo) => {
+    if (encerrando) return;
+    if (codigo === 0) return;
+    erro(`Web Vue encerrou com codigo ${codigo ?? "desconhecido"}`);
+    encerrar(codigo ?? 1);
+  });
   info("aguardando Nuxt/Vue...");
   await aguardarHttp("Web Vue", webUrl, { aceitarStatus: (status) => status < 500 });
   ok(`Web Vue pronta em ${webUrl}`);

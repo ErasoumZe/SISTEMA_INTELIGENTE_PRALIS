@@ -118,7 +118,7 @@ describe("copia", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_contas" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_contas" } });
     expect(mocks.importarCadastroEmpresa).not.toHaveBeenCalled();
   });
 
@@ -148,7 +148,7 @@ describe("copia", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 
   it("Deve_Retornar403_Quando_ServiceBloquearEmpresaNaExportacao", async () => {
@@ -164,6 +164,8 @@ describe("copia", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 });
+
+

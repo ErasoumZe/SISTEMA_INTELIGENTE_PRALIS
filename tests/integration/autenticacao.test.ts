@@ -70,7 +70,9 @@ describe("autenticacao", () => {
     // Assert
     expect(resposta.statusCode).toBe(500);
     expect(resposta.json()).toEqual({
-      error: "Internal authentication error",
+      type: "about:blank",
+      title: "Internal authentication error",
+      status: 500,
       code: "AUTH_FAILURE"
     });
   });

@@ -21,12 +21,12 @@ const emit = defineEmits<{
 
 <template>
   <v-card>
-    <v-card-title class="d-flex align-center justify-space-between ga-3">
+    <v-card-title class="cadastro-card-title d-flex align-center justify-space-between ga-3">
       <div>
         <div class="text-h6">{{ titulo }}</div>
         <div class="text-body-2 text-muted">{{ descricao }}</div>
       </div>
-      <div class="d-flex ga-2">
+      <div class="cadastro-card-actions d-flex ga-2">
         <v-btn v-if="podeImportar" size="small" variant="outlined" @click="emit('importar')">Importar</v-btn>
         <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="emit('acionar')">{{ acao }}</v-btn>
       </div>
@@ -37,7 +37,7 @@ const emit = defineEmits<{
         <div
           v-for="item in itens"
           :key="item.id"
-          class="bordered rounded-lg pa-3 mb-2 d-flex align-center justify-space-between ga-3"
+          class="tree-row bordered rounded-lg pa-3 mb-2 d-flex align-center justify-space-between ga-3"
           :style="{ marginLeft: `${Math.min(item.nivel, 8) * 1.25}rem` }"
         >
           <div class="d-flex align-center ga-2 min-w-0">
@@ -47,7 +47,7 @@ const emit = defineEmits<{
               <div v-if="item.detalhe" class="text-caption text-muted truncate-line">{{ item.detalhe }}</div>
             </div>
           </div>
-          <div class="d-flex ga-1">
+          <div class="row-actions d-flex ga-1">
             <v-btn v-if="podeExportar" size="small" variant="text" @click="emit('exportar', item.item)">Exportar</v-btn>
             <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="emit('criarFilho', item.item)"
               >Subitem</v-btn

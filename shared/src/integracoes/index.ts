@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -10,7 +11,7 @@ export const camposVinculoIntegracao = ["pdv", "cliente", "vendedor", "produto",
 
 export const integracaoQuerySchema = z.object({
   empresaId: uuidSchema.optional()
-});
+}).merge(paginationQuerySchema);
 
 export const integracaoCodigoParamsSchema = z.object({
   codigo: textoObrigatorioSchema

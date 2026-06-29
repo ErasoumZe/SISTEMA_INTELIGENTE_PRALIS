@@ -11,8 +11,11 @@
       "@padaria/db/schema/autenticacao": ["db/src/schema/autenticacao/autenticacao.schema.ts"],
       "@padaria/db/schema/cadastro": ["db/src/schema/cadastro/cadastro.schema.ts"],
       "@padaria/db/schema/caixa": ["db/src/schema/caixa/caixa.schema.ts"],
-      "@padaria/db/schema/movimentacao": ["db/src/schema/movimentacao/movimentacao.schema.ts"],
+      "@padaria/db/schema/despesa": ["db/src/schema/despesa/despesa.schema.ts"],
+      "@padaria/db/schema/mercadoria": ["db/src/schema/mercadoria/mercadoria.schema.ts"],
+      "@padaria/db/schema/retirada": ["db/src/schema/retirada/retirada.schema.ts"],
       "@padaria/db/schema/tema": ["db/src/schema/tema/tema.schema.ts"],
+      "@padaria/db/schema/transferencia": ["db/src/schema/transferencia/transferencia.schema.ts"],
       "@padaria/db/schema/venda": ["db/src/schema/venda/venda.schema.ts"]
     }
   },

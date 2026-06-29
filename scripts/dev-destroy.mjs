@@ -65,6 +65,27 @@ function executar(comando, args) {
   });
 }
 
+function executarCapturando(comando, args) {
+  return new Promise((resolve, reject) => {
+    const filho = spawn(comando, args, {
+      cwd,
+      env: { ...process.env, FORCE_COLOR: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: isWindows,
+      windowsHide: true
+    });
+    let stdout = "";
+    let stderr = "";
+    filho.stdout.on("data", (chunk) => (stdout += chunk.toString()));
+    filho.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+    filho.on("error", reject);
+    filho.on("exit", (codigo) => {
+      if (codigo === 0) resolve(stdout);
+      else reject(new Error((stderr || stdout || `${comando} saiu com codigo ${codigo ?? "desconhecido"}`).trim()));
+    });
+  });
+}
+
 function portaDisponivel(porta) {
   return new Promise((resolve) => {
     const servidor = net.createServer();
@@ -72,6 +93,46 @@ function portaDisponivel(porta) {
     servidor.once("listening", () => servidor.close(() => resolve(true)));
     servidor.listen(Number(porta), "0.0.0.0");
   });
+}
+
+async function pidsNaPorta(porta) {
+  try {
+    const netstat = await executarCapturando("netstat", ["-ano"]);
+    return [
+      ...new Set(
+        netstat
+          .split(/\r?\n/)
+          .map((item) => item.trim().replace(/\s+/g, " "))
+          .filter((item) => item.includes(`:${porta} `) && item.includes("LISTENING"))
+          .map((item) => item.split(" ").at(-1))
+          .filter(Boolean)
+      )
+    ];
+  } catch {
+    return [];
+  }
+}
+
+async function encerrarPid(pid) {
+  if (!pid || pid === String(process.pid)) return;
+  try {
+    await executarCapturando(isWindows ? "taskkill" : "kill", isWindows ? ["/PID", pid, "/T", "/F"] : ["-TERM", pid]);
+    ok(`processo ${pid} encerrado`);
+  } catch {
+    aviso(`processo ${pid} ja nao estava mais ativo`);
+  }
+}
+
+async function encerrarPortasLocais() {
+  for (const porta of ["4100", "5174"]) {
+    const pids = await pidsNaPorta(porta);
+    if (!pids.length) {
+      ok(`porta ${porta} sem processo local`);
+      continue;
+    }
+    aviso(`porta ${porta} ocupada por ${pids.join(", ")}; encerrando...`);
+    for (const pid of pids) await encerrarPid(pid);
+  }
 }
 
 async function validarPortasLivres() {
@@ -83,6 +144,9 @@ async function validarPortasLivres() {
 
 async function main() {
   titulo("Destruindo ambiente de desenvolvimento Padaria v2");
+  info("encerrando API/Web locais nas portas 4100 e 5174...");
+  await encerrarPortasLocais();
+
   info("removendo containers, redes e volumes do projeto padaria-dev...");
   await executar("docker", [...composeArgs, "down", "-v", "--remove-orphans"]);
   ok("containers, redes e volumes removidos");

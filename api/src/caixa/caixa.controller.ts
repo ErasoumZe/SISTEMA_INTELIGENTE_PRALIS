@@ -12,6 +12,7 @@ import {
 } from "@padaria/shared/caixa";
 import { exigirPermissao } from "../autorizacao.js";
 import { podeAcessarEmpresa } from "../autorizacao/empresa.js";
+import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "../respostas.js";
 import {
   abrirCaixa,
   acertarSaldoCaixa,
@@ -36,10 +37,10 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const query = caixaStatusQuerySchema.parse(request.query);
       try {
-        return await obterStatusCaixa(query.empresaId, request.perfilUsuario!);
+        return ok(await obterStatusCaixa(query.empresaId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Caixa invalido";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -50,10 +51,11 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = abrirCaixaPayloadSchema.parse(request.body);
       try {
-        return reply.status(201).send(await abrirCaixa(body, request.perfilUsuario!));
+        const status = await abrirCaixa(body, request.perfilUsuario!);
+        return criadoId(reply, status.caixaAberto?.id ?? body.pdvId);
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Abertura invalida";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -65,10 +67,11 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = editarAberturaCaixaPayloadSchema.parse(request.body);
       try {
-        return await editarAberturaCaixa(caixaId, body, request.perfilUsuario!);
+        await editarAberturaCaixa(caixaId, body, request.perfilUsuario!);
+        return semConteudo(reply);
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Edicao invalida";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -80,10 +83,11 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = acertarSaldoCaixaPayloadSchema.parse(request.body);
       try {
-        return reply.status(201).send(await acertarSaldoCaixaOperacional(caixaId, body, request.perfilUsuario!));
+        const acerto = await acertarSaldoCaixaOperacional(caixaId, body, request.perfilUsuario!);
+        return criadoId(reply, acerto.despesaId);
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Acerto invalido";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -95,10 +99,11 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const body = fecharCaixaPayloadSchema.parse(request.body);
       try {
-        return await fecharCaixa(caixaId, body, request.perfilUsuario!);
+        await fecharCaixa(caixaId, body, request.perfilUsuario!);
+        return semConteudo(reply);
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Fechamento invalido";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -109,10 +114,14 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const query = historicoCaixaQuerySchema.parse(request.query);
       try {
-        return await listarHistoricoCaixa(query.empresaId, request.perfilUsuario!);
+        return paginadoDeArray(
+          await listarHistoricoCaixa(query.empresaId, request.perfilUsuario!),
+          query.page,
+          query.pageSize
+        );
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Historico invalido";
-        return reply.status(statusErro(mensagem)).send({ erro: mensagem });
+        return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
@@ -123,10 +132,10 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const query = resumoCaixaQuerySchema.parse(request.query);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {
-        return reply.status(403).send({ erro: "Empresa nao permitida" });
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
 
-      return obterResumoCaixa(query);
+      return ok(await obterResumoCaixa(query));
     }
   );
 
@@ -136,13 +145,14 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = ajusteSaldoSchema.parse(request.body);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, body.empresaId)) {
-        return reply.status(403).send({ erro: "Empresa nao permitida" });
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
 
       try {
-        return reply.status(201).send(await acertarSaldoCaixa(body, request.usuarioId ?? ""));
+        const acerto = await acertarSaldoCaixa(body, request.usuarioId ?? "");
+        return criadoId(reply, acerto.despesaId);
       } catch (error) {
-        return reply.status(400).send({ erro: error instanceof Error ? error.message : "Fechamento invalido" });
+        return erro(reply, 400, error instanceof Error ? error.message : "Fechamento invalido");
       }
     }
   );

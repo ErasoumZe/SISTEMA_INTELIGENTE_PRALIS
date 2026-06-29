@@ -16,7 +16,7 @@ import {
   uuid,
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
-import type { Permissao, TipoMovimentacao } from "@padaria/shared";
+import type { Permissao } from "@padaria/shared";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
@@ -599,91 +599,6 @@ export const lacresMalotes = pgTable(
   ]
 );
 
-export const movimentacoesFinanceiras = pgTable(
-  "movimentacoes_financeiras",
-  {
-    id: idUuid,
-    empresaId,
-    tipo: text("tipo").$type<TipoMovimentacao>().notNull(),
-    dataReferencia: date("data_referencia").notNull(),
-    dataVencimento: date("data_vencimento"),
-    dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
-    observacao: text("observacao"),
-    valorOriginal: valorMonetario("valor_original").notNull(),
-    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
-    descricaoAcrescimo: text("descricao_acrescimo"),
-    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
-    descricaoDesconto: text("descricao_desconto"),
-    contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
-    contaDestinoId: uuid("conta_destino_id").references(() => contas.id),
-    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
-    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
-    grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
-    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
-    grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
-    maloteId: uuid("malote_id").references(() => malotes.id),
-    lacreMaloteId: uuid("lacre_malote_id").references(() => lacresMalotes.id),
-    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
-    notaFiscalId: text("nota_fiscal_id"),
-    temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
-    computar: boolean("computar").notNull().default(true),
-    fotoDocumentoUrl: text("foto_documento_url"),
-    status: text("status").notNull().default("aprovado"),
-    criadoPor: text("criado_por"),
-    criadoEm,
-    atualizadoEm
-  },
-  (table) => [
-    check(
-      "movimentacoes_financeiras_tipo_check",
-      sql`${table.tipo} in ('entrada', 'despesa', 'transferencia', 'mercadoria', 'retirada')`
-    ),
-    check(
-      "movimentacoes_financeiras_status_check",
-      sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`
-    ),
-    check("movimentacoes_financeiras_valor_original_check", sql`${table.valorOriginal} >= 0`),
-    check("movimentacoes_financeiras_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("movimentacoes_financeiras_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
-  ]
-);
-
-export const itensDespesas = pgTable(
-  "itens_despesas",
-  {
-    id: idUuid,
-    movimentacaoId: uuid("movimentacao_id")
-      .notNull()
-      .references(() => movimentacoesFinanceiras.id, { onDelete: "cascade" }),
-    grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
-    descricao: text("descricao").notNull(),
-    valor: valorMonetario("valor").notNull()
-  },
-  (table) => [check("itens_despesas_valor_check", sql`${table.valor} >= 0`)]
-);
-
-export const itensMercadorias = pgTable(
-  "itens_mercadorias",
-  {
-    id: idUuid,
-    movimentacaoId: uuid("movimentacao_id")
-      .notNull()
-      .references(() => movimentacoesFinanceiras.id, { onDelete: "cascade" }),
-    produtoId: uuid("produto_id").references(() => produtos.id),
-    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
-    unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
-    descricao: text("descricao").notNull(),
-    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
-    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
-    valorTotal: valorMonetario("valor_total").notNull()
-  },
-  (table) => [
-    check("itens_mercadorias_quantidade_check", sql`${table.quantidade} > 0`),
-    check("itens_mercadorias_valor_total_check", sql`${table.valorTotal} >= 0`)
-  ]
-);
-
 export const vendas = pgTable(
   "vendas",
   {
@@ -1010,7 +925,6 @@ export const ajustesFechamentoCaixa = pgTable("ajustes_fechamento_caixa", {
   fechamentoCaixaId: uuid("fechamento_caixa_id")
     .notNull()
     .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
-  movimentacaoId: uuid("movimentacao_id").references(() => movimentacoesFinanceiras.id),
   despesaId: uuid("despesa_id").references(() => despesas.id),
   valorDiferenca: valorMonetario("valor_diferenca").notNull(),
   criadoEm
@@ -1025,7 +939,6 @@ export const debitosColaboradores = pgTable(
       .notNull()
       .references(() => colaboradores.id),
     tipo: text("tipo").notNull(),
-    movimentacaoId: uuid("movimentacao_id").references(() => movimentacoesFinanceiras.id),
     despesaId: uuid("despesa_id").references(() => despesas.id),
     retiradaId: uuid("retirada_id").references(() => retiradas.id),
     caixaId: uuid("caixa_id").references(() => fechamentosCaixa.id),

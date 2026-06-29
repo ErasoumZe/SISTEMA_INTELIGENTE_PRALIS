@@ -6,16 +6,38 @@ const props = defineProps<{
   telaAtual: ItemMenu | null | undefined;
   descricao: string;
   colunas: string[];
-  linhas: Array<Record<string, string | undefined>>;
-  editarCarregandoId: string;
-}>();
+    linhas: Array<Record<string, string | undefined>>;
+    editarCarregandoId: string;
+    modoServidor?: boolean;
+    busca?: string;
+    tipoPermissaoFiltro?: string;
+    alvoFiltro?: string;
+    permissaoFiltro?: string;
+    alvosFiltro?: Array<{ id: string; nome?: string }>;
+    permissoesFiltro?: string[];
+    carregandoBusca?: boolean;
+    buscou?: boolean;
+    totalServidor?: number;
+    paginaServidor?: number;
+    itensPorPaginaServidor?: number;
+    podeExcluir?: boolean;
+    excluindoId?: string;
+  }>();
 
 const emit = defineEmits<{
   (event: "acionar"): void;
   (event: "importar"): void;
   (event: "exportar", linha: Record<string, string | undefined>): void;
   (event: "editar", linha: Record<string, string | undefined>): void;
+  (event: "excluir", linha: Record<string, string | undefined>): void;
   (event: "extra", payload: { event: string; linha: Record<string, string | undefined> }): void;
+  (event: "buscar"): void;
+  (event: "limpar"): void;
+  (event: "update:busca", valor: string): void;
+  (event: "update:tipoPermissaoFiltro", valor: string): void;
+  (event: "update:alvoFiltro", valor: string): void;
+  (event: "update:permissaoFiltro", valor: string): void;
+  (event: "update:paginaServidor", pagina: number): void;
 }>();
 
 const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
@@ -35,11 +57,33 @@ const acoesExtras = computed(() => (props.tela === "malotes" ? [{ label: "Editar
     :pode-exportar="podeCopia"
     :pode-importar="podeCopia"
     :editar-carregando-id="editarCarregandoId"
+    :modo-servidor="modoServidor"
+    :busca="busca"
+    :tipo-permissao-filtro="tipoPermissaoFiltro"
+    :alvo-filtro="alvoFiltro"
+    :permissao-filtro="permissaoFiltro"
+    :alvos-filtro="alvosFiltro"
+    :permissoes-filtro="permissoesFiltro"
+    :carregando-busca="carregandoBusca"
+    :buscou="buscou"
+    :total-servidor="totalServidor"
+    :pagina-servidor="paginaServidor"
+    :itens-por-pagina-servidor="itensPorPaginaServidor"
+    :pode-excluir="podeExcluir"
+    :excluindo-id="excluindoId"
     :acoes-extras="acoesExtras"
     @acionar="emit('acionar')"
     @importar="emit('importar')"
     @exportar="emit('exportar', $event)"
     @editar="emit('editar', $event)"
     @extra="emit('extra', $event)"
+    @excluir="emit('excluir', $event)"
+    @buscar="emit('buscar')"
+    @limpar="emit('limpar')"
+    @update:busca="emit('update:busca', $event)"
+    @update:tipo-permissao-filtro="emit('update:tipoPermissaoFiltro', $event)"
+    @update:alvo-filtro="emit('update:alvoFiltro', $event)"
+    @update:permissao-filtro="emit('update:permissaoFiltro', $event)"
+    @update:pagina-servidor="emit('update:paginaServidor', $event)"
   />
 </template>

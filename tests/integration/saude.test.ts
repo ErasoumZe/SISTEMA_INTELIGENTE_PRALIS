@@ -30,9 +30,12 @@ describe("saude", () => {
     // Assert
     expect(resposta.statusCode).toBe(200);
     expect(resposta.json()).toEqual({
-      status: "ok",
-      service: "api",
-      app: APP_NAME
+      ok: true,
+      data: {
+        status: "ok",
+        service: "api",
+        app: APP_NAME
+      }
     });
   });
 });

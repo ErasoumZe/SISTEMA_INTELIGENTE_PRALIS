@@ -1,4 +1,4 @@
-import type { Permissao, TemaAplicacao, TipoMovimentacao } from "@padaria/shared";
+import type { Permissao, TemaAplicacao } from "@padaria/shared";
 
 export type Opcao = {
   id: string;
@@ -49,6 +49,13 @@ export type Opcao = {
   tipoAreaSetor?: "area" | "setor";
 };
 
+export type PermissoesPaginadas = {
+  itens: Array<Record<string, string | undefined>>;
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type Opcoes = {
   empresas: Opcao[];
   contas: Opcao[];
@@ -77,10 +84,11 @@ export type Opcoes = {
   pdvs: Opcao[];
 };
 
-export type Movimento = {
+export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";
+
+export type OperacaoResumo = {
   id: string;
   empresaId: string;
-  tipo: TipoMovimentacao;
   dataReferencia: string;
   descricao: string;
   valorOriginal: string;
@@ -130,7 +138,7 @@ export type ItemMenu = {
 };
 
 export type AcaoNovo = {
-  tipo?: TipoMovimentacao;
+  entidade?: EntidadeOperacional;
   tela?: "malote";
   titulo: string;
   subtitulo: string;
@@ -163,6 +171,13 @@ export type CadastroForm = {
   setorPaiId: string;
   setorId: string;
   colaboradorId: string;
+  novoColaborador: boolean;
+  novoColaboradorNome: string;
+  novoColaboradorCpf: string;
+  novoColaboradorSetorId: string;
+  novoColaboradorCargoId: string;
+  novoColaboradorRemuneracaoMinuto: string;
+  novoColaboradorDataInicio: string;
   cargoId: string;
   empresaIds: string[];
   tipoPermissao: "cargo" | "setor" | "usuario";
@@ -170,7 +185,7 @@ export type CadastroForm = {
   permissoes: string[];
 };
 
-export type MovimentoForm = {
+export type OperacaoForm = {
   dataReferencia: string;
   dataVencimento: string;
   dataPagamento: string;

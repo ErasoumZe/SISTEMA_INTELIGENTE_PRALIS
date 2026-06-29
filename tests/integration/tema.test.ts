@@ -74,7 +74,7 @@ describe("tema", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.carregarTema).not.toHaveBeenCalled();
   });
 
@@ -96,7 +96,7 @@ describe("tema", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "configurar_tema" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "configurar_tema" } });
     expect(mocks.atualizarTema).not.toHaveBeenCalled();
   });
 
@@ -108,7 +108,8 @@ describe("tema", () => {
     const resposta = await requisitar(app, { method: "PUT", url: "/api/tema", payload });
 
     // Assert
-    expect(resposta.statusCode).toBe(200);
+    expect(resposta.statusCode).toBe(204);
+    expect(resposta.body).toBe("");
     expect(mocks.atualizarTema).toHaveBeenCalledWith(payload, usuarioId);
   });
 
@@ -118,7 +119,9 @@ describe("tema", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.atualizarTema).not.toHaveBeenCalled();
   });
 });
+
+

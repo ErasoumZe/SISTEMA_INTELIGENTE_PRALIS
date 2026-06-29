@@ -16,6 +16,11 @@
       "development": "./src/app/index.ts",
       "default": "./dist/app/index.js"
     },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "development": "./src/api/index.ts",
+      "default": "./dist/api/index.js"
+    },
     "./autenticacao": {
       "types": "./dist/autenticacao/index.d.ts",
       "development": "./src/autenticacao/index.ts",
@@ -56,10 +61,30 @@
       "development": "./src/malotes/index.ts",
       "default": "./dist/malotes/index.js"
     },
-    "./movimentacao": {
-      "types": "./dist/movimentacao/index.d.ts",
-      "development": "./src/movimentacao/index.ts",
-      "default": "./dist/movimentacao/index.js"
+    "./vendas": {
+      "types": "./dist/vendas/index.d.ts",
+      "development": "./src/vendas/index.ts",
+      "default": "./dist/vendas/index.js"
+    },
+    "./despesas": {
+      "types": "./dist/despesas/index.d.ts",
+      "development": "./src/despesas/index.ts",
+      "default": "./dist/despesas/index.js"
+    },
+    "./mercadorias": {
+      "types": "./dist/mercadorias/index.d.ts",
+      "development": "./src/mercadorias/index.ts",
+      "default": "./dist/mercadorias/index.js"
+    },
+    "./retiradas": {
+      "types": "./dist/retiradas/index.d.ts",
+      "development": "./src/retiradas/index.ts",
+      "default": "./dist/retiradas/index.js"
+    },
+    "./transferencias": {
+      "types": "./dist/transferencias/index.d.ts",
+      "development": "./src/transferencias/index.ts",
+      "default": "./dist/transferencias/index.js"
     },
     "./relatorios": {
       "types": "./dist/relatorios/index.d.ts",

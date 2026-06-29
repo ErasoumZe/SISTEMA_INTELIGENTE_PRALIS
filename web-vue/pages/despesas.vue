@@ -1,3 +1,4 @@
 <template>
-  <DashboardPanel tela-inicial="despesas" tipo-pagina="movimentos" />
+  <DashboardPanel tela-inicial="despesas" tipo-pagina="operacoes" />
 </template>
+

@@ -39,7 +39,8 @@ watch(
     </v-card-title>
     <v-card-text>
       <v-alert v-if="erro" type="error" variant="tonal" class="mb-3">{{ erro }}</v-alert>
-      <v-table>
+      <div class="responsive-table-shell">
+        <v-table>
         <thead>
           <tr>
             <th>Produto</th>
@@ -59,7 +60,8 @@ watch(
             </td>
           </tr>
         </tbody>
-      </v-table>
+        </v-table>
+      </div>
     </v-card-text>
   </v-card>
 </template>

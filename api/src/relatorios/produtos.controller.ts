@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { relatorioProdutosQuerySchema } from "@padaria/shared/relatorios";
 import { exigirPermissao } from "../autorizacao.js";
 import { podeAcessarEmpresa } from "../autorizacao/empresa.js";
+import { erro, paginadoDeArray } from "../respostas.js";
 import { obterProdutosMaisVendidos } from "./produtos.service.js";
 
 export async function registrarRotasRelatorioProdutos(app: FastifyInstance): Promise<void> {
@@ -11,10 +12,10 @@ export async function registrarRotasRelatorioProdutos(app: FastifyInstance): Pro
     async (request, reply) => {
       const query = relatorioProdutosQuerySchema.parse(request.query);
       if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {
-        return reply.status(403).send({ erro: "Empresa nao permitida" });
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
 
-      return obterProdutosMaisVendidos(query.empresaId);
+      return paginadoDeArray(await obterProdutosMaisVendidos(query.empresaId), query.page, query.pageSize);
     }
   );
 }

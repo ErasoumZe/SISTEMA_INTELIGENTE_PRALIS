@@ -58,9 +58,10 @@ describe("relatorios", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({
-      erro: "Permissao insuficiente",
-      permissao: "relatorio_produtos_mais_vendidos"
+    expect(resposta.json()).toMatchObject({
+      title: "Permissao insuficiente",
+      status: resposta.statusCode,
+      details: { permissao: "relatorio_produtos_mais_vendidos" }
     });
     expect(mocks.obterProdutosMaisVendidos).not.toHaveBeenCalled();
   });
@@ -86,7 +87,8 @@ describe("relatorios", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
     expect(mocks.obterProdutosMaisVendidos).not.toHaveBeenCalled();
   });
 });
+

@@ -1,5 +1,5 @@
-import { permissoes, type Permissao, type TemaAplicacao, type TipoMovimentacao } from "@padaria/shared";
-import type { AcaoNovo, CadastroForm, ItemMenu, MovimentoForm, Opcao, Opcoes } from "~/types/padaria";
+import { permissoes, type Permissao, type TemaAplicacao } from "@padaria/shared";
+import type { AcaoNovo, CadastroForm, EntidadeOperacional, ItemMenu, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
 export { permissoes };
 
@@ -155,16 +155,16 @@ export const itemPorTela: Record<string, ItemMenu> = {
   aparencia: { id: "aparencia", titulo: "Aparencia", permissao: "configurar_tema", icone: "mdi-palette" }
 };
 
-export const movimentoPorTela: Record<string, TipoMovimentacao> = {
-  entradas: "entrada",
+export const entidadePorTela: Record<string, EntidadeOperacional> = {
+  entradas: "venda",
   transferencias: "transferencia",
   despesas: "despesa",
   mercadorias: "mercadoria",
   retiradas: "retirada"
 };
 
-export const endpointMovimentoPorTipo: Record<TipoMovimentacao, string> = {
-  entrada: "entradas",
+export const endpointOperacaoPorEntidade: Record<EntidadeOperacional, string> = {
+  venda: "vendas",
   transferencia: "transferencias",
   despesa: "despesas",
   mercadoria: "mercadorias",
@@ -182,9 +182,31 @@ export const telasCrudDiretoria = [
   "colaboradores"
 ];
 
+export const telasFuturas = new Set([
+  "promocoes",
+  "relatorio_faltas",
+  "relatorio_advertencias",
+  "pedidos",
+  "perdas_sobras",
+  "estoque_produtos",
+  "relatorio_dre",
+  "clientes",
+  "folha_ponto",
+  "avaliacao_qualidade",
+  "avaliacao_colaboradores",
+  "relatorio_fiscal",
+  "fiscal_produtos",
+  "patrimonio",
+  "ficha_tecnica",
+  "ingredientes",
+  "notas_fiscais"
+]);
+
+export const mensagemTelaFutura = "Será desenvolvido futuramente.";
+
 export const opcoesNovo: AcaoNovo[] = [
   {
-    tipo: "despesa",
+    entidade: "despesa",
     titulo: "Despesa",
     subtitulo: "Fornecedor, grupo e itens discriminados",
     permissao: "despesas",
@@ -192,7 +214,7 @@ export const opcoesNovo: AcaoNovo[] = [
     cor: "error"
   },
   {
-    tipo: "mercadoria",
+    entidade: "mercadoria",
     titulo: "Mercadoria",
     subtitulo: "Compra, nota fiscal e documento",
     permissao: "mercadorias",
@@ -200,7 +222,7 @@ export const opcoesNovo: AcaoNovo[] = [
     cor: "info"
   },
   {
-    tipo: "transferencia",
+    entidade: "transferencia",
     titulo: "Transferencia",
     subtitulo: "Contas, malote e lacre",
     permissao: "transferencias",
@@ -208,7 +230,7 @@ export const opcoesNovo: AcaoNovo[] = [
     cor: "primary"
   },
   {
-    tipo: "retirada",
+    entidade: "retirada",
     titulo: "Retirada",
     subtitulo: "Colaborador, fornecedor ou retirada operacional",
     permissao: "retiradas",
@@ -314,7 +336,7 @@ export function opcoesVazias(): Opcoes {
   };
 }
 
-export function formMovimentoVazio(): MovimentoForm {
+export function formOperacaoVazio(): OperacaoForm {
   const hoje = new Date().toISOString().slice(0, 10);
   return {
     dataReferencia: hoje,
@@ -345,6 +367,7 @@ export function formMovimentoVazio(): MovimentoForm {
 }
 
 export function formCadastroVazio(): CadastroForm {
+  const hoje = new Date().toISOString().slice(0, 10);
   return {
     nome: "",
     email: "",
@@ -361,6 +384,13 @@ export function formCadastroVazio(): CadastroForm {
     setorPaiId: "",
     setorId: "",
     colaboradorId: "",
+    novoColaborador: false,
+    novoColaboradorNome: "",
+    novoColaboradorCpf: "",
+    novoColaboradorSetorId: "",
+    novoColaboradorCargoId: "",
+    novoColaboradorRemuneracaoMinuto: "",
+    novoColaboradorDataInicio: hoje,
     cargoId: "",
     empresaIds: [],
     tipoPermissao: "cargo",
@@ -475,13 +505,26 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       : { empresaId, nome: form.nome };
   }
   if (tela === "usuarios") {
-    return {
+    const payload: Record<string, unknown> = {
       nome: form.nome,
       email: form.email,
       senha: form.senha || undefined,
-      colaboradorId: form.colaboradorId,
       empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean)
     };
+    if (form.novoColaborador) {
+      payload.novoColaborador = {
+        empresaId,
+        nome: form.novoColaboradorNome || form.nome,
+        cpf: form.novoColaboradorCpf || null,
+        setorId: form.novoColaboradorSetorId || null,
+        cargoId: form.novoColaboradorCargoId,
+        remuneracaoMinuto: Number(form.novoColaboradorRemuneracaoMinuto || 0),
+        dataInicio: form.novoColaboradorDataInicio
+      };
+    } else {
+      payload.colaboradorId = form.colaboradorId;
+    }
+    return payload;
   }
   if (tela === "permissoes") {
     return {

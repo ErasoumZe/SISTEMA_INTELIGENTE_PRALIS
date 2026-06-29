@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   buscarColaboradorPorUsuarioRepository: vi.fn(),
   buscarPdvEmpresaRepository: vi.fn(),
   buscarPerfilUsuarioCaixaRepository: vi.fn(),
-  caixaTemMovimentosRepository: vi.fn(),
+  caixaTemLancamentosRepository: vi.fn(),
   calcularTotaisCaixaOperacionalRepository: vi.fn(),
   criarAcertoSaldoCaixaRepository: vi.fn(),
   criarCaixaRepository: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("../../api/src/banco/conexao.js", () => ({
 
 const empresaId = "11111111-1111-4111-8111-111111111111";
 const colaboradorId = "22222222-2222-4222-8222-222222222222";
-const movimentacaoId = "33333333-3333-4333-8333-333333333333";
+const despesaId = "33333333-3333-4333-8333-333333333333";
 const caixaId = "55555555-5555-4555-8555-555555555555";
 const pdvId = "66666666-6666-4666-8666-666666666666";
 const contaPdvId = "77777777-7777-4777-8777-777777777777";
@@ -87,7 +87,7 @@ beforeEach(() => {
     totalRetiradas: "5"
   });
   mocks.buscarGrupoQuebraCaixa.mockResolvedValue({ id: "44444444-4444-4444-8444-444444444444" });
-  mocks.criarAjusteSaldoCaixa.mockResolvedValue({ id: movimentacaoId });
+  mocks.criarAjusteSaldoCaixa.mockResolvedValue({ id: despesaId });
   mocks.buscarCaixaPorIdRepository.mockResolvedValue(caixaAberto);
   mocks.calcularTotaisCaixaOperacionalRepository.mockResolvedValue({
     totalEntradas: "100",
@@ -99,7 +99,7 @@ beforeEach(() => {
     totalMercadorias: "25"
   });
   mocks.criarAcertoSaldoCaixaRepository.mockResolvedValue({
-    movimentacaoId,
+    despesaId,
     debitoId: "88888888-8888-4888-8888-888888888888"
   });
 });
@@ -128,7 +128,7 @@ describe("caixa service", () => {
     expect(mocks.criarAjusteSaldoCaixa).not.toHaveBeenCalled();
   });
 
-  it("cria movimentacao de ajuste usando grupo de quebra de caixa quando existir", async () => {
+  it("cria despesa de ajuste usando grupo de quebra de caixa quando existir", async () => {
     const payload: AjusteSaldoPayload = {
       empresaId,
       colaboradorId,
@@ -137,7 +137,7 @@ describe("caixa service", () => {
       valorDiferenca: -12.5
     };
 
-    await expect(acertarSaldoCaixa(payload, "usuario-1")).resolves.toEqual({ movimentacaoId });
+    await expect(acertarSaldoCaixa(payload, "usuario-1")).resolves.toEqual({ despesaId });
     expect(mocks.criarAjusteSaldoCaixa).toHaveBeenCalledWith(
       payload,
       "44444444-4444-4444-8444-444444444444",
@@ -145,7 +145,7 @@ describe("caixa service", () => {
     );
   });
 
-  it("Deve_CalcularSaldoOperacional_Quando_CaixaTemMovimentosComputaveis", async () => {
+  it("Deve_CalcularSaldoOperacional_Quando_CaixaTemLancamentosComputaveis", async () => {
     await expect(calcularResumoCaixaOperacional(caixaAberto)).resolves.toEqual({
       totalEntradas: 100,
       totalTransferencias: 0,
@@ -160,7 +160,7 @@ describe("caixa service", () => {
 
   it("Deve_CriarDespesaEDebito_Quando_AcertarSaldoPositivo", async () => {
     await expect(acertarSaldoCaixaOperacional(caixaId, { observacao: "quebra" }, perfil)).resolves.toEqual({
-      movimentacaoId,
+      despesaId,
       debitoId: "88888888-8888-4888-8888-888888888888",
       valorDiferenca: 50
     });
@@ -205,3 +205,4 @@ describe("caixa service", () => {
     );
   });
 });
+

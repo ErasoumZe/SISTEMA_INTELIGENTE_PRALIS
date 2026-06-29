@@ -9,30 +9,38 @@ import { registrarRotasCadastros } from "./cadastros/cadastros.controller.js";
 import { registrarRotasCatalogos } from "./catalogos/catalogos.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasCopia } from "./copia/copia.controller.js";
+import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasMalotes } from "./malotes/malotes.controller.js";
-import { registrarRotasMovimentacao } from "./movimentacao/movimentacao.controller.js";
+import { registrarRotasMercadorias } from "./mercadorias/mercadorias.controller.js";
 import { registrarRotasRelatorioProdutos } from "./relatorios/produtos.controller.js";
+import { registrarRotasRetiradas } from "./retiradas/retiradas.controller.js";
 import { registrarRotasSaude } from "./saude/saude.controller.js";
 import { registrarRotasSessao } from "./sessao/sessao.controller.js";
 import { registrarRotasTema } from "./tema/tema.controller.js";
+import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
+import { registrarRotasVendas } from "./vendas/vendas.controller.js";
+import { erro } from "./respostas.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: process.env["NODE_ENV"] !== "test" });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
-      return reply.status(400).send({
-        erro: "Requisicao invalida",
-        detalhes: error.issues.map((issue) => ({
+      return erro(
+        reply,
+        400,
+        "Requisicao invalida",
+        "VALIDATION_ERROR",
+        error.issues.map((issue) => ({
           caminho: issue.path.join("."),
           mensagem: issue.message
         }))
-      });
+      );
     }
 
     request.log.error(error);
-    return reply.status(500).send({ erro: "Erro interno" });
+    return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
   });
 
   await app.register(cors, {
@@ -45,7 +53,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasSaude(app);
   await registrarRotasSessao(app);
   await registrarRotasTema(app);
-  await registrarRotasMovimentacao(app);
+  await registrarRotasVendas(app);
+  await registrarRotasDespesas(app);
+  await registrarRotasMercadorias(app);
+  await registrarRotasRetiradas(app);
+  await registrarRotasTransferencias(app);
   await registrarRotasCaixa(app);
   await registrarRotasCatalogos(app);
   await registrarRotasColaboradores(app);
@@ -75,10 +87,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.send(response.body ? await response.text() : null);
       } catch (error) {
         request.log.error(error, "authentication route failed");
-        return reply.status(500).send({
-          error: "Internal authentication error",
-          code: "AUTH_FAILURE"
-        });
+        return erro(reply, 500, "Internal authentication error", "AUTH_FAILURE");
       }
     }
   });

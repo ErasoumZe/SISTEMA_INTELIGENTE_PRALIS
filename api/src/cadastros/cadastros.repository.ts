@@ -65,6 +65,33 @@ export async function salvarColaboradorRepository(
   return criado;
 }
 
+export async function salvarCargoColaboradorRepository(
+  input: {
+    empresaId: string;
+    colaboradorId: string;
+    setorId: string | null;
+    cargoId: string;
+    remuneracaoMinuto: number;
+    dataInicio: string;
+    ativo: boolean;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [criado] = await db
+    .insert(colaboradoresCargos)
+    .values({
+      empresaId: input.empresaId,
+      colaboradorId: input.colaboradorId,
+      setorId: input.setorId,
+      cargoId: input.cargoId,
+      remuneracaoMinuto: String(input.remuneracaoMinuto),
+      dataInicio: input.dataInicio,
+      ativo: input.ativo
+    })
+    .returning({ id: colaboradoresCargos.id });
+  return criado;
+}
+
 export async function salvarContaRepository(
   input: { id?: string; empresaId: string; nome: string },
   db: ExecutorBanco = banco
@@ -382,4 +409,26 @@ export async function substituirPermissoesUsuarioRepository(
     .insert(permissoesUsuarios)
     .values(permissoes.map((permissaoCodigo) => ({ usuarioId, permissaoCodigo })))
     .onConflictDoNothing();
+}
+
+export async function excluirPermissaoCargoRepository(cargoId: string, permissao: Permissao, db: ExecutorBanco = banco) {
+  await db
+    .delete(permissoesCargos)
+    .where(and(eq(permissoesCargos.cargoId, cargoId), eq(permissoesCargos.permissaoCodigo, permissao)));
+}
+
+export async function excluirPermissaoSetorRepository(setorId: string, permissao: Permissao, db: ExecutorBanco = banco) {
+  await db
+    .delete(permissoesSetores)
+    .where(and(eq(permissoesSetores.setorId, setorId), eq(permissoesSetores.permissaoCodigo, permissao)));
+}
+
+export async function excluirPermissaoUsuarioRepository(
+  usuarioId: string,
+  permissao: Permissao,
+  db: ExecutorBanco = banco
+) {
+  await db
+    .delete(permissoesUsuarios)
+    .where(and(eq(permissoesUsuarios.usuarioId, usuarioId), eq(permissoesUsuarios.permissaoCodigo, permissao)));
 }

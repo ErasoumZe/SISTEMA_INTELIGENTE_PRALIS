@@ -14,36 +14,52 @@ import {
   colaboradoresCargos,
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
-  contas,
   clientes,
+  configuracoesTema,
+  configuracoesTemasTelas,
+  contas,
   ajustesFechamentoCaixa,
   debitosColaboradores,
   despesas,
+  despesasItens,
   edicoesCaixa,
   empresas,
   fechamentosCaixa,
+  feriados,
+  formasPagamento,
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
+  integracoesCamposConfig,
+  integracoesChaves,
+  integracoesHistorico,
+  integracoesRegistros,
+  integracoesSemNovidade,
+  integracoesVinculos,
   itensVendas,
   lacresMalotes,
   malotes,
   mercadorias,
+  mercadoriasItens,
   pdvs,
   permissoesCargos,
+  permissoesSetores,
   permissoesTabela,
   permissoesUsuarios,
   perfisUsuarios,
   produtos,
   retiradas,
+  sessaoAutenticacao,
   setores,
   transferencias,
   unidadesMedida,
   usuarioAutenticacao,
   usuariosEmpresas,
   vendas,
-  vendasProdutos
+  vendasPagamentos,
+  vendasProdutos,
+  verificacaoAutenticacao
 } from "./src/schema/index.js";
 
 const databaseUrl = process.env["DATABASE_URL"] ?? "postgresql://padaria:padaria@localhost:5543/padaria";
@@ -86,6 +102,19 @@ function bancoSemSenha(urlBanco: string) {
   } catch {
     return "(DATABASE_URL invalida)";
   }
+}
+
+const MS_DIA = 24 * 60 * 60 * 1000;
+const agora = new Date();
+const anoAtual = agora.getUTCFullYear();
+
+function dataISO(offsetDias = 0) {
+  return new Date(agora.getTime() + offsetDias * MS_DIA).toISOString().slice(0, 10);
+}
+
+function dataHora(offsetDias = 0, hora = 12, minuto = 0) {
+  const data = new Date(Date.UTC(anoAtual, agora.getUTCMonth(), agora.getUTCDate() + offsetDias, hora, minuto, 0));
+  return data;
 }
 
 const senhaPadraoSeed = "123456";
@@ -279,6 +308,7 @@ async function removerUsuariosSeed() {
   const ids = usuarios.map((usuario) => usuario.id);
   if (!ids.length) return;
 
+  await banco.delete(sessaoAutenticacao).where(inArray(sessaoAutenticacao.userId, ids));
   await banco.delete(permissoesUsuarios).where(inArray(permissoesUsuarios.usuarioId, ids));
   await banco.delete(usuariosEmpresas).where(inArray(usuariosEmpresas.usuarioId, ids));
   await banco.delete(perfisUsuarios).where(inArray(perfisUsuarios.usuarioId, ids));
@@ -330,10 +360,43 @@ const caixasEmpresa = await banco
   .from(fechamentosCaixa)
   .where(eq(fechamentosCaixa.empresaId, empresaId));
 const caixaIds = caixasEmpresa.map((caixa) => caixa.id);
+const vendasEmpresa = await banco.select({ id: vendas.id }).from(vendas).where(eq(vendas.empresaId, empresaId));
+const vendaIds = vendasEmpresa.map((venda) => venda.id);
+const despesasEmpresa = await banco.select({ id: despesas.id }).from(despesas).where(eq(despesas.empresaId, empresaId));
+const despesaIds = despesasEmpresa.map((despesa) => despesa.id);
+const mercadoriasEmpresa = await banco
+  .select({ id: mercadorias.id })
+  .from(mercadorias)
+  .where(eq(mercadorias.empresaId, empresaId));
+const mercadoriaIds = mercadoriasEmpresa.map((mercadoria) => mercadoria.id);
+const setoresEmpresa = await banco
+  .select({ id: setores.id })
+  .from(setores)
+  .where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")));
+const setorIds = setoresEmpresa.map((setorLinha) => setorLinha.id);
 
 if (caixaIds.length) {
   await banco.delete(ajustesFechamentoCaixa).where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
   await banco.delete(edicoesCaixa).where(inArray(edicoesCaixa.caixaId, caixaIds));
+}
+await banco
+  .delete(verificacaoAutenticacao)
+  .where(inArray(verificacaoAutenticacao.identifier, ["seed-verificacao@email.com", "seed-reset@email.com"]));
+await banco.delete(integracoesSemNovidade).where(eq(integracoesSemNovidade.empresaId, empresaId));
+await banco.delete(integracoesHistorico).where(eq(integracoesHistorico.empresaId, empresaId));
+await banco.delete(integracoesRegistros).where(eq(integracoesRegistros.empresaId, empresaId));
+await banco.delete(integracoesVinculos).where(eq(integracoesVinculos.empresaId, empresaId));
+await banco.delete(integracoesCamposConfig).where(eq(integracoesCamposConfig.empresaId, empresaId));
+await banco.delete(integracoesChaves).where(eq(integracoesChaves.empresaId, empresaId));
+if (vendaIds.length) {
+  await banco.delete(vendasPagamentos).where(inArray(vendasPagamentos.vendaId, vendaIds));
+  await banco.delete(vendasProdutos).where(inArray(vendasProdutos.vendaId, vendaIds));
+}
+if (despesaIds.length) {
+  await banco.delete(despesasItens).where(inArray(despesasItens.despesaId, despesaIds));
+}
+if (mercadoriaIds.length) {
+  await banco.delete(mercadoriasItens).where(inArray(mercadoriasItens.mercadoriaId, mercadoriaIds));
 }
 await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId, empresaId));
 await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
@@ -344,6 +407,7 @@ await banco.delete(itensVendas).where(eq(itensVendas.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
 if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+if (setorIds.length) await banco.delete(permissoesSetores).where(inArray(permissoesSetores.setorId, setorIds));
 
 await banco.delete(colaboradores).where(
   and(
@@ -355,12 +419,33 @@ await banco.delete(colaboradores).where(
   )
 );
 await banco.delete(malotes).where(and(eq(malotes.empresaId, empresaId), eq(malotes.codigo, "MALOTE-001")));
+await banco
+  .delete(feriados)
+  .where(
+    and(eq(feriados.empresaId, empresaId), inArray(feriados.nome, ["Aniversario da padaria", "Treinamento interno"]))
+  );
+await banco
+  .delete(formasPagamento)
+  .where(
+    and(eq(formasPagamento.empresaId, empresaId), inArray(formasPagamento.nome, ["Dinheiro", "Pix", "Cartao credito"]))
+  );
+await banco
+  .delete(configuracoesTemasTelas)
+  .where(
+    and(eq(configuracoesTemasTelas.empresaId, empresaId), inArray(configuracoesTemasTelas.tela, ["pdv", "caixa"]))
+  );
 await removerUsuariosSeed();
 
 const usuarioIds = new Map<string, string>();
 for (const usuario of usuariosSeed) {
   usuarioIds.set(usuario.email, await criarUsuario(usuario, empresaId));
 }
+const usuarioFinanceiroId = usuarioIds.get("financeiro@email.com");
+if (!usuarioFinanceiroId) throw new Error("Usuario financeiro nao foi criado");
+await banco
+  .insert(permissoesUsuarios)
+  .values({ usuarioId: usuarioFinanceiroId, permissaoCodigo: "contas_pagar" })
+  .onConflictDoNothing();
 console.info("[seed] OK Usuarios e perfis cadastrados/atualizados");
 
 await banco.delete(vendas).where(and(eq(vendas.empresaId, empresaId), eq(vendas.descricao, "Venda exemplo")));
@@ -430,10 +515,88 @@ await banco
 await banco.delete(pdvs).where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.codigo, "PDV-01")));
 await banco.delete(contas).where(and(eq(contas.empresaId, empresaId), inArray(contas.nome, ["Caixa loja", "Banco"])));
 
-const contaCaixa = (await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id }))[0];
-await banco.insert(contas).values({ empresaId, nome: "Banco" }).returning({ id: contas.id });
+const contaCaixa = (
+  await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id })
+)[0];
+const contaBanco = (await banco.insert(contas).values({ empresaId, nome: "Banco" }).returning({ id: contas.id }))[0];
 if (!contaCaixa) throw new Error("Conta caixa nao foi criada");
-await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", codigo: "PDV-01", contaId: contaCaixa.id });
+if (!contaBanco) throw new Error("Conta banco nao foi criada");
+const pdv = (
+  await banco
+    .insert(pdvs)
+    .values({ empresaId, nome: "PDV 01", codigo: "PDV-01", contaId: contaCaixa.id })
+    .returning({ id: pdvs.id })
+)[0];
+if (!pdv) throw new Error("PDV nao foi criado");
+
+await banco
+  .insert(configuracoesTema)
+  .values({
+    id: true,
+    corPrimaria: "#2563eb",
+    corSecundaria: "#059669",
+    corFundo: "#f8fafc",
+    corCartao: "#ffffff",
+    corSucesso: "#16a34a",
+    corAviso: "#d97706",
+    corErro: "#dc2626",
+    atualizadoPor: usuarioIds.get("diretor@email.com") ?? null
+  })
+  .onConflictDoUpdate({
+    target: configuracoesTema.id,
+    set: {
+      corPrimaria: "#2563eb",
+      corSecundaria: "#059669",
+      corFundo: "#f8fafc",
+      corCartao: "#ffffff",
+      corSucesso: "#16a34a",
+      corAviso: "#d97706",
+      corErro: "#dc2626",
+      atualizadoPor: usuarioIds.get("diretor@email.com") ?? null,
+      atualizadoEm: new Date()
+    }
+  });
+
+await banco
+  .insert(configuracoesTemasTelas)
+  .values([
+    {
+      empresaId,
+      tela: "pdv",
+      corPrimaria: "#0f766e",
+      corSecundaria: "#7c3aed",
+      corFundo: "#f1f5f9",
+      corCartao: "#ffffff",
+      corSucesso: "#15803d",
+      corAviso: "#ca8a04",
+      corErro: "#b91c1c",
+      atualizadoPor: usuarioIds.get("diretor@email.com") ?? null
+    },
+    {
+      empresaId,
+      tela: "caixa",
+      corPrimaria: "#1d4ed8",
+      corSecundaria: "#0891b2",
+      corFundo: "#eef2ff",
+      corCartao: "#ffffff",
+      corSucesso: "#16a34a",
+      corAviso: "#f59e0b",
+      corErro: "#ef4444",
+      atualizadoPor: usuarioIds.get("gerencia@email.com") ?? null
+    }
+  ])
+  .onConflictDoNothing();
+
+const formasPagamentoSeed = await banco
+  .insert(formasPagamento)
+  .values(["Dinheiro", "Pix", "Cartao credito"].map((nome) => ({ empresaId, nome })))
+  .returning({ id: formasPagamento.id, nome: formasPagamento.nome });
+const formaPagamentoIds = new Map(formasPagamentoSeed.map((forma) => [forma.nome, forma.id]));
+
+await banco.insert(feriados).values([
+  { empresaId, nome: "Aniversario da padaria", dia: agora.getUTCDate(), mes: agora.getUTCMonth() + 1, ano: anoAtual },
+  { empresaId, nome: "Treinamento interno", dia: 15, mes: 8, ano: anoAtual }
+]);
 
 const grupoDespesaPai = (
   await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
@@ -486,6 +649,16 @@ const setor = (
 )[0];
 if (!setor) throw new Error("Setor nao foi criado");
 
+await banco
+  .insert(permissoesSetores)
+  .values(
+    ["entradas", "operar_caixa", "relatorio_produtos_mais_vendidos"].map((permissaoCodigo) => ({
+      setorId: setor.id,
+      permissaoCodigo: permissaoCodigo as Permissao
+    }))
+  )
+  .onConflictDoNothing();
+
 const cargoIds = new Map<string, string>();
 for (const nome of Object.keys(permissoesPorCargoSeed)) {
   const cargoSeed = (
@@ -512,6 +685,8 @@ for (const nome of Object.keys(permissoesPorCargoSeed)) {
 }
 console.info("[seed] OK Cargos e permissoes por cargo sincronizados");
 
+const colaboradorIds = new Map<string, string>();
+const colaboradorCargoIds = new Map<string, string>();
 for (const usuario of usuariosSeed) {
   const usuarioId = usuarioIds.get(usuario.email);
   const cargoId = cargoIds.get(usuario.cargo);
@@ -524,23 +699,82 @@ for (const usuario of usuariosSeed) {
       .returning({ id: colaboradores.id })
   )[0];
   if (!colaborador) throw new Error(`Colaborador nao foi criado: ${usuario.email}`);
+  colaboradorIds.set(usuario.email, colaborador.id);
 
-  await banco
-    .insert(colaboradoresCargos)
-    .values({
-      empresaId,
-      colaboradorId: colaborador.id,
-      setorId: setor.id,
-      cargoId,
-      remuneracaoMinuto: "0.136364",
-      dataInicio: new Date().toISOString().slice(0, 10),
-      ativo: true
-    })
-    .onConflictDoNothing();
+  const colaboradorCargo = (
+    await banco
+      .insert(colaboradoresCargos)
+      .values({
+        empresaId,
+        colaboradorId: colaborador.id,
+        setorId: setor.id,
+        cargoId,
+        remuneracaoMinuto: "0.136364",
+        dataInicio: dataISO(-30),
+        ativo: true
+      })
+      .onConflictDoNothing()
+      .returning({ id: colaboradoresCargos.id })
+  )[0];
+  if (colaboradorCargo) colaboradorCargoIds.set(usuario.email, colaboradorCargo.id);
 }
 console.info("[seed] OK Colaboradores seed vinculados aos usuarios e cargos");
 
-await banco.insert(fornecedores).values({ empresaId, nome: "Fornecedor Exemplo", documento: "00000000000100" });
+const colaboradorCaixaId = colaboradorIds.get("caixa@email.com");
+const colaboradorComprasId = colaboradorIds.get("compras@email.com");
+const colaboradorFinanceiroId = colaboradorIds.get("financeiro@email.com");
+const colaboradorCargoCaixaId = colaboradorCargoIds.get("caixa@email.com");
+if (!colaboradorCaixaId || !colaboradorComprasId || !colaboradorFinanceiroId) {
+  throw new Error("Colaboradores base do seed nao foram criados");
+}
+
+await banco.insert(colaboradoresJornadas).values([
+  {
+    empresaId,
+    colaboradorId: colaboradorCaixaId,
+    diaDaSemana: "SEGUNDA",
+    cargaHorariaDiariaEmMinutos: 480,
+    intervaloMinutos: 60,
+    colaboradorCargoId: colaboradorCargoCaixaId ?? null,
+    horaEntrada: "08:00",
+    dataInicio: dataISO(-30),
+    ativo: true
+  },
+  {
+    empresaId,
+    colaboradorId: colaboradorComprasId,
+    diaDaSemana: "TERCA",
+    cargaHorariaDiariaEmMinutos: 420,
+    intervaloMinutos: 60,
+    horaEntrada: "09:00",
+    dataInicio: dataISO(-30),
+    ativo: true
+  }
+]);
+
+await banco.insert(colaboradoresFaltasJustificadas).values({
+  empresaId,
+  colaboradorId: colaboradorCaixaId,
+  inicio: dataHora(-7, 9),
+  fim: dataHora(-7, 18),
+  motivo: "Atestado medico seed"
+});
+
+const fornecedor = (
+  await banco
+    .insert(fornecedores)
+    .values({ empresaId, nome: "Fornecedor Exemplo", documento: "00000000000100" })
+    .returning({ id: fornecedores.id })
+)[0];
+if (!fornecedor) throw new Error("Fornecedor nao foi criado");
+
+const cliente = (
+  await banco
+    .insert(clientes)
+    .values({ empresaId, nome: "Cliente Balcao Seed", documento: "00000000000999" })
+    .returning({ id: clientes.id })
+)[0];
+if (!cliente) throw new Error("Cliente nao foi criado");
 
 const produto = (
   await banco
@@ -556,6 +790,30 @@ const produto = (
 )[0];
 if (!produto) throw new Error("Produto nao foi criado");
 
+const [integracaoVendas, integracaoProdutos] = await banco
+  .insert(integracoesChaves)
+  .values([
+    { empresaId, tipo: "vendas", codigo: "SEED-VENDAS-DEV", criadoPor: usuarioIds.get("diretor@email.com") ?? null },
+    {
+      empresaId,
+      tipo: "produtos_vendas",
+      codigo: "SEED-PRODUTOS-VENDAS-DEV",
+      criadoPor: usuarioIds.get("diretor@email.com") ?? null
+    }
+  ])
+  .returning({ id: integracoesChaves.id, tipo: integracoesChaves.tipo });
+if (!integracaoVendas || !integracaoProdutos) throw new Error("Chaves de integracao seed nao foram criadas");
+
+await banco.insert(integracoesCamposConfig).values(
+  ["pdv", "cliente", "vendedor", "produto", "forma_pagamento"].map((campo) => ({
+    empresaId,
+    tipo: "vendas" as const,
+    campo: campo as "pdv" | "cliente" | "vendedor" | "produto" | "forma_pagamento",
+    criarAutomaticamente: true,
+    vincularAutomaticamente: true
+  }))
+);
+
 const malote = (
   await banco
     .insert(malotes)
@@ -569,19 +827,88 @@ const malote = (
 )[0];
 if (!malote) throw new Error("Malote nao foi criado");
 
-await banco
+const lacres = await banco
   .insert(lacresMalotes)
-  .values(["LACRE-001", "LACRE-002", "LACRE-003"].map((numero) => ({ empresaId, maloteId: malote.id, numero })))
-  .onConflictDoNothing();
+  .values([
+    { empresaId, maloteId: malote.id, numero: "LACRE-001", status: "usado", usadoEm: dataHora(-1, 16) },
+    { empresaId, maloteId: malote.id, numero: "LACRE-002" },
+    { empresaId, maloteId: malote.id, numero: "LACRE-003", status: "cancelado" }
+  ])
+  .returning({ id: lacresMalotes.id, numero: lacresMalotes.numero });
+const lacreTransferencia = lacres.find((lacre) => lacre.numero === "LACRE-001");
+if (!lacreTransferencia) throw new Error("Lacre de transferencia nao foi criado");
+
+const caixaFechado = (
+  await banco
+    .insert(fechamentosCaixa)
+    .values({
+      empresaId,
+      pdvId: pdv.id,
+      usuarioId: usuarioIds.get("gerencia@email.com") ?? null,
+      usuarioCaixaId: usuarioIds.get("caixa@email.com") ?? null,
+      colaboradorId: colaboradorCaixaId,
+      dataMovimento: dataISO(-1),
+      dataHoraAbertura: dataHora(-1, 7, 50),
+      abertoEm: dataHora(-1, 7, 50),
+      dataHoraFechamento: dataHora(-1, 18, 10),
+      fechadoEm: dataHora(-1, 18, 12),
+      tokenEdicao: "SEED-TOKEN-CAIXA",
+      observacao: "Caixa seed fechado com ajuste",
+      totalEntradas: "96.00",
+      totalTransferencias: "20.00",
+      totalTransferenciasEntrada: "0.00",
+      totalTransferenciasSaida: "20.00",
+      totalDespesas: "35.00",
+      totalRetiradas: "12.00",
+      totalMercadorias: "44.00",
+      saldo: "5.00",
+      status: "ajustado",
+      criadoPor: usuarioIds.get("gerencia@email.com") ?? null
+    })
+    .returning({ id: fechamentosCaixa.id })
+)[0];
+if (!caixaFechado) throw new Error("Fechamento de caixa seed nao foi criado");
+
+await banco.insert(edicoesCaixa).values({
+  caixaId: caixaFechado.id,
+  tokenUsado: "SEED-TOKEN-USADO",
+  editadoPor: usuarioIds.get("gerencia@email.com") ?? null,
+  editadoEm: dataHora(-1, 18, 20),
+  valoresAntigos: { saldo: "0.00", observacao: "Fechamento original seed" },
+  valoresNovos: { saldo: "5.00", observacao: "Caixa seed fechado com ajuste" }
+});
 
 const venda = (
   await banco
     .insert(vendas)
     .values({
       empresaId,
-      dataReferencia: new Date().toISOString().slice(0, 10),
+      integracaoChaveId: integracaoVendas.id,
+      caixaId: caixaFechado.id,
+      dataReferencia: dataISO(-1),
+      dataVenda: dataHora(-1, 10, 30),
       descricao: "Venda exemplo",
-      valorOriginal: "96.00"
+      observacao: "Venda fake gerada pelo seed",
+      valorOriginal: "96.00",
+      dataPagamento: dataISO(-1),
+      contaOrigemId: contaCaixa.id,
+      pdvId: pdv.id,
+      colaboradorId: colaboradorCaixaId,
+      clienteId: cliente.id,
+      identificadorExterno: "SEED-VENDA-001",
+      hashIntegracao: "seed-hash-venda-001",
+      statusExterno: "finalizada",
+      numeroNotaFiscal: "NF-SEED-001",
+      pdvAutomacaoId: "PDV-AUTO-001",
+      pdvAutomacao: "PDV Automacao Seed",
+      vendedorAutomacaoId: "VENDEDOR-AUTO-001",
+      vendedorAutomacao: "Caixa Seed",
+      vendedorAutomacaoDocumento: "00000000002",
+      clienteAutomacaoId: "CLIENTE-AUTO-001",
+      clienteAutomacao: "Cliente Balcao Seed",
+      clienteAutomacaoDocumento: "00000000000999",
+      automacaoId: "AUTO-SEED-001",
+      criadoPor: usuarioIds.get("caixa@email.com") ?? null
     })
     .returning({ id: vendas.id })
 )[0];
@@ -590,13 +917,275 @@ if (!venda) throw new Error("Venda exemplo nao foi criada");
 await banco.insert(vendasProdutos).values({
   vendaId: venda.id,
   produtoId: produto.id,
+  produtoAutomacaoId: "PROD-AUTO-001",
+  produtoAutomacaoCodigo: "PAO-FRANCES",
   descricaoProduto: "Pao frances",
+  dataHoraItem: dataHora(-1, 10, 31),
   quantidade: "120",
   valorUnitario: "0.8000",
   valorTotal: "96.00"
 });
 
-console.info("[seed] OK Cadastros base, malote, lacres e venda exemplo aplicados");
+await banco.insert(vendasPagamentos).values({
+  vendaId: venda.id,
+  formaPagamentoId: formaPagamentoIds.get("Dinheiro") ?? null,
+  tipoPagamentoAutomacaoId: "DIN",
+  tipoPagamentoAutomacao: "Dinheiro",
+  numeroVendas: 1,
+  totalPago: "96.00"
+});
+
+await banco.insert(itensVendas).values({
+  empresaId,
+  produtoId: produto.id,
+  descricaoProduto: "Pao frances",
+  quantidade: "120",
+  valorTotal: "96.00",
+  dataVenda: dataISO(-1)
+});
+
+const despesa = (
+  await banco
+    .insert(despesas)
+    .values({
+      empresaId,
+      caixaId: caixaFechado.id,
+      grupoDespesaId: grupoDespesaSub.id,
+      fornecedorId: fornecedor.id,
+      colaboradorId: colaboradorFinanceiroId,
+      dataReferencia: dataISO(-2),
+      dataVencimento: dataISO(7),
+      dataPagamento: dataISO(-1),
+      descricao: "Manutencao preventiva seed",
+      observacao: "Despesa fake para demonstracao",
+      valorOriginal: "35.00",
+      contaOrigemId: contaBanco.id,
+      fotoDocumentoUrl: "https://example.com/seed/despesa.jpg",
+      criadoPor: usuarioIds.get("financeiro@email.com") ?? null
+    })
+    .returning({ id: despesas.id })
+)[0];
+if (!despesa) throw new Error("Despesa seed nao foi criada");
+
+await banco.insert(despesasItens).values({
+  despesaId: despesa.id,
+  grupoDespesaId: grupoDespesaSub.id,
+  colaboradorId: colaboradorFinanceiroId,
+  descricao: "Troca de resistencia",
+  valor: "35.00"
+});
+
+const mercadoria = (
+  await banco
+    .insert(mercadorias)
+    .values({
+      empresaId,
+      caixaId: caixaFechado.id,
+      grupoMercadoriaId: grupoMercadoria.id,
+      fornecedorId: fornecedor.id,
+      dataReferencia: dataISO(-3),
+      dataVencimento: dataISO(7),
+      dataPagamento: dataISO(-1),
+      descricao: "Compra de farinha seed",
+      observacao: "Mercadoria fake para demonstracao",
+      valorOriginal: "44.00",
+      contaOrigemId: contaBanco.id,
+      notaFiscalId: "NF-MERC-SEED-001",
+      temNotaFiscal: true,
+      fotoDocumentoUrl: "https://example.com/seed/mercadoria.jpg",
+      criadoPor: usuarioIds.get("compras@email.com") ?? null
+    })
+    .returning({ id: mercadorias.id })
+)[0];
+if (!mercadoria) throw new Error("Mercadoria seed nao foi criada");
+
+await banco.insert(mercadoriasItens).values({
+  mercadoriaId: mercadoria.id,
+  produtoId: produto.id,
+  grupoMercadoriaId: grupoMercadoria.id,
+  unidadeMedidaId: unidade.id,
+  descricao: "Farinha de trigo",
+  quantidade: "10.000",
+  valorUnitario: "4.4000",
+  valorTotal: "44.00"
+});
+
+const retirada = (
+  await banco
+    .insert(retiradas)
+    .values({
+      empresaId,
+      caixaId: caixaFechado.id,
+      grupoRetiradaId: grupoRetiradaPai.id,
+      colaboradorId: colaboradorCaixaId,
+      dataReferencia: dataISO(-1),
+      dataVencimento: dataISO(-1),
+      dataPagamento: dataISO(-1),
+      descricao: "Retirada operacional seed",
+      observacao: "Retirada fake para demonstracao",
+      valorOriginal: "12.00",
+      contaOrigemId: contaCaixa.id,
+      criadoPor: usuarioIds.get("caixa@email.com") ?? null
+    })
+    .returning({ id: retiradas.id })
+)[0];
+if (!retirada) throw new Error("Retirada seed nao foi criada");
+
+await banco.insert(transferencias).values({
+  empresaId,
+  caixaId: caixaFechado.id,
+  dataReferencia: dataISO(-1),
+  descricao: "Transferencia para banco seed",
+  observacao: "Transferencia fake com malote e lacre",
+  valorOriginal: "20.00",
+  contaOrigemId: contaCaixa.id,
+  contaDestinoId: contaBanco.id,
+  maloteId: malote.id,
+  lacreMaloteId: lacreTransferencia.id,
+  criadoPor: usuarioIds.get("tesouraria@email.com") ?? null
+});
+
+await banco.insert(ajustesFechamentoCaixa).values({
+  fechamentoCaixaId: caixaFechado.id,
+  despesaId: despesa.id,
+  valorDiferenca: "5.00"
+});
+
+await banco.insert(debitosColaboradores).values([
+  {
+    empresaId,
+    colaboradorId: colaboradorCaixaId,
+    tipo: "FECHAMENTO_CAIXA",
+    despesaId: despesa.id,
+    caixaId: caixaFechado.id,
+    valor: "5.00",
+    observacao: "Diferenca de caixa seed",
+    criadoPor: usuarioIds.get("gerencia@email.com") ?? null
+  },
+  {
+    empresaId,
+    colaboradorId: colaboradorCaixaId,
+    tipo: "RETIRADA",
+    retiradaId: retirada.id,
+    caixaId: caixaFechado.id,
+    valor: "12.00",
+    observacao: "Retirada operacional seed",
+    criadoPor: usuarioIds.get("caixa@email.com") ?? null
+  }
+]);
+
+await banco.insert(integracoesVinculos).values([
+  {
+    empresaId,
+    tipo: "vendas",
+    tipoRegistro: "pdv",
+    identificadorExterno: "PDV-AUTO-001",
+    descricaoExterna: "PDV Automacao Seed",
+    registroSistemaId: pdv.id,
+    pendente: false
+  },
+  {
+    empresaId,
+    tipo: "vendas",
+    tipoRegistro: "cliente",
+    identificadorExterno: "CLIENTE-AUTO-001",
+    descricaoExterna: "Cliente Balcao Seed",
+    registroSistemaId: cliente.id,
+    pendente: false
+  },
+  {
+    empresaId,
+    tipo: "vendas",
+    tipoRegistro: "colaborador",
+    identificadorExterno: "VENDEDOR-AUTO-001",
+    descricaoExterna: "Caixa Seed",
+    registroSistemaId: colaboradorCaixaId,
+    pendente: false
+  },
+  {
+    empresaId,
+    tipo: "produtos_vendas",
+    tipoRegistro: "produto",
+    identificadorExterno: "PROD-AUTO-001",
+    descricaoExterna: "Pao frances",
+    registroSistemaId: produto.id,
+    pendente: false
+  },
+  {
+    empresaId,
+    tipo: "vendas",
+    tipoRegistro: "forma_pagamento",
+    identificadorExterno: "DIN",
+    descricaoExterna: "Dinheiro",
+    registroSistemaId: formaPagamentoIds.get("Dinheiro") ?? null,
+    pendente: false
+  }
+]);
+
+await banco.insert(integracoesRegistros).values({
+  empresaId,
+  integracaoChaveId: integracaoVendas.id,
+  tipoRegistro: "venda",
+  identificadorExterno: "SEED-VENDA-001",
+  hashConteudo: "seed-hash-venda-001",
+  registroSistemaId: venda.id,
+  payload: {
+    Venda: { idVenda: "SEED-VENDA-001", valorTotal: 96, dataHoraVenda: dataHora(-1, 10, 30).toISOString() },
+    ItensVenda: [{ idRegistro: "SEED-ITEM-001", descricaoProduto: "Pao frances", total: 96 }],
+    PagamentosVenda: [{ idFormaPagamento: "DIN", valor: 96 }]
+  }
+});
+
+await banco.insert(integracoesHistorico).values([
+  {
+    empresaId,
+    integracaoChaveId: integracaoVendas.id,
+    tipo: "vendas",
+    identificadorExterno: "SEED-VENDA-001",
+    hashConteudo: "seed-hash-venda-001",
+    status: "criado",
+    payload: { status: "criado", vendaId: venda.id }
+  },
+  {
+    empresaId,
+    integracaoChaveId: integracaoProdutos.id,
+    tipo: "produtos_vendas",
+    identificadorExterno: "PROD-AUTO-001",
+    hashConteudo: "seed-hash-produto-001",
+    status: "sem_novidade",
+    payload: { status: "sem_novidade", produtoId: produto.id }
+  }
+]);
+
+await banco.insert(integracoesSemNovidade).values({
+  empresaId,
+  integracaoChaveId: integracaoProdutos.id,
+  tipo: "produtos_vendas",
+  identificadorExterno: "PROD-AUTO-001",
+  hashConteudo: "seed-hash-produto-001",
+  payload: { produtoId: produto.id, descricao: "Pao frances" }
+});
+
+const usuarioDiretorId = usuarioIds.get("diretor@email.com");
+if (!usuarioDiretorId) throw new Error("Usuario diretor nao foi criado");
+
+await banco.insert(sessaoAutenticacao).values({
+  id: "seed-session-expirada",
+  token: "seed-session-expirada-token",
+  userId: usuarioDiretorId,
+  expiresAt: dataHora(-1, 0),
+  ipAddress: "127.0.0.1",
+  userAgent: "seed"
+});
+
+await banco.insert(verificacaoAutenticacao).values({
+  id: "seed-verification-expirada",
+  identifier: "seed-verificacao@email.com",
+  value: "seed-token-expirado",
+  expiresAt: dataHora(-1, 0)
+});
+
+console.info("[seed] OK Dados fake completos aplicados em cadastros, caixa, lancamentos, integracoes e auth");
 console.info("[seed] Credenciais de desenvolvimento:");
 for (const usuario of usuariosSeed) {
   console.info(`[seed] - ${usuario.email} / ${usuario.senha} / ${usuario.role} / ${usuario.cargo}`);

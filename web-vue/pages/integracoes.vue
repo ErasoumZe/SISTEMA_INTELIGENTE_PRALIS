@@ -10,7 +10,7 @@ import type {
   TipoRegistroIntegracao
 } from "@padaria/shared/integracoes";
 import type { ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, mensagemErro } from "~/utils/domain";
+import { itemPorTela, mensagemErro, telasFuturas } from "~/utils/domain";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -49,12 +49,15 @@ const catalogos = reactive({
 const salvandoChave = ref(false);
 const salvandoCampo = ref("");
 const salvandoVinculo = ref("");
+const dicionarioCarregando = ref(false);
+const dicionarioSolicitacao = ref(0);
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const telasPermitidas = computed<ItemMenu[]>(() =>
   Object.values(itemPorTela).filter((item) => permissoesUsuario.value.includes(item.permissao))
 );
+const telasFuturasMenu = computed(() => [...telasFuturas].filter((tela) => telasPermitidas.value.some((item) => item.id === tela)));
 const chavesDaEmpresa = computed(() => chaves.value.filter((chave) => chave.empresaId === empresaId.value));
 const registrosDisponiveis = computed(() => ({
   pdv: catalogos.pdvs,
@@ -141,19 +144,34 @@ async function carregarDados() {
   empresaCarregando.value = true;
   try {
     const query = `?empresaId=${empresaId.value}`;
-    const [integracoesResposta, historicoResposta, dicionarioResposta] = await Promise.all([
+    const [integracoesResposta, historicoResposta] = await Promise.all([
       apiGet<IntegracoesResposta>(`/api/integracoes${query}`),
       apiGet<IntegracaoHistoricoDto[]>(`/api/integracoes/historico${query}`),
-      apiGet<DicionarioResposta>(`/api/integracoes/dicionario${query}&tipo=${tipoSelecionado.value}`),
       carregarCatalogos()
     ]);
     integracoes.value = integracoesResposta.integracoes;
     chaves.value = integracoesResposta.chaves;
     historico.value = historicoResposta;
-    configs.value = dicionarioResposta.configs;
-    vinculos.value = dicionarioResposta.vinculos;
+    await carregarDicionario();
   } finally {
     empresaCarregando.value = false;
+  }
+}
+
+async function carregarDicionario(tipo = tipoSelecionado.value) {
+  if (!empresaId.value) return;
+  const solicitacao = ++dicionarioSolicitacao.value;
+  dicionarioCarregando.value = true;
+  configs.value = [];
+  vinculos.value = [];
+  try {
+    const query = `?empresaId=${empresaId.value}&tipo=${tipo}`;
+    const resposta = await apiGet<DicionarioResposta>(`/api/integracoes/dicionario${query}`);
+    if (solicitacao !== dicionarioSolicitacao.value || tipo !== tipoSelecionado.value) return;
+    configs.value = resposta.configs;
+    vinculos.value = resposta.vinculos;
+  } finally {
+    if (solicitacao === dicionarioSolicitacao.value) dicionarioCarregando.value = false;
   }
 }
 
@@ -213,7 +231,7 @@ async function salvarVinculo(vinculo: IntegracaoVinculoDto, registroSistemaId: s
       registroSistemaId
     });
     notificar("Vinculo salvo.");
-    await carregarDados();
+    await carregarDicionario();
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -222,7 +240,7 @@ async function salvarVinculo(vinculo: IntegracaoVinculoDto, registroSistemaId: s
 }
 
 watch(tipoSelecionado, () => {
-  if (empresaId.value) void carregarDados();
+  if (empresaId.value) void carregarDicionario();
 });
 
 onMounted(async () => {
@@ -256,6 +274,8 @@ onMounted(async () => {
     tela-ativa="integracoes"
     :empresas="empresas"
     :empresa-id="empresaId"
+    :telas-desabilitadas="telasFuturasMenu"
+    :telas-futuras="telasFuturasMenu"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="trocarEmpresa"
@@ -295,7 +315,8 @@ onMounted(async () => {
                 Criar chave
               </v-btn>
             </v-card-title>
-            <v-table>
+            <div class="responsive-table-shell">
+              <v-table>
               <thead>
                 <tr>
                   <th>Codigo</th>
@@ -327,14 +348,16 @@ onMounted(async () => {
                   </td>
                 </tr>
               </tbody>
-            </v-table>
+              </v-table>
+            </div>
           </v-card>
         </v-window-item>
 
         <v-window-item value="historico">
           <v-card>
             <v-card-title>Funcionamento diario</v-card-title>
-            <v-table>
+            <div class="responsive-table-shell">
+              <v-table>
               <thead>
                 <tr>
                   <th>Dia</th>
@@ -357,7 +380,8 @@ onMounted(async () => {
                   <td>{{ linha.erros }}</td>
                 </tr>
               </tbody>
-            </v-table>
+              </v-table>
+            </div>
           </v-card>
         </v-window-item>
 
@@ -365,7 +389,9 @@ onMounted(async () => {
           <div class="d-grid ga-4">
             <v-card>
               <v-card-title>Regras automaticas</v-card-title>
-              <v-table>
+              <v-progress-linear v-if="dicionarioCarregando" indeterminate />
+              <div class="responsive-table-shell">
+                <v-table>
                 <thead>
                   <tr>
                     <th>Campo</th>
@@ -375,7 +401,7 @@ onMounted(async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="config in configs" :key="config.campo">
+                  <tr v-for="config in configs" :key="`${config.tipo}:${config.campo}`">
                     <td>{{ tituloCampo(config.campo) }}</td>
                     <td><v-switch v-model="config.criarAutomaticamente" color="primary" hide-details /></td>
                     <td><v-switch v-model="config.vincularAutomaticamente" color="primary" hide-details /></td>
@@ -391,12 +417,15 @@ onMounted(async () => {
                     </td>
                   </tr>
                 </tbody>
-              </v-table>
+                </v-table>
+              </div>
             </v-card>
 
             <v-card>
               <v-card-title>Vinculos externos</v-card-title>
-              <v-table>
+              <v-progress-linear v-if="dicionarioCarregando" indeterminate />
+              <div class="responsive-table-shell">
+                <v-table>
                 <thead>
                   <tr>
                     <th>Tipo</th>
@@ -425,7 +454,8 @@ onMounted(async () => {
                     </td>
                   </tr>
                 </tbody>
-              </v-table>
+                </v-table>
+              </div>
             </v-card>
           </div>
         </v-window-item>

@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PerfilUsuario, Permissao } from "@padaria/shared";
 import { auth } from "./auth.js";
 import { buscarPerfilUsuario } from "./perfis.js";
+import { erro } from "./respostas.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -17,13 +18,13 @@ export async function exigirAutenticacao(request: FastifyRequest, reply: Fastify
   });
 
   if (!sessao) {
-    reply.status(401).send({ erro: "Nao autenticado" });
+    erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
     return null;
   }
 
   const perfil = await buscarPerfilUsuario(sessao.user.id);
   if (!perfil) {
-    reply.status(403).send({ erro: "Perfil de usuario nao configurado" });
+    erro(reply, 403, "Perfil de usuario nao configurado", "PROFILE_NOT_CONFIGURED");
     return null;
   }
 
@@ -38,7 +39,7 @@ export function exigirPermissao(permissao: Permissao) {
     if (!perfil) return;
 
     if (!perfil.permissoes.includes(permissao)) {
-      reply.status(403).send({ erro: "Permissao insuficiente", permissao });
+      erro(reply, 403, "Permissao insuficiente", "INSUFFICIENT_PERMISSION", { permissao });
     }
   };
 }
@@ -49,7 +50,8 @@ export function exigirAlgumaPermissao(permissoes: Permissao[]) {
     if (!perfil) return;
 
     if (!permissoes.some((permissao) => perfil.permissoes.includes(permissao))) {
-      reply.status(403).send({ erro: "Permissao insuficiente", permissao: permissoes[0] });
+      const permissao = permissoes[0];
+      erro(reply, 403, "Permissao insuficiente", "INSUFFICIENT_PERMISSION", permissao ? { permissao } : undefined);
     }
   };
 }

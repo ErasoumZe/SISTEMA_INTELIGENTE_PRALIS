@@ -97,7 +97,7 @@ describe("catalogos", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([{ id: empresaA, nome: "Padaria A" }]);
+    expect(resposta.json()).toMatchObject({ ok: true, data: [{ id: empresaA, nome: "Padaria A" }] });
     expect(mocks.listarEmpresas).toHaveBeenCalledWith(expect.objectContaining({ usuarioId }));
   });
 
@@ -138,7 +138,7 @@ describe("catalogos", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Empresa nao permitida" });
+    expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 
   it("Deve_Retornar403_Quando_ListarUsuariosSemPermissao", async () => {
@@ -150,7 +150,7 @@ describe("catalogos", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_usuarios" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_usuarios" } });
     expect(mocks.listarUsuarios).not.toHaveBeenCalled();
   });
 
@@ -172,7 +172,7 @@ describe("catalogos", () => {
 
     // Assert
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_permissoes" });
+    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "cadastro_permissoes" } });
     expect(mocks.listarPermissoes).not.toHaveBeenCalled();
   });
 
@@ -185,3 +185,5 @@ describe("catalogos", () => {
     expect(mocks.listarPermissoes).toHaveBeenCalledWith([empresaA], [empresaA]);
   });
 });
+
+
