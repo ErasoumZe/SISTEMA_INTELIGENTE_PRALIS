@@ -3,8 +3,10 @@ import {
   cadastroColaboradorPayloadSchema,
   cadastroContaPayloadSchema,
   cadastroEmpresaPayloadSchema,
+  cadastroFormaPagamentoPayloadSchema,
   cadastroGrupoPayloadSchema,
   cadastroPermissaoPayloadSchema,
+  cadastroPdvPayloadSchema,
   cadastroSetorPayloadSchema,
   cadastroUnidadePayloadSchema,
   cadastroUsuarioPayloadSchema
@@ -15,6 +17,7 @@ import {
   atualizarUsuarioAutenticacaoRepository,
   buscarCargoEmpresaRepository,
   buscarColaboradorUsuarioRepository,
+  buscarContaEmpresaRepository,
   buscarSetorEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
   colaboradorTemCargoAtivoRepository,
@@ -24,7 +27,9 @@ import {
   salvarColaboradorRepository,
   salvarContaRepository,
   salvarEmpresaRepository,
+  salvarFormaPagamentoRepository,
   salvarGrupoRepository,
+  salvarPdvRepository,
   salvarSetorRepository,
   salvarUnidadeRepository,
   substituirEmpresasUsuarioRepository,
@@ -82,6 +87,29 @@ export async function salvarCadastro(
   if (tipo === "contas") {
     const dados = cadastroContaPayloadSchema.parse(body);
     return salvarContaRepository({ ...(id ? { id } : {}), empresaId: dados.empresaId, nome: dados.nome.trim() });
+  }
+
+  if (tipo === "formas-pagamento" || tipo === "formas_pagamento") {
+    const dados = cadastroFormaPagamentoPayloadSchema.parse(body);
+    return salvarFormaPagamentoRepository({
+      ...(id ? { id } : {}),
+      empresaId: dados.empresaId,
+      nome: dados.nome.trim()
+    });
+  }
+
+  if (tipo === "pdvs") {
+    const dados = cadastroPdvPayloadSchema.parse(body);
+    const conta = await buscarContaEmpresaRepository(dados.contaId);
+    if (!conta || conta.empresaId !== dados.empresaId) erroCadastro("Conta nao pertence a empresa");
+    return salvarPdvRepository({
+      ...(id ? { id } : {}),
+      empresaId: dados.empresaId,
+      nome: dados.nome.trim(),
+      codigo: dados.codigo?.trim() || null,
+      contaId: dados.contaId,
+      ativo: dados.ativo
+    });
   }
 
   if (tipo === "unidades") {

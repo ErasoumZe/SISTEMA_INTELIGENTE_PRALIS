@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { exigirPermissao } from "../autorizacao.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../autorizacao.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../autorizacao/empresa.js";
 import {
   atualizarMalote,
@@ -18,7 +18,7 @@ import {
 } from "@padaria/shared/malotes";
 
 export async function registrarRotasMalotes(app: FastifyInstance): Promise<void> {
-  app.get("/api/malotes", { preHandler: exigirPermissao("cadastro_malotes") }, async (request, reply) => {
+  app.get("/api/malotes", { preHandler: exigirAlgumaPermissao(["cadastro_malotes", "transferencias"]) }, async (request, reply) => {
     const query = malotesQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     try {

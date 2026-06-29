@@ -13,14 +13,19 @@ const mocks = vi.hoisted(() => ({
   listarMovimentacoesFinanceiras: vi.fn(),
   marcarLacreComoUsado: vi.fn(),
   obterLacrePorId: vi.fn(),
-  validarReferenciasMovimentacaoEmpresa: vi.fn()
+  validarReferenciasMovimentacaoEmpresa: vi.fn(),
+  obterCaixaAbertoParaMovimentacao: vi.fn()
 }));
 
 vi.mock("../../api/src/movimentacao/movimentacao.repository.js", () => mocks);
+vi.mock("../../api/src/caixa/caixa.service.js", () => ({
+  obterCaixaAbertoParaMovimentacao: mocks.obterCaixaAbertoParaMovimentacao
+}));
 
 const empresaId = "11111111-1111-4111-8111-111111111111";
 const uuidA = "22222222-2222-4222-8222-222222222222";
 const uuidB = "33333333-3333-4333-8333-333333333333";
+const caixaId = "44444444-4444-4444-8444-444444444444";
 
 const perfilTesouraria: PerfilUsuario = {
   usuarioId: "usuario-1",
@@ -54,6 +59,7 @@ function payloadBase(sobrescritas: Partial<MovimentacaoPayload>): MovimentacaoPa
     contaDestinoId: null,
     fornecedorId: null,
     colaboradorId: null,
+    pdvId: null,
     grupoDespesaId: null,
     grupoMercadoriaId: null,
     grupoRetiradaId: null,
@@ -65,6 +71,8 @@ function payloadBase(sobrescritas: Partial<MovimentacaoPayload>): MovimentacaoPa
     fotoDocumentoUrl: null,
     itensDespesa: [],
     itensMercadoria: [],
+    itensVenda: [],
+    tiposPagamento: [],
     ...sobrescritas
   };
 }
@@ -74,9 +82,43 @@ beforeEach(() => {
   mocks.criarMovimentacaoFinanceira.mockResolvedValue({ id: uuidA });
   mocks.obterLacrePorId.mockResolvedValue({ status: "disponivel" });
   mocks.validarReferenciasMovimentacaoEmpresa.mockResolvedValue(null);
+  mocks.obterCaixaAbertoParaMovimentacao.mockResolvedValue({ id: caixaId, pdvContaId: uuidA });
 });
 
 describe("movimentacao service", () => {
+  it("bloqueia venda quando a soma dos itens diverge do valor original", () => {
+    const payload = payloadBase({
+      tipo: "entrada",
+      dataVencimento: null,
+      valorOriginal: 100,
+      itensVenda: [
+        {
+          produtoId: uuidA,
+          produtoAutomacaoId: null,
+          produtoAutomacaoCodigo: null,
+          descricaoProduto: "Produto A",
+          quantidade: 1,
+          valorUnitario: 30,
+          valorTotal: 30
+        }
+      ]
+    });
+
+    expect(() => validarMovimentacaoFinanceira(payload)).toThrow(
+      "Soma dos itens da venda deve bater com o valor original"
+    );
+  });
+
+  it("bloqueia retirada sem colaborador", () => {
+    const payload = payloadBase({
+      tipo: "retirada",
+      grupoRetiradaId: uuidA,
+      colaboradorId: null
+    });
+
+    expect(() => validarMovimentacaoFinanceira(payload)).toThrow("Colaborador obrigatorio");
+  });
+
   it("bloqueia transferencia para a mesma conta", () => {
     const payload = payloadBase({
       tipo: "transferencia",
@@ -114,7 +156,45 @@ describe("movimentacao service", () => {
     });
 
     await expect(criarMovimentacao(payload, perfilTesouraria)).resolves.toEqual({ id: uuidA, computar: true });
-    expect(mocks.criarMovimentacaoFinanceira).toHaveBeenCalledWith(payload, true, perfilTesouraria.usuarioId);
+    expect(mocks.criarMovimentacaoFinanceira).toHaveBeenCalledWith(payload, true, perfilTesouraria.usuarioId, caixaId);
+  });
+
+  it("bloqueia criacao de movimentacao quando nao existe caixa aberto", async () => {
+    mocks.obterCaixaAbertoParaMovimentacao.mockRejectedValueOnce(
+      new Error("Abra um caixa antes de registrar esta movimentacao")
+    );
+    const payload = payloadBase({ tipo: "entrada" });
+
+    await expect(criarMovimentacao(payload, perfilTesouraria)).rejects.toThrow(
+      "Abra um caixa antes de registrar esta movimentacao"
+    );
+    expect(mocks.criarMovimentacaoFinanceira).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia transferencia quando nenhuma conta envolve o PDV aberto", async () => {
+    const payload = payloadBase({
+      tipo: "transferencia",
+      dataVencimento: null,
+      contaOrigemId: uuidB,
+      contaDestinoId: "55555555-5555-4555-8555-555555555555"
+    });
+
+    await expect(criarMovimentacao(payload, perfilTesouraria)).rejects.toThrow(
+      "Transferencia precisa envolver a conta do PDV aberto"
+    );
+    expect(mocks.criarMovimentacaoFinanceira).not.toHaveBeenCalled();
+  });
+
+  it("cria transferencia quando origem envolve a conta do PDV aberto", async () => {
+    const payload = payloadBase({
+      tipo: "transferencia",
+      dataVencimento: null,
+      contaOrigemId: uuidA,
+      contaDestinoId: uuidB
+    });
+
+    await expect(criarMovimentacao(payload, perfilTesouraria)).resolves.toEqual({ id: uuidA, computar: true });
+    expect(mocks.criarMovimentacaoFinanceira).toHaveBeenCalledWith(payload, true, perfilTesouraria.usuarioId, caixaId);
   });
 
   it("bloqueia lacre indisponivel antes de criar movimentacao", async () => {

@@ -5,9 +5,11 @@ import {
   listarColaboradoresRepository,
   listarContasRepository,
   listarEmpresasRepository,
+  listarFormasPagamentoRepository,
   listarFornecedoresRepository,
   listarGruposRepository,
   listarPermissoesRepository,
+  listarPdvsRepository,
   listarProdutosRepository,
   listarSetoresRepository,
   listarUnidadesMedidaRepository,
@@ -35,6 +37,14 @@ export async function listarEmpresas(perfil?: PerfilComEmpresa) {
 
 export async function listarContas(escopoDados: string[] | null) {
   return filtrarPorEmpresas(await listarContasRepository(), escopoDados);
+}
+
+export async function listarFormasPagamento(escopoDados: string[] | null) {
+  return filtrarPorEmpresas(await listarFormasPagamentoRepository(), escopoDados);
+}
+
+export async function listarPdvs(escopoDados: string[] | null) {
+  return filtrarPorEmpresas(await listarPdvsRepository(), escopoDados);
 }
 
 export async function listarFornecedores(escopoDados: string[] | null) {

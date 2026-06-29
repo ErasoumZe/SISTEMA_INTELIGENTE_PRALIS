@@ -45,6 +45,7 @@ describe("cadastros", () => {
         [
           "cadastro_empresas",
           "cadastro_contas",
+          "cadastro_pdv",
           "cadastro_usuarios",
           "cadastro_permissoes",
           "cadastro_colaboradores"
@@ -93,6 +94,30 @@ describe("cadastros", () => {
     expect(resposta.statusCode).toBe(200);
     expect(mocks.salvarCadastro).toHaveBeenCalledWith(
       "contas",
+      null,
+      payload,
+      usuarioId,
+      expect.objectContaining({ usuarioId })
+    );
+  });
+
+  it("Deve_CriarPdv_Quando_TiverPermissaoEEmpresaPermitida", async () => {
+    // Arrange
+    const payload = {
+      empresaId: empresaA,
+      nome: "PDV 01",
+      codigo: "PDV-01",
+      contaId: "77777777-7777-4777-8777-777777777777",
+      ativo: true
+    };
+
+    // Act
+    const resposta = await requisitar(app, { method: "POST", url: "/api/cadastros/pdvs", payload });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(mocks.salvarCadastro).toHaveBeenCalledWith(
+      "pdvs",
       null,
       payload,
       usuarioId,

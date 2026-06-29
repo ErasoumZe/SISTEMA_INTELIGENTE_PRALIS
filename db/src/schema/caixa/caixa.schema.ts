@@ -1,1 +1,1 @@
-export { ajustesFechamentoCaixa, fechamentosCaixa } from "../app.schema.js";
+export { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "../app.schema.js";

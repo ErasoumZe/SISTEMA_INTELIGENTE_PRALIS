@@ -61,7 +61,7 @@ describe("malotes", () => {
 
   it("Deve_Retornar403_Quando_ListarMalotesSemPermissao", async () => {
     // Arrange
-    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["transferencias"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil([], { empresaIds: [empresaA] }));
 
     // Act
     const resposta = await requisitar(app, { method: "GET", url: `/api/malotes?empresaId=${empresaA}` });
@@ -70,6 +70,18 @@ describe("malotes", () => {
     expect(resposta.statusCode).toBe(403);
     expect(resposta.json()).toEqual({ erro: "Permissao insuficiente", permissao: "cadastro_malotes" });
     expect(mocks.listarMalotes).not.toHaveBeenCalled();
+  });
+
+  it("Deve_ListarMalotes_Quando_TiverPermissaoDeTransferencia", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["transferencias"], { empresaIds: [empresaA] }));
+
+    // Act
+    const resposta = await requisitar(app, { method: "GET", url: `/api/malotes?empresaId=${empresaA}` });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(mocks.listarMalotes).toHaveBeenCalledWith([empresaA]);
   });
 
   it("Deve_ListarMalotesDaEmpresa_Quando_TiverPermissao", async () => {

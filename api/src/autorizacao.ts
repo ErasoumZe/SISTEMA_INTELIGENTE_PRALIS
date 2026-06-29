@@ -42,3 +42,14 @@ export function exigirPermissao(permissao: Permissao) {
     }
   };
 }
+
+export function exigirAlgumaPermissao(permissoes: Permissao[]) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const perfil = await exigirAutenticacao(request, reply);
+    if (!perfil) return;
+
+    if (!permissoes.some((permissao) => perfil.permissoes.includes(permissao))) {
+      reply.status(403).send({ erro: "Permissao insuficiente", permissao: permissoes[0] });
+    }
+  };
+}

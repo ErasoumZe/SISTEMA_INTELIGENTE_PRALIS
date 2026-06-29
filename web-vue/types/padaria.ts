@@ -24,6 +24,7 @@ export type Opcao = {
   usuarioId?: string;
   colaboradorId?: string;
   cargoId?: string;
+  contaId?: string;
   cargoIds?: string[];
   cargos?: string[];
   role?: string;
@@ -51,6 +52,7 @@ export type Opcao = {
 export type Opcoes = {
   empresas: Opcao[];
   contas: Opcao[];
+  formasPagamento: Opcao[];
   fornecedores: Opcao[];
   colaboradores: Opcao[];
   cargos: Opcao[];
@@ -71,6 +73,7 @@ export type Opcoes = {
   usuarios: Opcao[];
   produtos: Opcao[];
   malotes: Opcao[];
+  pdvs: Opcao[];
 };
 
 export type Movimento = {
@@ -87,9 +90,35 @@ export type Movimento = {
 export type ResumoCaixa = {
   totalEntradas: number;
   totalTransferencias: number;
+  totalTransferenciasEntrada?: number;
+  totalTransferenciasSaida?: number;
   totalDespesas: number;
   totalRetiradas: number;
+  totalMercadorias?: number;
   saldo: number;
+};
+
+export type CaixaOperacional = {
+  id: string;
+  empresaId: string;
+  pdvId: string;
+  pdvNome: string;
+  usuarioId: string;
+  usuarioCaixaId: string;
+  usuarioCaixaNome: string;
+  colaboradorId: string;
+  dataHoraAbertura: string;
+  abertoEm: string;
+  dataHoraFechamento: string | null;
+  fechadoEm: string | null;
+  tokenEdicao: string | null;
+  observacao: string | null;
+  status: string;
+};
+
+export type CaixaStatus = {
+  caixaAberto: CaixaOperacional | null;
+  resumo: ResumoCaixa | null;
 };
 
 export type ItemMenu = {
@@ -123,6 +152,9 @@ export type CadastroForm = {
   senha: string;
   cpf: string;
   sigla: string;
+  codigo: string;
+  contaId: string;
+  ativo: boolean;
   tipoGrupo: "despesa" | "mercadoria" | "retirada";
   grupoPaiId: string;
   tipoAreaSetor: "area" | "setor";
@@ -140,6 +172,7 @@ export type CadastroForm = {
 export type MovimentoForm = {
   dataReferencia: string;
   dataVencimento: string;
+  dataPagamento: string;
   descricao: string;
   observacao: string;
   valorOriginal: string;

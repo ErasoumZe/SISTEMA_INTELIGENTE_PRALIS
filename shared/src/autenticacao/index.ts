@@ -4,6 +4,8 @@ export const permissoes = [
   "despesas",
   "mercadorias",
   "retiradas",
+  "operar_caixa",
+  "gerenciar_caixas",
   "fechamento_com_diferenca",
   "relatorio_produtos_mais_vendidos",
   "cadastro_malotes",

@@ -15,7 +15,12 @@ import {
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
   contas,
+  ajustesFechamentoCaixa,
+  debitosColaboradores,
+  despesas,
+  edicoesCaixa,
   empresas,
+  fechamentosCaixa,
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
@@ -23,15 +28,21 @@ import {
   itensVendas,
   lacresMalotes,
   malotes,
+  mercadorias,
+  pdvs,
   permissoesCargos,
   permissoesTabela,
   permissoesUsuarios,
   perfisUsuarios,
   produtos,
+  retiradas,
   setores,
+  transferencias,
   unidadesMedida,
   usuarioAutenticacao,
-  usuariosEmpresas
+  usuariosEmpresas,
+  vendas,
+  vendasItens
 } from "./src/schema/index.js";
 
 const databaseUrl = process.env["DATABASE_URL"] ?? "postgresql://padaria:padaria@localhost:5543/padaria";
@@ -97,6 +108,7 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     "despesas",
     "mercadorias",
     "retiradas",
+    "operar_caixa",
     "fechamento_com_diferenca",
     "relatorio_produtos_mais_vendidos"
   ],
@@ -107,6 +119,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     "despesas",
     "mercadorias",
     "retiradas",
+    "operar_caixa",
+    "gerenciar_caixas",
     "fechamento_com_diferenca",
     "relatorio_produtos_mais_vendidos",
     "promocoes",
@@ -309,6 +323,26 @@ if (!empresaId) throw new Error("Empresa principal nao foi criada");
 console.info(`[seed] OK Empresa principal: Padaria Principal (${empresaId})`);
 
 await banco.delete(empresas).where(and(eq(empresas.nome, "Padaria Principal"), ne(empresas.id, empresaId)));
+
+const caixasEmpresa = await banco
+  .select({ id: fechamentosCaixa.id })
+  .from(fechamentosCaixa)
+  .where(eq(fechamentosCaixa.empresaId, empresaId));
+const caixaIds = caixasEmpresa.map((caixa) => caixa.id);
+
+if (caixaIds.length) {
+  await banco.delete(ajustesFechamentoCaixa).where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
+  await banco.delete(edicoesCaixa).where(inArray(edicoesCaixa.caixaId, caixaIds));
+}
+await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId, empresaId));
+await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
+await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
+await banco.delete(retiradas).where(eq(retiradas.empresaId, empresaId));
+await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
+await banco.delete(itensVendas).where(eq(itensVendas.empresaId, empresaId));
+await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
+if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+
 await banco.delete(colaboradores).where(
   and(
     eq(colaboradores.empresaId, empresaId),
@@ -327,9 +361,7 @@ for (const usuario of usuariosSeed) {
 }
 console.info("[seed] OK Usuarios e perfis cadastrados/atualizados");
 
-await banco
-  .delete(itensVendas)
-  .where(and(eq(itensVendas.empresaId, empresaId), eq(itensVendas.descricaoProduto, "Pao frances")));
+await banco.delete(vendas).where(and(eq(vendas.empresaId, empresaId), eq(vendas.descricao, "Venda exemplo")));
 await banco.delete(produtos).where(and(eq(produtos.empresaId, empresaId), eq(produtos.codigo, "PAO-FRANCES")));
 await banco.delete(colaboradoresJornadas).where(eq(colaboradoresJornadas.empresaId, empresaId));
 await banco.delete(colaboradoresFaltasJustificadas).where(eq(colaboradoresFaltasJustificadas.empresaId, empresaId));
@@ -393,10 +425,13 @@ await banco
 await banco
   .delete(fornecedores)
   .where(and(eq(fornecedores.empresaId, empresaId), eq(fornecedores.nome, "Fornecedor Exemplo")));
+await banco.delete(pdvs).where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.codigo, "PDV-01")));
 await banco.delete(contas).where(and(eq(contas.empresaId, empresaId), inArray(contas.nome, ["Caixa loja", "Banco"])));
 
-await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id });
+const contaCaixa = (await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id }))[0];
 await banco.insert(contas).values({ empresaId, nome: "Banco" }).returning({ id: contas.id });
+if (!contaCaixa) throw new Error("Conta caixa nao foi criada");
+await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", codigo: "PDV-01", contaId: contaCaixa.id });
 
 const grupoDespesaPai = (
   await banco.insert(gruposDespesas).values({ empresaId, nome: "Operacional" }).returning({ id: gruposDespesas.id })
@@ -537,13 +572,26 @@ await banco
   .values(["LACRE-001", "LACRE-002", "LACRE-003"].map((numero) => ({ empresaId, maloteId: malote.id, numero })))
   .onConflictDoNothing();
 
-await banco.insert(itensVendas).values({
-  empresaId,
+const venda = (
+  await banco
+    .insert(vendas)
+    .values({
+      empresaId,
+      dataReferencia: new Date().toISOString().slice(0, 10),
+      descricao: "Venda exemplo",
+      valorOriginal: "96.00"
+    })
+    .returning({ id: vendas.id })
+)[0];
+if (!venda) throw new Error("Venda exemplo nao foi criada");
+
+await banco.insert(vendasItens).values({
+  vendaId: venda.id,
   produtoId: produto.id,
   descricaoProduto: "Pao frances",
   quantidade: "120",
-  valorTotal: "96.00",
-  dataVenda: new Date().toISOString().slice(0, 10)
+  valorUnitario: "0.8000",
+  valorTotal: "96.00"
 });
 
 console.info("[seed] OK Cadastros base, malote, lacres e venda exemplo aplicados");

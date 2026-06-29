@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   buscarPerfilUsuario: vi.fn(),
   listarEmpresas: vi.fn(),
   listarContas: vi.fn(),
+  listarPdvs: vi.fn(),
   listarFornecedores: vi.fn(),
   listarColaboradores: vi.fn(),
   listarGrupos: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("../../api/src/perfis.js", () => ({
 vi.mock("../../api/src/catalogos/catalogos.service.js", () => ({
   listarEmpresas: mocks.listarEmpresas,
   listarContas: mocks.listarContas,
+  listarPdvs: mocks.listarPdvs,
   listarFornecedores: mocks.listarFornecedores,
   listarColaboradores: mocks.listarColaboradores,
   listarGrupos: mocks.listarGrupos,
@@ -65,6 +67,7 @@ describe("catalogos", () => {
     );
     mocks.listarEmpresas.mockResolvedValue([{ id: empresaA, nome: "Padaria A" }]);
     mocks.listarContas.mockResolvedValue([{ id: "conta-1", empresaId: empresaA }]);
+    mocks.listarPdvs.mockResolvedValue([{ id: "pdv-1", empresaId: empresaA }]);
     mocks.listarFornecedores.mockResolvedValue([]);
     mocks.listarColaboradores.mockResolvedValue([]);
     mocks.listarGrupos.mockResolvedValue({ gruposDespesas: [], gruposMercadorias: [], gruposRetiradas: [] });
@@ -100,6 +103,7 @@ describe("catalogos", () => {
 
   it.each([
     ["/api/contas", mocks.listarContas],
+    ["/api/pdvs", mocks.listarPdvs],
     ["/api/fornecedores", mocks.listarFornecedores],
     ["/api/colaboradores", mocks.listarColaboradores],
     ["/api/grupos", mocks.listarGrupos],
@@ -118,6 +122,7 @@ describe("catalogos", () => {
 
   it.each([
     "/api/contas",
+    "/api/pdvs",
     "/api/fornecedores",
     "/api/colaboradores",
     "/api/grupos",

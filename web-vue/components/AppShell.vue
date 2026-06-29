@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
-import type { ItemMenu, Opcao } from "~/types/padaria";
-import { rotaTela } from "~/utils/domain";
+import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
+import { itemPorTela, rotaTela } from "~/utils/domain";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -9,6 +9,8 @@ const props = defineProps<{
   telaAtiva: string;
   empresas: Opcao[];
   empresaId: string;
+  caixaStatus?: CaixaStatus | null;
+  telasDesabilitadas?: string[];
   carregandoEmpresa: boolean;
   saindo: boolean;
 }>();
@@ -23,9 +25,10 @@ const drawerRecolhido = ref(false);
 const empresaAtiva = computed(
   () => props.empresas.find((empresa) => empresa.id === props.empresaId) ?? props.empresas[0] ?? null
 );
-const telaAtual = computed(() => props.telas.find((item) => item.id === props.telaAtiva) ?? null);
+const telaAtual = computed(() => itemPorTela[props.telaAtiva] ?? props.telas.find((item) => item.id === props.telaAtiva) ?? null);
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
-const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user.name);
+const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
+const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
 
 function alternarDrawer() {
   drawerRecolhido.value = !drawerRecolhido.value;
@@ -76,16 +79,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="caixa-card">
-            <div class="d-flex align-start justify-space-between ga-2">
-              <div>
-                <div class="caixa-title">Caixa: PDV 01</div>
-                <div class="caixa-meta">Aberto em: 10/06/2026, 06:00</div>
-              </div>
-              <span class="status-pill">Aberto</span>
-            </div>
-            <v-btn class="mt-4 caixa-edit" block size="small" variant="tonal">Editar</v-btn>
-          </div>
+          <slot name="caixa" :caixa-aberto="caixaAberto" />
 
           <div class="sidebar-actions">
             <slot name="actions" />
@@ -94,16 +88,27 @@ onMounted(() => {
 
         <div class="sidebar-scroll-shell">
           <nav class="sidebar-nav" aria-label="Menu principal">
-            <NuxtLink
-              v-for="tela in telas"
-              :key="tela.id"
-              :to="rotaTela(tela.id)"
-              class="sidebar-item"
-              :class="{ active: tela.id === telaAtiva }"
-            >
-              <v-icon :icon="tela.icone" size="21" />
-              <span>{{ tela.titulo }}</span>
-            </NuxtLink>
+            <template v-for="tela in telas" :key="tela.id">
+              <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" text="E necessario abrir caixa para acessar esta tela.">
+                <template #activator="{ props: tooltipProps }">
+                  <span v-bind="tooltipProps" class="sidebar-disabled-wrapper">
+                    <span class="sidebar-item disabled">
+                      <v-icon :icon="tela.icone" size="21" />
+                      <span>{{ tela.titulo }}</span>
+                    </span>
+                  </span>
+                </template>
+              </v-tooltip>
+              <NuxtLink
+                v-else
+                :to="rotaTela(tela.id)"
+                class="sidebar-item"
+                :class="{ active: tela.id === telaAtiva }"
+              >
+                <v-icon :icon="tela.icone" size="21" />
+                <span>{{ tela.titulo }}</span>
+              </NuxtLink>
+            </template>
           </nav>
         </div>
 

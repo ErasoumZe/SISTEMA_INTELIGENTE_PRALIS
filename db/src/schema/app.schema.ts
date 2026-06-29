@@ -4,6 +4,7 @@ import {
   check,
   date,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -121,6 +122,42 @@ export const contas = pgTable("contas", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+export const formasPagamento = pgTable(
+  "formas_pagamento",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    criadoEm,
+    atualizadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [unique("formas_pagamento_empresa_nome_unica").on(table.empresaId, table.nome)]
+);
+
+export const pdvs = pgTable(
+  "pdvs",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    codigo: text("codigo"),
+    contaId: uuid("conta_id")
+      .notNull()
+      .references(() => contas.id),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("pdvs_empresa_nome_unica").on(table.empresaId, table.nome),
+    uniqueIndex("pdvs_empresa_codigo_unico_idx")
+      .on(table.empresaId, sql`lower(${table.codigo})`)
+      .where(sql`${table.codigo} is not null`)
+  ]
+);
 
 export const fornecedores = pgTable("fornecedores", {
   id: idUuid,
@@ -434,6 +471,7 @@ export const movimentacoesFinanceiras = pgTable(
     grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
     maloteId: uuid("malote_id").references(() => malotes.id),
     lacreMaloteId: uuid("lacre_malote_id").references(() => lacresMalotes.id),
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     notaFiscalId: text("nota_fiscal_id"),
     temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
     computar: boolean("computar").notNull().default(true),
@@ -493,19 +531,290 @@ export const itensMercadorias = pgTable(
   ]
 );
 
+export const vendas = pgTable(
+  "vendas",
+  {
+    id: idUuid,
+    empresaId,
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    dataReferencia: date("data_referencia").notNull(),
+    dataVenda: timestamp("data_venda", { withTimezone: true }),
+    descricao: text("descricao").notNull(),
+    observacao: text("observacao"),
+    valorOriginal: valorMonetario("valor_original").notNull(),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
+    descricaoAcrescimo: text("descricao_acrescimo"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    descricaoDesconto: text("descricao_desconto"),
+    dataPagamento: date("data_pagamento"),
+    contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
+    pdvId: uuid("pdv_id").references(() => pdvs.id),
+    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    clienteAutomacaoId: text("cliente_automacao_id"),
+    clienteAutomacao: text("cliente_automacao"),
+    clienteAutomacaoDocumento: text("cliente_automacao_documento"),
+    automacaoId: text("automacao_id"),
+    computar: boolean("computar").notNull().default(true),
+    status: text("status").notNull().default("aprovado"),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("vendas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("vendas_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check("vendas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+  ]
+);
+
+export const vendasItens = pgTable(
+  "vendas_itens",
+  {
+    id: idUuid,
+    vendaId: uuid("venda_id")
+      .notNull()
+      .references(() => vendas.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").references(() => produtos.id),
+    produtoAutomacaoId: text("produto_automacao_id"),
+    produtoAutomacaoCodigo: text("produto_automacao_codigo"),
+    descricaoProduto: text("descricao_produto").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("0"),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    valorTotal: valorMonetario("valor_total").notNull().default("0"),
+    criadoEm
+  },
+  (table) => [
+    check("vendas_itens_quantidade_check", sql`${table.quantidade} >= 0`),
+    check("vendas_itens_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
+    check("vendas_itens_valor_total_check", sql`${table.valorTotal} >= 0`)
+  ]
+);
+
+export const vendasTipoPagamento = pgTable(
+  "vendas_tipo_pagamento",
+  {
+    id: idUuid,
+    vendaId: uuid("venda_id")
+      .notNull()
+      .references(() => vendas.id, { onDelete: "cascade" }),
+    formaPagamentoId: uuid("forma_pagamento_id").references(() => formasPagamento.id),
+    tipoPagamentoAutomacaoId: text("tipo_pagamento_automacao_id"),
+    tipoPagamentoAutomacao: text("tipo_pagamento_automacao"),
+    numeroVendas: integer("numero_vendas").notNull().default(0),
+    totalPago: valorMonetario("total_pago").notNull().default("0"),
+    criadoEm
+  },
+  (table) => [
+    check("vendas_tipo_pagamento_numero_vendas_check", sql`${table.numeroVendas} >= 0`),
+    check("vendas_tipo_pagamento_total_pago_check", sql`${table.totalPago} >= 0`)
+  ]
+);
+
+export const despesas = pgTable(
+  "despesas",
+  {
+    id: idUuid,
+    empresaId,
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    dataReferencia: date("data_referencia").notNull(),
+    dataVencimento: date("data_vencimento").notNull(),
+    dataPagamento: date("data_pagamento"),
+    descricao: text("descricao").notNull(),
+    observacao: text("observacao"),
+    valorOriginal: valorMonetario("valor_original").notNull(),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
+    descricaoAcrescimo: text("descricao_acrescimo"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    descricaoDesconto: text("descricao_desconto"),
+    contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
+    computar: boolean("computar").notNull().default(true),
+    fotoDocumentoUrl: text("foto_documento_url"),
+    status: text("status").notNull().default("aprovado"),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("despesas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("despesas_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+  ]
+);
+
+export const despesasItens = pgTable(
+  "despesas_itens",
+  {
+    id: idUuid,
+    despesaId: uuid("despesa_id")
+      .notNull()
+      .references(() => despesas.id, { onDelete: "cascade" }),
+    grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    descricao: text("descricao").notNull(),
+    valor: valorMonetario("valor").notNull()
+  },
+  (table) => [check("despesas_itens_valor_check", sql`${table.valor} >= 0`)]
+);
+
+export const mercadorias = pgTable(
+  "mercadorias",
+  {
+    id: idUuid,
+    empresaId,
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    dataReferencia: date("data_referencia").notNull(),
+    dataVencimento: date("data_vencimento").notNull(),
+    dataPagamento: date("data_pagamento"),
+    descricao: text("descricao").notNull(),
+    observacao: text("observacao"),
+    valorOriginal: valorMonetario("valor_original").notNull(),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
+    descricaoAcrescimo: text("descricao_acrescimo"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    descricaoDesconto: text("descricao_desconto"),
+    contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
+    notaFiscalId: text("nota_fiscal_id"),
+    temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
+    computar: boolean("computar").notNull().default(true),
+    fotoDocumentoUrl: text("foto_documento_url"),
+    status: text("status").notNull().default("aprovado"),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("mercadorias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("mercadorias_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+  ]
+);
+
+export const mercadoriasItens = pgTable(
+  "mercadorias_itens",
+  {
+    id: idUuid,
+    mercadoriaId: uuid("mercadoria_id")
+      .notNull()
+      .references(() => mercadorias.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").references(() => produtos.id),
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
+    descricao: text("descricao").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    valorTotal: valorMonetario("valor_total").notNull()
+  },
+  (table) => [
+    check("mercadorias_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    check("mercadorias_itens_valor_total_check", sql`${table.valorTotal} >= 0`)
+  ]
+);
+
+export const retiradas = pgTable(
+  "retiradas",
+  {
+    id: idUuid,
+    empresaId,
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
+    colaboradorId: uuid("colaborador_id")
+      .notNull()
+      .references(() => colaboradores.id),
+    dataReferencia: date("data_referencia").notNull(),
+    dataVencimento: date("data_vencimento").notNull(),
+    dataPagamento: date("data_pagamento"),
+    descricao: text("descricao").notNull(),
+    observacao: text("observacao"),
+    valorOriginal: valorMonetario("valor_original").notNull(),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
+    descricaoAcrescimo: text("descricao_acrescimo"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    descricaoDesconto: text("descricao_desconto"),
+    contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
+    computar: boolean("computar").notNull().default(true),
+    status: text("status").notNull().default("aprovado"),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("retiradas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("retiradas_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check("retiradas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+  ]
+);
+
+export const transferencias = pgTable(
+  "transferencias",
+  {
+    id: idUuid,
+    empresaId,
+    caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    dataReferencia: date("data_referencia").notNull(),
+    descricao: text("descricao").notNull(),
+    observacao: text("observacao"),
+    valorOriginal: valorMonetario("valor_original").notNull(),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
+    descricaoAcrescimo: text("descricao_acrescimo"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    descricaoDesconto: text("descricao_desconto"),
+    contaOrigemId: uuid("conta_origem_id")
+      .notNull()
+      .references(() => contas.id),
+    contaDestinoId: uuid("conta_destino_id")
+      .notNull()
+      .references(() => contas.id),
+    maloteId: uuid("malote_id").references(() => malotes.id),
+    lacreMaloteId: uuid("lacre_malote_id").references(() => lacresMalotes.id),
+    computar: boolean("computar").notNull().default(true),
+    status: text("status").notNull().default("aprovado"),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("transferencias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`)
+  ]
+);
+
 export const fechamentosCaixa = pgTable(
   "fechamentos_caixa",
   {
     id: idUuid,
     empresaId,
+    pdvId: uuid("pdv_id").references(() => pdvs.id),
+    usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId),
+    usuarioCaixaId: text("usuario_caixa_id").references(() => perfisUsuarios.usuarioId),
     colaboradorId: uuid("colaborador_id")
       .notNull()
       .references(() => colaboradores.id),
     dataMovimento: date("data_movimento").notNull(),
+    dataHoraAbertura: timestamp("data_hora_abertura", { withTimezone: true }),
+    abertoEm: timestamp("aberto_em", { withTimezone: true }),
+    dataHoraFechamento: timestamp("data_hora_fechamento", { withTimezone: true }),
+    fechadoEm: timestamp("fechado_em", { withTimezone: true }),
+    tokenEdicao: text("token_edicao"),
+    observacao: text("observacao"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
     totalTransferencias: valorMonetario("total_transferencias").notNull().default("0"),
+    totalTransferenciasEntrada: valorMonetario("total_transferencias_entrada").notNull().default("0"),
+    totalTransferenciasSaida: valorMonetario("total_transferencias_saida").notNull().default("0"),
     totalDespesas: valorMonetario("total_despesas").notNull().default("0"),
     totalRetiradas: valorMonetario("total_retiradas").notNull().default("0"),
+    totalMercadorias: valorMonetario("total_mercadorias").notNull().default("0"),
     saldo: valorMonetario("saldo").notNull().default("0"),
     status: text("status").notNull().default("aberto"),
     criadoPor: text("criado_por"),
@@ -514,15 +823,52 @@ export const fechamentosCaixa = pgTable(
   (table) => [check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`)]
 );
 
+export const edicoesCaixa = pgTable("edicoes_caixa", {
+  id: idUuid,
+  caixaId: uuid("caixa_id")
+    .notNull()
+    .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
+  tokenUsado: text("token_usado").notNull(),
+  editadoPor: text("editado_por").references(() => perfisUsuarios.usuarioId),
+  editadoEm: timestamp("editado_em", { withTimezone: true }).notNull().defaultNow(),
+  valoresAntigos: jsonb("valores_antigos").notNull(),
+  valoresNovos: jsonb("valores_novos").notNull()
+});
+
 export const ajustesFechamentoCaixa = pgTable("ajustes_fechamento_caixa", {
   id: idUuid,
   fechamentoCaixaId: uuid("fechamento_caixa_id")
     .notNull()
     .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
   movimentacaoId: uuid("movimentacao_id").references(() => movimentacoesFinanceiras.id),
+  despesaId: uuid("despesa_id").references(() => despesas.id),
   valorDiferenca: valorMonetario("valor_diferenca").notNull(),
   criadoEm
 });
+
+export const debitosColaboradores = pgTable(
+  "debitos_colaboradores",
+  {
+    id: idUuid,
+    empresaId,
+    colaboradorId: uuid("colaborador_id")
+      .notNull()
+      .references(() => colaboradores.id),
+    tipo: text("tipo").notNull(),
+    movimentacaoId: uuid("movimentacao_id").references(() => movimentacoesFinanceiras.id),
+    despesaId: uuid("despesa_id").references(() => despesas.id),
+    retiradaId: uuid("retirada_id").references(() => retiradas.id),
+    caixaId: uuid("caixa_id").references(() => fechamentosCaixa.id),
+    valor: valorMonetario("valor").notNull(),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm
+  },
+  (table) => [
+    check("debitos_colaboradores_tipo_check", sql`${table.tipo} in ('FECHAMENTO_CAIXA', 'DESPESA', 'RETIRADA')`),
+    check("debitos_colaboradores_valor_check", sql`${table.valor} >= 0`)
+  ]
+);
 
 export const itensVendas = pgTable("itens_vendas", {
   id: idUuid,

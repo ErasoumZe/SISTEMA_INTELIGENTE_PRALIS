@@ -1,1 +1,1 @@
-export { itensVendas } from "../app.schema.js";
+export { itensVendas, vendas, vendasItens, vendasTipoPagamento } from "../app.schema.js";

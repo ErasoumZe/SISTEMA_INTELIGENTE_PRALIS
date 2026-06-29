@@ -28,6 +28,19 @@ export const cadastroContaPayloadSchema = z.object({
   nome: z.string().min(1)
 });
 
+export const cadastroFormaPagamentoPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1)
+});
+
+export const cadastroPdvPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1),
+  codigo: z.string().optional().nullable(),
+  contaId: uuidSchema,
+  ativo: z.boolean().optional().default(true)
+});
+
 export const cadastroUnidadePayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1),
@@ -88,6 +101,8 @@ export type TipoCadastroComIdParams = z.infer<typeof tipoCadastroComIdParamsSche
 export type CadastroEmpresaPayload = z.infer<typeof cadastroEmpresaPayloadSchema>;
 export type CadastroColaboradorPayload = z.infer<typeof cadastroColaboradorPayloadSchema>;
 export type CadastroContaPayload = z.infer<typeof cadastroContaPayloadSchema>;
+export type CadastroFormaPagamentoPayload = z.infer<typeof cadastroFormaPagamentoPayloadSchema>;
+export type CadastroPdvPayload = z.infer<typeof cadastroPdvPayloadSchema>;
 export type CadastroUnidadePayload = z.infer<typeof cadastroUnidadePayloadSchema>;
 export type CadastroGrupoPayload = z.infer<typeof cadastroGrupoPayloadSchema>;
 export type CadastroAreaPayload = z.infer<typeof cadastroAreaPayloadSchema>;

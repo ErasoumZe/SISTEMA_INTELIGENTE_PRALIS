@@ -8,9 +8,11 @@ import {
   listarColaboradores,
   listarContas,
   listarEmpresas,
+  listarFormasPagamento,
   listarFornecedores,
   listarGrupos,
   listarPermissoes,
+  listarPdvs,
   listarProdutos,
   listarSetores,
   listarUnidadesMedida,
@@ -37,6 +39,16 @@ export async function registrarRotasCatalogos(app: AplicacaoFastify) {
   app.get("/api/contas", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
     return escopo ? listarContas(escopo.escopoDados) : undefined;
+  });
+
+  app.get("/api/formas_pagamento", { preHandler: exigirAutenticacao }, async (request, reply) => {
+    const escopo = await escopoDaQuery(request, reply);
+    return escopo ? listarFormasPagamento(escopo.escopoDados) : undefined;
+  });
+
+  app.get("/api/pdvs", { preHandler: exigirAutenticacao }, async (request, reply) => {
+    const escopo = await escopoDaQuery(request, reply);
+    return escopo ? listarPdvs(escopo.escopoDados) : undefined;
   });
 
   app.get("/api/fornecedores", { preHandler: exigirAutenticacao }, async (request, reply) => {

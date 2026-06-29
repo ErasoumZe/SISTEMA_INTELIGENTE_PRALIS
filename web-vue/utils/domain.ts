@@ -32,7 +32,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
     icone: "mdi-chart-bar"
   },
   malotes: { id: "malotes", titulo: "Malotes", permissao: "cadastro_malotes", icone: "mdi-briefcase" },
-  caixa: { id: "caixa", titulo: "Caixa", permissao: "fechamento_com_diferenca", icone: "mdi-store" },
+  caixa: { id: "caixa", titulo: "Caixa", permissao: "operar_caixa", icone: "mdi-store" },
   promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",
@@ -162,6 +162,14 @@ export const movimentoPorTela: Record<string, TipoMovimentacao> = {
   retiradas: "retirada"
 };
 
+export const endpointMovimentoPorTipo: Record<TipoMovimentacao, string> = {
+  entrada: "entradas",
+  transferencia: "transferencias",
+  despesa: "despesas",
+  mercadoria: "mercadorias",
+  retirada: "retiradas"
+};
+
 export const telasCrudDiretoria = [
   "empresas",
   "contas",
@@ -278,6 +286,7 @@ export function opcoesVazias(): Opcoes {
   return {
     empresas: [],
     contas: [],
+    formasPagamento: [],
     fornecedores: [],
     colaboradores: [],
     cargos: [],
@@ -297,7 +306,8 @@ export function opcoesVazias(): Opcoes {
     usuariosPermissoes: [],
     usuarios: [],
     produtos: [],
-    malotes: []
+    malotes: [],
+    pdvs: []
   };
 }
 
@@ -306,6 +316,7 @@ export function formMovimentoVazio(): MovimentoForm {
   return {
     dataReferencia: hoje,
     dataVencimento: hoje,
+    dataPagamento: "",
     descricao: "",
     observacao: "",
     valorOriginal: "",
@@ -337,6 +348,9 @@ export function formCadastroVazio(): CadastroForm {
     senha: "",
     cpf: "",
     sigla: "",
+    codigo: "",
+    contaId: "",
+    ativo: true,
     tipoGrupo: "despesa",
     grupoPaiId: "",
     tipoAreaSetor: "area",
@@ -371,8 +385,8 @@ export function dinheiro(valor: number | string) {
 export function mensagemErro(error: unknown) {
   if (error instanceof Error) {
     try {
-      const dados = JSON.parse(error.message) as { message?: string; error?: string };
-      return dados.message || dados.error || error.message;
+      const dados = JSON.parse(error.message) as { message?: string; error?: string; erro?: string };
+      return dados.message || dados.error || dados.erro || error.message;
     } catch {
       return error.message;
     }
@@ -395,6 +409,7 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
   return {
     ...listas,
     contas: itensDaEmpresa(listas.contas, idEmpresa),
+    formasPagamento: itensDaEmpresa(listas.formasPagamento, idEmpresa),
     fornecedores: itensDaEmpresa(listas.fornecedores, idEmpresa),
     colaboradores: itensDaEmpresa(listas.colaboradores, idEmpresa),
     cargos: itensDaEmpresa(listas.cargos, idEmpresa),
@@ -414,7 +429,8 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     usuariosPermissoes: listas.usuariosPermissoes.filter((item) => !item.usuarioId || usuariosIds.has(item.usuarioId)),
     usuarios,
     produtos: itensDaEmpresa(listas.produtos, idEmpresa),
-    malotes: itensDaEmpresa(listas.malotes, idEmpresa)
+    malotes: itensDaEmpresa(listas.malotes, idEmpresa),
+    pdvs: itensDaEmpresa(listas.pdvs, idEmpresa)
   };
 }
 
@@ -433,6 +449,8 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
     usuarios: "usuarios",
     permissoes: "permissoes",
     colaboradores: "colaboradores",
+    pdv: "pdvs",
+    formas_pagamento: "formas-pagamento",
     fornecedores: "fornecedores",
     produtos: "produtos"
   };
@@ -442,6 +460,9 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome };
   if (tela === "contas") return { empresaId, nome: form.nome };
+  if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
+  if (tela === "pdv")
+    return { empresaId, nome: form.nome, codigo: form.codigo || null, contaId: form.contaId, ativo: form.ativo };
   if (tela === "grupos") return { empresaId, nome: form.nome, grupoPaiId: form.grupoPaiId || null };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
   if (tela === "areas_setores") {

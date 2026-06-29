@@ -6,7 +6,13 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   buscarPerfilUsuario: vi.fn(),
   obterResumoCaixa: vi.fn(),
-  acertarSaldoCaixa: vi.fn()
+  acertarSaldoCaixa: vi.fn(),
+  obterStatusCaixa: vi.fn(),
+  abrirCaixa: vi.fn(),
+  editarAberturaCaixa: vi.fn(),
+  acertarSaldoCaixaOperacional: vi.fn(),
+  fecharCaixa: vi.fn(),
+  listarHistoricoCaixa: vi.fn()
 }));
 
 vi.mock("../../api/src/auth.js", () => ({
@@ -24,7 +30,13 @@ vi.mock("../../api/src/perfis.js", () => ({
 
 vi.mock("../../api/src/caixa/caixa.service.js", () => ({
   obterResumoCaixa: mocks.obterResumoCaixa,
-  acertarSaldoCaixa: mocks.acertarSaldoCaixa
+  acertarSaldoCaixa: mocks.acertarSaldoCaixa,
+  obterStatusCaixa: mocks.obterStatusCaixa,
+  abrirCaixa: mocks.abrirCaixa,
+  editarAberturaCaixa: mocks.editarAberturaCaixa,
+  acertarSaldoCaixaOperacional: mocks.acertarSaldoCaixaOperacional,
+  fecharCaixa: mocks.fecharCaixa,
+  listarHistoricoCaixa: mocks.listarHistoricoCaixa
 }));
 
 describe("caixa", () => {
@@ -51,6 +63,193 @@ describe("caixa", () => {
       saldo: 80
     });
     mocks.acertarSaldoCaixa.mockResolvedValue({ movimentacaoId: "mov-ajuste" });
+    mocks.obterStatusCaixa.mockResolvedValue({ caixaAberto: null, resumo: null });
+    mocks.abrirCaixa.mockResolvedValue({ caixaAberto: { id: "66666666-6666-4666-8666-666666666666" }, resumo: null });
+    mocks.editarAberturaCaixa.mockResolvedValue({ caixaAberto: { id: "66666666-6666-4666-8666-666666666666" }, resumo: null });
+    mocks.acertarSaldoCaixaOperacional.mockResolvedValue({
+      movimentacaoId: "77777777-7777-4777-8777-777777777777",
+      debitoId: "88888888-8888-4888-8888-888888888888",
+      valorDiferenca: 10
+    });
+    mocks.fecharCaixa.mockResolvedValue({ caixaAberto: null, resumo: null });
+    mocks.listarHistoricoCaixa.mockResolvedValue([
+      { id: "66666666-6666-4666-8666-666666666666", tokenEdicao: "ABC123" }
+    ]);
+  });
+
+  it("Deve_Retornar403_Quando_ConsultarStatusSemPermissaoOperarCaixa", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil([], { empresaIds: [empresaA] }));
+
+    // Act
+    const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/status?empresaId=${empresaA}` });
+
+    // Assert
+    expect(resposta.statusCode).toBe(403);
+    expect(mocks.obterStatusCaixa).not.toHaveBeenCalled();
+  });
+
+  it("Deve_ConsultarStatus_Quando_UsuarioPodeOperarCaixa", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+
+    // Act
+    const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/status?empresaId=${empresaA}` });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(mocks.obterStatusCaixa).toHaveBeenCalledWith(empresaA, expect.objectContaining({ usuarioId }));
+  });
+
+  it("Deve_AbrirCaixa_Quando_PayloadValido", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    const payload = {
+      empresaId: empresaA,
+      pdvId: "66666666-6666-4666-8666-666666666666",
+      usuarioCaixaId: usuarioId,
+      dataHoraAbertura: "2026-06-28T10:00",
+      observacao: "inicio"
+    };
+
+    // Act
+    const resposta = await requisitar(app, { method: "POST", url: "/api/caixa/abrir", payload });
+
+    // Assert
+    expect(resposta.statusCode).toBe(201);
+    expect(mocks.abrirCaixa).toHaveBeenCalledWith(payload, expect.objectContaining({ usuarioId }));
+  });
+
+  it("Deve_Retornar400_Quando_AberturaSobreporPeriodo", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.abrirCaixa.mockRejectedValueOnce(
+      new Error("A data e hora de abertura ja pertence a outro caixa aberto/fechado")
+    );
+
+    // Act
+    const resposta = await requisitar(app, {
+      method: "POST",
+      url: "/api/caixa/abrir",
+      payload: {
+        empresaId: empresaA,
+        pdvId: "66666666-6666-4666-8666-666666666666",
+        usuarioCaixaId: usuarioId,
+        dataHoraAbertura: "2026-06-28T10:00"
+      }
+    });
+
+    // Assert
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toEqual({ erro: "A data e hora de abertura ja pertence a outro caixa aberto/fechado" });
+  });
+
+  it("Deve_EditarAbertura_Quando_TokenInformado", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    const caixaId = "66666666-6666-4666-8666-666666666666";
+    const payload = {
+      tokenEdicao: "ABC123",
+      pdvId: "77777777-7777-4777-8777-777777777777",
+      usuarioCaixaId: usuarioId,
+      dataHoraAbertura: "2026-06-28T11:00",
+      observacao: "ajuste"
+    };
+
+    // Act
+    const resposta = await requisitar(app, { method: "PUT", url: `/api/caixa/${caixaId}/abertura`, payload });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(mocks.editarAberturaCaixa).toHaveBeenCalledWith(caixaId, payload, expect.objectContaining({ usuarioId }));
+  });
+
+  it("Deve_Retornar400_Quando_TokenDeEdicaoInvalido", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    mocks.editarAberturaCaixa.mockRejectedValueOnce(new Error("Token de edicao invalido"));
+
+    // Act
+    const resposta = await requisitar(app, {
+      method: "PUT",
+      url: "/api/caixa/66666666-6666-4666-8666-666666666666/abertura",
+      payload: {
+        tokenEdicao: "ERRADO",
+        pdvId: "77777777-7777-4777-8777-777777777777",
+        usuarioCaixaId: usuarioId,
+        dataHoraAbertura: "2026-06-28T11:00"
+      }
+    });
+
+    // Assert
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toEqual({ erro: "Token de edicao invalido" });
+  });
+
+  it("Deve_AcertarSaldoOperacional_Quando_CaixaAberto", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    const caixaId = "66666666-6666-4666-8666-666666666666";
+
+    // Act
+    const resposta = await requisitar(app, {
+      method: "POST",
+      url: `/api/caixa/${caixaId}/acertar-saldo`,
+      payload: { observacao: "quebra" }
+    });
+
+    // Assert
+    expect(resposta.statusCode).toBe(201);
+    expect(mocks.acertarSaldoCaixaOperacional).toHaveBeenCalledWith(
+      caixaId,
+      { observacao: "quebra" },
+      expect.objectContaining({ usuarioId })
+    );
+  });
+
+  it("Deve_FecharCaixa_Quando_AcertoNaoPendente", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+    const caixaId = "66666666-6666-4666-8666-666666666666";
+
+    // Act
+    const resposta = await requisitar(app, {
+      method: "POST",
+      url: `/api/caixa/${caixaId}/fechar`,
+      payload: { observacao: "fim" }
+    });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(mocks.fecharCaixa).toHaveBeenCalledWith(
+      caixaId,
+      { observacao: "fim" },
+      expect.objectContaining({ usuarioId })
+    );
+  });
+
+  it("Deve_Retornar403_Quando_ConsultarHistoricoSemGerenciarCaixas", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["operar_caixa"], { empresaIds: [empresaA] }));
+
+    // Act
+    const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/historico?empresaId=${empresaA}` });
+
+    // Assert
+    expect(resposta.statusCode).toBe(403);
+    expect(mocks.listarHistoricoCaixa).not.toHaveBeenCalled();
+  });
+
+  it("Deve_ListarHistoricoComToken_Quando_Gerente", async () => {
+    // Arrange
+    mocks.buscarPerfilUsuario.mockResolvedValueOnce(criarPerfil(["gerenciar_caixas"], { empresaIds: [empresaA] }));
+
+    // Act
+    const resposta = await requisitar(app, { method: "GET", url: `/api/caixa/historico?empresaId=${empresaA}` });
+
+    // Assert
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toEqual([{ id: "66666666-6666-4666-8666-666666666666", tokenEdicao: "ABC123" }]);
   });
 
   it("Deve_Retornar403_Quando_ConsultarResumoSemPermissao", async () => {

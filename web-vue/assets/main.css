@@ -247,6 +247,16 @@ body {
   text-decoration: none;
 }
 
+.sidebar-disabled-wrapper {
+  display: block;
+}
+
+.sidebar-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+
 .sidebar-item span {
   min-width: 0;
   line-height: 1.2;
@@ -307,10 +317,10 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(48px, auto);
   min-height: 56px;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--padaria-border);
   background: var(--padaria-card);
@@ -320,6 +330,7 @@ body {
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -341,32 +352,34 @@ body {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(150px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .summary-card {
   display: flex;
-  min-height: 128px;
+  min-height: 92px;
   flex-direction: column;
   justify-content: center;
-  border-radius: 16px;
+  border-radius: 14px;
   color: white;
-  padding: 18px 14px;
+  padding: 12px 14px;
   box-shadow: 0 2px 5px rgb(15 23 42 / 0.18);
+  text-align: center;
 }
 
 .summary-label {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .summary-value {
-  margin-top: 16px;
-  font-size: 21px;
+  margin-top: 10px;
+  font-size: 19px;
   font-weight: 950;
   line-height: 1;
   text-align: center;

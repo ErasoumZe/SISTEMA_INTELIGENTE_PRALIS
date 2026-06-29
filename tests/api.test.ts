@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   buscarMaloteEmpresaRepository: vi.fn(),
   listarEmpresasRepository: vi.fn(),
   listarContasRepository: vi.fn(),
+  listarPdvsRepository: vi.fn(),
   temaSelectResults: [] as TemaLinhaMock[][],
   temaSalvo: null as TemaSalvoMock | null
 }));
@@ -52,6 +53,7 @@ vi.mock("../api/src/catalogos/catalogos.repository.js", () => ({
   listarAreasRepository: vi.fn(() => Promise.resolve([])),
   listarColaboradoresRepository: vi.fn(() => Promise.resolve([])),
   listarContasRepository: mocks.listarContasRepository,
+  listarPdvsRepository: mocks.listarPdvsRepository,
   listarEmpresasRepository: mocks.listarEmpresasRepository,
   listarFornecedoresRepository: vi.fn(() => Promise.resolve([])),
   listarGruposRepository: vi.fn(() =>
@@ -109,10 +111,10 @@ const empresaB = "33333333-3333-4333-8333-333333333333";
 beforeAll(async () => {
   const { buildApp } = await import("../api/src/app.js");
   app = await buildApp();
-});
+}, 30_000);
 
 afterAll(async () => {
-  await app.close();
+  await app?.close();
 });
 
 beforeEach(() => {
@@ -136,6 +138,7 @@ beforeEach(() => {
   mocks.buscarMaloteEmpresaRepository.mockResolvedValue({ empresaId: empresaA });
   mocks.listarEmpresasRepository.mockResolvedValue([]);
   mocks.listarContasRepository.mockResolvedValue([]);
+  mocks.listarPdvsRepository.mockResolvedValue([]);
   mocks.temaSelectResults = [];
   mocks.temaSalvo = null;
 });
@@ -309,10 +312,10 @@ describe("api", () => {
     expect(response.json()).toEqual([{ id: "conta-a", empresaId: empresaA, nome: "Conta A" }]);
   });
 
-  it("blocks movement listing for another company", async () => {
+  it("blocks entrada listing for another company", async () => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/movimentacoes?empresaId=${empresaB}`
+      url: `/api/entradas?empresaId=${empresaB}`
     });
 
     expect(response.statusCode).toBe(403);
@@ -320,13 +323,12 @@ describe("api", () => {
     expect(mocks.listarContasRepository).not.toHaveBeenCalled();
   });
 
-  it("blocks movement creation when the user lacks the movement permission", async () => {
+  it("blocks despesa creation when the user lacks the movement permission", async () => {
     const response = await app.inject({
       method: "POST",
-      url: "/api/movimentacoes",
+      url: "/api/despesas",
       payload: {
         empresaId: empresaA,
-        tipo: "despesa",
         dataReferencia: "2026-06-10",
         dataVencimento: "2026-06-10",
         descricao: "Despesa sem permissao",

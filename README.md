@@ -108,15 +108,28 @@ Cada conta tem um role tecnico: `usuario_comum`, `usuario_admin` ou `admin`. O `
 As permissoes efetivas sao a soma de permissoes diretas do usuario, permissoes dos cargos ativos do colaborador vinculado e permissoes do setor. Para `usuario_admin`, todas as permissoes tambem entram nessa soma. O menu do Web Vue e filtrado apenas por permissoes efetivas. O usuario `diretor@email.com` e seedado como `usuario_admin` e com o cargo **Diretor Geral**.
 
 - Diretor Geral: todas as permissoes.
-- Caixa: entradas, transferencias, despesas, mercadorias, retiradas, fechamento com diferenca e relatorio de produtos mais vendidos.
+- Caixa: entradas, transferencias, despesas, mercadorias, retiradas, operar caixa, fechamento com diferenca e relatorio de produtos mais vendidos.
 - Tesouraria: cadastro de malotes e transferencias.
-- Gerencia: movimentacoes, fechamento, relatorio de produtos, promocoes, faltas/atestados, advertencias/suspensoes, pedidos, perdas/sobras, estoque, DRE e clientes.
+- Gerencia: movimentacoes, operar/gerenciar caixas, fechamento, relatorio de produtos, promocoes, faltas/atestados, advertencias/suspensoes, pedidos, perdas/sobras, estoque, DRE e clientes.
 - Compras: pedidos, mercadorias, fornecedores e produtos.
 - DP: despesas, colaboradores e folha ponto.
 - RH: avaliacao de qualidade e avaliacao de colaboradores.
 - Fiscal: relatorio fiscal e cadastro fiscal de produtos.
 - Diretor de Operacoes: DRE, patrimonio, ficha tecnica e ingredientes.
 - Financeiro: crediario, notas fiscais, contas a pagar, movimentacoes, DRE, grupos de vendas, PDV e formas de pagamento.
+
+## Caixa operacional
+
+O caixa agora e aberto e fechado por usuario e PDV. O seed cria o cadastro `PDV 01`, vinculado a conta `Caixa loja`.
+
+- `/api/caixa/status?empresaId=...`: retorna o caixa aberto do usuario e o resumo por `caixaId`.
+- `/api/caixa/abrir`: exige `operar_caixa`, PDV ativo com conta vinculada e bloqueia periodo ja aberto/fechado para o mesmo PDV.
+- `/api/caixa/:caixaId/abertura`: edita abertura com token, registra auditoria em `edicoes_caixa` e troca o token.
+- `/api/caixa/:caixaId/acertar-saldo`: quando o saldo do caixa e positivo, cria despesa `Diferenca de caixa`, item em `itens_despesas` e debito `FECHAMENTO_CAIXA` em `debitos_colaboradores`.
+- `/api/caixa/:caixaId/fechar`: fecha somente quando o saldo calculado nao exige acerto.
+- `/api/caixa/historico?empresaId=...`: exige `gerenciar_caixas` e retorna o historico com token de edicao.
+
+Movimentacoes novas gravam `caixa_id`. Transferencias vinculadas ao caixa precisam envolver a conta do PDV aberto. As telas de transferencias, despesas, mercadorias, retiradas, fechamento e relatorio de produtos ficam bloqueadas no front sem caixa aberto; entradas continuam visiveis para consulta, mas criar entrada tambem exige caixa aberto.
 
 ## Isolamento por empresa
 

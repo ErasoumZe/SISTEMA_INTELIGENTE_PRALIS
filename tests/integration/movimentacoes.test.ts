@@ -53,39 +53,49 @@ describe("movimentacoes", () => {
     mocks.criarMovimentacao.mockResolvedValue({ id: "mov-1", computar: true });
   });
 
-  it("Deve_Retornar401_Quando_ListarMovimentacoesSemSessao", async () => {
+  it("Deve_Retornar404_Quando_UsarRotaLegadaDeMovimentacoes", async () => {
+    // Arrange / Act
+    const resposta = await requisitar(app, { method: "GET", url: "/api/movimentacoes" });
+
+    // Assert
+    expect(resposta.statusCode).toBe(404);
+    expect(mocks.listarMovimentacoes).not.toHaveBeenCalled();
+    expect(mocks.criarMovimentacao).not.toHaveBeenCalled();
+  });
+
+  it("Deve_Retornar401_Quando_ListarEntradasSemSessao", async () => {
     // Arrange
     mocks.getSession.mockResolvedValueOnce(null);
 
     // Act
-    const resposta = await app.inject({ method: "GET", url: "/api/movimentacoes" });
+    const resposta = await app.inject({ method: "GET", url: "/api/entradas" });
 
     // Assert
     expect(resposta.statusCode).toBe(401);
     expect(mocks.listarMovimentacoes).not.toHaveBeenCalled();
   });
 
-  it("Deve_ListarMovimentacoesDasEmpresasPermitidas_Quando_NaoInformarEmpresa", async () => {
+  it("Deve_ListarEntradasDasEmpresasPermitidas_Quando_NaoInformarEmpresa", async () => {
     // Arrange / Act
-    const resposta = await requisitar(app, { method: "GET", url: "/api/movimentacoes?tipo=entrada" });
+    const resposta = await requisitar(app, { method: "GET", url: "/api/entradas" });
 
     // Assert
     expect(resposta.statusCode).toBe(200);
     expect(mocks.listarMovimentacoes).toHaveBeenCalledWith({ tipo: "entrada" }, [empresaA]);
   });
 
-  it("Deve_ListarMovimentacoesDaEmpresaAtiva_Quando_EmpresaPermitida", async () => {
+  it("Deve_ListarEntradasDaEmpresaAtiva_Quando_EmpresaPermitida", async () => {
     // Arrange / Act
-    const resposta = await requisitar(app, { method: "GET", url: `/api/movimentacoes?empresaId=${empresaA}` });
+    const resposta = await requisitar(app, { method: "GET", url: `/api/entradas?empresaId=${empresaA}` });
 
     // Assert
     expect(resposta.statusCode).toBe(200);
-    expect(mocks.listarMovimentacoes).toHaveBeenCalledWith({ empresaId: empresaA }, [empresaA]);
+    expect(mocks.listarMovimentacoes).toHaveBeenCalledWith({ empresaId: empresaA, tipo: "entrada" }, [empresaA]);
   });
 
-  it("Deve_Retornar403_Quando_ListarMovimentacoesDeEmpresaNaoPermitida", async () => {
+  it("Deve_Retornar403_Quando_ListarEntradasDeEmpresaNaoPermitida", async () => {
     // Arrange / Act
-    const resposta = await requisitar(app, { method: "GET", url: `/api/movimentacoes?empresaId=${empresaB}` });
+    const resposta = await requisitar(app, { method: "GET", url: `/api/entradas?empresaId=${empresaB}` });
 
     // Assert
     expect(resposta.statusCode).toBe(403);
@@ -93,12 +103,12 @@ describe("movimentacoes", () => {
     expect(mocks.listarMovimentacoes).not.toHaveBeenCalled();
   });
 
-  it("Deve_CriarMovimentacao_Quando_EmpresaPermitidaEPayloadValido", async () => {
+  it("Deve_CriarEntrada_Quando_EmpresaPermitidaEPayloadValido", async () => {
     // Arrange
     const payload = payloadMovimentacao();
 
     // Act
-    const resposta = await requisitar(app, { method: "POST", url: "/api/movimentacoes", payload });
+    const resposta = await requisitar(app, { method: "POST", url: "/api/entradas", payload });
 
     // Assert
     expect(resposta.statusCode).toBe(201);
@@ -109,11 +119,11 @@ describe("movimentacoes", () => {
     );
   });
 
-  it("Deve_Retornar403_Quando_CriarMovimentacaoDeEmpresaNaoPermitida", async () => {
+  it("Deve_Retornar403_Quando_CriarEntradaDeEmpresaNaoPermitida", async () => {
     // Arrange / Act
     const resposta = await requisitar(app, {
       method: "POST",
-      url: "/api/movimentacoes",
+      url: "/api/entradas",
       payload: payloadMovimentacao(empresaB)
     });
 
@@ -123,12 +133,12 @@ describe("movimentacoes", () => {
     expect(mocks.criarMovimentacao).not.toHaveBeenCalled();
   });
 
-  it("Deve_Retornar400_Quando_CriarMovimentacaoComPayloadInvalido", async () => {
+  it("Deve_Retornar400_Quando_CriarEntradaComPayloadInvalido", async () => {
     // Arrange
     const payload = { ...payloadMovimentacao(), descricao: "" };
 
     // Act
-    const resposta = await requisitar(app, { method: "POST", url: "/api/movimentacoes", payload });
+    const resposta = await requisitar(app, { method: "POST", url: "/api/entradas", payload });
 
     // Assert
     expect(resposta.statusCode).toBe(400);
@@ -143,7 +153,7 @@ describe("movimentacoes", () => {
     mocks.criarMovimentacao.mockRejectedValueOnce(new PermissaoMovimentacaoInsuficienteError("despesas"));
 
     // Act
-    const resposta = await requisitar(app, { method: "POST", url: "/api/movimentacoes", payload: payloadMovimentacao() });
+    const resposta = await requisitar(app, { method: "POST", url: "/api/despesas", payload: payloadMovimentacao() });
 
     // Assert
     expect(resposta.statusCode).toBe(403);
@@ -155,7 +165,7 @@ describe("movimentacoes", () => {
     mocks.criarMovimentacao.mockRejectedValueOnce(new Error("Conta de origem obrigatoria"));
 
     // Act
-    const resposta = await requisitar(app, { method: "POST", url: "/api/movimentacoes", payload: payloadMovimentacao() });
+    const resposta = await requisitar(app, { method: "POST", url: "/api/transferencias", payload: payloadMovimentacao() });
 
     // Assert
     expect(resposta.statusCode).toBe(400);

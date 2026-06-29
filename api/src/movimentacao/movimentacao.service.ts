@@ -6,6 +6,7 @@ import type {
   MovimentoDto
 } from "@padaria/shared/movimentacao";
 import { deveComputarMercadoria, permissaoPorTipoMovimentacao } from "../regras.js";
+import { obterCaixaAbertoParaMovimentacao } from "../caixa/caixa.service.js";
 import {
   criarMovimentacaoFinanceira,
   listarMovimentacoesFinanceiras,
@@ -25,8 +26,25 @@ function arredondar(valor: number): number {
 }
 
 export function validarMovimentacaoFinanceira(dados: MovimentacaoPayload): void {
-  if (dados.tipo !== "transferencia" && !dados.dataVencimento) {
+  if (["despesa", "mercadoria", "retirada"].includes(dados.tipo) && !dados.dataVencimento) {
     throw new Error("Data de vencimento obrigatoria");
+  }
+
+  if (dados.tipo === "entrada") {
+    const itensVenda = dados.itensVenda ?? [];
+    const tiposPagamento = dados.tiposPagamento ?? [];
+    if (itensVenda.length) {
+      const soma = arredondar(itensVenda.reduce((total, item) => total + item.valorTotal, 0));
+      if (soma !== arredondar(dados.valorOriginal)) {
+        throw new Error("Soma dos itens da venda deve bater com o valor original");
+      }
+    }
+    if (tiposPagamento.length) {
+      const soma = arredondar(tiposPagamento.reduce((total, item) => total + item.totalPago, 0));
+      if (soma !== arredondar(dados.valorOriginal)) {
+        throw new Error("Soma dos pagamentos da venda deve bater com o valor original");
+      }
+    }
   }
 
   if (dados.tipo === "transferencia") {
@@ -43,6 +61,10 @@ export function validarMovimentacaoFinanceira(dados: MovimentacaoPayload): void 
         throw new Error("Soma dos itens da despesa deve bater com o valor original");
       }
     }
+  }
+
+  if (dados.tipo === "retirada") {
+    if (!dados.colaboradorId) throw new Error("Colaborador obrigatorio");
   }
 
   if (dados.tipo === "mercadoria") {
@@ -93,7 +115,15 @@ export async function criarMovimentacao(
 
   const computar =
     dados.tipo === "mercadoria" ? deveComputarMercadoria(dados.temNotaFiscal, dados.computar) : dados.computar;
-  const movimentacao = await criarMovimentacaoFinanceira(dados, computar, perfil.usuarioId);
+  const caixa = await obterCaixaAbertoParaMovimentacao(dados.empresaId, perfil.usuarioId);
+  if (
+    dados.tipo === "transferencia" &&
+    dados.contaOrigemId !== caixa.pdvContaId &&
+    dados.contaDestinoId !== caixa.pdvContaId
+  ) {
+    throw new Error("Transferencia precisa envolver a conta do PDV aberto");
+  }
+  const movimentacao = await criarMovimentacaoFinanceira(dados, computar, perfil.usuarioId, caixa.id);
 
   return { id: movimentacao.id, computar };
 }

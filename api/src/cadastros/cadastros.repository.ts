@@ -6,9 +6,11 @@ import {
   colaboradores,
   contas,
   empresas,
+  formasPagamento,
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
+  pdvs,
   permissoesCargos,
   permissoesSetores,
   permissoesUsuarios,
@@ -79,6 +81,63 @@ export async function salvarContaRepository(
     .values({ empresaId: input.empresaId, nome: input.nome })
     .returning({ id: contas.id });
   return criada;
+}
+
+export async function salvarFormaPagamentoRepository(
+  input: { id?: string; empresaId: string; nome: string },
+  db: ExecutorBanco = banco
+) {
+  if (input.id) {
+    await db
+      .update(formasPagamento)
+      .set({ nome: input.nome, atualizadoEm: new Date() })
+      .where(and(eq(formasPagamento.id, input.id), eq(formasPagamento.empresaId, input.empresaId)));
+    return { id: input.id, empresaId: input.empresaId, nome: input.nome };
+  }
+  const [criada] = await db
+    .insert(formasPagamento)
+    .values({ empresaId: input.empresaId, nome: input.nome })
+    .returning({ id: formasPagamento.id });
+  return criada;
+}
+
+export async function buscarContaEmpresaRepository(contaId: string, db: ExecutorBanco = banco) {
+  const [conta] = await db
+    .select({ id: contas.id, empresaId: contas.empresaId })
+    .from(contas)
+    .where(eq(contas.id, contaId))
+    .limit(1);
+  return conta ?? null;
+}
+
+export async function salvarPdvRepository(
+  input: { id?: string; empresaId: string; nome: string; codigo: string | null; contaId: string; ativo: boolean },
+  db: ExecutorBanco = banco
+) {
+  if (input.id) {
+    await db
+      .update(pdvs)
+      .set({
+        nome: input.nome,
+        codigo: input.codigo,
+        contaId: input.contaId,
+        ativo: input.ativo,
+        atualizadoEm: new Date()
+      })
+      .where(and(eq(pdvs.id, input.id), eq(pdvs.empresaId, input.empresaId)));
+    return input;
+  }
+  const [criado] = await db
+    .insert(pdvs)
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      codigo: input.codigo,
+      contaId: input.contaId,
+      ativo: input.ativo
+    })
+    .returning({ id: pdvs.id });
+  return criado;
 }
 
 export async function salvarUnidadeRepository(

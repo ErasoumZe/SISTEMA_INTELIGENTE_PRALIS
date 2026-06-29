@@ -1,9 +1,19 @@
 <script setup lang="ts">
 import type { AuthSession, Permissao, TemaAplicacao, TipoMovimentacao } from "@padaria/shared";
-import type { CadastroForm, Movimento, MovimentoForm, Opcao, Opcoes, ResumoCaixa, TreeItem } from "~/types/padaria";
+import type {
+  CadastroForm,
+  CaixaStatus,
+  Movimento,
+  MovimentoForm,
+  Opcao,
+  Opcoes,
+  ResumoCaixa,
+  TreeItem
+} from "~/types/padaria";
 import {
   cadastroPayload,
   dinheiro,
+  endpointMovimentoPorTipo,
   formCadastroVazio,
   formMovimentoVazio,
   itemPorTela,
@@ -40,6 +50,7 @@ const opcoes = ref<Opcoes>(opcoesVazias());
 const empresas = ref<Opcao[]>([]);
 const movimentos = ref<Movimento[]>([]);
 const resumo = ref<ResumoCaixa | null>(null);
+const caixaStatus = ref<CaixaStatus | null>(null);
 const telaAtiva = ref(props.telaInicial && itemPorTela[props.telaInicial] ? props.telaInicial : "entradas");
 const empresaSelecionadaId = ref("");
 const carregando = ref(true);
@@ -71,7 +82,18 @@ const itensMercadoria = ref([
     unidadeMedidaId: ""
   }
 ]);
+const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }]);
+const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoMovimento = ref(false);
+const caixaSalvando = ref(false);
+const modalCaixaDrawerAberto = ref(false);
+const modoCaixaDrawer = ref<"abrir" | "editar">("abrir");
+const tokenCaixaConfirmado = ref(false);
+const formCaixaDrawer = reactive({
+  pdvId: "",
+  dataHoraAbertura: "",
+  tokenEdicao: ""
+});
 
 const formMalote = ref({ codigo: "", lacres: [""] });
 const maloteEditandoId = ref("");
@@ -97,6 +119,15 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaMovimentos = ref(1);
+const telasDependemCaixa = new Set([
+  "entradas",
+  "transferencias",
+  "despesas",
+  "mercadorias",
+  "retiradas",
+  "fechamento",
+  "relatorio_produtos"
+]);
 
 const empresasDisponiveis = computed(() => empresas.value);
 const empresaId = computed(() => empresaSelecionadaId.value);
@@ -111,9 +142,22 @@ const colaboradoresDisponiveisUsuario = computed(() =>
 );
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const podeConfigurarTema = computed(() => permissoesUsuario.value.includes("configurar_tema"));
+const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
+const perfilCaixaOperacional = computed(
+  () =>
+    Boolean(sessao.value?.perfil) &&
+    sessao.value?.perfil?.role === "usuario_comum" &&
+    permissoesUsuario.value.includes("operar_caixa") &&
+    !permissoesUsuario.value.includes("gerenciar_caixas")
+);
+const telaBloqueadaPorCaixa = computed(() => telasDependemCaixa.has(telaAtiva.value) && !caixaAberto.value);
 const telasPermitidas = computed(() => {
   return Object.values(itemPorTela).filter((item) => permissoesUsuario.value.includes(item.permissao));
 });
+const telasShell = computed(() => {
+  return telasPermitidas.value.filter((item) => item.id !== "caixa");
+});
+const telasDesabilitadasPorCaixa = computed(() => (!caixaAberto.value ? [...telasDependemCaixa] : []));
 const telaAtual = computed(() => itemPorTela[telaAtiva.value] ?? telasPermitidas.value[0]);
 const movimentosDaTela = computed(() => {
   const tipo = movimentoPorTela[telaAtiva.value];
@@ -123,12 +167,19 @@ const totalPaginasMovimentos = computed(() => Math.max(1, Math.ceil(movimentosDa
 const movimentosPaginados = computed(() =>
   movimentosDaTela.value.slice((paginaMovimentos.value - 1) * 10, paginaMovimentos.value * 10)
 );
-const acoesNovo = computed(() => opcoesNovo.filter((item) => permissoesUsuario.value.includes(item.permissao)));
+const acoesNovo = computed(() => {
+  if (!caixaAberto.value) return [];
+  return opcoesNovo.filter((item) => permissoesUsuario.value.includes(item.permissao));
+});
 const totalItensDespesa = computed(() =>
   itensDespesa.value.reduce((total, item) => total + Number(item.valor || 0), 0)
 );
 const totalItensMercadoria = computed(() =>
   itensMercadoria.value.reduce((total, item) => total + Number(item.valorTotal || 0), 0)
+);
+const totalItensVenda = computed(() => itensVenda.value.reduce((total, item) => total + Number(item.valorTotal || 0), 0));
+const totalTiposPagamento = computed(() =>
+  tiposPagamento.value.reduce((total, item) => total + Number(item.totalPago || 0), 0)
 );
 const valorTotalMovimento = computed(() =>
   Math.max(
@@ -153,6 +204,12 @@ watch([discriminandoMercadoria, totalItensMercadoria], () => {
     form.value.valorOriginal = totalItensMercadoria.value ? totalItensMercadoria.value.toFixed(2) : "";
 });
 
+watch([totalItensVenda, totalTiposPagamento, tipoNovo], () => {
+  if (tipoNovo.value !== "entrada") return;
+  const totalDetalhado = totalItensVenda.value || totalTiposPagamento.value;
+  if (totalDetalhado) form.value.valorOriginal = totalDetalhado.toFixed(2);
+});
+
 watch(
   () => form.value.temNotaFiscal,
   (temNota) => {
@@ -168,6 +225,47 @@ function notificar(text: string, color = "success") {
   snackbar.text = text;
   snackbar.color = color;
   snackbar.show = true;
+}
+
+function dataHoraLocal(valor: Date | string = new Date()) {
+  const data = new Date(valor);
+  data.setMinutes(data.getMinutes() - data.getTimezoneOffset());
+  return data.toISOString().slice(0, 16);
+}
+
+function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
+  modoCaixaDrawer.value = modo;
+  tokenCaixaConfirmado.value = false;
+  formCaixaDrawer.tokenEdicao = "";
+  formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
+  formCaixaDrawer.dataHoraAbertura = caixaAberto.value
+    ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
+    : dataHoraLocal();
+  modalCaixaDrawerAberto.value = true;
+}
+
+async function salvarCaixaDrawer() {
+  if (modoCaixaDrawer.value === "abrir") {
+    const ok = await abrirCaixaOperacional({
+      pdvId: formCaixaDrawer.pdvId,
+      usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
+      dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
+      observacao: null
+    });
+    if (ok) modalCaixaDrawerAberto.value = false;
+    return;
+  }
+
+  if (!caixaAberto.value) return;
+  const ok = await editarAberturaCaixa({
+    caixaId: caixaAberto.value.id,
+    tokenEdicao: formCaixaDrawer.tokenEdicao,
+    pdvId: formCaixaDrawer.pdvId,
+    usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
+    dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
+    observacao: null
+  });
+  if (ok) modalCaixaDrawerAberto.value = false;
 }
 
 function temPermissao(permissao: Permissao) {
@@ -197,12 +295,13 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
   try {
+    await carregarStatusCaixa(idEmpresa);
     if (tela === "empresas") {
       await carregarEmpresas();
     } else {
       await carregarDadosPagina(idEmpresa, tela);
     }
-    await Promise.all([carregarMovimentos(idEmpresa), carregarResumo(idEmpresa)]);
+    await carregarMovimentos(idEmpresa);
   } finally {
     empresaCarregando.value = false;
   }
@@ -220,8 +319,20 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   const dados = opcoesVazias();
   dados.empresas = empresas.value;
 
-  if (["entradas", "caixa", "fechamento"].includes(tela)) {
+  if (tela === "entradas") {
+    [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
+      apiGet<Opcao[]>(`/api/contas${query}`),
+      apiGet<Opcao[]>(`/api/produtos${query}`),
+      apiGet<Opcao[]>(`/api/pdvs${query}`),
+      apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
+    ]);
+  } else if (tela === "fechamento") {
     dados.contas = await apiGet<Opcao[]>(`/api/contas${query}`);
+  } else if (tela === "caixa" || tela === "pdv") {
+    [dados.contas, dados.pdvs] = await Promise.all([
+      apiGet<Opcao[]>(`/api/contas${query}`),
+      apiGet<Opcao[]>(`/api/pdvs${query}`)
+    ]);
   } else if (tela === "transferencias") {
     [dados.contas, dados.malotes] = await Promise.all([
       apiGet<Opcao[]>(`/api/contas${query}`),
@@ -298,6 +409,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.feriados = await apiGet<Opcao[]>(`/api/feriados${query}`);
   } else if (tela === "fornecedores") {
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+  } else if (tela === "formas_pagamento") {
+    dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
   } else if (tela === "produtos") {
     const [produtos, grupos, unidades] = await Promise.all([
       apiGet<Opcao[]>(`/api/produtos${query}`),
@@ -307,6 +420,13 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.produtos = produtos;
     dados.gruposMercadorias = grupos.gruposMercadorias;
     dados.unidadesMedida = unidades;
+  }
+
+  if (permissoesUsuario.value.includes("operar_caixa") && idEmpresa) {
+    const cargas: Promise<unknown>[] = [];
+    if (!dados.pdvs.length) cargas.push(apiGet<Opcao[]>(`/api/pdvs${query}`).then((pdvs) => (dados.pdvs = pdvs)));
+    if (!dados.contas.length) cargas.push(apiGet<Opcao[]>(`/api/contas${query}`).then((contas) => (dados.contas = contas)));
+    await Promise.all(cargas);
   }
 
   opcoes.value = dados;
@@ -328,11 +448,10 @@ async function carregarTudo() {
     }
     const telas = telasDoUsuario();
     if (!telas.includes(telaAtiva.value)) {
-      const destino = telas[0] ?? "entradas";
-      telaAtiva.value = destino;
-      await router.replace(rotaTela(destino));
+      erro.value = "Sem permissao para acessar esta pagina.";
       return;
     }
+    await carregarStatusCaixa(empresaId.value);
     await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(telaAtiva.value);
   } catch (error) {
@@ -344,21 +463,34 @@ async function carregarTudo() {
 
 async function carregarMovimentos(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
-  movimentos.value = await apiGet<Movimento[]>(`/api/movimentacoes?empresaId=${idEmpresa}`);
+  const tipo = movimentoPorTela[telaAtiva.value];
+  if (!tipo) return;
+  movimentos.value = await apiGet<Movimento[]>(`/api/${endpointMovimentoPorTipo[tipo]}?empresaId=${idEmpresa}`);
 }
 
-async function carregarResumo(idEmpresa = empresaId.value) {
+async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
-  resumo.value = await apiGet<ResumoCaixa>(
-    `/api/fechamento-caixa/resumo?empresaId=${idEmpresa}&data=${new Date().toISOString().slice(0, 10)}`
-  );
+  if (!permissoesUsuario.value.includes("operar_caixa")) {
+    caixaStatus.value = null;
+    resumo.value = null;
+    return;
+  }
+  caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${idEmpresa}`);
+  resumo.value = caixaStatus.value.resumo;
 }
 
 function abrirMovimento(tipo: TipoMovimentacao) {
+  if (!caixaAberto.value) {
+    notificar("Abra um caixa antes de registrar movimentacoes.", "warning");
+    void router.push("/caixa");
+    return;
+  }
   tipoNovo.value = tipo;
   form.value = formMovimentoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
+  itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
+  tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
   itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
   itensMercadoria.value = [
     {
@@ -399,14 +531,41 @@ async function salvarMovimento() {
               valorTotal: Number(item.valorTotal || 0)
             }))
         : [];
+    const itensVendaPayload =
+      tipoNovo.value === "entrada"
+        ? itensVenda.value
+            .filter((item) => item.descricaoProduto || item.produtoId || item.valorTotal)
+            .map((item) => {
+              const produto = opcoesEmpresa.value.produtos.find((opcao) => opcao.id === item.produtoId);
+              return {
+                produtoId: item.produtoId || null,
+                descricaoProduto: item.descricaoProduto || produto?.descricao || produto?.nome || "Venda",
+                quantidade: Number(item.quantidade || 0),
+                valorUnitario: Number(item.valorUnitario || 0),
+                valorTotal: Number(item.valorTotal || 0)
+              };
+            })
+        : [];
+    const tiposPagamentoPayload =
+      tipoNovo.value === "entrada"
+        ? tiposPagamento.value
+            .filter((item) => item.formaPagamentoId || item.totalPago)
+            .map((item) => ({
+              formaPagamentoId: item.formaPagamentoId || null,
+              numeroVendas: Number(item.numeroVendas || 0),
+              totalPago: Number(item.totalPago || 0)
+            }))
+        : [];
 
-    const movimentoSalvo = await apiPost<{ id: string; computar: boolean }>("/api/movimentacoes", {
+    const movimentoSalvo = await apiPost<{ id: string; computar: boolean }>(`/api/${endpointMovimentoPorTipo[tipoNovo.value]}`, {
       empresaId: empresaId.value,
-      tipo: tipoNovo.value,
       ...form.value,
+      dataPagamento: form.value.dataPagamento || null,
       valorOriginal: Number(form.value.valorOriginal || 0),
       valorAcrescimo: Number(form.value.valorAcrescimo || 0),
       valorDesconto: Number(form.value.valorDesconto || 0),
+      itensVenda: itensVendaPayload,
+      tiposPagamento: tiposPagamentoPayload,
       itensDespesa: itensDespesaPayload,
       itensMercadoria: itensMercadoriaPayload
     });
@@ -422,7 +581,7 @@ async function salvarMovimento() {
     });
     modalMovimentoAberto.value = false;
     notificar("Movimentacao salva com sucesso.");
-    await carregarResumo(empresaId.value);
+    await carregarStatusCaixa(empresaId.value);
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -509,6 +668,9 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
     email: linha.email ?? "",
     cpf: linha.cpf ?? "",
     sigla: linha.sigla ?? "",
+    codigo: linha.codigo ?? "",
+    contaId: linha.contaId ?? "",
+    ativo: linha.ativo !== "Nao",
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
     grupoPaiId: linha.grupoPaiId ?? "",
     tipoAreaSetor:
@@ -579,16 +741,81 @@ async function salvarTema() {
   }
 }
 
-async function acertarSaldo() {
+async function abrirCaixaOperacional(payload: {
+  pdvId: string;
+  usuarioCaixaId: string;
+  dataHoraAbertura: string;
+  observacao: string | null;
+}) {
+  caixaSalvando.value = true;
   try {
-    await apiPost("/api/fechamento-caixa/acertar-saldo", {
+    caixaStatus.value = await apiPost<CaixaStatus>("/api/caixa/abrir", {
       empresaId: empresaId.value,
-      data: new Date().toISOString().slice(0, 10)
+      ...payload
     });
-    notificar("Saldo ajustado com sucesso.");
-    await carregarResumo(empresaId.value);
+    resumo.value = caixaStatus.value.resumo;
+    notificar("Caixa aberto com sucesso.");
+    return true;
   } catch (error) {
     notificar(mensagemErro(error), "error");
+    return false;
+  } finally {
+    caixaSalvando.value = false;
+  }
+}
+
+async function editarAberturaCaixa(payload: {
+  caixaId: string;
+  tokenEdicao: string;
+  pdvId: string;
+  usuarioCaixaId: string;
+  dataHoraAbertura: string;
+  observacao: string | null;
+}) {
+  caixaSalvando.value = true;
+  try {
+    const { caixaId, ...body } = payload;
+    caixaStatus.value = await apiPut<CaixaStatus>(`/api/caixa/${caixaId}/abertura`, body);
+    resumo.value = caixaStatus.value.resumo;
+    notificar("Abertura atualizada com sucesso.");
+    return true;
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+    return false;
+  } finally {
+    caixaSalvando.value = false;
+  }
+}
+
+async function acertarSaldoOperacional(payload: { caixaId: string; observacao: string | null }) {
+  if (!resumo.value || !window.confirm(`A diferenca de ${dinheiro(resumo.value.saldo)} sera atribuida ao usuario do caixa.`)) {
+    return;
+  }
+  caixaSalvando.value = true;
+  try {
+    await apiPost(`/api/caixa/${payload.caixaId}/acertar-saldo`, { observacao: payload.observacao });
+    notificar("Saldo ajustado com sucesso.");
+    await carregarStatusCaixa(empresaId.value);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    caixaSalvando.value = false;
+  }
+}
+
+async function fecharCaixaOperacional(payload: { caixaId: string; observacao: string | null }) {
+  caixaSalvando.value = true;
+  try {
+    caixaStatus.value = await apiPost<CaixaStatus>(`/api/caixa/${payload.caixaId}/fechar`, {
+      observacao: payload.observacao
+    });
+    resumo.value = caixaStatus.value.resumo;
+    notificar("Caixa fechado com sucesso.");
+    await carregarMovimentos(empresaId.value);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    caixaSalvando.value = false;
   }
 }
 
@@ -606,6 +833,16 @@ function dadosCadastro(tela: string): Array<Record<string, string | undefined>> 
   const listas = tela === "empresas" ? opcoes.value : opcoesEmpresa.value;
   if (tela === "empresas") return empresas.value.map((item) => ({ id: item.id, nome: item.nome }));
   if (tela === "contas") return listas.contas.map((item) => ({ id: item.id, nome: item.nome }));
+  if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
+  if (tela === "pdv")
+    return listas.pdvs.map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      codigo: item.codigo,
+      conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
+      contaId: item.contaId,
+      ativo: item.ativo === false ? "Nao" : "Sim"
+    }));
   if (tela === "fornecedores")
     return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, email: item.email }));
   if (tela === "produtos")
@@ -721,6 +958,7 @@ function descricaoTela(tela: string) {
   const descricoes: Record<string, string> = {
     empresas: "Empresas disponiveis no sistema.",
     contas: "Contas usadas nos lancamentos financeiros.",
+    formas_pagamento: "Formas de pagamento usadas nas vendas.",
     grupos: "Hierarquia de grupos de despesas, mercadorias e retiradas.",
     unidades: "Unidades de medida usadas nos produtos.",
     areas_setores: "Areas e setores organizacionais.",
@@ -730,7 +968,8 @@ function descricaoTela(tela: string) {
     colaboradores: "Cadastro de colaboradores.",
     feriados: "Feriados por empresa.",
     fornecedores: "Cadastro de fornecedores.",
-    produtos: "Cadastro de produtos."
+    produtos: "Cadastro de produtos.",
+    pdv: "Pontos de venda vinculados a uma conta de caixa."
   };
   return descricoes[tela] ?? "Cadastro operacional.";
 }
@@ -739,6 +978,8 @@ function colunasCadastro(tela: string) {
   const colunas: Record<string, string[]> = {
     empresas: ["Nome"],
     contas: ["Nome"],
+    formas_pagamento: ["Nome"],
+    pdv: ["Nome", "Codigo", "Conta", "Ativo"],
     grupos: ["Nome", "Tipo"],
     unidades: ["Nome", "Sigla"],
     areas_setores: ["Nome", "Tipo"],
@@ -888,16 +1129,44 @@ onMounted(() => {
   <AppShell
     v-else-if="sessao"
     :sessao="sessao"
-    :telas="telasPermitidas"
+    :telas="telasShell"
     :tela-ativa="telaAtiva"
     :empresas="empresasDisponiveis"
     :empresa-id="empresaSelecionadaId"
+    :caixa-status="caixaStatus"
+    :telas-desabilitadas="telasDesabilitadasPorCaixa"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
     @logout="logout"
   >
-    <template #actions>
+    <template #caixa>
+      <div v-if="permissoesUsuario.includes('operar_caixa')" class="caixa-card">
+        <div v-if="caixaAberto" class="d-flex align-start justify-space-between ga-2">
+          <div>
+            <div class="caixa-title">Caixa: {{ caixaAberto.pdvNome }}</div>
+            <div class="caixa-meta">Aberto em: {{ new Date(caixaAberto.dataHoraAbertura).toLocaleString("pt-BR") }}</div>
+          </div>
+          <span class="status-pill">Aberto</span>
+        </div>
+        <div v-else>
+          <div class="caixa-title">Nao ha caixa aberto</div>
+          <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
+        </div>
+        <v-btn
+          class="mt-4 caixa-edit"
+          block
+          size="small"
+          variant="tonal"
+          :prepend-icon="caixaAberto ? 'mdi-pencil' : 'mdi-cash-register'"
+          @click="abrirModalCaixaDrawer(caixaAberto ? 'editar' : 'abrir')"
+        >
+          {{ caixaAberto ? "Editar" : "Abrir caixa" }}
+        </v-btn>
+      </div>
+    </template>
+
+    <template v-if="acoesNovo.length" #actions>
       <v-menu>
         <template #activator="{ props: menuProps }">
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
@@ -929,8 +1198,12 @@ onMounted(() => {
     <div>
       <v-alert v-if="empresaCarregando" type="info" variant="tonal" class="mb-4">Carregando dados...</v-alert>
 
+      <v-alert v-if="telaBloqueadaPorCaixa" type="warning" variant="tonal" class="mb-4">
+        Abra um caixa antes de acessar esta tela.
+      </v-alert>
+
       <MovimentosPage
-        v-if="tipoPagina === 'movimentos'"
+        v-else-if="tipoPagina === 'movimentos'"
         :resumo="resumo"
         :tela-atual="telaAtual"
         :tela-ativa="telaAtiva"
@@ -944,7 +1217,18 @@ onMounted(() => {
         @update:pagina="paginaMovimentos = $event"
       />
 
-      <CaixaResumoPage v-else-if="tipoPagina === 'caixa'" :resumo="resumo" @acertar-saldo="acertarSaldo" />
+      <CaixaResumoPage
+        v-else-if="tipoPagina === 'caixa'"
+        :resumo="resumo"
+        :status="caixaStatus"
+        :pdvs="opcoesEmpresa.pdvs"
+        :usuario-id="sessao?.perfil?.usuarioId || ''"
+        :usuario-nome="sessao?.perfil?.nome || sessao?.user?.name || 'Usuario'"
+        :salvando="caixaSalvando"
+        @abrir-caixa="abrirCaixaOperacional"
+        @acertar-saldo="acertarSaldoOperacional"
+        @fechar-caixa="fecharCaixaOperacional"
+      />
 
       <RelatorioProdutos v-else-if="tipoPagina === 'relatorio_produtos'" :empresa-id="empresaId" />
 
@@ -978,6 +1262,76 @@ onMounted(() => {
       <PlaceholderPage v-else :tela-atual="telaAtual" />
     </div>
 
+    <v-dialog v-model="modalCaixaDrawerAberto" max-width="680">
+      <v-card>
+        <v-card-title>{{ modoCaixaDrawer === "abrir" ? "Abrir caixa" : "Editar abertura" }}</v-card-title>
+        <v-card-text>
+          <v-row v-if="modoCaixaDrawer === 'abrir'" dense>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCaixaDrawer.pdvId"
+                :items="opcoesEmpresa.pdvs"
+                item-title="nome"
+                item-value="id"
+                label="PDV"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="formCaixaDrawer.dataHoraAbertura"
+                type="datetime-local"
+                label="Data e hora de abertura"
+              />
+            </v-col>
+          </v-row>
+          <v-row v-else dense>
+            <v-col v-if="!tokenCaixaConfirmado" cols="12">
+              <v-text-field v-model="formCaixaDrawer.tokenEdicao" label="Codigo de edicao" autofocus />
+            </v-col>
+            <template v-else>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="formCaixaDrawer.pdvId"
+                  :items="opcoesEmpresa.pdvs"
+                  item-title="nome"
+                  item-value="id"
+                  label="PDV"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="formCaixaDrawer.dataHoraAbertura"
+                  type="datetime-local"
+                  label="Data e hora de abertura"
+                />
+              </v-col>
+            </template>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="outlined" :disabled="caixaSalvando" @click="modalCaixaDrawerAberto = false">Cancelar</v-btn>
+          <v-btn
+            v-if="modoCaixaDrawer === 'editar' && !tokenCaixaConfirmado"
+            color="primary"
+            :disabled="!formCaixaDrawer.tokenEdicao"
+            @click="tokenCaixaConfirmado = true"
+          >
+            Continuar
+          </v-btn>
+          <v-btn
+            v-else
+            color="primary"
+            :loading="caixaSalvando"
+            :disabled="!formCaixaDrawer.pdvId || !formCaixaDrawer.dataHoraAbertura"
+            @click="salvarCaixaDrawer"
+          >
+            Salvar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="modalMovimentoAberto" max-width="960" scrollable>
       <v-card>
         <v-card-title>{{ tipoNovo.charAt(0).toUpperCase() + tipoNovo.slice(1) }}</v-card-title>
@@ -998,7 +1352,11 @@ onMounted(() => {
             /></v-col>
             <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao" /></v-col>
             <v-col cols="12"><v-textarea v-model="form.observacao" label="Observacao" rows="2" /></v-col>
-            <v-col v-if="['entrada', 'despesa', 'transferencia'].includes(tipoNovo)" cols="12" md="6">
+            <v-col
+              v-if="['entrada', 'despesa', 'transferencia', 'mercadoria', 'retirada'].includes(tipoNovo)"
+              cols="12"
+              md="6"
+            >
               <v-select
                 v-model="form.contaOrigemId"
                 :items="opcoesEmpresa.contas"
@@ -1007,6 +1365,9 @@ onMounted(() => {
                 label="Conta origem"
               />
             </v-col>
+            <v-col v-if="['entrada', 'despesa', 'mercadoria', 'retirada'].includes(tipoNovo)" cols="12" md="6"
+              ><v-text-field v-model="form.dataPagamento" type="date" label="Data de pagamento"
+            /></v-col>
             <v-col v-if="tipoNovo === 'transferencia'" cols="12" md="6">
               <v-select
                 v-model="form.contaDestinoId"
@@ -1016,7 +1377,7 @@ onMounted(() => {
                 label="Conta destino"
               />
             </v-col>
-            <v-col v-if="['despesa', 'mercadoria', 'retirada'].includes(tipoNovo)" cols="12" md="6">
+            <v-col v-if="['despesa', 'mercadoria'].includes(tipoNovo)" cols="12" md="6">
               <v-select
                 v-model="form.fornecedorId"
                 :items="opcoesEmpresa.fornecedores"
@@ -1096,9 +1457,177 @@ onMounted(() => {
             <v-col cols="12" md="4"
               ><div class="text-caption text-muted">Total</div>
               <div class="text-h6">{{ dinheiro(valorTotalMovimento) }}</div></v-col
-            >
-          </v-row>
-        </v-card-text>
+	            >
+	          </v-row>
+	          <v-divider class="my-4" />
+	          <div v-if="tipoNovo === 'entrada'" class="d-grid ga-4">
+	            <section>
+	              <div class="d-flex align-center justify-space-between mb-2">
+	                <h3 class="text-subtitle-1">Itens da venda</h3>
+	                <v-btn
+	                  size="small"
+	                  variant="outlined"
+	                  prepend-icon="mdi-plus"
+	                  @click="itensVenda.push({ descricaoProduto: '', quantidade: '1', valorUnitario: '', valorTotal: '', produtoId: '' })"
+	                  >Adicionar item</v-btn
+	                >
+	              </div>
+	              <v-row v-for="(item, index) in itensVenda" :key="`venda-${index}`" dense>
+	                <v-col cols="12" md="4">
+	                  <v-select
+	                    v-model="item.produtoId"
+	                    :items="opcoesEmpresa.produtos"
+	                    item-title="descricao"
+	                    item-value="id"
+	                    label="Produto"
+	                    clearable
+	                  />
+	                </v-col>
+	                <v-col cols="12" md="3"><v-text-field v-model="item.descricaoProduto" label="Descricao" /></v-col>
+	                <v-col cols="6" md="2"><v-text-field v-model="item.quantidade" type="number" label="Qtd." /></v-col>
+	                <v-col cols="6" md="2"
+	                  ><v-text-field v-model="item.valorTotal" type="number" label="Total"
+	                /></v-col>
+	                <v-col cols="12" md="1" class="d-flex align-center justify-end">
+	                  <v-btn
+	                    icon="mdi-delete"
+	                    variant="text"
+	                    :disabled="itensVenda.length === 1"
+	                    @click="itensVenda.splice(index, 1)"
+	                  />
+	                </v-col>
+	              </v-row>
+	            </section>
+
+	            <section>
+	              <div class="d-flex align-center justify-space-between mb-2">
+	                <h3 class="text-subtitle-1">Tipos de pagamento</h3>
+	                <v-btn
+	                  size="small"
+	                  variant="outlined"
+	                  prepend-icon="mdi-plus"
+	                  @click="tiposPagamento.push({ formaPagamentoId: '', totalPago: '', numeroVendas: '1' })"
+	                  >Adicionar pagamento</v-btn
+	                >
+	              </div>
+	              <v-row v-for="(item, index) in tiposPagamento" :key="`pagamento-${index}`" dense>
+	                <v-col cols="12" md="5">
+	                  <v-select
+	                    v-model="item.formaPagamentoId"
+	                    :items="opcoesEmpresa.formasPagamento"
+	                    item-title="nome"
+	                    item-value="id"
+	                    label="Forma de pagamento"
+	                    clearable
+	                  />
+	                </v-col>
+	                <v-col cols="6" md="3"
+	                  ><v-text-field v-model="item.numeroVendas" type="number" label="Numero vendas"
+	                /></v-col>
+	                <v-col cols="6" md="3"
+	                  ><v-text-field v-model="item.totalPago" type="number" label="Total pago"
+	                /></v-col>
+	                <v-col cols="12" md="1" class="d-flex align-center justify-end">
+	                  <v-btn
+	                    icon="mdi-delete"
+	                    variant="text"
+	                    :disabled="tiposPagamento.length === 1"
+	                    @click="tiposPagamento.splice(index, 1)"
+	                  />
+	                </v-col>
+	              </v-row>
+	            </section>
+	          </div>
+
+	          <section v-if="tipoNovo === 'despesa'" class="mt-2">
+	            <v-switch v-model="discriminandoDespesa" label="Discriminar itens da despesa" color="primary" />
+	            <div v-if="discriminandoDespesa">
+	              <div class="d-flex justify-end mb-2">
+	                <v-btn
+	                  size="small"
+	                  variant="outlined"
+	                  prepend-icon="mdi-plus"
+	                  @click="itensDespesa.push({ descricao: '', valor: '', grupoDespesaId: '' })"
+	                  >Adicionar item</v-btn
+	                >
+	              </div>
+	              <v-row v-for="(item, index) in itensDespesa" :key="`despesa-${index}`" dense>
+	                <v-col cols="12" md="5"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
+	                <v-col cols="12" md="4">
+	                  <v-select
+	                    v-model="item.grupoDespesaId"
+	                    :items="opcoesEmpresa.gruposDespesas"
+	                    item-title="nome"
+	                    item-value="id"
+	                    label="Grupo"
+	                    clearable
+	                  />
+	                </v-col>
+	                <v-col cols="8" md="2"><v-text-field v-model="item.valor" type="number" label="Valor" /></v-col>
+	                <v-col cols="4" md="1" class="d-flex align-center justify-end">
+	                  <v-btn
+	                    icon="mdi-delete"
+	                    variant="text"
+	                    :disabled="itensDespesa.length === 1"
+	                    @click="itensDespesa.splice(index, 1)"
+	                  />
+	                </v-col>
+	              </v-row>
+	            </div>
+	          </section>
+
+	          <section v-if="tipoNovo === 'mercadoria'" class="mt-2">
+	            <v-switch v-model="discriminandoMercadoria" label="Discriminar mercadorias" color="primary" />
+	            <div v-if="discriminandoMercadoria">
+	              <div class="d-flex justify-end mb-2">
+	                <v-btn
+	                  size="small"
+	                  variant="outlined"
+	                  prepend-icon="mdi-plus"
+	                  @click="
+	                    itensMercadoria.push({
+	                      descricao: '',
+	                      quantidade: '1',
+	                      valorUnitario: '',
+	                      valorTotal: '',
+	                      produtoId: '',
+	                      grupoMercadoriaId: '',
+	                      unidadeMedidaId: ''
+	                    })
+	                  "
+	                  >Adicionar mercadoria</v-btn
+	                >
+	              </div>
+	              <v-row v-for="(item, index) in itensMercadoria" :key="`mercadoria-${index}`" dense>
+	                <v-col cols="12" md="4">
+	                  <v-select
+	                    v-model="item.produtoId"
+	                    :items="opcoesEmpresa.produtos"
+	                    item-title="descricao"
+	                    item-value="id"
+	                    label="Produto"
+	                    clearable
+	                  />
+	                </v-col>
+	                <v-col cols="12" md="3"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
+	                <v-col cols="6" md="2"
+	                  ><v-text-field v-model="item.quantidade" type="number" label="Qtd."
+	                /></v-col>
+	                <v-col cols="6" md="2"
+	                  ><v-text-field v-model="item.valorTotal" type="number" label="Total"
+	                /></v-col>
+	                <v-col cols="12" md="1" class="d-flex align-center justify-end">
+	                  <v-btn
+	                    icon="mdi-delete"
+	                    variant="text"
+	                    :disabled="itensMercadoria.length === 1"
+	                    @click="itensMercadoria.splice(index, 1)"
+	                  />
+	                </v-col>
+	              </v-row>
+	            </div>
+	          </section>
+	        </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="outlined" :disabled="salvandoMovimento" @click="modalMovimentoAberto = false">Cancelar</v-btn>
@@ -1157,9 +1686,24 @@ onMounted(() => {
                 :disabled="Boolean(cadastroEditandoId)"
               />
             </v-col>
-            <v-col cols="12" :md="cadastroTela === 'unidades' ? 8 : 12"
+            <v-col cols="12" :md="cadastroTela === 'unidades' || cadastroTela === 'pdv' ? 6 : 12"
               ><v-text-field v-model="formCadastro.nome" label="Nome"
             /></v-col>
+            <v-col v-if="cadastroTela === 'pdv'" cols="12" md="6">
+              <v-text-field v-model="formCadastro.codigo" label="Codigo" />
+            </v-col>
+            <v-col v-if="cadastroTela === 'pdv'" cols="12" md="8">
+              <v-select
+                v-model="formCadastro.contaId"
+                :items="opcoesEmpresa.contas"
+                item-title="nome"
+                item-value="id"
+                label="Conta do PDV"
+              />
+            </v-col>
+            <v-col v-if="cadastroTela === 'pdv'" cols="12" md="4">
+              <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
+            </v-col>
             <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
               ><v-text-field v-model="formCadastro.sigla" label="Sigla"
             /></v-col>

@@ -13,8 +13,27 @@ export const movimentacaoQuerySchema = z.object({
 
 export const itemDespesaSchema = z.object({
   grupoDespesaId: uuidSchema.optional().nullable(),
+  colaboradorId: uuidSchema.optional().nullable(),
   descricao: z.string().min(1),
   valor: dinheiroSchema
+});
+
+export const itemVendaSchema = z.object({
+  produtoId: uuidSchema.optional().nullable(),
+  produtoAutomacaoId: z.string().optional().nullable(),
+  produtoAutomacaoCodigo: z.string().optional().nullable(),
+  descricaoProduto: z.string().min(1),
+  quantidade: z.coerce.number().min(0).default(0),
+  valorUnitario: z.coerce.number().min(0).default(0),
+  valorTotal: dinheiroSchema
+});
+
+export const vendaTipoPagamentoSchema = z.object({
+  formaPagamentoId: uuidSchema.optional().nullable(),
+  tipoPagamentoAutomacaoId: z.string().optional().nullable(),
+  tipoPagamentoAutomacao: z.string().optional().nullable(),
+  numeroVendas: z.coerce.number().int().min(0).default(0),
+  totalPago: dinheiroSchema
 });
 
 export const itemMercadoriaSchema = z.object({
@@ -44,6 +63,7 @@ export const movimentacaoPayloadSchema = z.object({
   contaDestinoId: uuidSchema.optional().nullable(),
   fornecedorId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema.optional().nullable(),
+  pdvId: uuidSchema.optional().nullable(),
   grupoDespesaId: uuidSchema.optional().nullable(),
   grupoMercadoriaId: uuidSchema.optional().nullable(),
   grupoRetiradaId: uuidSchema.optional().nullable(),
@@ -53,6 +73,8 @@ export const movimentacaoPayloadSchema = z.object({
   temNotaFiscal: z.boolean().default(false),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  itensVenda: z.array(itemVendaSchema).default([]),
+  tiposPagamento: z.array(vendaTipoPagamentoSchema).default([]),
   itensDespesa: z.array(itemDespesaSchema).default([]),
   itensMercadoria: z.array(itemMercadoriaSchema).default([])
 });

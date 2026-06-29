@@ -6,10 +6,12 @@ import {
   colaboradoresCargos,
   contas,
   empresas,
+  formasPagamento,
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
+  pdvs,
   permissoesCargos,
   permissoesSetores,
   permissoesTabela,
@@ -75,6 +77,27 @@ export async function listarContasRepository() {
     .select({ id: contas.id, empresaId: contas.empresaId, nome: contas.nome })
     .from(contas)
     .orderBy(asc(contas.nome));
+}
+
+export async function listarFormasPagamentoRepository() {
+  return banco
+    .select({ id: formasPagamento.id, empresaId: formasPagamento.empresaId, nome: formasPagamento.nome })
+    .from(formasPagamento)
+    .orderBy(asc(formasPagamento.nome));
+}
+
+export async function listarPdvsRepository() {
+  return banco
+    .select({
+      id: pdvs.id,
+      empresaId: pdvs.empresaId,
+      nome: pdvs.nome,
+      codigo: pdvs.codigo,
+      contaId: pdvs.contaId,
+      ativo: pdvs.ativo
+    })
+    .from(pdvs)
+    .orderBy(asc(pdvs.nome));
 }
 
 export async function listarFornecedoresRepository() {
