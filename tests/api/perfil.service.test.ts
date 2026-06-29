@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buscarPerfilUsuario } from "../../api/src/perfis/perfil.service.js";
+import { buscarPerfilUsuario } from "../../api/src/auth/perfil.service.js";
 
 const mocks = vi.hoisted(() => ({
   obterPerfilPorUsuarioId: vi.fn()
 }));
 
-vi.mock("../../api/src/perfis/perfil.repository.js", () => mocks);
+vi.mock("../../api/src/auth/perfil.repository.js", () => mocks);
 
 const perfilBase = {
   usuario_id: "usuario-1",
@@ -55,4 +55,5 @@ describe("perfil service", () => {
     });
   });
 });
+
 

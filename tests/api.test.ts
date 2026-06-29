@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   temaSalvo: null as TemaSalvoMock | null
 }));
 
-vi.mock("../api/src/auth.js", () => ({
+vi.mock("../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession
@@ -34,36 +34,22 @@ vi.mock("../api/src/malotes/malotes.repository.js", () => ({
   buscarLacrePorEmpresaRepository: mocks.buscarLacrePorEmpresaRepository,
   buscarLacrePorNumeroRepository: vi.fn(),
   buscarMaloteEmpresaRepository: mocks.buscarMaloteEmpresaRepository,
+  copiarMalotesRepository: vi.fn(),
   criarMaloteRepository: mocks.criarMaloteRepository,
   listarLacresMaloteRepository: vi.fn(),
   listarMalotesRepository: vi.fn()
 }));
 
-vi.mock("../api/src/catalogos/catalogos.repository.js", () => ({
-  listarAreasRepository: vi.fn(() => Promise.resolve([])),
-  listarColaboradoresRepository: vi.fn(() => Promise.resolve([])),
-  listarContasRepository: mocks.listarContasRepository,
-  listarPdvsRepository: mocks.listarPdvsRepository,
+vi.mock("../api/src/empresas/empresas.repository.js", () => ({
   listarEmpresasRepository: mocks.listarEmpresasRepository,
-  listarFornecedoresRepository: vi.fn(() => Promise.resolve([])),
-  listarGruposRepository: vi.fn(() =>
-    Promise.resolve({ gruposDespesas: [], gruposMercadorias: [], gruposRetiradas: [] })
-  ),
-  listarPermissoesRepository: vi.fn(() =>
-    Promise.resolve({
-      permissoes: [],
-      cargos: [],
-      cargosPermissoes: [],
-      setores: [],
-      setoresPermissoes: [],
-      usuarios: [],
-      usuariosPermissoes: []
-    })
-  ),
-  listarProdutosRepository: vi.fn(() => Promise.resolve([])),
-  listarSetoresRepository: vi.fn(() => Promise.resolve([])),
-  listarUnidadesMedidaRepository: vi.fn(() => Promise.resolve([])),
-  listarUsuariosRepository: vi.fn(() => Promise.resolve([]))
+  salvarEmpresaRepository: vi.fn()
+}));
+
+vi.mock("../api/src/contas/contas.repository.js", () => ({
+  buscarContaEmpresaRepository: vi.fn(),
+  copiarContasRepository: vi.fn(),
+  listarContasRepository: mocks.listarContasRepository,
+  salvarContaRepository: vi.fn()
 }));
 
 vi.mock("../api/src/banco/conexao.js", () => ({
@@ -100,7 +86,7 @@ vi.mock("../api/src/banco/conexao.js", () => ({
   executarEmTransacao: vi.fn((callback: (tx: object) => unknown) => Promise.resolve(callback({})))
 }));
 
-vi.mock("../api/src/perfis.js", () => ({
+vi.mock("../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -131,7 +117,16 @@ beforeEach(() => {
     cargoIds: ["cargo-tesouraria"],
     cargos: [{ id: "cargo-tesouraria", nome: "Tesouraria" }],
     role: "usuario_comum",
-    permissoes: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_visualizar", "relatorio_vendas_visualizar"]
+    permissoes: [
+      "cadastro_empresas_visualizar",
+      "cadastro_contas_visualizar",
+      "cadastro_malotes_criar",
+      "cadastro_malotes_editar",
+      "transferencias_criar",
+      "transferencias_visualizar",
+      "relatorio_vendas_visualizar",
+      "aparencia_visualizar"
+    ]
   });
   mocks.criarMaloteRepository.mockResolvedValue({ id: null });
   mocks.buscarLacrePorEmpresaRepository.mockResolvedValue(null);
@@ -366,7 +361,7 @@ describe("api", () => {
       cargoIds: ["cargo-gerencia"],
       cargos: [{ id: "cargo-gerencia", nome: "Gerencia" }],
       role: "usuario_comum",
-      permissoes: ["transferencias_criar"]
+      permissoes: ["cadastro_contas_visualizar", "transferencias_criar"]
     });
     mocks.listarContasRepository.mockResolvedValueOnce([
       { id: "conta-a", empresaId: empresaA, nome: "Conta A" },
@@ -394,7 +389,7 @@ describe("api", () => {
       cargoIds: ["cargo-diretor"],
       cargos: [{ id: "cargo-diretor", nome: "Diretor Geral" }],
       role: "usuario_comum",
-      permissoes: ["cadastro_empresas_criar", "cadastro_usuarios_criar"]
+      permissoes: ["cadastro_empresas_visualizar", "cadastro_empresas_criar", "cadastro_usuarios_criar"]
     });
     mocks.listarEmpresasRepository.mockResolvedValueOnce([
       { id: empresaA, nome: "Empresa A" },
@@ -552,6 +547,8 @@ describe("api", () => {
     expect(response.json()).toMatchObject({ title: "Permissao insuficiente", status: response.statusCode, details: { permissao: "aparencia_editar" } });
   });
 });
+
+
 
 
 

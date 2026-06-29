@@ -3,7 +3,7 @@ import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import type { DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
 import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/referencias.js";
+import { filtrosEmpresa, valoresBase } from "./despesas.lancamento.js";
 
 export async function listarDespesasRepository(
   query: DespesasQuery,
@@ -84,3 +84,4 @@ export async function criarDespesaRepository(
     return despesa;
   });
 }
+

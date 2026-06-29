@@ -1,6 +1,7 @@
 import { and, asc, count, eq, ilike, inArray, ne, type SQL } from "drizzle-orm";
 import { lacresMalotes, malotes } from "@padaria/db/schema/cadastro";
 import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
 
 export type MaloteLinha = {
   id: string;
@@ -154,5 +155,51 @@ export async function atualizarMaloteRepository(input: {
       .set({ codigo: input.codigo, descricao: null })
       .where(and(eq(malotes.id, input.maloteId), eq(malotes.empresaId, input.empresaId)));
     await inserirLacres(input.empresaId, input.maloteId, input.lacres, tx);
+  });
+}
+
+async function completarMalotes(empresaDestinoId: string, db: ExecutorBanco) {
+  const destinos = await db.select().from(malotes).where(eq(malotes.empresaId, empresaDestinoId));
+  const lacresExistentes = await db.select({ numero: lacresMalotes.numero }).from(lacresMalotes);
+  const lacresExistentesChaves = new Set(lacresExistentes.map((lacre) => lacre.numero.toLocaleLowerCase("pt-BR")));
+  for (const destino of destinos) {
+    if (!destino.idImportado) continue;
+    const lacresOrigem = await db.select().from(lacresMalotes).where(eq(lacresMalotes.maloteId, destino.idImportado));
+    const novos = lacresOrigem
+      .filter((lacre) => !lacresExistentesChaves.has(lacre.numero.toLocaleLowerCase("pt-BR")))
+      .map((lacre) => ({
+        empresaId: empresaDestinoId,
+        maloteId: destino.id,
+        numero: lacre.numero,
+        status: "disponivel"
+      }));
+    if (novos.length) await db.insert(lacresMalotes).values(novos).onConflictDoNothing();
+  }
+}
+
+export async function copiarMalotesRepository(
+  filtro: FiltroOrigemEntidade,
+  empresaDestinoId: string,
+  empresasPermitidasIds: string[] | null,
+  modo: ModoImportacaoEntidade = "simples"
+): Promise<ResultadoImportacaoEntidade> {
+  return executarEmTransacao(async (db) => {
+    const origem = filtrarOrigemEntidade(await db.select().from(malotes), filtro, empresasPermitidasIds);
+    const destinos = await db.select().from(malotes).where(eq(malotes.empresaId, empresaDestinoId));
+    let inseridos = 0;
+    for (const malote of origem) {
+      if (jaImportado(destinos, malote.empresaId, malote.id)) continue;
+      await db.insert(malotes).values({
+        empresaId: empresaDestinoId,
+        codigo: malote.codigo,
+        descricao: malote.descricao,
+        criadoPor: null,
+        importadoDe: malote.empresaId,
+        idImportado: malote.id
+      });
+      inseridos += 1;
+    }
+    if (modo === "completo") await completarMalotes(empresaDestinoId, db);
+    return { tipo: "malotes", inseridos };
   });
 }

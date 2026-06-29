@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  empresaQuerySchema,
+  exportarEmpresaPayloadSchema,
+  importarEmpresaPayloadSchema,
+  type ExportarEmpresaPayload,
+  type ImportarEmpresaPayload
+} from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -15,6 +22,14 @@ export const colaboradorCargoParamsSchema = z.object({
 export const cargoPayloadSchema = z.object({
   empresaId: uuidSchema,
   nome: z.string().min(1)
+});
+
+export const colaboradorPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1),
+  cpf: z.string().optional().nullable(),
+  setorId: uuidSchema.optional().nullable(),
+  cargoId: uuidSchema
 });
 
 export const colaboradorCargoPayloadSchema = z.object({
@@ -58,12 +73,26 @@ export const faltaJustificadaPayloadSchema = z.object({
   motivo: z.string().min(1)
 });
 
+export const colaboradoresQuerySchema = empresaQuerySchema;
+export const importarColaboradoresSchema = importarEmpresaPayloadSchema;
+export const exportarColaboradorSchema = exportarEmpresaPayloadSchema;
+export const importarCargosSchema = importarEmpresaPayloadSchema;
+export const exportarCargoSchema = exportarEmpresaPayloadSchema;
+export const colaboradorExportacaoParamsSchema = idParamsSchema;
+export const cargoParamsSchema = idParamsSchema;
+
 export type DiaSemana = z.infer<typeof diaSemanaSchema>;
 export type IdParams = z.infer<typeof idParamsSchema>;
 export type ColaboradorParams = z.infer<typeof colaboradorParamsSchema>;
 export type ColaboradorCargoParams = z.infer<typeof colaboradorCargoParamsSchema>;
 export type CargoPayload = z.infer<typeof cargoPayloadSchema>;
+export type ColaboradorPayload = z.infer<typeof colaboradorPayloadSchema>;
 export type ColaboradorCargoPayload = z.infer<typeof colaboradorCargoPayloadSchema>;
 export type ColaboradorCargoStatusPayload = z.infer<typeof colaboradorCargoStatusPayloadSchema>;
 export type JornadaPayload = z.infer<typeof jornadaPayloadSchema>;
 export type FaltaJustificadaPayload = z.infer<typeof faltaJustificadaPayloadSchema>;
+export type ImportarColaboradoresPayload = ImportarEmpresaPayload;
+export type ExportarColaboradorPayload = ExportarEmpresaPayload;
+export type ImportarCargosPayload = ImportarEmpresaPayload;
+export type ExportarCargoPayload = ExportarEmpresaPayload;
+

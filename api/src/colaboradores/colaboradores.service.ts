@@ -5,13 +5,25 @@ import type {
   FaltaJustificadaPayload,
   JornadaPayload
 } from "@padaria/shared/colaboradores";
+import {
+  colaboradorPayloadSchema,
+  type ColaboradorPayload as ColaboradorDadosPayload,
+  type ExportarCargoPayload,
+  type ExportarColaboradorPayload,
+  type ImportarCargosPayload,
+  type ImportarColaboradoresPayload
+} from "@padaria/shared/colaboradores";
 import { diasSemana } from "@padaria/shared/colaboradores";
-import { filtrarPorEmpresas } from "../autorizacao/empresa.js";
+import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
+import { apenasDigitos, falharValidacao, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
+import { copiarAreasSetoresRepository } from "../areas/areas.repository.js";
 import {
   atualizarCargoRepository,
   atualizarStatusCargoColaboradorRepository,
   colaboradorTemUsuarioRepository,
   contarCargosAtivosColaboradorRepository,
+  copiarCargosRepository,
+  copiarColaboradoresRepository,
   criarCargoColaboradorRepository,
   criarCargoRepository,
   criarFaltaJustificadaRepository,
@@ -20,11 +32,15 @@ import {
   existeCargoNaEmpresaRepository,
   existeColaboradorNaEmpresaRepository,
   existeSetorNaEmpresaRepository,
+  listarColaboradoresRepository,
   listarCargosColaboradorRepository,
   listarCargosRepository,
   listarFaltasJustificadasRepository,
-  listarJornadasColaboradorRepository
+  listarJornadasColaboradorRepository,
+  salvarCargoColaboradorRepository,
+  salvarColaboradorRepository
 } from "./colaboradores.repository.js";
+import { executarEmTransacao } from "../banco/conexao.js";
 
 type FaixaJornada = {
   diaDaSemana: string;
@@ -65,6 +81,80 @@ function validarSobreposicaoJornada(faixas: FaixaJornada[]) {
 
 export async function listarCargos(escopoDados: string[] | null) {
   return filtrarPorEmpresas(await listarCargosRepository(), escopoDados);
+}
+
+export async function listarColaboradores(escopoDados: string[] | null) {
+  return filtrarPorEmpresas(await listarColaboradoresRepository(), escopoDados);
+}
+
+export async function salvarColaborador(id: string | null, body: unknown) {
+  const dados: ColaboradorDadosPayload = colaboradorPayloadSchema.parse(body);
+  const cargo = await existeCargoNaEmpresaRepository(dados.cargoId, dados.empresaId);
+  if (!cargo) falharValidacao("Cargo nao pertence a empresa");
+  return executarEmTransacao(async (tx) => {
+    const colaborador = await salvarColaboradorRepository(
+      {
+        ...(id ? { id } : {}),
+        empresaId: dados.empresaId,
+        nome: dados.nome.trim(),
+        cpf: apenasDigitos(dados.cpf),
+        setorId: dados.setorId ?? null
+      },
+      tx
+    );
+    if (!colaborador?.id) falharValidacao("Nao foi possivel cadastrar o colaborador");
+    if (!id || !(await contarCargosAtivosColaboradorRepository(colaborador.id, tx))) {
+      await salvarCargoColaboradorRepository(
+        {
+          empresaId: dados.empresaId,
+          colaboradorId: colaborador.id,
+          setorId: dados.setorId ?? null,
+          cargoId: dados.cargoId,
+          remuneracaoMinuto: 1,
+          dataInicio: new Date().toISOString().slice(0, 10),
+          ativo: true
+        },
+        tx
+      );
+    }
+    return colaborador;
+  });
+}
+
+export async function importarColaboradores(body: ImportarColaboradoresPayload, perfil?: PerfilComEmpresa) {
+  validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
+  const permitidas = perfil ? empresasPermitidas(perfil) : [];
+  let inseridos = 0;
+  if (body.modo === "completo") {
+    inseridos += (await copiarAreasSetoresRepository({ empresaOrigemId: body.empresaOrigemId }, body.empresaDestinoId, permitidas, body.modo)).inseridos;
+  }
+  inseridos += (await copiarColaboradoresRepository(
+    { empresaOrigemId: body.empresaOrigemId },
+    body.empresaDestinoId,
+    permitidas,
+    body.modo
+  )).inseridos;
+  return { tipo: "colaboradores", modo: body.modo, inseridos };
+}
+
+export async function exportarColaborador(id: string, body: ExportarColaboradorPayload, perfil?: PerfilComEmpresa) {
+  validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
+  return copiarColaboradoresRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
+}
+
+export async function importarCargos(body: ImportarCargosPayload, perfil?: PerfilComEmpresa) {
+  validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
+  return copiarCargosRepository(
+    { empresaOrigemId: body.empresaOrigemId },
+    body.empresaDestinoId,
+    perfil ? empresasPermitidas(perfil) : [],
+    body.modo
+  );
+}
+
+export async function exportarCargo(id: string, body: ExportarCargoPayload, perfil?: PerfilComEmpresa) {
+  validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
+  return copiarCargosRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
 }
 
 export async function criarCargo(payload: CargoPayload) {
@@ -175,3 +265,4 @@ export async function criarFaltaJustificada(colaboradorId: string, payload: Falt
     motivo: payload.motivo.trim()
   });
 }
+

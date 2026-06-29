@@ -46,3 +46,4 @@ export type TransferenciasQuery = z.input<typeof transferenciasQuerySchema>;
 export type TransferenciaPayload = z.infer<typeof transferenciaPayloadSchema>;
 export type TransferenciaDto = z.infer<typeof transferenciaDtoSchema>;
 export type TransferenciaCriada = z.infer<typeof transferenciaCriadaSchema>;
+

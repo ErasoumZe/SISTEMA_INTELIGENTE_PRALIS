@@ -1067,8 +1067,8 @@ async function salvarCadastro() {
     const idEditando = cadastroEditandoId.value;
     const payload = cadastroPayload(cadastroTela.value, formSnapshot, empresaId.value);
     const resultado = idEditando
-      ? await apiPut<{ id?: string } | undefined>(`/api/cadastros/${endpoint}/${idEditando}`, payload)
-      : await apiPost<{ id?: string }>(`/api/cadastros/${endpoint}`, payload);
+      ? await apiPut<{ id?: string } | undefined>(`/api/${endpoint}/${idEditando}`, payload)
+      : await apiPost<{ id?: string }>(`/api/${endpoint}`, payload);
     modalCadastroAberto.value = false;
     notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     const idSalvo = idEditando || resultado?.id;
@@ -1105,7 +1105,7 @@ async function buscarPermissoes(page = 1, aplicarFiltros = false) {
   permissoesCarregandoBusca.value = true;
   try {
     permissoesPagina.value = await apiGetPaginado<Record<string, string | undefined>>(
-      `/api/cadastros/permissoes?${queryPermissoes(page).toString()}`
+      `/api/permissoes/regras?${queryPermissoes(page).toString()}`
     );
     permissoesBuscou.value = true;
   } catch (error) {
@@ -1136,7 +1136,7 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
       alvoId,
       permissao
     });
-    await apiDelete(`/api/cadastros/permissoes?${params.toString()}`);
+    await apiDelete(`/api/permissoes/regras?${params.toString()}`);
     notificar("Permissao excluida com sucesso.");
     await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {

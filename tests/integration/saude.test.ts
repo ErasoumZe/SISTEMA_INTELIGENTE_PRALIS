@@ -2,7 +2,7 @@ import { APP_NAME } from "@padaria/shared";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: vi.fn(),
@@ -39,4 +39,5 @@ describe("saude", () => {
     });
   });
 });
+
 

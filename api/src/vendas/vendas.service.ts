@@ -1,8 +1,8 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { VendaCriada, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/service-utils.js";
+import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "./vendas.lancamento.js";
 import { criarVendaRepository, listarVendasRepository } from "./vendas.repository.js";
-import { validarReferenciasVenda } from "../lancamentos/referencias.js";
+import { validarReferenciasVenda } from "./vendas.lancamento.js";
 
 export function validarVenda(dados: VendaPayload): void {
   if (dados.itensVenda.length) {
@@ -34,3 +34,4 @@ export async function criarVenda(dados: VendaPayload, perfil: PerfilUsuario): Pr
   const venda = await criarVendaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
   return { id: venda.id, computar: dados.computar };
 }
+

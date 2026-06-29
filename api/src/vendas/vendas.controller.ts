@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { vendaPayloadSchema, vendasQuerySchema } from "@padaria/shared/vendas";
-import { exigirAlgumaPermissao, exigirAutenticacao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray } from "../respostas.js";
-import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
+import { PermissaoLancamentoInsuficienteError } from "./vendas.lancamento.js";
 import { criarVenda, listarVendas } from "./vendas.service.js";
 
 export async function registrarRotasVendas(app: FastifyInstance): Promise<void> {
@@ -24,10 +24,10 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
     }
   );
 
-  app.post("/api/vendas", async (request, reply) => {
+  app.post("/api/vendas", { preHandler: exigirPermissao("entradas_criar") }, async (request, reply) => {
     const dados = vendaPayloadSchema.parse(request.body);
-    const perfil = await exigirAutenticacao(request, reply);
-    if (!perfil) return;
+    const perfil = request.perfilUsuario;
+    if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
 
     if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -44,3 +44,6 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
     }
   });
 }
+
+
+

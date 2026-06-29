@@ -47,3 +47,4 @@ export type RetiradasQuery = z.input<typeof retiradasQuerySchema>;
 export type RetiradaPayload = z.infer<typeof retiradaPayloadSchema>;
 export type RetiradaDto = z.infer<typeof retiradaDtoSchema>;
 export type RetiradaCriada = z.infer<typeof retiradaCriadaSchema>;
+

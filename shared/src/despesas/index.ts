@@ -63,3 +63,4 @@ export type DespesasQuery = z.input<typeof despesasQuerySchema>;
 export type DespesaPayload = z.infer<typeof despesaPayloadSchema>;
 export type DespesaDto = z.infer<typeof despesaDtoSchema>;
 export type DespesaCriada = z.infer<typeof despesaCriadaSchema>;
+

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   receberVendaIntegracao: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -24,7 +24,7 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -159,6 +159,8 @@ describe("integracoes_visualizar", () => {
     expect(resposta.json()).toMatchObject({ title: "Chave de integracao invalida", status: resposta.statusCode });
   });
 });
+
+
 
 
 

@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { retiradaPayloadSchema, retiradasQuerySchema } from "@padaria/shared/retiradas";
-import { exigirAutenticacao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray } from "../respostas.js";
-import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
+import { exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
+import { PermissaoLancamentoInsuficienteError } from "./retiradas.lancamento.js";
 import { criarRetirada, listarRetiradas } from "./retiradas.service.js";
 
 export async function registrarRotasRetiradas(app: FastifyInstance): Promise<void> {
-  app.get("/api/retiradas", { preHandler: exigirAutenticacao }, async (request, reply) => {
+  app.get("/api/retiradas", { preHandler: exigirPermissao("retiradas_visualizar") }, async (request, reply) => {
     const query = retiradasQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     let escopoDados: string[] | null;
@@ -19,10 +19,10 @@ export async function registrarRotasRetiradas(app: FastifyInstance): Promise<voi
     return paginadoDeArray(await listarRetiradas(query, escopoDados), query.page, query.pageSize);
   });
 
-  app.post("/api/retiradas", async (request, reply) => {
+  app.post("/api/retiradas", { preHandler: exigirPermissao("retiradas_criar") }, async (request, reply) => {
     const dados = retiradaPayloadSchema.parse(request.body);
-    const perfil = await exigirAutenticacao(request, reply);
-    if (!perfil) return;
+    const perfil = request.perfilUsuario;
+    if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
     if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
@@ -37,3 +37,6 @@ export async function registrarRotasRetiradas(app: FastifyInstance): Promise<voi
     }
   });
 }
+
+
+

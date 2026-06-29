@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   listarEmpresas: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -17,11 +17,11 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
-vi.mock("../../api/src/catalogos/catalogos.service.js", () => ({
+vi.mock("../../api/src/empresas/empresas.service.js", () => ({
   listarEmpresas: mocks.listarEmpresas
 }));
 
@@ -104,5 +104,7 @@ describe("sessao", () => {
     expect(resposta.json()).toMatchObject({ ok: true, data: { perfil: { usuarioId } } });
   });
 });
+
+
 
 

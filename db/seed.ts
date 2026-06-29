@@ -6,7 +6,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { TELA_TEMA_RESUMO_CAIXA, permissoes, type Permissao, type RegrasPermissoes, type RoleUsuario } from "@padaria/shared";
 import { schema } from "./src/schema/schema.js";
-import { gerarUuidV7 } from "./src/ids/uuidv7.js";
+import { gerarUuidV7 } from "@padaria/shared/ids";
 import {
   areas,
   cargos,

@@ -150,3 +150,4 @@ export type IntegracaoHistoricoDto = z.infer<typeof integracaoHistoricoDtoSchema
 export type IntegracaoCampoConfigDto = z.infer<typeof integracaoCampoConfigDtoSchema>;
 export type IntegracaoVinculoDto = z.infer<typeof integracaoVinculoDtoSchema>;
 export type IntegracaoIngestaoResultado = z.infer<typeof integracaoIngestaoResultadoSchema>;
+

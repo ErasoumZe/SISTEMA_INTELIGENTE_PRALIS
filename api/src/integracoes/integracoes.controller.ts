@@ -11,8 +11,8 @@ import {
   vendaIntegracaoAgregadaSchema,
   type VendaIntegracaoAgregadaPayload
 } from "@padaria/shared/integracoes";
-import { exigirPermissao } from "../autorizacao.js";
-import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "../respostas.js";
+import { exigirPermissao } from "../auth/guards.js";
+import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import {
   criarChaveIntegracao,
   inativarChaveIntegracao,
@@ -121,3 +121,5 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
     }
   });
 }
+
+

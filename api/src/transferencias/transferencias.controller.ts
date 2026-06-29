@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { transferenciaPayloadSchema, transferenciasQuerySchema } from "@padaria/shared/transferencias";
-import { exigirAutenticacao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray } from "../respostas.js";
-import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
+import { exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
+import { PermissaoLancamentoInsuficienteError } from "./transferencias.lancamento.js";
 import { criarTransferencia, listarTransferencias } from "./transferencias.service.js";
 
 export async function registrarRotasTransferencias(app: FastifyInstance): Promise<void> {
-  app.get("/api/transferencias", { preHandler: exigirAutenticacao }, async (request, reply) => {
+  app.get("/api/transferencias", { preHandler: exigirPermissao("transferencias_visualizar") }, async (request, reply) => {
     const query = transferenciasQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     let escopoDados: string[] | null;
@@ -19,10 +19,10 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
     return paginadoDeArray(await listarTransferencias(query, escopoDados), query.page, query.pageSize);
   });
 
-  app.post("/api/transferencias", async (request, reply) => {
+  app.post("/api/transferencias", { preHandler: exigirPermissao("transferencias_criar") }, async (request, reply) => {
     const dados = transferenciaPayloadSchema.parse(request.body);
-    const perfil = await exigirAutenticacao(request, reply);
-    if (!perfil) return;
+    const perfil = request.perfilUsuario;
+    if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
     if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
@@ -37,3 +37,6 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
     }
   });
 }
+
+
+

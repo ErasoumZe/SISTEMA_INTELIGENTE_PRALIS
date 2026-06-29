@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession
@@ -77,4 +77,5 @@ describe("autenticacao", () => {
     });
   });
 });
+
 

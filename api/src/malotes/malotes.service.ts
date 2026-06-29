@@ -1,14 +1,18 @@
-import { filtrarPorEmpresas } from "../autorizacao/empresa.js";
+import { filtrarPorEmpresas } from "../auth/empresa.js";
 import {
   atualizarMaloteRepository,
   buscarLacrePorEmpresaRepository,
   buscarLacrePorNumeroRepository,
   buscarMaloteEmpresaRepository,
+  copiarMalotesRepository,
   criarMaloteRepository,
   listarLacresMaloteRepository,
   listarMalotesRepository
 } from "./malotes.repository.js";
 import type { AtualizarMalotePayload, CriarMalotePayload } from "@padaria/shared/malotes";
+import type { ExportarMalotePayload as ExportarPayload, ImportarMalotesPayload as ImportarPayload } from "@padaria/shared/malotes";
+import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
+import { validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 
 function normalizarLacre(lacre: string): string {
   return lacre.trim();
@@ -122,3 +126,19 @@ export async function atualizarMalote(
 
   return { id: maloteId, ...payload, codigo, lacres };
 }
+
+export async function importarMalotes(body: ImportarPayload, perfil?: PerfilComEmpresa) {
+  validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
+  return copiarMalotesRepository(
+    { empresaOrigemId: body.empresaOrigemId },
+    body.empresaDestinoId,
+    perfil ? empresasPermitidas(perfil) : [],
+    body.modo
+  );
+}
+
+export async function exportarMalote(id: string, body: ExportarPayload, perfil?: PerfilComEmpresa) {
+  validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
+  return copiarMalotesRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
+}
+

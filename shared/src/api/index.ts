@@ -43,9 +43,39 @@ export type ApiNoContent = void;
 export type ApiError = ProblemDetails;
 export type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
+export type ReplyHttp = {
+  status(statusCode: number): {
+    send(payload?: unknown): unknown;
+  };
+  send(payload?: unknown): unknown;
+};
+
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10)
+});
+
+const uuidSchema = z.string().uuid();
+
+export const empresaQuerySchema = z
+  .object({
+    empresaId: uuidSchema.optional()
+  })
+  .merge(paginationQuerySchema);
+
+export const apiIdParamsSchema = z.object({
+  id: uuidSchema
+});
+
+export const importarEmpresaPayloadSchema = z.object({
+  empresaOrigemId: uuidSchema,
+  empresaDestinoId: uuidSchema,
+  modo: z.enum(["simples", "completo"]).default("simples")
+});
+
+export const exportarEmpresaPayloadSchema = z.object({
+  empresaDestinoId: uuidSchema,
+  modo: z.enum(["simples", "completo"]).default("simples")
 });
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
@@ -92,6 +122,13 @@ export function apiPaginatedSchema<T extends z.ZodType>(item: T) {
 
 export const apiIdSchema = apiSuccessSchema(z.object({ id: z.string() }));
 
+export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
+export type EmpresaQuery = z.infer<typeof empresaQuerySchema>;
+export type ApiIdParams = z.infer<typeof apiIdParamsSchema>;
+export type ImportarEmpresaPayload = z.infer<typeof importarEmpresaPayloadSchema>;
+export type ExportarEmpresaPayload = z.infer<typeof exportarEmpresaPayloadSchema>;
+export type ModoImportacaoEmpresa = ImportarEmpresaPayload["modo"];
+
 export function criarPaginationMeta(total: number, page: number, pageSize: number): PaginationMeta {
   return {
     page,
@@ -108,4 +145,40 @@ export function paginarItens<T>(itens: T[], page: number, pageSize: number) {
     itens: itens.slice(inicio, inicio + pageSize),
     pagination: criarPaginationMeta(itens.length, page, pageSize)
   };
+}
+
+export function ok<T>(data: T): ApiSuccess<T> {
+  return { ok: true, data };
+}
+
+export function paginado<T>(data: T[], pagination: PaginationMeta): ApiPaginated<T> {
+  return { ok: true, data, meta: { pagination } };
+}
+
+export function paginadoDeArray<T>(itens: T[], page: number, pageSize: number) {
+  const resultado = paginarItens(itens, page, pageSize);
+  return paginado(resultado.itens, resultado.pagination);
+}
+
+export function paginadoDeResultado<T>(resultado: { itens: T[]; total: number; page: number; pageSize: number }) {
+  return paginado(resultado.itens, criarPaginationMeta(resultado.total, resultado.page, resultado.pageSize));
+}
+
+export function criadoId(reply: ReplyHttp, id: string) {
+  return reply.status(201).send(ok({ id }));
+}
+
+export function semConteudo(reply: ReplyHttp) {
+  return reply.status(204).send();
+}
+
+export function erro(reply: ReplyHttp, status: number, title: string, code?: string, details?: JsonValue) {
+  const body: ProblemDetails = {
+    type: "about:blank",
+    title,
+    status,
+    ...(code ? { code } : {}),
+    ...(details === undefined ? {} : { details })
+  };
+  return reply.status(status).send(body);
 }

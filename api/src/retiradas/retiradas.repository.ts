@@ -3,7 +3,7 @@ import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
 import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/referencias.js";
+import { filtrosEmpresa, valoresBase } from "./retiradas.lancamento.js";
 
 export async function listarRetiradasRepository(
   query: RetiradasQuery,
@@ -56,3 +56,4 @@ export async function criarRetiradaRepository(
     return retirada;
   });
 }
+

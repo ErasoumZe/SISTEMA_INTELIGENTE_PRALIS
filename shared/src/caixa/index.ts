@@ -112,3 +112,4 @@ export type AjusteSaldoResponse = z.infer<typeof ajusteSaldoResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
 export type AcertoSaldoCaixaResponse = z.infer<typeof acertoSaldoCaixaResponseSchema>;
+

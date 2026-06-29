@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { exigirAlgumaPermissao, exigirPermissao } from "../autorizacao.js";
-import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "../respostas.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
+import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import {
   atualizarMalote,
   criarMalote,
+  exportarMalote,
+  importarMalotes,
   listarLacresMalote,
   listarMalotes,
   mensagemErroMalote,
@@ -12,6 +14,9 @@ import {
 } from "./malotes.service.js";
 import {
   atualizarMaloteSchema,
+  exportarMaloteSchema as exportarPayloadSchema,
+  importarMalotesSchema as importarPayloadSchema,
+  maloteExportacaoParamsSchema as idParamsSchema,
   criarMaloteSchema,
   malotesQuerySchema,
   maloteParamsSchema,
@@ -81,4 +86,25 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
       return erro(reply, 400, mensagem);
     }
   });
+
+  app.post("/api/malotes/importar", { preHandler: exigirPermissao("cadastro_malotes_criar") }, async (request, reply) => {
+    try {
+      return ok(await importarMalotes(importarPayloadSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
+  });
+
+  app.post("/api/malotes/:id/exportar", { preHandler: exigirPermissao("cadastro_malotes_criar") }, async (request, reply) => {
+    const { id } = idParamsSchema.parse(request.params);
+    try {
+      return ok(await exportarMalote(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Copia invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
+  });
 }
+
+

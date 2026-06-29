@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { paginationQuerySchema } from "../api/index.js";
+import {
+  exportarEmpresaPayloadSchema,
+  apiIdParamsSchema,
+  importarEmpresaPayloadSchema,
+  paginationQuerySchema,
+  type ExportarEmpresaPayload,
+  type ImportarEmpresaPayload
+} from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 
@@ -27,7 +34,14 @@ export const atualizarMaloteSchema = z.object({
   lacres: z.array(z.string().min(1)).default([])
 });
 
+export const importarMalotesSchema = importarEmpresaPayloadSchema;
+export const exportarMaloteSchema = exportarEmpresaPayloadSchema;
+export const maloteExportacaoParamsSchema = apiIdParamsSchema;
+
 export type MaloteParams = z.infer<typeof maloteParamsSchema>;
 export type MalotesQuery = z.infer<typeof malotesQuerySchema>;
 export type CriarMalotePayload = z.infer<typeof criarMaloteSchema>;
 export type AtualizarMalotePayload = z.infer<typeof atualizarMaloteSchema>;
+export type ImportarMalotesPayload = ImportarEmpresaPayload;
+export type ExportarMalotePayload = ExportarEmpresaPayload;
+

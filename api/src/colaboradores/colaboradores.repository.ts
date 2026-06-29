@@ -8,6 +8,66 @@ import {
   setores
 } from "@padaria/db/schema/cadastro";
 import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+
+export async function listarColaboradoresRepository() {
+  return banco
+    .select({
+      id: colaboradores.id,
+      empresaId: colaboradores.empresaId,
+      nome: colaboradores.nome,
+      cpf: colaboradores.cpf,
+      setorId: colaboradores.setorId,
+      usuarioId: colaboradores.usuarioId
+    })
+    .from(colaboradores)
+    .orderBy(asc(colaboradores.nome));
+}
+
+export async function salvarColaboradorRepository(
+  input: { id?: string; empresaId: string; nome: string; cpf: string | null; setorId?: string | null },
+  db: ExecutorBanco = banco
+) {
+  if (input.id) {
+    await db
+      .update(colaboradores)
+      .set({ nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+      .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
+    return { id: input.id, empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null };
+  }
+  const [criado] = await db
+    .insert(colaboradores)
+    .values({ empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+    .returning({ id: colaboradores.id });
+  return criado;
+}
+
+export async function salvarCargoColaboradorRepository(
+  input: {
+    empresaId: string;
+    colaboradorId: string;
+    setorId: string | null;
+    cargoId: string;
+    remuneracaoMinuto: number;
+    dataInicio: string;
+    ativo: boolean;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [criado] = await db
+    .insert(colaboradoresCargos)
+    .values({
+      empresaId: input.empresaId,
+      colaboradorId: input.colaboradorId,
+      setorId: input.setorId,
+      cargoId: input.cargoId,
+      remuneracaoMinuto: String(input.remuneracaoMinuto),
+      dataInicio: input.dataInicio,
+      ativo: input.ativo
+    })
+    .returning({ id: colaboradoresCargos.id });
+  return criado;
+}
 
 export async function listarCargosRepository() {
   return banco
@@ -138,8 +198,8 @@ export async function colaboradorTemUsuarioRepository(colaboradorId: string) {
   return Boolean(colaborador?.usuarioId);
 }
 
-export async function contarCargosAtivosColaboradorRepository(colaboradorId: string) {
-  const cargosAtivos = await banco
+export async function contarCargosAtivosColaboradorRepository(colaboradorId: string, db: ExecutorBanco = banco) {
+  const cargosAtivos = await db
     .select({ id: colaboradoresCargos.id })
     .from(colaboradoresCargos)
     .where(and(eq(colaboradoresCargos.colaboradorId, colaboradorId), eq(colaboradoresCargos.ativo, true)));
@@ -275,4 +335,67 @@ export async function criarFaltaJustificadaRepository(input: {
     })
     .returning({ id: colaboradoresFaltasJustificadas.id });
   return criada;
+}
+
+async function completarColaboradores(empresaDestinoId: string, db: ExecutorBanco) {
+  const colaboradoresDestino = await db.select().from(colaboradores).where(eq(colaboradores.empresaId, empresaDestinoId));
+  const setoresDestino = await db.select().from(setores).where(eq(setores.empresaId, empresaDestinoId));
+  const colaboradoresOrigem = await db.select().from(colaboradores);
+  for (const destino of colaboradoresDestino) {
+    if (!destino.importadoDe || !destino.idImportado) continue;
+    const origem = colaboradoresOrigem.find((item) => item.id === destino.idImportado);
+    if (!origem?.setorId) continue;
+    const setorDestino = setoresDestino.find((item) => item.importadoDe === origem.empresaId && item.idImportado === origem.setorId);
+    if (setorDestino) await db.update(colaboradores).set({ setorId: setorDestino.id }).where(eq(colaboradores.id, destino.id));
+  }
+}
+
+export async function copiarColaboradoresRepository(
+  filtro: FiltroOrigemEntidade,
+  empresaDestinoId: string,
+  empresasPermitidasIds: string[] | null,
+  modo: ModoImportacaoEntidade = "simples"
+): Promise<ResultadoImportacaoEntidade> {
+  return executarEmTransacao(async (db) => {
+    const origem = filtrarOrigemEntidade(await db.select().from(colaboradores), filtro, empresasPermitidasIds);
+    const destinos = await db.select().from(colaboradores).where(eq(colaboradores.empresaId, empresaDestinoId));
+    let inseridos = 0;
+    for (const colaborador of origem) {
+      if (jaImportado(destinos, colaborador.empresaId, colaborador.id)) continue;
+      await db.insert(colaboradores).values({
+        empresaId: empresaDestinoId,
+        nome: colaborador.nome,
+        cpf: colaborador.cpf,
+        setorId: null,
+        usuarioId: null,
+        importadoDe: colaborador.empresaId,
+        idImportado: colaborador.id
+      });
+      inseridos += 1;
+    }
+    if (modo === "completo") await completarColaboradores(empresaDestinoId, db);
+    return { tipo: "colaboradores", inseridos };
+  });
+}
+
+export async function copiarCargosRepository(
+  filtro: FiltroOrigemEntidade,
+  empresaDestinoId: string,
+  empresasPermitidasIds: string[] | null,
+  _modo: ModoImportacaoEntidade = "simples"
+): Promise<ResultadoImportacaoEntidade> {
+  return executarEmTransacao(async (db) => {
+    const origem = filtrarOrigemEntidade(await db.select().from(cargos), filtro, empresasPermitidasIds);
+    const destinos = await db.select().from(cargos).where(eq(cargos.empresaId, empresaDestinoId));
+    let inseridos = 0;
+    for (const cargo of origem) {
+      if (jaImportado(destinos, cargo.empresaId, cargo.id)) continue;
+      await db
+        .insert(cargos)
+        .values({ empresaId: empresaDestinoId, nome: cargo.nome, importadoDe: cargo.empresaId, idImportado: cargo.id })
+        .onConflictDoNothing();
+      inseridos += 1;
+    }
+    return { tipo: "cargos", inseridos };
+  });
 }

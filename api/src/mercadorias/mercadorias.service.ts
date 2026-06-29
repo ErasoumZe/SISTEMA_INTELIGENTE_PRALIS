@@ -5,9 +5,9 @@ import type {
   MercadoriaPayload,
   MercadoriasQuery
 } from "@padaria/shared/mercadorias";
-import { deveComputarMercadoria } from "../regras.js";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/service-utils.js";
-import { validarReferenciasMercadoria } from "../lancamentos/referencias.js";
+import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "./mercadorias.lancamento.js";
+import { validarReferenciasMercadoria } from "./mercadorias.lancamento.js";
+import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import { criarMercadoriaRepository, listarMercadoriasRepository } from "./mercadorias.repository.js";
 
 export function validarMercadoria(dados: MercadoriaPayload): void {
@@ -39,3 +39,4 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
   const mercadoria = await criarMercadoriaRepository(dados, computar, perfil.usuarioId, caixa.id);
   return { id: mercadoria.id, computar };
 }
+

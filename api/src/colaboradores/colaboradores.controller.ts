@@ -1,4 +1,4 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   cargoPayloadSchema,
   colaboradorCargoParamsSchema,
@@ -9,11 +9,17 @@ import {
   idParamsSchema,
   jornadaPayloadSchema
 } from "@padaria/shared/colaboradores";
-import { empresaQuerySchema } from "@padaria/shared/catalogos";
-import { exigirPermissao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray, semConteudo } from "../respostas.js";
-import type { AplicacaoFastify } from "../tipos/fastify.js";
+import {
+  cargoParamsSchema,
+  colaboradoresQuerySchema as empresaQuerySchema,
+  exportarCargoSchema,
+  exportarColaboradorSchema,
+  importarCargosSchema,
+  importarColaboradoresSchema
+} from "@padaria/shared/colaboradores";
+import { exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import {
   atualizarCargo,
   atualizarStatusCargoColaborador,
@@ -21,11 +27,18 @@ import {
   criarCargoColaborador,
   criarFaltaJustificada,
   criarJornadasColaborador,
+  exportarCargo,
+  exportarColaborador,
+  importarCargos,
+  importarColaboradores,
+  listarColaboradores,
   listarCargos,
   listarCargosColaborador,
   listarFaltasJustificadas,
-  listarJornadasColaborador
+  listarJornadasColaborador,
+  salvarColaborador
 } from "./colaboradores.service.js";
+import { statusErroValidacao } from "../utils.js";
 
 async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   const query = empresaQuerySchema.parse(request.query);
@@ -47,7 +60,56 @@ function erro400(reply: FastifyReply, error: Error, fallback: string) {
   return erro(reply, 400, error.message || fallback);
 }
 
-export async function registrarRotasColaboradores(app: AplicacaoFastify) {
+export async function registrarRotasColaboradores(app: FastifyInstance) {
+  app.get("/api/colaboradores", { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") }, async (request, reply) => {
+    const escopo = await escopoDaQuery(request, reply);
+    return escopo ? paginadoDeArray(await listarColaboradores(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
+  });
+
+  app.post("/api/colaboradores", { preHandler: exigirPermissao("cadastro_colaboradores_criar") }, async (request, reply) => {
+    const body = request.body as { empresaId?: string };
+    if (body.empresaId && !empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    try {
+      const criado = await salvarColaborador(null, request.body);
+      return criadoId(reply, criado?.id ?? "colaboradores");
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      return erro(reply, statusErroValidacao(mensagem), mensagem);
+    }
+  });
+
+  app.put("/api/colaboradores/:id", { preHandler: exigirPermissao("cadastro_colaboradores_editar") }, async (request, reply) => {
+    const { id } = cargoParamsSchema.parse(request.params);
+    const body = request.body as { empresaId?: string };
+    if (body.empresaId && !empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    try {
+      await salvarColaborador(id, request.body);
+      return semConteudo(reply);
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      return erro(reply, statusErroValidacao(mensagem), mensagem);
+    }
+  });
+
+  app.post("/api/colaboradores/importar", { preHandler: exigirPermissao("cadastro_colaboradores_criar") }, async (request, reply) => {
+    try {
+      return ok(await importarColaboradores(importarColaboradoresSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
+  });
+
+  app.post("/api/colaboradores/:id/exportar", { preHandler: exigirPermissao("cadastro_colaboradores_criar") }, async (request, reply) => {
+    const { id } = cargoParamsSchema.parse(request.params);
+    try {
+      return ok(await exportarColaborador(id, exportarColaboradorSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Copia invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
+  });
+
   app.get("/api/cargos", { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
     return escopo ? paginadoDeArray(await listarCargos(escopo.escopoDados), escopo.query.page, escopo.query.pageSize) : undefined;
@@ -71,6 +133,25 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     if (!empresaPermitida(request, body.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     await atualizarCargo(id, body);
     return semConteudo(reply);
+  });
+
+  app.post("/api/cargos/importar", { preHandler: exigirPermissao("cadastro_colaboradores_criar") }, async (request, reply) => {
+    try {
+      return ok(await importarCargos(importarCargosSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
+  });
+
+  app.post("/api/cargos/:id/exportar", { preHandler: exigirPermissao("cadastro_colaboradores_criar") }, async (request, reply) => {
+    const { id } = cargoParamsSchema.parse(request.params);
+    try {
+      return ok(await exportarCargo(id, exportarCargoSchema.parse(request.body), request.perfilUsuario));
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Copia invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+    }
   });
 
   app.get(
@@ -185,3 +266,5 @@ export async function registrarRotasColaboradores(app: AplicacaoFastify) {
     }
   );
 }
+
+

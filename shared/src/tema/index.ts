@@ -58,3 +58,4 @@ export type ConfiguracaoAparenciaEmpresa = z.infer<typeof configuracaoAparenciaE
 export type TemaQuery = z.infer<typeof temaQuerySchema>;
 export type TemaPayload = z.infer<typeof temaPayloadSchema>;
 export type TemaDto = TemaAplicacao;
+

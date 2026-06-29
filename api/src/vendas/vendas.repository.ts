@@ -3,7 +3,7 @@ import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/sche
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/referencias.js";
+import { filtrosEmpresa, valoresBase } from "./vendas.lancamento.js";
 
 export async function listarVendasRepository(
   query: VendasQuery,
@@ -128,3 +128,4 @@ export async function criarVendaRepository(
     return venda;
   });
 }
+

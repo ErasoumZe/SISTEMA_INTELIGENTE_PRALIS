@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   obterProdutosMaisVendidos: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -17,11 +17,11 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
-vi.mock("../../api/src/relatorios/produtos.service.js", () => ({
+vi.mock("../../api/src/vendas/produtos-mais-vendidos.service.js", () => ({
   obterProdutosMaisVendidos: mocks.obterProdutosMaisVendidos
 }));
 
@@ -53,7 +53,7 @@ describe("relatorios", () => {
     // Act
     const resposta = await requisitar(app, {
       method: "GET",
-      url: `/api/relatorios/produtos-mais-vendidos?empresaId=${empresaA}`
+      url: `/api/vendas/produtos-mais-vendidos?empresaId=${empresaA}`
     });
 
     // Assert
@@ -70,7 +70,7 @@ describe("relatorios", () => {
     // Arrange / Act
     const resposta = await requisitar(app, {
       method: "GET",
-      url: `/api/relatorios/produtos-mais-vendidos?empresaId=${empresaA}`
+      url: `/api/vendas/produtos-mais-vendidos?empresaId=${empresaA}`
     });
 
     // Assert
@@ -82,7 +82,7 @@ describe("relatorios", () => {
     // Arrange / Act
     const resposta = await requisitar(app, {
       method: "GET",
-      url: `/api/relatorios/produtos-mais-vendidos?empresaId=${empresaB}`
+      url: `/api/vendas/produtos-mais-vendidos?empresaId=${empresaB}`
     });
 
     // Assert
@@ -91,5 +91,7 @@ describe("relatorios", () => {
     expect(mocks.obterProdutosMaisVendidos).not.toHaveBeenCalled();
   });
 });
+
+
 
 

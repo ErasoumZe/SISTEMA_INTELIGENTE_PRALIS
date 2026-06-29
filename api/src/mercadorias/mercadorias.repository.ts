@@ -2,7 +2,7 @@ import { and } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import type { MercadoriaDto, MercadoriaPayload, MercadoriasQuery } from "@padaria/shared/mercadorias";
 import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/referencias.js";
+import { filtrosEmpresa, valoresBase } from "./mercadorias.lancamento.js";
 
 export async function listarMercadoriasRepository(
   query: MercadoriasQuery,
@@ -60,3 +60,4 @@ export async function criarMercadoriaRepository(
     return mercadoria;
   });
 }
+

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   listarHistoricoCaixa: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -24,7 +24,7 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -349,6 +349,8 @@ describe("caixa", () => {
     expect(resposta.json()).toMatchObject({ title: "Nao ha diferenca para acertar", status: resposta.statusCode });
   });
 });
+
+
 
 
 

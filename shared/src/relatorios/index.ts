@@ -6,3 +6,4 @@ export const relatorioProdutosQuerySchema = z.object({
 }).merge(paginationQuerySchema);
 
 export type RelatorioProdutosQuery = z.infer<typeof relatorioProdutosQuerySchema>;
+

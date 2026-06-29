@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   atualizarMalote: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -21,7 +21,7 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -207,6 +207,8 @@ describe("malotes", () => {
     expect(resposta.json()).toMatchObject({ title: "Empresa nao permitida", status: resposta.statusCode });
   });
 });
+
+
 
 
 

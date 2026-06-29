@@ -4,7 +4,6 @@
     "noEmit": true,
     "baseUrl": "..",
     "paths": {
-      "@padaria/api/regras": ["api/src/regras.ts"],
       "@padaria/api/*": ["api/src/*.ts"],
       "@padaria/shared": ["shared/src/index.ts"],
       "@padaria/shared/*": ["shared/src/*/index.ts"],

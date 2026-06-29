@@ -13,7 +13,7 @@ async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    produtos.value = await apiGet(`/api/relatorios/produtos-mais-vendidos?empresaId=${props.empresaId}`);
+    produtos.value = await apiGet(`/api/vendas/produtos-mais-vendidos?empresaId=${props.empresaId}`);
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {

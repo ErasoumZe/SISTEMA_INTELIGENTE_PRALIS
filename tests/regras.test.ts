@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { permissoes } from "@padaria/shared";
-import { deveComputarMercadoria, saldoCaixa } from "@padaria/api/regras";
+import { saldoCaixa } from "../api/src/caixa/caixa.regras.js";
+import { deveComputarMercadoria } from "../api/src/mercadorias/mercadorias.regras.js";
 
 describe("permissoes", () => {
   it("mantem permissoes operacionais usadas pela aplicacao", () => {

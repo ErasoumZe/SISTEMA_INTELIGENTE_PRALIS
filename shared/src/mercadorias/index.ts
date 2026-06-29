@@ -61,3 +61,4 @@ export type MercadoriasQuery = z.input<typeof mercadoriasQuerySchema>;
 export type MercadoriaPayload = z.infer<typeof mercadoriaPayloadSchema>;
 export type MercadoriaDto = z.infer<typeof mercadoriaDtoSchema>;
 export type MercadoriaCriada = z.infer<typeof mercadoriaCriadaSchema>;
+

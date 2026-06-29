@@ -10,9 +10,9 @@ import {
   historicoCaixaQuerySchema,
   resumoCaixaQuerySchema
 } from "@padaria/shared/caixa";
-import { exigirPermissao } from "../autorizacao.js";
-import { podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "../respostas.js";
+import { exigirPermissao } from "../auth/guards.js";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import {
   abrirCaixa,
   acertarSaldoCaixa,
@@ -157,3 +157,5 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
 }
+
+

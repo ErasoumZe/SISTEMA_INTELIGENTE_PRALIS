@@ -13,7 +13,7 @@ import type {
 } from "@padaria/shared/integracoes";
 import { camposVinculoIntegracao, tiposRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
-import { empresasPermitidas, podeAcessarEmpresa } from "../autorizacao/empresa.js";
+import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import {
   buscarChavePorCodigoRepository,
@@ -396,3 +396,4 @@ export async function receberVendaIntegracao(
     return { status, vendaId: venda.id, identificadorExterno };
   });
 }
+

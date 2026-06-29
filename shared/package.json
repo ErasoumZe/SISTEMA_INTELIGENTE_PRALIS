@@ -31,35 +31,90 @@
       "development": "./src/caixa/index.ts",
       "default": "./dist/caixa/index.js"
     },
-    "./cadastros": {
-      "types": "./dist/cadastros/index.d.ts",
-      "development": "./src/cadastros/index.ts",
-      "default": "./dist/cadastros/index.js"
+    "./areas": {
+      "types": "./dist/areas/index.d.ts",
+      "development": "./src/areas/index.ts",
+      "default": "./dist/areas/index.js"
     },
-    "./catalogos": {
-      "types": "./dist/catalogos/index.d.ts",
-      "development": "./src/catalogos/index.ts",
-      "default": "./dist/catalogos/index.js"
+    "./clientes": {
+      "types": "./dist/clientes/index.d.ts",
+      "development": "./src/clientes/index.ts",
+      "default": "./dist/clientes/index.js"
     },
     "./colaboradores": {
       "types": "./dist/colaboradores/index.d.ts",
       "development": "./src/colaboradores/index.ts",
       "default": "./dist/colaboradores/index.js"
     },
-    "./copia": {
-      "types": "./dist/copia/index.d.ts",
-      "development": "./src/copia/index.ts",
-      "default": "./dist/copia/index.js"
+    "./contas": {
+      "types": "./dist/contas/index.d.ts",
+      "development": "./src/contas/index.ts",
+      "default": "./dist/contas/index.js"
+    },
+    "./empresas": {
+      "types": "./dist/empresas/index.d.ts",
+      "development": "./src/empresas/index.ts",
+      "default": "./dist/empresas/index.js"
+    },
+    "./fornecedores": {
+      "types": "./dist/fornecedores/index.d.ts",
+      "development": "./src/fornecedores/index.ts",
+      "default": "./dist/fornecedores/index.js"
+    },
+    "./formas-pagamento": {
+      "types": "./dist/formas-pagamento/index.d.ts",
+      "development": "./src/formas-pagamento/index.ts",
+      "default": "./dist/formas-pagamento/index.js"
+    },
+    "./grupos": {
+      "types": "./dist/grupos/index.d.ts",
+      "development": "./src/grupos/index.ts",
+      "default": "./dist/grupos/index.js"
     },
     "./integracoes": {
       "types": "./dist/integracoes/index.d.ts",
       "development": "./src/integracoes/index.ts",
       "default": "./dist/integracoes/index.js"
     },
+    "./ids": {
+      "types": "./dist/ids/index.d.ts",
+      "development": "./src/ids/index.ts",
+      "default": "./dist/ids/index.js"
+    },
     "./malotes": {
       "types": "./dist/malotes/index.d.ts",
       "development": "./src/malotes/index.ts",
       "default": "./dist/malotes/index.js"
+    },
+    "./pdvs": {
+      "types": "./dist/pdvs/index.d.ts",
+      "development": "./src/pdvs/index.ts",
+      "default": "./dist/pdvs/index.js"
+    },
+    "./permissoes": {
+      "types": "./dist/permissoes/index.d.ts",
+      "development": "./src/permissoes/index.ts",
+      "default": "./dist/permissoes/index.js"
+    },
+    "./produtos": {
+      "types": "./dist/produtos/index.d.ts",
+      "development": "./src/produtos/index.ts",
+      "default": "./dist/produtos/index.js"
+    },
+    "./setores": {
+      "types": "./dist/setores/index.d.ts",
+      "development": "./src/setores/index.ts",
+      "default": "./dist/setores/index.js"
+    },
+    "./unidades-medida": {
+      "types": "./dist/unidades-medida/index.d.ts",
+      "development": "./src/unidades-medida/index.ts",
+      "default": "./dist/unidades-medida/index.js"
+    },
+    "./usuarios": {
+      "types": "./dist/usuarios/index.d.ts",
+      "development": "./src/usuarios/index.ts",
+      "default": "./dist/usuarios/index.js"
     },
     "./vendas": {
       "types": "./dist/vendas/index.d.ts",
@@ -107,6 +162,7 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "uuid": "14.0.1",
     "zod": "^4.1.13"
   }
 }

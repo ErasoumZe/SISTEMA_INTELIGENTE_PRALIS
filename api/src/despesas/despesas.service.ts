@@ -1,7 +1,7 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { DespesaCriada, DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/service-utils.js";
-import { validarReferenciasDespesa } from "../lancamentos/referencias.js";
+import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "./despesas.lancamento.js";
+import { validarReferenciasDespesa } from "./despesas.lancamento.js";
 import { criarDespesaRepository, listarDespesasRepository } from "./despesas.repository.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
@@ -30,3 +30,4 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   const despesa = await criarDespesaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
   return { id: despesa.id, computar: dados.computar };
 }
+

@@ -12,9 +12,9 @@ import type {
   ResumoCaixaQuery
 } from "@padaria/shared/caixa";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
-import { podeAcessarEmpresa } from "../autorizacao/empresa.js";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { saldoCaixa } from "../regras.js";
+import { saldoCaixa } from "./caixa.regras.js";
 import {
   atualizarAberturaCaixaRepository,
   atualizarFechamentoCaixaRepository,
@@ -339,3 +339,4 @@ export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioI
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;
 }
+

@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   criarFaltaJustificada: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -26,7 +26,7 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -284,5 +284,7 @@ describe("colaboradores", () => {
     expect(resposta.json()).toMatchObject({ title: "Fim deve ser posterior ao inicio", status: resposta.statusCode });
   });
 });
+
+
 
 

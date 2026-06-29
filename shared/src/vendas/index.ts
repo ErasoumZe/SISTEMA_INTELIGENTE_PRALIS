@@ -110,3 +110,4 @@ export type VendaDto = z.infer<typeof vendaDtoSchema>;
 export type VendaCriada = z.infer<typeof vendaCriadaSchema>;
 export type VendaParams = z.infer<typeof vendaParamsSchema>;
 export type VendaComprovanteDto = z.infer<typeof vendaComprovanteDtoSchema>;
+

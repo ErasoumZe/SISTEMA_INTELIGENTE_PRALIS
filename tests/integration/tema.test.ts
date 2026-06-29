@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   atualizarTema: vi.fn()
 }));
 
-vi.mock("../../api/src/auth.js", () => ({
+vi.mock("../../api/src/auth/config.js", () => ({
   auth: {
     api: {
       getSession: mocks.getSession,
@@ -18,7 +18,7 @@ vi.mock("../../api/src/auth.js", () => ({
   }
 }));
 
-vi.mock("../../api/src/perfis.js", () => ({
+vi.mock("../../api/src/auth/perfil.service.js", () => ({
   buscarPerfilUsuario: mocks.buscarPerfilUsuario
 }));
 
@@ -42,7 +42,7 @@ describe("tema", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSession.mockResolvedValue({ user: { id: usuarioId } });
-    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["aparencia_editar"], { empresaIds: [empresaA] }));
+    mocks.buscarPerfilUsuario.mockResolvedValue(criarPerfil(["aparencia_visualizar", "aparencia_editar"], { empresaIds: [empresaA] }));
     mocks.carregarTema.mockResolvedValue({ corPrimaria: "#005f73" });
     mocks.atualizarTema.mockResolvedValue({ corPrimaria: "#005f73" });
   });
@@ -123,6 +123,8 @@ describe("tema", () => {
     expect(mocks.atualizarTema).not.toHaveBeenCalled();
   });
 });
+
+
 
 
 

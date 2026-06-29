@@ -269,3 +269,4 @@ export interface AuthSession {
   perfil?: PerfilUsuario;
   empresas?: EmpresaSessao[];
 }
+

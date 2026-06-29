@@ -1,12 +1,12 @@
-import { exigirAutenticacao, exigirPermissao } from "../autorizacao.js";
-import { podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { erro, ok, semConteudo } from "../respostas.js";
-import type { AplicacaoFastify } from "../tipos/fastify.js";
+import type { FastifyInstance } from "fastify";
+import { exigirPermissao } from "../auth/guards.js";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
+import { erro, ok, semConteudo } from "@padaria/shared/api";
 import { atualizarTema, carregarTema } from "./tema.service.js";
 import { temaPayloadSchema, temaQuerySchema } from "@padaria/shared/tema";
 
-export async function registrarRotasTema(app: AplicacaoFastify) {
-  app.get("/api/tema", { preHandler: exigirAutenticacao }, async (request, reply) => {
+export async function registrarRotasTema(app: FastifyInstance) {
+  app.get("/api/tema", { preHandler: exigirPermissao("aparencia_visualizar") }, async (request, reply) => {
     const query = temaQuerySchema.parse(request.query);
     if (request.perfilUsuario && !podeAcessarEmpresa(request.perfilUsuario, query.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -23,3 +23,5 @@ export async function registrarRotasTema(app: AplicacaoFastify) {
     return semConteudo(reply);
   });
 }
+
+

@@ -42,7 +42,7 @@ const chaves = ref<IntegracaoChaveDto[]>([]);
 const historico = ref<IntegracaoHistoricoDto[]>([]);
 const configs = ref<IntegracaoCampoConfigDto[]>([]);
 const vinculos = ref<IntegracaoVinculoDto[]>([]);
-const catalogos = reactive({
+const opcoesVinculo = reactive({
   pdvs: [] as Opcao[],
   clientes: [] as Opcao[],
   produtos: [] as Opcao[],
@@ -101,10 +101,10 @@ const motivosTelasDesabilitadas = computed(() =>
 );
 const chavesDaEmpresa = computed(() => chaves.value.filter((chave) => chave.empresaId === empresaId.value));
 const registrosDisponiveis = computed<RegistrosDisponiveis>(() => ({
-  pdv: catalogos.pdvs,
-  cliente: catalogos.clientes,
-  produto: catalogos.produtos,
-  forma_pagamento: catalogos.formasPagamento,
+  pdv: opcoesVinculo.pdvs,
+  cliente: opcoesVinculo.clientes,
+  produto: opcoesVinculo.produtos,
+  forma_pagamento: opcoesVinculo.formasPagamento,
   venda: [] as Opcao[]
 }));
 const registrosVinculoManual = computed(() => registrosDisponiveis.value[formVinculoManual.tipoRegistro]);
@@ -181,9 +181,9 @@ async function carregarEmpresas() {
   empresaId.value = sessao.value?.perfil?.empresaId ?? sessao.value?.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
 }
 
-async function carregarCatalogos() {
+async function carregarOpcoesVinculo() {
   const query = `?empresaId=${empresaId.value}`;
-  [catalogos.pdvs, catalogos.clientes, catalogos.produtos, catalogos.formasPagamento] = await Promise.all([
+  [opcoesVinculo.pdvs, opcoesVinculo.clientes, opcoesVinculo.produtos, opcoesVinculo.formasPagamento] = await Promise.all([
     apiGet<Opcao[]>(`/api/pdvs${query}`),
     apiGet<Opcao[]>(`/api/clientes${query}`),
     apiGet<Opcao[]>(`/api/produtos${query}`),
@@ -208,7 +208,7 @@ async function carregarDados() {
       apiGet<IntegracoesResposta>(`/api/integracoes${query}`),
       apiGet<IntegracaoHistoricoDto[]>(`/api/integracoes/historico${query}`),
       carregarStatusCaixa(),
-      carregarCatalogos()
+      carregarOpcoesVinculo()
     ]);
     integracoes.value = integracoesResposta.integracoes;
     chaves.value = integracoesResposta.chaves;

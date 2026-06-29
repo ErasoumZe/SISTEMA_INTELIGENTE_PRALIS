@@ -15,16 +15,6 @@
       "types": "./dist/app.d.ts",
       "development": "./src/app.ts",
       "default": "./dist/app.js"
-    },
-    "./regras": {
-      "types": "./dist/regras.d.ts",
-      "development": "./src/regras.ts",
-      "default": "./dist/regras.js"
-    },
-    "./perfis": {
-      "types": "./dist/perfis.d.ts",
-      "development": "./src/perfis.ts",
-      "default": "./dist/perfis.js"
     }
   },
   "scripts": {
@@ -32,9 +22,9 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.check.json --noEmit",
     "start": "node dist/server.js",
-    "db:migrate": "better-auth migrate --config src/auth.ts --yes",
-    "db:migrate:dev": "node --conditions=development ../node_modules/@better-auth/cli/dist/index.mjs migrate --config src/auth.ts --yes",
-    "db:generate": "better-auth generate --config src/auth.ts --output ../db/migrations/better-auth.sql --yes",
+    "db:migrate": "better-auth migrate --config src/auth/config.ts --yes",
+    "db:migrate:dev": "node --conditions=development ../node_modules/@better-auth/cli/dist/index.mjs migrate --config src/auth/config.ts --yes",
+    "db:generate": "better-auth generate --config src/auth/config.ts --output ../db/migrations/better-auth.sql --yes",
     "db:push": "npm run db:push --workspace @padaria/db",
     "db:generate:drizzle": "npm run db:generate --workspace @padaria/db",
     "db:migrate:drizzle": "npm run db:migrate --workspace @padaria/db",

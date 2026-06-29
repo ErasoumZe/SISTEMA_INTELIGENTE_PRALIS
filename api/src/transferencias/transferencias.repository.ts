@@ -6,7 +6,7 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/referencias.js";
+import { filtrosEmpresa, valoresBase } from "./transferencias.lancamento.js";
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
@@ -46,3 +46,4 @@ export async function criarTransferenciaRepository(
   if (!transferencia) throw new Error("Transferencia nao criada");
   return transferencia;
 }
+

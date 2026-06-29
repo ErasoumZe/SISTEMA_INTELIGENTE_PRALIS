@@ -1,7 +1,7 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { RetiradaCriada, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
-import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/service-utils.js";
-import { validarReferenciasRetirada } from "../lancamentos/referencias.js";
+import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "./retiradas.lancamento.js";
+import { validarReferenciasRetirada } from "./retiradas.lancamento.js";
 import { criarRetiradaRepository, listarRetiradasRepository } from "./retiradas.repository.js";
 
 export async function listarRetiradas(
@@ -21,3 +21,4 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
   const retirada = await criarRetiradaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
   return { id: retirada.id, computar: dados.computar };
 }
+

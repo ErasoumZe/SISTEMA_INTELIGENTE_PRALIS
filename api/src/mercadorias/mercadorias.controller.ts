@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { mercadoriaPayloadSchema, mercadoriasQuerySchema } from "@padaria/shared/mercadorias";
-import { exigirAutenticacao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray } from "../respostas.js";
-import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
+import { exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
+import { PermissaoLancamentoInsuficienteError } from "./mercadorias.lancamento.js";
 import { criarMercadoria, listarMercadorias } from "./mercadorias.service.js";
 
 export async function registrarRotasMercadorias(app: FastifyInstance): Promise<void> {
-  app.get("/api/mercadorias", { preHandler: exigirAutenticacao }, async (request, reply) => {
+  app.get("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_visualizar") }, async (request, reply) => {
     const query = mercadoriasQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
     let escopoDados: string[] | null;
@@ -19,10 +19,10 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     return paginadoDeArray(await listarMercadorias(query, escopoDados), query.page, query.pageSize);
   });
 
-  app.post("/api/mercadorias", async (request, reply) => {
+  app.post("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_criar") }, async (request, reply) => {
     const dados = mercadoriaPayloadSchema.parse(request.body);
-    const perfil = await exigirAutenticacao(request, reply);
-    if (!perfil) return;
+    const perfil = request.perfilUsuario;
+    if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
     if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
@@ -37,3 +37,6 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     }
   });
 }
+
+
+

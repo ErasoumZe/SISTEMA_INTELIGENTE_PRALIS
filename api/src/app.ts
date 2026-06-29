@@ -1,28 +1,36 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
-import { fromNodeHeaders } from "better-auth/node";
 import { ZodError } from "zod";
-import { auth } from "./auth.js";
 import { env } from "./env.js";
+import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
-import { registrarRotasCadastros } from "./cadastros/cadastros.controller.js";
-import { registrarRotasCatalogos } from "./catalogos/catalogos.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
-import { registrarRotasCopia } from "./copia/copia.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasMalotes } from "./malotes/malotes.controller.js";
 import { registrarRotasMercadorias } from "./mercadorias/mercadorias.controller.js";
-import { registrarRotasRelatorioProdutos } from "./relatorios/produtos.controller.js";
 import { registrarRotasRetiradas } from "./retiradas/retiradas.controller.js";
 import { registrarRotasSaude } from "./saude/saude.controller.js";
-import { registrarRotasSessao } from "./sessao/sessao.controller.js";
 import { registrarRotasTema } from "./tema/tema.controller.js";
 import { registrarRotasTransferencias } from "./transferencias/transferencias.controller.js";
 import { registrarRotasVendas } from "./vendas/vendas.controller.js";
-import { registrarRotasVendasComprovantes } from "./vendas-comprovantes/vendas-comprovantes.controller.js";
-import { erro } from "./respostas.js";
+import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
+import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
+import { erro } from "@padaria/shared/api";
+import { registrarRotasAreas } from "./areas/areas.controller.js";
+import { registrarRotasClientes } from "./clientes/clientes.controller.js";
+import { registrarRotasContas } from "./contas/contas.controller.js";
+import { registrarRotasEmpresas } from "./empresas/empresas.controller.js";
+import { registrarRotasFormasPagamento } from "./formas-pagamento/formas-pagamento.controller.js";
+import { registrarRotasFornecedores } from "./fornecedores/fornecedores.controller.js";
+import { registrarRotasGrupos } from "./grupos/grupos.controller.js";
+import { registrarRotasPdvs } from "./pdvs/pdvs.controller.js";
+import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js";
+import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
+import { registrarRotasSetores } from "./setores/setores.controller.js";
+import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
+import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: process.env["NODE_ENV"] !== "test" });
@@ -61,7 +69,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await registrarRotasSaude(app);
-  await registrarRotasSessao(app);
+  await registrarRotasAuth(app);
   await registrarRotasTema(app);
   await registrarRotasVendas(app);
   await registrarRotasVendasComprovantes(app);
@@ -70,38 +78,24 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasRetiradas(app);
   await registrarRotasTransferencias(app);
   await registrarRotasCaixa(app);
-  await registrarRotasCatalogos(app);
+  await registrarRotasEmpresas(app);
+  await registrarRotasContas(app);
+  await registrarRotasFormasPagamento(app);
+  await registrarRotasPdvs(app);
+  await registrarRotasFornecedores(app);
+  await registrarRotasClientes(app);
   await registrarRotasColaboradores(app);
+  await registrarRotasGrupos(app);
+  await registrarRotasUnidadesMedida(app);
+  await registrarRotasAreas(app);
+  await registrarRotasSetores(app);
+  await registrarRotasProdutos(app);
+  await registrarRotasUsuarios(app);
+  await registrarRotasPermissoes(app);
   await registrarRotasMalotes(app);
-  await registrarRotasCadastros(app);
-  await registrarRotasCopia(app);
-  await registrarRotasRelatorioProdutos(app);
+  await registrarRotasProdutosMaisVendidos(app);
   await registrarRotasIntegracoes(app);
-
-  app.route({
-    method: ["GET", "POST"],
-    url: "/api/auth/*",
-    async handler(request, reply) {
-      try {
-        const url = new URL(request.url, env.AUTH_BASE_URL);
-        const req = new Request(url.toString(), {
-          method: request.method,
-          headers: fromNodeHeaders(request.headers),
-          ...(request.body ? { body: JSON.stringify(request.body) } : {})
-        });
-
-        const response = await auth.handler(req);
-        reply.status(response.status);
-        for (const [key, value] of response.headers.entries()) {
-          reply.header(key, value);
-        }
-        return reply.send(response.body ? await response.text() : null);
-      } catch (error) {
-        request.log.error(error, "authentication route failed");
-        return erro(reply, 500, "Internal authentication error", "AUTH_FAILURE");
-      }
-    }
-  });
 
   return app;
 }
+

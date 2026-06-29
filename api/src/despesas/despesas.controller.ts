@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema } from "@padaria/shared/despesas";
-import { exigirAlgumaPermissao, exigirAutenticacao } from "../autorizacao.js";
-import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../autorizacao/empresa.js";
-import { criadoId, erro, paginadoDeArray } from "../respostas.js";
-import { PermissaoLancamentoInsuficienteError } from "../lancamentos/service-utils.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
+import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
+import { PermissaoLancamentoInsuficienteError } from "./despesas.lancamento.js";
 import { criarDespesa, listarDespesas } from "./despesas.service.js";
 
 export async function registrarRotasDespesas(app: FastifyInstance): Promise<void> {
@@ -19,10 +19,10 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
     return paginadoDeArray(await listarDespesas(query, escopoDados), query.page, query.pageSize);
   });
 
-  app.post("/api/despesas", async (request, reply) => {
+  app.post("/api/despesas", { preHandler: exigirPermissao("despesas_criar") }, async (request, reply) => {
     const dados = despesaPayloadSchema.parse(request.body);
-    const perfil = await exigirAutenticacao(request, reply);
-    if (!perfil) return;
+    const perfil = request.perfilUsuario;
+    if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
     if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
@@ -37,3 +37,6 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
     }
   });
 }
+
+
+

@@ -9,8 +9,8 @@ import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   usarLacreSeInformado
-} from "../lancamentos/service-utils.js";
-import { validarReferenciasTransferencia } from "../lancamentos/referencias.js";
+} from "./transferencias.lancamento.js";
+import { validarReferenciasTransferencia } from "./transferencias.lancamento.js";
 import { criarTransferenciaRepository, listarTransferenciasRepository } from "./transferencias.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
@@ -43,3 +43,4 @@ export async function criarTransferencia(
   const transferencia = await criarTransferenciaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
   return { id: transferencia.id, computar: dados.computar };
 }
+
