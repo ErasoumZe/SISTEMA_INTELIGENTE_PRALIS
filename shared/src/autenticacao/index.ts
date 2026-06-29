@@ -43,6 +43,7 @@ export const permissoes = [
   "cadastro_grupos_vendas",
   "cadastro_pdv",
   "cadastro_formas_pagamento",
+  "integracoes",
   "folha_ponto"
 ] as const;
 

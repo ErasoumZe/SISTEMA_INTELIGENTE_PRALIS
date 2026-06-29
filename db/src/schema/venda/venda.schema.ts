@@ -1,1 +1,12 @@
-export { itensVendas, vendas, vendasItens, vendasTipoPagamento } from "../app.schema.js";
+export {
+  integracoesCamposConfig,
+  integracoesChaves,
+  integracoesHistorico,
+  integracoesRegistros,
+  integracoesSemNovidade,
+  integracoesVinculos,
+  itensVendas,
+  vendas,
+  vendasPagamentos,
+  vendasProdutos
+} from "../app.schema.js";

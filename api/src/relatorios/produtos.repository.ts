@@ -1,6 +1,6 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { produtos } from "@padaria/db/schema/cadastro";
-import { vendas, vendasItens } from "@padaria/db/schema/venda";
+import { vendas, vendasProdutos } from "@padaria/db/schema/venda";
 import { banco } from "../banco/conexao.js";
 
 export type ProdutoMaisVendido = {
@@ -10,9 +10,9 @@ export type ProdutoMaisVendido = {
 };
 
 export async function listarProdutosMaisVendidos(empresaId: string): Promise<ProdutoMaisVendido[]> {
-  const produto = sql<string>`coalesce(${produtos.descricao}, ${vendasItens.descricaoProduto})`;
-  const quantidade = sql<number>`sum(${vendasItens.quantidade})::float`;
-  const valorTotal = sql<number>`sum(${vendasItens.valorTotal})::float`;
+  const produto = sql<string>`coalesce(${produtos.descricao}, ${vendasProdutos.descricaoProduto})`;
+  const quantidade = sql<number>`sum(${vendasProdutos.quantidade})::float`;
+  const valorTotal = sql<number>`sum(${vendasProdutos.valorTotal})::float`;
 
   return banco
     .select({
@@ -20,9 +20,9 @@ export async function listarProdutosMaisVendidos(empresaId: string): Promise<Pro
       quantidade,
       valorTotal
     })
-    .from(vendasItens)
-    .innerJoin(vendas, eq(vendas.id, vendasItens.vendaId))
-    .leftJoin(produtos, eq(produtos.id, vendasItens.produtoId))
+    .from(vendasProdutos)
+    .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+    .leftJoin(produtos, eq(produtos.id, vendasProdutos.produtoId))
     .where(eq(vendas.empresaId, empresaId))
     .groupBy(produto)
     .orderBy(desc(quantidade))

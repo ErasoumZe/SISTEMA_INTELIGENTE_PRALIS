@@ -46,6 +46,11 @@
       "development": "./src/copia/index.ts",
       "default": "./dist/copia/index.js"
     },
+    "./integracoes": {
+      "types": "./dist/integracoes/index.d.ts",
+      "development": "./src/integracoes/index.ts",
+      "default": "./dist/integracoes/index.js"
+    },
     "./malotes": {
       "types": "./dist/malotes/index.d.ts",
       "development": "./src/malotes/index.ts",

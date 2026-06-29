@@ -5,6 +5,7 @@ import { empresasPermitidas, escopoEmpresaAtiva } from "../autorizacao/empresa.j
 import type { AplicacaoFastify } from "../tipos/fastify.js";
 import {
   listarAreasSetores,
+  listarClientes,
   listarColaboradores,
   listarContas,
   listarEmpresas,
@@ -54,6 +55,11 @@ export async function registrarRotasCatalogos(app: AplicacaoFastify) {
   app.get("/api/fornecedores", { preHandler: exigirAutenticacao }, async (request, reply) => {
     const escopo = await escopoDaQuery(request, reply);
     return escopo ? listarFornecedores(escopo.escopoDados) : undefined;
+  });
+
+  app.get("/api/clientes", { preHandler: exigirAutenticacao }, async (request, reply) => {
+    const escopo = await escopoDaQuery(request, reply);
+    return escopo ? listarClientes(escopo.escopoDados) : undefined;
   });
 
   app.get("/api/colaboradores", { preHandler: exigirAutenticacao }, async (request, reply) => {

@@ -17,6 +17,7 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, TipoMovimentacao } from "@padaria/shared";
+import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -168,6 +169,25 @@ export const fornecedores = pgTable("fornecedores", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+export const clientes = pgTable(
+  "clientes",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    documento: text("documento"),
+    criadoEm,
+    atualizadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [
+    uniqueIndex("clientes_empresa_documento_unico_idx")
+      .on(table.empresaId, sql`lower(${table.documento})`)
+      .where(sql`${table.documento} is not null`)
+  ]
+);
 
 export const areas = pgTable("areas", {
   id: idUuid,
@@ -412,6 +432,139 @@ export const produtos = pgTable("produtos", {
   idImportado: uuid("id_importado")
 });
 
+export const integracoesChaves = pgTable(
+  "integracoes_chaves",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").$type<TipoIntegracao>().notNull(),
+    codigo: text("codigo").notNull(),
+    ativa: boolean("ativa").notNull().default(true),
+    criadoPor: text("criado_por"),
+    criadoEm,
+    inativadoEm: timestamp("inativado_em", { withTimezone: true })
+  },
+  (table) => [
+    unique("integracoes_chaves_codigo_unico").on(table.codigo),
+    check("integracoes_chaves_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`)
+  ]
+);
+
+export const integracoesCamposConfig = pgTable(
+  "integracoes_campos_config",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").$type<TipoIntegracao>().notNull(),
+    campo: text("campo").$type<CampoVinculoIntegracao>().notNull(),
+    criarAutomaticamente: boolean("criar_automaticamente").notNull().default(true),
+    vincularAutomaticamente: boolean("vincular_automaticamente").notNull().default(true),
+    atualizadoEm
+  },
+  (table) => [
+    unique("integracoes_campos_config_empresa_tipo_campo_unico").on(table.empresaId, table.tipo, table.campo),
+    check("integracoes_campos_config_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check(
+      "integracoes_campos_config_campo_check",
+      sql`${table.campo} in ('pdv', 'cliente', 'vendedor', 'produto', 'forma_pagamento')`
+    )
+  ]
+);
+
+export const integracoesVinculos = pgTable(
+  "integracoes_vinculos",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").$type<TipoIntegracao>().notNull(),
+    tipoRegistro: text("tipo_registro").$type<TipoRegistroIntegracao>().notNull(),
+    identificadorExterno: text("identificador_externo").notNull(),
+    descricaoExterna: text("descricao_externa"),
+    registroSistemaId: uuid("registro_sistema_id"),
+    pendente: boolean("pendente").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("integracoes_vinculos_externo_unico").on(
+      table.empresaId,
+      table.tipo,
+      table.tipoRegistro,
+      table.identificadorExterno
+    ),
+    check("integracoes_vinculos_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check(
+      "integracoes_vinculos_tipo_registro_check",
+      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'colaborador', 'produto', 'forma_pagamento')`
+    )
+  ]
+);
+
+export const integracoesRegistros = pgTable(
+  "integracoes_registros",
+  {
+    id: idUuid,
+    empresaId,
+    integracaoChaveId: uuid("integracao_chave_id")
+      .notNull()
+      .references(() => integracoesChaves.id, { onDelete: "cascade" }),
+    tipoRegistro: text("tipo_registro").$type<TipoRegistroIntegracao>().notNull(),
+    identificadorExterno: text("identificador_externo").notNull(),
+    hashConteudo: text("hash_conteudo").notNull(),
+    registroSistemaId: uuid("registro_sistema_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("integracoes_registros_externo_unico").on(
+      table.empresaId,
+      table.integracaoChaveId,
+      table.tipoRegistro,
+      table.identificadorExterno
+    ),
+    check(
+      "integracoes_registros_tipo_registro_check",
+      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'colaborador', 'produto', 'forma_pagamento')`
+    )
+  ]
+);
+
+export const integracoesHistorico = pgTable(
+  "integracoes_historico",
+  {
+    id: idUuid,
+    empresaId,
+    integracaoChaveId: uuid("integracao_chave_id")
+      .notNull()
+      .references(() => integracoesChaves.id, { onDelete: "cascade" }),
+    tipo: text("tipo").$type<TipoIntegracao>().notNull(),
+    identificadorExterno: text("identificador_externo"),
+    hashConteudo: text("hash_conteudo"),
+    status: text("status").notNull(),
+    mensagemErro: text("mensagem_erro"),
+    payload: jsonb("payload").notNull(),
+    criadoEm
+  },
+  (table) => [
+    check("integracoes_historico_tipo_check", sql`${table.tipo} in ('vendas', 'produtos_vendas')`),
+    check("integracoes_historico_status_check", sql`${table.status} in ('criado', 'atualizado', 'sem_novidade', 'erro')`)
+  ]
+);
+
+export const integracoesSemNovidade = pgTable("integracoes_sem_novidade", {
+  id: idUuid,
+  empresaId,
+  integracaoChaveId: uuid("integracao_chave_id")
+    .notNull()
+    .references(() => integracoesChaves.id, { onDelete: "cascade" }),
+  tipo: text("tipo").$type<TipoIntegracao>().notNull(),
+  identificadorExterno: text("identificador_externo").notNull(),
+  hashConteudo: text("hash_conteudo").notNull(),
+  payload: jsonb("payload").notNull(),
+  criadoEm
+});
+
 export const malotes = pgTable(
   "malotes",
   {
@@ -536,6 +689,7 @@ export const vendas = pgTable(
   {
     id: idUuid,
     empresaId,
+    integracaoChaveId: uuid("integracao_chave_id").references(() => integracoesChaves.id, { onDelete: "set null" }),
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     dataReferencia: date("data_referencia").notNull(),
     dataVenda: timestamp("data_venda", { withTimezone: true }),
@@ -550,6 +704,16 @@ export const vendas = pgTable(
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     pdvId: uuid("pdv_id").references(() => pdvs.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    clienteId: uuid("cliente_id").references(() => clientes.id),
+    identificadorExterno: text("identificador_externo"),
+    hashIntegracao: text("hash_integracao"),
+    statusExterno: text("status_externo"),
+    numeroNotaFiscal: text("numero_nota_fiscal"),
+    pdvAutomacaoId: text("pdv_automacao_id"),
+    pdvAutomacao: text("pdv_automacao"),
+    vendedorAutomacaoId: text("vendedor_automacao_id"),
+    vendedorAutomacao: text("vendedor_automacao"),
+    vendedorAutomacaoDocumento: text("vendedor_automacao_documento"),
     clienteAutomacaoId: text("cliente_automacao_id"),
     clienteAutomacao: text("cliente_automacao"),
     clienteAutomacaoDocumento: text("cliente_automacao_documento"),
@@ -568,8 +732,8 @@ export const vendas = pgTable(
   ]
 );
 
-export const vendasItens = pgTable(
-  "vendas_itens",
+export const vendasProdutos = pgTable(
+  "vendas_produtos",
   {
     id: idUuid,
     vendaId: uuid("venda_id")
@@ -579,20 +743,26 @@ export const vendasItens = pgTable(
     produtoAutomacaoId: text("produto_automacao_id"),
     produtoAutomacaoCodigo: text("produto_automacao_codigo"),
     descricaoProduto: text("descricao_produto").notNull(),
+    dataHoraItem: timestamp("data_hora_item", { withTimezone: true }),
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("0"),
     valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
+    valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     valorTotal: valorMonetario("valor_total").notNull().default("0"),
+    cancelado: boolean("cancelado").notNull().default(false),
     criadoEm
   },
   (table) => [
-    check("vendas_itens_quantidade_check", sql`${table.quantidade} >= 0`),
-    check("vendas_itens_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
-    check("vendas_itens_valor_total_check", sql`${table.valorTotal} >= 0`)
+    check("vendas_produtos_quantidade_check", sql`${table.quantidade} >= 0`),
+    check("vendas_produtos_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
+    check("vendas_produtos_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    check("vendas_produtos_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
+    check("vendas_produtos_valor_total_check", sql`${table.valorTotal} >= 0`)
   ]
 );
 
-export const vendasTipoPagamento = pgTable(
-  "vendas_tipo_pagamento",
+export const vendasPagamentos = pgTable(
+  "vendas_pagamentos",
   {
     id: idUuid,
     vendaId: uuid("venda_id")
@@ -606,8 +776,8 @@ export const vendasTipoPagamento = pgTable(
     criadoEm
   },
   (table) => [
-    check("vendas_tipo_pagamento_numero_vendas_check", sql`${table.numeroVendas} >= 0`),
-    check("vendas_tipo_pagamento_total_pago_check", sql`${table.totalPago} >= 0`)
+    check("vendas_pagamentos_numero_vendas_check", sql`${table.numeroVendas} >= 0`),
+    check("vendas_pagamentos_total_pago_check", sql`${table.totalPago} >= 0`)
   ]
 );
 

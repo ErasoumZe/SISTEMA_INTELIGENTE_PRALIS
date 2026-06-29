@@ -22,7 +22,7 @@ import {
   retiradas,
   transferencias
 } from "@padaria/db/schema/movimentacao";
-import { vendas, vendasItens, vendasTipoPagamento } from "@padaria/db/schema/venda";
+import { vendas, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { MovimentacaoPayload, MovimentacaoQuery, MovimentoDto, TipoMovimentacao } from "@padaria/shared/movimentacao";
 import { banco } from "../banco/conexao.js";
 
@@ -364,7 +364,7 @@ export async function criarMovimentacaoFinanceira(
       if (!venda) throw new Error("Venda nao criada");
 
       for (const item of dados.itensVenda) {
-        await tx.insert(vendasItens).values({
+        await tx.insert(vendasProdutos).values({
           vendaId: venda.id,
           produtoId: item.produtoId ?? null,
           produtoAutomacaoId: item.produtoAutomacaoId ?? null,
@@ -377,7 +377,7 @@ export async function criarMovimentacaoFinanceira(
       }
 
       for (const pagamento of dados.tiposPagamento) {
-        await tx.insert(vendasTipoPagamento).values({
+        await tx.insert(vendasPagamentos).values({
           vendaId: venda.id,
           formaPagamentoId: pagamento.formaPagamentoId ?? null,
           tipoPagamentoAutomacaoId: pagamento.tipoPagamentoAutomacaoId ?? null,

@@ -15,6 +15,7 @@ import {
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
   contas,
+  clientes,
   ajustesFechamentoCaixa,
   debitosColaboradores,
   despesas,
@@ -42,7 +43,7 @@ import {
   usuarioAutenticacao,
   usuariosEmpresas,
   vendas,
-  vendasItens
+  vendasProdutos
 } from "./src/schema/index.js";
 
 const databaseUrl = process.env["DATABASE_URL"] ?? "postgresql://padaria:padaria@localhost:5543/padaria";
@@ -341,6 +342,7 @@ await banco.delete(retiradas).where(eq(retiradas.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(itensVendas).where(eq(itensVendas.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
+await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
 if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
 
 await banco.delete(colaboradores).where(
@@ -585,7 +587,7 @@ const venda = (
 )[0];
 if (!venda) throw new Error("Venda exemplo nao foi criada");
 
-await banco.insert(vendasItens).values({
+await banco.insert(vendasProdutos).values({
   vendaId: venda.id,
   produtoId: produto.id,
   descricaoProduto: "Pao frances",

@@ -54,6 +54,7 @@ export type Opcoes = {
   contas: Opcao[];
   formasPagamento: Opcao[];
   fornecedores: Opcao[];
+  clientes: Opcao[];
   colaboradores: Opcao[];
   cargos: Opcao[];
   colaboradoresCargos: Opcao[];

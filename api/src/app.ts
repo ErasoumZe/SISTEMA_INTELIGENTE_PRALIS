@@ -9,6 +9,7 @@ import { registrarRotasCadastros } from "./cadastros/cadastros.controller.js";
 import { registrarRotasCatalogos } from "./catalogos/catalogos.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasCopia } from "./copia/copia.controller.js";
+import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasMalotes } from "./malotes/malotes.controller.js";
 import { registrarRotasMovimentacao } from "./movimentacao/movimentacao.controller.js";
 import { registrarRotasRelatorioProdutos } from "./relatorios/produtos.controller.js";
@@ -52,6 +53,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasCadastros(app);
   await registrarRotasCopia(app);
   await registrarRotasRelatorioProdutos(app);
+  await registrarRotasIntegracoes(app);
 
   app.route({
     method: ["GET", "POST"],

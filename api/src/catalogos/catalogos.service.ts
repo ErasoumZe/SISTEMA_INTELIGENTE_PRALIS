@@ -2,6 +2,7 @@ import { empresasPermitidas, filtrarPorEmpresas } from "../autorizacao/empresa.j
 import type { PerfilComEmpresa } from "../autorizacao/empresa.js";
 import {
   listarAreasRepository,
+  listarClientesRepository,
   listarColaboradoresRepository,
   listarContasRepository,
   listarEmpresasRepository,
@@ -49,6 +50,10 @@ export async function listarPdvs(escopoDados: string[] | null) {
 
 export async function listarFornecedores(escopoDados: string[] | null) {
   return filtrarPorEmpresas(await listarFornecedoresRepository(), escopoDados);
+}
+
+export async function listarClientes(escopoDados: string[] | null) {
+  return filtrarPorEmpresas(await listarClientesRepository(), escopoDados);
 }
 
 export async function listarColaboradores(escopoDados: string[] | null) {

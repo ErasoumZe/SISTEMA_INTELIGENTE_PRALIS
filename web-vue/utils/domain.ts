@@ -139,6 +139,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_formas_pagamento",
     icone: "mdi-credit-card"
   },
+  integracoes: { id: "integracoes", titulo: "Integracoes", permissao: "integracoes", icone: "mdi-connection" },
   contas: { id: "contas", titulo: "Contas", permissao: "cadastro_contas", icone: "mdi-domain" },
   empresas: { id: "empresas", titulo: "Empresas", permissao: "cadastro_empresas", icone: "mdi-domain" },
   grupos: { id: "grupos", titulo: "Grupos", permissao: "cadastro_grupos_despesas", icone: "mdi-layers" },
@@ -250,7 +251,8 @@ export const secoesPermissoes = [
       "vendas_crediario",
       "cadastro_pdv",
       "cadastro_formas_pagamento",
-      "cadastro_grupos_vendas"
+      "cadastro_grupos_vendas",
+      "integracoes"
     ]
   },
   {
@@ -288,6 +290,7 @@ export function opcoesVazias(): Opcoes {
     contas: [],
     formasPagamento: [],
     fornecedores: [],
+    clientes: [],
     colaboradores: [],
     cargos: [],
     colaboradoresCargos: [],
@@ -411,6 +414,7 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     contas: itensDaEmpresa(listas.contas, idEmpresa),
     formasPagamento: itensDaEmpresa(listas.formasPagamento, idEmpresa),
     fornecedores: itensDaEmpresa(listas.fornecedores, idEmpresa),
+    clientes: itensDaEmpresa(listas.clientes, idEmpresa),
     colaboradores: itensDaEmpresa(listas.colaboradores, idEmpresa),
     cargos: itensDaEmpresa(listas.cargos, idEmpresa),
     colaboradoresCargos: itensDaEmpresa(listas.colaboradoresCargos, idEmpresa),

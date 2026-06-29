@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import {
   areas,
   cargos,
+  clientes,
   colaboradores,
   colaboradoresCargos,
   contas,
@@ -105,6 +106,13 @@ export async function listarFornecedoresRepository() {
     .select({ id: fornecedores.id, empresaId: fornecedores.empresaId, nome: fornecedores.nome })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
+}
+
+export async function listarClientesRepository() {
+  return banco
+    .select({ id: clientes.id, empresaId: clientes.empresaId, nome: clientes.nome, documento: clientes.documento })
+    .from(clientes)
+    .orderBy(asc(clientes.nome));
 }
 
 export async function listarColaboradoresRepository() {

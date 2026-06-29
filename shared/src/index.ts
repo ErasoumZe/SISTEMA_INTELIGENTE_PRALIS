@@ -5,6 +5,7 @@ export * from "./cadastros/index.js";
 export * from "./catalogos/index.js";
 export * from "./colaboradores/index.js";
 export * from "./copia/index.js";
+export * from "./integracoes/index.js";
 export * from "./malotes/index.js";
 export * from "./movimentacao/index.js";
 export * from "./relatorios/index.js";

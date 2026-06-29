@@ -1,6 +1,7 @@
 export {
   areas,
   cargos,
+  clientes,
   colaboradores,
   colaboradoresCargos,
   colaboradoresFaltasJustificadas,
