@@ -2,7 +2,7 @@ import { setorPayloadSchema } from "@padaria/shared/setores";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
 import { listarSetoresRepository, salvarSetorRepository } from "./setores.repository.js";
 
-export async function listarSetores(escopoDados: string[] | null) {
+export async function listarSetores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarSetoresRepository(), escopoDados);
 }
 

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AtualizarCampoIntegracaoPayload,
   CampoVinculoIntegracao,
@@ -15,8 +15,9 @@ import { camposVinculoIntegracao, tiposRegistroIntegracao } from "@padaria/share
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { erroValidacao, naoAutorizado, proibido } from "../erros.js";
 import {
-  buscarChavePorCodigoRepository,
+  buscarChavePorCodigoHashRepository,
   buscarClienteAutomaticoRepository,
   buscarFormaPagamentoAutomaticoRepository,
   buscarPdvAutomaticoRepository,
@@ -92,8 +93,18 @@ function hashPayload(payload: VendaIntegracaoAgregadaPayload): string {
   return createHash("sha256").update(jsonCanonico(payload)).digest("hex");
 }
 
+function hashChaveIntegracao(chave: string): string {
+  return createHash("sha256").update(chave).digest("hex");
+}
+
+function compararHashConstante(hashRecebido: string, hashArmazenado: string | null): boolean {
+  const esperado = Buffer.from(hashArmazenado ?? "0".repeat(64), "hex");
+  const recebido = Buffer.from(hashRecebido.padEnd(64, "0").slice(0, 64), "hex");
+  return timingSafeEqual(recebido, esperado) && hashRecebido === hashArmazenado;
+}
+
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
-  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
+  if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
 }
 
 function configPadrao(
@@ -200,7 +211,11 @@ async function resolverVinculo(input: {
   return null;
 }
 
-async function resolverVinculosVenda(chave: IntegracaoChaveLinha, payload: VendaIntegracaoAgregadaPayload, db: ExecutorBanco) {
+async function resolverVinculosVenda(
+  chave: IntegracaoChaveLinha,
+  payload: VendaIntegracaoAgregadaPayload,
+  db: ExecutorBanco
+) {
   const configs = await obterConfigs(chave, db);
   const venda = payload.Venda;
   const pdvId = await resolverVinculo({
@@ -279,16 +294,19 @@ export async function listarIntegracoes(query: IntegracaoQuery, perfil: PerfilUs
   const chavesDisponiveis = chaves.filter((chave) => tiposIntegracaoDisponiveis.has(chave.tipo));
   return {
     integracoes: integracoesDisponiveis,
-    chaves:
-      empresasLiberadas === null
-        ? chavesDisponiveis
-        : chavesDisponiveis.filter((chave) => empresasLiberadas.includes(chave.empresaId))
+    chaves: chavesDisponiveis.filter((chave) => empresasLiberadas.includes(chave.empresaId))
   };
 }
 
 export async function criarChaveIntegracao(payload: CriarIntegracaoChavePayload, perfil: PerfilUsuario) {
   validarEmpresa(perfil, payload.empresaId);
-  return criarChaveIntegracaoRepository({ ...payload, codigo: gerarUlid(), criadoPor: perfil.usuarioId });
+  const codigo = gerarUlid();
+  return criarChaveIntegracaoRepository({
+    ...payload,
+    codigo,
+    codigoHash: hashChaveIntegracao(codigo),
+    criadoPor: perfil.usuarioId
+  });
 }
 
 export async function inativarChaveIntegracao(id: string, perfil: PerfilUsuario) {
@@ -347,12 +365,16 @@ export async function salvarVinculoIntegracao(payload: SalvarVinculoIntegracaoPa
 }
 
 export async function receberVendaIntegracao(
-  codigo: string,
+  chaveApi: string,
   payload: VendaIntegracaoAgregadaPayload
 ): Promise<IntegracaoIngestaoResultado> {
-  const chave = await buscarChavePorCodigoRepository(codigo);
-  if (!chave) throw new Error("Chave de integracao invalida");
-  if (chave.tipo !== "vendas") throw new Error("Integracao nao aceita payload de vendas");
+  const hashRecebido = hashChaveIntegracao(chaveApi);
+  const chave = await buscarChavePorCodigoHashRepository(hashRecebido);
+  if (!chave || !compararHashConstante(hashRecebido, chave.codigoHash)) {
+    throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
+  }
+  if (chave.tipo !== "vendas")
+    throw erroValidacao("Integracao nao aceita payload de vendas", "INVALID_INTEGRATION_TYPE");
 
   const identificadorExterno = payload.Venda.idVenda;
   const hashConteudo = hashPayload(payload);
@@ -396,4 +418,3 @@ export async function receberVendaIntegracao(
     return { status, vendaId: venda.id, identificadorExterno };
   });
 }
-

@@ -112,7 +112,11 @@ describe("integracoes_visualizar", () => {
     const resposta = await requisitar(app, { method: "GET", url: `/api/integracoes?empresaId=${empresaA}` });
 
     expect(resposta.statusCode).toBe(403);
-    expect(resposta.json()).toMatchObject({ title: "Permissao insuficiente", status: resposta.statusCode, details: { permissao: "integracoes_visualizar" } });
+    expect(resposta.json()).toMatchObject({
+      title: "Permissao insuficiente",
+      status: resposta.statusCode,
+      details: { permissao: "integracoes_visualizar" }
+    });
     expect(mocks.listarIntegracoes).not.toHaveBeenCalled();
   });
 
@@ -129,7 +133,8 @@ describe("integracoes_visualizar", () => {
   it("Deve_ReceberVendaAgregada_ComPayloadTipado", async () => {
     const resposta = await requisitar(app, {
       method: "POST",
-      url: "/api/integracoes/01JTESTEINTEGRACAO00000000",
+      url: "/api/integracoes",
+      headers: { "x-api-key": "01JTESTEINTEGRACAO00000000" },
       payload: payloadVenda()
     });
 
@@ -146,12 +151,28 @@ describe("integracoes_visualizar", () => {
     );
   });
 
+  it("Deve_RejeitarVendaAgregada_Quando_HeaderNaoInformado", async () => {
+    const resposta = await requisitar(app, {
+      method: "POST",
+      url: "/api/integracoes",
+      payload: payloadVenda()
+    });
+
+    expect(resposta.statusCode).toBe(401);
+    expect(resposta.json()).toMatchObject({ title: "Chave de integracao invalida", status: resposta.statusCode });
+    expect(mocks.receberVendaIntegracao).not.toHaveBeenCalled();
+  });
+
   it("Deve_RejeitarVendaAgregada_Quando_ChaveForInvalida", async () => {
-    mocks.receberVendaIntegracao.mockRejectedValueOnce(new Error("Chave de integracao invalida"));
+    const { naoAutorizado } = await import("../../api/src/erros.js");
+    mocks.receberVendaIntegracao.mockRejectedValueOnce(
+      naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY")
+    );
 
     const resposta = await requisitar(app, {
       method: "POST",
-      url: "/api/integracoes/CHAVEINVALIDA",
+      url: "/api/integracoes",
+      headers: { authorization: "Bearer CHAVEINVALIDA" },
       payload: payloadVenda()
     });
 
@@ -159,8 +180,3 @@ describe("integracoes_visualizar", () => {
     expect(resposta.json()).toMatchObject({ title: "Chave de integracao invalida", status: resposta.statusCode });
   });
 });
-
-
-
-
-

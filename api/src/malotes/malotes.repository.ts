@@ -1,7 +1,13 @@
 import { and, asc, count, eq, ilike, inArray, ne, type SQL } from "drizzle-orm";
 import { lacresMalotes, malotes } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import { banco, executarComTransacaoOpcional, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export type MaloteLinha = {
   id: string;
@@ -181,9 +187,10 @@ export async function copiarMalotesRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  modo: ModoImportacaoEntidade = "simples"
+  modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(malotes), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(malotes).where(eq(malotes.empresaId, empresaDestinoId));
     let inseridos = 0;

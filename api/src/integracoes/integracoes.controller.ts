@@ -4,7 +4,6 @@ import {
   atualizarCampoIntegracaoPayloadSchema,
   criarIntegracaoChavePayloadSchema,
   integracaoChaveParamsSchema,
-  integracaoCodigoParamsSchema,
   integracaoQuerySchema,
   salvarVinculoIntegracaoPayloadSchema,
   tiposIntegracao,
@@ -13,6 +12,7 @@ import {
 } from "@padaria/shared/integracoes";
 import { exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
+import { naoAutorizado } from "../erros.js";
 import {
   criarChaveIntegracao,
   inativarChaveIntegracao,
@@ -29,42 +29,44 @@ const dicionarioQuerySchema = integracaoQuerySchema.extend({
   tipo: z.enum(tiposIntegracao)
 });
 
+function chaveIntegracaoHeader(headers: Record<string, string | string[] | undefined>): string | null {
+  const apiKey = headers["x-api-key"];
+  if (typeof apiKey === "string" && apiKey.trim()) return apiKey.trim();
+
+  const authorization = headers["authorization"];
+  if (typeof authorization !== "string") return null;
+  const [tipo, token] = authorization.split(" ");
+  if (tipo?.toLowerCase() !== "bearer" || !token?.trim()) return null;
+  return token.trim();
+}
+
 export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<void> {
-  app.get(
-    "/api/integracoes",
-    { preHandler: exigirPermissao("integracoes_visualizar") },
-    async (request) => ok(await listarIntegracoes(integracaoQuerySchema.parse(request.query), request.perfilUsuario!))
+  app.get("/api/integracoes", { preHandler: exigirPermissao("integracoes_visualizar") }, async (request) =>
+    ok(await listarIntegracoes(integracaoQuerySchema.parse(request.query), request.perfilUsuario!))
   );
 
-  app.get(
-    "/api/integracoes/historico",
-    { preHandler: exigirPermissao("integracoes_visualizar") },
-    async (request) => {
-      const query = integracaoQuerySchema.parse(request.query);
-      return paginadoDeArray(await listarHistoricoIntegracao(query, request.perfilUsuario!), query.page, query.pageSize);
+  app.get("/api/integracoes/historico", { preHandler: exigirPermissao("integracoes_visualizar") }, async (request) => {
+    const query = integracaoQuerySchema.parse(request.query);
+    return paginadoDeArray(await listarHistoricoIntegracao(query, request.perfilUsuario!), query.page, query.pageSize);
+  });
+
+  app.get("/api/integracoes/dicionario", { preHandler: exigirPermissao("integracoes_visualizar") }, async (request) =>
+    ok(await listarDicionarioIntegracao(dicionarioQuerySchema.parse(request.query), request.perfilUsuario!))
+  );
+
+  app.post("/api/integracoes/chaves", { preHandler: exigirPermissao("integracoes_criar") }, async (request, reply) => {
+    try {
+      const chave = await criarChaveIntegracao(
+        criarIntegracaoChavePayloadSchema.parse(request.body),
+        request.perfilUsuario!
+      );
+      if (!chave) return erro(reply, 400, "Integracao invalida");
+      return criadoId(reply, chave.id);
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
     }
-  );
-
-  app.get(
-    "/api/integracoes/dicionario",
-    { preHandler: exigirPermissao("integracoes_visualizar") },
-    async (request) => ok(await listarDicionarioIntegracao(dicionarioQuerySchema.parse(request.query), request.perfilUsuario!))
-  );
-
-  app.post(
-    "/api/integracoes/chaves",
-    { preHandler: exigirPermissao("integracoes_criar") },
-    async (request, reply) => {
-      try {
-        const chave = await criarChaveIntegracao(criarIntegracaoChavePayloadSchema.parse(request.body), request.perfilUsuario!);
-        if (!chave) return erro(reply, 400, "Integracao invalida");
-        return criadoId(reply, chave.id);
-      } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Integracao invalida";
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
-      }
-    }
-  );
+  });
 
   app.post(
     "/api/integracoes/chaves/:id/inativar",
@@ -81,19 +83,15 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
     }
   );
 
-  app.put(
-    "/api/integracoes/campos",
-    { preHandler: exigirPermissao("integracoes_editar") },
-    async (request, reply) => {
-      try {
-        await salvarCampoIntegracao(atualizarCampoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);
-        return semConteudo(reply);
-      } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Integracao invalida";
-        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
-      }
+  app.put("/api/integracoes/campos", { preHandler: exigirPermissao("integracoes_editar") }, async (request, reply) => {
+    try {
+      await salvarCampoIntegracao(atualizarCampoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);
+      return semConteudo(reply);
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
     }
-  );
+  });
 
   app.put(
     "/api/integracoes/vinculos",
@@ -109,17 +107,21 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
     }
   );
 
-  app.post("/api/integracoes/:codigo", async (request, reply) => {
-    const { codigo } = integracaoCodigoParamsSchema.parse(request.params);
-    const payload: VendaIntegracaoAgregadaPayload = vendaIntegracaoAgregadaSchema.parse(request.body);
-    try {
-      return ok(await receberVendaIntegracao(codigo, payload));
-    } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Integracao invalida";
-      const status = mensagem === "Chave de integracao invalida" ? 401 : 400;
-      return erro(reply, status, mensagem);
+  app.post(
+    "/api/integracoes",
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: "1 minute"
+        }
+      }
+    },
+    async (request, reply) => {
+      const chave = chaveIntegracaoHeader(request.headers);
+      if (!chave) throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
+      const payload: VendaIntegracaoAgregadaPayload = vendaIntegracaoAgregadaSchema.parse(request.body);
+      return ok(await receberVendaIntegracao(chave, payload));
     }
-  });
+  );
 }
-
-

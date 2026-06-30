@@ -6,7 +6,7 @@ import { listarEmpresasRepository, salvarEmpresaRepository } from "./empresas.re
 export async function listarEmpresas(perfil?: PerfilComEmpresa) {
   const empresasLiberadas = perfil ? empresasPermitidas(perfil) : [];
   const empresas = await listarEmpresasRepository();
-  return empresasLiberadas === null ? empresas : empresas.filter((empresa) => empresasLiberadas.includes(empresa.id));
+  return empresas.filter((empresa) => empresasLiberadas.includes(empresa.id));
 }
 
 export async function salvarEmpresa(id: string | null, body: unknown) {

@@ -11,6 +11,7 @@ export * from "./fornecedores/index.js";
 export * from "./formas-pagamento/index.js";
 export * from "./grupos/index.js";
 export * from "./ids/index.js";
+export * from "./dinheiro/index.js";
 export * from "./integracoes/index.js";
 export * from "./malotes/index.js";
 export * from "./pdvs/index.js";
@@ -27,4 +28,3 @@ export * from "./transferencias/index.js";
 export * from "./relatorios/index.js";
 export * from "./saude/index.js";
 export * from "./tema/index.js";
-

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { dinheiro, mensagemErro } from "~/utils/domain";
 
-const props = defineProps<{ empresaId: string }>();
+const props = defineProps<{ empresaId: string; caixaIdFiltro?: string }>();
 const { apiGet } = useApi();
 
 const carregando = ref(false);
@@ -13,7 +13,9 @@ async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    produtos.value = await apiGet(`/api/vendas/produtos-mais-vendidos?empresaId=${props.empresaId}`);
+    const params = new URLSearchParams({ empresaId: props.empresaId });
+    if (props.caixaIdFiltro) params.set("caixaId", props.caixaIdFiltro);
+    produtos.value = await apiGet(`/api/vendas/produtos-mais-vendidos?${params.toString()}`);
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {
@@ -22,7 +24,7 @@ async function carregar() {
 }
 
 watch(
-  () => props.empresaId,
+  () => [props.empresaId, props.caixaIdFiltro],
   () => {
     produtos.value = [];
     void carregar();

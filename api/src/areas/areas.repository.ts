@@ -1,18 +1,36 @@
 import { and, asc, eq } from "drizzle-orm";
 import { areas, setores } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export async function listarAreasRepository() {
-  return banco.select({ id: areas.id, empresaId: areas.empresaId, nome: areas.nome }).from(areas).orderBy(asc(areas.nome));
+  return banco
+    .select({ id: areas.id, empresaId: areas.empresaId, nome: areas.nome })
+    .from(areas)
+    .orderBy(asc(areas.nome));
 }
 
-export async function salvarAreaRepository(input: { id?: string; empresaId: string; nome: string }, db: ExecutorBanco = banco) {
+export async function salvarAreaRepository(
+  input: { id?: string; empresaId: string; nome: string },
+  db: ExecutorBanco = banco
+) {
   if (input.id) {
-    await db.update(areas).set({ nome: input.nome }).where(and(eq(areas.id, input.id), eq(areas.empresaId, input.empresaId)));
+    await db
+      .update(areas)
+      .set({ nome: input.nome })
+      .where(and(eq(areas.id, input.id), eq(areas.empresaId, input.empresaId)));
     return { id: input.id, empresaId: input.empresaId, nome: input.nome };
   }
-  const [criada] = await db.insert(areas).values({ empresaId: input.empresaId, nome: input.nome }).returning({ id: areas.id });
+  const [criada] = await db
+    .insert(areas)
+    .values({ empresaId: input.empresaId, nome: input.nome })
+    .returning({ id: areas.id });
   return criada;
 }
 
@@ -41,9 +59,10 @@ export async function copiarAreasSetoresRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  modo: ModoImportacaoEntidade = "simples"
+  modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const areasOrigem = filtrarOrigemEntidade(await db.select().from(areas), filtro, empresasPermitidasIds);
     const setoresOrigem = filtrarOrigemEntidade(await db.select().from(setores), filtro, empresasPermitidasIds);
     const areasDestino = await db.select().from(areas).where(eq(areas.empresaId, empresaDestinoId));
@@ -51,7 +70,9 @@ export async function copiarAreasSetoresRepository(
     let inseridos = 0;
     for (const area of areasOrigem) {
       if (jaImportado(areasDestino, area.empresaId, area.id)) continue;
-      await db.insert(areas).values({ empresaId: empresaDestinoId, nome: area.nome, importadoDe: area.empresaId, idImportado: area.id });
+      await db
+        .insert(areas)
+        .values({ empresaId: empresaDestinoId, nome: area.nome, importadoDe: area.empresaId, idImportado: area.id });
       inseridos += 1;
     }
     for (const setor of setoresOrigem) {

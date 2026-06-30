@@ -5,6 +5,8 @@
   --padaria-muted: #eef2f7;
   --padaria-muted-foreground: #71717a;
   --padaria-border: #d9e1eb;
+  --padaria-brand: #6d28d9;
+  --padaria-accent: #0891b2;
 }
 
 html {
@@ -142,7 +144,7 @@ body {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 14px;
-  background: var(--padaria-brand, #d09000);
+  background: var(--padaria-brand, #6d28d9);
   color: white;
 }
 
@@ -162,7 +164,7 @@ body {
   gap: 4px;
   border: 0;
   background: transparent;
-  color: var(--padaria-brand, #b87800);
+  color: var(--padaria-brand, #6d28d9);
   font-size: 24px;
   font-weight: 900;
   line-height: 1.1;
@@ -226,7 +228,7 @@ body {
   min-height: 46px;
   justify-content: flex-start;
   border-radius: 999px !important;
-  background: var(--padaria-brand, #d09000) !important;
+  background: var(--padaria-brand, #6d28d9) !important;
   color: white !important;
   font-size: 15px;
   font-weight: 900;
@@ -302,8 +304,8 @@ body {
 }
 
 .sidebar-item.active {
-  background: color-mix(in srgb, var(--padaria-brand, #d09000) 12%, white);
-  color: var(--padaria-brand, #b87800);
+  background: color-mix(in srgb, var(--padaria-brand, #6d28d9) 12%, white);
+  color: var(--padaria-brand, #6d28d9);
 }
 
 .sidebar-bottom {
@@ -384,6 +386,41 @@ body {
 .operacoes-layout {
   display: grid;
   gap: 22px;
+}
+
+.inicio-vazio {
+  display: grid;
+  min-height: calc(100vh - 140px);
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #475569;
+  text-align: center;
+}
+
+.inicio-vazio-icon {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  border: 1px solid var(--padaria-border);
+  border-radius: 16px;
+  background: var(--padaria-card);
+  color: var(--padaria-brand, #6d28d9);
+}
+
+.inicio-vazio h1 {
+  margin: 8px 0 0;
+  color: #020617;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.inicio-vazio p {
+  max-width: 420px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .summary-grid {

@@ -2,8 +2,8 @@
 const router = useRouter();
 const { apiUrl } = useApi();
 
-const email = ref("diretor@email.com");
-const password = ref("123456");
+const email = ref("");
+const password = ref("");
 const loading = ref(false);
 const error = ref("");
 

@@ -1,8 +1,14 @@
 import { and, asc, eq } from "drizzle-orm";
 import { gruposMercadorias, produtos, produtosConversoes, unidadesMedida } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional } from "../banco/conexao.js";
 import type { ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export async function listarProdutosRepository() {
   const linhas = await banco
@@ -61,12 +67,7 @@ export async function salvarProdutoRepository(input: {
     };
     const produtoId = input.id
       ? input.id
-      : (
-          await tx
-            .insert(produtos)
-            .values(valores)
-            .returning({ id: produtos.id })
-        )[0]?.id;
+      : (await tx.insert(produtos).values(valores).returning({ id: produtos.id }))[0]?.id;
     if (!produtoId) throw new Error("Produto nao criado");
     if (input.id) {
       await tx
@@ -92,17 +93,24 @@ export async function salvarProdutoRepository(input: {
 async function completarProdutos(empresaDestinoId: string, db: ExecutorBanco) {
   const produtosDestino = await db.select().from(produtos).where(eq(produtos.empresaId, empresaDestinoId));
   const produtosOrigem = await db.select().from(produtos);
-  const gruposDestino = await db.select().from(gruposMercadorias).where(eq(gruposMercadorias.empresaId, empresaDestinoId));
+  const gruposDestino = await db
+    .select()
+    .from(gruposMercadorias)
+    .where(eq(gruposMercadorias.empresaId, empresaDestinoId));
   const unidadesDestino = await db.select().from(unidadesMedida).where(eq(unidadesMedida.empresaId, empresaDestinoId));
   for (const destino of produtosDestino) {
     if (!destino.importadoDe || !destino.idImportado) continue;
     const origem = produtosOrigem.find((item) => item.id === destino.idImportado);
     if (!origem) continue;
     const grupoDestino = origem.grupoMercadoriaId
-      ? gruposDestino.find((item) => item.importadoDe === origem.empresaId && item.idImportado === origem.grupoMercadoriaId)
+      ? gruposDestino.find(
+          (item) => item.importadoDe === origem.empresaId && item.idImportado === origem.grupoMercadoriaId
+        )
       : null;
     const unidadeDestino = origem.unidadeMedidaId
-      ? unidadesDestino.find((item) => item.importadoDe === origem.empresaId && item.idImportado === origem.unidadeMedidaId)
+      ? unidadesDestino.find(
+          (item) => item.importadoDe === origem.empresaId && item.idImportado === origem.unidadeMedidaId
+        )
       : null;
     await db
       .update(produtos)
@@ -115,9 +123,10 @@ export async function copiarProdutosRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  modo: ModoImportacaoEntidade = "simples"
+  modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(produtos), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(produtos).where(eq(produtos.empresaId, empresaDestinoId));
     let inseridos = 0;

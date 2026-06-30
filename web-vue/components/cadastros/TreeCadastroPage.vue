@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TreeItem } from "~/types/padaria";
+import TreeCadastro from "~/components/cadastros/TreeCadastro.vue";
 
 const props = defineProps<{
   tela: "grupos" | "areas_setores";

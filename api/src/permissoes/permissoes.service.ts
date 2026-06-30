@@ -7,6 +7,7 @@ import {
 } from "@padaria/shared/permissoes";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
 import { empresasPermitidas, filtrarPorEmpresas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
+import { executarEmTransacao } from "../banco/conexao.js";
 import { normalizarBusca, falharValidacao } from "../utils.js";
 import { buscarCargoEmpresaRepository, listarEmpresasUsuarioRepository } from "../usuarios/usuarios.repository.js";
 import { buscarSetorEmpresaRepository } from "../setores/setores.repository.js";
@@ -32,8 +33,8 @@ type DadosPermissoes = {
   usuariosPermissoes: DadosPermissoesRepository["usuariosPermissoes"];
 };
 
-function filtrarUsuariosPorEmpresas(usuarios: UsuarioPermissaoLinha[], escopoDados: string[] | null): UsuarioPermissaoLinha[] {
-  if (!escopoDados) return usuarios;
+function filtrarUsuariosPorEmpresas(usuarios: UsuarioPermissaoLinha[], escopoDados: string[]): UsuarioPermissaoLinha[] {
+  if (!escopoDados.length) return [];
   return usuarios.filter((usuario) => {
     const ids = Array.isArray(usuario.empresaIds) ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
     return escopoDados.some((empresaId) => ids.includes(empresaId));
@@ -47,13 +48,10 @@ function empresaNoEscopo(perfil: PerfilComEmpresa | undefined, empresaId: string
 function todasEmpresasNoEscopo(perfil: PerfilComEmpresa | undefined, empresaIds: string[]): boolean {
   if (!perfil) return true;
   const permitidas = empresasPermitidas(perfil);
-  return permitidas === null || empresaIds.every((empresaId) => permitidas.includes(empresaId));
+  return empresaIds.every((empresaId) => permitidas.includes(empresaId));
 }
 
-export async function listarPermissoes(
-  _empresasLiberadas: string[] | null,
-  escopoDados: string[] | null
-): Promise<DadosPermissoes> {
+export async function listarPermissoes(_empresasLiberadas: string[], escopoDados: string[]): Promise<DadosPermissoes> {
   const dados = await listarPermissoesRepository();
   const cargosVisiveis = filtrarPorEmpresas(dados.cargos, escopoDados);
   const setoresVisiveis = filtrarPorEmpresas(dados.setores, escopoDados);
@@ -90,21 +88,51 @@ function montarLinhasPermissoes(dados: DadosPermissoes) {
       if (!cargo) return [];
       const regras = linhaRegras(item.regras);
       if (!regras.permissao) return [];
-      return [{ id: `cargo:${item.cargoId}`, tipo: "cargo" as const, tipoPermissao: "cargo" as const, alvoId: item.cargoId, alvo: cargo.nome ?? item.cargoId, cargoId: item.cargoId, ...regras }];
+      return [
+        {
+          id: `cargo:${item.cargoId}`,
+          tipo: "cargo" as const,
+          tipoPermissao: "cargo" as const,
+          alvoId: item.cargoId,
+          alvo: cargo.nome ?? item.cargoId,
+          cargoId: item.cargoId,
+          ...regras
+        }
+      ];
     }),
     ...dados.setoresPermissoes.flatMap((item) => {
       const setor = dados.setores.find((alvo) => alvo.id === item.setorId);
       if (!setor?.id) return [];
       const regras = linhaRegras(item.regras);
       if (!regras.permissao) return [];
-      return [{ id: `setor:${setor.id}`, tipo: "setor" as const, tipoPermissao: "setor" as const, alvoId: setor.id, alvo: setor.nome ?? setor.id, setorId: setor.id, ...regras }];
+      return [
+        {
+          id: `setor:${setor.id}`,
+          tipo: "setor" as const,
+          tipoPermissao: "setor" as const,
+          alvoId: setor.id,
+          alvo: setor.nome ?? setor.id,
+          setorId: setor.id,
+          ...regras
+        }
+      ];
     }),
     ...dados.usuariosPermissoes.flatMap((item) => {
       const usuario = dados.usuarios.find((alvo) => alvo.usuarioId === item.usuarioId);
       if (!usuario?.usuarioId) return [];
       const regras = linhaRegras(item.regras);
       if (!regras.permissao) return [];
-      return [{ id: `usuario:${usuario.usuarioId}`, tipo: "usuario" as const, tipoPermissao: "usuario" as const, alvoId: usuario.usuarioId, alvo: usuario.nome ?? usuario.email ?? usuario.usuarioId, usuarioId: usuario.usuarioId, ...regras }];
+      return [
+        {
+          id: `usuario:${usuario.usuarioId}`,
+          tipo: "usuario" as const,
+          tipoPermissao: "usuario" as const,
+          alvoId: usuario.usuarioId,
+          alvo: usuario.nome ?? usuario.email ?? usuario.usuarioId,
+          usuarioId: usuario.usuarioId,
+          ...regras
+        }
+      ];
     })
   ].sort((a, b) => a.tipo.localeCompare(b.tipo) || a.alvo.localeCompare(b.alvo));
 }
@@ -131,56 +159,82 @@ export async function listarPermissoesPaginadas(body: unknown, perfil?: PerfilCo
 
 export async function excluirPermissao(body: unknown, perfil?: PerfilComEmpresa) {
   const query: ExcluirPermissaoQuery = excluirPermissaoQuerySchema.parse(body);
-  if (query.empresaId && perfil && !podeAcessarEmpresa(perfil, query.empresaId)) falharValidacao("Empresa nao permitida");
+  if (query.empresaId && perfil && !podeAcessarEmpresa(perfil, query.empresaId))
+    falharValidacao("Empresa nao permitida");
 
-  if (query.tipoPermissao === "cargo") {
-    const cargo = await buscarCargoEmpresaRepository(query.alvoId);
-    if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) falharValidacao("Empresa nao permitida");
-    if (query.empresaId && cargo.empresaId !== query.empresaId) falharValidacao("Empresa nao permitida");
-    await excluirPermissaoCargoRepository(query.alvoId, query.permissao);
+  return executarEmTransacao(async (tx) => {
+    if (query.tipoPermissao === "cargo") {
+      const cargo = await buscarCargoEmpresaRepository(query.alvoId, tx);
+      if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) falharValidacao("Empresa nao permitida");
+      if (query.empresaId && cargo.empresaId !== query.empresaId) falharValidacao("Empresa nao permitida");
+      await excluirPermissaoCargoRepository(query.alvoId, query.permissao, tx);
+      return { ok: true };
+    }
+
+    if (query.tipoPermissao === "setor") {
+      const setor = await buscarSetorEmpresaRepository(query.alvoId, tx);
+      if (!setor || !empresaNoEscopo(perfil, setor.empresaId)) falharValidacao("Empresa nao permitida");
+      if (query.empresaId && setor.empresaId !== query.empresaId) falharValidacao("Empresa nao permitida");
+      await excluirPermissaoSetorRepository(query.alvoId, query.permissao, tx);
+      return { ok: true };
+    }
+
+    const empresasDoUsuario = await listarEmpresasUsuarioRepository(query.alvoId, tx);
+    const empresaIds = empresasDoUsuario.map((empresa) => empresa.empresaId);
+    if (!empresaIds.length || !todasEmpresasNoEscopo(perfil, empresaIds)) falharValidacao("Empresa nao permitida");
+    if (query.empresaId && !empresaIds.includes(query.empresaId)) falharValidacao("Empresa nao permitida");
+    await excluirPermissaoUsuarioRepository(query.alvoId, query.permissao, tx);
     return { ok: true };
-  }
-
-  if (query.tipoPermissao === "setor") {
-    const setor = await buscarSetorEmpresaRepository(query.alvoId);
-    if (!setor || !empresaNoEscopo(perfil, setor.empresaId)) falharValidacao("Empresa nao permitida");
-    if (query.empresaId && setor.empresaId !== query.empresaId) falharValidacao("Empresa nao permitida");
-    await excluirPermissaoSetorRepository(query.alvoId, query.permissao);
-    return { ok: true };
-  }
-
-  const empresasDoUsuario = await listarEmpresasUsuarioRepository(query.alvoId);
-  const empresaIds = empresasDoUsuario.map((empresa) => empresa.empresaId);
-  if (!empresaIds.length || !todasEmpresasNoEscopo(perfil, empresaIds)) falharValidacao("Empresa nao permitida");
-  if (query.empresaId && !empresaIds.includes(query.empresaId)) falharValidacao("Empresa nao permitida");
-  await excluirPermissaoUsuarioRepository(query.alvoId, query.permissao);
-  return { ok: true };
+  });
 }
 
 export async function salvarPermissao(body: unknown, usuarioId?: string, perfil?: PerfilComEmpresa) {
   const dados = permissaoPayloadSchema.parse(body);
 
-  if (dados.tipoPermissao === "cargo") {
-    if (!dados.cargoId) falharValidacao("Cargo obrigatorio");
-    const cargo = await buscarCargoEmpresaRepository(dados.cargoId);
-    if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) falharValidacao("Empresa nao permitida");
-    await substituirPermissoesCargoRepository(dados.cargoId, dados.regras);
-    return { tipoPermissao: dados.tipoPermissao, cargoId: dados.cargoId, regras: dados.regras, atualizadoPor: usuarioId };
-  }
+  return executarEmTransacao(async (tx) => {
+    if (dados.tipoPermissao === "cargo") {
+      if (!dados.cargoId) falharValidacao("Cargo obrigatorio");
+      const cargo = await buscarCargoEmpresaRepository(dados.cargoId, tx);
+      if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) falharValidacao("Empresa nao permitida");
+      await substituirPermissoesCargoRepository(dados.cargoId, dados.regras, tx);
+      return {
+        tipoPermissao: dados.tipoPermissao,
+        cargoId: dados.cargoId,
+        regras: dados.regras,
+        atualizadoPor: usuarioId
+      };
+    }
 
-  if (dados.tipoPermissao === "setor") {
-    if (!dados.setorId) falharValidacao("Setor obrigatorio");
-    const setor = await buscarSetorEmpresaRepository(dados.setorId);
-    if (!setor || !empresaNoEscopo(perfil, setor.empresaId)) falharValidacao("Empresa nao permitida");
-    await substituirPermissoesSetorRepository(dados.setorId, dados.regras);
-    return { tipoPermissao: dados.tipoPermissao, setorId: dados.setorId, regras: dados.regras, atualizadoPor: usuarioId };
-  }
+    if (dados.tipoPermissao === "setor") {
+      if (!dados.setorId) falharValidacao("Setor obrigatorio");
+      const setor = await buscarSetorEmpresaRepository(dados.setorId, tx);
+      if (!setor || !empresaNoEscopo(perfil, setor.empresaId)) falharValidacao("Empresa nao permitida");
+      await substituirPermissoesSetorRepository(dados.setorId, dados.regras, tx);
+      return {
+        tipoPermissao: dados.tipoPermissao,
+        setorId: dados.setorId,
+        regras: dados.regras,
+        atualizadoPor: usuarioId
+      };
+    }
 
-  if (!dados.usuarioId) falharValidacao("Usuario obrigatorio");
-  const empresasDoUsuario = await listarEmpresasUsuarioRepository(dados.usuarioId);
-  if (!empresasDoUsuario.length || !todasEmpresasNoEscopo(perfil, empresasDoUsuario.map((empresa) => empresa.empresaId))) {
-    falharValidacao("Empresa nao permitida");
-  }
-  await substituirPermissoesUsuarioRepository(dados.usuarioId, dados.regras);
-  return { tipoPermissao: dados.tipoPermissao, usuarioId: dados.usuarioId, regras: dados.regras, atualizadoPor: usuarioId };
+    if (!dados.usuarioId) falharValidacao("Usuario obrigatorio");
+    const empresasDoUsuario = await listarEmpresasUsuarioRepository(dados.usuarioId, tx);
+    if (
+      !empresasDoUsuario.length ||
+      !todasEmpresasNoEscopo(
+        perfil,
+        empresasDoUsuario.map((empresa) => empresa.empresaId)
+      )
+    ) {
+      falharValidacao("Empresa nao permitida");
+    }
+    await substituirPermissoesUsuarioRepository(dados.usuarioId, dados.regras, tx);
+    return {
+      tipoPermissao: dados.tipoPermissao,
+      usuarioId: dados.usuarioId,
+      regras: dados.regras,
+      atualizadoPor: usuarioId
+    };
+  });
 }

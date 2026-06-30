@@ -81,6 +81,11 @@
       "development": "./src/ids/index.ts",
       "default": "./dist/ids/index.js"
     },
+    "./dinheiro": {
+      "types": "./dist/dinheiro/index.d.ts",
+      "development": "./src/dinheiro/index.ts",
+      "default": "./dist/dinheiro/index.js"
+    },
     "./malotes": {
       "types": "./dist/malotes/index.d.ts",
       "development": "./src/malotes/index.ts",

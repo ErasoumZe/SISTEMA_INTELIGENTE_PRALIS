@@ -3,17 +3,17 @@ import { vendaPayloadSchema, vendasQuerySchema } from "@padaria/shared/vendas";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
-import { PermissaoLancamentoInsuficienteError } from "./vendas.lancamento.js";
+import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarVenda, listarVendas } from "./vendas.service.js";
 
 export async function registrarRotasVendas(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/vendas",
-      { preHandler: exigirAlgumaPermissao(["entradas_visualizar", "relatorio_vendas_visualizar"]) },
+    { preHandler: exigirAlgumaPermissao(["entradas_visualizar", "relatorio_vendas_visualizar"]) },
     async (request, reply) => {
       const query = vendasQuerySchema.parse(request.query);
       const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-      let escopoDados: string[] | null;
+      let escopoDados: string[];
       try {
         escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
       } catch {
@@ -44,6 +44,3 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
     }
   });
 }
-
-
-

@@ -10,7 +10,10 @@ import {
   listarMalotesRepository
 } from "./malotes.repository.js";
 import type { AtualizarMalotePayload, CriarMalotePayload } from "@padaria/shared/malotes";
-import type { ExportarMalotePayload as ExportarPayload, ImportarMalotesPayload as ImportarPayload } from "@padaria/shared/malotes";
+import type {
+  ExportarMalotePayload as ExportarPayload,
+  ImportarMalotesPayload as ImportarPayload
+} from "@padaria/shared/malotes";
 import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 
@@ -68,21 +71,21 @@ export function mensagemErroMalote(error: Error): string {
   return error.message;
 }
 
-export async function listarMalotes(escopoDados: string[] | null) {
+export async function listarMalotes(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarMalotesRepository(), escopoDados);
 }
 
-function empresaPermitida(empresaId: string, empresasPermitidasIds: string[] | null): boolean {
-  return empresasPermitidasIds === null || empresasPermitidasIds.includes(empresaId);
+function empresaPermitida(empresaId: string, empresasPermitidasIds: string[]): boolean {
+  return empresasPermitidasIds.includes(empresaId);
 }
 
-export async function listarLacresMalote(maloteId: string, empresasPermitidasIds: string[] | null) {
-  if (empresasPermitidasIds?.length === 0) return [];
+export async function listarLacresMalote(maloteId: string, empresasPermitidasIds: string[]) {
+  if (!empresasPermitidasIds.length) return [];
   return listarLacresMaloteRepository(maloteId, empresasPermitidasIds);
 }
 
-export async function validarLacre(numero: string, empresasPermitidasIds: string[] | null) {
-  if (empresasPermitidasIds?.length === 0) return { existe: false, disponivel: false, erro: "Lacre inexistente" };
+export async function validarLacre(numero: string, empresasPermitidasIds: string[]) {
+  if (!empresasPermitidasIds.length) return { existe: false, disponivel: false, erro: "Lacre inexistente" };
   const lacre = await buscarLacrePorNumeroRepository(numero, empresasPermitidasIds);
   if (!lacre) return { existe: false, disponivel: false, erro: "Lacre inexistente" };
   return {
@@ -112,7 +115,7 @@ export async function criarMalote(payload: CriarMalotePayload, usuarioId?: strin
 export async function atualizarMalote(
   maloteId: string,
   payload: AtualizarMalotePayload,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[]
 ) {
   const malote = await buscarMaloteEmpresaRepository(maloteId);
   if (!malote || !empresaPermitida(malote.empresaId, empresasPermitidasIds)) throw new Error("Empresa nao permitida");
@@ -141,4 +144,3 @@ export async function exportarMalote(id: string, body: ExportarPayload, perfil?:
   validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
   return copiarMalotesRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
 }
-

@@ -1,11 +1,22 @@
 import { and, asc, eq } from "drizzle-orm";
 import { fornecedores } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export async function listarFornecedoresRepository() {
   return banco
-    .select({ id: fornecedores.id, empresaId: fornecedores.empresaId, nome: fornecedores.nome, documento: fornecedores.documento })
+    .select({
+      id: fornecedores.id,
+      empresaId: fornecedores.empresaId,
+      nome: fornecedores.nome,
+      documento: fornecedores.documento
+    })
     .from(fornecedores)
     .orderBy(asc(fornecedores.nome));
 }
@@ -32,9 +43,10 @@ export async function copiarFornecedoresRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  _modo: ModoImportacaoEntidade = "simples"
+  _modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(fornecedores), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(fornecedores).where(eq(fornecedores.empresaId, empresaDestinoId));
     let inseridos = 0;

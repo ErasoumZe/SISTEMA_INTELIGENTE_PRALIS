@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { pdvsQuerySchema as empresaQuerySchema } from "@padaria/shared/pdvs";
 import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { listarPdvs, salvarPdv } from "./pdvs.service.js";
 
 export async function registrarRotasPdvs(app: FastifyInstance): Promise<void> {
-  app.get("/api/pdvs", { preHandler: exigirPermissao("cadastro_pdv_visualizar") }, async (request, reply) => {
+  app.get("/api/pdvs", { preHandler: exigirAlgumaPermissao(["cadastro_pdv_visualizar", "caixa_operar"]) }, async (request, reply) => {
     const query = empresaQuerySchema.parse(request.query);
     try {
       const escopo = escopoEmpresaAtiva(request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [], query.empresaId);

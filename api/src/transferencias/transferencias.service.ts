@@ -5,12 +5,13 @@ import type {
   TransferenciaPayload,
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
+import { executarEmTransacao } from "../banco/conexao.js";
 import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   usarLacreSeInformado
-} from "./transferencias.lancamento.js";
-import { validarReferenciasTransferencia } from "./transferencias.lancamento.js";
+} from "../lancamentos/lancamentos.dominio.js";
+import { validarReferenciasTransferencia } from "../lancamentos/lancamentos.dominio.js";
 import { criarTransferenciaRepository, listarTransferenciasRepository } from "./transferencias.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
@@ -31,16 +32,17 @@ export async function criarTransferencia(
 ): Promise<TransferenciaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
-  const referenciaInvalida = await validarReferenciasTransferencia(dados);
-  if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-  await usarLacreSeInformado(dados.lacreMaloteId);
+  return executarEmTransacao(async (tx) => {
+    const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    await usarLacreSeInformado(dados.lacreMaloteId, tx);
 
-  const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId);
-  if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
-    throw new Error("Transferencia precisa envolver a conta do PDV aberto");
-  }
+    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
+      throw new Error("Transferencia precisa envolver a conta do PDV aberto");
+    }
 
-  const transferencia = await criarTransferenciaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
-  return { id: transferencia.id, computar: dados.computar };
+    const transferencia = await criarTransferenciaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
+    return { id: transferencia.id, computar: dados.computar };
+  });
 }
-

@@ -1,6 +1,6 @@
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { PerfilUsuario, Permissao } from "@padaria/shared";
+import { temAlgumaPermissao, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared";
 import { erro } from "@padaria/shared/api";
 import { auth } from "./config.js";
 import { buscarPerfilUsuario } from "./perfil.service.js";
@@ -22,7 +22,10 @@ export async function exigirAutenticacao(request: FastifyRequest, reply: Fastify
     return null;
   }
 
-  const perfil = await buscarPerfilUsuario(sessao.user.id);
+  const perfil =
+    request.usuarioId === sessao.user.id && request.perfilUsuario
+      ? request.perfilUsuario
+      : await buscarPerfilUsuario(sessao.user.id);
   if (!perfil) {
     erro(reply, 403, "Perfil de usuario nao configurado", "PROFILE_NOT_CONFIGURED");
     return null;
@@ -38,7 +41,7 @@ export function exigirPermissao(permissao: Permissao) {
     const perfil = await exigirAutenticacao(request, reply);
     if (!perfil) return;
 
-    if (!perfil.permissoes.includes(permissao)) {
+    if (!temPermissao(perfil.permissoes, permissao)) {
       erro(reply, 403, "Permissao insuficiente", "INSUFFICIENT_PERMISSION", { permissao });
     }
   };
@@ -49,10 +52,9 @@ export function exigirAlgumaPermissao(permissoes: Permissao[]) {
     const perfil = await exigirAutenticacao(request, reply);
     if (!perfil) return;
 
-    if (!permissoes.some((permissao) => perfil.permissoes.includes(permissao))) {
+    if (!temAlgumaPermissao(perfil.permissoes, permissoes)) {
       const permissao = permissoes[0];
       erro(reply, 403, "Permissao insuficiente", "INSUFFICIENT_PERMISSION", permissao ? { permissao } : undefined);
     }
   };
 }
-

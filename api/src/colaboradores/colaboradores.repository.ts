@@ -7,8 +7,14 @@ import {
   colaboradoresJornadas,
   setores
 } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export async function listarColaboradoresRepository() {
   return banco
@@ -33,7 +39,13 @@ export async function salvarColaboradorRepository(
       .update(colaboradores)
       .set({ nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
       .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
-    return { id: input.id, empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null };
+    return {
+      id: input.id,
+      empresaId: input.empresaId,
+      nome: input.nome,
+      cpf: input.cpf,
+      setorId: input.setorId ?? null
+    };
   }
   const [criado] = await db
     .insert(colaboradores)
@@ -165,16 +177,19 @@ export async function existeCargoAtivoColaboradorRepository(
   return Boolean(cargo);
 }
 
-export async function criarCargoColaboradorRepository(input: {
-  empresaId: string;
-  colaboradorId: string;
-  setorId: string | null;
-  cargoId: string;
-  remuneracaoMinuto: number;
-  dataInicio: string;
-  ativo: boolean;
-}) {
-  const [criado] = await banco
+export async function criarCargoColaboradorRepository(
+  input: {
+    empresaId: string;
+    colaboradorId: string;
+    setorId: string | null;
+    cargoId: string;
+    remuneracaoMinuto: number;
+    dataInicio: string;
+    ativo: boolean;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [criado] = await db
     .insert(colaboradoresCargos)
     .values({
       empresaId: input.empresaId,
@@ -189,8 +204,8 @@ export async function criarCargoColaboradorRepository(input: {
   return criado;
 }
 
-export async function colaboradorTemUsuarioRepository(colaboradorId: string) {
-  const [colaborador] = await banco
+export async function colaboradorTemUsuarioRepository(colaboradorId: string, db: ExecutorBanco = banco) {
+  const [colaborador] = await db
     .select({ usuarioId: colaboradores.usuarioId })
     .from(colaboradores)
     .where(eq(colaboradores.id, colaboradorId))
@@ -206,13 +221,16 @@ export async function contarCargosAtivosColaboradorRepository(colaboradorId: str
   return cargosAtivos.length;
 }
 
-export async function atualizarStatusCargoColaboradorRepository(input: {
-  colaboradorId: string;
-  cargoColaboradorId: string;
-  empresaId: string;
-  ativo: boolean;
-}) {
-  await banco
+export async function atualizarStatusCargoColaboradorRepository(
+  input: {
+    colaboradorId: string;
+    cargoColaboradorId: string;
+    empresaId: string;
+    ativo: boolean;
+  },
+  db: ExecutorBanco = banco
+) {
+  await db
     .update(colaboradoresCargos)
     .set({ ativo: input.ativo, atualizadoEm: new Date() })
     .where(
@@ -263,9 +281,10 @@ export async function criarJornadasColaboradorRepository(
       intervaloMinutos: number;
       colaboradorCargoId: string | null;
     }>;
-  }
+  },
+  db?: ExecutorBanco
 ) {
-  return executarEmTransacao(async (tx) => {
+  return executarComTransacaoOpcional(db, async (tx) => {
     const diasAfetados = [...new Set(input.faixas.map((faixa) => faixa.diaDaSemana))];
     if (diasAfetados.length) {
       await tx
@@ -317,14 +336,17 @@ export async function listarFaltasJustificadasRepository(colaboradorId: string) 
   return faltas.map((falta) => ({ ...falta, inicio: falta.inicio.toISOString(), fim: falta.fim.toISOString() }));
 }
 
-export async function criarFaltaJustificadaRepository(input: {
-  empresaId: string;
-  colaboradorId: string;
-  inicio: string;
-  fim: string;
-  motivo: string;
-}) {
-  const [criada] = await banco
+export async function criarFaltaJustificadaRepository(
+  input: {
+    empresaId: string;
+    colaboradorId: string;
+    inicio: string;
+    fim: string;
+    motivo: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [criada] = await db
     .insert(colaboradoresFaltasJustificadas)
     .values({
       empresaId: input.empresaId,
@@ -338,15 +360,21 @@ export async function criarFaltaJustificadaRepository(input: {
 }
 
 async function completarColaboradores(empresaDestinoId: string, db: ExecutorBanco) {
-  const colaboradoresDestino = await db.select().from(colaboradores).where(eq(colaboradores.empresaId, empresaDestinoId));
+  const colaboradoresDestino = await db
+    .select()
+    .from(colaboradores)
+    .where(eq(colaboradores.empresaId, empresaDestinoId));
   const setoresDestino = await db.select().from(setores).where(eq(setores.empresaId, empresaDestinoId));
   const colaboradoresOrigem = await db.select().from(colaboradores);
   for (const destino of colaboradoresDestino) {
     if (!destino.importadoDe || !destino.idImportado) continue;
     const origem = colaboradoresOrigem.find((item) => item.id === destino.idImportado);
     if (!origem?.setorId) continue;
-    const setorDestino = setoresDestino.find((item) => item.importadoDe === origem.empresaId && item.idImportado === origem.setorId);
-    if (setorDestino) await db.update(colaboradores).set({ setorId: setorDestino.id }).where(eq(colaboradores.id, destino.id));
+    const setorDestino = setoresDestino.find(
+      (item) => item.importadoDe === origem.empresaId && item.idImportado === origem.setorId
+    );
+    if (setorDestino)
+      await db.update(colaboradores).set({ setorId: setorDestino.id }).where(eq(colaboradores.id, destino.id));
   }
 }
 
@@ -354,9 +382,10 @@ export async function copiarColaboradoresRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  modo: ModoImportacaoEntidade = "simples"
+  modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(colaboradores), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(colaboradores).where(eq(colaboradores.empresaId, empresaDestinoId));
     let inseridos = 0;
@@ -382,9 +411,10 @@ export async function copiarCargosRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  _modo: ModoImportacaoEntidade = "simples"
+  _modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(cargos), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(cargos).where(eq(cargos.empresaId, empresaDestinoId));
     let inseridos = 0;

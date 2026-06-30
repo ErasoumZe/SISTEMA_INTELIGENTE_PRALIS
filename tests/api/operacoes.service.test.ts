@@ -1,4 +1,5 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import type * as LancamentosDominio from "../../api/src/lancamentos/lancamentos.dominio.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { criarDespesa, listarDespesas } from "../../api/src/despesas/despesas.service.js";
 import { criarMercadoria } from "../../api/src/mercadorias/mercadorias.service.js";
@@ -26,30 +27,18 @@ vi.mock("../../api/src/caixa/caixa.service.js", () => ({
   obterCaixaAbertoParaLancamento: mocks.obterCaixaAbertoParaLancamento
 }));
 
-vi.mock("../../api/src/vendas/vendas.lancamento.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/src/vendas/vendas.lancamento.js")>()),
-  validarReferenciasVenda: mocks.validarReferenciasVenda
-}));
-
-vi.mock("../../api/src/despesas/despesas.lancamento.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/src/despesas/despesas.lancamento.js")>()),
-  validarReferenciasDespesa: mocks.validarReferenciasDespesa
-}));
-
-vi.mock("../../api/src/mercadorias/mercadorias.lancamento.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/src/mercadorias/mercadorias.lancamento.js")>()),
-  validarReferenciasMercadoria: mocks.validarReferenciasMercadoria
-}));
-
-vi.mock("../../api/src/retiradas/retiradas.lancamento.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/src/retiradas/retiradas.lancamento.js")>()),
-  validarReferenciasRetirada: mocks.validarReferenciasRetirada
-}));
-
-vi.mock("../../api/src/transferencias/transferencias.lancamento.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/src/transferencias/transferencias.lancamento.js")>()),
-  validarReferenciasTransferencia: mocks.validarReferenciasTransferencia
-}));
+vi.mock("../../api/src/lancamentos/lancamentos.dominio.js", async (importOriginal) => {
+  const original = await importOriginal<typeof LancamentosDominio>();
+  return {
+    ...original,
+    obterCaixaParaLancamento: mocks.obterCaixaAbertoParaLancamento,
+    validarReferenciasVenda: mocks.validarReferenciasVenda,
+    validarReferenciasDespesa: mocks.validarReferenciasDespesa,
+    validarReferenciasMercadoria: mocks.validarReferenciasMercadoria,
+    validarReferenciasRetirada: mocks.validarReferenciasRetirada,
+    validarReferenciasTransferencia: mocks.validarReferenciasTransferencia
+  };
+});
 
 vi.mock("../../api/src/vendas/vendas.repository.js", () => ({
   criarVendaRepository: mocks.criarVendaRepository,
@@ -211,4 +200,3 @@ describe("services operacionais por entidade", () => {
     await expect(listarDespesas({}, [])).resolves.toEqual([]);
   });
 });
-

@@ -1,10 +1,10 @@
-import { clientePayloadSchema } from "@padaria/shared/clientes";
-import { filtrarPorEmpresas } from "../auth/empresa.js";
+import { clientePayloadSchema, type clientesQuerySchema } from "@padaria/shared/clientes";
+import type { z } from "zod";
 import { apenasDigitos } from "../utils.js";
 import { listarClientesRepository, salvarClienteRepository } from "./clientes.repository.js";
 
-export async function listarClientes(escopoDados: string[] | null) {
-  return filtrarPorEmpresas(await listarClientesRepository(), escopoDados);
+export async function listarClientes(query: z.infer<typeof clientesQuerySchema>, escopoDados: string[]) {
+  return listarClientesRepository(query, escopoDados);
 }
 
 export async function salvarCliente(id: string | null, body: unknown) {

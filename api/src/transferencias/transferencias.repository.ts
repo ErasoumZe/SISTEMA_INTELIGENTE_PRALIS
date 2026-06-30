@@ -1,18 +1,15 @@
-import { and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { transferencias } from "@padaria/db/schema/transferencia";
-import type {
-  TransferenciaDto,
-  TransferenciaPayload,
-  TransferenciasQuery
-} from "@padaria/shared/transferencias";
-import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "./transferencias.lancamento.js";
+import type { TransferenciaDto, TransferenciaPayload, TransferenciasQuery } from "@padaria/shared/transferencias";
+import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
   empresasPermitidasIds: string[] | null
 ): Promise<TransferenciaDto[]> {
   const filtros = filtrosEmpresa(transferencias, query, empresasPermitidasIds);
+  if (query.caixaId) filtros.push(eq(transferencias.caixaId, query.caixaId));
   return banco
     .select({
       id: transferencias.id,
@@ -31,9 +28,10 @@ export async function criarTransferenciaRepository(
   dados: TransferenciaPayload,
   computar: boolean,
   criadoPor: string,
-  caixaId?: string | null
+  caixaId?: string | null,
+  db: ExecutorBanco = banco
 ): Promise<{ id: string }> {
-  const [transferencia] = await banco
+  const [transferencia] = await db
     .insert(transferencias)
     .values({
       ...valoresBase(dados, computar, criadoPor, caixaId),
@@ -46,4 +44,3 @@ export async function criarTransferenciaRepository(
   if (!transferencia) throw new Error("Transferencia nao criada");
   return transferencia;
 }
-

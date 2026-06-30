@@ -1,11 +1,22 @@
 import { and, asc, eq } from "drizzle-orm";
 import { unidadesMedida } from "@padaria/db/schema/cadastro";
-import { banco, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrarOrigemEntidade, jaImportado, type FiltroOrigemEntidade, type ModoImportacaoEntidade, type ResultadoImportacaoEntidade } from "../utils.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import {
+  filtrarOrigemEntidade,
+  jaImportado,
+  type FiltroOrigemEntidade,
+  type ModoImportacaoEntidade,
+  type ResultadoImportacaoEntidade
+} from "../utils.js";
 
 export async function listarUnidadesMedidaRepository() {
   return banco
-    .select({ id: unidadesMedida.id, empresaId: unidadesMedida.empresaId, nome: unidadesMedida.nome, sigla: unidadesMedida.sigla })
+    .select({
+      id: unidadesMedida.id,
+      empresaId: unidadesMedida.empresaId,
+      nome: unidadesMedida.nome,
+      sigla: unidadesMedida.sigla
+    })
     .from(unidadesMedida)
     .orderBy(asc(unidadesMedida.nome));
 }
@@ -32,9 +43,10 @@ export async function copiarUnidadesMedidaRepository(
   filtro: FiltroOrigemEntidade,
   empresaDestinoId: string,
   empresasPermitidasIds: string[] | null,
-  _modo: ModoImportacaoEntidade = "simples"
+  _modo: ModoImportacaoEntidade = "simples",
+  db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
-  return executarEmTransacao(async (db) => {
+  return executarComTransacaoOpcional(db, async (db) => {
     const origem = filtrarOrigemEntidade(await db.select().from(unidadesMedida), filtro, empresasPermitidasIds);
     const destinos = await db.select().from(unidadesMedida).where(eq(unidadesMedida.empresaId, empresaDestinoId));
     let inseridos = 0;

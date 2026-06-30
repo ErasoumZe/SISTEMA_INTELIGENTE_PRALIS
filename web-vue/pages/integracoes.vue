@@ -9,8 +9,10 @@ import type {
   TipoIntegracao,
   TipoRegistroIntegracao
 } from "@padaria/shared";
-import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, mensagemErro, motivoTelaDesabilitada, telaDesabilitadaNoMenu, telaVisivelNoMenu } from "~/utils/domain";
+import type { CaixaStatus, Opcao } from "~/types/padaria";
+import AppShell from "~/components/app/AppShell.vue";
+import { usePermissoes } from "~/composables/usePermissoes";
+import { mensagemErro } from "~/utils/domain";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -81,23 +83,9 @@ const formVinculoManual = reactive<{
 });
 
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
-const telasPermitidas = computed<ItemMenu[]>(() =>
-  Object.values(itemPorTela).filter((item) => telaVisivelNoMenu(permissoesUsuario.value, item))
-);
-const telasDesabilitadasMenu = computed(() =>
-  telasPermitidas.value
-    .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto)))
-    .map((item) => item.id)
-);
-const motivosTelasDesabilitadas = computed(() =>
-  Object.fromEntries(
-    telasPermitidas.value
-      .filter((item) => telaDesabilitadaNoMenu(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto)))
-      .map((item) => [
-        item.id,
-        motivoTelaDesabilitada(permissoesUsuario.value, item, Boolean(caixaStatus.value?.caixaAberto))
-      ])
-  )
+const { temPermissao, telasPermitidas, telasDesabilitadasMenu, motivosTelasDesabilitadas } = usePermissoes(
+  permissoesUsuario,
+  () => Boolean(caixaStatus.value?.caixaAberto)
 );
 const chavesDaEmpresa = computed(() => chaves.value.filter((chave) => chave.empresaId === empresaId.value));
 const registrosDisponiveis = computed<RegistrosDisponiveis>(() => ({
@@ -166,10 +154,14 @@ function tituloOpcao(item: Opcao) {
 async function sair() {
   saindo.value = true;
   try {
-    await fetch(`${useRuntimeConfig().public.apiUrl || "http://localhost:4100"}/api/auth/sign-out`, {
-      method: "POST",
-      credentials: "include"
-    });
+    try {
+      await fetch(`${useRuntimeConfig().public.apiUrl || "http://localhost:4100"}/api/auth/sign-out`, {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch {
+      // Se a API estiver fora, o logout local ainda precisa liberar a tela.
+    }
     await router.push("/login");
   } finally {
     saindo.value = false;
@@ -178,21 +170,23 @@ async function sair() {
 
 async function carregarEmpresas() {
   empresas.value = await apiGet<Opcao[]>("/api/empresas");
-  empresaId.value = sessao.value?.perfil?.empresaId ?? sessao.value?.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
+  empresaId.value =
+    sessao.value?.perfil?.empresaId ?? sessao.value?.perfil?.empresaIds?.[0] ?? empresas.value[0]?.id ?? "";
 }
 
 async function carregarOpcoesVinculo() {
   const query = `?empresaId=${empresaId.value}`;
-  [opcoesVinculo.pdvs, opcoesVinculo.clientes, opcoesVinculo.produtos, opcoesVinculo.formasPagamento] = await Promise.all([
-    apiGet<Opcao[]>(`/api/pdvs${query}`),
-    apiGet<Opcao[]>(`/api/clientes${query}`),
-    apiGet<Opcao[]>(`/api/produtos${query}`),
-    apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
-  ]);
+  [opcoesVinculo.pdvs, opcoesVinculo.clientes, opcoesVinculo.produtos, opcoesVinculo.formasPagamento] =
+    await Promise.all([
+      apiGet<Opcao[]>(`/api/pdvs${query}`),
+      apiGet<Opcao[]>(`/api/clientes${query}`),
+      apiGet<Opcao[]>(`/api/produtos${query}`),
+      apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
+    ]);
 }
 
 async function carregarStatusCaixa() {
-  if (!empresaId.value || !permissoesUsuario.value.includes("caixa_operar")) {
+  if (!empresaId.value || !temPermissao("caixa_operar")) {
     caixaStatus.value = null;
     return;
   }
@@ -342,7 +336,7 @@ onMounted(async () => {
       await router.push("/login");
       return;
     }
-    if (!permissoesUsuario.value.includes("integracoes_visualizar")) {
+    if (!temPermissao("integracoes_visualizar")) {
       erro.value = "Sem permissao para acessar esta pagina.";
       return;
     }
@@ -411,37 +405,37 @@ onMounted(async () => {
             </v-card-title>
             <div class="responsive-table-shell">
               <v-table>
-              <thead>
-                <tr>
-                  <th>Codigo</th>
-                  <th>Status</th>
-                  <th>Criada em</th>
-                  <th class="text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="chave in chavesDaEmpresa.filter((item) => item.tipo === tipoSelecionado)" :key="chave.id">
-                  <td class="font-monospace">{{ chave.codigo }}</td>
-                  <td>
-                    <v-chip :color="chave.ativa ? 'success' : 'default'" size="small">
-                      {{ chave.ativa ? "Ativa" : "Inativa" }}
-                    </v-chip>
-                  </td>
-                  <td>{{ new Date(chave.criadoEm).toLocaleString("pt-BR") }}</td>
-                  <td class="text-right">
-                    <v-btn
-                      v-if="chave.ativa"
-                      size="small"
-                      variant="outlined"
-                      prepend-icon="mdi-close"
-                      :loading="salvandoChave"
-                      @click="inativarChave(chave.id)"
-                    >
-                      Inativar
-                    </v-btn>
-                  </td>
-                </tr>
-              </tbody>
+                <thead>
+                  <tr>
+                    <th>Codigo</th>
+                    <th>Status</th>
+                    <th>Criada em</th>
+                    <th class="text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="chave in chavesDaEmpresa.filter((item) => item.tipo === tipoSelecionado)" :key="chave.id">
+                    <td class="font-monospace">{{ chave.codigo }}</td>
+                    <td>
+                      <v-chip :color="chave.ativa ? 'success' : 'default'" size="small">
+                        {{ chave.ativa ? "Ativa" : "Inativa" }}
+                      </v-chip>
+                    </td>
+                    <td>{{ new Date(chave.criadoEm).toLocaleString("pt-BR") }}</td>
+                    <td class="text-right">
+                      <v-btn
+                        v-if="chave.ativa"
+                        size="small"
+                        variant="outlined"
+                        prepend-icon="mdi-close"
+                        :loading="salvandoChave"
+                        @click="inativarChave(chave.id)"
+                      >
+                        Inativar
+                      </v-btn>
+                    </td>
+                  </tr>
+                </tbody>
               </v-table>
             </div>
           </v-card>
@@ -452,28 +446,28 @@ onMounted(async () => {
             <v-card-title>Funcionamento diario</v-card-title>
             <div class="responsive-table-shell">
               <v-table>
-              <thead>
-                <tr>
-                  <th>Dia</th>
-                  <th>Integracao</th>
-                  <th>Recebidos</th>
-                  <th>Novos</th>
-                  <th>Atualizados</th>
-                  <th>Sem novidade</th>
-                  <th>Erros</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="linha in historico" :key="`${linha.dia}-${linha.tipo}`">
-                  <td>{{ linha.dia }}</td>
-                  <td>{{ tituloTipo(linha.tipo) }}</td>
-                  <td>{{ linha.recebidos }}</td>
-                  <td>{{ linha.novos }}</td>
-                  <td>{{ linha.atualizados }}</td>
-                  <td>{{ linha.semNovidade }}</td>
-                  <td>{{ linha.erros }}</td>
-                </tr>
-              </tbody>
+                <thead>
+                  <tr>
+                    <th>Dia</th>
+                    <th>Integracao</th>
+                    <th>Recebidos</th>
+                    <th>Novos</th>
+                    <th>Atualizados</th>
+                    <th>Sem novidade</th>
+                    <th>Erros</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="linha in historico" :key="`${linha.dia}-${linha.tipo}`">
+                    <td>{{ linha.dia }}</td>
+                    <td>{{ tituloTipo(linha.tipo) }}</td>
+                    <td>{{ linha.recebidos }}</td>
+                    <td>{{ linha.novos }}</td>
+                    <td>{{ linha.atualizados }}</td>
+                    <td>{{ linha.semNovidade }}</td>
+                    <td>{{ linha.erros }}</td>
+                  </tr>
+                </tbody>
               </v-table>
             </div>
           </v-card>
@@ -486,31 +480,31 @@ onMounted(async () => {
               <v-progress-linear v-if="dicionarioCarregando" indeterminate />
               <div class="responsive-table-shell">
                 <v-table>
-                <thead>
-                  <tr>
-                    <th>Campo</th>
-                    <th>Criar automaticamente</th>
-                    <th>Vincular automaticamente</th>
-                    <th class="text-right">Salvar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="config in configs" :key="`${config.tipo}:${config.campo}`">
-                    <td>{{ tituloCampo(config.campo) }}</td>
-                    <td><v-switch v-model="config.criarAutomaticamente" color="primary" hide-details /></td>
-                    <td><v-switch v-model="config.vincularAutomaticamente" color="primary" hide-details /></td>
-                    <td class="text-right">
-                      <v-btn
-                        size="small"
-                        variant="outlined"
-                        :loading="salvandoCampo === config.campo"
-                        @click="salvarCampo(config)"
-                      >
-                        Salvar
-                      </v-btn>
-                    </td>
-                  </tr>
-                </tbody>
+                  <thead>
+                    <tr>
+                      <th>Campo</th>
+                      <th>Criar automaticamente</th>
+                      <th>Vincular automaticamente</th>
+                      <th class="text-right">Salvar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="config in configs" :key="`${config.tipo}:${config.campo}`">
+                      <td>{{ tituloCampo(config.campo) }}</td>
+                      <td><v-switch v-model="config.criarAutomaticamente" color="primary" hide-details /></td>
+                      <td><v-switch v-model="config.vincularAutomaticamente" color="primary" hide-details /></td>
+                      <td class="text-right">
+                        <v-btn
+                          size="small"
+                          variant="outlined"
+                          :loading="salvandoCampo === config.campo"
+                          @click="salvarCampo(config)"
+                        >
+                          Salvar
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
                 </v-table>
               </div>
             </v-card>
@@ -560,34 +554,34 @@ onMounted(async () => {
               <v-progress-linear v-if="dicionarioCarregando" indeterminate />
               <div class="responsive-table-shell">
                 <v-table>
-                <thead>
-                  <tr>
-                    <th>Tipo</th>
-                    <th>Identificador externo</th>
-                    <th>Descricao</th>
-                    <th>Registro do sistema</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="vinculo in vinculos" :key="vinculo.id">
-                    <td>{{ tituloRegistro(vinculo.tipoRegistro) }}</td>
-                    <td class="font-monospace">{{ vinculo.identificadorExterno }}</td>
-                    <td>{{ vinculo.descricaoExterna || "-" }}</td>
-                    <td>
-                      <v-select
-                        :model-value="vinculo.registroSistemaId"
-                        :items="itensVinculo(vinculo)"
-                        :item-title="tituloOpcao"
-                        item-value="id"
-                        density="compact"
-                        hide-details
-                        clearable
-                        :loading="salvandoVinculo === vinculo.id"
-                        @update:model-value="salvarVinculo(vinculo, String($event || ''))"
-                      />
-                    </td>
-                  </tr>
-                </tbody>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Identificador externo</th>
+                      <th>Descricao</th>
+                      <th>Registro do sistema</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="vinculo in vinculos" :key="vinculo.id">
+                      <td>{{ tituloRegistro(vinculo.tipoRegistro) }}</td>
+                      <td class="font-monospace">{{ vinculo.identificadorExterno }}</td>
+                      <td>{{ vinculo.descricaoExterna || "-" }}</td>
+                      <td>
+                        <v-select
+                          :model-value="vinculo.registroSistemaId"
+                          :items="itensVinculo(vinculo)"
+                          :item-title="tituloOpcao"
+                          item-value="id"
+                          density="compact"
+                          hide-details
+                          clearable
+                          :loading="salvandoVinculo === vinculo.id"
+                          @update:model-value="salvarVinculo(vinculo, String($event || ''))"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
                 </v-table>
               </div>
             </v-card>

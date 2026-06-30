@@ -1,18 +1,13 @@
 import { and, asc, desc, eq, ilike, ne } from "drizzle-orm";
 import { colaboradores, gruposDespesas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
-import {
-  ajustesFechamentoCaixa,
-  debitosColaboradores,
-  edicoesCaixa,
-  fechamentosCaixa
-} from "@padaria/db/schema/caixa";
+import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
 import type { AjusteSaldoPayload, ResumoCaixaQuery } from "@padaria/shared/caixa";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
 export type TotaisCaixaLinha = {
   totalEntradas: string;
@@ -31,7 +26,10 @@ export async function obterTotaisCaixa(query: ResumoCaixaQuery): Promise<TotaisC
   const filtroVendas = [eq(vendas.empresaId, query.empresaId), eq(vendas.dataReferencia, query.data)];
   const filtroDespesas = [eq(despesas.empresaId, query.empresaId), eq(despesas.dataReferencia, query.data)];
   const filtroRetiradas = [eq(retiradas.empresaId, query.empresaId), eq(retiradas.dataReferencia, query.data)];
-  const filtroTransferencias = [eq(transferencias.empresaId, query.empresaId), eq(transferencias.dataReferencia, query.data)];
+  const filtroTransferencias = [
+    eq(transferencias.empresaId, query.empresaId),
+    eq(transferencias.dataReferencia, query.data)
+  ];
   if (query.colaboradorId) {
     filtroVendas.push(eq(vendas.colaboradorId, query.colaboradorId));
     filtroDespesas.push(eq(despesas.colaboradorId, query.colaboradorId));
@@ -39,12 +37,24 @@ export async function obterTotaisCaixa(query: ResumoCaixaQuery): Promise<TotaisC
   }
 
   const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas] = await Promise.all([
-    banco.select({ valorOriginal: vendas.valorOriginal }).from(vendas).where(and(...filtroVendas)),
+    banco
+      .select({ valorOriginal: vendas.valorOriginal })
+      .from(vendas)
+      .where(and(...filtroVendas)),
     query.colaboradorId
       ? Promise.resolve([])
-      : banco.select({ valorOriginal: transferencias.valorOriginal }).from(transferencias).where(and(...filtroTransferencias)),
-    banco.select({ valorOriginal: despesas.valorOriginal }).from(despesas).where(and(...filtroDespesas)),
-    banco.select({ valorOriginal: retiradas.valorOriginal }).from(retiradas).where(and(...filtroRetiradas))
+      : banco
+          .select({ valorOriginal: transferencias.valorOriginal })
+          .from(transferencias)
+          .where(and(...filtroTransferencias)),
+    banco
+      .select({ valorOriginal: despesas.valorOriginal })
+      .from(despesas)
+      .where(and(...filtroDespesas)),
+    banco
+      .select({ valorOriginal: retiradas.valorOriginal })
+      .from(retiradas)
+      .where(and(...filtroRetiradas))
   ]);
 
   const soma = (linhas: Array<{ valorOriginal: string }>) =>
@@ -64,7 +74,10 @@ export async function obterTotaisCaixa(query: ResumoCaixaQuery): Promise<TotaisC
   };
 }
 
-export async function buscarGrupoQuebraCaixa(empresaId: string, db: ExecutorBanco = banco): Promise<{ id: string } | null> {
+export async function buscarGrupoQuebraCaixa(
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string } | null> {
   const [grupo] = await db
     .select({ id: gruposDespesas.id })
     .from(gruposDespesas)
@@ -212,10 +225,18 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
   return caixa ?? null;
 }
 
-export async function existeCaixaAbertoPdvRepository(pdvId: string, caixaIgnoradoId?: string, db: ExecutorBanco = banco) {
+export async function existeCaixaAbertoPdvRepository(
+  pdvId: string,
+  caixaIgnoradoId?: string,
+  db: ExecutorBanco = banco
+) {
   const filtros = [eq(fechamentosCaixa.pdvId, pdvId), eq(fechamentosCaixa.status, "aberto")];
   if (caixaIgnoradoId) filtros.push(ne(fechamentosCaixa.id, caixaIgnoradoId));
-  const [caixa] = await db.select({ id: fechamentosCaixa.id }).from(fechamentosCaixa).where(and(...filtros)).limit(1);
+  const [caixa] = await db
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .where(and(...filtros))
+    .limit(1);
   return Boolean(caixa);
 }
 
@@ -354,7 +375,11 @@ export async function calcularTotaisCaixaOperacionalRepository(
       })
       .from(transferencias)
       .where(
-        and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true), ne(transferencias.status, "cancelado"))
+        and(
+          eq(transferencias.caixaId, caixaId),
+          eq(transferencias.computar, true),
+          ne(transferencias.status, "cancelado")
+        )
       ),
     db
       .select({ valorOriginal: despesas.valorOriginal })
@@ -412,56 +437,58 @@ export async function criarAcertoSaldoCaixaRepository(
     criadoPor: string;
     data: string;
   },
-  db: ExecutorBanco = banco
+  db?: ExecutorBanco
 ) {
-  const valor = input.valorDiferenca.toFixed(2);
-  const [despesa] = await db
-    .insert(despesas)
-    .values({
-      empresaId: input.empresaId,
-      dataReferencia: input.data,
-      dataVencimento: input.data,
-      descricao: "Diferenca de caixa",
-      observacao: input.observacao,
-      valorOriginal: valor,
-      contaOrigemId: input.contaOrigemId,
-      colaboradorId: input.colaboradorId,
-      grupoDespesaId: input.grupoDespesaId,
-      caixaId: input.caixaId,
-      criadoPor: input.criadoPor
-    })
-    .returning({ id: despesas.id });
-  if (!despesa) throw new Error("Despesa de diferenca nao criada");
+  return executarComTransacaoOpcional(db, async (db) => {
+    const valor = input.valorDiferenca.toFixed(2);
+    const [despesa] = await db
+      .insert(despesas)
+      .values({
+        empresaId: input.empresaId,
+        dataReferencia: input.data,
+        dataVencimento: input.data,
+        descricao: "Diferenca de caixa",
+        observacao: input.observacao,
+        valorOriginal: valor,
+        contaOrigemId: input.contaOrigemId,
+        colaboradorId: input.colaboradorId,
+        grupoDespesaId: input.grupoDespesaId,
+        caixaId: input.caixaId,
+        criadoPor: input.criadoPor
+      })
+      .returning({ id: despesas.id });
+    if (!despesa) throw new Error("Despesa de diferenca nao criada");
 
-  await db.insert(despesasItens).values({
-    despesaId: despesa.id,
-    grupoDespesaId: input.grupoDespesaId,
-    descricao: "Diferenca de caixa",
-    valor
-  });
-
-  const [debito] = await db
-    .insert(debitosColaboradores)
-    .values({
-      empresaId: input.empresaId,
-      colaboradorId: input.colaboradorId,
-      tipo: "FECHAMENTO_CAIXA",
+    await db.insert(despesasItens).values({
       despesaId: despesa.id,
-      caixaId: input.caixaId,
-      valor,
-      observacao: input.observacao,
-      criadoPor: input.criadoPor
-    })
-    .returning({ id: debitosColaboradores.id });
-  if (!debito) throw new Error("Debito de colaborador nao criado");
+      grupoDespesaId: input.grupoDespesaId,
+      descricao: "Diferenca de caixa",
+      valor
+    });
 
-  await db.insert(ajustesFechamentoCaixa).values({
-    fechamentoCaixaId: input.caixaId,
-    despesaId: despesa.id,
-    valorDiferenca: valor
+    const [debito] = await db
+      .insert(debitosColaboradores)
+      .values({
+        empresaId: input.empresaId,
+        colaboradorId: input.colaboradorId,
+        tipo: "FECHAMENTO_CAIXA",
+        despesaId: despesa.id,
+        caixaId: input.caixaId,
+        valor,
+        observacao: input.observacao,
+        criadoPor: input.criadoPor
+      })
+      .returning({ id: debitosColaboradores.id });
+    if (!debito) throw new Error("Debito de colaborador nao criado");
+
+    await db.insert(ajustesFechamentoCaixa).values({
+      fechamentoCaixaId: input.caixaId,
+      despesaId: despesa.id,
+      valorDiferenca: valor
+    });
+
+    return { despesaId: despesa.id, debitoId: debito.id };
   });
-
-  return { despesaId: despesa.id, debitoId: debito.id };
 }
 
 export async function atualizarFechamentoCaixaRepository(

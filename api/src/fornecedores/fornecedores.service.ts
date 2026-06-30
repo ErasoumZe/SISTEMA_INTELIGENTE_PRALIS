@@ -1,9 +1,17 @@
-import { fornecedorPayloadSchema, type ExportarFornecedorPayload as ExportarPayload, type ImportarFornecedoresPayload as ImportarPayload } from "@padaria/shared/fornecedores";
+import {
+  fornecedorPayloadSchema,
+  type ExportarFornecedorPayload as ExportarPayload,
+  type ImportarFornecedoresPayload as ImportarPayload
+} from "@padaria/shared/fornecedores";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
-import { copiarFornecedoresRepository, listarFornecedoresRepository, salvarFornecedorRepository } from "./fornecedores.repository.js";
+import {
+  copiarFornecedoresRepository,
+  listarFornecedoresRepository,
+  salvarFornecedorRepository
+} from "./fornecedores.repository.js";
 
-export async function listarFornecedores(escopoDados: string[] | null) {
+export async function listarFornecedores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarFornecedoresRepository(), escopoDados);
 }
 
@@ -19,10 +27,20 @@ export async function salvarFornecedor(id: string | null, body: unknown) {
 
 export async function importarFornecedores(body: ImportarPayload, perfil?: PerfilComEmpresa) {
   validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
-  return copiarFornecedoresRepository({ empresaOrigemId: body.empresaOrigemId }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
+  return copiarFornecedoresRepository(
+    { empresaOrigemId: body.empresaOrigemId },
+    body.empresaDestinoId,
+    perfil ? empresasPermitidas(perfil) : [],
+    body.modo
+  );
 }
 
 export async function exportarFornecedor(id: string, body: ExportarPayload, perfil?: PerfilComEmpresa) {
   validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
-  return copiarFornecedoresRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
+  return copiarFornecedoresRepository(
+    { id },
+    body.empresaDestinoId,
+    perfil ? empresasPermitidas(perfil) : [],
+    body.modo
+  );
 }

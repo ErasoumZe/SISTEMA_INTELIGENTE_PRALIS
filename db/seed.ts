@@ -156,6 +156,7 @@ const permissaoAcessoPorTelaSeed = {
   perdas_sobras: "perdas_sobras_visualizar",
   estoque_produtos: "estoque_produtos_visualizar",
   relatorio_dre: "relatorio_dre_visualizar",
+  clientes: "cadastro_clientes_visualizar",
   fornecedores: "cadastro_fornecedores_visualizar",
   produtos: "cadastro_produtos_visualizar",
   colaboradores: "cadastro_colaboradores_visualizar",
@@ -170,15 +171,24 @@ const permissaoAcessoPorTelaSeed = {
   relatorio_vendas: "relatorio_vendas_visualizar",
   notas_fiscais: "notas_fiscais_visualizar",
   contas_pagar: "contas_pagar_visualizar",
+  integracoes: "integracoes_visualizar",
+  contas: "cadastro_contas_visualizar",
   grupos: "cadastro_grupos_visualizar",
   pdv: "cadastro_pdv_visualizar",
-  formas_pagamento: "cadastro_formas_pagamento_visualizar"
+  formas_pagamento: "cadastro_formas_pagamento_visualizar",
+  empresas: "cadastro_empresas_visualizar",
+  unidades: "cadastro_unidades_medida_visualizar",
+  areas_setores: "cadastro_areas_setores_visualizar",
+  usuarios: "cadastro_usuarios_visualizar",
+  permissoes: "cadastro_permissoes_visualizar",
+  aparencia: "aparencia_visualizar"
 } as const satisfies Record<string, Permissao>;
 
 type TelaPermissaoSeed = keyof typeof permissaoAcessoPorTelaSeed;
 type PermissoesCargoSeed = {
   ativas?: TelaPermissaoSeed[];
   desabilitadas?: TelaPermissaoSeed[];
+  somenteCaixaAberto?: TelaPermissaoSeed[];
   extras?: Permissao[];
   todas?: boolean;
 };
@@ -201,6 +211,8 @@ function permissoesDoCargoSeed(config: PermissoesCargoSeed): Permissao[] {
   for (const tela of config.ativas ?? []) {
     resultado.add(permissaoAcessoPorTelaSeed[tela]);
     resultado.add(menuMostrarSeed(tela));
+  }
+  for (const tela of config.somenteCaixaAberto ?? []) {
     if (telasSomenteCaixaAbertoSeed.has(tela)) resultado.add(menuSomenteCaixaAbertoSeed(tela));
   }
   for (const tela of config.desabilitadas ?? []) {
@@ -216,6 +228,7 @@ function regrasPermissoesSeed(lista: Permissao[]): RegrasPermissoes {
 const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargoSeed({
     ativas: ["caixa", "entradas", "transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "relatorio_produtos"],
+    somenteCaixaAberto: ["entradas", "transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "relatorio_produtos"],
     extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
   }),
   Tesouraria: permissoesDoCargoSeed({
@@ -223,41 +236,57 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar"]
   }),
   Gerencia: permissoesDoCargoSeed({
-    ativas: ["entradas", "transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "relatorio_produtos"],
-    desabilitadas: [
+    ativas: [
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos",
       "promocoes",
       "relatorio_faltas",
       "relatorio_advertencias",
       "pedidos",
       "perdas_sobras",
       "estoque_produtos",
-      "relatorio_dre"
+      "relatorio_dre",
+      "clientes"
     ],
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar", "caixa_operar", "caixas_gerenciar"]
+    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
   }),
   Compras: permissoesDoCargoSeed({
-    ativas: ["mercadorias", "fornecedores", "produtos"],
-    desabilitadas: ["pedidos"],
+    ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
     extras: ["mercadorias_criar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargoSeed({
-    ativas: ["despesas", "colaboradores"],
-    desabilitadas: ["folha_ponto"],
+    ativas: ["despesas", "colaboradores", "folha_ponto"],
     extras: ["despesas_criar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
   }),
   RH: permissoesDoCargoSeed({
-    desabilitadas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
+    ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
   }),
   Fiscal: permissoesDoCargoSeed({
-    desabilitadas: ["relatorio_fiscal", "fiscal_produtos"]
+    ativas: ["relatorio_fiscal", "fiscal_produtos"]
   }),
   "Diretor de Operacoes": permissoesDoCargoSeed({
-    desabilitadas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
+    ativas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
   }),
   "Diretor Geral": permissoesDoCargoSeed({ todas: true }),
   Financeiro: permissoesDoCargoSeed({
-    ativas: ["relatorio_vendas", "contas_pagar", "transferencias", "despesas", "mercadorias", "retiradas", "relatorio_dre", "grupos", "pdv", "formas_pagamento"],
-    desabilitadas: ["notas_fiscais"],
+    ativas: [
+      "relatorio_vendas",
+      "notas_fiscais",
+      "contas_pagar",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "relatorio_dre",
+      "grupos",
+      "pdv",
+      "formas_pagamento"
+    ],
     extras: [
       "relatorio_vendas_comprovantes_criar",
       "transferencias_criar",

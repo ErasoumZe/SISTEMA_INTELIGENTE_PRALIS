@@ -203,12 +203,35 @@ export type Permissao = (typeof permissoes)[number];
 
 export type RegrasPermissoes = Partial<Record<Permissao, boolean>>;
 
+export function temPermissao(
+  permissoesUsuario: readonly Permissao[] | null | undefined,
+  permissao: Permissao
+): boolean {
+  return Boolean(permissoesUsuario?.includes(permissao));
+}
+
+export function temAlgumaPermissao(
+  permissoesUsuario: readonly Permissao[] | null | undefined,
+  permissoesNecessarias: readonly Permissao[]
+): boolean {
+  return permissoesNecessarias.some((permissao) => temPermissao(permissoesUsuario, permissao));
+}
+
+export function temTodasPermissoes(
+  permissoesUsuario: readonly Permissao[] | null | undefined,
+  permissoesNecessarias: readonly Permissao[]
+): boolean {
+  return permissoesNecessarias.every((permissao) => temPermissao(permissoesUsuario, permissao));
+}
+
 function valorRegraPermissao(regras: RegrasPermissoes | null | undefined, permissao: Permissao): boolean | undefined {
   const valor = regras?.[permissao];
   return typeof valor === "boolean" ? valor : undefined;
 }
 
-export function resolverPermissoesEfetivas(camadas: readonly (readonly (RegrasPermissoes | null | undefined)[])[]): Permissao[] {
+export function resolverPermissoesEfetivas(
+  camadas: readonly (readonly (RegrasPermissoes | null | undefined)[])[]
+): Permissao[] {
   const efetivas = new Set<Permissao>();
 
   for (const camada of camadas) {
@@ -269,4 +292,3 @@ export interface AuthSession {
   perfil?: PerfilUsuario;
   empresas?: EmpresaSessao[];
 }
-

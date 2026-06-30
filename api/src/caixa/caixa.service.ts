@@ -11,9 +11,10 @@ import type {
   ResumoCaixa,
   ResumoCaixaQuery
 } from "@padaria/shared/caixa";
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
+import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
 import { saldoCaixa } from "./caixa.regras.js";
 import {
   atualizarAberturaCaixaRepository,
@@ -51,19 +52,17 @@ function dataObrigatoria(valor: string, campo: string) {
 }
 
 function numero(valor: string | number | null | undefined) {
-  return Number(valor ?? 0);
+  return deCentavos(paraCentavos(valor));
 }
 
 function calcularSaldoOperacional(resumo: Omit<ResumoCaixa, "saldo" | "totalTransferencias">) {
-  return Number(
-    (
-      resumo.totalEntradas +
-      (resumo.totalTransferenciasEntrada ?? 0) -
-      (resumo.totalTransferenciasSaida ?? 0) -
-      resumo.totalDespesas -
-      resumo.totalRetiradas -
-      (resumo.totalMercadorias ?? 0)
-    ).toFixed(2)
+  return deCentavos(
+    paraCentavos(resumo.totalEntradas) +
+      paraCentavos(resumo.totalTransferenciasEntrada ?? 0) -
+      paraCentavos(resumo.totalTransferenciasSaida ?? 0) -
+      paraCentavos(resumo.totalDespesas) -
+      paraCentavos(resumo.totalRetiradas) -
+      paraCentavos(resumo.totalMercadorias ?? 0)
   );
 }
 
@@ -96,7 +95,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
 
 function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
   return (
-    perfil.permissoes.includes("caixas_gerenciar") ||
+    temPermissao(perfil.permissoes, "caixas_gerenciar") ||
     caixa.usuarioId === perfil.usuarioId ||
     caixa.usuarioCaixaId === perfil.usuarioId
   );
@@ -333,10 +332,9 @@ export async function listarHistoricoCaixa(empresaId: string, perfil: PerfilUsua
   }));
 }
 
-export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string) {
-  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId);
+export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId, db);
   if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;
 }
-

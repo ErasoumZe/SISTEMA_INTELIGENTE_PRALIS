@@ -1,15 +1,16 @@
-import { and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
-import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "./retiradas.lancamento.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarRetiradasRepository(
   query: RetiradasQuery,
   empresasPermitidasIds: string[] | null
 ): Promise<RetiradaDto[]> {
   const filtros = filtrosEmpresa(retiradas, query, empresasPermitidasIds);
+  if (query.caixaId) filtros.push(eq(retiradas.caixaId, query.caixaId));
   return banco
     .select({
       id: retiradas.id,
@@ -28,9 +29,10 @@ export async function criarRetiradaRepository(
   dados: RetiradaPayload,
   computar: boolean,
   criadoPor: string,
-  caixaId?: string | null
+  caixaId?: string | null,
+  db?: ExecutorBanco
 ): Promise<{ id: string }> {
-  return banco.transaction(async (tx) => {
+  return executarComTransacaoOpcional(db, async (tx) => {
     const [retirada] = await tx
       .insert(retiradas)
       .values({
@@ -56,4 +58,3 @@ export async function criarRetiradaRepository(
     return retirada;
   });
 }
-

@@ -9,6 +9,7 @@ export const despesasQuerySchema = z
     empresaId: uuidSchema.optional(),
     dataInicio: z.string().min(10).optional(),
     dataFim: z.string().min(10).optional(),
+    caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
     somentePendentes: z.coerce.boolean().optional().default(false)
   })

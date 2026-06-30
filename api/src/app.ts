@@ -1,8 +1,11 @@
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { env } from "./env.js";
+import { ErroDominio } from "./erros.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
@@ -49,6 +52,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       );
     }
 
+    if (error instanceof ErroDominio) {
+      return erro(reply, error.status, error.message, error.code, error.details);
+    }
+
     request.log.error(error);
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
   });
@@ -57,7 +64,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     origin: env.WEB_ORIGIN,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-API-Key"]
+  });
+  await app.register(helmet);
+  await app.register(rateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: "1 minute"
   });
   await app.register(multipart, {
     limits: {
@@ -98,4 +111,3 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   return app;
 }
-

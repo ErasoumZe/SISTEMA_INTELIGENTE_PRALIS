@@ -93,7 +93,7 @@ export function useApi() {
   }
 
   async function carregarSessao(): Promise<AuthSession | null> {
-    const resposta = await fetch(`${apiUrl}/api/me`, { credentials: "include" });
+    const resposta = await fetch(`${apiUrl}/api/me`, { credentials: "include", cache: "no-store" });
     if (resposta.status === 401) return null;
     const payload = await lerJson(resposta);
     if (!resposta.ok) throw new Error(mensagemErroApi(payload));
@@ -103,6 +103,8 @@ export function useApi() {
   function aplicarTema(tema: TemaAplicacao, temaResumoCaixa: TemaAplicacao = tema) {
     document.documentElement.style.setProperty("--padaria-background", tema.corFundo);
     document.documentElement.style.setProperty("--padaria-card", tema.corCartao);
+    document.documentElement.style.setProperty("--padaria-brand", tema.corPrimaria);
+    document.documentElement.style.setProperty("--padaria-accent", tema.corSecundaria);
     document.documentElement.style.setProperty("--v-theme-primary", tema.corPrimaria);
     document.documentElement.style.setProperty("--v-theme-secondary", tema.corSecundaria);
     document.documentElement.style.setProperty("--padaria-card-entrada", temaResumoCaixa.corAviso);

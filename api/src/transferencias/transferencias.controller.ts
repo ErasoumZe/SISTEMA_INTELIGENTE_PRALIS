@@ -3,21 +3,25 @@ import { transferenciaPayloadSchema, transferenciasQuerySchema } from "@padaria/
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
-import { PermissaoLancamentoInsuficienteError } from "./transferencias.lancamento.js";
+import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarTransferencia, listarTransferencias } from "./transferencias.service.js";
 
 export async function registrarRotasTransferencias(app: FastifyInstance): Promise<void> {
-  app.get("/api/transferencias", { preHandler: exigirPermissao("transferencias_visualizar") }, async (request, reply) => {
-    const query = transferenciasQuerySchema.parse(request.query);
-    const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-    let escopoDados: string[] | null;
-    try {
-      escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-    } catch {
-      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+  app.get(
+    "/api/transferencias",
+    { preHandler: exigirPermissao("transferencias_visualizar") },
+    async (request, reply) => {
+      const query = transferenciasQuerySchema.parse(request.query);
+      const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopoDados: string[];
+      try {
+        escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
+      } catch {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      return paginadoDeArray(await listarTransferencias(query, escopoDados), query.page, query.pageSize);
     }
-    return paginadoDeArray(await listarTransferencias(query, escopoDados), query.page, query.pageSize);
-  });
+  );
 
   app.post("/api/transferencias", { preHandler: exigirPermissao("transferencias_criar") }, async (request, reply) => {
     const dados = transferenciaPayloadSchema.parse(request.body);
@@ -37,6 +41,3 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
     }
   });
 }
-
-
-

@@ -9,9 +9,9 @@ export async function verificarApi(apiUrl) {
 }
 
 export async function enviarVendaIntegracao({ apiUrl, codigoIntegracao, payload }) {
-  const resposta = await fetch(`${apiUrl}/api/integracoes/${encodeURIComponent(codigoIntegracao)}`, {
+  const resposta = await fetch(`${apiUrl}/api/integracoes`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-api-key": codigoIntegracao },
     body: JSON.stringify(payload)
   });
 

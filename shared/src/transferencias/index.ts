@@ -6,7 +6,8 @@ const dinheiroSchema = z.coerce.number().min(0);
 
 export const transferenciasQuerySchema = z
   .object({
-    empresaId: uuidSchema.optional()
+    empresaId: uuidSchema.optional(),
+    caixaId: uuidSchema.optional()
   })
   .merge(paginationQuerySchema);
 

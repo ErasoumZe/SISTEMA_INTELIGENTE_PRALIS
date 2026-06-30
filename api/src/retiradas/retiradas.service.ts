@@ -1,7 +1,8 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { RetiradaCriada, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
-import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "./retiradas.lancamento.js";
-import { validarReferenciasRetirada } from "./retiradas.lancamento.js";
+import { executarEmTransacao } from "../banco/conexao.js";
+import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import { validarReferenciasRetirada } from "../lancamentos/lancamentos.dominio.js";
 import { criarRetiradaRepository, listarRetiradasRepository } from "./retiradas.repository.js";
 
 export async function listarRetiradas(
@@ -14,11 +15,12 @@ export async function listarRetiradas(
 
 export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuario): Promise<RetiradaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "retiradas_criar");
-  const referenciaInvalida = await validarReferenciasRetirada(dados);
-  if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+  return executarEmTransacao(async (tx) => {
+    const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-  const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId);
-  const retirada = await criarRetiradaRepository(dados, dados.computar, perfil.usuarioId, caixa.id);
-  return { id: retirada.id, computar: dados.computar };
+    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    const retirada = await criarRetiradaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
+    return { id: retirada.id, computar: dados.computar };
+  });
 }
-

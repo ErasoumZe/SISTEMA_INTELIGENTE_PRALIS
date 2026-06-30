@@ -76,11 +76,15 @@ const paginaAtual = computed(() => (props.modoServidor ? props.paginaServidor : 
 const itensPagina = computed(() => (props.modoServidor ? props.itensPorPaginaServidor : itensPorPagina));
 const totalPaginas = computed(() => Math.max(1, Math.ceil(totalItens.value / itensPagina.value)));
 const linhasPaginadas = computed(() =>
-  props.modoServidor ? props.linhas : props.linhas.slice((pagina.value - 1) * itensPorPagina, pagina.value * itensPorPagina)
+  props.modoServidor
+    ? props.linhas
+    : props.linhas.slice((pagina.value - 1) * itensPorPagina, pagina.value * itensPorPagina)
 );
 const inicio = computed(() => (totalItens.value ? (paginaAtual.value - 1) * itensPagina.value + 1 : 0));
 const fim = computed(() => Math.min(paginaAtual.value * itensPagina.value, totalItens.value));
-const temAcoes = computed(() => props.podeEditar || props.podeExportar || props.podeExcluir || props.acoesExtras.length);
+const temAcoes = computed(
+  () => props.podeEditar || props.podeExportar || props.podeExcluir || props.acoesExtras.length
+);
 
 watch(totalPaginas, (total) => {
   if (!props.modoServidor && pagina.value > total) pagina.value = total;
@@ -177,56 +181,55 @@ function proximaPagina() {
 
       <div class="responsive-table-shell">
         <v-table>
-        <thead>
-          <tr>
-            <th v-for="coluna in colunas" :key="coluna">{{ coluna }}</th>
-            <th v-if="temAcoes" class="text-right">Acoes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="linha in linhasPaginadas" :key="linha.id ?? JSON.stringify(linha)">
-            <td v-for="coluna in colunas" :key="coluna">{{ valorLinha(linha, coluna) }}</td>
-            <td v-if="temAcoes" class="text-right">
-              <div class="row-actions d-flex justify-end ga-1">
-                <v-btn
-                  v-for="acaoExtra in acoesExtras"
-                  :key="acaoExtra.event"
-                  size="small"
-                  variant="text"
-                  @click="emit('extra', { event: acaoExtra.event, linha })"
-                >
-                  {{ acaoExtra.label }}
-                </v-btn>
-                <v-btn v-if="podeExportar" size="small" variant="text" @click="emit('exportar', linha)">Exportar</v-btn>
-                <v-btn
-                  v-if="podeEditar"
-                  size="small"
-                  variant="text"
-                  :loading="editarCarregandoId === linha.id"
-                  @click="emit('editar', linha)"
-                  >Editar</v-btn
-                >
-                <v-btn
-                  v-if="podeExcluir"
-                  size="small"
-                  variant="text"
-                  color="error"
-                  :loading="excluindoId === linha.id"
-                  @click="emit('excluir', linha)"
-                  >Excluir</v-btn
-                >
-              </div>
-            </td>
-          </tr>
-          <tr v-if="!linhasPaginadas.length">
-            <td
-              :colspan="colunas.length + (temAcoes ? 1 : 0)"
-              class="text-center text-muted py-8"
-            >
-              {{ modoServidor && !buscou ? "Informe os filtros e clique em Buscar." : "Nenhum registro cadastrado." }}
-            </td>
-          </tr>
-        </tbody>
+          <thead>
+            <tr>
+              <th v-for="coluna in colunas" :key="coluna">{{ coluna }}</th>
+              <th v-if="temAcoes" class="text-right">Acoes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="linha in linhasPaginadas" :key="linha.id ?? JSON.stringify(linha)">
+              <td v-for="coluna in colunas" :key="coluna">{{ valorLinha(linha, coluna) }}</td>
+              <td v-if="temAcoes" class="text-right">
+                <div class="row-actions d-flex justify-end ga-1">
+                  <v-btn
+                    v-for="acaoExtra in acoesExtras"
+                    :key="acaoExtra.event"
+                    size="small"
+                    variant="text"
+                    @click="emit('extra', { event: acaoExtra.event, linha })"
+                  >
+                    {{ acaoExtra.label }}
+                  </v-btn>
+                  <v-btn v-if="podeExportar" size="small" variant="text" @click="emit('exportar', linha)"
+                    >Exportar</v-btn
+                  >
+                  <v-btn
+                    v-if="podeEditar"
+                    size="small"
+                    variant="text"
+                    :loading="editarCarregandoId === linha.id"
+                    @click="emit('editar', linha)"
+                    >Editar</v-btn
+                  >
+                  <v-btn
+                    v-if="podeExcluir"
+                    size="small"
+                    variant="text"
+                    color="error"
+                    :loading="excluindoId === linha.id"
+                    @click="emit('excluir', linha)"
+                    >Excluir</v-btn
+                  >
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!linhasPaginadas.length">
+              <td :colspan="colunas.length + (temAcoes ? 1 : 0)" class="text-center text-muted py-8">
+                {{ modoServidor && !buscou ? "Informe os filtros e clique em Buscar." : "Nenhum registro cadastrado." }}
+              </td>
+            </tr>
+          </tbody>
         </v-table>
       </div>
 

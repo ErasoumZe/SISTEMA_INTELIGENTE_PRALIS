@@ -1,14 +1,15 @@
-import { and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import type { MercadoriaDto, MercadoriaPayload, MercadoriasQuery } from "@padaria/shared/mercadorias";
-import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "./mercadorias.lancamento.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarMercadoriasRepository(
   query: MercadoriasQuery,
   empresasPermitidasIds: string[] | null
 ): Promise<MercadoriaDto[]> {
   const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
+  if (query.caixaId) filtros.push(eq(mercadorias.caixaId, query.caixaId));
   return banco
     .select({
       id: mercadorias.id,
@@ -27,9 +28,10 @@ export async function criarMercadoriaRepository(
   dados: MercadoriaPayload,
   computar: boolean,
   criadoPor: string,
-  caixaId?: string | null
+  caixaId?: string | null,
+  db?: ExecutorBanco
 ): Promise<{ id: string }> {
-  return banco.transaction(async (tx) => {
+  return executarComTransacaoOpcional(db, async (tx) => {
     const [mercadoria] = await tx
       .insert(mercadorias)
       .values({
@@ -60,4 +62,3 @@ export async function criarMercadoriaRepository(
     return mercadoria;
   });
 }
-

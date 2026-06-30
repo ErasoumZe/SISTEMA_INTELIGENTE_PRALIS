@@ -1,28 +1,29 @@
 <script setup lang="ts">
 import type { ItemMenu } from "~/types/padaria";
+import CadastroTable from "~/components/cadastros/CadastroTable.vue";
 
 const props = defineProps<{
   tela: string;
   telaAtual: ItemMenu | null | undefined;
   descricao: string;
   colunas: string[];
-    linhas: Array<Record<string, string | undefined>>;
-    editarCarregandoId: string;
-    modoServidor?: boolean;
-    busca?: string;
-    tipoPermissaoFiltro?: string;
-    alvoFiltro?: string;
-    permissaoFiltro?: string;
-    alvosFiltro?: Array<{ id: string; nome?: string }>;
-    permissoesFiltro?: string[];
-    carregandoBusca?: boolean;
-    buscou?: boolean;
-    totalServidor?: number;
-    paginaServidor?: number;
-    itensPorPaginaServidor?: number;
-    podeExcluir?: boolean;
-    excluindoId?: string;
-  }>();
+  linhas: Array<Record<string, string | undefined>>;
+  editarCarregandoId: string;
+  modoServidor?: boolean;
+  busca?: string;
+  tipoPermissaoFiltro?: string;
+  alvoFiltro?: string;
+  permissaoFiltro?: string;
+  alvosFiltro?: Array<{ id: string; nome?: string }>;
+  permissoesFiltro?: string[];
+  carregandoBusca?: boolean;
+  buscou?: boolean;
+  totalServidor?: number;
+  paginaServidor?: number;
+  itensPorPaginaServidor?: number;
+  podeExcluir?: boolean;
+  excluindoId?: string;
+}>();
 
 const emit = defineEmits<{
   (event: "acionar"): void;

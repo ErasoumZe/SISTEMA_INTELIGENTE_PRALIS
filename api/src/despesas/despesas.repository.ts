@@ -2,8 +2,8 @@ import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import type { DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
-import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "./despesas.lancamento.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarDespesasRepository(
   query: DespesasQuery,
@@ -13,6 +13,7 @@ export async function listarDespesasRepository(
   if (query.somentePendentes) filtros.push(isNull(despesas.dataPagamento));
   if (query.dataInicio) filtros.push(gte(despesas.dataVencimento, query.dataInicio));
   if (query.dataFim) filtros.push(lte(despesas.dataVencimento, query.dataFim));
+  if (query.caixaId) filtros.push(eq(despesas.caixaId, query.caixaId));
   if (query.pdvId) {
     const caixas = await banco
       .select({ id: fechamentosCaixa.id })
@@ -42,9 +43,10 @@ export async function criarDespesaRepository(
   dados: DespesaPayload,
   computar: boolean,
   criadoPor: string,
-  caixaId?: string | null
+  caixaId?: string | null,
+  db?: ExecutorBanco
 ): Promise<{ id: string }> {
-  return banco.transaction(async (tx) => {
+  return executarComTransacaoOpcional(db, async (tx) => {
     const [despesa] = await tx
       .insert(despesas)
       .values({
@@ -84,4 +86,3 @@ export async function criarDespesaRepository(
     return despesa;
   });
 }
-

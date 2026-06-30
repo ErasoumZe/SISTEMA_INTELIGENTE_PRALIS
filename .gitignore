@@ -6,6 +6,7 @@ dist
 coverage
 .env
 *.log
+.logs/
 playwright-report
 test-results
 storage

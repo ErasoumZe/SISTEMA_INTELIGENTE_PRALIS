@@ -2,8 +2,8 @@ import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
-import { banco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "./vendas.lancamento.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarVendasRepository(
   query: VendasQuery,
@@ -12,6 +12,7 @@ export async function listarVendasRepository(
   const filtros = filtrosEmpresa(vendas, query, empresasPermitidasIds);
   if (query.dataInicio) filtros.push(gte(vendas.dataReferencia, query.dataInicio));
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
+  if (query.caixaId) filtros.push(eq(vendas.caixaId, query.caixaId));
   if (query.pdvId) filtros.push(eq(vendas.pdvId, query.pdvId));
   if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
   if (query.colaboradorId) filtros.push(eq(vendas.colaboradorId, query.colaboradorId));
@@ -88,9 +89,10 @@ export async function criarVendaRepository(
   dados: VendaPayload,
   computar: boolean,
   criadoPor: string,
-  caixaId?: string | null
+  caixaId?: string | null,
+  db?: ExecutorBanco
 ): Promise<{ id: string }> {
-  return banco.transaction(async (tx) => {
+  return executarComTransacaoOpcional(db, async (tx) => {
     const [venda] = await tx
       .insert(vendas)
       .values({
@@ -128,4 +130,3 @@ export async function criarVendaRepository(
     return venda;
   });
 }
-

@@ -38,6 +38,13 @@ export type ApiPaginated<T> = {
   message?: string;
 };
 
+export type ResultadoPaginado<T> = {
+  itens: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type ApiId = ApiSuccess<{ id: string }>;
 export type ApiNoContent = void;
 export type ApiError = ProblemDetails;
@@ -79,7 +86,14 @@ export const exportarEmpresaPayloadSchema = z.object({
 });
 
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema)])
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema)
+  ])
 );
 
 export const problemDetailsSchema = z

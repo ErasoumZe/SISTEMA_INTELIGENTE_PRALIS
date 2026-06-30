@@ -3,21 +3,25 @@ import { despesaPayloadSchema, despesasQuerySchema } from "@padaria/shared/despe
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
-import { PermissaoLancamentoInsuficienteError } from "./despesas.lancamento.js";
+import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarDespesa, listarDespesas } from "./despesas.service.js";
 
 export async function registrarRotasDespesas(app: FastifyInstance): Promise<void> {
-  app.get("/api/despesas", { preHandler: exigirAlgumaPermissao(["despesas_visualizar", "contas_pagar_visualizar"]) }, async (request, reply) => {
-    const query = despesasQuerySchema.parse(request.query);
-    const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-    let escopoDados: string[] | null;
-    try {
-      escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-    } catch {
-      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+  app.get(
+    "/api/despesas",
+    { preHandler: exigirAlgumaPermissao(["despesas_visualizar", "contas_pagar_visualizar"]) },
+    async (request, reply) => {
+      const query = despesasQuerySchema.parse(request.query);
+      const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopoDados: string[];
+      try {
+        escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
+      } catch {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      return paginadoDeArray(await listarDespesas(query, escopoDados), query.page, query.pageSize);
     }
-    return paginadoDeArray(await listarDespesas(query, escopoDados), query.page, query.pageSize);
-  });
+  );
 
   app.post("/api/despesas", { preHandler: exigirPermissao("despesas_criar") }, async (request, reply) => {
     const dados = despesaPayloadSchema.parse(request.body);
@@ -37,6 +41,3 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
     }
   });
 }
-
-
-

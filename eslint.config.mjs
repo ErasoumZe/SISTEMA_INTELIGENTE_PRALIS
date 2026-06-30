@@ -16,7 +16,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["*.mjs", "scripts/*.mjs", "db/setup.ts", "db/seed.ts"]
+          allowDefaultProject: ["*.mjs", "scripts/*.mjs", "db/setup-dev.mjs", "db/seed.ts"]
         },
         tsconfigRootDir: import.meta.dirname
       },
@@ -55,13 +55,10 @@ export default tseslint.config(
     files: [
       "*.mjs",
       "scripts/**/*.mjs",
+      "db/setup-dev.mjs",
       "eslint.config.mjs",
-      "db/setup.ts",
       "db/seed.ts",
-      "api/src/rotas.ts",
       "tests/**/*.ts",
-      "api/src/db.ts",
-      "api/src/auth.ts",
       "api/src/env.ts",
       "web-vue/composables/useApi.ts",
       "web-vue/utils/domain.ts"

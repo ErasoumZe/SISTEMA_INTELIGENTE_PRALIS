@@ -1,11 +1,5 @@
 import { and, desc, eq, ilike, inArray, isNotNull } from "drizzle-orm";
-import {
-  clientes,
-  contas,
-  formasPagamento,
-  pdvs,
-  produtos
-} from "@padaria/db/schema/cadastro";
+import { clientes, contas, formasPagamento, pdvs, produtos } from "@padaria/db/schema/cadastro";
 import {
   integracoesCamposConfig,
   integracoesChaves,
@@ -28,13 +22,14 @@ import type {
   TipoRegistroIntegracao,
   VendaIntegracaoAgregadaPayload
 } from "@padaria/shared/integracoes";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
 export type IntegracaoChaveLinha = {
   id: string;
   empresaId: string;
   tipo: TipoIntegracao;
   codigo: string;
+  codigoHash: string | null;
   ativa: boolean;
 };
 
@@ -56,6 +51,7 @@ export async function listarChavesIntegracaoRepository(query: IntegracaoQuery, d
       empresaId: integracoesChaves.empresaId,
       tipo: integracoesChaves.tipo,
       codigo: integracoesChaves.codigo,
+      codigoHash: integracoesChaves.codigoHash,
       ativa: integracoesChaves.ativa,
       criadoEm: integracoesChaves.criadoEm,
       inativadoEm: integracoesChaves.inativadoEm
@@ -65,23 +61,24 @@ export async function listarChavesIntegracaoRepository(query: IntegracaoQuery, d
     .orderBy(desc(integracoesChaves.criadoEm));
 }
 
-export async function buscarChavePorCodigoRepository(codigo: string, db: ExecutorBanco = banco) {
+export async function buscarChavePorCodigoHashRepository(codigoHash: string, db: ExecutorBanco = banco) {
   const [chave] = await db
     .select({
       id: integracoesChaves.id,
       empresaId: integracoesChaves.empresaId,
       tipo: integracoesChaves.tipo,
       codigo: integracoesChaves.codigo,
+      codigoHash: integracoesChaves.codigoHash,
       ativa: integracoesChaves.ativa
     })
     .from(integracoesChaves)
-    .where(and(eq(integracoesChaves.codigo, codigo), eq(integracoesChaves.ativa, true)))
+    .where(and(eq(integracoesChaves.codigoHash, codigoHash), eq(integracoesChaves.ativa, true)))
     .limit(1);
   return chave ?? null;
 }
 
 export async function criarChaveIntegracaoRepository(
-  input: { empresaId: string; tipo: TipoIntegracao; codigo: string; criadoPor?: string },
+  input: { empresaId: string; tipo: TipoIntegracao; codigo: string; codigoHash: string; criadoPor?: string },
   db: ExecutorBanco = banco
 ) {
   const [chave] = await db
@@ -92,6 +89,7 @@ export async function criarChaveIntegracaoRepository(
       empresaId: integracoesChaves.empresaId,
       tipo: integracoesChaves.tipo,
       codigo: integracoesChaves.codigo,
+      codigoHash: integracoesChaves.codigoHash,
       ativa: integracoesChaves.ativa,
       criadoEm: integracoesChaves.criadoEm,
       inativadoEm: integracoesChaves.inativadoEm
@@ -361,15 +359,20 @@ export async function buscarPdvAutomaticoRepository(
   return porNome ?? null;
 }
 
-export async function criarPdvComContaRepository(empresaId: string, nome: string, codigo: string, db: ExecutorBanco = banco) {
-  const [conta] = await db.insert(contas).values({ empresaId, nome: `Conta ${nome}` }).returning({ id: contas.id });
-  if (!conta) throw new Error("Conta do PDV nao criada");
-  const [pdv] = await db
-    .insert(pdvs)
-    .values({ empresaId, nome, codigo, contaId: conta.id, ativo: true })
-    .returning({ id: pdvs.id });
-  if (!pdv) throw new Error("PDV nao criado");
-  return pdv;
+export async function criarPdvComContaRepository(empresaId: string, nome: string, codigo: string, db?: ExecutorBanco) {
+  return executarComTransacaoOpcional(db, async (db) => {
+    const [conta] = await db
+      .insert(contas)
+      .values({ empresaId, nome: `Conta ${nome}` })
+      .returning({ id: contas.id });
+    if (!conta) throw new Error("Conta do PDV nao criada");
+    const [pdv] = await db
+      .insert(pdvs)
+      .values({ empresaId, nome, codigo, contaId: conta.id, ativo: true })
+      .returning({ id: pdvs.id });
+    if (!pdv) throw new Error("PDV nao criado");
+    return pdv;
+  });
 }
 
 export async function buscarClienteAutomaticoRepository(
@@ -435,15 +438,16 @@ export async function criarProdutoRepository(
   descricao: string,
   db: ExecutorBanco = banco
 ) {
-  const [produto] = await db
-    .insert(produtos)
-    .values({ empresaId, codigo, descricao })
-    .returning({ id: produtos.id });
+  const [produto] = await db.insert(produtos).values({ empresaId, codigo, descricao }).returning({ id: produtos.id });
   if (!produto) throw new Error("Produto nao criado");
   return produto;
 }
 
-export async function buscarFormaPagamentoAutomaticoRepository(empresaId: string, nome: string, db: ExecutorBanco = banco) {
+export async function buscarFormaPagamentoAutomaticoRepository(
+  empresaId: string,
+  nome: string,
+  db: ExecutorBanco = banco
+) {
   const [forma] = await db
     .select({ id: formasPagamento.id })
     .from(formasPagamento)
@@ -477,83 +481,80 @@ export async function criarOuAtualizarVendaIntegradaRepository(
     produtosPorIdentificador: Map<string, string | null>;
     formasPagamentoPorIdentificador: Map<string, string | null>;
   },
-  db: ExecutorBanco = banco
+  db?: ExecutorBanco
 ) {
-  const vendaPayload = input.payload.Venda;
-  const dataVenda = vendaPayload.dataHoraVenda;
-  const valoresVenda = {
-    empresaId: input.chave.empresaId,
-    integracaoChaveId: input.chave.id,
-    dataReferencia: dataVenda.toISOString().slice(0, 10),
-    dataVenda,
-    descricao: `Venda ${vendaPayload.idVenda}`,
-    valorOriginal: String(vendaPayload.valorOriginal),
-    valorAcrescimo: String(vendaPayload.acrescimo),
-    valorDesconto: String(vendaPayload.desconto),
-    pdvId: input.pdvId,
-    clienteId: input.clienteId,
-    colaboradorId: input.colaboradorId,
-    identificadorExterno: vendaPayload.idVenda,
-    hashIntegracao: input.hashConteudo,
-    statusExterno: vendaPayload.statusVenda,
-    status: vendaPayload.statusVenda.toLowerCase().includes("cancel") ? "cancelado" : "aprovado",
-    numeroNotaFiscal: vendaPayload.numeroNotaFiscal ?? null,
-    pdvAutomacaoId: vendaPayload.idCaixa,
-    pdvAutomacao: vendaPayload.nomeCaixa,
-    clienteAutomacaoId: vendaPayload.idCliente ?? null,
-    clienteAutomacao: vendaPayload.nomeCliente ?? null,
-    clienteAutomacaoDocumento: vendaPayload.documentoCliente ?? null,
-    automacaoId: input.chave.codigo,
-    computar: true,
-    atualizadoEm: new Date()
-  };
+  return executarComTransacaoOpcional(db, async (db) => {
+    const vendaPayload = input.payload.Venda;
+    const dataVenda = vendaPayload.dataHoraVenda;
+    const valoresVenda = {
+      empresaId: input.chave.empresaId,
+      integracaoChaveId: input.chave.id,
+      dataReferencia: dataVenda.toISOString().slice(0, 10),
+      dataVenda,
+      descricao: `Venda ${vendaPayload.idVenda}`,
+      valorOriginal: String(vendaPayload.valorOriginal),
+      valorAcrescimo: String(vendaPayload.acrescimo),
+      valorDesconto: String(vendaPayload.desconto),
+      pdvId: input.pdvId,
+      clienteId: input.clienteId,
+      colaboradorId: input.colaboradorId,
+      identificadorExterno: vendaPayload.idVenda,
+      hashIntegracao: input.hashConteudo,
+      statusExterno: vendaPayload.statusVenda,
+      status: vendaPayload.statusVenda.toLowerCase().includes("cancel") ? "cancelado" : "aprovado",
+      numeroNotaFiscal: vendaPayload.numeroNotaFiscal ?? null,
+      pdvAutomacaoId: vendaPayload.idCaixa,
+      pdvAutomacao: vendaPayload.nomeCaixa,
+      clienteAutomacaoId: vendaPayload.idCliente ?? null,
+      clienteAutomacao: vendaPayload.nomeCliente ?? null,
+      clienteAutomacaoDocumento: vendaPayload.documentoCliente ?? null,
+      automacaoId: input.chave.codigo,
+      computar: true,
+      atualizadoEm: new Date()
+    };
 
-  const vendaId = input.vendaSistemaId
-    ? input.vendaSistemaId
-    : (
-        await db
-          .insert(vendas)
-          .values(valoresVenda)
-          .returning({ id: vendas.id })
-      )[0]?.id;
+    const vendaId = input.vendaSistemaId
+      ? input.vendaSistemaId
+      : (await db.insert(vendas).values(valoresVenda).returning({ id: vendas.id }))[0]?.id;
 
-  if (!vendaId) throw new Error("Venda nao criada");
+    if (!vendaId) throw new Error("Venda nao criada");
 
-  if (input.vendaSistemaId) {
-    await db.update(vendas).set(valoresVenda).where(eq(vendas.id, input.vendaSistemaId));
-    await db.delete(vendasProdutos).where(eq(vendasProdutos.vendaId, input.vendaSistemaId));
-    await db.delete(vendasPagamentos).where(eq(vendasPagamentos.vendaId, input.vendaSistemaId));
-  }
+    if (input.vendaSistemaId) {
+      await db.update(vendas).set(valoresVenda).where(eq(vendas.id, input.vendaSistemaId));
+      await db.delete(vendasProdutos).where(eq(vendasProdutos.vendaId, input.vendaSistemaId));
+      await db.delete(vendasPagamentos).where(eq(vendasPagamentos.vendaId, input.vendaSistemaId));
+    }
 
-  for (const item of input.payload.ItensVenda) {
-    await db.insert(vendasProdutos).values({
-      vendaId,
-      produtoId: input.produtosPorIdentificador.get(item.idProduto) ?? null,
-      produtoAutomacaoId: item.idProduto,
-      produtoAutomacaoCodigo: item.idRegistro,
-      descricaoProduto: item.descricaoProduto,
-      dataHoraItem: item.dataHoraItem,
-      quantidade: String(item.quantidade),
-      valorUnitario: String(item.valorUnitario),
-      valorDesconto: String(item.desconto),
-      valorAcrescimo: String(item.acrescimo),
-      valorTotal: String(item.total),
-      cancelado: item.itemCancelado
-    });
-  }
+    for (const item of input.payload.ItensVenda) {
+      await db.insert(vendasProdutos).values({
+        vendaId,
+        produtoId: input.produtosPorIdentificador.get(item.idProduto) ?? null,
+        produtoAutomacaoId: item.idProduto,
+        produtoAutomacaoCodigo: item.idRegistro,
+        descricaoProduto: item.descricaoProduto,
+        dataHoraItem: item.dataHoraItem,
+        quantidade: String(item.quantidade),
+        valorUnitario: String(item.valorUnitario),
+        valorDesconto: String(item.desconto),
+        valorAcrescimo: String(item.acrescimo),
+        valorTotal: String(item.total),
+        cancelado: item.itemCancelado
+      });
+    }
 
-  for (const pagamento of input.payload.PagamentosVenda) {
-    await db.insert(vendasPagamentos).values({
-      vendaId,
-      formaPagamentoId: input.formasPagamentoPorIdentificador.get(pagamento.idFormaPagamento) ?? null,
-      tipoPagamentoAutomacaoId: pagamento.idFormaPagamento,
-      tipoPagamentoAutomacao: pagamento.descricaoFormaPagamento,
-      numeroVendas: 1,
-      totalPago: String(pagamento.valor)
-    });
-  }
+    for (const pagamento of input.payload.PagamentosVenda) {
+      await db.insert(vendasPagamentos).values({
+        vendaId,
+        formaPagamentoId: input.formasPagamentoPorIdentificador.get(pagamento.idFormaPagamento) ?? null,
+        tipoPagamentoAutomacaoId: pagamento.idFormaPagamento,
+        tipoPagamentoAutomacao: pagamento.descricaoFormaPagamento,
+        numeroVendas: 1,
+        totalPago: String(pagamento.valor)
+      });
+    }
 
-  return { id: vendaId };
+    return { id: vendaId };
+  });
 }
 
 export async function upsertRegistroIntegracaoRepository(

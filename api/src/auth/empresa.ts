@@ -3,29 +3,25 @@ export type PerfilComEmpresa = {
   empresaIds?: string[] | null;
 };
 
-export function empresasPermitidas(perfil: PerfilComEmpresa): string[] | null {
+export function empresasPermitidas(perfil: PerfilComEmpresa): string[] {
   const ids = perfil.empresaIds?.length ? perfil.empresaIds : perfil.empresaId ? [perfil.empresaId] : [];
   return Array.from(new Set(ids));
 }
 
 export function podeAcessarEmpresa(perfil: PerfilComEmpresa, empresaId: string): boolean {
   const permitidas = empresasPermitidas(perfil);
-  return permitidas === null || permitidas.includes(empresaId);
+  return permitidas.includes(empresaId);
 }
 
-export function filtrarPorEmpresas<T extends { empresaId?: string | null }>(
-  itens: T[],
-  permitidas: string[] | null
-): T[] {
-  if (permitidas === null) return itens;
+export function filtrarPorEmpresas<T extends { empresaId?: string | null }>(itens: T[], permitidas: string[]): T[] {
   return itens.filter(
     (item) => item.empresaId !== null && item.empresaId !== undefined && permitidas.includes(item.empresaId)
   );
 }
 
-export function escopoEmpresaAtiva(permitidas: string[] | null, empresaId?: string): string[] | null {
+export function escopoEmpresaAtiva(permitidas: string[], empresaId?: string): string[] {
   if (!empresaId) return permitidas;
-  if (permitidas !== null && !permitidas.includes(empresaId)) {
+  if (!permitidas.includes(empresaId)) {
     throw new Error("Empresa nao permitida");
   }
   return [empresaId];

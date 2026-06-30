@@ -22,7 +22,9 @@ import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
-const idUuid = uuid("id").primaryKey().default(sql`uuid_generate_v7()`);
+const idUuid = uuid("id")
+  .primaryKey()
+  .default(sql`uuid_generate_v7()`);
 const empresaId = uuid("empresa_id")
   .notNull()
   .references(() => empresas.id, { onDelete: "cascade" });
@@ -67,7 +69,10 @@ export const permissoesUsuarios = pgTable(
     usuarioId: text("usuario_id")
       .notNull()
       .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
-    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
+    regras: jsonb("regras")
+      .$type<RegrasPermissoes>()
+      .notNull()
+      .default(sql`'{}'::jsonb`)
   },
   (table) => [primaryKey({ columns: [table.usuarioId] })]
 );
@@ -229,7 +234,10 @@ export const permissoesCargos = pgTable(
     cargoId: uuid("cargo_id")
       .notNull()
       .references(() => cargos.id, { onDelete: "cascade" }),
-    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
+    regras: jsonb("regras")
+      .$type<RegrasPermissoes>()
+      .notNull()
+      .default(sql`'{}'::jsonb`)
   },
   (table) => [primaryKey({ columns: [table.cargoId] })]
 );
@@ -370,7 +378,10 @@ export const permissoesSetores = pgTable(
     setorId: uuid("setor_id")
       .notNull()
       .references(() => setores.id, { onDelete: "cascade" }),
-    regras: jsonb("regras").$type<RegrasPermissoes>().notNull().default(sql`'{}'::jsonb`)
+    regras: jsonb("regras")
+      .$type<RegrasPermissoes>()
+      .notNull()
+      .default(sql`'{}'::jsonb`)
   },
   (table) => [primaryKey({ columns: [table.setorId] })]
 );
@@ -419,6 +430,7 @@ export const integracoesChaves = pgTable(
     empresaId,
     tipo: text("tipo").$type<TipoIntegracao>().notNull(),
     codigo: text("codigo").notNull(),
+    codigoHash: text("codigo_hash"),
     ativa: boolean("ativa").notNull().default(true),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -426,6 +438,9 @@ export const integracoesChaves = pgTable(
   },
   (table) => [
     unique("integracoes_chaves_codigo_unico").on(table.codigo),
+    uniqueIndex("integracoes_chaves_codigo_hash_unico_idx")
+      .on(table.codigoHash)
+      .where(sql`${table.codigoHash} is not null`),
     check("integracoes_chaves_tipo_check", sql`${table.tipo} in ('vendas')`)
   ]
 );
@@ -528,7 +543,10 @@ export const integracoesHistorico = pgTable(
   },
   (table) => [
     check("integracoes_historico_tipo_check", sql`${table.tipo} in ('vendas')`),
-    check("integracoes_historico_status_check", sql`${table.status} in ('criado', 'atualizado', 'sem_novidade', 'erro')`)
+    check(
+      "integracoes_historico_status_check",
+      sql`${table.status} in ('criado', 'atualizado', 'sem_novidade', 'erro')`
+    )
   ]
 );
 

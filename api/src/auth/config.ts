@@ -5,6 +5,8 @@ import { gerarUuidV7 } from "@padaria/shared/ids";
 import { env } from "../env.js";
 import { banco } from "../banco/conexao.js";
 
+const producao = env.NODE_ENV === "production";
+
 export const auth = betterAuth({
   database: drizzleAdapter(banco, {
     provider: "pg",
@@ -26,10 +28,13 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
-    minPasswordLength: 6,
-    sendResetPassword: async ({ user, url }) => {
-      console.info({ email: user.email, url }, "password reset link generated");
+    requireEmailVerification: producao,
+    minPasswordLength: producao ? 10 : 8,
+    sendResetPassword: async ({ user }) => {
+      if (producao) {
+        throw new Error("Envio de redefinicao de senha nao configurado");
+      }
+      console.info({ email: user.email }, "password reset requested");
     }
   }
 });

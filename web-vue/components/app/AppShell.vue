@@ -28,13 +28,17 @@ const viewportMobile = ref(false);
 const empresaAtiva = computed(
   () => props.empresas.find((empresa) => empresa.id === props.empresaId) ?? props.empresas[0] ?? null
 );
-const telaAtual = computed(() => itemPorTela[props.telaAtiva] ?? props.telas.find((item) => item.id === props.telaAtiva) ?? null);
+const telaAtual = computed(
+  () => itemPorTela[props.telaAtiva] ?? props.telas.find((item) => item.id === props.telaAtiva) ?? null
+);
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
 const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
 const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
 const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
-const drawerToggleIcon = computed(() => (viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"));
+const drawerToggleIcon = computed(() =>
+  viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"
+);
 
 function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";

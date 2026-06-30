@@ -3,14 +3,14 @@ import { mercadoriaPayloadSchema, mercadoriasQuerySchema } from "@padaria/shared
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
-import { PermissaoLancamentoInsuficienteError } from "./mercadorias.lancamento.js";
+import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarMercadoria, listarMercadorias } from "./mercadorias.service.js";
 
 export async function registrarRotasMercadorias(app: FastifyInstance): Promise<void> {
   app.get("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_visualizar") }, async (request, reply) => {
     const query = mercadoriasQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
-    let escopoDados: string[] | null;
+    let escopoDados: string[];
     try {
       escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
     } catch {
@@ -37,6 +37,3 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     }
   });
 }
-
-
-

@@ -168,6 +168,7 @@ export type ItemMenu = {
   id: string;
   titulo: string;
   permissao: Permissao;
+  permissoesAlternativas?: Permissao[];
   permissaoMenu?: Permissao;
   permissaoMenuDesabilitado?: Permissao;
   icone: string;

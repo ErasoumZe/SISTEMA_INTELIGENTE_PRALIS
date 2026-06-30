@@ -9,7 +9,7 @@ import {
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
 export type UsuarioLinha = {
   usuarioId: string;
@@ -36,7 +36,9 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
       })
       .from(perfisUsuarios)
       .orderBy(asc(perfisUsuarios.nome)),
-    banco.select({ usuarioId: usuariosEmpresas.usuarioId, empresaId: usuariosEmpresas.empresaId }).from(usuariosEmpresas),
+    banco
+      .select({ usuarioId: usuariosEmpresas.usuarioId, empresaId: usuariosEmpresas.empresaId })
+      .from(usuariosEmpresas),
     banco
       .select({ id: colaboradores.id, usuarioId: colaboradores.usuarioId, setorId: colaboradores.setorId })
       .from(colaboradores),
@@ -57,7 +59,9 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
     return {
       usuarioId: perfil.usuarioId,
       empresaId: perfil.empresaId,
-      empresaIds: empresasUsuarios.filter((empresa) => empresa.usuarioId === perfil.usuarioId).map((empresa) => empresa.empresaId),
+      empresaIds: empresasUsuarios
+        .filter((empresa) => empresa.usuarioId === perfil.usuarioId)
+        .map((empresa) => empresa.empresaId),
       nome: perfil.nome,
       email: perfil.email,
       colaboradorId: colaborador?.id ?? "",
@@ -69,19 +73,37 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
   });
 }
 
-export async function existeEmailUsuarioRepository(email: string, usuarioIdIgnorado?: string, db: ExecutorBanco = banco) {
+export async function existeEmailUsuarioRepository(
+  email: string,
+  usuarioIdIgnorado?: string,
+  db: ExecutorBanco = banco
+) {
   const filtros = [ilike(usuarioAutenticacao.email, email)];
   if (usuarioIdIgnorado) filtros.push(ne(usuarioAutenticacao.id, usuarioIdIgnorado));
-  const [existente] = await db.select({ id: usuarioAutenticacao.id }).from(usuarioAutenticacao).where(and(...filtros)).limit(1);
+  const [existente] = await db
+    .select({ id: usuarioAutenticacao.id })
+    .from(usuarioAutenticacao)
+    .where(and(...filtros))
+    .limit(1);
   return Boolean(existente);
 }
 
-export async function atualizarUsuarioAutenticacaoRepository(input: { id: string; nome: string; email: string }, db: ExecutorBanco = banco) {
-  await db.update(usuarioAutenticacao).set({ name: input.nome, email: input.email, updatedAt: new Date() }).where(eq(usuarioAutenticacao.id, input.id));
+export async function atualizarUsuarioAutenticacaoRepository(
+  input: { id: string; nome: string; email: string },
+  db: ExecutorBanco = banco
+) {
+  await db
+    .update(usuarioAutenticacao)
+    .set({ name: input.nome, email: input.email, updatedAt: new Date() })
+    .where(eq(usuarioAutenticacao.id, input.id));
 }
 
 export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string, db: ExecutorBanco = banco) {
-  const [usuario] = await db.select({ id: usuarioAutenticacao.id }).from(usuarioAutenticacao).where(ilike(usuarioAutenticacao.email, email)).limit(1);
+  const [usuario] = await db
+    .select({ id: usuarioAutenticacao.id })
+    .from(usuarioAutenticacao)
+    .where(ilike(usuarioAutenticacao.email, email))
+    .limit(1);
   return usuario ?? null;
 }
 
@@ -104,10 +126,15 @@ export async function upsertPerfilUsuarioRepository(
     });
 }
 
-export async function substituirEmpresasUsuarioRepository(usuarioId: string, empresaIds: string[], db: ExecutorBanco = banco) {
-  await db.delete(usuariosEmpresas).where(eq(usuariosEmpresas.usuarioId, usuarioId));
-  if (!empresaIds.length) return;
-  await db.insert(usuariosEmpresas).values(empresaIds.map((empresaId) => ({ usuarioId, empresaId }))).onConflictDoNothing();
+export async function substituirEmpresasUsuarioRepository(usuarioId: string, empresaIds: string[], db?: ExecutorBanco) {
+  await executarComTransacaoOpcional(db, async (db) => {
+    await db.delete(usuariosEmpresas).where(eq(usuariosEmpresas.usuarioId, usuarioId));
+    if (!empresaIds.length) return;
+    await db
+      .insert(usuariosEmpresas)
+      .values(empresaIds.map((empresaId) => ({ usuarioId, empresaId })))
+      .onConflictDoNothing();
+  });
 }
 
 export async function buscarColaboradorUsuarioRepository(colaboradorId: string, db: ExecutorBanco = banco) {
@@ -131,12 +158,19 @@ export async function buscarCargoEmpresaRepository(cargoId: string, db: Executor
 }
 
 export async function buscarSetorEmpresaRepository(setorId: string, db: ExecutorBanco = banco) {
-  const [setor] = await db.select({ empresaId: setores.empresaId }).from(setores).where(eq(setores.id, setorId)).limit(1);
+  const [setor] = await db
+    .select({ empresaId: setores.empresaId })
+    .from(setores)
+    .where(eq(setores.id, setorId))
+    .limit(1);
   return setor ?? null;
 }
 
 export async function listarEmpresasUsuarioRepository(usuarioId: string, db: ExecutorBanco = banco) {
-  return db.select({ empresaId: usuariosEmpresas.empresaId }).from(usuariosEmpresas).where(eq(usuariosEmpresas.usuarioId, usuarioId));
+  return db
+    .select({ empresaId: usuariosEmpresas.empresaId })
+    .from(usuariosEmpresas)
+    .where(eq(usuariosEmpresas.usuarioId, usuarioId));
 }
 
 export async function colaboradorTemCargoAtivoRepository(colaboradorId: string, db: ExecutorBanco = banco) {
@@ -157,7 +191,13 @@ export async function salvarColaboradorUsuarioRepository(
       .update(colaboradores)
       .set({ nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
       .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
-    return { id: input.id, empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null };
+    return {
+      id: input.id,
+      empresaId: input.empresaId,
+      nome: input.nome,
+      cpf: input.cpf,
+      setorId: input.setorId ?? null
+    };
   }
   const [criado] = await db
     .insert(colaboradores)
@@ -193,7 +233,13 @@ export async function salvarCargoColaboradorUsuarioRepository(
   return criado;
 }
 
-export async function vincularUsuarioColaboradorRepository(usuarioId: string, colaboradorId: string, db: ExecutorBanco = banco) {
-  await db.update(colaboradores).set({ usuarioId: null }).where(eq(colaboradores.usuarioId, usuarioId));
-  await db.update(colaboradores).set({ usuarioId }).where(eq(colaboradores.id, colaboradorId));
+export async function vincularUsuarioColaboradorRepository(
+  usuarioId: string,
+  colaboradorId: string,
+  db?: ExecutorBanco
+) {
+  await executarComTransacaoOpcional(db, async (db) => {
+    await db.update(colaboradores).set({ usuarioId: null }).where(eq(colaboradores.usuarioId, usuarioId));
+    await db.update(colaboradores).set({ usuarioId }).where(eq(colaboradores.id, colaboradorId));
+  });
 }

@@ -19,3 +19,11 @@ export const banco = bancoBase;
 export async function executarEmTransacao<T>(callback: (tx: TransacaoBanco) => Promise<T> | T) {
   return banco.transaction((tx) => Promise.resolve(callback(tx)));
 }
+
+export async function executarComTransacaoOpcional<T>(
+  db: ExecutorBanco | undefined,
+  callback: (db: ExecutorBanco) => Promise<T> | T
+) {
+  if (db) return Promise.resolve(callback(db));
+  return executarEmTransacao((tx) => callback(tx));
+}

@@ -15,7 +15,12 @@ import {
 } from "@padaria/shared/colaboradores";
 import { diasSemana } from "@padaria/shared/colaboradores";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
-import { apenasDigitos, falharValidacao, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
+import {
+  apenasDigitos,
+  falharValidacao,
+  validarExportacaoParaEmpresa,
+  validarImportacaoEntreEmpresas
+} from "../utils.js";
 import { copiarAreasSetoresRepository } from "../areas/areas.repository.js";
 import {
   atualizarCargoRepository,
@@ -79,19 +84,19 @@ function validarSobreposicaoJornada(faixas: FaixaJornada[]) {
   }
 }
 
-export async function listarCargos(escopoDados: string[] | null) {
+export async function listarCargos(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarCargosRepository(), escopoDados);
 }
 
-export async function listarColaboradores(escopoDados: string[] | null) {
+export async function listarColaboradores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarColaboradoresRepository(), escopoDados);
 }
 
 export async function salvarColaborador(id: string | null, body: unknown) {
   const dados: ColaboradorDadosPayload = colaboradorPayloadSchema.parse(body);
-  const cargo = await existeCargoNaEmpresaRepository(dados.cargoId, dados.empresaId);
-  if (!cargo) falharValidacao("Cargo nao pertence a empresa");
   return executarEmTransacao(async (tx) => {
+    const cargo = await existeCargoNaEmpresaRepository(dados.cargoId, dados.empresaId, tx);
+    if (!cargo) falharValidacao("Cargo nao pertence a empresa");
     const colaborador = await salvarColaboradorRepository(
       {
         ...(id ? { id } : {}),
@@ -124,22 +129,40 @@ export async function salvarColaborador(id: string | null, body: unknown) {
 export async function importarColaboradores(body: ImportarColaboradoresPayload, perfil?: PerfilComEmpresa) {
   validarImportacaoEntreEmpresas(body.empresaOrigemId, body.empresaDestinoId, perfil);
   const permitidas = perfil ? empresasPermitidas(perfil) : [];
-  let inseridos = 0;
-  if (body.modo === "completo") {
-    inseridos += (await copiarAreasSetoresRepository({ empresaOrigemId: body.empresaOrigemId }, body.empresaDestinoId, permitidas, body.modo)).inseridos;
-  }
-  inseridos += (await copiarColaboradoresRepository(
-    { empresaOrigemId: body.empresaOrigemId },
-    body.empresaDestinoId,
-    permitidas,
-    body.modo
-  )).inseridos;
-  return { tipo: "colaboradores", modo: body.modo, inseridos };
+  return executarEmTransacao(async (tx) => {
+    let inseridos = 0;
+    if (body.modo === "completo") {
+      inseridos += (
+        await copiarAreasSetoresRepository(
+          { empresaOrigemId: body.empresaOrigemId },
+          body.empresaDestinoId,
+          permitidas,
+          body.modo,
+          tx
+        )
+      ).inseridos;
+    }
+    inseridos += (
+      await copiarColaboradoresRepository(
+        { empresaOrigemId: body.empresaOrigemId },
+        body.empresaDestinoId,
+        permitidas,
+        body.modo,
+        tx
+      )
+    ).inseridos;
+    return { tipo: "colaboradores", modo: body.modo, inseridos };
+  });
 }
 
 export async function exportarColaborador(id: string, body: ExportarColaboradorPayload, perfil?: PerfilComEmpresa) {
   validarExportacaoParaEmpresa(body.empresaDestinoId, perfil);
-  return copiarColaboradoresRepository({ id }, body.empresaDestinoId, perfil ? empresasPermitidas(perfil) : [], body.modo);
+  return copiarColaboradoresRepository(
+    { id },
+    body.empresaDestinoId,
+    perfil ? empresasPermitidas(perfil) : [],
+    body.modo
+  );
 }
 
 export async function importarCargos(body: ImportarCargosPayload, perfil?: PerfilComEmpresa) {
@@ -165,28 +188,33 @@ export async function atualizarCargo(id: string, payload: CargoPayload) {
   return atualizarCargoRepository({ id, empresaId: payload.empresaId, nome: payload.nome.trim() });
 }
 
-export async function listarCargosColaborador(colaboradorId: string, empresasPermitidasIds: string[] | null) {
+export async function listarCargosColaborador(colaboradorId: string, empresasPermitidasIds: string[]) {
   return filtrarPorEmpresas(await listarCargosColaboradorRepository(colaboradorId), empresasPermitidasIds);
 }
 
 export async function criarCargoColaborador(colaboradorId: string, payload: ColaboradorCargoPayload) {
-  const [colaboradorExiste, cargoExiste, setorExiste] = await Promise.all([
-    existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId),
-    existeCargoNaEmpresaRepository(payload.cargoId, payload.empresaId),
-    payload.setorId ? existeSetorNaEmpresaRepository(payload.setorId, payload.empresaId) : Promise.resolve(true)
-  ]);
-  if (!colaboradorExiste) throw new Error("Colaborador inexistente");
-  if (!cargoExiste) throw new Error("Cargo inexistente");
-  if (!setorExiste) throw new Error("Setor inexistente");
+  return executarEmTransacao(async (tx) => {
+    const [colaboradorExiste, cargoExiste, setorExiste] = await Promise.all([
+      existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId, tx),
+      existeCargoNaEmpresaRepository(payload.cargoId, payload.empresaId, tx),
+      payload.setorId ? existeSetorNaEmpresaRepository(payload.setorId, payload.empresaId, tx) : Promise.resolve(true)
+    ]);
+    if (!colaboradorExiste) throw new Error("Colaborador inexistente");
+    if (!cargoExiste) throw new Error("Cargo inexistente");
+    if (!setorExiste) throw new Error("Setor inexistente");
 
-  return criarCargoColaboradorRepository({
-    empresaId: payload.empresaId,
-    colaboradorId,
-    setorId: payload.setorId ?? null,
-    cargoId: payload.cargoId,
-    remuneracaoMinuto: payload.remuneracaoMinuto,
-    dataInicio: payload.dataInicio,
-    ativo: payload.ativo
+    return criarCargoColaboradorRepository(
+      {
+        empresaId: payload.empresaId,
+        colaboradorId,
+        setorId: payload.setorId ?? null,
+        cargoId: payload.cargoId,
+        remuneracaoMinuto: payload.remuneracaoMinuto,
+        dataInicio: payload.dataInicio,
+        ativo: payload.ativo
+      },
+      tx
+    );
   });
 }
 
@@ -195,27 +223,29 @@ export async function atualizarStatusCargoColaborador(
   cargoColaboradorId: string,
   payload: ColaboradorCargoStatusPayload
 ) {
-  if (!payload.ativo && (await colaboradorTemUsuarioRepository(colaboradorId))) {
-    const cargosAtivos = await contarCargosAtivosColaboradorRepository(colaboradorId);
-    if (cargosAtivos <= 1) throw new Error("Colaborador com usuario precisa ter ao menos um cargo ativo");
-  }
+  return executarEmTransacao(async (tx) => {
+    if (!payload.ativo && (await colaboradorTemUsuarioRepository(colaboradorId, tx))) {
+      const cargosAtivos = await contarCargosAtivosColaboradorRepository(colaboradorId, tx);
+      if (cargosAtivos <= 1) throw new Error("Colaborador com usuario precisa ter ao menos um cargo ativo");
+    }
 
-  return atualizarStatusCargoColaboradorRepository({
-    colaboradorId,
-    cargoColaboradorId,
-    empresaId: payload.empresaId,
-    ativo: payload.ativo
+    return atualizarStatusCargoColaboradorRepository(
+      {
+        colaboradorId,
+        cargoColaboradorId,
+        empresaId: payload.empresaId,
+        ativo: payload.ativo
+      },
+      tx
+    );
   });
 }
 
-export async function listarJornadasColaborador(colaboradorId: string, empresasPermitidasIds: string[] | null) {
+export async function listarJornadasColaborador(colaboradorId: string, empresasPermitidasIds: string[]) {
   return filtrarPorEmpresas(await listarJornadasColaboradorRepository(colaboradorId), empresasPermitidasIds);
 }
 
 export async function criarJornadasColaborador(colaboradorId: string, payload: JornadaPayload) {
-  const colaboradorExiste = await existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId);
-  if (!colaboradorExiste) throw new Error("Colaborador inexistente");
-
   const faixas = payload.dias.flatMap((dia) =>
     dia.faixas.map((faixa) => ({
       diaDaSemana: dia.diaDaSemana,
@@ -228,26 +258,38 @@ export async function criarJornadasColaborador(colaboradorId: string, payload: J
 
   validarSobreposicaoJornada(faixas);
 
-  for (const faixa of faixas) {
-    if (faixa.cargaHorariaDiariaEmMinutos <= 0) continue;
-    if (!faixa.horaEntrada) throw new Error("Horario de entrada obrigatorio");
-    if (!faixa.colaboradorCargoId) throw new Error("Cargo obrigatorio na jornada");
-    const cargoExiste = await existeCargoAtivoColaboradorRepository({
-      colaboradorCargoId: faixa.colaboradorCargoId,
-      colaboradorId,
-      empresaId: payload.empresaId
-    });
-    if (!cargoExiste) throw new Error("Cargo ativo do colaborador inexistente");
-  }
+  return executarEmTransacao(async (tx) => {
+    const colaboradorExiste = await existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId, tx);
+    if (!colaboradorExiste) throw new Error("Colaborador inexistente");
 
-  return criarJornadasColaboradorRepository(colaboradorId, {
-    empresaId: payload.empresaId,
-    dataInicio: payload.dataInicio,
-    faixas
+    for (const faixa of faixas) {
+      if (faixa.cargaHorariaDiariaEmMinutos <= 0) continue;
+      if (!faixa.horaEntrada) throw new Error("Horario de entrada obrigatorio");
+      if (!faixa.colaboradorCargoId) throw new Error("Cargo obrigatorio na jornada");
+      const cargoExiste = await existeCargoAtivoColaboradorRepository(
+        {
+          colaboradorCargoId: faixa.colaboradorCargoId,
+          colaboradorId,
+          empresaId: payload.empresaId
+        },
+        tx
+      );
+      if (!cargoExiste) throw new Error("Cargo ativo do colaborador inexistente");
+    }
+
+    return criarJornadasColaboradorRepository(
+      colaboradorId,
+      {
+        empresaId: payload.empresaId,
+        dataInicio: payload.dataInicio,
+        faixas
+      },
+      tx
+    );
   });
 }
 
-export async function listarFaltasJustificadas(colaboradorId: string, empresasPermitidasIds: string[] | null) {
+export async function listarFaltasJustificadas(colaboradorId: string, empresasPermitidasIds: string[]) {
   return filtrarPorEmpresas(await listarFaltasJustificadasRepository(colaboradorId), empresasPermitidasIds);
 }
 
@@ -255,14 +297,18 @@ export async function criarFaltaJustificada(colaboradorId: string, payload: Falt
   if (new Date(payload.fim).getTime() <= new Date(payload.inicio).getTime()) {
     throw new Error("Fim deve ser posterior ao inicio");
   }
-  const colaboradorExiste = await existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId);
-  if (!colaboradorExiste) throw new Error("Colaborador inexistente");
-  return criarFaltaJustificadaRepository({
-    empresaId: payload.empresaId,
-    colaboradorId,
-    inicio: payload.inicio,
-    fim: payload.fim,
-    motivo: payload.motivo.trim()
+  return executarEmTransacao(async (tx) => {
+    const colaboradorExiste = await existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId, tx);
+    if (!colaboradorExiste) throw new Error("Colaborador inexistente");
+    return criarFaltaJustificadaRepository(
+      {
+        empresaId: payload.empresaId,
+        colaboradorId,
+        inicio: payload.inicio,
+        fim: payload.fim,
+        motivo: payload.motivo.trim()
+      },
+      tx
+    );
   });
 }
-

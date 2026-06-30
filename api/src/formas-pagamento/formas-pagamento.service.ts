@@ -2,7 +2,7 @@ import { formaPagamentoPayloadSchema } from "@padaria/shared/formas-pagamento";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
 import { listarFormasPagamentoRepository, salvarFormaPagamentoRepository } from "./formas-pagamento.repository.js";
 
-export async function listarFormasPagamento(escopoDados: string[] | null) {
+export async function listarFormasPagamento(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarFormasPagamentoRepository(), escopoDados);
 }
 
