@@ -387,10 +387,15 @@ function atualizarDocumentoCadastro(valor: string) {
   if (cadastroTela.value === "clientes" && !documentoEhCpf(documento)) formCadastro.value.dataNascimento = "";
 }
 
-function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
+async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
   modoCaixaDrawer.value = modo;
   tokenCaixaConfirmado.value = false;
   formCaixaDrawer.tokenEdicao = "";
+  // O botao "Abrir caixa" e global; a lista de PDVs pode nao ter sido carregada pela tela atual
+  // (ex.: Painel). Garante os PDVs da empresa ativa antes de montar o dropdown do dialogo.
+  if (empresaId.value) {
+    opcoes.value.pdvs = await apiGet<Opcao[]>(`/api/pdvs?empresaId=${empresaId.value}`);
+  }
   formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
   formCaixaDrawer.dataHoraAbertura = caixaAberto.value
     ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
