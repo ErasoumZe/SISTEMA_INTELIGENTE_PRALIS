@@ -1,0 +1,94 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile.prod
+      target: build
+    command: ["npm", "run", "api:prod:migrate", "--workspace", "@padaria/api"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL obrigatorio}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET obrigatorio}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
+    networks:
+      - padaria_prod
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile.prod
+    labels:
+      - traefik.docker.network=coolify
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL obrigatorio}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET obrigatorio}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
+      PORT: 4100
+      HOST: 0.0.0.0
+    restart: unless-stopped
+    expose:
+      - "4100"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:4100/health'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"'
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - padaria_prod
+      - coolify
+
+  web-vue:
+    build:
+      context: ..
+      dockerfile: web-vue/Dockerfile.prod
+      args:
+        NUXT_PUBLIC_API_URL: ${NUXT_PUBLIC_API_URL:?NUXT_PUBLIC_API_URL obrigatorio}
+        PUBLIC_API_URL: ${NUXT_PUBLIC_API_URL:?NUXT_PUBLIC_API_URL obrigatorio}
+    labels:
+      - traefik.docker.network=coolify
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NUXT_PUBLIC_API_URL: ${NUXT_PUBLIC_API_URL:?NUXT_PUBLIC_API_URL obrigatorio}
+      PUBLIC_API_URL: ${NUXT_PUBLIC_API_URL:?NUXT_PUBLIC_API_URL obrigatorio}
+    restart: unless-stopped
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - padaria_prod
+      - coolify
+
+networks:
+  padaria_prod:
+    name: padaria_prod
+  coolify:
+    external: true
+    name: coolify

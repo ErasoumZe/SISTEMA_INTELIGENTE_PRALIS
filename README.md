@@ -11,7 +11,7 @@ npm install
 
 ## Desenvolvimento rapido
 
-Use este comando no dia a dia. Ele sobe/reutiliza apenas o Postgres dev, prepara o banco localmente e depois roda API + Web Vue com hot reload.
+Use este comando no dia a dia. Ele sobe o Postgres em um Compose separado, prepara dependencias em volumes Docker, roda setup/seed pelo container da API, inicia a API em container e inicia o Web Vue no host com hot reload.
 
 ```powershell
 npm.cmd run dev
@@ -20,63 +20,99 @@ npm.cmd run dev
 - Web: http://localhost:5174
 - API: http://localhost:4100
 
-O preparo de desenvolvimento executa `drizzle-kit push --force` em modo dev e aplica o seed. O `npm run dev` nao constroi imagem da API, nao roda build e nao remove containers antigos; para destruir o ambiente dev use `npm.cmd run dev:destroy`.
+O preparo de desenvolvimento executa `drizzle-kit push --force` em modo dev e aplica o seed dentro do container da API. O script so imprime `Ambiente pronto` depois do healthcheck da API e de confirmar que o Web no host responde.
+
+Para rodar API e Web no host explicitamente, mantendo apenas o Postgres em container:
+
+```powershell
+npm.cmd run dev:local
+```
+
+Para uma validacao automatizada que sobe, espera healthchecks e encerra API/Web:
+
+```powershell
+npm.cmd run dev -- --once
+```
 
 O `npm run check` faz apenas validacoes/typecheck. Ele nao executa build nem gera `dist`.
 
-## Docker
+## Docker e Compose
 
-O Docker Compose pode subir banco, API e Web. No desenvolvimento rapido, use `npm.cmd run dev` para manter as etapas separadas e visiveis.
+O ambiente dev e separado em dois projetos Compose:
 
-```powershell
-docker compose up -d
-```
+- `padaria-db-dev`: Postgres e volume persistente de desenvolvimento.
+- `padaria-dev`: API em desenvolvimento. O Web Vue roda no host no fluxo `npm run dev`.
 
-Subir tudo reconstruindo imagens:
-
-```powershell
-docker compose up -d --build
-```
-
-Preparar banco dev explicitamente:
+Subir apenas o banco dev:
 
 ```powershell
-npm.cmd run api:dev:prepare
+npm.cmd run db:dev:up
 ```
 
-Subir producao com migracao separada da API:
+Parar o banco dev preservando dados:
+
+```powershell
+npm.cmd run db:dev:down
+```
+
+Parar API/Web e remover containers, redes e volumes locais de dev/prod:
+
+```powershell
+npm.cmd run dev:destroy
+```
+
+## Coolify
+
+O arquivo recomendado para publicacao e `infra/docker-compose.coolify.yml`. Ele define:
+
+- `migrate`: roda migrations antes da API.
+- `api`: Fastify em container Node, com healthcheck em `/health`.
+- `web-vue`: Nuxt gerado como SPA estatica e servido por Nginx unprivileged.
+
+Diferente do desenvolvimento local, no Coolify o Web tambem e orquestrado pelo Docker Compose.
+
+Variaveis obrigatorias no Coolify:
+
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- `AUTH_BASE_URL`
+- `WEB_ORIGIN`
+- `NUXT_PUBLIC_API_URL`
+
+Validar o compose Coolify com valores ficticios seguros:
+
+```powershell
+npm.cmd run compose:coolify:check
+```
+
+Se quiser operar Postgres em Compose separado fora do Coolify:
+
+```powershell
+set POSTGRES_PASSWORD=troque-esta-senha
+npm.cmd run db:prod:up
+```
+
+Em Coolify, prefira usar o banco gerenciado/externo e apontar `DATABASE_URL` para ele.
+
+## Builds de producao
+
+Subir o compose produtivo generico localmente, com variaveis reais configuradas:
 
 ```powershell
 npm.cmd run compose:prod
 ```
 
-Gerar a Web Vue:
+Gerar a Web Vue estatica:
 
 ```powershell
-npm.cmd run build --workspace @padaria/web-vue
+npm.cmd run generate --workspace @padaria/web-vue
 ```
 
-## Fechar ambiente
-
-Fechar tudo e remover volumes/orfaos:
+Build completo dos workspaces:
 
 ```powershell
-docker compose down -v --remove-orphans
+npm.cmd run build
 ```
-
-Fechar tudo, remover volumes/orfaos e apagar imagens locais criadas pelo Compose:
-
-```powershell
-docker compose down --rmi local -v --remove-orphans
-```
-
-O script do package usa o fechamento padrao:
-
-```powershell
-npm.cmd run compose:down
-```
-
-O Postgres de desenvolvimento usa `tmpfs`; os dados somem quando o Compose e removido.
 
 ## Credenciais seed
 

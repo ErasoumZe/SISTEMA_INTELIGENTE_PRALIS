@@ -1,0 +1,25 @@
+services:
+  db:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-padaria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-padaria}
+      POSTGRES_DB: ${POSTGRES_DB:-padaria}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5543}:5432"
+    volumes:
+      - padaria_postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-padaria} -d ${POSTGRES_DB:-padaria}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - padaria_dev
+
+volumes:
+  padaria_postgres_dev_data:
+    name: padaria_postgres_dev_data
+
+networks:
+  padaria_dev:
+    name: padaria_dev

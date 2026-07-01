@@ -19,5 +19,5 @@
       "@padaria/db/schema/venda": ["db/src/schema/venda/venda.schema.ts"]
     }
   },
-  "include": ["**/*.test.ts"]
+  "include": ["**/*.ts"]
 }

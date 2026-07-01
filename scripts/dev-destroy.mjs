@@ -1,19 +1,14 @@
 import { spawn } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
 import net from "node:net";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { composeAppDev, composeCoolify, composeDbDev, composeDbProd, docker } from "./compose-paths.mjs";
 
 const cwd = fileURLToPath(new URL("..", import.meta.url));
 const isWindows = process.platform === "win32";
-const composeArgs = [
-  "compose",
-  "-p",
-  "padaria-dev",
-  "-f",
-  "infra/docker-compose.yml",
-  "-f",
-  "infra/docker-compose.dev.yml"
-];
-const portas = ["4100", "5174", "5543"];
+const portas = ["4100", "5174", process.env.POSTGRES_PORT ?? "5543"];
+const cacheDirDev = path.join(cwd, "node_modules", ".cache", "padaria-dev");
 
 const cor = {
   reset: "\x1b[0m",
@@ -49,17 +44,18 @@ function erro(texto) {
   linha(`${cor.vermelho}ERRO${cor.reset} ${texto}`);
 }
 
-function executar(comando, args) {
+function executar(comando, args, { ignorarFalha = false, env = {} } = {}) {
   return new Promise((resolve, reject) => {
     const filho = spawn(comando, args, {
       cwd,
       stdio: "inherit",
       shell: isWindows,
-      windowsHide: true
+      windowsHide: true,
+      env: { ...process.env, ...env }
     });
     filho.on("error", reject);
     filho.on("exit", (codigo) => {
-      if (codigo === 0) resolve();
+      if (codigo === 0 || ignorarFalha) resolve();
       else reject(new Error(`${comando} ${args.join(" ")} saiu com codigo ${codigo ?? "desconhecido"}`));
     });
   });
@@ -113,8 +109,27 @@ async function pidsNaPorta(porta) {
   }
 }
 
+async function nomeDoProcesso(pid) {
+  if (!isWindows) return "";
+  try {
+    const saida = await executarCapturando("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
+    const linhaProcesso = saida
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .find((item) => item && !item.includes("INFO:"));
+    return linhaProcesso?.match(/^"([^"]+)"/)?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
 async function encerrarPid(pid) {
   if (!pid || pid === String(process.pid)) return;
+  const nome = await nomeDoProcesso(pid);
+  if (/docker/i.test(nome)) {
+    aviso(`processo ${pid} (${nome}) parece ser do Docker; nao vou encerrar diretamente`);
+    return;
+  }
   try {
     await executarCapturando(isWindows ? "taskkill" : "kill", isWindows ? ["/PID", pid, "/T", "/F"] : ["-TERM", pid]);
     ok(`processo ${pid} encerrado`);
@@ -135,29 +150,49 @@ async function encerrarPortasLocais() {
   }
 }
 
-async function validarPortasLivres() {
+async function validarPortas() {
   for (const porta of portas) {
     if (await portaDisponivel(porta)) ok(`porta ${porta} livre`);
-    else aviso(`porta ${porta} continua ocupada por um processo externo ao compose`);
+    else aviso(`porta ${porta} continua ocupada por processo externo ou container preservado`);
   }
 }
 
+async function composeDown(nome, composeArgs, incluirVolumes, env = {}) {
+  const args = [...composeArgs, "down", "--remove-orphans"];
+  if (incluirVolumes) args.push("-v");
+  info(`${incluirVolumes ? "removendo" : "parando"} ${nome}...`);
+  await executar(docker, args, { ignorarFalha: true, env });
+}
+
+function removerCacheDev() {
+  if (!existsSync(cacheDirDev)) return;
+  rmSync(cacheDirDev, { recursive: true, force: true });
+  ok("marcadores locais do dev removidos");
+}
+
 async function main() {
-  titulo("Destruindo ambiente de desenvolvimento Padaria v2");
-  info("encerrando API/Web locais nas portas 4100 e 5174...");
+  titulo("Destruindo ambiente Padaria v2 completo");
+
+  await composeDown("API/Web dev", composeAppDev, true);
+  await composeDown("Postgres dev", composeDbDev, true);
+  await composeDown("Postgres prod local", composeDbProd, true, { POSTGRES_PASSWORD: "dummy-prod-password" });
+  await composeDown("stack Coolify local", composeCoolify, true, {
+    DATABASE_URL: "postgresql://user:pass@db.example:5432/padaria",
+    BETTER_AUTH_SECRET: "dummy-secret-with-at-least-32-chars",
+    AUTH_BASE_URL: "https://api.example.test",
+    WEB_ORIGIN: "https://app.example.test",
+    NUXT_PUBLIC_API_URL: "https://api.example.test"
+  });
+  removerCacheDev();
+
+  info("encerrando processos locais remanescentes nas portas 4100 e 5174...");
   await encerrarPortasLocais();
 
-  info("removendo containers, redes e volumes do projeto padaria-dev...");
-  await executar("docker", [...composeArgs, "down", "-v", "--remove-orphans"]);
-  ok("containers, redes e volumes removidos");
-
   info("confirmando portas principais...");
-  await validarPortasLivres();
+  await validarPortas();
 
-  titulo("Ambiente removido");
-  ok("Postgres dev removido");
-  ok("API dev removida");
-  ok("Web Vue dev removida");
+  titulo("Ambiente removido com volumes");
+  ok("containers, redes e volumes locais removidos");
 }
 
 main().catch((falha) => {

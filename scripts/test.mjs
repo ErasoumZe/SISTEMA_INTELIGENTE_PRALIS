@@ -88,7 +88,7 @@ function executar(nome, args) {
 
 try {
   titulo("Rodando testes Padaria v2");
-  await executar("vitest", ["run", "test", "--workspace", "@padaria/tests"]);
+  await executar("vitest integration", ["run", "test:integration", "--workspace", "@padaria/tests"]);
   titulo("Testes concluidos");
   ok("suite Vitest aprovada");
 } catch (error) {

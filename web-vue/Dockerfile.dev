@@ -2,15 +2,6 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package.json package-lock.json* tsconfig.base.json ./
-COPY api/package.json api/package.json
-COPY db/package.json db/package.json
-COPY shared/package.json shared/package.json
-COPY tests/package.json tests/package.json
-COPY web-vue/package.json web-vue/package.json
-
-RUN npm install
+ENV NODE_OPTIONS=--conditions=development
 
 EXPOSE 5174
-
-CMD ["npm", "run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", "5174"]
