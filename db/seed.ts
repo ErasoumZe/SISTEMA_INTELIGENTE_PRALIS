@@ -253,7 +253,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "relatorio_dre",
       "clientes"
     ],
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
+    // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
+    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar", "caixas_gerenciar"]
   }),
   Compras: permissoesDoCargoSeed({
     ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
@@ -272,7 +273,9 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   "Diretor de Operacoes": permissoesDoCargoSeed({
     ativas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
   }),
-  "Diretor Geral": permissoesDoCargoSeed({ todas: true }),
+  // Diretor Geral vira um cargo normal (sem "todas"): o acesso total do diretor vem do role
+  // usuario_admin (decisao de negocio: pergunta 3). Assim a tela de permissoes do cargo fica limpa.
+  "Diretor Geral": permissoesDoCargoSeed({}),
   Financeiro: permissoesDoCargoSeed({
     ativas: [
       "relatorio_vendas",
@@ -755,7 +758,10 @@ await banco
   .insert(permissoesSetores)
   .values({
     setorId: setor.id,
-    regras: regrasPermissoesSeed(permissoesDoCargoSeed({ ativas: ["entradas", "caixa", "relatorio_produtos"] }))
+    // Setor "Loja" NAO concede permissoes amplas: cada cargo define seu proprio acesso.
+    // (Antes concedia caixa_operar/entradas/relatorio_produtos a TODOS os membros, contaminando
+    //  cargos estreitos como Tesouraria/DP/Fiscal. Operar caixa fica so no cargo Caixa.)
+    regras: regrasPermissoesSeed(permissoesDoCargoSeed({}))
   })
   .onConflictDoNothing();
 
