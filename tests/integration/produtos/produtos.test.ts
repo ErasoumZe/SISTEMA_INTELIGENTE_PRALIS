@@ -60,7 +60,56 @@ describe("produtos integration", () => {
       }
     });
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from produtos where id = $1 and descricao = $2", [produtoId, "Produto editado por integracao"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from produtos where id = $1 and descricao = $2", [
+        produtoId,
+        "Produto editado por integracao"
+      ])
+    ).resolves.toBeTruthy();
+  });
+
+  it("Deve_PersistirCamposComerciais_Quando_CriarProduto", async () => {
+    const unidade = await contexto.app.inject({
+      method: "POST",
+      url: "/api/unidades-medida",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Unidade Comercial", sigla: "cx" }
+    });
+    const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
+
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        descricao: "Produto comercial integracao",
+        unidadeIndividualId: unidadeId,
+        quantidadeIndividual: 1,
+        custo: 84.9,
+        margem: 0.7,
+        precoVenda: 4.81,
+        auto: true,
+        status: "ativo",
+        tipo: "revenda",
+        conversoes: []
+      }
+    });
+    expect(criado.statusCode).toBe(201);
+    const produtoId = json<{ data: { id: string } }>(criado).data.id;
+
+    const linha = await consultarUm<{
+      custo: string;
+      margem: string;
+      preco_venda: string;
+      auto: boolean;
+      status: string;
+      tipo: string;
+    }>("select custo, margem, preco_venda, auto, status, tipo from produtos where id = $1", [produtoId]);
+    expect(linha).toMatchObject({ auto: true, status: "ativo", tipo: "revenda" });
+    expect(Number(linha?.custo)).toBe(84.9);
+    expect(Number(linha?.margem)).toBe(0.7);
+    expect(Number(linha?.preco_venda)).toBe(4.81);
   });
 
   it("Deve_Retornar403_Quando_CriarProdutoEmEmpresaNaoPermitida", async () => {
@@ -94,7 +143,10 @@ describe("produtos importacao/exportacao integration", () => {
   });
 
   it("Deve_ImportarProdutosEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from produtos where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from produtos where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -105,7 +157,12 @@ describe("produtos importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarProdutoParaEmpresaPermitida", async () => {
@@ -124,7 +181,12 @@ describe("produtos importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.produto])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.produto
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

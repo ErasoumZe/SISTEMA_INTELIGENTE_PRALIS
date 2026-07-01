@@ -62,6 +62,12 @@ export function useCadastroView(params: {
           listas.unidadesMedida.find((unidade) => unidade.id === (item.unidadeIndividualId ?? item.unidadeMedidaId))
             ?.sigla ?? "",
         quantidadeIndividual: String(item.quantidadeIndividual ?? "1"),
+        custo: item.custo != null ? String(item.custo) : "",
+        margem: item.margem != null ? String(item.margem) : "",
+        precoVenda: item.precoVenda != null ? String(item.precoVenda) : "",
+        auto: item.auto ? "true" : "false",
+        status: item.status ?? "ativo",
+        tipo: item.tipo ?? "revenda",
         conversoes: JSON.stringify(item.conversoes ?? [])
       }));
     if (tela === "colaboradores")

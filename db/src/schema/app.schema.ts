@@ -397,6 +397,13 @@ export const produtos = pgTable("produtos", {
   descricao: text("descricao").notNull(),
   marca: text("marca"),
   quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
+  // Comercial (por empresa/loja) — porte do Pralis; preco = referencia de catalogo (vendas seguem do CREARE).
+  custo: numeric("custo", { precision: 14, scale: 2 }),
+  margem: numeric("margem", { precision: 6, scale: 4 }), // fracao (0.30 = 30%)
+  precoVenda: numeric("preco_venda", { precision: 14, scale: 2 }),
+  auto: boolean("auto").notNull().default(false),
+  status: text("status").notNull().default("ativo"), // ativo | inativo
+  tipo: text("tipo").notNull().default("revenda"), // revenda | transformacao
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")

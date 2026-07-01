@@ -1,5 +1,6 @@
 import {
   TELA_TEMA_RESUMO_CAIXA,
+  calcularPrecoVenda,
   permissoes as permissoesCompartilhadas,
   temAlgumaPermissao,
   temPermissao,
@@ -485,6 +486,12 @@ export function formCadastroVazio(): CadastroForm {
     quantidadeIndividual: "1",
     grupoMercadoriaId: "",
     produtoConversoes: [],
+    custo: "",
+    margem: "",
+    precoVenda: "",
+    auto: false,
+    status: "ativo",
+    tipo: "revenda",
     contaId: "",
     ativo: true,
     tipoGrupo: "despesa",
@@ -606,6 +613,34 @@ function documentoCadastroEhCpf(documento: string) {
   return digitos.length > 0 && digitos.length <= 11;
 }
 
+// converte campo de texto em numero, tratando vazio e nao-numerico (NaN) como null
+export function numeroCampoOuNulo(valor: string): number | null {
+  if (valor === "") return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+// preco de referencia do produto a partir do formulario: automatico calcula por custo+margem
+// (null se sem custo); manual usa o valor digitado (null se vazio). Fonte unica usada pelo
+// payload e pelo preview, para nunca divergirem.
+export function precoVendaDoFormProduto(
+  form: Pick<CadastroForm, "auto" | "custo" | "margem" | "precoVenda" | "quantidadeIndividual">
+): number | null {
+  const custo = numeroCampoOuNulo(form.custo);
+  if (form.auto) {
+    if (custo == null) return null;
+    return calcularPrecoVenda({
+      auto: true,
+      custo,
+      quantidadeCaixa: Number(form.quantidadeIndividual || 1),
+      margem: numeroCampoOuNulo(form.margem),
+      margemGrupo: 0,
+      precoManual: 0
+    });
+  }
+  return numeroCampoOuNulo(form.precoVenda);
+}
+
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
   if (tela === "contas") return { empresaId, nome: form.nome };
@@ -631,7 +666,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       cidade: form.cidade || null,
       estado: form.estado || null
     };
-  if (tela === "produtos")
+  if (tela === "produtos") {
     return {
       empresaId,
       codigo: form.codigo || null,
@@ -641,6 +676,12 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       unidadeIndividualId: form.unidadeIndividualId,
       quantidadeIndividual: Number(form.quantidadeIndividual || 1),
       grupoMercadoriaId: form.grupoMercadoriaId || null,
+      custo: numeroCampoOuNulo(form.custo),
+      margem: numeroCampoOuNulo(form.margem),
+      precoVenda: precoVendaDoFormProduto(form),
+      auto: form.auto,
+      status: form.status,
+      tipo: form.tipo,
       conversoes: form.produtoConversoes
         .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
         .map((conversao) => ({
@@ -649,6 +690,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
           unidadesIndividuais: Number(conversao.unidadesIndividuais)
         }))
     };
+  }
   if (tela === "areas_setores") {
     return form.tipoAreaSetor === "setor"
       ? { empresaId, nome: form.nome, areaId: form.areaId || null, setorPaiId: form.setorPaiId || null }

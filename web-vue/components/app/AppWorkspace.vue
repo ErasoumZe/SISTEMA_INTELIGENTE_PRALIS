@@ -207,8 +207,7 @@ const {
   telasPermitidas,
   telasDesabilitadasMenu,
   motivosTelasDesabilitadas
-} =
-  usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
+} = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 const perfilCaixaOperacional = computed(
   () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
@@ -664,7 +663,9 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
     return;
   }
   if (caixaId) params.set("caixaId", caixaId);
-  operacoes.value = await apiGet<OperacaoResumo[]>(`/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`);
+  operacoes.value = await apiGet<OperacaoResumo[]>(
+    `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
+  );
 }
 
 async function carregarStatusCaixa(idEmpresa = empresaId.value) {
@@ -1063,6 +1064,12 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
     unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
     quantidadeIndividual: linha.quantidadeIndividual ?? "1",
     grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
+    custo: linha.custo ?? "",
+    margem: linha.margem ?? "",
+    precoVenda: linha.precoVenda ?? "",
+    auto: linha.auto === "true",
+    status: (linha.status as CadastroForm["status"]) || "ativo",
+    tipo: (linha.tipo as CadastroForm["tipo"]) || "revenda",
     produtoConversoes: (() => {
       try {
         const conversoes = JSON.parse(linha.conversoes ?? "[]") as Array<{

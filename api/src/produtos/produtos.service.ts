@@ -26,6 +26,12 @@ export async function salvarProduto(id: string | null, body: unknown) {
     unidadeIndividualId: dados.unidadeIndividualId,
     quantidadeIndividual: dados.quantidadeIndividual,
     grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
+    custo: dados.custo ?? null,
+    margem: dados.margem ?? null,
+    precoVenda: dados.precoVenda ?? null,
+    auto: dados.auto,
+    status: dados.status,
+    tipo: dados.tipo,
     conversoes: dados.conversoes
   });
 }

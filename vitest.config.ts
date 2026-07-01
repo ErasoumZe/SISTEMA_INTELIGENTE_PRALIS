@@ -10,6 +10,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: "unit",
+          // Testes puros (regras, dinheiro, etc.) — sem banco/Testcontainers.
+          include: ["./tests/unit/**/*.test.ts"]
+        }
+      },
+      {
+        extends: true,
+        test: {
           name: "integration",
           include: ["./tests/integration/**/*.test.ts"],
           globalSetup: ["./tests/setup/testcontainers.ts"],

@@ -24,6 +24,11 @@ export type Opcao = {
   unidadeMedidaId?: string | null;
   unidadeIndividualId?: string | null;
   quantidadeIndividual?: string;
+  custo?: string | number | null;
+  margem?: string | number | null;
+  precoVenda?: string | number | null;
+  auto?: boolean;
+  status?: string | null;
   sigla?: string;
   empresaId?: string;
   empresaIds?: string[];
@@ -217,6 +222,12 @@ export type CadastroForm = {
   quantidadeIndividual: string;
   grupoMercadoriaId: string;
   produtoConversoes: ProdutoConversaoForm[];
+  custo: string;
+  margem: string;
+  precoVenda: string;
+  auto: boolean;
+  status: "ativo" | "inativo";
+  tipo: "revenda" | "transformacao";
   contaId: string;
   ativo: boolean;
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { TELA_TEMA_RESUMO_CAIXA } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
-import { dinheiro, itemPorTela } from "~/utils/domain";
+import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 
 const workspace = useWorkspaceContext();
 
@@ -64,6 +65,9 @@ const {
   copiaSalvando,
   executarCopia
 } = workspace;
+
+// Preview do preco de venda: mesma fonte usada no payload, para preview e valor salvo nunca divergirem.
+const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.value));
 </script>
 
 <template>
@@ -610,6 +614,52 @@ const {
             </v-col>
             <v-col cols="12" md="4">
               <v-text-field v-model="formCadastro.quantidadeIndividual" type="number" label="Quantidade individual" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.tipo"
+                :items="[
+                  { titulo: 'Revenda', valor: 'revenda' },
+                  { titulo: 'Transformacao', valor: 'transformacao' }
+                ]"
+                item-title="titulo"
+                item-value="valor"
+                label="Tipo"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formCadastro.status"
+                :items="[
+                  { titulo: 'Ativo', valor: 'ativo' },
+                  { titulo: 'Inativo', valor: 'inativo' }
+                ]"
+                item-title="titulo"
+                item-value="valor"
+                label="Status"
+              />
+            </v-col>
+            <v-col cols="12" md="4"
+              ><v-text-field v-model="formCadastro.custo" type="number" label="Custo (caixa)"
+            /></v-col>
+            <v-col cols="12" md="4"
+              ><v-text-field v-model="formCadastro.margem" type="number" step="0.01" label="Margem (fracao, ex 0.30)"
+            /></v-col>
+            <v-col cols="12" md="4" class="d-flex align-center">
+              <v-switch v-model="formCadastro.auto" label="Preco automatico" color="primary" hide-details />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model="formCadastro.precoVenda"
+                type="number"
+                label="Preco de venda"
+                :disabled="formCadastro.auto"
+              />
+            </v-col>
+            <v-col cols="12" md="6" class="d-flex align-center">
+              <v-chip color="primary" variant="tonal" label>
+                Preco calculado: {{ precoVendaPreview == null ? "-" : dinheiro(precoVendaPreview) }}
+              </v-chip>
             </v-col>
             <v-col cols="12">
               <div class="d-flex align-center justify-space-between mb-2">

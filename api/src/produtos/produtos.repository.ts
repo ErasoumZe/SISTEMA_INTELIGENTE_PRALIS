@@ -22,7 +22,13 @@ export async function listarProdutosRepository() {
       codigoBarras: produtos.codigoBarras,
       descricao: produtos.descricao,
       marca: produtos.marca,
-      quantidadeIndividual: produtos.quantidadeIndividual
+      quantidadeIndividual: produtos.quantidadeIndividual,
+      custo: produtos.custo,
+      margem: produtos.margem,
+      precoVenda: produtos.precoVenda,
+      auto: produtos.auto,
+      status: produtos.status,
+      tipo: produtos.tipo
     })
     .from(produtos)
     .orderBy(asc(produtos.descricao));
@@ -51,6 +57,12 @@ export async function salvarProdutoRepository(input: {
   unidadeIndividualId: string;
   quantidadeIndividual: number;
   grupoMercadoriaId: string | null;
+  custo: number | null;
+  margem: number | null;
+  precoVenda: number | null;
+  auto: boolean;
+  status: "ativo" | "inativo";
+  tipo: "revenda" | "transformacao";
   conversoes: Array<{ unidadeMedidaId: string; quantidade: number; unidadesIndividuais: number }>;
 }) {
   return banco.transaction(async (tx) => {
@@ -63,7 +75,13 @@ export async function salvarProdutoRepository(input: {
       unidadeMedidaId: input.unidadeIndividualId,
       unidadeIndividualId: input.unidadeIndividualId,
       quantidadeIndividual: String(input.quantidadeIndividual),
-      grupoMercadoriaId: input.grupoMercadoriaId
+      grupoMercadoriaId: input.grupoMercadoriaId,
+      custo: input.custo != null ? String(input.custo) : null,
+      margem: input.margem != null ? String(input.margem) : null,
+      precoVenda: input.precoVenda != null ? String(input.precoVenda) : null,
+      auto: input.auto,
+      status: input.status,
+      tipo: input.tipo
     };
     const produtoId = input.id
       ? input.id

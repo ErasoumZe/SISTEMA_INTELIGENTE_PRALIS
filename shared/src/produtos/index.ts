@@ -17,6 +17,9 @@ export const produtoConversaoPayloadSchema = z.object({
   unidadesIndividuais: z.coerce.number().positive()
 });
 
+export const statusProdutoSchema = z.enum(["ativo", "inativo"]);
+export const tipoProdutoSchema = z.enum(["revenda", "transformacao"]);
+
 export const produtoPayloadSchema = z.object({
   empresaId: uuidSchema,
   codigo: z.string().optional().nullable(),
@@ -26,7 +29,14 @@ export const produtoPayloadSchema = z.object({
   unidadeIndividualId: uuidSchema,
   quantidadeIndividual: z.coerce.number().positive(),
   grupoMercadoriaId: uuidSchema.optional().nullable(),
-  conversoes: z.array(produtoConversaoPayloadSchema).default([])
+  conversoes: z.array(produtoConversaoPayloadSchema).default([]),
+  // Comercial (por loja) — preco de venda e REFERENCIA de catalogo; margem em fracao (0.30 = 30%).
+  custo: z.coerce.number().min(0).optional().nullable(),
+  margem: z.coerce.number().min(0).optional().nullable(),
+  precoVenda: z.coerce.number().min(0).optional().nullable(),
+  auto: z.boolean().optional().default(false),
+  status: statusProdutoSchema.optional().default("ativo"),
+  tipo: tipoProdutoSchema.optional().default("revenda")
 });
 
 export const produtosQuerySchema = empresaQuerySchema;
@@ -39,3 +49,4 @@ export type ProdutoConversaoPayload = z.infer<typeof produtoConversaoPayloadSche
 export type ImportarProdutosPayload = ImportarEmpresaPayload;
 export type ExportarProdutoPayload = ExportarEmpresaPayload;
 
+export * from "./regras.js";

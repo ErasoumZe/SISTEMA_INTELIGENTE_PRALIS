@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import {
+  arredondar,
+  calcularPrecoVenda,
+  calcularPrecoVendaComPromocao,
+  montarComoSeCompra,
+  montarDescricao,
+  resolverMargemGrupo
+} from "@padaria/shared/produtos";
+
+describe("produtos/regras — preco de venda", () => {
+  it("usa custo unitario x (1 + margem)", () => {
+    // 84,90 / 30 = 2,83 ; x1,70 = 4,811 -> 4,81
+    expect(
+      calcularPrecoVenda({ auto: true, custo: 84.9, quantidadeCaixa: 30, margem: 0.7, margemGrupo: 0, precoManual: 0 })
+    ).toBe(4.81);
+  });
+
+  it("margem 0 mantem o custo unitario", () => {
+    expect(
+      calcularPrecoVenda({ auto: true, custo: 10, quantidadeCaixa: 10, margem: 0, margemGrupo: 0, precoManual: 0 })
+    ).toBe(1);
+  });
+
+  it("margem 30% sobre custo unitario", () => {
+    expect(
+      calcularPrecoVenda({ auto: true, custo: 100, quantidadeCaixa: 2, margem: 0.3, margemGrupo: 0, precoManual: 0 })
+    ).toBe(65);
+  });
+
+  it("margem pontual prevalece sobre a do grupo", () => {
+    expect(
+      calcularPrecoVenda({ auto: true, custo: 10, quantidadeCaixa: 1, margem: 0.5, margemGrupo: 0.1, precoManual: 0 })
+    ).toBe(15);
+  });
+
+  it("usa a margem do grupo quando a pontual e null", () => {
+    expect(
+      calcularPrecoVenda({ auto: true, custo: 10, quantidadeCaixa: 1, margem: null, margemGrupo: 0.1, precoManual: 0 })
+    ).toBe(11);
+  });
+
+  it("auto=false devolve o preco manual", () => {
+    expect(
+      calcularPrecoVenda({ auto: false, custo: 999, quantidadeCaixa: 1, margem: 0.5, margemGrupo: 0, precoManual: 7.5 })
+    ).toBe(7.5);
+  });
+
+  it("produto incompleto devolve 0", () => {
+    expect(
+      calcularPrecoVenda({
+        auto: true,
+        custo: 10,
+        quantidadeCaixa: 1,
+        margem: 0.5,
+        margemGrupo: 0,
+        precoManual: 0,
+        temProduto: false
+      })
+    ).toBe(0);
+  });
+});
+
+describe("produtos/regras — promocao", () => {
+  const precoVenda = 100;
+  const seg14h = new Date(2026, 5, 29, 14, 0, 0); // 29/06/2026 14:00
+
+  it("aplica desconto dentro da janela de horario", () => {
+    const preco = calcularPrecoVendaComPromocao({
+      precoVenda,
+      agora: seg14h,
+      promocoes: [{ tipo: "desconto", descontoFracao: 0.2, horaInicio: "12:00", horaFim: "15:00" }]
+    });
+    expect(preco).toBe(80);
+  });
+
+  it("nao aplica fora da janela de horario", () => {
+    const seg18h = new Date(2026, 5, 29, 18, 0, 0);
+    const preco = calcularPrecoVendaComPromocao({
+      precoVenda,
+      agora: seg18h,
+      promocoes: [{ tipo: "desconto", descontoFracao: 0.2, horaInicio: "12:00", horaFim: "15:00" }]
+    });
+    expect(preco).toBe(100);
+  });
+
+  it("promocao de valor fixo substitui o preco", () => {
+    const preco = calcularPrecoVendaComPromocao({
+      precoVenda,
+      agora: seg14h,
+      promocoes: [{ tipo: "valor", valor: 75 }]
+    });
+    expect(preco).toBe(75);
+  });
+
+  it("respeita o dia da semana marcado", () => {
+    // dias = [seg..dom]; marca apenas terca -> nao aplica numa segunda
+    const preco = calcularPrecoVendaComPromocao({
+      precoVenda,
+      agora: seg14h,
+      promocoes: [{ tipo: "desconto", descontoFracao: 0.5, dias: [false, true, false, false, false, false, false] }]
+    });
+    expect(preco).toBe(100);
+  });
+});
+
+describe("produtos/regras — texto e lookups", () => {
+  it("montarDescricao: NOME + QTD + MEDIDA", () => {
+    expect(montarDescricao("Farinha de Trigo", 25, "KG")).toBe("FARINHA DE TRIGO 25 KG");
+  });
+
+  it("montarComoSeCompra: embalagem DE", () => {
+    expect(montarComoSeCompra("saco", "DE", 25, "FARINHA 25 KG")).toBe("1 SACO DE25 (FARINHA 25 KG)");
+  });
+
+  it("montarComoSeCompra: embalagem C/", () => {
+    expect(montarComoSeCompra("lt", "C/", 10, "TESTE")).toBe("1 LT C/ (TESTE)");
+  });
+
+  it("resolverMargemGrupo: acha pelo nome, ou 0", () => {
+    const grupos = [
+      { nome: "Padaria", margem: 0.7 },
+      { nome: "Bebidas", margem: 0.3 }
+    ];
+    expect(resolverMargemGrupo("Bebidas", grupos)).toBe(0.3);
+    expect(resolverMargemGrupo("Inexistente", grupos)).toBe(0);
+  });
+
+  it("arredondar: 2 casas por padrao", () => {
+    expect(arredondar(4.811)).toBe(4.81);
+    expect(arredondar(2.835)).toBe(2.84);
+  });
+});
