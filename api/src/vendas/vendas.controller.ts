@@ -5,6 +5,7 @@ import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../a
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarVenda, listarVendas } from "./vendas.service.js";
+import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
 export async function registrarRotasVendas(app: FastifyInstance): Promise<void> {
   app.get(
@@ -20,7 +21,10 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
 
-      return paginadoDeArray(await listarVendas(query, escopoDados), query.page, query.pageSize);
+      const escopoCaixa = await resolverEscopoListagemPorCaixa(request.perfilUsuario, "entradas", query.empresaId, query.caixaId);
+      if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
+      const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
+      return paginadoDeArray(await listarVendas(queryComCaixa, escopoDados), query.page, query.pageSize);
     }
   );
 

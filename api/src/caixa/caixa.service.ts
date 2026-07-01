@@ -11,7 +11,7 @@ import type {
   ResumoCaixa,
   ResumoCaixaQuery
 } from "@padaria/shared/caixa";
-import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
@@ -152,6 +152,32 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
     caixaAberto: serializarCaixa(caixa),
     resumo: await calcularResumoCaixaOperacional(caixa)
   };
+}
+
+export interface EscopoListagemCaixa {
+  bloquear: boolean;
+  caixaId: string | undefined;
+}
+
+/**
+ * Impoe, no servidor, o escopo "somente caixa aberto" das telas de movimentacao.
+ * Se o perfil tem `menu_<tela>_somente_caixa_aberto`, a listagem fica presa ao caixa
+ * aberto do usuario (ignorando qualquer caixaId pedido pelo cliente); sem caixa aberto,
+ * nao retorna nada. Sem a flag, mantem o comportamento livre (filtro opcional por caixaId).
+ */
+export async function resolverEscopoListagemPorCaixa(
+  perfil: PerfilUsuario | undefined,
+  telaId: string,
+  empresaId: string | undefined,
+  caixaIdSolicitado: string | undefined
+): Promise<EscopoListagemCaixa> {
+  const flag = `menu_${telaId}_somente_caixa_aberto` as Permissao;
+  const exigeCaixaAberto = Boolean(perfil) && temPermissao(perfil?.permissoes, flag);
+  if (!exigeCaixaAberto) return { bloquear: false, caixaId: caixaIdSolicitado };
+  if (!perfil || !empresaId) return { bloquear: true, caixaId: undefined };
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
+  if (!caixa) return { bloquear: true, caixaId: undefined };
+  return { bloquear: false, caixaId: caixa.id };
 }
 
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {

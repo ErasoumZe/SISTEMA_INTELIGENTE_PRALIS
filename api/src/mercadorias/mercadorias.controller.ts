@@ -5,6 +5,7 @@ import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../a
 import { criadoId, erro, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { criarMercadoria, listarMercadorias } from "./mercadorias.service.js";
+import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
 export async function registrarRotasMercadorias(app: FastifyInstance): Promise<void> {
   app.get("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_visualizar") }, async (request, reply) => {
@@ -16,7 +17,10 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     } catch {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
-    return paginadoDeArray(await listarMercadorias(query, escopoDados), query.page, query.pageSize);
+    const escopoCaixa = await resolverEscopoListagemPorCaixa(request.perfilUsuario, "mercadorias", query.empresaId, query.caixaId);
+    if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
+    const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
+    return paginadoDeArray(await listarMercadorias(queryComCaixa, escopoDados), query.page, query.pageSize);
   });
 
   app.post("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_criar") }, async (request, reply) => {
