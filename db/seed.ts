@@ -237,6 +237,7 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   }),
   Gerencia: permissoesDoCargoSeed({
     ativas: [
+      "caixa",
       "entradas",
       "transferencias",
       "despesas",
