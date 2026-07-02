@@ -2,20 +2,16 @@ import { randomBytes } from "node:crypto";
 import type {
   AbrirCaixaPayload,
   AcertarSaldoCaixaPayload,
-  AjusteSaldoPayload,
-  AjusteSaldoResponse,
   CaixaOperacional,
   CaixaStatus,
   EditarAberturaCaixaPayload,
   FecharCaixaPayload,
-  ResumoCaixa,
-  ResumoCaixaQuery
+  ResumoCaixa
 } from "@padaria/shared/caixa";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
-import { saldoCaixa } from "./caixa.regras.js";
 import {
   atualizarAberturaCaixaRepository,
   atualizarFechamentoCaixaRepository,
@@ -28,12 +24,10 @@ import {
   caixaTemLancamentosRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarAcertoSaldoCaixaRepository,
-  criarAjusteSaldoCaixa,
   criarCaixaRepository,
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarHistoricoCaixaRepository,
-  obterTotaisCaixa,
   registrarEdicaoCaixaRepository
 } from "./caixa.repository.js";
 
@@ -115,31 +109,6 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
     caixa.usuarioId === perfil.usuarioId ||
     caixa.usuarioCaixaId === perfil.usuarioId
   );
-}
-
-export async function obterResumoCaixa(query: ResumoCaixaQuery): Promise<ResumoCaixa> {
-  const totais = await obterTotaisCaixa(query);
-  const totalEntradas = Number(totais.totalEntradas);
-  const totalTransferencias = Number(totais.totalTransferencias);
-  const totalDespesas = Number(totais.totalDespesas);
-  const totalRetiradas = Number(totais.totalRetiradas);
-
-  return {
-    totalEntradas,
-    totalTransferencias,
-    totalDespesas,
-    totalRetiradas,
-    saldo: saldoCaixa({ totalEntradas, totalTransferencias, totalDespesas, totalRetiradas })
-  };
-}
-
-export async function acertarSaldoCaixa(dados: AjusteSaldoPayload, usuarioId: string): Promise<AjusteSaldoResponse> {
-  if (dados.valorDiferenca === 0) throw new Error("Nao ha diferenca para acertar");
-
-  const grupo = await buscarGrupoQuebraCaixa(dados.empresaId);
-  const despesa = await criarAjusteSaldoCaixa(dados, grupo?.id ?? null, usuarioId);
-
-  return { despesaId: despesa.id };
 }
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha): Promise<ResumoCaixa> {

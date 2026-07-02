@@ -7,73 +7,17 @@ import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
-import type { AjusteSaldoPayload, ResumoCaixaQuery } from "@padaria/shared/caixa";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
-export type TotaisCaixaLinha = {
+export type TotaisCaixaOperacionalLinha = {
   totalEntradas: string;
   totalTransferencias: string;
-  totalDespesas: string;
-  totalRetiradas: string;
-};
-
-export type TotaisCaixaOperacionalLinha = TotaisCaixaLinha & {
   totalTransferenciasEntrada: string;
   totalTransferenciasSaida: string;
+  totalDespesas: string;
+  totalRetiradas: string;
   totalMercadorias: string;
 };
-
-export async function obterTotaisCaixa(query: ResumoCaixaQuery): Promise<TotaisCaixaLinha> {
-  const filtroVendas = [eq(vendas.empresaId, query.empresaId), eq(vendas.dataReferencia, query.data)];
-  const filtroDespesas = [eq(despesas.empresaId, query.empresaId), eq(despesas.dataReferencia, query.data)];
-  const filtroRetiradas = [eq(retiradas.empresaId, query.empresaId), eq(retiradas.dataReferencia, query.data)];
-  const filtroTransferencias = [
-    eq(transferencias.empresaId, query.empresaId),
-    eq(transferencias.dataReferencia, query.data)
-  ];
-  if (query.colaboradorId) {
-    filtroVendas.push(eq(vendas.colaboradorId, query.colaboradorId));
-    filtroDespesas.push(eq(despesas.colaboradorId, query.colaboradorId));
-    filtroRetiradas.push(eq(retiradas.colaboradorId, query.colaboradorId));
-  }
-
-  const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas] = await Promise.all([
-    banco
-      .select({ valorOriginal: vendas.valorOriginal })
-      .from(vendas)
-      .where(and(...filtroVendas)),
-    query.colaboradorId
-      ? Promise.resolve([])
-      : banco
-          .select({ valorOriginal: transferencias.valorOriginal })
-          .from(transferencias)
-          .where(and(...filtroTransferencias)),
-    banco
-      .select({ valorOriginal: despesas.valorOriginal })
-      .from(despesas)
-      .where(and(...filtroDespesas)),
-    banco
-      .select({ valorOriginal: retiradas.valorOriginal })
-      .from(retiradas)
-      .where(and(...filtroRetiradas))
-  ]);
-
-  const soma = (linhas: Array<{ valorOriginal: string }>) =>
-    linhas.reduce((total, movimento) => total + Number(movimento.valorOriginal), 0);
-  const totais = {
-    totalEntradas: soma(linhasVendas),
-    totalTransferencias: soma(linhasTransferencias),
-    totalDespesas: soma(linhasDespesas),
-    totalRetiradas: soma(linhasRetiradas)
-  };
-
-  return {
-    totalEntradas: totais.totalEntradas.toFixed(2),
-    totalTransferencias: totais.totalTransferencias.toFixed(2),
-    totalDespesas: totais.totalDespesas.toFixed(2),
-    totalRetiradas: totais.totalRetiradas.toFixed(2)
-  };
-}
 
 export async function buscarGrupoQuebraCaixa(
   empresaId: string,
@@ -86,30 +30,6 @@ export async function buscarGrupoQuebraCaixa(
     .limit(1);
 
   return grupo ?? null;
-}
-
-export async function criarAjusteSaldoCaixa(
-  dados: AjusteSaldoPayload,
-  grupoDespesaId: string | null,
-  criadoPor: string
-): Promise<{ id: string }> {
-  const [despesa] = await banco
-    .insert(despesas)
-    .values({
-      empresaId: dados.empresaId,
-      dataReferencia: dados.data,
-      dataVencimento: dados.data,
-      descricao: "Quebra de caixa",
-      valorOriginal: String(Math.abs(dados.valorDiferenca)),
-      contaOrigemId: dados.contaOrigemId ?? null,
-      colaboradorId: dados.colaboradorId,
-      grupoDespesaId,
-      criadoPor
-    })
-    .returning({ id: despesas.id });
-
-  if (!despesa) throw new Error("Ajuste de caixa nao criado");
-  return despesa;
 }
 
 export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: string, db: ExecutorBanco = banco) {

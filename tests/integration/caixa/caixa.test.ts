@@ -46,34 +46,6 @@ describe("caixa integration", () => {
     expect(JSON.stringify(resposta.json())).toContain(idsTeste.caixaFechado);
   });
 
-  it("Deve_RetornarResumoEAcertarSaldoDeFechamento_Quando_DadosValidos", async () => {
-    const resumo = await contexto.app.inject({
-      method: "GET",
-      url: `/api/fechamento-caixa/resumo?empresaId=${idsTeste.empresaA}&data=2026-06-30`,
-      headers: { cookie: cookieAdmin }
-    });
-    assertOk(resumo);
-    expect(resumo.json()).toMatchObject({ data: { totalEntradas: 42 } });
-
-    const acerto = await contexto.app.inject({
-      method: "POST",
-      url: "/api/fechamento-caixa/acertar-saldo",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        colaboradorId: idsTeste.colaboradorAdmin,
-        contaOrigemId: idsTeste.contaCaixa,
-        data: "2026-06-30",
-        valorDiferenca: 5
-      }
-    });
-    expect(acerto.statusCode).toBe(201);
-    const despesaId = json<{ data: { id: string } }>(acerto).data.id;
-    await expect(
-      consultarUm("select id from despesas where id = $1 and descricao = $2", [despesaId, "Quebra de caixa"])
-    ).resolves.toBeTruthy();
-  });
-
   it("Deve_Retornar403_Quando_AcessarOuOperarCaixaDeEmpresaNaoPermitida", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
     const status = await contexto.app.inject({
@@ -93,22 +65,8 @@ describe("caixa integration", () => {
         observacao: "Caixa proibido"
       }
     });
-    const acertoFechamento = await contexto.app.inject({
-      method: "POST",
-      url: "/api/fechamento-caixa/acertar-saldo",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaB,
-        colaboradorId: idsTeste.colaboradorAdmin,
-        contaOrigemId: idsTeste.contaCaixa,
-        data: "2026-06-30",
-        valorDiferenca: 1
-      }
-    });
-
     assertProblem(status, 403);
     assertProblem(abrir, 403);
-    assertProblem(acertoFechamento, 403, "FORBIDDEN_COMPANY");
   });
 
   it("Deve_AbrirEEditarCaixa_Quando_PdvDisponivel", async () => {

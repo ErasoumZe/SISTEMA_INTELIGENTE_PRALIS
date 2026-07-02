@@ -4,20 +4,6 @@ import { paginationQuerySchema } from "../api/index.js";
 const uuidSchema = z.string().uuid();
 const dataHoraSchema = z.string().min(16);
 
-export const resumoCaixaQuerySchema = z.object({
-  empresaId: uuidSchema,
-  colaboradorId: uuidSchema.optional(),
-  data: z.string().min(10)
-});
-
-export const ajusteSaldoSchema = z.object({
-  empresaId: uuidSchema,
-  colaboradorId: uuidSchema,
-  contaOrigemId: uuidSchema.optional().nullable(),
-  data: z.string().min(10),
-  valorDiferenca: z.coerce.number()
-});
-
 export const caixaStatusQuerySchema = z.object({
   empresaId: uuidSchema
 });
@@ -50,9 +36,11 @@ export const fecharCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable()
 });
 
-export const historicoCaixaQuerySchema = z.object({
-  empresaId: uuidSchema
-}).merge(paginationQuerySchema);
+export const historicoCaixaQuerySchema = z
+  .object({
+    empresaId: uuidSchema
+  })
+  .merge(paginationQuerySchema);
 
 export const resumoCaixaSchema = z.object({
   totalEntradas: z.number(),
@@ -63,10 +51,6 @@ export const resumoCaixaSchema = z.object({
   totalRetiradas: z.number(),
   totalMercadorias: z.number().optional(),
   saldo: z.number()
-});
-
-export const ajusteSaldoResponseSchema = z.object({
-  despesaId: z.string()
 });
 
 export const caixaOperacionalSchema = z.object({
@@ -98,8 +82,6 @@ export const acertoSaldoCaixaResponseSchema = z.object({
   valorDiferenca: z.number()
 });
 
-export type ResumoCaixaQuery = z.infer<typeof resumoCaixaQuerySchema>;
-export type AjusteSaldoPayload = z.infer<typeof ajusteSaldoSchema>;
 export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
@@ -108,8 +90,6 @@ export type AcertarSaldoCaixaPayload = z.infer<typeof acertarSaldoCaixaPayloadSc
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
-export type AjusteSaldoResponse = z.infer<typeof ajusteSaldoResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
 export type AcertoSaldoCaixaResponse = z.infer<typeof acertoSaldoCaixaResponseSchema>;
-
