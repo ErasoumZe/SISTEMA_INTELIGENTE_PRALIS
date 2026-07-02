@@ -42,7 +42,7 @@ O `npm run lint` builda `shared` e `db` antes do ESLint (`npm run build:libs`): 
 
 - **CI (GitHub Actions):** `.github/workflows/ci.yml` roda em push na `main` e em pull requests — lint, typecheck, testes unitarios, build completo e a suite de integracao com Testcontainers.
 - **Pre-commit (husky + lint-staged):** instalado via `npm install` (script `prepare`); roda prettier + eslint nos arquivos staged.
-- **Testes unitarios** nao entram no `npm test` (que roda so a integracao); rode `npm run test:unit --workspace @padaria/tests`.
+- **`npm test`** roda os testes unitarios e depois a suite de integracao (Testcontainers). Para rodar so os unitarios: `npm run test:unit --workspace @padaria/tests`.
 
 ## Docker e Compose
 
