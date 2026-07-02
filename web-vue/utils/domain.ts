@@ -498,6 +498,13 @@ export function formCadastroVazio(): CadastroForm {
     auto: false,
     status: "ativo",
     tipo: "revenda",
+    quantidadeEstoque: "0",
+    estoqueMin: "",
+    estoqueMax: "",
+    setorEstoque: "",
+    localVenda1: "",
+    localVenda2: "",
+    fotoUrl: "",
     fiscal: {
       ncm: "",
       cest: "",
@@ -646,6 +653,13 @@ export function numeroCampoOuNulo(valor: string): number | null {
   return Number.isFinite(numero) ? numero : null;
 }
 
+// Margem no formulario e digitada em % (ex.: 70). Converte para fracao (0.70) com clamp 0-1000% (BUG-02 do Pralis).
+export function margemFracaoDoForm(margemPct: string): number | null {
+  const pct = numeroCampoOuNulo(margemPct);
+  if (pct == null) return null;
+  return Math.min(1000, Math.max(0, pct)) / 100;
+}
+
 // preco de referencia do produto a partir do formulario: automatico calcula por custo+margem
 // (null se sem custo); manual usa o valor digitado (null se vazio). Fonte unica usada pelo
 // payload e pelo preview, para nunca divergirem.
@@ -660,7 +674,7 @@ export function precoVendaDoFormProduto(
       custo,
       // custo e da CAIXA; divide pelas unidades por caixa (qtCad), nao pela gramatura (quantidadeIndividual)
       quantidadeCaixa: Number(form.quantidadeCaixa || 1),
-      margem: numeroCampoOuNulo(form.margem),
+      margem: margemFracaoDoForm(form.margem),
       margemGrupo: 0,
       precoManual: 0
     });
@@ -845,11 +859,18 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       medidaCompra: form.medidaCompra || null,
       grupoMercadoriaId: form.grupoMercadoriaId || null,
       custo: numeroCampoOuNulo(form.custo),
-      margem: numeroCampoOuNulo(form.margem),
+      margem: margemFracaoDoForm(form.margem),
       precoVenda: precoVendaDoFormProduto(form),
       auto: form.auto,
       status: form.status,
       tipo: form.tipo,
+      quantidadeEstoque: numeroCampoOuNulo(form.quantidadeEstoque),
+      estoqueMin: numeroCampoOuNulo(form.estoqueMin),
+      estoqueMax: numeroCampoOuNulo(form.estoqueMax),
+      setorEstoque: form.setorEstoque || null,
+      localVenda1: form.localVenda1 || null,
+      localVenda2: form.localVenda2 || null,
+      fotoUrl: form.fotoUrl || null,
       fiscal: fiscalDoFormProduto(form.fiscal),
       transformacao: transformacaoDoFormProduto(form),
       promocoes: promocoesDoFormProduto(form),

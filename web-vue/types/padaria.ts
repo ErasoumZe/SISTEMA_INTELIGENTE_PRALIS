@@ -87,6 +87,13 @@ export type Opcao = {
   cDe?: string | null;
   quantidadeCaixa?: string | number | null;
   medidaCompra?: string | null;
+  quantidadeEstoque?: string | number | null;
+  estoqueMin?: string | number | null;
+  estoqueMax?: string | number | null;
+  setorEstoque?: string | null;
+  localVenda1?: string | null;
+  localVenda2?: string | null;
+  fotoUrl?: string | null;
   fiscal?: ProdutoFiscalDados | null;
   transformacao?: ProdutoTransformacaoDados | null;
   promocoes?: ProdutoPromocaoDados[];
@@ -298,6 +305,13 @@ export type CadastroForm = {
   auto: boolean;
   status: "ativo" | "inativo";
   tipo: "revenda" | "transformacao";
+  quantidadeEstoque: string;
+  estoqueMin: string;
+  estoqueMax: string;
+  setorEstoque: string;
+  localVenda1: string;
+  localVenda2: string;
+  fotoUrl: string;
   fiscal: ProdutoFiscalForm;
   transformacao: ProdutoTransformacaoForm;
   promoTipo: "nenhum" | "valor" | "desconto";

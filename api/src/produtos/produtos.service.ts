@@ -60,6 +60,13 @@ export async function salvarProduto(id: string | null, body: unknown, criadoPorU
     auto: dados.auto,
     status: dados.status,
     tipo: dados.tipo,
+    quantidadeEstoque: dados.quantidadeEstoque ?? null,
+    estoqueMin: dados.estoqueMin ?? null,
+    estoqueMax: dados.estoqueMax ?? null,
+    setorEstoque: dados.setorEstoque?.trim() || null,
+    localVenda1: dados.localVenda1?.trim() || null,
+    localVenda2: dados.localVenda2?.trim() || null,
+    fotoUrl: dados.fotoUrl?.trim() || null,
     conversoes: dados.conversoes,
     fiscal: dados.fiscal
       ? {

@@ -96,6 +96,12 @@ describe("produtos integration", () => {
         auto: true,
         status: "ativo",
         tipo: "revenda",
+        quantidadeEstoque: 12,
+        estoqueMin: 5,
+        estoqueMax: 50,
+        setorEstoque: "LJ - CAIXAS",
+        localVenda1: "PDV1",
+        fotoUrl: "https://exemplo.test/foto.png",
         fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA", aliquotaCheia: 18, icms: 18 },
         promocoes: [
           {
@@ -131,12 +137,24 @@ describe("produtos integration", () => {
       c_de: string;
       quantidade_caixa: number;
       medida_compra: string;
+      quantidade_estoque: string;
+      estoque_min: string;
+      setor_estoque: string;
+      local_venda_1: string;
+      foto_url: string;
     }>(
-      "select codigo, codigo_interno, custo, margem, preco_venda, auto, status, tipo, embalagem, c_de, quantidade_caixa, medida_compra from produtos where id = $1",
+      "select codigo, codigo_interno, custo, margem, preco_venda, auto, status, tipo, embalagem, c_de, quantidade_caixa, medida_compra, quantidade_estoque, estoque_min, setor_estoque, local_venda_1, foto_url from produtos where id = $1",
       [produtoId]
     );
     expect(linha?.codigo).toMatch(/^PR-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
     expect(linha?.codigo_interno).toMatch(/^\d{5}$/);
+    expect(linha).toMatchObject({
+      setor_estoque: "LJ - CAIXAS",
+      local_venda_1: "PDV1",
+      foto_url: "https://exemplo.test/foto.png"
+    });
+    expect(Number(linha?.quantidade_estoque)).toBe(12);
+    expect(Number(linha?.estoque_min)).toBe(5);
     expect(linha).toMatchObject({
       auto: true,
       status: "ativo",

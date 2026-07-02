@@ -730,7 +730,7 @@ const validacaoQtdPreview = computed(() =>
               ><v-text-field v-model="formCadastro.custo" type="number" label="Custo (caixa)"
             /></v-col>
             <v-col cols="12" md="4"
-              ><v-text-field v-model="formCadastro.margem" type="number" step="0.01" label="Margem (fracao, ex 0.30)"
+              ><v-text-field v-model="formCadastro.margem" type="number" label="Margem (%)" suffix="%"
             /></v-col>
             <v-col cols="12" md="4" class="d-flex align-center">
               <v-switch v-model="formCadastro.auto" label="Preco automatico" color="primary" hide-details />
@@ -750,6 +750,25 @@ const validacaoQtdPreview = computed(() =>
                 readonly
                 bg-color="purple-lighten-5"
               />
+            </v-col>
+            <v-col cols="12"><div class="text-body-2 font-weight-bold">Estoque</div></v-col>
+            <v-col cols="6" md="3"
+              ><v-text-field v-model="formCadastro.quantidadeEstoque" type="number" label="Saldo em estoque"
+            /></v-col>
+            <v-col cols="6" md="3"
+              ><v-text-field v-model="formCadastro.estoqueMin" type="number" label="Estoque min."
+            /></v-col>
+            <v-col cols="6" md="3"
+              ><v-text-field v-model="formCadastro.estoqueMax" type="number" label="Estoque max."
+            /></v-col>
+            <v-col cols="6" md="3"><v-text-field v-model="formCadastro.setorEstoque" label="Setor de estoque" /></v-col>
+            <v-col cols="12" md="6"><v-text-field v-model="formCadastro.localVenda1" label="Local de venda 1" /></v-col>
+            <v-col cols="12" md="6"><v-text-field v-model="formCadastro.localVenda2" label="Local de venda 2" /></v-col>
+            <v-col :cols="formCadastro.fotoUrl ? 9 : 12"
+              ><v-text-field v-model="formCadastro.fotoUrl" label="URL da foto" placeholder="https://..."
+            /></v-col>
+            <v-col v-if="formCadastro.fotoUrl" cols="3" class="d-flex align-center">
+              <v-img :src="formCadastro.fotoUrl" height="56" max-width="80" class="rounded" cover />
             </v-col>
             <v-col cols="12"><div class="text-body-2 font-weight-bold">Fiscal</div></v-col>
             <v-col cols="12" md="6"><v-text-field v-model="formCadastro.fiscal.ncm" label="NCM" /></v-col>

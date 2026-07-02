@@ -91,7 +91,14 @@ export async function listarProdutosRepository() {
       precoVenda: produtos.precoVenda,
       auto: produtos.auto,
       status: produtos.status,
-      tipo: produtos.tipo
+      tipo: produtos.tipo,
+      quantidadeEstoque: produtos.quantidadeEstoque,
+      estoqueMin: produtos.estoqueMin,
+      estoqueMax: produtos.estoqueMax,
+      setorEstoque: produtos.setorEstoque,
+      localVenda1: produtos.localVenda1,
+      localVenda2: produtos.localVenda2,
+      fotoUrl: produtos.fotoUrl
     })
     .from(produtos)
     .orderBy(asc(produtos.descricao));
@@ -178,6 +185,13 @@ export async function salvarProdutoRepository(input: {
   auto: boolean;
   status: "ativo" | "inativo";
   tipo: "revenda" | "transformacao";
+  quantidadeEstoque: number | null;
+  estoqueMin: number | null;
+  estoqueMax: number | null;
+  setorEstoque: string | null;
+  localVenda1: string | null;
+  localVenda2: string | null;
+  fotoUrl: string | null;
   conversoes: Array<{ unidadeMedidaId: string; quantidade: number; unidadesIndividuais: number }>;
   fiscal: {
     ncm: string | null;
@@ -233,7 +247,14 @@ export async function salvarProdutoRepository(input: {
       precoVenda: input.precoVenda != null ? String(input.precoVenda) : null,
       auto: input.auto,
       status: input.status,
-      tipo: input.tipo
+      tipo: input.tipo,
+      quantidadeEstoque: String(input.quantidadeEstoque ?? 0),
+      estoqueMin: input.estoqueMin != null ? String(input.estoqueMin) : null,
+      estoqueMax: input.estoqueMax != null ? String(input.estoqueMax) : null,
+      setorEstoque: input.setorEstoque,
+      localVenda1: input.localVenda1,
+      localVenda2: input.localVenda2,
+      fotoUrl: input.fotoUrl
     };
     let produtoId: string;
     if (input.id) {
