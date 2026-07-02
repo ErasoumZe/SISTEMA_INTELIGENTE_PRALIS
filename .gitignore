@@ -16,3 +16,6 @@ CADASTRO DE PRODUTOS/
 PROJECT_BRAIN - Copia/
 design-system/
 docs/
+
+# Config local do Claude Code (agents/skills/permissoes) — fora do git por decisao do Ze
+.claude/
