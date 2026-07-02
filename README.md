@@ -166,7 +166,7 @@ As permissoes efetivas sao a soma de permissoes diretas do usuario, permissoes d
 O caixa agora e aberto e fechado por usuario e PDV. O seed cria o cadastro `PDV 01`, vinculado a conta `Caixa loja`.
 
 - `/api/caixa/status?empresaId=...`: retorna o caixa aberto do usuario e o resumo por `caixaId`.
-- `/api/caixa/abrir`: exige `operar_caixa`, PDV ativo com conta vinculada e bloqueia periodo ja aberto/fechado para o mesmo PDV.
+- `/api/caixa/abrir`: exige `operar_caixa`, PDV ativo com conta vinculada e bloqueia periodo ja aberto/fechado para o mesmo PDV. Alem do pre-check, o indice unico parcial `fechamentos_caixa_pdv_aberto_unico_idx` garante no banco no maximo um caixa aberto por PDV, mesmo com aberturas concorrentes (migration `0003`).
 - `/api/caixa/:caixaId/abertura`: edita abertura com token, registra auditoria em `edicoes_caixa` e troca o token.
 - `/api/caixa/:caixaId/acertar-saldo`: quando o saldo do caixa e positivo, cria despesa `Diferenca de caixa`, item em `itens_despesas` e debito `FECHAMENTO_CAIXA` em `debitos_colaboradores`.
 - `/api/caixa/:caixaId/fechar`: fecha somente quando o saldo calculado nao exige acerto.

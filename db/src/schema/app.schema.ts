@@ -1020,7 +1020,12 @@ export const fechamentosCaixa = pgTable(
     criadoPor: text("criado_por"),
     criadoEm
   },
-  (table) => [check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`)]
+  (table) => [
+    check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
+    uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
+      .on(table.pdvId)
+      .where(sql`${table.status} = 'aberto'`)
+  ]
 );
 
 export const edicoesCaixa = pgTable("edicoes_caixa", {

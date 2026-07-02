@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 async function usuarioIdPorEmail(email: string) {
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email]);
@@ -252,6 +252,61 @@ describe("caixa integration", () => {
     assertProblem(pdvInvalido, 400);
     assertProblem(pdvJaAberto, 400);
     assertProblem(periodoSobreposto, 400);
+  });
+
+  it("Deve_AbrirApenasUmCaixa_Quando_AberturasConcorremNoMesmoPdv", async () => {
+    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+    const conta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta concorrencia" }
+    });
+    expect(conta.statusCode).toBe(201);
+    const contaId = json<{ data: { id: string } }>(conta).data.id;
+    const pdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "PDV concorrencia", contaId, ativo: true }
+    });
+    expect(pdv.statusCode).toBe(201);
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+
+    const abertura = (observacao: string) =>
+      contexto.app.inject({
+        method: "POST",
+        url: "/api/caixa/abrir",
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          pdvId,
+          usuarioCaixaId: usuarioAdminId,
+          dataHoraAbertura: "2026-02-10T08:00",
+          observacao
+        }
+      });
+
+    const [primeira, segunda] = await Promise.all([abertura("Abertura A"), abertura("Abertura B")]);
+
+    const statuses = [primeira.statusCode, segunda.statusCode].sort();
+    expect(statuses).toEqual([201, 400]);
+    const abertos = await consultarUm<{ total: number }>(
+      "select count(*)::int as total from fechamentos_caixa where pdv_id = $1 and status = 'aberto'",
+      [pdvId]
+    );
+    expect(abertos?.total).toBe(1);
+
+    // Prova deterministica do indice: mesmo por fora da API, o banco rejeita o segundo caixa aberto.
+    const violacao = await executarSql(
+      `insert into fechamentos_caixa (empresa_id, pdv_id, colaborador_id, data_movimento, status)
+       values ($1, $2, $3, '2026-02-10', 'aberto')`,
+      [idsTeste.empresaA, pdvId, idsTeste.colaboradorAdmin]
+    )
+      .then(() => null)
+      .catch((error: Error & { code?: string; constraint?: string }) => error);
+    expect(violacao?.code).toBe("23505");
+    expect(violacao?.constraint).toBe("fechamentos_caixa_pdv_aberto_unico_idx");
   });
 
   it("Deve_Retornar400_Quando_FecharCaixaComSaldoPositivoSemAcerto", async () => {

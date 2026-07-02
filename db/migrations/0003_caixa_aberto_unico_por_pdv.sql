@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "fechamentos_caixa_pdv_aberto_unico_idx" ON "fechamentos_caixa" USING btree ("pdv_id") WHERE "fechamentos_caixa"."status" = 'aberto';

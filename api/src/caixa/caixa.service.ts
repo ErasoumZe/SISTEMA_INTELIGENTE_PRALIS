@@ -38,8 +38,24 @@ import {
 } from "./caixa.repository.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
+const indiceCaixaAbertoUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
 
 type CaixaLinha = NonNullable<Awaited<ReturnType<typeof buscarCaixaPorIdRepository>>>;
+
+// Duas aberturas simultaneas do mesmo PDV podem passar pelos pre-checks; o indice unico
+// parcial do banco decide o vencedor e o perdedor recebe o mesmo erro do caminho sequencial.
+function ehViolacaoCaixaAbertoUnico(error: Error): boolean {
+  const candidatos = [error, error.cause instanceof Error ? error.cause : null];
+  return candidatos.some((atual) => {
+    if (!atual) return false;
+    const detalhes = atual as Error & { code?: string; constraint?: string };
+    return detalhes.code === "23505" && detalhes.constraint === indiceCaixaAbertoUnico;
+  });
+}
+
+function traduzirErroAberturaCaixa(error: Error): Error {
+  return ehViolacaoCaixaAbertoUnico(error) ? new Error(erroPeriodo) : error;
+}
 
 function gerarTokenEdicao() {
   return randomBytes(6).toString("hex").toUpperCase();
@@ -184,6 +200,19 @@ export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario
   if (!podeAcessarEmpresa(perfil, dados.empresaId)) throw new Error("Empresa nao permitida");
   const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
 
+  try {
+    return await abrirCaixaEmTransacao(dados, perfil, dataHoraAbertura);
+  } catch (error) {
+    if (error instanceof Error) throw traduzirErroAberturaCaixa(error);
+    throw error;
+  }
+}
+
+async function abrirCaixaEmTransacao(
+  dados: AbrirCaixaPayload,
+  perfil: PerfilUsuario,
+  dataHoraAbertura: Date
+): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
     const pdv = await buscarPdvEmpresaRepository(dados.pdvId, dados.empresaId, tx);
     if (!pdv || !pdv.ativo) throw new Error("PDV nao encontrado");
@@ -215,6 +244,19 @@ export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario
 }
 
 export async function editarAberturaCaixa(
+  caixaId: string,
+  dados: EditarAberturaCaixaPayload,
+  perfil: PerfilUsuario
+): Promise<CaixaStatus> {
+  try {
+    return await editarAberturaCaixaEmTransacao(caixaId, dados, perfil);
+  } catch (error) {
+    if (error instanceof Error) throw traduzirErroAberturaCaixa(error);
+    throw error;
+  }
+}
+
+async function editarAberturaCaixaEmTransacao(
   caixaId: string,
   dados: EditarAberturaCaixaPayload,
   perfil: PerfilUsuario
