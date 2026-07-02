@@ -10,3 +10,10 @@ build
 coverage
 playwright-report
 test-results
+.nuxt
+**/.nuxt
+.output
+**/.output
+storage
+**/storage
+.claude

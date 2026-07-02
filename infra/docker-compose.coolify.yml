@@ -35,6 +35,8 @@ services:
     restart: unless-stopped
     expose:
       - "4100"
+    volumes:
+      - padaria_api_storage:/app/storage
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -92,3 +94,7 @@ networks:
   coolify:
     external: true
     name: coolify
+
+volumes:
+  padaria_api_storage:
+    name: padaria_api_storage

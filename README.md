@@ -81,7 +81,7 @@ Validacao automatica: `tests/integration/migracoes/migracoes.test.ts` provisiona
 O arquivo recomendado para publicacao e `infra/docker-compose.coolify.yml`. Ele define:
 
 - `migrate`: roda migrations antes da API.
-- `api`: Fastify em container Node, com healthcheck em `/health`.
+- `api`: Fastify em container Node, com healthcheck em `/health` e volume nomeado `padaria_api_storage` montado em `/app/storage` (uploads de comprovantes sobrevivem a redeploys).
 - `web-vue`: Nuxt gerado como SPA estatica e servido por Nginx unprivileged.
 
 Diferente do desenvolvimento local, no Coolify o Web tambem e orquestrado pelo Docker Compose.

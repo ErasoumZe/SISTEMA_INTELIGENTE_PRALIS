@@ -30,6 +30,8 @@ services:
       HOST: 0.0.0.0
     ports:
       - "${API_PORT:-4100}:${API_PORT:-4100}"
+    volumes:
+      - padaria_api_storage:/app/storage
     healthcheck:
       test:
         [
@@ -57,3 +59,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+
+volumes:
+  padaria_api_storage:
+    name: padaria_api_storage
