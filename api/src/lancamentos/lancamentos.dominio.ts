@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { temPermissao, type Permissao } from "@padaria/shared";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -37,7 +38,7 @@ type BasePayload = {
   contaOrigemId?: string | null | undefined;
 };
 
-async function existeNaEmpresa<Tabela extends { id: unknown; empresaId: unknown }>(
+async function existeNaEmpresa<Tabela extends { id: DadosExternos; empresaId: DadosExternos }>(
   tabela: Tabela,
   id: string,
   empresaId: string,
@@ -51,7 +52,7 @@ async function existeNaEmpresa<Tabela extends { id: unknown; empresaId: unknown 
   return Boolean(linha);
 }
 
-export function filtrosEmpresa<T extends { empresaId: unknown }>(
+export function filtrosEmpresa<T extends { empresaId: DadosExternos }>(
   tabela: T,
   query: QueryEmpresa,
   empresasPermitidasIds: string[] | null

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { rolesUsuario } from "../autenticacao/index.js";
+import type { DadosExternos } from "../api/index.js";
 
 export { empresaQuerySchema as usuariosQuerySchema } from "../api/index.js";
 
@@ -24,14 +25,14 @@ export const usuarioPayloadSchema = z.object({
   senha: z.string().min(6).optional().or(z.literal(""))
 });
 
-export function empresasDoUsuarioPayload(body: unknown): string[] {
+export function empresasDoUsuarioPayload(body: DadosExternos): string[] {
   const dados = body as {
-    empresaId?: unknown;
-    empresaIds?: unknown;
-    novoColaborador?: { empresaId?: unknown } | null;
+    empresaId?: DadosExternos;
+    empresaIds?: DadosExternos;
+    novoColaborador?: { empresaId?: DadosExternos } | null;
   } | null;
   const ids = [
-    ...(Array.isArray(dados?.empresaIds) ? dados.empresaIds : []),
+    ...(Array.isArray(dados?.empresaIds) ? (dados.empresaIds as DadosExternos[]) : []),
     ...(dados?.empresaId ? [dados.empresaId] : []),
     ...(dados?.novoColaborador?.empresaId ? [dados.novoColaborador.empresaId] : [])
   ];
@@ -42,4 +43,3 @@ export function empresasDoUsuarioPayload(body: unknown): string[] {
 
 export type UsuarioPayload = z.infer<typeof usuarioPayloadSchema>;
 export type UsuarioNovoColaboradorPayload = z.infer<typeof usuarioNovoColaboradorPayloadSchema>;
-

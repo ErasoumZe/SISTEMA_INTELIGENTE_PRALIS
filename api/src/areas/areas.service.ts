@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   areaPayloadSchema,
   type ExportarAreaSetorPayload as ExportarPayload,
@@ -20,7 +21,7 @@ export async function listarAreasSetores(escopoDados: string[]) {
   };
 }
 
-export async function salvarArea(id: string | null, body: unknown) {
+export async function salvarArea(id: string | null, body: DadosExternos) {
   const dados = areaPayloadSchema.parse(body);
   return salvarAreaRepository({ ...(id ? { id } : {}), empresaId: dados.empresaId, nome: dados.nome.trim() });
 }

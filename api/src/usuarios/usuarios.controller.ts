@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import type { FastifyInstance } from "fastify";
 import { empresasDoUsuarioPayload, usuariosQuerySchema as empresaQuerySchema } from "@padaria/shared/usuarios";
 import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/api";
@@ -6,7 +7,7 @@ import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../a
 import { statusErroValidacao } from "../utils.js";
 import { listarUsuarios, salvarUsuario } from "./usuarios.service.js";
 
-function empresasNaoPermitidas(body: unknown, perfil: Parameters<typeof podeAcessarEmpresa>[0] | undefined) {
+function empresasNaoPermitidas(body: DadosExternos, perfil: Parameters<typeof podeAcessarEmpresa>[0] | undefined) {
   const empresasBody = empresasDoUsuarioPayload(body);
   return Boolean(perfil && empresasBody.some((empresaId) => !podeAcessarEmpresa(perfil, empresaId)));
 }
@@ -24,7 +25,8 @@ export async function registrarRotasUsuarios(app: FastifyInstance): Promise<void
   });
 
   app.post("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios_criar") }, async (request, reply) => {
-    if (empresasNaoPermitidas(request.body, request.perfilUsuario)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    if (empresasNaoPermitidas(request.body, request.perfilUsuario))
+      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     try {
       const salvo = await salvarUsuario(null, request.body, request.perfilUsuario);
       return criadoId(reply, salvo.id);
@@ -36,7 +38,8 @@ export async function registrarRotasUsuarios(app: FastifyInstance): Promise<void
 
   app.put("/api/usuarios/:id", { preHandler: exigirPermissao("cadastro_usuarios_editar") }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    if (empresasNaoPermitidas(request.body, request.perfilUsuario)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    if (empresasNaoPermitidas(request.body, request.perfilUsuario))
+      return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     try {
       await salvarUsuario(id, request.body, request.perfilUsuario);
       return semConteudo(reply);

@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   unidadeMedidaPayloadSchema,
   type ExportarUnidadeMedidaPayload as ExportarPayload,
@@ -15,7 +16,7 @@ export async function listarUnidadesMedida(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarUnidadesMedidaRepository(), escopoDados);
 }
 
-export async function salvarUnidadeMedida(id: string | null, body: unknown) {
+export async function salvarUnidadeMedida(id: string | null, body: DadosExternos) {
   const dados = unidadeMedidaPayloadSchema.parse(body);
   return salvarUnidadeRepository({
     ...(id ? { id } : {}),

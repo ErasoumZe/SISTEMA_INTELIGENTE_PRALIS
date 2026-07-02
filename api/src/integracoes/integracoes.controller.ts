@@ -117,7 +117,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
         }
       }
     },
-    async (request, reply) => {
+    async (request) => {
       const chave = chaveIntegracaoHeader(request.headers);
       if (!chave) throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
       const payload: VendaIntegracaoAgregadaPayload = vendaIntegracaoAgregadaSchema.parse(request.body);

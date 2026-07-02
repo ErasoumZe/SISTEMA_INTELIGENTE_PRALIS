@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   fornecedorPayloadSchema,
   type ExportarFornecedorPayload as ExportarPayload,
@@ -15,7 +16,7 @@ export async function listarFornecedores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarFornecedoresRepository(), escopoDados);
 }
 
-export async function salvarFornecedor(id: string | null, body: unknown) {
+export async function salvarFornecedor(id: string | null, body: DadosExternos) {
   const dados = fornecedorPayloadSchema.parse(body);
   return salvarFornecedorRepository({
     ...(id ? { id } : {}),

@@ -86,7 +86,7 @@ describe("integracoes integration", () => {
       payload: { empresaId: idsTeste.empresaA, tipo: "vendas" }
     });
     expect(criar.statusCode).toBe(201);
-    const chaveId = (criar.json() as { data: { id: string } }).data.id;
+    const chaveId = criar.json().data.id;
 
     const inativar = await contexto.app.inject({
       method: "POST",
@@ -94,7 +94,9 @@ describe("integracoes integration", () => {
       headers: { cookie: cookieAdmin }
     });
     expect(inativar.statusCode).toBe(204);
-    await expect(consultarUm("select id from integracoes_chaves where id = $1 and inativado_em is not null", [chaveId])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from integracoes_chaves where id = $1 and inativado_em is not null", [chaveId])
+    ).resolves.toBeTruthy();
 
     const cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
     const chaveEmpresaB = await contexto.app.inject({
@@ -104,7 +106,7 @@ describe("integracoes integration", () => {
       payload: { empresaId: idsTeste.empresaB, tipo: "vendas" }
     });
     expect(chaveEmpresaB.statusCode).toBe(201);
-    const chaveEmpresaBId = (chaveEmpresaB.json() as { data: { id: string } }).data.id;
+    const chaveEmpresaBId = chaveEmpresaB.json().data.id;
     const inativarProibida = await contexto.app.inject({
       method: "POST",
       url: `/api/integracoes/chaves/${chaveEmpresaBId}/inativar`,
@@ -150,11 +152,10 @@ describe("integracoes integration", () => {
       )
     ).resolves.toBeTruthy();
     await expect(
-      consultarUm("select id from integracoes_vinculos where empresa_id = $1 and identificador_externo = $2 and registro_sistema_id = $3", [
-        idsTeste.empresaA,
-        "CLIENTE-EXT-2",
-        idsTeste.cliente
-      ])
+      consultarUm(
+        "select id from integracoes_vinculos where empresa_id = $1 and identificador_externo = $2 and registro_sistema_id = $3",
+        [idsTeste.empresaA, "CLIENTE-EXT-2", idsTeste.cliente]
+      )
     ).resolves.toBeTruthy();
   });
 
@@ -288,4 +289,3 @@ describe("integracoes integration", () => {
     expect(JSON.stringify(resposta.json())).toContain("vendas");
   });
 });
-

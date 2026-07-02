@@ -34,7 +34,7 @@ describe("hierarquia de permissoes (usuario > cargo > setor)", () => {
   });
 
   function dados(resposta: LightMyRequestResponse): { id?: string } {
-    return (resposta.json() as { data?: { id?: string } }).data ?? {};
+    return resposta.json().data ?? {};
   }
 
   async function criar(url: string, payload: Record<string, unknown>): Promise<string> {
@@ -74,12 +74,16 @@ describe("hierarquia de permissoes (usuario > cargo > setor)", () => {
   async function permissoesEfetivas(cookie: string): Promise<Set<string>> {
     const resposta = await contexto.app.inject({ method: "GET", url: "/api/me", headers: { cookie } });
     expect(resposta.statusCode).toBe(200);
-    const perfil = (resposta.json() as { data?: { perfil?: { permissoes?: string[] } } }).data?.perfil;
+    const perfil = resposta.json().data?.perfil;
     return new Set(perfil?.permissoes ?? []);
   }
 
   async function statusRota(cookie: string, url: string): Promise<number> {
-    const resposta = await contexto.app.inject({ method: "GET", url: `${url}?empresaId=${empresaId}`, headers: { cookie } });
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `${url}?empresaId=${empresaId}`,
+      headers: { cookie }
+    });
     return resposta.statusCode;
   }
 
@@ -88,7 +92,11 @@ describe("hierarquia de permissoes (usuario > cargo > setor)", () => {
     const cargoId = await criar("/api/cargos", { empresaId, nome: `QA Cargo ${Date.now()}` });
 
     // SETOR: clientes/fornecedores/grupos = PERMITIR, produtos = NEGAR
-    await definirRegras("setor", { setorId }, { [P.clientes]: true, [P.fornecedores]: true, [P.produtos]: false, [P.grupos]: true });
+    await definirRegras(
+      "setor",
+      { setorId },
+      { [P.clientes]: true, [P.fornecedores]: true, [P.produtos]: false, [P.grupos]: true }
+    );
     // CARGO: fornecedores = NEGAR, produtos = PERMITIR, contas = NEGAR
     await definirRegras("cargo", { cargoId }, { [P.fornecedores]: false, [P.produtos]: true, [P.contas]: false });
 
@@ -103,9 +111,8 @@ describe("hierarquia de permissoes (usuario > cargo > setor)", () => {
     });
 
     const cookie = await logar(email);
-    const usuarioId = ((await contexto.app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json() as {
-      data?: { perfil?: { usuarioId?: string } };
-    }).data?.perfil?.usuarioId;
+    const usuarioId = (await contexto.app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json().data
+      ?.perfil?.usuarioId;
     expect(usuarioId).toBeTruthy();
 
     // USUARIO: contas = PERMITIR, grupos = NEGAR

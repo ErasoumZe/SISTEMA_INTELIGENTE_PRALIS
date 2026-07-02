@@ -16,7 +16,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["*.mjs", "scripts/*.mjs", "db/setup-dev.mjs", "db/seed.ts"]
+          allowDefaultProject: ["*.mjs", "scripts/*.mjs", "db/setup-dev.mjs", "db/seed.ts", "db/backfill-codigos.ts"],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20
         },
         tsconfigRootDir: import.meta.dirname
       },
@@ -26,6 +27,10 @@ export default tseslint.config(
       }
     },
     rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }
+      ],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unsafe-assignment": "error",
       "@typescript-eslint/no-unsafe-member-access": "error",
@@ -58,6 +63,7 @@ export default tseslint.config(
       "db/setup-dev.mjs",
       "eslint.config.mjs",
       "db/seed.ts",
+      "db/backfill-codigos.ts",
       "tests/**/*.ts",
       "api/src/env.ts",
       "web-vue/composables/useApi.ts",

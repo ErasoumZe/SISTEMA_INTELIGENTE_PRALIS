@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   excluirPermissaoQuerySchema,
   permissaoPayloadSchema,
@@ -137,7 +138,7 @@ function montarLinhasPermissoes(dados: DadosPermissoes) {
   ].sort((a, b) => a.tipo.localeCompare(b.tipo) || a.alvo.localeCompare(b.alvo));
 }
 
-export async function listarPermissoesPaginadas(body: unknown, perfil?: PerfilComEmpresa) {
+export async function listarPermissoesPaginadas(body: DadosExternos, perfil?: PerfilComEmpresa) {
   const query: PermissoesPaginadasQuery = permissoesPaginadasQuerySchema.parse(body);
   const empresasLiberadas = perfil ? empresasPermitidas(perfil) : [];
   const escopoDados = query.empresaId ? [query.empresaId] : empresasLiberadas;
@@ -157,7 +158,7 @@ export async function listarPermissoesPaginadas(body: unknown, perfil?: PerfilCo
   return { itens: linhas.slice(inicio, inicio + query.pageSize), total, page: query.page, pageSize: query.pageSize };
 }
 
-export async function excluirPermissao(body: unknown, perfil?: PerfilComEmpresa) {
+export async function excluirPermissao(body: DadosExternos, perfil?: PerfilComEmpresa) {
   const query: ExcluirPermissaoQuery = excluirPermissaoQuerySchema.parse(body);
   if (query.empresaId && perfil && !podeAcessarEmpresa(perfil, query.empresaId))
     falharValidacao("Empresa nao permitida");
@@ -188,7 +189,7 @@ export async function excluirPermissao(body: unknown, perfil?: PerfilComEmpresa)
   });
 }
 
-export async function salvarPermissao(body: unknown, usuarioId?: string, perfil?: PerfilComEmpresa) {
+export async function salvarPermissao(body: DadosExternos, usuarioId?: string, perfil?: PerfilComEmpresa) {
   const dados = permissaoPayloadSchema.parse(body);
 
   return executarEmTransacao(async (tx) => {

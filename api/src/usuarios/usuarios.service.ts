@@ -1,6 +1,7 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
 import { auth } from "../auth/config.js";
-import { empresasPermitidas, filtrarPorEmpresas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
+import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
@@ -40,7 +41,7 @@ export async function listarUsuarios(escopoDados: string[] | null) {
   return filtrarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
 }
 
-export async function salvarUsuario(id: string | null, body: unknown, perfil?: PerfilComEmpresa) {
+export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilComEmpresa) {
   const dados = usuarioPayloadSchema.parse(body);
   const novoColaborador = dados.novoColaborador
     ? {
@@ -64,8 +65,10 @@ export async function salvarUsuario(id: string | null, body: unknown, perfil?: P
   } else {
     if (!colaborador) falharValidacao("Colaborador nao encontrado");
     if (!empresaNoEscopo(perfil, colaborador.empresaId)) falharValidacao("Empresa nao permitida");
-    if (colaborador.usuarioId && colaborador.usuarioId !== id) falharValidacao("Colaborador ja vinculado a outro usuario");
-    if (!(await colaboradorTemCargoAtivoRepository(colaborador.id))) falharValidacao("Colaborador precisa ter ao menos um cargo ativo");
+    if (colaborador.usuarioId && colaborador.usuarioId !== id)
+      falharValidacao("Colaborador ja vinculado a outro usuario");
+    if (!(await colaboradorTemCargoAtivoRepository(colaborador.id)))
+      falharValidacao("Colaborador precisa ter ao menos um cargo ativo");
   }
 
   const empresaColaboradorId = novoColaborador?.empresaId ?? colaborador?.empresaId;
@@ -107,7 +110,13 @@ export async function salvarUsuario(id: string | null, body: unknown, perfil?: P
       },
       tx
     );
-    return { id: criado.id, empresaId: novoColaborador.empresaId, nome: novoColaborador.nome, usuarioId: null, setorId: novoColaborador.setorId };
+    return {
+      id: criado.id,
+      empresaId: novoColaborador.empresaId,
+      nome: novoColaborador.nome,
+      usuarioId: null,
+      setorId: novoColaborador.setorId
+    };
   }
 
   if (id) {
@@ -116,10 +125,21 @@ export async function salvarUsuario(id: string | null, body: unknown, perfil?: P
       if (emailExistente) falharValidacao("Email ja cadastrado");
       colaborador = await obterColaboradorParaVinculo(tx);
       await atualizarUsuarioAutenticacaoRepository({ id, nome, email }, tx);
-      await upsertPerfilUsuarioRepository({ usuarioId: id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) }, tx);
+      await upsertPerfilUsuarioRepository(
+        { usuarioId: id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
+        tx
+      );
       await substituirEmpresasUsuarioRepository(id, empresaIds, tx);
       await vincularUsuarioColaboradorRepository(id, colaborador.id, tx);
-      return { id, empresaId: empresaPrincipalId, empresaIds, nome, email, colaboradorId: colaborador.id, setorId: colaborador.setorId };
+      return {
+        id,
+        empresaId: empresaPrincipalId,
+        empresaIds,
+        nome,
+        email,
+        colaboradorId: colaborador.id,
+        setorId: colaborador.setorId
+      };
     });
   }
 
@@ -135,7 +155,10 @@ export async function salvarUsuario(id: string | null, body: unknown, perfil?: P
 
   const colaboradorVinculado = await executarEmTransacao(async (tx) => {
     const colaboradorTransacao = await obterColaboradorParaVinculo(tx);
-    await upsertPerfilUsuarioRepository({ usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) }, tx);
+    await upsertPerfilUsuarioRepository(
+      { usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
+      tx
+    );
     await substituirEmpresasUsuarioRepository(usuario.id, empresaIds, tx);
     await vincularUsuarioColaboradorRepository(usuario.id, colaboradorTransacao.id, tx);
     return colaboradorTransacao;

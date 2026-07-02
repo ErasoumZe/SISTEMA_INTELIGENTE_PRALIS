@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   contaPayloadSchema,
   type ExportarContaPayload as ExportarPayload,
@@ -11,7 +12,7 @@ export async function listarContas(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarContasRepository(), escopoDados);
 }
 
-export async function salvarConta(id: string | null, body: unknown) {
+export async function salvarConta(id: string | null, body: DadosExternos) {
   const dados = contaPayloadSchema.parse(body);
   return salvarContaRepository({ ...(id ? { id } : {}), empresaId: dados.empresaId, nome: dados.nome.trim() });
 }

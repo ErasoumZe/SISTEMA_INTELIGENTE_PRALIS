@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { clientePayloadSchema, type clientesQuerySchema } from "@padaria/shared/clientes";
 import type { z } from "zod";
 import { apenasDigitos } from "../utils.js";
@@ -7,7 +8,7 @@ export async function listarClientes(query: z.infer<typeof clientesQuerySchema>,
   return listarClientesRepository(query, escopoDados);
 }
 
-export async function salvarCliente(id: string | null, body: unknown) {
+export async function salvarCliente(id: string | null, body: DadosExternos) {
   const dados = clientePayloadSchema.parse(body);
   return salvarClienteRepository({
     ...(id ? { id } : {}),

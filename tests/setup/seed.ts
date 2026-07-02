@@ -91,7 +91,12 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorTesouraria,
     colaboradorCargoId: idsTeste.colaboradorCargoTesouraria,
     role: "usuario_comum",
-    permissoes: ["cadastro_malotes_visualizar", "cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_visualizar"]
+    permissoes: [
+      "cadastro_malotes_visualizar",
+      "cadastro_malotes_criar",
+      "cadastro_malotes_editar",
+      "transferencias_visualizar"
+    ]
   },
   {
     perfil: "semPermissao",
@@ -112,7 +117,7 @@ const usuarios: UsuarioSeed[] = [
 ];
 
 function regrasPermissoes(lista: Permissao[]): RegrasPermissoes {
-  return Object.fromEntries(lista.map((permissao) => [permissao, true])) as RegrasPermissoes;
+  return Object.fromEntries(lista.map((permissao) => [permissao, true]));
 }
 
 function hashChave(codigo: string) {
@@ -177,7 +182,9 @@ export async function aplicarSeedIntegracao() {
   ]);
 
   await banco.insert(areas).values({ id: idsTeste.areaA, empresaId: idsTeste.empresaA, nome: "Operacao" });
-  await banco.insert(setores).values({ id: idsTeste.setorA, empresaId: idsTeste.empresaA, areaId: idsTeste.areaA, nome: "Loja" });
+  await banco
+    .insert(setores)
+    .values({ id: idsTeste.setorA, empresaId: idsTeste.empresaA, areaId: idsTeste.areaA, nome: "Loja" });
 
   const usuarioIds = new Map<PerfilTeste, string>();
   for (const usuario of usuarios) {
@@ -240,17 +247,41 @@ export async function aplicarSeedIntegracao() {
       ativo: true
     }
   ]);
-  await banco.insert(formasPagamento).values({ id: idsTeste.formaPagamentoDinheiro, empresaId: idsTeste.empresaA, nome: "Dinheiro" });
+  await banco
+    .insert(formasPagamento)
+    .values({ id: idsTeste.formaPagamentoDinheiro, empresaId: idsTeste.empresaA, nome: "Dinheiro" });
   await banco.insert(gruposDespesas).values([
     { id: idsTeste.grupoDespesaOperacional, empresaId: idsTeste.empresaA, nome: "Operacional" },
     { id: idsTeste.grupoDespesaQuebra, empresaId: idsTeste.empresaA, nome: "Quebra de caixa" }
   ]);
-  await banco.insert(gruposMercadorias).values({ id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" });
-  await banco.insert(gruposRetiradas).values({ id: idsTeste.grupoRetiradaSangria, empresaId: idsTeste.empresaA, nome: "Sangria" });
-  await banco.insert(gruposVendas).values({ id: idsTeste.grupoVendaBalcao, empresaId: idsTeste.empresaA, nome: "Balcao" });
-  await banco.insert(unidadesMedida).values({ id: idsTeste.unidade, empresaId: idsTeste.empresaA, nome: "Unidade", sigla: "un" });
-  await banco.insert(fornecedores).values({ id: idsTeste.fornecedor, empresaId: idsTeste.empresaA, nome: "Fornecedor Integracao", documento: "00000000000100" });
-  await banco.insert(clientes).values({ id: idsTeste.cliente, empresaId: idsTeste.empresaA, nome: "Cliente Integracao", documento: "00000000000999" });
+  await banco
+    .insert(gruposMercadorias)
+    .values({ id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" });
+  await banco
+    .insert(gruposRetiradas)
+    .values({ id: idsTeste.grupoRetiradaSangria, empresaId: idsTeste.empresaA, nome: "Sangria" });
+  await banco
+    .insert(gruposVendas)
+    .values({ id: idsTeste.grupoVendaBalcao, empresaId: idsTeste.empresaA, nome: "Balcao" });
+  await banco
+    .insert(unidadesMedida)
+    .values({ id: idsTeste.unidade, empresaId: idsTeste.empresaA, nome: "Unidade", sigla: "un" });
+  await banco
+    .insert(fornecedores)
+    .values({
+      id: idsTeste.fornecedor,
+      empresaId: idsTeste.empresaA,
+      nome: "Fornecedor Integracao",
+      documento: "00000000000100"
+    });
+  await banco
+    .insert(clientes)
+    .values({
+      id: idsTeste.cliente,
+      empresaId: idsTeste.empresaA,
+      nome: "Cliente Integracao",
+      documento: "00000000000999"
+    });
   await banco.insert(produtos).values({
     id: idsTeste.produto,
     empresaId: idsTeste.empresaA,
@@ -403,7 +434,19 @@ export async function aplicarSeedIntegracao() {
     }
   ]);
   await banco.insert(lacresMalotes).values([
-    { id: idsTeste.lacreA, empresaId: idsTeste.empresaA, maloteId: idsTeste.maloteA, numero: "LACRE-A", status: "disponivel" },
-    { id: idsTeste.lacreB, empresaId: idsTeste.empresaB, maloteId: idsTeste.maloteB, numero: "LACRE-B", status: "disponivel" }
+    {
+      id: idsTeste.lacreA,
+      empresaId: idsTeste.empresaA,
+      maloteId: idsTeste.maloteA,
+      numero: "LACRE-A",
+      status: "disponivel"
+    },
+    {
+      id: idsTeste.lacreB,
+      empresaId: idsTeste.empresaB,
+      maloteId: idsTeste.maloteB,
+      numero: "LACRE-B",
+      status: "disponivel"
+    }
   ]);
 }

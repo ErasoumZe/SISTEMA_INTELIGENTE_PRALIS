@@ -4,7 +4,13 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { TELA_TEMA_RESUMO_CAIXA, permissoes, type Permissao, type RegrasPermissoes, type RoleUsuario } from "@padaria/shared";
+import {
+  TELA_TEMA_RESUMO_CAIXA,
+  permissoes,
+  type Permissao,
+  type RegrasPermissoes,
+  type RoleUsuario
+} from "@padaria/shared";
 import { schema } from "./src/schema/schema.js";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import {
@@ -222,13 +228,30 @@ function permissoesDoCargoSeed(config: PermissoesCargoSeed): Permissao[] {
 }
 
 function regrasPermissoesSeed(lista: Permissao[]): RegrasPermissoes {
-  return Object.fromEntries(lista.map((permissao) => [permissao, true])) as RegrasPermissoes;
+  return Object.fromEntries(lista.map((permissao) => [permissao, true]));
 }
 
 const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargoSeed({
-    ativas: ["caixa", "entradas", "transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "relatorio_produtos"],
-    somenteCaixaAberto: ["entradas", "transferencias", "despesas", "mercadorias", "retiradas", "fechamento", "relatorio_produtos"],
+    ativas: [
+      "caixa",
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos"
+    ],
+    somenteCaixaAberto: [
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos"
+    ],
     extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
   }),
   Tesouraria: permissoesDoCargoSeed({
@@ -255,7 +278,14 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "clientes"
     ],
     // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar", "caixas_gerenciar"]
+    extras: [
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "mercadorias_criar",
+      "retiradas_criar",
+      "caixas_gerenciar"
+    ]
   }),
   Compras: permissoesDoCargoSeed({
     ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
@@ -636,10 +666,7 @@ const contaBanco = (await banco.insert(contas).values({ empresaId, nome: "Banco"
 if (!contaCaixa) throw new Error("Conta caixa nao foi criada");
 if (!contaBanco) throw new Error("Conta banco nao foi criada");
 const pdv = (
-	await banco
-	  .insert(pdvs)
-	    .values({ empresaId, nome: "PDV 01", contaId: contaCaixa.id })
-    .returning({ id: pdvs.id })
+  await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", contaId: contaCaixa.id }).returning({ id: pdvs.id })
 )[0];
 if (!pdv) throw new Error("PDV nao foi criado");
 
@@ -899,7 +926,9 @@ if (!produto) throw new Error("Produto nao foi criado");
 
 const [integracaoVendas] = await banco
   .insert(integracoesChaves)
-  .values([{ empresaId, tipo: "vendas", codigo: "SEED-VENDAS-PDV-DEV", criadoPor: usuarioIds.get("diretor@email.com") ?? null }])
+  .values([
+    { empresaId, tipo: "vendas", codigo: "SEED-VENDAS-PDV-DEV", criadoPor: usuarioIds.get("diretor@email.com") ?? null }
+  ])
   .returning({ id: integracoesChaves.id, tipo: integracoesChaves.tipo });
 if (!integracaoVendas) throw new Error("Chave de integracao seed nao foi criada");
 

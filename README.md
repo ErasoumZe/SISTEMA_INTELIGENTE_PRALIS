@@ -36,6 +36,14 @@ npm.cmd run dev -- --once
 
 O `npm run check` faz apenas validacoes/typecheck. Ele nao executa build nem gera `dist`.
 
+O `npm run lint` builda `shared` e `db` antes do ESLint (`npm run build:libs`): o typed-lint resolve os pacotes do workspace pelos `types` em `dist/`, entao sem build os tipos viram `any` e o lint explode em falsos positivos.
+
+## Qualidade continua
+
+- **CI (GitHub Actions):** `.github/workflows/ci.yml` roda em push na `main` e em pull requests — lint, typecheck, testes unitarios, build completo e a suite de integracao com Testcontainers.
+- **Pre-commit (husky + lint-staged):** instalado via `npm install` (script `prepare`); roda prettier + eslint nos arquivos staged.
+- **Testes unitarios** nao entram no `npm test` (que roda so a integracao); rode `npm run test:unit --workspace @padaria/tests`.
+
 ## Docker e Compose
 
 O ambiente dev e separado em dois projetos Compose:

@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { pdvPayloadSchema } from "@padaria/shared/pdvs";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
@@ -9,7 +10,7 @@ export async function listarPdvs(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarPdvsRepository(), escopoDados);
 }
 
-export async function salvarPdv(id: string | null, body: unknown) {
+export async function salvarPdv(id: string | null, body: DadosExternos) {
   const dados = pdvPayloadSchema.parse(body);
   return executarEmTransacao(async (tx) => {
     const conta = await buscarContaEmpresaRepository(dados.contaId, tx);

@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyRequest } from "fastify";
 import { listarEmpresas } from "../empresas/empresas.service.js";
@@ -17,7 +18,7 @@ export async function carregarSessaoComPerfil(request: FastifyRequest) {
     ? (await listarEmpresas(perfil)).map((empresa) => ({
         ...empresa,
         configuracoesAparencia: normalizarConfiguracaoAparencia(
-          (empresa as { configuracoesAparencia?: unknown }).configuracoesAparencia
+          (empresa as { configuracoesAparencia?: DadosExternos }).configuracoesAparencia
         )
       }))
     : [];

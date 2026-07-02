@@ -11,13 +11,15 @@
     "tests"
   ],
   "scripts": {
+    "prepare": "husky",
     "build": "npm run build --workspace @padaria/shared && npm run build --workspace @padaria/db && npm run build --workspace @padaria/api && npm run build --workspace @padaria/web-vue",
     "check": "npm run check:texto && npm run check:arquitetura && npm run check --workspace @padaria/shared && npm run check --workspace @padaria/db && npm run check --workspace @padaria/api && npm run check --workspace @padaria/web-vue && npm run check --workspace @padaria/tests",
     "check:arquitetura": "node scripts/verificar-arquitetura.mjs",
     "check:texto": "node scripts/verificar-texto.mjs",
     "typecheck": "npm run check",
-    "lint": "eslint api db shared tests web-vue scripts eslint.config.mjs",
-    "lint:fix": "eslint api db shared tests web-vue scripts eslint.config.mjs --fix",
+    "build:libs": "npm run build --workspace @padaria/shared && npm run build --workspace @padaria/db",
+    "lint": "npm run build:libs && eslint api db shared tests web-vue scripts eslint.config.mjs",
+    "lint:fix": "npm run build:libs && eslint api db shared tests web-vue scripts eslint.config.mjs --fix",
     "lint:deps": "dependency-cruiser api/src db/src shared/src web-vue --config .dependency-cruiser.cjs",
     "format": "prettier --write \"*.{json,js,mjs,md,yml,yaml}\" \"infra/**/*.{yml,yaml}\" \"scripts/**/*.{mjs,ts}\" \"api/**/*.ts\" \"db/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" \"web-vue/**/*.{ts,vue,css,json}\"",
     "format:check": "prettier --check \"*.{json,js,mjs,md,yml,yaml}\" \"infra/**/*.{yml,yaml}\" \"scripts/**/*.{mjs,ts}\" \"api/**/*.ts\" \"db/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" \"web-vue/**/*.{ts,vue,css,json}\"",

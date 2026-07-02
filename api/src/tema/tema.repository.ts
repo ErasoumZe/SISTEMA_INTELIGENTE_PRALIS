@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { eq } from "drizzle-orm";
 import { empresas } from "@padaria/db/schema";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -21,7 +22,7 @@ const camposTema = [
 
 type TemaParcial = { [K in keyof TemaDto]?: TemaDto[K] | undefined };
 
-export function normalizarConfiguracaoAparencia(valor: unknown): ConfiguracaoAparenciaEmpresa {
+export function normalizarConfiguracaoAparencia(valor: DadosExternos): ConfiguracaoAparenciaEmpresa {
   const resultado = configuracaoAparenciaEmpresaSchema.safeParse(valor);
   if (!resultado.success) return { padrao: { ...temaPadraoAplicacao }, especifico: [] };
   return {
@@ -63,14 +64,17 @@ function paraTema(input: TemaPayload): TemaDto {
 function diferencasDoPadrao(tema: TemaDto, padrao: TemaDto): Partial<TemaDto> {
   return Object.fromEntries(
     camposTema.filter((campo) => tema[campo] !== padrao[campo]).map((campo) => [campo, tema[campo]])
-  ) as Partial<TemaDto>;
+  );
 }
 
 function limparEspecificos(configuracao: ConfiguracaoAparenciaEmpresa) {
   return configuracao.especifico
     .map((item) => ({
       pagina: item.pagina,
-      propriedades: diferencasDoPadrao(temaCompleto({ ...configuracao.padrao, ...item.propriedades }), configuracao.padrao)
+      propriedades: diferencasDoPadrao(
+        temaCompleto({ ...configuracao.padrao, ...item.propriedades }),
+        configuracao.padrao
+      )
     }))
     .filter((item) => Object.keys(item.propriedades).length > 0);
 }

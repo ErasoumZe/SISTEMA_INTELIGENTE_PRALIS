@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   grupoPayloadSchema,
   type ExportarGrupoPayload as ExportarPayload,
@@ -17,7 +18,7 @@ export async function listarGrupos(escopoDados: string[]) {
   };
 }
 
-export async function salvarGrupo(tipo: string, id: string | null, body: unknown) {
+export async function salvarGrupo(tipo: string, id: string | null, body: DadosExternos) {
   const dados = grupoPayloadSchema.parse(body);
   const tipoGrupo =
     tipo === "grupos-despesas"

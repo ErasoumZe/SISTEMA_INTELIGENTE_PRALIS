@@ -13,7 +13,6 @@ import {
 } from "@padaria/db/schema/venda";
 import type {
   AtualizarCampoIntegracaoPayload,
-  CampoVinculoIntegracao,
   IntegracaoCampoConfigDto,
   IntegracaoHistoricoDto,
   IntegracaoQuery,

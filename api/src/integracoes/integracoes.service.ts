@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AtualizarCampoIntegracaoPayload,
@@ -79,10 +80,10 @@ function gerarUlid(): string {
   return chars.join("");
 }
 
-function jsonCanonico(valor: unknown): string {
+function jsonCanonico(valor: DadosExternos): string {
   if (valor === null || typeof valor !== "object") return JSON.stringify(valor);
   if (Array.isArray(valor)) return `[${valor.map((item) => jsonCanonico(item)).join(",")}]`;
-  const objeto = valor as Record<string, unknown>;
+  const objeto = valor as Record<string, DadosExternos>;
   return `{${Object.keys(objeto)
     .sort()
     .map((chave) => `${JSON.stringify(chave)}:${jsonCanonico(objeto[chave])}`)

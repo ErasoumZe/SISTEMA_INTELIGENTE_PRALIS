@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { and, asc, desc, eq, ilike, ne } from "drizzle-orm";
 import { colaboradores, gruposDespesas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
@@ -328,8 +329,8 @@ export async function registrarEdicaoCaixaRepository(
     caixaId: string;
     tokenUsado: string;
     editadoPor: string;
-    valoresAntigos: Record<string, unknown>;
-    valoresNovos: Record<string, unknown>;
+    valoresAntigos: Record<string, DadosExternos>;
+    valoresNovos: Record<string, DadosExternos>;
   },
   db: ExecutorBanco = banco
 ) {

@@ -1,6 +1,6 @@
 import { inject, type ComputedRef, type Ref } from "vue";
 import type { TemaAplicacao } from "@padaria/shared";
-import { secoesPermissoes } from "~/utils/domain";
+import type { secoesPermissoes } from "~/utils/domain";
 import type { CadastroForm, EntidadeOperacional, ItemMenu, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
 export type CaixaDrawerForm = {

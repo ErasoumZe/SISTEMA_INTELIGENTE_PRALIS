@@ -50,11 +50,16 @@ export type ApiNoContent = void;
 export type ApiError = ProblemDetails;
 export type ApiResponse<T> = ApiSuccess<T> | ApiError;
 
+// Fronteira de dados externos: payload bruto (HTTP, integracoes, drivers) ANTES da validacao zod.
+// Unico ponto sancionado de `unknown` explicito no dominio — assinaturas de fronteira usam este alias.
+// eslint-disable-next-line no-restricted-syntax -- definicao do proprio alias de fronteira
+export type DadosExternos = unknown;
+
 export type ReplyHttp = {
   status(statusCode: number): {
-    send(payload?: unknown): unknown;
+    send(payload?: DadosExternos): DadosExternos;
   };
-  send(payload?: unknown): unknown;
+  send(payload?: DadosExternos): DadosExternos;
 };
 
 export const paginationQuerySchema = z.object({

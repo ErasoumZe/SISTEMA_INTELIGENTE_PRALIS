@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { setorPayloadSchema } from "@padaria/shared/setores";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
 import { listarSetoresRepository, salvarSetorRepository } from "./setores.repository.js";
@@ -6,7 +7,7 @@ export async function listarSetores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarSetoresRepository(), escopoDados);
 }
 
-export async function salvarSetor(id: string | null, body: unknown) {
+export async function salvarSetor(id: string | null, body: DadosExternos) {
   const dados = setorPayloadSchema.parse(body);
   return salvarSetorRepository({
     ...(id ? { id } : {}),

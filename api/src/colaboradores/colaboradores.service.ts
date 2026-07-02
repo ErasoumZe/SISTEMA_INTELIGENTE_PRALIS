@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import type {
   CargoPayload,
   ColaboradorCargoPayload,
@@ -92,7 +93,7 @@ export async function listarColaboradores(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarColaboradoresRepository(), escopoDados);
 }
 
-export async function salvarColaborador(id: string | null, body: unknown) {
+export async function salvarColaborador(id: string | null, body: DadosExternos) {
   const dados: ColaboradorDadosPayload = colaboradorPayloadSchema.parse(body);
   return executarEmTransacao(async (tx) => {
     const cargo = await existeCargoNaEmpresaRepository(dados.cargoId, dados.empresaId, tx);
@@ -196,7 +197,9 @@ export async function criarCargoColaborador(colaboradorId: string, payload: Cola
   return executarEmTransacao(async (tx) => {
     const colaboradorExiste = await existeColaboradorNaEmpresaRepository(colaboradorId, payload.empresaId, tx);
     const cargoExiste = await existeCargoNaEmpresaRepository(payload.cargoId, payload.empresaId, tx);
-    const setorExiste = payload.setorId ? await existeSetorNaEmpresaRepository(payload.setorId, payload.empresaId, tx) : true;
+    const setorExiste = payload.setorId
+      ? await existeSetorNaEmpresaRepository(payload.setorId, payload.empresaId, tx)
+      : true;
     if (!colaboradorExiste) throw new Error("Colaborador inexistente");
     if (!cargoExiste) throw new Error("Cargo inexistente");
     if (!setorExiste) throw new Error("Setor inexistente");
