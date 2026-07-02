@@ -1,7 +1,11 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { MercadoriaCriada, MercadoriaDto, MercadoriaPayload, MercadoriasQuery } from "@padaria/shared/mercadorias";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import {
+  exigirPermissaoLancamento,
+  obterCaixaParaLancamento,
+  somaConfereCentavos
+} from "../lancamentos/lancamentos.dominio.js";
 import { validarReferenciasMercadoria } from "../lancamentos/lancamentos.dominio.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import { criarMercadoriaRepository, listarMercadoriasRepository } from "./mercadorias.repository.js";
@@ -11,8 +15,8 @@ export function validarMercadoria(dados: MercadoriaPayload): void {
     throw new Error("Grupo ou itens de mercadoria obrigatorios");
   }
   if (dados.itensMercadoria.length) {
-    const soma = arredondar(dados.itensMercadoria.reduce((total, item) => total + item.valorTotal, 0));
-    if (soma !== arredondar(dados.valorOriginal))
+    const valores = dados.itensMercadoria.map((item) => item.valorTotal);
+    if (!somaConfereCentavos(valores, dados.valorOriginal))
       throw new Error("Soma das mercadorias deve bater com o valor original");
   }
 }

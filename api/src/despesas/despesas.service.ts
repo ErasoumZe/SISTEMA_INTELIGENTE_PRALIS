@@ -1,15 +1,19 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { DespesaCriada, DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import {
+  exigirPermissaoLancamento,
+  obterCaixaParaLancamento,
+  somaConfereCentavos
+} from "../lancamentos/lancamentos.dominio.js";
 import { validarReferenciasDespesa } from "../lancamentos/lancamentos.dominio.js";
 import { criarDespesaRepository, listarDespesasRepository } from "./despesas.repository.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
   if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
   if (dados.itensDespesa.length) {
-    const soma = arredondar(dados.itensDespesa.reduce((total, item) => total + item.valor, 0));
-    if (soma !== arredondar(dados.valorOriginal))
+    const valores = dados.itensDespesa.map((item) => item.valor);
+    if (!somaConfereCentavos(valores, dados.valorOriginal))
       throw new Error("Soma dos itens da despesa deve bater com o valor original");
   }
 }

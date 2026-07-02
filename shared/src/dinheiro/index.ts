@@ -18,6 +18,12 @@ export function somarCentavos(...valores: Array<string | number | null | undefin
   return valores.reduce<number>((total, valor) => total + paraCentavos(valor), 0);
 }
 
-export function formatarDecimalBanco(valor: string | number | null | undefined): string {
-  return deCentavos(paraCentavos(valor)).toFixed(2);
+// Converte centavos inteiros para a string decimal gravada em colunas numeric do banco.
+// Aritmetica inteira de ponta a ponta: nenhum float envolvido.
+export function centavosParaDecimalBanco(centavos: number): string {
+  const absoluto = Math.abs(Math.trunc(centavos));
+  const inteiro = Math.trunc(absoluto / 100);
+  const resto = absoluto % 100;
+  const sinal = centavos < 0 ? "-" : "";
+  return `${sinal}${inteiro}.${String(resto).padStart(2, "0")}`;
 }

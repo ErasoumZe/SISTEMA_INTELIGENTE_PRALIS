@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { deCentavos } from "../dinheiro/index.js";
+import { saldoCaixaCentavos, type TotaisCaixaCentavos } from "./regras.js";
+
+export * from "./regras.js";
 
 const uuidSchema = z.string().uuid();
 const dataHoraSchema = z.string().min(16);
@@ -91,5 +95,19 @@ export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
+
+// Converte os totais em centavos para o contrato wire (reais como number).
+export function montarResumoCaixa(totais: TotaisCaixaCentavos): ResumoCaixa {
+  return {
+    totalEntradas: deCentavos(totais.entradas),
+    totalTransferencias: deCentavos(totais.transferencias),
+    totalTransferenciasEntrada: deCentavos(totais.transferenciasEntrada),
+    totalTransferenciasSaida: deCentavos(totais.transferenciasSaida),
+    totalDespesas: deCentavos(totais.despesas),
+    totalRetiradas: deCentavos(totais.retiradas),
+    totalMercadorias: deCentavos(totais.mercadorias),
+    saldo: deCentavos(saldoCaixaCentavos(totais))
+  };
+}
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
 export type AcertoSaldoCaixaResponse = z.infer<typeof acertoSaldoCaixaResponseSchema>;

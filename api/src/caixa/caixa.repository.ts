@@ -7,17 +7,9 @@ import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
+import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
+import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
-
-export type TotaisCaixaOperacionalLinha = {
-  totalEntradas: string;
-  totalTransferencias: string;
-  totalTransferenciasEntrada: string;
-  totalTransferenciasSaida: string;
-  totalDespesas: string;
-  totalRetiradas: string;
-  totalMercadorias: string;
-};
 
 export async function buscarGrupoQuebraCaixa(
   empresaId: string,
@@ -272,15 +264,15 @@ export async function calcularTotaisCaixaOperacionalRepository(
   caixaId: string,
   pdvContaId: string,
   db: ExecutorBanco = banco
-): Promise<TotaisCaixaOperacionalLinha> {
-  const totais = {
-    totalEntradas: 0,
-    totalTransferencias: 0,
-    totalTransferenciasEntrada: 0,
-    totalTransferenciasSaida: 0,
-    totalDespesas: 0,
-    totalRetiradas: 0,
-    totalMercadorias: 0
+): Promise<TotaisCaixaCentavos> {
+  const totais: TotaisCaixaCentavos = {
+    entradas: 0,
+    transferencias: 0,
+    transferenciasEntrada: 0,
+    transferenciasSaida: 0,
+    despesas: 0,
+    retiradas: 0,
+    mercadorias: 0
   };
 
   const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias] = await Promise.all([
@@ -317,33 +309,25 @@ export async function calcularTotaisCaixaOperacionalRepository(
   ]);
 
   for (const movimento of linhasVendas) {
-    totais.totalEntradas += Number(movimento.valorOriginal);
+    totais.entradas += paraCentavos(movimento.valorOriginal);
   }
   for (const movimento of linhasTransferencias) {
-    const valor = Number(movimento.valorOriginal);
-    totais.totalTransferencias += valor;
-    if (movimento.contaDestinoId === pdvContaId) totais.totalTransferenciasEntrada += valor;
-    if (movimento.contaOrigemId === pdvContaId) totais.totalTransferenciasSaida += valor;
+    const valor = paraCentavos(movimento.valorOriginal);
+    totais.transferencias += valor;
+    if (movimento.contaDestinoId === pdvContaId) totais.transferenciasEntrada += valor;
+    if (movimento.contaOrigemId === pdvContaId) totais.transferenciasSaida += valor;
   }
   for (const movimento of linhasDespesas) {
-    totais.totalDespesas += Number(movimento.valorOriginal);
+    totais.despesas += paraCentavos(movimento.valorOriginal);
   }
   for (const movimento of linhasRetiradas) {
-    totais.totalRetiradas += Number(movimento.valorOriginal);
+    totais.retiradas += paraCentavos(movimento.valorOriginal);
   }
   for (const movimento of linhasMercadorias) {
-    totais.totalMercadorias += Number(movimento.valorOriginal);
+    totais.mercadorias += paraCentavos(movimento.valorOriginal);
   }
 
-  return {
-    totalEntradas: totais.totalEntradas.toFixed(2),
-    totalTransferencias: totais.totalTransferencias.toFixed(2),
-    totalTransferenciasEntrada: totais.totalTransferenciasEntrada.toFixed(2),
-    totalTransferenciasSaida: totais.totalTransferenciasSaida.toFixed(2),
-    totalDespesas: totais.totalDespesas.toFixed(2),
-    totalRetiradas: totais.totalRetiradas.toFixed(2),
-    totalMercadorias: totais.totalMercadorias.toFixed(2)
-  };
+  return totais;
 }
 
 export async function criarAcertoSaldoCaixaRepository(
@@ -353,7 +337,7 @@ export async function criarAcertoSaldoCaixaRepository(
     colaboradorId: string;
     contaOrigemId: string | null;
     grupoDespesaId: string | null;
-    valorDiferenca: number;
+    valorDiferencaCentavos: number;
     observacao: string | null;
     criadoPor: string;
     data: string;
@@ -361,7 +345,7 @@ export async function criarAcertoSaldoCaixaRepository(
   db?: ExecutorBanco
 ) {
   return executarComTransacaoOpcional(db, async (db) => {
-    const valor = input.valorDiferenca.toFixed(2);
+    const valor = centavosParaDecimalBanco(input.valorDiferencaCentavos);
     const [despesa] = await db
       .insert(despesas)
       .values({
@@ -417,13 +401,8 @@ export async function atualizarFechamentoCaixaRepository(
     caixaId: string;
     dataHoraFechamento: Date;
     observacao: string | null;
-    totalEntradas: number;
-    totalTransferenciasEntrada: number;
-    totalTransferenciasSaida: number;
-    totalDespesas: number;
-    totalRetiradas: number;
-    totalMercadorias: number;
-    saldo: number;
+    totais: TotaisCaixaCentavos;
+    saldoCentavos: number;
   },
   db: ExecutorBanco = banco
 ) {
@@ -433,14 +412,16 @@ export async function atualizarFechamentoCaixaRepository(
       dataHoraFechamento: input.dataHoraFechamento,
       fechadoEm: new Date(),
       observacao: input.observacao,
-      totalEntradas: input.totalEntradas.toFixed(2),
-      totalTransferencias: (input.totalTransferenciasEntrada - input.totalTransferenciasSaida).toFixed(2),
-      totalTransferenciasEntrada: input.totalTransferenciasEntrada.toFixed(2),
-      totalTransferenciasSaida: input.totalTransferenciasSaida.toFixed(2),
-      totalDespesas: input.totalDespesas.toFixed(2),
-      totalRetiradas: input.totalRetiradas.toFixed(2),
-      totalMercadorias: input.totalMercadorias.toFixed(2),
-      saldo: input.saldo.toFixed(2),
+      totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
+      totalTransferencias: centavosParaDecimalBanco(
+        input.totais.transferenciasEntrada - input.totais.transferenciasSaida
+      ),
+      totalTransferenciasEntrada: centavosParaDecimalBanco(input.totais.transferenciasEntrada),
+      totalTransferenciasSaida: centavosParaDecimalBanco(input.totais.transferenciasSaida),
+      totalDespesas: centavosParaDecimalBanco(input.totais.despesas),
+      totalRetiradas: centavosParaDecimalBanco(input.totais.retiradas),
+      totalMercadorias: centavosParaDecimalBanco(input.totais.mercadorias),
+      saldo: centavosParaDecimalBanco(input.saldoCentavos),
       status: "fechado"
     })
     .where(eq(fechamentosCaixa.id, input.caixaId));

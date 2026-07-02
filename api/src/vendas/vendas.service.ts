@@ -1,20 +1,24 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type { VendaCriada, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { arredondar, exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import {
+  exigirPermissaoLancamento,
+  obterCaixaParaLancamento,
+  somaConfereCentavos
+} from "../lancamentos/lancamentos.dominio.js";
 import { criarVendaRepository, listarVendasRepository } from "./vendas.repository.js";
 import { validarReferenciasVenda } from "../lancamentos/lancamentos.dominio.js";
 
 export function validarVenda(dados: VendaPayload): void {
   if (dados.itensVenda.length) {
-    const soma = arredondar(dados.itensVenda.reduce((total, item) => total + item.valorTotal, 0));
-    if (soma !== arredondar(dados.valorOriginal)) {
+    const valores = dados.itensVenda.map((item) => item.valorTotal);
+    if (!somaConfereCentavos(valores, dados.valorOriginal)) {
       throw new Error("Soma dos itens da venda deve bater com o valor original");
     }
   }
   if (dados.tiposPagamento.length) {
-    const soma = arredondar(dados.tiposPagamento.reduce((total, item) => total + item.totalPago, 0));
-    if (soma !== arredondar(dados.valorOriginal)) {
+    const valores = dados.tiposPagamento.map((item) => item.totalPago);
+    if (!somaConfereCentavos(valores, dados.valorOriginal)) {
       throw new Error("Soma dos pagamentos da venda deve bater com o valor original");
     }
   }

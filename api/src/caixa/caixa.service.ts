@@ -6,8 +6,10 @@ import type {
   CaixaStatus,
   EditarAberturaCaixaPayload,
   FecharCaixaPayload,
-  ResumoCaixa
+  ResumoCaixa,
+  TotaisCaixaCentavos
 } from "@padaria/shared/caixa";
+import { montarResumoCaixa, saldoCaixaCentavos } from "@padaria/shared/caixa";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
@@ -65,17 +67,6 @@ function numero(valor: string | number | null | undefined) {
   return deCentavos(paraCentavos(valor));
 }
 
-function calcularSaldoOperacional(resumo: Omit<ResumoCaixa, "saldo" | "totalTransferencias">) {
-  return deCentavos(
-    paraCentavos(resumo.totalEntradas) +
-      paraCentavos(resumo.totalTransferenciasEntrada ?? 0) -
-      paraCentavos(resumo.totalTransferenciasSaida ?? 0) -
-      paraCentavos(resumo.totalDespesas) -
-      paraCentavos(resumo.totalRetiradas) -
-      paraCentavos(resumo.totalMercadorias ?? 0)
-  );
-}
-
 function serializarData(data: Date | string | null) {
   return data ? new Date(data).toISOString() : null;
 }
@@ -111,22 +102,13 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
   );
 }
 
-export async function calcularResumoCaixaOperacional(caixa: CaixaLinha): Promise<ResumoCaixa> {
+async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco): Promise<TotaisCaixaCentavos> {
   if (!caixa.pdvContaId) throw new Error("PDV sem conta vinculada");
-  const totais = await calcularTotaisCaixaOperacionalRepository(caixa.id, caixa.pdvContaId);
-  const resumo = {
-    totalEntradas: numero(totais.totalEntradas),
-    totalTransferencias: numero(totais.totalTransferencias),
-    totalTransferenciasEntrada: numero(totais.totalTransferenciasEntrada),
-    totalTransferenciasSaida: numero(totais.totalTransferenciasSaida),
-    totalDespesas: numero(totais.totalDespesas),
-    totalRetiradas: numero(totais.totalRetiradas),
-    totalMercadorias: numero(totais.totalMercadorias)
-  };
-  return {
-    ...resumo,
-    saldo: calcularSaldoOperacional(resumo)
-  };
+  return calcularTotaisCaixaOperacionalRepository(caixa.id, caixa.pdvContaId, db);
+}
+
+export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: ExecutorBanco): Promise<ResumoCaixa> {
+  return montarResumoCaixa(await calcularTotaisCaixaCentavos(caixa, db));
 }
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
@@ -208,7 +190,7 @@ async function abrirCaixaEmTransacao(
     );
     const aberto = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
-    return { caixaAberto: serializarCaixa(aberto), resumo: await calcularResumoCaixaOperacional(aberto) };
+    return { caixaAberto: serializarCaixa(aberto), resumo: await calcularResumoCaixaOperacional(aberto, tx) };
   });
 }
 
@@ -281,7 +263,7 @@ async function editarAberturaCaixaEmTransacao(
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado apos edicao");
-    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado) };
+    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
   });
 }
 
@@ -295,8 +277,9 @@ export async function acertarSaldoCaixaOperacional(
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const resumo = await calcularResumoCaixaOperacional(caixa);
-    if (resumo.saldo <= 0) throw new Error("Nao ha diferenca positiva para acertar");
+    const totais = await calcularTotaisCaixaCentavos(caixa, tx);
+    const saldoCentavos = saldoCaixaCentavos(totais);
+    if (saldoCentavos <= 0) throw new Error("Nao ha diferenca positiva para acertar");
     const grupo = await buscarGrupoQuebraCaixa(caixa.empresaId, tx);
     const resultado = await criarAcertoSaldoCaixaRepository(
       {
@@ -305,14 +288,14 @@ export async function acertarSaldoCaixaOperacional(
         colaboradorId: caixa.colaboradorId,
         contaOrigemId: caixa.pdvContaId,
         grupoDespesaId: grupo?.id ?? null,
-        valorDiferenca: resumo.saldo,
+        valorDiferencaCentavos: saldoCentavos,
         observacao: dados.observacao?.trim() || null,
         criadoPor: perfil.usuarioId,
         data: new Date().toISOString().slice(0, 10)
       },
       tx
     );
-    return { ...resultado, valorDiferenca: resumo.saldo };
+    return { ...resultado, valorDiferenca: deCentavos(saldoCentavos) };
   });
 }
 
@@ -326,21 +309,17 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (caixa.dataHoraAbertura && dataHoraFechamento <= new Date(caixa.dataHoraAbertura)) {
       throw new Error("Fechamento precisa ser posterior a abertura");
     }
-    const resumo = await calcularResumoCaixaOperacional(caixa);
-    if (resumo.saldo > 0) throw new Error("Acerto de saldo obrigatorio");
+    const totais = await calcularTotaisCaixaCentavos(caixa, tx);
+    const saldoCentavos = saldoCaixaCentavos(totais);
+    if (saldoCentavos > 0) throw new Error("Acerto de saldo obrigatorio");
 
     await atualizarFechamentoCaixaRepository(
       {
         caixaId: caixa.id,
         dataHoraFechamento,
         observacao: dados.observacao?.trim() || caixa.observacao,
-        totalEntradas: resumo.totalEntradas,
-        totalTransferenciasEntrada: resumo.totalTransferenciasEntrada ?? 0,
-        totalTransferenciasSaida: resumo.totalTransferenciasSaida ?? 0,
-        totalDespesas: resumo.totalDespesas,
-        totalRetiradas: resumo.totalRetiradas,
-        totalMercadorias: resumo.totalMercadorias ?? 0,
-        saldo: resumo.saldo
+        totais,
+        saldoCentavos
       },
       tx
     );

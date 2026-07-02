@@ -1,5 +1,6 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import { temPermissao, type Permissao } from "@padaria/shared";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
@@ -221,8 +222,11 @@ export function exigirPermissaoLancamento(permissoes: readonly Permissao[], perm
   if (!temPermissao(permissoes, permissao)) throw new PermissaoLancamentoInsuficienteError(permissao);
 }
 
-export function arredondar(valor: number): number {
-  return Math.round(valor * 100) / 100;
+// Confere soma de itens contra o total em centavos inteiros (sem float).
+// Cada valor e convertido individualmente, espelhando como cada linha e gravada no banco.
+export function somaConfereCentavos(valores: number[], total: number): boolean {
+  const soma = valores.reduce((acumulado, valor) => acumulado + paraCentavos(valor), 0);
+  return soma === paraCentavos(total);
 }
 
 export async function usarLacreSeInformado(
