@@ -106,6 +106,7 @@ const modalTemaAberto = ref(false);
 const modalCopiaAberto = ref(false);
 
 const entidadeNova = ref<EntidadeOperacional>("venda");
+const operacaoEditandoId = ref("");
 const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
@@ -683,13 +684,119 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   resumo.value = caixaStatus.value?.resumo ?? null;
 }
 
-function abrirOperacao(entidade: EntidadeOperacional) {
+// Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
+type OperacaoDetalhe = {
+  id: string;
+  dataReferencia: string;
+  dataVencimento?: string;
+  dataPagamento?: string | null;
+  descricao: string;
+  observacao?: string | null;
+  valorOriginal: number;
+  valorAcrescimo: number;
+  descricaoAcrescimo?: string | null;
+  valorDesconto: number;
+  descricaoDesconto?: string | null;
+  contaOrigemId?: string | null;
+  contaDestinoId?: string | null;
+  fornecedorId?: string | null;
+  colaboradorId?: string | null;
+  grupoDespesaId?: string | null;
+  grupoMercadoriaId?: string | null;
+  grupoRetiradaId?: string | null;
+  maloteId?: string | null;
+  temNotaFiscal?: boolean;
+  computar: boolean;
+  itensVenda?: {
+    produtoId: string | null;
+    descricaoProduto: string;
+    quantidade: number;
+    valorUnitario: number;
+    valorTotal: number;
+  }[];
+  tiposPagamento?: { formaPagamentoId: string | null; numeroVendas: number; totalPago: number }[];
+  itensDespesa?: { grupoDespesaId: string | null; descricao: string; valor: number }[];
+  itensMercadoria?: {
+    produtoId: string | null;
+    grupoMercadoriaId: string | null;
+    unidadeMedidaId: string | null;
+    descricao: string;
+    quantidade: number;
+    valorUnitario: number;
+    valorTotal: number;
+  }[];
+};
+
+function preencherFormOperacao(entidade: EntidadeOperacional, detalhe: OperacaoDetalhe) {
+  form.value = {
+    ...form.value,
+    dataReferencia: detalhe.dataReferencia,
+    dataVencimento: detalhe.dataVencimento ?? form.value.dataVencimento,
+    dataPagamento: detalhe.dataPagamento ?? "",
+    descricao: detalhe.descricao,
+    observacao: detalhe.observacao ?? "",
+    valorOriginal: String(detalhe.valorOriginal),
+    valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
+    descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
+    valorDesconto: detalhe.valorDesconto ? String(detalhe.valorDesconto) : "",
+    descricaoDesconto: detalhe.descricaoDesconto ?? "",
+    contaOrigemId: detalhe.contaOrigemId ?? "",
+    contaDestinoId: detalhe.contaDestinoId ?? "",
+    fornecedorId: detalhe.fornecedorId ?? "",
+    colaboradorId: detalhe.colaboradorId ?? "",
+    grupoDespesaId: detalhe.grupoDespesaId ?? "",
+    grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
+    grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
+    maloteId: detalhe.maloteId ?? "",
+    temNotaFiscal: detalhe.temNotaFiscal ?? false,
+    computar: detalhe.computar
+  };
+  if (entidade === "venda" && detalhe.itensVenda?.length) {
+    itensVenda.value = detalhe.itensVenda.map((item) => ({
+      descricaoProduto: item.descricaoProduto,
+      quantidade: String(item.quantidade),
+      valorUnitario: String(item.valorUnitario),
+      valorTotal: String(item.valorTotal),
+      produtoId: item.produtoId ?? ""
+    }));
+  }
+  if (entidade === "venda" && detalhe.tiposPagamento?.length) {
+    tiposPagamento.value = detalhe.tiposPagamento.map((pagamento) => ({
+      formaPagamentoId: pagamento.formaPagamentoId ?? "",
+      totalPago: String(pagamento.totalPago),
+      numeroVendas: String(pagamento.numeroVendas)
+    }));
+  }
+  if (entidade === "despesa" && detalhe.itensDespesa?.length) {
+    discriminandoDespesa.value = true;
+    itensDespesa.value = detalhe.itensDespesa.map((item) => ({
+      descricao: item.descricao,
+      valor: String(item.valor),
+      grupoDespesaId: item.grupoDespesaId ?? ""
+    }));
+  }
+  if (entidade === "mercadoria" && detalhe.itensMercadoria?.length) {
+    discriminandoMercadoria.value = true;
+    itensMercadoria.value = detalhe.itensMercadoria.map((item) => ({
+      descricao: item.descricao,
+      quantidade: String(item.quantidade),
+      valorUnitario: String(item.valorUnitario),
+      valorTotal: String(item.valorTotal),
+      produtoId: item.produtoId ?? "",
+      grupoMercadoriaId: item.grupoMercadoriaId ?? "",
+      unidadeMedidaId: item.unidadeMedidaId ?? ""
+    }));
+  }
+}
+
+async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
   if (!caixaAberto.value) {
     notificar("Abra um caixa antes de registrar lancamentos.", "warning");
     void router.push("/caixa");
     return;
   }
   entidadeNova.value = entidade;
+  operacaoEditandoId.value = operacao?.id ?? "";
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
@@ -707,11 +814,20 @@ function abrirOperacao(entidade: EntidadeOperacional) {
       unidadeMedidaId: ""
     }
   ];
+  if (operacao?.id) {
+    try {
+      const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
+      preencherFormOperacao(entidade, detalhe);
+    } catch (error) {
+      notificar(mensagemErro(error), "error");
+      return;
+    }
+  }
   modalOperacaoAberto.value = true;
 }
 
 function executarAcaoNovo(acao: (typeof opcoesNovo)[number]) {
-  if (acao.entidade) abrirOperacao(acao.entidade);
+  if (acao.entidade) void abrirOperacao(acao.entidade);
   if (acao.tela === "malote") abrirMaloteNovo();
 }
 
@@ -761,32 +877,41 @@ async function salvarOperacao() {
             }))
         : [];
 
-    const operacaoSalva = await apiPost<{ id: string; computar: boolean }>(
-      `/api/${endpointOperacaoPorEntidade[entidadeNova.value]}`,
-      {
-        empresaId: empresaId.value,
-        ...form.value,
-        dataPagamento: form.value.dataPagamento || null,
-        valorOriginal: Number(form.value.valorOriginal || 0),
-        valorAcrescimo: Number(form.value.valorAcrescimo || 0),
-        valorDesconto: Number(form.value.valorDesconto || 0),
-        itensVenda: itensVendaPayload,
-        tiposPagamento: tiposPagamentoPayload,
-        itensDespesa: itensDespesaPayload,
-        itensMercadoria: itensMercadoriaPayload
-      }
-    );
-    operacoes.value.unshift({
+    const payload = {
+      empresaId: empresaId.value,
+      ...form.value,
+      dataPagamento: form.value.dataPagamento || null,
+      maloteId: form.value.maloteId || null,
+      valorOriginal: Number(form.value.valorOriginal || 0),
+      valorAcrescimo: Number(form.value.valorAcrescimo || 0),
+      valorDesconto: Number(form.value.valorDesconto || 0),
+      itensVenda: itensVendaPayload,
+      tiposPagamento: tiposPagamentoPayload,
+      itensDespesa: itensDespesaPayload,
+      itensMercadoria: itensMercadoriaPayload
+    };
+    const editandoId = operacaoEditandoId.value;
+    const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
+    const operacaoSalva = editandoId
+      ? await apiPut<{ id: string; computar: boolean }>(`/api/${endpoint}/${editandoId}`, payload)
+      : await apiPost<{ id: string; computar: boolean }>(`/api/${endpoint}`, payload);
+    const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
       dataReferencia: form.value.dataReferencia,
       descricao: form.value.descricao,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
-      computar: form.value.temNotaFiscal ? true : form.value.computar,
+      computar: operacaoSalva.computar,
       status: "aprovado"
-    });
+    };
+    if (editandoId) {
+      const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
+      if (indice >= 0) operacoes.value.splice(indice, 1, { ...operacoes.value[indice], ...linhaAtualizada });
+    } else {
+      operacoes.value.unshift(linhaAtualizada);
+    }
     modalOperacaoAberto.value = false;
-    notificar("Lancamento salvo com sucesso.");
+    notificar(editandoId ? "Lancamento atualizado com sucesso." : "Lancamento salvo com sucesso.");
     await carregarStatusCaixa(empresaId.value);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1517,6 +1642,7 @@ provide(WORKSPACE_CONTEXT, {
   salvarCaixaDrawer,
   modalOperacaoAberto,
   entidadeNova,
+  operacaoEditandoId,
   form,
   discriminandoDespesa,
   discriminandoMercadoria,

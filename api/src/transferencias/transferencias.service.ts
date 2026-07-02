@@ -1,6 +1,7 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   TransferenciaCriada,
+  TransferenciaDetalheDto,
   TransferenciaDto,
   TransferenciaPayload,
   TransferenciasQuery
@@ -11,8 +12,14 @@ import {
   obterCaixaParaLancamento,
   usarLacreSeInformado
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarReferenciasTransferencia } from "../lancamentos/lancamentos.dominio.js";
-import { criarTransferenciaRepository, listarTransferenciasRepository } from "./transferencias.repository.js";
+import { validarEdicaoNoCaixaAberto, validarReferenciasTransferencia } from "../lancamentos/lancamentos.dominio.js";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
+import {
+  atualizarTransferenciaRepository,
+  buscarTransferenciaDetalheRepository,
+  criarTransferenciaRepository,
+  listarTransferenciasRepository
+} from "./transferencias.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contaOrigemId === dados.contaDestinoId) throw new Error("Conta de destino deve ser diferente da origem");
@@ -44,5 +51,42 @@ export async function criarTransferencia(
 
     const transferencia = await criarTransferenciaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
     return { id: transferencia.id, computar: dados.computar };
+  });
+}
+
+export async function obterTransferencia(
+  transferenciaId: string,
+  perfil: PerfilUsuario
+): Promise<TransferenciaDetalheDto> {
+  const transferencia = await buscarTransferenciaDetalheRepository(transferenciaId);
+  if (!transferencia || !podeAcessarEmpresa(perfil, transferencia.empresaId)) {
+    throw new Error("Registro nao encontrado");
+  }
+  return transferencia;
+}
+
+export async function atualizarTransferencia(
+  transferenciaId: string,
+  dados: TransferenciaPayload,
+  perfil: PerfilUsuario
+): Promise<TransferenciaCriada> {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_editar");
+  validarTransferencia(dados);
+  return executarEmTransacao(async (tx) => {
+    const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    const caixa = await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    if (
+      (dados.maloteId ?? null) !== existente!.maloteId ||
+      (dados.lacreMaloteId ?? null) !== existente!.lacreMaloteId
+    ) {
+      throw new Error("Nao e possivel alterar malote ou lacre na edicao");
+    }
+    const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
+      throw new Error("Transferencia precisa envolver a conta do PDV aberto");
+    }
+    await atualizarTransferenciaRepository(transferenciaId, dados, dados.computar, tx);
+    return { id: transferenciaId, computar: dados.computar };
   });
 }

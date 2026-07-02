@@ -1,6 +1,7 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { temPermissao, type Permissao } from "@padaria/shared";
-import { paraCentavos } from "@padaria/shared/dinheiro";
+import { temPermissao, type Permissao, type PerfilUsuario } from "@padaria/shared";
+import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
@@ -64,10 +65,9 @@ export function filtrosEmpresa<T extends { empresaId: DadosExternos }>(
   return filtros;
 }
 
-export function valoresBase(dados: BasePayload, computar: boolean, criadoPor: string, caixaId?: string | null) {
+// Campos editaveis comuns aos lancamentos. Na edicao, empresa, caixa e criadoPor NUNCA mudam.
+export function valoresBaseEdicao(dados: BasePayload, computar: boolean) {
   return {
-    empresaId: dados.empresaId,
-    caixaId: caixaId ?? null,
     dataReferencia: dados.dataReferencia,
     dataPagamento: dados.dataPagamento ?? null,
     descricao: dados.descricao,
@@ -78,9 +78,37 @@ export function valoresBase(dados: BasePayload, computar: boolean, criadoPor: st
     valorDesconto: String(dados.valorDesconto),
     descricaoDesconto: dados.descricaoDesconto ?? null,
     contaOrigemId: dados.contaOrigemId ?? null,
-    computar,
-    criadoPor
+    computar
   };
+}
+
+export function valoresBase(dados: BasePayload, computar: boolean, criadoPor: string, caixaId?: string | null) {
+  return {
+    empresaId: dados.empresaId,
+    caixaId: caixaId ?? null,
+    criadoPor,
+    ...valoresBaseEdicao(dados, computar)
+  };
+}
+
+// Converte o decimal do banco (string) para o numero em reais do contrato wire.
+export function numeroDecimal(valor: string | number | null | undefined): number {
+  return deCentavos(paraCentavos(valor));
+}
+
+// Regras de edicao de lancamento: o registro precisa existir na empresa acessivel,
+// nao pode trocar de empresa e precisa pertencer ao caixa aberto do usuario.
+export async function validarEdicaoNoCaixaAberto(
+  existente: { empresaId: string; caixaId: string | null } | null,
+  dados: { empresaId: string },
+  perfil: PerfilUsuario,
+  tx?: ExecutorBanco
+) {
+  if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+  if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+  if (existente.caixaId !== caixa.id) throw new Error("Lancamento nao pertence ao seu caixa aberto");
+  return caixa;
 }
 
 export async function obterLacrePorId(lacreId: string, db: ExecutorBanco = banco): Promise<{ status: string } | null> {

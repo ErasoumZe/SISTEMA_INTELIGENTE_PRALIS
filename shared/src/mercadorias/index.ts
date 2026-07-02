@@ -60,6 +60,8 @@ export const mercadoriaCriadaSchema = z.object({
 
 export type MercadoriasQuery = z.input<typeof mercadoriasQuerySchema>;
 export type MercadoriaPayload = z.infer<typeof mercadoriaPayloadSchema>;
+
+// Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
+export type MercadoriaDetalheDto = MercadoriaPayload & { id: string; status: string; caixaId: string | null };
 export type MercadoriaDto = z.infer<typeof mercadoriaDtoSchema>;
 export type MercadoriaCriada = z.infer<typeof mercadoriaCriadaSchema>;
-

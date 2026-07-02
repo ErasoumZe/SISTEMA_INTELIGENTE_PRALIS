@@ -1,13 +1,25 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
-import type { DespesaCriada, DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
+import type {
+  DespesaCriada,
+  DespesaDetalheDto,
+  DespesaDto,
+  DespesaPayload,
+  DespesasQuery
+} from "@padaria/shared/despesas";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   somaConfereCentavos
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarReferenciasDespesa } from "../lancamentos/lancamentos.dominio.js";
-import { criarDespesaRepository, listarDespesasRepository } from "./despesas.repository.js";
+import { validarEdicaoNoCaixaAberto, validarReferenciasDespesa } from "../lancamentos/lancamentos.dominio.js";
+import {
+  atualizarDespesaRepository,
+  buscarDespesaDetalheRepository,
+  criarDespesaRepository,
+  listarDespesasRepository
+} from "./despesas.repository.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
   if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
@@ -36,5 +48,28 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
     const despesa = await criarDespesaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
     return { id: despesa.id, computar: dados.computar };
+  });
+}
+
+export async function obterDespesa(despesaId: string, perfil: PerfilUsuario): Promise<DespesaDetalheDto> {
+  const despesa = await buscarDespesaDetalheRepository(despesaId);
+  if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
+  return despesa;
+}
+
+export async function atualizarDespesa(
+  despesaId: string,
+  dados: DespesaPayload,
+  perfil: PerfilUsuario
+): Promise<DespesaCriada> {
+  exigirPermissaoLancamento(perfil.permissoes, "despesas_editar");
+  validarDespesa(dados);
+  return executarEmTransacao(async (tx) => {
+    const existente = await buscarDespesaDetalheRepository(despesaId, tx);
+    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    await atualizarDespesaRepository(despesaId, dados, dados.computar, existente!.caixaId, perfil.usuarioId, tx);
+    return { id: despesaId, computar: dados.computar };
   });
 }

@@ -45,6 +45,8 @@ export const transferenciaCriadaSchema = z.object({
 
 export type TransferenciasQuery = z.input<typeof transferenciasQuerySchema>;
 export type TransferenciaPayload = z.infer<typeof transferenciaPayloadSchema>;
+
+// Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
+export type TransferenciaDetalheDto = TransferenciaPayload & { id: string; status: string; caixaId: string | null };
 export type TransferenciaDto = z.infer<typeof transferenciaDtoSchema>;
 export type TransferenciaCriada = z.infer<typeof transferenciaCriadaSchema>;
-

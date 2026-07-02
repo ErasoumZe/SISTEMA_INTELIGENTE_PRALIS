@@ -56,6 +56,7 @@ export type WorkspaceContext = {
   salvarCaixaDrawer: () => Promise<void>;
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
+  operacaoEditandoId: Ref<string>;
   form: Ref<OperacaoForm>;
   discriminandoDespesa: Ref<boolean>;
   discriminandoMercadoria: Ref<boolean>;

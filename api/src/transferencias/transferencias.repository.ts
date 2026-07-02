@@ -1,8 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { transferencias } from "@padaria/db/schema/transferencia";
-import type { TransferenciaDto, TransferenciaPayload, TransferenciasQuery } from "@padaria/shared/transferencias";
+import type {
+  TransferenciaDetalheDto,
+  TransferenciaDto,
+  TransferenciaPayload,
+  TransferenciasQuery
+} from "@padaria/shared/transferencias";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
+import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
@@ -43,4 +48,57 @@ export async function criarTransferenciaRepository(
     .returning({ id: transferencias.id });
   if (!transferencia) throw new Error("Transferencia nao criada");
   return transferencia;
+}
+
+export async function buscarTransferenciaDetalheRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<TransferenciaDetalheDto | null> {
+  const [transferencia] = await db
+    .select({
+      id: transferencias.id,
+      empresaId: transferencias.empresaId,
+      caixaId: transferencias.caixaId,
+      status: transferencias.status,
+      dataReferencia: transferencias.dataReferencia,
+      descricao: transferencias.descricao,
+      observacao: transferencias.observacao,
+      valorOriginal: transferencias.valorOriginal,
+      valorAcrescimo: transferencias.valorAcrescimo,
+      descricaoAcrescimo: transferencias.descricaoAcrescimo,
+      valorDesconto: transferencias.valorDesconto,
+      descricaoDesconto: transferencias.descricaoDesconto,
+      contaOrigemId: transferencias.contaOrigemId,
+      contaDestinoId: transferencias.contaDestinoId,
+      maloteId: transferencias.maloteId,
+      lacreMaloteId: transferencias.lacreMaloteId,
+      computar: transferencias.computar
+    })
+    .from(transferencias)
+    .where(eq(transferencias.id, transferenciaId))
+    .limit(1);
+  if (!transferencia) return null;
+
+  return {
+    ...transferencia,
+    valorOriginal: numeroDecimal(transferencia.valorOriginal),
+    valorAcrescimo: numeroDecimal(transferencia.valorAcrescimo),
+    valorDesconto: numeroDecimal(transferencia.valorDesconto)
+  };
+}
+
+export async function atualizarTransferenciaRepository(
+  transferenciaId: string,
+  dados: TransferenciaPayload,
+  computar: boolean,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(transferencias)
+    .set({
+      ...valoresBaseEdicao(dados, computar),
+      contaOrigemId: dados.contaOrigemId,
+      contaDestinoId: dados.contaDestinoId
+    })
+    .where(eq(transferencias.id, transferenciaId));
 }

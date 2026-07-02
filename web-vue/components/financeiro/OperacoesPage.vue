@@ -15,7 +15,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: "editar", entidade: EntidadeOperacional): void;
+  (event: "editar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
 }>();
 
@@ -75,7 +75,12 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
                 <td class="font-weight-bold">{{ operacao.descricao }}</td>
                 <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
                 <td class="text-right">
-                  <v-btn size="small" variant="tonal" prepend-icon="mdi-pencil" @click="emit('editar', entidadeDaTela(telaAtiva))">
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    prepend-icon="mdi-pencil"
+                    @click="emit('editar', entidadeDaTela(telaAtiva), operacao)"
+                  >
                     Editar
                   </v-btn>
                 </td>
@@ -87,7 +92,12 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
           </v-table>
         </div>
         <div v-if="totalOperacoes > 10" class="mt-4 d-flex justify-end align-center ga-2">
-          <v-btn size="small" variant="outlined" :disabled="pagina === 1" @click="emit('update:pagina', Math.max(1, pagina - 1))">
+          <v-btn
+            size="small"
+            variant="outlined"
+            :disabled="pagina === 1"
+            @click="emit('update:pagina', Math.max(1, pagina - 1))"
+          >
             Anterior
           </v-btn>
           <span>{{ pagina }} / {{ totalPaginas }}</span>

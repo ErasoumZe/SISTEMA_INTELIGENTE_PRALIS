@@ -1,14 +1,26 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
-import type { MercadoriaCriada, MercadoriaDto, MercadoriaPayload, MercadoriasQuery } from "@padaria/shared/mercadorias";
+import type {
+  MercadoriaCriada,
+  MercadoriaDetalheDto,
+  MercadoriaDto,
+  MercadoriaPayload,
+  MercadoriasQuery
+} from "@padaria/shared/mercadorias";
+import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   somaConfereCentavos
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarReferenciasMercadoria } from "../lancamentos/lancamentos.dominio.js";
+import { validarEdicaoNoCaixaAberto, validarReferenciasMercadoria } from "../lancamentos/lancamentos.dominio.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
-import { criarMercadoriaRepository, listarMercadoriasRepository } from "./mercadorias.repository.js";
+import {
+  atualizarMercadoriaRepository,
+  buscarMercadoriaDetalheRepository,
+  criarMercadoriaRepository,
+  listarMercadoriasRepository
+} from "./mercadorias.repository.js";
 
 export function validarMercadoria(dados: MercadoriaPayload): void {
   if (!dados.grupoMercadoriaId && !dados.itensMercadoria.length) {
@@ -40,5 +52,29 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
     const mercadoria = await criarMercadoriaRepository(dados, computar, perfil.usuarioId, caixa.id, tx);
     return { id: mercadoria.id, computar };
+  });
+}
+
+export async function obterMercadoria(mercadoriaId: string, perfil: PerfilUsuario): Promise<MercadoriaDetalheDto> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  return mercadoria;
+}
+
+export async function atualizarMercadoria(
+  mercadoriaId: string,
+  dados: MercadoriaPayload,
+  perfil: PerfilUsuario
+): Promise<MercadoriaCriada> {
+  exigirPermissaoLancamento(perfil.permissoes, "mercadorias_editar");
+  validarMercadoria(dados);
+  return executarEmTransacao(async (tx) => {
+    const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    const computar = deveComputarMercadoria(dados.temNotaFiscal, dados.computar);
+    await atualizarMercadoriaRepository(mercadoriaId, dados, computar, tx);
+    return { id: mercadoriaId, computar };
   });
 }

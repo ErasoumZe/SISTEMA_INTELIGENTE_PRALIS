@@ -62,6 +62,8 @@ export const despesaCriadaSchema = z.object({
 
 export type DespesasQuery = z.input<typeof despesasQuerySchema>;
 export type DespesaPayload = z.infer<typeof despesaPayloadSchema>;
+
+// Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
+export type DespesaDetalheDto = DespesaPayload & { id: string; status: string; caixaId: string | null };
 export type DespesaDto = z.infer<typeof despesaDtoSchema>;
 export type DespesaCriada = z.infer<typeof despesaCriadaSchema>;
-

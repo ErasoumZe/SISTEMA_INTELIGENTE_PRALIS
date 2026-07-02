@@ -46,6 +46,8 @@ export const retiradaCriadaSchema = z.object({
 
 export type RetiradasQuery = z.input<typeof retiradasQuerySchema>;
 export type RetiradaPayload = z.infer<typeof retiradaPayloadSchema>;
+
+// Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
+export type RetiradaDetalheDto = RetiradaPayload & { id: string; status: string; caixaId: string | null };
 export type RetiradaDto = z.infer<typeof retiradaDtoSchema>;
 export type RetiradaCriada = z.infer<typeof retiradaCriadaSchema>;
-

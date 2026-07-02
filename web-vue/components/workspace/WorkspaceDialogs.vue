@@ -16,6 +16,7 @@ const {
   salvarCaixaDrawer,
   modalOperacaoAberto,
   entidadeNova,
+  operacaoEditandoId,
   form,
   discriminandoDespesa,
   discriminandoMercadoria,
@@ -189,7 +190,9 @@ const validacaoQtdPreview = computed(() =>
 
   <v-dialog v-model="modalOperacaoAberto" max-width="960" scrollable>
     <v-card>
-      <v-card-title>{{ entidadeNova.charAt(0).toUpperCase() + entidadeNova.slice(1) }}</v-card-title>
+      <v-card-title>
+        {{ (operacaoEditandoId ? "Editar " : "Nova ") + entidadeNova.charAt(0).toUpperCase() + entidadeNova.slice(1) }}
+      </v-card-title>
       <v-card-text>
         <v-row dense>
           <v-col cols="12" md="4"

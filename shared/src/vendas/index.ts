@@ -107,8 +107,10 @@ export const vendaCriadaSchema = z.object({
 
 export type VendasQuery = z.input<typeof vendasQuerySchema>;
 export type VendaPayload = z.infer<typeof vendaPayloadSchema>;
+
+// Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
+export type VendaDetalheDto = VendaPayload & { id: string; status: string; caixaId: string | null };
 export type VendaDto = z.infer<typeof vendaDtoSchema>;
 export type VendaCriada = z.infer<typeof vendaCriadaSchema>;
 export type VendaParams = z.infer<typeof vendaParamsSchema>;
 export type VendaComprovanteDto = z.infer<typeof vendaComprovanteDtoSchema>;
-

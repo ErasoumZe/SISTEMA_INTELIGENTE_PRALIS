@@ -1,9 +1,9 @@
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
-import type { VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
+import type { VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrosEmpresa, valoresBase } from "../lancamentos/lancamentos.dominio.js";
+import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
 export async function listarVendasRepository(
   query: VendasQuery,
@@ -128,5 +128,119 @@ export async function criarVendaRepository(
     }
 
     return venda;
+  });
+}
+
+export async function buscarVendaDetalheRepository(
+  vendaId: string,
+  db: ExecutorBanco = banco
+): Promise<VendaDetalheDto | null> {
+  const [venda] = await db
+    .select({
+      id: vendas.id,
+      empresaId: vendas.empresaId,
+      caixaId: vendas.caixaId,
+      status: vendas.status,
+      dataReferencia: vendas.dataReferencia,
+      dataPagamento: vendas.dataPagamento,
+      descricao: vendas.descricao,
+      observacao: vendas.observacao,
+      valorOriginal: vendas.valorOriginal,
+      valorAcrescimo: vendas.valorAcrescimo,
+      descricaoAcrescimo: vendas.descricaoAcrescimo,
+      valorDesconto: vendas.valorDesconto,
+      descricaoDesconto: vendas.descricaoDesconto,
+      contaOrigemId: vendas.contaOrigemId,
+      pdvId: vendas.pdvId,
+      colaboradorId: vendas.colaboradorId,
+      computar: vendas.computar
+    })
+    .from(vendas)
+    .where(eq(vendas.id, vendaId))
+    .limit(1);
+  if (!venda) return null;
+
+  const itens = await db
+    .select({
+      produtoId: vendasProdutos.produtoId,
+      produtoAutomacaoId: vendasProdutos.produtoAutomacaoId,
+      produtoAutomacaoCodigo: vendasProdutos.produtoAutomacaoCodigo,
+      descricaoProduto: vendasProdutos.descricaoProduto,
+      quantidade: vendasProdutos.quantidade,
+      valorUnitario: vendasProdutos.valorUnitario,
+      valorTotal: vendasProdutos.valorTotal
+    })
+    .from(vendasProdutos)
+    .where(eq(vendasProdutos.vendaId, vendaId));
+  const pagamentos = await db
+    .select({
+      formaPagamentoId: vendasPagamentos.formaPagamentoId,
+      tipoPagamentoAutomacaoId: vendasPagamentos.tipoPagamentoAutomacaoId,
+      tipoPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
+      numeroVendas: vendasPagamentos.numeroVendas,
+      totalPago: vendasPagamentos.totalPago
+    })
+    .from(vendasPagamentos)
+    .where(eq(vendasPagamentos.vendaId, vendaId));
+
+  return {
+    ...venda,
+    valorOriginal: numeroDecimal(venda.valorOriginal),
+    valorAcrescimo: numeroDecimal(venda.valorAcrescimo),
+    valorDesconto: numeroDecimal(venda.valorDesconto),
+    itensVenda: itens.map((item) => ({
+      ...item,
+      quantidade: Number(item.quantidade),
+      valorUnitario: Number(item.valorUnitario),
+      valorTotal: numeroDecimal(item.valorTotal)
+    })),
+    tiposPagamento: pagamentos.map((pagamento) => ({
+      ...pagamento,
+      totalPago: numeroDecimal(pagamento.totalPago)
+    }))
+  };
+}
+
+export async function atualizarVendaRepository(
+  vendaId: string,
+  dados: VendaPayload,
+  computar: boolean,
+  db?: ExecutorBanco
+): Promise<void> {
+  await executarComTransacaoOpcional(db, async (tx) => {
+    await tx
+      .update(vendas)
+      .set({
+        ...valoresBaseEdicao(dados, computar),
+        pdvId: dados.pdvId ?? null,
+        colaboradorId: dados.colaboradorId ?? null
+      })
+      .where(eq(vendas.id, vendaId));
+
+    await tx.delete(vendasProdutos).where(eq(vendasProdutos.vendaId, vendaId));
+    await tx.delete(vendasPagamentos).where(eq(vendasPagamentos.vendaId, vendaId));
+
+    for (const item of dados.itensVenda) {
+      await tx.insert(vendasProdutos).values({
+        vendaId,
+        produtoId: item.produtoId ?? null,
+        produtoAutomacaoId: item.produtoAutomacaoId ?? null,
+        produtoAutomacaoCodigo: item.produtoAutomacaoCodigo ?? null,
+        descricaoProduto: item.descricaoProduto,
+        quantidade: String(item.quantidade),
+        valorUnitario: String(item.valorUnitario),
+        valorTotal: String(item.valorTotal)
+      });
+    }
+    for (const pagamento of dados.tiposPagamento) {
+      await tx.insert(vendasPagamentos).values({
+        vendaId,
+        formaPagamentoId: pagamento.formaPagamentoId ?? null,
+        tipoPagamentoAutomacaoId: pagamento.tipoPagamentoAutomacaoId ?? null,
+        tipoPagamentoAutomacao: pagamento.tipoPagamentoAutomacao ?? null,
+        numeroVendas: pagamento.numeroVendas,
+        totalPago: String(pagamento.totalPago)
+      });
+    }
   });
 }
