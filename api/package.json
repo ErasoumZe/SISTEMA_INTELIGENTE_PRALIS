@@ -31,7 +31,7 @@
     "db:setup": "npm run setup:dev --workspace @padaria/db",
     "db:seed": "npm run seed:dev --workspace @padaria/db",
     "api:dev:prepare": "npm run db:setup && npm run db:seed",
-    "api:prod:migrate": "npm run db:migrate && npm run db:migrate:drizzle"
+    "api:prod:migrate": "npm run db:migrate:drizzle && npm run db:migrate"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.20",

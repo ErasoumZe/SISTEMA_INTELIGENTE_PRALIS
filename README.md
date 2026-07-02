@@ -20,7 +20,7 @@ npm.cmd run dev
 - Web: http://localhost:5174
 - API: http://localhost:4100
 
-O preparo de desenvolvimento executa `drizzle-kit push --force` em modo dev e aplica o seed dentro do container da API. O script so imprime `Ambiente pronto` depois do healthcheck da API e de confirmar que o Web no host responde.
+O preparo de desenvolvimento executa `drizzle-kit push --force` em modo dev, aplica as triggers de `atualizado_em` (mesmo SQL da migration `0002`) e aplica o seed dentro do container da API. O script so imprime `Ambiente pronto` depois do healthcheck da API e de confirmar que o Web no host responde.
 
 Para rodar API e Web no host explicitamente, mantendo apenas o Postgres em container:
 
@@ -60,6 +60,21 @@ Parar API/Web e remover containers, redes e volumes locais de dev/prod:
 ```powershell
 npm.cmd run dev:destroy
 ```
+
+## Migrations
+
+O schema de producao e criado exclusivamente por migrations versionadas em `db/migrations/` (journal em `db/migrations/meta/_journal.json`):
+
+- `0000_extensoes_uuid.sql`: extensao `pgcrypto` e funcao `uuid_generate_v7()` (precisa existir antes das tabelas, que a usam como DEFAULT).
+- `0001_baseline.sql`: baseline completa do schema (todas as tabelas de negocio e de autenticacao, indices, checks e FKs).
+- `0002_hardening_atualizado_em.sql`: funcao e triggers de `atualizado_em` (SQL idempotente).
+
+Fluxos por ambiente:
+
+- **Producao**: `npm run api:prod:migrate` executa `drizzle-kit migrate` (aplica o journal) e depois `better-auth migrate` (no-op de seguranca; as tabelas de auth ja vem do baseline). A ordem importa: o drizzle precisa rodar primeiro para nao colidir com tabelas criadas pelo better-auth.
+- **Dev e testes**: continuam usando `drizzle-kit push --force` (rapido e tolerante a iteracao de schema) e aplicam o SQL da `0002` logo apos o push, mantendo paridade com producao.
+
+Validacao automatica: `tests/integration/migracoes/migracoes.test.ts` provisiona um Postgres vazio somente com `drizzle-kit migrate` e compara a estrutura (colunas, indices e constraints) com o banco provisionado por `push`. Se o schema Drizzle evoluir sem migration correspondente, esse teste falha — gere a migration com `npm run db:generate --workspace @padaria/db` (respeitando a regra do projeto: migrations somente com ordem explicita).
 
 ## Coolify
 

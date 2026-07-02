@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { Client } from "pg";
+
+const migracaoTriggersUrl = new URL("./migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
 const isWindows = process.platform === "win32";
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://padaria:padaria@localhost:5543/padaria";
@@ -125,13 +128,28 @@ async function aplicarMigracaoLegadaSemPrompt() {
   }
 }
 
+async function aplicarTriggersAtualizadoEm() {
+  const sql = await readFile(migracaoTriggersUrl, "utf8");
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await client.query(sql);
+  } finally {
+    await client.end();
+  }
+}
+
 await aplicarMigracaoLegadaSemPrompt();
 
 const codigo = await executar("drizzle-kit", ["push", "--force"]);
-if (codigo === 0) process.exit(0);
+if (codigo === 0) {
+  await aplicarTriggersAtualizadoEm();
+  process.exit(0);
+}
 
 if (await schemaDevExiste()) {
   console.warn("[db:setup:dev] drizzle-kit push falhou, mas o schema dev ja existe; seguindo para o seed.");
+  await aplicarTriggersAtualizadoEm();
   process.exit(0);
 }
 

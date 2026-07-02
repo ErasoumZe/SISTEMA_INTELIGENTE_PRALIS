@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { TestProject } from "vitest/node";
+
+const migracaoTriggersUrl = new URL("../../db/migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
 function executar(comando: string, args: string[], env: NodeJS.ProcessEnv) {
   return new Promise<void>((resolve, reject) => {
@@ -23,6 +26,17 @@ function executar(comando: string, args: string[], env: NodeJS.ProcessEnv) {
       else reject(new Error(`${comando} ${args.join(" ")} terminou com codigo ${codigo ?? "desconhecido"}`));
     });
   });
+}
+
+async function aplicarTriggersAtualizadoEm(databaseUrl: string) {
+  const sql = await readFile(migracaoTriggersUrl, "utf8");
+  const client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await client.query(sql);
+  } finally {
+    await client.end();
+  }
 }
 
 async function prepararUuidV7(databaseUrl: string) {
@@ -81,6 +95,9 @@ export async function setup(project: TestProject) {
     DRIZZLE_DEV_SETUP: "1",
     NODE_OPTIONS: [process.env["NODE_OPTIONS"], "--conditions=development"].filter(Boolean).join(" ")
   });
+
+  console.info("[tests:integration] aplicando triggers de atualizado_em (paridade com migrations)");
+  await aplicarTriggersAtualizadoEm(databaseUrl);
 
   project.provide("databaseUrl", databaseUrl);
 
