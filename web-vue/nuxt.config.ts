@@ -50,10 +50,10 @@ export default defineNuxtConfig({
           padariaLight: {
             dark: false,
             colors: {
-              background: "#eaf1f9",
+              background: "#f7f5f2",
               surface: "#ffffff",
-              primary: "#6d28d9",
-              secondary: "#0891b2",
+              primary: "#c0521d",
+              secondary: "#b8480f",
               success: "#16a34a",
               warning: "#f59e0b",
               error: "#ef4444",

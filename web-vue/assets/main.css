@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+
 :root {
   --padaria-background: #eaf1f9;
   --padaria-foreground: #171717;
@@ -213,9 +215,9 @@ body {
 }
 
 .caixa-edit {
-  border: 1px solid #d7e2ef;
-  background: #edf3fa;
-  color: #111827;
+  border: 1px solid var(--pralis-line);
+  background: var(--pralis-canvas);
+  color: var(--pralis-ink);
   font-weight: 800;
 }
 
@@ -580,3 +582,688 @@ body {
     margin: 8px;
   }
 }
+
+/* =====================================================================
+   PRALIS ADMIN v2 — LAB de design (branch lab/admin-dashboard-v2-design)
+   Visual apenas. Admin CLARO/branco com identidade Pralis (acento laranja).
+   Bloco ADITIVO: sobrescreve o chrome do dashboard. Reverter = remover este
+   bloco + a linha @import do topo + os ajustes de AppShell.vue/index.vue.
+   Usa tokens FIXOS (--pralis-*) para nao ser sobrescrito pelo tema por empresa.
+   ===================================================================== */
+:root {
+  --pralis-orange: #f37435;
+  --pralis-orange-strong: #e2632a;
+  --pralis-orange-soft: #fdeee5;
+  --pralis-gold: #b8860b;
+  --pralis-ink: #2f2320;
+  --pralis-ink-soft: #6f635c;
+  --pralis-surface: #ffffff;
+  --pralis-canvas: #f7f5f2;
+  --pralis-line: #ece7e1;
+  --pralis-line-soft: #f1ede8;
+  --pralis-shadow: 0 10px 30px rgba(94, 55, 49, 0.06);
+}
+
+html,
+body {
+  font-family:
+    "Montserrat",
+    "Segoe UI",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* ---- Base / canvas ---- */
+.padaria-shell,
+.padaria-main {
+  background: var(--pralis-canvas) !important;
+}
+
+/* ---- Sidebar (branca, premium) ---- */
+.padaria-sidebar {
+  background: var(--pralis-surface) !important;
+  border-right: 1px solid var(--pralis-line) !important;
+  box-shadow: 4px 0 26px rgba(94, 55, 49, 0.05) !important;
+}
+.padaria-sidebar .v-navigation-drawer__content {
+  background: var(--pralis-surface);
+}
+.drawer-shell {
+  gap: 8px;
+  padding: 14px 12px 14px;
+}
+
+/* Logo Pralis (topo) */
+.sidebar-logo-row {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 6px;
+}
+.sidebar-logo {
+  width: clamp(120px, 60%, 148px);
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
+.padaria-sidebar.rail .sidebar-logo-row {
+  display: none; /* wordmark landscape nao cabe no rail (72px) — esconde p/ nao borrar */
+}
+
+/* Empresa ativa (switcher) */
+.sidebar-brand {
+  gap: 8px;
+  padding: 0 6px 10px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--pralis-line-soft);
+}
+.sidebar-label {
+  color: var(--pralis-ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+.company-trigger,
+.company-name {
+  color: var(--pralis-ink);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+.company-trigger {
+  min-height: 40px;
+}
+.company-trigger:hover {
+  color: var(--pralis-orange-strong);
+}
+.company-trigger:focus-visible {
+  outline: 2px solid var(--pralis-orange);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Caixa card */
+.caixa-card {
+  border: 1px solid var(--pralis-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdfb, #faf7f3);
+  box-shadow: var(--pralis-shadow);
+}
+.caixa-title {
+  color: var(--pralis-ink);
+}
+.status-pill {
+  background: #8a6608;
+  color: #fff;
+}
+
+/* Botao "Novo" (acao primaria) */
+.sidebar-new-button {
+  background: #c0521d !important; /* laranja profundo: branco AA ~4.8:1 */
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(192, 82, 29, 0.28) !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.sidebar-new-button:hover {
+  background: #a8461a !important;
+  transform: translateY(-1px);
+}
+
+/* Gradientes de scroll (brancos) */
+.sidebar-scroll-shell::before {
+  background: linear-gradient(var(--pralis-surface), rgb(255 255 255 / 0));
+}
+.sidebar-scroll-shell::after {
+  background: linear-gradient(rgb(255 255 255 / 0), var(--pralis-surface));
+}
+
+/* Itens de menu */
+.sidebar-nav {
+  gap: 3px;
+  padding: 12px 0 30px;
+}
+.sidebar-item {
+  position: relative;
+  color: var(--pralis-ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 11px;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.sidebar-item .v-icon {
+  color: var(--pralis-ink-soft);
+  transition:
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+/* Hover NAO move o item (evita "tremor" quando o cursor fica na borda);
+   so o icone desliza levemente — nao altera a area clicavel do link. */
+.sidebar-item:hover:not(.disabled) {
+  background: #f4f1ec;
+  color: var(--pralis-ink);
+}
+.sidebar-item:hover:not(.disabled) .v-icon {
+  transform: translateX(2px);
+}
+.sidebar-item:focus-visible {
+  outline: 2px solid var(--pralis-orange);
+  outline-offset: 2px;
+}
+.sidebar-disabled-wrapper:focus-visible {
+  outline: 2px solid var(--pralis-orange);
+  outline-offset: 2px;
+  border-radius: 11px;
+}
+.sidebar-item.active {
+  background: var(--pralis-orange-soft) !important;
+  color: #8f3d16 !important; /* AA ~5.9:1 sobre orange-soft */
+  font-weight: 800;
+}
+.sidebar-item.active .v-icon {
+  color: #b8480f !important; /* grafico AA >=3:1 */
+}
+.sidebar-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--pralis-orange);
+}
+.padaria-sidebar.rail .sidebar-item.active::before {
+  left: 0;
+}
+.sidebar-bottom {
+  border-top: 1px solid var(--pralis-line-soft);
+}
+.sidebar-bottom .v-btn {
+  color: var(--pralis-ink-soft) !important;
+  font-weight: 700;
+}
+
+/* ---- Topbar (branca, saudacao) ---- */
+.padaria-topbar {
+  background: var(--pralis-surface) !important;
+  border-bottom: 1px solid var(--pralis-line) !important;
+  min-height: 64px;
+  box-shadow: 0 1px 0 rgba(94, 55, 49, 0.02);
+}
+.topbar-page-id {
+  color: var(--pralis-ink);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+/* ---- Conteudo ---- */
+.content-frame {
+  padding: 26px 34px 34px;
+}
+
+/* ---- Painel (hero de boas-vindas) ---- */
+.inicio-vazio {
+  color: var(--pralis-ink-soft);
+  gap: 6px;
+}
+.inicio-hero {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 30px;
+  border-radius: 24px;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(243, 116, 53, 0.08) 0%, transparent 60%), var(--pralis-surface);
+  border: 1px solid var(--pralis-line);
+  box-shadow: var(--pralis-shadow);
+}
+.inicio-hero-logo {
+  width: clamp(160px, 40%, 200px);
+  height: auto;
+  object-fit: contain;
+}
+.inicio-vazio h1 {
+  color: var(--pralis-ink);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+.inicio-vazio p {
+  color: var(--pralis-ink-soft);
+  font-weight: 600;
+}
+.inicio-hero-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--pralis-orange-soft);
+  color: var(--pralis-orange-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* ---- Menu agrupado por secoes ---- */
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sidebar-group + .sidebar-group {
+  margin-top: 12px;
+}
+.sidebar-group-label {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--pralis-ink-soft); /* #6f635c sobre branco = 5.8:1 (AA) */
+}
+/* No modo recolhido (rail): rotulo vira um divisor fino */
+.padaria-sidebar.rail .sidebar-group-label {
+  height: 1px;
+  padding: 0;
+  margin: 10px 16px;
+  overflow: hidden;
+  color: transparent;
+  background: var(--pralis-line);
+}
+
+/* ---- Painel de filtros (cadastros / permissoes) ---- */
+.cadastro-filter-grid {
+  background: var(--pralis-canvas);
+  border: 1px solid var(--pralis-line);
+  border-radius: 14px;
+  padding: 14px;
+  align-items: end;
+  grid-template-columns: minmax(200px, 1.6fr) minmax(150px, 0.9fr) minmax(160px, 1fr);
+}
+.cadastro-filter-grid .cadastro-filter-actions {
+  grid-column: 1 / -1;
+}
+.cadastro-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+@media (width <= 900px) {
+  .cadastro-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (width <= 720px) {
+  .cadastro-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .cadastro-filter-grid .cadastro-filter-actions {
+    justify-content: stretch;
+  }
+  .cadastro-filter-grid .cadastro-filter-actions .v-btn {
+    flex: 1;
+  }
+}
+.cadastro-card-title .text-h6 {
+  font-weight: 800;
+  color: var(--pralis-ink);
+  letter-spacing: -0.2px;
+}
+
+/* ---- Tabela premium (cadastros / permissoes) ---- */
+.responsive-table-shell {
+  border: 1px solid var(--pralis-line);
+  border-radius: 14px;
+  overflow-x: auto; /* preserva scroll horizontal em tabelas largas (nao clipar) */
+}
+.responsive-table-shell .v-table thead th {
+  background: var(--pralis-canvas) !important;
+  color: var(--pralis-ink) !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--pralis-line) !important;
+}
+.responsive-table-shell .v-table tbody tr:hover td {
+  background: var(--pralis-line-soft);
+}
+
+/* Alvos de toque das acoes de linha / caixa (A11y >= 40px) */
+.row-actions {
+  gap: 8px;
+}
+.row-actions .v-btn {
+  min-height: 40px;
+}
+@media (width <= 720px) {
+  .row-actions {
+    width: 100%;
+  }
+  .row-actions .v-btn {
+    flex: 1;
+  }
+}
+.caixa-edit.v-btn {
+  min-height: 40px;
+}
+
+/* ---- Regras de permissao como chips legiveis ---- */
+.regras-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+  max-width: 100%; /* segue a celula; a casca da tabela ja rola no eixo x */
+}
+.regra-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 999px;
+  background: var(--pralis-surface);
+  border: 1px solid var(--pralis-line);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.regra-chave {
+  font-weight: 700;
+  color: var(--pralis-ink);
+  letter-spacing: 0.1px;
+}
+.regra-valor {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.regra-permitir {
+  border-color: rgba(31, 139, 76, 0.28);
+}
+.regra-permitir .regra-valor {
+  background: #e7f6ec;
+  color: #15693a; /* AA ~5.3:1 para texto pequeno */
+}
+.regra-negar {
+  border-color: rgba(192, 57, 43, 0.28);
+}
+.regra-negar .regra-valor {
+  background: #fdeaea;
+  color: #c0392b;
+}
+.regra-neutro .regra-valor {
+  background: var(--pralis-line-soft);
+  color: var(--pralis-ink-soft);
+}
+
+/* Cartoes gerais mais "premium" no admin claro */
+.svelte-table-card {
+  border: 1px solid var(--pralis-line) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--pralis-shadow) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-item,
+  .sidebar-item .v-icon,
+  .sidebar-new-button,
+  .company-trigger {
+    transition: none !important;
+  }
+  .sidebar-item:hover:not(.disabled),
+  .sidebar-new-button:hover,
+  .sidebar-item:hover:not(.disabled) .v-icon {
+    transform: none !important;
+  }
+}
+/* ===================== FIM PRALIS ADMIN v2 (lab) ===================== */
+
+/* =====================================================================
+   PRALIS ADMIN — RESPONSIVIDADE OFICIAL (branch lab/admin-responsive-polish)
+   Bloco ADITIVO no fim do arquivo (vence conflitos por ordem de fonte).
+   Breakpoints oficiais: 1920 / 1366 / 1024 / 768 / 390 / 360.
+   Somente CSS/layout. Nenhuma logica/dado/token --pralis-* alterado.
+   ===================================================================== */
+
+/* G0 — box model previsivel: padding/borda nao somam na largura (evita vazamento) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* G1 — rede de seguranca: pagina nunca gera scroll horizontal */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.padaria-shell,
+.padaria-main,
+.content-frame {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* G2 — respiro do conteudo por faixa (corrige regressao de padding no mobile) */
+@media (width <= 1024px) {
+  .content-frame {
+    padding: 20px 20px 28px;
+  }
+}
+@media (width <= 768px) {
+  .content-frame {
+    padding: 16px 14px 24px;
+  }
+}
+@media (width <= 390px) {
+  .content-frame {
+    padding: 14px 12px 20px;
+  }
+}
+
+/* ---- Sidebar / Topbar ---- */
+@media (width <= 768px) {
+  /* S2 — alvo de toque do botao de menu (>=44px) */
+  .padaria-topbar > .v-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* S3 — titulo em uma linha com ellipsis; grid compacto */
+  .padaria-topbar {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    column-gap: 8px;
+  }
+  .topbar-page-id {
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+/* S4 — nome de empresa longo: no maximo 2 linhas */
+.company-trigger span,
+.company-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---- Tabelas ---- */
+/* T3 — celulas longas nao explodem a largura (chips de regra ficam livres) */
+.responsive-table-shell .v-table td {
+  max-width: 340px;
+}
+.responsive-table-shell .v-table td:has(.regras-chips) {
+  max-width: none;
+}
+@media (width <= 768px) {
+  /* T1 — rolagem suave + barra visivel + coluna de Acoes fixa a direita */
+  .responsive-table-shell {
+    -webkit-overflow-scrolling: touch;
+  }
+  .responsive-table-shell::-webkit-scrollbar {
+    height: 8px;
+  }
+  .responsive-table-shell::-webkit-scrollbar-thumb {
+    background: var(--pralis-line);
+    border-radius: 999px;
+  }
+  .responsive-table-shell .v-table td:last-child,
+  .responsive-table-shell .v-table th:last-child {
+    position: sticky;
+    right: 0;
+    background: var(--pralis-surface);
+    box-shadow: -8px 0 12px -8px rgba(94, 55, 49, 0.18);
+  }
+}
+/* T2 — acoes de linha quebram bem em telas muito estreitas */
+@media (width <= 390px) {
+  .row-actions {
+    flex-wrap: wrap;
+  }
+  .row-actions .v-btn {
+    flex: 1 1 45%;
+    font-size: 12px;
+  }
+}
+
+/* ---- Modais ---- */
+/* M1 — overlay nao cola nas bordas e respeita a viewport real (dvh) ate tablet */
+@media (width <= 900px) {
+  .v-dialog > .v-overlay__content {
+    width: calc(100% - 24px) !important;
+    max-width: calc(100% - 24px) !important;
+    margin: 12px auto;
+    max-height: calc(100dvh - 24px);
+  }
+}
+/* M2 — acoes (Salvar/Cancelar) sempre visiveis: card rola por dentro */
+@media (width <= 768px) {
+  .v-dialog > .v-overlay__content > .v-card {
+    max-height: calc(100dvh - 24px);
+    display: flex;
+    flex-direction: column;
+  }
+  .v-dialog > .v-overlay__content > .v-card > .v-card-text {
+    overflow-y: auto;
+  }
+  .v-dialog > .v-overlay__content > .v-card > .v-card-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--pralis-surface);
+    border-top: 1px solid var(--pralis-line);
+  }
+}
+/* P3 — toggle Herdar/Permitir/Negar ocupa a largura em telas minimas */
+@media (width <= 400px) {
+  .permission-rule-row .v-btn-toggle {
+    width: 100%;
+  }
+  .permission-rule-row .v-btn-toggle .v-btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+  }
+}
+
+/* ---- Cards / grids ---- */
+/* F1 — summary-grid com passo de 2 colunas (tablet) e valor legivel no aperto */
+@media (width <= 1024px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width <= 560px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .summary-value {
+    font-size: 18px;
+  }
+}
+/* F2 — resumo do caixa vira grid no tablet (nao empilha em torre) */
+@media (min-width: 600px) and (max-width: 960px) {
+  .caixa-resumo-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .caixa-resumo-grid > [class*="v-col"] {
+    max-width: 100% !important;
+    flex: initial !important;
+    padding: 4px !important;
+  }
+}
+/* F3 — botoes de filtro cheios no tablet */
+@media (width <= 900px) {
+  .cadastro-filter-grid .cadastro-filter-actions {
+    justify-content: stretch;
+  }
+  .cadastro-filter-grid .cadastro-filter-actions .v-btn {
+    flex: 1;
+  }
+}
+
+/* ---- Por-tela ---- */
+/* G3 — cabecalho de Relatorios/Contas a pagar quebra no mobile */
+@media (width <= 768px) {
+  .report-card-head {
+    flex-wrap: wrap;
+    align-items: flex-start !important;
+  }
+  .report-card-head > .v-btn {
+    width: 100%;
+  }
+}
+/* P1 — Painel: viewport real (dvh) + hero compacto no celular */
+.inicio-vazio {
+  min-height: calc(100dvh - 140px);
+}
+@media (width <= 390px) {
+  .inicio-hero {
+    padding: 22px 18px;
+    border-radius: 20px;
+  }
+  .inicio-vazio h1 {
+    font-size: 22px;
+  }
+}
+/* P2 — arvore (grupos/areas): sem indentacao que vaza no tablet */
+@media (width <= 1024px) {
+  .tree-row {
+    margin-left: 0 !important;
+  }
+}
+/* ===================== FIM RESPONSIVIDADE OFICIAL ===================== */
+
+/* =====================================================================
+   PRALIS — ACENTO 100% LARANJA (sem roxo do tema por empresa)
+   Forca o primario/secundario do Vuetify e o --padaria-brand em laranja
+   Pralis, vencendo (via !important) o que o aplicarTema injeta inline a
+   partir do tema salvo da empresa. Apenas cor/identidade — nada de logica.
+   ===================================================================== */
+:root,
+.v-theme--padariaLight {
+  --padaria-brand: #c0521d !important;
+  --padaria-accent: #b8480f !important;
+  --v-theme-primary: 192, 82, 29 !important; /* #c0521d — CTA laranja profundo (AA c/ branco) */
+  --v-theme-on-primary: 255, 255, 255 !important;
+  --v-theme-secondary: 184, 72, 15 !important; /* #b8480f */
+  --v-theme-on-secondary: 255, 255, 255 !important;
+}
+/* ===================== FIM ACENTO LARANJA ===================== */

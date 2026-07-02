@@ -40,6 +40,71 @@ const drawerToggleIcon = computed(() =>
   viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"
 );
 
+// Agrupamento apenas VISUAL do menu (nao filtra nem altera permissoes).
+// Cada tela permitida cai na sua secao; o que nao estiver mapeado vai para "Geral",
+// garantindo que nenhuma tela desapareca.
+const SECOES_MENU: { titulo: string; ids: string[] }[] = [
+  {
+    titulo: "Operacao",
+    ids: ["entradas", "despesas", "retiradas", "transferencias", "mercadorias", "fechamento", "pedidos"]
+  },
+  {
+    titulo: "Relatorios",
+    ids: [
+      "relatorio_vendas",
+      "relatorio_produtos",
+      "contas_pagar",
+      "relatorio_dre",
+      "relatorio_faltas",
+      "relatorio_advertencias",
+      "relatorio_fiscal"
+    ]
+  },
+  {
+    titulo: "Cadastros",
+    ids: [
+      "produtos",
+      "grupos",
+      "unidades",
+      "formas_pagamento",
+      "fornecedores",
+      "clientes",
+      "colaboradores",
+      "pdv",
+      "malotes",
+      "areas_setores",
+      "ficha_tecnica",
+      "ingredientes",
+      "fiscal_produtos",
+      "patrimonio",
+      "notas_fiscais"
+    ]
+  },
+  {
+    titulo: "Administracao",
+    ids: ["empresas", "contas", "usuarios", "permissoes", "integracoes", "aparencia"]
+  }
+];
+
+const telasAgrupadas = computed(() => {
+  const restantes = new Map(props.telas.map((tela) => [tela.id, tela] as const));
+  const grupos: { titulo: string; itens: ItemMenu[] }[] = [];
+  for (const secao of SECOES_MENU) {
+    const itens: ItemMenu[] = [];
+    for (const id of secao.ids) {
+      const tela = restantes.get(id);
+      if (tela) {
+        itens.push(tela);
+        restantes.delete(id);
+      }
+    }
+    if (itens.length) grupos.push({ titulo: secao.titulo, itens });
+  }
+  const outras = [...restantes.values()];
+  if (outras.length) grupos.push({ titulo: "Geral", itens: outras });
+  return grupos;
+});
+
 function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
 }
@@ -61,8 +126,10 @@ function fecharDrawerMobile() {
 }
 
 onMounted(() => {
-  const mediaRail = window.matchMedia("(width < 1280px)");
-  const mediaMobile = window.matchMedia("(width <= 720px)");
+  // Breakpoints alinhados ao padrao responsivo: <=768 = drawer (overlay),
+  // 769-1024 = rail (icones), >1024 = drawer fixo completo.
+  const mediaRail = window.matchMedia("(min-width: 769px) and (max-width: 1024px)");
+  const mediaMobile = window.matchMedia("(max-width: 768px)");
   const atualizar = () => {
     const mobile = mediaMobile.matches;
     drawerRecolhido.value = mediaRail.matches;
@@ -95,10 +162,10 @@ onMounted(() => {
     >
       <div class="drawer-shell">
         <div class="drawer-top">
+          <div class="sidebar-logo-row">
+            <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="sidebar-logo" />
+          </div>
           <div class="sidebar-brand">
-            <div class="brand-icon">
-              <v-icon icon="mdi-store-outline" size="22" />
-            </div>
             <div class="brand-copy">
               <div class="sidebar-label">EMPRESA ATIVA</div>
               <v-menu v-if="empresas.length > 1" location="bottom start">
@@ -132,28 +199,38 @@ onMounted(() => {
 
         <div class="sidebar-scroll-shell">
           <nav class="sidebar-nav" aria-label="Menu principal">
-            <template v-for="tela in telas" :key="tela.id">
-              <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" :text="textoTooltipTela(tela.id)">
-                <template #activator="{ props: tooltipProps }">
-                  <span v-bind="tooltipProps" class="sidebar-disabled-wrapper">
-                    <span class="sidebar-item disabled">
-                      <v-icon :icon="tela.icone" size="21" />
-                      <span>{{ tela.titulo }}</span>
+            <div v-for="grupo in telasAgrupadas" :key="grupo.titulo" class="sidebar-group">
+              <div class="sidebar-group-label">{{ grupo.titulo }}</div>
+              <template v-for="tela in grupo.itens" :key="tela.id">
+                <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" :text="textoTooltipTela(tela.id)">
+                  <template #activator="{ props: tooltipProps }">
+                    <span
+                      v-bind="tooltipProps"
+                      class="sidebar-disabled-wrapper"
+                      tabindex="0"
+                      role="button"
+                      aria-disabled="true"
+                      :aria-label="`${tela.titulo} — ${textoTooltipTela(tela.id)}`"
+                    >
+                      <span class="sidebar-item disabled">
+                        <v-icon :icon="tela.icone" size="21" />
+                        <span>{{ tela.titulo }}</span>
+                      </span>
                     </span>
-                  </span>
-                </template>
-              </v-tooltip>
-              <NuxtLink
-                v-else
-                :to="rotaTela(tela.id)"
-                class="sidebar-item"
-                :class="{ active: tela.id === telaAtiva }"
-                @click="fecharDrawerMobile"
-              >
-                <v-icon :icon="tela.icone" size="21" />
-                <span>{{ tela.titulo }}</span>
-              </NuxtLink>
-            </template>
+                  </template>
+                </v-tooltip>
+                <NuxtLink
+                  v-else
+                  :to="rotaTela(tela.id)"
+                  class="sidebar-item"
+                  :class="{ active: tela.id === telaAtiva }"
+                  @click="fecharDrawerMobile"
+                >
+                  <v-icon :icon="tela.icone" size="21" />
+                  <span>{{ tela.titulo }}</span>
+                </NuxtLink>
+              </template>
+            </div>
           </nav>
         </div>
 

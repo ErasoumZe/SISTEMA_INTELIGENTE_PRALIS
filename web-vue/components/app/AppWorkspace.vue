@@ -680,7 +680,7 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
     return;
   }
   caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${idEmpresa}`);
-  resumo.value = caixaStatus.value.resumo;
+  resumo.value = caixaStatus.value?.resumo ?? null;
 }
 
 function abrirOperacao(entidade: EntidadeOperacional) {
@@ -1349,11 +1349,13 @@ async function abrirCaixaOperacional(payload: {
 }) {
   caixaSalvando.value = true;
   try {
-    caixaStatus.value = await apiPost<CaixaStatus>("/api/caixa/abrir", {
+    // A rota /abrir responde com o id criado (nao um CaixaStatus). Re-busca o status canonico
+    // para o app refletir o caixa aberto imediatamente (inclusive no Painel, sem tela ativa).
+    await apiPost("/api/caixa/abrir", {
       empresaId: empresaId.value,
       ...payload
     });
-    resumo.value = caixaStatus.value.resumo;
+    await carregarStatusCaixa(empresaId.value);
     if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     notificar("Caixa aberto com sucesso.");
     return true;
@@ -1376,8 +1378,9 @@ async function editarAberturaCaixa(payload: {
   caixaSalvando.value = true;
   try {
     const { caixaId, ...body } = payload;
-    caixaStatus.value = await apiPut<CaixaStatus>(`/api/caixa/${caixaId}/abertura`, body);
-    resumo.value = caixaStatus.value.resumo;
+    // A rota /abertura responde 204 (sem corpo); re-busca o status canonico.
+    await apiPut(`/api/caixa/${caixaId}/abertura`, body);
+    await carregarStatusCaixa(empresaId.value);
     if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     notificar("Abertura atualizada com sucesso.");
     return true;
@@ -1411,10 +1414,11 @@ async function acertarSaldoOperacional(payload: { caixaId: string; observacao: s
 async function fecharCaixaOperacional(payload: { caixaId: string; observacao: string | null }) {
   caixaSalvando.value = true;
   try {
-    caixaStatus.value = await apiPost<CaixaStatus>(`/api/caixa/${payload.caixaId}/fechar`, {
+    // A rota /fechar responde 204 (sem corpo); re-busca o status canonico (evita crash em .resumo).
+    await apiPost(`/api/caixa/${payload.caixaId}/fechar`, {
       observacao: payload.observacao
     });
-    resumo.value = caixaStatus.value.resumo;
+    await carregarStatusCaixa(empresaId.value);
     notificar("Caixa fechado com sucesso.");
     if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
   } catch (error) {
