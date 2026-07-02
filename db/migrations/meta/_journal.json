@@ -29,6 +29,13 @@
       "when": 1782999868865,
       "tag": "0003_caixa_aberto_unico_por_pdv",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783021401832,
+      "tag": "0004_indices_consulta",
+      "breakpoints": true
     }
   ]
 }

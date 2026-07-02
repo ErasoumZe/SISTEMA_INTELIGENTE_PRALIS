@@ -1,11 +1,12 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { formasPagamento } from "@padaria/db/schema/cadastro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
-export async function listarFormasPagamentoRepository() {
+export async function listarFormasPagamentoRepository(escopoEmpresas: string[]) {
   return banco
     .select({ id: formasPagamento.id, empresaId: formasPagamento.empresaId, nome: formasPagamento.nome })
     .from(formasPagamento)
+    .where(inArray(formasPagamento.empresaId, escopoEmpresas))
     .orderBy(asc(formasPagamento.nome));
 }
 

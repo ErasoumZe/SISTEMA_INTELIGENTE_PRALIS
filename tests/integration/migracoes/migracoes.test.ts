@@ -79,7 +79,7 @@ describe("migracoes integration", () => {
     const { rows } = await bancoMigrado.query<{ total: number }>(
       "select count(*)::int as total from drizzle.__drizzle_migrations"
     );
-    expect(rows[0]?.total).toBe(4);
+    expect(rows[0]?.total).toBe(5);
   });
 
   it("Deve_GerarEstruturaIdenticaAoPush_Quando_ProvisionarViaMigrate", async () => {

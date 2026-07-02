@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, max, ne, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, max, ne, or } from "drizzle-orm";
 import {
   gruposMercadorias,
   perfisUsuarios,
@@ -68,7 +68,7 @@ export async function buscarProdutoDuplicadoRepository(
   return linha ?? null;
 }
 
-export async function listarProdutosRepository() {
+export async function listarProdutosRepository(escopoEmpresas: string[]) {
   const linhas = await banco
     .select({
       id: produtos.id,
@@ -101,6 +101,7 @@ export async function listarProdutosRepository() {
       fotoUrl: produtos.fotoUrl
     })
     .from(produtos)
+    .where(inArray(produtos.empresaId, escopoEmpresas))
     .orderBy(asc(produtos.descricao));
   const conversoes = await banco
     .select({

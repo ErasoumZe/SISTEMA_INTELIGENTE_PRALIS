@@ -4,7 +4,7 @@ import {
   type ExportarProdutoPayload as ExportarPayload,
   type ImportarProdutosPayload as ImportarPayload
 } from "@padaria/shared/produtos";
-import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
+import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 import { copiarGruposRepository } from "../grupos/grupos.repository.js";
@@ -25,7 +25,8 @@ export class ProdutoDuplicadoError extends Error {
 }
 
 export async function listarProdutos(escopoDados: string[]) {
-  return filtrarPorEmpresas(await listarProdutosRepository(), escopoDados);
+  if (!escopoDados.length) return [];
+  return listarProdutosRepository(escopoDados);
 }
 
 export async function salvarProduto(id: string | null, body: DadosExternos, criadoPorUsuarioId?: string | null) {

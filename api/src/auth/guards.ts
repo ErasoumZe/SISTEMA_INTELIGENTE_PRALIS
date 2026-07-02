@@ -13,6 +13,10 @@ declare module "fastify" {
 }
 
 export async function exigirAutenticacao(request: FastifyRequest, reply: FastifyReply): Promise<PerfilUsuario | null> {
+  // Ja resolvido nesta requisicao (pelo hook global default-deny ou por outro guard):
+  // evita uma segunda ida ao banco por getSession/perfil.
+  if (request.perfilUsuario && request.usuarioId) return request.perfilUsuario;
+
   const sessao = await auth.api.getSession({
     headers: fromNodeHeaders(request.headers)
   });

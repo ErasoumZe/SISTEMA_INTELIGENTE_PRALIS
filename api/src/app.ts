@@ -21,6 +21,7 @@ import { registrarRotasVendas } from "./vendas/vendas.controller.js";
 import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controller.js";
 import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
 import { erro } from "@padaria/shared/api";
+import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
 import { registrarRotasClientes } from "./clientes/clientes.controller.js";
 import { registrarRotasContas } from "./contas/contas.controller.js";
@@ -35,8 +36,28 @@ import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 
+// Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
+// (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
+const rotasComAutenticacaoPropria = new Set(["/health", "/api/auth/*", "/api/me", "/api/sessao", "/api/integracoes"]);
+
 export async function buildApp(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: process.env["NODE_ENV"] !== "test" });
+  const app = Fastify({
+    logger:
+      process.env["NODE_ENV"] === "test"
+        ? false
+        : {
+            // Credenciais nunca vao para o log: cookie de sessao, bearer e chave de integracao.
+            redact: {
+              paths: [
+                "req.headers.cookie",
+                "req.headers.authorization",
+                'req.headers["x-api-key"]',
+                'res.headers["set-cookie"]'
+              ],
+              censor: "[redigido]"
+            }
+          }
+  });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
@@ -79,6 +100,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       fields: 10,
       parts: 12
     }
+  });
+
+  // Default-deny: toda rota exige sessao valida ANTES do handler, exceto a allowlist
+  // acima. Rota nova sem preHandler nasce protegida (401), nunca publica. Os guards de
+  // permissao por rota continuam responsaveis pela autorizacao fina (o perfil resolvido
+  // aqui e reaproveitado por eles na mesma requisicao).
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method === "OPTIONS") return;
+    const rota = request.routeOptions.url;
+    if (!rota || rotasComAutenticacaoPropria.has(rota)) return;
+    await exigirAutenticacao(request, reply);
   });
 
   await registrarRotasSaude(app);

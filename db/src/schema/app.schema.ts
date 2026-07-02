@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -744,7 +745,9 @@ export const vendas = pgTable(
     check("vendas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
     check("vendas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("vendas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+    check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    index("vendas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    index("vendas_caixa_idx").on(table.caixaId)
   ]
 );
 
@@ -773,7 +776,8 @@ export const vendasProdutos = pgTable(
     check("vendas_produtos_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
     check("vendas_produtos_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     check("vendas_produtos_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("vendas_produtos_valor_total_check", sql`${table.valorTotal} >= 0`)
+    check("vendas_produtos_valor_total_check", sql`${table.valorTotal} >= 0`),
+    index("vendas_produtos_venda_idx").on(table.vendaId)
   ]
 );
 
@@ -793,7 +797,8 @@ export const vendasPagamentos = pgTable(
   },
   (table) => [
     check("vendas_pagamentos_numero_vendas_check", sql`${table.numeroVendas} >= 0`),
-    check("vendas_pagamentos_total_pago_check", sql`${table.totalPago} >= 0`)
+    check("vendas_pagamentos_total_pago_check", sql`${table.totalPago} >= 0`),
+    index("vendas_pagamentos_venda_idx").on(table.vendaId)
   ]
 );
 
@@ -842,7 +847,9 @@ export const despesas = pgTable(
     check("despesas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
     check("despesas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+    check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    index("despesas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    index("despesas_caixa_idx").on(table.caixaId)
   ]
 );
 
@@ -858,7 +865,10 @@ export const despesasItens = pgTable(
     descricao: text("descricao").notNull(),
     valor: valorMonetario("valor").notNull()
   },
-  (table) => [check("despesas_itens_valor_check", sql`${table.valor} >= 0`)]
+  (table) => [
+    check("despesas_itens_valor_check", sql`${table.valor} >= 0`),
+    index("despesas_itens_despesa_idx").on(table.despesaId)
+  ]
 );
 
 export const mercadorias = pgTable(
@@ -893,7 +903,9 @@ export const mercadorias = pgTable(
     check("mercadorias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
     check("mercadorias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+    check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    index("mercadorias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    index("mercadorias_caixa_idx").on(table.caixaId)
   ]
 );
 
@@ -914,7 +926,8 @@ export const mercadoriasItens = pgTable(
   },
   (table) => [
     check("mercadorias_itens_quantidade_check", sql`${table.quantidade} > 0`),
-    check("mercadorias_itens_valor_total_check", sql`${table.valorTotal} >= 0`)
+    check("mercadorias_itens_valor_total_check", sql`${table.valorTotal} >= 0`),
+    index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId)
   ]
 );
 
@@ -949,7 +962,9 @@ export const retiradas = pgTable(
     check("retiradas_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
     check("retiradas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("retiradas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
-    check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`)
+    check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    index("retiradas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    index("retiradas_caixa_idx").on(table.caixaId)
   ]
 );
 
@@ -986,7 +1001,9 @@ export const transferencias = pgTable(
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
-    check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`)
+    check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
+    index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    index("transferencias_caixa_idx").on(table.caixaId)
   ]
 );
 
@@ -1024,7 +1041,8 @@ export const fechamentosCaixa = pgTable(
     check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)
-      .where(sql`${table.status} = 'aberto'`)
+      .where(sql`${table.status} = 'aberto'`),
+    index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
   ]
 );
 
@@ -1069,7 +1087,8 @@ export const debitosColaboradores = pgTable(
   },
   (table) => [
     check("debitos_colaboradores_tipo_check", sql`${table.tipo} in ('FECHAMENTO_CAIXA', 'DESPESA', 'RETIRADA')`),
-    check("debitos_colaboradores_valor_check", sql`${table.valor} >= 0`)
+    check("debitos_colaboradores_valor_check", sql`${table.valor} >= 0`),
+    index("debitos_colaboradores_empresa_colaborador_idx").on(table.empresaId, table.colaboradorId)
   ]
 );
 
