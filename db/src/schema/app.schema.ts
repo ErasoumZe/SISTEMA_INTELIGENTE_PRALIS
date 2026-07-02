@@ -386,28 +386,52 @@ export const permissoesSetores = pgTable(
   (table) => [primaryKey({ columns: [table.setorId] })]
 );
 
-export const produtos = pgTable("produtos", {
-  id: idUuid,
-  empresaId,
-  grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
-  unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
-  unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
-  codigo: text("codigo"),
-  codigoBarras: text("codigo_barras"),
-  descricao: text("descricao").notNull(),
-  marca: text("marca"),
-  quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
-  // Comercial (por empresa/loja) — porte do Pralis; preco = referencia de catalogo (vendas seguem do CREARE).
-  custo: numeric("custo", { precision: 14, scale: 2 }),
-  margem: numeric("margem", { precision: 6, scale: 4 }), // fracao (0.30 = 30%)
-  precoVenda: numeric("preco_venda", { precision: 14, scale: 2 }),
-  auto: boolean("auto").notNull().default(false),
-  status: text("status").notNull().default("ativo"), // ativo | inativo
-  tipo: text("tipo").notNull().default("revenda"), // revenda | transformacao
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+export const produtos = pgTable(
+  "produtos",
+  {
+    id: idUuid,
+    empresaId,
+    grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
+    unidadeIndividualId: uuid("unidade_individual_id").references(() => unidadesMedida.id),
+    codigo: text("codigo"), // codigo externo (PR-XXXX-XXXX gerado quando vazio; ou manual)
+    codigoInterno: text("codigo_interno"), // sequencial 5 digitos por empresa; herdado na importacao
+    codigoBarras: text("codigo_barras"),
+    descricao: text("descricao").notNull(), // auto (montarDescricao) por padrao, com override manual
+    marca: text("marca"),
+    quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
+    // Como se compra (porte do Pralis; enums fieis mantidos como texto)
+    embalagem: text("embalagem"), // UN|KG|LT|MIL|FD|PCT|CX|POTE|EMB|SACO|BAND
+    cDe: text("c_de"), // C/ | DE (preposicao de "como se compra")
+    quantidadeCaixa: integer("quantidade_caixa").notNull().default(1), // qtCad: unidades por embalagem/caixa
+    medidaCompra: text("medida_compra"), // UN|KG|LT
+    // Comercial (por empresa/loja) — preco = referencia de catalogo (vendas seguem do CREARE).
+    custo: numeric("custo", { precision: 14, scale: 2 }),
+    margem: numeric("margem", { precision: 6, scale: 4 }), // fracao (0.30 = 30%)
+    precoVenda: numeric("preco_venda", { precision: 14, scale: 2 }),
+    auto: boolean("auto").notNull().default(false),
+    status: text("status").notNull().default("ativo"), // ativo | inativo
+    tipo: text("tipo").notNull().default("revenda"), // revenda | transformacao
+    // Estoque (saldo + parametrizacao). quantidadeEstoque = "quantidade" do Pralis (distinta de quantidadeIndividual/Caixa).
+    quantidadeEstoque: numeric("quantidade_estoque", { precision: 14, scale: 3 }).notNull().default("0"),
+    estoqueMin: numeric("estoque_min", { precision: 14, scale: 3 }),
+    estoqueMax: numeric("estoque_max", { precision: 14, scale: 3 }),
+    setorEstoque: text("setor_estoque"),
+    // Locais de venda e foto
+    localVenda1: text("local_venda_1"),
+    localVenda2: text("local_venda_2"),
+    fotoUrl: text("foto_url"),
+    criadoPor: text("criado_por"), // auditoria (usuarioId; nome resolvido via join)
+    criadoEm,
+    atualizadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [
+    // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
+    uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno)
+  ]
+);
 
 export const produtosConversoes = pgTable(
   "produtos_conversoes",
@@ -428,6 +452,81 @@ export const produtosConversoes = pgTable(
     check("produtos_conversoes_quantidade_check", sql`${table.quantidade} > 0`),
     check("produtos_conversoes_unidades_individuais_check", sql`${table.unidadesIndividuais} > 0`)
   ]
+);
+
+// Dados tributarios do produto (1:1). Porte de product_fiscal do Pralis; aliquotas em fracao (scale 4).
+// So armazena os campos — nao ha calculo fiscal (nem no Pralis nem no ERP hoje).
+export const produtosFiscal = pgTable("produtos_fiscal", {
+  produtoId: uuid("produto_id")
+    .primaryKey()
+    .references(() => produtos.id, { onDelete: "cascade" }),
+  ncm: text("ncm"),
+  cest: text("cest"),
+  categoriaFiscal: text("categoria_fiscal"),
+  cstPisCofins: text("cst_pis_cofins"),
+  aliquotaCheia: numeric("aliquota_cheia", { precision: 6, scale: 4 }),
+  aliquotaFcp: numeric("aliquota_fcp", { precision: 6, scale: 4 }),
+  aliquotaPis: numeric("aliquota_pis", { precision: 6, scale: 4 }),
+  aliquotaCofins: numeric("aliquota_cofins", { precision: 6, scale: 4 }),
+  reducaoIcms: numeric("reducao_icms", { precision: 6, scale: 4 }),
+  icms: numeric("icms", { precision: 6, scale: 4 }),
+  criadoEm,
+  atualizadoEm
+});
+
+// Ficha de transformacao/receita (1:1, presente quando produtos.tipo = 'transformacao').
+// Porte de product_transformacao do Pralis. unidade permanece enum (mais granular que unidades_medida).
+export const produtosTransformacao = pgTable(
+  "produtos_transformacao",
+  {
+    produtoId: uuid("produto_id")
+      .primaryKey()
+      .references(() => produtos.id, { onDelete: "cascade" }),
+    precisao: text("precisao"), // EXATOS | APROXIMADOS
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
+    unidade: text("unidade"), // UN | G | ML
+    produtoReceituario: text("produto_receituario"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "produtos_transformacao_precisao_check",
+      sql`${table.precisao} is null or ${table.precisao} in ('EXATOS', 'APROXIMADOS')`
+    ),
+    check(
+      "produtos_transformacao_unidade_check",
+      sql`${table.unidade} is null or ${table.unidade} in ('UN', 'G', 'ML')`
+    )
+  ]
+);
+
+// Promocoes do produto (1:N). Porte de promocoes do Pralis: preco fixo (valor) ou desconto (fracao),
+// janela de horario e dias da semana. Consumida por calcularPrecoVendaComPromocao (ja portada).
+export const produtosPromocoes = pgTable(
+  "produtos_promocoes",
+  {
+    id: idUuid,
+    produtoId: uuid("produto_id")
+      .notNull()
+      .references(() => produtos.id, { onDelete: "cascade" }),
+    tipo: text("tipo").notNull(), // valor | desconto
+    valor: numeric("valor", { precision: 14, scale: 2 }),
+    descontoFracao: numeric("desconto_fracao", { precision: 6, scale: 4 }), // 0.10 = 10%
+    horaInicio: time("hora_inicio"),
+    horaFim: time("hora_fim"),
+    seg: boolean("seg").notNull().default(false),
+    ter: boolean("ter").notNull().default(false),
+    qua: boolean("qua").notNull().default(false),
+    qui: boolean("qui").notNull().default(false),
+    sex: boolean("sex").notNull().default(false),
+    sab: boolean("sab").notNull().default(false),
+    dom: boolean("dom").notNull().default(false),
+    validaAte: date("valida_ate"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [check("produtos_promocoes_tipo_check", sql`${table.tipo} in ('valor', 'desconto')`)]
 );
 
 export const integracoesChaves = pgTable(

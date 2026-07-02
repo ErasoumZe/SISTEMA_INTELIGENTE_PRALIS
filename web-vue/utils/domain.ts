@@ -14,7 +14,9 @@ import type {
   ItemMenu,
   OperacaoForm,
   Opcao,
-  Opcoes
+  Opcoes,
+  ProdutoPromocaoDados,
+  ProdutoTransformacaoDados
 } from "~/types/padaria";
 
 export const telasOcultasNoDrawerEPermissoes = new Set([
@@ -484,6 +486,10 @@ export function formCadastroVazio(): CadastroForm {
     marca: "",
     unidadeIndividualId: "",
     quantidadeIndividual: "1",
+    embalagem: "",
+    cDe: "",
+    quantidadeCaixa: "1",
+    medidaCompra: "",
     grupoMercadoriaId: "",
     produtoConversoes: [],
     custo: "",
@@ -492,6 +498,26 @@ export function formCadastroVazio(): CadastroForm {
     auto: false,
     status: "ativo",
     tipo: "revenda",
+    fiscal: {
+      ncm: "",
+      cest: "",
+      categoriaFiscal: "",
+      cstPisCofins: "",
+      aliquotaCheia: "",
+      aliquotaFcp: "",
+      aliquotaPis: "",
+      aliquotaCofins: "",
+      reducaoIcms: "",
+      icms: ""
+    },
+    transformacao: { precisao: "", quantidade: "", unidade: "", produtoReceituario: "" },
+    promoTipo: "nenhum",
+    promoValor: "",
+    promoDescontoPct: "",
+    promoHoraInicio: "",
+    promoHoraFim: "",
+    promoDias: [false, false, false, false, false, false, false],
+    promoValidaAte: "",
     contaId: "",
     ativo: true,
     tipoGrupo: "despesa",
@@ -624,7 +650,7 @@ export function numeroCampoOuNulo(valor: string): number | null {
 // (null se sem custo); manual usa o valor digitado (null se vazio). Fonte unica usada pelo
 // payload e pelo preview, para nunca divergirem.
 export function precoVendaDoFormProduto(
-  form: Pick<CadastroForm, "auto" | "custo" | "margem" | "precoVenda" | "quantidadeIndividual">
+  form: Pick<CadastroForm, "auto" | "custo" | "margem" | "precoVenda" | "quantidadeCaixa">
 ): number | null {
   const custo = numeroCampoOuNulo(form.custo);
   if (form.auto) {
@@ -632,13 +658,151 @@ export function precoVendaDoFormProduto(
     return calcularPrecoVenda({
       auto: true,
       custo,
-      quantidadeCaixa: Number(form.quantidadeIndividual || 1),
+      // custo e da CAIXA; divide pelas unidades por caixa (qtCad), nao pela gramatura (quantidadeIndividual)
+      quantidadeCaixa: Number(form.quantidadeCaixa || 1),
       margem: numeroCampoOuNulo(form.margem),
       margemGrupo: 0,
       precoManual: 0
     });
   }
   return numeroCampoOuNulo(form.precoVenda);
+}
+
+// Monta o bloco fiscal do payload a partir do form; null se nada preenchido (como no Pralis).
+export function fiscalDoFormProduto(fiscal: CadastroForm["fiscal"]) {
+  const temAlgum =
+    fiscal.ncm ||
+    fiscal.cest ||
+    fiscal.categoriaFiscal ||
+    fiscal.cstPisCofins ||
+    fiscal.aliquotaCheia ||
+    fiscal.aliquotaFcp ||
+    fiscal.aliquotaPis ||
+    fiscal.aliquotaCofins ||
+    fiscal.reducaoIcms ||
+    fiscal.icms;
+  if (!temAlgum) return null;
+  return {
+    ncm: fiscal.ncm || null,
+    cest: fiscal.cest || null,
+    categoriaFiscal: fiscal.categoriaFiscal || null,
+    cstPisCofins: fiscal.cstPisCofins || null,
+    aliquotaCheia: numeroCampoOuNulo(fiscal.aliquotaCheia),
+    aliquotaFcp: numeroCampoOuNulo(fiscal.aliquotaFcp),
+    aliquotaPis: numeroCampoOuNulo(fiscal.aliquotaPis),
+    aliquotaCofins: numeroCampoOuNulo(fiscal.aliquotaCofins),
+    reducaoIcms: numeroCampoOuNulo(fiscal.reducaoIcms),
+    icms: numeroCampoOuNulo(fiscal.icms)
+  };
+}
+
+// Reconstroi o bloco fiscal do formulario a partir da linha (JSON) da listagem, para edicao.
+export function fiscalFormDeLinha(fiscalJson: string | undefined): CadastroForm["fiscal"] {
+  const vazio = formCadastroVazio().fiscal;
+  try {
+    const f = JSON.parse(fiscalJson ?? "null") as Record<string, string | number | null> | null;
+    if (!f) return vazio;
+    const txt = (v: string | number | null | undefined) => (v == null ? "" : String(v));
+    return {
+      ncm: txt(f.ncm),
+      cest: txt(f.cest),
+      categoriaFiscal: txt(f.categoriaFiscal),
+      cstPisCofins: txt(f.cstPisCofins),
+      aliquotaCheia: txt(f.aliquotaCheia),
+      aliquotaFcp: txt(f.aliquotaFcp),
+      aliquotaPis: txt(f.aliquotaPis),
+      aliquotaCofins: txt(f.aliquotaCofins),
+      reducaoIcms: txt(f.reducaoIcms),
+      icms: txt(f.icms)
+    };
+  } catch {
+    return vazio;
+  }
+}
+
+// Bloco transformacao do payload — so quando tipo = transformacao (como no Pralis).
+export function transformacaoDoFormProduto(form: CadastroForm) {
+  if (form.tipo !== "transformacao") return null;
+  const t = form.transformacao;
+  return {
+    precisao: t.precisao || null,
+    quantidade: numeroCampoOuNulo(t.quantidade),
+    unidade: t.unidade || null,
+    produtoReceituario: t.produtoReceituario || null
+  };
+}
+
+// Reconstroi o bloco transformacao do formulario a partir da linha (JSON) da listagem.
+export function transformacaoFormDeLinha(json: string | undefined): CadastroForm["transformacao"] {
+  const vazio = formCadastroVazio().transformacao;
+  try {
+    const t = JSON.parse(json ?? "null") as ProdutoTransformacaoDados | null;
+    if (!t) return vazio;
+    return {
+      precisao: t.precisao ?? "",
+      quantidade: t.quantidade != null ? String(t.quantidade) : "",
+      unidade: t.unidade ?? "",
+      produtoReceituario: t.produtoReceituario ?? ""
+    };
+  } catch {
+    return vazio;
+  }
+}
+
+// Promocoes do payload — so quando tipo = revenda; monta 0 ou 1 promocao (como no Pralis).
+// Nenhum dia marcado => vale todos os dias.
+export function promocoesDoFormProduto(form: CadastroForm) {
+  if (form.tipo !== "revenda" || form.promoTipo === "nenhum") return [];
+  const temDia = form.promoDias.some(Boolean);
+  const dia = (i: number) => (temDia ? Boolean(form.promoDias[i]) : true);
+  const pct = numeroCampoOuNulo(form.promoDescontoPct);
+  return [
+    {
+      tipo: form.promoTipo,
+      valor: form.promoTipo === "valor" ? numeroCampoOuNulo(form.promoValor) : null,
+      descontoFracao: form.promoTipo === "desconto" && pct != null ? pct / 100 : null,
+      horaInicio: form.promoHoraInicio || null,
+      horaFim: form.promoHoraFim || null,
+      seg: dia(0),
+      ter: dia(1),
+      qua: dia(2),
+      qui: dia(3),
+      sex: dia(4),
+      sab: dia(5),
+      dom: dia(6),
+      validaAte: form.promoValidaAte || null
+    }
+  ];
+}
+
+// Reconstroi os campos de promocao do formulario a partir da primeira promocao da linha (JSON).
+export function promoFormDeLinha(promocoesJson: string | undefined) {
+  const vazio = formCadastroVazio();
+  const base = {
+    promoTipo: vazio.promoTipo,
+    promoValor: vazio.promoValor,
+    promoDescontoPct: vazio.promoDescontoPct,
+    promoHoraInicio: vazio.promoHoraInicio,
+    promoHoraFim: vazio.promoHoraFim,
+    promoDias: vazio.promoDias,
+    promoValidaAte: vazio.promoValidaAte
+  };
+  try {
+    const arr = JSON.parse(promocoesJson ?? "[]") as ProdutoPromocaoDados[];
+    const p = arr[0];
+    if (!p) return base;
+    return {
+      promoTipo: (p.tipo as CadastroForm["promoTipo"]) || "nenhum",
+      promoValor: p.valor != null ? String(p.valor) : "",
+      promoDescontoPct: p.descontoFracao != null ? String(Number(p.descontoFracao) * 100) : "",
+      promoHoraInicio: (p.horaInicio ?? "").slice(0, 5),
+      promoHoraFim: (p.horaFim ?? "").slice(0, 5),
+      promoDias: [p.seg, p.ter, p.qua, p.qui, p.sex, p.sab, p.dom].map(Boolean),
+      promoValidaAte: p.validaAte ?? ""
+    };
+  } catch {
+    return base;
+  }
 }
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
@@ -675,6 +839,10 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       marca: form.marca || null,
       unidadeIndividualId: form.unidadeIndividualId,
       quantidadeIndividual: Number(form.quantidadeIndividual || 1),
+      embalagem: form.embalagem || null,
+      cDe: form.cDe || null,
+      quantidadeCaixa: Number(form.quantidadeCaixa || 1),
+      medidaCompra: form.medidaCompra || null,
       grupoMercadoriaId: form.grupoMercadoriaId || null,
       custo: numeroCampoOuNulo(form.custo),
       margem: numeroCampoOuNulo(form.margem),
@@ -682,6 +850,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       auto: form.auto,
       status: form.status,
       tipo: form.tipo,
+      fiscal: fiscalDoFormProduto(form.fiscal),
+      transformacao: transformacaoDoFormProduto(form),
+      promocoes: promocoesDoFormProduto(form),
       conversoes: form.produtoConversoes
         .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
         .map((conversao) => ({

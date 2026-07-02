@@ -26,13 +26,54 @@ export async function salvarProduto(id: string | null, body: unknown) {
     unidadeIndividualId: dados.unidadeIndividualId,
     quantidadeIndividual: dados.quantidadeIndividual,
     grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
+    embalagem: dados.embalagem ?? null,
+    cDe: dados.cDe ?? null,
+    quantidadeCaixa: dados.quantidadeCaixa,
+    medidaCompra: dados.medidaCompra ?? null,
     custo: dados.custo ?? null,
     margem: dados.margem ?? null,
     precoVenda: dados.precoVenda ?? null,
     auto: dados.auto,
     status: dados.status,
     tipo: dados.tipo,
-    conversoes: dados.conversoes
+    conversoes: dados.conversoes,
+    fiscal: dados.fiscal
+      ? {
+          ncm: dados.fiscal.ncm?.trim() || null,
+          cest: dados.fiscal.cest?.trim() || null,
+          categoriaFiscal: dados.fiscal.categoriaFiscal?.trim() || null,
+          cstPisCofins: dados.fiscal.cstPisCofins?.trim() || null,
+          aliquotaCheia: dados.fiscal.aliquotaCheia ?? null,
+          aliquotaFcp: dados.fiscal.aliquotaFcp ?? null,
+          aliquotaPis: dados.fiscal.aliquotaPis ?? null,
+          aliquotaCofins: dados.fiscal.aliquotaCofins ?? null,
+          reducaoIcms: dados.fiscal.reducaoIcms ?? null,
+          icms: dados.fiscal.icms ?? null
+        }
+      : null,
+    transformacao: dados.transformacao
+      ? {
+          precisao: dados.transformacao.precisao ?? null,
+          quantidade: dados.transformacao.quantidade ?? null,
+          unidade: dados.transformacao.unidade ?? null,
+          produtoReceituario: dados.transformacao.produtoReceituario?.trim() || null
+        }
+      : null,
+    promocoes: dados.promocoes.map((promo) => ({
+      tipo: promo.tipo,
+      valor: promo.valor ?? null,
+      descontoFracao: promo.descontoFracao ?? null,
+      horaInicio: promo.horaInicio?.trim() || null,
+      horaFim: promo.horaFim?.trim() || null,
+      seg: promo.seg,
+      ter: promo.ter,
+      qua: promo.qua,
+      qui: promo.qui,
+      sex: promo.sex,
+      sab: promo.sab,
+      dom: promo.dom,
+      validaAte: promo.validaAte?.trim() || null
+    }))
   });
 }
 

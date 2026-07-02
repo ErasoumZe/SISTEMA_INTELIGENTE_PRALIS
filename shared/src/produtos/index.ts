@@ -20,6 +20,55 @@ export const produtoConversaoPayloadSchema = z.object({
 export const statusProdutoSchema = z.enum(["ativo", "inativo"]);
 export const tipoProdutoSchema = z.enum(["revenda", "transformacao"]);
 
+// Enums de "como se compra" — porte fiel dos enums do Pralis (MEDIDAS1/MEDIDAS2).
+export const embalagemSchema = z.enum(["UN", "KG", "LT", "MIL", "FD", "PCT", "CX", "POTE", "EMB", "SACO", "BAND"]);
+export const cDeSchema = z.enum(["C/", "DE"]);
+export const medidaCompraSchema = z.enum(["UN", "KG", "LT"]);
+
+// Dados fiscais (1:1). Porte de product_fiscal do Pralis. Aliquotas em % (como no formulario do Pralis);
+// nao ha calculo fiscal (nem no Pralis nem no ERP) — os campos so sao armazenados.
+export const produtoFiscalSchema = z.object({
+  ncm: z.string().optional().nullable(),
+  cest: z.string().optional().nullable(),
+  categoriaFiscal: z.string().optional().nullable(),
+  cstPisCofins: z.string().optional().nullable(),
+  aliquotaCheia: z.coerce.number().min(0).optional().nullable(),
+  aliquotaFcp: z.coerce.number().min(0).optional().nullable(),
+  aliquotaPis: z.coerce.number().min(0).optional().nullable(),
+  aliquotaCofins: z.coerce.number().min(0).optional().nullable(),
+  reducaoIcms: z.coerce.number().min(0).optional().nullable(),
+  icms: z.coerce.number().min(0).optional().nullable()
+});
+
+export const precisaoSchema = z.enum(["EXATOS", "APROXIMADOS"]);
+export const unidadeTransformacaoSchema = z.enum(["UN", "G", "ML"]);
+export const tipoPromocaoSchema = z.enum(["valor", "desconto"]);
+
+// Ficha de transformacao (1:1, quando tipo = transformacao). Porte de product_transformacao do Pralis.
+export const produtoTransformacaoSchema = z.object({
+  precisao: precisaoSchema.optional().nullable(),
+  quantidade: z.coerce.number().min(0).optional().nullable(),
+  unidade: unidadeTransformacaoSchema.optional().nullable(),
+  produtoReceituario: z.string().optional().nullable()
+});
+
+// Promocao (1:N). Porte de promocoes do Pralis: preco fixo ou desconto (fracao), janela + dias da semana.
+export const produtoPromocaoSchema = z.object({
+  tipo: tipoPromocaoSchema,
+  valor: z.coerce.number().min(0).optional().nullable(),
+  descontoFracao: z.coerce.number().min(0).optional().nullable(),
+  horaInicio: z.string().optional().nullable(),
+  horaFim: z.string().optional().nullable(),
+  seg: z.boolean().optional().default(false),
+  ter: z.boolean().optional().default(false),
+  qua: z.boolean().optional().default(false),
+  qui: z.boolean().optional().default(false),
+  sex: z.boolean().optional().default(false),
+  sab: z.boolean().optional().default(false),
+  dom: z.boolean().optional().default(false),
+  validaAte: z.string().optional().nullable()
+});
+
 export const produtoPayloadSchema = z.object({
   empresaId: uuidSchema,
   codigo: z.string().optional().nullable(),
@@ -30,13 +79,21 @@ export const produtoPayloadSchema = z.object({
   quantidadeIndividual: z.coerce.number().positive(),
   grupoMercadoriaId: uuidSchema.optional().nullable(),
   conversoes: z.array(produtoConversaoPayloadSchema).default([]),
+  // Como se compra (porte do Pralis): embalagem + preposicao + unidades por caixa + medida de compra.
+  embalagem: embalagemSchema.optional().nullable(),
+  cDe: cDeSchema.optional().nullable(),
+  quantidadeCaixa: z.coerce.number().int().positive().optional().default(1),
+  medidaCompra: medidaCompraSchema.optional().nullable(),
   // Comercial (por loja) — preco de venda e REFERENCIA de catalogo; margem em fracao (0.30 = 30%).
   custo: z.coerce.number().min(0).optional().nullable(),
   margem: z.coerce.number().min(0).optional().nullable(),
   precoVenda: z.coerce.number().min(0).optional().nullable(),
   auto: z.boolean().optional().default(false),
   status: statusProdutoSchema.optional().default("ativo"),
-  tipo: tipoProdutoSchema.optional().default("revenda")
+  tipo: tipoProdutoSchema.optional().default("revenda"),
+  fiscal: produtoFiscalSchema.optional().nullable(),
+  transformacao: produtoTransformacaoSchema.optional().nullable(),
+  promocoes: z.array(produtoPromocaoSchema).default([])
 });
 
 export const produtosQuerySchema = empresaQuerySchema;

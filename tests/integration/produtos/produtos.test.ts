@@ -86,12 +86,32 @@ describe("produtos integration", () => {
         descricao: "Produto comercial integracao",
         unidadeIndividualId: unidadeId,
         quantidadeIndividual: 1,
+        embalagem: "SACO",
+        cDe: "DE",
+        quantidadeCaixa: 30,
+        medidaCompra: "KG",
         custo: 84.9,
         margem: 0.7,
         precoVenda: 4.81,
         auto: true,
         status: "ativo",
         tipo: "revenda",
+        fiscal: { ncm: "19059090", categoriaFiscal: "REVENDA", aliquotaCheia: 18, icms: 18 },
+        promocoes: [
+          {
+            tipo: "desconto",
+            descontoFracao: 0.1,
+            horaInicio: "08:00",
+            horaFim: "12:00",
+            seg: true,
+            ter: false,
+            qua: false,
+            qui: false,
+            sex: false,
+            sab: false,
+            dom: false
+          }
+        ],
         conversoes: []
       }
     });
@@ -105,11 +125,75 @@ describe("produtos integration", () => {
       auto: boolean;
       status: string;
       tipo: string;
-    }>("select custo, margem, preco_venda, auto, status, tipo from produtos where id = $1", [produtoId]);
-    expect(linha).toMatchObject({ auto: true, status: "ativo", tipo: "revenda" });
+      embalagem: string;
+      c_de: string;
+      quantidade_caixa: number;
+      medida_compra: string;
+    }>(
+      "select custo, margem, preco_venda, auto, status, tipo, embalagem, c_de, quantidade_caixa, medida_compra from produtos where id = $1",
+      [produtoId]
+    );
+    expect(linha).toMatchObject({
+      auto: true,
+      status: "ativo",
+      tipo: "revenda",
+      embalagem: "SACO",
+      c_de: "DE",
+      medida_compra: "KG"
+    });
     expect(Number(linha?.custo)).toBe(84.9);
     expect(Number(linha?.margem)).toBe(0.7);
     expect(Number(linha?.preco_venda)).toBe(4.81);
+    expect(Number(linha?.quantidade_caixa)).toBe(30);
+
+    const fiscal = await consultarUm<{ ncm: string; categoria_fiscal: string; aliquota_cheia: string; icms: string }>(
+      "select ncm, categoria_fiscal, aliquota_cheia, icms from produtos_fiscal where produto_id = $1",
+      [produtoId]
+    );
+    expect(fiscal).toMatchObject({ ncm: "19059090", categoria_fiscal: "REVENDA" });
+    expect(Number(fiscal?.aliquota_cheia)).toBe(18);
+    expect(Number(fiscal?.icms)).toBe(18);
+
+    const promo = await consultarUm<{ tipo: string; desconto_fracao: string; seg: boolean; ter: boolean }>(
+      "select tipo, desconto_fracao, seg, ter from produtos_promocoes where produto_id = $1",
+      [produtoId]
+    );
+    expect(promo).toMatchObject({ tipo: "desconto", seg: true, ter: false });
+    expect(Number(promo?.desconto_fracao)).toBe(0.1);
+  });
+
+  it("Deve_PersistirTransformacao_Quando_TipoTransformacao", async () => {
+    const unidade = await contexto.app.inject({
+      method: "POST",
+      url: "/api/unidades-medida",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Unidade Transformacao", sigla: "g" }
+    });
+    const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
+
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        descricao: "Massa transformacao integracao",
+        unidadeIndividualId: unidadeId,
+        quantidadeIndividual: 1,
+        tipo: "transformacao",
+        transformacao: { precisao: "EXATOS", quantidade: 500, unidade: "G", produtoReceituario: "MASSA BASE" },
+        conversoes: []
+      }
+    });
+    expect(criado.statusCode).toBe(201);
+    const produtoId = json<{ data: { id: string } }>(criado).data.id;
+
+    const t = await consultarUm<{ precisao: string; quantidade: string; unidade: string; produto_receituario: string }>(
+      "select precisao, quantidade, unidade, produto_receituario from produtos_transformacao where produto_id = $1",
+      [produtoId]
+    );
+    expect(t).toMatchObject({ precisao: "EXATOS", unidade: "G", produto_receituario: "MASSA BASE" });
+    expect(Number(t?.quantidade)).toBe(500);
   });
 
   it("Deve_Retornar403_Quando_CriarProdutoEmEmpresaNaoPermitida", async () => {

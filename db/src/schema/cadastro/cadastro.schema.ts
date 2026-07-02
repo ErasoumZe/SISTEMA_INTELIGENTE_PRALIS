@@ -24,6 +24,9 @@ export {
   permissoesUsuarios,
   produtos,
   produtosConversoes,
+  produtosFiscal,
+  produtosPromocoes,
+  produtosTransformacao,
   setores,
   unidadesMedida,
   usuariosEmpresas

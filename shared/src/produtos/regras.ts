@@ -119,6 +119,13 @@ export function montarDescricao(nome: string, quantidade: number | string, medid
   return [nomeUp, quantidadeFmt, medidaUp].filter(Boolean).join(" ");
 }
 
+/** Texto de validacao de quantidade (transformacao): "DENTRO DA EMB (descricao) TEM [precisao] [qtd] [unidade]". */
+export function montarValidacaoQtd(descricao: string, precisao: string, qtd: number, unidade: string): string {
+  const desc = String(descricao ?? "");
+  if (!desc) return "";
+  return `DENTRO DA EMB (${desc}) TEM ${maiusculo(precisao)} ${qtd ?? ""} ${maiusculo(unidade)}`;
+}
+
 /** Texto "como se compra" (informativo): "1 SACO DE25 (descricao)" ou "1 LT C/ (descricao)". */
 export function montarComoSeCompra(
   embalagem: string,

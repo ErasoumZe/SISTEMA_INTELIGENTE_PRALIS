@@ -34,6 +34,9 @@ import {
   cadastroPayload,
   dinheiro,
   endpointOperacaoPorEntidade,
+  fiscalFormDeLinha,
+  promoFormDeLinha,
+  transformacaoFormDeLinha,
   formCadastroVazio,
   formOperacaoVazio,
   itemTemaResumoCaixa,
@@ -910,24 +913,10 @@ function atualizarCadastroLocal(tela: string, form: CadastroForm, id: string | u
   }
 
   if (tela === "produtos") {
-    upsertOpcao(opcoes.value.produtos, {
-      ...itemBase,
-      codigo: form.codigo || undefined,
-      codigoBarras: form.codigoBarras || undefined,
-      descricao: form.descricao || form.nome,
-      marca: form.marca || null,
-      unidadeIndividualId: form.unidadeIndividualId,
-      quantidadeIndividual: String(Number(form.quantidadeIndividual || 1)),
-      grupoMercadoriaId: form.grupoMercadoriaId || null,
-      conversoes: form.produtoConversoes
-        .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
-        .map((conversao) => ({
-          unidadeMedidaId: conversao.unidadeMedidaId,
-          quantidade: String(Number(conversao.quantidade || 0)),
-          unidadesIndividuais: String(Number(conversao.unidadesIndividuais || 0))
-        }))
-    });
-    return true;
+    // Produto tem muitos campos (comercial, como se compra, e satelites fiscal/transformacao/promocao).
+    // Em vez de espelhar tudo aqui (fragil e fonte de bug: campos editados "somem" ao reabrir),
+    // retorna false para recarregar da API e refletir exatamente o que foi gravado.
+    return false;
   }
 
   if (tela === "colaboradores") {
@@ -1063,6 +1052,10 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
     marca: linha.marca ?? "",
     unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
     quantidadeIndividual: linha.quantidadeIndividual ?? "1",
+    embalagem: linha.embalagem ?? "",
+    cDe: linha.cDe ?? "",
+    quantidadeCaixa: linha.quantidadeCaixa ?? "1",
+    medidaCompra: linha.medidaCompra ?? "",
     grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
     custo: linha.custo ?? "",
     margem: linha.margem ?? "",
@@ -1070,6 +1063,9 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
     auto: linha.auto === "true",
     status: (linha.status as CadastroForm["status"]) || "ativo",
     tipo: (linha.tipo as CadastroForm["tipo"]) || "revenda",
+    fiscal: fiscalFormDeLinha(linha.fiscal),
+    transformacao: transformacaoFormDeLinha(linha.transformacao),
+    ...promoFormDeLinha(linha.promocoes),
     produtoConversoes: (() => {
       try {
         const conversoes = JSON.parse(linha.conversoes ?? "[]") as Array<{

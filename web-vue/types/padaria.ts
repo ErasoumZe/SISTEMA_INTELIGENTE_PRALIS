@@ -1,5 +1,64 @@
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 
+// Dados fiscais do produto como vêm da API (numeric chega como string).
+export type ProdutoFiscalDados = {
+  ncm?: string | null;
+  cest?: string | null;
+  categoriaFiscal?: string | null;
+  cstPisCofins?: string | null;
+  aliquotaCheia?: string | number | null;
+  aliquotaFcp?: string | number | null;
+  aliquotaPis?: string | number | null;
+  aliquotaCofins?: string | number | null;
+  reducaoIcms?: string | number | null;
+  icms?: string | number | null;
+};
+
+// Dados fiscais no formulário (tudo string para os inputs).
+export type ProdutoFiscalForm = {
+  ncm: string;
+  cest: string;
+  categoriaFiscal: string;
+  cstPisCofins: string;
+  aliquotaCheia: string;
+  aliquotaFcp: string;
+  aliquotaPis: string;
+  aliquotaCofins: string;
+  reducaoIcms: string;
+  icms: string;
+};
+
+// Transformacao (ficha de receita) como vem da API e no formulario.
+export type ProdutoTransformacaoDados = {
+  precisao?: string | null;
+  quantidade?: string | number | null;
+  unidade?: string | null;
+  produtoReceituario?: string | null;
+};
+export type ProdutoTransformacaoForm = {
+  precisao: string;
+  quantidade: string;
+  unidade: string;
+  produtoReceituario: string;
+};
+
+// Promocao como vem da API (1:N).
+export type ProdutoPromocaoDados = {
+  tipo?: string | null;
+  valor?: string | number | null;
+  descontoFracao?: string | number | null;
+  horaInicio?: string | null;
+  horaFim?: string | null;
+  seg?: boolean;
+  ter?: boolean;
+  qua?: boolean;
+  qui?: boolean;
+  sex?: boolean;
+  sab?: boolean;
+  dom?: boolean;
+  validaAte?: string | null;
+};
+
 export type Opcao = {
   id: string;
   nome?: string;
@@ -24,6 +83,13 @@ export type Opcao = {
   unidadeMedidaId?: string | null;
   unidadeIndividualId?: string | null;
   quantidadeIndividual?: string;
+  embalagem?: string | null;
+  cDe?: string | null;
+  quantidadeCaixa?: string | number | null;
+  medidaCompra?: string | null;
+  fiscal?: ProdutoFiscalDados | null;
+  transformacao?: ProdutoTransformacaoDados | null;
+  promocoes?: ProdutoPromocaoDados[];
   custo?: string | number | null;
   margem?: string | number | null;
   precoVenda?: string | number | null;
@@ -220,6 +286,10 @@ export type CadastroForm = {
   marca: string;
   unidadeIndividualId: string;
   quantidadeIndividual: string;
+  embalagem: string;
+  cDe: string;
+  quantidadeCaixa: string;
+  medidaCompra: string;
   grupoMercadoriaId: string;
   produtoConversoes: ProdutoConversaoForm[];
   custo: string;
@@ -228,6 +298,15 @@ export type CadastroForm = {
   auto: boolean;
   status: "ativo" | "inativo";
   tipo: "revenda" | "transformacao";
+  fiscal: ProdutoFiscalForm;
+  transformacao: ProdutoTransformacaoForm;
+  promoTipo: "nenhum" | "valor" | "desconto";
+  promoValor: string;
+  promoDescontoPct: string;
+  promoHoraInicio: string;
+  promoHoraFim: string;
+  promoDias: boolean[];
+  promoValidaAte: string;
   contaId: string;
   ativo: boolean;
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";

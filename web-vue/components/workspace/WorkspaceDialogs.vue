@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { TELA_TEMA_RESUMO_CAIXA } from "@padaria/shared";
+import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 
@@ -68,6 +68,52 @@ const {
 
 // Preview do preco de venda: mesma fonte usada no payload, para preview e valor salvo nunca divergirem.
 const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.value));
+
+// Nome + gramatura + medida => Descricao automatica (regra do Pralis). O campo principal e o NOME.
+const unidadeSiglaProduto = computed(
+  () => opcoesEmpresa.value.unidadesMedida.find((u) => u.id === formCadastro.value.unidadeIndividualId)?.sigla ?? ""
+);
+const descricaoAutoPreview = computed(() =>
+  montarDescricao(formCadastro.value.descricao, formCadastro.value.quantidadeIndividual, unidadeSiglaProduto.value)
+);
+
+// "Como se compra" — versao amigavel do formulario do Pralis ("Saco de 25 KG — descricao").
+const EMB_LABEL: Record<string, string> = {
+  SACO: "Saco",
+  PCT: "Pacote",
+  CX: "Caixa",
+  UN: "Unidade",
+  FD: "Fardo",
+  POTE: "Pote",
+  BAND: "Bandeja",
+  EMB: "Embalagem",
+  MIL: "Milheiro",
+  KG: "Kg",
+  LT: "Litro"
+};
+const comoSeCompraPreview = computed(() => {
+  const emb = formCadastro.value.embalagem;
+  if (!emb) return "";
+  const rotulo = EMB_LABEL[emb] ?? emb;
+  const cde = formCadastro.value.cDe === "C/" ? "com" : "de";
+  const qtCad = Number(formCadastro.value.quantidadeCaixa || 0);
+  const qtd = qtCad ? `${qtCad}${formCadastro.value.medidaCompra ? " " + formCadastro.value.medidaCompra : ""}` : "";
+  const desc = descricaoAutoPreview.value;
+  return [rotulo, cde, qtd, desc ? "— " + desc : ""].filter(Boolean).join(" ");
+});
+
+// Validacao de quantidade (transformacao): texto automatico da regra do Pralis.
+const diasSemana = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
+const validacaoQtdPreview = computed(() =>
+  formCadastro.value.tipo === "transformacao"
+    ? montarValidacaoQtd(
+        descricaoAutoPreview.value,
+        formCadastro.value.transformacao.precisao,
+        Number(formCadastro.value.transformacao.quantidade || 0),
+        formCadastro.value.transformacao.unidade
+      )
+    : ""
+);
 </script>
 
 <template>
@@ -592,7 +638,16 @@ const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.va
               ><v-text-field v-model="formCadastro.codigoBarras" label="Codigo de barras"
             /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="formCadastro.marca" label="Marca" /></v-col>
-            <v-col cols="12"><v-text-field v-model="formCadastro.descricao" label="Descricao" /></v-col>
+            <v-col cols="12"><v-text-field v-model="formCadastro.descricao" label="Nome do produto *" /></v-col>
+            <v-col cols="12">
+              <v-text-field
+                :model-value="descricaoAutoPreview"
+                label="Descricao (automatica)"
+                readonly
+                bg-color="grey-lighten-4"
+                placeholder="Preencha nome, quantidade individual e unidade"
+              />
+            </v-col>
             <v-col cols="12" md="4">
               <v-select
                 v-model="formCadastro.grupoMercadoriaId"
@@ -614,6 +669,38 @@ const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.va
             </v-col>
             <v-col cols="12" md="4">
               <v-text-field v-model="formCadastro.quantidadeIndividual" type="number" label="Quantidade individual" />
+            </v-col>
+            <v-col cols="12"><div class="text-body-2 font-weight-bold">Como se compra</div></v-col>
+            <v-col cols="12" md="3">
+              <v-select
+                v-model="formCadastro.embalagem"
+                :items="['UN', 'KG', 'LT', 'MIL', 'FD', 'PCT', 'CX', 'POTE', 'EMB', 'SACO', 'BAND']"
+                label="Embalagem"
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-select v-model="formCadastro.cDe" :items="['C/', 'DE']" label="C/ ou DE" clearable />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field v-model="formCadastro.quantidadeCaixa" type="number" label="Qtd por caixa (qtCad)" />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-select
+                v-model="formCadastro.medidaCompra"
+                :items="['UN', 'KG', 'LT']"
+                label="Medida de compra"
+                clearable
+              />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field
+                :model-value="comoSeCompraPreview"
+                label="Como se compra (automatico)"
+                readonly
+                bg-color="grey-lighten-4"
+                placeholder="Preencha a embalagem para gerar"
+              />
             </v-col>
             <v-col cols="12" md="6">
               <v-select
@@ -656,11 +743,121 @@ const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.va
                 :disabled="formCadastro.auto"
               />
             </v-col>
-            <v-col cols="12" md="6" class="d-flex align-center">
-              <v-chip color="primary" variant="tonal" label>
-                Preco calculado: {{ precoVendaPreview == null ? "-" : dinheiro(precoVendaPreview) }}
-              </v-chip>
+            <v-col cols="12" md="6">
+              <v-text-field
+                :model-value="precoVendaPreview == null ? '-' : dinheiro(precoVendaPreview)"
+                label="Preco calculado (automatico)"
+                readonly
+                bg-color="purple-lighten-5"
+              />
             </v-col>
+            <v-col cols="12"><div class="text-body-2 font-weight-bold">Fiscal</div></v-col>
+            <v-col cols="12" md="6"><v-text-field v-model="formCadastro.fiscal.ncm" label="NCM" /></v-col>
+            <v-col cols="12" md="6"><v-text-field v-model="formCadastro.fiscal.cest" label="CEST" /></v-col>
+            <v-col cols="12" md="6"
+              ><v-text-field v-model="formCadastro.fiscal.categoriaFiscal" label="Categoria fiscal"
+            /></v-col>
+            <v-col cols="12" md="6"
+              ><v-text-field v-model="formCadastro.fiscal.cstPisCofins" label="CST PIS/COFINS"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.aliquotaCheia" type="number" label="Aliquota cheia %"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.aliquotaFcp" type="number" label="Aliquota FCP %"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.icms" type="number" label="ICMS %"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.aliquotaPis" type="number" label="Aliquota PIS %"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.aliquotaCofins" type="number" label="Aliquota COFINS %"
+            /></v-col>
+            <v-col cols="6" md="4"
+              ><v-text-field v-model="formCadastro.fiscal.reducaoIcms" type="number" label="Reducao ICMS %"
+            /></v-col>
+            <template v-if="formCadastro.tipo === 'transformacao'">
+              <v-col cols="12"><div class="text-body-2 font-weight-bold">Transformacao</div></v-col>
+              <v-col cols="6" md="3">
+                <v-select
+                  v-model="formCadastro.transformacao.precisao"
+                  :items="['EXATOS', 'APROXIMADOS']"
+                  label="Precisao"
+                  clearable
+                />
+              </v-col>
+              <v-col cols="6" md="3"
+                ><v-text-field v-model="formCadastro.transformacao.quantidade" type="number" label="Quantidade"
+              /></v-col>
+              <v-col cols="6" md="3">
+                <v-select
+                  v-model="formCadastro.transformacao.unidade"
+                  :items="['UN', 'G', 'ML']"
+                  label="Unidade"
+                  clearable
+                />
+              </v-col>
+              <v-col cols="6" md="3"
+                ><v-text-field v-model="formCadastro.transformacao.produtoReceituario" label="Produto receituario"
+              /></v-col>
+              <v-col cols="12">
+                <v-text-field
+                  :model-value="validacaoQtdPreview"
+                  label="Validacao de quantidade (automatico)"
+                  readonly
+                  bg-color="grey-lighten-4"
+                />
+              </v-col>
+            </template>
+            <template v-if="formCadastro.tipo === 'revenda'">
+              <v-col cols="12"><div class="text-body-2 font-weight-bold">Promocao</div></v-col>
+              <v-col cols="12" md="4">
+                <v-select
+                  v-model="formCadastro.promoTipo"
+                  :items="[
+                    { titulo: 'Sem promocao', valor: 'nenhum' },
+                    { titulo: 'Valor fixo', valor: 'valor' },
+                    { titulo: 'Desconto %', valor: 'desconto' }
+                  ]"
+                  item-title="titulo"
+                  item-value="valor"
+                  label="Promocao"
+                />
+              </v-col>
+              <template v-if="formCadastro.promoTipo !== 'nenhum'">
+                <v-col v-if="formCadastro.promoTipo === 'valor'" cols="6" md="4"
+                  ><v-text-field v-model="formCadastro.promoValor" type="number" label="Valor promo (R$)"
+                /></v-col>
+                <v-col v-if="formCadastro.promoTipo === 'desconto'" cols="6" md="4"
+                  ><v-text-field v-model="formCadastro.promoDescontoPct" type="number" label="Desconto %"
+                /></v-col>
+                <v-col cols="6" md="2"
+                  ><v-text-field v-model="formCadastro.promoHoraInicio" type="time" label="Inicio"
+                /></v-col>
+                <v-col cols="6" md="2"
+                  ><v-text-field v-model="formCadastro.promoHoraFim" type="time" label="Termino"
+                /></v-col>
+                <v-col cols="12" md="4"
+                  ><v-text-field v-model="formCadastro.promoValidaAte" type="date" label="Valida ate"
+                /></v-col>
+                <v-col cols="12">
+                  <div class="text-caption text-medium-emphasis mb-1">Dias da semana (nenhum marcado = todos)</div>
+                  <div class="d-flex flex-wrap ga-3">
+                    <v-checkbox
+                      v-for="(dia, i) in diasSemana"
+                      :key="i"
+                      v-model="formCadastro.promoDias[i]"
+                      :label="dia"
+                      density="compact"
+                      hide-details
+                      color="primary"
+                    />
+                  </div>
+                </v-col>
+              </template>
+            </template>
             <v-col cols="12">
               <div class="d-flex align-center justify-space-between mb-2">
                 <div class="text-body-2 font-weight-bold">Conversoes</div>
