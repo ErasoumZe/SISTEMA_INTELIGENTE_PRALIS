@@ -69,7 +69,9 @@ describe("caixa integration", () => {
     });
     expect(acerto.statusCode).toBe(201);
     const despesaId = json<{ data: { id: string } }>(acerto).data.id;
-    await expect(consultarUm("select id from despesas where id = $1 and descricao = $2", [despesaId, "Quebra de caixa"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from despesas where id = $1 and descricao = $2", [despesaId, "Quebra de caixa"])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_Retornar403_Quando_AcessarOuOperarCaixaDeEmpresaNaoPermitida", async () => {
@@ -142,9 +144,10 @@ describe("caixa integration", () => {
     });
     expect(abrir.statusCode).toBe(201);
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    const token = await consultarUm<{ token_edicao: string }>("select token_edicao from fechamentos_caixa where id = $1", [
-      caixaId
-    ]);
+    const token = await consultarUm<{ token_edicao: string }>(
+      "select token_edicao from fechamentos_caixa where id = $1",
+      [caixaId]
+    );
     expect(token?.token_edicao).toBeTruthy();
 
     const editar = await contexto.app.inject({
@@ -173,7 +176,9 @@ describe("caixa integration", () => {
       payload: { observacao: "Caixa fechado por teste" }
     });
     expect(fechar.statusCode).toBe(204);
-    await expect(consultarUm("select id from fechamentos_caixa where id = $1 and status = 'fechado'", [caixaId])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from fechamentos_caixa where id = $1 and status = 'fechado'", [caixaId])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_Retornar400_Quando_EditarAberturaComTokenInvalido", async () => {
@@ -319,5 +324,242 @@ describe("caixa integration", () => {
 
     assertProblem(resposta, 400);
   });
-});
 
+  it("Deve_Retornar403_Quando_AcertarSaldoDeCaixaDeOutroUsuario", async () => {
+    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${idsTeste.caixaAberto}/acertar-saldo`,
+      headers: { cookie: cookieCaixa },
+      payload: {}
+    });
+
+    assertProblem(resposta, 403);
+  });
+
+  it("Deve_CalcularSaldoAcertarEFechar_Quando_CicloOperacionalCompleto", async () => {
+    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+
+    const conta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta ciclo operacional" }
+    });
+    expect(conta.statusCode).toBe(201);
+    const contaPdvId = json<{ data: { id: string } }>(conta).data.id;
+    const pdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "PDV ciclo operacional", contaId: contaPdvId, ativo: true }
+    });
+    expect(pdv.statusCode).toBe(201);
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+
+    const abrir = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: usuarioAdminId,
+        dataHoraAbertura: "2026-03-01T08:00",
+        observacao: "Ciclo operacional"
+      }
+    });
+    expect(abrir.statusCode).toBe(201);
+    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+
+    const dataRef = "2026-03-01";
+    const lancamentos = [
+      {
+        url: "/api/vendas",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          dataPagamento: dataRef,
+          descricao: "Venda ciclo",
+          valorOriginal: 100,
+          contaOrigemId: contaPdvId,
+          pdvId,
+          colaboradorId: idsTeste.colaboradorAdmin,
+          itensVenda: [
+            {
+              produtoId: idsTeste.produto,
+              descricaoProduto: "Produto ciclo",
+              quantidade: 1,
+              valorUnitario: 100,
+              valorTotal: 100
+            }
+          ],
+          tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 100 }]
+        }
+      },
+      {
+        url: "/api/transferencias",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          descricao: "Transferencia entrada ciclo",
+          valorOriginal: 50,
+          contaOrigemId: idsTeste.contaBanco,
+          contaDestinoId: contaPdvId
+        }
+      },
+      {
+        url: "/api/transferencias",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          descricao: "Transferencia saida ciclo",
+          valorOriginal: 30,
+          contaOrigemId: contaPdvId,
+          contaDestinoId: idsTeste.contaBanco
+        }
+      },
+      {
+        url: "/api/despesas",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          dataVencimento: dataRef,
+          dataPagamento: dataRef,
+          descricao: "Despesa ciclo",
+          valorOriginal: 20,
+          contaOrigemId: contaPdvId,
+          grupoDespesaId: idsTeste.grupoDespesaOperacional
+        }
+      },
+      {
+        url: "/api/retiradas",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          dataVencimento: dataRef,
+          dataPagamento: dataRef,
+          descricao: "Retirada ciclo",
+          valorOriginal: 10,
+          contaOrigemId: contaPdvId,
+          colaboradorId: idsTeste.colaboradorAdmin,
+          grupoRetiradaId: idsTeste.grupoRetiradaSangria
+        }
+      },
+      {
+        url: "/api/mercadorias",
+        payload: {
+          empresaId: idsTeste.empresaA,
+          dataReferencia: dataRef,
+          dataVencimento: dataRef,
+          dataPagamento: dataRef,
+          descricao: "Mercadoria ciclo",
+          valorOriginal: 15,
+          contaOrigemId: contaPdvId,
+          fornecedorId: idsTeste.fornecedor,
+          grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+          temNotaFiscal: false
+        }
+      }
+    ];
+    for (const lancamento of lancamentos) {
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: lancamento.url,
+        headers: { cookie: cookieAdmin },
+        payload: lancamento.payload
+      });
+      expect(resposta.statusCode, `${lancamento.url}: ${resposta.body}`).toBe(201);
+    }
+
+    // Formula oficial: entradas + transf entrada - transf saida - despesas - retiradas - mercadorias
+    // 100 + 50 - 30 - 20 - 10 - 15 = 75
+    const statusAntes = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(statusAntes);
+    expect(statusAntes.json()).toMatchObject({
+      data: {
+        caixaAberto: { id: caixaId },
+        resumo: {
+          totalEntradas: 100,
+          totalTransferenciasEntrada: 50,
+          totalTransferenciasSaida: 30,
+          totalDespesas: 20,
+          totalRetiradas: 10,
+          totalMercadorias: 15,
+          saldo: 75
+        }
+      }
+    });
+
+    const acerto = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixaId}/acertar-saldo`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Acerto ciclo" }
+    });
+    expect(acerto.statusCode, acerto.body).toBe(201);
+
+    // Efeitos completos do acerto: despesa pendente vinculada ao colaborador e ao caixa,
+    // item da despesa, debito FECHAMENTO_CAIXA e ajuste operacional — todos com 75.00.
+    const despesaAcerto = await consultarUm<{
+      id: string;
+      colaborador_id: string;
+      data_pagamento: string | null;
+      valor_original: string;
+    }>(
+      "select id, colaborador_id, data_pagamento, valor_original from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'",
+      [caixaId]
+    );
+    expect(despesaAcerto?.valor_original).toBe("75.00");
+    expect(despesaAcerto?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
+    expect(despesaAcerto?.data_pagamento).toBeNull();
+
+    const itemAcerto = await consultarUm<{ valor: string }>("select valor from despesas_itens where despesa_id = $1", [
+      despesaAcerto?.id
+    ]);
+    expect(itemAcerto?.valor).toBe("75.00");
+
+    const debito = await consultarUm<{ tipo: string; valor: string; colaborador_id: string }>(
+      "select tipo, valor, colaborador_id from debitos_colaboradores where caixa_id = $1 and despesa_id = $2",
+      [caixaId, despesaAcerto?.id]
+    );
+    expect(debito?.tipo).toBe("FECHAMENTO_CAIXA");
+    expect(debito?.valor).toBe("75.00");
+    expect(debito?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
+
+    const ajuste = await consultarUm<{ valor_diferenca: string }>(
+      "select valor_diferenca from ajustes_fechamento_caixa where fechamento_caixa_id = $1 and despesa_id = $2",
+      [caixaId, despesaAcerto?.id]
+    );
+    expect(ajuste?.valor_diferenca).toBe("75.00");
+
+    // A despesa de acerto entra no proprio caixa e zera o saldo (o bug antigo nao volta).
+    const statusDepois = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(statusDepois);
+    expect(statusDepois.json()).toMatchObject({
+      data: { caixaAberto: { id: caixaId }, resumo: { totalDespesas: 95, saldo: 0 } }
+    });
+
+    const fechar = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixaId}/fechar`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Fechado apos acerto" }
+    });
+    expect(fechar.statusCode, fechar.body).toBe(204);
+    const fechado = await consultarUm<{ status: string; saldo: string }>(
+      "select status, saldo from fechamentos_caixa where id = $1",
+      [caixaId]
+    );
+    expect(fechado?.status).toBe("fechado");
+    expect(fechado?.saldo).toBe("0.00");
+  });
+});
