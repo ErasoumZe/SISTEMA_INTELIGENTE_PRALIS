@@ -93,7 +93,9 @@ export const produtoPayloadSchema = z.object({
   tipo: tipoProdutoSchema.optional().default("revenda"),
   fiscal: produtoFiscalSchema.optional().nullable(),
   transformacao: produtoTransformacaoSchema.optional().nullable(),
-  promocoes: z.array(produtoPromocaoSchema).default([])
+  promocoes: z.array(produtoPromocaoSchema).default([]),
+  // Governanca: "cadastrar mesmo assim" — pula a checagem de duplicado (nome/codigo de barras na loja).
+  forcar: z.boolean().optional().default(false)
 });
 
 export const produtosQuerySchema = empresaQuerySchema;

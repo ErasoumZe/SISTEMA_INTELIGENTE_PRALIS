@@ -9,13 +9,22 @@ import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/share
 import { exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
-import { exportarProduto, importarProdutos, listarProdutos, salvarProduto } from "./produtos.service.js";
+import {
+  exportarProduto,
+  importarProdutos,
+  listarProdutos,
+  ProdutoDuplicadoError,
+  salvarProduto
+} from "./produtos.service.js";
 
 export async function registrarRotasProdutos(app: FastifyInstance): Promise<void> {
   app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
     const query = empresaQuerySchema.parse(request.query);
     try {
-      const escopo = escopoEmpresaAtiva(request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [], query.empresaId);
+      const escopo = escopoEmpresaAtiva(
+        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+        query.empresaId
+      );
       return paginadoDeArray(await listarProdutos(escopo), query.page, query.pageSize);
     } catch (error) {
       return erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
@@ -28,9 +37,10 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
     try {
-      const salvo = await salvarProduto(null, request.body);
+      const salvo = await salvarProduto(null, request.body, request.usuarioId);
       return criadoId(reply, salvo?.id ?? "produtos");
     } catch (error) {
+      if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
       const mensagem = error instanceof Error ? error.message : "Dados invalidos";
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
@@ -43,30 +53,39 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
     try {
-      await salvarProduto(id, request.body);
+      await salvarProduto(id, request.body, request.usuarioId);
       return semConteudo(reply);
     } catch (error) {
+      if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
       const mensagem = error instanceof Error ? error.message : "Dados invalidos";
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
 
-  app.post("/api/produtos/importar", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
-    try {
-      return ok(await importarProdutos(importarPayloadSchema.parse(request.body), request.perfilUsuario));
-    } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Importacao invalida";
-      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+  app.post(
+    "/api/produtos/importar",
+    { preHandler: exigirPermissao("cadastro_produtos_criar") },
+    async (request, reply) => {
+      try {
+        return ok(await importarProdutos(importarPayloadSchema.parse(request.body), request.perfilUsuario));
+      } catch (error) {
+        const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+      }
     }
-  });
+  );
 
-  app.post("/api/produtos/:id/exportar", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
-    const { id } = idParamsSchema.parse(request.params);
-    try {
-      return ok(await exportarProduto(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
-    } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Copia invalida";
-      return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+  app.post(
+    "/api/produtos/:id/exportar",
+    { preHandler: exigirPermissao("cadastro_produtos_criar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      try {
+        return ok(await exportarProduto(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
+      } catch (error) {
+        const mensagem = error instanceof Error ? error.message : "Copia invalida";
+        return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
+      }
     }
-  });
+  );
 }

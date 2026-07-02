@@ -119,6 +119,8 @@ describe("produtos integration", () => {
     const produtoId = json<{ data: { id: string } }>(criado).data.id;
 
     const linha = await consultarUm<{
+      codigo: string;
+      codigo_interno: string;
       custo: string;
       margem: string;
       preco_venda: string;
@@ -130,9 +132,11 @@ describe("produtos integration", () => {
       quantidade_caixa: number;
       medida_compra: string;
     }>(
-      "select custo, margem, preco_venda, auto, status, tipo, embalagem, c_de, quantidade_caixa, medida_compra from produtos where id = $1",
+      "select codigo, codigo_interno, custo, margem, preco_venda, auto, status, tipo, embalagem, c_de, quantidade_caixa, medida_compra from produtos where id = $1",
       [produtoId]
     );
+    expect(linha?.codigo).toMatch(/^PR-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(linha?.codigo_interno).toMatch(/^\d{5}$/);
     expect(linha).toMatchObject({
       auto: true,
       status: "ativo",
@@ -194,6 +198,47 @@ describe("produtos integration", () => {
     );
     expect(t).toMatchObject({ precisao: "EXATOS", unidade: "G", produto_receituario: "MASSA BASE" });
     expect(Number(t?.quantidade)).toBe(500);
+  });
+
+  it("Deve_BloquearProdutoDuplicado_ExcetoComForcar", async () => {
+    const unidade = await contexto.app.inject({
+      method: "POST",
+      url: "/api/unidades-medida",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Unidade Dup", sigla: "ud" }
+    });
+    const unidadeId = json<{ data: { id: string } }>(unidade).data.id;
+    const base = {
+      empresaId: idsTeste.empresaA,
+      descricao: "Produto Duplicado Teste",
+      unidadeIndividualId: unidadeId,
+      quantidadeIndividual: 1,
+      conversoes: []
+    };
+
+    const primeiro = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: base
+    });
+    expect(primeiro.statusCode).toBe(201);
+
+    const segundo = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: base
+    });
+    assertProblem(segundo, 409, "DUPLICATE_PRODUCT");
+
+    const forcado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: { ...base, forcar: true }
+    });
+    expect(forcado.statusCode).toBe(201);
   });
 
   it("Deve_Retornar403_Quando_CriarProdutoEmEmpresaNaoPermitida", async () => {
@@ -265,12 +310,11 @@ describe("produtos importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(
-      consultarUm("select id from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
-        idsTeste.empresaB,
-        idsTeste.empresaA,
-        idsTeste.produto
-      ])
-    ).resolves.toBeTruthy();
+    const copiado = await consultarUm<{ codigo: string; codigo_interno: string }>(
+      "select codigo, codigo_interno from produtos where empresa_id = $1 and importado_de = $2 and id_importado = $3",
+      [idsTeste.empresaB, idsTeste.empresaA, idsTeste.produto]
+    );
+    expect(copiado?.codigo).toMatch(/^PR-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(copiado?.codigo_interno).toMatch(/^\d{5}$/);
   });
 });

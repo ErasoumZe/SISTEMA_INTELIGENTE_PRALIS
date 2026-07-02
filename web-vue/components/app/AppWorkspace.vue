@@ -21,6 +21,7 @@ import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
 import { usePermissoes } from "~/composables/usePermissoes";
+import { ErroApiCliente } from "~/composables/useApi";
 import {
   dataHoraLocal,
   documentoEhCpf,
@@ -1112,9 +1113,22 @@ async function salvarCadastro() {
     };
     const idEditando = cadastroEditandoId.value;
     const payload = cadastroPayload(cadastroTela.value, formSnapshot, empresaId.value);
-    const resultado = idEditando
-      ? await apiPut<{ id?: string } | undefined>(`/api/${endpoint}/${idEditando}`, payload)
-      : await apiPost<{ id?: string }>(`/api/${endpoint}`, payload);
+    const enviar = (corpo: unknown) =>
+      idEditando
+        ? apiPut<{ id?: string } | undefined>(`/api/${endpoint}/${idEditando}`, corpo)
+        : apiPost<{ id?: string }>(`/api/${endpoint}`, corpo);
+    let resultado: { id?: string } | undefined;
+    try {
+      resultado = await enviar(payload);
+    } catch (error) {
+      // Produto duplicado (nome/codigo de barras na loja): oferece "cadastrar mesmo assim".
+      if (error instanceof ErroApiCliente && error.codigo === "DUPLICATE_PRODUCT") {
+        if (!window.confirm(`${error.message} Cadastrar mesmo assim?`)) return;
+        resultado = await enviar({ ...(payload as Record<string, unknown>), forcar: true });
+      } else {
+        throw error;
+      }
+    }
     modalCadastroAberto.value = false;
     notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     const idSalvo = idEditando || resultado?.id;

@@ -13,6 +13,18 @@ function isProblemDetails(valor: unknown): valor is ProblemDetails {
   return Boolean(valor && typeof valor === "object" && "title" in valor && "status" in valor);
 }
 
+// Erro de API que preserva o status HTTP e o codigo do ProblemDetails (ex.: DUPLICATE_PRODUCT).
+export class ErroApiCliente extends Error {
+  status: number;
+  codigo?: string;
+  constructor(mensagem: string, status: number, codigo?: string) {
+    super(mensagem);
+    this.name = "ErroApiCliente";
+    this.status = status;
+    this.codigo = codigo;
+  }
+}
+
 function isApiSuccess<T>(valor: unknown): valor is ApiSuccess<T> {
   return Boolean(valor && typeof valor === "object" && "ok" in valor && (valor as { ok?: unknown }).ok === true);
 }
@@ -44,7 +56,10 @@ async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body
 
   if (resposta.status === 204) return undefined;
   const payload = await lerJson(resposta);
-  if (!resposta.ok) throw new Error(mensagemErroApi(payload));
+  if (!resposta.ok) {
+    const codigo = isProblemDetails(payload) ? payload.code : undefined;
+    throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo);
+  }
   return payload;
 }
 

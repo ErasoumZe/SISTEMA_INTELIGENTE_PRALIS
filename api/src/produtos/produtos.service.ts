@@ -8,20 +8,44 @@ import { executarEmTransacao } from "../banco/conexao.js";
 import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 import { copiarGruposRepository } from "../grupos/grupos.repository.js";
 import { copiarUnidadesMedidaRepository } from "../unidades-medida/unidades-medida.repository.js";
-import { copiarProdutosRepository, listarProdutosRepository, salvarProdutoRepository } from "./produtos.repository.js";
+import {
+  buscarProdutoDuplicadoRepository,
+  copiarProdutosRepository,
+  listarProdutosRepository,
+  salvarProdutoRepository
+} from "./produtos.repository.js";
+
+// Lancada quando ha produto duplicado (nome/codigo de barras) na loja e nao foi marcado "cadastrar mesmo assim".
+export class ProdutoDuplicadoError extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "ProdutoDuplicadoError";
+  }
+}
 
 export async function listarProdutos(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarProdutosRepository(), escopoDados);
 }
 
-export async function salvarProduto(id: string | null, body: unknown) {
+export async function salvarProduto(id: string | null, body: unknown, criadoPorUsuarioId?: string | null) {
   const dados = produtoPayloadSchema.parse(body);
+  const descricao = dados.descricao.trim();
+  const codigoBarras = apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null;
+  // Governanca: bloqueia duplicado (nome/codigo de barras) na mesma loja, salvo "cadastrar mesmo assim".
+  if (!dados.forcar) {
+    const duplicado = await buscarProdutoDuplicadoRepository(dados.empresaId, descricao, codigoBarras, id ?? undefined);
+    if (duplicado) {
+      const porQuem = duplicado.criadoPorNome ? ` (cadastrado por ${duplicado.criadoPorNome})` : "";
+      throw new ProdutoDuplicadoError(`Ja existe o produto "${duplicado.descricao}" nesta loja${porQuem}.`);
+    }
+  }
   return salvarProdutoRepository({
     ...(id ? { id } : {}),
     empresaId: dados.empresaId,
     codigo: dados.codigo?.trim() || null,
-    codigoBarras: apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null,
-    descricao: dados.descricao.trim(),
+    criadoPor: criadoPorUsuarioId ?? null,
+    codigoBarras,
+    descricao,
     marca: dados.marca?.trim() || null,
     unidadeIndividualId: dados.unidadeIndividualId,
     quantidadeIndividual: dados.quantidadeIndividual,
