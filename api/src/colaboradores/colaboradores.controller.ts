@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   cargoPayloadSchema,
@@ -47,7 +48,7 @@ async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   try {
     return { query, empresasLiberadas, escopoDados: escopoEmpresaAtiva(empresasLiberadas, query.empresaId) };
   } catch (error) {
-    erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
+    erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
     return null;
   }
 }
@@ -83,7 +84,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         const criado = await salvarColaborador(null, request.body);
         return criadoId(reply, criado?.id ?? "colaboradores");
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);
       }
     }
@@ -101,7 +102,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         await salvarColaborador(id, request.body);
         return semConteudo(reply);
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);
       }
     }
@@ -114,7 +115,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       try {
         return ok(await importarColaboradores(importarColaboradoresSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -128,7 +129,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       try {
         return ok(await exportarColaborador(id, exportarColaboradorSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Copia invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -154,7 +155,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       if (!criado) return erro(reply, 400, "Cargo invalido", "INVALID_CARGO");
       return criadoId(reply, criado.id);
     } catch (error) {
-      return erro400(reply, error instanceof Error ? error : new Error("Cargo invalido"), "Cargo invalido");
+      return erro400(reply, new Error(mensagemDominioOuRelancar(error)), "Cargo invalido");
     }
   });
 
@@ -178,7 +179,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       try {
         return ok(await importarCargos(importarCargosSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -192,7 +193,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       try {
         return ok(await exportarCargo(id, exportarCargoSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Copia invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -228,11 +229,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         if (!criado) return erro(reply, 400, "Cargo do colaborador invalido", "INVALID_COLLABORATOR_ROLE");
         return criadoId(reply, criado.id);
       } catch (error) {
-        return erro400(
-          reply,
-          error instanceof Error ? error : new Error("Cargo do colaborador invalido"),
-          "Cargo do colaborador invalido"
-        );
+        return erro400(reply, new Error(mensagemDominioOuRelancar(error)), "Cargo do colaborador invalido");
       }
     }
   );
@@ -279,7 +276,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         const criado = await criarJornadasColaborador(colaboradorId, body);
         return criadoId(reply, (criado as { ids?: string[] }).ids?.[0] ?? colaboradorId);
       } catch (error) {
-        return erro400(reply, error instanceof Error ? error : new Error("Jornada invalida"), "Jornada invalida");
+        return erro400(reply, new Error(mensagemDominioOuRelancar(error)), "Jornada invalida");
       }
     }
   );
@@ -314,11 +311,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
         if (!criado) return erro(reply, 400, "Falta justificada invalida", "INVALID_ABSENCE");
         return criadoId(reply, criado.id);
       } catch (error) {
-        return erro400(
-          reply,
-          error instanceof Error ? error : new Error("Falta justificada invalida"),
-          "Falta justificada invalida"
-        );
+        return erro400(reply, new Error(mensagemDominioOuRelancar(error)), "Falta justificada invalida");
       }
     }
   );

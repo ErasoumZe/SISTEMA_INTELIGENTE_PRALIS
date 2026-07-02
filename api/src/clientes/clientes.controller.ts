@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { clientePayloadSchema, clientesQuerySchema as empresaQuerySchema } from "@padaria/shared/clientes";
 import { apiIdParamsSchema, criadoId, erro, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
@@ -16,7 +17,7 @@ export async function registrarRotasClientes(app: FastifyInstance): Promise<void
       );
       return paginadoDeResultado(await listarClientes(query, escopo));
     } catch (error) {
-      return erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
     }
   });
 
@@ -29,7 +30,7 @@ export async function registrarRotasClientes(app: FastifyInstance): Promise<void
       const salvo = await salvarCliente(null, request.body);
       return criadoId(reply, salvo?.id ?? "clientes");
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
@@ -44,7 +45,7 @@ export async function registrarRotasClientes(app: FastifyInstance): Promise<void
       await salvarCliente(id, request.body);
       return semConteudo(reply);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });

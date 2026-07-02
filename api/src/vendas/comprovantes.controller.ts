@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { vendaParamsSchema } from "@padaria/shared/vendas";
 import { exigirPermissao } from "../auth/guards.js";
@@ -19,7 +20,7 @@ export async function registrarRotasVendasComprovantes(app: FastifyInstance): Pr
       try {
         return ok(await listarComprovantesVenda(vendaId, request.perfilUsuario!));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Comprovante invalido";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
       }
     }
@@ -34,11 +35,9 @@ export async function registrarRotasVendasComprovantes(app: FastifyInstance): Pr
         const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
         return reply.status(201).send(ok(await salvarComprovanteVenda(vendaId, arquivo, request.perfilUsuario!)));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Comprovante invalido";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
       }
     }
   );
 }
-
-

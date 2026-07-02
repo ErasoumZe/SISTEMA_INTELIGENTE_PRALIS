@@ -12,7 +12,7 @@ import {
 } from "@padaria/shared/integracoes";
 import { exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { naoAutorizado } from "../erros.js";
+import { mensagemDominioOuRelancar, naoAutorizado } from "../erros.js";
 import {
   criarChaveIntegracao,
   inativarChaveIntegracao,
@@ -63,7 +63,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
       if (!chave) return erro(reply, 400, "Integracao invalida");
       return criadoId(reply, chave.id);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
     }
   });
@@ -77,7 +77,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
         await inativarChaveIntegracao(id, request.perfilUsuario!);
         return semConteudo(reply);
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -88,7 +88,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
       await salvarCampoIntegracao(atualizarCampoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);
       return semConteudo(reply);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
     }
   });
@@ -101,7 +101,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
         await salvarVinculoIntegracao(salvarVinculoIntegracaoPayloadSchema.parse(request.body), request.perfilUsuario!);
         return semConteudo(reply);
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Integracao invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }

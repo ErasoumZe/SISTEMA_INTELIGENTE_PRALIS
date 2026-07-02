@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema } from "@padaria/shared/despesas";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
@@ -20,7 +21,12 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       } catch {
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
-      const escopoCaixa = await resolverEscopoListagemPorCaixa(request.perfilUsuario, "despesas", query.empresaId, query.caixaId);
+      const escopoCaixa = await resolverEscopoListagemPorCaixa(
+        request.perfilUsuario,
+        "despesas",
+        query.empresaId,
+        query.caixaId
+      );
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
       return paginadoDeArray(await listarDespesas(queryComCaixa, escopoDados), query.page, query.pageSize);
@@ -41,7 +47,7 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
       }
-      return erro(reply, 400, error instanceof Error ? error.message : "Despesa invalida");
+      return erro(reply, 400, mensagemDominioOuRelancar(error));
     }
   });
 }

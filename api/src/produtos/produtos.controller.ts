@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
   exportarProdutoSchema as exportarPayloadSchema,
@@ -27,7 +28,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       );
       return paginadoDeArray(await listarProdutos(escopo), query.page, query.pageSize);
     } catch (error) {
-      return erro(reply, 403, error instanceof Error ? error.message : "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
     }
   });
 
@@ -41,7 +42,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return criadoId(reply, salvo?.id ?? "produtos");
     } catch (error) {
       if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
@@ -57,7 +58,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return semConteudo(reply);
     } catch (error) {
       if (error instanceof ProdutoDuplicadoError) return erro(reply, 409, error.message, "DUPLICATE_PRODUCT");
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
@@ -69,7 +70,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       try {
         return ok(await importarProdutos(importarPayloadSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Importacao invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }
@@ -83,7 +84,7 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       try {
         return ok(await exportarProduto(id, exportarPayloadSchema.parse(request.body), request.perfilUsuario));
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Copia invalida";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, mensagem === "Empresa nao permitida" ? 403 : 400, mensagem);
       }
     }

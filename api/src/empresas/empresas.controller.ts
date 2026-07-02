@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { empresasQuerySchema as empresaQuerySchema } from "@padaria/shared/empresas";
 import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/api";
@@ -17,7 +18,7 @@ export async function registrarRotasEmpresas(app: FastifyInstance): Promise<void
       const salvo = await salvarEmpresa(null, request.body);
       return criadoId(reply, salvo?.id ?? "empresas");
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
@@ -31,7 +32,7 @@ export async function registrarRotasEmpresas(app: FastifyInstance): Promise<void
       await salvarEmpresa(id, request.body);
       return semConteudo(reply);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Dados invalidos";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });

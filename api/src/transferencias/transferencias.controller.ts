@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { transferenciaPayloadSchema, transferenciasQuerySchema } from "@padaria/shared/transferencias";
 import { exigirPermissao } from "../auth/guards.js";
@@ -20,7 +21,12 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       } catch {
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
-      const escopoCaixa = await resolverEscopoListagemPorCaixa(request.perfilUsuario, "transferencias", query.empresaId, query.caixaId);
+      const escopoCaixa = await resolverEscopoListagemPorCaixa(
+        request.perfilUsuario,
+        "transferencias",
+        query.empresaId,
+        query.caixaId
+      );
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
       return paginadoDeArray(await listarTransferencias(queryComCaixa, escopoDados), query.page, query.pageSize);
@@ -41,7 +47,7 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
       }
-      return erro(reply, 400, error instanceof Error ? error.message : "Transferencia invalida");
+      return erro(reply, 400, mensagemDominioOuRelancar(error));
     }
   });
 }

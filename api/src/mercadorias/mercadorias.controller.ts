@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { mercadoriaPayloadSchema, mercadoriasQuerySchema } from "@padaria/shared/mercadorias";
 import { exigirPermissao } from "../auth/guards.js";
@@ -17,7 +18,12 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     } catch {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
-    const escopoCaixa = await resolverEscopoListagemPorCaixa(request.perfilUsuario, "mercadorias", query.empresaId, query.caixaId);
+    const escopoCaixa = await resolverEscopoListagemPorCaixa(
+      request.perfilUsuario,
+      "mercadorias",
+      query.empresaId,
+      query.caixaId
+    );
     if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
     const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
     return paginadoDeArray(await listarMercadorias(queryComCaixa, escopoDados), query.page, query.pageSize);
@@ -37,7 +43,7 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
       }
-      return erro(reply, 400, error instanceof Error ? error.message : "Mercadoria invalida");
+      return erro(reply, 400, mensagemDominioOuRelancar(error));
     }
   });
 }

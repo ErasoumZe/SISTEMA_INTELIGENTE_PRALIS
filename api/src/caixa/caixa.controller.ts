@@ -1,3 +1,4 @@
+import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
   abrirCaixaPayloadSchema,
@@ -31,7 +32,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     try {
       return ok(await obterStatusCaixa(query.empresaId, request.perfilUsuario!));
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Caixa invalido";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
@@ -42,7 +43,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const status = await abrirCaixa(body, request.perfilUsuario!);
       return criadoId(reply, status.caixaAberto?.id ?? body.pdvId);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Abertura invalida";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
@@ -54,7 +55,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       await editarAberturaCaixa(caixaId, body, request.perfilUsuario!);
       return semConteudo(reply);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Edicao invalida";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
@@ -69,7 +70,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
         const acerto = await acertarSaldoCaixaOperacional(caixaId, body, request.perfilUsuario!);
         return criadoId(reply, acerto.despesaId);
       } catch (error) {
-        const mensagem = error instanceof Error ? error.message : "Acerto invalido";
+        const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
       }
     }
@@ -82,7 +83,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       await fecharCaixa(caixaId, body, request.perfilUsuario!);
       return semConteudo(reply);
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Fechamento invalido";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
@@ -96,7 +97,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
         query.pageSize
       );
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Historico invalido";
+      const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });

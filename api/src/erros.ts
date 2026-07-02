@@ -1,4 +1,16 @@
-import type { JsonValue } from "@padaria/shared/api";
+import type { DadosExternos, JsonValue } from "@padaria/shared/api";
+
+// Uso nos catch dos controllers. Services legados sinalizam regra de negocio com
+// `new Error("mensagem")` — para esses, retorna a mensagem para o mapeamento local de status.
+// Qualquer outra coisa e relancada para o error handler global: ErroDominio responde com
+// status/codigo proprios; falhas tecnicas (driver pg, Zod, TypeError...) viram 500 logado,
+// nunca 400 com mensagem interna crua.
+export function mensagemDominioOuRelancar(error: DadosExternos): string {
+  if (error instanceof Error && !(error instanceof ErroDominio) && error.constructor === Error && !("code" in error)) {
+    return error.message;
+  }
+  throw error;
+}
 
 export class ErroDominio extends Error {
   constructor(
