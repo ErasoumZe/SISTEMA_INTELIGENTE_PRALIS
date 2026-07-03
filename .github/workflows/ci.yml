@@ -28,6 +28,8 @@ jobs:
         run: npm run check
       - name: Testes unitarios
         run: npm run test:unit --workspace @padaria/tests
+      - name: Testes de front (web-vue)
+        run: npm run test --workspace @padaria/web-vue
       - name: Build completo
         run: npm run build
 
