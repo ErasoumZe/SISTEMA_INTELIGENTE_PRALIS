@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import {
   TELA_TEMA_RESUMO_CAIXA,
+  deCentavos,
+  paraCentavos,
+  somarCentavos,
   type AuthSession,
   type ConfiguracaoAparenciaEmpresa,
   type TemaAplicacao
 } from "@padaria/shared";
-import { deCentavos, paraCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 import type {
   CadastroForm,
   CaixaStatus,
