@@ -31,6 +31,7 @@
     "db:setup": "npm run setup:dev --workspace @padaria/db",
     "db:seed": "npm run seed:dev --workspace @padaria/db",
     "api:dev:prepare": "npm run db:setup && npm run db:seed",
+    "importar:pralis": "cross-env NODE_OPTIONS=--conditions=development tsx src/scripts/importar-pralis.ts",
     "api:prod:migrate": "npm run db:migrate:drizzle && npm run db:migrate"
   },
   "dependencies": {
