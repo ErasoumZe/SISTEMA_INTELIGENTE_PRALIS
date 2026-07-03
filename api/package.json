@@ -42,6 +42,7 @@
     "@fastify/rate-limit": "11.1.0",
     "@padaria/db": "0.1.0",
     "@padaria/shared": "0.1.0",
+    "@sentry/node": "^10.63.0",
     "better-auth": "^1.6.11",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.2",

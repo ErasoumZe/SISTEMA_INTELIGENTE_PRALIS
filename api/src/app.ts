@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { env } from "./env.js";
 import { ErroDominio } from "./erros.js";
+import { capturarErro, iniciarObservabilidade } from "./observabilidade.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
@@ -41,6 +42,9 @@ import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 const rotasComAutenticacaoPropria = new Set(["/health", "/api/auth/*", "/api/me", "/api/sessao", "/api/integracoes"]);
 
 export async function buildApp(): Promise<FastifyInstance> {
+  // Rastreamento de erros opcional (no-op sem SENTRY_DSN).
+  iniciarObservabilidade();
+
   const app = Fastify({
     logger:
       process.env["NODE_ENV"] === "test"
@@ -78,6 +82,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
 
     request.log.error(error);
+    capturarErro(error);
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
   });
 

@@ -14,7 +14,9 @@ const envSchema = z.object({
   AUTH_BASE_URL: z.string().url().default("http://localhost:4100"),
   WEB_ORIGIN: z.string().url().default("http://localhost:5174"),
   PORT: z.coerce.number().default(4100),
-  HOST: z.string().default("0.0.0.0")
+  HOST: z.string().default("0.0.0.0"),
+  // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
+  SENTRY_DSN: z.string().url().optional()
 });
 
 export const env = envSchema.parse(process.env);
