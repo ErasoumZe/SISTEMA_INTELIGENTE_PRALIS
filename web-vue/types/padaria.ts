@@ -100,6 +100,8 @@ export type Opcao = {
   custo?: string | number | null;
   margem?: string | number | null;
   precoVenda?: string | number | null;
+  // Derivado pelo servidor na leitura (promocao ativa por dia/horario) — nunca enviado de volta.
+  precoVendaAtual?: number | null;
   auto?: boolean;
   status?: string | null;
   sigla?: string;

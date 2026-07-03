@@ -1,7 +1,7 @@
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
-import { permissoes, permissoesOcultasNaTela, secoesPermissoes } from "~/utils/domain";
+import { dinheiro, permissoes, permissoesOcultasNaTela, secoesPermissoes } from "~/utils/domain";
 
 type LinhaCadastro = Record<string, string | undefined>;
 
@@ -69,6 +69,7 @@ export function useCadastroView(params: {
         custo: item.custo != null ? String(item.custo) : "",
         margem: item.margem != null ? String(Number(item.margem) * 100) : "",
         precoVenda: item.precoVenda != null ? String(item.precoVenda) : "",
+        preco_atual: item.precoVendaAtual != null ? dinheiro(item.precoVendaAtual) : "-",
         auto: item.auto ? "true" : "false",
         status: item.status ?? "ativo",
         tipo: item.tipo ?? "revenda",
@@ -201,7 +202,7 @@ export function useCadastroView(params: {
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento"],
       clientes: ["Nome", "Documento"],
-      produtos: ["Codigo", "Nome", "Marca", "Unidade"]
+      produtos: ["Codigo", "Nome", "Marca", "Unidade", "Preco atual"]
     };
     return colunas[tela] ?? ["Nome"];
   }

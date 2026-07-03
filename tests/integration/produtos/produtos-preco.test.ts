@@ -99,4 +99,56 @@ describe("produtos preco autoritativo integration", () => {
     ]);
     expect(linha?.preco_venda).toBeNull();
   });
+
+  it("Deve_DerivarPrecoVendaAtualNoServidor_Quando_PromocaoAtiva", async () => {
+    // ADR-003: o preco vigente e derivado na LEITURA pelo servidor (nunca persistido).
+    const comPromocao = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        descricao: "Produto com promocao sempre ativa",
+        unidadeIndividualId: idsTeste.unidade,
+        quantidadeIndividual: 1,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+        conversoes: [],
+        auto: false,
+        precoVenda: 10,
+        promocoes: [
+          { tipo: "valor", valor: 8, seg: true, ter: true, qua: true, qui: true, sex: true, sab: true, dom: true }
+        ]
+      }
+    });
+    expect(comPromocao.statusCode, comPromocao.body).toBe(201);
+    const comPromocaoId = json<{ data: { id: string } }>(comPromocao).data.id;
+
+    const semPromocao = await contexto.app.inject({
+      method: "POST",
+      url: "/api/produtos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        descricao: "Produto sem promocao",
+        unidadeIndividualId: idsTeste.unidade,
+        quantidadeIndividual: 1,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+        conversoes: [],
+        auto: false,
+        precoVenda: 10
+      }
+    });
+    expect(semPromocao.statusCode, semPromocao.body).toBe(201);
+    const semPromocaoId = json<{ data: { id: string } }>(semPromocao).data.id;
+
+    const lista = await contexto.app.inject({
+      method: "GET",
+      url: `/api/produtos?empresaId=${idsTeste.empresaA}&pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(lista.statusCode).toBe(200);
+    const itens = json<{ data: { id: string; precoVendaAtual: number | null }[] }>(lista).data;
+    expect(itens.find((item) => item.id === comPromocaoId)?.precoVendaAtual).toBe(8);
+    expect(itens.find((item) => item.id === semPromocaoId)?.precoVendaAtual).toBe(10);
+  });
 });

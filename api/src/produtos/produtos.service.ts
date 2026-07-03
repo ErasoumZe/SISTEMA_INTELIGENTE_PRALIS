@@ -1,9 +1,11 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import {
   calcularPrecoVenda,
+  calcularPrecoVendaComPromocao,
   produtoPayloadSchema,
   type ExportarProdutoPayload as ExportarPayload,
-  type ImportarProdutosPayload as ImportarPayload
+  type ImportarProdutosPayload as ImportarPayload,
+  type PromocaoRegra
 } from "@padaria/shared/produtos";
 import { empresasPermitidas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
@@ -27,7 +29,30 @@ export class ProdutoDuplicadoError extends Error {
 
 export async function listarProdutos(escopoDados: string[]) {
   if (!escopoDados.length) return [];
-  return listarProdutosRepository(escopoDados);
+  const agora = new Date();
+  const linhas = await listarProdutosRepository(escopoDados);
+  // ADR-002/003: o preco vigente (com promocao ativa por dia/horario) e derivado na
+  // LEITURA, pelo servidor — nunca persistido nem calculado pelo cliente.
+  return linhas.map((produto) => ({
+    ...produto,
+    precoVendaAtual:
+      produto.precoVenda == null
+        ? null
+        : calcularPrecoVendaComPromocao({
+            precoVenda: Number(produto.precoVenda),
+            agora,
+            promocoes: produto.promocoes.map(
+              (promo): PromocaoRegra => ({
+                tipo: promo.tipo === "valor" ? "valor" : "desconto",
+                valor: promo.valor == null ? null : Number(promo.valor),
+                descontoFracao: promo.descontoFracao == null ? null : Number(promo.descontoFracao),
+                horaInicio: promo.horaInicio,
+                horaFim: promo.horaFim,
+                dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom]
+              })
+            )
+          })
+  }));
 }
 
 export async function salvarProduto(id: string | null, body: DadosExternos, criadoPorUsuarioId?: string | null) {
