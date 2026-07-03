@@ -41,7 +41,6 @@ import {
   integracoesRegistros,
   integracoesSemNovidade,
   integracoesVinculos,
-  itensVendas,
   lacresMalotes,
   malotes,
   mercadorias,
@@ -554,7 +553,6 @@ await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
 await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
 await banco.delete(retiradas).where(eq(retiradas.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
-await banco.delete(itensVendas).where(eq(itensVendas.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
 if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
@@ -1058,15 +1056,6 @@ await banco.insert(vendasPagamentos).values({
   tipoPagamentoAutomacao: "Dinheiro",
   numeroVendas: 1,
   totalPago: "96.00"
-});
-
-await banco.insert(itensVendas).values({
-  empresaId,
-  produtoId: produto.id,
-  descricaoProduto: "Pao frances",
-  quantidade: "120",
-  valorTotal: "96.00",
-  dataVenda: dataISO(-1)
 });
 
 const despesa = (

@@ -5,7 +5,6 @@ export {
   integracoesRegistros,
   integracoesSemNovidade,
   integracoesVinculos,
-  itensVendas,
   vendas,
   vendasComprovantes,
   vendasPagamentos,

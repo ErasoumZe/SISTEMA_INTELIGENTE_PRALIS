@@ -36,6 +36,13 @@
       "when": 1783021401832,
       "tag": "0004_indices_consulta",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783080072711,
+      "tag": "0005_produtos_checks_drop_itens_vendas",
+      "breakpoints": true
     }
   ]
 }

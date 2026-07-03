@@ -20,7 +20,6 @@ import {
   integracoesCamposConfig,
   integracoesChaves,
   integracoesVinculos,
-  itensVendas,
   lacresMalotes,
   malotes,
   pdvs,
@@ -266,22 +265,18 @@ export async function aplicarSeedIntegracao() {
   await banco
     .insert(unidadesMedida)
     .values({ id: idsTeste.unidade, empresaId: idsTeste.empresaA, nome: "Unidade", sigla: "un" });
-  await banco
-    .insert(fornecedores)
-    .values({
-      id: idsTeste.fornecedor,
-      empresaId: idsTeste.empresaA,
-      nome: "Fornecedor Integracao",
-      documento: "00000000000100"
-    });
-  await banco
-    .insert(clientes)
-    .values({
-      id: idsTeste.cliente,
-      empresaId: idsTeste.empresaA,
-      nome: "Cliente Integracao",
-      documento: "00000000000999"
-    });
+  await banco.insert(fornecedores).values({
+    id: idsTeste.fornecedor,
+    empresaId: idsTeste.empresaA,
+    nome: "Fornecedor Integracao",
+    documento: "00000000000100"
+  });
+  await banco.insert(clientes).values({
+    id: idsTeste.cliente,
+    empresaId: idsTeste.empresaA,
+    nome: "Cliente Integracao",
+    documento: "00000000000999"
+  });
   await banco.insert(produtos).values({
     id: idsTeste.produto,
     empresaId: idsTeste.empresaA,
@@ -361,15 +356,6 @@ export async function aplicarSeedIntegracao() {
     numeroVendas: 1,
     totalPago: "42.00"
   });
-  await banco.insert(itensVendas).values({
-    empresaId: idsTeste.empresaA,
-    produtoId: idsTeste.produto,
-    descricaoProduto: "Produto Integracao",
-    quantidade: "2",
-    valorTotal: "42.00",
-    dataVenda: "2026-06-30"
-  });
-
   await banco.insert(integracoesChaves).values({
     id: idsTeste.integracaoChave,
     empresaId: idsTeste.empresaA,

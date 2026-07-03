@@ -430,7 +430,9 @@ export const produtos = pgTable(
   },
   (table) => [
     // codigo interno unico por empresa (NULLs sao distintos no Postgres, entao produtos ainda sem codigo convivem)
-    uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno)
+    uniqueIndex("produtos_codigo_interno_empresa_uidx").on(table.empresaId, table.codigoInterno),
+    check("produtos_status_check", sql`${table.status} in ('ativo', 'inativo')`),
+    check("produtos_tipo_check", sql`${table.tipo} in ('revenda', 'transformacao')`)
   ]
 );
 
@@ -1091,14 +1093,3 @@ export const debitosColaboradores = pgTable(
     index("debitos_colaboradores_empresa_colaborador_idx").on(table.empresaId, table.colaboradorId)
   ]
 );
-
-export const itensVendas = pgTable("itens_vendas", {
-  id: idUuid,
-  empresaId,
-  produtoId: uuid("produto_id").references(() => produtos.id),
-  descricaoProduto: text("descricao_produto").notNull(),
-  quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("0"),
-  valorTotal: valorMonetario("valor_total").notNull().default("0"),
-  dataVenda: date("data_venda").notNull(),
-  criadoEm
-});
