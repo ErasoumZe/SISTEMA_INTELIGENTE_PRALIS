@@ -13,7 +13,12 @@ import {
   obterCaixaParaLancamento,
   somaConfereCentavos
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarEdicaoNoCaixaAberto, validarReferenciasMercadoria } from "../lancamentos/lancamentos.dominio.js";
+import {
+  resolverComputarLancamento,
+  resolverDataPagamentoLancamento,
+  validarEdicaoNoCaixaAberto,
+  validarReferenciasMercadoria
+} from "../lancamentos/lancamentos.dominio.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import {
   atualizarMercadoriaRepository,
@@ -48,9 +53,16 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    const computar = deveComputarMercadoria(dados.temNotaFiscal, dados.computar);
+    const computar = deveComputarMercadoria(
+      dados.temNotaFiscal,
+      resolverComputarLancamento(dados.computar, perfil.permissoes)
+    );
+    const normalizados = {
+      ...dados,
+      dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+    };
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const mercadoria = await criarMercadoriaRepository(dados, computar, perfil.usuarioId, caixa.id, tx);
+    const mercadoria = await criarMercadoriaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
     return { id: mercadoria.id, computar };
   });
 }
@@ -73,8 +85,15 @@ export async function atualizarMercadoria(
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const computar = deveComputarMercadoria(dados.temNotaFiscal, dados.computar);
-    await atualizarMercadoriaRepository(mercadoriaId, dados, computar, tx);
+    const computar = deveComputarMercadoria(
+      dados.temNotaFiscal,
+      resolverComputarLancamento(dados.computar, perfil.permissoes)
+    );
+    const normalizados = {
+      ...dados,
+      dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+    };
+    await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
     return { id: mercadoriaId, computar };
   });
 }

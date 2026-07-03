@@ -13,7 +13,12 @@ import {
   obterCaixaParaLancamento,
   somaConfereCentavos
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarEdicaoNoCaixaAberto, validarReferenciasDespesa } from "../lancamentos/lancamentos.dominio.js";
+import {
+  resolverComputarLancamento,
+  resolverDataPagamentoLancamento,
+  validarEdicaoNoCaixaAberto,
+  validarReferenciasDespesa
+} from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarDespesaRepository,
   buscarDespesaDetalheRepository,
@@ -41,13 +46,18 @@ export async function listarDespesas(
 export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_criar");
   validarDespesa(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  const normalizados = {
+    ...dados,
+    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+  };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const despesa = await criarDespesaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
-    return { id: despesa.id, computar: dados.computar };
+    const despesa = await criarDespesaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+    return { id: despesa.id, computar };
   });
 }
 
@@ -64,12 +74,17 @@ export async function atualizarDespesa(
 ): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_editar");
   validarDespesa(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  const normalizados = {
+    ...dados,
+    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+  };
   return executarEmTransacao(async (tx) => {
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    await atualizarDespesaRepository(despesaId, dados, dados.computar, existente!.caixaId, perfil.usuarioId, tx);
-    return { id: despesaId, computar: dados.computar };
+    await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
+    return { id: despesaId, computar };
   });
 }

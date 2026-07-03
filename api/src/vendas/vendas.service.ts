@@ -13,7 +13,12 @@ import {
   criarVendaRepository,
   listarVendasRepository
 } from "./vendas.repository.js";
-import { validarEdicaoNoCaixaAberto, validarReferenciasVenda } from "../lancamentos/lancamentos.dominio.js";
+import {
+  resolverComputarLancamento,
+  resolverDataPagamentoLancamento,
+  validarEdicaoNoCaixaAberto,
+  validarReferenciasVenda
+} from "../lancamentos/lancamentos.dominio.js";
 
 export function validarVenda(dados: VendaPayload): void {
   if (dados.itensVenda.length) {
@@ -38,13 +43,18 @@ export async function listarVendas(query: VendasQuery, empresasPermitidasIds: st
 export async function criarVenda(dados: VendaPayload, perfil: PerfilUsuario): Promise<VendaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "entradas_criar");
   validarVenda(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  const normalizados = {
+    ...dados,
+    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+  };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const venda = await criarVendaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
-    return { id: venda.id, computar: dados.computar };
+    const venda = await criarVendaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+    return { id: venda.id, computar };
   });
 }
 
@@ -61,12 +71,17 @@ export async function atualizarVenda(
 ): Promise<VendaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "entradas_editar");
   validarVenda(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  const normalizados = {
+    ...dados,
+    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
+  };
   return executarEmTransacao(async (tx) => {
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    await atualizarVendaRepository(vendaId, dados, dados.computar, tx);
-    return { id: vendaId, computar: dados.computar };
+    await atualizarVendaRepository(vendaId, normalizados, computar, tx);
+    return { id: vendaId, computar };
   });
 }

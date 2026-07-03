@@ -250,6 +250,22 @@ export function exigirPermissaoLancamento(permissoes: readonly Permissao[], perm
   if (!temPermissao(permissoes, permissao)) throw new PermissaoLancamentoInsuficienteError(permissao);
 }
 
+// ADR-004: campos sensiveis sao decisao de servidor. Cliente comum nao marca lancamento
+// como nao-computavel nem como ja pago na criacao/edicao; a excecao exige caixas_gerenciar
+// (politica provisoria ate o modulo Financeiro definir permissoes proprias de baixa).
+export function resolverComputarLancamento(computarSolicitado: boolean, permissoes: readonly Permissao[]): boolean {
+  if (computarSolicitado) return true;
+  return temPermissao(permissoes, "caixas_gerenciar") ? false : true;
+}
+
+export function resolverDataPagamentoLancamento(
+  dataPagamento: string | null | undefined,
+  permissoes: readonly Permissao[]
+): string | null {
+  if (!dataPagamento) return null;
+  return temPermissao(permissoes, "caixas_gerenciar") ? dataPagamento : null;
+}
+
 // Confere soma de itens contra o total em centavos inteiros (sem float).
 // Cada valor e convertido individualmente, espelhando como cada linha e gravada no banco.
 export function somaConfereCentavos(valores: number[], total: number): boolean {

@@ -12,7 +12,11 @@ import {
   obterCaixaParaLancamento,
   usarLacreSeInformado
 } from "../lancamentos/lancamentos.dominio.js";
-import { validarEdicaoNoCaixaAberto, validarReferenciasTransferencia } from "../lancamentos/lancamentos.dominio.js";
+import {
+  resolverComputarLancamento,
+  validarEdicaoNoCaixaAberto,
+  validarReferenciasTransferencia
+} from "../lancamentos/lancamentos.dominio.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import {
   atualizarTransferenciaRepository,
@@ -39,6 +43,7 @@ export async function criarTransferencia(
 ): Promise<TransferenciaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
@@ -49,8 +54,8 @@ export async function criarTransferencia(
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
 
-    const transferencia = await criarTransferenciaRepository(dados, dados.computar, perfil.usuarioId, caixa.id, tx);
-    return { id: transferencia.id, computar: dados.computar };
+    const transferencia = await criarTransferenciaRepository(dados, computar, perfil.usuarioId, caixa.id, tx);
+    return { id: transferencia.id, computar };
   });
 }
 
@@ -72,6 +77,7 @@ export async function atualizarTransferencia(
 ): Promise<TransferenciaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_editar");
   validarTransferencia(dados);
+  const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     const caixa = await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
@@ -86,7 +92,7 @@ export async function atualizarTransferencia(
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
-    await atualizarTransferenciaRepository(transferenciaId, dados, dados.computar, tx);
-    return { id: transferenciaId, computar: dados.computar };
+    await atualizarTransferenciaRepository(transferenciaId, dados, computar, tx);
+    return { id: transferenciaId, computar };
   });
 }

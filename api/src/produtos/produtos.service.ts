@@ -1,5 +1,6 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import {
+  calcularPrecoVenda,
   produtoPayloadSchema,
   type ExportarProdutoPayload as ExportarPayload,
   type ImportarProdutosPayload as ImportarPayload
@@ -41,6 +42,22 @@ export async function salvarProduto(id: string | null, body: DadosExternos, cria
       throw new ProdutoDuplicadoError(`Ja existe o produto "${duplicado.descricao}" nesta loja${porQuem}.`);
     }
   }
+  // ADR-002: preco de venda e decisao do servidor. Com auto=true o valor enviado pelo
+  // cliente e IGNORADO e recalculado pela regra oficial do shared; manual (auto=false)
+  // aceita o valor digitado. Mesma formula que o front usa no preview.
+  const precoVenda = dados.auto
+    ? dados.custo == null
+      ? null
+      : calcularPrecoVenda({
+          auto: true,
+          custo: dados.custo,
+          quantidadeCaixa: dados.quantidadeCaixa ?? 1,
+          margem: dados.margem ?? null,
+          margemGrupo: 0,
+          precoManual: 0
+        })
+    : (dados.precoVenda ?? null);
+
   return salvarProdutoRepository({
     ...(id ? { id } : {}),
     empresaId: dados.empresaId,
@@ -58,7 +75,7 @@ export async function salvarProduto(id: string | null, body: DadosExternos, cria
     medidaCompra: dados.medidaCompra ?? null,
     custo: dados.custo ?? null,
     margem: dados.margem ?? null,
-    precoVenda: dados.precoVenda ?? null,
+    precoVenda,
     auto: dados.auto,
     status: dados.status,
     tipo: dados.tipo,
