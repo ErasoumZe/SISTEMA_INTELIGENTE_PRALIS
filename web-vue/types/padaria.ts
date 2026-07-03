@@ -1,3 +1,6 @@
+// M3/ADR-002: tipos de formulario de cadastro agora moram no shared (fachada para o front).
+export type { CadastroForm, ProdutoConversaoForm, ProdutoFiscalForm, ProdutoTransformacaoForm } from "@padaria/shared";
+
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 
 // Dados fiscais do produto como vêm da API (numeric chega como string).
@@ -14,32 +17,12 @@ export type ProdutoFiscalDados = {
   icms?: string | number | null;
 };
 
-// Dados fiscais no formulário (tudo string para os inputs).
-export type ProdutoFiscalForm = {
-  ncm: string;
-  cest: string;
-  categoriaFiscal: string;
-  cstPisCofins: string;
-  aliquotaCheia: string;
-  aliquotaFcp: string;
-  aliquotaPis: string;
-  aliquotaCofins: string;
-  reducaoIcms: string;
-  icms: string;
-};
-
 // Transformacao (ficha de receita) como vem da API e no formulario.
 export type ProdutoTransformacaoDados = {
   precisao?: string | null;
   quantidade?: string | number | null;
   unidade?: string | null;
   produtoReceituario?: string | null;
-};
-export type ProdutoTransformacaoForm = {
-  precisao: string;
-  quantidade: string;
-  unidade: string;
-  produtoReceituario: string;
 };
 
 // Promocao como vem da API (1:N).
@@ -272,87 +255,9 @@ export type TreeItem = {
   item: Record<string, string | undefined>;
 };
 
-export type CadastroForm = {
-  nome: string;
-  documento: string;
-  dataNascimento: string;
-  whatsapp: string;
-  cep: string;
-  rua: string;
-  numero: string;
-  complemento: string;
-  bairro: string;
-  cidade: string;
-  estado: string;
-  cnpj: string;
-  email: string;
-  senha: string;
-  cpf: string;
-  sigla: string;
-  codigo: string;
-  codigoBarras: string;
-  descricao: string;
-  marca: string;
-  unidadeIndividualId: string;
-  quantidadeIndividual: string;
-  embalagem: string;
-  cDe: string;
-  quantidadeCaixa: string;
-  medidaCompra: string;
-  grupoMercadoriaId: string;
-  produtoConversoes: ProdutoConversaoForm[];
-  custo: string;
-  margem: string;
-  precoVenda: string;
-  auto: boolean;
-  status: "ativo" | "inativo";
-  tipo: "revenda" | "transformacao";
-  quantidadeEstoque: string;
-  estoqueMin: string;
-  estoqueMax: string;
-  setorEstoque: string;
-  localVenda1: string;
-  localVenda2: string;
-  fotoUrl: string;
-  fiscal: ProdutoFiscalForm;
-  transformacao: ProdutoTransformacaoForm;
-  promoTipo: "nenhum" | "valor" | "desconto";
-  promoValor: string;
-  promoDescontoPct: string;
-  promoHoraInicio: string;
-  promoHoraFim: string;
-  promoDias: boolean[];
-  promoValidaAte: string;
-  contaId: string;
-  ativo: boolean;
-  tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
-  grupoPaiId: string;
-  tipoAreaSetor: "area" | "setor";
-  areaId: string;
-  setorPaiId: string;
-  setorId: string;
-  colaboradorId: string;
-  novoColaborador: boolean;
-  novoColaboradorNome: string;
-  novoColaboradorCpf: string;
-  novoColaboradorSetorId: string;
-  novoColaboradorCargoId: string;
-  cargoId: string;
-  empresaIds: string[];
-  tipoPermissao: "cargo" | "setor" | "usuario";
-  usuarioId: string;
-  regras: Record<string, boolean>;
-};
-
 export type ProdutoConversao = {
   id?: string;
   produtoId?: string;
-  unidadeMedidaId: string;
-  quantidade: string;
-  unidadesIndividuais: string;
-};
-
-export type ProdutoConversaoForm = {
   unidadeMedidaId: string;
   quantidade: string;
   unidadesIndividuais: string;

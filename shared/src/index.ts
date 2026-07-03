@@ -1,6 +1,7 @@
 export * from "./app/index.js";
 export * from "./api/index.js";
 export * from "./autenticacao/index.js";
+export * from "./cadastros/index.js";
 export * from "./caixa/index.js";
 export * from "./areas/index.js";
 export * from "./clientes/index.js";

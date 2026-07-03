@@ -26,6 +26,11 @@
       "development": "./src/autenticacao/index.ts",
       "default": "./dist/autenticacao/index.js"
     },
+    "./cadastros": {
+      "types": "./dist/cadastros/index.d.ts",
+      "development": "./src/cadastros/index.ts",
+      "default": "./dist/cadastros/index.js"
+    },
     "./caixa": {
       "types": "./dist/caixa/index.d.ts",
       "development": "./src/caixa/index.ts",

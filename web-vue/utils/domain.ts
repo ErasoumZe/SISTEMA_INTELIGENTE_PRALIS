@@ -1,11 +1,20 @@
 import {
   TELA_TEMA_RESUMO_CAIXA,
-  calcularPrecoVenda,
   permissoes as permissoesCompartilhadas,
   temAlgumaPermissao,
   temPermissao,
   type Permissao,
   type TemaAplicacao
+} from "@padaria/shared";
+// M3/ADR-002: serializacao formulario -> payload agora mora no shared; fachada para o front.
+export {
+  cadastroPayload,
+  fiscalDoFormProduto,
+  margemFracaoDoForm,
+  numeroCampoOuNulo,
+  precoVendaDoFormProduto,
+  promocoesDoFormProduto,
+  transformacaoDoFormProduto
 } from "@padaria/shared";
 import type {
   AcaoNovo,
@@ -641,75 +650,6 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
   return mapa[tela] ?? tela.replaceAll("_", "-");
 }
 
-function documentoCadastroEhCpf(documento: string) {
-  const digitos = documento.replace(/\D/g, "");
-  return digitos.length > 0 && digitos.length <= 11;
-}
-
-// converte campo de texto em numero, tratando vazio e nao-numerico (NaN) como null
-export function numeroCampoOuNulo(valor: string): number | null {
-  if (valor === "") return null;
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? numero : null;
-}
-
-// Margem no formulario e digitada em % (ex.: 70). Converte para fracao (0.70) com clamp 0-1000% (BUG-02 do Pralis).
-export function margemFracaoDoForm(margemPct: string): number | null {
-  const pct = numeroCampoOuNulo(margemPct);
-  if (pct == null) return null;
-  return Math.min(1000, Math.max(0, pct)) / 100;
-}
-
-// preco de referencia do produto a partir do formulario: automatico calcula por custo+margem
-// (null se sem custo); manual usa o valor digitado (null se vazio). Fonte unica usada pelo
-// payload e pelo preview, para nunca divergirem.
-export function precoVendaDoFormProduto(
-  form: Pick<CadastroForm, "auto" | "custo" | "margem" | "precoVenda" | "quantidadeCaixa">
-): number | null {
-  const custo = numeroCampoOuNulo(form.custo);
-  if (form.auto) {
-    if (custo == null) return null;
-    return calcularPrecoVenda({
-      auto: true,
-      custo,
-      // custo e da CAIXA; divide pelas unidades por caixa (qtCad), nao pela gramatura (quantidadeIndividual)
-      quantidadeCaixa: Number(form.quantidadeCaixa || 1),
-      margem: margemFracaoDoForm(form.margem),
-      margemGrupo: 0,
-      precoManual: 0
-    });
-  }
-  return numeroCampoOuNulo(form.precoVenda);
-}
-
-// Monta o bloco fiscal do payload a partir do form; null se nada preenchido (como no Pralis).
-export function fiscalDoFormProduto(fiscal: CadastroForm["fiscal"]) {
-  const temAlgum =
-    fiscal.ncm ||
-    fiscal.cest ||
-    fiscal.categoriaFiscal ||
-    fiscal.cstPisCofins ||
-    fiscal.aliquotaCheia ||
-    fiscal.aliquotaFcp ||
-    fiscal.aliquotaPis ||
-    fiscal.aliquotaCofins ||
-    fiscal.reducaoIcms ||
-    fiscal.icms;
-  if (!temAlgum) return null;
-  return {
-    ncm: fiscal.ncm || null,
-    cest: fiscal.cest || null,
-    categoriaFiscal: fiscal.categoriaFiscal || null,
-    cstPisCofins: fiscal.cstPisCofins || null,
-    aliquotaCheia: numeroCampoOuNulo(fiscal.aliquotaCheia),
-    aliquotaFcp: numeroCampoOuNulo(fiscal.aliquotaFcp),
-    aliquotaPis: numeroCampoOuNulo(fiscal.aliquotaPis),
-    aliquotaCofins: numeroCampoOuNulo(fiscal.aliquotaCofins),
-    reducaoIcms: numeroCampoOuNulo(fiscal.reducaoIcms),
-    icms: numeroCampoOuNulo(fiscal.icms)
-  };
-}
-
 // Reconstroi o bloco fiscal do formulario a partir da linha (JSON) da listagem, para edicao.
 export function fiscalFormDeLinha(fiscalJson: string | undefined): CadastroForm["fiscal"] {
   const vazio = formCadastroVazio().fiscal;
@@ -734,18 +674,6 @@ export function fiscalFormDeLinha(fiscalJson: string | undefined): CadastroForm[
   }
 }
 
-// Bloco transformacao do payload — so quando tipo = transformacao (como no Pralis).
-export function transformacaoDoFormProduto(form: CadastroForm) {
-  if (form.tipo !== "transformacao") return null;
-  const t = form.transformacao;
-  return {
-    precisao: t.precisao || null,
-    quantidade: numeroCampoOuNulo(t.quantidade),
-    unidade: t.unidade || null,
-    produtoReceituario: t.produtoReceituario || null
-  };
-}
-
 // Reconstroi o bloco transformacao do formulario a partir da linha (JSON) da listagem.
 export function transformacaoFormDeLinha(json: string | undefined): CadastroForm["transformacao"] {
   const vazio = formCadastroVazio().transformacao;
@@ -761,32 +689,6 @@ export function transformacaoFormDeLinha(json: string | undefined): CadastroForm
   } catch {
     return vazio;
   }
-}
-
-// Promocoes do payload — so quando tipo = revenda; monta 0 ou 1 promocao (como no Pralis).
-// Nenhum dia marcado => vale todos os dias.
-export function promocoesDoFormProduto(form: CadastroForm) {
-  if (form.tipo !== "revenda" || form.promoTipo === "nenhum") return [];
-  const temDia = form.promoDias.some(Boolean);
-  const dia = (i: number) => (temDia ? Boolean(form.promoDias[i]) : true);
-  const pct = numeroCampoOuNulo(form.promoDescontoPct);
-  return [
-    {
-      tipo: form.promoTipo,
-      valor: form.promoTipo === "valor" ? numeroCampoOuNulo(form.promoValor) : null,
-      descontoFracao: form.promoTipo === "desconto" && pct != null ? pct / 100 : null,
-      horaInicio: form.promoHoraInicio || null,
-      horaFim: form.promoHoraFim || null,
-      seg: dia(0),
-      ter: dia(1),
-      qua: dia(2),
-      qui: dia(3),
-      sex: dia(4),
-      sab: dia(5),
-      dom: dia(6),
-      validaAte: form.promoValidaAte || null
-    }
-  ];
 }
 
 // Reconstroi os campos de promocao do formulario a partir da primeira promocao da linha (JSON).
@@ -817,109 +719,6 @@ export function promoFormDeLinha(promocoesJson: string | undefined) {
   } catch {
     return base;
   }
-}
-
-export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
-  if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
-  if (tela === "contas") return { empresaId, nome: form.nome };
-  if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
-  if (tela === "pdv") return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
-  if (tela === "grupos")
-    return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
-  if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
-  if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
-  if (tela === "clientes")
-    return {
-      empresaId,
-      nome: form.nome,
-      documento: form.documento || null,
-      dataNascimento: documentoCadastroEhCpf(form.documento) ? form.dataNascimento || null : null,
-      whatsapp: form.whatsapp || null,
-      email: form.email || null,
-      cep: form.cep || null,
-      rua: form.rua || null,
-      numero: form.numero || null,
-      complemento: form.complemento || null,
-      bairro: form.bairro || null,
-      cidade: form.cidade || null,
-      estado: form.estado || null
-    };
-  if (tela === "produtos") {
-    return {
-      empresaId,
-      codigo: form.codigo || null,
-      codigoBarras: form.codigoBarras || null,
-      descricao: form.descricao || form.nome,
-      marca: form.marca || null,
-      unidadeIndividualId: form.unidadeIndividualId,
-      quantidadeIndividual: Number(form.quantidadeIndividual || 1),
-      embalagem: form.embalagem || null,
-      cDe: form.cDe || null,
-      quantidadeCaixa: Number(form.quantidadeCaixa || 1),
-      medidaCompra: form.medidaCompra || null,
-      grupoMercadoriaId: form.grupoMercadoriaId || null,
-      custo: numeroCampoOuNulo(form.custo),
-      margem: margemFracaoDoForm(form.margem),
-      precoVenda: precoVendaDoFormProduto(form),
-      auto: form.auto,
-      status: form.status,
-      tipo: form.tipo,
-      quantidadeEstoque: numeroCampoOuNulo(form.quantidadeEstoque),
-      estoqueMin: numeroCampoOuNulo(form.estoqueMin),
-      estoqueMax: numeroCampoOuNulo(form.estoqueMax),
-      setorEstoque: form.setorEstoque || null,
-      localVenda1: form.localVenda1 || null,
-      localVenda2: form.localVenda2 || null,
-      fotoUrl: form.fotoUrl || null,
-      fiscal: fiscalDoFormProduto(form.fiscal),
-      transformacao: transformacaoDoFormProduto(form),
-      promocoes: promocoesDoFormProduto(form),
-      conversoes: form.produtoConversoes
-        .filter((conversao) => conversao.unidadeMedidaId && conversao.quantidade && conversao.unidadesIndividuais)
-        .map((conversao) => ({
-          unidadeMedidaId: conversao.unidadeMedidaId,
-          quantidade: Number(conversao.quantidade),
-          unidadesIndividuais: Number(conversao.unidadesIndividuais)
-        }))
-    };
-  }
-  if (tela === "areas_setores") {
-    return form.tipoAreaSetor === "setor"
-      ? { empresaId, nome: form.nome, areaId: form.areaId || null, setorPaiId: form.setorPaiId || null }
-      : { empresaId, nome: form.nome };
-  }
-  if (tela === "usuarios") {
-    const payload: Record<string, unknown> = {
-      nome: form.nome,
-      email: form.email,
-      senha: form.senha || undefined,
-      empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean)
-    };
-    if (form.novoColaborador) {
-      payload.novoColaborador = {
-        empresaId,
-        nome: form.novoColaboradorNome || form.nome,
-        cpf: form.novoColaboradorCpf || null,
-        setorId: form.novoColaboradorSetorId || null,
-        cargoId: form.novoColaboradorCargoId
-      };
-    } else {
-      payload.colaboradorId = form.colaboradorId;
-    }
-    return payload;
-  }
-  if (tela === "permissoes") {
-    return {
-      tipoPermissao: form.tipoPermissao,
-      cargoId: form.tipoPermissao === "cargo" ? form.cargoId : undefined,
-      setorId: form.tipoPermissao === "setor" ? form.setorId : undefined,
-      usuarioId: form.tipoPermissao === "usuario" ? form.usuarioId : undefined,
-      regras: form.regras
-    };
-  }
-  if (tela === "colaboradores")
-    return { empresaId, nome: form.nome, cpf: form.cpf || null, setorId: form.setorId || null, cargoId: form.cargoId };
-  return { empresaId, nome: form.nome, descricao: form.nome };
 }
 
 export function rotaTela(tela: string) {
