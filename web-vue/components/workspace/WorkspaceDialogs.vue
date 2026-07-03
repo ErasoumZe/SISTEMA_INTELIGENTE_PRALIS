@@ -206,6 +206,7 @@ const validacaoQtdPreview = computed(() =>
               v-model="form.valorOriginal"
               type="number"
               label="Valor original"
+              prefix="R$"
               :readonly="discriminandoDespesa || discriminandoMercadoria"
           /></v-col>
           <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao" /></v-col>
@@ -298,11 +299,15 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6"
             ><v-text-field v-model="form.numeroLacre" label="Numero do lacre"
           /></v-col>
-          <v-col cols="12" md="4"><v-text-field v-model="form.valorAcrescimo" type="number" label="Acrescimo" /></v-col>
+          <v-col cols="12" md="4"
+            ><v-text-field v-model="form.valorAcrescimo" type="number" label="Acrescimo" prefix="R$"
+          /></v-col>
           <v-col cols="12" md="8"
             ><v-text-field v-model="form.descricaoAcrescimo" label="Descricao do acrescimo"
           /></v-col>
-          <v-col cols="12" md="4"><v-text-field v-model="form.valorDesconto" type="number" label="Desconto" /></v-col>
+          <v-col cols="12" md="4"
+            ><v-text-field v-model="form.valorDesconto" type="number" label="Desconto" prefix="R$"
+          /></v-col>
           <v-col cols="12" md="8"
             ><v-text-field v-model="form.descricaoDesconto" label="Descricao do desconto"
           /></v-col>

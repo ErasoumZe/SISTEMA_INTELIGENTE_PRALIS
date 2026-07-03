@@ -5,6 +5,7 @@ import {
   type ConfiguracaoAparenciaEmpresa,
   type TemaAplicacao
 } from "@padaria/shared";
+import { deCentavos, paraCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 import type {
   CadastroForm,
   CaixaStatus,
@@ -255,24 +256,24 @@ const {
   permissoesPagina,
   formCadastro
 });
-const totalItensDespesa = computed(() =>
-  itensDespesa.value.reduce((total, item) => total + Number(item.valor || 0), 0)
-);
+// M4/ADR-003: somas monetarias do preview em centavos inteiros (mesma aritmetica do
+// servidor); paraCentavos tolera virgula ("10,50") e string vazia.
+const totalItensDespesa = computed(() => deCentavos(somarCentavos(...itensDespesa.value.map((item) => item.valor))));
 const totalItensMercadoria = computed(() =>
-  itensMercadoria.value.reduce((total, item) => total + Number(item.valorTotal || 0), 0)
+  deCentavos(somarCentavos(...itensMercadoria.value.map((item) => item.valorTotal)))
 );
-const totalItensVenda = computed(() =>
-  itensVenda.value.reduce((total, item) => total + Number(item.valorTotal || 0), 0)
-);
+const totalItensVenda = computed(() => deCentavos(somarCentavos(...itensVenda.value.map((item) => item.valorTotal))));
 const totalTiposPagamento = computed(() =>
-  tiposPagamento.value.reduce((total, item) => total + Number(item.totalPago || 0), 0)
+  deCentavos(somarCentavos(...tiposPagamento.value.map((item) => item.totalPago)))
 );
 const valorTotalOperacao = computed(() =>
-  Math.max(
-    0,
-    Number(form.value.valorOriginal || 0) +
-      Number(form.value.valorAcrescimo || 0) -
-      Number(form.value.valorDesconto || 0)
+  deCentavos(
+    Math.max(
+      0,
+      paraCentavos(form.value.valorOriginal) +
+        paraCentavos(form.value.valorAcrescimo) -
+        paraCentavos(form.value.valorDesconto)
+    )
   )
 );
 const alvosFiltroPermissoes = computed(() => {
@@ -838,7 +839,7 @@ async function salvarOperacao() {
       entidadeNova.value === "despesa" && discriminandoDespesa.value
         ? itensDespesa.value
             .filter((item) => item.descricao || item.valor)
-            .map((item) => ({ ...item, valor: Number(item.valor || 0) }))
+            .map((item) => ({ ...item, valor: deCentavos(paraCentavos(item.valor)) }))
         : [];
     const itensMercadoriaPayload =
       entidadeNova.value === "mercadoria" && discriminandoMercadoria.value
@@ -848,7 +849,7 @@ async function salvarOperacao() {
               ...item,
               quantidade: Number(item.quantidade || 0),
               valorUnitario: Number(item.valorUnitario || 0),
-              valorTotal: Number(item.valorTotal || 0)
+              valorTotal: deCentavos(paraCentavos(item.valorTotal))
             }))
         : [];
     const itensVendaPayload =
@@ -862,7 +863,7 @@ async function salvarOperacao() {
                 descricaoProduto: item.descricaoProduto || produto?.descricao || produto?.nome || "Venda",
                 quantidade: Number(item.quantidade || 0),
                 valorUnitario: Number(item.valorUnitario || 0),
-                valorTotal: Number(item.valorTotal || 0)
+                valorTotal: deCentavos(paraCentavos(item.valorTotal))
               };
             })
         : [];
@@ -873,7 +874,7 @@ async function salvarOperacao() {
             .map((item) => ({
               formaPagamentoId: item.formaPagamentoId || null,
               numeroVendas: Number(item.numeroVendas || 0),
-              totalPago: Number(item.totalPago || 0)
+              totalPago: deCentavos(paraCentavos(item.totalPago))
             }))
         : [];
 
@@ -882,9 +883,9 @@ async function salvarOperacao() {
       ...form.value,
       dataPagamento: form.value.dataPagamento || null,
       maloteId: form.value.maloteId || null,
-      valorOriginal: Number(form.value.valorOriginal || 0),
-      valorAcrescimo: Number(form.value.valorAcrescimo || 0),
-      valorDesconto: Number(form.value.valorDesconto || 0),
+      valorOriginal: deCentavos(paraCentavos(form.value.valorOriginal)),
+      valorAcrescimo: deCentavos(paraCentavos(form.value.valorAcrescimo)),
+      valorDesconto: deCentavos(paraCentavos(form.value.valorDesconto)),
       itensVenda: itensVendaPayload,
       tiposPagamento: tiposPagamentoPayload,
       itensDespesa: itensDespesaPayload,
