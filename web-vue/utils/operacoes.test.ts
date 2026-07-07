@@ -85,6 +85,26 @@ describe("montarPayloadOperacao", () => {
     expect(payload.dataPagamento).toBeNull();
   });
 
+  it("todo ID opcional em branco vira null, nao '' (o bug 'colaboradorId: Invalid UUID')", () => {
+    // Form vazio: todos os IDs sao "" por padrao. O schema zod rejeita "" em campos uuid.
+    const payload = montarPayloadOperacao("despesa", { ...base, form: { ...formOperacaoVazio() } });
+    expect(payload.colaboradorId).toBeNull();
+    expect(payload.contaOrigemId).toBeNull();
+    expect(payload.contaDestinoId).toBeNull();
+    expect(payload.fornecedorId).toBeNull();
+    expect(payload.grupoDespesaId).toBeNull();
+    expect(payload.grupoMercadoriaId).toBeNull();
+    expect(payload.grupoRetiradaId).toBeNull();
+    expect(payload.maloteId).toBeNull();
+    // IDs preenchidos passam intactos.
+    const preenchido = montarPayloadOperacao("despesa", {
+      ...base,
+      form: { ...formOperacaoVazio(), contaOrigemId: "c1", grupoDespesaId: "g1" }
+    });
+    expect(preenchido.contaOrigemId).toBe("c1");
+    expect(preenchido.grupoDespesaId).toBe("g1");
+  });
+
   it("monta itens de venda com fallback de descricao pelo produto e centavos", () => {
     const form = { ...formOperacaoVazio(), valorOriginal: "12" };
     const payload = montarPayloadOperacao("venda", {
@@ -117,6 +137,8 @@ describe("validarOperacaoParaEnvio", () => {
     grupoMercadoriaId: "gm1",
     contaOrigemId: "c1",
     contaDestinoId: "c2",
+    fornecedorId: "f1",
+    colaboradorId: "col1",
     qtdItensDespesa: 0,
     qtdItensMercadoria: 0
   };
@@ -128,23 +150,30 @@ describe("validarOperacaoParaEnvio", () => {
 
   it("despesa: exige grupo OU itens discriminados (o bug relatado)", () => {
     expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "" })).toMatch(/grupo da despesa/i);
-    // com grupo passa; ou sem grupo mas com itens passa
     expect(validarOperacaoParaEnvio("despesa", ok)).toBeNull();
     expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "", qtdItensDespesa: 2 })).toBeNull();
   });
 
-  it("mercadoria: exige grupo OU itens discriminados", () => {
+  it("mercadoria: exige fornecedor E (grupo OU itens)", () => {
+    expect(validarOperacaoParaEnvio("mercadoria", { ...ok, fornecedorId: "" })).toMatch(/fornecedor/i);
     expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "" })).toMatch(/grupo da mercadoria/i);
     expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "", qtdItensMercadoria: 1 })).toBeNull();
+    expect(validarOperacaoParaEnvio("mercadoria", ok)).toBeNull();
   });
 
-  it("transferencia: conta destino deve diferir da origem", () => {
+  it("retirada: exige colaborador", () => {
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, colaboradorId: "" })).toMatch(/colaborador/i);
+    expect(validarOperacaoParaEnvio("retirada", ok)).toBeNull();
+  });
+
+  it("transferencia: exige conta origem, conta destino e que sejam diferentes", () => {
+    expect(validarOperacaoParaEnvio("transferencia", { ...ok, contaOrigemId: "" })).toMatch(/conta de origem/i);
+    expect(validarOperacaoParaEnvio("transferencia", { ...ok, contaDestinoId: "" })).toMatch(/conta de destino/i);
     expect(validarOperacaoParaEnvio("transferencia", { ...ok, contaDestinoId: "c1" })).toMatch(/diferente/i);
     expect(validarOperacaoParaEnvio("transferencia", ok)).toBeNull();
   });
 
-  it("retirada e venda com descricao passam sem exigir grupo", () => {
-    expect(validarOperacaoParaEnvio("retirada", { ...ok, grupoDespesaId: "" })).toBeNull();
-    expect(validarOperacaoParaEnvio("venda", { ...ok, grupoDespesaId: "" })).toBeNull();
+  it("aceita IDs nulos (campos opcionais em branco) sem quebrar", () => {
+    expect(validarOperacaoParaEnvio("venda", { ...ok, grupoDespesaId: null, contaOrigemId: null })).toBeNull();
   });
 });

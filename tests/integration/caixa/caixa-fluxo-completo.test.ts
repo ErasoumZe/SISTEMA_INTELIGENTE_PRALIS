@@ -214,4 +214,27 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     );
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
+
+  it("contrato do payload do front: ID opcional em branco deve ir como null (nao ''), senao da 400 Invalid UUID", async () => {
+    const { contaId } = await abrirCaixa("contrato-payload", "2026-05-03T08:00");
+    const dataReferencia = "2026-05-03";
+    const base = {
+      empresaId: idsTeste.empresaA,
+      dataReferencia,
+      dataVencimento: dataReferencia,
+      descricao: "Despesa contrato",
+      valorOriginal: 5,
+      contaOrigemId: contaId,
+      grupoDespesaId: idsTeste.grupoDespesaOperacional
+    };
+
+    // Como o front passou a enviar (null nos opcionais em branco): aceito.
+    const comNull = await post("/api/despesas", { ...base, colaboradorId: null, fornecedorId: null });
+    expect(comNull.statusCode, comNull.body).toBe(201);
+
+    // Como o front enviava antes (string vazia): rejeitado com o erro exato do print do Ze.
+    const comVazio = await post("/api/despesas", { ...base, colaboradorId: "" });
+    assertProblem(comVazio, 400);
+    expect(comVazio.body).toContain("colaboradorId");
+  });
 });

@@ -206,6 +206,16 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     empresaId: dados.empresaId,
     ...dados.form,
     dataPagamento: dados.form.dataPagamento || null,
+    // IDs opcionais nao selecionados vao como null (nao ""). O schema zod usa uuid().optional()
+    // .nullable(): aceita UUID, null ou undefined, mas REJEITA "" com "Invalid UUID". Sem isso,
+    // qualquer campo de ID em branco (conta/fornecedor/colaborador/grupo/malote) quebra o envio.
+    contaOrigemId: dados.form.contaOrigemId || null,
+    contaDestinoId: dados.form.contaDestinoId || null,
+    fornecedorId: dados.form.fornecedorId || null,
+    colaboradorId: dados.form.colaboradorId || null,
+    grupoDespesaId: dados.form.grupoDespesaId || null,
+    grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
+    grupoRetiradaId: dados.form.grupoRetiradaId || null,
     maloteId: dados.form.maloteId || null,
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
     valorAcrescimo: deCentavos(paraCentavos(dados.form.valorAcrescimo)),
@@ -224,20 +234,38 @@ export function validarOperacaoParaEnvio(
   entidade: EntidadeOperacional,
   dados: {
     descricao: string;
-    grupoDespesaId: string;
-    grupoMercadoriaId: string;
-    contaOrigemId: string;
-    contaDestinoId: string;
+    grupoDespesaId: string | null;
+    grupoMercadoriaId: string | null;
+    contaOrigemId: string | null;
+    contaDestinoId: string | null;
+    fornecedorId: string | null;
+    colaboradorId: string | null;
     qtdItensDespesa: number;
     qtdItensMercadoria: number;
   }
 ): string | null {
   if (!dados.descricao.trim()) return "Informe a descricao do lancamento.";
+
   if (entidade === "despesa" && !dados.grupoDespesaId && dados.qtdItensDespesa === 0)
     return "Selecione o grupo da despesa ou discrimine os itens da despesa.";
-  if (entidade === "mercadoria" && !dados.grupoMercadoriaId && dados.qtdItensMercadoria === 0)
-    return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
-  if (entidade === "transferencia" && Boolean(dados.contaOrigemId) && dados.contaOrigemId === dados.contaDestinoId)
-    return "A conta de destino deve ser diferente da conta de origem.";
+
+  if (entidade === "mercadoria") {
+    // Schema: fornecedorId e obrigatorio; grupo OU itens tambem.
+    if (!dados.fornecedorId) return "Selecione o fornecedor da mercadoria.";
+    if (!dados.grupoMercadoriaId && dados.qtdItensMercadoria === 0)
+      return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
+  }
+
+  // Schema: retirada exige colaboradorId.
+  if (entidade === "retirada" && !dados.colaboradorId) return "Selecione o colaborador da retirada.";
+
+  if (entidade === "transferencia") {
+    // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.
+    if (!dados.contaOrigemId) return "Selecione a conta de origem.";
+    if (!dados.contaDestinoId) return "Selecione a conta de destino.";
+    if (dados.contaOrigemId === dados.contaDestinoId)
+      return "A conta de destino deve ser diferente da conta de origem.";
+  }
+
   return null;
 }

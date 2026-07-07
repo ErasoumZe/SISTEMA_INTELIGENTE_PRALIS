@@ -221,7 +221,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.contas"
               item-title="nome"
               item-value="id"
-              label="Conta origem"
+              :label="entidadeNova === 'transferencia' ? 'Conta origem *' : 'Conta origem'"
             />
           </v-col>
           <v-col v-if="['venda', 'despesa', 'mercadoria', 'retirada'].includes(entidadeNova)" cols="12" md="6"
@@ -233,7 +233,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.contas"
               item-title="nome"
               item-value="id"
-              label="Conta destino"
+              label="Conta destino *"
             />
           </v-col>
           <v-col v-if="['despesa', 'mercadoria'].includes(entidadeNova)" cols="12" md="6">
@@ -242,7 +242,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.fornecedores"
               item-title="nome"
               item-value="id"
-              label="Fornecedor"
+              :label="entidadeNova === 'mercadoria' ? 'Fornecedor *' : 'Fornecedor'"
               clearable
             />
           </v-col>
@@ -252,7 +252,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.colaboradores"
               item-title="nome"
               item-value="id"
-              label="Colaborador"
+              label="Colaborador *"
               clearable
             />
           </v-col>

@@ -535,7 +535,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       `/api/grupos${query}`
     );
     Object.assign(dados, grupos);
-    [dados.fornecedores, dados.unidadesMedida, dados.produtos] = await Promise.all([
+    // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
+    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos] = await Promise.all([
+      apiGet<Opcao[]>(`/api/contas${query}`),
       apiGet<Opcao[]>(`/api/fornecedores${query}`),
       apiGet<Opcao[]>(`/api/unidades_medida${query}`),
       apiGet<Opcao[]>(`/api/produtos${query}`)
@@ -545,7 +547,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       `/api/grupos${query}`
     );
     Object.assign(dados, grupos);
-    [dados.fornecedores, dados.colaboradores] = await Promise.all([
+    // Conta origem e obrigatoria no form de retirada (sem ela o select fica "No data available").
+    [dados.contas, dados.fornecedores, dados.colaboradores] = await Promise.all([
+      apiGet<Opcao[]>(`/api/contas${query}`),
       apiGet<Opcao[]>(`/api/fornecedores${query}`),
       apiGet<Opcao[]>(`/api/colaboradores${query}`)
     ]);
@@ -759,6 +763,8 @@ async function salvarOperacao() {
       grupoMercadoriaId: payload.grupoMercadoriaId,
       contaOrigemId: payload.contaOrigemId,
       contaDestinoId: payload.contaDestinoId,
+      fornecedorId: payload.fornecedorId,
+      colaboradorId: payload.colaboradorId,
       qtdItensDespesa: payload.itensDespesa.length,
       qtdItensMercadoria: payload.itensMercadoria.length
     });
