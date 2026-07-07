@@ -53,6 +53,7 @@ import {
 } from "~/utils/domain";
 import { formOperacaoDeDetalhe, montarPayloadOperacao, type OperacaoDetalhe } from "~/utils/operacoes";
 import { montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "~/utils/tema";
+import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 
 type TipoPagina =
   | "inicio"
@@ -1215,92 +1216,24 @@ async function salvarTema() {
   }
 }
 
-async function abrirCaixaOperacional(payload: {
-  pdvId: string;
-  usuarioCaixaId: string;
-  dataHoraAbertura: string;
-  observacao: string | null;
-}) {
-  caixaSalvando.value = true;
-  try {
-    // A rota /abrir responde com o id criado (nao um CaixaStatus). Re-busca o status canonico
-    // para o app refletir o caixa aberto imediatamente (inclusive no Painel, sem tela ativa).
-    await apiPost("/api/caixa/abrir", {
-      empresaId: empresaId.value,
-      ...payload
-    });
-    await carregarStatusCaixa(empresaId.value);
-    if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
-    notificar("Caixa aberto com sucesso.");
-    return true;
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-    return false;
-  } finally {
-    caixaSalvando.value = false;
+// Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
+// injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
+const { abrirCaixaOperacional, editarAberturaCaixa, acertarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa(
+  {
+    api: { post: apiPost, put: apiPut },
+    empresaId: () => empresaId.value,
+    telaAtiva: () => telaAtiva.value,
+    resumoSaldo: () => resumo.value?.saldo ?? null,
+    setSalvando: (valor) => {
+      caixaSalvando.value = valor;
+    },
+    carregarStatusCaixa,
+    carregarDadosTela,
+    notificar,
+    mensagemErro,
+    confirmar: (mensagem) => window.confirm(mensagem)
   }
-}
-
-async function editarAberturaCaixa(payload: {
-  caixaId: string;
-  tokenEdicao: string;
-  pdvId: string;
-  usuarioCaixaId: string;
-  dataHoraAbertura: string;
-  observacao: string | null;
-}) {
-  caixaSalvando.value = true;
-  try {
-    const { caixaId, ...body } = payload;
-    // A rota /abertura responde 204 (sem corpo); re-busca o status canonico.
-    await apiPut(`/api/caixa/${caixaId}/abertura`, body);
-    await carregarStatusCaixa(empresaId.value);
-    if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
-    notificar("Abertura atualizada com sucesso.");
-    return true;
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-    return false;
-  } finally {
-    caixaSalvando.value = false;
-  }
-}
-
-async function acertarSaldoOperacional(payload: { caixaId: string; observacao: string | null }) {
-  if (
-    !resumo.value ||
-    !window.confirm(`A diferenca de ${dinheiro(resumo.value.saldo)} sera atribuida ao usuario do caixa.`)
-  ) {
-    return;
-  }
-  caixaSalvando.value = true;
-  try {
-    await apiPost(`/api/caixa/${payload.caixaId}/acertar-saldo`, { observacao: payload.observacao });
-    notificar("Saldo ajustado com sucesso.");
-    await carregarStatusCaixa(empresaId.value);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    caixaSalvando.value = false;
-  }
-}
-
-async function fecharCaixaOperacional(payload: { caixaId: string; observacao: string | null }) {
-  caixaSalvando.value = true;
-  try {
-    // A rota /fechar responde 204 (sem corpo); re-busca o status canonico (evita crash em .resumo).
-    await apiPost(`/api/caixa/${payload.caixaId}/fechar`, {
-      observacao: payload.observacao
-    });
-    await carregarStatusCaixa(empresaId.value);
-    notificar("Caixa fechado com sucesso.");
-    if (telaAtiva.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    caixaSalvando.value = false;
-  }
-}
+);
 
 async function logout() {
   saindo.value = true;
