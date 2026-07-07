@@ -5,7 +5,6 @@ import {
   paraCentavos,
   somarCentavos,
   type AuthSession,
-  type ConfiguracaoAparenciaEmpresa,
   type TemaAplicacao
 } from "@padaria/shared";
 import type {
@@ -53,6 +52,7 @@ import {
   tipoEndpointCadastro
 } from "~/utils/domain";
 import { formOperacaoDeDetalhe, montarPayloadOperacao, type OperacaoDetalhe } from "~/utils/operacoes";
+import { montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "~/utils/tema";
 
 type TipoPagina =
   | "inicio"
@@ -180,15 +180,6 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
-const camposTema = [
-  "corPrimaria",
-  "corSecundaria",
-  "corFundo",
-  "corCartao",
-  "corSucesso",
-  "corAviso",
-  "corErro"
-] as const satisfies ReadonlyArray<keyof TemaAplicacao>;
 
 const empresasDisponiveis = computed(() => empresas.value);
 const empresaId = computed(() => empresaSelecionadaId.value);
@@ -1147,45 +1138,13 @@ async function buscarTema(tela: string) {
 }
 
 function resolverTemaEmpresa(tela: string) {
-  const configuracao = empresaAtiva.value?.configuracoesAparencia;
-  if (!configuracao) return null;
-  if (tela === "padrao") return { ...configuracao.padrao };
-  const especifico = configuracao.especifico.find((item) => item.pagina === tela);
-  return { ...configuracao.padrao, ...(especifico?.propriedades ?? {}) };
-}
-
-function diferencasTema(temaSalvo: TemaAplicacao, padrao: TemaAplicacao): Partial<TemaAplicacao> {
-  return Object.fromEntries(
-    camposTema.filter((campo) => temaSalvo[campo] !== padrao[campo]).map((campo) => [campo, temaSalvo[campo]])
-  ) as Partial<TemaAplicacao>;
+  return resolverTemaDeConfiguracao(empresaAtiva.value?.configuracoesAparencia, tela);
 }
 
 function aplicarTemaNaConfiguracaoLocal(tela: string, temaSalvo: TemaAplicacao) {
   const empresa = empresaAtiva.value;
   if (!empresa?.configuracoesAparencia) return;
-
-  const configuracao: ConfiguracaoAparenciaEmpresa =
-    tela === "padrao"
-      ? {
-          padrao: temaSalvo,
-          especifico: empresa.configuracoesAparencia.especifico
-            .map((item) => ({
-              pagina: item.pagina,
-              propriedades: diferencasTema({ ...temaSalvo, ...item.propriedades }, temaSalvo)
-            }))
-            .filter((item) => Object.keys(item.propriedades).length > 0)
-        }
-      : {
-          padrao: empresa.configuracoesAparencia.padrao,
-          especifico: empresa.configuracoesAparencia.especifico.filter((item) => item.pagina !== tela)
-        };
-
-  if (tela !== "padrao") {
-    const propriedades = diferencasTema(temaSalvo, configuracao.padrao);
-    if (Object.keys(propriedades).length > 0) configuracao.especifico.push({ pagina: tela, propriedades });
-  }
-
-  empresa.configuracoesAparencia = configuracao;
+  empresa.configuracoesAparencia = montarConfiguracaoAparencia(empresa.configuracoesAparencia, tela, temaSalvo);
 }
 
 async function carregarTemaTela(tela: string) {
