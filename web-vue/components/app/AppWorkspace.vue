@@ -54,6 +54,7 @@ import {
 import { formOperacaoDeDetalhe, montarPayloadOperacao, type OperacaoDetalhe } from "~/utils/operacoes";
 import { montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "~/utils/tema";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
+import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 
 type TipoPagina =
   | "inicio"
@@ -824,167 +825,17 @@ async function salvarMalote() {
   }
 }
 
-function upsertOpcao(lista: Opcao[], item: Opcao) {
-  const indice = lista.findIndex((opcao) => opcao.id === item.id);
-  if (indice >= 0) lista.splice(indice, 1, { ...lista[indice], ...item });
-  else lista.unshift(item);
-}
-
-function removerOpcao(lista: Opcao[], id: string) {
-  const indice = lista.findIndex((opcao) => opcao.id === id);
-  if (indice >= 0) lista.splice(indice, 1);
-}
-
-function listaGrupoCadastro(tipoGrupo: CadastroForm["tipoGrupo"]) {
-  if (tipoGrupo === "mercadoria") return opcoes.value.gruposMercadorias;
-  if (tipoGrupo === "retirada") return opcoes.value.gruposRetiradas;
-  if (tipoGrupo === "vendas") return opcoes.value.gruposVendas;
-  return opcoes.value.gruposDespesas;
-}
-
-function atualizarCadastroLocal(tela: string, form: CadastroForm, id: string | undefined) {
-  if (!id) return false;
-  const empresaAtual = empresaId.value;
-  const empresaDoItem = tela === "empresas" ? undefined : empresaAtual;
-  const itemBase: Opcao = { id, ...(empresaDoItem ? { empresaId: empresaDoItem } : {}) };
-
-  if (tela === "empresas") {
-    const item = { ...itemBase, nome: form.nome, cnpj: form.cnpj || null };
-    upsertOpcao(empresas.value, item);
-    upsertOpcao(opcoes.value.empresas, item);
-    return true;
-  }
-
-  if (tela === "contas") {
-    upsertOpcao(opcoes.value.contas, { ...itemBase, nome: form.nome });
-    return true;
-  }
-
-  if (tela === "formas_pagamento") {
-    upsertOpcao(opcoes.value.formasPagamento, { ...itemBase, nome: form.nome });
-    return true;
-  }
-
-  if (tela === "pdv") {
-    upsertOpcao(opcoes.value.pdvs, { ...itemBase, nome: form.nome, contaId: form.contaId, ativo: form.ativo });
-    return true;
-  }
-
-  if (tela === "fornecedores") {
-    upsertOpcao(opcoes.value.fornecedores, { ...itemBase, nome: form.nome, documento: form.documento || undefined });
-    return true;
-  }
-
-  if (tela === "clientes") {
-    upsertOpcao(opcoes.value.clientes, {
-      ...itemBase,
-      nome: form.nome,
-      documento: form.documento || undefined,
-      dataNascimento: documentoEhCpf(form.documento) ? form.dataNascimento || undefined : undefined,
-      whatsapp: form.whatsapp || undefined,
-      email: form.email || undefined,
-      cep: form.cep || undefined,
-      rua: form.rua || undefined,
-      numero: form.numero || undefined,
-      complemento: form.complemento || undefined,
-      bairro: form.bairro || undefined,
-      cidade: form.cidade || undefined,
-      estado: form.estado || undefined
-    });
-    return true;
-  }
-
-  if (tela === "produtos") {
-    // Produto tem muitos campos (comercial, como se compra, e satelites fiscal/transformacao/promocao).
-    // Em vez de espelhar tudo aqui (fragil e fonte de bug: campos editados "somem" ao reabrir),
-    // retorna false para recarregar da API e refletir exatamente o que foi gravado.
-    return false;
-  }
-
-  if (tela === "colaboradores") {
-    const cargo = opcoes.value.cargos.find((opcao) => opcao.id === form.cargoId);
-    const setor = opcoes.value.setores.find((opcao) => opcao.id === form.setorId);
-    upsertOpcao(opcoes.value.colaboradores, {
-      ...itemBase,
-      nome: form.nome,
-      cpf: form.cpf || undefined,
-      setorId: form.setorId || null,
-      descricao: setor?.nome ?? setor?.descricao,
-      cargoId: form.cargoId,
-      cargoIds: [form.cargoId],
-      cargoNome: cargo?.nome,
-      cargos: cargo?.nome ? [cargo.nome] : []
-    });
-    return true;
-  }
-
-  if (tela === "unidades") {
-    upsertOpcao(opcoes.value.unidadesMedida, { ...itemBase, nome: form.nome, sigla: form.sigla });
-    return true;
-  }
-
-  if (tela === "grupos") {
-    [
-      opcoes.value.gruposDespesas,
-      opcoes.value.gruposMercadorias,
-      opcoes.value.gruposRetiradas,
-      opcoes.value.gruposVendas
-    ].forEach((lista) => removerOpcao(lista, id));
-    upsertOpcao(listaGrupoCadastro(form.tipoGrupo), {
-      ...itemBase,
-      nome: form.nome,
-      tipoGrupo: form.tipoGrupo,
-      grupoPaiId: form.grupoPaiId || null
-    });
-    return true;
-  }
-
-  if (tela === "areas_setores") {
-    removerOpcao(opcoes.value.areas, id);
-    removerOpcao(opcoes.value.setores, id);
-    if (form.tipoAreaSetor === "setor") {
-      upsertOpcao(opcoes.value.setores, {
-        ...itemBase,
-        nome: form.nome,
-        tipoAreaSetor: "setor",
-        areaId: form.areaId || null,
-        setorPaiId: form.setorPaiId || null
-      });
-    } else {
-      upsertOpcao(opcoes.value.areas, { ...itemBase, nome: form.nome, tipoAreaSetor: "area" });
-    }
-    return true;
-  }
-
-  if (tela === "usuarios") {
-    if (form.novoColaborador) return false;
-    const empresaIds = form.empresaIds.length ? form.empresaIds : [empresaAtual].filter(Boolean);
-    const usuarioAtual = opcoes.value.usuarios.find((opcao) => (opcao.usuarioId ?? opcao.id) === id);
-    const colaboradorAnterior = opcoes.value.colaboradores.find((opcao) => opcao.id === usuarioAtual?.colaboradorId);
-    const colaborador = opcoes.value.colaboradores.find((opcao) => opcao.id === form.colaboradorId);
-    if (colaboradorAnterior && colaboradorAnterior.id !== colaborador?.id) colaboradorAnterior.usuarioId = undefined;
-    upsertOpcao(opcoes.value.usuarios, {
-      ...itemBase,
-      usuarioId: id,
-      empresaIds,
-      empresaId: empresaIds[0] ?? empresaAtual,
-      nome: form.nome,
-      email: form.email,
-      colaboradorId: form.colaboradorId,
-      setorId: colaborador?.setorId ?? null,
-      cargos: colaborador?.cargos ?? (colaborador?.cargoNome ? [colaborador.cargoNome] : [])
-    });
-    if (colaborador) colaborador.usuarioId = id;
-    return true;
-  }
-
-  if (tela === "permissoes") {
+// Atualizacao local de cadastro: mapeamento tela->item + upsert nas listas reativas extraidos
+// para utils/cadastro-local.ts (factory testavel). O componente injeta os getters de estado e o
+// callback de permissoes; a factory muta as mesmas listas reativas (comportamento identico).
+const { atualizarCadastroLocal } = criarAtualizadorCadastroLocal({
+  empresaId: () => empresaId.value,
+  opcoes: () => opcoes.value,
+  empresas: () => empresas.value,
+  onPermissoesSalvas: () => {
     if (permissoesBuscou.value) void buscarPermissoes(permissoesPagina.value.page || 1);
-    return true;
   }
-
-  return false;
-}
+});
 
 function abrirCadastroNovo(tela: string, valores: Partial<CadastroForm> = {}) {
   cadastroTela.value = tela;
