@@ -38,9 +38,7 @@ import {
   cadastroPayload,
   dinheiro,
   endpointOperacaoPorEntidade,
-  fiscalFormDeLinha,
-  promoFormDeLinha,
-  transformacaoFormDeLinha,
+  formCadastroDeLinha,
   formCadastroVazio,
   formOperacaoVazio,
   itemTemaResumoCaixa,
@@ -1021,81 +1019,7 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
-  formCadastro.value = {
-    ...formCadastroVazio(),
-    nome: linha.nome ?? "",
-    documento: linha.documento ? mascararDocumento(linha.documento) : "",
-    dataNascimento: linha.dataNascimento ?? "",
-    whatsapp: linha.whatsapp ? mascararWhatsapp(linha.whatsapp) : "",
-    cep: linha.cep ? mascararCep(linha.cep) : "",
-    rua: linha.rua ?? "",
-    numero: linha.numero ?? "",
-    complemento: linha.complemento ?? "",
-    bairro: linha.bairro ?? "",
-    cidade: linha.cidade ?? "",
-    estado: linha.estado ?? "",
-    cnpj: linha.cnpj ?? "",
-    email: linha.email ?? "",
-    cpf: linha.cpf ?? "",
-    sigla: linha.sigla ?? "",
-    codigo: linha.codigo ?? "",
-    codigoBarras: linha.codigoBarras ?? "",
-    descricao: linha.descricao ?? linha.nome ?? "",
-    marca: linha.marca ?? "",
-    unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
-    quantidadeIndividual: linha.quantidadeIndividual ?? "1",
-    embalagem: linha.embalagem ?? "",
-    cDe: linha.cDe ?? "",
-    quantidadeCaixa: linha.quantidadeCaixa ?? "1",
-    medidaCompra: linha.medidaCompra ?? "",
-    grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
-    custo: linha.custo ?? "",
-    margem: linha.margem ?? "",
-    precoVenda: linha.precoVenda ?? "",
-    auto: linha.auto === "true",
-    status: (linha.status as CadastroForm["status"]) || "ativo",
-    tipo: (linha.tipo as CadastroForm["tipo"]) || "revenda",
-    quantidadeEstoque: linha.quantidadeEstoque ?? "0",
-    estoqueMin: linha.estoqueMin ?? "",
-    estoqueMax: linha.estoqueMax ?? "",
-    setorEstoque: linha.setorEstoque ?? "",
-    localVenda1: linha.localVenda1 ?? "",
-    localVenda2: linha.localVenda2 ?? "",
-    fotoUrl: linha.fotoUrl ?? "",
-    fiscal: fiscalFormDeLinha(linha.fiscal),
-    transformacao: transformacaoFormDeLinha(linha.transformacao),
-    ...promoFormDeLinha(linha.promocoes),
-    produtoConversoes: (() => {
-      try {
-        const conversoes = JSON.parse(linha.conversoes ?? "[]") as Array<{
-          unidadeMedidaId?: string;
-          quantidade?: string;
-          unidadesIndividuais?: string;
-        }>;
-        return conversoes.map((conversao) => ({
-          unidadeMedidaId: conversao.unidadeMedidaId ?? "",
-          quantidade: String(conversao.quantidade ?? ""),
-          unidadesIndividuais: String(conversao.unidadesIndividuais ?? "")
-        }));
-      } catch {
-        return [];
-      }
-    })(),
-    contaId: linha.contaId ?? "",
-    ativo: linha.ativo !== "Nao",
-    tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
-    grupoPaiId: linha.grupoPaiId ?? "",
-    tipoAreaSetor:
-      (linha.tipoAreaSetor as CadastroForm["tipoAreaSetor"]) || (linha.areaId || linha.setorPaiId ? "setor" : "area"),
-    areaId: linha.areaId ?? "",
-    setorPaiId: linha.setorPaiId ?? "",
-    setorId: linha.setorId ?? "",
-    colaboradorId: linha.colaboradorId ?? "",
-    cargoId: linha.cargoId ?? "",
-    empresaIds: linha.empresaIds ? String(linha.empresaIds).split(",") : [],
-    usuarioId: linha.usuarioId ?? "",
-    regras: regrasDaLinha(linha)
-  };
+  formCadastro.value = formCadastroDeLinha(linha, regrasDaLinha(linha));
   modalCadastroAberto.value = true;
 }
 

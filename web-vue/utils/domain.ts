@@ -27,6 +27,7 @@ import type {
   ProdutoPromocaoDados,
   ProdutoTransformacaoDados
 } from "~/types/padaria";
+import { mascararCep, mascararDocumento, mascararWhatsapp } from "./formatacao";
 
 export const telasOcultasNoDrawerEPermissoes = new Set([
   "promocoes",
@@ -719,6 +720,91 @@ export function promoFormDeLinha(promocoesJson: string | undefined) {
   } catch {
     return base;
   }
+}
+
+function conversoesDeLinha(json: string | undefined) {
+  try {
+    const conversoes = JSON.parse(json ?? "[]") as Array<{
+      unidadeMedidaId?: string;
+      quantidade?: string;
+      unidadesIndividuais?: string;
+    }>;
+    return conversoes.map((conversao) => ({
+      unidadeMedidaId: conversao.unidadeMedidaId ?? "",
+      quantidade: String(conversao.quantidade ?? ""),
+      unidadesIndividuais: String(conversao.unidadesIndividuais ?? "")
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Reconstroi o formulario de cadastro (todos os tipos) a partir da linha da listagem, para edicao.
+// Puro: recebe as regras (calculadas no chamador via useCadastroView) como parametro.
+export function formCadastroDeLinha(
+  linha: Record<string, string | undefined>,
+  regras: Record<string, boolean>
+): CadastroForm {
+  return {
+    ...formCadastroVazio(),
+    nome: linha.nome ?? "",
+    documento: linha.documento ? mascararDocumento(linha.documento) : "",
+    dataNascimento: linha.dataNascimento ?? "",
+    whatsapp: linha.whatsapp ? mascararWhatsapp(linha.whatsapp) : "",
+    cep: linha.cep ? mascararCep(linha.cep) : "",
+    rua: linha.rua ?? "",
+    numero: linha.numero ?? "",
+    complemento: linha.complemento ?? "",
+    bairro: linha.bairro ?? "",
+    cidade: linha.cidade ?? "",
+    estado: linha.estado ?? "",
+    cnpj: linha.cnpj ?? "",
+    email: linha.email ?? "",
+    cpf: linha.cpf ?? "",
+    sigla: linha.sigla ?? "",
+    codigo: linha.codigo ?? "",
+    codigoBarras: linha.codigoBarras ?? "",
+    descricao: linha.descricao ?? linha.nome ?? "",
+    marca: linha.marca ?? "",
+    unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
+    quantidadeIndividual: linha.quantidadeIndividual ?? "1",
+    embalagem: linha.embalagem ?? "",
+    cDe: linha.cDe ?? "",
+    quantidadeCaixa: linha.quantidadeCaixa ?? "1",
+    medidaCompra: linha.medidaCompra ?? "",
+    grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
+    custo: linha.custo ?? "",
+    margem: linha.margem ?? "",
+    precoVenda: linha.precoVenda ?? "",
+    auto: linha.auto === "true",
+    status: (linha.status as CadastroForm["status"]) || "ativo",
+    tipo: (linha.tipo as CadastroForm["tipo"]) || "revenda",
+    quantidadeEstoque: linha.quantidadeEstoque ?? "0",
+    estoqueMin: linha.estoqueMin ?? "",
+    estoqueMax: linha.estoqueMax ?? "",
+    setorEstoque: linha.setorEstoque ?? "",
+    localVenda1: linha.localVenda1 ?? "",
+    localVenda2: linha.localVenda2 ?? "",
+    fotoUrl: linha.fotoUrl ?? "",
+    fiscal: fiscalFormDeLinha(linha.fiscal),
+    transformacao: transformacaoFormDeLinha(linha.transformacao),
+    ...promoFormDeLinha(linha.promocoes),
+    produtoConversoes: conversoesDeLinha(linha.conversoes),
+    contaId: linha.contaId ?? "",
+    ativo: linha.ativo !== "Nao",
+    tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
+    grupoPaiId: linha.grupoPaiId ?? "",
+    tipoAreaSetor:
+      (linha.tipoAreaSetor as CadastroForm["tipoAreaSetor"]) || (linha.areaId || linha.setorPaiId ? "setor" : "area"),
+    areaId: linha.areaId ?? "",
+    setorPaiId: linha.setorPaiId ?? "",
+    setorId: linha.setorId ?? "",
+    colaboradorId: linha.colaboradorId ?? "",
+    cargoId: linha.cargoId ?? "",
+    empresaIds: linha.empresaIds ? String(linha.empresaIds).split(",") : [],
+    usuarioId: linha.usuarioId ?? "",
+    regras
+  };
 }
 
 export function rotaTela(tela: string) {
