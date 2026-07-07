@@ -216,3 +216,28 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     itensMercadoria
   };
 }
+
+// Pre-validacao no cliente ANTES de enviar, espelhando as regras do servidor, para dar uma
+// mensagem clara em portugues em vez do generico "Requisicao invalida" (400) apos o round-trip.
+// Fonte das regras: zod (descricao min 1) + services (validarDespesa/validarMercadoria/transferencia).
+export function validarOperacaoParaEnvio(
+  entidade: EntidadeOperacional,
+  dados: {
+    descricao: string;
+    grupoDespesaId: string;
+    grupoMercadoriaId: string;
+    contaOrigemId: string;
+    contaDestinoId: string;
+    qtdItensDespesa: number;
+    qtdItensMercadoria: number;
+  }
+): string | null {
+  if (!dados.descricao.trim()) return "Informe a descricao do lancamento.";
+  if (entidade === "despesa" && !dados.grupoDespesaId && dados.qtdItensDespesa === 0)
+    return "Selecione o grupo da despesa ou discrimine os itens da despesa.";
+  if (entidade === "mercadoria" && !dados.grupoMercadoriaId && dados.qtdItensMercadoria === 0)
+    return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
+  if (entidade === "transferencia" && Boolean(dados.contaOrigemId) && dados.contaOrigemId === dados.contaDestinoId)
+    return "A conta de destino deve ser diferente da conta de origem.";
+  return null;
+}

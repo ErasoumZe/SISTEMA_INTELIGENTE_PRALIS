@@ -209,7 +209,7 @@ const validacaoQtdPreview = computed(() =>
               prefix="R$"
               :readonly="discriminandoDespesa || discriminandoMercadoria"
           /></v-col>
-          <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao" /></v-col>
+          <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao *" /></v-col>
           <v-col cols="12"><v-textarea v-model="form.observacao" label="Observacao" rows="2" /></v-col>
           <v-col
             v-if="['venda', 'despesa', 'transferencia', 'mercadoria', 'retirada'].includes(entidadeNova)"
@@ -262,7 +262,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.gruposDespesas"
               item-title="nome"
               item-value="id"
-              label="Grupo despesa"
+              label="Grupo despesa (ou discrimine os itens)"
               clearable
             />
           </v-col>
@@ -272,7 +272,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.gruposMercadorias"
               item-title="nome"
               item-value="id"
-              label="Grupo mercadoria"
+              label="Grupo mercadoria (ou discrimine os itens)"
               clearable
             />
           </v-col>

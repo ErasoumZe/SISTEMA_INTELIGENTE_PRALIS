@@ -39,8 +39,26 @@ async function lerJson(resposta: Response) {
   }
 }
 
+// Erros de validacao (VALIDATION_ERROR) trazem `details` = [{ caminho, mensagem }]. Sem isso o
+// usuario so via "Requisicao invalida" e nao sabia QUAL campo faltou. Aqui anexamos os campos.
+function detalhesValidacao(details: unknown): string {
+  if (!Array.isArray(details)) return "";
+  return details
+    .map((item) => {
+      if (!item || typeof item !== "object" || !("mensagem" in item)) return "";
+      const caminho = "caminho" in item ? String((item as { caminho?: unknown }).caminho) : "";
+      const mensagem = String((item as { mensagem?: unknown }).mensagem);
+      return caminho ? `${caminho}: ${mensagem}` : mensagem;
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
 function mensagemErroApi(body: unknown) {
-  if (isProblemDetails(body)) return body.title;
+  if (isProblemDetails(body)) {
+    const detalhes = detalhesValidacao(body.details);
+    return detalhes ? `${body.title} (${detalhes})` : body.title;
+  }
   if (body && typeof body === "object" && "erro" in body) return String((body as { erro?: unknown }).erro);
   if (body && typeof body === "object" && "error" in body) return String((body as { error?: unknown }).error);
   return typeof body === "string" ? body : "Erro na requisicao";

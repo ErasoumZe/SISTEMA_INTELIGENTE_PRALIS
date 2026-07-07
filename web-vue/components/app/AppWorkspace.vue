@@ -51,7 +51,12 @@ import {
   temaPadrao,
   tipoEndpointCadastro
 } from "~/utils/domain";
-import { formOperacaoDeDetalhe, montarPayloadOperacao, type OperacaoDetalhe } from "~/utils/operacoes";
+import {
+  formOperacaoDeDetalhe,
+  montarPayloadOperacao,
+  validarOperacaoParaEnvio,
+  type OperacaoDetalhe
+} from "~/utils/operacoes";
 import { montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "~/utils/tema";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
@@ -747,6 +752,20 @@ async function salvarOperacao() {
       discriminandoMercadoria: discriminandoMercadoria.value,
       produtos: opcoesEmpresa.value.produtos
     });
+    // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
+    const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
+      descricao: payload.descricao,
+      grupoDespesaId: payload.grupoDespesaId,
+      grupoMercadoriaId: payload.grupoMercadoriaId,
+      contaOrigemId: payload.contaOrigemId,
+      contaDestinoId: payload.contaDestinoId,
+      qtdItensDespesa: payload.itensDespesa.length,
+      qtdItensMercadoria: payload.itensMercadoria.length
+    });
+    if (erroValidacao) {
+      notificar(erroValidacao, "error");
+      return;
+    }
     const editandoId = operacaoEditandoId.value;
     const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
     const operacaoSalva = editandoId

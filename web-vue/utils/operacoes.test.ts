@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { formOperacaoVazio } from "./domain";
-import { formOperacaoDeDetalhe, montarPayloadOperacao, type OperacaoDetalhe } from "./operacoes";
+import {
+  formOperacaoDeDetalhe,
+  montarPayloadOperacao,
+  validarOperacaoParaEnvio,
+  type OperacaoDetalhe
+} from "./operacoes";
 
 const detalheBase: OperacaoDetalhe = {
   id: "op-1",
@@ -102,5 +107,44 @@ describe("montarPayloadOperacao", () => {
     expect(
       montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
     ).toEqual([{ descricao: "Item", valor: 5, grupoDespesaId: "g1" }]);
+  });
+});
+
+describe("validarOperacaoParaEnvio", () => {
+  const ok = {
+    descricao: "Compra de farinha",
+    grupoDespesaId: "g1",
+    grupoMercadoriaId: "gm1",
+    contaOrigemId: "c1",
+    contaDestinoId: "c2",
+    qtdItensDespesa: 0,
+    qtdItensMercadoria: 0
+  };
+
+  it("exige descricao em qualquer operacao", () => {
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, descricao: "   " })).toMatch(/descricao/i);
+    expect(validarOperacaoParaEnvio("venda", { ...ok, descricao: "" })).toMatch(/descricao/i);
+  });
+
+  it("despesa: exige grupo OU itens discriminados (o bug relatado)", () => {
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "" })).toMatch(/grupo da despesa/i);
+    // com grupo passa; ou sem grupo mas com itens passa
+    expect(validarOperacaoParaEnvio("despesa", ok)).toBeNull();
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "", qtdItensDespesa: 2 })).toBeNull();
+  });
+
+  it("mercadoria: exige grupo OU itens discriminados", () => {
+    expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "" })).toMatch(/grupo da mercadoria/i);
+    expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "", qtdItensMercadoria: 1 })).toBeNull();
+  });
+
+  it("transferencia: conta destino deve diferir da origem", () => {
+    expect(validarOperacaoParaEnvio("transferencia", { ...ok, contaDestinoId: "c1" })).toMatch(/diferente/i);
+    expect(validarOperacaoParaEnvio("transferencia", ok)).toBeNull();
+  });
+
+  it("retirada e venda com descricao passam sem exigir grupo", () => {
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, grupoDespesaId: "" })).toBeNull();
+    expect(validarOperacaoParaEnvio("venda", { ...ok, grupoDespesaId: "" })).toBeNull();
   });
 });
