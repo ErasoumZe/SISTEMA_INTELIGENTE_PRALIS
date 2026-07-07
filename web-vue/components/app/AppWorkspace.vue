@@ -700,6 +700,71 @@ function preencherFormOperacao(entidade: EntidadeOperacional, detalhe: OperacaoD
   if (preenchido.itensMercadoria) itensMercadoria.value = preenchido.itensMercadoria;
 }
 
+type ChaveOpcaoOperacao =
+  | "contas"
+  | "fornecedores"
+  | "colaboradores"
+  | "produtos"
+  | "formasPagamento"
+  | "pdvs"
+  | "unidadesMedida"
+  | "malotes"
+  | "grupos";
+
+// Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
+// qualquer tela), entao carregamos as opcoes por ENTIDADE ao abrir o modal — senao os selects
+// (fornecedor, grupo, conta, colaborador...) ficam "No data available" quando a operacao e aberta
+// fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
+const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
+  venda: ["contas", "produtos", "pdvs", "formasPagamento"],
+  despesa: ["contas", "fornecedores", "grupos"],
+  mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
+  retirada: ["contas", "colaboradores", "grupos"],
+  transferencia: ["contas", "malotes"]
+};
+
+async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
+  const params = new URLSearchParams({ t: String(Date.now()) });
+  if (idEmpresa) params.set("empresaId", idEmpresa);
+  const query = `?${params.toString()}`;
+  const alvo = opcoes.value;
+
+  const tarefas: Record<ChaveOpcaoOperacao, () => Promise<void>> = {
+    contas: async () => {
+      alvo.contas = await apiGet<Opcao[]>(`/api/contas${query}`);
+    },
+    fornecedores: async () => {
+      alvo.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+    },
+    colaboradores: async () => {
+      alvo.colaboradores = await apiGet<Opcao[]>(`/api/colaboradores${query}`);
+    },
+    produtos: async () => {
+      alvo.produtos = await apiGet<Opcao[]>(`/api/produtos${query}`);
+    },
+    formasPagamento: async () => {
+      alvo.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
+    },
+    pdvs: async () => {
+      alvo.pdvs = await apiGet<Opcao[]>(`/api/pdvs${query}`);
+    },
+    unidadesMedida: async () => {
+      alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
+    },
+    malotes: async () => {
+      alvo.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
+    },
+    grupos: async () => {
+      Object.assign(
+        alvo,
+        await apiGet<Pick<Opcoes, "gruposDespesas" | "gruposMercadorias" | "gruposRetiradas">>(`/api/grupos${query}`)
+      );
+    }
+  };
+
+  await Promise.all(opcoesPorEntidade[entidade].map((chave) => tarefas[chave]()));
+}
+
 async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
   if (!caixaAberto.value) {
     notificar("Abra um caixa antes de registrar lancamentos.", "warning");
@@ -725,6 +790,12 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
       unidadeMedidaId: ""
     }
   ];
+  // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
+  try {
+    await carregarOpcoesParaOperacao(entidade);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
   if (operacao?.id) {
     try {
       const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
