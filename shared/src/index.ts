@@ -29,3 +29,4 @@ export * from "./transferencias/index.js";
 export * from "./relatorios/index.js";
 export * from "./saude/index.js";
 export * from "./tema/index.js";
+export * from "./pedidos/index.js";

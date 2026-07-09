@@ -402,10 +402,10 @@ export const produtos = pgTable(
     marca: text("marca"),
     quantidadeIndividual: numeric("quantidade_individual", { precision: 14, scale: 3 }).notNull().default("1"),
     // Como se compra (porte do Pralis; enums fieis mantidos como texto)
-    embalagem: text("embalagem"), // UN|KG|LT|MIL|FD|PCT|CX|POTE|EMB|SACO|BAND
+    embalagem: text("embalagem"), // sigla de unidades_medida (cadastro de Unidades)
     cDe: text("c_de"), // C/ | DE (preposicao de "como se compra")
     quantidadeCaixa: integer("quantidade_caixa").notNull().default(1), // qtCad: unidades por embalagem/caixa
-    medidaCompra: text("medida_compra"), // UN|KG|LT
+    medidaCompra: text("medida_compra"), // sigla de unidades_medida (cadastro de Unidades)
     // Comercial (por empresa/loja) — preco = referencia de catalogo (vendas seguem do CREARE).
     custo: numeric("custo", { precision: 14, scale: 2 }),
     margem: numeric("margem", { precision: 6, scale: 4 }), // fracao (0.30 = 30%)
@@ -478,7 +478,7 @@ export const produtosFiscal = pgTable("produtos_fiscal", {
 });
 
 // Ficha de transformacao/receita (1:1, presente quando produtos.tipo = 'transformacao').
-// Porte de product_transformacao do Pralis. unidade permanece enum (mais granular que unidades_medida).
+// Porte de product_transformacao do Pralis. unidade agora vem do cadastro de Unidades (grava a sigla).
 export const produtosTransformacao = pgTable(
   "produtos_transformacao",
   {
@@ -487,7 +487,7 @@ export const produtosTransformacao = pgTable(
       .references(() => produtos.id, { onDelete: "cascade" }),
     precisao: text("precisao"), // EXATOS | APROXIMADOS
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }),
-    unidade: text("unidade"), // UN | G | ML
+    unidade: text("unidade"), // sigla de unidades_medida (cadastro de Unidades)
     produtoReceituario: text("produto_receituario"),
     criadoEm,
     atualizadoEm
@@ -496,10 +496,6 @@ export const produtosTransformacao = pgTable(
     check(
       "produtos_transformacao_precisao_check",
       sql`${table.precisao} is null or ${table.precisao} in ('EXATOS', 'APROXIMADOS')`
-    ),
-    check(
-      "produtos_transformacao_unidade_check",
-      sql`${table.unidade} is null or ${table.unidade} in ('UN', 'G', 'ML')`
     )
   ]
 );
@@ -870,6 +866,54 @@ export const despesasItens = pgTable(
   (table) => [
     check("despesas_itens_valor_check", sql`${table.valor} >= 0`),
     index("despesas_itens_despesa_idx").on(table.despesaId)
+  ]
+);
+
+// PEDIDOS de compra/reposicao de estoque (V1). Header + itens. Itens podem ter fornecedores
+// diferentes (misto). Agendamento por data unica (dataAgendada) e/ou recorrencia.
+export const pedidos = pgTable(
+  "pedidos",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo").notNull().default("manual"),
+    status: text("status").notNull().default("rascunho"),
+    dataAgendada: timestamp("data_agendada", { withTimezone: true }),
+    recorrencia: text("recorrencia").notNull().default("nenhuma"),
+    observacao: text("observacao"),
+    criadoPor: text("criado_por"),
+    aprovadoPor: text("aprovado_por"),
+    aprovadoEm: timestamp("aprovado_em", { withTimezone: true }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check("pedidos_tipo_check", sql`${table.tipo} in ('manual', 'automatico')`),
+    check("pedidos_status_check", sql`${table.status} in ('rascunho', 'aprovado', 'cancelado')`),
+    check("pedidos_recorrencia_check", sql`${table.recorrencia} in ('nenhuma', 'semanal', 'quinzenal', 'mensal')`),
+    index("pedidos_empresa_status_idx").on(table.empresaId, table.status)
+  ]
+);
+
+export const pedidosItens = pgTable(
+  "pedidos_itens",
+  {
+    id: idUuid,
+    pedidoId: uuid("pedido_id")
+      .notNull()
+      .references(() => pedidos.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").references(() => produtos.id),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    descricaoProduto: text("descricao_produto").notNull(),
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
+    // Snapshot do estoque no momento da geracao (auditoria do pedido automatico).
+    estoqueAtual: numeric("estoque_atual", { precision: 14, scale: 3 }),
+    estoqueMin: numeric("estoque_min", { precision: 14, scale: 3 }),
+    estoqueMax: numeric("estoque_max", { precision: 14, scale: 3 })
+  },
+  (table) => [
+    check("pedidos_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    index("pedidos_itens_pedido_idx").on(table.pedidoId)
   ]
 );
 

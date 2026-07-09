@@ -358,8 +358,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) minmax(48px, auto);
+  display: flex;
   min-height: 56px;
   align-items: center;
   gap: 12px;
@@ -376,13 +375,14 @@ body {
 }
 
 .topbar-page-id {
+  flex: 1;
   min-width: 0;
   color: #020617;
   font-size: 15px;
   font-weight: 900;
-  overflow-wrap: anywhere;
-  text-align: center;
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .operacoes-layout {
@@ -635,11 +635,24 @@ body {
   padding: 14px 12px 14px;
 }
 
-/* Logo Pralis (topo) */
+/* Logo Pralis (topo) — agora e o BOTAO que recolhe/expande o menu (sem botao separado). */
 .sidebar-logo-row {
   display: flex;
   align-items: center;
-  padding: 0 6px 6px;
+  padding: 4px 6px 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.15s ease;
+}
+.sidebar-logo-row:hover {
+  background: #f4f1ec;
+}
+.sidebar-logo-row:focus-visible {
+  outline: 2px solid var(--pralis-orange);
+  outline-offset: 2px;
 }
 .sidebar-logo {
   width: clamp(120px, 60%, 148px);
@@ -648,8 +661,18 @@ body {
   object-fit: contain;
   display: block;
 }
+/* No rail (72px) o logo fica compacto e centralizado — continua clicavel p/ expandir. */
 .padaria-sidebar.rail .sidebar-logo-row {
-  display: none; /* wordmark landscape nao cabe no rail (72px) — esconde p/ nao borrar */
+  justify-content: center;
+  padding: 6px 0 8px;
+}
+.padaria-sidebar.rail .sidebar-logo {
+  width: 100%;
+  max-width: 52px;
+}
+/* Rotulos de grupo transbordam os 72px do rail e quebravam o layout (menu "sumia"). */
+.padaria-sidebar.rail .sidebar-group-label {
+  display: none;
 }
 
 /* Empresa ativa (switcher) */
@@ -1267,3 +1290,49 @@ body {
   --v-theme-on-secondary: 255, 255, 255 !important;
 }
 /* ===================== FIM ACENTO LARANJA ===================== */
+
+/* ===================== MODO ESCURO (claro/escuro) =====================
+   O toggle no topbar seta data-theme="dark" no <html>. As vars com !important
+   vencem o estilo inline (sem !important) que o aplicarTema (aparencia) injeta,
+   entao o escuro funciona mesmo com a personalizacao de cor ativa. Baseline:
+   superficies/bordas/texto. O laranja (identidade) e mantido. */
+:root[data-theme="dark"] {
+  --padaria-background: #0f1318 !important;
+  --padaria-foreground: #e7e9ec !important;
+  --padaria-card: #191f26 !important;
+  --padaria-muted: #232b34 !important;
+  --padaria-muted-foreground: #a6afba !important;
+  --padaria-border: #2a323c !important;
+  --pralis-surface: #191f26 !important;
+  --pralis-canvas: #0f1318 !important;
+  --pralis-line: #2a323c !important;
+  --pralis-line-soft: #232b34 !important;
+  --pralis-ink: #e7e9ec !important;
+  --pralis-ink-soft: #a6afba !important;
+  --pralis-orange-soft: #3a2a1e !important;
+  --pralis-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
+  --v-theme-background: 15, 19, 24 !important;
+  --v-theme-surface: 25, 31, 38 !important;
+  --v-theme-on-surface: 231, 233, 236 !important;
+  --v-theme-on-background: 231, 233, 236 !important;
+}
+/* Superficies com cor fixa (hardcoded) que o var nao cobre. */
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .padaria-main {
+  background: var(--padaria-background) !important;
+  color: var(--padaria-foreground);
+}
+:root[data-theme="dark"] .topbar-page-id {
+  color: var(--pralis-ink) !important;
+}
+:root[data-theme="dark"] .caixa-card {
+  background: linear-gradient(180deg, #1c232b, #171d24) !important;
+}
+:root[data-theme="dark"] .sidebar-item:hover:not(.disabled) {
+  background: #232b34 !important;
+}
+:root[data-theme="dark"] .inicio-card,
+:root[data-theme="dark"] .v-card {
+  background: var(--pralis-surface) !important;
+  color: var(--pralis-ink);
+}

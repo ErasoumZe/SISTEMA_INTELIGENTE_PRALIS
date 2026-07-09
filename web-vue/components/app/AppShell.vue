@@ -25,6 +25,8 @@ const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
 
+const { escuro, inicializar: inicializarModoEscuro, alternar: alternarModoEscuro } = useModoEscuro();
+
 const empresaAtiva = computed(
   () => props.empresas.find((empresa) => empresa.id === props.empresaId) ?? props.empresas[0] ?? null
 );
@@ -36,9 +38,6 @@ const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
 const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
 const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
-const drawerToggleIcon = computed(() =>
-  viewportMobile.value ? "mdi-menu" : drawerRecolhido.value ? "mdi-menu-open" : "mdi-menu"
-);
 
 // Agrupamento apenas VISUAL do menu (nao filtra nem altera permissoes).
 // Cada tela permitida cai na sua secao; o que nao estiver mapeado vai para "Geral",
@@ -137,6 +136,7 @@ onMounted(() => {
     if (!mobile) drawerMobileAberto.value = false;
   };
   atualizar();
+  inicializarModoEscuro();
   mediaRail.addEventListener("change", atualizar);
   mediaMobile.addEventListener("change", atualizar);
 
@@ -162,9 +162,15 @@ onMounted(() => {
     >
       <div class="drawer-shell">
         <div class="drawer-top">
-          <div class="sidebar-logo-row">
+          <button
+            type="button"
+            class="sidebar-logo-row"
+            :title="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
+            :aria-label="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
+            @click="alternarDrawer"
+          >
             <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="sidebar-logo" />
-          </div>
+          </button>
           <div class="sidebar-brand">
             <div class="brand-copy">
               <div class="sidebar-label">EMPRESA ATIVA</div>
@@ -252,14 +258,18 @@ onMounted(() => {
 
     <v-main class="padaria-main">
       <header class="padaria-topbar">
-        <v-btn
-          :icon="drawerToggleIcon"
-          variant="text"
-          :title="viewportMobile ? 'Abrir menu' : drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
-          @click="alternarDrawer"
-        />
+        <!-- No desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay) ainda
+             e preciso um gatilho para abrir. -->
+        <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
         <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
         <div class="topbar-actions">
+          <v-btn
+            :icon="escuro ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+            variant="text"
+            :title="escuro ? 'Tema claro' : 'Tema escuro'"
+            :aria-label="escuro ? 'Ativar tema claro' : 'Ativar tema escuro'"
+            @click="alternarModoEscuro"
+          />
           <slot name="heading-actions" />
         </div>
       </header>

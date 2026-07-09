@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -6,6 +7,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { consultarTodos, consultarUm } from "../../setup/integracao.js";
 
 const raizRepositorio = fileURLToPath(new URL("../../..", import.meta.url));
+
+// Quantidade de migrations esperadas = entradas do journal (fonte da verdade do drizzle-kit).
+// Derivado do arquivo para o teste nao quebrar por numero magico a cada nova migration.
+const journalMigracoes = JSON.parse(
+  readFileSync(new URL("../../../db/migrations/meta/_journal.json", import.meta.url), "utf8")
+) as { entries: unknown[] };
+const totalMigracoesEsperado = journalMigracoes.entries.length;
 
 const sqlColunas = `
   select table_name, column_name, data_type, is_nullable, coalesce(column_default, '') as column_default
@@ -79,7 +87,7 @@ describe("migracoes integration", () => {
     const { rows } = await bancoMigrado.query<{ total: number }>(
       "select count(*)::int as total from drizzle.__drizzle_migrations"
     );
-    expect(rows[0]?.total).toBe(6);
+    expect(rows[0]?.total).toBe(totalMigracoesEsperado);
   });
 
   it("Deve_GerarEstruturaIdenticaAoPush_Quando_ProvisionarViaMigrate", async () => {

@@ -20,10 +20,12 @@ export const produtoConversaoPayloadSchema = z.object({
 export const statusProdutoSchema = z.enum(["ativo", "inativo"]);
 export const tipoProdutoSchema = z.enum(["revenda", "transformacao"]);
 
-// Enums de "como se compra" — porte fiel dos enums do Pralis (MEDIDAS1/MEDIDAS2).
-export const embalagemSchema = z.enum(["UN", "KG", "LT", "MIL", "FD", "PCT", "CX", "POTE", "EMB", "SACO", "BAND"]);
+// "Como se compra": embalagem e medida de compra deixaram de ser enums fixos do Pralis
+// (MEDIDAS1/MEDIDAS2) e passaram a vir do cadastro de Unidades — a UI lista
+// opcoesEmpresa.unidadesMedida e grava a sigla; por isso validamos como texto livre.
+export const embalagemSchema = z.string().trim().min(1);
 export const cDeSchema = z.enum(["C/", "DE"]);
-export const medidaCompraSchema = z.enum(["UN", "KG", "LT"]);
+export const medidaCompraSchema = z.string().trim().min(1);
 
 // Dados fiscais (1:1). Porte de product_fiscal do Pralis. Aliquotas em % (como no formulario do Pralis);
 // nao ha calculo fiscal (nem no Pralis nem no ERP) — os campos so sao armazenados.
@@ -41,7 +43,8 @@ export const produtoFiscalSchema = z.object({
 });
 
 export const precisaoSchema = z.enum(["EXATOS", "APROXIMADOS"]);
-export const unidadeTransformacaoSchema = z.enum(["UN", "G", "ML"]);
+// Unidade da transformacao tambem passou a vir do cadastro de Unidades (grava a sigla) — texto livre.
+export const unidadeTransformacaoSchema = z.string().trim().min(1);
 export const tipoPromocaoSchema = z.enum(["valor", "desconto"]);
 
 // Ficha de transformacao (1:1, quando tipo = transformacao). Porte de product_transformacao do Pralis.

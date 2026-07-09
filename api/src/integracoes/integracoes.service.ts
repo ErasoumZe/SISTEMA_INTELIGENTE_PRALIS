@@ -18,6 +18,7 @@ import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import { erroValidacao, naoAutorizado, proibido } from "../erros.js";
 import {
+  buscarCaixaParaVendaRepository,
   buscarChavePorCodigoHashRepository,
   buscarClienteAutomaticoRepository,
   buscarFormaPagamentoAutomaticoRepository,
@@ -285,7 +286,13 @@ async function resolverVinculosVenda(
     );
   }
 
-  return { pdvId, clienteId, colaboradorId: null, produtosPorIdentificador, formasPagamentoPorIdentificador };
+  // Liga a venda ao caixa do mesmo PDV cujo periodo aberto contem a dataVenda (null se nao houver).
+  const caixaId =
+    pdvId !== null
+      ? ((await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db))?.id ?? null)
+      : null;
+
+  return { pdvId, clienteId, colaboradorId: null, caixaId, produtosPorIdentificador, formasPagamentoPorIdentificador };
 }
 
 export async function listarIntegracoes(query: IntegracaoQuery, perfil: PerfilUsuario) {

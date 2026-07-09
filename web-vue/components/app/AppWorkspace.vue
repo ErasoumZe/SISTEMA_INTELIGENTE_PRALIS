@@ -57,7 +57,7 @@ import {
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
-import { montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "~/utils/tema";
+import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 
@@ -1078,90 +1078,38 @@ function atualizarColaboradorUsuario(valor: string) {
   formCadastro.value.colaboradorId = valor;
 }
 
-async function buscarTema(tela: string) {
-  const temaLocal = resolverTemaEmpresa(tela);
-  if (temaLocal) return temaLocal;
-  const params = new URLSearchParams({ tela, empresaId: empresaId.value });
-  return apiGet<TemaAplicacao>(`/api/tema?${params.toString()}`);
-}
+// Acoes assincronas de tema: orquestracao extraida para utils/tema-acoes.ts (factory testavel).
+// O componente injeta os refs reativos de tema + o port de API + callbacks.
+const { carregarTemaTela, carregarTemaResumoCaixa, abrirTema, salvarTema } = criarAcoesTema({
+  refs: {
+    tema,
+    temaAtual,
+    temaResumoCaixa,
+    temaTelaAtual,
+    temaResumoCaixaAtual,
+    temaTelaEdicao,
+    temaSalvando,
+    modalTemaAberto
+  },
+  empresaId: () => empresaId.value,
+  telaAtiva: () => telaAtiva.value,
+  empresaAtiva: () => empresaAtiva.value,
+  telaResumoCaixa: TELA_TEMA_RESUMO_CAIXA,
+  api: { get: apiGet, put: apiPut },
+  aplicarTema,
+  notificar,
+  mensagemErro,
+  temaPadrao
+});
 
-function resolverTemaEmpresa(tela: string) {
-  return resolverTemaDeConfiguracao(empresaAtiva.value?.configuracoesAparencia, tela);
-}
-
-function aplicarTemaNaConfiguracaoLocal(tela: string, temaSalvo: TemaAplicacao) {
-  const empresa = empresaAtiva.value;
-  if (!empresa?.configuracoesAparencia) return;
-  empresa.configuracoesAparencia = montarConfiguracaoAparencia(empresa.configuracoesAparencia, tela, temaSalvo);
-}
-
-async function carregarTemaTela(tela: string) {
-  try {
-    const temaCarregado = await buscarTema(tela);
-    temaAtual.value = temaCarregado;
-    tema.value = temaCarregado;
-    temaTelaAtual.value = `${empresaId.value}:${tela}`;
-    aplicarTema(temaAtual.value, temaResumoCaixa.value);
-  } catch {
-    temaAtual.value = temaPadrao();
-    tema.value = temaAtual.value;
-    aplicarTema(temaAtual.value, temaResumoCaixa.value);
-  }
-}
-
-async function carregarTemaResumoCaixa() {
-  try {
-    temaResumoCaixa.value = await buscarTema(TELA_TEMA_RESUMO_CAIXA);
-    temaResumoCaixaAtual.value = `${empresaId.value}:${TELA_TEMA_RESUMO_CAIXA}`;
-  } catch {
-    temaResumoCaixa.value = temaPadrao();
-  } finally {
-    aplicarTema(temaAtual.value, temaResumoCaixa.value);
-  }
-}
-
-async function abrirTema(tela = telaAtiva.value) {
-  temaTelaEdicao.value = tela;
-  try {
-    tema.value = await buscarTema(tela);
-    if (tela === TELA_TEMA_RESUMO_CAIXA) {
-      temaResumoCaixa.value = tema.value;
-    } else if (tela === telaAtiva.value) {
-      temaAtual.value = tema.value;
-    }
-    aplicarTema(temaAtual.value, temaResumoCaixa.value);
-  } catch {
-    tema.value = tela === TELA_TEMA_RESUMO_CAIXA ? temaResumoCaixa.value : temaAtual.value;
-  }
-  modalTemaAberto.value = true;
-}
-
-async function salvarTema() {
-  temaSalvando.value = true;
-  try {
-    const temaSalvo = { ...tema.value };
-    await apiPut<void>("/api/tema", {
-      empresaId: empresaId.value,
-      tela: temaTelaEdicao.value,
-      ...temaSalvo
-    });
-    aplicarTemaNaConfiguracaoLocal(temaTelaEdicao.value, temaSalvo);
-    if (temaTelaEdicao.value === TELA_TEMA_RESUMO_CAIXA) {
-      temaResumoCaixa.value = temaSalvo;
-      temaResumoCaixaAtual.value = `${empresaId.value}:${TELA_TEMA_RESUMO_CAIXA}`;
-    } else if (temaTelaEdicao.value === telaAtiva.value) {
-      temaAtual.value = temaSalvo;
-      temaTelaAtual.value = `${empresaId.value}:${temaTelaEdicao.value}`;
-    }
-    aplicarTema(temaAtual.value, temaResumoCaixa.value);
-    modalTemaAberto.value = false;
-    notificar("Aparencia salva com sucesso.");
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    temaSalvando.value = false;
-  }
-}
+// Aparencia vive no menu lateral (tela "aparencia"): ao entrar, abre a customizacao de cores.
+watch(
+  () => telaAtiva.value,
+  (tela) => {
+    if (tela === "aparencia" && podeConfigurarTema.value) void abrirTema("padrao");
+  },
+  { immediate: true }
+);
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
@@ -1461,17 +1409,6 @@ onMounted(() => {
           />
         </v-list>
       </v-menu>
-    </template>
-
-    <template #heading-actions>
-      <v-btn
-        v-if="podeConfigurarTema"
-        icon="mdi-palette"
-        variant="tonal"
-        size="small"
-        :title="'Aparencia'"
-        @click="abrirTema(telaAtiva || 'padrao')"
-      />
     </template>
 
     <v-alert v-if="empresaCarregando" type="info" variant="tonal" class="mb-4">Carregando dados...</v-alert>

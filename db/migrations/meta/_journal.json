@@ -43,6 +43,20 @@
       "when": 1783080072711,
       "tag": "0005_produtos_checks_drop_itens_vendas",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783453012792,
+      "tag": "0006_pedidos_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783602811901,
+      "tag": "0007_produtos_transformacao_unidade_check_drop",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "produtos_transformacao" DROP CONSTRAINT "produtos_transformacao_unidade_check";

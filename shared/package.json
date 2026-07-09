@@ -165,6 +165,11 @@
       "types": "./dist/tema/index.d.ts",
       "development": "./src/tema/index.ts",
       "default": "./dist/tema/index.js"
+    },
+    "./pedidos": {
+      "types": "./dist/pedidos/index.d.ts",
+      "development": "./src/pedidos/index.ts",
+      "default": "./dist/pedidos/index.js"
     }
   },
   "scripts": {

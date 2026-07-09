@@ -33,7 +33,6 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "promocoes",
   "relatorio_faltas",
   "relatorio_advertencias",
-  "pedidos",
   "perdas_sobras",
   "estoque_produtos",
   "relatorio_dre",

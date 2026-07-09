@@ -1,5 +1,6 @@
-import { and, desc, eq, ilike, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { clientes, contas, formasPagamento, pdvs, produtos } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   integracoesCamposConfig,
   integracoesChaves,
@@ -468,6 +469,32 @@ export async function criarFormaPagamentoRepository(empresaId: string, nome: str
   return forma;
 }
 
+// Caixa que "recebe" a venda integrada: mesmo PDV e a dataVenda dentro do periodo em que o caixa
+// esteve aberto ([abertura, fechamento]; enquanto aberto, fechamento e null -> sem limite superior).
+// Regra do negocio (Ze, 07/07): a venda alimenta o caixa X se foi feita no PDV do caixa X dentro do
+// periodo em que o caixa X estava aberto.
+export async function buscarCaixaParaVendaRepository(
+  empresaId: string,
+  pdvId: string,
+  dataVenda: Date,
+  db: ExecutorBanco = banco
+): Promise<{ id: string } | null> {
+  const [caixa] = await db
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .where(
+      and(
+        eq(fechamentosCaixa.empresaId, empresaId),
+        eq(fechamentosCaixa.pdvId, pdvId),
+        lte(fechamentosCaixa.dataHoraAbertura, dataVenda),
+        or(isNull(fechamentosCaixa.dataHoraFechamento), gte(fechamentosCaixa.dataHoraFechamento, dataVenda))
+      )
+    )
+    .orderBy(desc(fechamentosCaixa.dataHoraAbertura))
+    .limit(1);
+  return caixa ?? null;
+}
+
 export async function criarOuAtualizarVendaIntegradaRepository(
   input: {
     chave: IntegracaoChaveLinha;
@@ -477,6 +504,7 @@ export async function criarOuAtualizarVendaIntegradaRepository(
     pdvId: string | null;
     clienteId: string | null;
     colaboradorId: string | null;
+    caixaId: string | null;
     produtosPorIdentificador: Map<string, string | null>;
     formasPagamentoPorIdentificador: Map<string, string | null>;
   },
@@ -495,6 +523,7 @@ export async function criarOuAtualizarVendaIntegradaRepository(
       valorAcrescimo: String(vendaPayload.acrescimo),
       valorDesconto: String(vendaPayload.desconto),
       pdvId: input.pdvId,
+      caixaId: input.caixaId,
       clienteId: input.clienteId,
       colaboradorId: input.colaboradorId,
       identificadorExterno: vendaPayload.idVenda,

@@ -682,7 +682,9 @@ const validacaoQtdPreview = computed(() =>
             <v-col cols="12" md="3">
               <v-select
                 v-model="formCadastro.embalagem"
-                :items="['UN', 'KG', 'LT', 'MIL', 'FD', 'PCT', 'CX', 'POTE', 'EMB', 'SACO', 'BAND']"
+                :items="opcoesEmpresa.unidadesMedida"
+                item-title="sigla"
+                item-value="sigla"
                 label="Embalagem"
                 clearable
               />
@@ -696,7 +698,9 @@ const validacaoQtdPreview = computed(() =>
             <v-col cols="12" md="3">
               <v-select
                 v-model="formCadastro.medidaCompra"
-                :items="['UN', 'KG', 'LT']"
+                :items="opcoesEmpresa.unidadesMedida"
+                item-title="sigla"
+                item-value="sigla"
                 label="Medida de compra"
                 clearable
               />
@@ -821,7 +825,9 @@ const validacaoQtdPreview = computed(() =>
               <v-col cols="6" md="3">
                 <v-select
                   v-model="formCadastro.transformacao.unidade"
-                  :items="['UN', 'G', 'ML']"
+                  :items="opcoesEmpresa.unidadesMedida"
+                  item-title="sigla"
+                  item-value="sigla"
                   label="Unidade"
                   clearable
                 />
