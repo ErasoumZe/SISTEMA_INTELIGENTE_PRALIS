@@ -16,7 +16,14 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["*.mjs", "scripts/*.mjs", "db/setup-dev.mjs", "db/seed.ts", "db/backfill-codigos.ts"],
+          allowDefaultProject: [
+            "*.mjs",
+            "scripts/*.mjs",
+            "db/setup-dev.mjs",
+            "db/seed.ts",
+            "db/bootstrap-prod.ts",
+            "db/backfill-codigos.ts"
+          ],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20
         },
         tsconfigRootDir: import.meta.dirname
@@ -63,6 +70,7 @@ export default tseslint.config(
       "db/setup-dev.mjs",
       "eslint.config.mjs",
       "db/seed.ts",
+      "db/bootstrap-prod.ts",
       "db/backfill-codigos.ts",
       "tests/**/*.ts",
       "api/src/env.ts",

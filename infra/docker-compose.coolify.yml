@@ -4,7 +4,15 @@ services:
       context: ..
       dockerfile: api/Dockerfile.prod
       target: build
-    command: ["npm", "run", "api:prod:migrate", "--workspace", "@padaria/api"]
+    # Aplica migrations (drizzle + better-auth) e, em seguida, o bootstrap idempotente de
+    # producao (catalogo de permissoes + 1a empresa + primeiro admin). A API so sobe depois
+    # que este passo conclui com sucesso (depends_on: service_completed_successfully).
+    command:
+      [
+        "sh",
+        "-c",
+        "npm run api:prod:migrate --workspace @padaria/api && npm run bootstrap:prod --workspace @padaria/db"
+      ]
     restart: "no"
     environment:
       NODE_ENV: production
@@ -12,8 +20,14 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET obrigatorio}
       AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL obrigatorio}
+      ADMIN_SENHA: ${ADMIN_SENHA:?ADMIN_SENHA obrigatorio}
+      ADMIN_NOME: ${ADMIN_NOME:-Administrador}
+      EMPRESA_NOME: ${EMPRESA_NOME:-Padaria Principal}
+    # padaria_prod (interna) + coolify (alcanca o Postgres gerenciado do Coolify pelo host interno)
     networks:
       - padaria_prod
+      - coolify
 
   api:
     build:
