@@ -83,7 +83,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
 
     request.log.error(error);
-    capturarErro(error);
+    capturarErro(error instanceof Error ? error : new Error(String(error)));
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
   });
 
