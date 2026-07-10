@@ -3,7 +3,7 @@ import { useTheme } from "vuetify";
 import type { ApiPaginated, ApiSuccess, AuthSession, ProblemDetails, TemaAplicacao } from "@padaria/shared";
 import { inkParaSuperficie } from "~/utils/tema";
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 type PaginatedClientResult<T> = {
   itens: T[];
@@ -136,6 +136,10 @@ export function useApi() {
     return request<T>(apiUrl, "PUT", rota, body);
   }
 
+  async function apiPatch<T>(rota: string, body: unknown) {
+    return request<T>(apiUrl, "PATCH", rota, body);
+  }
+
   async function apiDelete<T>(rota: string) {
     return request<T>(apiUrl, "DELETE", rota);
   }
@@ -185,5 +189,5 @@ export function useApi() {
     document.documentElement.style.setProperty("--padaria-card-saldo", temaResumoCaixa.corSucesso);
   }
 
-  return { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiDelete, carregarSessao, aplicarTema };
+  return { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiPatch, apiDelete, carregarSessao, aplicarTema };
 }

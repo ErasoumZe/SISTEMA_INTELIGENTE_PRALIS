@@ -3,6 +3,13 @@ import { computed } from "vue";
 import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
+import { totalItemMercadoriaForm } from "~/utils/operacoes";
+
+const tiposDescontoItem = [
+  { title: "Sem desconto", value: "" },
+  { title: "Percentual (%)", value: "percentual" },
+  { title: "Valor (R$)", value: "valor" }
+];
 
 const workspace = useWorkspaceContext();
 
@@ -17,6 +24,7 @@ const {
   modalOperacaoAberto,
   entidadeNova,
   operacaoEditandoId,
+  modoDiscriminacao,
   form,
   discriminandoDespesa,
   discriminandoMercadoria,
@@ -191,8 +199,15 @@ const validacaoQtdPreview = computed(() =>
   <v-dialog v-model="modalOperacaoAberto" max-width="960" scrollable>
     <v-card>
       <v-card-title>
-        {{ (operacaoEditandoId ? "Editar " : "Nova ") + entidadeNova.charAt(0).toUpperCase() + entidadeNova.slice(1) }}
+        {{
+          (modoDiscriminacao ? "Discriminar " : operacaoEditandoId ? "Editar " : "Nova ") +
+          entidadeNova.charAt(0).toUpperCase() +
+          entidadeNova.slice(1)
+        }}
       </v-card-title>
+      <v-card-subtitle v-if="modoDiscriminacao">
+        Detalhe os itens deste lancamento. A soma dos itens deve bater com o valor do cabecalho.
+      </v-card-subtitle>
       <v-card-text>
         <v-row dense>
           <v-col cols="12" md="4"
@@ -405,7 +420,12 @@ const validacaoQtdPreview = computed(() =>
         </div>
 
         <section v-if="entidadeNova === 'despesa'" class="mt-2">
-          <v-switch v-model="discriminandoDespesa" label="Discriminar itens da despesa" color="primary" />
+          <v-switch
+            v-model="discriminandoDespesa"
+            label="Discriminar itens da despesa"
+            color="primary"
+            :disabled="modoDiscriminacao"
+          />
           <div v-if="discriminandoDespesa">
             <div class="d-flex justify-end mb-2">
               <v-btn
@@ -442,7 +462,12 @@ const validacaoQtdPreview = computed(() =>
         </section>
 
         <section v-if="entidadeNova === 'mercadoria'" class="mt-2">
-          <v-switch v-model="discriminandoMercadoria" label="Discriminar mercadorias" color="primary" />
+          <v-switch
+            v-model="discriminandoMercadoria"
+            label="Discriminar mercadorias"
+            color="primary"
+            :disabled="modoDiscriminacao"
+          />
           <div v-if="discriminandoMercadoria">
             <div class="d-flex justify-end mb-2">
               <v-btn
@@ -454,6 +479,8 @@ const validacaoQtdPreview = computed(() =>
                     descricao: '',
                     quantidade: '1',
                     valorUnitario: '',
+                    descontoTipo: '',
+                    descontoValor: '',
                     valorTotal: '',
                     produtoId: '',
                     grupoMercadoriaId: '',
@@ -464,7 +491,7 @@ const validacaoQtdPreview = computed(() =>
               >
             </div>
             <v-row v-for="(item, index) in itensMercadoria" :key="`mercadoria-${index}`" dense>
-              <v-col cols="12" md="4">
+              <v-col cols="12" md="3">
                 <v-select
                   v-model="item.produtoId"
                   :items="opcoesEmpresa.produtos"
@@ -475,9 +502,39 @@ const validacaoQtdPreview = computed(() =>
                 />
               </v-col>
               <v-col cols="12" md="3"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
-              <v-col cols="6" md="2"><v-text-field v-model="item.quantidade" type="number" label="Qtd." /></v-col>
-              <v-col cols="6" md="2"><v-text-field v-model="item.valorTotal" type="number" label="Total" /></v-col>
-              <v-col cols="12" md="1" class="d-flex align-center justify-end">
+              <v-col cols="6" md="1"><v-text-field v-model="item.quantidade" type="number" label="Qtd." /></v-col>
+              <v-col cols="6" md="2"
+                ><v-text-field v-model="item.valorUnitario" type="number" label="Unitario" prefix="R$"
+              /></v-col>
+              <v-col cols="6" md="2">
+                <v-select
+                  v-model="item.descontoTipo"
+                  :items="tiposDescontoItem"
+                  item-title="title"
+                  item-value="value"
+                  label="Desconto"
+                />
+              </v-col>
+              <v-col cols="6" md="1">
+                <v-text-field
+                  v-model="item.descontoValor"
+                  type="number"
+                  label="Desc."
+                  :disabled="!item.descontoTipo"
+                  :suffix="item.descontoTipo === 'percentual' ? '%' : item.descontoTipo === 'valor' ? 'R$' : ''"
+                />
+              </v-col>
+              <v-col cols="8" md="2">
+                <v-text-field
+                  v-if="item.descontoTipo"
+                  :model-value="totalItemMercadoriaForm(item).toFixed(2)"
+                  label="Total"
+                  prefix="R$"
+                  readonly
+                />
+                <v-text-field v-else v-model="item.valorTotal" type="number" label="Total" prefix="R$" />
+              </v-col>
+              <v-col cols="4" md="1" class="d-flex align-center justify-end">
                 <v-btn
                   icon="mdi-delete"
                   variant="text"

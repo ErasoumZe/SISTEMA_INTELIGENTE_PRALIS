@@ -178,6 +178,7 @@ export type OperacaoResumo = {
   valorOriginal: string;
   computar: boolean;
   status: string;
+  pendenteDiscriminacao?: boolean;
   pdvId?: string | null;
   pdvNome?: string | null;
   clienteId?: string | null;

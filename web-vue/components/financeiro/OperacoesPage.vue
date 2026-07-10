@@ -12,11 +12,16 @@ defineProps<{
   pagina: number;
   totalPaginas: number;
   descricao: string;
+  mostrarFiltroDiscriminacao?: boolean;
+  pendentesDiscriminacaoAtivo?: boolean;
+  podeDiscriminar?: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: "editar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
+  (event: "discriminar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
+  (event: "update:pendentes", valor: boolean): void;
 }>();
 
 function entidadeDaTela(tela: string): EntidadeOperacional {
@@ -55,9 +60,20 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
 
     <v-card class="svelte-table-card">
       <v-card-text>
-        <div class="table-heading">
-          <h2>{{ telaAtual?.titulo }}</h2>
-          <p>{{ descricao || `Lancamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+        <div class="table-heading d-flex align-start justify-space-between ga-4 flex-wrap">
+          <div>
+            <h2>{{ telaAtual?.titulo }}</h2>
+            <p>{{ descricao || `Lancamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+          </div>
+          <v-switch
+            v-if="mostrarFiltroDiscriminacao"
+            :model-value="pendentesDiscriminacaoAtivo"
+            label="Somente pendentes de discriminacao"
+            color="warning"
+            density="compact"
+            hide-details
+            @update:model-value="emit('update:pendentes', Boolean($event))"
+          />
         </div>
         <div class="responsive-table-shell">
           <v-table class="operacoes-table">
@@ -72,17 +88,40 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
             <tbody>
               <tr v-for="operacao in operacoesPaginadas" :key="operacao.id">
                 <td>{{ operacao.dataReferencia }}</td>
-                <td class="font-weight-bold">{{ operacao.descricao }}</td>
+                <td class="font-weight-bold">
+                  {{ operacao.descricao }}
+                  <v-chip
+                    v-if="operacao.pendenteDiscriminacao"
+                    size="x-small"
+                    color="warning"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    Pendente de discriminacao
+                  </v-chip>
+                </td>
                 <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
                 <td class="text-right">
-                  <v-btn
-                    size="small"
-                    variant="tonal"
-                    prepend-icon="mdi-pencil"
-                    @click="emit('editar', entidadeDaTela(telaAtiva), operacao)"
-                  >
-                    Editar
-                  </v-btn>
+                  <div class="d-inline-flex ga-2 justify-end">
+                    <v-btn
+                      v-if="operacao.pendenteDiscriminacao && podeDiscriminar"
+                      size="small"
+                      variant="tonal"
+                      color="warning"
+                      prepend-icon="mdi-format-list-checks"
+                      @click="emit('discriminar', entidadeDaTela(telaAtiva), operacao)"
+                    >
+                      Discriminar
+                    </v-btn>
+                    <v-btn
+                      size="small"
+                      variant="tonal"
+                      prepend-icon="mdi-pencil"
+                      @click="emit('editar', entidadeDaTela(telaAtiva), operacao)"
+                    >
+                      Editar
+                    </v-btn>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!operacoesPaginadas.length">
