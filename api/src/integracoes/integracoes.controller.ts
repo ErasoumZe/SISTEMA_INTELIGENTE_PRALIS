@@ -6,9 +6,7 @@ import {
   integracaoChaveParamsSchema,
   integracaoQuerySchema,
   salvarVinculoIntegracaoPayloadSchema,
-  tiposIntegracao,
-  vendaIntegracaoAgregadaSchema,
-  type VendaIntegracaoAgregadaPayload
+  tiposIntegracao
 } from "@padaria/shared/integracoes";
 import { exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
@@ -120,8 +118,7 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
     async (request) => {
       const chave = chaveIntegracaoHeader(request.headers);
       if (!chave) throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
-      const payload: VendaIntegracaoAgregadaPayload = vendaIntegracaoAgregadaSchema.parse(request.body);
-      return ok(await receberVendaIntegracao(chave, payload));
+      return ok(await receberVendaIntegracao(chave, request.body));
     }
   );
 }

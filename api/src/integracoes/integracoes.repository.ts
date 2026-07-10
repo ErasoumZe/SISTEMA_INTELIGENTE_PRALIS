@@ -1,3 +1,4 @@
+import type { DadosExternos } from "@padaria/shared/api";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { clientes, contas, formasPagamento, pdvs, produtos } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
@@ -322,7 +323,8 @@ export async function registrarHistoricoRepository(
     hashConteudo?: string | null;
     status: "criado" | "atualizado" | "sem_novidade" | "erro";
     mensagemErro?: string | null;
-    payload: VendaIntegracaoAgregadaPayload;
+    // Aceita o payload validado (com Date) no sucesso e o corpo cru no erro de validacao.
+    payload: DadosExternos;
   },
   db: ExecutorBanco = banco
 ) {
