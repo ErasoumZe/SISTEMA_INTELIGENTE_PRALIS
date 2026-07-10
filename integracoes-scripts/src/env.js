@@ -25,9 +25,11 @@ export function obterConfig() {
       apiUrl: (process.env.PADARIA_API_URL?.trim() || "http://localhost:4100").replace(/\/+$/, ""),
       codigoIntegracao: obterObrigatoria("PADARIA_INTEGRACAO_CODIGO")
     },
-    // Usado so pelo modo producao (src/sincronizar.js). Defaults sensatos; nada obrigatorio.
+    // Usado so pelo modo producao (src/sincronizar.js e src/loop.js). Defaults sensatos.
     sincronizacao: {
       diasIniciais: obterNumero("SYNC_DIAS_INICIAIS", 1),
+      intervaloMinutos: obterNumero("SYNC_INTERVALO_MINUTOS", 10),
+      lockMaxMinutos: obterNumero("SYNC_LOCK_MAX_MINUTOS", 30),
       retryTentativas: obterNumero("SYNC_RETRY_TENTATIVAS", 4),
       retryBaseMs: obterNumero("SYNC_RETRY_BASE_MS", 500),
       estadoDir: process.env.SYNC_ESTADO_DIR?.trim() || ".estado",

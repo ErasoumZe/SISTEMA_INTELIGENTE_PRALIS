@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { enviarVendaIntegracao, verificarApi } from "./api-client.js";
 import { buscarVendasIncrementais } from "./creare-repository.js";
 import { criarPoolCreare } from "./database.js";
@@ -8,8 +8,22 @@ import { montarPayloads } from "./payload.js";
 import { gravarCursor, lerCursor } from "./cursor.js";
 import { gravarFila, lerFila } from "./fila-falhas.js";
 import { ehErroPermanente, enviarComRetry } from "./retry.js";
+import { adquirirLock, liberarLock } from "./lock.js";
 
 const raizProjeto = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// Caminhos do estado de runtime (cursor, fila e lock). Compartilhado pelo modo 1-ciclo e pelo loop.
+export function derivarCaminhos(config) {
+  const estadoDir = path.isAbsolute(config.sincronizacao.estadoDir)
+    ? config.sincronizacao.estadoDir
+    : path.join(raizProjeto, config.sincronizacao.estadoDir);
+  return {
+    estadoDir,
+    cursorArquivo: path.join(estadoDir, "cursor.json"),
+    filaArquivo: path.join(estadoDir, "fila-falhas.json"),
+    lockArquivo: path.join(estadoDir, "agente.lock")
+  };
+}
 
 // Inicio padrao (1a execucao, sem cursor): 00:00:00 de (hoje - (diasIniciais-1)), hora local.
 function inicioPadrao(diasIniciais) {
@@ -28,13 +42,10 @@ function contarStatus(resposta, contagem) {
   else if (status === "sem_novidade") contagem.semNovidade += 1;
 }
 
-async function main() {
-  const config = obterConfig();
+// Um ciclo de sincronizacao (sem lock — quem chama garante a exclusao). Reusado pelo modo 1-ciclo
+// e pelo loop. Pode lancar (ex.: API fora do ar); o chamador decide se aborta ou tenta de novo.
+export async function executarCiclo(config, caminhos) {
   const sync = config.sincronizacao;
-  const estadoDir = path.isAbsolute(sync.estadoDir) ? sync.estadoDir : path.join(raizProjeto, sync.estadoDir);
-  const cursorArquivo = path.join(estadoDir, "cursor.json");
-  const filaArquivo = path.join(estadoDir, "fila-falhas.json");
-
   await verificarApi(config.padaria.apiUrl);
 
   const enviar = (payload) =>
@@ -67,12 +78,12 @@ async function main() {
   }
 
   // 1) Reprocessa a fila de falhas anteriores.
-  for (const payload of await lerFila(filaArquivo)) {
+  for (const payload of await lerFila(caminhos.filaArquivo)) {
     await processar(payload, true);
   }
 
   // 2) Janela incremental desde o cursor.
-  const cursor = await lerCursor(cursorArquivo);
+  const cursor = await lerCursor(caminhos.cursorArquivo);
   const desde = cursor?.ultimaDataHoraVenda ?? inicioPadrao(sync.diasIniciais);
   let novoCursor = cursor;
 
@@ -100,8 +111,8 @@ async function main() {
   }
 
   // 3) Persiste fila e depois cursor (ordem segura a crash: cursor so avanca no fim).
-  await gravarFila(filaArquivo, falhas);
-  if (novoCursor) await gravarCursor(cursorArquivo, novoCursor);
+  await gravarFila(caminhos.filaArquivo, falhas);
+  if (novoCursor) await gravarCursor(caminhos.cursorArquivo, novoCursor);
 
   // 4) Log resumido do ciclo.
   console.log(
@@ -109,9 +120,32 @@ async function main() {
       `criadas=${contagem.criadas} atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} ` +
       `erros=${contagem.erros} fila_pendente=${falhas.length} cursor=${novoCursor?.ultimaDataHoraVenda ?? "-"}`
   );
+
+  return { ...contagem, filaPendente: falhas.length };
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+// Modo 1-CICLO (ex.: Agendador de Tarefas): adquire o lock, roda um ciclo e libera. Se ja houver
+// execucao em andamento (lock ativo), pula — evita sobrepor com o loop ou outra tarefa agendada.
+async function main() {
+  const config = obterConfig();
+  const caminhos = derivarCaminhos(config);
+  const maxIdadeMs = config.sincronizacao.lockMaxMinutos * 60_000;
+
+  if (!(await adquirirLock(caminhos.lockArquivo, { maxIdadeMs }))) {
+    console.log("[sincronizar] outra execucao em andamento (lock ativo); pulando este ciclo.");
+    return;
+  }
+  try {
+    await executarCiclo(config, caminhos);
+  } finally {
+    await liberarLock(caminhos.lockArquivo);
+  }
+}
+
+// So roda main() quando executado direto (node src/sincronizar.js); nao quando importado (loop.js).
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
