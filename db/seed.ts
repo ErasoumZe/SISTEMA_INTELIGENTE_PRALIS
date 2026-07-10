@@ -65,6 +65,15 @@ import {
   verificacaoAutenticacao
 } from "./src/schema/index.js";
 
+// Guard: este seed e de DESENVOLVIMENTO (senha 123456, dados fake). Nunca deve rodar em producao —
+// la o bootstrap idempotente (db/bootstrap-prod.ts) cria o admin com ADMIN_SENHA. Falha antes de
+// conectar ao banco para evitar semear producao com credenciais fracas por engano.
+if (process.env["NODE_ENV"] === "production") {
+  throw new Error(
+    "[seed] recusado: o seed de desenvolvimento (senha 123456, dados fake) nao roda em producao. Use db/bootstrap-prod.ts (ADMIN_SENHA)."
+  );
+}
+
 const databaseUrl = process.env["DATABASE_URL"] ?? "postgresql://padaria:padaria@localhost:5543/padaria";
 const authSecret = process.env["BETTER_AUTH_SECRET"] ?? "dev-secret-change-me-dev-secret-change-me";
 const authBaseUrl = process.env["AUTH_BASE_URL"] ?? "http://localhost:4100";
