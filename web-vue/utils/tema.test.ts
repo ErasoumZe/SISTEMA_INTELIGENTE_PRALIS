@@ -4,6 +4,7 @@ import {
   corCategoriaPorTela,
   corMenuTela,
   diferencasTema,
+  inkParaSuperficie,
   montarConfiguracaoAparencia,
   padraoComIdentidade,
   resolverTemaDeConfiguracao
@@ -98,6 +99,22 @@ describe("padraoComIdentidade", () => {
   it("resolver aplica a identidade sobre o padrao de fabrica", () => {
     const config: ConfiguracaoAparenciaEmpresa = { padrao: roxoFabrica, especifico: [] };
     expect(resolverTemaDeConfiguracao(config, "padrao")?.corPrimaria).toBe("#c0521d");
+  });
+});
+
+describe("inkParaSuperficie", () => {
+  it("cartao claro -> texto escuro", () => {
+    expect(inkParaSuperficie("#ffffff").ink).toBe("#2f2320");
+    expect(inkParaSuperficie("#eaf1f9").ink).toBe("#2f2320");
+  });
+
+  it("cartao escuro -> texto claro", () => {
+    expect(inkParaSuperficie("#191f26").ink).toBe("#f7f5f2");
+    expect(inkParaSuperficie("#2f2320").ink).toBe("#f7f5f2");
+  });
+
+  it("hex invalido cai no texto escuro (fundo claro)", () => {
+    expect(inkParaSuperficie("nao-hex").ink).toBe("#2f2320");
   });
 });
 

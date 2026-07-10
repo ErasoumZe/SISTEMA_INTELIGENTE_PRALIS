@@ -69,6 +69,25 @@ export function resolverTemaDeConfiguracao(
   return { ...baseTemaDaTela(configuracao.padrao, tela), ...(especifico?.propriedades ?? {}) };
 }
 
+// Luminancia relativa aproximada (0 = escuro, 1 = claro) de uma cor hex #rrggbb.
+function luminanciaHex(hex: string): number {
+  const casado = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!casado?.[1]) return 1;
+  const inteiro = Number.parseInt(casado[1], 16);
+  const r = (inteiro >> 16) & 255;
+  const g = (inteiro >> 8) & 255;
+  const b = inteiro & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+// Cores de texto (ink) que contrastam com uma superficie: claras sobre fundo escuro, escuras
+// sobre fundo claro. Mantem o texto legivel quando a empresa personaliza a cor do cartao/fundo.
+export function inkParaSuperficie(hexSuperficie: string): { ink: string; inkSoft: string } {
+  return luminanciaHex(hexSuperficie) < 0.5
+    ? { ink: "#f7f5f2", inkSoft: "#c9c3bd" }
+    : { ink: "#2f2320", inkSoft: "#6f635c" };
+}
+
 // Cor do icone da tela no menu: a corPrimaria resolvida quando DIFERE do padrao da empresa
 // (tela categorizada ou personalizada); undefined = icone neutro. Sem configuracao carregada,
 // cai na cor fixa da categoria (mesmo default estatico do domain.ts).

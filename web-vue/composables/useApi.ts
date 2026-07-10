@@ -1,4 +1,7 @@
+import { getCurrentInstance } from "vue";
+import { useTheme } from "vuetify";
 import type { ApiPaginated, ApiSuccess, AuthSession, ProblemDetails, TemaAplicacao } from "@padaria/shared";
+import { inkParaSuperficie } from "~/utils/tema";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -105,6 +108,18 @@ export function useApi() {
   const config = useRuntimeConfig();
   const apiUrl = String(config.public.apiUrl || "http://localhost:4100");
 
+  // Tema do Vuetify — para que os componentes color="primary"/"secondary"/etc. sigam a aparencia.
+  // useTheme() usa inject e so vale em setup; useApi() tambem roda em middleware (fora de setup),
+  // por isso so capturamos quando ha instancia ativa. aplicarTema so e chamado de componentes.
+  let temaVuetify: ReturnType<typeof useTheme> | null = null;
+  if (getCurrentInstance()) {
+    try {
+      temaVuetify = useTheme();
+    } catch {
+      temaVuetify = null;
+    }
+  }
+
   async function apiGet<T>(rota: string) {
     return request<T>(apiUrl, "GET", rota);
   }
@@ -134,12 +149,35 @@ export function useApi() {
   }
 
   function aplicarTema(tema: TemaAplicacao, temaResumoCaixa: TemaAplicacao = tema) {
+    // Cores do Vuetify via API de tema: regenera as triplas RGB reativamente, entao todos os
+    // componentes color="primary"/"secondary"/"success"/"warning"/"error" seguem a aparencia.
+    // (Antes gravavamos --v-theme-primary como hex, formato invalido para o Vuetify -> nao pegava.)
+    const cores = temaVuetify?.themes.value["padariaLight"]?.colors;
+    if (cores) {
+      cores["primary"] = tema.corPrimaria;
+      cores["secondary"] = tema.corSecundaria;
+      cores["success"] = tema.corSucesso;
+      cores["warning"] = tema.corAviso;
+      cores["error"] = tema.corErro;
+      cores["background"] = tema.corFundo;
+      cores["surface"] = tema.corCartao;
+    }
+    // Texto (ink) que contrasta com o cartao personalizado — mantem menu/cards legiveis quando a
+    // empresa escolhe um cartao escuro (modo escuro segue protegido pelos !important em main.css).
+    const raiz = document.documentElement.style;
+    const { ink, inkSoft } = inkParaSuperficie(tema.corCartao);
+    // Camada de identidade Pralis (--pralis-*, definida em :root) — sobreposta aqui inline para
+    // que fundo/cartao/texto do menu tambem sigam a aparencia da empresa.
+    raiz.setProperty("--pralis-canvas", tema.corFundo);
+    raiz.setProperty("--pralis-surface", tema.corCartao);
+    raiz.setProperty("--pralis-ink", ink);
+    raiz.setProperty("--pralis-ink-soft", inkSoft);
+    // Variaveis proprias (hex) usadas pelo CSS da aplicacao (sidebar, cards, resumo de caixa).
     document.documentElement.style.setProperty("--padaria-background", tema.corFundo);
     document.documentElement.style.setProperty("--padaria-card", tema.corCartao);
+    document.documentElement.style.setProperty("--padaria-foreground", ink);
     document.documentElement.style.setProperty("--padaria-brand", tema.corPrimaria);
     document.documentElement.style.setProperty("--padaria-accent", tema.corSecundaria);
-    document.documentElement.style.setProperty("--v-theme-primary", tema.corPrimaria);
-    document.documentElement.style.setProperty("--v-theme-secondary", tema.corSecundaria);
     document.documentElement.style.setProperty("--padaria-card-entrada", temaResumoCaixa.corAviso);
     document.documentElement.style.setProperty("--padaria-card-transferencia", temaResumoCaixa.corSecundaria);
     document.documentElement.style.setProperty("--padaria-card-despesa", temaResumoCaixa.corErro);
