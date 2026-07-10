@@ -8,7 +8,7 @@
 // Seguro para rodar em todo deploy: usa upsert/onConflict e nao apaga nada existente.
 import "dotenv/config";
 import pg from "pg";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
@@ -16,6 +16,7 @@ import { permissoes } from "@padaria/shared";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import { schema } from "./src/schema/schema.js";
 import {
+  contaAutenticacao,
   empresas,
   perfisUsuarios,
   permissoesTabela,
@@ -98,6 +99,23 @@ if (!usuario) {
 }
 if (!usuario?.id) throw new Error(`[bootstrap] Falha ao criar/obter o usuario admin: ${adminEmail}`);
 
+// Producao exige e-mail verificado (requireEmailVerification em api/src/auth/config.ts). O admin do
+// bootstrap e confiavel (criado no servidor), entao marcamos como verificado para permitir o login.
+await banco
+  .update(usuarioAutenticacao)
+  .set({ emailVerified: true, updatedAt: new Date() })
+  .where(eq(usuarioAutenticacao.id, usuario.id));
+
+// Garante (idempotente) que a senha do admin = ADMIN_SENHA em TODA execucao: reescreve o hash na
+// conta 'credential' usando o proprio hasher do better-auth. Assim ADMIN_SENHA e a fonte da verdade
+// e um simples redeploy sempre reseta a senha do admin (resolve senha divergente de deploys antigos).
+const contextoAuth = await auth.$context;
+const senhaHash = await contextoAuth.password.hash(adminSenha);
+await banco
+  .update(contaAutenticacao)
+  .set({ password: senhaHash, updatedAt: new Date() })
+  .where(and(eq(contaAutenticacao.userId, usuario.id), eq(contaAutenticacao.providerId, "credential")));
+
 await banco
   .insert(perfisUsuarios)
   .values({ usuarioId: usuario.id, empresaId, nome: adminNome, email: adminEmail, role: "usuario_admin" })
@@ -106,7 +124,7 @@ await banco
     set: { empresaId, nome: adminNome, email: adminEmail, role: "usuario_admin", atualizadoEm: new Date() }
   });
 await banco.insert(usuariosEmpresas).values({ usuarioId: usuario.id, empresaId }).onConflictDoNothing();
-console.info(`[bootstrap] OK admin ${adminEmail} (usuario_admin) vinculado a empresa`);
+console.info(`[bootstrap] OK admin ${adminEmail} (usuario_admin, email verificado, senha = ADMIN_SENHA)`);
 
 await pool.end();
 console.info("[bootstrap] OK bootstrap concluido");
