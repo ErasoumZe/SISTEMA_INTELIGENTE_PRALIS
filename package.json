@@ -51,7 +51,7 @@
     "db:prod:down": "docker compose -p padaria-prod-db -f db/docker-compose-db.yml -f db/docker-compose-db.prod.yml down",
     "compose:up": "npm run db:dev:up && docker compose -p padaria-dev -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build api",
     "compose:prod": "docker compose -p padaria-prod -f infra/docker-compose.prod.yml up --build",
-    "compose:coolify:check": "cross-env DATABASE_URL=postgresql://user:pass@db.example:5432/padaria BETTER_AUTH_SECRET=dummy-secret-with-at-least-32-chars AUTH_BASE_URL=https://api.example.test WEB_ORIGIN=https://app.example.test NUXT_PUBLIC_API_URL=https://api.example.test docker compose -p padaria-coolify -f infra/docker-compose.coolify.yml config --quiet",
+    "compose:coolify:check": "cross-env DATABASE_URL=postgresql://user:pass@db.example:5432/padaria BETTER_AUTH_SECRET=dummy-secret-with-at-least-32-chars AUTH_BASE_URL=https://api.example.test WEB_ORIGIN=https://app.example.test NUXT_PUBLIC_API_URL=https://api.example.test ADMIN_EMAIL=admin@example.test ADMIN_SENHA=dummy-admin-pass docker compose -p padaria-coolify --project-directory . -f infra/docker-compose.coolify.yml config --quiet",
     "compose:down": "npm run dev:destroy"
   },
   "devDependencies": {
