@@ -16,6 +16,7 @@ import { permissoes } from "@padaria/shared";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import { schema } from "./src/schema/schema.js";
 import {
+  colaboradores,
   contaAutenticacao,
   empresas,
   perfisUsuarios,
@@ -124,7 +125,18 @@ await banco
     set: { empresaId, nome: adminNome, email: adminEmail, role: "usuario_admin", atualizadoEm: new Date() }
   });
 await banco.insert(usuariosEmpresas).values({ usuarioId: usuario.id, empresaId }).onConflictDoNothing();
-console.info(`[bootstrap] OK admin ${adminEmail} (usuario_admin, email verificado, senha = ADMIN_SENHA)`);
+
+// O app exige um colaborador vinculado ao usuario para montar o perfil (obterPerfilPorUsuarioId
+// retorna null sem colaborador). Cria um colaborador minimo para o admin, de forma idempotente.
+const [colaboradorExistente] = await banco
+  .select({ id: colaboradores.id })
+  .from(colaboradores)
+  .where(eq(colaboradores.usuarioId, usuario.id))
+  .limit(1);
+if (!colaboradorExistente) {
+  await banco.insert(colaboradores).values({ empresaId, nome: adminNome, usuarioId: usuario.id });
+}
+console.info(`[bootstrap] OK admin ${adminEmail} (usuario_admin, email verificado, senha = ADMIN_SENHA, colaborador)`);
 
 await pool.end();
 console.info("[bootstrap] OK bootstrap concluido");
