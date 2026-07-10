@@ -220,7 +220,7 @@ onMounted(() => {
                     >
                       <span class="sidebar-item disabled">
                         <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                        <span>{{ tela.titulo }}</span>
+                        <span :style="tela.cor ? { color: tela.cor } : undefined">{{ tela.titulo }}</span>
                       </span>
                     </span>
                   </template>
@@ -233,7 +233,9 @@ onMounted(() => {
                   @click="fecharDrawerMobile"
                 >
                   <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                  <span>{{ tela.titulo }}</span>
+                  <span :style="tela.cor && tela.id !== telaAtiva ? { color: tela.cor } : undefined">{{
+                    tela.titulo
+                  }}</span>
                 </NuxtLink>
               </template>
             </div>

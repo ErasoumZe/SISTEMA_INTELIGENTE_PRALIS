@@ -1113,14 +1113,14 @@ const validacaoQtdPreview = computed(() =>
   <v-dialog v-model="modalTemaAberto" max-width="560">
     <v-card>
       <v-card-title>Aparencia</v-card-title>
-      <v-card-subtitle>Cores editaveis por pagina/secao.</v-card-subtitle>
+      <v-card-subtitle>Padrao vale para todas as telas; escolha uma tela para personalizar so ela.</v-card-subtitle>
       <v-card-text>
         <v-select
           v-model="temaTelaEdicao"
           :items="telasTemaPermitidas"
           item-title="titulo"
           item-value="id"
-          label="Pagina/secao"
+          label="Aplicar em"
           @update:model-value="abrirTema(String($event))"
         />
         <v-row dense>

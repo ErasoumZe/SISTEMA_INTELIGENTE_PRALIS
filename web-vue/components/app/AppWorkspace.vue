@@ -222,7 +222,13 @@ const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
 });
-const telasTemaPermitidas = computed(() => [...telasPermitidas.value, itemTemaResumoCaixa]);
+// Opcoes do seletor de aparencia com rotulo explicito: "padrao" (global) primeiro, o resumo do
+// caixa, e cada tela como "Somente a tela: X" — deixa claro se a cor vale para tudo ou uma so.
+const telasTemaPermitidas = computed(() => [
+  { id: "padrao", titulo: "Padrao (todas as telas)" },
+  { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
+  ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
+]);
 const telasShell = computed(() => {
   // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
   // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
