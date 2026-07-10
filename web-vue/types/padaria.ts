@@ -235,6 +235,8 @@ export type ItemMenu = {
   permissaoMenu?: Permissao;
   permissaoMenuDesabilitado?: Permissao;
   icone: string;
+  // Cor da categoria (identidade visual) aplicada ao icone no menu; ver corCategoriaPorTela.
+  cor?: string;
 };
 
 export type AcaoNovo = {

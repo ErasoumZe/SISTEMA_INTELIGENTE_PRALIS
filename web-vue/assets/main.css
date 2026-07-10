@@ -1275,21 +1275,12 @@ body {
 /* ===================== FIM RESPONSIVIDADE OFICIAL ===================== */
 
 /* =====================================================================
-   PRALIS — ACENTO 100% LARANJA (sem roxo do tema por empresa)
-   Forca o primario/secundario do Vuetify e o --padaria-brand em laranja
-   Pralis, vencendo (via !important) o que o aplicarTema injeta inline a
-   partir do tema salvo da empresa. Apenas cor/identidade — nada de logica.
+   PRALIS — IDENTIDADE LARANJA COMO PADRAO (nao mais forcada)
+   O laranja Pralis agora e o DEFAULT do tema (nuxt.config + shared
+   temaPadraoAplicacao + shim padraoComIdentidade em utils/tema.ts).
+   A personalizacao por empresa/tela (Aparencia) volta a vencer: o
+   aplicarTema injeta as vars inline e nada aqui as sobrepoe.
    ===================================================================== */
-:root,
-.v-theme--padariaLight {
-  --padaria-brand: #c0521d !important;
-  --padaria-accent: #b8480f !important;
-  --v-theme-primary: 192, 82, 29 !important; /* #c0521d — CTA laranja profundo (AA c/ branco) */
-  --v-theme-on-primary: 255, 255, 255 !important;
-  --v-theme-secondary: 184, 72, 15 !important; /* #b8480f */
-  --v-theme-on-secondary: 255, 255, 255 !important;
-}
-/* ===================== FIM ACENTO LARANJA ===================== */
 
 /* ===================== MODO ESCURO (claro/escuro) =====================
    O toggle no topbar seta data-theme="dark" no <html>. As vars com !important

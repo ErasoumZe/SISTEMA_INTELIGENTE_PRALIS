@@ -28,6 +28,7 @@ import type {
   ProdutoTransformacaoDados
 } from "~/types/padaria";
 import { mascararCep, mascararDocumento, mascararWhatsapp } from "./formatacao";
+import { corCategoriaPorTela } from "./tema";
 
 export const telasOcultasNoDrawerEPermissoes = new Set([
   "promocoes",
@@ -48,21 +49,35 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
 ]);
 
 export const itemPorTela: Record<string, ItemMenu> = {
-  entradas: { id: "entradas", titulo: "Entradas", permissao: "entradas_visualizar", icone: "mdi-arrow-down-left" },
+  entradas: {
+    id: "entradas",
+    titulo: "Entradas",
+    permissao: "entradas_visualizar",
+    icone: "mdi-arrow-down-left",
+    cor: corCategoriaPorTela["entradas"]
+  },
   transferencias: {
     id: "transferencias",
     titulo: "Transferencias",
     permissao: "transferencias_visualizar",
-    icone: "mdi-swap-horizontal"
+    icone: "mdi-swap-horizontal",
+    cor: corCategoriaPorTela["transferencias"]
   },
   despesas: { id: "despesas", titulo: "Despesas", permissao: "despesas_visualizar", icone: "mdi-receipt-text" },
   mercadorias: {
     id: "mercadorias",
     titulo: "Mercadorias",
     permissao: "mercadorias_visualizar",
-    icone: "mdi-package-variant-closed"
+    icone: "mdi-package-variant-closed",
+    cor: corCategoriaPorTela["mercadorias"]
   },
-  retiradas: { id: "retiradas", titulo: "Retiradas", permissao: "retiradas_visualizar", icone: "mdi-wallet" },
+  retiradas: {
+    id: "retiradas",
+    titulo: "Retiradas",
+    permissao: "retiradas_visualizar",
+    icone: "mdi-wallet",
+    cor: corCategoriaPorTela["retiradas"]
+  },
   fechamento: {
     id: "fechamento",
     titulo: "Fechamento com diferenca",
@@ -191,7 +206,8 @@ export const itemPorTela: Record<string, ItemMenu> = {
     id: "relatorio_vendas",
     titulo: "Relatorio de Vendas",
     permissao: "relatorio_vendas_visualizar",
-    icone: "mdi-hand-coin"
+    icone: "mdi-hand-coin",
+    cor: corCategoriaPorTela["relatorio_vendas"]
   },
   notas_fiscais: {
     id: "notas_fiscais",

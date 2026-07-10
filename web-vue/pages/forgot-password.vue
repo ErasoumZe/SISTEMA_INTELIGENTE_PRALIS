@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { apiUrl } = useApi();
 
-const email = ref("diretor@email.com");
+const email = ref("");
 const loading = ref(false);
 const message = ref("");
 const error = ref("");
@@ -22,7 +22,7 @@ async function requestReset() {
   });
 
   if (response.ok) {
-    message.value = "Se o email existir, um link de recuperacao sera gerado no log da API.";
+    message.value = "Se o email existir, enviamos um link de recuperacao. Verifique sua caixa de entrada.";
   } else {
     error.value = "Nao foi possivel solicitar a recuperacao agora.";
   }

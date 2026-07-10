@@ -57,6 +57,7 @@ import {
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
+import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
@@ -221,9 +222,19 @@ const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
 });
-const telasTemaPermitidas = computed(() => [...telasPermitidas.value, itemTemaResumoCaixa]);
+// Opcoes do seletor de aparencia com rotulo explicito: "padrao" (global) primeiro, o resumo do
+// caixa, e cada tela como "Somente a tela: X" — deixa claro se a cor vale para tudo ou uma so.
+const telasTemaPermitidas = computed(() => [
+  { id: "padrao", titulo: "Padrao (todas as telas)" },
+  { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
+  ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
+]);
 const telasShell = computed(() => {
-  return telasPermitidas.value.filter((item) => item.id !== "caixa");
+  // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
+  // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
+  return telasPermitidas.value
+    .filter((item) => item.id !== "caixa")
+    .map((item) => ({ ...item, cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id) }));
 });
 const motivoTelaAtivaDesabilitada = computed(
   () => motivosTelasDesabilitadas.value[telaAtiva.value] ?? "Tela indisponivel para este perfil."

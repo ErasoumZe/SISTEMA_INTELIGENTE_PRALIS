@@ -98,6 +98,16 @@ export async function atualizarUsuarioAutenticacaoRepository(
     .where(eq(usuarioAutenticacao.id, input.id));
 }
 
+// Usuario criado por admin (fluxo confiavel, senha definida na hora) ja nasce com o e-mail
+// verificado, para poder logar em producao (onde requireEmailVerification e true). Diferente do
+// auto-cadastro publico, em que a verificacao sera obrigatoria.
+export async function marcarEmailVerificadoRepository(id: string, db: ExecutorBanco = banco) {
+  await db
+    .update(usuarioAutenticacao)
+    .set({ emailVerified: true, updatedAt: new Date() })
+    .where(eq(usuarioAutenticacao.id, id));
+}
+
 export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string, db: ExecutorBanco = banco) {
   const [usuario] = await db
     .select({ id: usuarioAutenticacao.id })

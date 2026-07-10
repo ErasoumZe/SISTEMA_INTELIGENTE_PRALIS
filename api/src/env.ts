@@ -16,7 +16,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4100),
   HOST: z.string().default("0.0.0.0"),
   // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
-  SENTRY_DSN: z.string().url().optional()
+  SENTRY_DSN: z.string().url().optional(),
+  // E-mail transacional (reset de senha + verificacao). Sem chave, os e-mails so vao para o log
+  // (dev). Em producao, configure ambos (conta em resend.com). EMAIL_FROM = remetente verificado.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);
@@ -34,5 +38,9 @@ if (env.NODE_ENV === "production") {
   }
   if (problemas.length) {
     throw new Error(`Configuracao invalida para producao: ${problemas.join("; ")}`);
+  }
+  // E-mail e degradavel (nao fatal): sem provedor, reset/verificacao so vao para o log do container.
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    console.warn("[env] RESEND_API_KEY/EMAIL_FROM ausentes: e-mails (reset/verificacao) so irao para o log.");
   }
 }

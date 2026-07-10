@@ -1,7 +1,7 @@
 import { inject, type ComputedRef, type Ref } from "vue";
 import type { TemaAplicacao } from "@padaria/shared";
 import type { secoesPermissoes } from "~/utils/domain";
-import type { CadastroForm, EntidadeOperacional, ItemMenu, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
+import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
 export type CaixaDrawerForm = {
   pdvId: string;
@@ -93,7 +93,7 @@ export type WorkspaceContext = {
   salvarCadastro: () => Promise<void>;
   modalTemaAberto: Ref<boolean>;
   temaTelaEdicao: Ref<string>;
-  telasTemaPermitidas: ComputedRef<ItemMenu[]>;
+  telasTemaPermitidas: ComputedRef<{ id: string; titulo: string }[]>;
   abrirTema: (tela?: string) => Promise<void>;
   tema: Ref<TemaAplicacao>;
   temaSalvando: Ref<boolean>;
