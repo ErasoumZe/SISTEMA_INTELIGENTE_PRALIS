@@ -1,7 +1,9 @@
+# Deploy no Coolify: ele roda `docker compose` com --project-directory = RAIZ do repo
+# (nao a pasta infra/). Por isso os `context` sao relativos a raiz (`.`), e nao `..`.
 services:
   migrate:
     build:
-      context: ..
+      context: .
       dockerfile: api/Dockerfile.prod
       target: build
     # Aplica migrations (drizzle + better-auth) e, em seguida, o bootstrap idempotente de
@@ -31,7 +33,7 @@ services:
 
   api:
     build:
-      context: ..
+      context: .
       dockerfile: api/Dockerfile.prod
     labels:
       - traefik.docker.network=coolify
@@ -71,7 +73,7 @@ services:
 
   web-vue:
     build:
-      context: ..
+      context: .
       dockerfile: web-vue/Dockerfile.prod
       args:
         NUXT_PUBLIC_API_URL: ${NUXT_PUBLIC_API_URL:?NUXT_PUBLIC_API_URL obrigatorio}
