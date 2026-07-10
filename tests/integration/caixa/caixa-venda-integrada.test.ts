@@ -192,9 +192,9 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     // >>> COM O VINCULO (fix): a venda integrada recebe o caixa_id do caixa do seu PDV/periodo e
     // ENTRA no ENTRADAS/saldo do caixa aberto, junto com as operacoes manuais.
     expect(linhaVenda?.caixa_id).toBe(caixaId);
-    expect(status.resumo.totalEntradas).toBe(200);
+    expect(status.resumo["totalEntradas"]).toBe(200);
     // saldo = 200 (entrada integrada) + 50 - 0 - 30 - 20 - 15 = 185
-    expect(status.resumo.saldo).toBe(185);
+    expect(status.resumo["saldo"]).toBe(185);
   });
 
   it("venda integrada de OUTRO periodo/PDV NAO entra no caixa (so entra a do periodo certo)", async () => {
