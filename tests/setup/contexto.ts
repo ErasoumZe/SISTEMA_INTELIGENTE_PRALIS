@@ -4,7 +4,14 @@ declare module "vitest" {
   }
 }
 
-export type PerfilTeste = "admin" | "caixa" | "gerente" | "tesouraria" | "semPermissao" | "multiempresa";
+export type PerfilTeste =
+  | "admin"
+  | "caixa"
+  | "gerente"
+  | "tesouraria"
+  | "semPermissao"
+  | "multiempresa"
+  | "discriminador";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -22,18 +29,21 @@ export const idsTeste = {
   cargoTesouraria: "11111111-1111-4111-8111-111111111504",
   cargoSemPermissao: "11111111-1111-4111-8111-111111111505",
   cargoMultiempresa: "11111111-1111-4111-8111-111111111506",
+  cargoDiscriminador: "11111111-1111-4111-8111-111111111507",
   colaboradorAdmin: "11111111-1111-4111-8111-111111111601",
   colaboradorCaixa: "11111111-1111-4111-8111-111111111602",
   colaboradorGerente: "11111111-1111-4111-8111-111111111603",
   colaboradorTesouraria: "11111111-1111-4111-8111-111111111604",
   colaboradorSemPermissao: "11111111-1111-4111-8111-111111111605",
   colaboradorMultiempresa: "11111111-1111-4111-8111-111111111606",
+  colaboradorDiscriminador: "11111111-1111-4111-8111-111111111607",
   colaboradorCargoAdmin: "11111111-1111-4111-8111-111111111701",
   colaboradorCargoCaixa: "11111111-1111-4111-8111-111111111702",
   colaboradorCargoGerente: "11111111-1111-4111-8111-111111111703",
   colaboradorCargoTesouraria: "11111111-1111-4111-8111-111111111704",
   colaboradorCargoSemPermissao: "11111111-1111-4111-8111-111111111705",
   colaboradorCargoMultiempresa: "11111111-1111-4111-8111-111111111706",
+  colaboradorCargoDiscriminador: "11111111-1111-4111-8111-111111111707",
   grupoDespesaOperacional: "11111111-1111-4111-8111-111111111711",
   grupoDespesaQuebra: "11111111-1111-4111-8111-111111111712",
   grupoMercadoriaInsumos: "11111111-1111-4111-8111-111111111713",
@@ -73,5 +83,10 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "multiempresa.integracao@padaria.local",
     nome: "Multiempresa Integracao",
     senha: "Teste#2026!multi"
+  },
+  discriminador: {
+    email: "discriminador.integracao@padaria.local",
+    nome: "Discriminador Integracao",
+    senha: "Teste#2026!discrimina"
   }
 };

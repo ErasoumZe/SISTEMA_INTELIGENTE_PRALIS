@@ -968,11 +968,20 @@ export const mercadoriasItens = pgTable(
     descricao: text("descricao").notNull(),
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
     valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    // Desconto por item, informado na discriminacao. tipo null = sem desconto;
+    // valor e % (quando tipo='percentual') ou R$ (quando tipo='valor'). valor_total ja e liquido.
+    descontoTipo: text("desconto_tipo"),
+    descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
     valorTotal: valorMonetario("valor_total").notNull()
   },
   (table) => [
     check("mercadorias_itens_quantidade_check", sql`${table.quantidade} > 0`),
     check("mercadorias_itens_valor_total_check", sql`${table.valorTotal} >= 0`),
+    check(
+      "mercadorias_itens_desconto_tipo_check",
+      sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('percentual', 'valor')`
+    ),
+    check("mercadorias_itens_desconto_valor_check", sql`${table.descontoValor} is null or ${table.descontoValor} >= 0`),
     index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId)
   ]
 );

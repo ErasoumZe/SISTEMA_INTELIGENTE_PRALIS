@@ -112,6 +112,15 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoMultiempresa,
     role: "usuario_admin",
     permissoes: [...permissoes]
+  },
+  {
+    // So visualiza e discrimina (sem criar/editar/caixa) — prova a permissao propria isolada.
+    perfil: "discriminador",
+    cargoId: idsTeste.cargoDiscriminador,
+    colaboradorId: idsTeste.colaboradorDiscriminador,
+    colaboradorCargoId: idsTeste.colaboradorCargoDiscriminador,
+    role: "usuario_comum",
+    permissoes: ["mercadorias_visualizar", "mercadorias_discriminar", "despesas_visualizar", "despesas_discriminar"]
   }
 ];
 

@@ -4,14 +4,16 @@ import type {
   DespesaDetalheDto,
   DespesaDto,
   DespesaPayload,
-  DespesasQuery
+  DespesasQuery,
+  DiscriminarDespesaPayload
 } from "@padaria/shared/despesas";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
-  somaConfereCentavos
+  somaConfereCentavos,
+  validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
@@ -23,6 +25,7 @@ import {
   atualizarDespesaRepository,
   buscarDespesaDetalheRepository,
   criarDespesaRepository,
+  discriminarDespesaRepository,
   listarDespesasRepository
 } from "./despesas.repository.js";
 
@@ -86,5 +89,36 @@ export async function atualizarDespesa(
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: despesaId, computar };
+  });
+}
+
+// Discriminacao feita por outro setor DEPOIS: substitui os itens do cabecalho existente.
+// De proposito NAO passa por validarEdicaoNoCaixaAberto — desacopla do caixa (pode estar fechado).
+export async function discriminarDespesa(
+  despesaId: string,
+  dados: DiscriminarDespesaPayload,
+  perfil: PerfilUsuario
+): Promise<DespesaCriada> {
+  exigirPermissaoLancamento(perfil.permissoes, "despesas_discriminar");
+  return executarEmTransacao(async (tx) => {
+    const existente = await buscarDespesaDetalheRepository(despesaId, tx);
+    if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+    if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+
+    const valores = dados.itensDespesa.map((item) => item.valor);
+    if (!somaConfereCentavos(valores, existente.valorOriginal))
+      throw new Error("Soma dos itens da despesa deve bater com o valor original");
+
+    const referenciaInvalida = await validarReferenciasItensDespesa(dados.empresaId, dados.itensDespesa, tx);
+    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+
+    await discriminarDespesaRepository(
+      despesaId,
+      dados.itensDespesa,
+      existente.grupoDespesaId ?? null,
+      existente.colaboradorId ?? null,
+      tx
+    );
+    return { id: despesaId, computar: existente.computar };
   });
 }

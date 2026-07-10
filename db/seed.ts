@@ -290,18 +290,20 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "entradas_criar",
       "transferencias_criar",
       "despesas_criar",
+      "despesas_discriminar",
       "mercadorias_criar",
+      "mercadorias_discriminar",
       "retiradas_criar",
       "caixas_gerenciar"
     ]
   }),
   Compras: permissoesDoCargoSeed({
     ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
-    extras: ["mercadorias_criar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
+    extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargoSeed({
     ativas: ["despesas", "colaboradores", "folha_ponto"],
-    extras: ["despesas_criar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
+    extras: ["despesas_criar", "despesas_discriminar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
   }),
   RH: permissoesDoCargoSeed({
     ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
@@ -333,7 +335,9 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "relatorio_vendas_comprovantes_criar",
       "transferencias_criar",
       "despesas_criar",
+      "despesas_discriminar",
       "mercadorias_criar",
+      "mercadorias_discriminar",
       "retiradas_criar",
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",

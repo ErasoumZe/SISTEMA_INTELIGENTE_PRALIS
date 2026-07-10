@@ -1,11 +1,17 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
-import { despesaPayloadSchema, despesasQuerySchema } from "@padaria/shared/despesas";
+import { despesaPayloadSchema, despesasQuerySchema, discriminarDespesaSchema } from "@padaria/shared/despesas";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
-import { atualizarDespesa, criarDespesa, listarDespesas, obterDespesa } from "./despesas.service.js";
+import {
+  atualizarDespesa,
+  criarDespesa,
+  discriminarDespesa,
+  listarDespesas,
+  obterDespesa
+} from "./despesas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
@@ -80,4 +86,27 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  app.patch(
+    "/api/despesas/:id/discriminar",
+    { preHandler: exigirPermissao("despesas_discriminar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const dados = discriminarDespesaSchema.parse(request.body);
+      const perfil = request.perfilUsuario;
+      if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
+      if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      try {
+        return ok(await discriminarDespesa(id, dados, perfil));
+      } catch (error) {
+        if (error instanceof PermissaoLancamentoInsuficienteError) {
+          return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
+        }
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
 }

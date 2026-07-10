@@ -1,13 +1,40 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import type {
   MercadoriaDetalheDto,
   MercadoriaDto,
+  MercadoriaItemPayload,
   MercadoriaPayload,
   MercadoriasQuery
 } from "@padaria/shared/mercadorias";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
+import {
+  calcularTotalItemMercadoria,
+  filtrosEmpresa,
+  numeroDecimal,
+  valoresBase,
+  valoresBaseEdicao
+} from "../lancamentos/lancamentos.dominio.js";
+
+// Valores de uma linha de item. O servidor recalcula o valorTotal (desconto) e persiste tipo/valor.
+function valoresItemMercadoria(
+  item: MercadoriaItemPayload,
+  mercadoriaId: string,
+  grupoMercadoriaIdHeader: string | null
+) {
+  return {
+    mercadoriaId,
+    produtoId: item.produtoId ?? null,
+    grupoMercadoriaId: item.grupoMercadoriaId ?? grupoMercadoriaIdHeader ?? null,
+    unidadeMedidaId: item.unidadeMedidaId ?? null,
+    descricao: item.descricao,
+    quantidade: String(item.quantidade),
+    valorUnitario: String(item.valorUnitario),
+    descontoTipo: item.descontoTipo ?? null,
+    descontoValor: item.descontoValor != null ? String(item.descontoValor) : null,
+    valorTotal: String(calcularTotalItemMercadoria(item))
+  };
+}
 
 export async function listarMercadoriasRepository(
   query: MercadoriasQuery,
@@ -15,7 +42,7 @@ export async function listarMercadoriasRepository(
 ): Promise<MercadoriaDto[]> {
   const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(mercadorias.caixaId, query.caixaId));
-  return banco
+  const linhas = await banco
     .select({
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
@@ -27,6 +54,19 @@ export async function listarMercadoriasRepository(
     })
     .from(mercadorias)
     .where(filtros.length ? and(...filtros) : undefined);
+
+  // pendenteDiscriminacao = cabecalho sem nenhum item (derivado, sem coluna). Um so SELECT para
+  // saber quais tem itens; o resto e em memoria (a paginacao ja e feita em memoria no controller).
+  const ids = linhas.map((linha) => linha.id);
+  const comItens = ids.length
+    ? await banco
+        .select({ mercadoriaId: mercadoriasItens.mercadoriaId })
+        .from(mercadoriasItens)
+        .where(inArray(mercadoriasItens.mercadoriaId, ids))
+    : [];
+  const idsComItens = new Set(comItens.map((linha) => linha.mercadoriaId));
+  const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
+  return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
 }
 
 export async function criarMercadoriaRepository(
@@ -52,16 +92,9 @@ export async function criarMercadoriaRepository(
     if (!mercadoria) throw new Error("Mercadoria nao criada");
 
     for (const item of dados.itensMercadoria) {
-      await tx.insert(mercadoriasItens).values({
-        mercadoriaId: mercadoria.id,
-        produtoId: item.produtoId ?? null,
-        grupoMercadoriaId: item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null,
-        unidadeMedidaId: item.unidadeMedidaId ?? null,
-        descricao: item.descricao,
-        quantidade: String(item.quantidade),
-        valorUnitario: String(item.valorUnitario),
-        valorTotal: String(item.valorTotal)
-      });
+      await tx
+        .insert(mercadoriasItens)
+        .values(valoresItemMercadoria(item, mercadoria.id, dados.grupoMercadoriaId ?? null));
     }
 
     return mercadoria;
@@ -110,6 +143,8 @@ export async function buscarMercadoriaDetalheRepository(
       descricao: mercadoriasItens.descricao,
       quantidade: mercadoriasItens.quantidade,
       valorUnitario: mercadoriasItens.valorUnitario,
+      descontoTipo: mercadoriasItens.descontoTipo,
+      descontoValor: mercadoriasItens.descontoValor,
       valorTotal: mercadoriasItens.valorTotal
     })
     .from(mercadoriasItens)
@@ -125,6 +160,8 @@ export async function buscarMercadoriaDetalheRepository(
       ...item,
       quantidade: Number(item.quantidade),
       valorUnitario: Number(item.valorUnitario),
+      descontoTipo: item.descontoTipo as MercadoriaItemPayload["descontoTipo"],
+      descontoValor: item.descontoValor != null ? Number(item.descontoValor) : null,
       valorTotal: numeroDecimal(item.valorTotal)
     }))
   };
@@ -152,16 +189,24 @@ export async function atualizarMercadoriaRepository(
 
     await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
     for (const item of dados.itensMercadoria) {
-      await tx.insert(mercadoriasItens).values({
-        mercadoriaId,
-        produtoId: item.produtoId ?? null,
-        grupoMercadoriaId: item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null,
-        unidadeMedidaId: item.unidadeMedidaId ?? null,
-        descricao: item.descricao,
-        quantidade: String(item.quantidade),
-        valorUnitario: String(item.valorUnitario),
-        valorTotal: String(item.valorTotal)
-      });
+      await tx
+        .insert(mercadoriasItens)
+        .values(valoresItemMercadoria(item, mercadoriaId, dados.grupoMercadoriaId ?? null));
+    }
+  });
+}
+
+// Discriminacao: substitui SO os itens (o cabecalho e valorOriginal ficam intactos).
+export async function discriminarMercadoriaRepository(
+  mercadoriaId: string,
+  itens: MercadoriaItemPayload[],
+  grupoMercadoriaIdHeader: string | null,
+  db?: ExecutorBanco
+): Promise<void> {
+  await executarComTransacaoOpcional(db, async (tx) => {
+    await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
+    for (const item of itens) {
+      await tx.insert(mercadoriasItens).values(valoresItemMercadoria(item, mercadoriaId, grupoMercadoriaIdHeader));
     }
   });
 }

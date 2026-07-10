@@ -1,7 +1,13 @@
 import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
-import type { DespesaDetalheDto, DespesaDto, DespesaPayload, DespesasQuery } from "@padaria/shared/despesas";
+import type {
+  DespesaDetalheDto,
+  DespesaDto,
+  DespesaItemPayload,
+  DespesaPayload,
+  DespesasQuery
+} from "@padaria/shared/despesas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
@@ -23,7 +29,7 @@ export async function listarDespesasRepository(
     if (!caixaIds.length) return [];
     filtros.push(inArray(despesas.caixaId, caixaIds));
   }
-  return banco
+  const linhas = await banco
     .select({
       id: despesas.id,
       empresaId: despesas.empresaId,
@@ -37,6 +43,19 @@ export async function listarDespesasRepository(
     })
     .from(despesas)
     .where(filtros.length ? and(...filtros) : undefined);
+
+  // pendenteDiscriminacao = cabecalho sem nenhum item (derivado, sem coluna). Um so SELECT extra;
+  // o resto e em memoria (a paginacao ja e feita em memoria no controller).
+  const ids = linhas.map((linha) => linha.id);
+  const comItens = ids.length
+    ? await banco
+        .select({ despesaId: despesasItens.despesaId })
+        .from(despesasItens)
+        .where(inArray(despesasItens.despesaId, ids))
+    : [];
+  const idsComItens = new Set(comItens.map((linha) => linha.despesaId));
+  const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
+  return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
 }
 
 export async function criarDespesaRepository(
@@ -182,6 +201,29 @@ export async function atualizarDespesaRepository(
         valor: String(dados.valorOriginal),
         observacao: dados.observacao ?? null,
         criadoPor
+      });
+    }
+  });
+}
+
+// Discriminacao: substitui SO os itens (o cabecalho, o valorOriginal e o debito de colaborador,
+// que e derivado do cabecalho, ficam intactos).
+export async function discriminarDespesaRepository(
+  despesaId: string,
+  itens: DespesaItemPayload[],
+  grupoDespesaIdHeader: string | null,
+  colaboradorIdHeader: string | null,
+  db?: ExecutorBanco
+): Promise<void> {
+  await executarComTransacaoOpcional(db, async (tx) => {
+    await tx.delete(despesasItens).where(eq(despesasItens.despesaId, despesaId));
+    for (const item of itens) {
+      await tx.insert(despesasItens).values({
+        despesaId,
+        grupoDespesaId: item.grupoDespesaId ?? grupoDespesaIdHeader ?? null,
+        colaboradorId: item.colaboradorId ?? colaboradorIdHeader ?? null,
+        descricao: item.descricao,
+        valor: String(item.valor)
       });
     }
   });
