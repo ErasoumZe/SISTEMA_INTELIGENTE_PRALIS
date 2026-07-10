@@ -13,6 +13,7 @@ import {
   colaboradorTemCargoAtivoRepository,
   existeEmailUsuarioRepository,
   listarUsuariosRepository,
+  marcarEmailVerificadoRepository,
   salvarCargoColaboradorUsuarioRepository,
   salvarColaboradorUsuarioRepository,
   substituirEmpresasUsuarioRepository,
@@ -155,6 +156,8 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
 
   const colaboradorVinculado = await executarEmTransacao(async (tx) => {
     const colaboradorTransacao = await obterColaboradorParaVinculo(tx);
+    // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
+    await marcarEmailVerificadoRepository(usuario.id, tx);
     await upsertPerfilUsuarioRepository(
       { usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
       tx

@@ -4,6 +4,7 @@ import { schema } from "@padaria/db/schema";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import { env } from "../env.js";
 import { banco } from "../banco/conexao.js";
+import { enviarEmail, montarHtmlEmail } from "./email.js";
 
 const producao = env.NODE_ENV === "production";
 
@@ -30,11 +31,37 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: producao,
     minPasswordLength: producao ? 10 : 8,
-    sendResetPassword: async ({ user }) => {
-      if (producao) {
-        throw new Error("Envio de redefinicao de senha nao configurado");
-      }
-      console.info({ email: user.email }, "password reset requested");
+    sendResetPassword: async ({ user, url, token }) => {
+      await enviarEmail({
+        para: user.email,
+        assunto: "Redefinir sua senha",
+        html: montarHtmlEmail(
+          "Redefinir senha",
+          "Recebemos um pedido para redefinir a senha da sua conta. O link expira em breve.",
+          "Redefinir senha",
+          url
+        ),
+        url,
+        token
+      });
+    }
+  },
+  // Verificacao de e-mail: o callback fica pronto para os dois caminhos. O auto-cadastro (proxima
+  // tarefa) dispara a verificacao no caminho publico; usuario criado por admin ja nasce verificado.
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url, token }) => {
+      await enviarEmail({
+        para: user.email,
+        assunto: "Confirme seu e-mail",
+        html: montarHtmlEmail(
+          "Confirmar e-mail",
+          "Confirme seu endereco de e-mail para ativar o acesso a sua conta.",
+          "Confirmar e-mail",
+          url
+        ),
+        url,
+        token
+      });
     }
   }
 });

@@ -15,6 +15,7 @@ async function resetPassword() {
 
   const response = await fetch(`${apiUrl}/api/auth/reset-password`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ newPassword: password.value, token: token.value })
   });
