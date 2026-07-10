@@ -5,8 +5,11 @@ dist
 .vite
 coverage
 .env
+.env.producao
 *.log
 .logs/
+# Estado de runtime do agente de sincronizacao CREARE (cursor + fila de falhas)
+integracoes-scripts/.estado/
 playwright-report
 test-results
 storage

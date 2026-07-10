@@ -21,12 +21,30 @@ function trocarDataPreservandoHora(dataHoraOrigem, dataDestino) {
   return `${dataDestino}T${hora}.000Z`;
 }
 
+// Converte a data/hora do CREARE ("YYYY-MM-DD HH:MM:SS", hora LOCAL) para ISO, preservando a data
+// real (sem reescrever). Por padrao (offset vazio) rotula como `Z` — mesma convencao do ERP, que
+// grava o horario do caixa como naive-local-em-UTC (o front manda datetime-local sem timezone).
+// Se SYNC_FUSO_OFFSET for informado (ex.: "-03:00"), gera o instante UTC real.
+export function dataHoraParaIso(dataHoraOrigem, offset = "") {
+  const [data = "", hora = "00:00:00"] = String(dataHoraOrigem).trim().split(" ");
+  if (!data) return "";
+  return offset ? new Date(`${data}T${hora}${offset}`).toISOString() : `${data}T${hora}.000Z`;
+}
+
 function vendaCancelada(status) {
-  return String(status ?? "").trim().toUpperCase() === "C";
+  return (
+    String(status ?? "")
+      .trim()
+      .toUpperCase() === "C"
+  );
 }
 
 function itemCancelado(valor) {
-  return ["1", "C", "S", "SIM", "TRUE"].includes(String(valor ?? "").trim().toUpperCase());
+  return ["1", "C", "S", "SIM", "TRUE"].includes(
+    String(valor ?? "")
+      .trim()
+      .toUpperCase()
+  );
 }
 
 function agruparPorVenda(linhas) {
@@ -38,6 +56,59 @@ function agruparPorVenda(linhas) {
     grupos.set(chave, grupo);
   }
   return grupos;
+}
+
+// Modo PRODUCAO: NAO reescreve datas nem usa prefixo TESTE. idVenda estavel (chave de idempotencia
+// do servidor) = CREARE:<idVendaOriginal>; dataHoraVenda = a real (ver dataHoraParaIso). Reaproveita
+// os mesmos helpers puros do modo teste.
+export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = "" } = {}) {
+  const itensPorVenda = agruparPorVenda(itens);
+  const pagamentosPorVenda = agruparPorVenda(pagamentos);
+
+  return vendas.map((venda) => {
+    const idVendaOriginal = String(venda.idVendaBalcao);
+    const idVenda = `CREARE:${idVendaOriginal}`;
+    const idCaixa = texto(venda.idDispositivo, `SEM_CAIXA_${idVendaOriginal}`);
+    const nomeCaixa = texto(venda.nomeCaixa, `PDV ${idCaixa}`);
+    const idCliente = venda.idCliente == null ? null : String(venda.idCliente);
+
+    return {
+      DadosIntegracao: { origem: "CREARE_COMPILART", modo: "producao", idVendaOriginal },
+      Venda: {
+        idVenda,
+        idCaixa,
+        nomeCaixa,
+        idCliente,
+        nomeCliente: venda.nomeCliente ?? null,
+        documentoCliente: venda.documentoCliente ?? null,
+        dataHoraVenda: dataHoraParaIso(venda.dataHoraVenda, offsetFuso),
+        valorOriginal: dinheiro(venda.valorSubtotal ?? venda.valorTotal),
+        desconto: dinheiro(venda.valorDesconto),
+        acrescimo: dinheiro(venda.valorAcrescimo),
+        valorTotal: dinheiro(venda.valorTotal),
+        statusVenda: vendaCancelada(venda.statusVenda) ? "CANCELADA" : "FINALIZADA",
+        numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal)
+      },
+      ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) => ({
+        idRegistro: `CREARE_ITEM:${item.idItemVendaBalcao}`,
+        idProduto: texto(item.codigoProduto, `PRODUTO_${item.idProduto ?? item.idItemVendaBalcao}`),
+        descricaoProduto: texto(item.descricaoProduto, "Produto sem descricao"),
+        dataHoraItem: dataHoraParaIso(item.dataHoraItem ?? venda.dataHoraVenda, offsetFuso),
+        quantidade: Number(item.quantidade ?? 0),
+        valorUnitario: dinheiro(item.valorUnitario),
+        desconto: dinheiro(item.desconto),
+        acrescimo: dinheiro(item.acrescimo),
+        total: dinheiro(item.total),
+        itemCancelado: itemCancelado(item.itemCancelado)
+      })),
+      PagamentosVenda: (pagamentosPorVenda.get(idVendaOriginal) ?? []).map((pagamento) => ({
+        idVenda,
+        idFormaPagamento: texto(pagamento.idFormaPagamento, `FORMA_${pagamento.idFormaPgtoVendaBalcao}`),
+        descricaoFormaPagamento: texto(pagamento.descricaoFormaPagamento, "Forma sem descricao"),
+        valor: dinheiro(pagamento.valor)
+      }))
+    };
+  });
 }
 
 export function montarPayloadsTeste({ vendas, itens, pagamentos, dataOrigem, dataDestino = dataHojeLocal() }) {

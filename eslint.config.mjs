@@ -5,7 +5,9 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/.nuxt/**", "**/.output/**", "**/node_modules/**"]
+    // integracoes-scripts e um workspace JS puro (sem TS), com gate proprio (node --check + node --test).
+    // Fica fora do eslint com type-check, como ja fica fora do `lint` da raiz.
+    ignores: ["**/dist/**", "**/.nuxt/**", "**/.output/**", "**/node_modules/**", "integracoes-scripts/**"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
