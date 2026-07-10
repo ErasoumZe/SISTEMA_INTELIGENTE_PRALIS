@@ -36,9 +36,12 @@ export const temaPayloadSchema = temaAplicacaoSchema.extend({
   tela: z.string().min(1).default("padrao")
 });
 
+// Identidade Pralis (laranja) como padrao da aplicacao. As cores roxo/teal antigas
+// permanecem gravadas no banco de empresas nunca personalizadas — o front troca esses
+// valores "de fabrica" pelo laranja (padraoComIdentidade em web-vue/utils/tema.ts).
 export const temaPadraoAplicacao = {
-  corPrimaria: "#6d28d9",
-  corSecundaria: "#0891b2",
+  corPrimaria: "#c0521d",
+  corSecundaria: "#b8480f",
   corFundo: "#eaf1f9",
   corCartao: "#ffffff",
   corSucesso: "#16a34a",
@@ -58,4 +61,3 @@ export type ConfiguracaoAparenciaEmpresa = z.infer<typeof configuracaoAparenciaE
 export type TemaQuery = z.infer<typeof temaQuerySchema>;
 export type TemaPayload = z.infer<typeof temaPayloadSchema>;
 export type TemaDto = TemaAplicacao;
-

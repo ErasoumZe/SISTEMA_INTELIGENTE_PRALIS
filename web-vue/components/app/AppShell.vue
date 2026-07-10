@@ -219,7 +219,7 @@ onMounted(() => {
                       :aria-label="`${tela.titulo} — ${textoTooltipTela(tela.id)}`"
                     >
                       <span class="sidebar-item disabled">
-                        <v-icon :icon="tela.icone" size="21" />
+                        <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
                         <span>{{ tela.titulo }}</span>
                       </span>
                     </span>
@@ -232,7 +232,7 @@ onMounted(() => {
                   :class="{ active: tela.id === telaAtiva }"
                   @click="fecharDrawerMobile"
                 >
-                  <v-icon :icon="tela.icone" size="21" />
+                  <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
                   <span>{{ tela.titulo }}</span>
                 </NuxtLink>
               </template>

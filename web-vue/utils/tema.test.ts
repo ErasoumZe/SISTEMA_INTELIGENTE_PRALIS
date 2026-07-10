@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ConfiguracaoAparenciaEmpresa, TemaAplicacao } from "@padaria/shared";
-import { diferencasTema, montarConfiguracaoAparencia, resolverTemaDeConfiguracao } from "./tema";
+import {
+  corCategoriaPorTela,
+  corMenuTela,
+  diferencasTema,
+  montarConfiguracaoAparencia,
+  padraoComIdentidade,
+  resolverTemaDeConfiguracao
+} from "./tema";
 
 const padrao: TemaAplicacao = {
   corPrimaria: "#111111",
@@ -40,6 +47,82 @@ describe("resolverTemaDeConfiguracao", () => {
   it("tela sem especifico cai no padrao", () => {
     expect(resolverTemaDeConfiguracao(config, "relatorios")).toEqual(padrao);
   });
+
+  it("tela categorizada sem especifico usa a cor da categoria sobre o padrao", () => {
+    expect(resolverTemaDeConfiguracao(config, "entradas")).toEqual({
+      ...padrao,
+      corPrimaria: corCategoriaPorTela["entradas"]
+    });
+    expect(resolverTemaDeConfiguracao(config, "mercadorias")).toEqual({
+      ...padrao,
+      corPrimaria: corCategoriaPorTela["mercadorias"]
+    });
+  });
+
+  it("especifico da empresa vence o default de categoria", () => {
+    const configComEspecifico: ConfiguracaoAparenciaEmpresa = {
+      padrao,
+      especifico: [{ pagina: "retiradas", propriedades: { corPrimaria: "#aabbcc" } }]
+    };
+    expect(resolverTemaDeConfiguracao(configComEspecifico, "retiradas")).toEqual({
+      ...padrao,
+      corPrimaria: "#aabbcc"
+    });
+  });
+
+  it("default de categoria so muda a cor primaria (fundo/cartao seguem o padrao)", () => {
+    const tema = resolverTemaDeConfiguracao(config, "transferencias");
+    expect(tema?.corPrimaria).toBe(corCategoriaPorTela["transferencias"]);
+    expect(tema?.corFundo).toBe(padrao.corFundo);
+    expect(tema?.corCartao).toBe(padrao.corCartao);
+  });
+});
+
+describe("padraoComIdentidade", () => {
+  const roxoFabrica: TemaAplicacao = { ...padrao, corPrimaria: "#6d28d9", corSecundaria: "#0891b2" };
+
+  it("troca as cores de fabrica (roxo/teal) pelo laranja Pralis", () => {
+    const efetivo = padraoComIdentidade(roxoFabrica);
+    expect(efetivo.corPrimaria).toBe("#c0521d");
+    expect(efetivo.corSecundaria).toBe("#b8480f");
+  });
+
+  it("mantem cores personalizadas (campo a campo)", () => {
+    expect(padraoComIdentidade(padrao)).toEqual(padrao);
+    const soPrimariaCustom: TemaAplicacao = { ...padrao, corSecundaria: "#0891b2" };
+    const efetivo = padraoComIdentidade(soPrimariaCustom);
+    expect(efetivo.corPrimaria).toBe(padrao.corPrimaria);
+    expect(efetivo.corSecundaria).toBe("#b8480f");
+  });
+
+  it("resolver aplica a identidade sobre o padrao de fabrica", () => {
+    const config: ConfiguracaoAparenciaEmpresa = { padrao: roxoFabrica, especifico: [] };
+    expect(resolverTemaDeConfiguracao(config, "padrao")?.corPrimaria).toBe("#c0521d");
+  });
+});
+
+describe("corMenuTela", () => {
+  const config: ConfiguracaoAparenciaEmpresa = {
+    padrao,
+    especifico: [{ pagina: "despesas", propriedades: { corPrimaria: "#aa00aa" } }]
+  };
+
+  it("tela categorizada usa a cor da categoria", () => {
+    expect(corMenuTela(config, "entradas")).toBe(corCategoriaPorTela["entradas"]);
+  });
+
+  it("tela personalizada usa a cor do especifico", () => {
+    expect(corMenuTela(config, "despesas")).toBe("#aa00aa");
+  });
+
+  it("tela igual ao padrao fica neutra (undefined)", () => {
+    expect(corMenuTela(config, "clientes")).toBeUndefined();
+  });
+
+  it("sem configuracao cai na cor estatica da categoria", () => {
+    expect(corMenuTela(null, "mercadorias")).toBe(corCategoriaPorTela["mercadorias"]);
+    expect(corMenuTela(null, "clientes")).toBeUndefined();
+  });
 });
 
 describe("montarConfiguracaoAparencia", () => {
@@ -57,6 +140,20 @@ describe("montarConfiguracaoAparencia", () => {
     };
     const nova = montarConfiguracaoAparencia(atual, "caixa", padrao);
     expect(nova.especifico).toEqual([]);
+  });
+
+  it("salvar tela categorizada sem mudar nada NAO grava especifico (diff contra a base da tela)", () => {
+    const atual: ConfiguracaoAparenciaEmpresa = { padrao, especifico: [] };
+    const baseEntradas: TemaAplicacao = { ...padrao, corPrimaria: corCategoriaPorTela["entradas"] ?? "" };
+    const nova = montarConfiguracaoAparencia(atual, "entradas", baseEntradas);
+    expect(nova.especifico).toEqual([]);
+  });
+
+  it("personalizar tela categorizada grava so o diff contra a base (categoria inclusa)", () => {
+    const atual: ConfiguracaoAparenciaEmpresa = { padrao, especifico: [] };
+    const tema: TemaAplicacao = { ...padrao, corPrimaria: "#123456" };
+    const nova = montarConfiguracaoAparencia(atual, "entradas", tema);
+    expect(nova.especifico).toEqual([{ pagina: "entradas", propriedades: { corPrimaria: "#123456" } }]);
   });
 
   it("editar o padrao recalcula os especificos como diff sobre o novo padrao", () => {

@@ -57,6 +57,7 @@ import {
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
+import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
@@ -223,7 +224,11 @@ const telaBloqueadaPorCaixa = computed(() => {
 });
 const telasTemaPermitidas = computed(() => [...telasPermitidas.value, itemTemaResumoCaixa]);
 const telasShell = computed(() => {
-  return telasPermitidas.value.filter((item) => item.id !== "caixa");
+  // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
+  // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
+  return telasPermitidas.value
+    .filter((item) => item.id !== "caixa")
+    .map((item) => ({ ...item, cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id) }));
 });
 const motivoTelaAtivaDesabilitada = computed(
   () => motivosTelasDesabilitadas.value[telaAtiva.value] ?? "Tela indisponivel para este perfil."
