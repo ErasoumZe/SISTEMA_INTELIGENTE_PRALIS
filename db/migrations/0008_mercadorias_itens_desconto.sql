@@ -1,0 +1,4 @@
+ALTER TABLE "mercadorias_itens" ADD COLUMN "desconto_tipo" text;--> statement-breakpoint
+ALTER TABLE "mercadorias_itens" ADD COLUMN "desconto_valor" numeric(14, 4);--> statement-breakpoint
+ALTER TABLE "mercadorias_itens" ADD CONSTRAINT "mercadorias_itens_desconto_tipo_check" CHECK ("mercadorias_itens"."desconto_tipo" is null or "mercadorias_itens"."desconto_tipo" in ('percentual', 'valor'));--> statement-breakpoint
+ALTER TABLE "mercadorias_itens" ADD CONSTRAINT "mercadorias_itens_desconto_valor_check" CHECK ("mercadorias_itens"."desconto_valor" is null or "mercadorias_itens"."desconto_valor" >= 0);

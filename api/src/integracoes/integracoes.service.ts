@@ -12,11 +12,15 @@ import type {
   TipoRegistroIntegracao,
   VendaIntegracaoAgregadaPayload
 } from "@padaria/shared/integracoes";
-import { camposVinculoIntegracao, tiposRegistroIntegracao } from "@padaria/shared/integracoes";
+import {
+  camposVinculoIntegracao,
+  tiposRegistroIntegracao,
+  vendaIntegracaoAgregadaSchema
+} from "@padaria/shared/integracoes";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
-import { erroValidacao, naoAutorizado, proibido } from "../erros.js";
+import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
   buscarChavePorCodigoHashRepository,
@@ -97,6 +101,15 @@ function hashPayload(payload: VendaIntegracaoAgregadaPayload): string {
 
 function hashChaveIntegracao(chave: string): string {
   return createHash("sha256").update(chave).digest("hex");
+}
+
+// Best-effort para atribuir um identificador ao historico quando o payload nem validou.
+function extrairIdVenda(corpo: DadosExternos): string | null {
+  if (corpo === null || typeof corpo !== "object" || Array.isArray(corpo)) return null;
+  const venda = (corpo as Record<string, DadosExternos>)["Venda"];
+  if (venda === null || typeof venda !== "object" || Array.isArray(venda)) return null;
+  const idVenda = (venda as Record<string, DadosExternos>)["idVenda"];
+  return typeof idVenda === "string" ? idVenda : null;
 }
 
 function compararHashConstante(hashRecebido: string, hashArmazenado: string | null): boolean {
@@ -374,7 +387,7 @@ export async function salvarVinculoIntegracao(payload: SalvarVinculoIntegracaoPa
 
 export async function receberVendaIntegracao(
   chaveApi: string,
-  payload: VendaIntegracaoAgregadaPayload
+  corpo: DadosExternos
 ): Promise<IntegracaoIngestaoResultado> {
   const hashRecebido = hashChaveIntegracao(chaveApi);
   const chave = await buscarChavePorCodigoHashRepository(hashRecebido);
@@ -384,45 +397,89 @@ export async function receberVendaIntegracao(
   if (chave.tipo !== "vendas")
     throw erroValidacao("Integracao nao aceita payload de vendas", "INVALID_INTEGRATION_TYPE");
 
+  // Validacao do payload: falha vira registro "erro" no historico + erro estruturado 400.
+  const analise = vendaIntegracaoAgregadaSchema.safeParse(corpo);
+  if (!analise.success) {
+    const detalhes = analise.error.issues.map((issue) => ({
+      caminho: issue.path.join("."),
+      mensagem: issue.message
+    }));
+    const mensagemErro = detalhes
+      .slice(0, 5)
+      .map((detalhe) => `${detalhe.caminho || "(raiz)"}: ${detalhe.mensagem}`)
+      .join("; ");
+    await registrarHistoricoRepository({
+      chave,
+      identificadorExterno: extrairIdVenda(corpo),
+      hashConteudo: null,
+      status: "erro",
+      mensagemErro,
+      payload: corpo
+    });
+    throw erroValidacao("Payload de venda integrada invalido", "INTEGRATION_VALIDATION_ERROR", detalhes);
+  }
+
+  const payload = analise.data;
   const identificadorExterno = payload.Venda.idVenda;
   const hashConteudo = hashPayload(payload);
 
-  return banco.transaction(async (tx) => {
-    const registro = await buscarRegistroIntegracaoRepository(chave, "venda", identificadorExterno, tx);
-    if (registro?.hashConteudo === hashConteudo) {
-      await registrarSemNovidadeRepository(chave, identificadorExterno, hashConteudo, payload, tx);
-      await registrarHistoricoRepository(
-        { chave, identificadorExterno, hashConteudo, status: "sem_novidade", payload },
+  try {
+    return await banco.transaction(async (tx) => {
+      const registro = await buscarRegistroIntegracaoRepository(chave, "venda", identificadorExterno, tx);
+      if (registro?.hashConteudo === hashConteudo) {
+        await registrarSemNovidadeRepository(chave, identificadorExterno, hashConteudo, payload, tx);
+        await registrarHistoricoRepository(
+          { chave, identificadorExterno, hashConteudo, status: "sem_novidade", payload },
+          tx
+        );
+        return { status: "sem_novidade", vendaId: registro.registroSistemaId, identificadorExterno };
+      }
+
+      const vinculos = await resolverVinculosVenda(chave, payload, tx);
+      const venda = await criarOuAtualizarVendaIntegradaRepository(
+        {
+          chave,
+          payload,
+          hashConteudo,
+          ...(registro ? { vendaSistemaId: registro.registroSistemaId } : {}),
+          ...vinculos
+        },
         tx
       );
-      return { status: "sem_novidade", vendaId: registro.registroSistemaId, identificadorExterno };
-    }
 
-    const vinculos = await resolverVinculosVenda(chave, payload, tx);
-    const venda = await criarOuAtualizarVendaIntegradaRepository(
-      {
-        chave,
-        payload,
-        hashConteudo,
-        ...(registro ? { vendaSistemaId: registro.registroSistemaId } : {}),
-        ...vinculos
-      },
-      tx
-    );
+      await upsertRegistroIntegracaoRepository(
+        {
+          chave,
+          identificadorExterno,
+          hashConteudo,
+          registroSistemaId: venda.id,
+          payload
+        },
+        tx
+      );
 
-    await upsertRegistroIntegracaoRepository(
-      {
+      const status = registro ? "atualizado" : "criado";
+      await registrarHistoricoRepository({ chave, identificadorExterno, hashConteudo, status, payload }, tx);
+      return { status, vendaId: venda.id, identificadorExterno };
+    });
+  } catch (error) {
+    // Erros de dominio ja sao estruturados; nao viram "erro" de processamento.
+    if (error instanceof ErroDominio) throw error;
+    const mensagemErro = error instanceof Error ? error.message : String(error);
+    try {
+      // Fora da transacao que sofreu rollback: conexao nova (banco default) -> o registro sobrevive.
+      await registrarHistoricoRepository({
         chave,
         identificadorExterno,
         hashConteudo,
-        registroSistemaId: venda.id,
+        status: "erro",
+        mensagemErro,
         payload
-      },
-      tx
-    );
-
-    const status = registro ? "atualizado" : "criado";
-    await registrarHistoricoRepository({ chave, identificadorExterno, hashConteudo, status, payload }, tx);
-    return { status, vendaId: venda.id, identificadorExterno };
-  });
+      });
+    } catch {
+      // Nem gravar o erro foi possivel (ex.: banco fora): propaga o original -> 500 -> agente re-tenta.
+      throw error instanceof Error ? error : new Error(mensagemErro);
+    }
+    throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
+  }
 }

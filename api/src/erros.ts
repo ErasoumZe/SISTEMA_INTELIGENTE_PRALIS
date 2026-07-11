@@ -39,6 +39,10 @@ export function naoEncontrado(message: string, code = "NOT_FOUND", details?: Jso
   return new ErroDominio(message, 404, code, details);
 }
 
+export function naoProcessavel(message: string, code = "UNPROCESSABLE_ENTITY", details?: JsonValue): ErroDominio {
+  return new ErroDominio(message, 422, code, details);
+}
+
 export function conflito(message: string, code = "CONFLICT", details?: JsonValue): ErroDominio {
   return new ErroDominio(message, 409, code, details);
 }

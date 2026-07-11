@@ -11,7 +11,10 @@ export const despesasQuerySchema = z
     dataFim: z.string().min(10).optional(),
     caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
-    somentePendentes: z.coerce.boolean().optional().default(false)
+    // somentePendentes = pendente de PAGAMENTO (dataPagamento nula). Nao confundir com o abaixo.
+    somentePendentes: z.coerce.boolean().optional().default(false),
+    // Fila de pendencias de discriminacao: cabecalhos sem nenhum item.
+    pendenteDiscriminacao: z.coerce.boolean().optional()
   })
   .merge(paginationQuerySchema);
 
@@ -52,7 +55,15 @@ export const despesaDtoSchema = z.object({
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),
-  status: z.string()
+  status: z.string(),
+  // Derivado: cabecalho sem itens ainda nao foi discriminado.
+  pendenteDiscriminacao: z.boolean()
+});
+
+// Discriminacao: so os itens (o cabecalho ja existe). Nao passa pela trava de caixa aberto.
+export const discriminarDespesaSchema = z.object({
+  empresaId: uuidSchema,
+  itensDespesa: z.array(despesaItemSchema).min(1)
 });
 
 export const despesaCriadaSchema = z.object({
@@ -62,6 +73,8 @@ export const despesaCriadaSchema = z.object({
 
 export type DespesasQuery = z.input<typeof despesasQuerySchema>;
 export type DespesaPayload = z.infer<typeof despesaPayloadSchema>;
+export type DespesaItemPayload = z.infer<typeof despesaItemSchema>;
+export type DiscriminarDespesaPayload = z.infer<typeof discriminarDespesaSchema>;
 
 // Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
 export type DespesaDetalheDto = DespesaPayload & { id: string; status: string; caixaId: string | null };

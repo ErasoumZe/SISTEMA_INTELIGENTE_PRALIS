@@ -24,6 +24,8 @@ jobs:
         run: npm ci
       - name: Lint (builda shared/db antes)
         run: npm run lint
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       - name: Typecheck + arquitetura + texto
         run: npm run check
       - name: Testes unitarios

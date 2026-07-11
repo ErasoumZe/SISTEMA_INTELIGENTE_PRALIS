@@ -18,8 +18,8 @@ import {
   produtos,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
-import type { DespesaPayload } from "@padaria/shared/despesas";
-import type { MercadoriaPayload } from "@padaria/shared/mercadorias";
+import type { DespesaItemPayload, DespesaPayload } from "@padaria/shared/despesas";
+import type { MercadoriaItemPayload, MercadoriaPayload } from "@padaria/shared/mercadorias";
 import type { RetiradaPayload } from "@padaria/shared/retiradas";
 import type { TransferenciaPayload } from "@padaria/shared/transferencias";
 import type { VendaPayload } from "@padaria/shared/vendas";
@@ -271,6 +271,50 @@ export function resolverDataPagamentoLancamento(
 export function somaConfereCentavos(valores: number[], total: number): boolean {
   const soma = valores.reduce((acumulado, valor) => acumulado + paraCentavos(valor), 0);
   return soma === paraCentavos(total);
+}
+
+// Total liquido do item de mercadoria. Sem desconto, respeita o valorTotal informado (permite
+// lancamento por soma direta / valor cheio). Com desconto, o servidor RECALCULA: bruto (qtd*unit)
+// menos o desconto (% quando 'percentual', R$ quando 'valor'), nunca abaixo de zero.
+export function calcularTotalItemMercadoria(item: MercadoriaItemPayload): number {
+  if (!item.descontoTipo || item.descontoValor == null) return item.valorTotal;
+  const bruto = item.quantidade * item.valorUnitario;
+  const desconto = item.descontoTipo === "percentual" ? (bruto * item.descontoValor) / 100 : item.descontoValor;
+  const liquido = bruto - desconto;
+  return liquido > 0 ? liquido : 0;
+}
+
+// Referencias dos itens na discriminacao de mercadoria (grupos/produtos/unidades da empresa).
+export async function validarReferenciasItensMercadoria(
+  empresaId: string,
+  itens: MercadoriaItemPayload[],
+  db: ExecutorBanco = banco
+): Promise<string | null> {
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoMercadoriaId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposMercadorias, grupoId, empresaId, db))) return "Grupo de mercadoria";
+  }
+  for (const produtoId of [...new Set(itens.map((item) => item.produtoId).filter(Boolean))]) {
+    if (produtoId && !(await existeNaEmpresa(produtos, produtoId, empresaId, db))) return "Produto";
+  }
+  for (const unidadeId of [...new Set(itens.map((item) => item.unidadeMedidaId).filter(Boolean))]) {
+    if (unidadeId && !(await existeNaEmpresa(unidadesMedida, unidadeId, empresaId, db))) return "Unidade de medida";
+  }
+  return null;
+}
+
+// Referencias dos itens na discriminacao de despesa (grupos/colaboradores da empresa).
+export async function validarReferenciasItensDespesa(
+  empresaId: string,
+  itens: DespesaItemPayload[],
+  db: ExecutorBanco = banco
+): Promise<string | null> {
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoDespesaId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposDespesas, grupoId, empresaId, db))) return "Grupo de despesa";
+  }
+  for (const colaboradorId of [...new Set(itens.map((item) => item.colaboradorId).filter(Boolean))]) {
+    if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, empresaId, db))) return "Colaborador";
+  }
+  return null;
 }
 
 export async function usarLacreSeInformado(

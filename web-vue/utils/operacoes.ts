@@ -43,6 +43,8 @@ export type OperacaoDetalhe = {
     descricao: string;
     quantidade: number;
     valorUnitario: number;
+    descontoTipo?: "percentual" | "valor" | null;
+    descontoValor?: number | null;
     valorTotal: number;
   }[];
 };
@@ -60,11 +62,25 @@ export type ItemMercadoriaForm = {
   descricao: string;
   quantidade: string;
   valorUnitario: string;
+  // Desconto por item (discriminacao). tipo vazio = sem desconto. valor e % ou R$ conforme o tipo.
+  descontoTipo: string;
+  descontoValor: string;
   valorTotal: string;
   produtoId: string;
   grupoMercadoriaId: string;
   unidadeMedidaId: string;
 };
+
+// Total liquido de um item de mercadoria no cliente (espelha o recalculo do servidor). Sem desconto,
+// usa o valorTotal digitado (permite valor cheio). Com desconto, e qtd*unit menos o desconto, >= 0.
+export function totalItemMercadoriaForm(item: ItemMercadoriaForm): number {
+  if (!item.descontoTipo) return deCentavos(paraCentavos(item.valorTotal));
+  const bruto = Number(item.quantidade || 0) * Number(item.valorUnitario || 0);
+  const descNum = Number(item.descontoValor || 0);
+  const desconto = item.descontoTipo === "percentual" ? (bruto * descNum) / 100 : descNum;
+  const liquido = bruto - desconto;
+  return deCentavos(paraCentavos(liquido > 0 ? liquido : 0));
+}
 
 // Pecas que o AppWorkspace atribui aos refs do formulario. Itens so vem quando o detalhe os traz
 // (para nao sobrescrever as linhas em branco padrao quando o registro nao e discriminado).
@@ -137,6 +153,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
       descricao: item.descricao,
       quantidade: String(item.quantidade),
       valorUnitario: String(item.valorUnitario),
+      descontoTipo: item.descontoTipo ?? "",
+      descontoValor: item.descontoValor != null ? String(item.descontoValor) : "",
       valorTotal: String(item.valorTotal),
       produtoId: item.produtoId ?? "",
       grupoMercadoriaId: item.grupoMercadoriaId ?? "",
@@ -173,7 +191,10 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
             ...item,
             quantidade: Number(item.quantidade || 0),
             valorUnitario: Number(item.valorUnitario || 0),
-            valorTotal: deCentavos(paraCentavos(item.valorTotal))
+            descontoTipo: item.descontoTipo || null,
+            descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
+            // Servidor recalcula, mas mandamos o total ja liquido para casar com a soma na hora.
+            valorTotal: totalItemMercadoriaForm(item)
           }))
       : [];
   const itensVenda =

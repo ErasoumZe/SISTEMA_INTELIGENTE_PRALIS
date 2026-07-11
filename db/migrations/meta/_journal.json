@@ -57,6 +57,13 @@
       "when": 1783602811901,
       "tag": "0007_produtos_transformacao_unidade_check_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783711332904,
+      "tag": "0008_mercadorias_itens_desconto",
+      "breakpoints": true
     }
   ]
 }

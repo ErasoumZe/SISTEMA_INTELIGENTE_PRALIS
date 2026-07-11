@@ -19,6 +19,8 @@ export type ItemMercadoriaForm = {
   descricao: string;
   quantidade: string;
   valorUnitario: string;
+  descontoTipo: string;
+  descontoValor: string;
   valorTotal: string;
   produtoId: string;
   grupoMercadoriaId: string;
@@ -57,6 +59,7 @@ export type WorkspaceContext = {
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
   operacaoEditandoId: Ref<string>;
+  modoDiscriminacao: Ref<boolean>;
   form: Ref<OperacaoForm>;
   discriminandoDespesa: Ref<boolean>;
   discriminandoMercadoria: Ref<boolean>;

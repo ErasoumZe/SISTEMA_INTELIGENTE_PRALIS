@@ -276,6 +276,56 @@ describe("integracoes integration", () => {
     expect(atualizado.json()).toMatchObject({ data: { status: "atualizado" } });
   });
 
+  it("Deve_RegistrarErroERetornar400_Quando_PayloadDeVendaInvalido", async () => {
+    const identificador = "VENDA-ERRO-VALIDACAO";
+    const invalido = payloadVendaIntegrada(identificador);
+    invalido.Venda.dataHoraVenda = "data-invalida";
+
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/integracoes",
+      headers: { "x-api-key": idsTeste.integracaoCodigo },
+      payload: invalido
+    });
+
+    assertProblem(resposta, 400, "INTEGRATION_VALIDATION_ERROR");
+    await expect(
+      consultarUm(
+        "select mensagem_erro from integracoes_historico where identificador_externo = $1 and status = 'erro'",
+        [identificador]
+      )
+    ).resolves.toBeTruthy();
+  });
+
+  it("Deve_RegistrarErroERetornar422EFazerRollback_Quando_ProcessamentoFalha", async () => {
+    // valorOriginal com 14 digitos inteiros estoura a coluna numeric(14,2) no INSERT (passa no zod).
+    const identificador = "VENDA-ERRO-PROCESSAMENTO";
+    const payload = payloadVendaIntegrada(identificador);
+    payload.Venda.valorOriginal = 10000000000000;
+
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/integracoes",
+      headers: { "x-api-key": idsTeste.integracaoCodigo },
+      payload
+    });
+
+    assertProblem(resposta, 422, "INTEGRATION_PROCESSING_ERROR");
+    await expect(
+      consultarUm(
+        "select mensagem_erro from integracoes_historico where identificador_externo = $1 and status = 'erro'",
+        [identificador]
+      )
+    ).resolves.toBeTruthy();
+    // O registro de erro sobrevive (conexao nova), mas a venda e o registro de integracao sofreram rollback.
+    await expect(
+      consultarUm("select id from vendas where identificador_externo = $1", [identificador])
+    ).resolves.toBeNull();
+    await expect(
+      consultarUm("select id from integracoes_registros where identificador_externo = $1", [identificador])
+    ).resolves.toBeNull();
+  });
+
   it("Deve_ListarHistoricoDaIntegracao_AposIngestao", async () => {
     const cookie = await cookieSessao(contexto.app, "admin");
 

@@ -54,6 +54,7 @@ import {
 import {
   formOperacaoDeDetalhe,
   montarPayloadOperacao,
+  totalItemMercadoriaForm,
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
@@ -87,7 +88,7 @@ const tipoPagina = computed(() => props.tipoPagina);
 const paginaInicialNeutra = computed(() => tipoPagina.value === "inicio");
 
 const router = useRouter();
-const { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiDelete, carregarSessao, aplicarTema } = useApi();
+const { apiUrl, apiGet, apiGetPaginado, apiPost, apiPut, apiPatch, apiDelete, carregarSessao, aplicarTema } = useApi();
 
 const workspaceCarregado = useState("padaria.workspace.carregado", () => false);
 const telaInicialNormalizada = computed(() =>
@@ -117,6 +118,10 @@ const modalCopiaAberto = ref(false);
 
 const entidadeNova = ref<EntidadeOperacional>("venda");
 const operacaoEditandoId = ref("");
+// Modo discriminacao: reutiliza o modal de operacao, mas salva so os itens via PATCH .../discriminar
+// (feito por outro setor, DEPOIS, sem exigir caixa aberto). Fila filtravel abaixo.
+const modoDiscriminacao = ref(false);
+const filtroPendentesDiscriminacao = ref(false);
 const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
@@ -126,6 +131,8 @@ const itensMercadoria = ref([
     descricao: "",
     quantidade: "1",
     valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
     valorTotal: "",
     produtoId: "",
     grupoMercadoriaId: "",
@@ -240,7 +247,21 @@ const motivoTelaAtivaDesabilitada = computed(
   () => motivosTelasDesabilitadas.value[telaAtiva.value] ?? "Tela indisponivel para este perfil."
 );
 const telaAtual = computed(() => itemPorTela[telaAtiva.value] ?? telasPermitidas.value[0]);
-const operacoesDaTela = computed(() => operacoes.value);
+const telaSuportaDiscriminacao = computed(() => telaAtiva.value === "mercadorias" || telaAtiva.value === "despesas");
+const permissaoDiscriminarTela = computed(() => {
+  if (telaAtiva.value === "mercadorias") return "mercadorias_discriminar" as const;
+  if (telaAtiva.value === "despesas") return "despesas_discriminar" as const;
+  return null;
+});
+const podeDiscriminarTela = computed(() => {
+  const permissao = permissaoDiscriminarTela.value;
+  return permissao ? temPermissao(permissao) : false;
+});
+const operacoesDaTela = computed(() =>
+  filtroPendentesDiscriminacao.value && telaSuportaDiscriminacao.value
+    ? operacoes.value.filter((operacao) => operacao.pendenteDiscriminacao)
+    : operacoes.value
+);
 const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTela.value.length / 10)));
 const operacoesPaginadas = computed(() =>
   operacoesDaTela.value.slice((paginaOperacoes.value - 1) * 10, paginaOperacoes.value * 10)
@@ -270,7 +291,7 @@ const {
 // servidor); paraCentavos tolera virgula ("10,50") e string vazia.
 const totalItensDespesa = computed(() => deCentavos(somarCentavos(...itensDespesa.value.map((item) => item.valor))));
 const totalItensMercadoria = computed(() =>
-  deCentavos(somarCentavos(...itensMercadoria.value.map((item) => item.valorTotal)))
+  deCentavos(somarCentavos(...itensMercadoria.value.map((item) => totalItemMercadoriaForm(item))))
 );
 const totalItensVenda = computed(() => deCentavos(somarCentavos(...itensVenda.value.map((item) => item.valorTotal))));
 const totalTiposPagamento = computed(() =>
@@ -307,6 +328,14 @@ const alvosFiltroPermissoes = computed(() => {
 
 watch(totalPaginasOperacoes, (total) => {
   if (paginaOperacoes.value > total) paginaOperacoes.value = total;
+});
+
+// Ao filtrar a fila de pendencias, volta para a primeira pagina; ao trocar de tela, limpa o filtro.
+watch(filtroPendentesDiscriminacao, () => {
+  paginaOperacoes.value = 1;
+});
+watch(telaAtiva, () => {
+  filtroPendentesDiscriminacao.value = false;
 });
 
 watch([discriminandoDespesa, totalItensDespesa], () => {
@@ -784,6 +813,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   }
   entidadeNova.value = entidade;
   operacaoEditandoId.value = operacao?.id ?? "";
+  modoDiscriminacao.value = false;
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
@@ -795,6 +825,8 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
       descricao: "",
       quantidade: "1",
       valorUnitario: "",
+      descontoTipo: "",
+      descontoValor: "",
       valorTotal: "",
       produtoId: "",
       grupoMercadoriaId: "",
@@ -819,14 +851,88 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   modalOperacaoAberto.value = true;
 }
 
+// Abre o modal em modo discriminacao: carrega o cabecalho existente + itens, forca o modo de itens
+// e NAO exige caixa aberto (a discriminacao e feita por outro setor, depois).
+async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id: string }) {
+  if (entidade !== "despesa" && entidade !== "mercadoria") return;
+  entidadeNova.value = entidade;
+  operacaoEditandoId.value = operacao.id;
+  modoDiscriminacao.value = true;
+  form.value = formOperacaoVazio();
+  discriminandoDespesa.value = entidade === "despesa";
+  discriminandoMercadoria.value = entidade === "mercadoria";
+  itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
+  itensMercadoria.value = [
+    {
+      descricao: "",
+      quantidade: "1",
+      valorUnitario: "",
+      descontoTipo: "",
+      descontoValor: "",
+      valorTotal: "",
+      produtoId: "",
+      grupoMercadoriaId: "",
+      unidadeMedidaId: ""
+    }
+  ];
+  try {
+    await carregarOpcoesParaOperacao(entidade);
+    const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
+    preencherFormOperacao(entidade, detalhe);
+    // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
+    discriminandoDespesa.value = entidade === "despesa";
+    discriminandoMercadoria.value = entidade === "mercadoria";
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+    return;
+  }
+  modalOperacaoAberto.value = true;
+}
+
 function executarAcaoNovo(acao: (typeof opcoesNovo)[number]) {
   if (acao.entidade) void abrirOperacao(acao.entidade);
   if (acao.tela === "malote") abrirMaloteNovo();
 }
 
+// Discriminacao: envia SO os itens via PATCH .../discriminar (sem trava de caixa). O servidor
+// valida a soma contra o valor do cabecalho e recalcula o total de cada item pelo desconto.
+async function salvarDiscriminacao() {
+  const entidade = entidadeNova.value;
+  const payload = montarPayloadOperacao(entidade, {
+    empresaId: empresaId.value,
+    form: form.value,
+    itensVenda: itensVenda.value,
+    tiposPagamento: tiposPagamento.value,
+    itensDespesa: itensDespesa.value,
+    itensMercadoria: itensMercadoria.value,
+    discriminandoDespesa: discriminandoDespesa.value,
+    discriminandoMercadoria: discriminandoMercadoria.value,
+    produtos: opcoesEmpresa.value.produtos
+  });
+  const corpo =
+    entidade === "mercadoria"
+      ? { empresaId: empresaId.value, itensMercadoria: payload.itensMercadoria }
+      : { empresaId: empresaId.value, itensDespesa: payload.itensDespesa };
+  const itens = entidade === "mercadoria" ? payload.itensMercadoria : payload.itensDespesa;
+  if (!itens.length) {
+    notificar("Informe ao menos um item para discriminar.", "error");
+    return;
+  }
+  await apiPatch(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacaoEditandoId.value}/discriminar`, corpo);
+  const indice = operacoes.value.findIndex((operacao) => operacao.id === operacaoEditandoId.value);
+  const linha = operacoes.value[indice];
+  if (indice >= 0 && linha) operacoes.value.splice(indice, 1, { ...linha, pendenteDiscriminacao: false });
+  modalOperacaoAberto.value = false;
+  notificar("Discriminacao salva com sucesso.");
+}
+
 async function salvarOperacao() {
   salvandoOperacao.value = true;
   try {
+    if (modoDiscriminacao.value) {
+      await salvarDiscriminacao();
+      return;
+    }
     const payload = montarPayloadOperacao(entidadeNova.value, {
       empresaId: empresaId.value,
       form: form.value,
@@ -1231,6 +1337,7 @@ provide(WORKSPACE_CONTEXT, {
   modalOperacaoAberto,
   entidadeNova,
   operacaoEditandoId,
+  modoDiscriminacao,
   form,
   discriminandoDespesa,
   discriminandoMercadoria,
@@ -1296,6 +1403,9 @@ const pageContext = computed(() => ({
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   descricao: descricaoTela(telaAtiva.value),
   caixaStatus: caixaStatus.value,
+  mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
+  pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
+  podeDiscriminar: podeDiscriminarTela.value,
   opcoesEmpresa: opcoesEmpresa.value,
   sessao: sessao.value,
   caixaSalvando: caixaSalvando.value,
@@ -1313,6 +1423,10 @@ const pageContext = computed(() => ({
   permissoesPagina: permissoesPagina.value,
   permissaoExcluindoId: permissaoExcluindoId.value,
   abrirOperacao,
+  abrirDiscriminacao,
+  alternarFiltroPendentes: (valor: boolean) => {
+    filtroPendentesDiscriminacao.value = valor;
+  },
   atualizarPaginaOperacoes,
   abrirCaixaOperacional,
   acertarSaldoOperacional,
