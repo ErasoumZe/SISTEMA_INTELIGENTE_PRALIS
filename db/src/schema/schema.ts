@@ -3,6 +3,7 @@ import * as cadastroSchema from "./cadastro/cadastro.schema.js";
 import * as caixaSchema from "./caixa/caixa.schema.js";
 import * as despesaSchema from "./despesa/despesa.schema.js";
 import * as mercadoriaSchema from "./mercadoria/mercadoria.schema.js";
+import * as notaFiscalSchema from "./nota-fiscal/nota-fiscal.schema.js";
 import * as retiradaSchema from "./retirada/retirada.schema.js";
 import * as temaSchema from "./tema/tema.schema.js";
 import * as transferenciaSchema from "./transferencia/transferencia.schema.js";
@@ -14,6 +15,7 @@ export const schema = {
   ...caixaSchema,
   ...despesaSchema,
   ...mercadoriaSchema,
+  ...notaFiscalSchema,
   ...retiradaSchema,
   ...temaSchema,
   ...transferenciaSchema,

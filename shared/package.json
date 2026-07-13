@@ -141,6 +141,11 @@
       "development": "./src/mercadorias/index.ts",
       "default": "./dist/mercadorias/index.js"
     },
+    "./notas-fiscais": {
+      "types": "./dist/notas-fiscais/index.d.ts",
+      "development": "./src/notas-fiscais/index.ts",
+      "default": "./dist/notas-fiscais/index.js"
+    },
     "./retiradas": {
       "types": "./dist/retiradas/index.d.ts",
       "development": "./src/retiradas/index.ts",

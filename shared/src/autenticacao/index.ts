@@ -110,6 +110,7 @@ export const permissoes = [
   "cadastro_ficha_tecnica_visualizar",
   "cadastro_ingredientes_visualizar",
   "notas_fiscais_visualizar",
+  "notas_fiscais_importar",
   "folha_ponto_visualizar",
   "menu_entradas_mostrar",
   "menu_entradas_desabilitado",
