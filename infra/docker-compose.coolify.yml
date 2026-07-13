@@ -9,11 +9,14 @@ services:
     # Aplica migrations (drizzle + better-auth) e, em seguida, o bootstrap idempotente de
     # producao (catalogo de permissoes + 1a empresa + primeiro admin). A API so sobe depois
     # que este passo conclui com sucesso (depends_on: service_completed_successfully).
+    # Migrations + bootstrap idempotente. Por fim, o seed de referencia — que so faz algo se
+    # SEED_REFERENCIA=1 (senao sai na hora). Assim voce popula a producao uma vez ligando a flag
+    # no Coolify e deployando; depois desliga a flag e os proximos deploys nao re-semeiam.
     command:
       [
         "sh",
         "-c",
-        "npm run api:prod:migrate --workspace @padaria/api && npm run bootstrap:prod --workspace @padaria/db"
+        "npm run api:prod:migrate --workspace @padaria/api && npm run bootstrap:prod --workspace @padaria/db && { npm run seed:referencia:prod --workspace @padaria/db || echo '[seed-referencia] AVISO: falhou; deploy segue (API nao bloqueada)'; }"
       ]
     restart: "no"
     environment:
@@ -26,6 +29,8 @@ services:
       ADMIN_SENHA: ${ADMIN_SENHA:?ADMIN_SENHA obrigatorio}
       ADMIN_NOME: ${ADMIN_NOME:-Administrador}
       EMPRESA_NOME: ${EMPRESA_NOME:-Padaria Principal}
+      # Ligue para popular a producao uma vez (dados de referencia + exemplos); depois remova.
+      SEED_REFERENCIA: ${SEED_REFERENCIA:-}
     # padaria_prod (interna) + coolify (alcanca o Postgres gerenciado do Coolify pelo host interno)
     networks:
       - padaria_prod

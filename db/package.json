@@ -68,6 +68,7 @@
     "db:push:force": "drizzle-kit push --force",
     "db:migrate": "drizzle-kit migrate",
     "bootstrap:prod": "tsx bootstrap-prod.ts",
+    "seed:referencia:prod": "tsx seed-referencia-prod.ts",
     "seed:dev": "tsx --conditions=development seed.ts",
     "backfill:codigos": "tsx --conditions=development backfill-codigos.ts",
     "setup": "drizzle-kit push",

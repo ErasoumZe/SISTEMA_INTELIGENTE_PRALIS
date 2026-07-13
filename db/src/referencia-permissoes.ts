@@ -1,0 +1,208 @@
+// Esquema de permissoes por cargo, usado pelo seed de referencia de PRODUCAO
+// (db/seed-referencia-prod.ts). Espelha o mesmo esquema de db/seed.ts (dev) — se um mudar o
+// conjunto de permissoes de um cargo, ajuste o outro. So define dados/funcoes puras (sem efeito
+// colateral / sem acesso a banco): seguro de importar.
+import { permissoes, type Permissao, type RegrasPermissoes } from "@padaria/shared";
+
+const telasSomenteCaixaAberto = new Set<string>([
+  "entradas",
+  "transferencias",
+  "despesas",
+  "mercadorias",
+  "retiradas",
+  "fechamento",
+  "relatorio_produtos"
+]);
+
+const permissaoAcessoPorTela = {
+  entradas: "entradas_visualizar",
+  transferencias: "transferencias_visualizar",
+  despesas: "despesas_visualizar",
+  mercadorias: "mercadorias_visualizar",
+  retiradas: "retiradas_visualizar",
+  fechamento: "fechamento_com_diferenca_visualizar",
+  relatorio_produtos: "relatorio_produtos_visualizar",
+  malotes: "cadastro_malotes_visualizar",
+  caixa: "caixa_operar",
+  promocoes: "promocoes_visualizar",
+  relatorio_faltas: "relatorio_faltas_visualizar",
+  relatorio_advertencias: "relatorio_advertencias_visualizar",
+  pedidos: "pedidos_visualizar",
+  perdas_sobras: "perdas_sobras_visualizar",
+  estoque_produtos: "estoque_produtos_visualizar",
+  relatorio_dre: "relatorio_dre_visualizar",
+  clientes: "cadastro_clientes_visualizar",
+  fornecedores: "cadastro_fornecedores_visualizar",
+  produtos: "cadastro_produtos_visualizar",
+  colaboradores: "cadastro_colaboradores_visualizar",
+  folha_ponto: "folha_ponto_visualizar",
+  avaliacao_qualidade: "avaliacao_qualidade_visualizar",
+  avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
+  relatorio_fiscal: "relatorio_fiscal_visualizar",
+  fiscal_produtos: "cadastro_fiscal_produtos_visualizar",
+  patrimonio: "cadastro_patrimonio_visualizar",
+  ficha_tecnica: "cadastro_ficha_tecnica_visualizar",
+  ingredientes: "cadastro_ingredientes_visualizar",
+  relatorio_vendas: "relatorio_vendas_visualizar",
+  notas_fiscais: "notas_fiscais_visualizar",
+  contas_pagar: "contas_pagar_visualizar",
+  integracoes: "integracoes_visualizar",
+  contas: "cadastro_contas_visualizar",
+  grupos: "cadastro_grupos_visualizar",
+  pdv: "cadastro_pdv_visualizar",
+  formas_pagamento: "cadastro_formas_pagamento_visualizar",
+  empresas: "cadastro_empresas_visualizar",
+  unidades: "cadastro_unidades_medida_visualizar",
+  areas_setores: "cadastro_areas_setores_visualizar",
+  usuarios: "cadastro_usuarios_visualizar",
+  permissoes: "cadastro_permissoes_visualizar",
+  aparencia: "aparencia_visualizar"
+} as const satisfies Record<string, Permissao>;
+
+type TelaPermissao = keyof typeof permissaoAcessoPorTela;
+type ConfigPermissoesCargo = {
+  ativas?: TelaPermissao[];
+  desabilitadas?: TelaPermissao[];
+  somenteCaixaAberto?: TelaPermissao[];
+  extras?: Permissao[];
+  todas?: boolean;
+};
+
+function menuMostrar(tela: TelaPermissao) {
+  return `menu_${tela}_mostrar` as Permissao;
+}
+
+function menuDesabilitado(tela: TelaPermissao) {
+  return `menu_${tela}_desabilitado` as Permissao;
+}
+
+function menuSomenteCaixaAberto(tela: TelaPermissao) {
+  return `menu_${tela}_somente_caixa_aberto` as Permissao;
+}
+
+export function permissoesDoCargo(config: ConfigPermissoesCargo): Permissao[] {
+  if (config.todas) return [...permissoes];
+  const resultado = new Set<Permissao>(config.extras ?? []);
+  for (const tela of config.ativas ?? []) {
+    resultado.add(permissaoAcessoPorTela[tela]);
+    resultado.add(menuMostrar(tela));
+  }
+  for (const tela of config.somenteCaixaAberto ?? []) {
+    if (telasSomenteCaixaAberto.has(tela)) resultado.add(menuSomenteCaixaAberto(tela));
+  }
+  for (const tela of config.desabilitadas ?? []) {
+    resultado.add(menuDesabilitado(tela));
+  }
+  return [...resultado];
+}
+
+export function regrasPermissoes(lista: Permissao[]): RegrasPermissoes {
+  return Object.fromEntries(lista.map((permissao) => [permissao, true]));
+}
+
+export const permissoesPorCargo: Record<string, Permissao[]> = {
+  Caixa: permissoesDoCargo({
+    ativas: [
+      "caixa",
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos"
+    ],
+    somenteCaixaAberto: [
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos"
+    ],
+    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
+  }),
+  Tesouraria: permissoesDoCargo({
+    ativas: ["malotes", "transferencias"],
+    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar"]
+  }),
+  Gerencia: permissoesDoCargo({
+    ativas: [
+      "caixa",
+      "entradas",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "fechamento",
+      "relatorio_produtos",
+      "promocoes",
+      "relatorio_faltas",
+      "relatorio_advertencias",
+      "pedidos",
+      "perdas_sobras",
+      "estoque_produtos",
+      "relatorio_dre",
+      "clientes"
+    ],
+    // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
+    extras: [
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "despesas_discriminar",
+      "mercadorias_criar",
+      "mercadorias_discriminar",
+      "retiradas_criar",
+      "caixas_gerenciar"
+    ]
+  }),
+  Compras: permissoesDoCargo({
+    ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
+    extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
+  }),
+  DP: permissoesDoCargo({
+    ativas: ["despesas", "colaboradores", "folha_ponto"],
+    extras: ["despesas_criar", "despesas_discriminar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
+  }),
+  RH: permissoesDoCargo({
+    ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
+  }),
+  Fiscal: permissoesDoCargo({
+    ativas: ["relatorio_fiscal", "fiscal_produtos"]
+  }),
+  "Diretor de Operacoes": permissoesDoCargo({
+    ativas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
+  }),
+  // Diretor Geral vira um cargo normal (sem "todas"): o acesso total do diretor vem do role
+  // usuario_admin (decisao de negocio: pergunta 3). Assim a tela de permissoes do cargo fica limpa.
+  "Diretor Geral": permissoesDoCargo({}),
+  Financeiro: permissoesDoCargo({
+    ativas: [
+      "relatorio_vendas",
+      "notas_fiscais",
+      "contas_pagar",
+      "transferencias",
+      "despesas",
+      "mercadorias",
+      "retiradas",
+      "relatorio_dre",
+      "grupos",
+      "pdv",
+      "formas_pagamento"
+    ],
+    extras: [
+      "relatorio_vendas_comprovantes_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "despesas_discriminar",
+      "mercadorias_criar",
+      "mercadorias_discriminar",
+      "retiradas_criar",
+      "cadastro_grupos_criar",
+      "cadastro_pdv_criar",
+      "cadastro_formas_pagamento_criar"
+    ]
+  })
+};
