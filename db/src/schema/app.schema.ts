@@ -986,6 +986,70 @@ export const mercadoriasItens = pgTable(
   ]
 );
 
+// Notas fiscais eletronicas importadas do webhook da contabilidade (NF-e por CNPJ/periodo).
+// Guarda a NF-e crua como fonte da verdade e ancora de idempotencia (unica por empresa+chave);
+// a mercadoria pre-preenchida (cabecalho+itens, status 'aguardando_aprovacao') referencia esta
+// nota via mercadoria_id. Fornecedor casado por CNPJ (criado se nao existir).
+export const notasFiscais = pgTable(
+  "notas_fiscais",
+  {
+    id: idUuid,
+    empresaId,
+    chave: text("chave").notNull(), // 44 digitos, sem o prefixo "NFe"
+    numero: text("numero"),
+    serie: text("serie"),
+    modelo: text("modelo"),
+    naturezaOperacao: text("natureza_operacao"),
+    dataEmissao: timestamp("data_emissao", { withTimezone: true }),
+    fornecedorCnpj: text("fornecedor_cnpj"),
+    fornecedorNome: text("fornecedor_nome"),
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    valorProdutos: valorMonetario("valor_produtos"),
+    valorDesconto: valorMonetario("valor_desconto"),
+    valorFrete: valorMonetario("valor_frete"),
+    valorOutros: valorMonetario("valor_outros"),
+    valorSeguro: valorMonetario("valor_seguro"),
+    valorTotal: valorMonetario("valor_total"),
+    dataVencimento: date("data_vencimento"),
+    mercadoriaId: uuid("mercadoria_id").references(() => mercadorias.id, { onDelete: "set null" }),
+    payloadHash: text("payload_hash"),
+    statusImportacao: text("status_importacao").notNull().default("pendente_revisao"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    check(
+      "notas_fiscais_status_importacao_check",
+      sql`${table.statusImportacao} in ('pendente_revisao', 'revisada', 'ignorada', 'cancelada')`
+    ),
+    unique("notas_fiscais_empresa_chave_unica").on(table.empresaId, table.chave),
+    index("notas_fiscais_empresa_status_idx").on(table.empresaId, table.statusImportacao)
+  ]
+);
+
+// Itens fiscais da NF-e (nItem/EAN/NCM/CFOP/CEST/uCom/qCom/vUnCom). Detalhe que mercadorias_itens
+// nao carrega — fica ligado ao cabecalho da nota; a tela de revisao junta por nota_fiscal_id.
+export const notasFiscaisItens = pgTable(
+  "notas_fiscais_itens",
+  {
+    id: idUuid,
+    notaFiscalId: uuid("nota_fiscal_id")
+      .notNull()
+      .references(() => notasFiscais.id, { onDelete: "cascade" }),
+    numeroItem: integer("numero_item"),
+    ean: text("ean"), // cEAN
+    ncm: text("ncm"),
+    cfop: text("cfop"),
+    cest: text("cest"),
+    descricao: text("descricao"), // xProd
+    unidadeComercial: text("unidade_comercial"), // uCom
+    quantidade: numeric("quantidade", { precision: 14, scale: 4 }), // qCom
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 6 }), // vUnCom
+    criadoEm
+  },
+  (table) => [index("notas_fiscais_itens_nota_idx").on(table.notaFiscalId)]
+);
+
 export const retiradas = pgTable(
   "retiradas",
   {

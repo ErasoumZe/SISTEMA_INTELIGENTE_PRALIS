@@ -5,6 +5,7 @@ export * from "./cadastro/cadastro.schema.js";
 export * from "./caixa/caixa.schema.js";
 export * from "./despesa/despesa.schema.js";
 export * from "./mercadoria/mercadoria.schema.js";
+export * from "./nota-fiscal/nota-fiscal.schema.js";
 export * from "./retirada/retirada.schema.js";
 export * from "./tema/tema.schema.js";
 export * from "./transferencia/transferencia.schema.js";

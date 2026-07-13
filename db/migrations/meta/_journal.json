@@ -64,6 +64,13 @@
       "when": 1783711332904,
       "tag": "0008_mercadorias_itens_desconto",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783963195744,
+      "tag": "0009_notas_fiscais",
+      "breakpoints": true
     }
   ]
 }

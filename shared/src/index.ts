@@ -24,6 +24,7 @@ export * from "./usuarios/index.js";
 export * from "./vendas/index.js";
 export * from "./despesas/index.js";
 export * from "./mercadorias/index.js";
+export * from "./notas-fiscais/index.js";
 export * from "./retiradas/index.js";
 export * from "./transferencias/index.js";
 export * from "./relatorios/index.js";

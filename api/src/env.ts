@@ -20,7 +20,12 @@ const envSchema = z.object({
   // E-mail transacional (reset de senha + verificacao). Sem chave, os e-mails so vao para o log
   // (dev). Em producao, configure ambos (conta em resend.com). EMAIL_FROM = remetente verificado.
   RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().optional()
+  EMAIL_FROM: z.string().optional(),
+  // Webhook da contabilidade (Make.com) para importar NF-e por CNPJ/periodo. Sem URL/TOKEN, a
+  // importacao de notas fiscais fica indisponivel (erro claro na rota); o resto do sistema funciona.
+  // O CNPJ de cada empresa NAO vem daqui: e resolvido de empresas.cnpj no banco.
+  NOTAS_FISCAIS_URL: z.string().url().optional(),
+  NOTAS_FISCAIS_TOKEN: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);
@@ -42,5 +47,9 @@ if (env.NODE_ENV === "production") {
   // E-mail e degradavel (nao fatal): sem provedor, reset/verificacao so vao para o log do container.
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
     console.warn("[env] RESEND_API_KEY/EMAIL_FROM ausentes: e-mails (reset/verificacao) so irao para o log.");
+  }
+  // Importacao de NF-e e degradavel: sem webhook configurado, apenas a rota de importacao fica indisponivel.
+  if (!env.NOTAS_FISCAIS_URL || !env.NOTAS_FISCAIS_TOKEN) {
+    console.warn("[env] NOTAS_FISCAIS_URL/TOKEN ausentes: importacao de notas fiscais desativada.");
   }
 }

@@ -34,6 +34,11 @@
       "development": "./src/schema/mercadoria/mercadoria.schema.ts",
       "default": "./dist/src/schema/mercadoria/mercadoria.schema.js"
     },
+    "./schema/nota-fiscal": {
+      "types": "./dist/src/schema/nota-fiscal/nota-fiscal.schema.d.ts",
+      "development": "./src/schema/nota-fiscal/nota-fiscal.schema.ts",
+      "default": "./dist/src/schema/nota-fiscal/nota-fiscal.schema.js"
+    },
     "./schema/retirada": {
       "types": "./dist/src/schema/retirada/retirada.schema.d.ts",
       "development": "./src/schema/retirada/retirada.schema.ts",
