@@ -24,6 +24,7 @@ export default tseslint.config(
             "db/setup-dev.mjs",
             "db/seed.ts",
             "db/bootstrap-prod.ts",
+            "db/seed-referencia-prod.ts",
             "db/backfill-codigos.ts"
           ],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20
@@ -73,6 +74,7 @@ export default tseslint.config(
       "eslint.config.mjs",
       "db/seed.ts",
       "db/bootstrap-prod.ts",
+      "db/seed-referencia-prod.ts",
       "db/backfill-codigos.ts",
       "tests/**/*.ts",
       "api/src/env.ts",
