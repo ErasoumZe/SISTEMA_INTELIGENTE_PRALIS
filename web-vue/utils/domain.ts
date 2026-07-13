@@ -44,8 +44,7 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "fiscal_produtos",
   "patrimonio",
   "ficha_tecnica",
-  "ingredientes",
-  "notas_fiscais"
+  "ingredientes"
 ]);
 
 export const itemPorTela: Record<string, ItemMenu> = {

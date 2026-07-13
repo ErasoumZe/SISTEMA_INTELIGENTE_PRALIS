@@ -71,6 +71,7 @@ type TipoPagina =
   | "relatorio_produtos"
   | "relatorio_vendas"
   | "contas_pagar"
+  | "notas_fiscais"
   | "tree"
   | "cadastro"
   | "placeholder";
