@@ -28,6 +28,9 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
       PORT: ${API_PORT:-4100}
       HOST: 0.0.0.0
+      # Webhook de importacao de NF-e (opcional). Sem os dois, a rota de importacao responde 422.
+      NOTAS_FISCAIS_URL: ${NOTAS_FISCAIS_URL:-}
+      NOTAS_FISCAIS_TOKEN: ${NOTAS_FISCAIS_TOKEN:-}
     ports:
       - "${API_PORT:-4100}:${API_PORT:-4100}"
     volumes:
