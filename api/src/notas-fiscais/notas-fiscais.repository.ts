@@ -9,10 +9,20 @@ import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banc
 import { apenasDigitos } from "../utils.js";
 import { extrairNotasDoFiltro, fileIdDaNota, notaCancelada, type NfeParseada } from "./notas-fiscais.parser.js";
 
-// Identificador fixo da contabilidade no webhook (Make.com) — company do filtro. O CNPJ da
-// empresa consultada vai em data.search.Client (filtro) e em company (obterxmlporids).
-const CNPJ_CONTABILIDADE = "08351168000153";
 const TAMANHO_LOTE_XML = 50;
+
+// Logger minimo compativel com pino (request.log). Serve para diagnosticar a chamada ao webhook
+// nos logs do Coolify quando a importacao volta vazia — SEM vazar o token (que vai apenas no header
+// Authorization, nunca no corpo logado).
+export interface RegistroWebhook {
+  info(obj: object, msg?: string): void;
+  debug(obj: object, msg?: string): void;
+}
+
+const registroConsole: RegistroWebhook = {
+  info: (obj, msg) => console.info(`[notas-fiscais] ${msg ?? ""}`.trimEnd(), obj),
+  debug: (obj, msg) => console.debug(`[notas-fiscais] ${msg ?? ""}`.trimEnd(), obj)
+};
 
 function padCnpj(valor: string | null): string {
   return (apenasDigitos(valor) ?? "").padStart(14, "0");
@@ -24,12 +34,37 @@ function emLotes<T>(itens: T[], tamanho: number): T[][] {
   return lotes;
 }
 
+// Parse defensivo do corpo do filtro: o Make.com as vezes devolve o JSON como string (dupla
+// codificacao). Desembrulha uma vez; retorna null se nao for JSON (o chamador loga a amostra crua).
+function parseJsonSeguro(texto: string): DadosExternos {
+  try {
+    const valor: DadosExternos = JSON.parse(texto);
+    if (typeof valor === "string") {
+      try {
+        return JSON.parse(valor) as DadosExternos;
+      } catch {
+        return valor;
+      }
+    }
+    return valor;
+  } catch {
+    return null;
+  }
+}
+
 type CorpoWebhook = { route: string; company: string; data: Record<string, DadosExternos> };
 
-function corpoFiltro(cnpjEmpresa: string, dataInicioBr: string, dataFimBr: string): CorpoWebhook {
+// company = identificador FIXO da contabilidade (env NOTAS_FISCAIS_COMPANY). O CNPJ da empresa
+// consultada vai em data.search.Client — nunca em company.
+function corpoFiltro(
+  companyContabilidade: string,
+  cnpjEmpresa: string,
+  dataInicioBr: string,
+  dataFimBr: string
+): CorpoWebhook {
   return {
     route: "obternfeporfiltro",
-    company: padCnpj(CNPJ_CONTABILIDADE),
+    company: padCnpj(companyContabilidade),
     data: {
       search: {
         Client: [padCnpj(cnpjEmpresa)],
@@ -40,6 +75,7 @@ function corpoFiltro(cnpjEmpresa: string, dataInicioBr: string, dataFimBr: strin
   };
 }
 
+// obterxmlporids: aqui company = CNPJ da PROPRIA empresa consultada (nao a contabilidade).
 function corpoXml(cnpjEmpresa: string, fileIds: string[]): CorpoWebhook {
   return {
     route: "obterxmlporids",
@@ -48,7 +84,10 @@ function corpoXml(cnpjEmpresa: string, fileIds: string[]): CorpoWebhook {
   };
 }
 
-async function postWebhook(url: string, token: string, corpo: CorpoWebhook): Promise<Response> {
+async function postWebhook(url: string, token: string, corpo: CorpoWebhook, log: RegistroWebhook): Promise<Response> {
+  // Diagnostico: corpo SEM o token (o token vai so no header Authorization). Confere
+  // company/Client/datas nos logs do Coolify quando a importacao volta vazia.
+  log.info({ route: corpo.route, company: corpo.company, data: corpo.data }, "webhook requisicao");
   const resposta = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -56,6 +95,7 @@ async function postWebhook(url: string, token: string, corpo: CorpoWebhook): Pro
   });
   if (!resposta.ok) {
     const detalhe = (await resposta.text()).slice(0, 500);
+    log.info({ route: corpo.route, status: resposta.status, detalhe }, "webhook respondeu erro");
     throw new Error(`Webhook de notas fiscais respondeu HTTP ${resposta.status}: ${detalhe}`);
   }
   return resposta;
@@ -65,24 +105,34 @@ async function postWebhook(url: string, token: string, corpo: CorpoWebhook): Pro
 export async function baixarXmlsDoWebhook(input: {
   url: string;
   token: string;
+  companyContabilidade: string;
   cnpjEmpresa: string;
   dataInicioBr: string;
   dataFimBr: string;
+  log?: RegistroWebhook | undefined;
 }): Promise<string[]> {
+  const log = input.log ?? registroConsole;
   const respostaFiltro = await postWebhook(
     input.url,
     input.token,
-    corpoFiltro(input.cnpjEmpresa, input.dataInicioBr, input.dataFimBr)
+    corpoFiltro(input.companyContabilidade, input.cnpjEmpresa, input.dataInicioBr, input.dataFimBr),
+    log
   );
-  const payloadFiltro: DadosExternos = await respostaFiltro.json();
-  const fileIds = extrairNotasDoFiltro(payloadFiltro)
-    .filter((nfe) => !notaCancelada(nfe))
-    .map(fileIdDaNota)
-    .filter((id) => id.length > 0);
+  const textoFiltro = await respostaFiltro.text();
+  const payloadFiltro = parseJsonSeguro(textoFiltro);
+  const notas = extrairNotasDoFiltro(payloadFiltro);
+  const naoCanceladas = notas.filter((nfe) => !notaCancelada(nfe));
+  const fileIds = naoCanceladas.map(fileIdDaNota).filter((id) => id.length > 0);
+  // Contagem da resposta (sempre) + amostra crua do payload (debug) para diagnostico em producao.
+  log.info(
+    { notasNoPayload: notas.length, notasNaoCanceladas: naoCanceladas.length, fileIds: fileIds.length },
+    "webhook filtro resposta"
+  );
+  log.debug({ amostra: textoFiltro.slice(0, 300) }, "webhook filtro payload (300 chars)");
 
   const xmls: string[] = [];
   for (const lote of emLotes(fileIds, TAMANHO_LOTE_XML)) {
-    const respostaXml = await postWebhook(input.url, input.token, corpoXml(input.cnpjEmpresa, lote));
+    const respostaXml = await postWebhook(input.url, input.token, corpoXml(input.cnpjEmpresa, lote), log);
     const zip = new AdmZip(Buffer.from(await respostaXml.arrayBuffer()));
     for (const entrada of zip.getEntries()) {
       if (!entrada.isDirectory && entrada.entryName.toLowerCase().endsWith(".xml")) {
@@ -90,6 +140,7 @@ export async function baixarXmlsDoWebhook(input: {
       }
     }
   }
+  log.info({ xmls: xmls.length }, "webhook xmls baixados");
   return xmls;
 }
 

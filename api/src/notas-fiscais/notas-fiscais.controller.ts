@@ -45,8 +45,9 @@ export async function registrarRotasNotasFiscais(app: FastifyInstance): Promise<
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
       // Erros de dominio (empresa sem CNPJ, webhook nao configurado/indisponivel) sao estruturados
-      // pelo servico e respondidos pelo error handler global.
-      return ok(await importarNotasFiscais(dados, perfil));
+      // pelo servico e respondidos pelo error handler global. request.log (pino) leva o diagnostico
+      // da chamada ao webhook para os logs do Coolify.
+      return ok(await importarNotasFiscais(dados, perfil, request.log));
     }
   );
 }

@@ -31,6 +31,8 @@ services:
       # Webhook de importacao de NF-e (opcional). Sem os dois, a rota de importacao responde 422.
       NOTAS_FISCAIS_URL: ${NOTAS_FISCAIS_URL:-}
       NOTAS_FISCAIS_TOKEN: ${NOTAS_FISCAIS_TOKEN:-}
+      # Identificador FIXO da contabilidade no filtro (nao e o CNPJ da empresa). Default = contabilidade atual.
+      NOTAS_FISCAIS_COMPANY: ${NOTAS_FISCAIS_COMPANY:-08351168000153}
     ports:
       - "${API_PORT:-4100}:${API_PORT:-4100}"
     volumes:
