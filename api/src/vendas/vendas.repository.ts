@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
@@ -53,7 +53,8 @@ export async function listarVendasRepository(
     .leftJoin(pdvs, eq(pdvs.id, vendas.pdvId))
     .leftJoin(clientes, eq(clientes.id, vendas.clienteId))
     .leftJoin(colaboradores, eq(colaboradores.id, vendas.colaboradorId))
-    .where(filtros.length ? and(...filtros) : undefined);
+    .where(filtros.length ? and(...filtros) : undefined)
+    .orderBy(desc(vendas.dataReferencia));
 
   const ids = linhas.map((linha) => linha.id);
   if (!ids.length) return [];
