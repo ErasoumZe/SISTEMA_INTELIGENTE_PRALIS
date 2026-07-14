@@ -25,7 +25,15 @@ const envSchema = z.object({
   // importacao de notas fiscais fica indisponivel (erro claro na rota); o resto do sistema funciona.
   // O CNPJ de cada empresa NAO vem daqui: e resolvido de empresas.cnpj no banco.
   NOTAS_FISCAIS_URL: z.string().url().optional(),
-  NOTAS_FISCAIS_TOKEN: z.string().optional()
+  NOTAS_FISCAIS_TOKEN: z.string().optional(),
+  // Identificador FIXO da contabilidade no filtro (campo `company` de obternfeporfiltro). NAO e o
+  // CNPJ da empresa consultada (esse vai em data.search.Client). Exposto como env para trocar de
+  // contabilidade sem alterar codigo. Normalizado e validado como 14 digitos no boot.
+  NOTAS_FISCAIS_COMPANY: z
+    .string()
+    .default("08351168000153")
+    .transform((valor) => valor.replace(/\D/g, ""))
+    .refine((valor) => valor.length === 14, "NOTAS_FISCAIS_COMPANY deve ter 14 digitos (CNPJ da contabilidade)")
 });
 
 export const env = envSchema.parse(process.env);
