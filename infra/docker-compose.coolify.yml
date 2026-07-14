@@ -7,7 +7,7 @@ services:
       dockerfile: api/Dockerfile.prod
       target: build
     # Aplica migrations (drizzle + better-auth) e, em seguida, o bootstrap idempotente de
-    # producao (catalogo de permissoes + 1a empresa + primeiro admin). A API so sobe depois
+    # producao (catalogo, permissoes padrao dos cargos, 1a empresa e primeiro admin). A API so sobe depois
     # que este passo conclui com sucesso (depends_on: service_completed_successfully).
     # Migrations + bootstrap idempotente. Por fim, o seed de referencia — que so faz algo se
     # SEED_REFERENCIA=1 (senao sai na hora). Assim voce popula a producao uma vez ligando a flag

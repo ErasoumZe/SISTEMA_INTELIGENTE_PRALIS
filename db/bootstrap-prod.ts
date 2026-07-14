@@ -2,8 +2,9 @@
 // (seed.ts), que injeta vendas/caixa/despesas ficticios e senhas fracas, este script cria apenas
 // o minimo para o sistema ser utilizavel no primeiro deploy:
 //   1) catalogo de permissoes (para a tela de Permissoes),
-//   2) a primeira empresa,
-//   3) o primeiro usuario admin (role usuario_admin) com perfil + vinculo a empresa.
+//   2) as permissoes padrao dos cargos conhecidos que ja existem,
+//   3) a primeira empresa,
+//   4) o primeiro usuario admin (role usuario_admin) com perfil + vinculo a empresa.
 // As credenciais do admin vem de variaveis de ambiente (segredos do Coolify), nunca do codigo.
 // Seguro para rodar em todo deploy: usa upsert/onConflict e nao apaga nada existente.
 import "dotenv/config";
@@ -16,14 +17,17 @@ import { permissoes } from "@padaria/shared";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import { schema } from "./src/schema/schema.js";
 import {
+  cargos,
   colaboradores,
   contaAutenticacao,
   empresas,
+  permissoesCargos,
   perfisUsuarios,
   permissoesTabela,
   usuarioAutenticacao,
   usuariosEmpresas
 } from "./src/schema/index.js";
+import { permissoesPorCargo, regrasPermissoes } from "./src/referencia-permissoes.js";
 
 // Le uma env obrigatoria por valor literal (sem process.env[dinamico], que dispara regra de seguranca).
 function exigir(nome: string, valor: string | undefined): string {
@@ -75,7 +79,29 @@ for (const permissao of permissoes) {
 }
 console.info(`[bootstrap] OK catalogo de permissoes (${permissoes.length})`);
 
-// 2) Primeira empresa — reaproveita a mais antiga se ja houver (evita duplicar em re-execucoes/renome).
+// O seed local sempre aplica as regras dos cargos, mas o seed de referencia de producao depende
+// de SEED_REFERENCIA=1 e pode nunca ter sido executado. Mesclamos os defaults em todo deploy:
+// regras ja configuradas no banco prevalecem, inclusive `false` explicito, preservando ajustes.
+const cargosExistentes = await banco.select({ id: cargos.id, nome: cargos.nome }).from(cargos);
+const permissoesExistentes = await banco
+  .select({ cargoId: permissoesCargos.cargoId, regras: permissoesCargos.regras })
+  .from(permissoesCargos);
+const regrasPorCargo = new Map(permissoesExistentes.map((linha) => [linha.cargoId, linha.regras]));
+let cargosSincronizados = 0;
+
+for (const cargo of cargosExistentes) {
+  const listaPadrao = permissoesPorCargo[cargo.nome];
+  if (!listaPadrao) continue;
+  const regras = { ...regrasPermissoes(listaPadrao), ...(regrasPorCargo.get(cargo.id) ?? {}) };
+  await banco
+    .insert(permissoesCargos)
+    .values({ cargoId: cargo.id, regras })
+    .onConflictDoUpdate({ target: permissoesCargos.cargoId, set: { regras } });
+  cargosSincronizados += 1;
+}
+console.info(`[bootstrap] OK permissoes padrao (${cargosSincronizados} cargos sincronizados)`);
+
+// 3) Primeira empresa — reaproveita a mais antiga se ja houver (evita duplicar em re-execucoes/renome).
 const [empresaExistente] = await banco.select({ id: empresas.id }).from(empresas).orderBy(empresas.criadoEm).limit(1);
 const empresaId =
   empresaExistente?.id ??
@@ -83,7 +109,7 @@ const empresaId =
 if (!empresaId) throw new Error("[bootstrap] Falha ao garantir a empresa");
 console.info(`[bootstrap] OK empresa (${empresaId})`);
 
-// 3) Primeiro admin — cria o usuario de auth (better-auth) se faltar e garante perfil + vinculo.
+// 4) Primeiro admin — cria o usuario de auth (better-auth) se faltar e garante perfil + vinculo.
 async function usuarioPorEmail(email: string) {
   const [usuario] = await banco
     .select({ id: usuarioAutenticacao.id })
