@@ -14,11 +14,11 @@ playwright-report
 test-results
 storage
 
-# Referencia/documentacao — fora do git por decisao do Ze (NAO remover do disco; so tirar do source control)
+# Referencia/prototipo — fora do git por decisao do Ze (NAO remover do disco; so tirar do source control)
+# (docs/ passou a ser versionado — backup da documentacao do projeto)
 CADASTRO DE PRODUTOS/
 PROJECT_BRAIN - Copia/
 design-system/
-docs/
 # PDFs de analise/reuniao gerados localmente
 *.pdf
 
