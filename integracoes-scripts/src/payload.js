@@ -21,11 +21,11 @@ function trocarDataPreservandoHora(dataHoraOrigem, dataDestino) {
   return `${dataDestino}T${hora}.000Z`;
 }
 
-// Converte a data/hora do CREARE ("YYYY-MM-DD HH:MM:SS", hora LOCAL) para ISO, preservando a data
-// real (sem reescrever). Por padrao (offset vazio) rotula como `Z` — mesma convencao do ERP, que
-// grava o horario do caixa como naive-local-em-UTC (o front manda datetime-local sem timezone).
-// Se SYNC_FUSO_OFFSET for informado (ex.: "-03:00"), gera o instante UTC real.
-export function dataHoraParaIso(dataHoraOrigem, offset = "") {
+const OFFSET_FUSO_PADRAO = "-03:00";
+
+// Converte a data/hora local do CREARE para o instante UTC real. O offset padrao e o de Brasilia;
+// SYNC_FUSO_OFFSET permite sobrescrever explicitamente para instalacoes em outro fuso.
+export function dataHoraParaIso(dataHoraOrigem, offset = OFFSET_FUSO_PADRAO) {
   const [data = "", hora = "00:00:00"] = String(dataHoraOrigem).trim().split(" ");
   if (!data) return "";
   return offset ? new Date(`${data}T${hora}${offset}`).toISOString() : `${data}T${hora}.000Z`;
@@ -61,7 +61,7 @@ function agruparPorVenda(linhas) {
 // Modo PRODUCAO: NAO reescreve datas nem usa prefixo TESTE. idVenda estavel (chave de idempotencia
 // do servidor) = CREARE:<idVendaOriginal>; dataHoraVenda = a real (ver dataHoraParaIso). Reaproveita
 // os mesmos helpers puros do modo teste.
-export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = "" } = {}) {
+export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = OFFSET_FUSO_PADRAO } = {}) {
   const itensPorVenda = agruparPorVenda(itens);
   const pagamentosPorVenda = agruparPorVenda(pagamentos);
 

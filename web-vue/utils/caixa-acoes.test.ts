@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { criarAcoesCaixa, type DepsAcoesCaixa } from "./caixa-acoes";
+import { dataHoraParaUtc } from "./formatacao";
 
 // Fakes das dependencias injetadas: a factory nao toca Nuxt/refs, entao testa-se so a orquestracao
 // (endpoint certo, re-fetch de status, notificacao, reset do "salvando", confirmacao do acerto).
@@ -29,7 +30,11 @@ describe("abrirCaixaOperacional", () => {
     const ok = await acoes.abrirCaixaOperacional(payload);
 
     expect(ok).toBe(true);
-    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/abrir", { empresaId: "emp-1", ...payload });
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/abrir", {
+      empresaId: "emp-1",
+      ...payload,
+      dataHoraAbertura: dataHoraParaUtc(payload.dataHoraAbertura)
+    });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.carregarDadosTela).toHaveBeenCalledWith("caixa", "emp-1");
     expect(deps.notificar).toHaveBeenCalledWith("Caixa aberto com sucesso.");
@@ -73,7 +78,7 @@ describe("editarAberturaCaixa", () => {
       tokenEdicao: "tok",
       pdvId: "pdv-1",
       usuarioCaixaId: "u-1",
-      dataHoraAbertura: "2026-07-03T08:00",
+      dataHoraAbertura: dataHoraParaUtc("2026-07-03T08:00"),
       observacao: "obs"
     });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");

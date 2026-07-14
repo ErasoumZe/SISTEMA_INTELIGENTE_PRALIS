@@ -14,20 +14,20 @@ API do ERP (`POST /api/integracoes`). Roda na maquina da loja, de forma continua
 
 Copie `.env.producao.example` para `.env.producao` (que fica fora do git) e preencha:
 
-| Variavel                                              | Descricao                                                             |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| `SERVIDOR_CREARE_COMPILART`                           | host do MySQL do CREARE (ex.: `localhost`)                            |
-| `PORTA_CREARE_COMPILART`                              | porta (default `3306`)                                                |
-| `BANCO_CREARE_COMPILART`                              | nome do banco (ex.: `gerente`)                                        |
-| `USUARIO_CREARE_COMPILART` / `SENHA_CREARE_COMPILART` | credenciais do MySQL                                                  |
-| `PADARIA_API_URL`                                     | `https://api-sistema.cicluzieai.com.br`                               |
-| `PADARIA_INTEGRACAO_CODIGO`                           | a chave de integracao (passo 2)                                       |
-| `SYNC_INTERVALO_MINUTOS`                              | intervalo do loop (default `10`)                                      |
-| `SYNC_DIAS_INICIAIS`                                  | 1a execucao: dias para tras (default `1`)                             |
-| `SYNC_LOCK_MAX_MINUTOS`                               | idade maxima do lock (default `30`)                                   |
-| `SYNC_RETRY_TENTATIVAS` / `SYNC_RETRY_BASE_MS`        | retry de rede por venda (default `4` / `500`)                         |
-| `SYNC_ESTADO_DIR`                                     | pasta do estado de runtime (default `.estado`)                        |
-| `SYNC_FUSO_OFFSET`                                    | vazio = hora local rotulada como UTC (padrao). Ver observacao no fim. |
+| Variavel                                              | Descricao                                                      |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `SERVIDOR_CREARE_COMPILART`                           | host do MySQL do CREARE (ex.: `localhost`)                     |
+| `PORTA_CREARE_COMPILART`                              | porta (default `3306`)                                         |
+| `BANCO_CREARE_COMPILART`                              | nome do banco (ex.: `gerente`)                                 |
+| `USUARIO_CREARE_COMPILART` / `SENHA_CREARE_COMPILART` | credenciais do MySQL                                           |
+| `PADARIA_API_URL`                                     | `https://api-sistema.cicluzieai.com.br`                        |
+| `PADARIA_INTEGRACAO_CODIGO`                           | a chave de integracao (passo 2)                                |
+| `SYNC_INTERVALO_MINUTOS`                              | intervalo do loop (default `10`)                               |
+| `SYNC_DIAS_INICIAIS`                                  | 1a execucao: dias para tras (default `1`)                      |
+| `SYNC_LOCK_MAX_MINUTOS`                               | idade maxima do lock (default `30`)                            |
+| `SYNC_RETRY_TENTATIVAS` / `SYNC_RETRY_BASE_MS`        | retry de rede por venda (default `4` / `500`)                  |
+| `SYNC_ESTADO_DIR`                                     | pasta do estado de runtime (default `.estado`)                 |
+| `SYNC_FUSO_OFFSET`                                    | offset da loja para UTC (padrao `-03:00`, horario de Brasilia) |
 
 ## 2. Gerar a chave de integracao
 
@@ -110,11 +110,10 @@ trafego). Nao apague com o agente rodando.
 
 ## Observacao sobre fuso horario
 
-O CREARE guarda a hora **local**. Por padrao (`SYNC_FUSO_OFFSET` vazio), o agente rotula essa hora
-como `Z` — a **mesma convencao** que o ERP usa para o horario do caixa (o front envia datetime-local
-sem fuso), garantindo que a venda case com o periodo do caixa. So use `SYNC_FUSO_OFFSET="-03:00"` se
-um dia o ERP passar a gravar UTC real. **Valide no primeiro dia real** que as vendas caem no caixa
-certo.
+O CREARE guarda a hora **local**. O agente usa `SYNC_FUSO_OFFSET="-03:00"` por padrao para converter
+o horario de Brasilia no instante UTC real, a mesma convencao usada pela abertura e pelo fechamento
+do caixa. Altere a variavel apenas se a loja estiver em outro fuso. **Valide no primeiro dia real**
+que as vendas caem no caixa certo.
 
 ## Modo desenvolvimento
 

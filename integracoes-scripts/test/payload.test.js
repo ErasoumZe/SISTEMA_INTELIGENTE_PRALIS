@@ -48,7 +48,7 @@ test("montarPayloads: idVenda estavel CREARE:<id> (sem TESTE) e data real preser
   const [payload] = montarPayloads(dados);
   assert.equal(payload.Venda.idVenda, "CREARE:42");
   assert.ok(!payload.Venda.idVenda.includes("TESTE"));
-  assert.equal(payload.Venda.dataHoraVenda, "2026-07-05T14:30:00.000Z");
+  assert.equal(payload.Venda.dataHoraVenda, "2026-07-05T17:30:00.000Z");
   assert.equal(payload.DadosIntegracao.modo, "producao");
   assert.equal(payload.Venda.statusVenda, "FINALIZADA");
   assert.equal(payload.ItensVenda.length, 1);
@@ -65,7 +65,7 @@ test("montarPayloads: venda cancelada vira CANCELADA", () => {
   assert.equal(payload.Venda.statusVenda, "CANCELADA");
 });
 
-test("dataHoraParaIso: default rotula Z (naive); offset gera UTC real", () => {
-  assert.equal(dataHoraParaIso("2026-07-05 14:30:00"), "2026-07-05T14:30:00.000Z");
+test("dataHoraParaIso: default de Brasilia e offset explicito geram UTC real", () => {
+  assert.equal(dataHoraParaIso("2026-07-05 14:30:00"), "2026-07-05T17:30:00.000Z");
   assert.equal(dataHoraParaIso("2026-07-05 14:30:00", "-03:00"), "2026-07-05T17:30:00.000Z");
 });

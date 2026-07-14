@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   apenasDigitos,
-  dataHoraUtc,
+  dataHoraLocal,
+  dataHoraParaUtc,
   documentoEhCpf,
   formatarDataHora,
   mascararCep,
@@ -12,11 +13,13 @@ import {
 } from "./formatacao";
 
 describe("formatacao", () => {
-  it("preserva o relogio UTC ao preencher e exibir a abertura do caixa", () => {
-    const abertura = "2026-07-14T10:43:00.000Z";
+  it("converte o relogio local para UTC e o restaura ao preencher o campo", () => {
+    const aberturaLocal = "2026-07-14T10:43";
+    const aberturaUtc = dataHoraParaUtc(aberturaLocal);
 
-    expect(dataHoraUtc(abertura)).toBe("2026-07-14T10:43");
-    expect(formatarDataHora(abertura)).toContain("10:43:00");
+    expect(aberturaUtc).toMatch(/Z$/);
+    expect(dataHoraLocal(aberturaUtc)).toBe(aberturaLocal);
+    expect(formatarDataHora(aberturaUtc)).toBe(new Date(aberturaUtc).toLocaleString("pt-BR"));
   });
 
   it("apenasDigitos remove tudo que nao e digito", () => {

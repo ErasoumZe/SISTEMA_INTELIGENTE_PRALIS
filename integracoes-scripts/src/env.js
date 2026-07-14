@@ -33,9 +33,8 @@ export function obterConfig() {
       retryTentativas: obterNumero("SYNC_RETRY_TENTATIVAS", 4),
       retryBaseMs: obterNumero("SYNC_RETRY_BASE_MS", 500),
       estadoDir: process.env.SYNC_ESTADO_DIR?.trim() || ".estado",
-      // Vazio = rotula a hora local do CREARE como Z (mesma convencao do caixa do ERP).
-      // Ex.: "-03:00" para gerar o instante UTC real, se um dia o ERP passar a usar UTC de verdade.
-      offsetFuso: process.env.SYNC_FUSO_OFFSET?.trim() || ""
+      // O CREARE fornece hora local; -03:00 converte o horario de Brasilia para o instante UTC real.
+      offsetFuso: process.env.SYNC_FUSO_OFFSET?.trim() || "-03:00"
     }
   };
 }

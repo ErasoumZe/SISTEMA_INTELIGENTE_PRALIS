@@ -3,6 +3,7 @@
 // testavel com fakes, sem runtime Nuxt. O componente injeta as dependencias reais.
 import type { DadosExternos } from "@padaria/shared";
 import { dinheiro } from "~/utils/domain";
+import { dataHoraParaUtc } from "~/utils/formatacao";
 
 type PortApi = {
   post: <T>(rota: string, body: DadosExternos) => Promise<T>;
@@ -41,7 +42,11 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     deps.setSalvando(true);
     try {
       // /abrir responde o id criado (nao CaixaStatus); re-busca o status canonico.
-      await deps.api.post("/api/caixa/abrir", { empresaId: deps.empresaId(), ...payload });
+      await deps.api.post("/api/caixa/abrir", {
+        empresaId: deps.empresaId(),
+        ...payload,
+        dataHoraAbertura: dataHoraParaUtc(payload.dataHoraAbertura)
+      });
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();
       deps.notificar("Caixa aberto com sucesso.");
@@ -59,7 +64,10 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     try {
       const { caixaId, ...body } = payload;
       // /abertura responde 204; re-busca o status canonico.
-      await deps.api.put(`/api/caixa/${caixaId}/abertura`, body);
+      await deps.api.put(`/api/caixa/${caixaId}/abertura`, {
+        ...body,
+        dataHoraAbertura: dataHoraParaUtc(body.dataHoraAbertura)
+      });
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();
       deps.notificar("Abertura atualizada com sucesso.");

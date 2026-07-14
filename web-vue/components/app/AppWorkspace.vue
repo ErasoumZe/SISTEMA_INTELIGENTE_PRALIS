@@ -26,7 +26,6 @@ import { usePermissoes } from "~/composables/usePermissoes";
 import { ErroApiCliente } from "~/composables/useApi";
 import {
   dataHoraLocal,
-  dataHoraUtc,
   documentoEhCpf,
   formatarDataHora,
   mascararCep,
@@ -445,7 +444,7 @@ async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
   }
   formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
   formCaixaDrawer.dataHoraAbertura = caixaAberto.value
-    ? dataHoraUtc(caixaAberto.value.dataHoraAbertura)
+    ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
     : dataHoraLocal();
   modalCaixaDrawerAberto.value = true;
 }
