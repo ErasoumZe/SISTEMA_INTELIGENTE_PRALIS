@@ -107,6 +107,7 @@ const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNorma
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
 const empresaCarregando = ref(false);
+const atualizandoOperacoesAutomaticamente = ref(false);
 const erro = ref("");
 const saindo = ref(false);
 
@@ -728,6 +729,30 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   }
   caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${idEmpresa}`);
   resumo.value = caixaStatus.value?.resumo ?? null;
+}
+
+async function atualizarOperacoesAutomaticamente() {
+  if (
+    tipoPagina.value !== "operacoes" ||
+    !sessao.value ||
+    !empresaId.value ||
+    atualizandoOperacoesAutomaticamente.value ||
+    empresaCarregando.value
+  ) {
+    return;
+  }
+
+  atualizandoOperacoesAutomaticamente.value = true;
+  try {
+    // O robo inclui vendas fora desta aplicacao. Recarrega primeiro o caixa e depois usa
+    // esse mesmo caixa para atualizar a tabela, mantendo os cartoes e as linhas coerentes.
+    await carregarStatusCaixa(empresaId.value);
+    await carregarOperacoes(empresaId.value);
+  } catch (error) {
+    console.error("Falha ao atualizar os lancamentos automaticamente", error);
+  } finally {
+    atualizandoOperacoesAutomaticamente.value = false;
+  }
 }
 
 // Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
@@ -1457,14 +1482,33 @@ const pageContext = computed(() => ({
   atualizarPaginaPermissoes: buscarPermissoes
 }));
 
+let intervaloAtualizacaoOperacoes: ReturnType<typeof setInterval> | null = null;
+
+function atualizarAoRetomarPagina() {
+  if (document.visibilityState === "visible") void atualizarOperacoesAutomaticamente();
+}
+
 onMounted(() => {
+  window.addEventListener("focus", atualizarAoRetomarPagina);
+  document.addEventListener("visibilitychange", atualizarAoRetomarPagina);
+  intervaloAtualizacaoOperacoes = setInterval(() => {
+    if (document.visibilityState === "visible") void atualizarOperacoesAutomaticamente();
+  }, 30_000);
+
   if (workspaceCarregado.value && sessao.value) {
     carregando.value = false;
     erro.value = "";
     aplicarTema(temaAtual.value, temaResumoCaixa.value);
+    void atualizarOperacoesAutomaticamente();
     return;
   }
   void carregarTudo();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("focus", atualizarAoRetomarPagina);
+  document.removeEventListener("visibilitychange", atualizarAoRetomarPagina);
+  if (intervaloAtualizacaoOperacoes) clearInterval(intervaloAtualizacaoOperacoes);
 });
 </script>
 
