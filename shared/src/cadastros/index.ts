@@ -3,6 +3,7 @@
 // estas funcoes produzem o payload que a API valida com zod. O servidor continua sendo o
 // unico com autoridade sobre valores derivados (ex.: preco de venda e recalculado la).
 import type { DadosExternos } from "../api/index.js";
+import type { RoleUsuario } from "../autenticacao/index.js";
 import { calcularPrecoVenda } from "../produtos/regras.js";
 
 export type ProdutoFiscalForm = {
@@ -46,6 +47,7 @@ export type CadastroForm = {
   cnpj: string;
   email: string;
   senha: string;
+  role: RoleUsuario;
   cpf: string;
   sigla: string;
   codigo: string;
@@ -284,6 +286,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       email: form.email,
       senha: form.senha || undefined,
+      role: form.role,
       empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean)
     };
     if (form.novoColaborador) {

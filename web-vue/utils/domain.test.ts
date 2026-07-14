@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { cadastroPayload } from "@padaria/shared";
 import { formCadastroDeLinha } from "./domain";
 
 describe("formCadastroDeLinha", () => {
@@ -46,7 +47,14 @@ describe("formCadastroDeLinha", () => {
     expect(form.tipo).toBe("revenda");
     expect(form.quantidadeCaixa).toBe("1");
     expect(form.ativo).toBe(true);
+    expect(form.role).toBe("usuario_comum");
     expect(form.empresaIds).toEqual(["e1", "e2"]);
+  });
+
+  it("preserva o perfil de acesso ao editar usuario", () => {
+    const form = formCadastroDeLinha({ nome: "Jose", email: "jose@example.com", role: "usuario_admin" }, {});
+    expect(form.role).toBe("usuario_admin");
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_admin" });
   });
 
   it("deriva tipoAreaSetor=setor quando ha areaId/setorPaiId e repassa regras", () => {
