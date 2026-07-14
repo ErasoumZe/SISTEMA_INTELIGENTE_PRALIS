@@ -11,6 +11,12 @@ const tiposDescontoItem = [
   { title: "Valor (R$)", value: "valor" }
 ];
 
+const perfisAcessoUsuario = [
+  { title: "Usuario comum (permissoes por cargo, setor e usuario)", value: "usuario_comum" },
+  { title: "Administrador total", value: "usuario_admin" },
+  { title: "Admin legado (permissoes por cargo, setor e usuario)", value: "admin" }
+];
+
 const workspace = useWorkspaceContext();
 
 const {
@@ -990,6 +996,15 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6"
             ><v-text-field v-model="formCadastro.email" type="email" label="Email"
           /></v-col>
+          <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.role"
+              :items="perfisAcessoUsuario"
+              item-title="title"
+              item-value="value"
+              label="Perfil de acesso"
+            />
+          </v-col>
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
             <v-select
               :model-value="formCadastro.novoColaborador ? '__novo__' : formCadastro.colaboradorId"
