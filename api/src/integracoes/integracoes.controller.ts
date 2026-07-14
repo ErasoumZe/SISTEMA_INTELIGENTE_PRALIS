@@ -9,6 +9,7 @@ import {
   tiposIntegracao
 } from "@padaria/shared/integracoes";
 import { exigirPermissao } from "../auth/guards.js";
+import { empresasPermitidas } from "../auth/empresa.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import { mensagemDominioOuRelancar, naoAutorizado } from "../erros.js";
 import {
@@ -19,7 +20,8 @@ import {
   listarIntegracoes,
   receberVendaIntegracao,
   salvarCampoIntegracao,
-  salvarVinculoIntegracao
+  salvarVinculoIntegracao,
+  verificarSilencioIntegracao
 } from "./integracoes.service.js";
 
 const dicionarioQuerySchema = integracaoQuerySchema.extend({
@@ -45,7 +47,15 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
 
   app.get("/api/integracoes/historico", { preHandler: exigirPermissao("integracoes_visualizar") }, async (request) => {
     const query = integracaoQuerySchema.parse(request.query);
-    return paginadoDeArray(await listarHistoricoIntegracao(query, request.perfilUsuario!), query.page, query.pageSize);
+    const perfil = request.perfilUsuario!;
+    const pagina = paginadoDeArray(await listarHistoricoIntegracao(query, perfil), query.page, query.pageSize);
+    // Best-effort, sem bloquear a resposta: se um dia fechou sem venda por integracao numa empresa
+    // com chave ativa, avisa os admins (no maximo 1x/empresa/dia). Erros so vao para o log.
+    const empresasParaVerificar = query.empresaId ? [query.empresaId] : empresasPermitidas(perfil);
+    void verificarSilencioIntegracao({ empresaIds: empresasParaVerificar, hoje: new Date() }).catch((error) =>
+      request.log.error(error, "verificacao de silencio da integracao falhou")
+    );
+    return pagina;
   });
 
   app.get("/api/integracoes/dicionario", { preHandler: exigirPermissao("integracoes_visualizar") }, async (request) =>

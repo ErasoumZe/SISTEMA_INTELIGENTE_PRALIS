@@ -1,6 +1,15 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
-import { clientes, contas, formasPagamento, pdvs, produtos } from "@padaria/db/schema/cadastro";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import {
+  clientes,
+  contas,
+  empresas,
+  formasPagamento,
+  pdvs,
+  perfisUsuarios,
+  produtos,
+  usuariosEmpresas
+} from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   integracoesCamposConfig,
@@ -112,6 +121,45 @@ export async function obterEmpresaDaChaveRepository(id: string, db: ExecutorBanc
     .where(eq(integracoesChaves.id, id))
     .limit(1);
   return chave ?? null;
+}
+
+// Empresas (distintas) que tem ao menos uma chave de integracao ATIVA do tipo dado — o universo
+// que deve receber alerta de silencio. Traz o nome para compor o e-mail.
+export async function listarEmpresasComChaveAtivaRepository(
+  tipo: TipoIntegracao,
+  db: ExecutorBanco = banco
+): Promise<Array<{ empresaId: string; nome: string }>> {
+  return db
+    .selectDistinct({ empresaId: integracoesChaves.empresaId, nome: empresas.nome })
+    .from(integracoesChaves)
+    .innerJoin(empresas, eq(empresas.id, integracoesChaves.empresaId))
+    .where(and(eq(integracoesChaves.tipo, tipo), eq(integracoesChaves.ativa, true)));
+}
+
+// Quantas vendas RECEBIDAS por integracao (integracao_chave_id preenchido) a empresa teve no dia
+// (data_referencia). Zero = dia silencioso. Qualquer status conta (a venda foi recebida).
+export async function contarVendasIntegradasNoDiaRepository(
+  empresaId: string,
+  dia: string,
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const [linha] = await db
+    .select({ total: count() })
+    .from(vendas)
+    .where(and(eq(vendas.empresaId, empresaId), isNotNull(vendas.integracaoChaveId), eq(vendas.dataReferencia, dia)));
+  return linha?.total ?? 0;
+}
+
+// E-mails (distintos) dos administradores vinculados a empresa — destinatarios do alerta.
+export async function listarEmailsAdminsDaEmpresaRepository(
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<Array<{ nome: string; email: string }>> {
+  return db
+    .selectDistinct({ nome: perfisUsuarios.nome, email: perfisUsuarios.email })
+    .from(perfisUsuarios)
+    .innerJoin(usuariosEmpresas, eq(usuariosEmpresas.usuarioId, perfisUsuarios.usuarioId))
+    .where(and(eq(usuariosEmpresas.empresaId, empresaId), inArray(perfisUsuarios.role, ["usuario_admin", "admin"])));
 }
 
 export async function listarHistoricoIntegracaoRepository(
