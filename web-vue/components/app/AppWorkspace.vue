@@ -26,7 +26,9 @@ import { usePermissoes } from "~/composables/usePermissoes";
 import { ErroApiCliente } from "~/composables/useApi";
 import {
   dataHoraLocal,
+  dataHoraUtc,
   documentoEhCpf,
+  formatarDataHora,
   mascararCep,
   mascararCnpj,
   mascararCpf,
@@ -443,7 +445,7 @@ async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
   }
   formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
   formCaixaDrawer.dataHoraAbertura = caixaAberto.value
-    ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
+    ? dataHoraUtc(caixaAberto.value.dataHoraAbertura)
     : dataHoraLocal();
   modalCaixaDrawerAberto.value = true;
 }
@@ -1496,9 +1498,7 @@ onMounted(() => {
         <div v-if="caixaAberto" class="d-flex align-start justify-space-between ga-2">
           <div>
             <div class="caixa-title">Caixa: {{ caixaAberto.pdvNome }}</div>
-            <div class="caixa-meta">
-              Aberto em: {{ new Date(caixaAberto.dataHoraAbertura).toLocaleString("pt-BR") }}
-            </div>
+            <div class="caixa-meta">Aberto em: {{ formatarDataHora(caixaAberto.dataHoraAbertura) }}</div>
           </div>
           <span class="status-pill">Aberto</span>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CaixaStatus, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
+import { formatarDataHora } from "~/utils/formatacao";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -43,9 +44,7 @@ function fechar() {
 
 <template>
   <div class="operacoes-layout">
-    <v-alert v-if="!caixaAberto" type="warning" variant="tonal">
-      Nenhum caixa aberto para fechamento.
-    </v-alert>
+    <v-alert v-if="!caixaAberto" type="warning" variant="tonal"> Nenhum caixa aberto para fechamento. </v-alert>
 
     <template v-else>
       <section v-if="resumoAtual" class="summary-grid" aria-label="Resumo do fechamento">
@@ -80,8 +79,7 @@ function fechar() {
           <div class="table-heading">
             <h2>Fechamento com diferenca</h2>
             <p>
-              {{ caixaAberto.pdvNome }} aberto em
-              {{ new Date(caixaAberto.dataHoraAbertura).toLocaleString("pt-BR") }} por
+              {{ caixaAberto.pdvNome }} aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} por
               {{ caixaAberto.usuarioCaixaNome }}.
             </p>
           </div>
@@ -90,9 +88,7 @@ function fechar() {
             Diferenca positiva de {{ dinheiro(diferenca) }}. Faca o acerto antes de fechar o caixa.
           </v-alert>
 
-          <v-alert v-else type="success" variant="tonal" class="mb-5">
-            Caixa pronto para fechamento.
-          </v-alert>
+          <v-alert v-else type="success" variant="tonal" class="mb-5"> Caixa pronto para fechamento. </v-alert>
 
           <v-textarea
             v-model="fechamento.observacao"

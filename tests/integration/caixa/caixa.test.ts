@@ -96,17 +96,27 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaA,
         pdvId,
         usuarioCaixaId: usuarioAdminId,
-        dataHoraAbertura: "2026-01-15T08:00",
+        dataHoraAbertura: "2026-01-15T10:43",
         observacao: "Caixa aberto por teste"
       }
     });
     expect(abrir.statusCode).toBe(201);
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    const token = await consultarUm<{ token_edicao: string }>(
-      "select token_edicao from fechamentos_caixa where id = $1",
+    const statusAposAbertura = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(statusAposAbertura);
+    expect(statusAposAbertura.json()).toMatchObject({
+      data: { caixaAberto: { id: caixaId, dataHoraAbertura: "2026-01-15T10:43:00.000Z" } }
+    });
+    const token = await consultarUm<{ token_edicao: string; data_hora_abertura: Date }>(
+      "select token_edicao, data_hora_abertura from fechamentos_caixa where id = $1",
       [caixaId]
     );
     expect(token?.token_edicao).toBeTruthy();
+    expect(new Date(token?.data_hora_abertura ?? 0).toISOString()).toBe("2026-01-15T10:43:00.000Z");
 
     const editar = await contexto.app.inject({
       method: "PUT",
@@ -116,7 +126,7 @@ describe("caixa integration", () => {
         tokenEdicao: token?.token_edicao,
         pdvId,
         usuarioCaixaId: usuarioAdminId,
-        dataHoraAbertura: "2026-01-15T09:00",
+        dataHoraAbertura: "2026-01-15T11:00",
         observacao: "Caixa editado por teste"
       }
     });

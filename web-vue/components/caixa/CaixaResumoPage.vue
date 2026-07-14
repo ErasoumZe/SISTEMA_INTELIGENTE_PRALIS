@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
+import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -19,12 +20,6 @@ const emit = defineEmits<{
   (event: "acertarSaldo", payload: { caixaId: string; observacao: string | null }): void;
   (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null }): void;
 }>();
-
-function dataHoraLocal(valor: Date | string = new Date()) {
-  const data = new Date(valor);
-  data.setMinutes(data.getMinutes() - data.getTimezoneOffset());
-  return data.toISOString().slice(0, 16);
-}
 
 const abertura = reactive({
   pdvId: "",
@@ -98,7 +93,13 @@ function fechar() {
           <v-text-field :model-value="usuarioNome" label="Usuario do caixa" readonly />
         </v-col>
         <v-col cols="12">
-          <v-btn color="primary" prepend-icon="mdi-cash-register" :loading="salvando" :disabled="!abertura.pdvId" @click="abrir">
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-cash-register"
+            :loading="salvando"
+            :disabled="!abertura.pdvId"
+            @click="abrir"
+          >
             Abrir caixa
           </v-btn>
         </v-col>
@@ -106,7 +107,7 @@ function fechar() {
 
       <template v-else>
         <v-alert type="success" variant="tonal" class="mb-4">
-          Caixa aberto em {{ new Date(caixaAberto.dataHoraAbertura).toLocaleString("pt-BR") }} no {{ caixaAberto.pdvNome }}.
+          Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
         </v-alert>
 
         <v-row v-if="resumoAtual" dense>
@@ -151,7 +152,8 @@ function fechar() {
         <v-divider class="my-5" />
 
         <v-alert v-if="precisaAcerto" type="warning" variant="tonal" class="my-5">
-          Diferenca positiva de {{ dinheiro(resumoAtual?.saldo || 0) }}. Ao acertar, a diferenca sera atribuida ao usuario do caixa.
+          Diferenca positiva de {{ dinheiro(resumoAtual?.saldo || 0) }}. Ao acertar, a diferenca sera atribuida ao
+          usuario do caixa.
         </v-alert>
 
         <v-row dense>
@@ -164,7 +166,13 @@ function fechar() {
             <v-text-field v-model="fechamento.observacao" label="Observacao do fechamento" />
           </v-col>
           <v-col cols="12">
-            <v-btn color="primary" prepend-icon="mdi-lock" :disabled="precisaAcerto" :loading="salvando" @click="fechar">
+            <v-btn
+              color="primary"
+              prepend-icon="mdi-lock"
+              :disabled="precisaAcerto"
+              :loading="salvando"
+              @click="fechar"
+            >
               Fechar caixa
             </v-btn>
           </v-col>

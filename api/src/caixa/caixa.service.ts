@@ -58,7 +58,9 @@ function gerarTokenEdicao() {
 }
 
 function dataObrigatoria(valor: string, campo: string) {
-  const data = new Date(valor);
+  const valorNormalizado = valor.trim();
+  const temFusoExplicito = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(valorNormalizado);
+  const data = new Date(temFusoExplicito ? valorNormalizado : `${valorNormalizado}Z`);
   if (Number.isNaN(data.getTime())) throw new Error(`${campo} invalida`);
   return data;
 }

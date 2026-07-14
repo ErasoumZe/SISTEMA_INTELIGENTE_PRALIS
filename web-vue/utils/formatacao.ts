@@ -4,6 +4,14 @@ export function dataHoraLocal(valor: Date | string = new Date()) {
   return data.toISOString().slice(0, 16);
 }
 
+export function dataHoraUtc(valor: Date | string) {
+  return new Date(valor).toISOString().slice(0, 16);
+}
+
+export function formatarDataHora(valor: Date | string) {
+  return new Date(valor).toLocaleString("pt-BR", { timeZone: "UTC" });
+}
+
 export function apenasDigitos(valor: string) {
   return valor.replace(/\D/g, "");
 }
