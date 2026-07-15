@@ -660,6 +660,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/colaboradores${query}`),
       apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
     ]);
+    dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   }
 
   if (temPermissao("caixa_operar") && idEmpresa) {

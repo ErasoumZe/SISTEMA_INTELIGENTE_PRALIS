@@ -164,6 +164,7 @@ export type Opcoes = {
   produtos: Opcao[];
   malotes: Opcao[];
   pdvs: Opcao[];
+  turnos: Opcao[];
 };
 
 export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";

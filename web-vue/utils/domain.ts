@@ -452,7 +452,8 @@ export function opcoesVazias(): Opcoes {
     usuarios: [],
     produtos: [],
     malotes: [],
-    pdvs: []
+    pdvs: [],
+    turnos: []
   };
 }
 
@@ -637,7 +638,8 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     usuarios,
     produtos: itensDaEmpresa(listas.produtos, idEmpresa),
     malotes: itensDaEmpresa(listas.malotes, idEmpresa),
-    pdvs: itensDaEmpresa(listas.pdvs, idEmpresa)
+    pdvs: itensDaEmpresa(listas.pdvs, idEmpresa),
+    turnos: itensDaEmpresa(listas.turnos, idEmpresa)
   };
 }
 

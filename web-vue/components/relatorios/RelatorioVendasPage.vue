@@ -8,7 +8,14 @@ const props = defineProps<{
   clientes: Opcao[];
   colaboradores: Opcao[];
   formasPagamento: Opcao[];
+  turnos?: Opcao[];
 }>();
+
+type TotaisVendas = {
+  totalGeral: number;
+  quantidade: number;
+  porFormaPagamento: Array<{ formaPagamento: string; total: number; quantidade: number }>;
+};
 
 type Comprovante = {
   id: string;
@@ -23,11 +30,13 @@ const filtros = reactive({
   dataInicio: "",
   dataFim: "",
   pdvId: "",
+  turnoId: "",
   clienteId: "",
   colaboradorId: "",
   formaPagamentoId: "",
   status: ""
 });
+const totais = ref<TotaisVendas | null>(null);
 const linhas = ref<OperacaoResumo[]>([]);
 const pagina = ref(1);
 const itensPorPagina = 50;
@@ -41,19 +50,22 @@ const comprovantes = ref<Comprovante[]>([]);
 const uploadCarregando = ref(false);
 const arquivoInput = ref<File | null>(null);
 
+function paramsFiltro() {
+  const params = new URLSearchParams({ empresaId: props.empresaId });
+  for (const [chave, valor] of Object.entries(filtros)) {
+    if (valor) params.set(chave, valor);
+  }
+  return params;
+}
+
 async function buscar() {
   if (!props.empresaId) return;
   carregando.value = true;
   erro.value = "";
   try {
-    const params = new URLSearchParams({
-      empresaId: props.empresaId,
-      page: String(pagina.value),
-      pageSize: String(itensPorPagina)
-    });
-    for (const [chave, valor] of Object.entries(filtros)) {
-      if (valor) params.set(chave, valor);
-    }
+    const params = paramsFiltro();
+    params.set("page", String(pagina.value));
+    params.set("pageSize", String(itensPorPagina));
     const resultado = await apiGetPaginado<OperacaoResumo>(`/api/relatorios/vendas?${params.toString()}`);
     linhas.value = resultado.itens;
     total.value = resultado.total;
@@ -64,9 +76,19 @@ async function buscar() {
   }
 }
 
+// Totais sobre TODO o conjunto filtrado (nao so a pagina) — homologacao contra o CREARE.
+async function buscarTotais() {
+  if (!props.empresaId) return;
+  try {
+    totais.value = await apiGet<TotaisVendas>(`/api/relatorios/vendas/totais?${paramsFiltro().toString()}`);
+  } catch {
+    totais.value = null;
+  }
+}
+
 async function aplicarFiltros() {
   pagina.value = 1;
-  await buscar();
+  await Promise.all([buscar(), buscarTotais()]);
 }
 
 async function abrirComprovantes(venda: OperacaoResumo) {
@@ -106,6 +128,7 @@ watch(
   () => {
     pagina.value = 1;
     void buscar();
+    void buscarTotais();
   },
   { immediate: true }
 );
@@ -126,6 +149,16 @@ watch(
         <v-col cols="12" md="3"><v-text-field v-model="filtros.dataFim" type="date" label="Data final" /></v-col>
         <v-col cols="12" md="3">
           <v-select v-model="filtros.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" clearable />
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-select
+            v-model="filtros.turnoId"
+            :items="turnos ?? []"
+            item-title="nome"
+            item-value="id"
+            label="Turno"
+            clearable
+          />
         </v-col>
         <v-col cols="12" md="3">
           <v-select
@@ -205,6 +238,23 @@ watch(
           </tbody>
         </v-table>
       </div>
+      <div v-if="totais" class="totais-rodape mt-4 pa-3 rounded-lg">
+        <div class="d-flex justify-space-between align-center flex-wrap ga-2">
+          <div class="text-subtitle-1 font-weight-bold">Total geral: {{ dinheiro(totais.totalGeral) }}</div>
+          <div class="text-body-2 text-muted">{{ totais.quantidade }} vendas no periodo filtrado</div>
+        </div>
+        <div v-if="totais.porFormaPagamento.length" class="d-flex flex-wrap ga-2 mt-2">
+          <v-chip
+            v-for="forma in totais.porFormaPagamento"
+            :key="forma.formaPagamento"
+            size="small"
+            variant="tonal"
+            color="primary"
+          >
+            {{ forma.formaPagamento }}: {{ dinheiro(forma.total) }}
+          </v-chip>
+        </div>
+      </div>
       <div v-if="totalPaginas > 1" class="d-flex justify-center mt-4">
         <v-pagination v-model="pagina" :length="totalPaginas" :total-visible="7" @update:model-value="buscar" />
       </div>
@@ -242,3 +292,10 @@ watch(
     </v-dialog>
   </v-card>
 </template>
+
+<style scoped>
+.totais-rodape {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border: 1px solid rgba(var(--v-theme-primary), 0.15);
+}
+</style>
