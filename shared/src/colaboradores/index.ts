@@ -29,6 +29,7 @@ export const colaboradorPayloadSchema = z.object({
   nome: z.string().min(1),
   cpf: z.string().optional().nullable(),
   setorId: uuidSchema.optional().nullable(),
+  turnoPadraoId: uuidSchema.optional().nullable(),
   cargoId: uuidSchema
 });
 
@@ -95,4 +96,3 @@ export type ImportarColaboradoresPayload = ImportarEmpresaPayload;
 export type ExportarColaboradorPayload = ExportarEmpresaPayload;
 export type ImportarCargosPayload = ImportarEmpresaPayload;
 export type ExportarCargoPayload = ExportarEmpresaPayload;
-

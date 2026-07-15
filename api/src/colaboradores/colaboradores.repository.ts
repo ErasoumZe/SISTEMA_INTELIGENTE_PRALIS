@@ -24,6 +24,7 @@ export async function listarColaboradoresRepository() {
       nome: colaboradores.nome,
       cpf: colaboradores.cpf,
       setorId: colaboradores.setorId,
+      turnoPadraoId: colaboradores.turnoPadraoId,
       usuarioId: colaboradores.usuarioId
     })
     .from(colaboradores)
@@ -31,13 +32,25 @@ export async function listarColaboradoresRepository() {
 }
 
 export async function salvarColaboradorRepository(
-  input: { id?: string; empresaId: string; nome: string; cpf: string | null; setorId?: string | null },
+  input: {
+    id?: string;
+    empresaId: string;
+    nome: string;
+    cpf: string | null;
+    setorId?: string | null;
+    turnoPadraoId?: string | null;
+  },
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
     await db
       .update(colaboradores)
-      .set({ nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+      .set({
+        nome: input.nome,
+        cpf: input.cpf,
+        setorId: input.setorId ?? null,
+        turnoPadraoId: input.turnoPadraoId ?? null
+      })
       .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
     return {
       id: input.id,
@@ -49,7 +62,13 @@ export async function salvarColaboradorRepository(
   }
   const [criado] = await db
     .insert(colaboradores)
-    .values({ empresaId: input.empresaId, nome: input.nome, cpf: input.cpf, setorId: input.setorId ?? null })
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      cpf: input.cpf,
+      setorId: input.setorId ?? null,
+      turnoPadraoId: input.turnoPadraoId ?? null
+    })
     .returning({ id: colaboradores.id });
   return criado;
 }
