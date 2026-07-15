@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
@@ -5,7 +6,7 @@ import {
   mercadoriaPayloadSchema,
   mercadoriasQuerySchema
 } from "@padaria/shared/mercadorias";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
@@ -14,7 +15,9 @@ import {
   criarMercadoria,
   discriminarMercadoria,
   listarMercadorias,
-  obterMercadoria
+  obterFotoMercadoria,
+  obterMercadoria,
+  salvarFotoMercadoria
 } from "./mercadorias.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
@@ -86,6 +89,39 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  // Anexo de foto do documento: upload (gerente ao lancar) e download (retaguarda ao discriminar).
+  app.post(
+    "/api/mercadorias/:id/foto",
+    { preHandler: exigirAlgumaPermissao(["mercadorias_criar", "mercadorias_editar"]) },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+        return reply.status(201).send(ok(await salvarFotoMercadoria(id, arquivo, request.perfilUsuario!)));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/mercadorias/:id/foto",
+    { preHandler: exigirPermissao("mercadorias_visualizar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const { caminhoAbsoluto, mimeType } = await obterFotoMercadoria(id, request.perfilUsuario!);
+        reply.header("Content-Type", mimeType);
+        reply.header("Cache-Control", "private, max-age=300");
+        return reply.send(createReadStream(caminhoAbsoluto));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
 
   app.patch(
     "/api/mercadorias/:id/discriminar",

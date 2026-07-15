@@ -50,7 +50,8 @@ export async function listarMercadoriasRepository(
       descricao: mercadorias.descricao,
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
-      status: mercadorias.status
+      status: mercadorias.status,
+      fotoDocumentoUrl: mercadorias.fotoDocumentoUrl
     })
     .from(mercadorias)
     .where(filtros.length ? and(...filtros) : undefined);
@@ -67,6 +68,18 @@ export async function listarMercadoriasRepository(
   const idsComItens = new Set(comItens.map((linha) => linha.mercadoriaId));
   const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
   return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
+}
+
+export async function atualizarFotoMercadoriaRepository(
+  id: string,
+  empresaId: string,
+  fotoDocumentoUrl: string | null,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(mercadorias)
+    .set({ fotoDocumentoUrl })
+    .where(and(eq(mercadorias.id, id), eq(mercadorias.empresaId, empresaId)));
 }
 
 export async function criarMercadoriaRepository(

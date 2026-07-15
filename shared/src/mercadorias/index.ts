@@ -59,6 +59,8 @@ export const mercadoriaDtoSchema = z.object({
   valorOriginal: z.string(),
   computar: z.boolean(),
   status: z.string(),
+  // Foto do documento (nota/cupom): insumo de quem discrimina. Null quando nao anexada.
+  fotoDocumentoUrl: z.string().nullable(),
   // Derivado: cabecalho sem itens ainda nao foi discriminado.
   pendenteDiscriminacao: z.boolean()
 });

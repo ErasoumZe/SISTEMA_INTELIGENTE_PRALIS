@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema, discriminarDespesaSchema } from "@padaria/shared/despesas";
@@ -10,7 +11,9 @@ import {
   criarDespesa,
   discriminarDespesa,
   listarDespesas,
-  obterDespesa
+  obterDespesa,
+  obterFotoDespesa,
+  salvarFotoDespesa
 } from "./despesas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
@@ -81,6 +84,35 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
       }
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErroValidacao(mensagem), mensagem);
+    }
+  });
+
+  // Anexo de foto do documento: upload (gerente ao lancar) e download (retaguarda ao discriminar).
+  app.post(
+    "/api/despesas/:id/foto",
+    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar"]) },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+        return reply.status(201).send(ok(await salvarFotoDespesa(id, arquivo, request.perfilUsuario!)));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get("/api/despesas/:id/foto", { preHandler: exigirPermissao("despesas_visualizar") }, async (request, reply) => {
+    const { id } = apiIdParamsSchema.parse(request.params);
+    try {
+      const { caminhoAbsoluto, mimeType } = await obterFotoDespesa(id, request.perfilUsuario!);
+      reply.header("Content-Type", mimeType);
+      reply.header("Cache-Control", "private, max-age=300");
+      return reply.send(createReadStream(caminhoAbsoluto));
+    } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }

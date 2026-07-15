@@ -1,3 +1,4 @@
+import type { MultipartFile } from "@fastify/multipart";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   DiscriminarMercadoriaPayload,
@@ -24,12 +25,14 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import {
+  atualizarFotoMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
   criarMercadoriaRepository,
   discriminarMercadoriaRepository,
   listarMercadoriasRepository
 } from "./mercadorias.repository.js";
+import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 export function validarMercadoria(dados: MercadoriaPayload): void {
   if (!dados.grupoMercadoriaId && !dados.itensMercadoria.length) {
@@ -75,6 +78,33 @@ export async function obterMercadoria(mercadoriaId: string, perfil: PerfilUsuari
   const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
   if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
   return mercadoria;
+}
+
+// Anexo de foto do documento (nota/cupom) — insumo de quem discrimina depois.
+export async function salvarFotoMercadoria(
+  mercadoriaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+): Promise<{ fotoDocumentoUrl: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("mercadorias", mercadoriaId, arquivo);
+  await atualizarFotoMercadoriaRepository(mercadoriaId, mercadoria.empresaId, caminhoRelativo);
+  return { fotoDocumentoUrl: caminhoRelativo };
+}
+
+export async function obterFotoMercadoria(
+  mercadoriaId: string,
+  perfil: PerfilUsuario
+): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!mercadoria.fotoDocumentoUrl) throw new Error("Foto nao encontrada");
+  return {
+    caminhoAbsoluto: caminhoAbsolutoDocumento(mercadoria.fotoDocumentoUrl),
+    mimeType: mimePorCaminho(mercadoria.fotoDocumentoUrl)
+  };
 }
 
 export async function atualizarMercadoria(
