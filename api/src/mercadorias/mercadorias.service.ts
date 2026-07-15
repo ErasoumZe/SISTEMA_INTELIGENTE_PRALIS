@@ -1,12 +1,16 @@
 import type { MultipartFile } from "@fastify/multipart";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
+  AprovarMercadoriaPayload,
   DiscriminarMercadoriaPayload,
+  MercadoriaAprovacaoDto,
   MercadoriaCriada,
   MercadoriaDetalheDto,
   MercadoriaDto,
   MercadoriaPayload,
-  MercadoriasQuery
+  MercadoriasAprovacaoQuery,
+  MercadoriasQuery,
+  RecusarMercadoriaPayload
 } from "@padaria/shared/mercadorias";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
@@ -25,12 +29,15 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import {
+  aprovarMercadoriaRepository,
   atualizarFotoMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
   criarMercadoriaRepository,
   discriminarMercadoriaRepository,
-  listarMercadoriasRepository
+  listarMercadoriasAguardandoAprovacaoRepository,
+  listarMercadoriasRepository,
+  recusarMercadoriaRepository
 } from "./mercadorias.repository.js";
 import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
@@ -155,4 +162,45 @@ export async function discriminarMercadoria(
     await discriminarMercadoriaRepository(mercadoriaId, dados.itensMercadoria, existente.grupoMercadoriaId ?? null, tx);
     return { id: mercadoriaId, computar: existente.computar };
   });
+}
+
+// Fila de aprovacao (NF-e): lista os cabecalhos aguardando aprovacao (com itens do XML).
+export async function listarMercadoriasAguardandoAprovacao(
+  query: MercadoriasAprovacaoQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<MercadoriaAprovacaoDto[]> {
+  if (empresasPermitidasIds?.length === 0) return [];
+  return listarMercadoriasAguardandoAprovacaoRepository(query, empresasPermitidasIds);
+}
+
+// Aprova a mercadoria da NF-e definindo se computa (decisao da reuniao: nota so fiscal nao computa).
+export async function aprovarMercadoria(
+  mercadoriaId: string,
+  dados: AprovarMercadoriaPayload,
+  perfil: PerfilUsuario
+): Promise<{ id: string; computar: boolean }> {
+  exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
+  const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar);
+  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+  return { id: mercadoriaId, computar: dados.computar };
+}
+
+// Recusa a mercadoria da NF-e (aguardando_aprovacao -> recusado).
+export async function recusarMercadoria(
+  mercadoriaId: string,
+  dados: RecusarMercadoriaPayload,
+  perfil: PerfilUsuario
+): Promise<{ id: string }> {
+  exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
+  const afetadas = await recusarMercadoriaRepository(mercadoriaId, dados.empresaId);
+  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+  return { id: mercadoriaId };
 }

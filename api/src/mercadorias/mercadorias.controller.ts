@@ -2,21 +2,27 @@ import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
+  aprovarMercadoriaSchema,
   discriminarMercadoriaSchema,
   mercadoriaPayloadSchema,
-  mercadoriasQuerySchema
+  mercadoriasAprovacaoQuerySchema,
+  mercadoriasQuerySchema,
+  recusarMercadoriaSchema
 } from "@padaria/shared/mercadorias";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import {
+  aprovarMercadoria,
   atualizarMercadoria,
   criarMercadoria,
   discriminarMercadoria,
   listarMercadorias,
+  listarMercadoriasAguardandoAprovacao,
   obterFotoMercadoria,
   obterMercadoria,
+  recusarMercadoria,
   salvarFotoMercadoria
 } from "./mercadorias.service.js";
 import { statusErroValidacao } from "../utils.js";
@@ -42,6 +48,28 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
     return paginadoDeArray(await listarMercadorias(queryComCaixa, escopoDados), query.page, query.pageSize);
   });
+
+  // Fila de aprovacao (NF-e): visao de retaguarda, ignora a trava de caixa aberto e lista os
+  // cabecalhos "aguardando_aprovacao" com fornecedor e itens. Rota estatica antes de /:id.
+  app.get(
+    "/api/mercadorias/aguardando-aprovacao",
+    { preHandler: exigirPermissao("mercadorias_aprovar") },
+    async (request, reply) => {
+      const query = mercadoriasAprovacaoQuerySchema.parse(request.query);
+      const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopoDados: string[];
+      try {
+        escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
+      } catch {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      return paginadoDeArray(
+        await listarMercadoriasAguardandoAprovacao(query, escopoDados),
+        query.page,
+        query.pageSize
+      );
+    }
+  );
 
   app.post("/api/mercadorias", { preHandler: exigirPermissao("mercadorias_criar") }, async (request, reply) => {
     const dados = mercadoriaPayloadSchema.parse(request.body);
@@ -136,6 +164,52 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
       }
       try {
         return ok(await discriminarMercadoria(id, dados, perfil));
+      } catch (error) {
+        if (error instanceof PermissaoLancamentoInsuficienteError) {
+          return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
+        }
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.patch(
+    "/api/mercadorias/:id/aprovar",
+    { preHandler: exigirPermissao("mercadorias_aprovar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const dados = aprovarMercadoriaSchema.parse(request.body);
+      const perfil = request.perfilUsuario;
+      if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
+      if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      try {
+        return ok(await aprovarMercadoria(id, dados, perfil));
+      } catch (error) {
+        if (error instanceof PermissaoLancamentoInsuficienteError) {
+          return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
+        }
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.patch(
+    "/api/mercadorias/:id/recusar",
+    { preHandler: exigirPermissao("mercadorias_aprovar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const dados = recusarMercadoriaSchema.parse(request.body);
+      const perfil = request.perfilUsuario;
+      if (!perfil) return erro(reply, 401, "Nao autenticado", "UNAUTHENTICATED");
+      if (!podeAcessarEmpresa(perfil, dados.empresaId)) {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      try {
+        return ok(await recusarMercadoria(id, dados, perfil));
       } catch (error) {
         if (error instanceof PermissaoLancamentoInsuficienteError) {
           return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });

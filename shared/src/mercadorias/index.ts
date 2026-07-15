@@ -71,6 +71,44 @@ export const discriminarMercadoriaSchema = z.object({
   itensMercadoria: z.array(mercadoriaItemSchema).min(1)
 });
 
+// Fila de aprovacao: mercadorias vindas da NF-e nascem "aguardando_aprovacao" (computar=false,
+// sem caixa) ja com os itens do XML. A retaguarda aprova (definindo se computa) ou recusa.
+export const mercadoriasAprovacaoQuerySchema = z
+  .object({ empresaId: uuidSchema.optional() })
+  .merge(paginationQuerySchema);
+
+export const aprovarMercadoriaSchema = z.object({
+  empresaId: uuidSchema,
+  // Decisao da reuniao: nota so fiscal nao computa; a retaguarda escolhe no momento da aprovacao.
+  computar: z.boolean()
+});
+
+export const recusarMercadoriaSchema = z.object({
+  empresaId: uuidSchema,
+  motivo: z.string().trim().optional().nullable()
+});
+
+export const mercadoriaAprovacaoItemDtoSchema = z.object({
+  descricao: z.string(),
+  quantidade: z.string(),
+  valorUnitario: z.string(),
+  valorTotal: z.string()
+});
+
+export const mercadoriaAprovacaoDtoSchema = z.object({
+  id: z.string(),
+  empresaId: z.string(),
+  dataReferencia: z.string(),
+  dataVencimento: z.string(),
+  descricao: z.string(),
+  valorOriginal: z.string(),
+  computar: z.boolean(),
+  fornecedorId: z.string().nullable(),
+  fornecedorNome: z.string().nullable(),
+  notaFiscalId: z.string().nullable(),
+  itens: z.array(mercadoriaAprovacaoItemDtoSchema)
+});
+
 export const mercadoriaCriadaSchema = z.object({
   id: z.string(),
   computar: z.boolean()
@@ -80,6 +118,10 @@ export type MercadoriasQuery = z.input<typeof mercadoriasQuerySchema>;
 export type MercadoriaPayload = z.infer<typeof mercadoriaPayloadSchema>;
 export type MercadoriaItemPayload = z.infer<typeof mercadoriaItemSchema>;
 export type DiscriminarMercadoriaPayload = z.infer<typeof discriminarMercadoriaSchema>;
+export type MercadoriasAprovacaoQuery = z.input<typeof mercadoriasAprovacaoQuerySchema>;
+export type AprovarMercadoriaPayload = z.infer<typeof aprovarMercadoriaSchema>;
+export type RecusarMercadoriaPayload = z.infer<typeof recusarMercadoriaSchema>;
+export type MercadoriaAprovacaoDto = z.infer<typeof mercadoriaAprovacaoDtoSchema>;
 export type TipoDescontoItem = (typeof tiposDescontoItem)[number];
 
 // Detalhe para edicao: payload completo (com filhos) + identificacao do registro.
