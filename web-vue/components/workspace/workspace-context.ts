@@ -5,6 +5,7 @@ import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } f
 
 export type CaixaDrawerForm = {
   pdvId: string;
+  turnoId: string;
   dataHoraAbertura: string;
   tokenEdicao: string;
 };

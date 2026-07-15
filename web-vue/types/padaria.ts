@@ -116,6 +116,7 @@ export type Opcao = {
   ativo?: boolean;
   horaInicio?: string | null;
   horaFim?: string | null;
+  turnoPadraoId?: string | null;
   diaDaSemana?: string;
   horaEntrada?: string;
   cargaHorariaDiariaEmMinutos?: number;
@@ -222,6 +223,7 @@ export type CaixaOperacional = {
   dataHoraFechamento: string | null;
   fechadoEm: string | null;
   tokenEdicao: string | null;
+  turnoId: string | null;
   observacao: string | null;
   status: string;
 };

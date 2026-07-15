@@ -94,6 +94,7 @@ export type CadastroForm = {
   areaId: string;
   setorPaiId: string;
   setorId: string;
+  turnoPadraoId: string;
   colaboradorId: string;
   novoColaborador: boolean;
   novoColaboradorNome: string;
@@ -316,6 +317,13 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     };
   }
   if (tela === "colaboradores")
-    return { empresaId, nome: form.nome, cpf: form.cpf || null, setorId: form.setorId || null, cargoId: form.cargoId };
+    return {
+      empresaId,
+      nome: form.nome,
+      cpf: form.cpf || null,
+      setorId: form.setorId || null,
+      turnoPadraoId: form.turnoPadraoId || null,
+      cargoId: form.cargoId
+    };
   return { empresaId, nome: form.nome, descricao: form.nome };
 }

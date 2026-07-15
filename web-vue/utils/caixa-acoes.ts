@@ -26,6 +26,7 @@ export type DepsAcoesCaixa = {
 export type AberturaCaixaPayload = {
   pdvId: string;
   usuarioCaixaId: string;
+  turnoId?: string | null;
   dataHoraAbertura: string;
   observacao: string | null;
 };

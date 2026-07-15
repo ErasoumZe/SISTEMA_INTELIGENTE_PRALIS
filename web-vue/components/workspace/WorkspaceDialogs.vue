@@ -147,6 +147,16 @@ const validacaoQtdPreview = computed(() =>
             />
           </v-col>
           <v-col cols="12" md="6">
+            <v-select
+              v-model="formCaixaDrawer.turnoId"
+              :items="opcoesEmpresa.turnos"
+              item-title="nome"
+              item-value="id"
+              label="Turno"
+              clearable
+            />
+          </v-col>
+          <v-col cols="12" md="6">
             <v-text-field
               v-model="formCaixaDrawer.dataHoraAbertura"
               type="datetime-local"
@@ -1076,6 +1086,16 @@ const validacaoQtdPreview = computed(() =>
               item-title="nome"
               item-value="id"
               label="Cargo"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
+            <v-select
+              v-model="formCadastro.turnoPadraoId"
+              :items="opcoesEmpresa.turnos"
+              item-title="nome"
+              item-value="id"
+              label="Turno padrao"
+              clearable
             />
           </v-col>
           <v-col v-if="cadastroTela === 'areas_setores' && formCadastro.tipoAreaSetor === 'setor'" cols="12" md="6">
