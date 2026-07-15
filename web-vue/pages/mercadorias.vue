@@ -18,9 +18,17 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       :mostrar-filtro-discriminacao="ctx.mostrarFiltroDiscriminacao"
       :pendentes-discriminacao-ativo="ctx.pendentesDiscriminacaoAtivo"
       :pode-discriminar="ctx.podeDiscriminar"
+      :mostrar-aprovacao-mercadorias="ctx.mostrarAprovacaoMercadorias"
+      :aprovacao-mercadorias-ativa="ctx.aprovacaoMercadoriasAtiva"
+      :mercadorias-aguardando="ctx.mercadoriasAguardando"
+      :aprovacao-mercadorias-carregando="ctx.aprovacaoMercadoriasCarregando"
+      :aprovacao-mercadoria-salvando-id="ctx.aprovacaoMercadoriaSalvandoId"
       @editar="ctx.abrirOperacao"
       @discriminar="ctx.abrirDiscriminacao"
       @update:pendentes="ctx.alternarFiltroPendentes"
+      @update:aprovacao="ctx.alternarAprovacaoMercadorias"
+      @aprovar="ctx.aprovarMercadoriaAguardando"
+      @recusar="ctx.recusarMercadoriaAguardando"
       @update:pagina="ctx.atualizarPaginaOperacoes"
     />
   </AppWorkspace>

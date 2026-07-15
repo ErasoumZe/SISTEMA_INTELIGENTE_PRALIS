@@ -11,6 +11,7 @@ import type {
   CadastroForm,
   CaixaStatus,
   EntidadeOperacional,
+  MercadoriaAprovacao,
   OperacaoResumo,
   OperacaoForm,
   Opcao,
@@ -127,6 +128,11 @@ const fotoDocumento = useFotoDocumento();
 // (feito por outro setor, DEPOIS, sem exigir caixa aberto). Fila filtravel abaixo.
 const modoDiscriminacao = ref(false);
 const filtroPendentesDiscriminacao = ref(false);
+// Fila de aprovacao de compras vindas de NF-e (retaguarda, tela de mercadorias).
+const mostrarAprovacaoMercadorias = ref(false);
+const mercadoriasAguardando = ref<MercadoriaAprovacao[]>([]);
+const aprovacaoMercadoriasCarregando = ref(false);
+const aprovacaoMercadoriaSalvandoId = ref("");
 const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
@@ -344,6 +350,11 @@ watch(filtroPendentesDiscriminacao, () => {
 });
 watch(telaAtiva, () => {
   filtroPendentesDiscriminacao.value = false;
+  mostrarAprovacaoMercadorias.value = false;
+});
+// Ao abrir a fila de aprovacao de NF-e, busca os cabecalhos aguardando (visao independente do caixa).
+watch(mostrarAprovacaoMercadorias, (ativo) => {
+  if (ativo) void carregarMercadoriasAguardando();
 });
 
 watch([discriminandoDespesa, totalItensDespesa], () => {
@@ -747,6 +758,54 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
   operacoes.value = await apiGet<OperacaoResumo[]>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
   );
+}
+
+// Fila de aprovacao (NF-e): visao de retaguarda, ignora o caixa. Carregada sob demanda ao ligar
+// o toggle na tela de mercadorias.
+async function carregarMercadoriasAguardando(idEmpresa = empresaId.value) {
+  if (!idEmpresa) {
+    mercadoriasAguardando.value = [];
+    return;
+  }
+  aprovacaoMercadoriasCarregando.value = true;
+  try {
+    mercadoriasAguardando.value = (
+      await apiGetPaginado<MercadoriaAprovacao>(
+        `/api/mercadorias/aguardando-aprovacao?empresaId=${idEmpresa}&pageSize=100`
+      )
+    ).itens;
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    aprovacaoMercadoriasCarregando.value = false;
+  }
+}
+
+async function aprovarMercadoriaAguardando(id: string, computar: boolean) {
+  aprovacaoMercadoriaSalvandoId.value = id;
+  try {
+    await apiPatch(`/api/mercadorias/${id}/aprovar`, { empresaId: empresaId.value, computar });
+    mercadoriasAguardando.value = mercadoriasAguardando.value.filter((m) => m.id !== id);
+    notificar(computar ? "Compra aprovada e computada no financeiro." : "Compra aprovada (somente fiscal).");
+    await carregarStatusCaixa(empresaId.value);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    aprovacaoMercadoriaSalvandoId.value = "";
+  }
+}
+
+async function recusarMercadoriaAguardando(id: string) {
+  aprovacaoMercadoriaSalvandoId.value = id;
+  try {
+    await apiPatch(`/api/mercadorias/${id}/recusar`, { empresaId: empresaId.value });
+    mercadoriasAguardando.value = mercadoriasAguardando.value.filter((m) => m.id !== id);
+    notificar("Compra recusada.");
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    aprovacaoMercadoriaSalvandoId.value = "";
+  }
 }
 
 async function carregarStatusCaixa(idEmpresa = empresaId.value) {
@@ -1487,6 +1546,11 @@ const pageContext = computed(() => ({
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
+  mostrarAprovacaoMercadorias: telaAtiva.value === "mercadorias" && temPermissao("mercadorias_aprovar"),
+  aprovacaoMercadoriasAtiva: mostrarAprovacaoMercadorias.value,
+  mercadoriasAguardando: mercadoriasAguardando.value,
+  aprovacaoMercadoriasCarregando: aprovacaoMercadoriasCarregando.value,
+  aprovacaoMercadoriaSalvandoId: aprovacaoMercadoriaSalvandoId.value,
   opcoesEmpresa: opcoesEmpresa.value,
   sessao: sessao.value,
   caixaSalvando: caixaSalvando.value,
@@ -1508,6 +1572,11 @@ const pageContext = computed(() => ({
   alternarFiltroPendentes: (valor: boolean) => {
     filtroPendentesDiscriminacao.value = valor;
   },
+  alternarAprovacaoMercadorias: (valor: boolean) => {
+    mostrarAprovacaoMercadorias.value = valor;
+  },
+  aprovarMercadoriaAguardando,
+  recusarMercadoriaAguardando,
   atualizarPaginaOperacoes,
   abrirCaixaOperacional,
   acertarSaldoOperacional,
