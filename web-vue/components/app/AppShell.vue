@@ -108,6 +108,16 @@ function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
 }
 
+// Agora quem rola e a area de conteudo (.padaria-main), nao a janela — entao o reset de scroll
+// do router nao se aplica. Ao trocar de tela, volta o conteudo ao topo.
+watch(
+  () => props.telaAtiva,
+  () => {
+    if (typeof document === "undefined") return;
+    document.querySelector(".padaria-main")?.scrollTo({ top: 0 });
+  }
+);
+
 function alternarDrawer() {
   if (viewportMobile.value) {
     drawerMobileAberto.value = !drawerMobileAberto.value;
