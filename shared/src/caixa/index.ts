@@ -17,6 +17,8 @@ export const abrirCaixaPayloadSchema = z.object({
   pdvId: uuidSchema,
   usuarioCaixaId: z.string().min(1),
   dataHoraAbertura: dataHoraSchema,
+  // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
+  turnoId: uuidSchema.optional().nullable(),
   observacao: z.string().optional().nullable()
 });
 
@@ -56,13 +58,19 @@ export const solicitarAutorizacaoCaixaPayloadSchema = z.object({
   observacao: z.string().trim().max(500).optional().nullable()
 });
 
-// Alteracao do horario de abertura: token exigido para quem NAO tem a permissao; observacao SEMPRE
-// obrigatoria (motivo), nos dois fluxos (token e permissao direta).
-export const alterarHorarioCaixaPayloadSchema = z.object({
-  dataHoraAbertura: dataHoraSchema,
-  token: z.string().trim().optional(),
-  observacao: z.string().trim().min(1, "Observacao obrigatoria").max(500)
-});
+// Alteracao do horario de abertura e/ou fechamento: token exigido para quem NAO tem a permissao;
+// observacao SEMPRE obrigatoria (motivo), nos dois fluxos (token e permissao direta). Pelo menos um
+// dos horarios deve ser informado.
+export const alterarHorarioCaixaPayloadSchema = z
+  .object({
+    dataHoraAbertura: dataHoraSchema.optional(),
+    dataHoraFechamento: dataHoraSchema.optional(),
+    token: z.string().trim().optional(),
+    observacao: z.string().trim().min(1, "Observacao obrigatoria").max(500)
+  })
+  .refine((dados) => dados.dataHoraAbertura !== undefined || dados.dataHoraFechamento !== undefined, {
+    message: "Informe o novo horario de abertura e/ou fechamento"
+  });
 
 export const autorizadorCaixaSchema = z.object({
   usuarioId: z.string(),
@@ -105,6 +113,7 @@ export const caixaOperacionalSchema = z.object({
   dataHoraFechamento: z.string().nullable(),
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
+  turnoId: z.string().nullable(),
   observacao: z.string().nullable(),
   status: z.string()
 });

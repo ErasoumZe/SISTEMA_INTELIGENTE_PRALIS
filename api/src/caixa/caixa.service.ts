@@ -25,7 +25,7 @@ import {
 import {
   atualizarAberturaCaixaRepository,
   atualizarFechamentoCaixaRepository,
-  atualizarHorarioAberturaCaixaRepository,
+  atualizarHorarioCaixaRepository,
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
@@ -101,6 +101,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
+    turnoId: caixa.turnoId ?? null,
     observacao: caixa.observacao,
     status: caixa.status
   };
@@ -211,6 +212,8 @@ async function abrirCaixaEmTransacao(
         colaboradorId: colaborador.id,
         dataHoraAbertura,
         tokenEdicao: gerarTokenEdicao(),
+        // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
+        turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
         observacao: dados.observacao?.trim() || null
       },
       tx
@@ -332,7 +335,13 @@ export async function alterarHorarioCaixa(
 ): Promise<AlterarHorarioCaixaResponse> {
   const observacao = payload.observacao.trim();
   if (!observacao) throw erroValidacao("Observacao obrigatoria", "OBSERVACAO_OBRIGATORIA");
-  const dataHoraAbertura = dataObrigatoria(payload.dataHoraAbertura, "Data de abertura");
+  const novaAbertura = payload.dataHoraAbertura
+    ? dataObrigatoria(payload.dataHoraAbertura, "Data de abertura")
+    : undefined;
+  const novoFechamento = payload.dataHoraFechamento
+    ? dataObrigatoria(payload.dataHoraFechamento, "Data de fechamento")
+    : undefined;
+  if (!novaAbertura && !novoFechamento) throw erroValidacao("Informe abertura e/ou fechamento");
 
   try {
     return await executarEmTransacao(async (tx) => {
@@ -341,16 +350,28 @@ export async function alterarHorarioCaixa(
       if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
       if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
 
+      const aberturaFinal = novaAbertura ?? (caixa.dataHoraAbertura ? new Date(caixa.dataHoraAbertura) : undefined);
+      const fechamentoFinal = novoFechamento ?? (caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : null);
+      if (aberturaFinal && fechamentoFinal && fechamentoFinal <= aberturaFinal) {
+        throw erroValidacao("Fechamento precisa ser posterior a abertura");
+      }
+
       const autorizadorId = temPermissao(perfil.permissoes, "caixa_alterar_horario")
         ? perfil.usuarioId
         : await consumirTokenAutorizacao(caixaId, perfil.usuarioId, payload.token, tx);
 
-      if (await existePeriodoCaixaRepository(caixa.pdvId, dataHoraAbertura, caixa.id, tx)) {
+      if (novaAbertura && (await existePeriodoCaixaRepository(caixa.pdvId, novaAbertura, caixa.id, tx))) {
         throw erroValidacao(erroPeriodo);
       }
 
-      const valoresAntigos = { dataHoraAbertura: serializarData(caixa.dataHoraAbertura) };
-      await atualizarHorarioAberturaCaixaRepository({ caixaId: caixa.id, dataHoraAbertura }, tx);
+      const valoresAntigos = {
+        dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
+        dataHoraFechamento: serializarData(caixa.dataHoraFechamento)
+      };
+      await atualizarHorarioCaixaRepository(
+        { caixaId: caixa.id, dataHoraAbertura: novaAbertura, dataHoraFechamento: novoFechamento },
+        tx
+      );
       const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
       if (!atualizado) throw naoEncontrado("Caixa nao encontrado");
       const revinculacao = await revincularVendasAoCaixa(atualizado, tx);
@@ -364,7 +385,8 @@ export async function alterarHorarioCaixa(
           editadoPor: perfil.usuarioId,
           valoresAntigos,
           valoresNovos: {
-            dataHoraAbertura: dataHoraAbertura.toISOString(),
+            dataHoraAbertura: serializarData(atualizado.dataHoraAbertura),
+            dataHoraFechamento: serializarData(atualizado.dataHoraFechamento),
             vendasAnexadas: revinculacao.anexadas,
             vendasDesanexadas: revinculacao.desanexadas
           }
