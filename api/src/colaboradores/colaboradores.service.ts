@@ -104,7 +104,8 @@ export async function salvarColaborador(id: string | null, body: DadosExternos) 
         empresaId: dados.empresaId,
         nome: dados.nome.trim(),
         cpf: apenasDigitos(dados.cpf),
-        setorId: dados.setorId ?? null
+        setorId: dados.setorId ?? null,
+        turnoPadraoId: dados.turnoPadraoId ?? null
       },
       tx
     );

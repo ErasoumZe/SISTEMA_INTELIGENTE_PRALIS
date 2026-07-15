@@ -11,6 +11,7 @@ import RelatorioVendasPage from "~/components/relatorios/RelatorioVendasPage.vue
       :clientes="ctx.opcoesEmpresa.clientes"
       :colaboradores="ctx.opcoesEmpresa.colaboradores"
       :formas-pagamento="ctx.opcoesEmpresa.formasPagamento"
+      :turnos="ctx.opcoesEmpresa.turnos"
     />
   </AppWorkspace>
 </template>

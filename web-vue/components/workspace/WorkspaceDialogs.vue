@@ -147,6 +147,16 @@ const validacaoQtdPreview = computed(() =>
             />
           </v-col>
           <v-col cols="12" md="6">
+            <v-select
+              v-model="formCaixaDrawer.turnoId"
+              :items="opcoesEmpresa.turnos"
+              item-title="nome"
+              item-value="id"
+              label="Turno"
+              clearable
+            />
+          </v-col>
+          <v-col cols="12" md="6">
             <v-text-field
               v-model="formCaixaDrawer.dataHoraAbertura"
               type="datetime-local"
@@ -696,6 +706,15 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
             ><v-text-field v-model="formCadastro.sigla" label="Sigla"
           /></v-col>
+          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
+            <v-text-field v-model="formCadastro.horaInicio" type="time" label="Inicio" />
+          </v-col>
+          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
+            <v-text-field v-model="formCadastro.horaFim" type="time" label="Fim" />
+          </v-col>
+          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
+            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
+          </v-col>
           <v-col v-if="cadastroTela === 'colaboradores'" cols="12" md="6"
             ><v-text-field
               :model-value="formCadastro.cpf"
@@ -1067,6 +1086,16 @@ const validacaoQtdPreview = computed(() =>
               item-title="nome"
               item-value="id"
               label="Cargo"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
+            <v-select
+              v-model="formCadastro.turnoPadraoId"
+              :items="opcoesEmpresa.turnos"
+              item-title="nome"
+              item-value="id"
+              label="Turno padrao"
+              clearable
             />
           </v-col>
           <v-col v-if="cadastroTela === 'areas_setores' && formCadastro.tipoAreaSetor === 'setor'" cols="12" md="6">

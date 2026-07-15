@@ -9,6 +9,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :resumo="ctx.resumo"
       :status="ctx.caixaStatus"
       :pdvs="ctx.opcoesEmpresa.pdvs"
+      :turnos="ctx.opcoesEmpresa.turnos"
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuario'"
       :salvando="ctx.caixaSalvando"

@@ -92,11 +92,20 @@ export function useCadastroView(params: {
         cpf: item.cpf,
         setor: item.descricao,
         setorId: item.setorId ?? undefined,
+        turnoPadraoId: item.turnoPadraoId ?? undefined,
         cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
         cargoId: item.cargoIds?.[0] ?? item.cargoId ?? ""
       }));
     if (tela === "unidades")
       return listas.unidadesMedida.map((item) => ({ id: item.id, nome: item.nome, sigla: item.sigla }));
+    if (tela === "turnos")
+      return listas.turnos.map((item) => ({
+        id: item.id,
+        nome: item.nome ?? "",
+        inicio: (item.horaInicio ?? "").slice(0, 5),
+        fim: (item.horaFim ?? "").slice(0, 5),
+        ativo: item.ativo === false ? "Nao" : "Sim"
+      }));
     if (tela === "usuarios")
       return listas.usuarios.map((item) => ({
         id: item.usuarioId ?? item.id,
@@ -174,6 +183,7 @@ export function useCadastroView(params: {
       formas_pagamento: "Formas de pagamento usadas nas vendas.",
       grupos: "Hierarquia de grupos de despesas, mercadorias e retiradas.",
       unidades: "Unidades de medida usadas nos produtos.",
+      turnos: "Turnos de trabalho (ex.: Manha 06:00-14:00). Pre-selecionam o turno na abertura do caixa.",
       areas_setores: "Areas e setores organizacionais.",
       usuarios: "Usuarios e acessos do sistema.",
       permissoes: "Permissoes por cargo, setor ou usuario.",
@@ -195,6 +205,7 @@ export function useCadastroView(params: {
       pdv: ["Nome", "Conta", "Ativo"],
       grupos: ["Nome", "Tipo"],
       unidades: ["Nome", "Sigla"],
+      turnos: ["Nome", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Role", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],

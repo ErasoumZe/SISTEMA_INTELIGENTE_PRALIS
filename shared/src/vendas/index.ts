@@ -11,6 +11,7 @@ export const vendasQuerySchema = z
     dataFim: z.string().min(10).optional(),
     caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
+    turnoId: uuidSchema.optional(),
     clienteId: uuidSchema.optional(),
     colaboradorId: uuidSchema.optional(),
     formaPagamentoId: uuidSchema.optional(),

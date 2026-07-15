@@ -7,6 +7,7 @@ const props = defineProps<{
   resumo: ResumoCaixa | null;
   status: CaixaStatus | null;
   pdvs: Opcao[];
+  turnos?: Opcao[];
   usuarioId: string;
   usuarioNome: string;
   salvando?: boolean;
@@ -15,7 +16,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   (
     event: "abrirCaixa",
-    payload: { pdvId: string; usuarioCaixaId: string; dataHoraAbertura: string; observacao: string | null }
+    payload: {
+      pdvId: string;
+      usuarioCaixaId: string;
+      turnoId?: string | null;
+      dataHoraAbertura: string;
+      observacao: string | null;
+    }
   ): void;
   (event: "acertarSaldo", payload: { caixaId: string; observacao: string | null }): void;
   (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null }): void;
@@ -23,6 +30,7 @@ const emit = defineEmits<{
 
 const abertura = reactive({
   pdvId: "",
+  turnoId: "",
   dataHoraAbertura: dataHoraLocal()
 });
 const fechamento = reactive({ observacao: "" });
@@ -53,6 +61,7 @@ function abrir() {
   emit("abrirCaixa", {
     pdvId: abertura.pdvId,
     usuarioCaixaId: props.usuarioId,
+    turnoId: abertura.turnoId || null,
     dataHoraAbertura: abertura.dataHoraAbertura,
     observacao: null
   });
@@ -83,13 +92,23 @@ function fechar() {
       </v-alert>
 
       <v-row v-if="!caixaAberto" dense>
-        <v-col cols="12" md="4">
+        <v-col cols="12" md="3">
           <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" />
         </v-col>
-        <v-col cols="12" md="4">
+        <v-col cols="12" md="3">
+          <v-select
+            v-model="abertura.turnoId"
+            :items="turnos ?? []"
+            item-title="nome"
+            item-value="id"
+            label="Turno"
+            clearable
+          />
+        </v-col>
+        <v-col cols="12" md="3">
           <v-text-field v-model="abertura.dataHoraAbertura" type="datetime-local" label="Data e hora de abertura" />
         </v-col>
-        <v-col cols="12" md="4">
+        <v-col cols="12" md="3">
           <v-text-field :model-value="usuarioNome" label="Usuario do caixa" readonly />
         </v-col>
         <v-col cols="12">

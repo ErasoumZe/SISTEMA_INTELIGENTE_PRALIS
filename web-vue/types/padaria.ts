@@ -114,6 +114,9 @@ export type Opcao = {
   remuneracaoMinuto?: string;
   dataInicio?: string;
   ativo?: boolean;
+  horaInicio?: string | null;
+  horaFim?: string | null;
+  turnoPadraoId?: string | null;
   diaDaSemana?: string;
   horaEntrada?: string;
   cargaHorariaDiariaEmMinutos?: number;
@@ -164,6 +167,7 @@ export type Opcoes = {
   produtos: Opcao[];
   malotes: Opcao[];
   pdvs: Opcao[];
+  turnos: Opcao[];
 };
 
 export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";
@@ -219,6 +223,7 @@ export type CaixaOperacional = {
   dataHoraFechamento: string | null;
   fechadoEm: string | null;
   tokenEdicao: string | null;
+  turnoId: string | null;
   observacao: string | null;
   status: string;
 };

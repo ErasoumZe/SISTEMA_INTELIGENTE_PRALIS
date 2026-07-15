@@ -65,6 +65,7 @@ const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "produtos",
       "grupos",
       "unidades",
+      "turnos",
       "formas_pagamento",
       "fornecedores",
       "clientes",

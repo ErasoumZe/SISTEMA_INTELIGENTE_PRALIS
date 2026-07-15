@@ -151,6 +151,7 @@ const modoCaixaDrawer = ref<"abrir" | "editar">("abrir");
 const tokenCaixaConfirmado = ref(false);
 const formCaixaDrawer = reactive({
   pdvId: "",
+  turnoId: "",
   dataHoraAbertura: "",
   tokenEdicao: ""
 });
@@ -442,8 +443,17 @@ async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
   // (ex.: Painel). Garante os PDVs da empresa ativa antes de montar o dropdown do dialogo.
   if (empresaId.value) {
     opcoes.value.pdvs = await apiGet<Opcao[]>(`/api/pdvs?empresaId=${empresaId.value}`);
+    opcoes.value.turnos = (await apiGetPaginado<Opcao>(`/api/turnos?empresaId=${empresaId.value}`)).itens;
+    if (!opcoes.value.colaboradores.length) {
+      opcoes.value.colaboradores = await apiGet<Opcao[]>(`/api/colaboradores?empresaId=${empresaId.value}`);
+    }
   }
   formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
+  // Pre-seleciona o turno pelo turno padrao do colaborador do usuario logado (server tambem aplica).
+  const colaboradorLogado = opcoesEmpresa.value.colaboradores.find(
+    (colaborador) => colaborador.id === sessao.value?.perfil?.colaboradorId
+  );
+  formCaixaDrawer.turnoId = caixaAberto.value?.turnoId || colaboradorLogado?.turnoPadraoId || "";
   formCaixaDrawer.dataHoraAbertura = caixaAberto.value
     ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
     : dataHoraLocal();
@@ -455,6 +465,7 @@ async function salvarCaixaDrawer() {
     const ok = await abrirCaixaOperacional({
       pdvId: formCaixaDrawer.pdvId,
       usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
+      turnoId: formCaixaDrawer.turnoId || null,
       dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
       observacao: null
     });
@@ -551,7 +562,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "fechamento") {
     dados.contas = await apiGet<Opcao[]>(`/api/contas${query}`);
   } else if (tela === "caixa") {
-    dados.pdvs = await apiGet<Opcao[]>(`/api/pdvs${query}`);
+    [dados.pdvs, dados.turnos] = await Promise.all([
+      apiGet<Opcao[]>(`/api/pdvs${query}`),
+      apiGetPaginado<Opcao>(`/api/turnos${query}`).then((r) => r.itens)
+    ]);
   } else if (tela === "pdv") {
     [dados.contas, dados.pdvs] = await Promise.all([
       apiGet<Opcao[]>(`/api/contas${query}`),
@@ -603,6 +617,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
   } else if (tela === "unidades") {
     dados.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
+  } else if (tela === "turnos") {
+    dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "areas_setores") {
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {
@@ -638,6 +654,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/cargos${query}`),
       apiGet<Opcao[]>(`/api/setores${query}`)
     ]);
+    dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "fornecedores") {
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
   } else if (tela === "clientes") {
@@ -660,6 +677,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       apiGet<Opcao[]>(`/api/colaboradores${query}`),
       apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
     ]);
+    dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   }
 
   if (temPermissao("caixa_operar") && idEmpresa) {

@@ -1,9 +1,20 @@
 import { and, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { TotaisVendas, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
+
+// Vendas nao tem turno proprio: o turno vive no caixa. Filtrar por turno = restringir aos caixas
+// daquele turno (venda orfa, sem caixa, nao entra no filtro).
+async function caixaIdsPorTurno(turnoId: string): Promise<string[]> {
+  const caixas = await banco
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .where(eq(fechamentosCaixa.turnoId, turnoId));
+  return caixas.map((caixa) => caixa.id);
+}
 
 export async function listarVendasRepository(
   query: VendasQuery,
@@ -17,6 +28,11 @@ export async function listarVendasRepository(
   if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
   if (query.colaboradorId) filtros.push(eq(vendas.colaboradorId, query.colaboradorId));
   if (query.status) filtros.push(eq(vendas.status, query.status));
+  if (query.turnoId) {
+    const caixaIds = await caixaIdsPorTurno(query.turnoId);
+    if (!caixaIds.length) return [];
+    filtros.push(inArray(vendas.caixaId, caixaIds));
+  }
 
   const pagamentosFiltro = query.formaPagamentoId
     ? await banco
@@ -100,6 +116,11 @@ export async function totaisVendasRepository(
   if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
   if (query.colaboradorId) filtros.push(eq(vendas.colaboradorId, query.colaboradorId));
   if (query.status) filtros.push(eq(vendas.status, query.status));
+  if (query.turnoId) {
+    const caixaIds = await caixaIdsPorTurno(query.turnoId);
+    if (!caixaIds.length) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
+    filtros.push(inArray(vendas.caixaId, caixaIds));
+  }
 
   if (query.formaPagamentoId) {
     const comForma = await banco
