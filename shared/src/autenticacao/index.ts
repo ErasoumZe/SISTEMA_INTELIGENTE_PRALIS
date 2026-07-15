@@ -25,6 +25,7 @@ export const permissoes = [
   "retiradas_excluir",
   "caixa_operar",
   "caixas_gerenciar",
+  "caixa_alterar_horario",
   "fechamento_com_diferenca_visualizar",
   "relatorio_produtos_visualizar",
   "relatorio_vendas_visualizar",

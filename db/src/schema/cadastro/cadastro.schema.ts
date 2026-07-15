@@ -28,6 +28,7 @@ export {
   produtosPromocoes,
   produtosTransformacao,
   setores,
+  turnos,
   unidadesMedida,
   usuariosEmpresas
 } from "../app.schema.js";

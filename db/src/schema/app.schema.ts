@@ -204,6 +204,8 @@ export const colaboradores = pgTable(
     cpf: text("cpf"),
     setorId: uuid("setor_id").references(() => setores.id),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    // Turno habitual do colaborador — pre-seleciona o turno na abertura do caixa (editavel no ato).
+    turnoPadraoId: uuid("turno_padrao_id").references(() => turnos.id, { onDelete: "set null" }),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
@@ -213,6 +215,23 @@ export const colaboradores = pgTable(
       .on(table.usuarioId)
       .where(sql`${table.usuarioId} is not null`)
   ]
+);
+
+// Turnos de trabalho (ex.: Manha 06:00-14:00). Turno so existe COM horario (regra da reuniao 15/07).
+// E filtro/pre-preenchimento; NAO vincula venda sozinho — o vinculo e sempre o periodo do caixa.
+export const turnos = pgTable(
+  "turnos",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    horaInicio: time("hora_inicio").notNull(),
+    horaFim: time("hora_fim").notNull(),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [unique("turnos_empresa_nome_unica").on(table.empresaId, table.nome)]
 );
 
 export const cargos = pgTable(
@@ -745,7 +764,11 @@ export const vendas = pgTable(
     check("vendas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     index("vendas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("vendas_caixa_idx").on(table.caixaId)
+    index("vendas_caixa_idx").on(table.caixaId),
+    // Suporta a revinculacao retroativa: achar vendas ORFAS (caixa_id NULL) de um PDV num intervalo.
+    index("vendas_orfas_pdv_data_idx")
+      .on(table.empresaId, table.pdvId, table.dataVenda)
+      .where(sql`${table.caixaId} is null`)
   ]
 );
 
@@ -1132,6 +1155,9 @@ export const fechamentosCaixa = pgTable(
     id: idUuid,
     empresaId,
     pdvId: uuid("pdv_id").references(() => pdvs.id),
+    // Turno da abertura (pre-selecionado pelo turno padrao do colaborador). Filtro/relatorio;
+    // NAO governa o vinculo de vendas — quem manda e o periodo [abertura, fechamento] do caixa.
+    turnoId: uuid("turno_id").references(() => turnos.id, { onDelete: "set null" }),
     usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId),
     usuarioCaixaId: text("usuario_caixa_id").references(() => perfisUsuarios.usuarioId),
     colaboradorId: uuid("colaborador_id")
@@ -1170,12 +1196,47 @@ export const edicoesCaixa = pgTable("edicoes_caixa", {
   caixaId: uuid("caixa_id")
     .notNull()
     .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
-  tokenUsado: text("token_usado").notNull(),
+  // Nullable: alteracao por permissao direta (gerente/admin) nao consome token. No fluxo por token,
+  // guarda o token efetivamente usado (o tokenEdicao antigo do gerente ou o token de autorizacao).
+  tokenUsado: text("token_usado"),
+  // Quem autorizou a alteracao (fluxo por token). Na permissao direta e o proprio editor.
+  autorizadorId: text("autorizador_id").references(() => perfisUsuarios.usuarioId),
+  // Motivo obrigatorio da alteracao de horario (auditoria).
+  observacao: text("observacao"),
   editadoPor: text("editado_por").references(() => perfisUsuarios.usuarioId),
   editadoEm: timestamp("editado_em", { withTimezone: true }).notNull().defaultNow(),
   valoresAntigos: jsonb("valores_antigos").notNull(),
   valoresNovos: jsonb("valores_novos").notNull()
 });
+
+// Fluxo de autorizacao para alterar horario do caixa (reuniao 15/07): o operador solicita escolhendo
+// um autorizador (usuario com caixa_alterar_horario); o autorizador gera um token curto — guardado
+// APENAS como SHA-256 — que o operador usa UMA vez, em ate 15 min, para alterar o horario com
+// observacao obrigatoria. Gerente/admin com a permissao alteram direto, sem passar por aqui.
+export const caixaAutorizacoes = pgTable(
+  "caixa_autorizacoes",
+  {
+    id: idUuid,
+    caixaId: uuid("caixa_id")
+      .notNull()
+      .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
+    solicitanteId: text("solicitante_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    autorizadorId: text("autorizador_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    tokenHash: text("token_hash"),
+    status: text("status").notNull().default("pendente"),
+    observacao: text("observacao"),
+    expiraEm: timestamp("expira_em", { withTimezone: true }),
+    criadoEm
+  },
+  (table) => [
+    check("caixa_autorizacoes_status_check", sql`${table.status} in ('pendente', 'usada', 'expirada', 'negada')`),
+    index("caixa_autorizacoes_autorizador_status_idx").on(table.autorizadorId, table.status)
+  ]
+);
 
 export const ajustesFechamentoCaixa = pgTable("ajustes_fechamento_caixa", {
   id: idUuid,

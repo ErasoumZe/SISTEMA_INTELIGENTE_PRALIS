@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import type {
   AbrirCaixaPayload,
   AcertarSaldoCaixaPayload,
+  AlterarHorarioCaixaPayload,
+  AlterarHorarioCaixaResponse,
   CaixaOperacional,
   CaixaStatus,
   EditarAberturaCaixaPayload,
@@ -14,9 +16,16 @@ import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/share
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import { ErroDominio, erroValidacao, naoEncontrado } from "../erros.js";
+import { hashTokenAutorizacao } from "./autorizacoes.service.js";
+import {
+  atualizarStatusAutorizacaoRepository,
+  buscarAutorizacaoPorTokenRepository
+} from "./autorizacoes.repository.js";
 import {
   atualizarAberturaCaixaRepository,
   atualizarFechamentoCaixaRepository,
+  atualizarHorarioAberturaCaixaRepository,
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
@@ -30,7 +39,8 @@ import {
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarHistoricoCaixaRepository,
-  registrarEdicaoCaixaRepository
+  registrarEdicaoCaixaRepository,
+  revincularVendasAoCaixaRepository
 } from "./caixa.repository.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
@@ -107,6 +117,21 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
 async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco): Promise<TotaisCaixaCentavos> {
   if (!caixa.pdvContaId) throw new Error("PDV sem conta vinculada");
   return calcularTotaisCaixaOperacionalRepository(caixa.id, caixa.pdvContaId, db);
+}
+
+// Revincula as vendas integradas ORFAS ao caixa apos qualquer mudanca de horario (ou na abertura
+// retroativa). Nunca move venda de outro caixa nem venda manual — ver revincularVendasAoCaixaRepository.
+export async function revincularVendasAoCaixa(
+  caixa: CaixaLinha,
+  db: ExecutorBanco
+): Promise<{ anexadas: number; desanexadas: number }> {
+  if (!caixa.pdvId || !caixa.dataHoraAbertura) return { anexadas: 0, desanexadas: 0 };
+  const abertura = new Date(caixa.dataHoraAbertura);
+  const limiteSuperior = caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : new Date();
+  return revincularVendasAoCaixaRepository(
+    { caixaId: caixa.id, empresaId: caixa.empresaId, pdvId: caixa.pdvId, abertura, limiteSuperior },
+    db
+  );
 }
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: ExecutorBanco): Promise<ResumoCaixa> {
@@ -192,6 +217,8 @@ async function abrirCaixaEmTransacao(
     );
     const aberto = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
+    // Abertura retroativa (ex.: abriu 12:53 informando 08:00): puxa as vendas orfas do periodo.
+    await revincularVendasAoCaixa(aberto, tx);
     return { caixaAberto: serializarCaixa(aberto), resumo: await calcularResumoCaixaOperacional(aberto, tx) };
   });
 }
@@ -265,8 +292,96 @@ async function editarAberturaCaixaEmTransacao(
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado apos edicao");
+    // Qualquer edicao de horario dispara a revinculacao retroativa das vendas integradas.
+    await revincularVendasAoCaixa(atualizado, tx);
     return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
   });
+}
+
+// Valida e CONSOME (uso unico) o token de autorizacao do proprio solicitante para este caixa.
+// Invalido -> 400; ja usado / indisponivel / expirado -> 410 (nunca 200). Compara so o hash.
+async function consumirTokenAutorizacao(
+  caixaId: string,
+  solicitanteId: string,
+  token: string | undefined,
+  tx: ExecutorBanco
+): Promise<string> {
+  const tokenLimpo = token?.trim();
+  if (!tokenLimpo) throw erroValidacao("Token obrigatorio", "TOKEN_OBRIGATORIO");
+  const autorizacao = await buscarAutorizacaoPorTokenRepository(
+    { caixaId, solicitanteId, tokenHash: hashTokenAutorizacao(tokenLimpo) },
+    tx
+  );
+  if (!autorizacao) throw erroValidacao("Token invalido", "TOKEN_INVALIDO");
+  if (autorizacao.status === "usada") throw new ErroDominio("Token ja utilizado", 410, "TOKEN_JA_UTILIZADO");
+  if (autorizacao.status !== "pendente") throw new ErroDominio("Token indisponivel", 410, "TOKEN_INDISPONIVEL");
+  if (!autorizacao.expiraEm || new Date(autorizacao.expiraEm) <= new Date()) {
+    throw new ErroDominio("Token expirado", 410, "TOKEN_EXPIRADO");
+  }
+  await atualizarStatusAutorizacaoRepository({ id: autorizacao.id, status: "usada" }, tx);
+  return autorizacao.autorizadorId;
+}
+
+// Altera o horario de ABERTURA do caixa: gerente/admin (caixa_alterar_horario) direto; operador via
+// token de autorizacao. Observacao SEMPRE obrigatoria. Ao final, revincula as vendas integradas
+// (anexa/desanexa) e audita em edicoes_caixa com o autorizador, a observacao e as contagens.
+export async function alterarHorarioCaixa(
+  caixaId: string,
+  payload: AlterarHorarioCaixaPayload,
+  perfil: PerfilUsuario
+): Promise<AlterarHorarioCaixaResponse> {
+  const observacao = payload.observacao.trim();
+  if (!observacao) throw erroValidacao("Observacao obrigatoria", "OBSERVACAO_OBRIGATORIA");
+  const dataHoraAbertura = dataObrigatoria(payload.dataHoraAbertura, "Data de abertura");
+
+  try {
+    return await executarEmTransacao(async (tx) => {
+      const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+      if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
+      if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
+      if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
+
+      const autorizadorId = temPermissao(perfil.permissoes, "caixa_alterar_horario")
+        ? perfil.usuarioId
+        : await consumirTokenAutorizacao(caixaId, perfil.usuarioId, payload.token, tx);
+
+      if (await existePeriodoCaixaRepository(caixa.pdvId, dataHoraAbertura, caixa.id, tx)) {
+        throw erroValidacao(erroPeriodo);
+      }
+
+      const valoresAntigos = { dataHoraAbertura: serializarData(caixa.dataHoraAbertura) };
+      await atualizarHorarioAberturaCaixaRepository({ caixaId: caixa.id, dataHoraAbertura }, tx);
+      const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
+      if (!atualizado) throw naoEncontrado("Caixa nao encontrado");
+      const revinculacao = await revincularVendasAoCaixa(atualizado, tx);
+
+      await registrarEdicaoCaixaRepository(
+        {
+          caixaId: caixa.id,
+          tokenUsado: null,
+          autorizadorId,
+          observacao,
+          editadoPor: perfil.usuarioId,
+          valoresAntigos,
+          valoresNovos: {
+            dataHoraAbertura: dataHoraAbertura.toISOString(),
+            vendasAnexadas: revinculacao.anexadas,
+            vendasDesanexadas: revinculacao.desanexadas
+          }
+        },
+        tx
+      );
+
+      return {
+        caixaAberto: serializarCaixa(atualizado),
+        resumo: await calcularResumoCaixaOperacional(atualizado, tx),
+        revinculacao
+      };
+    });
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof ErroDominio)) throw traduzirErroAberturaCaixa(error);
+    throw error;
+  }
 }
 
 export async function acertarSaldoCaixaOperacional(

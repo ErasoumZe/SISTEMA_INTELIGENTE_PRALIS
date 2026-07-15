@@ -1,5 +1,5 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { and, asc, desc, eq, ilike, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, isNotNull, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { colaboradores, gruposDespesas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
@@ -239,7 +239,9 @@ export async function atualizarAberturaCaixaRepository(
 export async function registrarEdicaoCaixaRepository(
   input: {
     caixaId: string;
-    tokenUsado: string;
+    tokenUsado: string | null;
+    autorizadorId?: string | null;
+    observacao?: string | null;
     editadoPor: string;
     valoresAntigos: Record<string, DadosExternos>;
     valoresNovos: Record<string, DadosExternos>;
@@ -247,6 +249,62 @@ export async function registrarEdicaoCaixaRepository(
   db: ExecutorBanco = banco
 ) {
   await db.insert(edicoesCaixa).values(input);
+}
+
+// Atualiza SOMENTE o horario de abertura (nao mexe em PDV/usuario/token) — usado pelo novo fluxo de
+// alteracao de horario por token/permissao. O tokenEdicao do gerente (fluxo antigo) fica intacto.
+export async function atualizarHorarioAberturaCaixaRepository(
+  input: { caixaId: string; dataHoraAbertura: Date },
+  db: ExecutorBanco = banco
+) {
+  await db
+    .update(fechamentosCaixa)
+    .set({
+      dataHoraAbertura: input.dataHoraAbertura,
+      dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10)
+    })
+    .where(eq(fechamentosCaixa.id, input.caixaId));
+}
+
+// Revinculacao retroativa das vendas INTEGRADAS ao caixa apos qualquer mudanca de horario.
+// ANEXAR: vendas orfas (caixa_id NULL) do mesmo empresa+PDV com data_venda dentro do periodo.
+// DESANEXAR: vendas DESTE caixa que ficaram fora do periodo voltam a orfas.
+// Garantias: nunca toca venda de OUTRO caixa (anexar exige caixa_id NULL; desanexar filtra caixa_id
+// = este) e nunca toca venda MANUAL (exige integracao_chave_id e data_venda preenchidos).
+export async function revincularVendasAoCaixaRepository(
+  input: { caixaId: string; empresaId: string; pdvId: string; abertura: Date; limiteSuperior: Date },
+  db: ExecutorBanco = banco
+): Promise<{ anexadas: number; desanexadas: number }> {
+  const anexadas = await db
+    .update(vendas)
+    .set({ caixaId: input.caixaId })
+    .where(
+      and(
+        eq(vendas.empresaId, input.empresaId),
+        eq(vendas.pdvId, input.pdvId),
+        isNull(vendas.caixaId),
+        isNotNull(vendas.integracaoChaveId),
+        isNotNull(vendas.dataVenda),
+        gte(vendas.dataVenda, input.abertura),
+        lte(vendas.dataVenda, input.limiteSuperior)
+      )
+    )
+    .returning({ id: vendas.id });
+
+  const desanexadas = await db
+    .update(vendas)
+    .set({ caixaId: null })
+    .where(
+      and(
+        eq(vendas.caixaId, input.caixaId),
+        isNotNull(vendas.integracaoChaveId),
+        isNotNull(vendas.dataVenda),
+        or(lt(vendas.dataVenda, input.abertura), gt(vendas.dataVenda, input.limiteSuperior))
+      )
+    )
+    .returning({ id: vendas.id });
+
+  return { anexadas: anexadas.length, desanexadas: desanexadas.length };
 }
 
 export async function caixaTemLancamentosRepository(caixaId: string, db: ExecutorBanco = banco) {
