@@ -57,6 +57,8 @@ services:
       # e o resto do sistema segue normal. Defina os valores como secrets no painel do Coolify.
       NOTAS_FISCAIS_URL: ${NOTAS_FISCAIS_URL:-}
       NOTAS_FISCAIS_TOKEN: ${NOTAS_FISCAIS_TOKEN:-}
+      # Identificador FIXO da contabilidade no filtro (nao e o CNPJ da empresa). Default = contabilidade atual.
+      NOTAS_FISCAIS_COMPANY: ${NOTAS_FISCAIS_COMPANY:-08351168000153}
     restart: unless-stopped
     expose:
       - "4100"

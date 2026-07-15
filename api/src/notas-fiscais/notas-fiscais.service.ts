@@ -16,21 +16,22 @@ import {
   buscarCnpjEmpresaRepository,
   buscarNotaFiscalDetalheRepository,
   importarNotaFiscalRepository,
-  listarNotasFiscaisRepository
+  listarNotasFiscaisRepository,
+  type RegistroWebhook
 } from "./notas-fiscais.repository.js";
 
 function validarEmpresa(perfil: PerfilUsuario, empresaId: string): void {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
 }
 
-function configWebhook(): { url: string; token: string } {
+function configWebhook(): { url: string; token: string; company: string } {
   if (!env.NOTAS_FISCAIS_URL || !env.NOTAS_FISCAIS_TOKEN) {
     throw naoProcessavel(
       "Importacao de NF-e nao configurada (NOTAS_FISCAIS_URL/TOKEN ausentes)",
       "NOTAS_FISCAIS_NAO_CONFIGURADO"
     );
   }
-  return { url: env.NOTAS_FISCAIS_URL, token: env.NOTAS_FISCAIS_TOKEN };
+  return { url: env.NOTAS_FISCAIS_URL, token: env.NOTAS_FISCAIS_TOKEN, company: env.NOTAS_FISCAIS_COMPANY };
 }
 
 // yyyy-MM-dd -> dd/MM/yyyy (formato exigido pelo webhook da contabilidade).
@@ -45,10 +46,11 @@ function mensagemErro(erro: DadosExternos): string {
 
 export async function importarNotasFiscais(
   payload: ImportarNotasFiscaisPayload,
-  perfil: PerfilUsuario
+  perfil: PerfilUsuario,
+  log?: RegistroWebhook
 ): Promise<ImportarNotasFiscaisResultado> {
   validarEmpresa(perfil, payload.empresaId);
-  const { url, token } = configWebhook();
+  const { url, token, company } = configWebhook();
 
   const cnpjEmpresa = await buscarCnpjEmpresaRepository(payload.empresaId);
   if (!cnpjEmpresa) {
@@ -63,9 +65,11 @@ export async function importarNotasFiscais(
     xmls = await baixarXmlsDoWebhook({
       url,
       token,
+      companyContabilidade: company,
       cnpjEmpresa,
       dataInicioBr: isoParaBr(payload.dataInicio),
-      dataFimBr: isoParaBr(payload.dataFim)
+      dataFimBr: isoParaBr(payload.dataFim),
+      log
     });
   } catch (erro) {
     // Falha ao falar com o webhook e fatal para a importacao: 422 com mensagem clara ao operador,

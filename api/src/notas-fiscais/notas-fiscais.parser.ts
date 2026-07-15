@@ -143,16 +143,31 @@ export function parseNfe(xmlContent: string): NfeParseada {
 
 // Extrai a lista de NF-e da resposta JSON do filtro (obternfeporfiltro), em qualquer aninhamento.
 export function extrairNotasDoFiltro(payload: DadosExternos): DadosExternos[] {
-  const achado = buscarProfundo(payload, "Nfe") ?? buscarProfundo(payload, "NFe");
+  const achado = buscarProfundo(payload, "Nfe") ?? buscarProfundo(payload, "NFe") ?? buscarProfundo(payload, "nfe");
   return comoArray(achado);
 }
 
+// Le um atributo de uma entrada de NF-e do filtro tolerando as formas em que o webhook (Make.com)
+// pode serializar atributos XML -> JSON: plano (`File`), com prefixo de atributo (`@_File`/`@File`)
+// ou aninhado sob `_attributes`/`attributes`. Sem isso, atributos aninhados sao lidos como vazios e
+// a importacao volta com 0 notas mesmo com o webhook respondendo. Testa cada nome candidato.
+function lerAtributoNota(nfe: DadosExternos, ...nomes: string[]): string | null {
+  if (!ehRegistro(nfe)) return null;
+  const containers: DadosExternos[] = [nfe, subRegistro(nfe, "_attributes"), subRegistro(nfe, "attributes")];
+  for (const container of containers) {
+    for (const nome of nomes) {
+      const valor = ler(container, nome) ?? ler(container, `@_${nome}`) ?? ler(container, `@${nome}`);
+      if (valor !== null) return valor;
+    }
+  }
+  return null;
+}
+
 export function notaCancelada(nfe: DadosExternos): boolean {
-  if (!ehRegistro(nfe)) return false;
-  return (ler(nfe, "Canceled") ?? ler(nfe, "canceled") ?? "").toUpperCase() === "TRUE";
+  return (lerAtributoNota(nfe, "Canceled", "canceled") ?? "").toUpperCase() === "TRUE";
 }
 
 // Id do arquivo XML no webhook (usado no lote de obterxmlporids).
 export function fileIdDaNota(nfe: DadosExternos): string {
-  return ler(nfe, "File") ?? ler(nfe, "file") ?? ler(nfe, "ID_ARQUIVO") ?? ler(nfe, "IdArquivo") ?? "";
+  return lerAtributoNota(nfe, "File", "file", "ID_ARQUIVO", "IdArquivo") ?? "";
 }

@@ -20,6 +20,7 @@ import {
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { enviarEmail } from "../auth/email.js";
 import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
@@ -30,6 +31,7 @@ import {
   buscarProdutoAutomaticoRepository,
   buscarRegistroIntegracaoRepository,
   buscarVinculoResolvidoRepository,
+  contarVendasIntegradasNoDiaRepository,
   criarChaveIntegracaoRepository,
   criarClienteRepository,
   criarFormaPagamentoRepository,
@@ -39,6 +41,8 @@ import {
   inativarChaveIntegracaoRepository,
   listarCamposConfigRepository,
   listarChavesIntegracaoRepository,
+  listarEmailsAdminsDaEmpresaRepository,
+  listarEmpresasComChaveAtivaRepository,
   listarHistoricoIntegracaoRepository,
   listarVinculosRepository,
   obterEmpresaDaChaveRepository,
@@ -341,6 +345,84 @@ export async function listarHistoricoIntegracao(query: IntegracaoQuery, perfil: 
   if (query.empresaId) validarEmpresa(perfil, query.empresaId);
   const historico = await listarHistoricoIntegracaoRepository(query, empresasPermitidas(perfil));
   return historico.filter((item) => tiposIntegracaoDisponiveis.has(item.tipo));
+}
+
+// --- Alerta de silencio da integracao de vendas -----------------------------------------------
+// Avisa os administradores por e-mail quando um dia fecha sem NENHUMA venda recebida por integracao
+// numa empresa com chave ativa. Disparado best-effort ao carregar o historico (nao ha job diario no
+// sistema). Dedup em memoria garante no maximo 1 alerta por empresa/dia por processo — aceitavel
+// para um aviso interno; reinicia a cada deploy (sem tabela nova, por decisao de nao criar migrations).
+const alertasSilencioEnviados = new Set<string>();
+
+// yyyy-MM-dd do dia anterior a `hoje` (UTC, como o resto do sistema fatia datas). "Todo dia e dia
+// util": nao pula fim de semana/feriado.
+function diaAnteriorIso(hoje: Date): string {
+  const dia = new Date(hoje);
+  dia.setUTCDate(dia.getUTCDate() - 1);
+  return dia.toISOString().slice(0, 10);
+}
+
+function assuntoSilencio(dia: string, nomeEmpresa: string): string {
+  return `Sem vendas por integracao em ${dia} - ${nomeEmpresa}`;
+}
+
+function htmlSilencio(nomeEmpresa: string, dia: string): string {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#2f2320">
+  <h2 style="color:#c0521d">Integracao de vendas sem movimento</h2>
+  <p>A empresa <strong>${nomeEmpresa}</strong> nao recebeu nenhuma venda por integracao no dia <strong>${dia}</strong>.</p>
+  <p>Se isso nao era esperado, verifique se a automacao de vendas esta ativa e enviando dados.</p>
+  <p style="color:#6f635c;font-size:12px">Alerta automatico do Sistema Cicluz. Voce recebe porque e administrador desta empresa.</p>
+</div>`;
+}
+
+export interface ResumoSilencioIntegracao {
+  dia: string;
+  verificadas: number;
+  silenciosas: number;
+  alertasEnviados: number;
+}
+
+// Verifica as empresas com chave de vendas ATIVA (restrito a `empresaIds`, quando informado) e, para
+// cada dia silencioso ainda nao alertado, envia e-mail aos admins. Robusto por empresa: um erro numa
+// nao interrompe as demais. Nunca lanca para o chamador (proprio para fire-and-forget).
+export async function verificarSilencioIntegracao(input: {
+  empresaIds?: string[] | undefined;
+  hoje: Date;
+}): Promise<ResumoSilencioIntegracao> {
+  const dia = diaAnteriorIso(input.hoje);
+  const comChaveAtiva = await listarEmpresasComChaveAtivaRepository("vendas");
+  const filtro = input.empresaIds ? new Set(input.empresaIds) : null;
+  const alvo = filtro ? comChaveAtiva.filter((empresa) => filtro.has(empresa.empresaId)) : comChaveAtiva;
+
+  let silenciosas = 0;
+  let alertasEnviados = 0;
+  for (const empresa of alvo) {
+    const chaveDedup = `${empresa.empresaId}:${dia}`;
+    if (alertasSilencioEnviados.has(chaveDedup)) continue;
+    try {
+      const recebidas = await contarVendasIntegradasNoDiaRepository(empresa.empresaId, dia);
+      if (recebidas > 0) continue;
+      silenciosas += 1;
+      const admins = await listarEmailsAdminsDaEmpresaRepository(empresa.empresaId);
+      // Marca antes de enviar: mesmo com falha parcial de e-mail, nao repetimos o alerta hoje.
+      alertasSilencioEnviados.add(chaveDedup);
+      for (const admin of admins) {
+        await enviarEmail({
+          para: admin.email,
+          assunto: assuntoSilencio(dia, empresa.nome),
+          html: htmlSilencio(empresa.nome, dia)
+        });
+        alertasEnviados += 1;
+      }
+    } catch (erro) {
+      console.error(
+        `[integracoes] falha ao verificar silencio da empresa ${empresa.empresaId} em ${dia}:`,
+        erro instanceof Error ? erro.message : erro
+      );
+    }
+  }
+
+  return { dia, verificadas: alvo.length, silenciosas, alertasEnviados };
 }
 
 export async function listarDicionarioIntegracao(
