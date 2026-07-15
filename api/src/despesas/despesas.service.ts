@@ -1,3 +1,4 @@
+import type { MultipartFile } from "@fastify/multipart";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   DespesaCriada,
@@ -23,11 +24,13 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarDespesaRepository,
+  atualizarFotoDespesaRepository,
   buscarDespesaDetalheRepository,
   criarDespesaRepository,
   discriminarDespesaRepository,
   listarDespesasRepository
 } from "./despesas.repository.js";
+import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
   if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
@@ -68,6 +71,33 @@ export async function obterDespesa(despesaId: string, perfil: PerfilUsuario): Pr
   const despesa = await buscarDespesaDetalheRepository(despesaId);
   if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
   return despesa;
+}
+
+// Anexo de foto do documento (nota/cupom) — insumo de quem discrimina depois.
+export async function salvarFotoDespesa(
+  despesaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+): Promise<{ fotoDocumentoUrl: string }> {
+  const despesa = await buscarDespesaDetalheRepository(despesaId);
+  if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("despesas", despesaId, arquivo);
+  await atualizarFotoDespesaRepository(despesaId, despesa.empresaId, caminhoRelativo);
+  return { fotoDocumentoUrl: caminhoRelativo };
+}
+
+export async function obterFotoDespesa(
+  despesaId: string,
+  perfil: PerfilUsuario
+): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const despesa = await buscarDespesaDetalheRepository(despesaId);
+  if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
+  if (!despesa.fotoDocumentoUrl) throw new Error("Foto nao encontrada");
+  return {
+    caminhoAbsoluto: caminhoAbsolutoDocumento(despesa.fotoDocumentoUrl),
+    mimeType: mimePorCaminho(despesa.fotoDocumentoUrl)
+  };
 }
 
 export async function atualizarDespesa(

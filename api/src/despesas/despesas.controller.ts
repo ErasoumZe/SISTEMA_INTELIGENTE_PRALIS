@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema, discriminarDespesaSchema } from "@padaria/shared/despesas";
@@ -10,7 +11,9 @@ import {
   criarDespesa,
   discriminarDespesa,
   listarDespesas,
-  obterDespesa
+  obterDespesa,
+  obterFotoDespesa,
+  salvarFotoDespesa
 } from "./despesas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
@@ -28,12 +31,11 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       } catch {
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
-      const escopoCaixa = await resolverEscopoListagemPorCaixa(
-        request.perfilUsuario,
-        "despesas",
-        query.empresaId,
-        query.caixaId
-      );
+      // A fila "somente pendentes de discriminacao" e visao de RETAGUARDA: ignora a trava de caixa
+      // aberto e lista os pendentes da empresa (paridade com mercadorias/NF-e).
+      const escopoCaixa = query.pendenteDiscriminacao
+        ? { bloquear: false, caixaId: undefined }
+        : await resolverEscopoListagemPorCaixa(request.perfilUsuario, "despesas", query.empresaId, query.caixaId);
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
       return paginadoDeArray(await listarDespesas(queryComCaixa, escopoDados), query.page, query.pageSize);
@@ -82,6 +84,35 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
       }
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErroValidacao(mensagem), mensagem);
+    }
+  });
+
+  // Anexo de foto do documento: upload (gerente ao lancar) e download (retaguarda ao discriminar).
+  app.post(
+    "/api/despesas/:id/foto",
+    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar"]) },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+        return reply.status(201).send(ok(await salvarFotoDespesa(id, arquivo, request.perfilUsuario!)));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get("/api/despesas/:id/foto", { preHandler: exigirPermissao("despesas_visualizar") }, async (request, reply) => {
+    const { id } = apiIdParamsSchema.parse(request.params);
+    try {
+      const { caminhoAbsoluto, mimeType } = await obterFotoDespesa(id, request.perfilUsuario!);
+      reply.header("Content-Type", mimeType);
+      reply.header("Cache-Control", "private, max-age=300");
+      return reply.send(createReadStream(caminhoAbsoluto));
+    } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }

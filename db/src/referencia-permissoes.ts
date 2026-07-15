@@ -156,7 +156,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "mercadorias_discriminar",
       "retiradas_criar",
       "caixas_gerenciar",
-      "caixa_alterar_horario"
+      "caixa_alterar_horario",
+      "cadastro_turnos_visualizar",
+      "cadastro_turnos_criar",
+      "cadastro_turnos_editar",
+      "cadastro_turnos_excluir"
     ]
   }),
   Compras: permissoesDoCargo({

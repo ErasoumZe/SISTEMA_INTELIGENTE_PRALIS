@@ -1,7 +1,7 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
-import type { VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
+import type { TotaisVendas, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
@@ -84,6 +84,62 @@ export async function listarVendasRepository(
       .map(({ vendaId: _vendaId, ...pagamento }) => pagamento),
     totalComprovantes: comprovantes.filter((comprovante) => comprovante.vendaId === linha.id).length
   }));
+}
+
+// Totais do relatorio sobre TODO o conjunto filtrado (mesmos filtros da listagem): total geral
+// (soma de valor_original das vendas) + subtotais por forma de pagamento (soma de total_pago).
+export async function totaisVendasRepository(
+  query: VendasQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<TotaisVendas> {
+  const filtros = filtrosEmpresa(vendas, query, empresasPermitidasIds);
+  if (query.dataInicio) filtros.push(gte(vendas.dataReferencia, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
+  if (query.caixaId) filtros.push(eq(vendas.caixaId, query.caixaId));
+  if (query.pdvId) filtros.push(eq(vendas.pdvId, query.pdvId));
+  if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
+  if (query.colaboradorId) filtros.push(eq(vendas.colaboradorId, query.colaboradorId));
+  if (query.status) filtros.push(eq(vendas.status, query.status));
+
+  if (query.formaPagamentoId) {
+    const comForma = await banco
+      .select({ vendaId: vendasPagamentos.vendaId })
+      .from(vendasPagamentos)
+      .where(eq(vendasPagamentos.formaPagamentoId, query.formaPagamentoId));
+    const vendaIds = comForma.map((item) => item.vendaId);
+    if (!vendaIds.length) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
+    filtros.push(inArray(vendas.id, vendaIds));
+  }
+  const where = filtros.length ? and(...filtros) : undefined;
+
+  const [resumo] = await banco
+    .select({ total: sum(vendas.valorOriginal), quantidade: count() })
+    .from(vendas)
+    .where(where);
+
+  const porForma = await banco
+    .select({
+      formaPagamentoId: vendasPagamentos.formaPagamentoId,
+      formaPagamento: formasPagamento.nome,
+      total: sum(vendasPagamentos.totalPago),
+      quantidade: count()
+    })
+    .from(vendasPagamentos)
+    .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+    .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
+    .where(where)
+    .groupBy(vendasPagamentos.formaPagamentoId, formasPagamento.nome);
+
+  return {
+    totalGeral: numeroDecimal(resumo?.total ?? "0"),
+    quantidade: Number(resumo?.quantidade ?? 0),
+    porFormaPagamento: porForma.map((linha) => ({
+      formaPagamentoId: linha.formaPagamentoId,
+      formaPagamento: linha.formaPagamento ?? "Sem forma",
+      total: numeroDecimal(linha.total ?? "0"),
+      quantidade: Number(linha.quantidade)
+    }))
+  };
 }
 
 export async function criarVendaRepository(

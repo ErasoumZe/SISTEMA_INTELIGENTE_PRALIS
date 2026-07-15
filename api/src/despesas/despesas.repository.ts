@@ -39,7 +39,8 @@ export async function listarDespesasRepository(
       descricao: despesas.descricao,
       valorOriginal: despesas.valorOriginal,
       computar: despesas.computar,
-      status: despesas.status
+      status: despesas.status,
+      fotoDocumentoUrl: despesas.fotoDocumentoUrl
     })
     .from(despesas)
     .where(filtros.length ? and(...filtros) : undefined);
@@ -56,6 +57,18 @@ export async function listarDespesasRepository(
   const idsComItens = new Set(comItens.map((linha) => linha.despesaId));
   const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
   return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
+}
+
+export async function atualizarFotoDespesaRepository(
+  id: string,
+  empresaId: string,
+  fotoDocumentoUrl: string | null,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(despesas)
+    .set({ fotoDocumentoUrl })
+    .where(and(eq(despesas.id, id), eq(despesas.empresaId, empresaId)));
 }
 
 export async function criarDespesaRepository(

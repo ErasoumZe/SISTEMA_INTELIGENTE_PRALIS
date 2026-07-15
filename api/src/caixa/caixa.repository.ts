@@ -52,7 +52,8 @@ export async function buscarColaboradorPorUsuarioRepository(
       id: colaboradores.id,
       empresaId: colaboradores.empresaId,
       nome: colaboradores.nome,
-      usuarioId: colaboradores.usuarioId
+      usuarioId: colaboradores.usuarioId,
+      turnoPadraoId: colaboradores.turnoPadraoId
     })
     .from(colaboradores)
     .where(and(...filtros))
@@ -91,6 +92,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
+      turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
       status: fechamentosCaixa.status
     })
@@ -127,6 +129,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
+      turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
       status: fechamentosCaixa.status
     })
@@ -185,6 +188,7 @@ export async function criarCaixaRepository(
     colaboradorId: string;
     dataHoraAbertura: Date;
     tokenEdicao: string;
+    turnoId: string | null;
     observacao: string | null;
   },
   db: ExecutorBanco = banco
@@ -197,6 +201,7 @@ export async function criarCaixaRepository(
       usuarioId: input.usuarioId,
       usuarioCaixaId: input.usuarioCaixaId,
       colaboradorId: input.colaboradorId,
+      turnoId: input.turnoId,
       dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10),
       dataHoraAbertura: input.dataHoraAbertura,
       abertoEm: new Date(),
@@ -251,19 +256,23 @@ export async function registrarEdicaoCaixaRepository(
   await db.insert(edicoesCaixa).values(input);
 }
 
-// Atualiza SOMENTE o horario de abertura (nao mexe em PDV/usuario/token) — usado pelo novo fluxo de
-// alteracao de horario por token/permissao. O tokenEdicao do gerente (fluxo antigo) fica intacto.
-export async function atualizarHorarioAberturaCaixaRepository(
-  input: { caixaId: string; dataHoraAbertura: Date },
+// Atualiza o horario de abertura e/ou fechamento (nao mexe em PDV/usuario/token) — usado pelo novo
+// fluxo de alteracao por token/permissao. O tokenEdicao do gerente (fluxo antigo) fica intacto.
+export async function atualizarHorarioCaixaRepository(
+  input: { caixaId: string; dataHoraAbertura?: Date | undefined; dataHoraFechamento?: Date | undefined },
   db: ExecutorBanco = banco
 ) {
-  await db
-    .update(fechamentosCaixa)
-    .set({
-      dataHoraAbertura: input.dataHoraAbertura,
-      dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10)
-    })
-    .where(eq(fechamentosCaixa.id, input.caixaId));
+  const campos = {
+    ...(input.dataHoraAbertura
+      ? {
+          dataHoraAbertura: input.dataHoraAbertura,
+          dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10)
+        }
+      : {}),
+    ...(input.dataHoraFechamento ? { dataHoraFechamento: input.dataHoraFechamento } : {})
+  };
+  if (Object.keys(campos).length === 0) return;
+  await db.update(fechamentosCaixa).set(campos).where(eq(fechamentosCaixa.id, input.caixaId));
 }
 
 // Revinculacao retroativa das vendas INTEGRADAS ao caixa apos qualquer mudanca de horario.
