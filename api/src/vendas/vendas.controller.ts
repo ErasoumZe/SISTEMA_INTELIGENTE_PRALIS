@@ -5,7 +5,7 @@ import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
-import { atualizarVenda, criarVenda, listarVendas, obterVenda } from "./vendas.service.js";
+import { atualizarVenda, criarVenda, listarVendas, obterVenda, totaisVendas } from "./vendas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
@@ -47,6 +47,23 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
       // Relatorios consultam o historico da empresa inteira. A regra operacional de
       // "somente caixa aberto" pertence a /api/vendas e nao pode ocultar vendas antigas.
       return paginadoDeArray(await listarVendas(query, escopoDados), query.page, query.pageSize);
+    }
+  );
+
+  // Rodape do relatorio: total geral + subtotais por forma de pagamento sobre TODO o filtro.
+  app.get(
+    "/api/relatorios/vendas/totais",
+    { preHandler: exigirPermissao("relatorio_vendas_visualizar") },
+    async (request, reply) => {
+      const query = vendasQuerySchema.parse(request.query);
+      const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopoDados: string[];
+      try {
+        escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
+      } catch {
+        return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+      }
+      return ok(await totaisVendas(query, escopoDados));
     }
   );
 

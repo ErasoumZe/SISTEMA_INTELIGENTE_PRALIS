@@ -18,6 +18,22 @@ export const vendasQuerySchema = z
   })
   .merge(paginationQuerySchema);
 
+// Rodape do Relatorio de Vendas: total geral + subtotais por forma de pagamento sobre TODO o
+// conjunto filtrado (nao so a pagina). Usado na homologacao contra o CREARE.
+export const totalPorFormaPagamentoSchema = z.object({
+  formaPagamentoId: z.string().nullable(),
+  formaPagamento: z.string(),
+  total: z.number(),
+  quantidade: z.number()
+});
+export const totaisVendasSchema = z.object({
+  totalGeral: z.number(),
+  quantidade: z.number(),
+  porFormaPagamento: z.array(totalPorFormaPagamentoSchema)
+});
+export type TotalPorFormaPagamento = z.infer<typeof totalPorFormaPagamentoSchema>;
+export type TotaisVendas = z.infer<typeof totaisVendasSchema>;
+
 export const vendaItemSchema = z.object({
   produtoId: uuidSchema.optional().nullable(),
   produtoAutomacaoId: z.string().optional().nullable(),

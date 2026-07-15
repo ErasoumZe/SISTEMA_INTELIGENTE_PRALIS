@@ -1,5 +1,12 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
-import type { VendaCriada, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
+import type {
+  TotaisVendas,
+  VendaCriada,
+  VendaDetalheDto,
+  VendaDto,
+  VendaPayload,
+  VendasQuery
+} from "@padaria/shared/vendas";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
@@ -11,7 +18,8 @@ import {
   atualizarVendaRepository,
   buscarVendaDetalheRepository,
   criarVendaRepository,
-  listarVendasRepository
+  listarVendasRepository,
+  totaisVendasRepository
 } from "./vendas.repository.js";
 import {
   resolverComputarLancamento,
@@ -38,6 +46,11 @@ export function validarVenda(dados: VendaPayload): void {
 export async function listarVendas(query: VendasQuery, empresasPermitidasIds: string[] | null): Promise<VendaDto[]> {
   if (empresasPermitidasIds?.length === 0) return [];
   return listarVendasRepository(query, empresasPermitidasIds);
+}
+
+export async function totaisVendas(query: VendasQuery, empresasPermitidasIds: string[] | null): Promise<TotaisVendas> {
+  if (empresasPermitidasIds?.length === 0) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
+  return totaisVendasRepository(query, empresasPermitidasIds);
 }
 
 export async function criarVenda(dados: VendaPayload, perfil: PerfilUsuario): Promise<VendaCriada> {
