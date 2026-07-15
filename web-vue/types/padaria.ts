@@ -183,6 +183,7 @@ export type OperacaoResumo = {
   computar: boolean;
   status: string;
   pendenteDiscriminacao?: boolean;
+  fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
   pdvNome?: string | null;
   clienteId?: string | null;

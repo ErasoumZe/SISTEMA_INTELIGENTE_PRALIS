@@ -121,6 +121,8 @@ const modalCopiaAberto = ref(false);
 
 const entidadeNova = ref<EntidadeOperacional>("venda");
 const operacaoEditandoId = ref("");
+// Foto do documento (nota/cupom) de despesas e mercadorias: anexada no modal de lancamento.
+const fotoDocumento = useFotoDocumento();
 // Modo discriminacao: reutiliza o modal de operacao, mas salva so os itens via PATCH .../discriminar
 // (feito por outro setor, DEPOIS, sem exigir caixa aberto). Fila filtravel abaixo.
 const modoDiscriminacao = ref(false);
@@ -334,9 +336,11 @@ watch(totalPaginasOperacoes, (total) => {
   if (paginaOperacoes.value > total) paginaOperacoes.value = total;
 });
 
-// Ao filtrar a fila de pendencias, volta para a primeira pagina; ao trocar de tela, limpa o filtro.
+// Ao filtrar a fila de pendencias, volta para a primeira pagina e recarrega os lancamentos
+// (a fila ignora o caixa, entao precisa buscar no servidor, nao apenas filtrar em memoria).
 watch(filtroPendentesDiscriminacao, () => {
   paginaOperacoes.value = 1;
+  void carregarOperacoes();
 });
 watch(telaAtiva, () => {
   filtroPendentesDiscriminacao.value = false;
@@ -726,13 +730,20 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
   const entidade = entidadePorTela[telaAtiva.value];
   if (!entidade) return;
   const params = new URLSearchParams({ empresaId: idEmpresa });
+  // Fila de pendentes: mostra lancamentos sem discriminacao de qualquer caixa (inclusive os
+  // vindos de NF-e com caixa_id NULL), ignorando o filtro de caixa aberto.
+  const pendentes = filtroPendentesDiscriminacao.value && telaSuportaDiscriminacao.value;
   const caixaId = caixaIdFiltroTela();
   const item = itemPorTela[telaAtiva.value];
-  if (item && dependeCaixaAberto(item) && !caixaId) {
+  if (!pendentes && item && dependeCaixaAberto(item) && !caixaId) {
     operacoes.value = [];
     return;
   }
-  if (caixaId) params.set("caixaId", caixaId);
+  if (pendentes) {
+    params.set("pendenteDiscriminacao", "true");
+  } else if (caixaId) {
+    params.set("caixaId", caixaId);
+  }
   operacoes.value = await apiGet<OperacaoResumo[]>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
   );
@@ -859,6 +870,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   entidadeNova.value = entidade;
   operacaoEditandoId.value = operacao?.id ?? "";
   modoDiscriminacao.value = false;
+  fotoDocumento.limpar();
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
@@ -888,6 +900,9 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
     try {
       const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
       preencherFormOperacao(entidade, detalhe);
+      if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
+        void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+      }
     } catch (error) {
       notificar(mensagemErro(error), "error");
       return;
@@ -903,6 +918,7 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   entidadeNova.value = entidade;
   operacaoEditandoId.value = operacao.id;
   modoDiscriminacao.value = true;
+  fotoDocumento.limpar();
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = entidade === "despesa";
   discriminandoMercadoria.value = entidade === "mercadoria";
@@ -924,6 +940,9 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
     preencherFormOperacao(entidade, detalhe);
+    if (detalhe.fotoDocumentoUrl) {
+      void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+    }
     // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
     discriminandoDespesa.value = entidade === "despesa";
     discriminandoMercadoria.value = entidade === "mercadoria";
@@ -963,10 +982,18 @@ async function salvarDiscriminacao() {
     notificar("Informe ao menos um item para discriminar.", "error");
     return;
   }
-  await apiPatch(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacaoEditandoId.value}/discriminar`, corpo);
+  const endpoint = endpointOperacaoPorEntidade[entidade];
+  await apiPatch(`/api/${endpoint}/${operacaoEditandoId.value}/discriminar`, corpo);
+  const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value);
   const indice = operacoes.value.findIndex((operacao) => operacao.id === operacaoEditandoId.value);
   const linha = operacoes.value[indice];
-  if (indice >= 0 && linha) operacoes.value.splice(indice, 1, { ...linha, pendenteDiscriminacao: false });
+  if (indice >= 0 && linha) {
+    operacoes.value.splice(indice, 1, {
+      ...linha,
+      pendenteDiscriminacao: false,
+      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {})
+    });
+  }
   modalOperacaoAberto.value = false;
   notificar("Discriminacao salva com sucesso.");
 }
@@ -1010,6 +1037,11 @@ async function salvarOperacao() {
     const operacaoSalva = editandoId
       ? await apiPut<{ id: string; computar: boolean }>(`/api/${endpoint}/${editandoId}`, payload)
       : await apiPost<{ id: string; computar: boolean }>(`/api/${endpoint}`, payload);
+    // Anexa a foto do documento (nota/cupom) so em despesas/mercadorias, apos o registro existir.
+    const fotoUrl =
+      entidadeNova.value === "despesa" || entidadeNova.value === "mercadoria"
+        ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id)
+        : null;
     const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
@@ -1017,7 +1049,8 @@ async function salvarOperacao() {
       descricao: form.value.descricao,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
       computar: operacaoSalva.computar,
-      status: "aprovado"
+      status: "aprovado",
+      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {})
     };
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
@@ -1393,6 +1426,9 @@ provide(WORKSPACE_CONTEXT, {
   itensMercadoria,
   salvandoOperacao,
   salvarOperacao,
+  fotoDocumentoPreview: fotoDocumento.previewUrl,
+  fotoDocumentoExistente: fotoDocumento.existente,
+  selecionarFotoDocumento: fotoDocumento.selecionar,
   modalMaloteAberto,
   maloteEditandoId,
   formMalote,

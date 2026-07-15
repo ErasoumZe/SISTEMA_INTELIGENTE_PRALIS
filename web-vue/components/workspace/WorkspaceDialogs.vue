@@ -41,6 +41,9 @@ const {
   itensMercadoria,
   salvandoOperacao,
   salvarOperacao,
+  fotoDocumentoPreview,
+  fotoDocumentoExistente,
+  selecionarFotoDocumento,
   modalMaloteAberto,
   maloteEditandoId,
   formMalote,
@@ -350,6 +353,36 @@ const validacaoQtdPreview = computed(() =>
             ><div class="text-caption text-muted">Total</div>
             <div class="text-h6">{{ dinheiro(valorTotalOperacao) }}</div></v-col
           >
+        </v-row>
+        <v-row v-if="['despesa', 'mercadoria'].includes(entidadeNova)" dense class="mb-1">
+          <v-col cols="12" md="7">
+            <v-file-input
+              label="Foto do documento (nota/cupom)"
+              accept="image/*,application/pdf"
+              prepend-icon="mdi-camera"
+              density="comfortable"
+              clearable
+              hide-details="auto"
+              hint="Anexe a foto da nota; a retaguarda usa para discriminar depois."
+              persistent-hint
+              @update:model-value="selecionarFotoDocumento"
+            />
+          </v-col>
+          <v-col cols="12" md="5" class="d-flex align-center">
+            <a v-if="fotoDocumentoPreview" :href="fotoDocumentoPreview" target="_blank" rel="noopener">
+              <v-img
+                :src="fotoDocumentoPreview"
+                height="80"
+                width="128"
+                cover
+                class="rounded-lg border"
+                alt="Foto do documento"
+              />
+            </a>
+            <span v-else-if="fotoDocumentoExistente" class="text-caption text-medium-emphasis">
+              <v-icon size="small" icon="mdi-paperclip" /> Documento anexado
+            </span>
+          </v-col>
         </v-row>
         <v-divider class="my-4" />
         <div v-if="entidadeNova === 'venda'" class="d-grid ga-4">

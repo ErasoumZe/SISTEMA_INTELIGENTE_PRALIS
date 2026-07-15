@@ -99,6 +99,13 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
                   >
                     Pendente de discriminacao
                   </v-chip>
+                  <v-icon
+                    v-if="operacao.fotoDocumentoUrl"
+                    icon="mdi-paperclip"
+                    size="small"
+                    class="ml-1 text-medium-emphasis"
+                    title="Documento anexado"
+                  />
                 </td>
                 <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
                 <td class="text-right">
