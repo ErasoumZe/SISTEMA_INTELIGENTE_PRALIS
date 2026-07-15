@@ -100,7 +100,12 @@ body {
 }
 
 .padaria-shell {
-  min-height: 100vh;
+  /* Trava a casca na altura da viewport para o menu lateral nao esticar com a pagina: em telas
+     altas o drawer crescia ate a altura do documento e rolava junto, "espalhando" os grupos.
+     Aqui a pagina nao rola; quem rola e .padaria-main e o menu fica fixo. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--padaria-background);
 }
 
@@ -346,7 +351,12 @@ body {
 }
 
 .padaria-main {
-  min-height: 100vh;
+  /* Area de rolagem do conteudo (topbar sticky + content-frame). min-height:0 permite encolher
+     abaixo do conteudo para o overflow rolar aqui em vez de esticar a casca/o menu. */
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--padaria-background);
 }
 
