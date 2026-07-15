@@ -226,6 +226,10 @@ async function garantirProduto(
 const areaOperacao = await garantirArea("Operacao");
 await garantirSetor("Loja", areaOperacao);
 await garantirSetor("Producao", areaOperacao);
+// NOTA (auditoria): a camada de permissoes POR SETOR (permissoes_setores) e OPCIONAL e fica
+// vazia de proposito neste seed. O acesso efetivo vem de cargo + usuario (ver resolverPermissoesEfetivas);
+// o setor e um ajuste fino que a operacao concede sob demanda pela tela de Permissoes. Se quiser um
+// default por setor, use aplicarPermissoesCargo como modelo e grave em permissoes_setores aqui.
 
 for (const [nomeCargo, listaPermissoes] of Object.entries(permissoesPorCargo)) {
   const cargoId = await garantirCargo(nomeCargo);

@@ -89,8 +89,20 @@ const permissoesExistentes = await banco
 const regrasPorCargo = new Map(permissoesExistentes.map((linha) => [linha.cargoId, linha.regras]));
 let cargosSincronizados = 0;
 
+// Casa o cargo do banco com a referencia por nome NORMALIZADO (trim + minusculas + sem acentos),
+// para que "Gerencia"/"gerencia " tambem recebam os defaults de "Gerencia".
+const normalizarNomeCargo = (nome: string) =>
+  nome
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+const padraoPorNomeNormalizado = new Map(
+  Object.entries(permissoesPorCargo).map(([nome, lista]) => [normalizarNomeCargo(nome), lista])
+);
+
 for (const cargo of cargosExistentes) {
-  const listaPadrao = permissoesPorCargo[cargo.nome];
+  const listaPadrao = padraoPorNomeNormalizado.get(normalizarNomeCargo(cargo.nome));
   if (!listaPadrao) continue;
   const regras = { ...regrasPermissoes(listaPadrao), ...(regrasPorCargo.get(cargo.id) ?? {}) };
   await banco

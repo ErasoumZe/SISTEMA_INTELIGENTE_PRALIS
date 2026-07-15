@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./referencia-permissoes": {
+      "types": "./dist/src/referencia-permissoes.d.ts",
+      "development": "./src/referencia-permissoes.ts",
+      "default": "./dist/src/referencia-permissoes.js"
+    },
     "./schema": {
       "types": "./dist/src/schema/index.d.ts",
       "development": "./src/schema/index.ts",

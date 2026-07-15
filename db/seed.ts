@@ -286,15 +286,27 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "clientes"
     ],
     // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
+    // Mantido em paridade com db/src/referencia-permissoes.ts (producao).
     extras: [
       "entradas_criar",
       "transferencias_criar",
+      "transferencias_editar",
       "despesas_criar",
+      "despesas_editar",
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
+      "mercadorias_aprovar",
+      "pedidos_aprovar",
       "retiradas_criar",
-      "caixas_gerenciar"
+      "retiradas_editar",
+      "notas_fiscais_importar",
+      "caixas_gerenciar",
+      "caixa_alterar_horario",
+      "cadastro_turnos_visualizar",
+      "cadastro_turnos_criar",
+      "cadastro_turnos_editar",
+      "cadastro_turnos_excluir"
     ]
   }),
   Compras: permissoesDoCargoSeed({
@@ -334,11 +346,15 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     extras: [
       "relatorio_vendas_comprovantes_criar",
       "transferencias_criar",
+      "transferencias_editar",
       "despesas_criar",
+      "despesas_editar",
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
       "retiradas_criar",
+      "retiradas_editar",
+      "notas_fiscais_importar",
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
       "cadastro_formas_pagamento_criar"

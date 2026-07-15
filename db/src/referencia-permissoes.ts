@@ -20,6 +20,9 @@ const permissaoAcessoPorTela = {
   despesas: "despesas_visualizar",
   mercadorias: "mercadorias_visualizar",
   retiradas: "retiradas_visualizar",
+  // NOTA (auditoria): fechamento_com_diferenca_visualizar e apenas GATE DE MENU (mostra/oculta a
+  // tela). Nenhuma rota o valida; a tela de fechamento roda sob caixa_operar por baixo. Mantido como
+  // permissao de acesso do menu "fechamento" so para visibilidade.
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
   malotes: "cadastro_malotes_visualizar",
@@ -150,11 +153,18 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: [
       "entradas_criar",
       "transferencias_criar",
+      "transferencias_editar",
       "despesas_criar",
+      "despesas_editar",
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
+      // Gerencia aprova as compras vindas de NF-e (fila de aprovacao) e os pedidos.
+      "mercadorias_aprovar",
+      "pedidos_aprovar",
       "retiradas_criar",
+      "retiradas_editar",
+      "notas_fiscais_importar",
       "caixas_gerenciar",
       "caixa_alterar_horario",
       "cadastro_turnos_visualizar",
@@ -200,11 +210,15 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: [
       "relatorio_vendas_comprovantes_criar",
       "transferencias_criar",
+      "transferencias_editar",
       "despesas_criar",
+      "despesas_editar",
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
       "retiradas_criar",
+      "retiradas_editar",
+      "notas_fiscais_importar",
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
       "cadastro_formas_pagamento_criar"
