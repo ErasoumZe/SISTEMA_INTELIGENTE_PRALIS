@@ -155,7 +155,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "mercadorias_criar",
       "mercadorias_discriminar",
       "retiradas_criar",
-      "caixas_gerenciar"
+      "caixas_gerenciar",
+      "caixa_alterar_horario"
     ]
   }),
   Compras: permissoesDoCargo({
