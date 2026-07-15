@@ -50,6 +50,8 @@ export type CadastroForm = {
   role: RoleUsuario;
   cpf: string;
   sigla: string;
+  horaInicio: string;
+  horaFim: string;
   codigo: string;
   codigoBarras: string;
   descricao: string;
@@ -220,6 +222,8 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
   if (tela === "grupos")
     return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
+  if (tela === "turnos")
+    return { empresaId, nome: form.nome, horaInicio: form.horaInicio, horaFim: form.horaFim, ativo: form.ativo };
   if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
   if (tela === "clientes")
     return {

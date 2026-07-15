@@ -603,6 +603,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
   } else if (tela === "unidades") {
     dados.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
+  } else if (tela === "turnos") {
+    dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "areas_setores") {
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {

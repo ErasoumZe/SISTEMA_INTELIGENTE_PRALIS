@@ -114,6 +114,8 @@ export type Opcao = {
   remuneracaoMinuto?: string;
   dataInicio?: string;
   ativo?: boolean;
+  horaInicio?: string | null;
+  horaFim?: string | null;
   diaDaSemana?: string;
   horaEntrada?: string;
   cargaHorariaDiariaEmMinutos?: number;

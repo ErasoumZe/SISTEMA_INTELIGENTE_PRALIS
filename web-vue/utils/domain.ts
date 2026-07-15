@@ -236,6 +236,12 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_unidades_medida_visualizar",
     icone: "mdi-ruler"
   },
+  turnos: {
+    id: "turnos",
+    titulo: "Turnos",
+    permissao: "cadastro_turnos_visualizar",
+    icone: "mdi-clock-outline"
+  },
   areas_setores: {
     id: "areas_setores",
     titulo: "Areas e setores",
@@ -506,6 +512,8 @@ export function formCadastroVazio(): CadastroForm {
     role: "usuario_comum",
     cpf: "",
     sigla: "",
+    horaInicio: "",
+    horaFim: "",
     codigo: "",
     codigoBarras: "",
     descricao: "",
@@ -780,6 +788,8 @@ export function formCadastroDeLinha(
     role: (linha.role as CadastroForm["role"]) || "usuario_comum",
     cpf: linha.cpf ?? "",
     sigla: linha.sigla ?? "",
+    horaInicio: (linha.inicio ?? "").slice(0, 5),
+    horaFim: (linha.fim ?? "").slice(0, 5),
     codigo: linha.codigo ?? "",
     codigoBarras: linha.codigoBarras ?? "",
     descricao: linha.descricao ?? linha.nome ?? "",
