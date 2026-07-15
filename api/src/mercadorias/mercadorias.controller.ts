@@ -29,12 +29,12 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
     } catch {
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
-    const escopoCaixa = await resolverEscopoListagemPorCaixa(
-      request.perfilUsuario,
-      "mercadorias",
-      query.empresaId,
-      query.caixaId
-    );
+    // A fila "somente pendentes de discriminacao" e visao de RETAGUARDA: ignora a trava de caixa
+    // aberto e lista os pendentes da empresa (inclui os criados pela NF-e, que nascem com caixa_id
+    // NULL e ficariam invisiveis sob o filtro do caixa).
+    const escopoCaixa = query.pendenteDiscriminacao
+      ? { bloquear: false, caixaId: undefined }
+      : await resolverEscopoListagemPorCaixa(request.perfilUsuario, "mercadorias", query.empresaId, query.caixaId);
     if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
     const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
     return paginadoDeArray(await listarMercadorias(queryComCaixa, escopoDados), query.page, query.pageSize);

@@ -28,12 +28,11 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       } catch {
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
-      const escopoCaixa = await resolverEscopoListagemPorCaixa(
-        request.perfilUsuario,
-        "despesas",
-        query.empresaId,
-        query.caixaId
-      );
+      // A fila "somente pendentes de discriminacao" e visao de RETAGUARDA: ignora a trava de caixa
+      // aberto e lista os pendentes da empresa (paridade com mercadorias/NF-e).
+      const escopoCaixa = query.pendenteDiscriminacao
+        ? { bloquear: false, caixaId: undefined }
+        : await resolverEscopoListagemPorCaixa(request.perfilUsuario, "despesas", query.empresaId, query.caixaId);
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
       return paginadoDeArray(await listarDespesas(queryComCaixa, escopoDados), query.page, query.pageSize);
