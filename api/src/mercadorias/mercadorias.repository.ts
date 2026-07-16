@@ -1,10 +1,13 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
+import { fornecedores } from "@padaria/db/schema/cadastro";
 import type {
+  MercadoriaAprovacaoDto,
   MercadoriaDetalheDto,
   MercadoriaDto,
   MercadoriaItemPayload,
   MercadoriaPayload,
+  MercadoriasAprovacaoQuery,
   MercadoriasQuery
 } from "@padaria/shared/mercadorias";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
@@ -207,6 +210,97 @@ export async function atualizarMercadoriaRepository(
         .values(valoresItemMercadoria(item, mercadoriaId, dados.grupoMercadoriaId ?? null));
     }
   });
+}
+
+// Fila de aprovacao (NF-e): cabecalhos "aguardando_aprovacao" com fornecedor e itens do XML,
+// ignorando o filtro de caixa (nascem com caixa_id NULL).
+export async function listarMercadoriasAguardandoAprovacaoRepository(
+  query: MercadoriasAprovacaoQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<MercadoriaAprovacaoDto[]> {
+  const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
+  filtros.push(eq(mercadorias.status, "aguardando_aprovacao"));
+  const linhas = await banco
+    .select({
+      id: mercadorias.id,
+      empresaId: mercadorias.empresaId,
+      dataReferencia: mercadorias.dataReferencia,
+      dataVencimento: mercadorias.dataVencimento,
+      descricao: mercadorias.descricao,
+      valorOriginal: mercadorias.valorOriginal,
+      computar: mercadorias.computar,
+      fornecedorId: mercadorias.fornecedorId,
+      fornecedorNome: fornecedores.nome,
+      notaFiscalId: mercadorias.notaFiscalId
+    })
+    .from(mercadorias)
+    .leftJoin(fornecedores, eq(fornecedores.id, mercadorias.fornecedorId))
+    .where(and(...filtros))
+    .orderBy(desc(mercadorias.dataReferencia));
+
+  const ids = linhas.map((linha) => linha.id);
+  const itensLinhas = ids.length
+    ? await banco
+        .select({
+          mercadoriaId: mercadoriasItens.mercadoriaId,
+          descricao: mercadoriasItens.descricao,
+          quantidade: mercadoriasItens.quantidade,
+          valorUnitario: mercadoriasItens.valorUnitario,
+          valorTotal: mercadoriasItens.valorTotal
+        })
+        .from(mercadoriasItens)
+        .where(inArray(mercadoriasItens.mercadoriaId, ids))
+    : [];
+  const itensPorMercadoria = new Map<string, MercadoriaAprovacaoDto["itens"]>();
+  for (const item of itensLinhas) {
+    const lista = itensPorMercadoria.get(item.mercadoriaId) ?? [];
+    lista.push({
+      descricao: item.descricao,
+      quantidade: item.quantidade,
+      valorUnitario: item.valorUnitario,
+      valorTotal: item.valorTotal
+    });
+    itensPorMercadoria.set(item.mercadoriaId, lista);
+  }
+  return linhas.map((linha) => ({ ...linha, itens: itensPorMercadoria.get(linha.id) ?? [] }));
+}
+
+// Aprova (aguardando_aprovacao -> aprovado) definindo se computa. Guardado por status para nao
+// reaprovar/alterar algo ja decidido. Devolve quantas linhas mudaram (0 = nao aplicavel).
+export async function aprovarMercadoriaRepository(
+  mercadoriaId: string,
+  empresaId: string,
+  computar: boolean
+): Promise<number> {
+  const atualizadas = await banco
+    .update(mercadorias)
+    .set({ status: "aprovado", computar })
+    .where(
+      and(
+        eq(mercadorias.id, mercadoriaId),
+        eq(mercadorias.empresaId, empresaId),
+        eq(mercadorias.status, "aguardando_aprovacao")
+      )
+    )
+    .returning({ id: mercadorias.id });
+  return atualizadas.length;
+}
+
+// Recusa (aguardando_aprovacao -> cancelado; "cancelado" e o status ja permitido pelo CHECK da
+// tabela para lancamentos descartados). Mesma trava por status.
+export async function recusarMercadoriaRepository(mercadoriaId: string, empresaId: string): Promise<number> {
+  const atualizadas = await banco
+    .update(mercadorias)
+    .set({ status: "cancelado" })
+    .where(
+      and(
+        eq(mercadorias.id, mercadoriaId),
+        eq(mercadorias.empresaId, empresaId),
+        eq(mercadorias.status, "aguardando_aprovacao")
+      )
+    )
+    .returning({ id: mercadorias.id });
+  return atualizadas.length;
 }
 
 // Discriminacao: substitui SO os itens (o cabecalho e valorOriginal ficam intactos).

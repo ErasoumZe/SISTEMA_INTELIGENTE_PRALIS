@@ -44,7 +44,19 @@ const emit = defineEmits<{
 const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
 const podeEditar = computed(() => true);
 const podeCopia = computed(() => !["permissoes", "malotes"].includes(props.tela));
-const acoesExtras = computed(() => (props.tela === "malotes" ? [{ label: "Editar", event: "maloteEditar" }] : []));
+const acoesExtras = computed(() => {
+  if (props.tela === "malotes") return [{ label: "Editar", event: "maloteEditar" }];
+  // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
+  if (props.tela === "permissoes")
+    return [
+      {
+        label: "Restaurar padrao",
+        event: "restaurarPadraoCargo",
+        condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
+      }
+    ];
+  return [];
+});
 </script>
 
 <template>

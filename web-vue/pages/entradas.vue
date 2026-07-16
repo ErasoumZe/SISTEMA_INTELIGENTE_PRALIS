@@ -15,7 +15,14 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       :pagina="ctx.paginaOperacoes"
       :total-paginas="ctx.totalPaginasOperacoes"
       :descricao="ctx.descricao"
+      :pode-editar-entrada="ctx.podeEditarEntrada"
+      :formas-pagamento="ctx.opcoesEmpresa.formasPagamento"
+      :venda-detalhe="ctx.vendaDetalhe"
+      :modal-venda-detalhe-aberto="ctx.modalVendaDetalheAberto"
+      :venda-detalhe-carregando="ctx.vendaDetalheCarregando"
       @editar="ctx.abrirOperacao"
+      @detalhes="ctx.abrirDetalheVenda"
+      @update:venda-detalhe-aberto="ctx.fecharDetalheVenda"
       @update:pagina="ctx.atualizarPaginaOperacoes"
     />
   </AppWorkspace>

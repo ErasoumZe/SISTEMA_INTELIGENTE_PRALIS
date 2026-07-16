@@ -19,6 +19,7 @@ export const permissoes = [
   "mercadorias_editar",
   "mercadorias_excluir",
   "mercadorias_discriminar",
+  "mercadorias_aprovar",
   "retiradas_visualizar",
   "retiradas_criar",
   "retiradas_editar",

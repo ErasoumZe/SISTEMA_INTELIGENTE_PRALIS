@@ -27,6 +27,7 @@ export type OperacaoDetalhe = {
   maloteId?: string | null;
   temNotaFiscal?: boolean;
   computar: boolean;
+  fotoDocumentoUrl?: string | null;
   itensVenda?: {
     produtoId: string | null;
     descricaoProduto: string;

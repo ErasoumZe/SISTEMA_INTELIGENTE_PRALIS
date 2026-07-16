@@ -1,7 +1,7 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { permissoesQuerySchema as empresaQuerySchema } from "@padaria/shared/permissoes";
-import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
+import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
@@ -9,6 +9,7 @@ import {
   excluirPermissao,
   listarPermissoes,
   listarPermissoesPaginadas,
+  restaurarPadraoCargo,
   salvarPermissao
 } from "./permissoes.service.js";
 
@@ -72,6 +73,22 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
       try {
         await salvarPermissao(request.body, request.usuarioId, request.perfilUsuario);
         return semConteudo(reply);
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  // Restaura as permissoes de um cargo para o padrao da referencia (REPLACE) — recupera regras que a
+  // UI tenha desligado e que o merge do bootstrap nunca restaura.
+  app.post(
+    "/api/permissoes/cargo/:id/restaurar-padrao",
+    { preHandler: exigirPermissao("cadastro_permissoes_editar") },
+    async (request, reply) => {
+      try {
+        const { id } = apiIdParamsSchema.parse(request.params);
+        return ok(await restaurarPadraoCargo(id, request.perfilUsuario));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);

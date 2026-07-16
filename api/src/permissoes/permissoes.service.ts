@@ -7,6 +7,10 @@ import {
   type PermissoesPaginadasQuery
 } from "@padaria/shared/permissoes";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import {
+  permissoesPadraoDoCargo,
+  regrasPermissoes as regrasPermissoesReferencia
+} from "@padaria/db/referencia-permissoes";
 import { empresasPermitidas, filtrarPorEmpresas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { normalizarBusca, falharValidacao } from "../utils.js";
@@ -186,6 +190,21 @@ export async function excluirPermissao(body: DadosExternos, perfil?: PerfilComEm
     if (query.empresaId && !empresaIds.includes(query.empresaId)) falharValidacao("Empresa nao permitida");
     await excluirPermissaoUsuarioRepository(query.alvoId, query.permissao, tx);
     return { ok: true };
+  });
+}
+
+// Restaura as permissoes de um cargo para o PADRAO da referencia de producao (REPLACE, nao merge):
+// reaplica exatamente permissoesPorCargo[cargo]. Recupera regras "false" que a UI tenha salvo e que o
+// bootstrap (merge) nao restaura. So vale para cargos conhecidos (com padrao de referencia).
+export async function restaurarPadraoCargo(cargoId: string, perfil?: PerfilComEmpresa) {
+  return executarEmTransacao(async (tx) => {
+    const cargo = await buscarCargoEmpresaRepository(cargoId, tx);
+    if (!cargo || !empresaNoEscopo(perfil, cargo.empresaId)) falharValidacao("Empresa nao permitida");
+    const lista = permissoesPadraoDoCargo(cargo.nome ?? "");
+    if (!lista) falharValidacao(`O cargo "${cargo.nome ?? ""}" nao tem um padrao de referencia para restaurar.`);
+    const regras = regrasPermissoesReferencia(lista);
+    await substituirPermissoesCargoRepository(cargoId, regras, tx);
+    return { cargoId, regras };
   });
 }
 

@@ -172,6 +172,28 @@ export type Opcoes = {
 
 export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";
 
+// Fila de aprovacao de compras vindas de NF-e (retaguarda). Espelha MercadoriaAprovacaoDto da API.
+export type MercadoriaAprovacaoItem = {
+  descricao: string;
+  quantidade: string;
+  valorUnitario: string;
+  valorTotal: string;
+};
+
+export type MercadoriaAprovacao = {
+  id: string;
+  empresaId: string;
+  dataReferencia: string;
+  dataVencimento: string;
+  descricao: string;
+  valorOriginal: string;
+  computar: boolean;
+  fornecedorId: string | null;
+  fornecedorNome: string | null;
+  notaFiscalId: string | null;
+  itens: MercadoriaAprovacaoItem[];
+};
+
 export type OperacaoResumo = {
   id: string;
   empresaId: string;
@@ -183,6 +205,7 @@ export type OperacaoResumo = {
   computar: boolean;
   status: string;
   pendenteDiscriminacao?: boolean;
+  fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
   pdvNome?: string | null;
   clienteId?: string | null;

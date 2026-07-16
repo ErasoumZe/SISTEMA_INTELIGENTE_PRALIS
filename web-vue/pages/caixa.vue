@@ -10,12 +10,15 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :status="ctx.caixaStatus"
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :turnos="ctx.opcoesEmpresa.turnos"
+      :empresa-id="ctx.empresaId"
+      :permissoes="ctx.sessao?.perfil?.permissoes ?? []"
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuario'"
       :salvando="ctx.caixaSalvando"
       @abrir-caixa="ctx.abrirCaixaOperacional"
       @acertar-saldo="ctx.acertarSaldoOperacional"
       @fechar-caixa="ctx.fecharCaixaOperacional"
+      @recarregar="ctx.recarregarCaixa"
     />
   </AppWorkspace>
 </template>
