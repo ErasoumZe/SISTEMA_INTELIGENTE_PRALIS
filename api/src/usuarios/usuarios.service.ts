@@ -7,6 +7,7 @@ import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
   buscarCargoEmpresaRepository,
+  buscarColaboradorPorCpfRepository,
   buscarColaboradorUsuarioRepository,
   buscarSetorEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
@@ -87,8 +88,44 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   const email = dados.email.trim().toLowerCase();
   const role = dados.role ?? (id ? undefined : "usuario_comum");
 
+  async function garantirCargoAtivo(colaboradorId: string, tx: TransacaoBanco) {
+    if (await colaboradorTemCargoAtivoRepository(colaboradorId, tx)) return;
+    await salvarCargoColaboradorUsuarioRepository(
+      {
+        empresaId: novoColaborador!.empresaId,
+        colaboradorId,
+        setorId: novoColaborador!.setorId,
+        cargoId: novoColaborador!.cargoId,
+        remuneracaoMinuto: 1,
+        dataInicio: new Date().toISOString().slice(0, 10),
+        ativo: true
+      },
+      tx
+    );
+  }
+
   async function obterColaboradorParaVinculo(tx: TransacaoBanco) {
     if (!novoColaborador) return colaborador!;
+
+    // Dedup por CPF: se ja existe um colaborador com esse CPF na empresa, reutiliza em vez de criar
+    // uma copia (a causa dos colaboradores duplicados no QA de 15/07). Sem CPF, cria normalmente.
+    if (novoColaborador.cpf) {
+      const existente = await buscarColaboradorPorCpfRepository(novoColaborador.empresaId, novoColaborador.cpf, tx);
+      if (existente) {
+        if (existente.usuarioId && existente.usuarioId !== id) {
+          falharValidacao("Ja existe um colaborador com esse CPF vinculado a outro usuario");
+        }
+        await garantirCargoAtivo(existente.id, tx);
+        return {
+          id: existente.id,
+          empresaId: existente.empresaId,
+          nome: existente.nome,
+          usuarioId: existente.usuarioId ?? null,
+          setorId: existente.setorId
+        };
+      }
+    }
+
     const criado = await salvarColaboradorUsuarioRepository(
       {
         empresaId: novoColaborador.empresaId,
