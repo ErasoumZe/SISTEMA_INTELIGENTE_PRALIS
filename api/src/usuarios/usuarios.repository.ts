@@ -162,6 +162,23 @@ export async function buscarColaboradorUsuarioRepository(colaboradorId: string, 
   return colaborador ?? null;
 }
 
+// Dedup por CPF: um colaborador ja existente com o mesmo CPF na empresa deve ser reutilizado no
+// cadastro de usuario, em vez de criar uma copia. CPF e sempre gravado so com digitos.
+export async function buscarColaboradorPorCpfRepository(empresaId: string, cpf: string, db: ExecutorBanco = banco) {
+  const [colaborador] = await db
+    .select({
+      id: colaboradores.id,
+      empresaId: colaboradores.empresaId,
+      nome: colaboradores.nome,
+      usuarioId: colaboradores.usuarioId,
+      setorId: colaboradores.setorId
+    })
+    .from(colaboradores)
+    .where(and(eq(colaboradores.empresaId, empresaId), eq(colaboradores.cpf, cpf)))
+    .limit(1);
+  return colaborador ?? null;
+}
+
 export async function buscarCargoEmpresaRepository(cargoId: string, db: ExecutorBanco = banco) {
   const [cargo] = await db
     .select({ empresaId: cargos.empresaId, nome: cargos.nome })
