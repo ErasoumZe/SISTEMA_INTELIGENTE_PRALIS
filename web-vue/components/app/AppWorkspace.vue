@@ -976,15 +976,14 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
 }
 
 // Detalhe somente leitura da venda (integrada): itens + pagamento + total. Reusa o GET de detalhe.
+// Exibido INLINE na lista (OperacoesPage expande a linha); aqui so carregamos os dados.
 async function abrirDetalheVenda(operacao: { id: string }) {
   vendaDetalhe.value = null;
   vendaDetalheCarregando.value = true;
-  modalVendaDetalheAberto.value = true;
   try {
     vendaDetalhe.value = await apiGet<OperacaoDetalhe>(`/api/vendas/${operacao.id}`);
   } catch (error) {
     notificar(mensagemErro(error), "error");
-    modalVendaDetalheAberto.value = false;
   } finally {
     vendaDetalheCarregando.value = false;
   }
