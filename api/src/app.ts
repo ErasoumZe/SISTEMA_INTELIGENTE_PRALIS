@@ -92,7 +92,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: env.WEB_ORIGIN,
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    // PATCH e usado por aprovar/recusar NF-e e discriminar lancamentos. Sem ele, o preflight
+    // cross-origin (front sistema. -> API api-sistema.) barra o PATCH com net::ERR_FAILED.
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-API-Key"]
   });
   await app.register(helmet);
