@@ -95,6 +95,17 @@ function fechar() {
         Cadastre um PDV com conta vinculada antes de abrir caixa.
       </v-alert>
 
+      <!-- Sem caixa aberto o autorizador ainda precisa da fila de autorizacoes: o proprio
+           CaixaAutorizacoes decide o que mostrar (so o botao Autorizacoes, neste caso). -->
+      <div v-if="!caixaAberto" class="mb-4">
+        <CaixaAutorizacoes
+          :empresa-id="empresaId"
+          :caixa-aberto="null"
+          :permissoes="permissoes"
+          @alterado="emit('recarregar')"
+        />
+      </div>
+
       <v-row v-if="!caixaAberto" dense>
         <v-col cols="12" md="3">
           <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" />

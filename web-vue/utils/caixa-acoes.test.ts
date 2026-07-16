@@ -6,7 +6,7 @@ import { dataHoraParaUtc } from "./formatacao";
 // (endpoint certo, re-fetch de status, notificacao, reset do "salvando", confirmacao do acerto).
 function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
   const deps: DepsAcoesCaixa = {
-    api: { post: vi.fn().mockResolvedValue(undefined), put: vi.fn().mockResolvedValue(undefined) },
+    api: { post: vi.fn().mockResolvedValue(undefined) },
     empresaId: () => "emp-1",
     telaAtiva: () => "caixa",
     resumoSaldo: () => 1500,
@@ -43,7 +43,7 @@ describe("abrirCaixaOperacional", () => {
   });
 
   it("em erro notifica erro, retorna false e reseta salvando", async () => {
-    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("500")), put: vi.fn() } });
+    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("500")) } });
     const acoes = criarAcoesCaixa(deps);
     const ok = await acoes.abrirCaixaOperacional(payload);
 
@@ -57,32 +57,6 @@ describe("abrirCaixaOperacional", () => {
     const deps = montarDeps({ telaAtiva: () => "" });
     await criarAcoesCaixa(deps).abrirCaixaOperacional(payload);
     expect(deps.carregarDadosTela).not.toHaveBeenCalled();
-  });
-});
-
-describe("editarAberturaCaixa", () => {
-  it("puta em /:id/abertura sem o caixaId no corpo, re-busca status e notifica", async () => {
-    const deps = montarDeps();
-    const acoes = criarAcoesCaixa(deps);
-    const ok = await acoes.editarAberturaCaixa({
-      caixaId: "cx-9",
-      tokenEdicao: "tok",
-      pdvId: "pdv-1",
-      usuarioCaixaId: "u-1",
-      dataHoraAbertura: "2026-07-03T08:00",
-      observacao: "obs"
-    });
-
-    expect(ok).toBe(true);
-    expect(deps.api.put).toHaveBeenCalledWith("/api/caixa/cx-9/abertura", {
-      tokenEdicao: "tok",
-      pdvId: "pdv-1",
-      usuarioCaixaId: "u-1",
-      dataHoraAbertura: dataHoraParaUtc("2026-07-03T08:00"),
-      observacao: "obs"
-    });
-    expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
-    expect(deps.notificar).toHaveBeenCalledWith("Abertura atualizada com sucesso.");
   });
 });
 
@@ -129,7 +103,7 @@ describe("fecharCaixaOperacional", () => {
   });
 
   it("em erro notifica e reseta salvando", async () => {
-    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")), put: vi.fn() } });
+    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
     await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
 
     expect(deps.notificar).toHaveBeenCalledWith("erro:boom", "error");

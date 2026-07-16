@@ -7,7 +7,6 @@ import { dataHoraParaUtc } from "~/utils/formatacao";
 
 type PortApi = {
   post: <T>(rota: string, body: DadosExternos) => Promise<T>;
-  put: <T>(rota: string, body: DadosExternos) => Promise<T>;
 };
 
 export type DepsAcoesCaixa = {
@@ -30,7 +29,6 @@ export type AberturaCaixaPayload = {
   dataHoraAbertura: string;
   observacao: string | null;
 };
-export type EdicaoAberturaPayload = AberturaCaixaPayload & { caixaId: string; tokenEdicao: string };
 export type AcertoFechamentoPayload = { caixaId: string; observacao: string | null };
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
@@ -51,27 +49,6 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();
       deps.notificar("Caixa aberto com sucesso.");
-      return true;
-    } catch (error) {
-      deps.notificar(deps.mensagemErro(error), "error");
-      return false;
-    } finally {
-      deps.setSalvando(false);
-    }
-  }
-
-  async function editarAberturaCaixa(payload: EdicaoAberturaPayload): Promise<boolean> {
-    deps.setSalvando(true);
-    try {
-      const { caixaId, ...body } = payload;
-      // /abertura responde 204; re-busca o status canonico.
-      await deps.api.put(`/api/caixa/${caixaId}/abertura`, {
-        ...body,
-        dataHoraAbertura: dataHoraParaUtc(body.dataHoraAbertura)
-      });
-      await deps.carregarStatusCaixa(deps.empresaId());
-      await recarregarTela();
-      deps.notificar("Abertura atualizada com sucesso.");
       return true;
     } catch (error) {
       deps.notificar(deps.mensagemErro(error), "error");
@@ -113,5 +90,5 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  return { abrirCaixaOperacional, editarAberturaCaixa, acertarSaldoOperacional, fecharCaixaOperacional };
+  return { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional };
 }
