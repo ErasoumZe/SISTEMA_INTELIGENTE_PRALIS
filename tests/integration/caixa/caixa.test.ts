@@ -218,6 +218,42 @@ describe("caixa integration", () => {
     ]);
   });
 
+  it("Deve_SomarLiquidoNasEntradas_Quando_VendaTemDescontoOuAcrescimo", async () => {
+    // BUG A: valor_original e o SUBTOTAL. O resumo do caixa somava ele puro, entao venda com
+    // desconto entrava a mais e venda com acrescimo a menos — e o caixa nao batia com o CREARE.
+    const ids = ["33333333-3333-4333-8333-333333330001", "33333333-3333-4333-8333-333333330002"];
+    await executarSql(
+      `insert into vendas (id, empresa_id, caixa_id, pdv_id, data_referencia, descricao, valor_original,
+         valor_desconto, valor_acrescimo, status, computar)
+       values ($1,$2,$3,$4,$5,'Venda com desconto','100.00','10.00','0','aprovado',true),
+              ($6,$2,$3,$4,$5,'Venda com acrescimo','50.00','0','5.00','aprovado',true)`,
+      [ids[0], idsTeste.empresaA, idsTeste.caixaAberto, idsTeste.pdvA, "2026-06-30", ids[1]]
+    );
+
+    const status = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(status);
+    assertOk(detalhe);
+    // Venda do seed (42) + 90 (100-10) + 55 (50+5) = 187. Somando subtotal puro daria 192.
+    const resumo = json<{ data: { resumo: { totalEntradas: number } } }>(status).data.resumo;
+    expect(resumo.totalEntradas).toBe(187);
+
+    // O detalhe tem de contar a MESMA historia que o resumo.
+    const entradas = json<DetalheJson>(detalhe).data.lancamentos.find((grupo) => grupo.categoria === "entradas");
+    expect(entradas?.total).toBe(187);
+
+    await executarSql("delete from vendas where id in ($1,$2)", [ids[0], ids[1]]);
+  });
+
   it("Deve_TrazerLancamentosVaziosSemCruzarCaixas_Quando_CaixaNaoTemMovimento", async () => {
     // O caixa fechado do seed nao tem lancamento: as categorias vem todas zeradas — e nao podem
     // pescar a venda do OUTRO caixa (regressao do escopo por caixa).

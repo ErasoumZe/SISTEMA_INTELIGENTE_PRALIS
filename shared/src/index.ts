@@ -12,6 +12,7 @@ export * from "./fornecedores/index.js";
 export * from "./formas-pagamento/index.js";
 export * from "./grupos/index.js";
 export * from "./ids/index.js";
+export * from "./datas/index.js";
 export * from "./dinheiro/index.js";
 export * from "./integracoes/index.js";
 export * from "./malotes/index.js";

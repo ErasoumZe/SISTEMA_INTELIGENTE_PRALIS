@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OperacaoResumo, Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
+import { formatarDataSomenteDia, formatarHora } from "~/utils/formatacao";
 
 const props = defineProps<{
   empresaId: string;
@@ -26,6 +27,9 @@ type Comprovante = {
 };
 
 const { apiUrl, apiGet, apiGetPaginado } = useApi();
+// Ordem cronologica real (data_venda), crescente por padrao: a investigacao de conciliacao le a
+// fita do dia de cima para baixo. O clique no cabecalho "Hora" inverte — e vai para o servidor.
+const ordem = ref<"asc" | "desc">("asc");
 const filtros = reactive({
   dataInicio: "",
   dataFim: "",
@@ -66,6 +70,7 @@ async function buscar() {
     const params = paramsFiltro();
     params.set("page", String(pagina.value));
     params.set("pageSize", String(itensPorPagina));
+    params.set("ordem", ordem.value);
     const resultado = await apiGetPaginado<OperacaoResumo>(`/api/relatorios/vendas?${params.toString()}`);
     linhas.value = resultado.itens;
     total.value = resultado.total;
@@ -89,6 +94,14 @@ async function buscarTotais() {
 async function aplicarFiltros() {
   pagina.value = 1;
   await Promise.all([buscar(), buscarTotais()]);
+}
+
+// Inverter a ordem volta para a pagina 1: a "primeira venda do dia" tem de aparecer de cara, e
+// manter a pagina 5 numa lista invertida mostraria um pedaco aleatorio do meio.
+async function alternarOrdem() {
+  ordem.value = ordem.value === "asc" ? "desc" : "asc";
+  pagina.value = 1;
+  await buscar();
 }
 
 async function abrirComprovantes(venda: OperacaoResumo) {
@@ -206,6 +219,12 @@ watch(
           <thead>
             <tr>
               <th>Data</th>
+              <!-- Ordena no SERVIDOR: a lista e paginada, entao ordenar no cliente reordenaria so
+                   as 50 linhas visiveis, parecendo ordenar o filtro inteiro. -->
+              <th class="hora-coluna" role="button" tabindex="0" @click="alternarOrdem" @keydown.enter="alternarOrdem">
+                Hora
+                <v-icon :icon="ordem === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="14" />
+              </th>
               <th>Descricao</th>
               <th>PDV</th>
               <th>Cliente</th>
@@ -216,7 +235,10 @@ watch(
           </thead>
           <tbody>
             <tr v-for="linha in linhas" :key="linha.id">
-              <td>{{ linha.dataReferencia }}</td>
+              <!-- dataReferencia e date-only: formatarDataSomenteDia nao a deixa passar por Date. -->
+              <td>{{ formatarDataSomenteDia(linha.dataReferencia) }}</td>
+              <!-- "-" quando nao ha dataVenda: venda manual so tem a data contabil. -->
+              <td>{{ formatarHora(linha.dataVenda) }}</td>
               <td>{{ linha.descricao }}</td>
               <td>{{ linha.pdvNome ?? "-" }}</td>
               <td>{{ linha.clienteNome ?? "-" }}</td>
@@ -225,7 +247,9 @@ watch(
                   linha.pagamentos?.map((pagamento) => pagamento.formaPagamentoNome ?? "Sem forma").join(", ") || "-"
                 }}
               </td>
-              <td>{{ dinheiro(linha.valorOriginal) }}</td>
+              <!-- Liquido: o subtotal (valorOriginal) nao e o que o cliente pagou e nao bateria
+                   com o rodape nem com o CREARE. -->
+              <td>{{ dinheiro(linha.valorLiquido ?? linha.valorOriginal) }}</td>
               <td class="text-right">
                 <v-btn size="small" variant="text" @click="abrirComprovantes(linha)">
                   Adicionar comprovantes ({{ linha.totalComprovantes ?? 0 }})

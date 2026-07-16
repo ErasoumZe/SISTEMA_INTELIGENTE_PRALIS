@@ -15,7 +15,11 @@ export const vendasQuerySchema = z
     clienteId: uuidSchema.optional(),
     colaboradorId: uuidSchema.optional(),
     formaPagamentoId: uuidSchema.optional(),
-    status: z.string().optional()
+    status: z.string().optional(),
+    // Ordem cronologica REAL (por data_venda, desempatando por data_referencia). Sem ela, a
+    // ordenacao teria de acontecer no cliente — e ordenaria so a pagina, nao o filtro inteiro.
+    // Ausente = mantem o padrao historico (mais recente primeiro) das telas operacionais.
+    ordem: z.enum(["asc", "desc"]).optional()
   })
   .merge(paginationQuerySchema);
 
@@ -75,12 +79,20 @@ export const vendaPayloadSchema = z.object({
 export const vendaDtoSchema = z.object({
   id: z.string(),
   empresaId: z.string(),
+  // Data contabil (date-only, "yyyy-MM-dd"): NAO tem hora. Quem precisa da hora usa dataVenda.
   dataReferencia: z.string(),
+  // Momento real da venda (timestamp ISO), vindo da integracao. Null em venda manual, que so
+  // registra a data contabil — por isso a tela mostra "-" na coluna Hora.
+  dataVenda: z.string().nullable().optional(),
   dataPagamento: z.string().nullable().optional(),
   descricao: z.string(),
+  // SUBTOTAL da venda (no integrado, VALOR_SUBTOTAL do CREARE) — nao e o que o cliente pagou.
   valorOriginal: z.string(),
   valorAcrescimo: z.string().optional(),
   valorDesconto: z.string().optional(),
+  // O que de fato entrou: original - desconto + acrescimo. E este que bate com o VALOR_TOTAL do
+  // CREARE e com os totais do relatorio/caixa; a tela exibe ele na coluna Valor.
+  valorLiquido: z.string().optional(),
   computar: z.boolean(),
   status: z.string(),
   pdvId: z.string().nullable().optional(),

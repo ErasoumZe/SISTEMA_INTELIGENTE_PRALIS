@@ -135,7 +135,12 @@ export const ajusteCaixaSchema = z.object({
 export const lancamentoCaixaSchema = z.object({
   id: uuidSchema,
   descricao: z.string().nullable(),
+  // Data CONTABIL do lancamento (date-only "yyyy-MM-dd", sem hora). A tela exibe com
+  // formatarDataSomenteDia — passar por Date volta um dia em fuso negativo.
   data: z.string().nullable(),
+  // Momento real, so em venda vinda da integracao (timestamp ISO). Quando existe, a tela mostra
+  // data e hora reais no lugar da data contabil. Null em venda manual e nas demais categorias.
+  dataHora: z.string().nullable(),
   valor: z.number(),
   // Transferencia: entrada ou saida em relacao a conta do PDV. Nas demais categorias fica null.
   sentido: z.enum(["entrada", "saida"]).nullable()

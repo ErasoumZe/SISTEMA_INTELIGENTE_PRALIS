@@ -42,12 +42,54 @@ function payloadVendaIntegrada(idVenda: string) {
 describe("integracoes integration", () => {
   let contexto: ContextoApiTeste;
 
+  function receber(payload: object) {
+    return contexto.app.inject({
+      method: "POST",
+      url: "/api/integracoes",
+      headers: { "x-api-key": idsTeste.integracaoCodigo },
+      payload
+    });
+  }
+
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
   }, 120_000);
 
   afterAll(async () => {
     await contexto.fechar();
+  });
+
+  // BUG B: data_referencia era derivada com toISOString() (UTC). Em BRT (-03), venda a partir das
+  // 21:00 locais caia no dia SEGUINTE — no caixa errado e divergindo do CREARE.
+  it("Deve_GravarDataReferenciaNoDiaLocal_Quando_VendaOcorreAs22h", async () => {
+    // 16/07/2026 22:00 em Sao Paulo = 17/07/2026 01:00 UTC.
+    const payload = payloadVendaIntegrada("VENDA-22H");
+    payload.Venda.dataHoraVenda = "2026-07-17T01:00:00.000Z";
+    const resposta = await receber(payload);
+
+    assertOk(resposta);
+    // ::text para ler a data crua do banco: o driver converteria `date` em Date do JS, reintroduzindo
+    // fuso justamente na asserção sobre fuso.
+    const venda = await consultarUm<{ data_referencia: string; data_venda: Date }>(
+      `select data_referencia::text as data_referencia, data_venda from vendas where descricao = 'Venda VENDA-22H'`
+    );
+    // A data contabil e o dia em que o operador vendeu: 16, nao 17.
+    expect(venda!.data_referencia).toBe("2026-07-16");
+    // E o instante real fica intacto.
+    expect(new Date(venda!.data_venda).toISOString()).toBe("2026-07-17T01:00:00.000Z");
+  });
+
+  it("Deve_ManterDataReferencia_Quando_VendaOcorreDeManha", async () => {
+    // 16/07 10:30 UTC = 07:30 local: o dia e o mesmo nos dois fusos (nunca esteve errado).
+    const payload = payloadVendaIntegrada("VENDA-MANHA");
+    payload.Venda.dataHoraVenda = "2026-07-16T10:30:00.000Z";
+    const resposta = await receber(payload);
+
+    assertOk(resposta);
+    const venda = await consultarUm<{ data_referencia: string }>(
+      `select data_referencia::text as data_referencia from vendas where descricao = 'Venda VENDA-MANHA'`
+    );
+    expect(venda!.data_referencia).toBe("2026-07-16");
   });
 
   it("Deve_ListarChavesEConfigDaIntegracao_Quando_UsuarioTemPermissao", async () => {

@@ -26,7 +26,7 @@ import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
 import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
-import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
+import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
 export async function buscarGrupoQuebraCaixa(
@@ -315,11 +315,16 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
         id: vendas.id,
         descricao: vendas.descricao,
         data: vendas.dataReferencia,
-        valor: vendas.valorOriginal
+        // Hora real da venda integrada; null em venda manual. A tela prefere ela a data contabil.
+        dataHora: vendas.dataVenda,
+        // Liquido: o detalhe tem de bater com a coluna Entradas, que soma liquido.
+        valor: vendas.valorOriginal,
+        valorDesconto: vendas.valorDesconto,
+        valorAcrescimo: vendas.valorAcrescimo
       })
       .from(vendas)
       .where(ativo(vendas))
-      .orderBy(desc(vendas.dataReferencia)),
+      .orderBy(desc(vendas.dataReferencia), desc(vendas.dataVenda)),
     db
       .select({
         id: transferencias.id,
@@ -482,7 +487,12 @@ export async function calcularTotaisCaixaOperacionalRepository(
 
   const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias] = await Promise.all([
     db
-      .select({ valorOriginal: vendas.valorOriginal })
+      // Desconto/acrescimo entram no liquido: valor_original e so o subtotal.
+      .select({
+        valorOriginal: vendas.valorOriginal,
+        valorDesconto: vendas.valorDesconto,
+        valorAcrescimo: vendas.valorAcrescimo
+      })
       .from(vendas)
       .where(and(eq(vendas.caixaId, caixaId), eq(vendas.computar, true), ne(vendas.status, "cancelado"))),
     db
@@ -514,7 +524,7 @@ export async function calcularTotaisCaixaOperacionalRepository(
   ]);
 
   for (const movimento of linhasVendas) {
-    totais.entradas += paraCentavos(movimento.valorOriginal);
+    totais.entradas += liquidoCentavos(movimento);
   }
   for (const movimento of linhasTransferencias) {
     const valor = paraCentavos(movimento.valorOriginal);

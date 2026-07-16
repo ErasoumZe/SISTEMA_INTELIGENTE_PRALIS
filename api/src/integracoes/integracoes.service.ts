@@ -3,6 +3,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AtualizarCampoIntegracaoPayload,
   CampoVinculoIntegracao,
+  ConciliacaoPdvResultado,
+  ConciliacaoResultado,
   CriarIntegracaoChavePayload,
   IntegracaoCampoConfigDto,
   IntegracaoIngestaoResultado,
@@ -14,9 +16,12 @@ import type {
 } from "@padaria/shared/integracoes";
 import {
   camposVinculoIntegracao,
+  conciliacaoPayloadSchema,
   tiposRegistroIntegracao,
+  TOLERANCIA_CONCILIACAO_CENTAVOS,
   vendaIntegracaoAgregadaSchema
 } from "@padaria/shared/integracoes";
+import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -44,7 +49,9 @@ import {
   listarEmailsAdminsDaEmpresaRepository,
   listarEmpresasComChaveAtivaRepository,
   listarHistoricoIntegracaoRepository,
+  listarNomesPdvsRepository,
   listarVinculosRepository,
+  somarVendasPorPdvNoDiaRepository,
   obterEmpresaDaChaveRepository,
   registrarHistoricoRepository,
   registrarSemNovidadeRepository,
@@ -425,6 +432,138 @@ export async function verificarSilencioIntegracao(input: {
   return { dia, verificadas: alvo.length, silenciosas, alertasEnviados };
 }
 
+// --- Conciliacao diaria sistema x CREARE -------------------------------------------------------
+
+function assuntoConciliacao(dia: string, nomeEmpresa: string): string {
+  return `Divergencia de conciliacao em ${dia} - ${nomeEmpresa}`;
+}
+
+function htmlConciliacao(nomeEmpresa: string, dia: string, divergentes: ConciliacaoPdvResultado[]): string {
+  const linhas = divergentes
+    .map((pdv) => {
+      const nome = pdv.pdvNome ?? pdv.pdvIdentificador;
+      if (pdv.pdvNaoVinculado) {
+        return `<tr><td style="padding:6px 10px">${nome}</td><td colspan="3" style="padding:6px 10px">PDV sem vinculo no sistema — nao foi possivel comparar</td></tr>`;
+      }
+      return `<tr>
+      <td style="padding:6px 10px">${nome}</td>
+      <td style="padding:6px 10px">${dinheiroBr(pdv.sistema.valorTotal)} (${pdv.sistema.quantidadeVendas})</td>
+      <td style="padding:6px 10px">${dinheiroBr(pdv.creare.valorTotal)} (${pdv.creare.quantidadeVendas})</td>
+      <td style="padding:6px 10px;font-weight:bold">${dinheiroBr(pdv.diferenca)}</td>
+    </tr>`;
+    })
+    .join("");
+
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#2f2320">
+  <h2 style="color:#c0521d">Divergencia entre o sistema e o CREARE</h2>
+  <p>Na empresa <strong>${nomeEmpresa}</strong>, o fechamento do dia <strong>${dia}</strong> nao bateu nos PDVs abaixo.</p>
+  <table style="border-collapse:collapse;width:100%;font-size:14px">
+    <thead>
+      <tr style="background:#f5efe9;text-align:left">
+        <th style="padding:6px 10px">PDV</th>
+        <th style="padding:6px 10px">Sistema (qtd)</th>
+        <th style="padding:6px 10px">CREARE (qtd)</th>
+        <th style="padding:6px 10px">Diferenca</th>
+      </tr>
+    </thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  <p style="color:#6f635c;font-size:12px">Diferenca = sistema - CREARE. Alerta automatico do Sistema Cicluz.
+  Voce recebe porque e administrador desta empresa.</p>
+</div>`;
+}
+
+function dinheiroBr(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/**
+ * Compara, por PDV, as vendas do dia no sistema com o que o CREARE reporta. So LE: nao cria
+ * vinculo, nao altera venda, nao persiste resultado — o e-mail aos admins e o registro.
+ * Um PDV sem vinculo resolvido nao e comparavel e entra como divergencia (nao como "ok").
+ */
+export async function conciliarVendasDoDia(chaveApi: string, corpo: DadosExternos): Promise<ConciliacaoResultado> {
+  const chave = await autenticarChaveVendas(chaveApi);
+
+  const analise = conciliacaoPayloadSchema.safeParse(corpo);
+  if (!analise.success) {
+    const detalhes = analise.error.issues.map((issue) => `${issue.path.join(".") || "(raiz)"}: ${issue.message}`);
+    throw erroValidacao(`Payload de conciliacao invalido: ${detalhes.slice(0, 5).join("; ")}`, "INVALID_PAYLOAD");
+  }
+  const payload = analise.data;
+
+  // 1) identificador externo -> pdvId, SO pelo dicionario ja resolvido (nunca cria vinculo).
+  const vinculados = await Promise.all(
+    payload.porPdv.map(async (pdv) => ({
+      entrada: pdv,
+      pdvId:
+        (await buscarVinculoResolvidoRepository(chave.empresaId, chave.tipo, "pdv", pdv.pdvIdentificador))?.id ?? null
+    }))
+  );
+
+  // 2) soma do sistema no dia, por PDV.
+  const pdvIds = vinculados.map((item) => item.pdvId).filter((id): id is string => Boolean(id));
+  const [somas, nomes] = await Promise.all([
+    somarVendasPorPdvNoDiaRepository(chave.empresaId, payload.data, pdvIds),
+    listarNomesPdvsRepository(pdvIds)
+  ]);
+  const somaPorPdv = new Map(somas.map((linha) => [linha.pdvId, linha]));
+  const nomePorPdv = new Map(nomes.map((pdv) => [pdv.id, pdv.nome]));
+
+  // 3) comparacao em CENTAVOS (float de dinheiro nao fecha conta).
+  const porPdv: ConciliacaoPdvResultado[] = vinculados.map(({ entrada, pdvId }) => {
+    const soma = pdvId ? somaPorPdv.get(pdvId) : undefined;
+    // Lado sistema no LIQUIDO: e o que corresponde ao VALOR_TOTAL que o CREARE reporta.
+    const sistemaCentavos = soma ? liquidoDeSomasCentavos(soma) : 0;
+    const creareCentavos = paraCentavos(entrada.valorTotal);
+    const diferencaCentavos = sistemaCentavos - creareCentavos;
+    return {
+      pdvIdentificador: entrada.pdvIdentificador,
+      pdvId,
+      pdvNome: pdvId ? (nomePorPdv.get(pdvId) ?? null) : null,
+      sistema: { quantidadeVendas: soma?.quantidadeVendas ?? 0, valorTotal: deCentavos(sistemaCentavos) },
+      creare: { quantidadeVendas: entrada.quantidadeVendas, valorTotal: deCentavos(creareCentavos) },
+      diferenca: deCentavos(diferencaCentavos),
+      ok: Boolean(pdvId) && Math.abs(diferencaCentavos) <= TOLERANCIA_CONCILIACAO_CENTAVOS,
+      pdvNaoVinculado: !pdvId
+    };
+  });
+
+  const divergentes = porPdv.filter((pdv) => !pdv.ok);
+  let alertasEnviados = 0;
+  if (divergentes.length) {
+    alertasEnviados = await avisarDivergencia(chave.empresaId, payload.data, divergentes);
+  }
+
+  return { data: payload.data, ok: divergentes.length === 0, porPdv, alertasEnviados };
+}
+
+// Mesma infraestrutura do alerta de silencio (Resend via enviarEmail, admins da empresa).
+// Falha de e-mail nao derruba a conciliacao: o resultado ja foi apurado e volta na resposta.
+async function avisarDivergencia(empresaId: string, dia: string, divergentes: ConciliacaoPdvResultado[]) {
+  try {
+    const empresas = await listarEmpresasComChaveAtivaRepository("vendas");
+    const nomeEmpresa = empresas.find((empresa) => empresa.empresaId === empresaId)?.nome ?? "Empresa";
+    const admins = await listarEmailsAdminsDaEmpresaRepository(empresaId);
+    let enviados = 0;
+    for (const admin of admins) {
+      await enviarEmail({
+        para: admin.email,
+        assunto: assuntoConciliacao(dia, nomeEmpresa),
+        html: htmlConciliacao(nomeEmpresa, dia, divergentes)
+      });
+      enviados += 1;
+    }
+    return enviados;
+  } catch (erro) {
+    console.error(
+      `[integracoes] falha ao enviar alerta de conciliacao da empresa ${empresaId} em ${dia}:`,
+      erro instanceof Error ? erro.message : erro
+    );
+    return 0;
+  }
+}
+
 export async function listarDicionarioIntegracao(
   query: { empresaId: string; tipo: TipoIntegracao },
   perfil: PerfilUsuario
@@ -467,10 +606,9 @@ export async function salvarVinculoIntegracao(payload: SalvarVinculoIntegracaoPa
   return payload;
 }
 
-export async function receberVendaIntegracao(
-  chaveApi: string,
-  corpo: DadosExternos
-): Promise<IntegracaoIngestaoResultado> {
+// Autenticacao da chave de integracao de vendas: comparacao de hash em tempo constante. Extraida
+// para a ingestao e a conciliacao usarem exatamente a MESMA porta (mesma chave, mesmo erro).
+async function autenticarChaveVendas(chaveApi: string) {
   const hashRecebido = hashChaveIntegracao(chaveApi);
   const chave = await buscarChavePorCodigoHashRepository(hashRecebido);
   if (!chave || !compararHashConstante(hashRecebido, chave.codigoHash)) {
@@ -478,6 +616,14 @@ export async function receberVendaIntegracao(
   }
   if (chave.tipo !== "vendas")
     throw erroValidacao("Integracao nao aceita payload de vendas", "INVALID_INTEGRATION_TYPE");
+  return chave;
+}
+
+export async function receberVendaIntegracao(
+  chaveApi: string,
+  corpo: DadosExternos
+): Promise<IntegracaoIngestaoResultado> {
+  const chave = await autenticarChaveVendas(chaveApi);
 
   // Validacao do payload: falha vira registro "erro" no historico + erro estruturado 400.
   const analise = vendaIntegracaoAgregadaSchema.safeParse(corpo);

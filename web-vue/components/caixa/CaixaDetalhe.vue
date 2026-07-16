@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import type { DetalheCaixaResponse, LinhaHistoricoCaixa } from "@padaria/shared";
+import type { LancamentoCaixa } from "@padaria/shared";
 import { dinheiro, mensagemErro } from "~/utils/domain";
-import { formatarDataHora } from "~/utils/formatacao";
+import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{ caixa: LinhaHistoricoCaixa; empresaId: string }>();
 
@@ -22,6 +23,12 @@ async function carregar() {
   } finally {
     carregando.value = false;
   }
+}
+
+// Venda integrada tem hora real (dataHora): mostra data e hora de verdade. Sem ela, so a data
+// CONTABIL (date-only) — que nao pode passar por Date, sob pena de voltar um dia e inventar hora.
+function dataDoLancamento(item: LancamentoCaixa) {
+  return item.dataHora ? formatarDataHora(item.dataHora) : formatarDataSomenteDia(item.data);
 }
 
 function horarioAuditado(valor: { dataHoraAbertura: string | null; dataHoraFechamento: string | null }) {
@@ -63,7 +70,7 @@ onMounted(carregar);
               </thead>
               <tbody>
                 <tr v-for="item in grupo.itens" :key="item.id">
-                  <td>{{ item.data ? formatarDataHora(item.data) : "--" }}</td>
+                  <td>{{ dataDoLancamento(item) }}</td>
                   <td>
                     {{ item.descricao || "--" }}
                     <v-chip v-if="item.sentido" size="x-small" variant="tonal" class="ml-2">

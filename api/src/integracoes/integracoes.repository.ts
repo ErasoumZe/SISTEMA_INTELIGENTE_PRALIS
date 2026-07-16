@@ -1,5 +1,5 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sum } from "drizzle-orm";
 import {
   clientes,
   contas,
@@ -32,6 +32,7 @@ import type {
   TipoRegistroIntegracao,
   VendaIntegracaoAgregadaPayload
 } from "@padaria/shared/integracoes";
+import { diaNegocio } from "@padaria/shared/datas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
 export type IntegracaoChaveLinha = {
@@ -148,6 +149,56 @@ export async function contarVendasIntegradasNoDiaRepository(
     .from(vendas)
     .where(and(eq(vendas.empresaId, empresaId), isNotNull(vendas.integracaoChaveId), eq(vendas.dataReferencia, dia)));
   return linha?.total ?? 0;
+}
+
+// Vendas do sistema no dia, agrupadas por PDV — o lado "sistema" da conciliacao.
+// Regua igual a do CREARE: o dia e data_referencia (que, apos a correcao do fuso, e o dia LOCAL
+// derivado de data_venda) e o valor e o LIQUIDO, que corresponde ao VALOR_TOTAL do CREARE.
+// Somamos as tres colunas e combinamos em JS: soma e linear, entao da o mesmo que
+// SUM(original - desconto + acrescimo), sem expressao aritmetica em SQL.
+// Conta TODAS as vendas do PDV no dia (integradas ou nao): a pergunta e "o caixa bate?", nao
+// "a integracao entregou?" — para isso ja existe o alerta de silencio.
+export async function somarVendasPorPdvNoDiaRepository(
+  empresaId: string,
+  dia: string,
+  pdvIds: string[],
+  db: ExecutorBanco = banco
+): Promise<
+  Array<{
+    pdvId: string | null;
+    quantidadeVendas: number;
+    somaOriginal: string | null;
+    somaDesconto: string | null;
+    somaAcrescimo: string | null;
+  }>
+> {
+  if (!pdvIds.length) return [];
+  return db
+    .select({
+      pdvId: vendas.pdvId,
+      quantidadeVendas: count(),
+      somaOriginal: sum(vendas.valorOriginal),
+      somaDesconto: sum(vendas.valorDesconto),
+      somaAcrescimo: sum(vendas.valorAcrescimo)
+    })
+    .from(vendas)
+    .where(
+      and(
+        eq(vendas.empresaId, empresaId),
+        eq(vendas.dataReferencia, dia),
+        ne(vendas.status, "cancelado"),
+        inArray(vendas.pdvId, pdvIds)
+      )
+    )
+    .groupBy(vendas.pdvId);
+}
+
+export async function listarNomesPdvsRepository(
+  pdvIds: string[],
+  db: ExecutorBanco = banco
+): Promise<Array<{ id: string; nome: string }>> {
+  if (!pdvIds.length) return [];
+  return db.select({ id: pdvs.id, nome: pdvs.nome }).from(pdvs).where(inArray(pdvs.id, pdvIds));
 }
 
 // E-mails (distintos) dos administradores vinculados a empresa — destinatarios do alerta.
@@ -566,7 +617,9 @@ export async function criarOuAtualizarVendaIntegradaRepository(
     const valoresVenda = {
       empresaId: input.chave.empresaId,
       integracaoChaveId: input.chave.id,
-      dataReferencia: dataVenda.toISOString().slice(0, 10),
+      // Dia CONTABIL no fuso do negocio. Com toISOString() (UTC), venda a partir das 21:00 locais
+      // caia no dia seguinte — no caixa errado e divergindo do CREARE (BUG B).
+      dataReferencia: diaNegocio(dataVenda),
       dataVenda,
       descricao: `Venda ${vendaPayload.idVenda}`,
       valorOriginal: String(vendaPayload.valorOriginal),

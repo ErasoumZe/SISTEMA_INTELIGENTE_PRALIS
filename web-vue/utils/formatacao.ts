@@ -12,11 +12,30 @@ export function formatarDataHora(valor: Date | string) {
   return new Date(valor).toLocaleString("pt-BR");
 }
 
-// Data pura vinda do banco (YYYY-MM-DD, ex.: data_movimento). NAO passa por Date de proposito:
-// new Date("2026-06-30") e lido como meia-noite UTC e, em fuso negativo (BRT), voltaria um dia.
-export function formatarDataIso(valor: string) {
-  const [ano, mes, dia] = valor.split("-");
+// UNICA forma de exibir campo date-only (coluna `date` do Postgres: data_referencia, data_movimento,
+// data_vencimento, data_pagamento, data_nascimento...). Chega como "yyyy-MM-dd" e NAO tem hora.
+//
+// NAO passa por Date de proposito: new Date("2026-07-16") e lido como meia-noite UTC e, em fuso
+// negativo (BRT), volta um dia — era o que fazia o detalhe do caixa mostrar "15/07/2026, 21:00:00"
+// numa venda do dia 16. Campo date-only nunca deve encostar em new Date()/toLocaleString.
+//
+// Para timestamp real (data_hora_abertura, data_venda, criado_em...) use formatarDataHora, que
+// converte para o fuso local corretamente.
+export function formatarDataSomenteDia(valor: string | null | undefined) {
+  if (!valor) return "-";
+  const [ano, mes, dia] = valor.slice(0, 10).split("-");
   return ano && mes && dia ? `${dia}/${mes}/${ano}` : valor;
+}
+
+// Dia LOCAL de um timestamp real (nao date-only). Diferente de fatiar o ISO, que devolveria o dia
+// em UTC: uma emissao as 22h de 15/07 em BRT esta em "2026-07-16T01:00Z" e seria exibida como 16.
+export function formatarDiaDeTimestamp(valor: string | Date | null | undefined) {
+  return valor ? new Date(valor).toLocaleDateString("pt-BR") : "-";
+}
+
+// Hora real (HH:mm:ss) de um timestamp. Usada na coluna "Hora" do relatorio de vendas.
+export function formatarHora(valor: string | Date | null | undefined) {
+  return valor ? new Date(valor).toLocaleTimeString("pt-BR") : "-";
 }
 
 export function apenasDigitos(valor: string) {

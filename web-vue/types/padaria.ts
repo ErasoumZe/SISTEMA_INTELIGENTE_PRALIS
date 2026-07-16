@@ -197,11 +197,19 @@ export type MercadoriaAprovacao = {
 export type OperacaoResumo = {
   id: string;
   empresaId: string;
+  // Datas CONTABEIS (date-only "yyyy-MM-dd", sem hora): exibir com formatarDataSomenteDia.
   dataReferencia: string;
   dataVencimento?: string;
   dataPagamento?: string | null;
+  // Momento real da venda (timestamp ISO), so em venda vinda da integracao — null na manual.
+  // E a unica fonte de "que horas foi a venda"; dataReferencia nao responde isso.
+  dataVenda?: string | null;
   descricao: string;
+  // SUBTOTAL do lancamento — nao e o que o cliente pagou.
   valorOriginal: string;
+  // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
+  // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
+  valorLiquido?: string;
   computar: boolean;
   status: string;
   pendenteDiscriminacao?: boolean;

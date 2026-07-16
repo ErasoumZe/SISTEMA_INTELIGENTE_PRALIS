@@ -11,6 +11,17 @@ export async function buscarUltimoDiaComDados(pool) {
   return linha?.dataOrigem ?? null;
 }
 
+// Agregado do dia por dispositivo (PDV) para a conciliacao: so venda fechada (STATUS='F').
+// Os valores vem do MySQL como string/decimal; a API compara em centavos.
+export async function buscarConciliacaoDia(pool, dataOrigem) {
+  const linhas = await executar(pool, "conciliacao-dia.sql", [dataOrigem, dataOrigem]);
+  return linhas.map((linha) => ({
+    pdvIdentificador: String(linha.pdvIdentificador),
+    quantidadeVendas: Number(linha.quantidadeVendas ?? 0),
+    valorTotal: Number(linha.valorTotal ?? 0)
+  }));
+}
+
 export async function buscarVendasDia(pool, dataOrigem) {
   const intervaloDia = [dataOrigem, dataOrigem];
   const [vendas, itens, pagamentos] = await Promise.all([
@@ -35,7 +46,22 @@ export function enumerarDias(deYMD, ateYMD) {
   return dias;
 }
 
-function hojeLocalYMD() {
+// Dia contabil no fuso do NEGOCIO (nao o da maquina): a API deriva data_referencia com a mesma
+// regra (shared/src/datas), entao os dois lados da conciliacao usam a mesma regua mesmo se o
+// agente rodar num host/container em UTC. Espelha diaNegocio() do shared — este pacote e standalone
+// (JS puro, sem dependencia do shared), por isso a duplicacao consciente.
+const formatadorDiaNegocio = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+
+export function diaNegocioHoje() {
+  return formatadorDiaNegocio.format(new Date());
+}
+
+export function hojeLocalYMD() {
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = String(agora.getMonth() + 1).padStart(2, "0");

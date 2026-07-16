@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OperacaoResumo, Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
+import { formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{
   empresaId: string;
@@ -39,7 +40,11 @@ async function buscar() {
   }
 }
 
-watch(() => props.empresaId, () => void buscar(), { immediate: true });
+watch(
+  () => props.empresaId,
+  () => void buscar(),
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -72,7 +77,7 @@ watch(() => props.empresaId, () => void buscar(), { immediate: true });
           </thead>
           <tbody>
             <tr v-for="linha in linhas" :key="linha.id">
-              <td>{{ linha.dataVencimento ?? linha.dataReferencia }}</td>
+              <td>{{ formatarDataSomenteDia(linha.dataVencimento ?? linha.dataReferencia) }}</td>
               <td>{{ linha.descricao }}</td>
               <td>{{ dinheiro(linha.valorOriginal) }}</td>
               <td>{{ linha.status }}</td>
