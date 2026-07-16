@@ -21,10 +21,8 @@ const workspace = useWorkspaceContext();
 
 const {
   modalCaixaDrawerAberto,
-  modoCaixaDrawer,
   formCaixaDrawer,
   opcoesEmpresa,
-  tokenCaixaConfirmado,
   caixaSalvando,
   salvarCaixaDrawer,
   modalOperacaoAberto,
@@ -137,9 +135,9 @@ const validacaoQtdPreview = computed(() =>
 <template>
   <v-dialog v-model="modalCaixaDrawerAberto" max-width="680">
     <v-card>
-      <v-card-title>{{ modoCaixaDrawer === "abrir" ? "Abrir caixa" : "Editar abertura" }}</v-card-title>
+      <v-card-title>Abrir caixa</v-card-title>
       <v-card-text>
-        <v-row v-if="modoCaixaDrawer === 'abrir'" dense>
+        <v-row dense>
           <v-col cols="12" md="6">
             <v-select
               v-model="formCaixaDrawer.pdvId"
@@ -167,43 +165,11 @@ const validacaoQtdPreview = computed(() =>
             />
           </v-col>
         </v-row>
-        <v-row v-else dense>
-          <v-col v-if="!tokenCaixaConfirmado" cols="12">
-            <v-text-field v-model="formCaixaDrawer.tokenEdicao" label="Codigo de edicao" autofocus />
-          </v-col>
-          <template v-else>
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formCaixaDrawer.pdvId"
-                :items="opcoesEmpresa.pdvs"
-                item-title="nome"
-                item-value="id"
-                label="PDV"
-              />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="formCaixaDrawer.dataHoraAbertura"
-                type="datetime-local"
-                label="Data e hora de abertura"
-              />
-            </v-col>
-          </template>
-        </v-row>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
         <v-btn variant="outlined" :disabled="caixaSalvando" @click="modalCaixaDrawerAberto = false">Cancelar</v-btn>
         <v-btn
-          v-if="modoCaixaDrawer === 'editar' && !tokenCaixaConfirmado"
-          color="primary"
-          :disabled="!formCaixaDrawer.tokenEdicao"
-          @click="tokenCaixaConfirmado = true"
-        >
-          Continuar
-        </v-btn>
-        <v-btn
-          v-else
           color="primary"
           :loading="caixaSalvando"
           :disabled="!formCaixaDrawer.pdvId || !formCaixaDrawer.dataHoraAbertura"

@@ -95,7 +95,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_malotes_visualizar",
     icone: "mdi-briefcase"
   },
-  caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-store" },
+  caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-cash-register" },
   promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",

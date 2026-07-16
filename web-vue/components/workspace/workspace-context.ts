@@ -7,7 +7,6 @@ export type CaixaDrawerForm = {
   pdvId: string;
   turnoId: string;
   dataHoraAbertura: string;
-  tokenEdicao: string;
 };
 
 export type ItemDespesaForm = {
@@ -51,10 +50,8 @@ export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
   modalCaixaDrawerAberto: Ref<boolean>;
-  modoCaixaDrawer: Ref<"abrir" | "editar">;
   formCaixaDrawer: CaixaDrawerForm;
   opcoesEmpresa: ComputedRef<Opcoes>;
-  tokenCaixaConfirmado: Ref<boolean>;
   caixaSalvando: Ref<boolean>;
   salvarCaixaDrawer: () => Promise<void>;
   modalOperacaoAberto: Ref<boolean>;

@@ -161,13 +161,10 @@ const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas:
 const salvandoOperacao = ref(false);
 const caixaSalvando = ref(false);
 const modalCaixaDrawerAberto = ref(false);
-const modoCaixaDrawer = ref<"abrir" | "editar">("abrir");
-const tokenCaixaConfirmado = ref(false);
 const formCaixaDrawer = reactive({
   pdvId: "",
   turnoId: "",
-  dataHoraAbertura: "",
-  tokenEdicao: ""
+  dataHoraAbertura: ""
 });
 
 const formMalote = ref({ codigo: "", lacres: [""] });
@@ -257,9 +254,10 @@ const telasTemaPermitidas = computed(() => [
 const telasShell = computed(() => {
   // Cor do icone dirigida pela Aparencia da empresa: categorizada ou personalizada colore;
   // sem configuracao carregada, corMenuTela devolve o default estatico da categoria.
-  return telasPermitidas.value
-    .filter((item) => item.id !== "caixa")
-    .map((item) => ({ ...item, cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id) }));
+  return telasPermitidas.value.map((item) => ({
+    ...item,
+    cor: corMenuTela(empresaAtiva.value?.configuracoesAparencia, item.id)
+  }));
 });
 const motivoTelaAtivaDesabilitada = computed(
   () => motivosTelasDesabilitadas.value[telaAtiva.value] ?? "Tela indisponivel para este perfil."
@@ -456,10 +454,10 @@ function atualizarDocumentoCadastro(valor: string) {
   if (cadastroTela.value === "clientes" && !documentoEhCpf(documento)) formCadastro.value.dataNascimento = "";
 }
 
-async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
-  modoCaixaDrawer.value = modo;
-  tokenCaixaConfirmado.value = false;
-  formCaixaDrawer.tokenEdicao = "";
+// So abre caixa. Com caixa aberto o card leva para a tela /caixa, onde vive o fluxo novo de
+// alterar horario (token do autorizador) — o PUT /abertura com tokenEdicao legado nao tem mais
+// entrada na interface.
+async function abrirModalCaixaDrawer() {
   // O botao "Abrir caixa" e global; a lista de PDVs pode nao ter sido carregada pela tela atual
   // (ex.: Painel). Garante os PDVs da empresa ativa antes de montar o dropdown do dialogo.
   // Turnos/colaboradores sao opcionais: se a permissao faltar (403), o modal ABRE mesmo assim com
@@ -489,37 +487,21 @@ async function abrirModalCaixaDrawer(modo: "abrir" | "editar") {
     const aviso = avisoOpcoesIndisponiveis(faltas);
     if (aviso) notificar(aviso, "warning");
   }
-  formCaixaDrawer.pdvId = caixaAberto.value?.pdvId || opcoesEmpresa.value.pdvs[0]?.id || "";
+  formCaixaDrawer.pdvId = opcoesEmpresa.value.pdvs[0]?.id || "";
   // Pre-seleciona o turno pelo turno padrao do colaborador do usuario logado (server tambem aplica).
   const colaboradorLogado = opcoesEmpresa.value.colaboradores.find(
     (colaborador) => colaborador.id === sessao.value?.perfil?.colaboradorId
   );
-  formCaixaDrawer.turnoId = caixaAberto.value?.turnoId || colaboradorLogado?.turnoPadraoId || "";
-  formCaixaDrawer.dataHoraAbertura = caixaAberto.value
-    ? dataHoraLocal(caixaAberto.value.dataHoraAbertura)
-    : dataHoraLocal();
+  formCaixaDrawer.turnoId = colaboradorLogado?.turnoPadraoId || "";
+  formCaixaDrawer.dataHoraAbertura = dataHoraLocal();
   modalCaixaDrawerAberto.value = true;
 }
 
 async function salvarCaixaDrawer() {
-  if (modoCaixaDrawer.value === "abrir") {
-    const ok = await abrirCaixaOperacional({
-      pdvId: formCaixaDrawer.pdvId,
-      usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
-      turnoId: formCaixaDrawer.turnoId || null,
-      dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
-      observacao: null
-    });
-    if (ok) modalCaixaDrawerAberto.value = false;
-    return;
-  }
-
-  if (!caixaAberto.value) return;
-  const ok = await editarAberturaCaixa({
-    caixaId: caixaAberto.value.id,
-    tokenEdicao: formCaixaDrawer.tokenEdicao,
+  const ok = await abrirCaixaOperacional({
     pdvId: formCaixaDrawer.pdvId,
     usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
+    turnoId: formCaixaDrawer.turnoId || null,
     dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
     observacao: null
   });
@@ -1460,22 +1442,20 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, editarAberturaCaixa, acertarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa(
-  {
-    api: { post: apiPost, put: apiPut },
-    empresaId: () => empresaId.value,
-    telaAtiva: () => telaAtiva.value,
-    resumoSaldo: () => resumo.value?.saldo ?? null,
-    setSalvando: (valor) => {
-      caixaSalvando.value = valor;
-    },
-    carregarStatusCaixa,
-    carregarDadosTela,
-    notificar,
-    mensagemErro,
-    confirmar: (mensagem) => window.confirm(mensagem)
-  }
-);
+const { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
+  api: { post: apiPost },
+  empresaId: () => empresaId.value,
+  telaAtiva: () => telaAtiva.value,
+  resumoSaldo: () => resumo.value?.saldo ?? null,
+  setSalvando: (valor) => {
+    caixaSalvando.value = valor;
+  },
+  carregarStatusCaixa,
+  carregarDadosTela,
+  notificar,
+  mensagemErro,
+  confirmar: (mensagem) => window.confirm(mensagem)
+});
 
 async function logout() {
   saindo.value = true;
@@ -1579,10 +1559,8 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 
 provide(WORKSPACE_CONTEXT, {
   modalCaixaDrawerAberto,
-  modoCaixaDrawer,
   formCaixaDrawer,
   opcoesEmpresa,
-  tokenCaixaConfirmado,
   caixaSalvando,
   salvarCaixaDrawer,
   modalOperacaoAberto,
@@ -1799,14 +1777,26 @@ onBeforeUnmount(() => {
           <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
         </div>
         <v-btn
+          v-if="caixaAberto"
           class="mt-4 caixa-edit"
           block
           size="small"
           variant="tonal"
-          :prepend-icon="caixaAberto ? 'mdi-pencil' : 'mdi-cash-register'"
-          @click="abrirModalCaixaDrawer(caixaAberto ? 'editar' : 'abrir')"
+          prepend-icon="mdi-cash-register"
+          to="/caixa"
         >
-          {{ caixaAberto ? "Editar" : "Abrir caixa" }}
+          Gerenciar caixa
+        </v-btn>
+        <v-btn
+          v-else
+          class="mt-4 caixa-edit"
+          block
+          size="small"
+          variant="tonal"
+          prepend-icon="mdi-cash-plus"
+          @click="abrirModalCaixaDrawer()"
+        >
+          Abrir caixa
         </v-btn>
       </div>
     </template>

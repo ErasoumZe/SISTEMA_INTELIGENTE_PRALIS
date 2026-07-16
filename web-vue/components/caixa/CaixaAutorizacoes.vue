@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type { CaixaOperacional } from "~/types/padaria";
 import { dataHoraLocal, dataHoraParaUtc, formatarDataHora } from "~/utils/formatacao";
 import { useCaixaAutorizacoes } from "~/composables/useCaixaAutorizacoes";
@@ -121,10 +121,12 @@ const pendentesAberto = ref(false);
 const gerandoId = ref("");
 const tokensGerados = reactive<Record<string, { token: string; expiraEm: string }>>({});
 
-async function recarregarPendentes() {
+// silencioso: usado pelo polling — um 403/queda de rede a cada 30s nao pode virar chuva de toast.
+async function recarregarPendentes(silencioso = false) {
   try {
     await carregarPendentes(props.empresaId);
   } catch (error) {
+    if (silencioso) return;
     notificar(error instanceof Error ? error.message : "Falha ao carregar pendencias.", "error");
   }
 }
@@ -147,16 +149,45 @@ async function gerarTokenPara(autorizacaoId: string) {
   }
 }
 
-onMounted(() => {
-  if (podeAlterarDireto.value && props.empresaId) void recarregarPendentes();
-});
+// A fila de pendencias e da EMPRESA, nao do caixa: o autorizador (gerencia/admin) quase nunca tem
+// caixa aberto e ficava cego as solicitacoes. Carrega e faz polling so com caixa_alterar_horario,
+// independente de haver caixa aberto. Sem polling com a aba oculta (mesma regra do AppWorkspace).
+const INTERVALO_PENDENTES_MS = 30_000;
+let intervaloPendentes: ReturnType<typeof setInterval> | null = null;
+
+function pararPollingPendentes() {
+  if (!intervaloPendentes) return;
+  clearInterval(intervaloPendentes);
+  intervaloPendentes = null;
+}
+
+function iniciarPollingPendentes() {
+  pararPollingPendentes();
+  if (!podeAlterarDireto.value || !props.empresaId) return;
+  void recarregarPendentes(true);
+  intervaloPendentes = setInterval(() => {
+    if (document.visibilityState === "visible") void recarregarPendentes(true);
+  }, INTERVALO_PENDENTES_MS);
+}
+
+onMounted(iniciarPollingPendentes);
+watch([podeAlterarDireto, () => props.empresaId], iniciarPollingPendentes);
+onBeforeUnmount(pararPollingPendentes);
 </script>
 
 <template>
-  <div v-if="caixaAberto" class="d-flex flex-wrap ga-2">
-    <v-btn variant="outlined" prepend-icon="mdi-clock-edit-outline" @click="abrirAlterar">Alterar horario</v-btn>
+  <div v-if="caixaAberto || podeAlterarDireto" class="d-flex flex-wrap ga-2">
+    <!-- Alterar/solicitar exigem um caixa aberto; a fila de autorizacoes nao (ver polling acima). -->
+    <v-btn v-if="caixaAberto" variant="outlined" prepend-icon="mdi-clock-edit-outline" @click="abrirAlterar">
+      Alterar horario
+    </v-btn>
 
-    <v-btn v-if="!podeAlterarDireto" variant="text" prepend-icon="mdi-key-outline" @click="abrirSolicitar">
+    <v-btn
+      v-if="caixaAberto && !podeAlterarDireto"
+      variant="text"
+      prepend-icon="mdi-key-outline"
+      @click="abrirSolicitar"
+    >
       Solicitar autorizacao
     </v-btn>
 
