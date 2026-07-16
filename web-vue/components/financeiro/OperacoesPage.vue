@@ -8,9 +8,11 @@ import type {
   ResumoCaixa
 } from "~/types/padaria";
 import type { OperacaoDetalhe } from "~/utils/operacoes";
+import { ref } from "vue";
 import { dinheiro } from "~/utils/domain";
 import MercadoriasAprovacaoPanel from "~/components/financeiro/MercadoriasAprovacaoPanel.vue";
 import VendaDetalheDialog from "~/components/financeiro/VendaDetalheDialog.vue";
+import VendaDetalheConteudo from "~/components/financeiro/VendaDetalheConteudo.vue";
 
 defineProps<{
   resumo: ResumoCaixa | null;
@@ -55,6 +57,19 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
   if (tela === "retiradas") return "retirada";
   if (tela === "transferencias") return "transferencia";
   return "venda";
+}
+
+// Detalhe da venda exibido INLINE (expandir/colapsar a linha), no lugar de um botao "Detalhes".
+// Reusa o GET de detalhe ja existente via o evento "detalhes"; uma linha aberta por vez (o pai
+// mantem um unico vendaDetalhe carregado).
+const linhaExpandidaId = ref("");
+function alternarDetalhe(operacao: OperacaoResumo) {
+  if (linhaExpandidaId.value === operacao.id) {
+    linhaExpandidaId.value = "";
+    return;
+  }
+  linhaExpandidaId.value = operacao.id;
+  emit("detalhes", operacao);
 }
 </script>
 
@@ -133,61 +148,73 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="operacao in operacoesPaginadas" :key="operacao.id">
-                  <td>{{ operacao.dataReferencia }}</td>
-                  <td class="font-weight-bold">
-                    {{ operacao.descricao }}
-                    <v-chip
-                      v-if="operacao.pendenteDiscriminacao"
-                      size="x-small"
-                      color="warning"
-                      variant="tonal"
-                      class="ml-2"
-                    >
-                      Pendente de discriminacao
-                    </v-chip>
-                    <v-icon
-                      v-if="operacao.fotoDocumentoUrl"
-                      icon="mdi-paperclip"
-                      size="small"
-                      class="ml-1 text-medium-emphasis"
-                      title="Documento anexado"
-                    />
-                  </td>
-                  <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
-                  <td class="text-right">
-                    <div class="d-inline-flex ga-2 justify-end">
-                      <v-btn
-                        v-if="operacao.pendenteDiscriminacao && podeDiscriminar"
-                        size="small"
-                        variant="tonal"
+                <template v-for="operacao in operacoesPaginadas" :key="operacao.id">
+                  <tr>
+                    <td>{{ operacao.dataReferencia }}</td>
+                    <td class="font-weight-bold">
+                      {{ operacao.descricao }}
+                      <v-chip
+                        v-if="operacao.pendenteDiscriminacao"
+                        size="x-small"
                         color="warning"
-                        prepend-icon="mdi-format-list-checks"
-                        @click="emit('discriminar', entidadeDaTela(telaAtiva), operacao)"
-                      >
-                        Discriminar
-                      </v-btn>
-                      <v-btn
-                        v-if="telaAtiva === 'entradas'"
-                        size="small"
                         variant="tonal"
-                        prepend-icon="mdi-eye-outline"
-                        @click="emit('detalhes', operacao)"
+                        class="ml-2"
                       >
-                        Detalhes
-                      </v-btn>
-                      <v-btn
-                        v-if="telaAtiva !== 'entradas' || podeEditarEntrada"
+                        Pendente de discriminacao
+                      </v-chip>
+                      <v-icon
+                        v-if="operacao.fotoDocumentoUrl"
+                        icon="mdi-paperclip"
                         size="small"
-                        variant="tonal"
-                        prepend-icon="mdi-pencil"
-                        @click="emit('editar', entidadeDaTela(telaAtiva), operacao)"
-                      >
-                        Editar
-                      </v-btn>
-                    </div>
-                  </td>
-                </tr>
+                        class="ml-1 text-medium-emphasis"
+                        title="Documento anexado"
+                      />
+                    </td>
+                    <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
+                    <td class="text-right">
+                      <div class="d-inline-flex ga-2 justify-end align-center">
+                        <v-btn
+                          v-if="operacao.pendenteDiscriminacao && podeDiscriminar"
+                          size="small"
+                          variant="tonal"
+                          color="warning"
+                          prepend-icon="mdi-format-list-checks"
+                          @click="emit('discriminar', entidadeDaTela(telaAtiva), operacao)"
+                        >
+                          Discriminar
+                        </v-btn>
+                        <v-btn
+                          v-if="telaAtiva !== 'entradas' || podeEditarEntrada"
+                          size="small"
+                          variant="tonal"
+                          prepend-icon="mdi-pencil"
+                          @click="emit('editar', entidadeDaTela(telaAtiva), operacao)"
+                        >
+                          Editar
+                        </v-btn>
+                        <v-btn
+                          v-if="telaAtiva === 'entradas'"
+                          size="small"
+                          variant="text"
+                          :icon="linhaExpandidaId === operacao.id ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                          :title="linhaExpandidaId === operacao.id ? 'Ocultar detalhes' : 'Ver detalhes'"
+                          @click="alternarDetalhe(operacao)"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="telaAtiva === 'entradas' && linhaExpandidaId === operacao.id">
+                    <td colspan="4" class="pa-0">
+                      <div class="venda-detalhe-inline pa-4">
+                        <VendaDetalheConteudo
+                          :detalhe="vendaDetalhe ?? null"
+                          :carregando="vendaDetalheCarregando"
+                          :formas-pagamento="formasPagamento"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                </template>
                 <tr v-if="!operacoesPaginadas.length">
                   <td colspan="4" class="text-center text-muted py-8">Nenhum lancamento encontrado.</td>
                 </tr>
@@ -226,3 +253,12 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
     />
   </div>
 </template>
+
+<style scoped>
+/* Bloco de detalhe da venda expandido inline na linha da tabela. Cinza com alpha para ficar
+   discreto e legivel tanto no tema claro quanto no escuro. */
+.venda-detalhe-inline {
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  background: rgba(128, 128, 128, 0.04);
+}
+</style>
