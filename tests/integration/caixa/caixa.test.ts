@@ -166,6 +166,58 @@ describe("caixa integration", () => {
     expect(entradas?.total).toBe(42);
   });
 
+  it("Deve_ClassificarSentidoDaTransferenciaPelaContaDoPdv_Quando_MontarDetalhe", async () => {
+    // pdvA usa contaCaixa. As tres situacoes possiveis, com a mesma regra dos totais:
+    // destino = conta do PDV -> entrada; origem = conta do PDV -> saida; nenhuma das duas -> null
+    // (nao entra em nenhum total, entao nao pode aparecer como "saida" no detalhe).
+    await executarSql(
+      `insert into transferencias (id, empresa_id, caixa_id, data_referencia, descricao, valor_original,
+         conta_origem_id, conta_destino_id, computar, status)
+       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'aprovado'),
+              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'aprovado'),
+              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'aprovado')`,
+      [
+        "22222222-2222-4222-8222-222222220001",
+        idsTeste.empresaA,
+        idsTeste.caixaAberto,
+        "2026-06-30",
+        "10.00",
+        idsTeste.contaBanco,
+        idsTeste.contaCaixa,
+        "22222222-2222-4222-8222-222222220002",
+        "22222222-2222-4222-8222-222222220003",
+        idsTeste.contaLivre
+      ]
+    );
+
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const grupo = json<DetalheJson>(detalhe).data.lancamentos.find((atual) => atual.categoria === "transferencias");
+    const porDescricao = new Map(
+      (grupo?.itens as unknown as { descricao: string; sentido: string | null }[]).map((item) => [
+        item.descricao,
+        item.sentido
+      ])
+    );
+    expect(porDescricao.get("Entrada no PDV")).toBe("entrada");
+    expect(porDescricao.get("Saida do PDV")).toBe("saida");
+    // Nao toca a conta do PDV: nem entrada nem saida — como nos totais.
+    expect(porDescricao.get("Fora do PDV")).toBeNull();
+    // Total da categoria e o LIQUIDO (10 de entrada - 10 de saida), igual ao total_transferencias.
+    expect(grupo?.total).toBe(0);
+
+    await executarSql("delete from transferencias where id in ($1,$2,$3)", [
+      "22222222-2222-4222-8222-222222220001",
+      "22222222-2222-4222-8222-222222220002",
+      "22222222-2222-4222-8222-222222220003"
+    ]);
+  });
+
   it("Deve_TrazerLancamentosVaziosSemCruzarCaixas_Quando_CaixaNaoTemMovimento", async () => {
     // O caixa fechado do seed nao tem lancamento: as categorias vem todas zeradas — e nao podem
     // pescar a venda do OUTRO caixa (regressao do escopo por caixa).

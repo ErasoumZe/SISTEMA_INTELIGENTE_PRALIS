@@ -586,8 +586,6 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
 }
 
 // Agrupa por categoria, na mesma ordem em que a tela do caixa apresenta os totais.
-// Transferencia: entrada quando o dinheiro CAI na conta do PDV; saida quando sai dela — a mesma
-// regra que calcularTotaisCaixaOperacionalRepository usa para somar.
 function montarLancamentosPorCategoria(
   lancamentos: Awaited<ReturnType<typeof listarLancamentosCaixaRepository>>,
   pdvContaId: string | null
@@ -601,26 +599,48 @@ function montarLancamentosPorCategoria(
       sentido: null
     }));
 
+  const somar = (itens: { valor: number }[]) => itens.reduce((soma, item) => soma + paraCentavos(item.valor), 0);
+
+  // Mesma regra de calcularTotaisCaixaOperacionalRepository: entrada quando o dinheiro CAI na conta
+  // do PDV, saida quando SAI dela — testes independentes. Uma transferencia entre duas contas que
+  // nao sao a do PDV nao e nem uma nem outra (nao entra em nenhum dos dois totais); marcar como
+  // "saida" faria o detalhe contradizer as colunas.
   const transferencias = lancamentos.linhasTransferencias.map((item) => ({
     id: item.id,
     descricao: item.descricao,
     data: item.data,
     valor: numero(item.valor),
-    sentido: item.contaDestinoId === pdvContaId ? ("entrada" as const) : ("saida" as const)
+    sentido:
+      item.contaDestinoId === pdvContaId
+        ? ("entrada" as const)
+        : item.contaOrigemId === pdvContaId
+          ? ("saida" as const)
+          : null
   }));
 
-  const categorias: CategoriaLancamentosCaixa[] = [
-    { categoria: "entradas", titulo: "Entradas", itens: simples(lancamentos.linhasVendas), total: 0 },
-    { categoria: "transferencias", titulo: "Transferencias", itens: transferencias, total: 0 },
-    { categoria: "despesas", titulo: "Despesas", itens: simples(lancamentos.linhasDespesas), total: 0 },
-    { categoria: "retiradas", titulo: "Retiradas", itens: simples(lancamentos.linhasRetiradas), total: 0 },
-    { categoria: "mercadorias", titulo: "Mercadorias", itens: simples(lancamentos.linhasMercadorias), total: 0 }
+  // total_transferencias persistido e o LIQUIDO (entrada - saida); o total da categoria segue o
+  // mesmo criterio, senao a soma do grupo nao bate com a coluna da linha.
+  const liquidoTransferencias =
+    somar(transferencias.filter((item) => item.sentido === "entrada")) -
+    somar(transferencias.filter((item) => item.sentido === "saida"));
+
+  const entradas = simples(lancamentos.linhasVendas);
+  const despesas = simples(lancamentos.linhasDespesas);
+  const retiradas = simples(lancamentos.linhasRetiradas);
+  const mercadorias = simples(lancamentos.linhasMercadorias);
+
+  return [
+    { categoria: "entradas", titulo: "Entradas", itens: entradas, total: deCentavos(somar(entradas)) },
+    {
+      categoria: "transferencias",
+      titulo: "Transferencias (liquido)",
+      itens: transferencias,
+      total: deCentavos(liquidoTransferencias)
+    },
+    { categoria: "despesas", titulo: "Despesas", itens: despesas, total: deCentavos(somar(despesas)) },
+    { categoria: "retiradas", titulo: "Retiradas", itens: retiradas, total: deCentavos(somar(retiradas)) },
+    { categoria: "mercadorias", titulo: "Mercadorias", itens: mercadorias, total: deCentavos(somar(mercadorias)) }
   ];
-
-  return categorias.map((categoria) => ({
-    ...categoria,
-    total: deCentavos(categoria.itens.reduce((soma, item) => soma + paraCentavos(item.valor), 0))
-  }));
 }
 
 // valores_antigos/novos sao jsonb livre: le so os horarios, tolerando registro antigo sem o campo.

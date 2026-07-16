@@ -48,20 +48,23 @@ const periodoInvertido = computed(
   () => Boolean(filtros.dataInicio && filtros.dataFim) && filtros.dataInicio > filtros.dataFim
 );
 
+// sortable: false de proposito — a pagina vem pronta do servidor (ordenada por data de movimento).
+// Ordenar no cliente reordenaria SO as 25 linhas visiveis, dando a impressao de ordenar o filtro
+// inteiro. Se precisar de ordenacao por coluna, ela tem de ir para a query.
 const colunas = [
-  { title: "Data", key: "dataMovimento" },
-  { title: "PDV", key: "pdvNome" },
-  { title: "Operador", key: "operador" },
-  { title: "Turno", key: "turnoNome" },
-  { title: "Abertura -> Fechamento", key: "periodo" },
-  { title: "Entradas", key: "totalEntradas", align: "end" as const },
-  { title: "Despesas", key: "totalDespesas", align: "end" as const },
-  { title: "Retiradas", key: "totalRetiradas", align: "end" as const },
-  { title: "Mercadorias", key: "totalMercadorias", align: "end" as const },
-  { title: "Transf. entrada", key: "totalTransferenciasEntrada", align: "end" as const },
-  { title: "Transf. saida", key: "totalTransferenciasSaida", align: "end" as const },
-  { title: "Saldo", key: "saldo", align: "end" as const },
-  { title: "Status", key: "status" }
+  { title: "Data", key: "dataMovimento", sortable: false },
+  { title: "PDV", key: "pdvNome", sortable: false },
+  { title: "Operador", key: "operador", sortable: false },
+  { title: "Turno", key: "turnoNome", sortable: false },
+  { title: "Abertura -> Fechamento", key: "periodo", sortable: false },
+  { title: "Entradas", key: "totalEntradas", align: "end" as const, sortable: false },
+  { title: "Despesas", key: "totalDespesas", align: "end" as const, sortable: false },
+  { title: "Retiradas", key: "totalRetiradas", align: "end" as const, sortable: false },
+  { title: "Mercadorias", key: "totalMercadorias", align: "end" as const, sortable: false },
+  { title: "Transf. entrada", key: "totalTransferenciasEntrada", align: "end" as const, sortable: false },
+  { title: "Transf. saida", key: "totalTransferenciasSaida", align: "end" as const, sortable: false },
+  { title: "Saldo", key: "saldo", align: "end" as const, sortable: false },
+  { title: "Status", key: "status", sortable: false }
 ];
 
 function paramsFiltro() {
