@@ -163,7 +163,11 @@ export async function buscarColaboradorUsuarioRepository(colaboradorId: string, 
 }
 
 export async function buscarCargoEmpresaRepository(cargoId: string, db: ExecutorBanco = banco) {
-  const [cargo] = await db.select({ empresaId: cargos.empresaId }).from(cargos).where(eq(cargos.id, cargoId)).limit(1);
+  const [cargo] = await db
+    .select({ empresaId: cargos.empresaId, nome: cargos.nome })
+    .from(cargos)
+    .where(eq(cargos.id, cargoId))
+    .limit(1);
   return cargo ?? null;
 }
 

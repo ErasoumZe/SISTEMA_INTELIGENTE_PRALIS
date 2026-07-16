@@ -103,6 +103,17 @@ export function regrasPermissoes(lista: Permissao[]): RegrasPermissoes {
   return Object.fromEntries(lista.map((permissao) => [permissao, true]));
 }
 
+// Normaliza o nome do cargo para casar com a referencia (trim + minusculas + sem acentos), para que
+// "Gerencia"/"Gerência"/"gerencia " apontem para o mesmo padrao. Usado pelo bootstrap e pelo endpoint
+// "restaurar padrao do cargo".
+export function normalizarNomeCargo(nome: string): string {
+  return nome
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
 export const permissoesPorCargo: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargo({
     ativas: [
@@ -225,3 +236,13 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     ]
   })
 };
+
+const padraoPorNomeNormalizado = new Map(
+  Object.entries(permissoesPorCargo).map(([nome, lista]) => [normalizarNomeCargo(nome), lista])
+);
+
+// Padrao de permissoes de um cargo pelo nome (normalizado). null quando o cargo nao tem referencia
+// (ex.: cargo custom criado pela operacao). Alimenta o "restaurar padrao do cargo".
+export function permissoesPadraoDoCargo(nome: string): Permissao[] | null {
+  return padraoPorNomeNormalizado.get(normalizarNomeCargo(nome)) ?? null;
+}

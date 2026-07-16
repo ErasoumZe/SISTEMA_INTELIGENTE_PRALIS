@@ -27,7 +27,7 @@ import {
   usuarioAutenticacao,
   usuariosEmpresas
 } from "./src/schema/index.js";
-import { permissoesPorCargo, regrasPermissoes } from "./src/referencia-permissoes.js";
+import { permissoesPadraoDoCargo, regrasPermissoes } from "./src/referencia-permissoes.js";
 
 // Le uma env obrigatoria por valor literal (sem process.env[dinamico], que dispara regra de seguranca).
 function exigir(nome: string, valor: string | undefined): string {
@@ -90,19 +90,9 @@ const regrasPorCargo = new Map(permissoesExistentes.map((linha) => [linha.cargoI
 let cargosSincronizados = 0;
 
 // Casa o cargo do banco com a referencia por nome NORMALIZADO (trim + minusculas + sem acentos),
-// para que "Gerencia"/"gerencia " tambem recebam os defaults de "Gerencia".
-const normalizarNomeCargo = (nome: string) =>
-  nome
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-const padraoPorNomeNormalizado = new Map(
-  Object.entries(permissoesPorCargo).map(([nome, lista]) => [normalizarNomeCargo(nome), lista])
-);
-
+// para que variacoes com acento ou espaco (ex.: "gerencia ") tambem recebam os defaults do cargo.
 for (const cargo of cargosExistentes) {
-  const listaPadrao = padraoPorNomeNormalizado.get(normalizarNomeCargo(cargo.nome));
+  const listaPadrao = permissoesPadraoDoCargo(cargo.nome);
   if (!listaPadrao) continue;
   const regras = { ...regrasPermissoes(listaPadrao), ...(regrasPorCargo.get(cargo.id) ?? {}) };
   await banco
