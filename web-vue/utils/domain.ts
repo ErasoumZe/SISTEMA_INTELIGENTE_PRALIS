@@ -81,7 +81,9 @@ export const itemPorTela: Record<string, ItemMenu> = {
     id: "fechamento",
     titulo: "Fechamento com diferenca",
     permissao: "fechamento_com_diferenca_visualizar",
-    icone: "mdi-cash-register"
+    // Balanca (conferir diferenca): mdi-cash-register agora e da tela Caixa, vizinha na secao
+    // Operacao — dois icones iguais lado a lado confundiam.
+    icone: "mdi-scale-balance"
   },
   relatorio_produtos: {
     id: "relatorio_produtos",

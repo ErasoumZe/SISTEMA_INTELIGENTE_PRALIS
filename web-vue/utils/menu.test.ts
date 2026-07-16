@@ -45,6 +45,12 @@ describe("item de menu da tela caixa", () => {
       icone: "mdi-cash-register"
     });
   });
+
+  it("nao repete o icone de outra tela da secao Operacao (Caixa x Fechamento)", () => {
+    const menu = menuDoPerfil(["caixa_operar", "fechamento_com_diferenca_visualizar"]);
+    const icones = idsDaSecao(menu, "Operacao").map((id) => itemPorTela[id]?.icone);
+    expect(icones).toEqual([...new Set(icones)]);
+  });
 });
 
 describe("agruparTelasMenu", () => {
