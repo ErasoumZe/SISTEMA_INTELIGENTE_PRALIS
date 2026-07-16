@@ -7,7 +7,7 @@ import {
   importarFornecedoresSchema as importarPayloadSchema
 } from "@padaria/shared/fornecedores";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import {
@@ -18,9 +18,17 @@ import {
 } from "./fornecedores.service.js";
 
 export async function registrarRotasFornecedores(app: FastifyInstance): Promise<void> {
+  // Lista consumida como OPCAO de formulario (fornecedor em despesas/mercadorias). Aceita quem
+  // opera esses lancamentos, alem do cadastro de fornecedores.
   app.get(
     "/api/fornecedores",
-    { preHandler: exigirPermissao("cadastro_fornecedores_visualizar") },
+    {
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_fornecedores_visualizar",
+        "despesas_visualizar",
+        "mercadorias_visualizar"
+      ])
+    },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {

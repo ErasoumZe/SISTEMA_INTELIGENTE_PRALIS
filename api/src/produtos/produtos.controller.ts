@@ -7,7 +7,7 @@ import {
   produtosQuerySchema as empresaQuerySchema
 } from "@padaria/shared/produtos";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import {
@@ -19,18 +19,24 @@ import {
 } from "./produtos.service.js";
 
 export async function registrarRotasProdutos(app: FastifyInstance): Promise<void> {
-  app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
-    const query = empresaQuerySchema.parse(request.query);
-    try {
-      const escopo = escopoEmpresaAtiva(
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
-        query.empresaId
-      );
-      return paginadoDeArray(await listarProdutos(escopo), query.page, query.pageSize);
-    } catch (error) {
-      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+  // Lista consumida como OPCAO de formulario (itens de mercadoria). Aceita quem opera mercadorias,
+  // alem do cadastro de produtos.
+  app.get(
+    "/api/produtos",
+    { preHandler: exigirAlgumaPermissao(["cadastro_produtos_visualizar", "mercadorias_visualizar"]) },
+    async (request, reply) => {
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        return paginadoDeArray(await listarProdutos(escopo), query.page, query.pageSize);
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
     }
-  });
+  );
 
   app.post("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_criar") }, async (request, reply) => {
     const body = request.body as { empresaId?: string };

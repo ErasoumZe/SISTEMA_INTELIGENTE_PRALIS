@@ -8,7 +8,7 @@ import {
   importarGruposSchema as importarPayloadSchema
 } from "@padaria/shared/grupos";
 import { criadoId, erro, ok, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { exportarGrupo, importarGrupos, listarGrupos, salvarGrupo } from "./grupos.service.js";
@@ -33,18 +33,31 @@ async function salvarGrupoEndpoint(
 }
 
 export async function registrarRotasGrupos(app: FastifyInstance): Promise<void> {
-  app.get("/api/grupos", { preHandler: exigirPermissao("cadastro_grupos_visualizar") }, async (request, reply) => {
-    const query = empresaQuerySchema.parse(request.query);
-    try {
-      const escopo = escopoEmpresaAtiva(
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
-        query.empresaId
-      );
-      return listarGrupos(escopo);
-    } catch (error) {
-      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+  // Lista consumida como OPCAO de formulario (grupos em despesas/mercadorias/retiradas). Aceita
+  // quem opera esses lancamentos, alem do cadastro de grupos.
+  app.get(
+    "/api/grupos",
+    {
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_grupos_visualizar",
+        "despesas_visualizar",
+        "mercadorias_visualizar",
+        "retiradas_visualizar"
+      ])
+    },
+    async (request, reply) => {
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        return listarGrupos(escopo);
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
     }
-  });
+  );
 
   app.post("/api/grupos-despesas", { preHandler: exigirPermissao("cadastro_grupos_criar") }, async (request, reply) =>
     salvarGrupoEndpoint("grupos-despesas", null, request, reply)
