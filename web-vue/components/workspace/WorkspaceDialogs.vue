@@ -290,16 +290,6 @@ const validacaoQtdPreview = computed(() =>
               clearable
             />
           </v-col>
-          <v-col v-if="entidadeNova === 'despesa'" cols="12" md="6">
-            <v-select
-              v-model="form.grupoDespesaId"
-              :items="opcoesEmpresa.gruposDespesas"
-              item-title="nome"
-              item-value="id"
-              label="Grupo despesa (ou discrimine os itens)"
-              clearable
-            />
-          </v-col>
           <v-col v-if="entidadeNova === 'mercadoria'" cols="12" md="6">
             <v-select
               v-model="form.grupoMercadoriaId"
