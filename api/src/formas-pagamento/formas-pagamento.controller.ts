@@ -8,12 +8,17 @@ import { statusErroValidacao } from "../utils.js";
 import { listarFormasPagamento, salvarFormaPagamento } from "./formas-pagamento.service.js";
 
 export async function registrarRotasFormasPagamento(app: FastifyInstance): Promise<void> {
-  // Lista consumida como OPCAO de formulario/filtro (formas de pagamento no relatorio de vendas).
-  // Aceita relatorio_vendas_visualizar alem do cadastro de formas de pagamento.
+  // Lista consumida como OPCAO/filtro (relatorio de vendas) e para RESOLVER o nome da forma no
+  // detalhe da venda na tela de Entradas. Por isso aceita entradas_visualizar (o operador de caixa
+  // ve as entradas e precisa do nome da forma) e relatorio_vendas_visualizar, alem do cadastro.
   app.get(
     "/api/formas_pagamento",
     {
-      preHandler: exigirAlgumaPermissao(["cadastro_formas_pagamento_visualizar", "relatorio_vendas_visualizar"])
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_formas_pagamento_visualizar",
+        "relatorio_vendas_visualizar",
+        "entradas_visualizar"
+      ])
     },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);

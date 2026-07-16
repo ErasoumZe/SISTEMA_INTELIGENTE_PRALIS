@@ -66,18 +66,24 @@ describe("opcoes de formulario: gate por permissao de operacao (exigirAlgumaPerm
     assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 
-  // formas_pagamento aceita relatorio_vendas_visualizar (filtro do relatorio de vendas). Nenhum perfil
-  // do seed isola essa permissao, entao concedemos a um usuario na camada usuario e re-logamos para
-  // provar o grant positivo — sem depender do admin (que passa por ter tudo).
-  it("/api/formas_pagamento: barra sem permissao e libera com relatorio_vendas_visualizar", async () => {
-    for (const perfil of ["caixa", "semPermissao"] as const) {
-      const barrado = await contexto.app.inject({
-        method: "GET",
-        url: `/api/formas_pagamento${query}`,
-        headers: { cookie: cookies.get(perfil)! }
-      });
-      assertProblem(barrado, 403, "INSUFFICIENT_PERMISSION");
-    }
+  // formas_pagamento aceita entradas_visualizar (o operador de caixa ve o nome da forma no detalhe
+  // da venda, na tela de Entradas) e relatorio_vendas_visualizar (filtro do relatorio). O caixa tem
+  // entradas_visualizar -> 200; semPermissao -> 403. O grant por relatorio_vendas_visualizar e
+  // provado a parte, concedendo a um usuario na camada usuario e re-logando.
+  it("/api/formas_pagamento: caixa enxerga (entradas_visualizar); sem permissao barra; libera relatorio_vendas", async () => {
+    const caixa = await contexto.app.inject({
+      method: "GET",
+      url: `/api/formas_pagamento${query}`,
+      headers: { cookie: cookies.get("caixa")! }
+    });
+    expect(caixa.statusCode, caixa.body).toBe(200);
+
+    const barrado = await contexto.app.inject({
+      method: "GET",
+      url: `/api/formas_pagamento${query}`,
+      headers: { cookie: cookies.get("semPermissao")! }
+    });
+    assertProblem(barrado, 403, "INSUFFICIENT_PERMISSION");
 
     const alvo = await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
       usuariosTeste.tesouraria.email
