@@ -6,7 +6,17 @@ import type { ItemMenu } from "~/types/padaria";
 export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
     titulo: "Operacao",
-    ids: ["caixa", "entradas", "despesas", "retiradas", "transferencias", "mercadorias", "fechamento", "pedidos"]
+    ids: [
+      "caixa",
+      "historico_caixas",
+      "entradas",
+      "despesas",
+      "retiradas",
+      "transferencias",
+      "mercadorias",
+      "fechamento",
+      "pedidos"
+    ]
   },
   {
     titulo: "Relatorios",

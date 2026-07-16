@@ -5,11 +5,14 @@ import { inkParaSuperficie } from "~/utils/tema";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-type PaginatedClientResult<T> = {
+// Meta: alguns endpoints mandam mais coisa alem da paginacao (ex.: meta.totais do filtro, no
+// historico de caixas). Fica tipado por quem chama; quem nao precisa simplesmente ignora.
+type PaginatedClientResult<T, Meta = unknown> = {
   itens: T[];
   total: number;
   page: number;
   pageSize: number;
+  meta: Meta | null;
 };
 
 function isProblemDetails(valor: unknown): valor is ProblemDetails {
@@ -90,17 +93,21 @@ async function request<T>(apiUrl: string, method: HttpMethod, rota: string, body
   return payload as T;
 }
 
-async function requestPaginado<T>(apiUrl: string, rota: string): Promise<PaginatedClientResult<T>> {
+async function requestPaginado<T, Meta = unknown>(
+  apiUrl: string,
+  rota: string
+): Promise<PaginatedClientResult<T, Meta>> {
   const payload = await rawRequest(apiUrl, "GET", rota);
   if (!isApiSuccess<T[]>(payload) || !("meta" in payload)) {
-    return { itens: [], total: 0, page: 1, pageSize: 10 };
+    return { itens: [], total: 0, page: 1, pageSize: 10, meta: null };
   }
   const paginado = payload as ApiPaginated<T>;
   return {
     itens: paginado.data,
     total: paginado.meta.pagination.total,
     page: paginado.meta.pagination.page,
-    pageSize: paginado.meta.pagination.pageSize
+    pageSize: paginado.meta.pagination.pageSize,
+    meta: paginado.meta as Meta
   };
 }
 
@@ -124,8 +131,8 @@ export function useApi() {
     return request<T>(apiUrl, "GET", rota);
   }
 
-  async function apiGetPaginado<T>(rota: string) {
-    return requestPaginado<T>(apiUrl, rota);
+  async function apiGetPaginado<T, Meta = unknown>(rota: string) {
+    return requestPaginado<T, Meta>(apiUrl, rota);
   }
 
   async function apiPost<T>(rota: string, body: unknown) {

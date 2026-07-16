@@ -5,6 +5,7 @@ import {
   dataHoraParaUtc,
   documentoEhCpf,
   formatarDataHora,
+  formatarDataIso,
   mascararCep,
   mascararCnpj,
   mascararCpf,
@@ -24,6 +25,14 @@ describe("formatacao", () => {
 
   it("apenasDigitos remove tudo que nao e digito", () => {
     expect(apenasDigitos("12.345-67/ab")).toBe("1234567");
+  });
+
+  // data_movimento e data pura: passar por Date leria como UTC e, em fuso negativo, voltaria um dia.
+  it("formatarDataIso nao desloca a data pura por fuso horario", () => {
+    expect(formatarDataIso("2026-06-30")).toBe("30/06/2026");
+    expect(formatarDataIso("2026-01-01")).toBe("01/01/2026");
+    // A armadilha que este helper evita: new Date("2026-01-01") em BRT cai em 31/12/2025.
+    expect(formatarDataIso("2026-01-01")).not.toBe(new Date("2026-01-01").toLocaleDateString("pt-BR"));
   });
 
   it("mascararCpf formata progressivamente e limita a 11 digitos", () => {

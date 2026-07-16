@@ -98,6 +98,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     icone: "mdi-briefcase"
   },
   caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-cash-register" },
+  // Retaguarda: quem gerencia caixas ve o historico de todos. Operador de caixa nao entra aqui.
+  historico_caixas: {
+    id: "historico_caixas",
+    titulo: "Historico de caixas",
+    permissao: "caixas_gerenciar",
+    icone: "mdi-history"
+  },
   promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",

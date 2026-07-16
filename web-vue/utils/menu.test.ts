@@ -53,6 +53,24 @@ describe("item de menu da tela caixa", () => {
   });
 });
 
+describe("item de menu do historico de caixas", () => {
+  it("aparece para quem gerencia caixas (gerencia/admin), logo depois de Caixa", () => {
+    const menu = menuDoPerfil(["caixa_operar", "caixas_gerenciar", "entradas_visualizar"]);
+    expect(idsDaSecao(menu, "Operacao")).toEqual(["caixa", "historico_caixas", "entradas"]);
+  });
+
+  it("some para o operador de caixa, que so tem caixa_operar", () => {
+    const menu = menuDoPerfil(["caixa_operar"]);
+    expect(idsDaSecao(menu, "Operacao")).toEqual(["caixa"]);
+    expect(menu.flatMap((secao) => secao.itens).map((item) => item.id)).not.toContain("historico_caixas");
+  });
+
+  it("aparece para o autorizador mesmo sem caixa_operar", () => {
+    const menu = menuDoPerfil(["caixas_gerenciar"]);
+    expect(idsDaSecao(menu, "Operacao")).toEqual(["historico_caixas"]);
+  });
+});
+
 describe("agruparTelasMenu", () => {
   it("joga tela nao mapeada em nenhuma secao para Geral, para nada sumir do menu", () => {
     const menu = agruparTelasMenu([

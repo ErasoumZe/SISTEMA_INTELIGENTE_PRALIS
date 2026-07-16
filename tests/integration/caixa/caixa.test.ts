@@ -5,6 +5,18 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
+type LinhaHistorico = { id: string; tokenEdicao?: string };
+type HistoricoJson = {
+  data: LinhaHistorico[];
+  meta: { totais: { totalEntradas: number; saldo: number; caixas: number } };
+};
+type GrupoLancamentos = { categoria: string; total: number; itens: { id: string }[] };
+type DetalheJson = { data: { lancamentos: GrupoLancamentos[]; edicoes: unknown[]; ajuste: unknown } };
+
+function idsDoHistorico(resposta: Parameters<typeof json>[0]) {
+  return json<HistoricoJson>(resposta).data.map((linha) => linha.id);
+}
+
 async function usuarioIdPorEmail(email: string) {
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email]);
   if (!usuario) throw new Error(`Usuario nao encontrado para ${email}`);
@@ -44,6 +56,187 @@ describe("caixa integration", () => {
 
     assertOk(resposta);
     expect(JSON.stringify(resposta.json())).toContain(idsTeste.caixaFechado);
+  });
+
+  it("Deve_Retornar403NoHistoricoEDetalhe_Quando_UsuarioSoOperaCaixa", async () => {
+    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieCaixa }
+    });
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieCaixa }
+    });
+
+    assertProblem(historico, 403);
+    assertProblem(detalhe, 403);
+  });
+
+  it("Deve_OmitirTokenEdicao_Quando_ListarHistorico", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    // O seed grava TOKEN-ABERTO/TOKEN-FECHADO: o token do fluxo legado nao pode vazar na listagem.
+    expect(JSON.stringify(resposta.json())).not.toContain("TOKEN-");
+    expect(json<HistoricoJson>(resposta).data[0]).not.toHaveProperty("tokenEdicao");
+  });
+
+  it("Deve_FiltrarPorStatusPeriodoEPdv_Quando_HistoricoRecebeFiltros", async () => {
+    const fechados = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&status=fechado`,
+      headers: { cookie: cookieAdmin }
+    });
+    const doDiaDoAberto = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&dataInicio=2026-06-30&dataFim=2026-06-30`,
+      headers: { cookie: cookieAdmin }
+    });
+    const porPdv = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&pdvId=${idsTeste.pdvLivre}`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(fechados);
+    assertOk(doDiaDoAberto);
+    assertOk(porPdv);
+    expect(idsDoHistorico(fechados)).toEqual([idsTeste.caixaFechado]);
+    expect(idsDoHistorico(doDiaDoAberto)).toEqual([idsTeste.caixaAberto]);
+    expect(idsDoHistorico(porPdv)).toEqual([idsTeste.caixaFechado]);
+  });
+
+  it("Deve_SomarTotaisDoFiltroEnaoDaPagina_Quando_HistoricoPaginado", async () => {
+    // pageSize=1 devolve 1 item, mas os totais tem de continuar sendo os do filtro inteiro.
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&status=fechado&pageSize=1`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    const corpo = json<HistoricoJson>(resposta);
+    expect(corpo.data).toHaveLength(1);
+    // Unico caixa fechado do seed: entradas 42.00 e saldo 42.00.
+    expect(corpo.meta.totais).toMatchObject({ totalEntradas: 42, saldo: 42, caixas: 1 });
+  });
+
+  it("Deve_RejeitarPeriodoInvertido_Quando_DataInicioMaiorQueDataFim", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&dataInicio=2026-06-30&dataFim=2026-06-01`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertProblem(resposta, 400);
+  });
+
+  it("Deve_TrazerEdicoesEAjuste_Quando_ConsultarDetalheDoCaixa", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    // Caixa do seed nao teve alteracao de horario nem acerto: contrato presente, conteudo vazio.
+    expect(json<DetalheJson>(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
+  });
+
+  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_AdminTemFlagSomenteCaixaAberto", async () => {
+    // usuario_admin recebe TODAS as permissoes, inclusive menu_entradas_somente_caixa_aberto.
+    // Por isso o detalhe nao pode reusar /api/vendas: aquela rota trocaria o caixaId pedido pelo
+    // caixa aberto do proprio admin. Aqui o caixa consultado (caixaAberto) tem a venda do seed.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const entradas = json<DetalheJson>(detalhe).data.lancamentos.find((grupo) => grupo.categoria === "entradas");
+    expect(entradas?.itens.map((item) => item.id)).toContain(idsTeste.vendaSeed);
+    expect(entradas?.total).toBe(42);
+  });
+
+  it("Deve_ClassificarSentidoDaTransferenciaPelaContaDoPdv_Quando_MontarDetalhe", async () => {
+    // pdvA usa contaCaixa. As tres situacoes possiveis, com a mesma regra dos totais:
+    // destino = conta do PDV -> entrada; origem = conta do PDV -> saida; nenhuma das duas -> null
+    // (nao entra em nenhum total, entao nao pode aparecer como "saida" no detalhe).
+    await executarSql(
+      `insert into transferencias (id, empresa_id, caixa_id, data_referencia, descricao, valor_original,
+         conta_origem_id, conta_destino_id, computar, status)
+       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'aprovado'),
+              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'aprovado'),
+              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'aprovado')`,
+      [
+        "22222222-2222-4222-8222-222222220001",
+        idsTeste.empresaA,
+        idsTeste.caixaAberto,
+        "2026-06-30",
+        "10.00",
+        idsTeste.contaBanco,
+        idsTeste.contaCaixa,
+        "22222222-2222-4222-8222-222222220002",
+        "22222222-2222-4222-8222-222222220003",
+        idsTeste.contaLivre
+      ]
+    );
+
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const grupo = json<DetalheJson>(detalhe).data.lancamentos.find((atual) => atual.categoria === "transferencias");
+    const porDescricao = new Map(
+      (grupo?.itens as unknown as { descricao: string; sentido: string | null }[]).map((item) => [
+        item.descricao,
+        item.sentido
+      ])
+    );
+    expect(porDescricao.get("Entrada no PDV")).toBe("entrada");
+    expect(porDescricao.get("Saida do PDV")).toBe("saida");
+    // Nao toca a conta do PDV: nem entrada nem saida — como nos totais.
+    expect(porDescricao.get("Fora do PDV")).toBeNull();
+    // Total da categoria e o LIQUIDO (10 de entrada - 10 de saida), igual ao total_transferencias.
+    expect(grupo?.total).toBe(0);
+
+    await executarSql("delete from transferencias where id in ($1,$2,$3)", [
+      "22222222-2222-4222-8222-222222220001",
+      "22222222-2222-4222-8222-222222220002",
+      "22222222-2222-4222-8222-222222220003"
+    ]);
+  });
+
+  it("Deve_TrazerLancamentosVaziosSemCruzarCaixas_Quando_CaixaNaoTemMovimento", async () => {
+    // O caixa fechado do seed nao tem lancamento: as categorias vem todas zeradas — e nao podem
+    // pescar a venda do OUTRO caixa (regressao do escopo por caixa).
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const grupos = json<DetalheJson>(detalhe).data.lancamentos;
+    expect(grupos.map((grupo) => grupo.categoria)).toEqual([
+      "entradas",
+      "transferencias",
+      "despesas",
+      "retiradas",
+      "mercadorias"
+    ]);
+    expect(grupos.every((grupo) => !grupo.itens.length && grupo.total === 0)).toBe(true);
   });
 
   it("Deve_Retornar403_Quando_AcessarOuOperarCaixaDeEmpresaNaoPermitida", async () => {
