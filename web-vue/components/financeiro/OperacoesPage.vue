@@ -10,6 +10,7 @@ import type {
 import type { OperacaoDetalhe } from "~/utils/operacoes";
 import { ref } from "vue";
 import { dinheiro } from "~/utils/domain";
+import { formatarDataSomenteDia } from "~/utils/formatacao";
 import MercadoriasAprovacaoPanel from "~/components/financeiro/MercadoriasAprovacaoPanel.vue";
 import VendaDetalheDialog from "~/components/financeiro/VendaDetalheDialog.vue";
 import VendaDetalheConteudo from "~/components/financeiro/VendaDetalheConteudo.vue";
@@ -150,7 +151,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
               <tbody>
                 <template v-for="operacao in operacoesPaginadas" :key="operacao.id">
                   <tr>
-                    <td>{{ operacao.dataReferencia }}</td>
+                    <td>{{ formatarDataSomenteDia(operacao.dataReferencia) }}</td>
                     <td class="font-weight-bold">
                       {{ operacao.descricao }}
                       <v-chip

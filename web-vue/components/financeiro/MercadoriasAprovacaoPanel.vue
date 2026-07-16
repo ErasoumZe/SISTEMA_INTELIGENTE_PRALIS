@@ -2,6 +2,7 @@
 import { reactive, watch } from "vue";
 import type { MercadoriaAprovacao } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
+import { formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{
   itens: MercadoriaAprovacao[];
@@ -56,7 +57,7 @@ watch(
           <div class="d-flex flex-wrap align-center ga-3 w-100">
             <span class="font-weight-bold">{{ item.fornecedorNome || "Fornecedor nao identificado" }}</span>
             <v-chip size="x-small" variant="tonal" color="primary">{{ dinheiro(item.valorOriginal) }}</v-chip>
-            <span class="text-caption text-medium-emphasis">{{ item.dataReferencia }}</span>
+            <span class="text-caption text-medium-emphasis">{{ formatarDataSomenteDia(item.dataReferencia) }}</span>
             <span v-if="item.notaFiscalId" class="text-caption text-medium-emphasis">
               NF-e {{ item.notaFiscalId }}
             </span>

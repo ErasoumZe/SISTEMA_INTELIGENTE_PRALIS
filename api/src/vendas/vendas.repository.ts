@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
@@ -14,6 +14,14 @@ async function caixaIdsPorTurno(turnoId: string): Promise<string[]> {
     .from(fechamentosCaixa)
     .where(eq(fechamentosCaixa.turnoId, turnoId));
   return caixas.map((caixa) => caixa.id);
+}
+
+// Ordem cronologica da listagem. Em "asc"/"desc" a chave e data_venda (hora real); data_referencia
+// entra como desempate para a venda manual, que nao tem hora.
+function ordenacaoVendas(ordem: "asc" | "desc" | undefined) {
+  if (ordem === "asc") return [asc(vendas.dataVenda), asc(vendas.dataReferencia)];
+  if (ordem === "desc") return [desc(vendas.dataVenda), desc(vendas.dataReferencia)];
+  return [desc(vendas.dataReferencia), desc(vendas.dataVenda)];
 }
 
 export async function listarVendasRepository(
@@ -51,6 +59,9 @@ export async function listarVendasRepository(
       id: vendas.id,
       empresaId: vendas.empresaId,
       dataReferencia: vendas.dataReferencia,
+      // Hora real da venda (integracao). data_referencia e date-only e nao responde "que horas
+      // foi": era por isso que o relatorio nao mostrava hora.
+      dataVenda: vendas.dataVenda,
       dataPagamento: vendas.dataPagamento,
       descricao: vendas.descricao,
       valorOriginal: vendas.valorOriginal,
@@ -70,7 +81,10 @@ export async function listarVendasRepository(
     .leftJoin(clientes, eq(clientes.id, vendas.clienteId))
     .leftJoin(colaboradores, eq(colaboradores.id, vendas.colaboradorId))
     .where(filtros.length ? and(...filtros) : undefined)
-    .orderBy(desc(vendas.dataReferencia));
+    // data_referencia e date-only: sozinha empilha o dia inteiro sem ordem interna; data_venda
+    // desempata pela hora real. `ordem` vem do Relatorio de Vendas (cabecalho clicavel); sem ela,
+    // mantem o padrao das telas operacionais (mais recente primeiro).
+    .orderBy(...ordenacaoVendas(query.ordem));
 
   const ids = linhas.map((linha) => linha.id);
   if (!ids.length) return [];
@@ -95,6 +109,8 @@ export async function listarVendasRepository(
 
   return linhas.map((linha) => ({
     ...linha,
+    // timestamp -> ISO no contrato (dataReferencia/dataPagamento sao date-only e ja vem string).
+    dataVenda: linha.dataVenda ? new Date(linha.dataVenda).toISOString() : null,
     pagamentos: pagamentos
       .filter((pagamento) => pagamento.vendaId === linha.id)
       .map(({ vendaId: _vendaId, ...pagamento }) => pagamento),

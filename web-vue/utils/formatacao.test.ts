@@ -5,7 +5,9 @@ import {
   dataHoraParaUtc,
   documentoEhCpf,
   formatarDataHora,
-  formatarDataIso,
+  formatarDataSomenteDia,
+  formatarDiaDeTimestamp,
+  formatarHora,
   mascararCep,
   mascararCnpj,
   mascararCpf,
@@ -27,12 +29,36 @@ describe("formatacao", () => {
     expect(apenasDigitos("12.345-67/ab")).toBe("1234567");
   });
 
-  // data_movimento e data pura: passar por Date leria como UTC e, em fuso negativo, voltaria um dia.
-  it("formatarDataIso nao desloca a data pura por fuso horario", () => {
-    expect(formatarDataIso("2026-06-30")).toBe("30/06/2026");
-    expect(formatarDataIso("2026-01-01")).toBe("01/01/2026");
-    // A armadilha que este helper evita: new Date("2026-01-01") em BRT cai em 31/12/2025.
-    expect(formatarDataIso("2026-01-01")).not.toBe(new Date("2026-01-01").toLocaleDateString("pt-BR"));
+  // Campo date-only ("yyyy-MM-dd") jamais pode passar por Date: seria lido como meia-noite UTC e,
+  // em fuso negativo, voltaria um dia. O vitest.config fixa TZ=America/Sao_Paulo para o teste valer.
+  it("formatarDataSomenteDia nao desloca a data pura por fuso horario", () => {
+    expect(formatarDataSomenteDia("2026-07-16")).toBe("16/07/2026");
+    expect(formatarDataSomenteDia("2026-06-30")).toBe("30/06/2026");
+    expect(formatarDataSomenteDia("2026-01-01")).toBe("01/01/2026");
+  });
+
+  it("formatarDataSomenteDia evita a armadilha que quebrou o detalhe do caixa", () => {
+    // O bug real: dataReferencia "2026-07-16" exibida via Date virava "15/07/2026, 21:00:00".
+    expect(new Date("2026-07-16").toLocaleDateString("pt-BR")).toBe("15/07/2026"); // prova do fuso
+    expect(formatarDataSomenteDia("2026-07-16")).toBe("16/07/2026"); // o helper nao cai nela
+  });
+
+  it("formatarDataSomenteDia trata vazio/nulo e aceita timestamp cortando o dia", () => {
+    expect(formatarDataSomenteDia(null)).toBe("-");
+    expect(formatarDataSomenteDia("")).toBe("-");
+    expect(formatarDataSomenteDia("2026-07-16T00:00:00.000Z")).toBe("16/07/2026");
+  });
+
+  // Timestamp real e o oposto: TEM de ser convertido para o fuso local.
+  it("formatarDiaDeTimestamp usa o dia LOCAL, nao o dia em UTC", () => {
+    // 16/07 01:00 UTC = 15/07 22:00 em BRT: o dia local e 15, nao 16.
+    expect(formatarDiaDeTimestamp("2026-07-16T01:00:00.000Z")).toBe("15/07/2026");
+    expect(formatarDiaDeTimestamp(null)).toBe("-");
+  });
+
+  it("formatarHora extrai a hora local do timestamp e trata venda sem hora", () => {
+    expect(formatarHora("2026-07-16T12:34:56.000Z")).toBe("09:34:56"); // UTC-3
+    expect(formatarHora(null)).toBe("-"); // venda manual nao tem dataVenda
   });
 
   it("mascararCpf formata progressivamente e limita a 11 digitos", () => {

@@ -8,6 +8,7 @@ import type {
 } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
 import { dinheiro, mensagemErro } from "~/utils/domain";
+import { formatarDataSomenteDia, formatarDiaDeTimestamp } from "~/utils/formatacao";
 
 const props = defineProps<{ empresaId: string }>();
 
@@ -63,8 +64,10 @@ function rotuloStatus(status: string) {
   return opcoesStatus.find((opcao) => opcao.valor === status)?.rotulo ?? status;
 }
 
+// dataEmissao e timestamp REAL: o dia tem de sair do fuso local. Fatiar o ISO ("2026-07-16T01:00Z")
+// devolvia o dia em UTC — uma emissao as 22h de 15/07 em BRT aparecia como 16/07.
 function soData(iso: string | null) {
-  return iso ? iso.slice(0, 10) : "—";
+  return formatarDiaDeTimestamp(iso);
 }
 
 async function buscar() {
@@ -217,7 +220,7 @@ watch(filtroStatus, () => void buscar());
               </td>
               <td class="text-caption">{{ linha.chave }}</td>
               <td class="text-right">{{ linha.valorTotal ? dinheiro(linha.valorTotal) : "—" }}</td>
-              <td>{{ linha.dataVencimento ?? "—" }}</td>
+              <td>{{ formatarDataSomenteDia(linha.dataVencimento) }}</td>
               <td>
                 <v-chip :color="corStatus(linha.statusImportacao)" size="small" variant="tonal">
                   {{ rotuloStatus(linha.statusImportacao) }}
@@ -310,7 +313,7 @@ watch(filtroStatus, () => void buscar());
             </v-col>
             <v-col cols="6" md="3">
               <div class="text-caption text-muted">Vencimento</div>
-              <div>{{ detalhe.dataVencimento ?? "—" }}</div>
+              <div>{{ formatarDataSomenteDia(detalhe.dataVencimento) }}</div>
             </v-col>
           </v-row>
 

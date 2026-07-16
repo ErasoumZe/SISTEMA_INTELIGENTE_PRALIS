@@ -197,9 +197,13 @@ export type MercadoriaAprovacao = {
 export type OperacaoResumo = {
   id: string;
   empresaId: string;
+  // Datas CONTABEIS (date-only "yyyy-MM-dd", sem hora): exibir com formatarDataSomenteDia.
   dataReferencia: string;
   dataVencimento?: string;
   dataPagamento?: string | null;
+  // Momento real da venda (timestamp ISO), so em venda vinda da integracao — null na manual.
+  // E a unica fonte de "que horas foi a venda"; dataReferencia nao responde isso.
+  dataVenda?: string | null;
   descricao: string;
   valorOriginal: string;
   computar: boolean;

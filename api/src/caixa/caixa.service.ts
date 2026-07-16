@@ -590,14 +590,26 @@ function montarLancamentosPorCategoria(
   lancamentos: Awaited<ReturnType<typeof listarLancamentosCaixaRepository>>,
   pdvContaId: string | null
 ): CategoriaLancamentosCaixa[] {
+  // Categorias sem hora real: so despesa/retirada/mercadoria/transferencia, que tem apenas a data
+  // contabil. Venda tem data_venda e passa pelo mapa proprio abaixo.
   const simples = (itens: { id: string; descricao: string | null; data: string | null; valor: string | null }[]) =>
     itens.map((item) => ({
       id: item.id,
       descricao: item.descricao,
       data: item.data,
+      dataHora: null,
       valor: numero(item.valor),
       sentido: null
     }));
+
+  const entradas = lancamentos.linhasVendas.map((item) => ({
+    id: item.id,
+    descricao: item.descricao,
+    data: item.data,
+    dataHora: serializarData(item.dataHora),
+    valor: numero(item.valor),
+    sentido: null
+  }));
 
   const somar = (itens: { valor: number }[]) => itens.reduce((soma, item) => soma + paraCentavos(item.valor), 0);
 
@@ -609,6 +621,7 @@ function montarLancamentosPorCategoria(
     id: item.id,
     descricao: item.descricao,
     data: item.data,
+    dataHora: null,
     valor: numero(item.valor),
     sentido:
       item.contaDestinoId === pdvContaId
@@ -624,7 +637,6 @@ function montarLancamentosPorCategoria(
     somar(transferencias.filter((item) => item.sentido === "entrada")) -
     somar(transferencias.filter((item) => item.sentido === "saida"));
 
-  const entradas = simples(lancamentos.linhasVendas);
   const despesas = simples(lancamentos.linhasDespesas);
   const retiradas = simples(lancamentos.linhasRetiradas);
   const mercadorias = simples(lancamentos.linhasMercadorias);

@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import type { LinhaHistoricoCaixa, TotaisHistoricoCaixa } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
-import { formatarDataHora, formatarDataIso } from "~/utils/formatacao";
+import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import CaixaDetalhe from "~/components/caixa/CaixaDetalhe.vue";
 
 const props = defineProps<{
@@ -223,7 +223,7 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
         :items-per-page="itensPorPagina"
         no-data-text="Nenhum caixa no filtro."
       >
-        <template #[`item.dataMovimento`]="{ item }">{{ formatarDataIso(item.dataMovimento) }}</template>
+        <template #[`item.dataMovimento`]="{ item }">{{ formatarDataSomenteDia(item.dataMovimento) }}</template>
         <template #[`item.operador`]="{ item }">{{ item.colaboradorNome || item.usuarioCaixaNome || "--" }}</template>
         <template #[`item.turnoNome`]="{ item }">{{ item.turnoNome || "--" }}</template>
         <template #[`item.periodo`]="{ item }">

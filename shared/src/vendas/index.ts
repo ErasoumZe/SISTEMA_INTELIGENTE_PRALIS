@@ -15,7 +15,11 @@ export const vendasQuerySchema = z
     clienteId: uuidSchema.optional(),
     colaboradorId: uuidSchema.optional(),
     formaPagamentoId: uuidSchema.optional(),
-    status: z.string().optional()
+    status: z.string().optional(),
+    // Ordem cronologica REAL (por data_venda, desempatando por data_referencia). Sem ela, a
+    // ordenacao teria de acontecer no cliente — e ordenaria so a pagina, nao o filtro inteiro.
+    // Ausente = mantem o padrao historico (mais recente primeiro) das telas operacionais.
+    ordem: z.enum(["asc", "desc"]).optional()
   })
   .merge(paginationQuerySchema);
 
@@ -75,7 +79,11 @@ export const vendaPayloadSchema = z.object({
 export const vendaDtoSchema = z.object({
   id: z.string(),
   empresaId: z.string(),
+  // Data contabil (date-only, "yyyy-MM-dd"): NAO tem hora. Quem precisa da hora usa dataVenda.
   dataReferencia: z.string(),
+  // Momento real da venda (timestamp ISO), vindo da integracao. Null em venda manual, que so
+  // registra a data contabil — por isso a tela mostra "-" na coluna Hora.
+  dataVenda: z.string().nullable().optional(),
   dataPagamento: z.string().nullable().optional(),
   descricao: z.string(),
   valorOriginal: z.string(),

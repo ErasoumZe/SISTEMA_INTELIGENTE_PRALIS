@@ -315,11 +315,13 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
         id: vendas.id,
         descricao: vendas.descricao,
         data: vendas.dataReferencia,
+        // Hora real da venda integrada; null em venda manual. A tela prefere ela a data contabil.
+        dataHora: vendas.dataVenda,
         valor: vendas.valorOriginal
       })
       .from(vendas)
       .where(ativo(vendas))
-      .orderBy(desc(vendas.dataReferencia)),
+      .orderBy(desc(vendas.dataReferencia), desc(vendas.dataVenda)),
     db
       .select({
         id: transferencias.id,
