@@ -124,6 +124,11 @@ const entidadeNova = ref<EntidadeOperacional>("venda");
 const operacaoEditandoId = ref("");
 // Foto do documento (nota/cupom) de despesas e mercadorias: anexada no modal de lancamento.
 const fotoDocumento = useFotoDocumento();
+// Detalhe (somente leitura) da venda integrada (CREARE) — itens, pagamento e total. O cargo caixa
+// so visualiza; editar exige entradas_editar (na pratica, admin).
+const modalVendaDetalheAberto = ref(false);
+const vendaDetalhe = ref<OperacaoDetalhe | null>(null);
+const vendaDetalheCarregando = ref(false);
 // Modo discriminacao: reutiliza o modal de operacao, mas salva so os itens via PATCH .../discriminar
 // (feito por outro setor, DEPOIS, sem exigir caixa aberto). Fila filtravel abaixo.
 const modoDiscriminacao = ref(false);
@@ -970,6 +975,21 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   modalOperacaoAberto.value = true;
 }
 
+// Detalhe somente leitura da venda (integrada): itens + pagamento + total. Reusa o GET de detalhe.
+async function abrirDetalheVenda(operacao: { id: string }) {
+  vendaDetalhe.value = null;
+  vendaDetalheCarregando.value = true;
+  modalVendaDetalheAberto.value = true;
+  try {
+    vendaDetalhe.value = await apiGet<OperacaoDetalhe>(`/api/vendas/${operacao.id}`);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+    modalVendaDetalheAberto.value = false;
+  } finally {
+    vendaDetalheCarregando.value = false;
+  }
+}
+
 // Abre o modal em modo discriminacao: carrega o cabecalho existente + itens, forca o modo de itens
 // e NAO exige caixa aberto (a discriminacao e feita por outro setor, depois).
 async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id: string }) {
@@ -1567,6 +1587,10 @@ const pageContext = computed(() => ({
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
+  podeEditarEntrada: temPermissao("entradas_editar"),
+  vendaDetalhe: vendaDetalhe.value,
+  modalVendaDetalheAberto: modalVendaDetalheAberto.value,
+  vendaDetalheCarregando: vendaDetalheCarregando.value,
   mostrarAprovacaoMercadorias: telaAtiva.value === "mercadorias" && temPermissao("mercadorias_aprovar"),
   aprovacaoMercadoriasAtiva: mostrarAprovacaoMercadorias.value,
   mercadoriasAguardando: mercadoriasAguardando.value,
@@ -1598,6 +1622,10 @@ const pageContext = computed(() => ({
   },
   aprovarMercadoriaAguardando,
   recusarMercadoriaAguardando,
+  abrirDetalheVenda,
+  fecharDetalheVenda: (valor: boolean) => {
+    modalVendaDetalheAberto.value = valor;
+  },
   atualizarPaginaOperacoes,
   abrirCaixaOperacional,
   acertarSaldoOperacional,

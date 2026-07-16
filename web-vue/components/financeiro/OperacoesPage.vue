@@ -7,8 +7,10 @@ import type {
   Opcao,
   ResumoCaixa
 } from "~/types/padaria";
+import type { OperacaoDetalhe } from "~/utils/operacoes";
 import { dinheiro } from "~/utils/domain";
 import MercadoriasAprovacaoPanel from "~/components/financeiro/MercadoriasAprovacaoPanel.vue";
+import VendaDetalheDialog from "~/components/financeiro/VendaDetalheDialog.vue";
 
 defineProps<{
   resumo: ResumoCaixa | null;
@@ -28,6 +30,11 @@ defineProps<{
   mercadoriasAguardando?: MercadoriaAprovacao[];
   aprovacaoMercadoriasCarregando?: boolean;
   aprovacaoMercadoriaSalvandoId?: string;
+  podeEditarEntrada?: boolean;
+  formasPagamento?: Opcao[];
+  vendaDetalhe?: OperacaoDetalhe | null;
+  modalVendaDetalheAberto?: boolean;
+  vendaDetalheCarregando?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +45,8 @@ const emit = defineEmits<{
   (event: "update:aprovacao", valor: boolean): void;
   (event: "aprovar", id: string, computar: boolean): void;
   (event: "recusar", id: string): void;
+  (event: "detalhes", operacao: OperacaoResumo): void;
+  (event: "update:vendaDetalheAberto", valor: boolean): void;
 }>();
 
 function entidadeDaTela(tela: string): EntidadeOperacional {
@@ -159,6 +168,16 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
                         Discriminar
                       </v-btn>
                       <v-btn
+                        v-if="telaAtiva === 'entradas'"
+                        size="small"
+                        variant="tonal"
+                        prepend-icon="mdi-eye-outline"
+                        @click="emit('detalhes', operacao)"
+                      >
+                        Detalhes
+                      </v-btn>
+                      <v-btn
+                        v-if="telaAtiva !== 'entradas' || podeEditarEntrada"
                         size="small"
                         variant="tonal"
                         prepend-icon="mdi-pencil"
@@ -197,5 +216,13 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
         </template>
       </v-card-text>
     </v-card>
+
+    <VendaDetalheDialog
+      :aberto="Boolean(modalVendaDetalheAberto)"
+      :detalhe="vendaDetalhe ?? null"
+      :carregando="vendaDetalheCarregando"
+      :formas-pagamento="formasPagamento"
+      @update:aberto="emit('update:vendaDetalheAberto', $event)"
+    />
   </div>
 </template>
