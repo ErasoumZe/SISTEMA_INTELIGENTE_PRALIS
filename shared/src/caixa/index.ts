@@ -132,7 +132,24 @@ export const ajusteCaixaSchema = z.object({
   observacao: z.string().nullable()
 });
 
+export const lancamentoCaixaSchema = z.object({
+  id: uuidSchema,
+  descricao: z.string().nullable(),
+  data: z.string().nullable(),
+  valor: z.number(),
+  // Transferencia: entrada ou saida em relacao a conta do PDV. Nas demais categorias fica null.
+  sentido: z.enum(["entrada", "saida"]).nullable()
+});
+
+export const categoriaLancamentosCaixaSchema = z.object({
+  categoria: z.enum(["entradas", "transferencias", "despesas", "retiradas", "mercadorias"]),
+  titulo: z.string(),
+  total: z.number(),
+  itens: z.array(lancamentoCaixaSchema)
+});
+
 export const detalheCaixaResponseSchema = z.object({
+  lancamentos: z.array(categoriaLancamentosCaixaSchema),
   edicoes: z.array(edicaoHorarioCaixaSchema),
   ajuste: ajusteCaixaSchema.nullable()
 });
@@ -235,6 +252,8 @@ export type TotaisHistoricoCaixa = z.infer<typeof totaisHistoricoCaixaSchema>;
 export type HistoricoCaixaResponse = z.infer<typeof historicoCaixaResponseSchema>;
 export type EdicaoHorarioCaixa = z.infer<typeof edicaoHorarioCaixaSchema>;
 export type AjusteCaixa = z.infer<typeof ajusteCaixaSchema>;
+export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
+export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;

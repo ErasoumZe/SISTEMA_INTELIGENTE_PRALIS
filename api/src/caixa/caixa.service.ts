@@ -7,6 +7,7 @@ import type {
   AlterarHorarioCaixaResponse,
   CaixaOperacional,
   CaixaStatus,
+  CategoriaLancamentosCaixa,
   DetalheCaixaResponse,
   EditarAberturaCaixaPayload,
   FecharCaixaPayload,
@@ -48,6 +49,7 @@ import {
   existePeriodoCaixaRepository,
   listarEdicoesCaixaRepository,
   listarHistoricoCaixaRepository,
+  listarLancamentosCaixaRepository,
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
@@ -548,12 +550,14 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
 
-  const [edicoes, ajuste] = await Promise.all([
+  const [edicoes, ajuste, lancamentos] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),
-    buscarAjusteCaixaRepository(caixaId)
+    buscarAjusteCaixaRepository(caixaId),
+    listarLancamentosCaixaRepository(caixaId)
   ]);
 
   return {
+    lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
     edicoes: edicoes.map((edicao) => ({
       id: edicao.id,
       editadoPor: edicao.editadoPor,
@@ -579,6 +583,44 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
         }
       : null
   };
+}
+
+// Agrupa por categoria, na mesma ordem em que a tela do caixa apresenta os totais.
+// Transferencia: entrada quando o dinheiro CAI na conta do PDV; saida quando sai dela — a mesma
+// regra que calcularTotaisCaixaOperacionalRepository usa para somar.
+function montarLancamentosPorCategoria(
+  lancamentos: Awaited<ReturnType<typeof listarLancamentosCaixaRepository>>,
+  pdvContaId: string | null
+): CategoriaLancamentosCaixa[] {
+  const simples = (itens: { id: string; descricao: string | null; data: string | null; valor: string | null }[]) =>
+    itens.map((item) => ({
+      id: item.id,
+      descricao: item.descricao,
+      data: item.data,
+      valor: numero(item.valor),
+      sentido: null
+    }));
+
+  const transferencias = lancamentos.linhasTransferencias.map((item) => ({
+    id: item.id,
+    descricao: item.descricao,
+    data: item.data,
+    valor: numero(item.valor),
+    sentido: item.contaDestinoId === pdvContaId ? ("entrada" as const) : ("saida" as const)
+  }));
+
+  const categorias: CategoriaLancamentosCaixa[] = [
+    { categoria: "entradas", titulo: "Entradas", itens: simples(lancamentos.linhasVendas), total: 0 },
+    { categoria: "transferencias", titulo: "Transferencias", itens: transferencias, total: 0 },
+    { categoria: "despesas", titulo: "Despesas", itens: simples(lancamentos.linhasDespesas), total: 0 },
+    { categoria: "retiradas", titulo: "Retiradas", itens: simples(lancamentos.linhasRetiradas), total: 0 },
+    { categoria: "mercadorias", titulo: "Mercadorias", itens: simples(lancamentos.linhasMercadorias), total: 0 }
+  ];
+
+  return categorias.map((categoria) => ({
+    ...categoria,
+    total: deCentavos(categoria.itens.reduce((soma, item) => soma + paraCentavos(item.valor), 0))
+  }));
 }
 
 // valores_antigos/novos sao jsonb livre: le so os horarios, tolerando registro antigo sem o campo.

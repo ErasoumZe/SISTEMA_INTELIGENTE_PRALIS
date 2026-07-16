@@ -300,6 +300,79 @@ export async function listarEdicoesCaixaRepository(caixaId: string, db: Executor
     .orderBy(desc(edicoesCaixa.editadoEm));
 }
 
+// Lancamentos de UM caixa, por categoria. Mesmos criterios de calcularTotaisCaixaOperacionalRepository
+// (computar + nao cancelado), para o detalhe bater com os totais da linha.
+// Nao reusa /api/vendas e afins de proposito: aquelas rotas aplicam o escopo operacional
+// "somente caixa aberto" e, para um usuario_admin (que tem todos os flags), trocariam o caixaId
+// pedido pelo caixa aberto do proprio usuario — o detalhe mostraria o caixa errado.
+export async function listarLancamentosCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
+  const ativo = (tabela: typeof vendas | typeof despesas | typeof retiradas | typeof mercadorias) =>
+    and(eq(tabela.caixaId, caixaId), eq(tabela.computar, true), ne(tabela.status, "cancelado"));
+
+  const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias] = await Promise.all([
+    db
+      .select({
+        id: vendas.id,
+        descricao: vendas.descricao,
+        data: vendas.dataReferencia,
+        valor: vendas.valorOriginal
+      })
+      .from(vendas)
+      .where(ativo(vendas))
+      .orderBy(desc(vendas.dataReferencia)),
+    db
+      .select({
+        id: transferencias.id,
+        descricao: transferencias.descricao,
+        data: transferencias.dataReferencia,
+        valor: transferencias.valorOriginal,
+        contaOrigemId: transferencias.contaOrigemId,
+        contaDestinoId: transferencias.contaDestinoId
+      })
+      .from(transferencias)
+      .where(
+        and(
+          eq(transferencias.caixaId, caixaId),
+          eq(transferencias.computar, true),
+          ne(transferencias.status, "cancelado")
+        )
+      )
+      .orderBy(desc(transferencias.dataReferencia)),
+    db
+      .select({
+        id: despesas.id,
+        descricao: despesas.descricao,
+        data: despesas.dataReferencia,
+        valor: despesas.valorOriginal
+      })
+      .from(despesas)
+      .where(ativo(despesas))
+      .orderBy(desc(despesas.dataReferencia)),
+    db
+      .select({
+        id: retiradas.id,
+        descricao: retiradas.descricao,
+        data: retiradas.dataReferencia,
+        valor: retiradas.valorOriginal
+      })
+      .from(retiradas)
+      .where(ativo(retiradas))
+      .orderBy(desc(retiradas.dataReferencia)),
+    db
+      .select({
+        id: mercadorias.id,
+        descricao: mercadorias.descricao,
+        data: mercadorias.dataReferencia,
+        valor: mercadorias.valorOriginal
+      })
+      .from(mercadorias)
+      .where(ativo(mercadorias))
+      .orderBy(desc(mercadorias.dataReferencia))
+  ]);
+
+  return { linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias };
+}
+
 // Acerto de saldo do caixa (se houve): valor da diferenca e o colaborador que ficou com o debito.
 export async function buscarAjusteCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
   const [ajuste] = await db

@@ -5,6 +5,18 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
+type LinhaHistorico = { id: string; tokenEdicao?: string };
+type HistoricoJson = {
+  data: LinhaHistorico[];
+  meta: { totais: { totalEntradas: number; saldo: number; caixas: number } };
+};
+type GrupoLancamentos = { categoria: string; total: number; itens: { id: string }[] };
+type DetalheJson = { data: { lancamentos: GrupoLancamentos[]; edicoes: unknown[]; ajuste: unknown } };
+
+function idsDoHistorico(resposta: Parameters<typeof json>[0]) {
+  return json<HistoricoJson>(resposta).data.map((linha) => linha.id);
+}
+
 async function usuarioIdPorEmail(email: string) {
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email]);
   if (!usuario) throw new Error(`Usuario nao encontrado para ${email}`);
@@ -73,7 +85,7 @@ describe("caixa integration", () => {
     assertOk(resposta);
     // O seed grava TOKEN-ABERTO/TOKEN-FECHADO: o token do fluxo legado nao pode vazar na listagem.
     expect(JSON.stringify(resposta.json())).not.toContain("TOKEN-");
-    expect(json(resposta).data[0]).not.toHaveProperty("tokenEdicao");
+    expect(json<HistoricoJson>(resposta).data[0]).not.toHaveProperty("tokenEdicao");
   });
 
   it("Deve_FiltrarPorStatusPeriodoEPdv_Quando_HistoricoRecebeFiltros", async () => {
@@ -96,9 +108,9 @@ describe("caixa integration", () => {
     assertOk(fechados);
     assertOk(doDiaDoAberto);
     assertOk(porPdv);
-    expect(json(fechados).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaFechado]);
-    expect(json(doDiaDoAberto).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaAberto]);
-    expect(json(porPdv).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaFechado]);
+    expect(idsDoHistorico(fechados)).toEqual([idsTeste.caixaFechado]);
+    expect(idsDoHistorico(doDiaDoAberto)).toEqual([idsTeste.caixaAberto]);
+    expect(idsDoHistorico(porPdv)).toEqual([idsTeste.caixaFechado]);
   });
 
   it("Deve_SomarTotaisDoFiltroEnaoDaPagina_Quando_HistoricoPaginado", async () => {
@@ -110,7 +122,7 @@ describe("caixa integration", () => {
     });
 
     assertOk(resposta);
-    const corpo = json(resposta);
+    const corpo = json<HistoricoJson>(resposta);
     expect(corpo.data).toHaveLength(1);
     // Unico caixa fechado do seed: entradas 42.00 e saldo 42.00.
     expect(corpo.meta.totais).toMatchObject({ totalEntradas: 42, saldo: 42, caixas: 1 });
@@ -135,7 +147,44 @@ describe("caixa integration", () => {
 
     assertOk(resposta);
     // Caixa do seed nao teve alteracao de horario nem acerto: contrato presente, conteudo vazio.
-    expect(json(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
+    expect(json<DetalheJson>(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
+  });
+
+  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_AdminTemFlagSomenteCaixaAberto", async () => {
+    // usuario_admin recebe TODAS as permissoes, inclusive menu_entradas_somente_caixa_aberto.
+    // Por isso o detalhe nao pode reusar /api/vendas: aquela rota trocaria o caixaId pedido pelo
+    // caixa aberto do proprio admin. Aqui o caixa consultado (caixaAberto) tem a venda do seed.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const entradas = json<DetalheJson>(detalhe).data.lancamentos.find((grupo) => grupo.categoria === "entradas");
+    expect(entradas?.itens.map((item) => item.id)).toContain(idsTeste.vendaSeed);
+    expect(entradas?.total).toBe(42);
+  });
+
+  it("Deve_TrazerLancamentosVaziosSemCruzarCaixas_Quando_CaixaNaoTemMovimento", async () => {
+    // O caixa fechado do seed nao tem lancamento: as categorias vem todas zeradas — e nao podem
+    // pescar a venda do OUTRO caixa (regressao do escopo por caixa).
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(detalhe);
+    const grupos = json<DetalheJson>(detalhe).data.lancamentos;
+    expect(grupos.map((grupo) => grupo.categoria)).toEqual([
+      "entradas",
+      "transferencias",
+      "despesas",
+      "retiradas",
+      "mercadorias"
+    ]);
+    expect(grupos.every((grupo) => !grupo.itens.length && grupo.total === 0)).toBe(true);
   });
 
   it("Deve_Retornar403_Quando_AcessarOuOperarCaixaDeEmpresaNaoPermitida", async () => {

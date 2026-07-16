@@ -12,6 +12,13 @@ export function formatarDataHora(valor: Date | string) {
   return new Date(valor).toLocaleString("pt-BR");
 }
 
+// Data pura vinda do banco (YYYY-MM-DD, ex.: data_movimento). NAO passa por Date de proposito:
+// new Date("2026-06-30") e lido como meia-noite UTC e, em fuso negativo (BRT), voltaria um dia.
+export function formatarDataIso(valor: string) {
+  const [ano, mes, dia] = valor.split("-");
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : valor;
+}
+
 export function apenasDigitos(valor: string) {
   return valor.replace(/\D/g, "");
 }
