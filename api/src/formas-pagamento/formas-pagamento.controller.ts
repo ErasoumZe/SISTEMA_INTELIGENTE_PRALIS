@@ -2,15 +2,19 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { formasPagamentoQuerySchema as empresaQuerySchema } from "@padaria/shared/formas-pagamento";
 import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { listarFormasPagamento, salvarFormaPagamento } from "./formas-pagamento.service.js";
 
 export async function registrarRotasFormasPagamento(app: FastifyInstance): Promise<void> {
+  // Lista consumida como OPCAO de formulario/filtro (formas de pagamento no relatorio de vendas).
+  // Aceita relatorio_vendas_visualizar alem do cadastro de formas de pagamento.
   app.get(
     "/api/formas_pagamento",
-    { preHandler: exigirPermissao("cadastro_formas_pagamento_visualizar") },
+    {
+      preHandler: exigirAlgumaPermissao(["cadastro_formas_pagamento_visualizar", "relatorio_vendas_visualizar"])
+    },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {

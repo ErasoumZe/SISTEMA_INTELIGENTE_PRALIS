@@ -18,7 +18,7 @@ import {
   importarCargosSchema,
   importarColaboradoresSchema
 } from "@padaria/shared/colaboradores";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import {
@@ -62,9 +62,12 @@ function erro400(reply: FastifyReply, error: Error, fallback: string) {
 }
 
 export async function registrarRotasColaboradores(app: FastifyInstance) {
+  // Lista consumida como OPCAO de formulario (modal de abrir/editar caixa escolhe o colaborador;
+  // retiradas selecionam o responsavel). Aceita caixa_operar alem do cadastro de colaboradores.
+  // As sub-rotas (cargos/jornadas/faltas) seguem restritas ao cadastro.
   app.get(
     "/api/colaboradores",
-    { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
+    { preHandler: exigirAlgumaPermissao(["cadastro_colaboradores_visualizar", "caixa_operar"]) },
     async (request, reply) => {
       const escopo = await escopoDaQuery(request, reply);
       return escopo

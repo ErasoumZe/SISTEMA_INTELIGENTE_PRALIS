@@ -7,24 +7,38 @@ import {
   importarContasSchema as importarPayloadSchema
 } from "@padaria/shared/contas";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { exportarConta, importarContas, listarContas, salvarConta } from "./contas.service.js";
 
 export async function registrarRotasContas(app: FastifyInstance): Promise<void> {
-  app.get("/api/contas", { preHandler: exigirPermissao("cadastro_contas_visualizar") }, async (request, reply) => {
-    const query = empresaQuerySchema.parse(request.query);
-    try {
-      const escopo = escopoEmpresaAtiva(
-        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
-        query.empresaId
-      );
-      return paginadoDeArray(await listarContas(escopo), query.page, query.pageSize);
-    } catch (error) {
-      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+  // Lista consumida como OPCAO de formulario (conta origem em despesas/retiradas/transferencias e
+  // no fluxo de caixa). Aceita quem opera esses lancamentos, alem do cadastro de contas.
+  app.get(
+    "/api/contas",
+    {
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_contas_visualizar",
+        "despesas_visualizar",
+        "transferencias_visualizar",
+        "retiradas_visualizar",
+        "caixa_operar"
+      ])
+    },
+    async (request, reply) => {
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        return paginadoDeArray(await listarContas(escopo), query.page, query.pageSize);
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
     }
-  });
+  );
 
   app.post("/api/contas", { preHandler: exigirPermissao("cadastro_contas_criar") }, async (request, reply) => {
     const body = request.body as { empresaId?: string };
