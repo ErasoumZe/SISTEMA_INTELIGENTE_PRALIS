@@ -1630,6 +1630,10 @@ const pageContext = computed(() => ({
   abrirCaixaOperacional,
   acertarSaldoOperacional,
   fecharCaixaOperacional,
+  recarregarCaixa: async () => {
+    await carregarStatusCaixa(empresaId.value);
+    await carregarOperacoes(empresaId.value);
+  },
   abrirCadastroNovo: () => (telaAtiva.value === "malotes" ? abrirMaloteNovo() : abrirCadastroNovo(telaAtiva.value)),
   abrirImportacao: () => abrirImportacao(telaAtiva.value),
   abrirExportacao,

@@ -2,12 +2,15 @@
 import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
+import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
   status: CaixaStatus | null;
   pdvs: Opcao[];
   turnos?: Opcao[];
+  empresaId: string;
+  permissoes: string[];
   usuarioId: string;
   usuarioNome: string;
   salvando?: boolean;
@@ -26,6 +29,7 @@ const emit = defineEmits<{
   ): void;
   (event: "acertarSaldo", payload: { caixaId: string; observacao: string | null }): void;
   (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null }): void;
+  (event: "recarregar"): void;
 }>();
 
 const abertura = reactive({
@@ -125,9 +129,17 @@ function fechar() {
       </v-row>
 
       <template v-else>
-        <v-alert type="success" variant="tonal" class="mb-4">
-          Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
-        </v-alert>
+        <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
+          <v-alert type="success" variant="tonal" class="flex-grow-1 mb-0">
+            Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
+          </v-alert>
+          <CaixaAutorizacoes
+            :empresa-id="empresaId"
+            :caixa-aberto="caixaAberto"
+            :permissoes="permissoes"
+            @alterado="emit('recarregar')"
+          />
+        </div>
 
         <v-row v-if="resumoAtual" dense>
           <v-col cols="12" md="2">
