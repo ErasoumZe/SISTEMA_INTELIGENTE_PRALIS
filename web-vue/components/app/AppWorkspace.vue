@@ -1459,8 +1459,29 @@ async function executarCopia() {
   }
 }
 
+async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
+  const cargoId = linha.alvoId;
+  if (!cargoId) return;
+  const nome = linha.alvo ?? "cargo";
+  if (
+    !window.confirm(
+      `Restaurar as permissoes do cargo "${nome}" para o padrao? Isso SUBSTITUI as regras atuais (inclusive as desligadas manualmente).`
+    )
+  ) {
+    return;
+  }
+  try {
+    await apiPost(`/api/permissoes/cargo/${cargoId}/restaurar-padrao`, {});
+    notificar(`Permissoes do cargo "${nome}" restauradas para o padrao.`);
+    if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
+}
+
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
   if (payload.event === "maloteEditar") void abrirMaloteEditar(payload.linha);
+  else if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
 }
 
 provide(WORKSPACE_CONTEXT, {

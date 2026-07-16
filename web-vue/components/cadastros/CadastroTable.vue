@@ -26,7 +26,11 @@ const props = withDefaults(
     totalServidor?: number;
     paginaServidor?: number;
     itensPorPaginaServidor?: number;
-    acoesExtras?: Array<{ label: string; event: string }>;
+    acoesExtras?: Array<{
+      label: string;
+      event: string;
+      condicao?: (linha: Record<string, string | undefined>) => boolean;
+    }>;
   }>(),
   {
     acaoCarregando: false,
@@ -193,7 +197,7 @@ function proximaPagina() {
               <td v-if="temAcoes" class="text-right">
                 <div class="row-actions d-flex justify-end ga-1">
                   <v-btn
-                    v-for="acaoExtra in acoesExtras"
+                    v-for="acaoExtra in acoesExtras.filter((acao) => !acao.condicao || acao.condicao(linha))"
                     :key="acaoExtra.event"
                     size="small"
                     variant="text"
