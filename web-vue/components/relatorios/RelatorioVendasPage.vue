@@ -247,7 +247,9 @@ watch(
                   linha.pagamentos?.map((pagamento) => pagamento.formaPagamentoNome ?? "Sem forma").join(", ") || "-"
                 }}
               </td>
-              <td>{{ dinheiro(linha.valorOriginal) }}</td>
+              <!-- Liquido: o subtotal (valorOriginal) nao e o que o cliente pagou e nao bateria
+                   com o rodape nem com o CREARE. -->
+              <td>{{ dinheiro(linha.valorLiquido ?? linha.valorOriginal) }}</td>
               <td class="text-right">
                 <v-btn size="small" variant="text" @click="abrirComprovantes(linha)">
                   Adicionar comprovantes ({{ linha.totalComprovantes ?? 0 }})

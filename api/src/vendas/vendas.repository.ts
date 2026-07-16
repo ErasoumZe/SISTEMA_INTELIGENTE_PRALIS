@@ -3,6 +3,12 @@ import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/sche
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import type { TotaisVendas, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
+import {
+  centavosParaDecimalBanco,
+  deCentavos,
+  liquidoCentavos,
+  liquidoDeSomasCentavos
+} from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
@@ -111,6 +117,8 @@ export async function listarVendasRepository(
     ...linha,
     // timestamp -> ISO no contrato (dataReferencia/dataPagamento sao date-only e ja vem string).
     dataVenda: linha.dataVenda ? new Date(linha.dataVenda).toISOString() : null,
+    // O que o cliente pagou. valorOriginal segue no DTO (subtotal) para quem precisar da decomposicao.
+    valorLiquido: centavosParaDecimalBanco(liquidoCentavos(linha)),
     pagamentos: pagamentos
       .filter((pagamento) => pagamento.vendaId === linha.id)
       .map(({ vendaId: _vendaId, ...pagamento }) => pagamento),
@@ -149,10 +157,28 @@ export async function totaisVendasRepository(
   }
   const where = filtros.length ? and(...filtros) : undefined;
 
+  // Total geral. Soma e linear, entao somamos as tres colunas e combinamos no liquido — evita
+  // expressao aritmetica em SQL (proibida na API) e da o mesmo SUM(original - desconto + acrescimo).
   const [resumo] = await banco
-    .select({ total: sum(vendas.valorOriginal), quantidade: count() })
+    .select({
+      somaOriginal: sum(vendas.valorOriginal),
+      somaDesconto: sum(vendas.valorDesconto),
+      somaAcrescimo: sum(vendas.valorAcrescimo),
+      quantidade: count()
+    })
     .from(vendas)
     .where(where);
+
+  // Com filtro de forma ativo, o total geral e a PARCELA paga naquela forma — nao o valor inteiro
+  // da venda. Numa venda multi-forma ("CREDITO, PIX"), somar a venda toda ao filtrar por CREDITO
+  // inflava o relatorio com dinheiro que entrou por outra forma.
+  const [parcelaDaForma] = query.formaPagamentoId
+    ? await banco
+        .select({ total: sum(vendasPagamentos.totalPago) })
+        .from(vendasPagamentos)
+        .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+        .where(and(eq(vendasPagamentos.formaPagamentoId, query.formaPagamentoId), ...(where ? [where] : [])))
+    : [undefined];
 
   const porForma = await banco
     .select({
@@ -168,7 +194,11 @@ export async function totaisVendasRepository(
     .groupBy(vendasPagamentos.formaPagamentoId, formasPagamento.nome);
 
   return {
-    totalGeral: numeroDecimal(resumo?.total ?? "0"),
+    // Sem filtro de forma: liquido das vendas (cada venda conta UMA vez, sem join com pagamentos).
+    // Com filtro: so a parcela daquela forma. quantidade continua sendo "vendas com a forma".
+    totalGeral: query.formaPagamentoId
+      ? numeroDecimal(parcelaDaForma?.total ?? "0")
+      : deCentavos(liquidoDeSomasCentavos(resumo ?? { somaOriginal: 0, somaDesconto: 0, somaAcrescimo: 0 })),
     quantidade: Number(resumo?.quantidade ?? 0),
     porFormaPagamento: porForma.map((linha) => ({
       formaPagamentoId: linha.formaPagamentoId,

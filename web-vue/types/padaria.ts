@@ -205,7 +205,11 @@ export type OperacaoResumo = {
   // E a unica fonte de "que horas foi a venda"; dataReferencia nao responde isso.
   dataVenda?: string | null;
   descricao: string;
+  // SUBTOTAL do lancamento — nao e o que o cliente pagou.
   valorOriginal: string;
+  // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
+  // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
+  valorLiquido?: string;
   computar: boolean;
   status: string;
   pendenteDiscriminacao?: boolean;

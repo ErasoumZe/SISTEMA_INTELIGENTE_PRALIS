@@ -18,6 +18,33 @@ export function somarCentavos(...valores: Array<string | number | null | undefin
   return valores.reduce<number>((total, valor) => total + paraCentavos(valor), 0);
 }
 
+// Valor LIQUIDO de um lancamento, em centavos: o que de fato entrou/saiu.
+//
+// valor_original guarda o SUBTOTAL (na venda integrada e o VALOR_SUBTOTAL do CREARE), com desconto
+// e acrescimo em colunas separadas. Somar valor_original puro superestima venda com desconto e
+// subestima venda com acrescimo — era o que fazia o relatorio e o caixa nao baterem com o CREARE.
+//
+// Fonte unica: todo agregado de venda (relatorio, caixa, conciliacao) passa por aqui.
+export function liquidoCentavos(valores: {
+  valorOriginal: string | number | null | undefined;
+  valorDesconto?: string | number | null | undefined;
+  valorAcrescimo?: string | number | null | undefined;
+}): number {
+  return (
+    paraCentavos(valores.valorOriginal) - paraCentavos(valores.valorDesconto) + paraCentavos(valores.valorAcrescimo)
+  );
+}
+
+// Versao para agregados vindos do SQL: SOMA E LINEAR, entao somar as tres colunas separadamente e
+// combinar aqui da exatamente SUM(original - desconto + acrescimo) — sem precisar de SQL cru.
+export function liquidoDeSomasCentavos(somas: {
+  somaOriginal: string | number | null | undefined;
+  somaDesconto: string | number | null | undefined;
+  somaAcrescimo: string | number | null | undefined;
+}): number {
+  return paraCentavos(somas.somaOriginal) - paraCentavos(somas.somaDesconto) + paraCentavos(somas.somaAcrescimo);
+}
+
 // Converte centavos inteiros para a string decimal gravada em colunas numeric do banco.
 // Aritmetica inteira de ponta a ponta: nenhum float envolvido.
 export function centavosParaDecimalBanco(centavos: number): string {

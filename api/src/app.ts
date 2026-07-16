@@ -42,7 +42,17 @@ import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
 // (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
-const rotasComAutenticacaoPropria = new Set(["/health", "/api/auth/*", "/api/me", "/api/sessao", "/api/integracoes"]);
+// Allowlist do default-deny: rotas que NAO usam sessao porque tem autenticacao propria.
+// /api/integracoes e /api/integracoes/conciliacao autenticam pela chave de integracao (x-api-key,
+// hash em tempo constante) — sao chamadas pelo agente, que nao tem sessao de usuario.
+const rotasComAutenticacaoPropria = new Set([
+  "/health",
+  "/api/auth/*",
+  "/api/me",
+  "/api/sessao",
+  "/api/integracoes",
+  "/api/integracoes/conciliacao"
+]);
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Rastreamento de erros opcional (no-op sem SENTRY_DSN).

@@ -20,7 +20,7 @@ import type {
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
-import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
 import { ErroDominio, erroValidacao, naoEncontrado } from "../erros.js";
@@ -602,12 +602,14 @@ function montarLancamentosPorCategoria(
       sentido: null
     }));
 
+  // Venda entra pelo LIQUIDO (valor_original e o subtotal): assim a soma do grupo bate com a
+  // coluna Entradas da linha, que tambem soma liquido.
   const entradas = lancamentos.linhasVendas.map((item) => ({
     id: item.id,
     descricao: item.descricao,
     data: item.data,
     dataHora: serializarData(item.dataHora),
-    valor: numero(item.valor),
+    valor: deCentavos(liquidoCentavos({ valorOriginal: item.valor, ...item })),
     sentido: null
   }));
 

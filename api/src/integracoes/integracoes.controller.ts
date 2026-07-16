@@ -13,6 +13,7 @@ import { empresasPermitidas } from "../auth/empresa.js";
 import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
 import { mensagemDominioOuRelancar, naoAutorizado } from "../erros.js";
 import {
+  conciliarVendasDoDia,
   criarChaveIntegracao,
   inativarChaveIntegracao,
   listarDicionarioIntegracao,
@@ -129,6 +130,25 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
       const chave = chaveIntegracaoHeader(request.headers);
       if (!chave) throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
       return ok(await receberVendaIntegracao(chave, request.body));
+    }
+  );
+
+  // Conciliacao diaria sistema x CREARE, por PDV. Mesma chave (x-api-key) e mesmo rate limit da
+  // ingestao — e o mesmo agente que chama, ao fim do ciclo. So le: o e-mail e o registro.
+  app.post(
+    "/api/integracoes/conciliacao",
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: "1 minute"
+        }
+      }
+    },
+    async (request) => {
+      const chave = chaveIntegracaoHeader(request.headers);
+      if (!chave) throw naoAutorizado("Chave de integracao invalida", "INVALID_INTEGRATION_KEY");
+      return ok(await conciliarVendasDoDia(chave, request.body));
     }
   );
 }

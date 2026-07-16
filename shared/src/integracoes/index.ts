@@ -9,9 +9,11 @@ export const tiposIntegracao = ["vendas"] as const;
 export const tiposRegistroIntegracao = ["venda", "pdv", "cliente", "produto", "forma_pagamento"] as const;
 export const camposVinculoIntegracao = ["pdv", "cliente", "produto", "forma_pagamento"] as const;
 
-export const integracaoQuerySchema = z.object({
-  empresaId: uuidSchema.optional()
-}).merge(paginationQuerySchema);
+export const integracaoQuerySchema = z
+  .object({
+    empresaId: uuidSchema.optional()
+  })
+  .merge(paginationQuerySchema);
 
 export const integracaoCodigoParamsSchema = z.object({
   codigo: textoObrigatorioSchema
@@ -133,6 +135,50 @@ export const integracaoIngestaoResultadoSchema = z.object({
   identificadorExterno: z.string()
 });
 
+// --- Conciliacao diaria sistema x CREARE -------------------------------------------------------
+// O agente manda o que o CREARE tem (por PDV, so venda fechada) e a API compara com o que entrou
+// no sistema. Nao persiste nada: o e-mail de divergencia e o registro.
+export const conciliacaoPdvPayloadSchema = z.object({
+  // Mesmo identificador externo do PDV usado na ingestao (Venda.idCaixa) — resolvido pelo
+  // dicionario de vinculos ja existente.
+  pdvIdentificador: z.string().min(1),
+  quantidadeVendas: z.number().int().min(0),
+  valorTotal: z.number().min(0)
+});
+
+export const conciliacaoPayloadSchema = z.object({
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "data deve ser yyyy-MM-dd"),
+  porPdv: z.array(conciliacaoPdvPayloadSchema)
+});
+
+// Tolerancia de 1 centavo: abaixo disso e ruido de arredondamento, nao divergencia.
+export const TOLERANCIA_CONCILIACAO_CENTAVOS = 1;
+
+export const conciliacaoPdvResultadoSchema = z.object({
+  pdvIdentificador: z.string(),
+  pdvId: z.string().nullable(),
+  pdvNome: z.string().nullable(),
+  sistema: z.object({ quantidadeVendas: z.number().int(), valorTotal: z.number() }),
+  creare: z.object({ quantidadeVendas: z.number().int(), valorTotal: z.number() }),
+  diferenca: z.number(),
+  ok: z.boolean(),
+  // PDV que o CREARE mandou mas que nao tem vinculo resolvido no sistema: nao da para comparar,
+  // entao nao e "ok". Nunca criamos vinculo aqui — isso e regra da ingestao.
+  pdvNaoVinculado: z.boolean()
+});
+
+export const conciliacaoResultadoSchema = z.object({
+  data: z.string(),
+  ok: z.boolean(),
+  porPdv: z.array(conciliacaoPdvResultadoSchema),
+  alertasEnviados: z.number().int().min(0)
+});
+
+export type ConciliacaoPayload = z.infer<typeof conciliacaoPayloadSchema>;
+export type ConciliacaoPdvPayload = z.infer<typeof conciliacaoPdvPayloadSchema>;
+export type ConciliacaoPdvResultado = z.infer<typeof conciliacaoPdvResultadoSchema>;
+export type ConciliacaoResultado = z.infer<typeof conciliacaoResultadoSchema>;
+
 export type TipoIntegracao = z.infer<typeof criarIntegracaoChavePayloadSchema>["tipo"];
 export type TipoRegistroIntegracao = (typeof tiposRegistroIntegracao)[number];
 export type CampoVinculoIntegracao = (typeof camposVinculoIntegracao)[number];
@@ -150,4 +196,3 @@ export type IntegracaoHistoricoDto = z.infer<typeof integracaoHistoricoDtoSchema
 export type IntegracaoCampoConfigDto = z.infer<typeof integracaoCampoConfigDtoSchema>;
 export type IntegracaoVinculoDto = z.infer<typeof integracaoVinculoDtoSchema>;
 export type IntegracaoIngestaoResultado = z.infer<typeof integracaoIngestaoResultadoSchema>;
-

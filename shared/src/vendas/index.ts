@@ -86,9 +86,13 @@ export const vendaDtoSchema = z.object({
   dataVenda: z.string().nullable().optional(),
   dataPagamento: z.string().nullable().optional(),
   descricao: z.string(),
+  // SUBTOTAL da venda (no integrado, VALOR_SUBTOTAL do CREARE) — nao e o que o cliente pagou.
   valorOriginal: z.string(),
   valorAcrescimo: z.string().optional(),
   valorDesconto: z.string().optional(),
+  // O que de fato entrou: original - desconto + acrescimo. E este que bate com o VALOR_TOTAL do
+  // CREARE e com os totais do relatorio/caixa; a tela exibe ele na coluna Valor.
+  valorLiquido: z.string().optional(),
   computar: z.boolean(),
   status: z.string(),
   pdvId: z.string().nullable().optional(),

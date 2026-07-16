@@ -91,6 +91,11 @@
       "development": "./src/ids/index.ts",
       "default": "./dist/ids/index.js"
     },
+    "./datas": {
+      "types": "./dist/datas/index.d.ts",
+      "development": "./src/datas/index.ts",
+      "default": "./dist/datas/index.js"
+    },
     "./dinheiro": {
       "types": "./dist/dinheiro/index.d.ts",
       "development": "./src/dinheiro/index.ts",

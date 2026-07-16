@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { enviarVendaIntegracao, verificarApi } from "./api-client.js";
-import { buscarVendasIncrementais } from "./creare-repository.js";
+import { enviarConciliacao, enviarVendaIntegracao, verificarApi } from "./api-client.js";
+import { buscarConciliacaoDia, buscarVendasIncrementais, diaNegocioHoje } from "./creare-repository.js";
 import { criarPoolCreare } from "./database.js";
 import { obterConfig } from "./env.js";
 import { montarPayloads } from "./payload.js";
@@ -87,6 +87,11 @@ export async function executarCiclo(config, caminhos) {
   const desde = cursor?.ultimaDataHoraVenda ?? inicioPadrao(sync.diasIniciais);
   let novoCursor = cursor;
 
+  // Agregado do dia para a conciliacao: lido com o pool ainda aberto, enviado depois do ciclo.
+  // Dia no fuso do negocio — a mesma regra que a API usa para gravar data_referencia.
+  const diaConciliacao = diaNegocioHoje();
+  let porPdvCreare = null;
+
   const pool = criarPoolCreare(config.creare);
   try {
     const { vendas, itens, pagamentos } = await buscarVendasIncrementais(pool, desde);
@@ -106,6 +111,9 @@ export async function executarCiclo(config, caminhos) {
       }
     }
     novoCursor = { ultimaDataHoraVenda: maxData, ultimoIdVendaBalcao: maxId };
+
+    // Le o agregado DEPOIS de enviar as vendas do ciclo: assim compara o estado ja sincronizado.
+    porPdvCreare = await buscarConciliacaoDia(pool, diaConciliacao);
   } finally {
     await pool.end();
   }
@@ -121,7 +129,49 @@ export async function executarCiclo(config, caminhos) {
       `erros=${contagem.erros} fila_pendente=${falhas.length} cursor=${novoCursor?.ultimaDataHoraVenda ?? "-"}`
   );
 
-  return { ...contagem, filaPendente: falhas.length };
+  // 5) Conciliacao do dia (best-effort): nunca derruba o ciclo — as vendas ja foram entregues.
+  const conciliacao = await conciliarDia(config, diaConciliacao, porPdvCreare);
+
+  return { ...contagem, filaPendente: falhas.length, conciliacao };
+}
+
+// Compara o agregado do CREARE com o sistema e loga PDV a PDV. A API e quem decide divergencia e
+// dispara o e-mail aos admins; aqui so reportamos no console do ciclo.
+async function conciliarDia(config, dia, porPdv) {
+  if (!porPdv) return null;
+  try {
+    const resultado = await enviarConciliacao({
+      apiUrl: config.padaria.apiUrl,
+      codigoIntegracao: config.padaria.codigoIntegracao,
+      data: dia,
+      porPdv
+    });
+    if (!resultado) return null;
+
+    for (const pdv of resultado.porPdv) {
+      const nome = pdv.pdvNome ?? pdv.pdvIdentificador;
+      if (pdv.pdvNaoVinculado) {
+        console.warn(`[conciliacao] ${dia} PDV ${nome}: SEM VINCULO no sistema (nao comparado)`);
+      } else if (pdv.ok) {
+        console.log(
+          `[conciliacao] ${dia} PDV ${nome}: ok (${pdv.creare.quantidadeVendas} vendas, ${pdv.creare.valorTotal})`
+        );
+      } else {
+        console.warn(
+          `[conciliacao] ${dia} PDV ${nome}: DIVERGENTE sistema=${pdv.sistema.valorTotal} (${pdv.sistema.quantidadeVendas}) ` +
+            `creare=${pdv.creare.valorTotal} (${pdv.creare.quantidadeVendas}) diferenca=${pdv.diferenca}`
+        );
+      }
+    }
+    if (!resultado.porPdv.length) console.log(`[conciliacao] ${dia}: nenhuma venda fechada no CREARE.`);
+    else if (resultado.ok) console.log(`[conciliacao] ${dia}: todos os PDVs batem.`);
+    else console.warn(`[conciliacao] ${dia}: divergencia -> ${resultado.alertasEnviados} alerta(s) por e-mail.`);
+
+    return resultado;
+  } catch (erro) {
+    console.error(`[conciliacao] falha ao conciliar ${dia}: ${erro instanceof Error ? erro.message : erro}`);
+    return null;
+  }
 }
 
 // Modo 1-CICLO (ex.: Agendador de Tarefas): adquire o lock, roda um ciclo e libera. Se ja houver
