@@ -7,6 +7,7 @@ export * from "./regras.js";
 
 const uuidSchema = z.string().uuid();
 const dataHoraSchema = z.string().min(16);
+const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, "data deve ser YYYY-MM-DD");
 
 export const caixaStatusQuerySchema = z.object({
   empresaId: uuidSchema
@@ -42,11 +43,99 @@ export const fecharCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable()
 });
 
+// Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
+// aceito pela constraint do banco e existe no seed, mas NENHUM fluxo o escreve — o acerto de saldo
+// cria despesa/debito/ajuste e mantem o caixa aberto. Quem quer "houve acerto" usa temAjuste.
+export const statusCaixaSchema = z.enum(["aberto", "fechado", "ajustado"]);
+
+// Filtros do historico. Periodo e por data_movimento (a data contabil do caixa), nao por
+// data_hora_abertura: e ela que o operador enxerga como "o dia daquele caixa".
 export const historicoCaixaQuerySchema = z
   .object({
-    empresaId: uuidSchema
+    empresaId: uuidSchema,
+    dataInicio: dataSchema.optional(),
+    dataFim: dataSchema.optional(),
+    pdvId: uuidSchema.optional(),
+    usuarioCaixaId: z.string().min(1).optional(),
+    colaboradorId: uuidSchema.optional(),
+    turnoId: uuidSchema.optional(),
+    status: statusCaixaSchema.optional()
   })
   .merge(paginationQuerySchema);
+
+export const totaisHistoricoCaixaSchema = z.object({
+  totalEntradas: z.number(),
+  totalTransferenciasEntrada: z.number(),
+  totalTransferenciasSaida: z.number(),
+  totalDespesas: z.number(),
+  totalRetiradas: z.number(),
+  totalMercadorias: z.number(),
+  saldo: z.number(),
+  caixas: z.number()
+});
+
+// Uma linha da listagem. Totais vem persistidos de fechamentos_caixa (nao recalculamos);
+// para caixa ainda aberto eles sao 0 ate o fechamento gravar — a UI marca isso.
+export const linhaHistoricoCaixaSchema = z.object({
+  id: uuidSchema,
+  empresaId: uuidSchema,
+  dataMovimento: z.string(),
+  pdvId: uuidSchema.nullable(),
+  pdvNome: z.string(),
+  usuarioCaixaId: z.string().nullable(),
+  usuarioCaixaNome: z.string().nullable(),
+  colaboradorId: uuidSchema,
+  colaboradorNome: z.string().nullable(),
+  turnoId: uuidSchema.nullable(),
+  turnoNome: z.string().nullable(),
+  dataHoraAbertura: z.string().nullable(),
+  dataHoraFechamento: z.string().nullable(),
+  totalEntradas: z.number(),
+  totalTransferencias: z.number(),
+  totalTransferenciasEntrada: z.number(),
+  totalTransferenciasSaida: z.number(),
+  totalDespesas: z.number(),
+  totalRetiradas: z.number(),
+  totalMercadorias: z.number(),
+  saldo: z.number(),
+  status: statusCaixaSchema,
+  temAjuste: z.boolean(),
+  observacao: z.string().nullable()
+});
+
+export const historicoCaixaResponseSchema = z.object({
+  itens: z.array(linhaHistoricoCaixaSchema),
+  totais: totaisHistoricoCaixaSchema
+});
+
+// --- Detalhe de um caixa (auditoria) ------------------------------------------------------------
+export const edicaoHorarioCaixaSchema = z.object({
+  id: uuidSchema,
+  editadoPor: z.string().nullable(),
+  editadoPorNome: z.string().nullable(),
+  autorizadorId: z.string().nullable(),
+  autorizadorNome: z.string().nullable(),
+  observacao: z.string().nullable(),
+  editadoEm: z.string(),
+  porToken: z.boolean(),
+  valoresAntigos: z.object({ dataHoraAbertura: z.string().nullable(), dataHoraFechamento: z.string().nullable() }),
+  valoresNovos: z.object({ dataHoraAbertura: z.string().nullable(), dataHoraFechamento: z.string().nullable() })
+});
+
+export const ajusteCaixaSchema = z.object({
+  id: uuidSchema,
+  valorDiferenca: z.number(),
+  despesaId: uuidSchema.nullable(),
+  criadoEm: z.string(),
+  colaboradorId: uuidSchema.nullable(),
+  colaboradorNome: z.string().nullable(),
+  observacao: z.string().nullable()
+});
+
+export const detalheCaixaResponseSchema = z.object({
+  edicoes: z.array(edicaoHorarioCaixaSchema),
+  ajuste: ajusteCaixaSchema.nullable()
+});
 
 // --- Alteracao de horario por token / permissao direta -----------------------------------------
 export const autorizacoesCaixaQuerySchema = z.object({ empresaId: uuidSchema });
@@ -140,6 +229,13 @@ export type EditarAberturaCaixaPayload = z.infer<typeof editarAberturaCaixaPaylo
 export type AcertarSaldoCaixaPayload = z.infer<typeof acertarSaldoCaixaPayloadSchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
+export type StatusCaixa = z.infer<typeof statusCaixaSchema>;
+export type LinhaHistoricoCaixa = z.infer<typeof linhaHistoricoCaixaSchema>;
+export type TotaisHistoricoCaixa = z.infer<typeof totaisHistoricoCaixaSchema>;
+export type HistoricoCaixaResponse = z.infer<typeof historicoCaixaResponseSchema>;
+export type EdicaoHorarioCaixa = z.infer<typeof edicaoHorarioCaixaSchema>;
+export type AjusteCaixa = z.infer<typeof ajusteCaixaSchema>;
+export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 

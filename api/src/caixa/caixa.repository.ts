@@ -1,6 +1,24 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { and, asc, desc, eq, gt, gte, ilike, isNotNull, isNull, lt, lte, ne, or } from "drizzle-orm";
-import { colaboradores, gruposDespesas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sum
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { colaboradores, gruposDespesas, pdvs, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
 import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -256,6 +274,53 @@ export async function registrarEdicaoCaixaRepository(
   await db.insert(edicoesCaixa).values(input);
 }
 
+// Auditoria de alteracoes de horario de UM caixa: quem editou, quando, motivo e quem autorizou.
+// Dois joins na mesma tabela de perfis (editor e autorizador) exigem alias.
+const perfilEditor = alias(perfisUsuarios, "perfil_editor");
+const perfilAutorizador = alias(perfisUsuarios, "perfil_autorizador");
+
+export async function listarEdicoesCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: edicoesCaixa.id,
+      editadoPor: edicoesCaixa.editadoPor,
+      editadoPorNome: perfilEditor.nome,
+      autorizadorId: edicoesCaixa.autorizadorId,
+      autorizadorNome: perfilAutorizador.nome,
+      observacao: edicoesCaixa.observacao,
+      editadoEm: edicoesCaixa.editadoEm,
+      tokenUsado: edicoesCaixa.tokenUsado,
+      valoresAntigos: edicoesCaixa.valoresAntigos,
+      valoresNovos: edicoesCaixa.valoresNovos
+    })
+    .from(edicoesCaixa)
+    .leftJoin(perfilEditor, eq(perfilEditor.usuarioId, edicoesCaixa.editadoPor))
+    .leftJoin(perfilAutorizador, eq(perfilAutorizador.usuarioId, edicoesCaixa.autorizadorId))
+    .where(eq(edicoesCaixa.caixaId, caixaId))
+    .orderBy(desc(edicoesCaixa.editadoEm));
+}
+
+// Acerto de saldo do caixa (se houve): valor da diferenca e o colaborador que ficou com o debito.
+export async function buscarAjusteCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
+  const [ajuste] = await db
+    .select({
+      id: ajustesFechamentoCaixa.id,
+      valorDiferenca: ajustesFechamentoCaixa.valorDiferenca,
+      despesaId: ajustesFechamentoCaixa.despesaId,
+      criadoEm: ajustesFechamentoCaixa.criadoEm,
+      colaboradorId: debitosColaboradores.colaboradorId,
+      colaboradorNome: colaboradores.nome,
+      observacao: debitosColaboradores.observacao
+    })
+    .from(ajustesFechamentoCaixa)
+    .leftJoin(debitosColaboradores, eq(debitosColaboradores.caixaId, ajustesFechamentoCaixa.fechamentoCaixaId))
+    .leftJoin(colaboradores, eq(colaboradores.id, debitosColaboradores.colaboradorId))
+    .where(eq(ajustesFechamentoCaixa.fechamentoCaixaId, caixaId))
+    .orderBy(desc(ajustesFechamentoCaixa.criadoEm))
+    .limit(1);
+  return ajuste ?? null;
+}
+
 // Atualiza o horario de abertura e/ou fechamento (nao mexe em PDV/usuario/token) — usado pelo novo
 // fluxo de alteracao por token/permissao. O tokenEdicao do gerente (fluxo antigo) fica intacto.
 export async function atualizarHorarioCaixaRepository(
@@ -494,22 +559,54 @@ export async function atualizarFechamentoCaixaRepository(
     .where(eq(fechamentosCaixa.id, input.caixaId));
 }
 
-export async function listarHistoricoCaixaRepository(empresaId: string, db: ExecutorBanco = banco) {
-  return db
+export type FiltrosHistoricoCaixa = {
+  empresaId: string;
+  dataInicio?: string;
+  dataFim?: string;
+  pdvId?: string;
+  usuarioCaixaId?: string;
+  colaboradorId?: string;
+  turnoId?: string;
+  status?: string;
+};
+
+// Um unico WHERE para pagina, contagem e totais: se divergirem, o rodape mente sobre a lista.
+function condicoesHistoricoCaixa(filtros: FiltrosHistoricoCaixa) {
+  const condicoes = [eq(fechamentosCaixa.empresaId, filtros.empresaId)];
+  if (filtros.dataInicio) condicoes.push(gte(fechamentosCaixa.dataMovimento, filtros.dataInicio));
+  if (filtros.dataFim) condicoes.push(lte(fechamentosCaixa.dataMovimento, filtros.dataFim));
+  if (filtros.pdvId) condicoes.push(eq(fechamentosCaixa.pdvId, filtros.pdvId));
+  if (filtros.usuarioCaixaId) condicoes.push(eq(fechamentosCaixa.usuarioCaixaId, filtros.usuarioCaixaId));
+  if (filtros.colaboradorId) condicoes.push(eq(fechamentosCaixa.colaboradorId, filtros.colaboradorId));
+  if (filtros.turnoId) condicoes.push(eq(fechamentosCaixa.turnoId, filtros.turnoId));
+  if (filtros.status) condicoes.push(eq(fechamentosCaixa.status, filtros.status));
+  return and(...condicoes);
+}
+
+// Pagina do historico. Ordena por data_movimento (a data contabil que a tela filtra) e desempata
+// pela abertura/PDV. tokenEdicao NAO sai daqui: e segredo do fluxo legado, nao dado de listagem.
+export async function listarHistoricoCaixaRepository(
+  filtros: FiltrosHistoricoCaixa,
+  page: number,
+  pageSize: number,
+  db: ExecutorBanco = banco
+) {
+  const where = condicoesHistoricoCaixa(filtros);
+  const itens = await db
     .select({
       id: fechamentosCaixa.id,
       empresaId: fechamentosCaixa.empresaId,
+      dataMovimento: fechamentosCaixa.dataMovimento,
       pdvId: fechamentosCaixa.pdvId,
       pdvNome: pdvs.nome,
-      usuarioId: fechamentosCaixa.usuarioId,
       usuarioCaixaId: fechamentosCaixa.usuarioCaixaId,
       usuarioCaixaNome: perfisUsuarios.nome,
       colaboradorId: fechamentosCaixa.colaboradorId,
+      colaboradorNome: colaboradores.nome,
+      turnoId: fechamentosCaixa.turnoId,
+      turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
-      abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
-      fechadoEm: fechamentosCaixa.fechadoEm,
-      tokenEdicao: fechamentosCaixa.tokenEdicao,
       observacao: fechamentosCaixa.observacao,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
@@ -524,6 +621,42 @@ export async function listarHistoricoCaixaRepository(empresaId: string, db: Exec
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
-    .where(eq(fechamentosCaixa.empresaId, empresaId))
-    .orderBy(desc(fechamentosCaixa.dataHoraAbertura), asc(pdvs.nome));
+    .leftJoin(colaboradores, eq(colaboradores.id, fechamentosCaixa.colaboradorId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
+    .where(where)
+    .orderBy(desc(fechamentosCaixa.dataMovimento), desc(fechamentosCaixa.dataHoraAbertura), asc(pdvs.nome))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  const [contagem] = await db.select({ total: count() }).from(fechamentosCaixa).where(where);
+  return { itens, total: contagem?.total ?? 0 };
+}
+
+// Totais do FILTRO INTEIRO (nao da pagina) — e o que o rodape promete. Soma as colunas ja
+// persistidas em fechamentos_caixa; nada e recalculado a partir dos lancamentos.
+export async function totaisHistoricoCaixaRepository(filtros: FiltrosHistoricoCaixa, db: ExecutorBanco = banco) {
+  const [totais] = await db
+    .select({
+      totalEntradas: sum(fechamentosCaixa.totalEntradas),
+      totalTransferenciasEntrada: sum(fechamentosCaixa.totalTransferenciasEntrada),
+      totalTransferenciasSaida: sum(fechamentosCaixa.totalTransferenciasSaida),
+      totalDespesas: sum(fechamentosCaixa.totalDespesas),
+      totalRetiradas: sum(fechamentosCaixa.totalRetiradas),
+      totalMercadorias: sum(fechamentosCaixa.totalMercadorias),
+      saldo: sum(fechamentosCaixa.saldo),
+      caixas: count()
+    })
+    .from(fechamentosCaixa)
+    .where(condicoesHistoricoCaixa(filtros));
+  return totais ?? null;
+}
+
+// Quais caixas tiveram acerto de saldo. O status "ajustado" existe na constraint mas nenhum fluxo
+// o escreve; a verdade sobre "houve acerto" e a existencia da linha em ajustes_fechamento_caixa.
+export async function caixasComAjusteRepository(caixaIds: string[], db: ExecutorBanco = banco) {
+  if (!caixaIds.length) return [];
+  return db
+    .selectDistinct({ caixaId: ajustesFechamentoCaixa.fechamentoCaixaId })
+    .from(ajustesFechamentoCaixa)
+    .where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
 }

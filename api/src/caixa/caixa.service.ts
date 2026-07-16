@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { z } from "zod";
 import type {
   AbrirCaixaPayload,
   AcertarSaldoCaixaPayload,
@@ -6,12 +7,17 @@ import type {
   AlterarHorarioCaixaResponse,
   CaixaOperacional,
   CaixaStatus,
+  DetalheCaixaResponse,
   EditarAberturaCaixaPayload,
   FecharCaixaPayload,
+  HistoricoCaixaQuery,
+  LinhaHistoricoCaixa,
   ResumoCaixa,
-  TotaisCaixaCentavos
+  TotaisCaixaCentavos,
+  TotaisHistoricoCaixa
 } from "@padaria/shared/caixa";
-import { montarResumoCaixa, saldoCaixaCentavos } from "@padaria/shared/caixa";
+import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
+import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
@@ -31,16 +37,21 @@ import {
   buscarColaboradorPorUsuarioRepository,
   buscarGrupoQuebraCaixa,
   buscarPdvEmpresaRepository,
+  buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
   caixaTemLancamentosRepository,
+  caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarAcertoSaldoCaixaRepository,
   criarCaixaRepository,
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
+  listarEdicoesCaixaRepository,
   listarHistoricoCaixaRepository,
   registrarEdicaoCaixaRepository,
-  revincularVendasAoCaixaRepository
+  revincularVendasAoCaixaRepository,
+  totaisHistoricoCaixaRepository,
+  type FiltrosHistoricoCaixa
 } from "./caixa.repository.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
@@ -467,24 +478,121 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
   });
 }
 
-export async function listarHistoricoCaixa(empresaId: string, perfil: PerfilUsuario) {
-  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
-  const historico = await listarHistoricoCaixaRepository(empresaId);
-  return historico.map((caixa) => ({
-    ...caixa,
-    dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
-    abertoEm: serializarData(caixa.abertoEm),
-    dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
-    fechadoEm: serializarData(caixa.fechadoEm),
-    totalEntradas: numero(caixa.totalEntradas),
-    totalTransferencias: numero(caixa.totalTransferencias),
-    totalTransferenciasEntrada: numero(caixa.totalTransferenciasEntrada),
-    totalTransferenciasSaida: numero(caixa.totalTransferenciasSaida),
-    totalDespesas: numero(caixa.totalDespesas),
-    totalRetiradas: numero(caixa.totalRetiradas),
-    totalMercadorias: numero(caixa.totalMercadorias),
-    saldo: numero(caixa.saldo)
-  }));
+export async function listarHistoricoCaixa(
+  query: HistoricoCaixaQuery,
+  perfil: PerfilUsuario
+): Promise<ResultadoPaginado<LinhaHistoricoCaixa> & { totais: TotaisHistoricoCaixa }> {
+  if (!podeAcessarEmpresa(perfil, query.empresaId)) throw new Error("Empresa nao permitida");
+  if (query.dataInicio && query.dataFim && query.dataInicio > query.dataFim) {
+    throw new Error("Data inicial nao pode ser maior que a final");
+  }
+
+  const filtros = filtrosDoHistorico(query);
+  const { itens, total } = await listarHistoricoCaixaRepository(filtros, query.page, query.pageSize);
+  // Totais do filtro inteiro (rodape) e o flag de acerto so das linhas da pagina.
+  const [totais, ajustes] = await Promise.all([
+    totaisHistoricoCaixaRepository(filtros),
+    caixasComAjusteRepository(itens.map((caixa) => caixa.id))
+  ]);
+  const comAjuste = new Set(ajustes.map((ajuste) => ajuste.caixaId));
+
+  return {
+    itens: itens.map((caixa) => ({
+      ...caixa,
+      dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
+      dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+      totalEntradas: numero(caixa.totalEntradas),
+      totalTransferencias: numero(caixa.totalTransferencias),
+      totalTransferenciasEntrada: numero(caixa.totalTransferenciasEntrada),
+      totalTransferenciasSaida: numero(caixa.totalTransferenciasSaida),
+      totalDespesas: numero(caixa.totalDespesas),
+      totalRetiradas: numero(caixa.totalRetiradas),
+      totalMercadorias: numero(caixa.totalMercadorias),
+      saldo: numero(caixa.saldo),
+      status: statusCaixaSchema.parse(caixa.status),
+      temAjuste: comAjuste.has(caixa.id)
+    })),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+    totais: {
+      totalEntradas: numero(totais?.totalEntradas),
+      totalTransferenciasEntrada: numero(totais?.totalTransferenciasEntrada),
+      totalTransferenciasSaida: numero(totais?.totalTransferenciasSaida),
+      totalDespesas: numero(totais?.totalDespesas),
+      totalRetiradas: numero(totais?.totalRetiradas),
+      totalMercadorias: numero(totais?.totalMercadorias),
+      saldo: numero(totais?.saldo),
+      caixas: totais?.caixas ?? 0
+    }
+  };
+}
+
+// Query (wire) -> filtros do repositorio: so o que veio preenchido vira condicao.
+function filtrosDoHistorico(query: HistoricoCaixaQuery): FiltrosHistoricoCaixa {
+  return {
+    empresaId: query.empresaId,
+    ...(query.dataInicio ? { dataInicio: query.dataInicio } : {}),
+    ...(query.dataFim ? { dataFim: query.dataFim } : {}),
+    ...(query.pdvId ? { pdvId: query.pdvId } : {}),
+    ...(query.usuarioCaixaId ? { usuarioCaixaId: query.usuarioCaixaId } : {}),
+    ...(query.colaboradorId ? { colaboradorId: query.colaboradorId } : {}),
+    ...(query.turnoId ? { turnoId: query.turnoId } : {}),
+    ...(query.status ? { status: query.status } : {})
+  };
+}
+
+// Detalhe de auditoria de um caixa: alteracoes de horario + acerto de saldo (se houve).
+// Os lancamentos NAO vem daqui — a tela reusa as listagens existentes filtradas por caixaId.
+export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario): Promise<DetalheCaixaResponse> {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+
+  const [edicoes, ajuste] = await Promise.all([
+    listarEdicoesCaixaRepository(caixaId),
+    buscarAjusteCaixaRepository(caixaId)
+  ]);
+
+  return {
+    edicoes: edicoes.map((edicao) => ({
+      id: edicao.id,
+      editadoPor: edicao.editadoPor,
+      editadoPorNome: edicao.editadoPorNome,
+      autorizadorId: edicao.autorizadorId,
+      autorizadorNome: edicao.autorizadorNome,
+      observacao: edicao.observacao,
+      editadoEm: serializarData(edicao.editadoEm) ?? "",
+      // tokenUsado e segredo: sai so como "foi por token?" — o valor nunca vai para o cliente.
+      porToken: Boolean(edicao.tokenUsado),
+      valoresAntigos: horariosAuditados(edicao.valoresAntigos),
+      valoresNovos: horariosAuditados(edicao.valoresNovos)
+    })),
+    ajuste: ajuste
+      ? {
+          id: ajuste.id,
+          valorDiferenca: numero(ajuste.valorDiferenca),
+          despesaId: ajuste.despesaId,
+          criadoEm: serializarData(ajuste.criadoEm) ?? "",
+          colaboradorId: ajuste.colaboradorId,
+          colaboradorNome: ajuste.colaboradorNome,
+          observacao: ajuste.observacao
+        }
+      : null
+  };
+}
+
+// valores_antigos/novos sao jsonb livre: le so os horarios, tolerando registro antigo sem o campo.
+function horariosAuditados(valores: DadosExternos) {
+  const dados = z
+    .object({
+      dataHoraAbertura: z.union([z.string(), z.date()]).nullish(),
+      dataHoraFechamento: z.union([z.string(), z.date()]).nullish()
+    })
+    .safeParse(valores);
+  return {
+    dataHoraAbertura: dados.success ? serializarData(dados.data.dataHoraAbertura ?? null) : null,
+    dataHoraFechamento: dados.success ? serializarData(dados.data.dataHoraFechamento ?? null) : null
+  };
 }
 
 export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {

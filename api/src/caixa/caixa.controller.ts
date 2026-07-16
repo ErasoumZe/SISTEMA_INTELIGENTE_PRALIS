@@ -14,7 +14,7 @@ import {
   solicitarAutorizacaoCaixaPayloadSchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
-import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/shared/api";
+import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
 import {
   abrirCaixa,
   acertarSaldoCaixaOperacional,
@@ -22,6 +22,7 @@ import {
   editarAberturaCaixa,
   fecharCaixa,
   listarHistoricoCaixa,
+  obterDetalheCaixa,
   obterStatusCaixa
 } from "./caixa.service.js";
 import {
@@ -173,17 +174,32 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // Paginacao e filtros sao do banco (nao mais paginadoDeArray sobre a empresa inteira); os totais
+  // do rodape acompanham o FILTRO, nao a pagina, e viajam no meta ao lado da paginacao.
   app.get("/api/caixa/historico", { preHandler: exigirPermissao("caixas_gerenciar") }, async (request, reply) => {
     const query = historicoCaixaQuerySchema.parse(request.query);
     try {
-      return paginadoDeArray(
-        await listarHistoricoCaixa(query.empresaId, request.perfilUsuario!),
-        query.page,
-        query.pageSize
-      );
+      const { itens, total, page, pageSize, totais } = await listarHistoricoCaixa(query, request.perfilUsuario!);
+      const resposta = paginadoDeResultado({ itens, total, page, pageSize });
+      return { ...resposta, meta: { ...resposta.meta, totais } };
     } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
+
+  // Detalhe de auditoria de um caixa: alteracoes de horario e acerto de saldo.
+  app.get(
+    "/api/caixa/:caixaId/detalhe",
+    { preHandler: exigirPermissao("caixas_gerenciar") },
+    async (request, reply) => {
+      const params = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await obterDetalheCaixa(params.caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 }

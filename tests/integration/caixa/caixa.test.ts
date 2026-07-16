@@ -46,6 +46,98 @@ describe("caixa integration", () => {
     expect(JSON.stringify(resposta.json())).toContain(idsTeste.caixaFechado);
   });
 
+  it("Deve_Retornar403NoHistoricoEDetalhe_Quando_UsuarioSoOperaCaixa", async () => {
+    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieCaixa }
+    });
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieCaixa }
+    });
+
+    assertProblem(historico, 403);
+    assertProblem(detalhe, 403);
+  });
+
+  it("Deve_OmitirTokenEdicao_Quando_ListarHistorico", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    // O seed grava TOKEN-ABERTO/TOKEN-FECHADO: o token do fluxo legado nao pode vazar na listagem.
+    expect(JSON.stringify(resposta.json())).not.toContain("TOKEN-");
+    expect(json(resposta).data[0]).not.toHaveProperty("tokenEdicao");
+  });
+
+  it("Deve_FiltrarPorStatusPeriodoEPdv_Quando_HistoricoRecebeFiltros", async () => {
+    const fechados = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&status=fechado`,
+      headers: { cookie: cookieAdmin }
+    });
+    const doDiaDoAberto = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&dataInicio=2026-06-30&dataFim=2026-06-30`,
+      headers: { cookie: cookieAdmin }
+    });
+    const porPdv = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&pdvId=${idsTeste.pdvLivre}`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(fechados);
+    assertOk(doDiaDoAberto);
+    assertOk(porPdv);
+    expect(json(fechados).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaFechado]);
+    expect(json(doDiaDoAberto).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaAberto]);
+    expect(json(porPdv).data.map((linha: { id: string }) => linha.id)).toEqual([idsTeste.caixaFechado]);
+  });
+
+  it("Deve_SomarTotaisDoFiltroEnaoDaPagina_Quando_HistoricoPaginado", async () => {
+    // pageSize=1 devolve 1 item, mas os totais tem de continuar sendo os do filtro inteiro.
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&status=fechado&pageSize=1`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    const corpo = json(resposta);
+    expect(corpo.data).toHaveLength(1);
+    // Unico caixa fechado do seed: entradas 42.00 e saldo 42.00.
+    expect(corpo.meta.totais).toMatchObject({ totalEntradas: 42, saldo: 42, caixas: 1 });
+  });
+
+  it("Deve_RejeitarPeriodoInvertido_Quando_DataInicioMaiorQueDataFim", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&dataInicio=2026-06-30&dataFim=2026-06-01`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertProblem(resposta, 400);
+  });
+
+  it("Deve_TrazerEdicoesEAjuste_Quando_ConsultarDetalheDoCaixa", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${idsTeste.caixaFechado}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertOk(resposta);
+    // Caixa do seed nao teve alteracao de horario nem acerto: contrato presente, conteudo vazio.
+    expect(json(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
+  });
+
   it("Deve_Retornar403_Quando_AcessarOuOperarCaixaDeEmpresaNaoPermitida", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
     const status = await contexto.app.inject({
