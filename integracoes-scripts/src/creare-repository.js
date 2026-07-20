@@ -33,6 +33,50 @@ export async function buscarVendasDia(pool, dataOrigem) {
   return { vendas, itens, pagamentos };
 }
 
+// Normaliza uma lista de IDs de venda (string "1,2,3" ou array) para inteiros positivos unicos, na
+// ordem informada. Lanca em qualquer token nao-numerico — usado tanto na validacao do CLI quanto na
+// leitura por IDs, para nunca montar SQL com entrada suja (os IDs vao como parametros, nunca no texto).
+export function normalizarIds(entrada) {
+  const bruto = Array.isArray(entrada) ? entrada : String(entrada ?? "").split(",");
+  const vistos = new Set();
+  const ids = [];
+  for (const item of bruto) {
+    const token = String(item).trim();
+    if (!token) continue;
+    if (!/^\d+$/.test(token)) throw new Error(`ID de venda invalido: "${token}" (use apenas numeros).`);
+    const numero = Number(token);
+    if (!vistos.has(numero)) {
+      vistos.add(numero);
+      ids.push(numero);
+    }
+  }
+  return ids;
+}
+
+// Carrega uma query "-ids.sql" e expande o marcador /*IDS*/ em N placeholders (?, ?, ...), passando
+// os IDs como parametros da prepared statement — a lista variavel de IN () fica parametrizada, sem
+// interpolar valor no SQL.
+async function executarPorIds(pool, arquivo, ids) {
+  const sql = (await carregarQuery(arquivo)).replace("/*IDS*/", ids.map(() => "?").join(", "));
+  const [linhas] = await pool.execute(sql, ids);
+  return linhas;
+}
+
+// Le vendas especificas por ID_VENDA_BALCAO (independentemente do dia). itens/pagamentos vem so das
+// vendas pedidas; o montador de payload agrupa por venda. IDs sem venda correspondente simplesmente
+// nao voltam — quem chama compara com o pedido para avisar os ausentes.
+export async function buscarVendasPorIds(pool, entradaIds) {
+  const ids = normalizarIds(entradaIds);
+  if (!ids.length) return { vendas: [], itens: [], pagamentos: [] };
+  const [vendas, itens, pagamentos] = await Promise.all([
+    executarPorIds(pool, "vendas-ids.sql", ids),
+    executarPorIds(pool, "itens-ids.sql", ids),
+    executarPorIds(pool, "pagamentos-ids.sql", ids)
+  ]);
+
+  return { vendas, itens, pagamentos };
+}
+
 // Lista de dias "YYYY-MM-DD" de de..ate (inclusive). Ancorada em UTC (strings de data sao neutras
 // de fuso); pura e testavel. Se ate < de, retorna [].
 export function enumerarDias(deYMD, ateYMD) {

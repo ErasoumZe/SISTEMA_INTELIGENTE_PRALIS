@@ -82,6 +82,35 @@ Cada ciclo imprime um resumo:
 3. Marque **"Nao iniciar uma nova instancia"** se a anterior ainda estiver rodando (o lock ja cobre
    isso, mas some as duas protecoes).
 
+## Reprocesso manual (recuperacao)
+
+Ferramenta para **reenviar vendas que ficaram de fora** da ingestao (ex.: falharam durante um deploy).
+Re-le do CREARE e reenvia para a API. E **idempotente**: vendas que ja existem voltam _sem novidade_ e
+as que faltavam sao **criadas**. **Nao mexe** no cursor, na fila nem no lock — pode rodar com o
+`agente`/`sincronizar` no ar.
+
+```bash
+# Reprocessa o dia inteiro (todas as vendas daquela data no CREARE)
+npm run reprocessar -- --dia 2026-07-15
+
+# Reprocessa apenas vendas especificas (por ID_VENDA_BALCAO do CREARE)
+npm run reprocessar -- --ids 522987,523147,523369
+```
+
+Informe **exatamente um** alvo (`--dia` **ou** `--ids`). O comando loga o resultado **de cada venda** e
+um resumo no fim:
+
+```
+[reprocessar] ids=522987,523147,523369: 3 venda(s) lida(s) no CREARE.
+[reprocessar] CREARE:522987 -> CRIADA (estava faltando)
+[reprocessar] CREARE:523147 -> sem novidade (ja existia igual)
+[reprocessar] CREARE:523369 -> CRIADA (estava faltando)
+[reprocessar] ids=522987,523147,523369 concluido: total=3 criadas=2 atualizadas=0 sem_novidade=1 erros=0
+```
+
+No modo `--ids`, um ID que nao existir no CREARE e avisado (`NAO ENCONTRADA`) e ignorado. Se alguma
+venda falhar no envio, o comando sai com codigo != 0.
+
 ## Backfill inicial (opcional)
 
 Para importar dias anteriores na primeira vez, rode uma vez com mais dias:
@@ -92,7 +121,8 @@ set SYNC_DIAS_INICIAIS=7
 npm run sincronizar
 ```
 
-Depois, o cursor assume e os ciclos seguintes so pegam o novo.
+Depois, o cursor assume e os ciclos seguintes so pegam o novo. Para reenviar dias/vendas pontuais
+depois que o agente ja esta rodando, use o **reprocesso manual** acima (nao mexe no cursor).
 
 ## Estado (nao apagar)
 
