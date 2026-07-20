@@ -1,3 +1,24 @@
+// Erro HTTP com status e Retry-After estruturados. Deixa o retry decidir: 4xx (exceto 429) e
+// permanente; 429 e "aguarde o Retry-After"; 5xx/rede e transitorio.
+export class ErroHttp extends Error {
+  constructor(mensagem, { status, retryAfterMs = null } = {}) {
+    super(mensagem);
+    this.name = "ErroHttp";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+// Le o header Retry-After (segundos ou data HTTP) e devolve em ms. null se ausente/invalido.
+export function lerRetryAfterMs(resposta) {
+  const bruto = resposta.headers?.get?.("retry-after");
+  if (!bruto) return null;
+  const segundos = Number(bruto);
+  if (Number.isFinite(segundos)) return Math.max(0, Math.round(segundos * 1000));
+  const data = Date.parse(bruto);
+  return Number.isNaN(data) ? null : Math.max(0, data - Date.now());
+}
+
 export async function verificarApi(apiUrl) {
   try {
     const resposta = await fetch(`${apiUrl}/health`);
@@ -19,7 +40,10 @@ export async function enviarConciliacao({ apiUrl, codigoIntegracao, data, porPdv
 
   const corpoTexto = await resposta.text();
   if (!resposta.ok) {
-    throw new Error(`Falha na conciliacao de ${data}: HTTP ${resposta.status} ${corpoTexto}`);
+    throw new ErroHttp(`Falha na conciliacao de ${data}: HTTP ${resposta.status} ${corpoTexto}`, {
+      status: resposta.status,
+      retryAfterMs: lerRetryAfterMs(resposta)
+    });
   }
   const corpo = corpoTexto ? JSON.parse(corpoTexto) : null;
   return corpo?.data ?? null;
@@ -41,7 +65,10 @@ export async function enviarVendaIntegracao({ apiUrl, codigoIntegracao, payload 
   }
 
   if (!resposta.ok) {
-    throw new Error(`Falha ao enviar venda ${payload.Venda.idVenda}: HTTP ${resposta.status} ${corpoTexto}`);
+    throw new ErroHttp(`Falha ao enviar venda ${payload.Venda.idVenda}: HTTP ${resposta.status} ${corpoTexto}`, {
+      status: resposta.status,
+      retryAfterMs: lerRetryAfterMs(resposta)
+    });
   }
 
   return corpo;

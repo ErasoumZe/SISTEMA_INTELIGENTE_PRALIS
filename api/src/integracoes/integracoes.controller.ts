@@ -119,10 +119,14 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
   app.post(
     "/api/integracoes",
     {
+      // Limite por CHAVE de integracao (nao global): backfill/reprocesso e uso legitimo e mandaria
+      // centenas de vendas em rajada. 300/min por chave cobre o agente (que ainda se auto-limita a
+      // ~4 req/s) sem abrir a rota para keyless (cai no bucket do IP).
       config: {
         rateLimit: {
-          max: 30,
-          timeWindow: "1 minute"
+          max: 300,
+          timeWindow: "1 minute",
+          keyGenerator: (request) => chaveIntegracaoHeader(request.headers) ?? request.ip
         }
       }
     },
@@ -138,10 +142,13 @@ export async function registrarRotasIntegracoes(app: FastifyInstance): Promise<v
   app.post(
     "/api/integracoes/conciliacao",
     {
+      // Mesmo criterio da ingestao: limite por chave (o agente chama uma vez por ciclo, mas um
+      // backfill pode conciliar varios dias em sequencia).
       config: {
         rateLimit: {
-          max: 30,
-          timeWindow: "1 minute"
+          max: 300,
+          timeWindow: "1 minute",
+          keyGenerator: (request) => chaveIntegracaoHeader(request.headers) ?? request.ip
         }
       }
     },
