@@ -143,7 +143,10 @@ export const conciliacaoPdvPayloadSchema = z.object({
   // dicionario de vinculos ja existente.
   pdvIdentificador: z.string().min(1),
   quantidadeVendas: z.number().int().min(0),
-  valorTotal: z.number().min(0)
+  valorTotal: z.number().min(0),
+  // IDs das vendas fechadas do dia nesse PDV, no formato que o sistema guarda (CREARE:<id>). Opcional
+  // (agente antigo nao envia): quando presente, a API aponta quais faltam. default [] para compat.
+  idsVendas: z.array(z.string()).default([])
 });
 
 export const conciliacaoPayloadSchema = z.object({
@@ -164,7 +167,11 @@ export const conciliacaoPdvResultadoSchema = z.object({
   ok: z.boolean(),
   // PDV que o CREARE mandou mas que nao tem vinculo resolvido no sistema: nao da para comparar,
   // entao nao e "ok". Nunca criamos vinculo aqui — isso e regra da ingestao.
-  pdvNaoVinculado: z.boolean()
+  pdvNaoVinculado: z.boolean(),
+  // IDs presentes no CREARE (idsVendas enviados) e ausentes no sistema: transforma o alerta de
+  // divergencia em diagnostico pronto (basta reprocessar esses IDs). Vazio quando nada falta ou
+  // quando o agente nao enviou a lista.
+  idsFaltantes: z.array(z.string())
 });
 
 export const conciliacaoResultadoSchema = z.object({

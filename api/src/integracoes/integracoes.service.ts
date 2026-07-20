@@ -49,6 +49,7 @@ import {
   listarEmailsAdminsDaEmpresaRepository,
   listarEmpresasComChaveAtivaRepository,
   listarHistoricoIntegracaoRepository,
+  listarIdsVendaRegistradosRepository,
   listarNomesPdvsRepository,
   listarVinculosRepository,
   somarVendasPorPdvNoDiaRepository,
@@ -468,9 +469,27 @@ function htmlConciliacao(nomeEmpresa: string, dia: string, divergentes: Concilia
     </thead>
     <tbody>${linhas}</tbody>
   </table>
+  ${htmlIdsFaltantes(divergentes)}
   <p style="color:#6f635c;font-size:12px">Diferenca = sistema - CREARE. Alerta automatico do Sistema Cicluz.
   Voce recebe porque e administrador desta empresa.</p>
 </div>`;
+}
+
+// Bloco de diagnostico: por PDV, os IDs que o CREARE tem e o sistema nao recebeu. Sao exatamente os
+// IDs para reprocessar (npm run reprocessar -- --ids ...). Omitido quando nada falta.
+function htmlIdsFaltantes(divergentes: ConciliacaoPdvResultado[]): string {
+  const comFaltantes = divergentes.filter((pdv) => pdv.idsFaltantes.length > 0);
+  if (!comFaltantes.length) return "";
+  const blocos = comFaltantes
+    .map((pdv) => {
+      const nome = pdv.pdvNome ?? pdv.pdvIdentificador;
+      return `<li style="margin-bottom:4px"><strong>${nome}</strong> (${pdv.idsFaltantes.length}):
+      <span style="font-family:monospace">${pdv.idsFaltantes.join(", ")}</span></li>`;
+    })
+    .join("");
+  return `<p style="margin-top:16px">Vendas presentes no CREARE e <strong>ausentes no sistema</strong>
+  (reprocesse estes IDs):</p>
+  <ul style="font-size:13px;padding-left:18px">${blocos}</ul>`;
 }
 
 function dinheiroBr(valor: number): string {
@@ -510,22 +529,32 @@ export async function conciliarVendasDoDia(chaveApi: string, corpo: DadosExterno
   const somaPorPdv = new Map(somas.map((linha) => [linha.pdvId, linha]));
   const nomePorPdv = new Map(nomes.map((pdv) => [pdv.id, pdv.nome]));
 
-  // 3) comparacao em CENTAVOS (float de dinheiro nao fecha conta).
+  // 2b) dos IDs de venda que o CREARE reportou (por PDV), quais o sistema JA recebeu. O complemento
+  // sao as vendas ausentes — o diagnostico do e-mail. Uma consulta so, com todos os IDs do dia.
+  const idsCreare = [...new Set(payload.porPdv.flatMap((pdv) => pdv.idsVendas))];
+  const registrados = new Set(await listarIdsVendaRegistradosRepository(chave.empresaId, chave.id, idsCreare));
+
+  // 3) comparacao em CENTAVOS (float de dinheiro nao fecha conta) E na CONTAGEM de vendas por PDV.
   const porPdv: ConciliacaoPdvResultado[] = vinculados.map(({ entrada, pdvId }) => {
     const soma = pdvId ? somaPorPdv.get(pdvId) : undefined;
     // Lado sistema no LIQUIDO: e o que corresponde ao VALOR_TOTAL que o CREARE reporta.
     const sistemaCentavos = soma ? liquidoDeSomasCentavos(soma) : 0;
     const creareCentavos = paraCentavos(entrada.valorTotal);
     const diferencaCentavos = sistemaCentavos - creareCentavos;
+    const quantidadeSistema = soma?.quantidadeVendas ?? 0;
+    const valorBate = Math.abs(diferencaCentavos) <= TOLERANCIA_CONCILIACAO_CENTAVOS;
+    const contagemBate = quantidadeSistema === entrada.quantidadeVendas;
+    const idsFaltantes = entrada.idsVendas.filter((id) => !registrados.has(id));
     return {
       pdvIdentificador: entrada.pdvIdentificador,
       pdvId,
       pdvNome: pdvId ? (nomePorPdv.get(pdvId) ?? null) : null,
-      sistema: { quantidadeVendas: soma?.quantidadeVendas ?? 0, valorTotal: deCentavos(sistemaCentavos) },
+      sistema: { quantidadeVendas: quantidadeSistema, valorTotal: deCentavos(sistemaCentavos) },
       creare: { quantidadeVendas: entrada.quantidadeVendas, valorTotal: deCentavos(creareCentavos) },
       diferenca: deCentavos(diferencaCentavos),
-      ok: Boolean(pdvId) && Math.abs(diferencaCentavos) <= TOLERANCIA_CONCILIACAO_CENTAVOS,
-      pdvNaoVinculado: !pdvId
+      ok: Boolean(pdvId) && valorBate && contagemBate,
+      pdvNaoVinculado: !pdvId,
+      idsFaltantes
     };
   });
 

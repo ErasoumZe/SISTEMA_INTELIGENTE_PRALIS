@@ -49,14 +49,24 @@ Cada ciclo imprime um resumo:
 
 ## Como funciona
 
-- **Cursor incremental** (`.estado/cursor.json`): guarda a ultima venda processada; cada ciclo
-  busca so o que e novo desde o cursor.
+- **Reprocesso do dia corrente** (fim da perda silenciosa): cada ciclo relê e reenvia o **dia
+  corrente inteiro** — nao apenas o que e "novo". Assim, uma venda que o PDV sincronizou tarde (com
+  hora anterior ao ultimo ciclo) e capturada no ciclo seguinte, em vez de ficar para tras. Na
+  **primeira execucao de cada dia**, o ciclo reprocessa tambem o **dia anterior** uma vez (pega
+  retardatarios da virada).
+- **Cursor** (`.estado/cursor.json`): agora guarda so o **ultimo dia processado** e e **apenas
+  otimizacao** (evita reprocessar o dia anterior a cada ciclo), nunca fonte de verdade — se sumir ou
+  vier de versao antiga, o dia corrente inteiro e reprocessado do mesmo jeito.
 - **Idempotente**: reenviar a mesma venda nao duplica (o servidor deduplica por `idVenda` + hash),
-  entao reprocessar e sempre seguro.
+  entao reprocessar o dia inteiro a cada ciclo e sempre seguro (as repetidas voltam _sem novidade_).
 - **Fila de falhas** (`.estado/fila-falhas.json`): vendas que falharam por erro de rede ficam nela e
   sao reenviadas no inicio do proximo ciclo. Erros de payload (4xx) sao logados e nao entram na fila.
 - **Lock** (`.estado/agente.lock`): impede duas execucoes simultaneas (loop + tarefa agendada + run
   manual). Um lock de processo morto ou obsoleto (> `SYNC_LOCK_MAX_MINUTOS`) e roubado.
+- **Conciliacao diaria**: ao fim do ciclo, o agente manda o agregado do CREARE (por PDV: quantidade,
+  valor e os IDs das vendas fechadas) e a API compara com o sistema. Alem do **valor**, compara a
+  **contagem** de vendas; havendo divergencia, o e-mail aos admins (e o log do ciclo) lista os **IDs
+  presentes no CREARE e ausentes no sistema** — basta reprocessar esses IDs.
 
 ## Rodar como servico no Windows
 
@@ -95,10 +105,13 @@ npm run reprocessar -- --dia 2026-07-15
 
 # Reprocessa apenas vendas especificas (por ID_VENDA_BALCAO do CREARE)
 npm run reprocessar -- --ids 522987,523147,523369
+
+# Reprocessa uma FAIXA de dias, dia a dia (backfill)
+npm run reprocessar -- --de 2026-07-01 --ate 2026-07-20
 ```
 
-Informe **exatamente um** alvo (`--dia` **ou** `--ids`). O comando loga o resultado **de cada venda** e
-um resumo no fim:
+Informe **exatamente um** alvo (`--dia`, `--ids` **ou** `--de/--ate`). Nos modos `--dia`/`--ids` o
+comando loga o resultado **de cada venda**; na **faixa**, um resumo **por dia** + o total geral:
 
 ```
 [reprocessar] ids=522987,523147,523369: 3 venda(s) lida(s) no CREARE.
@@ -106,6 +119,12 @@ um resumo no fim:
 [reprocessar] CREARE:523147 -> sem novidade (ja existia igual)
 [reprocessar] CREARE:523369 -> CRIADA (estava faltando)
 [reprocessar] ids=522987,523147,523369 concluido: total=3 criadas=2 atualizadas=0 sem_novidade=1 erros=0
+
+[reprocessar] faixa 2026-07-01..2026-07-03: 3 dia(s).
+[reprocessar] dia=2026-07-01: lidas=180 criadas=0 atualizadas=0 sem_novidade=180 erros=0
+[reprocessar] dia=2026-07-02: lidas=205 criadas=2 atualizadas=0 sem_novidade=203 erros=0
+[reprocessar] dia=2026-07-03: lidas=190 criadas=0 atualizadas=0 sem_novidade=190 erros=0
+[reprocessar] faixa 2026-07-01..2026-07-03 concluida: dias=3 total=575 criadas=2 atualizadas=0 sem_novidade=573 erros=0
 ```
 
 No modo `--ids`, um ID que nao existir no CREARE e avisado (`NAO ENCONTRADA`) e ignorado. Se alguma
@@ -113,22 +132,21 @@ venda falhar no envio, o comando sai com codigo != 0.
 
 ## Backfill inicial (opcional)
 
-Para importar dias anteriores na primeira vez, rode uma vez com mais dias:
+Para importar dias anteriores na primeira vez, use a **faixa** do reprocesso manual:
 
 ```bash
-# Windows (cmd): set e npm em duas linhas
-set SYNC_DIAS_INICIAIS=7
-npm run sincronizar
+npm run reprocessar -- --de 2026-07-01 --ate 2026-07-20
 ```
 
-Depois, o cursor assume e os ciclos seguintes so pegam o novo. Para reenviar dias/vendas pontuais
-depois que o agente ja esta rodando, use o **reprocesso manual** acima (nao mexe no cursor).
+Isso nao mexe no cursor e e idempotente. Alternativamente, na primeira execucao do `sincronizar` o
+`SYNC_DIAS_INICIAIS` controla quantos dias para tras o **primeiro** ciclo relê.
 
 ## Estado (nao apagar)
 
 A pasta `.estado/` guarda `cursor.json`, `fila-falhas.json` e `agente.lock`. Nao vai para o git.
-Apagar o `cursor.json` faz o proximo ciclo reprocessar desde `SYNC_DIAS_INICIAIS` (seguro, mas gera
-trafego). Nao apague com o agente rodando.
+O `cursor.json` e so otimizacao (ultimo dia processado): apaga-lo e inofensivo — o proximo ciclo o
+trata como primeira execucao (relê `SYNC_DIAS_INICIAIS` dias) e o dia corrente inteiro entra do mesmo
+jeito. Evite apagar com o agente rodando so para nao competir pela escrita.
 
 ## Problemas comuns
 

@@ -201,6 +201,30 @@ export async function listarNomesPdvsRepository(
   return db.select({ id: pdvs.id, nome: pdvs.nome }).from(pdvs).where(inArray(pdvs.id, pdvIds));
 }
 
+// Dos identificadores externos (idVenda) informados, quais JA foram registrados por esta chave de
+// integracao. O complemento (informados - presentes) sao as vendas que o CREARE tem e o sistema nao
+// recebeu — o diagnostico do e-mail de divergencia. So le o ledger da integracao (registros).
+export async function listarIdsVendaRegistradosRepository(
+  empresaId: string,
+  integracaoChaveId: string,
+  identificadoresExternos: string[],
+  db: ExecutorBanco = banco
+): Promise<string[]> {
+  if (!identificadoresExternos.length) return [];
+  const linhas = await db
+    .select({ identificadorExterno: integracoesRegistros.identificadorExterno })
+    .from(integracoesRegistros)
+    .where(
+      and(
+        eq(integracoesRegistros.empresaId, empresaId),
+        eq(integracoesRegistros.integracaoChaveId, integracaoChaveId),
+        eq(integracoesRegistros.tipoRegistro, "venda"),
+        inArray(integracoesRegistros.identificadorExterno, identificadoresExternos)
+      )
+    );
+  return linhas.map((linha) => linha.identificadorExterno);
+}
+
 // E-mails (distintos) dos administradores vinculados a empresa — destinatarios do alerta.
 export async function listarEmailsAdminsDaEmpresaRepository(
   empresaId: string,

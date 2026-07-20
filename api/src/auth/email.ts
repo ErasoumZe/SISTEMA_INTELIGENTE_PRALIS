@@ -10,6 +10,7 @@ export type EmailMensagem = { para: string; assunto: string; html: string; url?:
 export const emailsCapturados: Array<{
   para: string;
   assunto: string;
+  html: string;
   url?: string | undefined;
   token?: string | undefined;
 }> = [];
@@ -36,6 +37,7 @@ export async function enviarEmail(mensagem: EmailMensagem): Promise<void> {
     emailsCapturados.push({
       para: mensagem.para,
       assunto: mensagem.assunto,
+      html: mensagem.html,
       url: mensagem.url,
       token: mensagem.token
     });

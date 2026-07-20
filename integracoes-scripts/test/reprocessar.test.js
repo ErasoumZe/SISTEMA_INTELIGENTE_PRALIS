@@ -14,9 +14,32 @@ test("interpretarArgumentos: --ids devolve inteiros unicos na ordem informada", 
   assert.deepEqual(interpretarArgumentos(["--ids", "1,1,2, 2 ,3"]), { ids: [1, 2, 3] });
 });
 
+test("interpretarArgumentos: --de/--ate devolve a faixa", () => {
+  assert.deepEqual(interpretarArgumentos(["--de", "2026-07-01", "--ate", "2026-07-20"]), {
+    de: "2026-07-01",
+    ate: "2026-07-20"
+  });
+  // Faixa de um unico dia e valida (de == ate).
+  assert.deepEqual(interpretarArgumentos(["--de", "2026-07-05", "--ate", "2026-07-05"]), {
+    de: "2026-07-05",
+    ate: "2026-07-05"
+  });
+});
+
 test("interpretarArgumentos: exige exatamente um alvo", () => {
   assert.throws(() => interpretarArgumentos([]), ErroDeUso);
   assert.throws(() => interpretarArgumentos(["--dia", "2026-07-15", "--ids", "1"]), ErroDeUso);
+  assert.throws(
+    () => interpretarArgumentos(["--de", "2026-07-01", "--ate", "2026-07-02", "--dia", "2026-07-01"]),
+    ErroDeUso
+  );
+});
+
+test("interpretarArgumentos: faixa exige --de e --ate juntos e na ordem certa", () => {
+  assert.throws(() => interpretarArgumentos(["--de", "2026-07-01"]), ErroDeUso);
+  assert.throws(() => interpretarArgumentos(["--ate", "2026-07-20"]), ErroDeUso);
+  assert.throws(() => interpretarArgumentos(["--de", "2026-07-20", "--ate", "2026-07-01"]), ErroDeUso);
+  assert.throws(() => interpretarArgumentos(["--de", "01/07/2026", "--ate", "2026-07-20"]), ErroDeUso);
 });
 
 test("interpretarArgumentos: --dia com formato ou data invalida falha", () => {

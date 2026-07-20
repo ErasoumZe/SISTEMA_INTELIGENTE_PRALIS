@@ -1,7 +1,13 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { enviarConciliacao, enviarVendaIntegracao, verificarApi } from "./api-client.js";
-import { buscarConciliacaoDia, buscarVendasIncrementais, diaNegocioHoje } from "./creare-repository.js";
+import {
+  buscarConciliacaoDia,
+  buscarIdsVendasFechadasDia,
+  buscarVendasDias,
+  diaNegocioHoje,
+  diasParaProcessar
+} from "./creare-repository.js";
 import { criarPoolCreare } from "./database.js";
 import { obterConfig } from "./env.js";
 import { montarPayloads } from "./payload.js";
@@ -25,21 +31,23 @@ export function derivarCaminhos(config) {
   };
 }
 
-// Inicio padrao (1a execucao, sem cursor): 00:00:00 de (hoje - (diasIniciais-1)), hora local.
-function inicioPadrao(diasIniciais) {
-  const data = new Date();
-  data.setDate(data.getDate() - (Math.max(1, diasIniciais) - 1));
-  const ano = data.getFullYear();
-  const mes = String(data.getMonth() + 1).padStart(2, "0");
-  const dia = String(data.getDate()).padStart(2, "0");
-  return `${ano}-${mes}-${dia} 00:00:00`;
-}
-
 function contarStatus(resposta, contagem) {
   const status = resposta?.data?.status ?? resposta?.status;
   if (status === "criado") contagem.criadas += 1;
   else if (status === "atualizado") contagem.atualizadas += 1;
   else if (status === "sem_novidade") contagem.semNovidade += 1;
+}
+
+// Junta o agregado por PDV (quantidade + valor) com a lista de IDs de venda fechada do dia, no mesmo
+// formato que o sistema guarda (CREARE:<id>) — assim a API cruza e aponta os ausentes.
+function montarPorPdvConciliacao(agregado, idsLinhas) {
+  const idsPorPdv = new Map();
+  for (const { pdvIdentificador, idVendaBalcao } of idsLinhas) {
+    const lista = idsPorPdv.get(pdvIdentificador) ?? [];
+    lista.push(`CREARE:${idVendaBalcao}`);
+    idsPorPdv.set(pdvIdentificador, lista);
+  }
+  return agregado.map((pdv) => ({ ...pdv, idsVendas: idsPorPdv.get(pdv.pdvIdentificador) ?? [] }));
 }
 
 // Um ciclo de sincronizacao (sem lock — quem chama garante a exclusao). Reusado pelo modo 1-ciclo
@@ -82,19 +90,19 @@ export async function executarCiclo(config, caminhos) {
     await processar(payload, true);
   }
 
-  // 2) Janela incremental desde o cursor.
-  const cursor = await lerCursor(caminhos.cursorArquivo);
-  const desde = cursor?.ultimaDataHoraVenda ?? inicioPadrao(sync.diasIniciais);
-  let novoCursor = cursor;
+  // 2) Reprocesso do dia corrente inteiro (+ dia anterior na virada / backfill na 1a vez). O cursor
+  //    e so otimizacao: mesmo sem ele o dia corrente inteiro entra, entao venda que chega tarde nao
+  //    se perde. Dia no fuso do NEGOCIO — a mesma regra que a API usa para gravar data_referencia.
+  const estado = await lerCursor(caminhos.cursorArquivo);
+  const hoje = diaNegocioHoje();
+  const dias = diasParaProcessar(hoje, estado?.ultimoDiaProcessado ?? null, sync.diasIniciais);
 
-  // Agregado do dia para a conciliacao: lido com o pool ainda aberto, enviado depois do ciclo.
-  // Dia no fuso do negocio — a mesma regra que a API usa para gravar data_referencia.
-  const diaConciliacao = diaNegocioHoje();
+  // Agregado + IDs do dia corrente para a conciliacao: lidos com o pool ainda aberto, enviados depois.
   let porPdvCreare = null;
 
   const pool = criarPoolCreare(config.creare);
   try {
-    const { vendas, itens, pagamentos } = await buscarVendasIncrementais(pool, desde);
+    const { vendas, itens, pagamentos } = await buscarVendasDias(pool, dias);
     contagem.recebidas = vendas.length;
 
     const payloads = montarPayloads({ vendas, itens, pagamentos }, { offsetFuso: sync.offsetFuso });
@@ -102,41 +110,35 @@ export async function executarCiclo(config, caminhos) {
       await processar(payload, false);
     }
 
-    let maxData = desde;
-    let maxId = cursor?.ultimoIdVendaBalcao ?? null;
-    for (const venda of vendas) {
-      if (String(venda.dataHoraVenda) > String(maxData)) {
-        maxData = String(venda.dataHoraVenda);
-        maxId = venda.idVendaBalcao;
-      }
-    }
-    novoCursor = { ultimaDataHoraVenda: maxData, ultimoIdVendaBalcao: maxId };
-
-    // Le o agregado DEPOIS de enviar as vendas do ciclo: assim compara o estado ja sincronizado.
-    porPdvCreare = await buscarConciliacaoDia(pool, diaConciliacao);
+    // Le o agregado + IDs DEPOIS de enviar as vendas do ciclo: assim compara o estado ja sincronizado.
+    const [agregado, idsLinhas] = await Promise.all([
+      buscarConciliacaoDia(pool, hoje),
+      buscarIdsVendasFechadasDia(pool, hoje)
+    ]);
+    porPdvCreare = montarPorPdvConciliacao(agregado, idsLinhas);
   } finally {
     await pool.end();
   }
 
-  // 3) Persiste fila e depois cursor (ordem segura a crash: cursor so avanca no fim).
+  // 3) Persiste fila e depois o cursor (marca o dia corrente como processado — otimiza a virada).
   await gravarFila(caminhos.filaArquivo, falhas);
-  if (novoCursor) await gravarCursor(caminhos.cursorArquivo, novoCursor);
+  await gravarCursor(caminhos.cursorArquivo, { ultimoDiaProcessado: hoje });
 
   // 4) Log resumido do ciclo.
   console.log(
-    `[sincronizar] recebidas=${contagem.recebidas} fila_reprocessada=${contagem.filaReprocessada} ` +
+    `[sincronizar] dias=${dias.join(",")} recebidas=${contagem.recebidas} fila_reprocessada=${contagem.filaReprocessada} ` +
       `criadas=${contagem.criadas} atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} ` +
-      `erros=${contagem.erros} fila_pendente=${falhas.length} cursor=${novoCursor?.ultimaDataHoraVenda ?? "-"}`
+      `erros=${contagem.erros} fila_pendente=${falhas.length}`
   );
 
   // 5) Conciliacao do dia (best-effort): nunca derruba o ciclo — as vendas ja foram entregues.
-  const conciliacao = await conciliarDia(config, diaConciliacao, porPdvCreare);
+  const conciliacao = await conciliarDia(config, hoje, porPdvCreare);
 
   return { ...contagem, filaPendente: falhas.length, conciliacao };
 }
 
 // Compara o agregado do CREARE com o sistema e loga PDV a PDV. A API e quem decide divergencia e
-// dispara o e-mail aos admins; aqui so reportamos no console do ciclo.
+// dispara o e-mail aos admins; aqui so reportamos no console do ciclo (inclusive os IDs ausentes).
 async function conciliarDia(config, dia, porPdv) {
   if (!porPdv) return null;
   try {
@@ -161,6 +163,12 @@ async function conciliarDia(config, dia, porPdv) {
           `[conciliacao] ${dia} PDV ${nome}: DIVERGENTE sistema=${pdv.sistema.valorTotal} (${pdv.sistema.quantidadeVendas}) ` +
             `creare=${pdv.creare.valorTotal} (${pdv.creare.quantidadeVendas}) diferenca=${pdv.diferenca}`
         );
+        if (pdv.idsFaltantes?.length) {
+          console.warn(
+            `[conciliacao] ${dia} PDV ${nome}: ${pdv.idsFaltantes.length} venda(s) no CREARE ausente(s) no sistema -> ` +
+              `${pdv.idsFaltantes.join(", ")}`
+          );
+        }
       }
     }
     if (!resultado.porPdv.length) console.log(`[conciliacao] ${dia}: nenhuma venda fechada no CREARE.`);
