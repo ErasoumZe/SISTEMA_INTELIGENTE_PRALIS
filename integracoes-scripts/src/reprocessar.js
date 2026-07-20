@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { enviarVendaIntegracao, verificarApi } from "./api-client.js";
-import { buscarVendasDia, buscarVendasPorIds, normalizarIds } from "./creare-repository.js";
+import { buscarVendasDia, buscarVendasPorIds, enumerarDias, normalizarIds } from "./creare-repository.js";
 import { criarPoolCreare } from "./database.js";
 import { obterConfig } from "./env.js";
 import { montarPayloads } from "./payload.js";
@@ -15,10 +15,12 @@ import { ehErroPermanente, enviarComRetry } from "./retry.js";
 export const USO = `Uso:
   npm run reprocessar -- --dia 2026-07-15
   npm run reprocessar -- --ids 522987,523147,523369
+  npm run reprocessar -- --de 2026-07-01 --ate 2026-07-20
 
 Alvos (informe exatamente um):
-  --dia YYYY-MM-DD   re-le o dia inteiro no CREARE e reenvia todas as vendas.
-  --ids a,b,c        reenvia apenas as vendas com esses ID_VENDA_BALCAO.
+  --dia YYYY-MM-DD          re-le o dia inteiro e reenvia todas as vendas.
+  --ids a,b,c               reenvia apenas as vendas com esses ID_VENDA_BALCAO.
+  --de YYYY-MM-DD --ate ..  reprocessa uma faixa de dias (backfill), dia a dia.
 
 Idempotente e seguro: vendas ja existentes voltam "sem novidade"; as que
 faltavam sao criadas. Nao altera o cursor nem a fila — pode rodar com o
@@ -33,13 +35,19 @@ function ehDataValida(texto) {
   return !Number.isNaN(data.getTime()) && data.toISOString().slice(0, 10) === texto;
 }
 
-// Interpreta os argumentos e devolve o alvo: { dia } OU { ids }. Puro e testavel (sem I/O).
+function exigirData(rotulo, valor) {
+  const texto = String(valor).trim();
+  if (!ehDataValida(texto)) throw new ErroDeUso(`${rotulo} invalido: "${valor}". Use o formato YYYY-MM-DD.`);
+  return texto;
+}
+
+// Interpreta os argumentos e devolve o alvo: { dia } | { ids } | { de, ate }. Puro e testavel.
 export function interpretarArgumentos(argv) {
   let values;
   try {
     ({ values } = parseArgs({
       args: argv,
-      options: { dia: { type: "string" }, ids: { type: "string" } },
+      options: { dia: { type: "string" }, ids: { type: "string" }, de: { type: "string" }, ate: { type: "string" } },
       allowPositionals: false
     }));
   } catch (erro) {
@@ -48,25 +56,32 @@ export function interpretarArgumentos(argv) {
 
   const temDia = typeof values.dia === "string" && values.dia.trim() !== "";
   const temIds = typeof values.ids === "string" && values.ids.trim() !== "";
+  const temDe = typeof values.de === "string" && values.de.trim() !== "";
+  const temAte = typeof values.ate === "string" && values.ate.trim() !== "";
 
-  if (temDia === temIds) {
-    throw new ErroDeUso("Informe exatamente um alvo: --dia OU --ids.");
+  const modos = [temDia, temIds, temDe || temAte].filter(Boolean).length;
+  if (modos !== 1) {
+    throw new ErroDeUso("Informe exatamente um alvo: --dia, --ids OU --de/--ate.");
   }
 
-  if (temDia) {
-    const dia = values.dia.trim();
-    if (!ehDataValida(dia)) throw new ErroDeUso(`--dia invalido: "${values.dia}". Use o formato YYYY-MM-DD.`);
-    return { dia };
+  if (temDia) return { dia: exigirData("--dia", values.dia) };
+
+  if (temIds) {
+    let ids;
+    try {
+      ids = normalizarIds(values.ids);
+    } catch (erro) {
+      throw new ErroDeUso(erro instanceof Error ? erro.message : String(erro));
+    }
+    if (!ids.length) throw new ErroDeUso("--ids vazio. Informe ao menos um ID de venda.");
+    return { ids };
   }
 
-  let ids;
-  try {
-    ids = normalizarIds(values.ids);
-  } catch (erro) {
-    throw new ErroDeUso(erro instanceof Error ? erro.message : String(erro));
-  }
-  if (!ids.length) throw new ErroDeUso("--ids vazio. Informe ao menos um ID de venda.");
-  return { ids };
+  if (!(temDe && temAte)) throw new ErroDeUso("Faixa requer --de e --ate juntos (YYYY-MM-DD).");
+  const de = exigirData("--de", values.de);
+  const ate = exigirData("--ate", values.ate);
+  if (de > ate) throw new ErroDeUso(`Faixa invalida: --de (${de}) e posterior a --ate (${ate}).`);
+  return { de, ate };
 }
 
 const DESCRICAO_STATUS = {
@@ -75,8 +90,9 @@ const DESCRICAO_STATUS = {
   sem_novidade: "sem novidade (ja existia igual)"
 };
 
-// Envia os payloads um a um (reusa retry + api-client), logando o resultado de cada venda.
-async function enviarPayloads(config, payloads) {
+// Envia os payloads um a um (reusa retry + api-client). Loga o resultado de cada venda quando
+// `detalhado` (modos --dia/--ids); na faixa fica silencioso e o chamador loga o resumo por dia.
+async function enviarPayloads(config, payloads, { detalhado = true } = {}) {
   const sync = config.sincronizacao;
   const contagem = { total: payloads.length, criadas: 0, atualizadas: 0, semNovidade: 0, erros: 0 };
 
@@ -96,7 +112,7 @@ async function enviarPayloads(config, payloads) {
       if (status === "criado") contagem.criadas += 1;
       else if (status === "atualizado") contagem.atualizadas += 1;
       else if (status === "sem_novidade") contagem.semNovidade += 1;
-      console.log(`[reprocessar] ${idVenda} -> ${DESCRICAO_STATUS[status] ?? status}`);
+      if (detalhado) console.log(`[reprocessar] ${idVenda} -> ${DESCRICAO_STATUS[status] ?? status}`);
     } catch (erro) {
       contagem.erros += 1;
       const tipo = ehErroPermanente(erro) ? "permanente" : "transitorio";
@@ -107,40 +123,74 @@ async function enviarPayloads(config, payloads) {
   return contagem;
 }
 
-// Le do CREARE conforme o alvo, monta os payloads e reenvia. Devolve a contagem do reprocesso.
+function somarContagem(total, parcial) {
+  total.total += parcial.total;
+  total.criadas += parcial.criadas;
+  total.atualizadas += parcial.atualizadas;
+  total.semNovidade += parcial.semNovidade;
+  total.erros += parcial.erros;
+  return total;
+}
+
+// Reprocessa um unico dia (com log por venda). Reusado pelos modos --dia e (silencioso) --de/--ate.
+async function reprocessarDia(config, pool, dia, { detalhado = true } = {}) {
+  const dados = await buscarVendasDia(pool, dia);
+  const payloads = montarPayloads(dados, { offsetFuso: config.sincronizacao.offsetFuso });
+  if (detalhado) console.log(`[reprocessar] dia=${dia}: ${payloads.length} venda(s) lida(s) no CREARE.`);
+  return enviarPayloads(config, payloads, { detalhado });
+}
+
+async function reprocessarIds(config, pool, ids) {
+  const dados = await buscarVendasPorIds(pool, ids);
+  console.log(`[reprocessar] ids=${ids.join(",")}: ${dados.vendas.length} venda(s) lida(s) no CREARE.`);
+  const encontrados = new Set(dados.vendas.map((venda) => String(venda.idVendaBalcao)));
+  for (const id of ids) {
+    if (!encontrados.has(String(id))) {
+      console.warn(`[reprocessar] venda ${id}: NAO ENCONTRADA no CREARE (ignorada).`);
+    }
+  }
+  const payloads = montarPayloads(dados, { offsetFuso: config.sincronizacao.offsetFuso });
+  return enviarPayloads(config, payloads, { detalhado: true });
+}
+
+// Backfill: itera a faixa dia a dia reusando o fluxo do dia; log resumido por dia + total geral.
+async function reprocessarFaixa(config, pool, de, ate) {
+  const dias = enumerarDias(de, ate);
+  console.log(`[reprocessar] faixa ${de}..${ate}: ${dias.length} dia(s).`);
+  const total = { total: 0, criadas: 0, atualizadas: 0, semNovidade: 0, erros: 0 };
+  for (const dia of dias) {
+    const c = await reprocessarDia(config, pool, dia, { detalhado: false });
+    somarContagem(total, c);
+    console.log(
+      `[reprocessar] dia=${dia}: lidas=${c.total} criadas=${c.criadas} atualizadas=${c.atualizadas} ` +
+        `sem_novidade=${c.semNovidade} erros=${c.erros}`
+    );
+  }
+  console.log(
+    `[reprocessar] faixa ${de}..${ate} concluida: dias=${dias.length} total=${total.total} ` +
+      `criadas=${total.criadas} atualizadas=${total.atualizadas} sem_novidade=${total.semNovidade} erros=${total.erros}`
+  );
+  return total;
+}
+
+// Abre a API + o pool uma unica vez e despacha para o modo do alvo. Devolve a contagem consolidada.
 export async function reprocessar(config, alvo) {
   await verificarApi(config.padaria.apiUrl);
 
-  let dados;
   const pool = criarPoolCreare(config.creare);
   try {
-    dados = alvo.dia ? await buscarVendasDia(pool, alvo.dia) : await buscarVendasPorIds(pool, alvo.ids);
+    if (alvo.de) return await reprocessarFaixa(config, pool, alvo.de, alvo.ate);
+    if (alvo.ids) return await reprocessarIds(config, pool, alvo.ids);
+
+    const contagem = await reprocessarDia(config, pool, alvo.dia, { detalhado: true });
+    console.log(
+      `[reprocessar] dia=${alvo.dia} concluido: total=${contagem.total} criadas=${contagem.criadas} ` +
+        `atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} erros=${contagem.erros}`
+    );
+    return contagem;
   } finally {
     await pool.end();
   }
-
-  const escopo = alvo.dia ? `dia=${alvo.dia}` : `ids=${alvo.ids.join(",")}`;
-  console.log(`[reprocessar] ${escopo}: ${dados.vendas.length} venda(s) lida(s) no CREARE.`);
-
-  // Modo --ids: avisa quais IDs pedidos nao existem no CREARE (nao ha o que reenviar).
-  if (alvo.ids) {
-    const encontrados = new Set(dados.vendas.map((venda) => String(venda.idVendaBalcao)));
-    for (const id of alvo.ids) {
-      if (!encontrados.has(String(id))) {
-        console.warn(`[reprocessar] venda ${id}: NAO ENCONTRADA no CREARE (ignorada).`);
-      }
-    }
-  }
-
-  const payloads = montarPayloads(dados, { offsetFuso: config.sincronizacao.offsetFuso });
-  const contagem = await enviarPayloads(config, payloads);
-
-  console.log(
-    `[reprocessar] ${escopo} concluido: total=${contagem.total} criadas=${contagem.criadas} ` +
-      `atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} erros=${contagem.erros}`
-  );
-
-  return contagem;
 }
 
 async function main() {

@@ -21,9 +21,31 @@ type ConciliacaoJson = {
       diferenca: number;
       ok: boolean;
       pdvNaoVinculado: boolean;
+      idsFaltantes: string[];
     }>;
   };
 };
+
+// Payload minimo de ingestao — cria a venda no sistema E o registro (ledger da integracao), para o
+// cruzamento "presente no CREARE, ausente no sistema" ter contra o que comparar.
+function payloadVendaIntegrada(idVenda: string, dataHoraVenda: string, valorTotal: number) {
+  return {
+    DadosIntegracao: { origem: "vitest" },
+    Venda: {
+      idVenda,
+      idCaixa: "PDV-EXT",
+      nomeCaixa: "PDV Integracao",
+      dataHoraVenda,
+      valorOriginal: valorTotal,
+      desconto: 0,
+      acrescimo: 0,
+      valorTotal,
+      statusVenda: "aprovado"
+    },
+    ItensVenda: [],
+    PagamentosVenda: []
+  };
+}
 
 const DIA = "2026-08-10";
 
@@ -35,6 +57,15 @@ describe("conciliacao diaria da integracao de vendas", () => {
       method: "POST",
       url: "/api/integracoes/conciliacao",
       headers: chave ? { "x-api-key": chave } : {},
+      payload
+    });
+  }
+
+  async function receberVenda(payload: object) {
+    return await contexto.app.inject({
+      method: "POST",
+      url: "/api/integracoes",
+      headers: { "x-api-key": idsTeste.integracaoCodigo },
       payload
     });
   }
@@ -132,6 +163,46 @@ describe("conciliacao diaria da integracao de vendas", () => {
     expect(new Set(alertas.map((email) => email.para))).toEqual(
       new Set([usuariosTeste.admin.email, usuariosTeste.multiempresa.email])
     );
+  });
+
+  it("Deve_DivergirPorContagem_E_ListarIdsAusentes_Quando_ValorBateMasFaltamVendas", async () => {
+    // Dia novo: o sistema recebe 1 venda (CREARE:7001) de 30.00; o CREARE reporta 3 vendas somando
+    // os mesmos 30.00. O VALOR bate, mas a CONTAGEM nao (1 != 3): tem de divergir mesmo assim, e o
+    // diagnostico deve apontar exatamente as duas vendas que o sistema nao recebeu.
+    const dia = "2026-08-14";
+    const recebida = await receberVenda(payloadVendaIntegrada("CREARE:7001", `${dia}T14:00:00.000Z`, 30));
+    assertOk(recebida);
+
+    const resposta = await conciliar({
+      data: dia,
+      porPdv: [
+        {
+          pdvIdentificador: "PDV-EXT",
+          quantidadeVendas: 3,
+          valorTotal: 30,
+          idsVendas: ["CREARE:7001", "CREARE:7002", "CREARE:7003"]
+        }
+      ]
+    });
+
+    assertOk(resposta);
+    const corpo = json<ConciliacaoJson>(resposta).data;
+    expect(corpo.ok).toBe(false);
+    expect(corpo.porPdv[0]).toMatchObject({
+      sistema: { quantidadeVendas: 1, valorTotal: 30 },
+      creare: { quantidadeVendas: 3, valorTotal: 30 },
+      diferenca: 0, // o valor bate; quem reprova e a contagem
+      ok: false
+    });
+    // 7001 chegou; 7002 e 7003 estao no CREARE e ausentes no sistema.
+    expect(corpo.porPdv[0]?.idsFaltantes).toEqual(["CREARE:7002", "CREARE:7003"]);
+
+    // O e-mail de divergencia lista os IDs para reprocessar (diagnostico pronto).
+    const alertas = alertasDoDia(dia);
+    expect(alertas.length).toBeGreaterThan(0);
+    expect(alertas[0]?.html).toContain("CREARE:7002");
+    expect(alertas[0]?.html).toContain("CREARE:7003");
+    expect(alertas[0]?.html).not.toContain("CREARE:7001");
   });
 
   it("Deve_MarcarComoNaoOk_Quando_PdvDoCreareNaoTemVinculo", async () => {

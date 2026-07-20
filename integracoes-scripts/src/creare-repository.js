@@ -22,6 +22,16 @@ export async function buscarConciliacaoDia(pool, dataOrigem) {
   }));
 }
 
+// Uma linha por venda FECHADA do dia (mesmo filtro do agregado da conciliacao), por PDV. Alimenta o
+// diagnostico "presente no CREARE, ausente no sistema": a API cruza esses IDs com o que recebeu.
+export async function buscarIdsVendasFechadasDia(pool, dataOrigem) {
+  const linhas = await executar(pool, "conciliacao-ids-dia.sql", [dataOrigem, dataOrigem]);
+  return linhas.map((linha) => ({
+    pdvIdentificador: String(linha.pdvIdentificador),
+    idVendaBalcao: String(linha.idVendaBalcao)
+  }));
+}
+
 export async function buscarVendasDia(pool, dataOrigem) {
   const intervaloDia = [dataOrigem, dataOrigem];
   const [vendas, itens, pagamentos] = await Promise.all([
@@ -90,6 +100,30 @@ export function enumerarDias(deYMD, ateYMD) {
   return dias;
 }
 
+// "YYYY-MM-DD" de n dias antes de `ymd`. Ancorado em UTC (data neutra de fuso); puro.
+export function subtrairDias(ymd, n) {
+  const data = new Date(`${ymd}T00:00:00Z`);
+  data.setUTCDate(data.getUTCDate() - n);
+  return data.toISOString().slice(0, 10);
+}
+
+// Conjunto de dias (YYYY-MM-DD, ordenado) que o ciclo reprocessa POR COMPLETO. O cursor (ultimoDia)
+// e apenas otimizacao, nunca fonte de verdade: o dia corrente inteiro SEMPRE entra, entao uma venda
+// que o PDV sincronizou tarde (DTHR anterior ao ultimo cursor) e capturada no ciclo seguinte.
+//  - sempre o dia corrente inteiro;
+//  - 1a execucao (sem cursor): backfill de `diasIniciais` dias;
+//  - virada de dia (cursor != hoje): tambem o dia anterior, uma vez (retardatarios da virada).
+// Nao cobre buracos de varios dias (agente parado dias): para isso existe o reprocesso em faixa.
+export function diasParaProcessar(hoje, ultimoDia, diasIniciais = 1) {
+  const dias = new Set([hoje]);
+  if (!ultimoDia) {
+    for (const dia of enumerarDias(subtrairDias(hoje, Math.max(1, diasIniciais) - 1), hoje)) dias.add(dia);
+  } else if (ultimoDia !== hoje) {
+    dias.add(subtrairDias(hoje, 1));
+  }
+  return [...dias].sort();
+}
+
 // Dia contabil no fuso do NEGOCIO (nao o da maquina): a API deriva data_referencia com a mesma
 // regra (shared/src/datas), entao os dois lados da conciliacao usam a mesma regua mesmo se o
 // agente rodar num host/container em UTC. Espelha diaNegocio() do shared — este pacote e standalone
@@ -105,20 +139,10 @@ export function diaNegocioHoje() {
   return formatadorDiaNegocio.format(new Date());
 }
 
-export function hojeLocalYMD() {
-  const agora = new Date();
-  const ano = agora.getFullYear();
-  const mes = String(agora.getMonth() + 1).padStart(2, "0");
-  const dia = String(agora.getDate()).padStart(2, "0");
-  return `${ano}-${mes}-${dia}`;
-}
-
-// Janela incremental: varre os dias de date(desde) ate hoje (reusando buscarVendasDia por dia),
-// junta e devolve so as vendas com dataHoraVenda >= desde. itens/pagamentos vem completos (o
-// montador de payload seleciona por venda). Reprocessar o dia do cursor e barato (o servidor
-// deduplica por idVenda + hash), garantindo que nenhuma venda do mesmo instante seja perdida.
-export async function buscarVendasIncrementais(pool, dataHoraDesde) {
-  const dias = enumerarDias(String(dataHoraDesde).slice(0, 10), hojeLocalYMD());
+// Le varios dias (inclusive) e junta vendas/itens/pagamentos. O montador de payload seleciona
+// itens/pagamentos por venda. Reprocessar dias ja enviados e barato e seguro (o servidor deduplica
+// por idVenda + hash). Base do ciclo (dia corrente + retardatarios) e do reprocesso em faixa.
+export async function buscarVendasDias(pool, dias) {
   const vendas = [];
   const itens = [];
   const pagamentos = [];
@@ -128,6 +152,5 @@ export async function buscarVendasIncrementais(pool, dataHoraDesde) {
     itens.push(...dados.itens);
     pagamentos.push(...dados.pagamentos);
   }
-  const vendasFiltradas = vendas.filter((venda) => String(venda.dataHoraVenda) >= String(dataHoraDesde));
-  return { vendas: vendasFiltradas, itens, pagamentos };
+  return { vendas, itens, pagamentos };
 }

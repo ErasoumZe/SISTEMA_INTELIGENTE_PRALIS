@@ -1,8 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-// Cursor de sincronizacao persistido em disco: { ultimaDataHoraVenda, ultimoIdVendaBalcao,
-// atualizadoEm }. ultimaDataHoraVenda esta no formato do CREARE ("YYYY-MM-DD HH:MM:SS").
+// Cursor de sincronizacao persistido em disco: { ultimoDiaProcessado, atualizadoEm }, onde
+// ultimoDiaProcessado e "YYYY-MM-DD" no fuso do negocio. E APENAS otimizacao (evita reprocessar o
+// dia anterior a cada ciclo e marca a virada do dia), nunca fonte de verdade: se sumir ou vier de
+// versao antiga, o ciclo ainda reprocessa o dia corrente inteiro (idempotente). lerCursor tolera
+// qualquer forma antiga do arquivo (ex.: ultimaDataHoraVenda) — campos desconhecidos sao ignorados.
 
 export async function lerCursor(caminho) {
   try {
