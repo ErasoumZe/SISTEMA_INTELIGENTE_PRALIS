@@ -32,6 +32,9 @@ export function obterConfig() {
       lockMaxMinutos: obterNumero("SYNC_LOCK_MAX_MINUTOS", 30),
       retryTentativas: obterNumero("SYNC_RETRY_TENTATIVAS", 4),
       retryBaseMs: obterNumero("SYNC_RETRY_BASE_MS", 500),
+      // Throttle de saida: teto de req/s para nao estourar o rate limit da API (fica < 300/min da
+      // rota). 4 req/s por padrao => intervalo de 250ms entre envios.
+      maxReqPorSegundo: obterNumero("SYNC_MAX_REQ_POR_SEGUNDO", 4),
       estadoDir: process.env.SYNC_ESTADO_DIR?.trim() || ".estado",
       // O CREARE fornece hora local; -03:00 converte o horario de Brasilia para o instante UTC real.
       offsetFuso: process.env.SYNC_FUSO_OFFSET?.trim() || "-03:00"

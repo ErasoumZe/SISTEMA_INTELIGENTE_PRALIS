@@ -94,6 +94,13 @@ export async function buildApp(): Promise<FastifyInstance> {
       return erro(reply, error.status, error.message, error.code, error.details);
     }
 
+    // Erro do @fastify/rate-limit: chega aqui com statusCode 429 e os headers (Retry-After /
+    // X-RateLimit-*) ja setados no reply pelo plugin. Sem este ramo virava 500 INTERNAL_ERROR e o
+    // cliente re-martelava em vez de aguardar. reply.status().send() preserva os headers ja setados.
+    if ((error as { statusCode?: number }).statusCode === 429) {
+      return erro(reply, 429, "Muitas requisicoes; aguarde e tente novamente", "RATE_LIMITED");
+    }
+
     request.log.error(error);
     capturarErro(error instanceof Error ? error : new Error(String(error)));
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");

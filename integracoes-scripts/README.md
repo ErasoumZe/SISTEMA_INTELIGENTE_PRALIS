@@ -26,6 +26,7 @@ Copie `.env.producao.example` para `.env.producao` (que fica fora do git) e pree
 | `SYNC_DIAS_INICIAIS`                                  | 1a execucao: dias para tras (default `1`)                      |
 | `SYNC_LOCK_MAX_MINUTOS`                               | idade maxima do lock (default `30`)                            |
 | `SYNC_RETRY_TENTATIVAS` / `SYNC_RETRY_BASE_MS`        | retry de rede por venda (default `4` / `500`)                  |
+| `SYNC_MAX_REQ_POR_SEGUNDO`                            | teto de envios/s (throttle; default `4`, fica < limite da API) |
 | `SYNC_ESTADO_DIR`                                     | pasta do estado de runtime (default `.estado`)                 |
 | `SYNC_FUSO_OFFSET`                                    | offset da loja para UTC (padrao `-03:00`, horario de Brasilia) |
 
@@ -59,6 +60,10 @@ Cada ciclo imprime um resumo:
   vier de versao antiga, o dia corrente inteiro e reprocessado do mesmo jeito.
 - **Idempotente**: reenviar a mesma venda nao duplica (o servidor deduplica por `idVenda` + hash),
   entao reprocessar o dia inteiro a cada ciclo e sempre seguro (as repetidas voltam _sem novidade_).
+- **Throttle + respeito ao rate limit**: o agente limita a saida a `SYNC_MAX_REQ_POR_SEGUNDO` (default
+  4/s, abaixo do limite da API por chave). Se ainda assim receber **429**, le o `Retry-After` e
+  **aguarda** (nunca re-martela); no reprocesso em faixa, a venda que levar 429 e **reenfileirada no
+  proprio run** (as outras seguem e o limite reabastece), em vez de ser pulada.
 - **Fila de falhas** (`.estado/fila-falhas.json`): vendas que falharam por erro de rede ficam nela e
   sao reenviadas no inicio do proximo ciclo. Erros de payload (4xx) sao logados e nao entram na fila.
 - **Lock** (`.estado/agente.lock`): impede duas execucoes simultaneas (loop + tarefa agendada + run

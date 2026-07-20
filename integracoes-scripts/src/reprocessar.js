@@ -5,7 +5,8 @@ import { buscarVendasDia, buscarVendasPorIds, enumerarDias, normalizarIds } from
 import { criarPoolCreare } from "./database.js";
 import { obterConfig } from "./env.js";
 import { montarPayloads } from "./payload.js";
-import { ehErroPermanente, enviarComRetry } from "./retry.js";
+import { ehErro429, ehErroPermanente, enviarComRetry, retryAfterMsDoErro } from "./retry.js";
+import { criarThrottle, intervaloDeReqPorSegundo } from "./throttle.js";
 
 // REPROCESSO manual: re-le vendas no CREARE e reenvia para a API. Ferramenta de recuperacao para
 // vendas que ficaram de fora da ingestao (ex.: falha durante um deploy). E idempotente — o servidor
@@ -90,22 +91,32 @@ const DESCRICAO_STATUS = {
   sem_novidade: "sem novidade (ja existia igual)"
 };
 
-// Envia os payloads um a um (reusa retry + api-client). Loga o resultado de cada venda quando
+// Teto de reenfileiramentos por venda em caso de 429 persistente — evita girar sem fim.
+const MAX_REENFILEIRAR_429 = 5;
+const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
+
+// Envia os payloads (reusa throttle + retry + api-client). Loga o resultado de cada venda quando
 // `detalhado` (modos --dia/--ids); na faixa fica silencioso e o chamador loga o resumo por dia.
-async function enviarPayloads(config, payloads, { detalhado = true } = {}) {
+// Fila interna: uma venda que falhar por 429 (mesmo depois do retry) NAO e pulada — volta para o fim
+// da fila e e tentada de novo no proprio run (as outras seguem; o bucket do servidor reabastece).
+async function enviarPayloads(config, payloads, { detalhado = true, throttle } = {}) {
   const sync = config.sincronizacao;
   const contagem = { total: payloads.length, criadas: 0, atualizadas: 0, semNovidade: 0, erros: 0 };
+  const fila = payloads.map((payload) => ({ payload, reenfileiradas: 0 }));
 
-  for (const payload of payloads) {
-    const idVenda = payload.Venda.idVenda;
+  while (fila.length) {
+    const item = fila.shift();
+    const idVenda = item.payload.Venda.idVenda;
     try {
       const resposta = await enviarComRetry(
-        () =>
-          enviarVendaIntegracao({
+        async () => {
+          await throttle();
+          return enviarVendaIntegracao({
             apiUrl: config.padaria.apiUrl,
             codigoIntegracao: config.padaria.codigoIntegracao,
-            payload
-          }),
+            payload: item.payload
+          });
+        },
         { tentativas: sync.retryTentativas, baseMs: sync.retryBaseMs }
       );
       const status = resposta?.data?.status ?? resposta?.status ?? "desconhecido";
@@ -114,9 +125,20 @@ async function enviarPayloads(config, payloads, { detalhado = true } = {}) {
       else if (status === "sem_novidade") contagem.semNovidade += 1;
       if (detalhado) console.log(`[reprocessar] ${idVenda} -> ${DESCRICAO_STATUS[status] ?? status}`);
     } catch (erro) {
-      contagem.erros += 1;
-      const tipo = ehErroPermanente(erro) ? "permanente" : "transitorio";
-      console.error(`[reprocessar] ${idVenda} -> ERRO (${tipo}): ${erro instanceof Error ? erro.message : erro}`);
+      if (ehErro429(erro) && item.reenfileiradas < MAX_REENFILEIRAR_429) {
+        item.reenfileiradas += 1;
+        fila.push(item);
+        const espera = retryAfterMsDoErro(erro) ?? sync.retryBaseMs;
+        console.warn(
+          `[reprocessar] ${idVenda} -> 429; reenfileirado (${item.reenfileiradas}/${MAX_REENFILEIRAR_429}), ` +
+            `aguardando ${espera}ms`
+        );
+        await esperar(espera);
+      } else {
+        contagem.erros += 1;
+        const tipo = ehErroPermanente(erro) ? "permanente" : ehErro429(erro) ? "429 persistente" : "transitorio";
+        console.error(`[reprocessar] ${idVenda} -> ERRO (${tipo}): ${erro instanceof Error ? erro.message : erro}`);
+      }
     }
   }
 
@@ -133,14 +155,14 @@ function somarContagem(total, parcial) {
 }
 
 // Reprocessa um unico dia (com log por venda). Reusado pelos modos --dia e (silencioso) --de/--ate.
-async function reprocessarDia(config, pool, dia, { detalhado = true } = {}) {
+async function reprocessarDia(config, pool, dia, { detalhado = true, throttle } = {}) {
   const dados = await buscarVendasDia(pool, dia);
   const payloads = montarPayloads(dados, { offsetFuso: config.sincronizacao.offsetFuso });
   if (detalhado) console.log(`[reprocessar] dia=${dia}: ${payloads.length} venda(s) lida(s) no CREARE.`);
-  return enviarPayloads(config, payloads, { detalhado });
+  return enviarPayloads(config, payloads, { detalhado, throttle });
 }
 
-async function reprocessarIds(config, pool, ids) {
+async function reprocessarIds(config, pool, ids, throttle) {
   const dados = await buscarVendasPorIds(pool, ids);
   console.log(`[reprocessar] ids=${ids.join(",")}: ${dados.vendas.length} venda(s) lida(s) no CREARE.`);
   const encontrados = new Set(dados.vendas.map((venda) => String(venda.idVendaBalcao)));
@@ -150,16 +172,16 @@ async function reprocessarIds(config, pool, ids) {
     }
   }
   const payloads = montarPayloads(dados, { offsetFuso: config.sincronizacao.offsetFuso });
-  return enviarPayloads(config, payloads, { detalhado: true });
+  return enviarPayloads(config, payloads, { detalhado: true, throttle });
 }
 
 // Backfill: itera a faixa dia a dia reusando o fluxo do dia; log resumido por dia + total geral.
-async function reprocessarFaixa(config, pool, de, ate) {
+async function reprocessarFaixa(config, pool, de, ate, throttle) {
   const dias = enumerarDias(de, ate);
   console.log(`[reprocessar] faixa ${de}..${ate}: ${dias.length} dia(s).`);
   const total = { total: 0, criadas: 0, atualizadas: 0, semNovidade: 0, erros: 0 };
   for (const dia of dias) {
-    const c = await reprocessarDia(config, pool, dia, { detalhado: false });
+    const c = await reprocessarDia(config, pool, dia, { detalhado: false, throttle });
     somarContagem(total, c);
     console.log(
       `[reprocessar] dia=${dia}: lidas=${c.total} criadas=${c.criadas} atualizadas=${c.atualizadas} ` +
@@ -177,12 +199,15 @@ async function reprocessarFaixa(config, pool, de, ate) {
 export async function reprocessar(config, alvo) {
   await verificarApi(config.padaria.apiUrl);
 
+  // Throttle compartilhado por todo o run (todos os dias/vendas): teto de req/s abaixo do rate limit.
+  const throttle = criarThrottle(intervaloDeReqPorSegundo(config.sincronizacao.maxReqPorSegundo));
+
   const pool = criarPoolCreare(config.creare);
   try {
-    if (alvo.de) return await reprocessarFaixa(config, pool, alvo.de, alvo.ate);
-    if (alvo.ids) return await reprocessarIds(config, pool, alvo.ids);
+    if (alvo.de) return await reprocessarFaixa(config, pool, alvo.de, alvo.ate, throttle);
+    if (alvo.ids) return await reprocessarIds(config, pool, alvo.ids, throttle);
 
-    const contagem = await reprocessarDia(config, pool, alvo.dia, { detalhado: true });
+    const contagem = await reprocessarDia(config, pool, alvo.dia, { detalhado: true, throttle });
     console.log(
       `[reprocessar] dia=${alvo.dia} concluido: total=${contagem.total} criadas=${contagem.criadas} ` +
         `atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} erros=${contagem.erros}`

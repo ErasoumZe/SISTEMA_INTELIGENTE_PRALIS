@@ -14,6 +14,7 @@ import { montarPayloads } from "./payload.js";
 import { gravarCursor, lerCursor } from "./cursor.js";
 import { gravarFila, lerFila } from "./fila-falhas.js";
 import { ehErroPermanente, enviarComRetry } from "./retry.js";
+import { criarThrottle, intervaloDeReqPorSegundo } from "./throttle.js";
 import { adquirirLock, liberarLock } from "./lock.js";
 
 const raizProjeto = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,14 +57,19 @@ export async function executarCiclo(config, caminhos) {
   const sync = config.sincronizacao;
   await verificarApi(config.padaria.apiUrl);
 
+  // Throttle de saida (compartilhado por todas as vendas do ciclo, retries inclusive): segura o ritmo
+  // abaixo do rate limit da API. Somado ao Retry-After no retry, nunca re-martela a API.
+  const throttle = criarThrottle(intervaloDeReqPorSegundo(sync.maxReqPorSegundo));
   const enviar = (payload) =>
     enviarComRetry(
-      () =>
-        enviarVendaIntegracao({
+      async () => {
+        await throttle();
+        return enviarVendaIntegracao({
           apiUrl: config.padaria.apiUrl,
           codigoIntegracao: config.padaria.codigoIntegracao,
           payload
-        }),
+        });
+      },
       { tentativas: sync.retryTentativas, baseMs: sync.retryBaseMs }
     );
 
