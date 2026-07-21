@@ -152,7 +152,7 @@ function fechar() {
           />
         </div>
 
-        <v-row v-if="resumoAtual" dense>
+        <v-row v-if="resumoAtual" dense class="caixa-resumo-grid">
           <v-col cols="12" md="2">
             <v-sheet class="pa-4 rounded-lg soft-bg">
               <div class="text-caption">Entradas</div>

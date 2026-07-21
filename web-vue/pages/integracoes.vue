@@ -397,7 +397,7 @@ onMounted(async () => {
       <v-window v-model="aba">
         <v-window-item value="chaves">
           <v-card>
-            <v-card-title class="d-flex align-center justify-space-between">
+            <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-2">
               <span>Chaves de {{ tituloTipo(tipoSelecionado) }}</span>
               <v-btn prepend-icon="mdi-plus" color="primary" :loading="salvandoChave" @click="criarChave">
                 Criar chave

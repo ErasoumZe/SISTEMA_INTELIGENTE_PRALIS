@@ -149,7 +149,7 @@ watch(
 
 <template>
   <v-card>
-    <v-card-title class="d-flex align-center justify-space-between ga-3">
+    <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
         <div class="text-h6">Relatorio de Vendas</div>
         <div class="text-body-2 text-muted">Vendas com filtros por periodo, PDV, cliente e pagamento.</div>
@@ -280,7 +280,7 @@ watch(
         </div>
       </div>
       <div v-if="totalPaginas > 1" class="d-flex justify-center mt-4">
-        <v-pagination v-model="pagina" :length="totalPaginas" :total-visible="7" @update:model-value="buscar" />
+        <v-pagination v-model="pagina" :length="totalPaginas" :total-visible="5" @update:model-value="buscar" />
       </div>
     </v-card-text>
 
