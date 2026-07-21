@@ -5,6 +5,14 @@ const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 const textoObrigatorioSchema = z.string().trim().min(1);
 
+// Dinheiro de item de venda: mantem a regra >= 0 (boa regra — o agente normaliza na origem), mas cita
+// o campo e o valor recebido na mensagem. Se um negativo voltar a escapar do CREARE, o historico de
+// erro aponta exatamente o que chegou, em vez da mensagem generica do zod.
+const dinheiroItemSchema = (campo: string) =>
+  z.coerce
+    .number()
+    .min(0, { error: (issue) => `${campo} do item nao pode ser negativo (recebido: ${String(issue.input)})` });
+
 export const tiposIntegracao = ["vendas"] as const;
 export const tiposRegistroIntegracao = ["venda", "pdv", "cliente", "produto", "forma_pagamento"] as const;
 export const camposVinculoIntegracao = ["pdv", "cliente", "produto", "forma_pagamento"] as const;
@@ -69,10 +77,10 @@ export const itemVendaIntegracaoPayloadSchema = z.object({
   descricaoProduto: textoObrigatorioSchema,
   dataHoraItem: z.coerce.date(),
   quantidade: z.coerce.number().min(0),
-  valorUnitario: dinheiroSchema,
-  desconto: dinheiroSchema.default(0),
-  acrescimo: dinheiroSchema.default(0),
-  total: dinheiroSchema,
+  valorUnitario: dinheiroItemSchema("valorUnitario"),
+  desconto: dinheiroItemSchema("desconto").default(0),
+  acrescimo: dinheiroItemSchema("acrescimo").default(0),
+  total: dinheiroItemSchema("total"),
   itemCancelado: z.coerce.boolean().default(false)
 });
 

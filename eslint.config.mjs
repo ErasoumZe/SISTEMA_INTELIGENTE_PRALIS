@@ -7,7 +7,18 @@ export default tseslint.config(
   {
     // integracoes-scripts e um workspace JS puro (sem TS), com gate proprio (node --check + node --test).
     // Fica fora do eslint com type-check, como ja fica fora do `lint` da raiz.
-    ignores: ["**/dist/**", "**/.nuxt/**", "**/.output/**", "**/node_modules/**", "integracoes-scripts/**"]
+    // **/*.json* fica ignorado globalmente: o eslint nao linta JSON neste repo (o `lint` da raiz passa
+    // diretorios, nunca .json). Sem isso, a extensao do eslint no editor acusa "File ignored because no
+    // matching configuration was supplied" ao abrir tsconfig.json/package.json — falso positivo.
+    ignores: [
+      "**/dist/**",
+      "**/.nuxt/**",
+      "**/.output/**",
+      "**/node_modules/**",
+      "**/*.json",
+      "**/*.jsonc",
+      "integracoes-scripts/**"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

@@ -47,6 +47,44 @@ function itemCancelado(valor) {
   );
 }
 
+// O CREARE, em alguns itens, grava desconto/acrescimo NEGATIVO (ex.: desconto -2,50 significa, na
+// pratica, um acrescimo de 2,50). O schema de integracao exige >= 0 e rejeitava a venda inteira, entao
+// normalizamos na ORIGEM: um valor negativo em um campo vira o valor absoluto no campo oposto. O total
+// do item (lido direto do CREARE) NAO muda, pois o liquido net = -desconto + acrescimo e invariante:
+//   desconto -2,50 -> acrescimo +2,50 : -(-2,50) + 0  ==  0 + 2,50
+//   acrescimo -1,00 -> desconto +1,00 : -0 + (-1,00)  ==  -1,00 + 0
+function normalizarDescontoAcrescimo(descontoBruto, acrescimoBruto) {
+  let desconto = dinheiro(descontoBruto);
+  let acrescimo = dinheiro(acrescimoBruto);
+  if (desconto < 0) {
+    acrescimo = dinheiro(acrescimo - desconto); // acrescimo + |desconto|
+    desconto = 0;
+  }
+  if (acrescimo < 0) {
+    desconto = dinheiro(desconto - acrescimo); // desconto + |acrescimo|
+    acrescimo = 0;
+  }
+  return { desconto, acrescimo };
+}
+
+// Item de venda no formato do payload. Centralizado para producao e teste compartilharem exatamente
+// a mesma normalizacao (a data e a unica diferenca entre os dois modos).
+function montarItem(item, dataHoraItem) {
+  const { desconto, acrescimo } = normalizarDescontoAcrescimo(item.desconto, item.acrescimo);
+  return {
+    idRegistro: `CREARE_ITEM:${item.idItemVendaBalcao}`,
+    idProduto: texto(item.codigoProduto, `PRODUTO_${item.idProduto ?? item.idItemVendaBalcao}`),
+    descricaoProduto: texto(item.descricaoProduto, "Produto sem descricao"),
+    dataHoraItem,
+    quantidade: Number(item.quantidade ?? 0),
+    valorUnitario: dinheiro(item.valorUnitario),
+    desconto,
+    acrescimo,
+    total: dinheiro(item.total),
+    itemCancelado: itemCancelado(item.itemCancelado)
+  };
+}
+
 function agruparPorVenda(linhas) {
   const grupos = new Map();
   for (const linha of linhas) {
@@ -89,18 +127,9 @@ export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = OFF
         statusVenda: vendaCancelada(venda.statusVenda) ? "CANCELADA" : "FINALIZADA",
         numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal)
       },
-      ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) => ({
-        idRegistro: `CREARE_ITEM:${item.idItemVendaBalcao}`,
-        idProduto: texto(item.codigoProduto, `PRODUTO_${item.idProduto ?? item.idItemVendaBalcao}`),
-        descricaoProduto: texto(item.descricaoProduto, "Produto sem descricao"),
-        dataHoraItem: dataHoraParaIso(item.dataHoraItem ?? venda.dataHoraVenda, offsetFuso),
-        quantidade: Number(item.quantidade ?? 0),
-        valorUnitario: dinheiro(item.valorUnitario),
-        desconto: dinheiro(item.desconto),
-        acrescimo: dinheiro(item.acrescimo),
-        total: dinheiro(item.total),
-        itemCancelado: itemCancelado(item.itemCancelado)
-      })),
+      ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) =>
+        montarItem(item, dataHoraParaIso(item.dataHoraItem ?? venda.dataHoraVenda, offsetFuso))
+      ),
       PagamentosVenda: (pagamentosPorVenda.get(idVendaOriginal) ?? []).map((pagamento) => ({
         idVenda,
         idFormaPagamento: texto(pagamento.idFormaPagamento, `FORMA_${pagamento.idFormaPgtoVendaBalcao}`),
@@ -145,18 +174,9 @@ export function montarPayloadsTeste({ vendas, itens, pagamentos, dataOrigem, dat
         statusVenda: vendaCancelada(venda.statusVenda) ? "CANCELADA" : "FINALIZADA",
         numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal)
       },
-      ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) => ({
-        idRegistro: `CREARE_ITEM:${item.idItemVendaBalcao}`,
-        idProduto: texto(item.codigoProduto, `PRODUTO_${item.idProduto ?? item.idItemVendaBalcao}`),
-        descricaoProduto: texto(item.descricaoProduto, "Produto sem descricao"),
-        dataHoraItem: trocarDataPreservandoHora(item.dataHoraItem ?? venda.dataHoraVenda, dataDestino),
-        quantidade: Number(item.quantidade ?? 0),
-        valorUnitario: dinheiro(item.valorUnitario),
-        desconto: dinheiro(item.desconto),
-        acrescimo: dinheiro(item.acrescimo),
-        total: dinheiro(item.total),
-        itemCancelado: itemCancelado(item.itemCancelado)
-      })),
+      ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) =>
+        montarItem(item, trocarDataPreservandoHora(item.dataHoraItem ?? venda.dataHoraVenda, dataDestino))
+      ),
       PagamentosVenda: (pagamentosPorVenda.get(idVendaOriginal) ?? []).map((pagamento) => ({
         idVenda,
         idFormaPagamento: texto(pagamento.idFormaPagamento, `FORMA_${pagamento.idFormaPgtoVendaBalcao}`),
