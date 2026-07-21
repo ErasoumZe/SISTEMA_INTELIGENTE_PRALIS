@@ -60,27 +60,29 @@ onMounted(carregar);
             </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
-            <v-table density="compact">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Descricao</th>
-                  <th class="text-end">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in grupo.itens" :key="item.id">
-                  <td>{{ dataDoLancamento(item) }}</td>
-                  <td>
-                    {{ item.descricao || "--" }}
-                    <v-chip v-if="item.sentido" size="x-small" variant="tonal" class="ml-2">
-                      {{ item.sentido === "entrada" ? "Entrada" : "Saida" }}
-                    </v-chip>
-                  </td>
-                  <td class="text-end">{{ dinheiro(item.valor) }}</td>
-                </tr>
-              </tbody>
-            </v-table>
+            <div class="responsive-table-shell">
+              <v-table density="compact">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descricao</th>
+                    <th class="text-end">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in grupo.itens" :key="item.id">
+                    <td>{{ dataDoLancamento(item) }}</td>
+                    <td>
+                      {{ item.descricao || "--" }}
+                      <v-chip v-if="item.sentido" size="x-small" variant="tonal" class="ml-2">
+                        {{ item.sentido === "entrada" ? "Entrada" : "Saida" }}
+                      </v-chip>
+                    </td>
+                    <td class="text-end">{{ dinheiro(item.valor) }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
@@ -90,31 +92,33 @@ onMounted(carregar);
       <p v-if="!detalhe.edicoes.length" class="text-body-2 text-medium-emphasis mb-4">
         Nenhuma alteracao de horario neste caixa.
       </p>
-      <v-table v-else density="compact" class="mb-4">
-        <thead>
-          <tr>
-            <th>Quando</th>
-            <th>Quem alterou</th>
-            <th>Autorizador</th>
-            <th>Motivo</th>
-            <th>De</th>
-            <th>Para</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="edicao in detalhe.edicoes" :key="edicao.id">
-            <td>{{ formatarDataHora(edicao.editadoEm) }}</td>
-            <td>{{ edicao.editadoPorNome || "--" }}</td>
-            <td>
-              {{ edicao.autorizadorNome || "--" }}
-              <v-chip v-if="edicao.porToken" size="x-small" variant="tonal" class="ml-2">por token</v-chip>
-            </td>
-            <td>{{ edicao.observacao || "--" }}</td>
-            <td>{{ horarioAuditado(edicao.valoresAntigos) }}</td>
-            <td>{{ horarioAuditado(edicao.valoresNovos) }}</td>
-          </tr>
-        </tbody>
-      </v-table>
+      <div v-else class="responsive-table-shell mb-4">
+        <v-table density="compact">
+          <thead>
+            <tr>
+              <th>Quando</th>
+              <th>Quem alterou</th>
+              <th>Autorizador</th>
+              <th>Motivo</th>
+              <th>De</th>
+              <th>Para</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="edicao in detalhe.edicoes" :key="edicao.id">
+              <td>{{ formatarDataHora(edicao.editadoEm) }}</td>
+              <td>{{ edicao.editadoPorNome || "--" }}</td>
+              <td>
+                {{ edicao.autorizadorNome || "--" }}
+                <v-chip v-if="edicao.porToken" size="x-small" variant="tonal" class="ml-2">por token</v-chip>
+              </td>
+              <td>{{ edicao.observacao || "--" }}</td>
+              <td>{{ horarioAuditado(edicao.valoresAntigos) }}</td>
+              <td>{{ horarioAuditado(edicao.valoresNovos) }}</td>
+            </tr>
+          </tbody>
+        </v-table>
+      </div>
 
       <!-- Acerto de saldo: a diferenca vira despesa e debito do colaborador. -->
       <div class="text-subtitle-2 mb-2">Acerto de saldo</div>

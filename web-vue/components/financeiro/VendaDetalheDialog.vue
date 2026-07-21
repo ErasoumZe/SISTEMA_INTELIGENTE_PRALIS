@@ -16,7 +16,7 @@ const emit = defineEmits<{ (event: "update:aberto", valor: boolean): void }>();
 <template>
   <v-dialog :model-value="aberto" max-width="720" scrollable @update:model-value="emit('update:aberto', $event)">
     <v-card>
-      <v-card-title class="d-flex align-center ga-2">
+      <v-card-title class="d-flex align-center flex-wrap ga-2">
         <v-icon icon="mdi-receipt-text-outline" />
         Detalhe da venda
         <span v-if="detalhe" class="text-body-2 text-medium-emphasis">{{ detalhe.descricao }}</span>

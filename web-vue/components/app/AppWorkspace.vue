@@ -1820,7 +1820,7 @@ onBeforeUnmount(() => {
         <template #activator="{ props: menuProps }">
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
         </template>
-        <v-list min-width="320">
+        <v-list min-width="280">
           <v-list-item
             v-for="acao in acoesNovo"
             :key="acao.titulo"

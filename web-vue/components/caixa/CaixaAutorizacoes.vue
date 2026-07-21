@@ -259,7 +259,7 @@ onBeforeUnmount(pararPollingPendentes);
     <!-- Fila do autorizador -->
     <v-dialog v-model="pendentesAberto" max-width="620" scrollable>
       <v-card>
-        <v-card-title class="d-flex align-center justify-space-between">
+        <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-2">
           Autorizacoes pendentes
           <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="recarregarPendentes">Atualizar</v-btn>
         </v-card-title>

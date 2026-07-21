@@ -52,6 +52,7 @@ body {
 
 .min-h-screen {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .min-w-0 {
@@ -1253,10 +1254,18 @@ body {
 }
 
 /* ---- Por-tela ---- */
-/* G3 — cabecalho de Relatorios/Contas a pagar quebra no mobile */
+/* G3 — cabecalho de Relatorios/Contas a pagar quebra no mobile.
+   Base (todas as larguras): o v-card-title do Vuetify e nowrap + overflow:hidden, entao
+   sem isto a descricao (e ate o botao "Buscar") era clipada em telas estreitas. */
+.report-card-head {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+.report-card-head > :first-child {
+  min-width: 0;
+}
 @media (width <= 768px) {
   .report-card-head {
-    flex-wrap: wrap;
     align-items: flex-start !important;
   }
   .report-card-head > .v-btn {

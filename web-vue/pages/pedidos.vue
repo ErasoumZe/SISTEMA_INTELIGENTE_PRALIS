@@ -327,44 +327,46 @@ onMounted(async () => {
       <v-card>
         <v-card-title class="text-subtitle-1">Pedidos</v-card-title>
         <v-card-text>
-          <v-table density="comfortable">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Status</th>
-                <th class="text-right">Itens</th>
-                <th>Recorrencia</th>
-                <th>Agendado</th>
-                <th class="text-right">Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!pedidos.length">
-                <td colspan="6" class="text-center text-medium-emphasis">Nenhum pedido encontrado.</td>
-              </tr>
-              <tr v-for="pedido in pedidos" :key="pedido.id">
-                <td>{{ pedido.tipo === "automatico" ? "Automatico" : "Manual" }}</td>
-                <td>
-                  <v-chip size="small" :color="corStatus(pedido.status)" variant="flat">{{ pedido.status }}</v-chip>
-                </td>
-                <td class="text-right">{{ pedido.totalItens }}</td>
-                <td>{{ pedido.recorrencia === "nenhuma" ? "-" : pedido.recorrencia }}</td>
-                <td>{{ pedido.dataAgendada ? new Date(pedido.dataAgendada).toLocaleString("pt-BR") : "-" }}</td>
-                <td class="text-right">
-                  <v-btn size="small" variant="text" icon="mdi-eye" @click="verPedido(pedido.id)" />
-                  <v-btn
-                    v-if="podeAprovar && pedido.status === 'rascunho'"
-                    size="small"
-                    variant="text"
-                    color="success"
-                    icon="mdi-check"
-                    :loading="aprovandoId === pedido.id"
-                    @click="aprovar(pedido.id)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
+          <div class="responsive-table-shell">
+            <v-table density="comfortable">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Status</th>
+                  <th class="text-right">Itens</th>
+                  <th>Recorrencia</th>
+                  <th>Agendado</th>
+                  <th class="text-right">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!pedidos.length">
+                  <td colspan="6" class="text-center text-medium-emphasis">Nenhum pedido encontrado.</td>
+                </tr>
+                <tr v-for="pedido in pedidos" :key="pedido.id">
+                  <td>{{ pedido.tipo === "automatico" ? "Automatico" : "Manual" }}</td>
+                  <td>
+                    <v-chip size="small" :color="corStatus(pedido.status)" variant="flat">{{ pedido.status }}</v-chip>
+                  </td>
+                  <td class="text-right">{{ pedido.totalItens }}</td>
+                  <td>{{ pedido.recorrencia === "nenhuma" ? "-" : pedido.recorrencia }}</td>
+                  <td>{{ pedido.dataAgendada ? new Date(pedido.dataAgendada).toLocaleString("pt-BR") : "-" }}</td>
+                  <td class="text-right">
+                    <v-btn size="small" variant="text" icon="mdi-eye" @click="verPedido(pedido.id)" />
+                    <v-btn
+                      v-if="podeAprovar && pedido.status === 'rascunho'"
+                      size="small"
+                      variant="text"
+                      color="success"
+                      icon="mdi-check"
+                      :loading="aprovandoId === pedido.id"
+                      @click="aprovar(pedido.id)"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </div>
         </v-card-text>
       </v-card>
     </div>
@@ -376,26 +378,28 @@ onMounted(async () => {
           <v-chip size="small" :color="corStatus(detalhe.status)" variant="flat">{{ detalhe.status }}</v-chip>
         </v-card-title>
         <v-card-text>
-          <v-table density="compact">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th class="text-right">Quantidade</th>
-                <th class="text-right">Estoque (atual/min/max)</th>
-                <th>Fornecedor</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in detalhe.itens ?? []" :key="item.id">
-                <td>{{ item.descricaoProduto }}</td>
-                <td class="text-right">{{ item.quantidade }}</td>
-                <td class="text-right">
-                  {{ item.estoqueAtual ?? "-" }} / {{ item.estoqueMin ?? "-" }} / {{ item.estoqueMax ?? "-" }}
-                </td>
-                <td>{{ item.fornecedorNome ?? "-" }}</td>
-              </tr>
-            </tbody>
-          </v-table>
+          <div class="responsive-table-shell">
+            <v-table density="compact">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th class="text-right">Quantidade</th>
+                  <th class="text-right">Estoque (atual/min/max)</th>
+                  <th>Fornecedor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in detalhe.itens ?? []" :key="item.id">
+                  <td>{{ item.descricaoProduto }}</td>
+                  <td class="text-right">{{ item.quantidade }}</td>
+                  <td class="text-right">
+                    {{ item.estoqueAtual ?? "-" }} / {{ item.estoqueMin ?? "-" }} / {{ item.estoqueMax ?? "-" }}
+                  </td>
+                  <td>{{ item.fornecedorNome ?? "-" }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-btn

@@ -49,7 +49,7 @@ watch(
 
 <template>
   <v-card>
-    <v-card-title class="d-flex align-center justify-space-between ga-3">
+    <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
         <div class="text-h6">Contas a pagar</div>
         <div class="text-body-2 text-muted">Despesas pendentes de pagamento.</div>
