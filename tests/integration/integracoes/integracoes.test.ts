@@ -5,7 +5,10 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm } from "../../setup/integracao.js";
 
-function payloadVendaIntegrada(idVenda: string) {
+function payloadVendaIntegrada(
+  idVenda: string,
+  vendedor: { identificador?: string | null; nome?: string | null } | null = null
+) {
   return {
     DadosIntegracao: { origem: "vitest" },
     Venda: {
@@ -15,6 +18,7 @@ function payloadVendaIntegrada(idVenda: string) {
       idCliente: "CLIENTE-EXT",
       nomeCliente: "Cliente Integracao",
       documentoCliente: "00000000000999",
+      vendedor,
       dataHoraVenda: "2026-06-30T10:30:00.000Z",
       valorOriginal: 15,
       desconto: 0,
@@ -316,6 +320,79 @@ describe("integracoes integration", () => {
     expect(criado.json()).toMatchObject({ data: { status: "criado" } });
     expect(semNovidade.json()).toMatchObject({ data: { status: "sem_novidade" } });
     expect(atualizado.json()).toMatchObject({ data: { status: "atualizado" } });
+  });
+
+  it("Deve_GravarColaboradorId_Quando_VendedorTemVinculoDeParaResolvido", async () => {
+    const cookie = await cookieSessao(contexto.app, "admin");
+    // De-para do vendedor: o gerente vinculou o "posto de caixa" do CREARE a um colaborador real.
+    const vinculo = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/integracoes/vinculos",
+      headers: { cookie },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        tipo: "vendas",
+        tipoRegistro: "colaborador",
+        identificadorExterno: "USUARIO-EXT-1",
+        descricaoExterna: "VND CAIXA PDV - 2M",
+        registroSistemaId: idsTeste.colaboradorCaixa
+      }
+    });
+    expect(vinculo.statusCode).toBe(204);
+
+    const identificador = "VENDA-VENDEDOR-VINCULADO";
+    const resposta = await receber(
+      payloadVendaIntegrada(identificador, { identificador: "USUARIO-EXT-1", nome: "VND CAIXA PDV - 2M" })
+    );
+    assertOk(resposta);
+
+    const venda = await consultarUm<{
+      colaborador_id: string | null;
+      colaborador_automacao_id: string | null;
+      colaborador_automacao: string | null;
+    }>(
+      "select colaborador_id, colaborador_automacao_id, colaborador_automacao from vendas where identificador_externo = $1",
+      [identificador]
+    );
+    // Vinculo resolvido -> colaborador_id populado; o texto cru fica guardado para auditoria.
+    expect(venda?.colaborador_id).toBe(idsTeste.colaboradorCaixa);
+    expect(venda?.colaborador_automacao_id).toBe("USUARIO-EXT-1");
+    expect(venda?.colaborador_automacao).toBe("VND CAIXA PDV - 2M");
+
+    // Parte 4: o relatorio de vendas ja filtra por colaborador e agora popula o nome.
+    const relatorio = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/vendas?empresaId=${idsTeste.empresaA}&colaboradorId=${idsTeste.colaboradorCaixa}`,
+      headers: { cookie }
+    });
+    assertOk(relatorio);
+    const corpo = JSON.stringify(relatorio.json());
+    expect(corpo).toContain(identificador);
+    expect(corpo).toContain("Caixa Integracao");
+  });
+
+  it("Deve_CriarPendenciaSemConversao_Quando_VendedorSemVinculo", async () => {
+    const identificador = "VENDA-VENDEDOR-SEM-VINCULO";
+    const resposta = await receber(
+      payloadVendaIntegrada(identificador, { identificador: "USUARIO-SEM-VINCULO", nome: "VND CAIXA PDV - 9Z" })
+    );
+    assertOk(resposta);
+
+    // Sem vinculo: NAO inventa colaborador (colaborador_id null), mas guarda o texto cru.
+    const venda = await consultarUm<{ colaborador_id: string | null; colaborador_automacao: string | null }>(
+      "select colaborador_id, colaborador_automacao from vendas where identificador_externo = $1",
+      [identificador]
+    );
+    expect(venda?.colaborador_id).toBeNull();
+    expect(venda?.colaborador_automacao).toBe("VND CAIXA PDV - 9Z");
+
+    // E cria a pendencia "sem conversao" para o gerente vincular depois.
+    const pendencia = await consultarUm<{ pendente: boolean; registro_sistema_id: string | null }>(
+      "select pendente, registro_sistema_id from integracoes_vinculos where empresa_id = $1 and tipo_registro = 'colaborador' and identificador_externo = $2",
+      [idsTeste.empresaA, "USUARIO-SEM-VINCULO"]
+    );
+    expect(pendencia?.pendente).toBe(true);
+    expect(pendencia?.registro_sistema_id).toBeNull();
   });
 
   it("Deve_RegistrarErroERetornar400_Quando_PayloadDeVendaInvalido", async () => {

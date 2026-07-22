@@ -663,6 +663,9 @@ export async function criarOuAtualizarVendaIntegradaRepository(
       clienteAutomacaoId: vendaPayload.idCliente ?? null,
       clienteAutomacao: vendaPayload.nomeCliente ?? null,
       clienteAutomacaoDocumento: vendaPayload.documentoCliente ?? null,
+      // Texto cru do vendedor: guardado SEMPRE (mesmo sem vinculo resolvido) para auditoria e pendencia.
+      colaboradorAutomacaoId: vendaPayload.vendedor?.identificador ?? null,
+      colaboradorAutomacao: vendaPayload.vendedor?.nome ?? null,
       automacaoId: input.chave.codigo,
       computar: true,
       atualizadoEm: new Date()

@@ -48,7 +48,8 @@ const opcoesVinculo = reactive({
   pdvs: [] as Opcao[],
   clientes: [] as Opcao[],
   produtos: [] as Opcao[],
-  formasPagamento: [] as Opcao[]
+  formasPagamento: [] as Opcao[],
+  colaboradores: [] as Opcao[]
 });
 type RegistrosDisponiveis = Record<TipoRegistroIntegracao, Opcao[]>;
 const salvandoChave = ref(false);
@@ -60,6 +61,7 @@ const dicionarioSolicitacao = ref(0);
 const snackbar = reactive({ show: false, text: "", color: "success" });
 const tiposRegistroManual: Array<{ tipo: TipoRegistroManual; nome: string }> = [
   { tipo: "cliente", nome: "Cliente" },
+  { tipo: "colaborador", nome: "Colaborador" },
   { tipo: "forma_pagamento", nome: "Forma de pagamento" },
   { tipo: "pdv", nome: "PDV" },
   { tipo: "produto", nome: "Produto" }
@@ -93,6 +95,7 @@ const registrosDisponiveis = computed<RegistrosDisponiveis>(() => ({
   cliente: opcoesVinculo.clientes,
   produto: opcoesVinculo.produtos,
   forma_pagamento: opcoesVinculo.formasPagamento,
+  colaborador: opcoesVinculo.colaboradores,
   venda: [] as Opcao[]
 }));
 const registrosVinculoManual = computed(() => registrosDisponiveis.value[formVinculoManual.tipoRegistro]);
@@ -138,7 +141,8 @@ function tituloRegistro(tipo: TipoRegistroIntegracao) {
     pdv: "PDV",
     cliente: "Cliente",
     produto: "Produto",
-    forma_pagamento: "Forma de pagamento"
+    forma_pagamento: "Forma de pagamento",
+    colaborador: "Colaborador"
   };
   return mapa[tipo];
 }
@@ -176,13 +180,19 @@ async function carregarEmpresas() {
 
 async function carregarOpcoesVinculo() {
   const query = `?empresaId=${empresaId.value}`;
-  [opcoesVinculo.pdvs, opcoesVinculo.clientes, opcoesVinculo.produtos, opcoesVinculo.formasPagamento] =
-    await Promise.all([
-      apiGet<Opcao[]>(`/api/pdvs${query}`),
-      apiGet<Opcao[]>(`/api/clientes${query}`),
-      apiGet<Opcao[]>(`/api/produtos${query}`),
-      apiGet<Opcao[]>(`/api/formas_pagamento${query}`)
-    ]);
+  [
+    opcoesVinculo.pdvs,
+    opcoesVinculo.clientes,
+    opcoesVinculo.produtos,
+    opcoesVinculo.formasPagamento,
+    opcoesVinculo.colaboradores
+  ] = await Promise.all([
+    apiGet<Opcao[]>(`/api/pdvs${query}`),
+    apiGet<Opcao[]>(`/api/clientes${query}`),
+    apiGet<Opcao[]>(`/api/produtos${query}`),
+    apiGet<Opcao[]>(`/api/formas_pagamento${query}`),
+    apiGet<Opcao[]>(`/api/colaboradores${query}`)
+  ]);
 }
 
 async function carregarStatusCaixa() {

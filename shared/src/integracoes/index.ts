@@ -14,7 +14,16 @@ const dinheiroItemSchema = (campo: string) =>
     .min(0, { error: (issue) => `${campo} do item nao pode ser negativo (recebido: ${String(issue.input)})` });
 
 export const tiposIntegracao = ["vendas"] as const;
-export const tiposRegistroIntegracao = ["venda", "pdv", "cliente", "produto", "forma_pagamento"] as const;
+// "colaborador" e um tipo de vinculo (de-para / pendencia "sem conversao") mas NAO um campo de config:
+// o vendedor nunca e criado nem casado automaticamente — so resolvido pelo dicionario ou vira pendencia.
+export const tiposRegistroIntegracao = [
+  "venda",
+  "pdv",
+  "cliente",
+  "produto",
+  "forma_pagamento",
+  "colaborador"
+] as const;
 export const camposVinculoIntegracao = ["pdv", "cliente", "produto", "forma_pagamento"] as const;
 
 export const integracaoQuerySchema = z
@@ -55,6 +64,14 @@ export const salvarVinculoIntegracaoPayloadSchema = z.object({
 
 export const dadosIntegracaoPayloadSchema = z.record(z.string(), z.unknown()).default({});
 
+// Vendedor/atendente do PDV. Opcional (agente antigo nao envia; pode nao haver operador na venda).
+// `identificador` e a chave do de-para (o usuario/operador do CREARE); `nome` e o texto cru do posto de
+// caixa (ex.: "VND CAIXA PDV - 2M"), guardado para auditoria e para o gerente reconhecer na pendencia.
+export const vendedorIntegracaoPayloadSchema = z.object({
+  identificador: z.string().trim().optional().nullable(),
+  nome: z.string().trim().optional().nullable()
+});
+
 export const vendaIntegracaoPayloadSchema = z.object({
   idVenda: textoObrigatorioSchema,
   idCaixa: textoObrigatorioSchema,
@@ -62,6 +79,7 @@ export const vendaIntegracaoPayloadSchema = z.object({
   idCliente: z.string().trim().optional().nullable(),
   nomeCliente: z.string().trim().optional().nullable(),
   documentoCliente: z.string().trim().optional().nullable(),
+  vendedor: vendedorIntegracaoPayloadSchema.optional().nullable(),
   dataHoraVenda: z.coerce.date(),
   valorOriginal: dinheiroSchema,
   desconto: dinheiroSchema.default(0),
@@ -202,6 +220,7 @@ export type CriarIntegracaoChavePayload = z.infer<typeof criarIntegracaoChavePay
 export type AtualizarCampoIntegracaoPayload = z.infer<typeof atualizarCampoIntegracaoPayloadSchema>;
 export type SalvarVinculoIntegracaoPayload = z.infer<typeof salvarVinculoIntegracaoPayloadSchema>;
 export type DadosIntegracaoPayload = z.infer<typeof dadosIntegracaoPayloadSchema>;
+export type VendedorIntegracaoPayload = z.infer<typeof vendedorIntegracaoPayloadSchema>;
 export type VendaIntegracaoPayload = z.infer<typeof vendaIntegracaoPayloadSchema>;
 export type ItemVendaIntegracaoPayload = z.infer<typeof itemVendaIntegracaoPayloadSchema>;
 export type PagamentoVendaIntegracaoPayload = z.infer<typeof pagamentoVendaIntegracaoPayloadSchema>;
