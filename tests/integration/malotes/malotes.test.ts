@@ -87,9 +87,9 @@ describe("malotes integration", () => {
     expect(malote?.codigo).toBe(payload.codigo);
   });
 
-  it("Deve_AutogerarCodigo_Quando_CriarMaloteSemInformarCodigo", async () => {
+  it("Deve_UsarOLacreComoCodigo_Quando_CriarMaloteSemInformarCodigo", async () => {
     const cookie = await cookieSessao(contexto.app, "tesouraria");
-    // O operador foca no lacre; sem codigo do malote, o servidor gera um sequencial por empresa.
+    // "So lacre": sem codigo, o malote e identificado pelo proprio lacre (nada de "Malote 0001").
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/malotes",
@@ -102,7 +102,42 @@ describe("malotes integration", () => {
       "select m.codigo from malotes m join lacres_malotes l on l.malote_id = m.id where l.numero = $1",
       ["LACRE-AUTOGEN"]
     );
-    expect((malote?.codigo ?? "").trim().length).toBeGreaterThan(0);
+    expect(malote?.codigo).toBe("LACRE-AUTOGEN");
+  });
+
+  it("Deve_ExcluirMaloteELacres_Quando_TiverPermissao", async () => {
+    // Excluir malote exige cadastro_malotes_excluir (admin tem). Pedido do Ze: excluir no user admin.
+    const cookie = await cookieSessao(contexto.app, "admin");
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/malotes",
+      headers: { cookie },
+      payload: { empresaId: idsTeste.empresaA, lacres: ["LACRE-EXCLUIR"] }
+    });
+    expect(criado.statusCode).toBe(201);
+    const maloteId = criado.json().data.id as string;
+
+    const excluir = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/malotes/${maloteId}`,
+      headers: { cookie }
+    });
+
+    expect(excluir.statusCode).toBe(204);
+    await expect(consultarUm("select id from malotes where id = $1", [maloteId])).resolves.toBeNull();
+    // Os lacres saem em cascata junto com o malote.
+    await expect(consultarUm("select id from lacres_malotes where numero = $1", ["LACRE-EXCLUIR"])).resolves.toBeNull();
+  });
+
+  it("Deve_Retornar403_Quando_ExcluirMaloteDeEmpresaNaoPermitida", async () => {
+    const cookie = await cookieSessao(contexto.app, "admin");
+    const resposta = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/malotes/${idsTeste.maloteB}`,
+      headers: { cookie }
+    });
+
+    assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 
   it("Deve_Retornar400_Quando_CriarMaloteComLacreDuplicadoNoPayload", async () => {

@@ -4,9 +4,10 @@ import {
   buscarLacrePorEmpresaRepository,
   buscarLacrePorNumeroRepository,
   buscarMaloteEmpresaRepository,
+  contarTransferenciasDoMaloteRepository,
   copiarMalotesRepository,
   criarMaloteRepository,
-  gerarCodigoMaloteRepository,
+  excluirMaloteRepository,
   listarLacresMaloteRepository,
   listarMalotesRepository
 } from "./malotes.repository.js";
@@ -30,11 +31,12 @@ function lacresNormalizados(lacres: string[]): string[] {
   return lacres.map(normalizarLacre).filter(Boolean);
 }
 
-// Codigo do malote e opcional: informado -> usa o que veio (trim); vazio -> gera sequencial por empresa.
-// O operador foca no LACRE; o codigo do saco sai do fluxo obrigatorio.
-async function resolverCodigoMalote(empresaId: string, codigoInformado: string | undefined): Promise<string> {
+// "So lacre": o malote e identificado pelo proprio LACRE. Codigo informado (compat) e respeitado, mas
+// sem codigo o valor passa a ser o (primeiro) lacre — nada de codigo inventado tipo "Malote 0001".
+// lacres ja vem validado como nao-vazio por validarLacresUnicosNoPayload, entao lacres[0] existe.
+function resolverCodigoMalote(codigoInformado: string | undefined, lacres: string[]): string {
   const codigo = codigoInformado?.trim();
-  return codigo ? codigo : gerarCodigoMaloteRepository(empresaId);
+  return codigo || lacres[0] || "";
 }
 
 function validarLacresUnicosNoPayload(lacres: string[]): void {
@@ -109,7 +111,7 @@ export async function criarMalote(payload: CriarMalotePayload, usuarioId?: strin
   validarLacresUnicosNoPayload(lacres);
   await validarLacresUnicosPorEmpresa(payload.empresaId, lacres);
 
-  const codigo = await resolverCodigoMalote(payload.empresaId, payload.codigo);
+  const codigo = resolverCodigoMalote(payload.codigo, lacres);
   const malote = await criarMaloteRepository({
     empresaId: payload.empresaId,
     codigo,
@@ -132,10 +134,18 @@ export async function atualizarMalote(
   validarLacresUnicosNoPayload(lacres);
   await validarLacresUnicosPorEmpresa(malote.empresaId, lacres, maloteId);
 
-  const codigo = await resolverCodigoMalote(malote.empresaId, payload.codigo);
+  const codigo = resolverCodigoMalote(payload.codigo, lacres);
   await atualizarMaloteRepository({ maloteId, empresaId: malote.empresaId, codigo, lacres });
 
   return { id: maloteId, ...payload, codigo, lacres };
+}
+
+export async function excluirMalote(maloteId: string, empresasPermitidasIds: string[]) {
+  const malote = await buscarMaloteEmpresaRepository(maloteId);
+  if (!malote || !empresaPermitida(malote.empresaId, empresasPermitidasIds)) throw new Error("Empresa nao permitida");
+  const emUso = await contarTransferenciasDoMaloteRepository(maloteId);
+  if (emUso > 0) throw new Error("Malote em uso em transferencias; nao pode ser excluido.");
+  await excluirMaloteRepository(maloteId, malote.empresaId);
 }
 
 export async function importarMalotes(body: ImportarPayload, perfil?: PerfilComEmpresa) {

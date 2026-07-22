@@ -168,10 +168,11 @@ const formCaixaDrawer = reactive({
   dataHoraAbertura: ""
 });
 
-const formMalote = ref({ codigo: "", lacres: [""] });
+const formMalote = ref<{ lacres: string[] }>({ lacres: [""] });
 const maloteEditandoId = ref("");
 const maloteSalvando = ref(false);
 const maloteEditandoCarregandoId = ref("");
+const maloteExcluindoId = ref("");
 
 const cadastroTela = ref("");
 const cadastroEditandoId = ref("");
@@ -1218,7 +1219,7 @@ async function salvarOperacao() {
 
 function abrirMaloteNovo() {
   maloteEditandoId.value = "";
-  formMalote.value = { codigo: "", lacres: [""] };
+  formMalote.value = { lacres: [""] };
   modalMaloteAberto.value = true;
 }
 
@@ -1229,7 +1230,6 @@ async function abrirMaloteEditar(linha: Record<string, string | undefined>) {
     const lacres = await apiGet<Array<{ numero: string }>>(`/api/malotes/${linha.id}/lacres`);
     maloteEditandoId.value = linha.id;
     formMalote.value = {
-      codigo: linha.codigo ?? "",
       lacres: lacres.map((lacre) => lacre.numero).concat(lacres.length ? [] : [""])
     };
     modalMaloteAberto.value = true;
@@ -1245,7 +1245,6 @@ async function salvarMalote() {
   try {
     const payload = {
       empresaId: empresaId.value,
-      codigo: formMalote.value.codigo,
       lacres: formMalote.value.lacres.map((lacre) => lacre.trim()).filter(Boolean)
     };
     const malote = maloteEditandoId.value
@@ -1261,6 +1260,22 @@ async function salvarMalote() {
     notificar(mensagemErro(error), "error");
   } finally {
     maloteSalvando.value = false;
+  }
+}
+
+async function excluirMalote(linha: Record<string, string | undefined>) {
+  if (!linha.id) return;
+  const rotulo = linha.codigo || "este malote";
+  if (!window.confirm(`Excluir ${rotulo} e os lacres dele? Esta acao nao pode ser desfeita.`)) return;
+  maloteExcluindoId.value = linha.id;
+  try {
+    await apiDelete(`/api/malotes/${linha.id}`);
+    opcoes.value.malotes = opcoes.value.malotes.filter((item) => item.id !== linha.id);
+    notificar("Malote excluido com sucesso.");
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  } finally {
+    maloteExcluindoId.value = "";
   }
 }
 
@@ -1676,6 +1691,9 @@ const pageContext = computed(() => ({
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
   maloteEditandoCarregandoId: maloteEditandoCarregandoId.value,
+  podeExcluirMalote: temPermissao("cadastro_malotes_excluir"),
+  maloteExcluindoId: maloteExcluindoId.value,
+  excluirMalote,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,

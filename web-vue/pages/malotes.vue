@@ -14,9 +14,11 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
       :linhas="ctx.linhasCadastro"
       :editar-carregando-id="ctx.maloteEditandoCarregandoId"
       :permissoes-filtro="[...permissoes]"
-      :pode-excluir="false"
+      :pode-excluir="ctx.podeExcluirMalote"
+      :excluindo-id="ctx.maloteExcluindoId"
       @acionar="ctx.abrirCadastroNovo"
       @editar="ctx.abrirCadastroEditar"
+      @excluir="ctx.excluirMalote"
       @extra="ctx.lidarExtraCadastro"
     />
   </AppWorkspace>

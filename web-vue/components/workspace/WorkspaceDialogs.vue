@@ -563,7 +563,8 @@ const validacaoQtdPreview = computed(() =>
     <v-card>
       <v-card-title>{{ maloteEditandoId ? "Editar malote" : "Novo malote" }}</v-card-title>
       <v-card-text>
-        <!-- O LACRE e o identificador que o operador controla (numero unico, de fonte externa): campo em destaque. -->
+        <!-- So lacre: o malote e identificado pelo numero do lacre (unico, de fonte externa). Sem
+             codigo separado — o proprio lacre identifica o malote. -->
         <div class="d-grid ga-2">
           <div v-for="(_, index) in formMalote.lacres" :key="index" class="d-flex ga-2">
             <v-text-field
@@ -581,15 +582,6 @@ const validacaoQtdPreview = computed(() =>
           </div>
           <v-btn variant="outlined" prepend-icon="mdi-plus" @click="formMalote.lacres.push('')">Adicionar lacre</v-btn>
         </div>
-        <!-- O codigo do malote (saco) e opcional e sai do fluxo obrigatorio: gerado automaticamente se vazio. -->
-        <v-text-field
-          v-model="formMalote.codigo"
-          label="Malote (saco)"
-          placeholder="Opcional - gerado automaticamente"
-          hint="Opcional - gerado automaticamente se vazio"
-          persistent-hint
-          class="mt-4"
-        />
       </v-card-text>
       <v-card-actions>
         <v-spacer />

@@ -6,6 +6,7 @@ import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/share
 import {
   atualizarMalote,
   criarMalote,
+  excluirMalote,
   exportarMalote,
   importarMalotes,
   listarLacresMalote,
@@ -95,6 +96,22 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
 
       try {
         await atualizarMalote(maloteId, body, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []);
+        return semConteudo(reply);
+      } catch (error) {
+        const mensagem = mensagemErroMalote(new Error(mensagemDominioOuRelancar(error)));
+        if (mensagem === "Empresa nao permitida") return erro(reply, 403, mensagem, "FORBIDDEN_COMPANY");
+        return erro(reply, 400, mensagem);
+      }
+    }
+  );
+
+  app.delete(
+    "/api/malotes/:maloteId",
+    { preHandler: exigirPermissao("cadastro_malotes_excluir") },
+    async (request, reply) => {
+      const { maloteId } = maloteParamsSchema.parse(request.params);
+      try {
+        await excluirMalote(maloteId, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []);
         return semConteudo(reply);
       } catch (error) {
         const mensagem = mensagemErroMalote(new Error(mensagemDominioOuRelancar(error)));

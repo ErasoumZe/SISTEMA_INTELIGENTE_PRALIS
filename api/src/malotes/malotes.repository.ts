@@ -1,5 +1,6 @@
 import { and, asc, count, eq, ilike, inArray, ne, type SQL } from "drizzle-orm";
 import { lacresMalotes, malotes } from "@padaria/db/schema/cadastro";
+import { transferencias } from "@padaria/db/schema/transferencia";
 import { banco, executarComTransacaoOpcional, executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
 import {
   filtrarOrigemEntidade,
@@ -127,20 +128,23 @@ async function inserirLacres(empresaId: string, maloteId: string, lacres: string
     .onConflictDoNothing();
 }
 
-// Codigo sequencial por empresa ("Malote 0001", "0002", ...) para quando o operador nao informa um.
-// Pula numeros ja em uso (inclusive codigos digitados a mao) para nunca colidir com o unique(empresa,
-// codigo). Sob concorrencia rara de dois cadastros simultaneos, o unique do banco ainda e a garantia
-// final (o erro vira "Ja existe um malote com este codigo").
-export async function gerarCodigoMaloteRepository(empresaId: string, db: ExecutorBanco = banco): Promise<string> {
-  const existentes = await db.select({ codigo: malotes.codigo }).from(malotes).where(eq(malotes.empresaId, empresaId));
-  const usados = new Set(existentes.map((linha) => linha.codigo.trim().toLocaleLowerCase("pt-BR")));
-  let sequencia = existentes.length + 1;
-  let codigo = `Malote ${String(sequencia).padStart(4, "0")}`;
-  while (usados.has(codigo.toLocaleLowerCase("pt-BR"))) {
-    sequencia += 1;
-    codigo = `Malote ${String(sequencia).padStart(4, "0")}`;
-  }
-  return codigo;
+// Quantas transferencias referenciam este malote. Se houver, o malote esta EM USO: a FK
+// transferencias.malote_id e RESTRICT, entao a exclusao e barrada com um erro claro em vez do 23503 cru.
+export async function contarTransferenciasDoMaloteRepository(
+  maloteId: string,
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const [linha] = await db.select({ total: count() }).from(transferencias).where(eq(transferencias.maloteId, maloteId));
+  return Number(linha?.total ?? 0);
+}
+
+// Exclui o malote; os lacres saem em cascata pela FK. Escopo por empresa para nunca apagar de outra.
+export async function excluirMaloteRepository(
+  maloteId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db.delete(malotes).where(and(eq(malotes.id, maloteId), eq(malotes.empresaId, empresaId)));
 }
 
 export async function criarMaloteRepository(input: {
