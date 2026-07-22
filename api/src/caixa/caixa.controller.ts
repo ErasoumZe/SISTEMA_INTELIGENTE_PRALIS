@@ -176,17 +176,23 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   // Paginacao e filtros sao do banco (nao mais paginadoDeArray sobre a empresa inteira); os totais
   // do rodape acompanham o FILTRO, nao a pagina, e viajam no meta ao lado da paginacao.
-  app.get("/api/caixa/historico", { preHandler: exigirPermissao("caixas_gerenciar") }, async (request, reply) => {
-    const query = historicoCaixaQuerySchema.parse(request.query);
-    try {
-      const { itens, total, page, pageSize, totais } = await listarHistoricoCaixa(query, request.perfilUsuario!);
-      const resposta = paginadoDeResultado({ itens, total, page, pageSize });
-      return { ...resposta, meta: { ...resposta.meta, totais } };
-    } catch (error) {
-      const mensagem = mensagemDominioOuRelancar(error);
-      return erro(reply, statusErro(mensagem), mensagem);
+  // Historico e a fonte tanto do seletor de caixa do cockpit (caixas_gerenciar) quanto do DRE do
+  // periodo (relatorio_dre_visualizar) — leitura de totais persistidos, sem alterar nada.
+  app.get(
+    "/api/caixa/historico",
+    { preHandler: exigirAlgumaPermissao(["caixas_gerenciar", "relatorio_dre_visualizar"]) },
+    async (request, reply) => {
+      const query = historicoCaixaQuerySchema.parse(request.query);
+      try {
+        const { itens, total, page, pageSize, totais } = await listarHistoricoCaixa(query, request.perfilUsuario!);
+        const resposta = paginadoDeResultado({ itens, total, page, pageSize });
+        return { ...resposta, meta: { ...resposta.meta, totais } };
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
     }
-  });
+  );
 
   // Detalhe de auditoria de um caixa: alteracoes de horario e acerto de saldo.
   app.get(

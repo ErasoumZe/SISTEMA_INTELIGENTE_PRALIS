@@ -71,6 +71,18 @@ describe("item de menu do historico de caixas", () => {
   });
 });
 
+describe("item de menu do relatorio de DRE", () => {
+  it("aparece na secao Relatorios para quem tem relatorio_dre_visualizar (saiu de placeholder)", () => {
+    const menu = menuDoPerfil(["relatorio_dre_visualizar"]);
+    expect(idsDaSecao(menu, "Relatorios")).toContain("relatorio_dre");
+  });
+
+  it("some para quem nao tem a permissao", () => {
+    const menu = menuDoPerfil(["caixa_operar"]);
+    expect(menu.flatMap((secao) => secao.itens).map((item) => item.id)).not.toContain("relatorio_dre");
+  });
+});
+
 describe("agruparTelasMenu", () => {
   it("joga tela nao mapeada em nenhuma secao para Geral, para nada sumir do menu", () => {
     const menu = agruparTelasMenu([

@@ -74,6 +74,7 @@ type TipoPagina =
   | "fechamento"
   | "relatorio_produtos"
   | "relatorio_vendas"
+  | "relatorio_dre"
   | "contas_pagar"
   | "notas_fiscais"
   | "tree"
@@ -1669,6 +1670,7 @@ const pageContext = computed(() => ({
   opcoesEmpresa: opcoesEmpresa.value,
   sessao: sessao.value,
   caixaSalvando: caixaSalvando.value,
+  podeGerenciarCaixas: temPermissao("caixas_gerenciar"),
   empresaId: empresaId.value,
   caixaIdFiltro: caixaIdFiltroTela(),
   treeTela: telaAtiva.value === "areas_setores" ? "areas_setores" : "grupos",

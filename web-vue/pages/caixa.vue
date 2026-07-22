@@ -14,11 +14,15 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :permissoes="ctx.sessao?.perfil?.permissoes ?? []"
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
       :usuario-nome="ctx.sessao?.perfil?.nome || ctx.sessao?.user?.name || 'Usuario'"
+      :pode-gerenciar-caixas="ctx.podeGerenciarCaixas"
       :salvando="ctx.caixaSalvando"
       @abrir-caixa="ctx.abrirCaixaOperacional"
       @acertar-saldo="ctx.acertarSaldoOperacional"
       @fechar-caixa="ctx.fecharCaixaOperacional"
       @recarregar="ctx.recarregarCaixa"
+      @lancar="ctx.abrirOperacao"
+      @editar="(p) => ctx.abrirOperacao(p.entidade, { id: p.id })"
+      @discriminar="(p) => ctx.abrirDiscriminacao(p.entidade, { id: p.id })"
     />
   </AppWorkspace>
 </template>
