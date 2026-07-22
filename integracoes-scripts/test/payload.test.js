@@ -128,6 +128,33 @@ test("montarPayloads: nunca emite desconto/acrescimo negativo, mesmo com ambos n
   assert.equal(item.total, 11.5);
 });
 
+test("montarPayloads: inclui vendedor (identificador do de-para + nome cru) quando presente", () => {
+  const [payload] = montarPayloads({
+    vendas: [
+      {
+        idVendaBalcao: 7,
+        dataHoraVenda: "2026-07-05 10:00:00",
+        statusVenda: "F",
+        valorTotal: 5,
+        idVendedor: 3,
+        nomeVendedor: "VND CAIXA PDV - 2M"
+      }
+    ],
+    itens: [],
+    pagamentos: []
+  });
+  assert.deepEqual(payload.Venda.vendedor, { identificador: "3", nome: "VND CAIXA PDV - 2M" });
+});
+
+test("montarPayloads: vendedor null quando a venda nao traz operador", () => {
+  const [payload] = montarPayloads({
+    vendas: [{ idVendaBalcao: 8, dataHoraVenda: "2026-07-05 10:00:00", statusVenda: "F", valorTotal: 5 }],
+    itens: [],
+    pagamentos: []
+  });
+  assert.equal(payload.Venda.vendedor, null);
+});
+
 test("montarPayloads: venda cancelada vira CANCELADA", () => {
   const [payload] = montarPayloads({
     vendas: [{ idVendaBalcao: 1, dataHoraVenda: "2026-07-05 10:00:00", statusVenda: "C", valorTotal: 5 }],

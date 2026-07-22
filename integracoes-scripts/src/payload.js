@@ -85,6 +85,16 @@ function montarItem(item, dataHoraItem) {
   };
 }
 
+// Vendedor/atendente no formato do payload. `identificador` e a chave do de-para (COALESCE de
+// ID_VENDEDOR/ID_USUARIO feita na query); `nome` e o texto cru do posto de caixa (usuario.USUARIO).
+// Retorna null quando nao ha nenhum dado — a venda entao segue sem vendedor (campo opcional na API).
+function montarVendedor(venda) {
+  const identificador = venda.idVendedor == null ? "" : String(venda.idVendedor).trim();
+  const nome = venda.nomeVendedor == null ? "" : String(venda.nomeVendedor).trim();
+  if (!identificador && !nome) return null;
+  return { identificador: identificador || null, nome: nome || null };
+}
+
 function agruparPorVenda(linhas) {
   const grupos = new Map();
   for (const linha of linhas) {
@@ -119,6 +129,7 @@ export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = OFF
         idCliente,
         nomeCliente: venda.nomeCliente ?? null,
         documentoCliente: venda.documentoCliente ?? null,
+        vendedor: montarVendedor(venda),
         dataHoraVenda: dataHoraParaIso(venda.dataHoraVenda, offsetFuso),
         valorOriginal: dinheiro(venda.valorSubtotal ?? venda.valorTotal),
         desconto: dinheiro(venda.valorDesconto),
@@ -166,6 +177,7 @@ export function montarPayloadsTeste({ vendas, itens, pagamentos, dataOrigem, dat
         idCliente,
         nomeCliente: venda.nomeCliente ?? null,
         documentoCliente: venda.documentoCliente ?? null,
+        vendedor: montarVendedor(venda),
         dataHoraVenda: trocarDataPreservandoHora(venda.dataHoraVenda, dataDestino),
         valorOriginal: dinheiro(venda.valorSubtotal ?? venda.valorTotal),
         desconto: dinheiro(venda.valorDesconto),

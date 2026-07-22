@@ -238,6 +238,34 @@ async function resolverVinculo(input: {
   return null;
 }
 
+// Vendedor/atendente do PDV: resolvido SO pelo dicionario de-para (mesma porta dos demais campos), mas
+// nunca inventa colaborador nem casa por nome — decisao de negocio (o "usuario" do CREARE e um posto de
+// caixa, ex.: "VND CAIXA PDV - 2M", nao uma pessoa). Sem identificador -> sem atribuicao. Com
+// identificador e sem vinculo resolvido -> pendencia "sem conversao" para o gerente vincular depois.
+async function resolverColaborador(
+  chave: IntegracaoChaveLinha,
+  venda: VendaIntegracaoAgregadaPayload["Venda"],
+  db: ExecutorBanco
+): Promise<string | null> {
+  const identificador = venda.vendedor?.identificador?.trim();
+  if (!identificador) return null;
+  const vinculo = await buscarVinculoResolvidoRepository(chave.empresaId, chave.tipo, "colaborador", identificador, db);
+  if (vinculo) return vinculo.id;
+  await upsertVinculoRepository(
+    {
+      empresaId: chave.empresaId,
+      tipo: chave.tipo,
+      tipoRegistro: "colaborador",
+      identificadorExterno: identificador,
+      descricaoExterna: venda.vendedor?.nome ?? null,
+      registroSistemaId: null,
+      pendente: true
+    },
+    db
+  );
+  return null;
+}
+
 async function resolverVinculosVenda(
   chave: IntegracaoChaveLinha,
   payload: VendaIntegracaoAgregadaPayload,
@@ -311,13 +339,15 @@ async function resolverVinculosVenda(
     );
   }
 
+  const colaboradorId = await resolverColaborador(chave, venda, db);
+
   // Liga a venda ao caixa do mesmo PDV cujo periodo aberto contem a dataVenda (null se nao houver).
   const caixaId =
     pdvId !== null
       ? ((await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db))?.id ?? null)
       : null;
 
-  return { pdvId, clienteId, colaboradorId: null, caixaId, produtosPorIdentificador, formasPagamentoPorIdentificador };
+  return { pdvId, clienteId, colaboradorId, caixaId, produtosPorIdentificador, formasPagamentoPorIdentificador };
 }
 
 export async function listarIntegracoes(query: IntegracaoQuery, perfil: PerfilUsuario) {

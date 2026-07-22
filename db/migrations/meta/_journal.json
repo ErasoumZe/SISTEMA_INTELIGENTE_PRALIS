@@ -78,6 +78,13 @@
       "when": 1784137372176,
       "tag": "0010_even_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784726113315,
+      "tag": "0011_typical_agent_brand",
+      "breakpoints": true
     }
   ]
 }

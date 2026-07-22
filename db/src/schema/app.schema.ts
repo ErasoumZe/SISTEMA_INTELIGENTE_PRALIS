@@ -614,7 +614,7 @@ export const integracoesVinculos = pgTable(
     check("integracoes_vinculos_tipo_check", sql`${table.tipo} in ('vendas')`),
     check(
       "integracoes_vinculos_tipo_registro_check",
-      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'produto', 'forma_pagamento')`
+      sql`${table.tipoRegistro} in ('venda', 'pdv', 'cliente', 'produto', 'forma_pagamento', 'colaborador')`
     )
   ]
 );
@@ -751,6 +751,10 @@ export const vendas = pgTable(
     clienteAutomacaoId: text("cliente_automacao_id"),
     clienteAutomacao: text("cliente_automacao"),
     clienteAutomacaoDocumento: text("cliente_automacao_documento"),
+    // Vendedor/atendente cru da automacao (CREARE): identificador do de-para + texto do posto de caixa.
+    // Guardado sempre, mesmo sem vinculo resolvido (auditoria e pendencia "sem conversao").
+    colaboradorAutomacaoId: text("colaborador_automacao_id"),
+    colaboradorAutomacao: text("colaborador_automacao"),
     automacaoId: text("automacao_id"),
     computar: boolean("computar").notNull().default(true),
     status: text("status").notNull().default("aprovado"),
