@@ -81,8 +81,28 @@ describe("malotes integration", () => {
     });
 
     expect(resposta.statusCode).toBe(201);
-    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where codigo = $1", [payload.codigo]);
+    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where codigo = $1", [
+      payload.codigo
+    ]);
     expect(malote?.codigo).toBe(payload.codigo);
+  });
+
+  it("Deve_AutogerarCodigo_Quando_CriarMaloteSemInformarCodigo", async () => {
+    const cookie = await cookieSessao(contexto.app, "tesouraria");
+    // O operador foca no lacre; sem codigo do malote, o servidor gera um sequencial por empresa.
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/malotes",
+      headers: { cookie },
+      payload: { empresaId: idsTeste.empresaA, lacres: ["LACRE-AUTOGEN"] }
+    });
+
+    expect(resposta.statusCode).toBe(201);
+    const malote = await consultarUm<{ codigo: string }>(
+      "select m.codigo from malotes m join lacres_malotes l on l.malote_id = m.id where l.numero = $1",
+      ["LACRE-AUTOGEN"]
+    );
+    expect((malote?.codigo ?? "").trim().length).toBeGreaterThan(0);
   });
 
   it("Deve_Retornar400_Quando_CriarMaloteComLacreDuplicadoNoPayload", async () => {
@@ -130,10 +150,11 @@ describe("malotes integration", () => {
     });
 
     expect(resposta.statusCode).toBe(204);
-    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where id = $1", [idsTeste.maloteA]);
+    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where id = $1", [
+      idsTeste.maloteA
+    ]);
     expect(malote?.codigo).toBe(payload.codigo);
   });
-
 });
 
 describe("malotes importacao/exportacao integration", () => {
@@ -150,7 +171,10 @@ describe("malotes importacao/exportacao integration", () => {
   });
 
   it("Deve_ImportarMalotesEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from malotes where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from malotes where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -161,7 +185,12 @@ describe("malotes importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from malotes where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from malotes where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarMaloteParaEmpresaPermitida", async () => {
@@ -180,7 +209,12 @@ describe("malotes importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from malotes where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.maloteA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from malotes where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.maloteA
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

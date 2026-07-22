@@ -6,6 +6,7 @@ import {
   buscarMaloteEmpresaRepository,
   copiarMalotesRepository,
   criarMaloteRepository,
+  gerarCodigoMaloteRepository,
   listarLacresMaloteRepository,
   listarMalotesRepository
 } from "./malotes.repository.js";
@@ -27,6 +28,13 @@ function chaveLacre(lacre: string): string {
 
 function lacresNormalizados(lacres: string[]): string[] {
   return lacres.map(normalizarLacre).filter(Boolean);
+}
+
+// Codigo do malote e opcional: informado -> usa o que veio (trim); vazio -> gera sequencial por empresa.
+// O operador foca no LACRE; o codigo do saco sai do fluxo obrigatorio.
+async function resolverCodigoMalote(empresaId: string, codigoInformado: string | undefined): Promise<string> {
+  const codigo = codigoInformado?.trim();
+  return codigo ? codigo : gerarCodigoMaloteRepository(empresaId);
 }
 
 function validarLacresUnicosNoPayload(lacres: string[]): void {
@@ -101,7 +109,7 @@ export async function criarMalote(payload: CriarMalotePayload, usuarioId?: strin
   validarLacresUnicosNoPayload(lacres);
   await validarLacresUnicosPorEmpresa(payload.empresaId, lacres);
 
-  const codigo = payload.codigo.trim();
+  const codigo = await resolverCodigoMalote(payload.empresaId, payload.codigo);
   const malote = await criarMaloteRepository({
     empresaId: payload.empresaId,
     codigo,
@@ -124,7 +132,7 @@ export async function atualizarMalote(
   validarLacresUnicosNoPayload(lacres);
   await validarLacresUnicosPorEmpresa(malote.empresaId, lacres, maloteId);
 
-  const codigo = payload.codigo.trim();
+  const codigo = await resolverCodigoMalote(malote.empresaId, payload.codigo);
   await atualizarMaloteRepository({ maloteId, empresaId: malote.empresaId, codigo, lacres });
 
   return { id: maloteId, ...payload, codigo, lacres };
