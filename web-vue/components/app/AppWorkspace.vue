@@ -1299,6 +1299,12 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 }
 
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
+  // Malotes tem modal proprio (com lacres): o botao Editar embutido abre o editor de malote,
+  // e nao o cadastro generico. Isso substitui a acao "Editar" extra duplicada que existia.
+  if (telaAtiva.value === "malotes") {
+    void abrirMaloteEditar(linha);
+    return;
+  }
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
   formCadastro.value = formCadastroDeLinha(linha, regrasDaLinha(linha));
@@ -1567,8 +1573,7 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
 }
 
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
-  if (payload.event === "maloteEditar") void abrirMaloteEditar(payload.linha);
-  else if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
+  if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
 }
 
 provide(WORKSPACE_CONTEXT, {

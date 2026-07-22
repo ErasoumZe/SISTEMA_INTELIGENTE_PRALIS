@@ -45,7 +45,7 @@ const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo ca
 const podeEditar = computed(() => true);
 const podeCopia = computed(() => !["permissoes", "malotes"].includes(props.tela));
 const acoesExtras = computed(() => {
-  if (props.tela === "malotes") return [{ label: "Editar", event: "maloteEditar" }];
+  // Malotes usa o botao Editar embutido (podeEditar); a acao extra "Editar" era uma duplicata, removida.
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
   if (props.tela === "permissoes")
     return [
