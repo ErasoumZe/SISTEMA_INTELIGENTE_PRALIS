@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap");
 
 :root {
   --padaria-background: #eaf1f9;
@@ -1346,3 +1346,78 @@ body {
   background: var(--pralis-surface) !important;
   color: var(--pralis-ink);
 }
+
+/* =====================================================================
+   MOBILLS TEMA V1 — tokens + tipografia + raio Material (branch feat/tema-mobills)
+   Bloco 100% ADITIVO no fim do arquivo (vence por ordem de fonte). Nao redesenha
+   nenhuma tela: so injeta a camada de tokens de categoria (fixos), os neutros da V1
+   (PROJECT_BRAIN/03 e docs/research/mobills/DESIGN_TOKENS.md), a fonte Noto Sans e o
+   raio de card Material. Reverter = remover este bloco + voltar o @import do topo.
+   ===================================================================== */
+
+/* Tokens de CATEGORIA — semantica de negocio, FIXOS (nao seguem o tema por empresa).
+   Traduzidos da planilha (abas coloridas) em PROJECT_BRAIN/03_MODELO_DE_CORES.md.
+   -base (icone/borda/barra/texto), -soft (fundo de chip/secao/hover), -strong (hover/ativo). */
+:root {
+  --cat-entradas-base: #b7791f;
+  --cat-entradas-soft: #fef6e4;
+  --cat-entradas-strong: #8f6115;
+
+  --cat-transferencias-base: #c2410c;
+  --cat-transferencias-soft: #fff1e8;
+  --cat-transferencias-strong: #9a3412;
+
+  --cat-despesas-base: #c0392b;
+  --cat-despesas-soft: #fdecea;
+  --cat-despesas-strong: #96261b;
+
+  --cat-mercadorias-base: #15803d;
+  --cat-mercadorias-soft: #e9f7ee;
+  --cat-mercadorias-strong: #106430;
+
+  --cat-retiradas-base: #1d4ed8;
+  --cat-retiradas-soft: #eaf0fe;
+  --cat-retiradas-strong: #1739a8;
+
+  --cat-resultado-base: #6d28d9;
+  --cat-resultado-soft: #f3edfd;
+  --cat-resultado-strong: #54209f;
+
+  /* Neutros da V1 (Mobills/Material). ink/ink-soft/line sao rgba/hex que nao cabem como cor de
+     tema Vuetify — ficam como CSS vars, prontos para consumo nas proximas etapas. */
+  --canvas: #f4f6fa;
+  --surface: #ffffff;
+  --ink: rgba(0, 0, 0, 0.87);
+  --ink-soft: rgba(0, 0, 0, 0.54);
+  --line: #e4e8ef;
+  --brand: #6515dd;
+  --brand-strong: #35128c;
+  --brand-soft: #edf3fb;
+}
+
+/* Tipografia: Noto Sans no corpo (vence o Montserrat do bloco LAB por ordem de fonte).
+   Roboto/system como fallback Material. */
+html,
+body {
+  font-family:
+    "Noto Sans",
+    Roboto,
+    "Segoe UI",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* Titulos com peso Material 500-600 como DEFAULT (:where = especificidade 0, qualquer
+   classe existente ainda vence — nao redesenha nada). */
+:where(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+}
+
+/* Cards com raio Material (faixa 12-16 do brief). Botoes/FAB ja sao pill via VBtn default.
+   .svelte-table-card (18px !important) e .caixa-card seguem seus proprios raios. */
+.v-card {
+  border-radius: 14px;
+}
+/* ===================== FIM MOBILLS TEMA V1 ===================== */
