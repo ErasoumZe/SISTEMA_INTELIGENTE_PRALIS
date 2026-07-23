@@ -5,6 +5,7 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 import { totalItemMercadoriaForm } from "~/utils/operacoes";
 import OperacaoDespesaModal from "~/components/operacoes/OperacaoDespesaModal.vue";
+import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
 
 const tiposDescontoItem = [
   { title: "Sem desconto", value: "" },
@@ -182,10 +183,16 @@ const validacaoQtdPreview = computed(() =>
     </v-card>
   </v-dialog>
 
-  <!-- Despesa tem modal proprio (fiel ao mockup); o modal generico abaixo cobre os demais tipos. -->
+  <!-- Despesa e Transferencia tem modais proprios (fieis ao mockup); o generico cobre os demais. -->
   <OperacaoDespesaModal />
+  <OperacaoTransferenciaModal />
 
-  <v-dialog v-if="entidadeNova !== 'despesa'" v-model="modalOperacaoAberto" max-width="960" scrollable>
+  <v-dialog
+    v-if="!['despesa', 'transferencia'].includes(entidadeNova)"
+    v-model="modalOperacaoAberto"
+    max-width="960"
+    scrollable
+  >
     <v-card>
       <v-card-title>
         {{
@@ -225,21 +232,12 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.contas"
               item-title="nome"
               item-value="id"
-              :label="entidadeNova === 'transferencia' ? 'Conta origem *' : 'Conta origem'"
+              label="Conta origem"
             />
           </v-col>
           <v-col v-if="['venda', 'despesa', 'mercadoria', 'retirada'].includes(entidadeNova)" cols="12" md="6"
             ><v-text-field v-model="form.dataPagamento" type="date" label="Data de pagamento"
           /></v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
-            <v-select
-              v-model="form.contaDestinoId"
-              :items="opcoesEmpresa.contas"
-              item-title="nome"
-              item-value="id"
-              label="Conta destino *"
-            />
-          </v-col>
           <v-col v-if="['despesa', 'mercadoria'].includes(entidadeNova)" cols="12" md="6">
             <v-select
               v-model="form.fornecedorId"
@@ -280,19 +278,6 @@ const validacaoQtdPreview = computed(() =>
               clearable
             />
           </v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
-            <v-select
-              v-model="form.maloteId"
-              :items="opcoesEmpresa.malotes"
-              item-title="numeroLacre"
-              item-value="id"
-              label="Lacre (nº do malote)"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6"
-            ><v-text-field v-model="form.numeroLacre" label="Numero do lacre"
-          /></v-col>
           <v-col cols="12" md="4"
             ><v-text-field v-model="form.valorAcrescimo" type="number" label="Acrescimo" prefix="R$"
           /></v-col>
