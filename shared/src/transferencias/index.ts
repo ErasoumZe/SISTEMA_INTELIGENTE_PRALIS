@@ -23,8 +23,8 @@ export const transferenciaPayloadSchema = z.object({
   descricaoDesconto: z.string().optional().nullable(),
   contaOrigemId: uuidSchema,
   contaDestinoId: uuidSchema,
+  // O malote E o lacre (D3): a transferencia referencia o malote; nao ha mais lacre_malote_id.
   maloteId: uuidSchema.optional().nullable(),
-  lacreMaloteId: uuidSchema.optional().nullable(),
   computar: z.boolean().default(true)
 });
 

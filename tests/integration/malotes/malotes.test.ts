@@ -27,8 +27,8 @@ describe("malotes integration", () => {
 
     assertOk(resposta);
     const corpo = JSON.stringify(resposta.json());
-    expect(corpo).toContain("MALOTE-A");
-    expect(corpo).not.toContain("MALOTE-B");
+    expect(corpo).toContain("LACRE-A");
+    expect(corpo).not.toContain("LACRE-B");
   });
 
   it("Deve_Retornar403_Quando_ListarMalotesDeEmpresaNaoPermitida", async () => {
@@ -53,25 +53,16 @@ describe("malotes integration", () => {
     });
 
     assertOk(resposta);
-    expect(resposta.json()).toMatchObject({ ok: true, data: { existe: true, disponivel: true, numero: "LACRE-A" } });
-  });
-
-  it("Deve_ListarLacresDoMalote_Quando_MaloteEstiverNoEscopo", async () => {
-    const cookie = await cookieSessao(contexto.app, "tesouraria");
-
-    const resposta = await contexto.app.inject({
-      method: "GET",
-      url: `/api/malotes/${idsTeste.maloteA}/lacres?empresaId=${idsTeste.empresaA}`,
-      headers: { cookie }
+    expect(resposta.json()).toMatchObject({
+      ok: true,
+      data: { existe: true, disponivel: true, numeroLacre: "LACRE-A" }
     });
-
-    assertOk(resposta);
-    expect(JSON.stringify(resposta.json())).toContain("LACRE-A");
   });
 
-  it("Deve_CriarMalote_Quando_LacresForemValidosEEmpresaPermitida", async () => {
+  it("Deve_CriarMalote_Quando_LacreForValidoEEmpresaPermitida", async () => {
     const cookie = await cookieSessao(contexto.app, "tesouraria");
-    const payload = { empresaId: idsTeste.empresaA, codigo: "MALOTE-NOVO", lacres: ["LACRE-NOVO"] };
+    // O malote E o lacre: so o numero do lacre + o valor. Sem codigo, sem saco.
+    const payload = { empresaId: idsTeste.empresaA, numeroLacre: "LACRE-NOVO", valor: 250 };
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -81,42 +72,27 @@ describe("malotes integration", () => {
     });
 
     expect(resposta.statusCode).toBe(201);
-    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where codigo = $1", [
-      payload.codigo
-    ]);
-    expect(malote?.codigo).toBe(payload.codigo);
-  });
-
-  it("Deve_AutogerarCodigo_Quando_CriarMaloteSemInformarCodigo", async () => {
-    const cookie = await cookieSessao(contexto.app, "tesouraria");
-    // O operador foca no lacre; sem codigo do malote, o servidor gera um sequencial por empresa.
-    const resposta = await contexto.app.inject({
-      method: "POST",
-      url: "/api/malotes",
-      headers: { cookie },
-      payload: { empresaId: idsTeste.empresaA, lacres: ["LACRE-AUTOGEN"] }
-    });
-
-    expect(resposta.statusCode).toBe(201);
-    const malote = await consultarUm<{ codigo: string }>(
-      "select m.codigo from malotes m join lacres_malotes l on l.malote_id = m.id where l.numero = $1",
-      ["LACRE-AUTOGEN"]
+    const malote = await consultarUm<{ numero_lacre: string; valor: string; status: string }>(
+      "select numero_lacre, valor, status from malotes where numero_lacre = $1",
+      [payload.numeroLacre]
     );
-    expect((malote?.codigo ?? "").trim().length).toBeGreaterThan(0);
+    expect(malote?.numero_lacre).toBe(payload.numeroLacre);
+    expect(malote?.status).toBe("disponivel");
   });
 
-  it("Deve_Retornar400_Quando_CriarMaloteComLacreDuplicadoNoPayload", async () => {
+  it("Deve_Retornar400_Quando_CriarMaloteComLacreJaCadastrado", async () => {
     const cookie = await cookieSessao(contexto.app, "tesouraria");
 
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/malotes",
       headers: { cookie },
-      payload: { empresaId: idsTeste.empresaA, codigo: "MALOTE-DUP", lacres: ["DUP-1", "dup-1"] }
+      // LACRE-A ja existe no seed da empresa A (case-insensitive).
+      payload: { empresaId: idsTeste.empresaA, numeroLacre: "lacre-a", valor: 0 }
     });
 
     assertProblem(resposta, 400);
-    expect(JSON.stringify(resposta.json())).toContain("Lacre duplicado");
+    expect(JSON.stringify(resposta.json())).toContain("ja cadastrado");
   });
 
   it("Deve_Retornar403_Quando_CriarOuEditarMaloteDeEmpresaNaoPermitida", async () => {
@@ -125,13 +101,13 @@ describe("malotes integration", () => {
       method: "POST",
       url: "/api/malotes",
       headers: { cookie },
-      payload: { empresaId: idsTeste.empresaB, codigo: "MALOTE-PROIBIDO", lacres: ["LACRE-PROIBIDO"] }
+      payload: { empresaId: idsTeste.empresaB, numeroLacre: "LACRE-PROIBIDO", valor: 0 }
     });
     const editar = await contexto.app.inject({
       method: "PUT",
       url: `/api/malotes/${idsTeste.maloteB}`,
       headers: { cookie },
-      payload: { codigo: "MALOTE-B-PROIBIDO", lacres: ["LACRE-B-PROIBIDO"] }
+      payload: { numeroLacre: "LACRE-B-PROIBIDO", valor: 0 }
     });
 
     assertProblem(criar, 403, "FORBIDDEN_COMPANY");
@@ -140,7 +116,7 @@ describe("malotes integration", () => {
 
   it("Deve_AtualizarMaloteNoEscopoPermitido_Quando_PayloadValido", async () => {
     const cookie = await cookieSessao(contexto.app, "tesouraria");
-    const payload = { codigo: "MALOTE-EDITADO", lacres: ["LACRE-EDITADO"] };
+    const payload = { numeroLacre: "LACRE-EDITADO", valor: 123 };
 
     const resposta = await contexto.app.inject({
       method: "PUT",
@@ -150,10 +126,10 @@ describe("malotes integration", () => {
     });
 
     expect(resposta.statusCode).toBe(204);
-    const malote = await consultarUm<{ codigo: string }>("select codigo from malotes where id = $1", [
+    const malote = await consultarUm<{ numero_lacre: string }>("select numero_lacre from malotes where id = $1", [
       idsTeste.maloteA
     ]);
-    expect(malote?.codigo).toBe(payload.codigo);
+    expect(malote?.numero_lacre).toBe(payload.numeroLacre);
   });
 });
 

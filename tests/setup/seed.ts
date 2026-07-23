@@ -20,7 +20,6 @@ import {
   integracoesCamposConfig,
   integracoesChaves,
   integracoesVinculos,
-  lacresMalotes,
   malotes,
   pdvs,
   perfisUsuarios,
@@ -450,36 +449,23 @@ export async function aplicarSeedIntegracao() {
     }
   ]);
 
+  // Malote === lacre (D3): a identidade e o numero do lacre; valor > 0 para servir a abertura (R8).
   await banco.insert(malotes).values([
     {
       id: idsTeste.maloteA,
       empresaId: idsTeste.empresaA,
-      codigo: "MALOTE-A",
-      descricao: "Malote de integracao A",
+      numeroLacre: "LACRE-A",
+      valor: "300.00",
+      status: "disponivel",
       criadoPor: usuarioIds.get("tesouraria") ?? null
     },
     {
       id: idsTeste.maloteB,
       empresaId: idsTeste.empresaB,
-      codigo: "MALOTE-B",
-      descricao: "Malote de integracao B",
+      numeroLacre: "LACRE-B",
+      valor: "300.00",
+      status: "disponivel",
       criadoPor: null
-    }
-  ]);
-  await banco.insert(lacresMalotes).values([
-    {
-      id: idsTeste.lacreA,
-      empresaId: idsTeste.empresaA,
-      maloteId: idsTeste.maloteA,
-      numero: "LACRE-A",
-      status: "disponivel"
-    },
-    {
-      id: idsTeste.lacreB,
-      empresaId: idsTeste.empresaB,
-      maloteId: idsTeste.maloteB,
-      numero: "LACRE-B",
-      status: "disponivel"
     }
   ]);
 }

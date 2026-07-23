@@ -49,8 +49,9 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
     return { contaId, pdvId };
   }
 
-  async function criarMalote(codigo: string, valor: number, lacres: string[]) {
-    const resposta = await criar("/api/malotes", { empresaId: idsTeste.empresaA, codigo, valor, lacres });
+  // O malote E o lacre (D3): a identidade e o numero do lacre + o valor.
+  async function criarMalote(numeroLacre: string, valor: number) {
+    const resposta = await criar("/api/malotes", { empresaId: idsTeste.empresaA, numeroLacre, valor });
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
@@ -69,16 +70,15 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
     return json<{ data: { caixaAberto: { id: string }; resumo: Record<string, number> } }>(resposta).data;
   }
 
-  it("Deve nascer em deficit -490, criar a transferencia de abertura e consumir malote e lacre", async () => {
-    const maloteId = await criarMalote("MAL-ABE-1", 490, ["LAC-ABE-1"]);
+  it("Deve nascer em deficit -490, criar a transferencia de abertura e consumir o malote (lacre)", async () => {
+    const maloteId = await criarMalote("LAC-ABE-1", 490);
     const { contaId, pdvId } = await criarContaEPdv("abertura-malote");
 
     const caixaId = await abrir({
       pdvId,
       usuarioCaixaId: await usuarioAdminId(),
       dataHoraAbertura: "2026-05-10T08:00",
-      maloteId,
-      lacreAbertura: "LAC-ABE-1"
+      maloteId
     });
 
     // Saldo fisico segue +490 (o dinheiro esta na gaveta); o deficit vive em dividaCofre/saldoProprio.
@@ -86,16 +86,15 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
     expect(status.caixaAberto.id).toBe(caixaId);
     expect(status.resumo).toMatchObject({ dividaCofre: 490, saldo: 490, saldoProprio: -490 });
 
-    // Transferencia de abertura: cofre -> caixa, tipo 'abertura', vinculada ao caixa/malote/lacre.
+    // Transferencia de abertura: cofre -> caixa, tipo 'abertura', vinculada ao caixa/malote.
     const transferencia = await consultarUm<{
       tipo: string;
       valor_original: string;
       conta_origem_id: string;
       conta_destino_id: string;
       malote_id: string;
-      lacre_malote_id: string | null;
     }>(
-      `select tipo, valor_original, conta_origem_id, conta_destino_id, malote_id, lacre_malote_id
+      `select tipo, valor_original, conta_origem_id, conta_destino_id, malote_id
          from transferencias where caixa_id = $1 and tipo = 'abertura'`,
       [caixaId]
     );
@@ -106,15 +105,10 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
       conta_destino_id: contaId,
       malote_id: maloteId
     });
-    expect(transferencia?.lacre_malote_id).toBeTruthy();
 
-    // Malote vira em_uso; lacre da ida vira usado.
+    // Malote (lacre) vira em_uso.
     const malote = await consultarUm<{ status: string }>("select status from malotes where id = $1", [maloteId]);
     expect(malote?.status).toBe("em_uso");
-    const lacre = await consultarUm<{ status: string }>("select status from lacres_malotes where numero = $1", [
-      "LAC-ABE-1"
-    ]);
-    expect(lacre?.status).toBe("usado");
 
     // Fechamento guarda o vinculo da abertura + a divida.
     const caixa = await consultarUm<{ divida_cofre: string; lacre_abertura: string; malote_abertura_id: string }>(
@@ -129,7 +123,7 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
   });
 
   it("Deve quitar a divida (saldo proprio = 0) quando as vendas em dinheiro igualam o malote", async () => {
-    const maloteId = await criarMalote("MAL-ABE-2", 490, ["LAC-ABE-2"]);
+    const maloteId = await criarMalote("LAC-ABE-2", 490);
     const { contaId, pdvId } = await criarContaEPdv("quita-divida");
     const caixaId = await abrir({
       pdvId,
@@ -183,7 +177,7 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
   });
 
   it("Deve recusar um malote que ja esta em_uso", async () => {
-    const maloteId = await criarMalote("MAL-ABE-4", 300, ["LAC-ABE-4"]);
+    const maloteId = await criarMalote("LAC-ABE-4", 300);
     const primeiro = await criarContaEPdv("malote-uso-1");
     await abrir({
       pdvId: primeiro.pdvId,
@@ -206,7 +200,7 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
   });
 
   it("Deve PARAR (Regra 5) quando a empresa nao tem conta de cofre configurada", async () => {
-    const maloteId = await criarMalote("MAL-ABE-5", 200, ["LAC-ABE-5"]);
+    const maloteId = await criarMalote("LAC-ABE-5", 200);
     const { pdvId } = await criarContaEPdv("sem-cofre");
     await executarSql("update empresas set conta_cofre_id = null where id = $1", [idsTeste.empresaA]);
     try {

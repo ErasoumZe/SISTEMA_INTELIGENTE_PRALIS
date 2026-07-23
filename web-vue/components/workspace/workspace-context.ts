@@ -42,8 +42,8 @@ export type TipoPagamentoForm = {
 };
 
 export type FormMalote = {
-  codigo: string;
-  lacres: string[];
+  numeroLacre: string;
+  valor: number;
 };
 
 export type SecaoPermissao = (typeof secoesPermissoes)[number];

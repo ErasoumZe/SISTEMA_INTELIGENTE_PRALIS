@@ -12,7 +12,6 @@ import {
   gruposDespesas,
   gruposMercadorias,
   gruposRetiradas,
-  lacresMalotes,
   malotes,
   pdvs,
   produtos,
@@ -109,20 +108,6 @@ export async function validarEdicaoNoCaixaAberto(
   const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
   if (existente.caixaId !== caixa.id) throw new Error("Lancamento nao pertence ao seu caixa aberto");
   return caixa;
-}
-
-export async function obterLacrePorId(lacreId: string, db: ExecutorBanco = banco): Promise<{ status: string } | null> {
-  const [lacre] = await db
-    .select({ status: lacresMalotes.status })
-    .from(lacresMalotes)
-    .where(eq(lacresMalotes.id, lacreId))
-    .limit(1);
-
-  return lacre ?? null;
-}
-
-export async function marcarLacreComoUsado(lacreId: string, db: ExecutorBanco = banco): Promise<void> {
-  await db.update(lacresMalotes).set({ status: "usado", usadoEm: new Date() }).where(eq(lacresMalotes.id, lacreId));
 }
 
 async function validarConta(
@@ -234,9 +219,6 @@ export async function validarReferenciasTransferencia(
   if (!(await existeNaEmpresa(contas, dados.contaOrigemId, dados.empresaId, db))) return "Conta de origem";
   if (!(await existeNaEmpresa(contas, dados.contaDestinoId, dados.empresaId, db))) return "Conta de destino";
   if (dados.maloteId && !(await existeNaEmpresa(malotes, dados.maloteId, dados.empresaId, db))) return "Malote";
-  if (dados.lacreMaloteId && !(await existeNaEmpresa(lacresMalotes, dados.lacreMaloteId, dados.empresaId, db))) {
-    return "Lacre";
-  }
   return null;
 }
 
@@ -363,19 +345,6 @@ export async function validarReferenciasItensDespesa(
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, empresaId, db))) return "Colaborador";
   }
   return null;
-}
-
-export async function usarLacreSeInformado(
-  lacreId: string | null | undefined,
-  db: ExecutorBanco = banco
-): Promise<void> {
-  if (!lacreId) return;
-
-  const lacre = await obterLacrePorId(lacreId, db);
-  if (!lacre) throw new Error("Lacre inexistente");
-  if (lacre.status !== "disponivel") throw new Error("Lacre indisponivel");
-
-  await marcarLacreComoUsado(lacreId, db);
 }
 
 export async function obterCaixaParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {

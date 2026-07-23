@@ -7,11 +7,7 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { executarEmTransacao } from "../banco/conexao.js";
-import {
-  exigirPermissaoLancamento,
-  obterCaixaParaLancamento,
-  usarLacreSeInformado
-} from "../lancamentos/lancamentos.dominio.js";
+import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
   validarEdicaoNoCaixaAberto,
@@ -47,7 +43,6 @@ export async function criarTransferencia(
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    await usarLacreSeInformado(dados.lacreMaloteId, tx);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
@@ -81,11 +76,8 @@ export async function atualizarTransferencia(
   return executarEmTransacao(async (tx) => {
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     const caixa = await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
-    if (
-      (dados.maloteId ?? null) !== existente!.maloteId ||
-      (dados.lacreMaloteId ?? null) !== existente!.lacreMaloteId
-    ) {
-      throw new Error("Nao e possivel alterar malote ou lacre na edicao");
+    if ((dados.maloteId ?? null) !== existente!.maloteId) {
+      throw new Error("Nao e possivel alterar o malote na edicao");
     }
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

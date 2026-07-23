@@ -14,7 +14,6 @@ export {
   gruposMercadorias,
   gruposRetiradas,
   gruposVendas,
-  lacresMalotes,
   malotes,
   pdvs,
   perfisUsuarios,

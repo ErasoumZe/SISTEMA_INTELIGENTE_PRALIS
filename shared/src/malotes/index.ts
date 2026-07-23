@@ -11,7 +11,7 @@ import {
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 
-// Ciclo do malote fisico: disponivel -> em_uso (selecionado numa abertura de caixa) -> devolvido (M2).
+// Ciclo do malote/lacre: disponivel -> em_uso (aberto num caixa ou usado numa sangria/retorno) -> devolvido.
 export const maloteStatusSchema = z.enum(["disponivel", "em_uso", "devolvido"]);
 
 export const maloteParamsSchema = z.object({
@@ -29,20 +29,18 @@ export const validarLacreQuerySchema = z.object({
   empresaId: uuidSchema.optional()
 });
 
-// O identificador que o operador controla e o LACRE (numero unico, fonte externa). O "codigo do malote"
-// (o saco) e opcional: quando vazio, o servidor gera um sequencial por empresa. Por isso codigo e opcional.
-// valor = fundo emprestado do cofre (R8); vira a divida do caixa quando o malote e usado na abertura.
+// O malote E o lacre (D3): a identidade e o numero do lacre (unico por empresa, impresso de fonte
+// externa e digitado). Nao existe mais "codigo do malote" nem o "saco". valor = fundo emprestado do
+// cofre (R8); vira a divida do caixa quando o malote e usado na abertura.
 export const criarMaloteSchema = z.object({
   empresaId: uuidSchema,
-  codigo: z.string().trim().optional(),
-  valor: dinheiroSchema.default(0),
-  lacres: z.array(z.string().min(1)).min(1)
+  numeroLacre: z.string().trim().min(1),
+  valor: dinheiroSchema.default(0)
 });
 
 export const atualizarMaloteSchema = z.object({
-  codigo: z.string().trim().optional(),
-  valor: dinheiroSchema.default(0),
-  lacres: z.array(z.string().min(1)).default([])
+  numeroLacre: z.string().trim().min(1),
+  valor: dinheiroSchema.default(0)
 });
 
 export const importarMalotesSchema = importarEmpresaPayloadSchema;

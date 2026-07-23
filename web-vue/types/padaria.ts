@@ -93,7 +93,9 @@ export type Opcao = {
   caminho?: string;
   nivel?: number;
   selecionavel?: boolean;
-  totalLacres?: number;
+  // Malote (D3): o malote E o lacre — identidade = numero do lacre + valor + status.
+  numeroLacre?: string;
+  valor?: string | number | null;
   cpf?: string;
   tipo?: string;
   tipoGrupo?: "despesa" | "mercadoria" | "retirada" | "vendas";

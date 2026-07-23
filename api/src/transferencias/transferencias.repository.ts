@@ -42,8 +42,7 @@ export async function criarTransferenciaRepository(
       ...valoresBase(dados, computar, criadoPor, caixaId),
       contaOrigemId: dados.contaOrigemId,
       contaDestinoId: dados.contaDestinoId,
-      maloteId: dados.maloteId ?? null,
-      lacreMaloteId: dados.lacreMaloteId ?? null
+      maloteId: dados.maloteId ?? null
     })
     .returning({ id: transferencias.id });
   if (!transferencia) throw new Error("Transferencia nao criada");
@@ -71,7 +70,6 @@ export async function buscarTransferenciaDetalheRepository(
       contaOrigemId: transferencias.contaOrigemId,
       contaDestinoId: transferencias.contaDestinoId,
       maloteId: transferencias.maloteId,
-      lacreMaloteId: transferencias.lacreMaloteId,
       computar: transferencias.computar
     })
     .from(transferencias)

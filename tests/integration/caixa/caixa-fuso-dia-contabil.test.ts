@@ -70,9 +70,8 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
   it("Deve gravar data_referencia da transferencia de abertura no dia LOCAL (malote as 22:00 BRT)", async () => {
     const malote = await criar("/api/malotes", {
       empresaId: idsTeste.empresaA,
-      codigo: "MAL-FUSO",
-      valor: 100,
-      lacres: ["LAC-FUSO"]
+      numeroLacre: "LAC-FUSO",
+      valor: 100
     });
     const maloteId = json<{ data: { id: string } }>(malote).data.id;
     const { pdvId } = await criarContaEPdv("fuso-malote");

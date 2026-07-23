@@ -168,7 +168,7 @@ const formCaixaDrawer = reactive({
   dataHoraAbertura: ""
 });
 
-const formMalote = ref({ codigo: "", lacres: [""] });
+const formMalote = ref({ numeroLacre: "", valor: 0 });
 const maloteEditandoId = ref("");
 const maloteSalvando = ref(false);
 const maloteEditandoCarregandoId = ref("");
@@ -1218,26 +1218,20 @@ async function salvarOperacao() {
 
 function abrirMaloteNovo() {
   maloteEditandoId.value = "";
-  formMalote.value = { codigo: "", lacres: [""] };
+  formMalote.value = { numeroLacre: "", valor: 0 };
   modalMaloteAberto.value = true;
 }
 
-async function abrirMaloteEditar(linha: Record<string, string | undefined>) {
+// O malote E o lacre (D3): o item ja esta em opcoes.malotes (numero + valor), sem buscar lacres.
+function abrirMaloteEditar(linha: Record<string, string | undefined>) {
   if (!linha.id) return;
-  maloteEditandoCarregandoId.value = linha.id;
-  try {
-    const lacres = await apiGet<Array<{ numero: string }>>(`/api/malotes/${linha.id}/lacres`);
-    maloteEditandoId.value = linha.id;
-    formMalote.value = {
-      codigo: linha.codigo ?? "",
-      lacres: lacres.map((lacre) => lacre.numero).concat(lacres.length ? [] : [""])
-    };
-    modalMaloteAberto.value = true;
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    maloteEditandoCarregandoId.value = "";
-  }
+  const malote = opcoes.value.malotes.find((item) => item.id === linha.id);
+  maloteEditandoId.value = linha.id;
+  formMalote.value = {
+    numeroLacre: malote?.numeroLacre ?? linha.lacre ?? "",
+    valor: Number(malote?.valor ?? 0)
+  };
+  modalMaloteAberto.value = true;
 }
 
 async function salvarMalote() {
@@ -1245,16 +1239,24 @@ async function salvarMalote() {
   try {
     const payload = {
       empresaId: empresaId.value,
-      codigo: formMalote.value.codigo,
-      lacres: formMalote.value.lacres.map((lacre) => lacre.trim()).filter(Boolean)
+      numeroLacre: formMalote.value.numeroLacre.trim(),
+      valor: formMalote.value.valor
     };
-    const malote = maloteEditandoId.value
-      ? await apiPut<Opcao & { codigo?: string; lacres?: string[] }>(`/api/malotes/${maloteEditandoId.value}`, payload)
-      : await apiPost<Opcao & { codigo?: string; lacres?: string[] }>("/api/malotes", payload);
-    const indiceAtual = opcoes.value.malotes.findIndex((item) => item.id === malote.id);
-    if (indiceAtual >= 0)
-      opcoes.value.malotes.splice(indiceAtual, 1, { ...opcoes.value.malotes[indiceAtual], ...malote });
-    else opcoes.value.malotes.unshift(malote);
+    const resposta = maloteEditandoId.value
+      ? await apiPut<{ id?: string }>(`/api/malotes/${maloteEditandoId.value}`, payload)
+      : await apiPost<{ id?: string }>("/api/malotes", payload);
+    const id = resposta?.id ?? maloteEditandoId.value;
+    const indiceAtual = opcoes.value.malotes.findIndex((item) => item.id === id);
+    // Status: novo nasce "disponivel"; edicao mantem o status atual (ciclo e do caixa, nao do cadastro).
+    const item: Opcao = {
+      id,
+      empresaId: empresaId.value,
+      numeroLacre: payload.numeroLacre,
+      valor: payload.valor,
+      status: indiceAtual >= 0 ? (opcoes.value.malotes[indiceAtual]?.status ?? "disponivel") : "disponivel"
+    };
+    if (indiceAtual >= 0) opcoes.value.malotes.splice(indiceAtual, 1, item);
+    else opcoes.value.malotes.unshift(item);
     modalMaloteAberto.value = false;
     notificar(maloteEditandoId.value ? "Malote atualizado com sucesso." : "Malote cadastrado com sucesso.");
   } catch (error) {

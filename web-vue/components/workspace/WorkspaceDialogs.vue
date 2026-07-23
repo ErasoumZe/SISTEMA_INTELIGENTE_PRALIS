@@ -563,33 +563,30 @@ const validacaoQtdPreview = computed(() =>
     <v-card>
       <v-card-title>{{ maloteEditandoId ? "Editar malote" : "Novo malote" }}</v-card-title>
       <v-card-text>
-        <!-- O LACRE e o identificador que o operador controla (numero unico, de fonte externa): campo em destaque. -->
-        <div class="d-grid ga-2">
-          <div v-for="(_, index) in formMalote.lacres" :key="index" class="d-flex ga-2">
-            <v-text-field
-              v-model="formMalote.lacres[index]"
-              label="Numero do lacre"
-              :autofocus="index === 0"
-              hide-details
-            />
-            <v-btn
-              icon="mdi-delete"
-              variant="text"
-              :disabled="formMalote.lacres.length === 1"
-              @click="formMalote.lacres.splice(index, 1)"
-            />
-          </div>
-          <v-btn variant="outlined" prepend-icon="mdi-plus" @click="formMalote.lacres.push('')">Adicionar lacre</v-btn>
+        <!-- O malote E o lacre (D3): so o numero do lacre (identidade unica) + o valor. Sem codigo, sem saco.
+             O status nasce "disponivel" automaticamente. -->
+        <div class="d-grid ga-4">
+          <v-text-field
+            v-model="formMalote.numeroLacre"
+            label="Numero do lacre"
+            placeholder="Ex.: 007"
+            hint="Identidade unica do malote (vem impresso no lacre)"
+            persistent-hint
+            autofocus
+            hide-details="auto"
+          />
+          <v-text-field
+            v-model.number="formMalote.valor"
+            label="Valor (R$)"
+            type="number"
+            min="0"
+            step="0.01"
+            prefix="R$"
+            hint="Quanto de dinheiro vai dentro do malote"
+            persistent-hint
+            hide-details="auto"
+          />
         </div>
-        <!-- O codigo do malote (saco) e opcional e sai do fluxo obrigatorio: gerado automaticamente se vazio. -->
-        <v-text-field
-          v-model="formMalote.codigo"
-          label="Malote (saco)"
-          placeholder="Opcional - gerado automaticamente"
-          hint="Opcional - gerado automaticamente se vazio"
-          persistent-hint
-          class="mt-4"
-        />
       </v-card-text>
       <v-card-actions>
         <v-spacer />
