@@ -240,6 +240,9 @@ export type ResumoCaixa = {
   totalRetiradas: number;
   totalMercadorias?: number;
   saldo: number;
+  // Abertura com malote (R8): divida com o cofre (deficit a quitar) e o saldo proprio derivado.
+  dividaCofre?: number;
+  saldoProprio?: number;
 };
 
 export type CaixaOperacional = {

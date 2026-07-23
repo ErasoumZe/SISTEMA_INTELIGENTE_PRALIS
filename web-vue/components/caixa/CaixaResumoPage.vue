@@ -3,6 +3,7 @@ import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
+import CaixaCockpit from "~/components/caixa/CaixaCockpit.vue";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -141,9 +142,7 @@ function fechar() {
 
       <template v-else>
         <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
-          <v-alert type="success" variant="tonal" class="flex-grow-1 mb-0">
-            Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
-          </v-alert>
+          <div class="text-body-2 text-muted">Aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }}</div>
           <CaixaAutorizacoes
             :empresa-id="empresaId"
             :caixa-aberto="caixaAberto"
@@ -152,44 +151,12 @@ function fechar() {
           />
         </div>
 
-        <v-row v-if="resumoAtual" dense class="caixa-resumo-grid">
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Entradas</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.totalEntradas) }}</div>
-            </v-sheet>
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Transf. entrada</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.totalTransferenciasEntrada || 0) }}</div>
-            </v-sheet>
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Transf. saida</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.totalTransferenciasSaida || 0) }}</div>
-            </v-sheet>
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Despesas</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.totalDespesas) }}</div>
-            </v-sheet>
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Mercadorias</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.totalMercadorias || 0) }}</div>
-            </v-sheet>
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-sheet class="pa-4 rounded-lg soft-bg">
-              <div class="text-caption">Saldo</div>
-              <div class="text-h6">{{ dinheiro(resumoAtual.saldo) }}</div>
-            </v-sheet>
-          </v-col>
-        </v-row>
+        <CaixaCockpit
+          v-if="resumoAtual"
+          :resumo="resumoAtual"
+          :caixa="caixaAberto"
+          :usuario-nome="caixaAberto.usuarioCaixaNome || usuarioNome"
+        />
 
         <v-divider class="my-5" />
 
