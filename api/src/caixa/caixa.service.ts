@@ -15,7 +15,9 @@ import type {
   LinhaHistoricoCaixa,
   ResumoCaixa,
   TotaisCaixaCentavos,
-  TotaisHistoricoCaixa
+  TotaisHistoricoCaixa,
+  TransferenciaCofrePayload,
+  TransferenciasCaixaResponse
 } from "@padaria/shared/caixa";
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
@@ -40,6 +42,7 @@ import {
   buscarContaCofreEmpresaRepository,
   buscarGrupoQuebraCaixa,
   buscarLacreDoMaloteRepository,
+  buscarLacreEmpresaRepository,
   buscarMaloteParaAberturaRepository,
   buscarPdvEmpresaRepository,
   buscarAjusteCaixaRepository,
@@ -51,13 +54,16 @@ import {
   criarAcertoSaldoCaixaRepository,
   criarCaixaRepository,
   criarTransferenciaAberturaRepository,
+  criarTransferenciaCofreRepository,
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarEdicoesCaixaRepository,
   listarHistoricoCaixaRepository,
   listarLancamentosCaixaRepository,
+  listarTransferenciasCaixaRepository,
   marcarLacreUsadoRepository,
   marcarMaloteEmUsoRepository,
+  proximaOrdemTransferenciaRepository,
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
@@ -569,6 +575,106 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
 
     return { caixaAberto: null, resumo: null } satisfies CaixaStatus;
   });
+}
+
+// M2 (R3/R4): sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade — uma
+// transferencia caixa -> cofre. O servidor resolve a conta do cofre, o ordinal (R6) e consome o
+// lacre novo (D5 opcional). O retorno da sobra em especie zera o saldo fisico e libera o fechamento.
+export async function criarTransferenciaCofreCaixa(
+  caixaId: string,
+  dados: TransferenciaCofrePayload,
+  perfil: PerfilUsuario
+): Promise<CaixaStatus> {
+  return executarEmTransacao(async (tx) => {
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
+    const valorCentavos = paraCentavos(dados.valor);
+    if (valorCentavos <= 0) throw new Error("Valor da transferencia deve ser positivo");
+
+    // Regra 5: destino = conta do cofre mapeada na empresa (sem inventar).
+    const contaCofreId = await buscarContaCofreEmpresaRepository(caixa.empresaId, tx);
+    if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
+    if (contaCofreId === caixa.pdvContaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
+
+    // Lacre novo da volta (D5 opcional): qualquer lacre disponivel da empresa.
+    let lacreId: string | null = null;
+    if (dados.lacre?.trim()) {
+      const lacre = await buscarLacreEmpresaRepository(caixa.empresaId, dados.lacre.trim(), tx);
+      if (!lacre) throw new Error("Lacre inexistente");
+      if (lacre.status !== "disponivel") throw new Error("Lacre indisponivel");
+      lacreId = lacre.id;
+    }
+
+    const ordem = await proximaOrdemTransferenciaRepository(caixa.id, dados.tipo, tx);
+    await criarTransferenciaCofreRepository(
+      {
+        empresaId: caixa.empresaId,
+        caixaId: caixa.id,
+        contaCaixaId: caixa.pdvContaId,
+        contaCofreId,
+        valorCentavos,
+        tipo: dados.tipo,
+        ordem,
+        dataReferencia: caixa.dataMovimento ?? diaNegocio(new Date()),
+        dataTransferencia: diaNegocio(new Date()),
+        lacreMaloteId: lacreId,
+        descricao: dados.tipo === "retorno" ? "Retorno de fechamento" : "Sangria",
+        observacao: dados.observacao?.trim() || null,
+        criadoPor: perfil.usuarioId
+      },
+      tx
+    );
+    if (lacreId) await marcarLacreUsadoRepository(lacreId, tx);
+
+    const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!atualizado) throw new Error("Caixa nao encontrado");
+    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
+  });
+}
+
+// M2 (consultas, item 4): a "aba TRANSFERENCIAS" por caixa+dia — os movimentos com ordem 1a/2a/3a/4a
+// e os totais na OTICA DO COFRE: SAIDA = cofre->caixa (abertura/suprimento); ENTRADA = caixa->cofre
+// (sangria/retorno); SALDO = ENTRADA - SAIDA (o que o caixa devolveu alem do fundo emprestado).
+export async function obterTransferenciasCaixa(
+  caixaId: string,
+  perfil: PerfilUsuario
+): Promise<TransferenciasCaixaResponse> {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
+  const linhas = await listarTransferenciasCaixaRepository(caixaId);
+
+  let totalSaidaCentavos = 0; // cofre -> caixa (abertura/suprimento)
+  let totalEntradaCentavos = 0; // caixa -> cofre (sangria/retorno)
+  let ordemSaida = 0;
+  let ordemEntrada = 0;
+  const itens = linhas.map((linha) => {
+    const valorCentavos = paraCentavos(linha.valorOriginal);
+    const sentido = linha.contaDestinoId === caixa.pdvContaId ? ("saida" as const) : ("entrada" as const);
+    // Ordinal 1a/2a/3a por sentido, cronologico (independe do ordem gravado — abertura nao tem).
+    const ordem = sentido === "saida" ? ++ordemSaida : ++ordemEntrada;
+    if (sentido === "saida") totalSaidaCentavos += valorCentavos;
+    else totalEntradaCentavos += valorCentavos;
+    return {
+      id: linha.id,
+      tipo: linha.tipo as "abertura" | "suprimento" | "sangria" | "retorno",
+      ordem,
+      valor: deCentavos(valorCentavos),
+      sentido,
+      lacre: linha.lacreNumero,
+      dataTransferencia: linha.dataTransferencia
+    };
+  });
+
+  return {
+    itens,
+    totalSaida: deCentavos(totalSaidaCentavos),
+    totalEntrada: deCentavos(totalEntradaCentavos),
+    saldo: deCentavos(totalEntradaCentavos - totalSaidaCentavos)
+  };
 }
 
 export async function listarHistoricoCaixa(

@@ -349,6 +349,99 @@ export async function criarTransferenciaAberturaRepository(
   return transferencia;
 }
 
+// --- Retorno / sangria (M2, R3/R4/R6) ---------------------------------------------------------
+// Proxima ordem (1a/2a/3a/4a) das transferencias de um caixa por tipo (R6). App-managed.
+export async function proximaOrdemTransferenciaRepository(
+  caixaId: string,
+  tipo: string,
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const [linha] = await db
+    .select({ total: count() })
+    .from(transferencias)
+    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.tipo, tipo)));
+  return Number(linha?.total ?? 0) + 1;
+}
+
+// Lacre disponivel da empresa por numero — o retorno/sangria usa um lacre NOVO (D5 opcional).
+export async function buscarLacreEmpresaRepository(empresaId: string, numero: string, db: ExecutorBanco = banco) {
+  const [lacre] = await db
+    .select({ id: lacresMalotes.id, numero: lacresMalotes.numero, status: lacresMalotes.status })
+    .from(lacresMalotes)
+    .where(and(eq(lacresMalotes.empresaId, empresaId), ilike(lacresMalotes.numero, numero)))
+    .limit(1);
+  return lacre ?? null;
+}
+
+// Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
+export async function criarTransferenciaCofreRepository(
+  input: {
+    empresaId: string;
+    caixaId: string;
+    contaCaixaId: string;
+    contaCofreId: string;
+    valorCentavos: number;
+    tipo: string;
+    ordem: number;
+    dataReferencia: string;
+    dataTransferencia: string;
+    lacreMaloteId: string | null;
+    descricao: string;
+    observacao: string | null;
+    criadoPor: string;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string }> {
+  const [transferencia] = await db
+    .insert(transferencias)
+    .values({
+      empresaId: input.empresaId,
+      caixaId: input.caixaId,
+      dataReferencia: input.dataReferencia,
+      dataTransferencia: input.dataTransferencia,
+      descricao: input.descricao,
+      observacao: input.observacao,
+      valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
+      contaOrigemId: input.contaCaixaId,
+      contaDestinoId: input.contaCofreId,
+      lacreMaloteId: input.lacreMaloteId,
+      tipo: input.tipo,
+      ordem: input.ordem,
+      criadoPor: input.criadoPor
+    })
+    .returning({ id: transferencias.id });
+  if (!transferencia) throw new Error("Transferencia de cofre nao criada");
+  return transferencia;
+}
+
+// Todas as transferencias de um caixa (aba TRANSFERENCIAS da planilha), com o lacre e a ordem.
+export async function listarTransferenciasCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return (
+    db
+      .select({
+        id: transferencias.id,
+        tipo: transferencias.tipo,
+        ordem: transferencias.ordem,
+        valorOriginal: transferencias.valorOriginal,
+        contaOrigemId: transferencias.contaOrigemId,
+        contaDestinoId: transferencias.contaDestinoId,
+        lacreNumero: lacresMalotes.numero,
+        dataTransferencia: transferencias.dataTransferencia
+      })
+      .from(transferencias)
+      .leftJoin(lacresMalotes, eq(lacresMalotes.id, transferencias.lacreMaloteId))
+      .where(
+        and(
+          eq(transferencias.caixaId, caixaId),
+          eq(transferencias.computar, true),
+          ne(transferencias.status, "cancelado")
+        )
+      )
+      // Cronologico: a "aba" numera 1a/2a/3a por ordem de acontecimento (abertura sem ordem entra 1a).
+      .orderBy(asc(transferencias.criadoEm))
+  );
+}
+
 export async function atualizarAberturaCaixaRepository(
   input: {
     caixaId: string;

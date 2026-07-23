@@ -11,7 +11,8 @@ import {
   editarAberturaCaixaPayloadSchema,
   fecharCaixaPayloadSchema,
   historicoCaixaQuerySchema,
-  solicitarAutorizacaoCaixaPayloadSchema
+  solicitarAutorizacaoCaixaPayloadSchema,
+  transferenciaCofrePayloadSchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
@@ -19,11 +20,13 @@ import {
   abrirCaixa,
   acertarSaldoCaixaOperacional,
   alterarHorarioCaixa,
+  criarTransferenciaCofreCaixa,
   editarAberturaCaixa,
   fecharCaixa,
   listarHistoricoCaixa,
   obterDetalheCaixa,
-  obterStatusCaixa
+  obterStatusCaixa,
+  obterTransferenciasCaixa
 } from "./caixa.service.js";
 import {
   gerarTokenAutorizacao,
@@ -99,6 +102,37 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
+
+  // M2 (R3/R4): sangria (turno) / retorno (fechamento) — caixa -> cofre, mesma entidade com tipo.
+  app.post(
+    "/api/caixa/:caixaId/transferencia-cofre",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const body = transferenciaCofrePayloadSchema.parse(request.body);
+      try {
+        return ok(await criarTransferenciaCofreCaixa(caixaId, body, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  // M2 (item 4): agregacao "aba TRANSFERENCIAS" por caixa+dia (1a/2a/3a, TOTAL SAIDA/ENTRADA, SALDO).
+  app.get(
+    "/api/caixa/:caixaId/transferencias",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await obterTransferenciasCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 
   // Alteracao de horario (novo fluxo): gerente/admin direto; operador via token de autorizacao.
   app.put(

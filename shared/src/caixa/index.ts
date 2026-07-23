@@ -217,6 +217,37 @@ export const resumoCaixaSchema = z.object({
   // vendas em dinheiro o levam a zero; excedente e resultado do caixa.
   dividaCofre: z.number().optional(),
   saldoProprio: z.number().optional(),
+  // propostaRetorno (R3/M2): sobra em especie a devolver ao cofre no fechamento (= saldo fisico se > 0).
+  propostaRetorno: z.number().optional(),
+  saldo: z.number()
+});
+
+// M2 — sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade (R4): transferencia
+// caixa -> cofre. O servidor resolve a conta do cofre, a ordem e (opcional, D5) consome o lacre.
+export const transferenciaCofrePayloadSchema = z.object({
+  tipo: z.enum(["sangria", "retorno"]),
+  valor: z.coerce.number().positive(),
+  lacre: z.string().trim().min(1).optional().nullable(),
+  observacao: z.string().trim().max(500).optional().nullable()
+});
+
+// M2 — visao "aba TRANSFERENCIAS" da planilha: por caixa+dia, os movimentos com ordem 1a/2a/3a/4a e
+// os totais na OTICA DO COFRE (saida = cofre->caixa: abertura/suprimento; entrada = caixa->cofre:
+// sangria/retorno). SALDO = ENTRADA - SAIDA (o que o caixa devolveu alem do fundo emprestado).
+export const transferenciaCaixaLinhaSchema = z.object({
+  id: uuidSchema,
+  tipo: z.enum(["abertura", "suprimento", "sangria", "retorno"]),
+  ordem: z.number().nullable(),
+  valor: z.number(),
+  sentido: z.enum(["saida", "entrada"]),
+  lacre: z.string().nullable(),
+  dataTransferencia: z.string().nullable()
+});
+
+export const transferenciasCaixaResponseSchema = z.object({
+  itens: z.array(transferenciaCaixaLinhaSchema),
+  totalSaida: z.number(),
+  totalEntrada: z.number(),
   saldo: z.number()
 });
 
@@ -271,6 +302,9 @@ export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
 export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
+export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
+export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;
+export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 
 // Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
@@ -286,6 +320,7 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
     totalMercadorias: deCentavos(totais.mercadorias),
     dividaCofre: deCentavos(dividaCofreCentavos),
     saldoProprio: deCentavos(saldoProprioCentavos(totais, dividaCofreCentavos)),
+    propostaRetorno: deCentavos(Math.max(0, saldoCaixaCentavos(totais))),
     saldo: deCentavos(saldoCaixaCentavos(totais))
   };
 }

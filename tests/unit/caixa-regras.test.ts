@@ -84,7 +84,10 @@ describe("montarResumoCaixa", () => {
       totalRetiradas: 10,
       totalMercadorias: 15,
       dividaCofre: 0,
-      saldoProprio: 75,
+      // saldoProprio e OPERACIONAL (exclui transferencias): 100 - 20 - 10 - 15 = 55. O saldo fisico
+      // (75) inclui o liquido das transferencias (+50 -30); saldoProprio nao.
+      saldoProprio: 55,
+      propostaRetorno: 75, // sobra em especie a devolver = saldo fisico (> 0)
       saldo: 75
     });
   });
@@ -118,10 +121,19 @@ describe("saldoProprioCentavos (R8 — deficit do malote, Opcao A/Lente B)", () 
     expect(saldoProprio).toBe(11000);
   });
 
-  it("Deve_IgualarSaldoFisico_Quando_SemMalote", () => {
-    // Retrocompat: sem malote (divida 0), saldo proprio == saldo canonico.
+  it("Deve_IgualarSaldoFisico_Quando_SemMalote_E_SemTransferencias", () => {
+    // Retrocompat: sem malote (divida 0) e sem transferencias, saldo proprio == saldo canonico.
     const semMalote = totais({ entradas: 30000, despesas: 5000 });
     expect(saldoProprioCentavos(semMalote, 0)).toBe(saldoCaixaCentavos(semMalote));
+  });
+
+  it("Deve_NaoDescontarEmDobro_Quando_HaSangria_ou_Retorno (M2)", () => {
+    // Malote 490, 490 em vendas dinheiro e uma sangria de 200 (caixa->cofre, transferenciasSaida).
+    // A sangria so MOVE dinheiro: nao pode mexer no rastreador de deficit -> continua 0 (divida quitada).
+    const comSangria = totais({ entradas: 49000, transferenciasEntrada: 49000, transferenciasSaida: 20000 });
+    expect(saldoProprioCentavos(comSangria, 49000)).toBe(0);
+    // Prova do bug antigo: a formula errada (saldo fisico - 2*divida) daria -20000 aqui.
+    expect(saldoCaixaCentavos(comSangria) - 2 * 49000).toBe(-20000);
   });
 });
 
