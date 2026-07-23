@@ -239,6 +239,12 @@ function regrasPermissoesSeed(lista: Permissao[]): RegrasPermissoes {
   return Object.fromEntries(lista.map((permissao) => [permissao, true]));
 }
 
+// Ciclo de vida R7/R10 (Fase 1, doc 09 §4) — PARIDADE com db/src/referencia-permissoes.ts.
+const DOMINIOS_LANCAMENTO_FINANCEIRO = ["despesas", "mercadorias", "retiradas", "transferencias"] as const;
+function acoesLancamentoPorDominio(...acoes: string[]): Permissao[] {
+  return DOMINIOS_LANCAMENTO_FINANCEIRO.flatMap((dominio) => acoes.map((acao) => `${dominio}_${acao}` as Permissao));
+}
+
 const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargoSeed({
     ativas: [
@@ -264,7 +270,7 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   }),
   Tesouraria: permissoesDoCargoSeed({
     ativas: ["malotes", "transferencias"],
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar"]
+    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
   }),
   Gerencia: permissoesDoCargoSeed({
     ativas: [
@@ -306,7 +312,10 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "cadastro_turnos_visualizar",
       "cadastro_turnos_criar",
       "cadastro_turnos_editar",
-      "cadastro_turnos_excluir"
+      "cadastro_turnos_excluir",
+      // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
+      "mercadorias_editar",
+      ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
   Compras: permissoesDoCargoSeed({
@@ -352,12 +361,23 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
+      "mercadorias_editar",
       "retiradas_criar",
       "retiradas_editar",
       "notas_fiscais_importar",
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
-      "cadastro_formas_pagamento_criar"
+      "cadastro_formas_pagamento_criar",
+      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e *_dpago.
+      ...acoesLancamentoPorDominio(
+        "pagar",
+        "efetuar",
+        "conferir",
+        "editar_dpago",
+        "visualizar_dpago",
+        "excluir",
+        "excluir_dpago"
+      )
     ]
   })
 };

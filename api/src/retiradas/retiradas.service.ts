@@ -8,10 +8,15 @@ import type {
 } from "@padaria/shared/retiradas";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import {
+  exigirPermissaoEditarPago,
+  exigirPermissaoLancamento,
+  exigirPermissaoPagar,
+  obterCaixaParaLancamento,
+  podeVerLancamentosPagos
+} from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
-  resolverDataPagamentoLancamento,
   validarEdicaoNoCaixaAberto,
   validarReferenciasRetirada
 } from "../lancamentos/lancamentos.dominio.js";
@@ -24,19 +29,21 @@ import {
 
 export async function listarRetiradas(
   query: RetiradasQuery,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[] | null,
+  perfil?: PerfilUsuario
 ): Promise<RetiradaDto[]> {
   if (empresasPermitidasIds?.length === 0) return [];
-  return listarRetiradasRepository(query, empresasPermitidasIds);
+  // visualizar_dpago (R7): sem a permissao, a listagem nunca traz lancamentos ja pagos (server-side).
+  const esconderPagos = !perfil || !podeVerLancamentosPagos(perfil.permissoes, "retiradas");
+  return listarRetiradasRepository(query, empresasPermitidasIds, esconderPagos);
 }
 
 export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuario): Promise<RetiradaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "retiradas_criar");
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  const normalizados = {
-    ...dados,
-    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
-  };
+  // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
+  exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento);
+  const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
@@ -60,15 +67,15 @@ export async function atualizarRetirada(
 ): Promise<RetiradaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "retiradas_editar");
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  const normalizados = {
-    ...dados,
-    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
-  };
   return executarEmTransacao(async (tx) => {
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
+    exigirPermissaoEditarPago(perfil.permissoes, "retiradas", existente!.dataPagamento);
+    exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
     await atualizarRetiradaRepository(retiradaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: retiradaId, computar };
   });

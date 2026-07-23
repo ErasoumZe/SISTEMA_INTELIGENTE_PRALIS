@@ -27,7 +27,11 @@ export async function registrarRotasRetiradas(app: FastifyInstance): Promise<voi
     );
     if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
     const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
-    return paginadoDeArray(await listarRetiradas(queryComCaixa, escopoDados), query.page, query.pageSize);
+    return paginadoDeArray(
+      await listarRetiradas(queryComCaixa, escopoDados, request.perfilUsuario),
+      query.page,
+      query.pageSize
+    );
   });
 
   app.post("/api/retiradas", { preHandler: exigirPermissao("retiradas_criar") }, async (request, reply) => {

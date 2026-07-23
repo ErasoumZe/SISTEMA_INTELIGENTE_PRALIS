@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import { fornecedores } from "@padaria/db/schema/cadastro";
 import type {
@@ -41,10 +41,13 @@ function valoresItemMercadoria(
 
 export async function listarMercadoriasRepository(
   query: MercadoriasQuery,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[] | null,
+  esconderPagos = false
 ): Promise<MercadoriaDto[]> {
   const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(mercadorias.caixaId, query.caixaId));
+  // visualizar_dpago: sem a permissao (esconderPagos), so mercadorias NAO pagas saem da listagem.
+  if (esconderPagos) filtros.push(isNull(mercadorias.dataPagamento));
   const linhas = await banco
     .select({
       id: mercadorias.id,

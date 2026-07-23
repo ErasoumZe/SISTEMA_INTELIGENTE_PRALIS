@@ -46,7 +46,11 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
       : await resolverEscopoListagemPorCaixa(request.perfilUsuario, "mercadorias", query.empresaId, query.caixaId);
     if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
     const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
-    return paginadoDeArray(await listarMercadorias(queryComCaixa, escopoDados), query.page, query.pageSize);
+    return paginadoDeArray(
+      await listarMercadorias(queryComCaixa, escopoDados, request.perfilUsuario),
+      query.page,
+      query.pageSize
+    );
   });
 
   // Fila de aprovacao (NF-e): visao de retaguarda, ignora a trava de caixa aberto e lista os

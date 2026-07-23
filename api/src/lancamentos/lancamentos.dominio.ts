@@ -1,5 +1,5 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { temPermissao, type Permissao, type PerfilUsuario } from "@padaria/shared";
+import { temPermissao, type DominioLancamentoPagavel, type Permissao, type PerfilUsuario } from "@padaria/shared";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
@@ -264,6 +264,54 @@ export function resolverDataPagamentoLancamento(
 ): string | null {
   if (!dataPagamento) return null;
   return temPermissao(permissoes, "caixas_gerenciar") ? dataPagamento : null;
+}
+
+// --- Ciclo de vida R7/R10 (Fase 1): enforcement ADITIVO de PAGAR e D/Pago ----------------------
+// So despesas/mercadorias/retiradas tem dataPagamento (transferencia = movimento imediato; entradas
+// = venda por integracao). Retrocompativel: nada muda para quem ja podia.
+//
+// TODO(M3 / R9 e ciclo de vida): "efetuar" (V), "conferir" (CONF) e a EXCLUSAO (nao ha rota DELETE
+// hoje) dependem de campos/rotas que ainda nao existem. Os codigos *_efetuar/*_conferir/*_excluir_
+// dpago ja estao no catalogo e distribuidos por cargo; o enforcement entra quando as rotas/campos
+// existirem (ver doc 09 P1/P2 e SPEC de 9 acoes). A notificacao de diferenca (R9/D8 / P2) tambem e M3.
+
+// pagar: ADITIVO. Alem do novo *_pagar, mantemos o caminho legado (caixas_gerenciar) que HOJE ja
+// libera dataPagamento — a Fase 1 nao remove regra mais fraca existente (a Fase 3 tira o fallback).
+export function podePagarLancamento(permissoes: readonly Permissao[], dominio: DominioLancamentoPagavel): boolean {
+  return temPermissao(permissoes, `${dominio}_pagar` as Permissao) || temPermissao(permissoes, "caixas_gerenciar");
+}
+
+// Exige *_pagar SOMENTE quando o payload DEFINE ou ALTERA a dataPagamento (comparando com o atual).
+// Editar outros campos de um lancamento ja pago NAO cai aqui (isso e *_editar_dpago).
+export function exigirPermissaoPagar(
+  permissoes: readonly Permissao[],
+  dominio: DominioLancamentoPagavel,
+  dataPagamentoNova: string | null | undefined,
+  dataPagamentoAtual: string | null = null
+): void {
+  const nova = dataPagamentoNova ?? null;
+  if (nova === (dataPagamentoAtual ?? null)) return; // nao mexeu no pagamento
+  if (!podePagarLancamento(permissoes, dominio)) {
+    throw new PermissaoLancamentoInsuficienteError(`${dominio}_pagar` as Permissao);
+  }
+}
+
+// _dpago: editar um lancamento JA PAGO (dataPagamento preenchida no registro atual) exige a variante
+// *_editar_dpago — sem ela, 403 mesmo tendo *_editar.
+export function exigirPermissaoEditarPago(
+  permissoes: readonly Permissao[],
+  dominio: DominioLancamentoPagavel,
+  dataPagamentoAtual: string | null | undefined
+): void {
+  if (!dataPagamentoAtual) return; // nao pago -> o gate normal (*_editar) basta
+  if (!temPermissao(permissoes, `${dominio}_editar_dpago` as Permissao)) {
+    throw new PermissaoLancamentoInsuficienteError(`${dominio}_editar_dpago` as Permissao);
+  }
+}
+
+// visualizar_dpago: sem a permissao, a listagem esconde os lancamentos JA PAGOS (server-side).
+export function podeVerLancamentosPagos(permissoes: readonly Permissao[], dominio: DominioLancamentoPagavel): boolean {
+  return temPermissao(permissoes, `${dominio}_visualizar_dpago` as Permissao);
 }
 
 // Confere soma de itens contra o total em centavos inteiros (sem float).

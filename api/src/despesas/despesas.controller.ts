@@ -38,7 +38,11 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
         : await resolverEscopoListagemPorCaixa(request.perfilUsuario, "despesas", query.empresaId, query.caixaId);
       if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
       const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
-      return paginadoDeArray(await listarDespesas(queryComCaixa, escopoDados), query.page, query.pageSize);
+      return paginadoDeArray(
+        await listarDespesas(queryComCaixa, escopoDados, request.perfilUsuario),
+        query.page,
+        query.pageSize
+      );
     }
   );
 

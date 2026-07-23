@@ -9,21 +9,47 @@ export const permissoes = [
   "transferencias_criar",
   "transferencias_editar",
   "transferencias_excluir",
+  // Ciclo de vida R7/R10 (Fase 1). Transferencia nao tem dataPagamento (movimento imediato), entao
+  // pagar/*_dpago ficam so no catalogo/distribuicao; a acao enforcada aqui e futura (M3).
+  "transferencias_pagar",
+  "transferencias_efetuar",
+  "transferencias_conferir",
+  "transferencias_visualizar_dpago",
+  "transferencias_editar_dpago",
+  "transferencias_excluir_dpago",
   "despesas_visualizar",
   "despesas_criar",
   "despesas_editar",
   "despesas_excluir",
   "despesas_discriminar",
+  "despesas_pagar",
+  "despesas_efetuar",
+  "despesas_conferir",
+  "despesas_visualizar_dpago",
+  "despesas_editar_dpago",
+  "despesas_excluir_dpago",
   "mercadorias_visualizar",
   "mercadorias_criar",
   "mercadorias_editar",
   "mercadorias_excluir",
   "mercadorias_discriminar",
   "mercadorias_aprovar",
+  "mercadorias_pagar",
+  "mercadorias_efetuar",
+  "mercadorias_conferir",
+  "mercadorias_visualizar_dpago",
+  "mercadorias_editar_dpago",
+  "mercadorias_excluir_dpago",
   "retiradas_visualizar",
   "retiradas_criar",
   "retiradas_editar",
   "retiradas_excluir",
+  "retiradas_pagar",
+  "retiradas_efetuar",
+  "retiradas_conferir",
+  "retiradas_visualizar_dpago",
+  "retiradas_editar_dpago",
+  "retiradas_excluir_dpago",
   "caixa_operar",
   "caixas_gerenciar",
   "caixa_alterar_horario",
@@ -216,6 +242,25 @@ export const permissoes = [
 export type Permissao = (typeof permissoes)[number];
 
 export type RegrasPermissoes = Partial<Record<Permissao, boolean>>;
+
+// DE-PARA oficial (Fase 1) do modelo de 9 acoes do Xmind. Mantemos os codigos LEGADOS como
+// CANONICOS (nada e renomeado agora): `*_criar` desempenha o papel da acao "lancar"; visualizar/
+// editar/excluir ja casam com as acoes sem sufixo D/Pago. As acoes novas (pagar/efetuar/conferir/
+// *_dpago) ganharam codigo proprio. Este de-para documenta a equivalencia para a UI de grade
+// agrupar (Fase 2) e para o script de renome (Fase 3) — SEM efeito no runtime hoje.
+export const mapaPermissoesLegadoParaAcoes = {
+  entradas_criar: "entradas_lancar",
+  transferencias_criar: "transferencias_lancar",
+  despesas_criar: "despesas_lancar",
+  mercadorias_criar: "mercadorias_lancar",
+  retiradas_criar: "retiradas_lancar"
+} as const satisfies Partial<Record<Permissao, string>>;
+
+// Dominios de lancamento com dataPagamento (o "D/Pago" e enforcavel na Fase 1). Transferencia e
+// entradas ficam de fora do enforcement de pagamento (transferencia = movimento imediato sem
+// dataPagamento; entradas = venda por integracao).
+export const dominiosLancamentoPagavel = ["despesas", "mercadorias", "retiradas"] as const;
+export type DominioLancamentoPagavel = (typeof dominiosLancamentoPagavel)[number];
 
 export function temPermissao(
   permissoesUsuario: readonly Permissao[] | null | undefined,

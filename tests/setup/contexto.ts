@@ -11,7 +11,10 @@ export type PerfilTeste =
   | "tesouraria"
   | "semPermissao"
   | "multiempresa"
-  | "discriminador";
+  | "discriminador"
+  // Ciclo de vida R7 (Fase 1): operadores de caixa com perfis de pagamento distintos para a matriz.
+  | "caixaCiclo"
+  | "financeiroCiclo";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -63,7 +66,13 @@ export const idsTeste = {
   maloteA: "11111111-1111-4111-8111-111111111801",
   maloteB: "33333333-3333-4333-8333-333333333801",
   lacreA: "11111111-1111-4111-8111-111111111901",
-  lacreB: "33333333-3333-4333-8333-333333333901"
+  lacreB: "33333333-3333-4333-8333-333333333901",
+  cargoCaixaCiclo: "11111111-1111-4111-8111-111111112001",
+  colaboradorCaixaCiclo: "11111111-1111-4111-8111-111111112002",
+  colaboradorCargoCaixaCiclo: "11111111-1111-4111-8111-111111112003",
+  cargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112011",
+  colaboradorFinanceiroCiclo: "11111111-1111-4111-8111-111111112012",
+  colaboradorCargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112013"
 } as const;
 
 export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; senha: string }> = {
@@ -89,5 +98,15 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "discriminador.integracao@padaria.local",
     nome: "Discriminador Integracao",
     senha: "Teste#2026!discrimina"
+  },
+  caixaCiclo: {
+    email: "caixa-ciclo.integracao@padaria.local",
+    nome: "Caixa Ciclo Integracao",
+    senha: "Teste#2026!caixaciclo"
+  },
+  financeiroCiclo: {
+    email: "financeiro-ciclo.integracao@padaria.local",
+    nome: "Financeiro Ciclo Integracao",
+    senha: "Teste#2026!finciclo"
   }
 };

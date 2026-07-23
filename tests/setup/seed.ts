@@ -121,6 +121,41 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoDiscriminador,
     role: "usuario_comum",
     permissoes: ["mercadorias_visualizar", "mercadorias_discriminar", "despesas_visualizar", "despesas_discriminar"]
+  },
+  {
+    // Ciclo de vida R7 (Fase 1): opera caixa e lanca/edita despesa, mas NAO paga, NAO ve/edita pago.
+    perfil: "caixaCiclo",
+    cargoId: idsTeste.cargoCaixaCiclo,
+    colaboradorId: idsTeste.colaboradorCaixaCiclo,
+    colaboradorCargoId: idsTeste.colaboradorCargoCaixaCiclo,
+    role: "usuario_comum",
+    permissoes: [
+      "caixa_operar",
+      "menu_caixa_mostrar",
+      "despesas_visualizar",
+      "despesas_criar",
+      "despesas_editar",
+      "menu_despesas_mostrar"
+    ]
+  },
+  {
+    // Opera caixa E tem o ciclo de pagamento completo de despesas (pagar + *_dpago) — lado "com permissao".
+    perfil: "financeiroCiclo",
+    cargoId: idsTeste.cargoFinanceiroCiclo,
+    colaboradorId: idsTeste.colaboradorFinanceiroCiclo,
+    colaboradorCargoId: idsTeste.colaboradorCargoFinanceiroCiclo,
+    role: "usuario_comum",
+    permissoes: [
+      "caixa_operar",
+      "menu_caixa_mostrar",
+      "despesas_visualizar",
+      "despesas_criar",
+      "despesas_editar",
+      "despesas_pagar",
+      "despesas_editar_dpago",
+      "despesas_visualizar_dpago",
+      "menu_despesas_mostrar"
+    ]
   }
 ];
 

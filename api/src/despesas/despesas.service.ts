@@ -11,14 +11,16 @@ import type {
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
+  exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
+  exigirPermissaoPagar,
   obterCaixaParaLancamento,
+  podeVerLancamentosPagos,
   somaConfereCentavos,
   validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
-  resolverDataPagamentoLancamento,
   validarEdicaoNoCaixaAberto,
   validarReferenciasDespesa
 } from "../lancamentos/lancamentos.dominio.js";
@@ -43,20 +45,23 @@ export function validarDespesa(dados: DespesaPayload): void {
 
 export async function listarDespesas(
   query: DespesasQuery,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[] | null,
+  perfil?: PerfilUsuario
 ): Promise<DespesaDto[]> {
   if (empresasPermitidasIds?.length === 0) return [];
-  return listarDespesasRepository(query, empresasPermitidasIds);
+  // visualizar_dpago (R7): sem a permissao, a listagem nunca traz lancamentos ja pagos (server-side).
+  const esconderPagos = !perfil || !podeVerLancamentosPagos(perfil.permissoes, "despesas");
+  return listarDespesasRepository(query, empresasPermitidasIds, esconderPagos);
 }
 
 export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_criar");
   validarDespesa(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  const normalizados = {
-    ...dados,
-    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
-  };
+  // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo: *_pagar OU o legado
+  // caixas_gerenciar). Sem, 403 em vez do antigo strip silencioso.
+  exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento);
+  const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
@@ -108,15 +113,16 @@ export async function atualizarDespesa(
   exigirPermissaoLancamento(perfil.permissoes, "despesas_editar");
   validarDespesa(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  const normalizados = {
-    ...dados,
-    dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
-  };
   return executarEmTransacao(async (tx) => {
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
+    // exige *_pagar. Ambos comparam com o estado atual do registro.
+    exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);
+    exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento, existente!.dataPagamento ?? null);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
     await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: despesaId, computar };
   });

@@ -13,10 +13,12 @@ import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from ".
 
 export async function listarDespesasRepository(
   query: DespesasQuery,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[] | null,
+  esconderPagos = false
 ): Promise<DespesaDto[]> {
   const filtros = filtrosEmpresa(despesas, query, empresasPermitidasIds);
-  if (query.somentePendentes) filtros.push(isNull(despesas.dataPagamento));
+  // visualizar_dpago: sem a permissao (esconderPagos), so lancamentos NAO pagos saem da listagem.
+  if (query.somentePendentes || esconderPagos) filtros.push(isNull(despesas.dataPagamento));
   if (query.dataInicio) filtros.push(gte(despesas.dataVencimento, query.dataInicio));
   if (query.dataFim) filtros.push(lte(despesas.dataVencimento, query.dataFim));
   if (query.caixaId) filtros.push(eq(despesas.caixaId, query.caixaId));

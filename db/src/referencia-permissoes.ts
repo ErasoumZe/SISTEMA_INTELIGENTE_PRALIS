@@ -20,9 +20,11 @@ const permissaoAcessoPorTela = {
   despesas: "despesas_visualizar",
   mercadorias: "mercadorias_visualizar",
   retiradas: "retiradas_visualizar",
-  // NOTA (auditoria): fechamento_com_diferenca_visualizar e apenas GATE DE MENU (mostra/oculta a
+  // NOTA (auditoria P2): fechamento_com_diferenca_visualizar e apenas GATE DE MENU (mostra/oculta a
   // tela). Nenhuma rota o valida; a tela de fechamento roda sob caixa_operar por baixo. Mantido como
   // permissao de acesso do menu "fechamento" so para visibilidade.
+  // TODO(M3): o enforcement real de "lancar com diferenca" + a notificacao a Tesouraria/Gerencia/
+  // Financeiro/Admin sao R9/D8 (doc 02) — Fase 1 NAO muda comportamento aqui.
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
   malotes: "cadastro_malotes_visualizar",
@@ -114,6 +116,14 @@ export function normalizarNomeCargo(nome: string): string {
     .replace(/\p{Diacritic}/gu, "");
 }
 
+// Ciclo de vida R7/R10 (Fase 1, doc 09 §4): gera os codigos de acao por dominio de lancamento
+// financeiro. Transferencia entra na distribuicao por paridade do §4, ainda que pagar/*_dpago
+// fiquem inertes nela (sem dataPagamento) ate o M3.
+const DOMINIOS_LANCAMENTO_FINANCEIRO = ["despesas", "mercadorias", "retiradas", "transferencias"] as const;
+function acoesLancamentoPorDominio(...acoes: string[]): Permissao[] {
+  return DOMINIOS_LANCAMENTO_FINANCEIRO.flatMap((dominio) => acoes.map((acao) => `${dominio}_${acao}` as Permissao));
+}
+
 export const permissoesPorCargo: Record<string, Permissao[]> = {
   Caixa: permissoesDoCargo({
     ativas: [
@@ -139,7 +149,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   }),
   Tesouraria: permissoesDoCargo({
     ativas: ["malotes", "transferencias"],
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar"]
+    // Lanca transferencia + CONFERE (D7 — conferencia = Financeiro/Gerencia/Tesouraria). Confere no
+    // dominio que acessa (transferencias); os demais dominios ela nao ve.
+    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
   }),
   Gerencia: permissoesDoCargo({
     ativas: [
@@ -181,7 +193,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_turnos_visualizar",
       "cadastro_turnos_criar",
       "cadastro_turnos_editar",
-      "cadastro_turnos_excluir"
+      "cadastro_turnos_excluir",
+      // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
+      // (mercadorias_editar faltava; os demais editar ela ja tinha acima.)
+      "mercadorias_editar",
+      ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
   Compras: permissoesDoCargo({
@@ -227,12 +243,24 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "despesas_discriminar",
       "mercadorias_criar",
       "mercadorias_discriminar",
+      "mercadorias_editar",
       "retiradas_criar",
       "retiradas_editar",
       "notas_fiscais_importar",
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
-      "cadastro_formas_pagamento_criar"
+      "cadastro_formas_pagamento_criar",
+      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e as
+      // variantes *_dpago (mexer em lancamento ja pago). E o unico cargo com _dpago (fora o admin).
+      ...acoesLancamentoPorDominio(
+        "pagar",
+        "efetuar",
+        "conferir",
+        "editar_dpago",
+        "visualizar_dpago",
+        "excluir",
+        "excluir_dpago"
+      )
     ]
   })
 };

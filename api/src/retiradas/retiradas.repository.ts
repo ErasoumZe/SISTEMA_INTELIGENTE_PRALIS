@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDetalheDto, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
@@ -7,10 +7,13 @@ import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from ".
 
 export async function listarRetiradasRepository(
   query: RetiradasQuery,
-  empresasPermitidasIds: string[] | null
+  empresasPermitidasIds: string[] | null,
+  esconderPagos = false
 ): Promise<RetiradaDto[]> {
   const filtros = filtrosEmpresa(retiradas, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(retiradas.caixaId, query.caixaId));
+  // visualizar_dpago: sem a permissao (esconderPagos), so retiradas NAO pagas saem da listagem.
+  if (esconderPagos) filtros.push(isNull(retiradas.dataPagamento));
   return banco
     .select({
       id: retiradas.id,
