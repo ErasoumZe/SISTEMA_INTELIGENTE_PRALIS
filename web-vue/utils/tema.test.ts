@@ -81,11 +81,18 @@ describe("resolverTemaDeConfiguracao", () => {
 
 describe("padraoComIdentidade", () => {
   const roxoFabrica: TemaAplicacao = { ...padrao, corPrimaria: "#6d28d9", corSecundaria: "#0891b2" };
+  const laranjaFabrica: TemaAplicacao = { ...padrao, corPrimaria: "#c0521d", corSecundaria: "#b8480f" };
 
-  it("troca as cores de fabrica (roxo/teal) pelo laranja Pralis", () => {
+  it("troca as cores de fabrica (roxo/teal) pela marca neutra", () => {
     const efetivo = padraoComIdentidade(roxoFabrica);
-    expect(efetivo.corPrimaria).toBe("#c0521d");
-    expect(efetivo.corSecundaria).toBe("#b8480f");
+    expect(efetivo.corPrimaria).toBe("#6515dd");
+    expect(efetivo.corSecundaria).toBe("#35128c");
+  });
+
+  it("troca o laranja Pralis persistido pela marca neutra", () => {
+    const efetivo = padraoComIdentidade(laranjaFabrica);
+    expect(efetivo.corPrimaria).toBe("#6515dd");
+    expect(efetivo.corSecundaria).toBe("#35128c");
   });
 
   it("mantem cores personalizadas (campo a campo)", () => {
@@ -93,12 +100,12 @@ describe("padraoComIdentidade", () => {
     const soPrimariaCustom: TemaAplicacao = { ...padrao, corSecundaria: "#0891b2" };
     const efetivo = padraoComIdentidade(soPrimariaCustom);
     expect(efetivo.corPrimaria).toBe(padrao.corPrimaria);
-    expect(efetivo.corSecundaria).toBe("#b8480f");
+    expect(efetivo.corSecundaria).toBe("#35128c");
   });
 
   it("resolver aplica a identidade sobre o padrao de fabrica", () => {
     const config: ConfiguracaoAparenciaEmpresa = { padrao: roxoFabrica, especifico: [] };
-    expect(resolverTemaDeConfiguracao(config, "padrao")?.corPrimaria).toBe("#c0521d");
+    expect(resolverTemaDeConfiguracao(config, "padrao")?.corPrimaria).toBe("#6515dd");
   });
 });
 
