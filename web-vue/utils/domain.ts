@@ -400,14 +400,6 @@ export const opcoesNovo: AcaoNovo[] = [
     permissao: "retiradas_criar",
     icone: "mdi-wallet",
     cor: "warning"
-  },
-  {
-    tela: "malote",
-    titulo: "Malote",
-    subtitulo: "Numero do lacre + valor",
-    permissao: "cadastro_malotes_criar",
-    icone: "mdi-briefcase",
-    cor: "secondary"
   }
 ];
 

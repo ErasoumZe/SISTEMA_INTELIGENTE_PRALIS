@@ -4,6 +4,7 @@ import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@pa
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 import { totalItemMercadoriaForm } from "~/utils/operacoes";
+import OperacaoDespesaModal from "~/components/operacoes/OperacaoDespesaModal.vue";
 
 const tiposDescontoItem = [
   { title: "Sem desconto", value: "" },
@@ -181,7 +182,10 @@ const validacaoQtdPreview = computed(() =>
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="modalOperacaoAberto" max-width="960" scrollable>
+  <!-- Despesa tem modal proprio (fiel ao mockup); o modal generico abaixo cobre os demais tipos. -->
+  <OperacaoDespesaModal />
+
+  <v-dialog v-if="entidadeNova !== 'despesa'" v-model="modalOperacaoAberto" max-width="960" scrollable>
     <v-card>
       <v-card-title>
         {{
@@ -280,9 +284,9 @@ const validacaoQtdPreview = computed(() =>
             <v-select
               v-model="form.maloteId"
               :items="opcoesEmpresa.malotes"
-              item-title="codigo"
+              item-title="numeroLacre"
               item-value="id"
-              label="Malote"
+              label="Lacre (nº do malote)"
               clearable
             />
           </v-col>
@@ -424,47 +428,7 @@ const validacaoQtdPreview = computed(() =>
           </section>
         </div>
 
-        <section v-if="entidadeNova === 'despesa'" class="mt-2">
-          <v-switch
-            v-model="discriminandoDespesa"
-            label="Discriminar itens da despesa"
-            color="primary"
-            :disabled="modoDiscriminacao"
-          />
-          <div v-if="discriminandoDespesa">
-            <div class="d-flex justify-end mb-2">
-              <v-btn
-                size="small"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="itensDespesa.push({ descricao: '', valor: '', grupoDespesaId: '' })"
-                >Adicionar item</v-btn
-              >
-            </div>
-            <v-row v-for="(item, index) in itensDespesa" :key="`despesa-${index}`" dense>
-              <v-col cols="12" md="5"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
-              <v-col cols="12" md="4">
-                <v-select
-                  v-model="item.grupoDespesaId"
-                  :items="opcoesEmpresa.gruposDespesas"
-                  item-title="nome"
-                  item-value="id"
-                  label="Grupo"
-                  clearable
-                />
-              </v-col>
-              <v-col cols="8" md="2"><v-text-field v-model="item.valor" type="number" label="Valor" /></v-col>
-              <v-col cols="4" md="1" class="d-flex align-center justify-end">
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  :disabled="itensDespesa.length === 1"
-                  @click="itensDespesa.splice(index, 1)"
-                />
-              </v-col>
-            </v-row>
-          </div>
-        </section>
+        <!-- Despesa (incl. discriminacao de itens) agora vive no OperacaoDespesaModal proprio, acima. -->
 
         <section v-if="entidadeNova === 'mercadoria'" class="mt-2">
           <v-switch
