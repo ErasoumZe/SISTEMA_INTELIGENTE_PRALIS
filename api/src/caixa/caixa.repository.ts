@@ -36,6 +36,7 @@ import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
 import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
+import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
@@ -236,7 +237,7 @@ export async function criarCaixaRepository(
       usuarioCaixaId: input.usuarioCaixaId,
       colaboradorId: input.colaboradorId,
       turnoId: input.turnoId,
-      dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10),
+      dataMovimento: diaNegocio(input.dataHoraAbertura),
       dataHoraAbertura: input.dataHoraAbertura,
       abertoEm: new Date(),
       tokenEdicao: input.tokenEdicao,
@@ -366,7 +367,7 @@ export async function atualizarAberturaCaixaRepository(
       pdvId: input.pdvId,
       usuarioCaixaId: input.usuarioCaixaId,
       colaboradorId: input.colaboradorId,
-      dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10),
+      dataMovimento: diaNegocio(input.dataHoraAbertura),
       dataHoraAbertura: input.dataHoraAbertura,
       observacao: input.observacao,
       tokenEdicao: input.tokenEdicao
@@ -524,7 +525,7 @@ export async function atualizarHorarioCaixaRepository(
     ...(input.dataHoraAbertura
       ? {
           dataHoraAbertura: input.dataHoraAbertura,
-          dataMovimento: input.dataHoraAbertura.toISOString().slice(0, 10)
+          dataMovimento: diaNegocio(input.dataHoraAbertura)
         }
       : {}),
     ...(input.dataHoraFechamento ? { dataHoraFechamento: input.dataHoraFechamento } : {})

@@ -15,6 +15,7 @@ import {
   type ImportarColaboradoresPayload
 } from "@padaria/shared/colaboradores";
 import { diasSemana } from "@padaria/shared/colaboradores";
+import { diaNegocio } from "@padaria/shared/datas";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
 import {
   apenasDigitos,
@@ -118,7 +119,7 @@ export async function salvarColaborador(id: string | null, body: DadosExternos) 
           setorId: dados.setorId ?? null,
           cargoId: dados.cargoId,
           remuneracaoMinuto: 1,
-          dataInicio: new Date().toISOString().slice(0, 10),
+          dataInicio: diaNegocio(new Date()),
           ativo: true
         },
         tx

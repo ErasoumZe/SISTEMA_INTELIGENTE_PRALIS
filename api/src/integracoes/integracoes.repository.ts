@@ -258,7 +258,7 @@ export async function listarHistoricoIntegracaoRepository(
 
   const porDiaTipo = new Map<string, IntegracaoHistoricoDto>();
   for (const linha of linhas) {
-    const dia = linha.criadoEm.toISOString().slice(0, 10);
+    const dia = diaNegocio(linha.criadoEm);
     const chave = `${dia}:${linha.tipo}`;
     const atual =
       porDiaTipo.get(chave) ??

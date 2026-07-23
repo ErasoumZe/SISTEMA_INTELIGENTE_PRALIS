@@ -22,6 +22,7 @@ import {
   vendaIntegracaoAgregadaSchema
 } from "@padaria/shared/integracoes";
 import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { diaNegocio, somarDias } from "@padaria/shared/datas";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -392,12 +393,10 @@ export async function listarHistoricoIntegracao(query: IntegracaoQuery, perfil: 
 // para um aviso interno; reinicia a cada deploy (sem tabela nova, por decisao de nao criar migrations).
 const alertasSilencioEnviados = new Set<string>();
 
-// yyyy-MM-dd do dia anterior a `hoje` (UTC, como o resto do sistema fatia datas). "Todo dia e dia
+// yyyy-MM-dd do dia anterior a `hoje`, no fuso do negocio (America/Sao_Paulo). "Todo dia e dia
 // util": nao pula fim de semana/feriado.
 function diaAnteriorIso(hoje: Date): string {
-  const dia = new Date(hoje);
-  dia.setUTCDate(dia.getUTCDate() - 1);
-  return dia.toISOString().slice(0, 10);
+  return somarDias(diaNegocio(hoje), -1);
 }
 
 function assuntoSilencio(dia: string, nomeEmpresa: string): string {

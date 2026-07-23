@@ -1,5 +1,6 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
+import { diaNegocio } from "@padaria/shared/datas";
 import { auth } from "../auth/config.js";
 import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
@@ -97,7 +98,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         setorId: novoColaborador!.setorId,
         cargoId: novoColaborador!.cargoId,
         remuneracaoMinuto: 1,
-        dataInicio: new Date().toISOString().slice(0, 10),
+        dataInicio: diaNegocio(new Date()),
         ativo: true
       },
       tx
@@ -143,7 +144,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         setorId: novoColaborador.setorId,
         cargoId: novoColaborador.cargoId,
         remuneracaoMinuto: 1,
-        dataInicio: new Date().toISOString().slice(0, 10),
+        dataInicio: diaNegocio(new Date()),
         ativo: true
       },
       tx

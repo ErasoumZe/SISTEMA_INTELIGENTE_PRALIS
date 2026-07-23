@@ -18,6 +18,7 @@ import type {
   TotaisHistoricoCaixa
 } from "@padaria/shared/caixa";
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
+import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
@@ -309,7 +310,7 @@ async function abrirCaixaEmTransacao(
           contaCofreId: aberturaMalote.contaCofreId,
           contaCaixaId: pdv.contaId,
           valorCentavos: aberturaMalote.valorCentavos,
-          dataReferencia: dataHoraAbertura.toISOString().slice(0, 10),
+          dataReferencia: diaNegocio(dataHoraAbertura),
           maloteId: aberturaMalote.maloteId,
           lacreMaloteId: aberturaMalote.lacreId,
           descricao: `Abertura de caixa - malote ${aberturaMalote.codigo}`,
@@ -533,7 +534,7 @@ export async function acertarSaldoCaixaOperacional(
         valorDiferencaCentavos: saldoCentavos,
         observacao: dados.observacao?.trim() || null,
         criadoPor: perfil.usuarioId,
-        data: new Date().toISOString().slice(0, 10)
+        data: diaNegocio(new Date())
       },
       tx
     );
