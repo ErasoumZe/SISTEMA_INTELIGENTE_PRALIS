@@ -404,7 +404,7 @@ export const opcoesNovo: AcaoNovo[] = [
   {
     tela: "malote",
     titulo: "Malote",
-    subtitulo: "Cadastro de malote e lacres",
+    subtitulo: "Numero do lacre + valor",
     permissao: "cadastro_malotes_criar",
     icone: "mdi-briefcase",
     cor: "secondary"

@@ -8,7 +8,6 @@ import {
   criarMalote,
   exportarMalote,
   importarMalotes,
-  listarLacresMalote,
   listarMalotes,
   mensagemErroMalote,
   validarLacre
@@ -40,20 +39,6 @@ export async function registrarRotasMalotes(app: FastifyInstance): Promise<void>
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
-    }
-  );
-
-  app.get(
-    "/api/malotes/:maloteId/lacres",
-    { preHandler: exigirPermissao("transferencias_visualizar") },
-    async (request) => {
-      const { maloteId } = maloteParamsSchema.parse(request.params);
-      const query = malotesQuerySchema.parse(request.query);
-      return paginadoDeArray(
-        await listarLacresMalote(maloteId, request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []),
-        query.page,
-        query.pageSize
-      );
     }
   );
 

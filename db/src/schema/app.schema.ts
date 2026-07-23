@@ -695,11 +695,13 @@ export const malotes = pgTable(
   {
     id: idUuid,
     empresaId,
-    codigo: text("codigo").notNull(),
-    descricao: text("descricao"),
+    // O malote E o lacre (D3): o numero do lacre e a identidade unica do malote. Nao existe mais
+    // "codigo do malote" nem o "saco". Vem impresso de fonte externa e e digitado pelo operador.
+    numeroLacre: text("numero_lacre").notNull(),
     // Valor do malote (fundo/troco emprestado do cofre). Vira a divida do caixa na abertura (R8).
     valor: valorMonetario("valor").notNull().default("0"),
-    // Ciclo do malote fisico: disponivel -> em_uso (selecionado numa abertura) -> devolvido (M2).
+    // Ciclo do malote/lacre: disponivel -> em_uso (aberto num caixa ou usado numa sangria/retorno)
+    // -> devolvido (M2). Um so ciclo (antes havia status duplo malote+lacre).
     status: text("status").notNull().default("disponivel"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -707,27 +709,8 @@ export const malotes = pgTable(
     idImportado: uuid("id_importado")
   },
   (table) => [
-    unique("malotes_empresa_id_codigo_key").on(table.empresaId, table.codigo),
+    uniqueIndex("malotes_empresa_numero_lacre_unico_idx").on(table.empresaId, sql`lower(${table.numeroLacre})`),
     check("malotes_status_check", sql`${table.status} in ('disponivel', 'em_uso', 'devolvido')`)
-  ]
-);
-
-export const lacresMalotes = pgTable(
-  "lacres_malotes",
-  {
-    id: idUuid,
-    empresaId,
-    maloteId: uuid("malote_id")
-      .notNull()
-      .references(() => malotes.id, { onDelete: "cascade" }),
-    numero: text("numero").notNull(),
-    status: text("status").notNull().default("disponivel"),
-    usadoEm: timestamp("usado_em", { withTimezone: true })
-  },
-  (table) => [
-    unique("lacres_malotes_malote_id_numero_key").on(table.maloteId, table.numero),
-    uniqueIndex("lacres_malotes_empresa_numero_unico_idx").on(table.empresaId, sql`lower(${table.numero})`),
-    check("lacres_malotes_status_check", sql`${table.status} in ('disponivel', 'usado', 'cancelado')`)
   ]
 );
 
@@ -1144,8 +1127,9 @@ export const transferencias = pgTable(
     contaDestinoId: uuid("conta_destino_id")
       .notNull()
       .references(() => contas.id),
+    // O malote/lacre envolvido na transferencia (abertura usa o malote de abertura; sangria/retorno
+    // usa o malote-selo da volta). Antes havia um lacre_malote_id separado — agora malote === lacre.
     maloteId: uuid("malote_id").references(() => malotes.id),
-    lacreMaloteId: uuid("lacre_malote_id").references(() => lacresMalotes.id),
     // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
     // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
     tipo: text("tipo").notNull().default("suprimento"),

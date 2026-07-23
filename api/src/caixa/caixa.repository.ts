@@ -23,7 +23,6 @@ import {
   contas,
   empresas,
   gruposDespesas,
-  lacresMalotes,
   malotes,
   pdvs,
   perfisUsuarios,
@@ -287,7 +286,7 @@ export async function buscarMaloteParaAberturaRepository(
   db: ExecutorBanco = banco
 ) {
   const [malote] = await db
-    .select({ id: malotes.id, codigo: malotes.codigo, valor: malotes.valor, status: malotes.status })
+    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, valor: malotes.valor, status: malotes.status })
     .from(malotes)
     .where(and(eq(malotes.id, maloteId), eq(malotes.empresaId, empresaId)))
     .limit(1);
@@ -296,20 +295,6 @@ export async function buscarMaloteParaAberturaRepository(
 
 export async function marcarMaloteEmUsoRepository(maloteId: string, db: ExecutorBanco = banco): Promise<void> {
   await db.update(malotes).set({ status: "em_uso" }).where(eq(malotes.id, maloteId));
-}
-
-// Lacre da IDA: precisa pertencer ao malote selecionado (D1/D3 — o lacre e a identidade do malote).
-export async function buscarLacreDoMaloteRepository(maloteId: string, numero: string, db: ExecutorBanco = banco) {
-  const [lacre] = await db
-    .select({ id: lacresMalotes.id, numero: lacresMalotes.numero, status: lacresMalotes.status })
-    .from(lacresMalotes)
-    .where(and(eq(lacresMalotes.maloteId, maloteId), ilike(lacresMalotes.numero, numero)))
-    .limit(1);
-  return lacre ?? null;
-}
-
-export async function marcarLacreUsadoRepository(lacreId: string, db: ExecutorBanco = banco): Promise<void> {
-  await db.update(lacresMalotes).set({ status: "usado", usadoEm: new Date() }).where(eq(lacresMalotes.id, lacreId));
 }
 
 // Transferencia automatica de abertura (cofre -> caixa), tipo 'abertura', criada pelo servidor na
@@ -323,7 +308,6 @@ export async function criarTransferenciaAberturaRepository(
     valorCentavos: number;
     dataReferencia: string;
     maloteId: string;
-    lacreMaloteId: string | null;
     descricao: string;
     criadoPor: string;
   },
@@ -340,7 +324,6 @@ export async function criarTransferenciaAberturaRepository(
       contaOrigemId: input.contaCofreId,
       contaDestinoId: input.contaCaixaId,
       maloteId: input.maloteId,
-      lacreMaloteId: input.lacreMaloteId,
       tipo: "abertura",
       criadoPor: input.criadoPor
     })
@@ -363,14 +346,19 @@ export async function proximaOrdemTransferenciaRepository(
   return Number(linha?.total ?? 0) + 1;
 }
 
-// Lacre disponivel da empresa por numero — o retorno/sangria usa um lacre NOVO (D5 opcional).
-export async function buscarLacreEmpresaRepository(empresaId: string, numero: string, db: ExecutorBanco = banco) {
-  const [lacre] = await db
-    .select({ id: lacresMalotes.id, numero: lacresMalotes.numero, status: lacresMalotes.status })
-    .from(lacresMalotes)
-    .where(and(eq(lacresMalotes.empresaId, empresaId), ilike(lacresMalotes.numero, numero)))
+// Malote-selo disponivel da empresa por numero de lacre — o retorno/sangria usa um malote como selo
+// da volta (D5 opcional; o malote E o lacre).
+export async function buscarMaloteDisponivelPorLacreRepository(
+  empresaId: string,
+  numero: string,
+  db: ExecutorBanco = banco
+) {
+  const [malote] = await db
+    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, status: malotes.status })
+    .from(malotes)
+    .where(and(eq(malotes.empresaId, empresaId), ilike(malotes.numeroLacre, numero)))
     .limit(1);
-  return lacre ?? null;
+  return malote ?? null;
 }
 
 // Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
@@ -385,7 +373,7 @@ export async function criarTransferenciaCofreRepository(
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
-    lacreMaloteId: string | null;
+    maloteId: string | null;
     descricao: string;
     observacao: string | null;
     criadoPor: string;
@@ -404,7 +392,7 @@ export async function criarTransferenciaCofreRepository(
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
-      lacreMaloteId: input.lacreMaloteId,
+      maloteId: input.maloteId,
       tipo: input.tipo,
       ordem: input.ordem,
       criadoPor: input.criadoPor
@@ -425,11 +413,12 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         valorOriginal: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
-        lacreNumero: lacresMalotes.numero,
+        // O malote E o lacre: o "lacre" da linha e o numero de lacre do malote da transferencia.
+        lacreNumero: malotes.numeroLacre,
         dataTransferencia: transferencias.dataTransferencia
       })
       .from(transferencias)
-      .leftJoin(lacresMalotes, eq(lacresMalotes.id, transferencias.lacreMaloteId))
+      .leftJoin(malotes, eq(malotes.id, transferencias.maloteId))
       .where(
         and(
           eq(transferencias.caixaId, caixaId),

@@ -41,7 +41,6 @@ import {
   integracoesRegistros,
   integracoesSemNovidade,
   integracoesVinculos,
-  lacresMalotes,
   malotes,
   mercadorias,
   mercadoriasItens,
@@ -616,7 +615,9 @@ await banco.delete(colaboradores).where(
     )
   )
 );
-await banco.delete(malotes).where(and(eq(malotes.empresaId, empresaId), eq(malotes.codigo, "MALOTE-001")));
+await banco
+  .delete(malotes)
+  .where(and(eq(malotes.empresaId, empresaId), inArray(malotes.numeroLacre, ["LACRE-001", "LACRE-002", "LACRE-003"])));
 await banco
   .delete(formasPagamento)
   .where(
@@ -995,29 +996,19 @@ await banco.insert(integracoesCamposConfig).values(
   }))
 );
 
-const malote = (
-  await banco
-    .insert(malotes)
-    .values({
-      empresaId,
-      codigo: "MALOTE-001",
-      descricao: "Malote seed",
-      criadoPor: usuarioIds.get("tesouraria@email.com") ?? null
-    })
-    .returning({ id: malotes.id })
-)[0];
-if (!malote) throw new Error("Malote nao foi criado");
-
-const lacres = await banco
-  .insert(lacresMalotes)
+// Malote === lacre (D3): cada malote e um lacre com valor e status proprios. Um em_uso (usado numa
+// transferencia seed), um disponivel (pronto p/ abrir caixa) e um devolvido.
+const criadoPorTesouraria = usuarioIds.get("tesouraria@email.com") ?? null;
+const malotesSeed = await banco
+  .insert(malotes)
   .values([
-    { empresaId, maloteId: malote.id, numero: "LACRE-001", status: "usado", usadoEm: dataHora(-1, 16) },
-    { empresaId, maloteId: malote.id, numero: "LACRE-002" },
-    { empresaId, maloteId: malote.id, numero: "LACRE-003", status: "cancelado" }
+    { empresaId, numeroLacre: "LACRE-001", valor: "200.00", status: "em_uso", criadoPor: criadoPorTesouraria },
+    { empresaId, numeroLacre: "LACRE-002", valor: "490.00", status: "disponivel", criadoPor: criadoPorTesouraria },
+    { empresaId, numeroLacre: "LACRE-003", valor: "0.00", status: "devolvido", criadoPor: criadoPorTesouraria }
   ])
-  .returning({ id: lacresMalotes.id, numero: lacresMalotes.numero });
-const lacreTransferencia = lacres.find((lacre) => lacre.numero === "LACRE-001");
-if (!lacreTransferencia) throw new Error("Lacre de transferencia nao foi criado");
+  .returning({ id: malotes.id, numeroLacre: malotes.numeroLacre });
+const malote = malotesSeed.find((item) => item.numeroLacre === "LACRE-001");
+if (!malote) throw new Error("Malote nao foi criado");
 
 const caixaFechado = (
   await banco
@@ -1205,12 +1196,11 @@ await banco.insert(transferencias).values({
   caixaId: caixaFechado.id,
   dataReferencia: dataISO(-1),
   descricao: "Transferencia para banco seed",
-  observacao: "Transferencia fake com malote e lacre",
+  observacao: "Transferencia fake com malote (lacre)",
   valorOriginal: "20.00",
   contaOrigemId: contaCaixa.id,
   contaDestinoId: contaBanco.id,
   maloteId: malote.id,
-  lacreMaloteId: lacreTransferencia.id,
   criadoPor: usuarioIds.get("tesouraria@email.com") ?? null
 });
 

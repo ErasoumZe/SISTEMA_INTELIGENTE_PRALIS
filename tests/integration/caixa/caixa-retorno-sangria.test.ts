@@ -41,8 +41,8 @@ describe("caixa - retorno/sangria (M2)", () => {
     return json<{ data: { id: string } }>(r).data.id;
   }
 
-  async function criarMalote(codigo: string, valor: number, lacres: string[]) {
-    return criar("/api/malotes", { empresaId, codigo, valor, lacres });
+  async function criarMalote(numeroLacre: string, valor: number) {
+    return criar("/api/malotes", { empresaId, numeroLacre, valor });
   }
 
   async function abrir(nome: string, dataHora: string, maloteId?: string) {
@@ -108,7 +108,7 @@ describe("caixa - retorno/sangria (M2)", () => {
   }
 
   it("Sangria NAO desconta o deficit em dobro (saldoProprio correto)", async () => {
-    const maloteId = await criarMalote("MAL-SANGRIA", 490, ["LAC-SANGRIA"]);
+    const maloteId = await criarMalote("LAC-SANGRIA", 490);
     const { contaId, pdvId, caixaId } = await abrir("sangria", "2026-08-01T08:00", maloteId);
 
     await venda(contaId, pdvId, "2026-08-01", 490);
@@ -138,7 +138,7 @@ describe("caixa - retorno/sangria (M2)", () => {
   });
 
   it("Agrega por caixa+dia: 1a/2a saida (abertura+suprimento) e 1a/2a entrada (sangria+retorno)", async () => {
-    const maloteId = await criarMalote("MAL-AGREGA", 490, ["LAC-AGREGA"]);
+    const maloteId = await criarMalote("LAC-AGREGA", 490);
     const { contaId, caixaId } = await abrir("agrega", "2026-08-03T08:00", maloteId);
 
     // 2o suprimento (cofre -> caixa) pela rota manual de transferencias.

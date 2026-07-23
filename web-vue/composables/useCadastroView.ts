@@ -123,10 +123,13 @@ export function useCadastroView(params: {
         .itens.map(removerPermissoesOcultasDaLinha)
         .filter((linha): linha is LinhaCadastro => Boolean(linha));
     if (tela === "malotes")
+      // O malote E o lacre (D3): lista por lacre + valor + status (sem codigo, sem saco). O status
+      // cru vai para a celula; o CadastroTable pinta o chip (disponivel/em uso/devolvido).
       return listas.malotes.map((item) => ({
         id: item.id,
-        codigo: item.codigo,
-        total_lacres: String(item.totalLacres ?? 0)
+        lacre: item.numeroLacre ?? "",
+        valor: dinheiro(item.valor ?? 0),
+        status: item.status ?? ""
       }));
     if (tela === "grupos") {
       return [
@@ -187,7 +190,7 @@ export function useCadastroView(params: {
       areas_setores: "Areas e setores organizacionais.",
       usuarios: "Usuarios e acessos do sistema.",
       permissoes: "Permissoes por cargo, setor ou usuario.",
-      malotes: "Malotes e lacres para transferencias.",
+      malotes: "Cada malote e o seu lacre.",
       colaboradores: "Cadastro de colaboradores.",
       fornecedores: "Cadastro de fornecedores.",
       clientes: "Cadastro de clientes.",
@@ -209,7 +212,7 @@ export function useCadastroView(params: {
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Role", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
-      malotes: ["Codigo", "Total lacres"],
+      malotes: ["Lacre", "Valor", "Status"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento"],
       clientes: ["Nome", "Documento"],
