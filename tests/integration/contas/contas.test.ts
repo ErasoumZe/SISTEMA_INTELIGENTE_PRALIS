@@ -106,7 +106,9 @@ describe("contas integration", () => {
     });
 
     assertOk(resposta);
-    expect(resposta.json()).toMatchObject({ data: { tipo: "contas", inseridos: 4 } });
+    // 4 contas semeadas em A (Caixa/Banco/Livre + Cofre do M1) + a "Conta criada por integracao"
+    // criada no primeiro teste deste arquivo = 5.
+    expect(resposta.json()).toMatchObject({ data: { tipo: "contas", inseridos: 5 } });
 
     const contasCopiadas = await consultarTodos<{ nome: string; importado_de: string; id_importado: string }>(
       "select nome, importado_de, id_importado from contas where empresa_id = $1 and importado_de = $2 order by nome",
@@ -114,9 +116,26 @@ describe("contas integration", () => {
     );
     expect(contasCopiadas).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ nome: "Caixa Integracao", importado_de: idsTeste.empresaA, id_importado: idsTeste.contaCaixa }),
-        expect.objectContaining({ nome: "Banco Integracao", importado_de: idsTeste.empresaA, id_importado: idsTeste.contaBanco }),
-        expect.objectContaining({ nome: "Conta Livre Integracao", importado_de: idsTeste.empresaA, id_importado: idsTeste.contaLivre })
+        expect.objectContaining({
+          nome: "Caixa Integracao",
+          importado_de: idsTeste.empresaA,
+          id_importado: idsTeste.contaCaixa
+        }),
+        expect.objectContaining({
+          nome: "Banco Integracao",
+          importado_de: idsTeste.empresaA,
+          id_importado: idsTeste.contaBanco
+        }),
+        expect.objectContaining({
+          nome: "Conta Livre Integracao",
+          importado_de: idsTeste.empresaA,
+          id_importado: idsTeste.contaLivre
+        }),
+        expect.objectContaining({
+          nome: "Cofre Integracao",
+          importado_de: idsTeste.empresaA,
+          id_importado: idsTeste.contaCofre
+        })
       ])
     );
   });
