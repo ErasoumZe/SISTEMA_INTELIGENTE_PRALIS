@@ -18,7 +18,17 @@ import {
   sum
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { colaboradores, gruposDespesas, pdvs, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
+import {
+  colaboradores,
+  contas,
+  empresas,
+  gruposDespesas,
+  lacresMalotes,
+  malotes,
+  pdvs,
+  perfisUsuarios,
+  turnos
+} from "@padaria/db/schema/cadastro";
 import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -112,6 +122,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
+      dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
     })
     .from(fechamentosCaixa)
@@ -149,6 +160,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
+      dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
     })
     .from(fechamentosCaixa)
@@ -208,6 +220,10 @@ export async function criarCaixaRepository(
     tokenEdicao: string;
     turnoId: string | null;
     observacao: string | null;
+    // Abertura com malote (R8): vinculo do malote/lacre e a divida com o cofre (= valor do malote).
+    maloteAberturaId?: string | null;
+    lacreAbertura?: string | null;
+    dividaCofreCentavos?: number;
   },
   db: ExecutorBanco = banco
 ) {
@@ -225,12 +241,111 @@ export async function criarCaixaRepository(
       abertoEm: new Date(),
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
+      maloteAberturaId: input.maloteAberturaId ?? null,
+      lacreAbertura: input.lacreAbertura ?? null,
+      dividaCofre: centavosParaDecimalBanco(input.dividaCofreCentavos ?? 0),
       status: "aberto",
       criadoPor: input.usuarioId
     })
     .returning({ id: fechamentosCaixa.id });
   if (!caixa) throw new Error("Caixa nao criado");
   return caixa;
+}
+
+// --- Abertura com malote (M1, R8) -------------------------------------------------------------
+// Conta contabil do cofre da empresa (origem da transferencia de abertura). Regra 5: mapeamento
+// explicito; null quando a empresa nao configurou (a abertura com malote falha com mensagem clara).
+export async function buscarContaCofreEmpresaRepository(
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<string | null> {
+  const [empresa] = await db
+    .select({ contaCofreId: empresas.contaCofreId })
+    .from(empresas)
+    .where(eq(empresas.id, empresaId))
+    .limit(1);
+  return empresa?.contaCofreId ?? null;
+}
+
+export async function contaPertenceEmpresaRepository(
+  contaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [conta] = await db
+    .select({ id: contas.id })
+    .from(contas)
+    .where(and(eq(contas.id, contaId), eq(contas.empresaId, empresaId)))
+    .limit(1);
+  return Boolean(conta);
+}
+
+export async function buscarMaloteParaAberturaRepository(
+  maloteId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [malote] = await db
+    .select({ id: malotes.id, codigo: malotes.codigo, valor: malotes.valor, status: malotes.status })
+    .from(malotes)
+    .where(and(eq(malotes.id, maloteId), eq(malotes.empresaId, empresaId)))
+    .limit(1);
+  return malote ?? null;
+}
+
+export async function marcarMaloteEmUsoRepository(maloteId: string, db: ExecutorBanco = banco): Promise<void> {
+  await db.update(malotes).set({ status: "em_uso" }).where(eq(malotes.id, maloteId));
+}
+
+// Lacre da IDA: precisa pertencer ao malote selecionado (D1/D3 — o lacre e a identidade do malote).
+export async function buscarLacreDoMaloteRepository(maloteId: string, numero: string, db: ExecutorBanco = banco) {
+  const [lacre] = await db
+    .select({ id: lacresMalotes.id, numero: lacresMalotes.numero, status: lacresMalotes.status })
+    .from(lacresMalotes)
+    .where(and(eq(lacresMalotes.maloteId, maloteId), ilike(lacresMalotes.numero, numero)))
+    .limit(1);
+  return lacre ?? null;
+}
+
+export async function marcarLacreUsadoRepository(lacreId: string, db: ExecutorBanco = banco): Promise<void> {
+  await db.update(lacresMalotes).set({ status: "usado", usadoEm: new Date() }).where(eq(lacresMalotes.id, lacreId));
+}
+
+// Transferencia automatica de abertura (cofre -> caixa), tipo 'abertura', criada pelo servidor na
+// mesma transacao da abertura. Nasce 'aprovado'/'computar=true' pelos defaults do schema.
+export async function criarTransferenciaAberturaRepository(
+  input: {
+    empresaId: string;
+    caixaId: string;
+    contaCofreId: string;
+    contaCaixaId: string;
+    valorCentavos: number;
+    dataReferencia: string;
+    maloteId: string;
+    lacreMaloteId: string | null;
+    descricao: string;
+    criadoPor: string;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string }> {
+  const [transferencia] = await db
+    .insert(transferencias)
+    .values({
+      empresaId: input.empresaId,
+      caixaId: input.caixaId,
+      dataReferencia: input.dataReferencia,
+      descricao: input.descricao,
+      valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
+      contaOrigemId: input.contaCofreId,
+      contaDestinoId: input.contaCaixaId,
+      maloteId: input.maloteId,
+      lacreMaloteId: input.lacreMaloteId,
+      tipo: "abertura",
+      criadoPor: input.criadoPor
+    })
+    .returning({ id: transferencias.id });
+  if (!transferencia) throw new Error("Transferencia de abertura nao criada");
+  return transferencia;
 }
 
 export async function atualizarAberturaCaixaRepository(

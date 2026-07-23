@@ -251,8 +251,18 @@ for (const nome of ["Dinheiro", "Pix", "Cartao credito", "Cartao debito"]) await
 
 const contaCaixa = await garantirConta("Caixa loja");
 await garantirConta("Banco");
+// Cofre: origem da transferencia automatica de abertura do caixa (R8). Mapeado na empresa (Regra 5)
+// somente quando ainda nao ha um definido — nunca sobrescreve uma escolha manual.
+const contaCofre = await garantirConta("Cofre");
+const [empresaAtual] = await banco
+  .select({ contaCofreId: empresas.contaCofreId })
+  .from(empresas)
+  .where(eq(empresas.id, empresaId));
+if (!empresaAtual?.contaCofreId) {
+  await banco.update(empresas).set({ contaCofreId: contaCofre }).where(eq(empresas.id, empresaId));
+}
 await garantirPdv("PDV 01", "PDV-01", contaCaixa);
-console.info("[seed-referencia] OK grupos, unidades, formas de pagamento, contas e PDV");
+console.info("[seed-referencia] OK grupos, unidades, formas de pagamento, contas, cofre e PDV");
 
 // --- 3) Exemplos de cadastro (fake, deletaveis) ---
 const [grupoInsumos] = await banco

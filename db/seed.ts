@@ -684,14 +684,19 @@ await banco
   .delete(fornecedores)
   .where(and(eq(fornecedores.empresaId, empresaId), eq(fornecedores.nome, "Fornecedor Exemplo")));
 await banco.delete(pdvs).where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.nome, "PDV 01")));
-await banco.delete(contas).where(and(eq(contas.empresaId, empresaId), inArray(contas.nome, ["Caixa loja", "Banco"])));
+await banco
+  .delete(contas)
+  .where(and(eq(contas.empresaId, empresaId), inArray(contas.nome, ["Caixa loja", "Banco", "Cofre"])));
 
 const contaCaixa = (
   await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id })
 )[0];
 const contaBanco = (await banco.insert(contas).values({ empresaId, nome: "Banco" }).returning({ id: contas.id }))[0];
+// Cofre: origem da transferencia automatica de abertura do caixa (R8). Mapeado na empresa abaixo.
+const contaCofre = (await banco.insert(contas).values({ empresaId, nome: "Cofre" }).returning({ id: contas.id }))[0];
 if (!contaCaixa) throw new Error("Conta caixa nao foi criada");
 if (!contaBanco) throw new Error("Conta banco nao foi criada");
+if (!contaCofre) throw new Error("Conta cofre nao foi criada");
 const pdv = (
   await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", contaId: contaCaixa.id }).returning({ id: pdvs.id })
 )[0];
@@ -700,6 +705,7 @@ if (!pdv) throw new Error("PDV nao foi criado");
 await banco
   .update(empresas)
   .set({
+    contaCofreId: contaCofre.id,
     configuracoesAparencia: {
       padrao: {
         corPrimaria: "#6d28d9",

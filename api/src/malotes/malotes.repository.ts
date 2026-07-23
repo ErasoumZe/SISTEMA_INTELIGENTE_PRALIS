@@ -14,6 +14,8 @@ export type MaloteLinha = {
   empresaId: string;
   codigo: string;
   descricao: string | null;
+  valor: string;
+  status: string;
   totalLacres: number;
 };
 
@@ -36,6 +38,8 @@ export async function listarMalotesRepository(): Promise<MaloteLinha[]> {
       empresaId: malotes.empresaId,
       codigo: malotes.codigo,
       descricao: malotes.descricao,
+      valor: malotes.valor,
+      status: malotes.status,
       totalLacres: count(lacresMalotes.id)
     })
     .from(malotes)
@@ -146,6 +150,7 @@ export async function gerarCodigoMaloteRepository(empresaId: string, db: Executo
 export async function criarMaloteRepository(input: {
   empresaId: string;
   codigo: string;
+  valor: string;
   lacres: string[];
   usuarioId?: string;
 }): Promise<{ id: string | undefined }> {
@@ -156,6 +161,7 @@ export async function criarMaloteRepository(input: {
         empresaId: input.empresaId,
         codigo: input.codigo,
         descricao: null,
+        valor: input.valor,
         criadoPor: input.usuarioId ?? null
       })
       .returning({ id: malotes.id });
@@ -169,12 +175,14 @@ export async function atualizarMaloteRepository(input: {
   maloteId: string;
   empresaId: string;
   codigo: string;
+  valor: string;
   lacres: string[];
 }): Promise<void> {
   await executarEmTransacao(async (tx) => {
+    // status NAO e alterado aqui: e do ciclo do caixa (abertura -> em_uso, M2 -> devolvido).
     await tx
       .update(malotes)
-      .set({ codigo: input.codigo, descricao: null })
+      .set({ codigo: input.codigo, descricao: null, valor: input.valor })
       .where(and(eq(malotes.id, input.maloteId), eq(malotes.empresaId, input.empresaId)));
     await inserirLacres(input.empresaId, input.maloteId, input.lacres, tx);
   });
@@ -216,6 +224,8 @@ export async function copiarMalotesRepository(
         empresaId: empresaDestinoId,
         codigo: malote.codigo,
         descricao: malote.descricao,
+        valor: malote.valor,
+        // Copia nasce disponivel (status e do ciclo do caixa na empresa destino, nao se importa).
         criadoPor: null,
         importadoDe: malote.empresaId,
         idImportado: malote.id

@@ -1,3 +1,4 @@
+import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
 import {
   atualizarMaloteRepository,
@@ -110,9 +111,11 @@ export async function criarMalote(payload: CriarMalotePayload, usuarioId?: strin
   await validarLacresUnicosPorEmpresa(payload.empresaId, lacres);
 
   const codigo = await resolverCodigoMalote(payload.empresaId, payload.codigo);
+  const valor = centavosParaDecimalBanco(paraCentavos(payload.valor));
   const malote = await criarMaloteRepository({
     empresaId: payload.empresaId,
     codigo,
+    valor,
     lacres,
     ...(usuarioId ? { usuarioId } : {})
   });
@@ -133,7 +136,8 @@ export async function atualizarMalote(
   await validarLacresUnicosPorEmpresa(malote.empresaId, lacres, maloteId);
 
   const codigo = await resolverCodigoMalote(malote.empresaId, payload.codigo);
-  await atualizarMaloteRepository({ maloteId, empresaId: malote.empresaId, codigo, lacres });
+  const valor = centavosParaDecimalBanco(paraCentavos(payload.valor));
+  await atualizarMaloteRepository({ maloteId, empresaId: malote.empresaId, codigo, valor, lacres });
 
   return { id: maloteId, ...payload, codigo, lacres };
 }

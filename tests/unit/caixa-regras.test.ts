@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { montarResumoCaixa, saldoCaixaCentavos, type TotaisCaixaCentavos } from "@padaria/shared/caixa";
+import {
+  montarResumoCaixa,
+  saldoCaixaCentavos,
+  saldoProprioCentavos,
+  type TotaisCaixaCentavos
+} from "@padaria/shared/caixa";
 import { centavosParaDecimalBanco, deCentavos, paraCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 
 function totais(parcial: Partial<TotaisCaixaCentavos> = {}): TotaisCaixaCentavos {
@@ -78,8 +83,45 @@ describe("montarResumoCaixa", () => {
       totalDespesas: 20,
       totalRetiradas: 10,
       totalMercadorias: 15,
+      dividaCofre: 0,
+      saldoProprio: 75,
       saldo: 75
     });
+  });
+
+  it("Deve_ExporDividaCofre_E_SaldoProprioNegativo_Quando_AberturaComMalote", () => {
+    // Malote de 490: a transferencia de abertura entra como transferenciasEntrada (dinheiro na
+    // gaveta) e dividaCofre = 490. Sem vendas, o saldo proprio nasce em -490 (deficit).
+    const resumo = montarResumoCaixa(totais({ transferenciasEntrada: 49000 }), 49000);
+    expect(resumo.dividaCofre).toBe(490);
+    expect(resumo.saldo).toBe(490); // saldo fisico (formula canonica intacta)
+    expect(resumo.saldoProprio).toBe(-490); // deficit com o cofre
+  });
+});
+
+describe("saldoProprioCentavos (R8 — deficit do malote, Opcao A/Lente B)", () => {
+  it("Deve_NascerEmDeficit_Quando_AberturaComMalote490SemVendas", () => {
+    // Abertura: transferencia cofre->caixa de 490 (transferenciasEntrada) e divida 490.
+    const saldoProprio = saldoProprioCentavos(totais({ transferenciasEntrada: 49000 }), 49000);
+    expect(saldoProprio).toBe(-49000);
+  });
+
+  it("Deve_QuitarDivida_Quando_VendasEmDinheiroIgualamOMalote", () => {
+    // 490 em vendas dinheiro sobre o malote de 490: deficit zerado.
+    const saldoProprio = saldoProprioCentavos(totais({ entradas: 49000, transferenciasEntrada: 49000 }), 49000);
+    expect(saldoProprio).toBe(0);
+  });
+
+  it("Deve_VirarResultado_Quando_VendasSuperamOMalote", () => {
+    // 600 em vendas sobre malote de 490: 110 de resultado do caixa.
+    const saldoProprio = saldoProprioCentavos(totais({ entradas: 60000, transferenciasEntrada: 49000 }), 49000);
+    expect(saldoProprio).toBe(11000);
+  });
+
+  it("Deve_IgualarSaldoFisico_Quando_SemMalote", () => {
+    // Retrocompat: sem malote (divida 0), saldo proprio == saldo canonico.
+    const semMalote = totais({ entradas: 30000, despesas: 5000 });
+    expect(saldoProprioCentavos(semMalote, 0)).toBe(saldoCaixaCentavos(semMalote));
   });
 });
 

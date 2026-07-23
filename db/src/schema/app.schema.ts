@@ -41,6 +41,9 @@ export const empresas = pgTable("empresas", {
     .default(
       sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
     ),
+  // Conta contabil do COFRE da empresa (origem da transferencia automatica de abertura do caixa).
+  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, a abertura com malote falha em vez de inventar conta.
+  contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
   criadoEm
 });
 
@@ -694,12 +697,19 @@ export const malotes = pgTable(
     empresaId,
     codigo: text("codigo").notNull(),
     descricao: text("descricao"),
+    // Valor do malote (fundo/troco emprestado do cofre). Vira a divida do caixa na abertura (R8).
+    valor: valorMonetario("valor").notNull().default("0"),
+    // Ciclo do malote fisico: disponivel -> em_uso (selecionado numa abertura) -> devolvido (M2).
+    status: text("status").notNull().default("disponivel"),
     criadoPor: text("criado_por"),
     criadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
   },
-  (table) => [unique("malotes_empresa_id_codigo_key").on(table.empresaId, table.codigo)]
+  (table) => [
+    unique("malotes_empresa_id_codigo_key").on(table.empresaId, table.codigo),
+    check("malotes_status_check", sql`${table.status} in ('disponivel', 'em_uso', 'devolvido')`)
+  ]
 );
 
 export const lacresMalotes = pgTable(
@@ -1136,6 +1146,9 @@ export const transferencias = pgTable(
       .references(() => contas.id),
     maloteId: uuid("malote_id").references(() => malotes.id),
     lacreMaloteId: uuid("lacre_malote_id").references(() => lacresMalotes.id),
+    // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
+    // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
+    tipo: text("tipo").notNull().default("suprimento"),
     computar: boolean("computar").notNull().default(true),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
@@ -1144,6 +1157,7 @@ export const transferencias = pgTable(
   },
   (table) => [
     check("transferencias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("transferencias_tipo_check", sql`${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno')`),
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
@@ -1174,6 +1188,12 @@ export const fechamentosCaixa = pgTable(
     fechadoEm: timestamp("fechado_em", { withTimezone: true }),
     tokenEdicao: text("token_edicao"),
     observacao: text("observacao"),
+    // Abertura com malote (M1, R8): malote selecionado, lacre da ida e a divida com o cofre
+    // (= valor do malote). divida_cofre NAO entra na formula canonica de saldo (ADR-001 intacto);
+    // e a base do "saldo proprio" derivado. Caixas sem malote ficam com divida_cofre = 0.
+    maloteAberturaId: uuid("malote_abertura_id").references(() => malotes.id),
+    lacreAbertura: text("lacre_abertura"),
+    dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
     totalTransferencias: valorMonetario("total_transferencias").notNull().default("0"),
     totalTransferenciasEntrada: valorMonetario("total_transferencias_entrada").notNull().default("0"),

@@ -235,8 +235,11 @@ export async function aplicarSeedIntegracao() {
   await banco.insert(contas).values([
     { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
     { id: idsTeste.contaBanco, empresaId: idsTeste.empresaA, nome: "Banco Integracao", ativa: true },
-    { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true }
+    { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
+    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true }
   ]);
+  // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
+  await banco.update(empresas).set({ contaCofreId: idsTeste.contaCofre }).where(eq(empresas.id, idsTeste.empresaA));
   await banco.insert(pdvs).values([
     {
       id: idsTeste.pdvA,

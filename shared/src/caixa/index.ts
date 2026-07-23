@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { deCentavos } from "../dinheiro/index.js";
-import { saldoCaixaCentavos, type TotaisCaixaCentavos } from "./regras.js";
+import { saldoCaixaCentavos, saldoProprioCentavos, type TotaisCaixaCentavos } from "./regras.js";
 
 export * from "./regras.js";
 
@@ -20,6 +20,11 @@ export const abrirCaixaPayloadSchema = z.object({
   dataHoraAbertura: dataHoraSchema,
   // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
   turnoId: uuidSchema.optional().nullable(),
+  // Malote selecionado na abertura (R8): o servidor cria a transferencia cofre -> caixa pelo valor
+  // do malote e inicia o caixa em deficit. Opcional (abrir sem malote continua valido).
+  maloteId: uuidSchema.optional().nullable(),
+  // Lacre da IDA (D1/D5): preenchimento opcional por enquanto; o campo ja existe.
+  lacreAbertura: z.string().trim().min(1).optional().nullable(),
   observacao: z.string().optional().nullable()
 });
 
@@ -207,6 +212,11 @@ export const resumoCaixaSchema = z.object({
   totalDespesas: z.number(),
   totalRetiradas: z.number(),
   totalMercadorias: z.number().optional(),
+  // saldo = saldo FISICO (formula canonica). dividaCofre = valor do malote emprestado na abertura
+  // (0 sem malote). saldoProprio = saldo sob a otica da divida (R8): nasce em -dividaCofre e as
+  // vendas em dinheiro o levam a zero; excedente e resultado do caixa.
+  dividaCofre: z.number().optional(),
+  saldoProprio: z.number().optional(),
   saldo: z.number()
 });
 
@@ -263,8 +273,9 @@ export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 
-// Converte os totais em centavos para o contrato wire (reais como number).
-export function montarResumoCaixa(totais: TotaisCaixaCentavos): ResumoCaixa {
+// Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
+// do fechamento (valor do malote da abertura; 0 sem malote) e alimenta o saldo proprio derivado.
+export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentavos = 0): ResumoCaixa {
   return {
     totalEntradas: deCentavos(totais.entradas),
     totalTransferencias: deCentavos(totais.transferencias),
@@ -273,6 +284,8 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos): ResumoCaixa {
     totalDespesas: deCentavos(totais.despesas),
     totalRetiradas: deCentavos(totais.retiradas),
     totalMercadorias: deCentavos(totais.mercadorias),
+    dividaCofre: deCentavos(dividaCofreCentavos),
+    saldoProprio: deCentavos(saldoProprioCentavos(totais, dividaCofreCentavos)),
     saldo: deCentavos(saldoCaixaCentavos(totais))
   };
 }

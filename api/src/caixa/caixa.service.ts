@@ -36,20 +36,27 @@ import {
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
+  buscarContaCofreEmpresaRepository,
   buscarGrupoQuebraCaixa,
+  buscarLacreDoMaloteRepository,
+  buscarMaloteParaAberturaRepository,
   buscarPdvEmpresaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
   caixaTemLancamentosRepository,
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
+  contaPertenceEmpresaRepository,
   criarAcertoSaldoCaixaRepository,
   criarCaixaRepository,
+  criarTransferenciaAberturaRepository,
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarEdicoesCaixaRepository,
   listarHistoricoCaixaRepository,
   listarLancamentosCaixaRepository,
+  marcarLacreUsadoRepository,
+  marcarMaloteEmUsoRepository,
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
@@ -149,7 +156,9 @@ export async function revincularVendasAoCaixa(
 }
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: ExecutorBanco): Promise<ResumoCaixa> {
-  return montarResumoCaixa(await calcularTotaisCaixaCentavos(caixa, db));
+  const totais = await calcularTotaisCaixaCentavos(caixa, db);
+  // dividaCofre (valor do malote da abertura; 0 sem malote) alimenta o saldo proprio derivado (R8).
+  return montarResumoCaixa(totais, paraCentavos(caixa.dividaCofre));
 }
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
@@ -200,6 +209,51 @@ export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario
   }
 }
 
+// Dados resolvidos da abertura com malote (R8): valida o malote, o cofre e o lacre ANTES de criar
+// o caixa, para que a transacao inteira falhe cedo e com mensagem clara em vez de meia-abertura.
+type AberturaMalote = {
+  maloteId: string;
+  codigo: string;
+  valorCentavos: number;
+  contaCofreId: string;
+  lacreId: string | null;
+  lacreNumero: string | null;
+};
+
+async function prepararAberturaComMalote(
+  empresaId: string,
+  maloteId: string,
+  lacreNumero: string | null,
+  contaCaixaId: string,
+  tx: ExecutorBanco
+): Promise<AberturaMalote> {
+  const malote = await buscarMaloteParaAberturaRepository(maloteId, empresaId, tx);
+  if (!malote) throw new Error("Malote nao encontrado");
+  if (malote.status !== "disponivel") throw new Error("Malote indisponivel");
+  const valorCentavos = paraCentavos(malote.valor);
+  if (valorCentavos <= 0) throw new Error("Malote sem valor para emprestar ao caixa");
+
+  // Regra 5: origem = conta do cofre mapeada na empresa. Sem mapeamento, PARA (nao inventa conta).
+  const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
+  if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para abertura com malote");
+  if (contaCofreId === contaCaixaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
+  if (!(await contaPertenceEmpresaRepository(contaCofreId, empresaId, tx))) throw new Error("Conta de cofre invalida");
+
+  // Lacre da IDA e opcional por enquanto (D5); quando informado, precisa ser um lacre disponivel
+  // DO malote selecionado (D1/D3) e e consumido na abertura.
+  let lacreId: string | null = null;
+  let lacreNumeroResolvido: string | null = null;
+  if (lacreNumero) {
+    const lacre = await buscarLacreDoMaloteRepository(maloteId, lacreNumero, tx);
+    if (!lacre) throw new Error("Lacre nao pertence ao malote selecionado");
+    if (lacre.status !== "disponivel") throw new Error("Lacre indisponivel");
+    lacreId = lacre.id;
+    lacreNumeroResolvido = lacre.numero;
+  }
+
+  return { maloteId, codigo: malote.codigo, valorCentavos, contaCofreId, lacreId, lacreNumero: lacreNumeroResolvido };
+}
+
 async function abrirCaixaEmTransacao(
   dados: AbrirCaixaPayload,
   perfil: PerfilUsuario,
@@ -216,6 +270,17 @@ async function abrirCaixaEmTransacao(
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
 
+    // R8: malote selecionado => transferencia cofre->caixa e caixa nasce devendo (deficit). Opcional.
+    const aberturaMalote = dados.maloteId
+      ? await prepararAberturaComMalote(
+          dados.empresaId,
+          dados.maloteId,
+          dados.lacreAbertura?.trim() || null,
+          pdv.contaId,
+          tx
+        )
+      : null;
+
     const caixa = await criarCaixaRepository(
       {
         empresaId: dados.empresaId,
@@ -227,10 +292,35 @@ async function abrirCaixaEmTransacao(
         tokenEdicao: gerarTokenEdicao(),
         // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
         turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
-        observacao: dados.observacao?.trim() || null
+        observacao: dados.observacao?.trim() || null,
+        maloteAberturaId: aberturaMalote?.maloteId ?? null,
+        lacreAbertura: aberturaMalote?.lacreNumero ?? null,
+        dividaCofreCentavos: aberturaMalote?.valorCentavos ?? 0
       },
       tx
     );
+
+    // Transferencia de abertura + consumo do malote/lacre, tudo na mesma transacao da abertura.
+    if (aberturaMalote) {
+      await criarTransferenciaAberturaRepository(
+        {
+          empresaId: dados.empresaId,
+          caixaId: caixa.id,
+          contaCofreId: aberturaMalote.contaCofreId,
+          contaCaixaId: pdv.contaId,
+          valorCentavos: aberturaMalote.valorCentavos,
+          dataReferencia: dataHoraAbertura.toISOString().slice(0, 10),
+          maloteId: aberturaMalote.maloteId,
+          lacreMaloteId: aberturaMalote.lacreId,
+          descricao: `Abertura de caixa - malote ${aberturaMalote.codigo}`,
+          criadoPor: perfil.usuarioId
+        },
+        tx
+      );
+      await marcarMaloteEmUsoRepository(aberturaMalote.maloteId, tx);
+      if (aberturaMalote.lacreId) await marcarLacreUsadoRepository(aberturaMalote.lacreId, tx);
+    }
+
     const aberto = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
     // Abertura retroativa (ex.: abriu 12:53 informando 08:00): puxa as vendas orfas do periodo.
