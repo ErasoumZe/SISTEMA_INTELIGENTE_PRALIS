@@ -593,13 +593,13 @@ export function formCadastroVazio(): CadastroForm {
 
 export function temaPadrao(): TemaAplicacao {
   return {
-    corPrimaria: "#c0521d",
-    corSecundaria: "#b8480f",
-    corFundo: "#f7f5f2",
+    corPrimaria: "#6515dd",
+    corSecundaria: "#35128c",
+    corFundo: "#f4f6fa",
     corCartao: "#ffffff",
     corSucesso: "#16a34a",
-    corAviso: "#f59e0b",
-    corErro: "#ef4444"
+    corAviso: "#b7791f",
+    corErro: "#dc2626"
   };
 }
 

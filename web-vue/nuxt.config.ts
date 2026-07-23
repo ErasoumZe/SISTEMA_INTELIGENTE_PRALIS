@@ -26,7 +26,8 @@ export default defineNuxtConfig({
       },
       defaults: {
         VBtn: {
-          rounded: "lg"
+          // Cara Material/Mobills: botoes/FAB como pills (~25px). Cards recebem raio 14px via main.css.
+          rounded: "pill"
         },
         VCard: {
           rounded: "lg"
@@ -49,15 +50,17 @@ export default defineNuxtConfig({
         themes: {
           padariaLight: {
             dark: false,
+            // Tema neutro Mobills/Material (V1). Estes sao os defaults/paint inicial; a mecanica de
+            // tema por empresa (aplicarTema) continua sobrescrevendo em runtime. Ver PROJECT_BRAIN/03.
             colors: {
-              background: "#f7f5f2",
+              background: "#f4f6fa",
               surface: "#ffffff",
-              primary: "#c0521d",
-              secondary: "#b8480f",
+              primary: "#6515dd",
+              secondary: "#35128c",
               success: "#16a34a",
-              warning: "#f59e0b",
-              error: "#ef4444",
-              info: "#0284c7"
+              warning: "#b7791f",
+              error: "#dc2626",
+              info: "#2196f3"
             }
           }
         }

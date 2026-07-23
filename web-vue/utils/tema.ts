@@ -35,19 +35,21 @@ export const temaPadraoPorTela: Record<string, Partial<TemaAplicacao>> = Object.
   Object.entries(corCategoriaPorTela).map(([tela, cor]) => [tela, { corPrimaria: cor }])
 );
 
-// Cores "de fabrica" antigas (roxo/teal) gravadas no banco de empresas nunca personalizadas.
-const primariaFabricaAntiga = "#6d28d9";
-const secundariaFabricaAntiga = "#0891b2";
-const identidadePralis = { corPrimaria: "#c0521d", corSecundaria: "#b8480f" };
+// Cores "de fabrica" gravadas no banco de empresas nunca personalizadas: o roxo/teal original e o
+// laranja Pralis (persistido em quem abriu Aparencia e salvou). Ambos migram para a marca neutra.
+const primariasDeFabrica = new Set(["#6d28d9", "#c0521d"]);
+const secundariasDeFabrica = new Set(["#0891b2", "#b8480f"]);
+const marcaAtual = { corPrimaria: "#6515dd", corSecundaria: "#35128c" };
 
-// Padrao efetivo com a identidade Pralis: troca APENAS os campos ainda de fabrica pelo
-// laranja (campo a campo). Empresa que personalizou o padrao mantem as cores escolhidas.
+// Padrao efetivo com a marca atual: troca APENAS os campos ainda de fabrica pela marca neutra
+// (campo a campo). Empresa que personalizou o padrao mantem as cores escolhidas.
 export function padraoComIdentidade(padrao: TemaAplicacao): TemaAplicacao {
   return {
     ...padrao,
-    corPrimaria: padrao.corPrimaria === primariaFabricaAntiga ? identidadePralis.corPrimaria : padrao.corPrimaria,
-    corSecundaria:
-      padrao.corSecundaria === secundariaFabricaAntiga ? identidadePralis.corSecundaria : padrao.corSecundaria
+    corPrimaria: primariasDeFabrica.has(padrao.corPrimaria.toLowerCase()) ? marcaAtual.corPrimaria : padrao.corPrimaria,
+    corSecundaria: secundariasDeFabrica.has(padrao.corSecundaria.toLowerCase())
+      ? marcaAtual.corSecundaria
+      : padrao.corSecundaria
   };
 }
 
