@@ -1149,6 +1149,13 @@ export const transferencias = pgTable(
     // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
     // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
     tipo: text("tipo").notNull().default("suprimento"),
+    // M2 (rascunho Rodrigo): data REAL do movimento fisico (separada de dataReferencia contabil e do
+    // criadoEm), vencimento e classificacao contabil (paridade com o lancamento da planilha), e o
+    // ordinal 1a/2a/3a/4a por caixa+tipo (R6). O vinculo caixa+dia e o caixaId ja existente.
+    dataTransferencia: date("data_transferencia"),
+    vencimento: date("vencimento"),
+    contabil: text("contabil"),
+    ordem: integer("ordem"),
     computar: boolean("computar").notNull().default(true),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
@@ -1158,6 +1165,7 @@ export const transferencias = pgTable(
   (table) => [
     check("transferencias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
     check("transferencias_tipo_check", sql`${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno')`),
+    check("transferencias_ordem_check", sql`${table.ordem} is null or ${table.ordem} >= 1`),
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
