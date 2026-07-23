@@ -6,6 +6,10 @@ import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 import { totalItemMercadoriaForm } from "~/utils/operacoes";
 import OperacaoDespesaModal from "~/components/operacoes/OperacaoDespesaModal.vue";
 import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
+import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
+
+// Telas operacionais que a grade (PermissoesGrade) cobre — escondidas da lista abaixo p/ nao duplicar.
+const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferencias"];
 
 const tiposDescontoItem = [
   { title: "Sem desconto", value: "" },
@@ -1121,8 +1125,12 @@ const validacaoQtdPreview = computed(() =>
                 item-value="usuarioId"
                 label="Usuario"
             /></v-col>
+            <v-col cols="12">
+              <div class="text-body-2 font-weight-bold mb-2">Operacoes (telas x acoes)</div>
+              <PermissoesGrade />
+            </v-col>
             <template v-for="secao in secoesPermissoes" :key="secao.titulo">
-              <v-col v-if="permissoesDaSecao(secao).length" cols="12">
+              <v-col v-if="permissoesDaSecao(secao).length && !secoesOperacionais.includes(secao.titulo)" cols="12">
                 <v-sheet class="pa-3 rounded-lg soft-bg">
                   <div class="text-body-2 font-weight-bold mb-2">{{ secao.titulo }}</div>
                   <div class="text-caption text-muted mb-3">
