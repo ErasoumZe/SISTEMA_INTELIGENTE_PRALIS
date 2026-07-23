@@ -49,14 +49,17 @@ export default defineNuxtConfig({
         themes: {
           padariaLight: {
             dark: false,
+            // Neutros do doc 03 (base Mobills) + brand roxo (D9). A mecanica de tema por empresa
+            // continua vencendo por cima (aplicarTema injeta as vars inline). As cores de categoria
+            // ficam FIXAS em main.css (--cat-*), fora do tema por empresa.
             colors: {
-              background: "#f7f5f2",
-              surface: "#ffffff",
-              primary: "#c0521d",
-              secondary: "#b8480f",
-              success: "#16a34a",
+              background: "#f4f6fa", // --canvas
+              surface: "#ffffff", // --surface
+              primary: "#5b21b6", // --brand
+              secondary: "#54209f", // brand/resultado forte
+              success: "#16a34a", // --positive
               warning: "#f59e0b",
-              error: "#ef4444",
+              error: "#dc2626", // --negative
               info: "#0284c7"
             }
           }

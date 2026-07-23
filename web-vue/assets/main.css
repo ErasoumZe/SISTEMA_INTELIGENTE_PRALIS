@@ -1,4 +1,43 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+
+/* =====================================================================
+   TOKENS DE CATEGORIA (doc 03) — semantica de negocio, FIXOS.
+   Nao seguem o tema por empresa (aparencia). Cada categoria: base (icone/
+   borda/valor), soft (fundo de chip/secao) e strong (hover/ativo). Valores
+   AA-safe sobre branco. Camada ADITIVA para o rework por modulo (D12) usar.
+   ===================================================================== */
+:root {
+  --cat-entradas-base: #b7791f;
+  --cat-entradas-soft: #fef6e4;
+  --cat-entradas-strong: #8f6115;
+  --cat-transferencias-base: #c2410c;
+  --cat-transferencias-soft: #fff1e8;
+  --cat-transferencias-strong: #9a3412;
+  --cat-despesas-base: #c0392b;
+  --cat-despesas-soft: #fdecea;
+  --cat-despesas-strong: #96261b;
+  --cat-mercadorias-base: #15803d;
+  --cat-mercadorias-soft: #e9f7ee;
+  --cat-mercadorias-strong: #106430;
+  --cat-retiradas-base: #1d4ed8;
+  --cat-retiradas-soft: #eaf0fe;
+  --cat-retiradas-strong: #1739a8;
+  --cat-resultado-base: #6d28d9;
+  --cat-resultado-soft: #f3edfd;
+  --cat-resultado-strong: #54209f;
+  --cat-contas-base: #334155;
+  --cat-contas-soft: #f1f5f9;
+  --cat-contas-strong: #1e293b;
+  /* Neutros do doc 03 (base Mobills) + sinais de dinheiro + brand roxo (D9). */
+  --surface: #ffffff;
+  --canvas: #f4f6fa;
+  --ink: #1f2733;
+  --ink-soft: #64748b;
+  --line: #e4e8ef;
+  --brand: #5b21b6;
+  --positive: #16a34a;
+  --negative: #dc2626;
+}
 
 :root {
   --padaria-background: #eaf1f9;
@@ -617,8 +656,9 @@ body {
 
 html,
 body {
+  /* D11: fonte de interface (Inter) no lugar da Montserrat da identidade padaria. */
   font-family:
-    "Montserrat",
+    "Inter",
     "Segoe UI",
     ui-sans-serif,
     system-ui,
