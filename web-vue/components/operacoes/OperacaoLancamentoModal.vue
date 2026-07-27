@@ -6,6 +6,7 @@
 // regras). Nada de api/db/shared.
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro } from "~/utils/domain";
+import type { ItemMercadoriaForm } from "~/utils/operacoes";
 
 const {
   modalOperacaoAberto,
@@ -156,6 +157,58 @@ const discriminando = computed({
   }
 });
 
+// --- Discriminação (FOTO 3): desconto GERAL "Vale Presente" (R$ ou %) distribuído nas linhas. O
+// valor em R$ vai para form.valorDesconto (SUPORTADO — salva). As colunas c/Desc e % e os totais
+// são RECÁLCULO no front (não persistidos). Em Mercadoria a Descrição vem do cadastro de produto. ---
+const modoDesconto = ref<"valor" | "percentual">("valor");
+const descontoInput = ref("");
+const totalGeralBruto = computed(() =>
+  itensMercadoria.value.reduce((soma, it) => soma + Number(it.quantidade || 0) * Number(it.valorUnitario || 0), 0)
+);
+const descontoFrac = computed(() => {
+  const bruto = totalGeralBruto.value;
+  if (modoDesconto.value === "percentual") return Math.min(1, Math.max(0, Number(descontoInput.value || 0) / 100));
+  return bruto > 0 ? Math.min(1, Math.max(0, Number(descontoInput.value || 0) / bruto)) : 0;
+});
+const descontoValorReais = computed(() => totalGeralBruto.value * descontoFrac.value);
+const totalGeralComDesc = computed(() => totalGeralBruto.value - descontoValorReais.value);
+const pctEfetivo = computed(() => descontoFrac.value * 100);
+// Espelha o desconto geral no campo suportado do header (em R$) para salvar de verdade.
+watch(descontoValorReais, (v) => {
+  form.value.valorDesconto = v ? v.toFixed(2) : "";
+});
+function totalLinha(it: ItemMercadoriaForm) {
+  return Number(it.quantidade || 0) * Number(it.valorUnitario || 0);
+}
+function unitComDesc(it: ItemMercadoriaForm) {
+  return Number(it.valorUnitario || 0) * (1 - descontoFrac.value);
+}
+function totalLinhaComDesc(it: ItemMercadoriaForm) {
+  return totalLinha(it) * (1 - descontoFrac.value);
+}
+function brn(n: number) {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Mercadoria: a Descrição vem do cadastro de produto (preenche produtoId + descrição).
+function escolherProduto(item: ItemMercadoriaForm, produtoId: string) {
+  item.produtoId = produtoId;
+  const p = opcoesEmpresa.value.produtos.find((x) => x.id === produtoId);
+  if (p?.descricao) item.descricao = p.descricao;
+}
+function novoItemMercadoria() {
+  itensMercadoria.value.push({
+    descricao: "",
+    quantidade: "1",
+    valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
+    valorTotal: "",
+    produtoId: "",
+    grupoMercadoriaId: "",
+    unidadeMedidaId: ""
+  });
+}
+
 function dataISO(offset: number) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -165,7 +218,7 @@ const hojeISO = computed(() => dataISO(0));
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="560">
+  <v-dialog v-model="aberto" :max-width="discriminando && cat === 'mercadoria' ? 920 : 560">
     <div class="lc-modal" :style="catVars">
       <div class="lc-head">
         <span class="lc-ic"
@@ -311,9 +364,14 @@ const hojeISO = computed(() => dataISO(0));
           <span class="lc-flex" />
           <v-icon size="16">{{ discriminando ? "mdi-chevron-down" : "mdi-chevron-right" }}</v-icon>
         </button>
+        <!-- Despesa: descrição e grupo LIVRES (FOTO 3, nota). -->
         <div v-if="discriminando && cat === 'despesa'" class="lc-itens">
           <div v-for="(item, i) in itensDespesa" :key="`d-${i}`" class="lc-item">
-            <input v-model="item.descricao" class="lc-input" placeholder="Descrição do item" />
+            <input v-model="item.descricao" class="lc-input" placeholder="Descrição (livre)" />
+            <select v-model="item.grupoDespesaId" class="lc-input lc-item-grupo">
+              <option value="">Grupo</option>
+              <option v-for="g in opcoesEmpresa.gruposDespesas" :key="g.id" :value="g.id">{{ g.nome }}</option>
+            </select>
             <input v-model="item.valor" type="number" class="lc-input lc-item-valor" placeholder="R$" />
             <v-icon size="18" class="lc-item-del" @click="itensDespesa.length > 1 && itensDespesa.splice(i, 1)"
               >mdi-close</v-icon
@@ -327,34 +385,104 @@ const hojeISO = computed(() => dataISO(0));
             <v-icon size="15">mdi-plus</v-icon> Adicionar item
           </button>
         </div>
-        <div v-if="discriminando && cat === 'mercadoria'" class="lc-itens">
-          <div v-for="(item, i) in itensMercadoria" :key="`m-${i}`" class="lc-item">
-            <input v-model="item.descricao" class="lc-input" placeholder="Descrição" />
-            <input v-model="item.quantidade" type="number" class="lc-input lc-item-qtd" placeholder="Qtd" />
-            <input v-model="item.valorTotal" type="number" class="lc-input lc-item-valor" placeholder="R$" />
-            <v-icon size="18" class="lc-item-del" @click="itensMercadoria.length > 1 && itensMercadoria.splice(i, 1)"
-              >mdi-close</v-icon
-            >
+
+        <!-- Mercadoria: tabela de Discriminação (FOTO 3). Itens do cadastro de produto; colunas
+             c/Desc e % recalculadas no front a partir do Vale Presente geral. -->
+        <div v-if="discriminando && cat === 'mercadoria'" class="disc">
+          <div class="disc-scroll">
+            <table class="disc-tabela">
+              <thead>
+                <tr>
+                  <th>Quant</th>
+                  <th>Descrição</th>
+                  <th>Grupo</th>
+                  <th>V.Unit</th>
+                  <th>V.Unit c/Desc</th>
+                  <th>V.Total</th>
+                  <th>V.Total c/Desc</th>
+                  <th>%</th>
+                  <th aria-label="remover" />
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, i) in itensMercadoria" :key="`m-${i}`">
+                  <td><input v-model="item.quantidade" type="number" class="disc-in disc-qtd" /></td>
+                  <td>
+                    <select
+                      :value="item.produtoId"
+                      class="disc-in"
+                      @change="escolherProduto(item, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">— livre —</option>
+                      <option v-for="p in opcoesEmpresa.produtos" :key="p.id" :value="p.id">{{ p.descricao }}</option>
+                    </select>
+                    <input v-model="item.descricao" class="disc-in disc-desc" placeholder="Descrição" />
+                  </td>
+                  <td>
+                    <select v-model="item.grupoMercadoriaId" class="disc-in">
+                      <option value="">—</option>
+                      <option v-for="g in opcoesEmpresa.gruposMercadorias" :key="g.id" :value="g.id">
+                        {{ g.nome }}
+                      </option>
+                    </select>
+                  </td>
+                  <td><input v-model="item.valorUnitario" type="number" class="disc-in disc-num" /></td>
+                  <td class="disc-calc">{{ brn(unitComDesc(item)) }}</td>
+                  <td class="disc-calc">{{ brn(totalLinha(item)) }}</td>
+                  <td class="disc-calc">{{ brn(totalLinhaComDesc(item)) }}</td>
+                  <td class="disc-calc">{{ brn(pctEfetivo) }}%</td>
+                  <td>
+                    <v-icon
+                      size="18"
+                      class="lc-item-del"
+                      @click="itensMercadoria.length > 1 && itensMercadoria.splice(i, 1)"
+                      >mdi-close</v-icon
+                    >
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="5" class="disc-foot-lbl">V. Total geral</td>
+                  <td class="disc-calc disc-foot">{{ brn(totalGeralBruto) }}</td>
+                  <td class="disc-calc disc-foot">{{ brn(totalGeralComDesc) }}</td>
+                  <td class="disc-calc disc-foot">{{ brn(pctEfetivo) }}%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
           </div>
-          <button
-            type="button"
-            class="lc-add"
-            @click="
-              itensMercadoria.push({
-                descricao: '',
-                quantidade: '1',
-                valorUnitario: '',
-                descontoTipo: '',
-                descontoValor: '',
-                valorTotal: '',
-                produtoId: '',
-                grupoMercadoriaId: '',
-                unidadeMedidaId: ''
-              })
-            "
-          >
-            <v-icon size="15">mdi-plus</v-icon> Adicionar item
-          </button>
+
+          <div class="disc-rodape">
+            <button type="button" class="lc-add" @click="novoItemMercadoria">
+              <v-icon size="15">mdi-plus</v-icon> Adicionar item
+            </button>
+            <div class="disc-vale">
+              <span class="lc-campo-lbl">Vale Presente / Desconto</span>
+              <div class="disc-vale-row">
+                <div class="disc-modo">
+                  <button
+                    type="button"
+                    class="disc-modo-btn"
+                    :class="{ ativo: modoDesconto === 'valor' }"
+                    @click="modoDesconto = 'valor'"
+                  >
+                    R$
+                  </button>
+                  <button
+                    type="button"
+                    class="disc-modo-btn"
+                    :class="{ ativo: modoDesconto === 'percentual' }"
+                    @click="modoDesconto = 'percentual'"
+                  >
+                    %
+                  </button>
+                </div>
+                <input v-model="descontoInput" type="number" class="disc-in disc-num" placeholder="0" />
+                <span class="disc-vale-res">= R$ {{ brn(descontoValorReais) }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -634,6 +762,116 @@ const hojeISO = computed(() => dataISO(0));
   color: #64748b;
   font-size: 12px;
   cursor: pointer;
+}
+.lc-item-grupo {
+  max-width: 140px;
+}
+
+/* --- Discriminação (FOTO 3): tabela com rolagem horizontal (não estoura o modal) --- */
+.disc {
+  margin-bottom: 8px;
+}
+.disc-scroll {
+  overflow-x: auto;
+}
+.disc-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.disc-tabela th {
+  padding: 4px 6px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 0.5px solid #e4e8ef;
+}
+.disc-tabela td {
+  padding: 3px 5px;
+  border-bottom: 0.5px solid #f1f3f7;
+  vertical-align: middle;
+}
+.disc-in {
+  width: 100%;
+  min-width: 64px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 6px;
+  padding: 6px 7px;
+  font-size: 12px;
+  color: #1f2733;
+  background: #fff;
+  outline: none;
+}
+.disc-in:focus {
+  border-color: var(--cat);
+}
+.disc-desc {
+  margin-top: 3px;
+}
+.disc-qtd {
+  min-width: 52px;
+  max-width: 64px;
+}
+.disc-num {
+  min-width: 72px;
+  max-width: 96px;
+}
+.disc-calc {
+  color: var(--cat);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.disc-foot-lbl {
+  color: #64748b;
+  font-weight: 700;
+  text-align: right;
+}
+.disc-foot {
+  border-top: 0.5px solid #e4e8ef;
+}
+.disc-rodape {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.disc-vale {
+  min-width: 220px;
+}
+.disc-vale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.disc-modo {
+  display: flex;
+  border: 0.5px solid #cbd2dc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.disc-modo-btn {
+  border: 0;
+  background: #fff;
+  padding: 7px 12px;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.disc-modo-btn.ativo {
+  background: var(--cat-soft);
+  color: var(--cat);
+  font-weight: 600;
+}
+.disc-vale-res {
+  color: var(--cat);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .lc-recorrencia {
   margin-bottom: 8px;
