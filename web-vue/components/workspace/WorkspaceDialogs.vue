@@ -4,7 +4,7 @@ import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@pa
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 import { totalItemMercadoriaForm } from "~/utils/operacoes";
-import OperacaoDespesaModal from "~/components/operacoes/OperacaoDespesaModal.vue";
+import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
 import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
 import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
 
@@ -187,12 +187,13 @@ const validacaoQtdPreview = computed(() =>
     </v-card>
   </v-dialog>
 
-  <!-- Despesa e Transferencia tem modais proprios (fieis ao mockup); o generico cobre os demais. -->
-  <OperacaoDespesaModal />
+  <!-- Lancamento (despesa/mercadoria/retirada) e Transferencia tem modais proprios fieis ao desenho
+       do Rodrigo (FOTO 2 / FOTO 1); o generico cobre so a venda. -->
+  <OperacaoLancamentoModal />
   <OperacaoTransferenciaModal />
 
   <v-dialog
-    v-if="!['despesa', 'transferencia'].includes(entidadeNova)"
+    v-if="!['despesa', 'mercadoria', 'retirada', 'transferencia'].includes(entidadeNova)"
     v-model="modalOperacaoAberto"
     max-width="960"
     scrollable
