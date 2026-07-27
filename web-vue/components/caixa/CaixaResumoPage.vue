@@ -37,6 +37,11 @@ const abertura = reactive({
   turnoId: "",
   dataHoraAbertura: dataHoraLocal()
 });
+// Campos da FOTO 5 SEM backend nesta rodada (data-pendente="regra"): estado LOCAL, nunca enviado no
+// abrir(). A persistencia vem na rodada de regras.
+// TODO(regras): abertura por N Lacre da transferencia de entrada (Fase A / tabela lacres).
+// TODO(regras): maquina de cartao / N de serie vinculada ao caixa (PDV/turno).
+const aberturaExtra = reactive({ numeroLacre: "", maqCartaoSerie: "" });
 const fechamento = reactive({ observacao: "" });
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
@@ -106,38 +111,70 @@ function fechar() {
         />
       </div>
 
-      <v-row v-if="!caixaAberto" dense>
-        <v-col cols="12" md="3">
-          <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-select
-            v-model="abertura.turnoId"
-            :items="turnos ?? []"
-            item-title="nome"
-            item-value="id"
-            label="Turno"
-            clearable
-          />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-text-field v-model="abertura.dataHoraAbertura" type="datetime-local" label="Data e hora de abertura" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-text-field :model-value="usuarioNome" label="Usuario do caixa" readonly />
-        </v-col>
-        <v-col cols="12">
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-cash-register"
-            :loading="salvando"
-            :disabled="!abertura.pdvId"
-            @click="abrir"
-          >
-            Abrir caixa
-          </v-btn>
-        </v-col>
-      </v-row>
+      <!-- Abertura de Caixa fiel ao desenho do Rodrigo (FOTO 5): enxuta, 4 campos em 2x2. -->
+      <template v-if="!caixaAberto">
+        <v-row dense>
+          <v-col cols="12" md="6">
+            <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="Ponto de Venda" />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="abertura.turnoId"
+              :items="turnos ?? []"
+              item-title="nome"
+              item-value="id"
+              label="Turno"
+              clearable
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.numeroLacre"
+              label="Transf. Entrada / N° Lacre"
+              placeholder="Ex.: 001"
+              data-pendente="regra"
+              hint="A abertura por lacre entra na rodada de regras."
+              persistent-hint
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.maqCartaoSerie"
+              label="Maq. Cartão / N° Série"
+              placeholder="Ex.: 0742742…"
+              data-pendente="regra"
+              hint="Vínculo da maquininha entra na rodada de regras."
+              persistent-hint
+            />
+          </v-col>
+        </v-row>
+
+        <!-- Campos que o backend exige para abrir (fora do desenho enxuto): data/hora + usuário. -->
+        <v-row dense class="mt-2">
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="abertura.dataHoraAbertura"
+              type="datetime-local"
+              label="Data e hora de abertura"
+              density="comfortable"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field :model-value="usuarioNome" label="Usuário do caixa" readonly density="comfortable" />
+          </v-col>
+          <v-col cols="12">
+            <v-btn
+              color="primary"
+              prepend-icon="mdi-cash-register"
+              :loading="salvando"
+              :disabled="!abertura.pdvId"
+              @click="abrir"
+            >
+              Abrir caixa
+            </v-btn>
+          </v-col>
+        </v-row>
+      </template>
 
       <template v-else>
         <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
