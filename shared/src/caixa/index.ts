@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { deCentavos } from "../dinheiro/index.js";
-import { saldoCaixaCentavos, saldoProprioCentavos, type TotaisCaixaCentavos } from "./regras.js";
+import { saldoCaixaCentavos, type TotaisCaixaCentavos } from "./regras.js";
 
 export * from "./regras.js";
 
@@ -20,8 +20,8 @@ export const abrirCaixaPayloadSchema = z.object({
   dataHoraAbertura: dataHoraSchema,
   // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
   turnoId: uuidSchema.optional().nullable(),
-  // Malote selecionado na abertura (R8): o servidor cria a transferencia cofre -> caixa pelo valor
-  // do malote e inicia o caixa em deficit. Opcional (abrir sem malote continua valido).
+  // Malote selecionado na abertura: o servidor cria a transferencia cofre -> caixa pelo valor do
+  // malote (FUNDO DE TROCO — entra como saldo fisico, sem divida). Opcional (abrir sem malote vale).
   maloteId: uuidSchema.optional().nullable(),
   // Lacre da IDA (D1/D5): preenchimento opcional por enquanto; o campo ja existe.
   lacreAbertura: z.string().trim().min(1).optional().nullable(),
@@ -212,11 +212,8 @@ export const resumoCaixaSchema = z.object({
   totalDespesas: z.number(),
   totalRetiradas: z.number(),
   totalMercadorias: z.number().optional(),
-  // saldo = saldo FISICO (formula canonica). dividaCofre = valor do malote emprestado na abertura
-  // (0 sem malote). saldoProprio = saldo sob a otica da divida (R8): nasce em -dividaCofre e as
-  // vendas em dinheiro o levam a zero; excedente e resultado do caixa.
-  dividaCofre: z.number().optional(),
-  saldoProprio: z.number().optional(),
+  // saldo = saldo FISICO (formula canonica, ADR-001). O malote entra como FUNDO (saldo normal): a
+  // R8 (dividaCofre/saldoProprio) foi revogada em 24/07 e nao existe mais no contrato.
   // propostaRetorno (R3/M2): sobra em especie a devolver ao cofre no fechamento (= saldo fisico se > 0).
   propostaRetorno: z.number().optional(),
   saldo: z.number()
@@ -307,9 +304,9 @@ export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSche
 export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 
-// Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
-// do fechamento (valor do malote da abertura; 0 sem malote) e alimenta o saldo proprio derivado.
-export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentavos = 0): ResumoCaixa {
+// Converte os totais em centavos para o contrato wire (reais como number). O malote de abertura ja
+// entrou como transferenciasEntrada (fundo), entao o saldo canonico ja o reflete — nao ha divida.
+export function montarResumoCaixa(totais: TotaisCaixaCentavos): ResumoCaixa {
   return {
     totalEntradas: deCentavos(totais.entradas),
     totalTransferencias: deCentavos(totais.transferencias),
@@ -318,8 +315,6 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
     totalDespesas: deCentavos(totais.despesas),
     totalRetiradas: deCentavos(totais.retiradas),
     totalMercadorias: deCentavos(totais.mercadorias),
-    dividaCofre: deCentavos(dividaCofreCentavos),
-    saldoProprio: deCentavos(saldoProprioCentavos(totais, dividaCofreCentavos)),
     propostaRetorno: deCentavos(Math.max(0, saldoCaixaCentavos(totais))),
     saldo: deCentavos(saldoCaixaCentavos(totais))
   };

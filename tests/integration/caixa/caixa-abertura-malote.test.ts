@@ -5,11 +5,11 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-// M1 / R8: abertura de caixa com MALOTE. O malote e um emprestimo do cofre — ao seleciona-lo na
-// abertura, o servidor cria a transferencia cofre->caixa (tipo 'abertura') e o caixa NASCE devendo
-// esse valor (deficit). As vendas em dinheiro quitam a divida. Formula canonica (saldo fisico)
-// intacta (ADR-001); o deficit vive em divida_cofre + saldoProprio derivado (Opcao A / Lente B).
-describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
+// Abertura de caixa com MALOTE. O malote e FUNDO DE TROCO do cofre (R8 revogada em 24/07 — ver
+// PROJECT_BRAIN/12): ao seleciona-lo, o servidor cria a transferencia cofre->caixa (tipo 'abertura')
+// e o valor entra como saldo fisico normal. O caixa NAO deve nada — nao ha mais divida_cofre nem
+// saldoProprio no resumo. Formula canonica (ADR-001) intacta; no fechamento tudo volta ao cofre.
+describe("caixa - abertura com malote (fundo de troco)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
 
@@ -70,7 +70,7 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
     return json<{ data: { caixaAberto: { id: string }; resumo: Record<string, number> } }>(resposta).data;
   }
 
-  it("Deve nascer em deficit -490, criar a transferencia de abertura e consumir o malote (lacre)", async () => {
+  it("Fundo 490: abre com saldo 490, cria a transferencia de abertura e consome o malote (lacre)", async () => {
     const maloteId = await criarMalote("LAC-ABE-1", 490);
     const { contaId, pdvId } = await criarContaEPdv("abertura-malote");
 
@@ -81,10 +81,12 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
       maloteId
     });
 
-    // Saldo fisico segue +490 (o dinheiro esta na gaveta); o deficit vive em dividaCofre/saldoProprio.
+    // O fundo entra como saldo fisico (490 na gaveta). NAO ha mais dividaCofre nem saldoProprio.
     const status = await resumoAtual();
     expect(status.caixaAberto.id).toBe(caixaId);
-    expect(status.resumo).toMatchObject({ dividaCofre: 490, saldo: 490, saldoProprio: -490 });
+    expect(status.resumo).toMatchObject({ saldo: 490 });
+    expect(status.resumo).not.toHaveProperty("dividaCofre");
+    expect(status.resumo).not.toHaveProperty("saldoProprio");
 
     // Transferencia de abertura: cofre -> caixa, tipo 'abertura', vinculada ao caixa/malote.
     const transferencia = await consultarUm<{
@@ -110,21 +112,22 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
     const malote = await consultarUm<{ status: string }>("select status from malotes where id = $1", [maloteId]);
     expect(malote?.status).toBe("em_uso");
 
-    // Fechamento guarda o vinculo da abertura + a divida.
+    // Fechamento guarda o vinculo da abertura (malote/lacre). divida_cofre e LEGADO da R8 revogada:
+    // o codigo nao escreve mais nela, entao fica no default 0 mesmo com fundo.
     const caixa = await consultarUm<{ divida_cofre: string; lacre_abertura: string; malote_abertura_id: string }>(
       "select divida_cofre, lacre_abertura, malote_abertura_id from fechamentos_caixa where id = $1",
       [caixaId]
     );
     expect(caixa).toMatchObject({
-      divida_cofre: "490.00",
+      divida_cofre: "0.00",
       lacre_abertura: "LAC-ABE-1",
       malote_abertura_id: maloteId
     });
   });
 
-  it("Deve quitar a divida (saldo proprio = 0) quando as vendas em dinheiro igualam o malote", async () => {
+  it("Fundo 490 + venda 300 em dinheiro => saldo fisico 790 (sem divida)", async () => {
     const maloteId = await criarMalote("LAC-ABE-2", 490);
-    const { contaId, pdvId } = await criarContaEPdv("quita-divida");
+    const { contaId, pdvId } = await criarContaEPdv("fundo-mais-venda");
     const caixaId = await abrir({
       pdvId,
       usuarioCaixaId: await usuarioAdminId(),
@@ -133,26 +136,28 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
       // lacreAbertura omitido: opcional por enquanto (D5).
     });
 
-    // R$490 em vendas dinheiro.
+    // R$300 em vendas dinheiro sobre o fundo de 490.
     await criar("/api/vendas", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-05-11",
       dataPagamento: "2026-05-11",
       descricao: "Vendas do turno",
-      valorOriginal: 490,
+      valorOriginal: 300,
       contaOrigemId: contaId,
       pdvId,
       colaboradorId: idsTeste.colaboradorAdmin,
       itensVenda: [
-        { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 490, valorTotal: 490 }
+        { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 300, valorTotal: 300 }
       ],
-      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 490 }]
+      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 300 }]
     });
 
     const status = await resumoAtual();
     expect(status.caixaAberto.id).toBe(caixaId);
-    // Fisico = 490 (abertura) + 490 (vendas) = 980; divida = 490; saldo proprio = 0 (divida quitada).
-    expect(status.resumo).toMatchObject({ dividaCofre: 490, saldo: 980, saldoProprio: 0 });
+    // Fisico = 490 (fundo da abertura) + 300 (vendas) = 790. Nada de divida/saldo proprio.
+    expect(status.resumo).toMatchObject({ saldo: 790, propostaRetorno: 790 });
+    expect(status.resumo).not.toHaveProperty("dividaCofre");
+    expect(status.resumo).not.toHaveProperty("saldoProprio");
   });
 
   it("Deve abrir SEM malote com o comportamento atual intacto (retrocompat)", async () => {
@@ -165,7 +170,8 @@ describe("caixa - abertura com malote (deficit do cofre, R8)", () => {
 
     const status = await resumoAtual();
     expect(status.caixaAberto.id).toBe(caixaId);
-    expect(status.resumo).toMatchObject({ dividaCofre: 0, saldo: 0, saldoProprio: 0 });
+    expect(status.resumo).toMatchObject({ saldo: 0 });
+    expect(status.resumo).not.toHaveProperty("dividaCofre");
 
     const caixa = await consultarUm<{ divida_cofre: string; malote_abertura_id: string | null }>(
       "select divida_cofre, malote_abertura_id from fechamentos_caixa where id = $1",

@@ -162,8 +162,9 @@ export async function revincularVendasAoCaixa(
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: ExecutorBanco): Promise<ResumoCaixa> {
   const totais = await calcularTotaisCaixaCentavos(caixa, db);
-  // dividaCofre (valor do malote da abertura; 0 sem malote) alimenta o saldo proprio derivado (R8).
-  return montarResumoCaixa(totais, paraCentavos(caixa.dividaCofre));
+  // O fundo da abertura ja entrou como transferenciasEntrada, entao o saldo canonico o reflete.
+  // R8 (dividaCofre/saldoProprio) revogada em 24/07 — nao ha mais divida a calcular.
+  return montarResumoCaixa(totais);
 }
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
@@ -261,7 +262,8 @@ async function abrirCaixaEmTransacao(
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
 
-    // R8: malote selecionado => transferencia cofre->caixa e caixa nasce devendo (deficit). Opcional.
+    // Malote selecionado => transferencia cofre->caixa como FUNDO DE TROCO (entra no saldo fisico,
+    // sem divida; R8 revogada em 24/07). Opcional.
     const aberturaMalote = dados.maloteId
       ? await prepararAberturaComMalote(dados.empresaId, dados.maloteId, pdv.contaId, tx)
       : null;
@@ -279,8 +281,7 @@ async function abrirCaixaEmTransacao(
         turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
         observacao: dados.observacao?.trim() || null,
         maloteAberturaId: aberturaMalote?.maloteId ?? null,
-        lacreAbertura: aberturaMalote?.numeroLacre ?? null,
-        dividaCofreCentavos: aberturaMalote?.valorCentavos ?? 0
+        lacreAbertura: aberturaMalote?.numeroLacre ?? null
       },
       tx
     );

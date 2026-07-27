@@ -122,7 +122,6 @@ export async function buscarCaixaAbertoUsuarioRepository(
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
-      dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
     })
     .from(fechamentosCaixa)
@@ -160,7 +159,6 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       observacao: fechamentosCaixa.observacao,
-      dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
     })
     .from(fechamentosCaixa)
@@ -220,10 +218,10 @@ export async function criarCaixaRepository(
     tokenEdicao: string;
     turnoId: string | null;
     observacao: string | null;
-    // Abertura com malote (R8): vinculo do malote/lacre e a divida com o cofre (= valor do malote).
+    // Abertura com malote: vinculo do malote/lacre da ida. O valor do malote entra como FUNDO via a
+    // transferencia de abertura (cofre->caixa); nao gera divida (R8 revogada em 24/07).
     maloteAberturaId?: string | null;
     lacreAbertura?: string | null;
-    dividaCofreCentavos?: number;
   },
   db: ExecutorBanco = banco
 ) {
@@ -243,7 +241,7 @@ export async function criarCaixaRepository(
       observacao: input.observacao,
       maloteAberturaId: input.maloteAberturaId ?? null,
       lacreAbertura: input.lacreAbertura ?? null,
-      dividaCofre: centavosParaDecimalBanco(input.dividaCofreCentavos ?? 0),
+      // divida_cofre NAO e mais escrita (R8 revogada 24/07): o banco aplica o default 0 (legado).
       status: "aberto",
       criadoPor: input.usuarioId
     })

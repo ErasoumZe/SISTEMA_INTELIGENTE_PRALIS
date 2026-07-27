@@ -1180,11 +1180,13 @@ export const fechamentosCaixa = pgTable(
     fechadoEm: timestamp("fechado_em", { withTimezone: true }),
     tokenEdicao: text("token_edicao"),
     observacao: text("observacao"),
-    // Abertura com malote (M1, R8): malote selecionado, lacre da ida e a divida com o cofre
-    // (= valor do malote). divida_cofre NAO entra na formula canonica de saldo (ADR-001 intacto);
-    // e a base do "saldo proprio" derivado. Caixas sem malote ficam com divida_cofre = 0.
+    // Abertura com malote: malote selecionado e lacre da ida. O valor do malote entra como FUNDO DE
+    // TROCO via a transferencia de abertura (cofre->caixa), refletido no saldo canonico (ADR-001).
     maloteAberturaId: uuid("malote_abertura_id").references(() => malotes.id),
     lacreAbertura: text("lacre_abertura"),
+    // LEGADO da R8 (caixa nasce em deficit / divida com o cofre), REVOGADA em 24/07 — ver
+    // PROJECT_BRAIN/12_DECISAO_FUNDO_SIMPLES.md. A coluna e MANTIDA em producao (risco sem ganho
+    // remover), mas o codigo NAO escreve mais nela: fica sempre no default 0. Nao usar em novo codigo.
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
     totalTransferencias: valorMonetario("total_transferencias").notNull().default("0"),

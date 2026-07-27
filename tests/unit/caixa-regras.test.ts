@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  montarResumoCaixa,
-  saldoCaixaCentavos,
-  saldoProprioCentavos,
-  type TotaisCaixaCentavos
-} from "@padaria/shared/caixa";
+import { montarResumoCaixa, saldoCaixaCentavos, type TotaisCaixaCentavos } from "@padaria/shared/caixa";
 import { centavosParaDecimalBanco, deCentavos, paraCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 
 function totais(parcial: Partial<TotaisCaixaCentavos> = {}): TotaisCaixaCentavos {
@@ -83,57 +78,27 @@ describe("montarResumoCaixa", () => {
       totalDespesas: 20,
       totalRetiradas: 10,
       totalMercadorias: 15,
-      dividaCofre: 0,
-      // saldoProprio e OPERACIONAL (exclui transferencias): 100 - 20 - 10 - 15 = 55. O saldo fisico
-      // (75) inclui o liquido das transferencias (+50 -30); saldoProprio nao.
-      saldoProprio: 55,
       propostaRetorno: 75, // sobra em especie a devolver = saldo fisico (> 0)
       saldo: 75
     });
   });
 
-  it("Deve_ExporDividaCofre_E_SaldoProprioNegativo_Quando_AberturaComMalote", () => {
-    // Malote de 490: a transferencia de abertura entra como transferenciasEntrada (dinheiro na
-    // gaveta) e dividaCofre = 490. Sem vendas, o saldo proprio nasce em -490 (deficit).
-    const resumo = montarResumoCaixa(totais({ transferenciasEntrada: 49000 }), 49000);
-    expect(resumo.dividaCofre).toBe(490);
-    expect(resumo.saldo).toBe(490); // saldo fisico (formula canonica intacta)
-    expect(resumo.saldoProprio).toBe(-490); // deficit com o cofre
-  });
-});
-
-describe("saldoProprioCentavos (R8 — deficit do malote, Opcao A/Lente B)", () => {
-  it("Deve_NascerEmDeficit_Quando_AberturaComMalote490SemVendas", () => {
-    // Abertura: transferencia cofre->caixa de 490 (transferenciasEntrada) e divida 490.
-    const saldoProprio = saldoProprioCentavos(totais({ transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(-49000);
+  // R8 REVOGADA em 24/07 (PROJECT_BRAIN/12): o malote e FUNDO DE TROCO, nao emprestimo. O resumo
+  // NAO expoe mais dividaCofre nem saldoProprio — o fundo ja esta no saldo canonico.
+  it("Fundo de troco entra no saldo fisico e nao gera divida (R8 revogada)", () => {
+    // Abertura com fundo 490: a transferencia cofre->caixa entra como transferenciasEntrada.
+    const resumo = montarResumoCaixa(totais({ transferenciasEntrada: 49000 }));
+    expect(resumo.saldo).toBe(490); // saldo fisico = o fundo na gaveta
+    expect(resumo.propostaRetorno).toBe(490); // no fechamento tudo volta ao cofre
+    expect(resumo).not.toHaveProperty("dividaCofre");
+    expect(resumo).not.toHaveProperty("saldoProprio");
   });
 
-  it("Deve_QuitarDivida_Quando_VendasEmDinheiroIgualamOMalote", () => {
-    // 490 em vendas dinheiro sobre o malote de 490: deficit zerado.
-    const saldoProprio = saldoProprioCentavos(totais({ entradas: 49000, transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(0);
-  });
-
-  it("Deve_VirarResultado_Quando_VendasSuperamOMalote", () => {
-    // 600 em vendas sobre malote de 490: 110 de resultado do caixa.
-    const saldoProprio = saldoProprioCentavos(totais({ entradas: 60000, transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(11000);
-  });
-
-  it("Deve_IgualarSaldoFisico_Quando_SemMalote_E_SemTransferencias", () => {
-    // Retrocompat: sem malote (divida 0) e sem transferencias, saldo proprio == saldo canonico.
-    const semMalote = totais({ entradas: 30000, despesas: 5000 });
-    expect(saldoProprioCentavos(semMalote, 0)).toBe(saldoCaixaCentavos(semMalote));
-  });
-
-  it("Deve_NaoDescontarEmDobro_Quando_HaSangria_ou_Retorno (M2)", () => {
-    // Malote 490, 490 em vendas dinheiro e uma sangria de 200 (caixa->cofre, transferenciasSaida).
-    // A sangria so MOVE dinheiro: nao pode mexer no rastreador de deficit -> continua 0 (divida quitada).
-    const comSangria = totais({ entradas: 49000, transferenciasEntrada: 49000, transferenciasSaida: 20000 });
-    expect(saldoProprioCentavos(comSangria, 49000)).toBe(0);
-    // Prova do bug antigo: a formula errada (saldo fisico - 2*divida) daria -20000 aqui.
-    expect(saldoCaixaCentavos(comSangria) - 2 * 49000).toBe(-20000);
+  it("Fundo 490 + venda 300 em dinheiro => saldo fisico 790", () => {
+    // Cenario-alvo do fundo simples: abrir com 490, vender 300 -> 790 (tudo volta ao cofre ao fechar).
+    const resumo = montarResumoCaixa(totais({ entradas: 30000, transferenciasEntrada: 49000 }));
+    expect(resumo.saldo).toBe(790);
+    expect(resumo.propostaRetorno).toBe(790);
   });
 });
 

@@ -6,8 +6,9 @@ import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
 // M2 (R3/R4/R6): sangria (turno) e retorno (fechamento) = caixa -> cofre, mesma entidade com tipo.
-// Cobre: (a) a fórmula do déficit NAO descontar em dobro apos sangria; (b) retorno proposto pela
-// sobra zera o saldo e libera o fechamento; (c) agregacao "aba TRANSFERENCIAS" por caixa+dia.
+// Modelo de FUNDO (R8 revogada em 24/07 — ver PROJECT_BRAIN/12): o fundo entra no saldo fisico e no
+// fechamento tudo volta ao cofre (caixa zerado). Cobre: (a) sangria sobre o fundo move dinheiro e
+// reduz o saldo; (b) retorno da sobra zera o saldo e libera o fechamento; (c) agregacao por caixa+dia.
 describe("caixa - retorno/sangria (M2)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
@@ -107,27 +108,34 @@ describe("caixa - retorno/sangria (M2)", () => {
     }>(r).data;
   }
 
-  it("Sangria NAO desconta o deficit em dobro (saldoProprio correto)", async () => {
+  it("Sangria sobre o fundo move dinheiro e reduz o saldo fisico (sem divida)", async () => {
     const maloteId = await criarMalote("LAC-SANGRIA", 490);
     const { contaId, pdvId, caixaId } = await abrir("sangria", "2026-08-01T08:00", maloteId);
 
     await venda(contaId, pdvId, "2026-08-01", 490);
-    // Divida quitada: saldoProprio == 0, saldo fisico == 980 (490 abertura + 490 vendas).
-    expect(await resumoAtual()).toMatchObject({ dividaCofre: 490, saldoProprio: 0, saldo: 980 });
+    // Fundo 490 + vendas 490 = saldo fisico 980. Nao ha mais dividaCofre/saldoProprio.
+    const comVenda = await resumoAtual();
+    expect(comVenda).toMatchObject({ saldo: 980 });
+    expect(comVenda).not.toHaveProperty("dividaCofre");
+    expect(comVenda).not.toHaveProperty("saldoProprio");
 
-    // Sangria de 200: so MOVE dinheiro -> saldoProprio continua 0; saldo fisico cai 200.
+    // Sangria de 200: caixa -> cofre. So MOVE dinheiro -> saldo fisico cai 200 (980 -> 780).
     const sangria = await transferenciaCofre(caixaId, "sangria", 200);
     expect(sangria.statusCode, sangria.body).toBe(200);
-    expect(await resumoAtual()).toMatchObject({ dividaCofre: 490, saldoProprio: 0, saldo: 780 });
+    expect(await resumoAtual()).toMatchObject({ saldo: 780 });
   });
 
-  it("Retorno da sobra zera o saldo e libera o fechamento", async () => {
-    // Abertura no passado (o fechamento usa "agora" e precisa ser posterior a abertura).
-    const { contaId, pdvId, caixaId } = await abrir("retorno", "2026-07-20T08:00");
+  it("Fundo 490 + venda 300: o retorno de 790 devolve tudo ao cofre e o caixa fecha zerado", async () => {
+    // Cenario-alvo do fundo simples. Abertura no passado (o fechamento usa "agora" e precisa ser
+    // posterior a abertura). Retorno automatico no fechamento e feature separada (Bloco 2, ainda nao
+    // na main); aqui o retorno e disparado explicitamente e leva o saldo a zero antes do fechar.
+    const maloteId = await criarMalote("LAC-RETORNO", 490);
+    const { contaId, pdvId, caixaId } = await abrir("retorno", "2026-07-20T08:00", maloteId);
     await venda(contaId, pdvId, "2026-07-20", 300);
 
     const resumo = await resumoAtual();
-    expect(resumo).toMatchObject({ saldo: 300, propostaRetorno: 300 });
+    expect(resumo).toMatchObject({ saldo: 790, propostaRetorno: 790 });
+    expect(resumo).not.toHaveProperty("dividaCofre");
 
     const retorno = await transferenciaCofre(caixaId, "retorno", resumo["propostaRetorno"] ?? 0);
     expect(retorno.statusCode, retorno.body).toBe(200);
