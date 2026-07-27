@@ -1,7 +1,10 @@
 <script setup lang="ts">
-// Nova transferencia fiel ao mockup (docs/mockups/TODAS-AS-TELAS-mockup.html, tela 1): hero R$,
-// Origem -> Destino, numero do lacre (o malote), descricao. REUSA o form e o salvarOperacao do
-// contexto (a UI muda, a gravacao continua a mesma). So aparece para 'transferencia'.
+// Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1). VISUAL-FIRST:
+// os campos que o backend JA suporta (valor, data lanc., origem, destino, descricao) salvam normal
+// via salvarOperacao; os campos NOVOS (N Lacre/Doc do setor, agendamento + data, data de
+// recebimento, multiplo destino, sempre confirmar, retorno/sangria) sao ESTADO LOCAL marcado
+// data-pendente="regra" e NAO vao para a API — a persistencia vem na rodada de regras.
+// Cor: token de categoria --cat-transferencias.
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 
 const { modalOperacaoAberto, entidadeNova, operacaoEditandoId, form, opcoesEmpresa, salvandoOperacao, salvarOperacao } =
@@ -14,25 +17,48 @@ const aberto = computed({
   }
 });
 
-// Abas visuais (Suprimento/Sangria/Retorno). O tipo "de cofre" (sangria/retorno) vive no fluxo do
-// caixa (M2); aqui e a transferencia manual. Deixado como seletor visual — a acao ainda e a mesma.
-const abas = ["Suprimento", "Sangria", "Retorno"];
-const aba = ref("Suprimento");
+// --- Campos SEM backend nesta rodada (data-pendente="regra"): estado LOCAL, nunca enviado. ---
+// TODO(regras): N Lacre/Doc "do setor" digitado (tabela `lacres` da Fase A).
+const lacreDoc = ref("");
+// TODO(regras): agendamento da transferencia (+ data de agendamento).
+const agendamento = ref(false);
+const dataAgendamento = ref("");
+// TODO(regras): data de recebimento — preenchida quando o destinatario CONFIRMA (fluxo 2 pontas).
+const dataRecebimento = ref("");
+// TODO(regras): multiplo destino (broadcast) e "sempre confirmar".
+const multiploDestino = ref(false);
+const sempreConfirmar = ref(false);
+// TODO(regras): bloco Retorno/Sangria — linhas repetiveis com sinal (+/-), valor e lacre.
+const retornoAberto = ref(false);
+type LinhaRetorno = { sinal: "+" | "-"; valor: string; lacre: string };
+const retornos = ref<LinhaRetorno[]>([{ sinal: "+", valor: "", lacre: "" }]);
+function addRetorno() {
+  retornos.value.push({ sinal: "+", valor: "", lacre: "" });
+}
+function removerRetorno(i: number) {
+  if (retornos.value.length > 1) retornos.value.splice(i, 1);
+}
+
+// --- Resumo Saida/Entrada/Saldo: calculado no FRONT a partir dos campos visiveis (nao persistido). ---
+const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
+const totalEntrada = computed(() =>
+  retornos.value.reduce((soma, l) => soma + (l.sinal === "-" ? -1 : 1) * Number(l.valor || 0), 0)
+);
+const saldo = computed(() => totalEntrada.value - totalSaida.value);
+function br(n: number) {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function dataISO(offset: number) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
   return d.toISOString().slice(0, 10);
 }
-function definirData(offset: number) {
-  form.value.dataReferencia = dataISO(offset);
-}
 const hojeISO = computed(() => dataISO(0));
-const ontemISO = computed(() => dataISO(-1));
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="440">
+  <v-dialog v-model="aberto" max-width="470">
     <div class="tr-modal">
       <div class="tr-head">
         <span class="tr-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
@@ -40,40 +66,53 @@ const ontemISO = computed(() => dataISO(-1));
         <v-icon class="tr-x" size="19" @click="aberto = false">mdi-close</v-icon>
       </div>
 
-      <div class="tr-abas">
-        <button v-for="a in abas" :key="a" type="button" class="tr-aba" :class="{ ativa: aba === a }" @click="aba = a">
-          {{ a }}
-        </button>
-      </div>
+      <!-- Bloco A · Transf. Saída -->
+      <div class="tr-secao">Transf. Saída</div>
 
       <div class="tr-hero">
         <span class="tr-cifra">R$</span>
         <input v-model="form.valorOriginal" class="tr-valor" type="number" inputmode="decimal" placeholder="0,00" />
       </div>
 
-      <div class="tr-datas">
-        <button
-          type="button"
-          class="tr-pill"
-          :class="{ ativo: form.dataReferencia === hojeISO }"
-          @click="definirData(0)"
-        >
-          Hoje
-        </button>
-        <button
-          type="button"
-          class="tr-pill"
-          :class="{ ativo: form.dataReferencia === ontemISO }"
-          @click="definirData(-1)"
-        >
-          Ontem
-        </button>
-        <input v-model="form.dataReferencia" type="date" class="tr-data-outros" />
+      <div class="tr-dois">
+        <label class="tr-campo">
+          <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
+          <input v-model="lacreDoc" data-pendente="regra" class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+        </label>
+        <label class="tr-campo">
+          <span class="tr-campo-lbl">Data Lanç</span>
+          <div class="tr-data-row">
+            <button
+              type="button"
+              class="tr-pill"
+              :class="{ ativo: form.dataReferencia === hojeISO }"
+              @click="form.dataReferencia = hojeISO"
+            >
+              Hoje
+            </button>
+            <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
+          </div>
+        </label>
       </div>
+
+      <label class="tr-check">
+        <input v-model="agendamento" type="checkbox" data-pendente="regra" />
+        <span>Agendamento</span>
+      </label>
+      <label v-if="agendamento" class="tr-campo tr-indent">
+        <span class="tr-campo-lbl">Data Agendamento</span>
+        <input v-model="dataAgendamento" type="datetime-local" data-pendente="regra" class="tr-input" />
+      </label>
+
+      <label class="tr-campo">
+        <span class="tr-campo-lbl">Data Recebimento</span>
+        <input :value="dataRecebimento" data-pendente="regra" class="tr-input tr-input-ro" readonly placeholder="—" />
+        <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
+      </label>
 
       <div class="tr-rota">
         <label class="tr-campo">
-          <span class="tr-campo-lbl">Origem</span>
+          <span class="tr-campo-lbl">Origem / Saída</span>
           <select v-model="form.contaOrigemId" class="tr-input">
             <option value="">—</option>
             <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
@@ -81,7 +120,7 @@ const ontemISO = computed(() => dataISO(-1));
         </label>
         <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
         <label class="tr-campo">
-          <span class="tr-campo-lbl">Destino</span>
+          <span class="tr-campo-lbl">Destino / Entrada</span>
           <select v-model="form.contaDestinoId" class="tr-input">
             <option value="">—</option>
             <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
@@ -89,18 +128,57 @@ const ontemISO = computed(() => dataISO(-1));
         </label>
       </div>
 
-      <label class="tr-campo tr-lacre">
-        <span class="tr-campo-lbl">Lacre (nº do malote)</span>
-        <select v-model="form.maloteId" class="tr-input tr-input-lacre">
-          <option value="">—</option>
-          <option v-for="m in opcoesEmpresa.malotes" :key="m.id" :value="m.id">{{ m.numeroLacre }}</option>
-        </select>
-      </label>
+      <div class="tr-checks">
+        <label class="tr-check">
+          <input v-model="multiploDestino" type="checkbox" data-pendente="regra" /><span>Múltiplo Destino</span>
+        </label>
+        <label class="tr-check">
+          <input v-model="sempreConfirmar" type="checkbox" data-pendente="regra" /><span>Sempre confirmar</span>
+        </label>
+        <label class="tr-check">
+          <input v-model="retornoAberto" type="checkbox" data-pendente="regra" /><span>Transf. Retorno / Sangria</span>
+        </label>
+      </div>
 
+      <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
+      <div v-if="retornoAberto" class="tr-retorno" data-pendente="regra">
+        <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
+        <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
+          <button
+            type="button"
+            class="tr-sinal"
+            :class="{ neg: l.sinal === '-' }"
+            @click="l.sinal = l.sinal === '+' ? '-' : '+'"
+          >
+            {{ l.sinal }}
+          </button>
+          <input v-model="l.valor" type="number" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
+          <input v-model="l.lacre" class="tr-input" placeholder="N° Lacre / Doc" />
+          <v-icon size="18" class="tr-item-del" @click="removerRetorno(i)">mdi-close</v-icon>
+        </div>
+        <button type="button" class="tr-add" @click="addRetorno">
+          <v-icon size="15">mdi-plus</v-icon> Adicionar linha
+        </button>
+      </div>
+
+      <!-- Descrição — obrigatória no backend; não está no desenho, fica discreta no rodapé. -->
       <label class="tr-campo">
         <span class="tr-campo-lbl">Descrição</span>
-        <input v-model="form.descricao" class="tr-input" placeholder="Ex.: Suprimento CX1M — reforço de troco" />
+        <input v-model="form.descricao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
       </label>
+
+      <!-- Bloco C · Resumo (calculado no front) -->
+      <div class="tr-resumo">
+        <div class="tr-resumo-linha">
+          <span>Saída (−)</span><b>R$ {{ br(totalSaida) }}</b>
+        </div>
+        <div class="tr-resumo-linha">
+          <span>Entrada (+)</span><b>R$ {{ br(totalEntrada) }}</b>
+        </div>
+        <div class="tr-resumo-linha tr-resumo-saldo">
+          <span>Saldo (±)</span><b>R$ {{ br(saldo) }}</b>
+        </div>
+      </div>
 
       <div class="tr-acoes">
         <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="salvarOperacao">
@@ -113,7 +191,7 @@ const ontemISO = computed(() => dataISO(-1));
 </template>
 
 <style scoped>
-/* Mockup tela 1. Laranja = token de categoria "transferencias" do V1. */
+/* FOTO 1 do Rodrigo. Laranja = token de categoria "transferencias". */
 .tr-modal {
   background: #fff;
   border: 0.5px solid #e4e8ef;
@@ -124,7 +202,7 @@ const ontemISO = computed(() => dataISO(-1));
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .tr-ic {
   display: flex;
@@ -146,26 +224,13 @@ const ontemISO = computed(() => dataISO(-1));
   color: #94a3b8;
   cursor: pointer;
 }
-.tr-abas {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-.tr-aba {
-  flex: 1;
-  border: 0.5px solid #e4e8ef;
-  border-radius: 999px;
-  padding: 7px 0;
-  background: none;
-  color: #64748b;
-  font-size: 12px;
-  cursor: pointer;
-}
-.tr-aba.ativa {
-  border-color: transparent;
-  background: var(--cat-transferencias-soft, #fff1e8);
+.tr-secao {
+  margin: 6px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--cat-transferencias-base, #c2410c);
-  font-weight: 500;
 }
 .tr-hero {
   display: flex;
@@ -189,55 +254,34 @@ const ontemISO = computed(() => dataISO(-1));
   font-weight: 500;
   letter-spacing: -0.5px;
 }
-.tr-datas {
+.tr-dois {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: 10px;
 }
-.tr-pill {
-  border: 0;
-  background: none;
-  padding: 6px 12px;
-  border-radius: 999px;
-  color: #64748b;
-  font-size: 12px;
-  cursor: pointer;
-}
-.tr-pill.ativo {
-  background: #f4f6fa;
-  border: 0.5px solid #cbd2dc;
-  color: #1f2733;
-}
-.tr-data-outros {
-  margin-left: auto;
-  border: 0.5px solid #e4e8ef;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: #64748b;
-}
-.tr-rota {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.tr-rota .tr-campo {
+.tr-dois .tr-campo {
   flex: 1;
-}
-.tr-seta {
-  margin-bottom: 9px;
-  color: var(--cat-transferencias-base, #c2410c);
 }
 .tr-campo {
   display: block;
   margin-bottom: 12px;
 }
+.tr-indent {
+  margin-left: 22px;
+}
 .tr-campo-lbl {
   display: block;
   margin-bottom: 3px;
   font-size: 11px;
+  color: #94a3b8;
+}
+.tr-hint {
+  color: #cbd2dc;
+}
+.tr-legenda {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-style: italic;
   color: #94a3b8;
 }
 .tr-input {
@@ -256,6 +300,140 @@ const ontemISO = computed(() => dataISO(-1));
 .tr-input-lacre {
   border-color: var(--cat-transferencias-base, #c2410c);
   font-weight: 500;
+}
+.tr-input-ro {
+  background: #f4f6fa;
+  color: #94a3b8;
+}
+.tr-data-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tr-data-input {
+  flex: 1;
+}
+.tr-pill {
+  border: 0.5px solid #cbd2dc;
+  background: none;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tr-pill.ativo {
+  background: var(--cat-transferencias-soft, #fff1e8);
+  border-color: transparent;
+  color: var(--cat-transferencias-base, #c2410c);
+}
+.tr-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #1f2733;
+  cursor: pointer;
+}
+.tr-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cat-transferencias-base, #c2410c);
+}
+.tr-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 12px;
+  padding: 10px 12px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+.tr-rota {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.tr-rota .tr-campo {
+  flex: 1;
+}
+.tr-seta {
+  margin-bottom: 9px;
+  color: var(--cat-transferencias-base, #c2410c);
+}
+.tr-retorno {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--cat-transferencias-base, #c2410c);
+  border-radius: 10px;
+  background: var(--cat-transferencias-soft, #fff1e8);
+}
+.tr-retorno-linha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tr-sinal {
+  flex: 0 0 30px;
+  height: 32px;
+  border: 0.5px solid #cbd2dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #15803d;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tr-sinal.neg {
+  color: var(--cat-despesas-base, #c0392b);
+}
+.tr-retorno-valor {
+  max-width: 120px;
+}
+.tr-item-del {
+  color: #94a3b8;
+  cursor: pointer;
+}
+.tr-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tr-resumo {
+  margin: 6px 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f4f6fa;
+}
+.tr-resumo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #64748b;
+  padding: 2px 0;
+}
+.tr-resumo-saldo {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 0.5px solid #e4e8ef;
+  color: var(--cat-resultado-base, #6d28d9);
+  font-weight: 700;
+}
+.tr-resumo-saldo b {
+  color: var(--cat-resultado-base, #6d28d9);
 }
 .tr-acoes {
   display: flex;
