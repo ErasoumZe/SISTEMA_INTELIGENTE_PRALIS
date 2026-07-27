@@ -538,6 +538,10 @@ const hojeISO = computed(() => dataISO(0));
   border: 0.5px solid #e4e8ef;
   border-radius: 16px;
   padding: 20px 22px;
+  /* Nunca ultrapassa a viewport: rola por dentro em qualquer largura (o rodape de acoes fica fixo,
+     abaixo). Sem isto, formularios altos cortavam o "Salvar" fora da tela. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
 }
 .lc-head {
   display: flex;
@@ -588,17 +592,21 @@ const hojeISO = computed(() => dataISO(0));
   font-weight: 500;
   letter-spacing: -0.5px;
 }
-.lc-tres {
-  display: flex;
-  gap: 8px;
-}
+.lc-tres,
 .lc-dois {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
-.lc-tres .lc-campo,
-.lc-dois .lc-campo {
-  flex: 1;
+/* 3 campos por linha no desktop; 2 no tablet (<=768) e 1 no celular (<=560) — os campos EMPILHAM. */
+.lc-tres > .lc-campo {
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: 0;
+}
+.lc-dois > .lc-campo,
+.lc-dois > .lc-foto {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
 }
 .lc-campo {
   display: block;
@@ -903,11 +911,18 @@ const hojeISO = computed(() => dataISO(0));
   font-weight: 500;
 }
 .lc-acoes {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 14px;
-  margin-top: 10px;
+  /* margens negativas = rodape "full-bleed" ate as bordas do modal (padding 20/22). */
+  margin: 12px -22px -20px;
+  padding: 12px 22px;
+  background: #fff;
+  border-top: 0.5px solid #e4e8ef;
 }
 .lc-salvar-nova {
   border: 0;
@@ -931,5 +946,30 @@ const hojeISO = computed(() => dataISO(0));
 .lc-salvar-nova:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* --- Responsividade (1024/768/560) — so layout. Os campos EMPILHAM, nunca somem. --- */
+@media (width <= 768px) {
+  .lc-tres > .lc-campo {
+    flex-basis: calc(50% - 4px);
+  }
+}
+@media (width <= 560px) {
+  .lc-tres > .lc-campo,
+  .lc-dois > .lc-campo,
+  .lc-dois > .lc-foto,
+  .lc-pagamento > .lc-toggle {
+    flex-basis: 100%;
+  }
+  /* Modal fullscreen (a casca do overlay ja e 100dvh via main.css): ocupa a tela toda. O rodape
+     fixo ja vem da regra base; aqui so ampliamos a altura e respeitamos a safe-area do iOS. */
+  .lc-modal {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .lc-acoes {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

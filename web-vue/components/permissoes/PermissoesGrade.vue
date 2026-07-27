@@ -17,16 +17,17 @@ const TELAS = [
 ];
 
 // 9 colunas do mockup -> sufixos candidatos do codigo real. "$" = variantes sobre valor / D-Pago.
+// `nome` = rotulo completo, so para tooltip (o rotulo abreviado continua sendo o exibido).
 const COLUNAS = [
-  { rotulo: "Lanç", sufixos: ["criar", "lancar"] },
-  { rotulo: "Pagar", sufixos: ["pagar"] },
-  { rotulo: "Discr", sufixos: ["discriminar"] },
-  { rotulo: "Ver", sufixos: ["visualizar"] },
-  { rotulo: "Ver$", sufixos: ["visualizar_valor", "visualizar_pago", "ver_pago"] },
-  { rotulo: "Edit", sufixos: ["editar"] },
-  { rotulo: "Edit$", sufixos: ["editar_valor", "editar_pago"] },
-  { rotulo: "Excl", sufixos: ["excluir"] },
-  { rotulo: "Excl$", sufixos: ["excluir_valor", "excluir_pago"] }
+  { rotulo: "Lanç", nome: "Lançar", sufixos: ["criar", "lancar"] },
+  { rotulo: "Pagar", nome: "Pagar", sufixos: ["pagar"] },
+  { rotulo: "Discr", nome: "Discriminar", sufixos: ["discriminar"] },
+  { rotulo: "Ver", nome: "Visualizar", sufixos: ["visualizar"] },
+  { rotulo: "Ver$", nome: "Visualizar valor / pago", sufixos: ["visualizar_valor", "visualizar_pago", "ver_pago"] },
+  { rotulo: "Edit", nome: "Editar", sufixos: ["editar"] },
+  { rotulo: "Edit$", nome: "Editar valor / pago", sufixos: ["editar_valor", "editar_pago"] },
+  { rotulo: "Excl", nome: "Excluir", sufixos: ["excluir"] },
+  { rotulo: "Excl$", nome: "Excluir valor / pago", sufixos: ["excluir_valor", "excluir_pago"] }
 ];
 
 const ESTADOS = ["herdar", "permitir", "negar"] as const;
@@ -64,11 +65,14 @@ function icone(codigo: string | null) {
     <div class="pg-grid">
       <div class="pg-linha pg-cabecalho">
         <div class="pg-tela-cel">Tela</div>
-        <div v-for="c in COLUNAS" :key="c.rotulo" class="pg-acao-cel">{{ c.rotulo }}</div>
+        <div v-for="c in COLUNAS" :key="c.rotulo" class="pg-acao-cel" :title="c.nome">{{ c.rotulo }}</div>
       </div>
       <div v-for="linha in grade" :key="linha.tela" class="pg-linha">
         <div class="pg-tela-cel pg-tela-nome">{{ linha.tela }}</div>
         <div v-for="(cel, i) in linha.celulas" :key="i" class="pg-acao-cel">
+          <!-- Rotulo por celula: escondido na grade larga (o cabecalho ja mostra); visivel no modo
+               card (<=768px), onde nao ha linha de cabecalho. -->
+          <span class="pg-acao-rotulo" :title="COLUNAS[i]?.nome">{{ COLUNAS[i]?.rotulo }}</span>
           <button
             v-if="cel.codigo"
             type="button"
@@ -148,6 +152,59 @@ function icone(codigo: string | null) {
 }
 .pg-btn:hover {
   background: #f4f6fa;
+}
+/* Rotulo por celula: so aparece no modo card (mobile); na grade larga o cabecalho ja mostra. */
+.pg-acao-rotulo {
+  display: none;
+}
+
+/* <=768px: a matriz de 10 colunas nao cabe num modal estreito -> vira CARDS (um por tela), com as
+   9 acoes em grid 3x3 e o rotulo de cada acao ao lado do toggle. Empilha, sem scroll horizontal. */
+@media (width <= 768px) {
+  .pg-grid {
+    display: grid;
+    gap: 10px;
+    border: 0;
+    overflow: visible;
+  }
+  .pg-cabecalho {
+    display: none;
+  }
+  .pg-linha {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 10px 12px;
+    border: 0.5px solid #e4e8ef;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .pg-tela-cel {
+    grid-column: 1 / -1;
+    padding: 0 0 6px;
+    font-weight: 600;
+    border-bottom: 0.5px solid #e4e8ef;
+  }
+  .pg-acao-cel {
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 44px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+  .pg-acao-rotulo {
+    display: block;
+    overflow: hidden;
+    font-size: 11px;
+    color: #64748b;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pg-btn {
+    min-width: 40px;
+    min-height: 40px;
+    flex: 0 0 auto;
+  }
 }
 .pg-legenda {
   display: flex;

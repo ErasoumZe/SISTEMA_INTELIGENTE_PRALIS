@@ -1421,3 +1421,23 @@ body {
   border-radius: 14px;
 }
 /* ===================== FIM MOBILLS TEMA V1 ===================== */
+
+/* =====================================================================
+   RESPONSIVIDADE — MODAIS FIEIS AO DESENHO DO RODRIGO (feat/visual-telas-rodrigo)
+   Bloco ADITIVO no fim do arquivo. So layout/CSS. Os modais custom (.tr-modal /
+   .lc-modal) NAO usam v-card, entao as regras M1/M2 acima (que miram .v-card) nao os
+   cobrem. Aqui a casca do overlay vira quase fullscreen em <=560px; o layout interno
+   (rolagem + rodape fixo) fica no <style scoped> de cada modal.
+   ===================================================================== */
+@media (width <= 560px) {
+  .v-overlay__content:has(.tr-modal),
+  .v-overlay__content:has(.lc-modal) {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0 !important;
+    border-radius: 0;
+  }
+}
+/* ===================== FIM RESPONSIVIDADE MODAIS RODRIGO ===================== */

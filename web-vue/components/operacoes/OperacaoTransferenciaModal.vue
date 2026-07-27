@@ -197,6 +197,10 @@ const hojeISO = computed(() => dataISO(0));
   border: 0.5px solid #e4e8ef;
   border-radius: 16px;
   padding: 20px 22px;
+  /* Nunca ultrapassa a viewport: rola por dentro em qualquer largura (rodape fixo abaixo). Sem
+     isto, com todas as secoes abertas o "Salvar" saía para fora da tela. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
 }
 .tr-head {
   display: flex;
@@ -436,11 +440,18 @@ const hojeISO = computed(() => dataISO(0));
   color: var(--cat-resultado-base, #6d28d9);
 }
 .tr-acoes {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 14px;
-  margin-top: 8px;
+  /* margens negativas = rodape "full-bleed" ate as bordas do modal (padding 20/22). */
+  margin: 12px -22px -20px;
+  padding: 12px 22px;
+  background: #fff;
+  border-top: 0.5px solid #e4e8ef;
 }
 .tr-salvar-nova {
   border: 0;
@@ -464,5 +475,41 @@ const hojeISO = computed(() => dataISO(0));
 .tr-salvar-nova:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* --- Responsividade (560) — so layout. Campos EMPILHAM, o Resumo continua visivel. --- */
+@media (width <= 560px) {
+  /* N Lacre/Doc + Data Lanç empilham. */
+  .tr-dois {
+    flex-direction: column;
+    gap: 0;
+  }
+  /* Origem -> Destino empilham; a seta vira vertical (aponta para baixo). */
+  .tr-rota {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .tr-seta {
+    margin: 2px auto;
+    transform: rotate(90deg);
+  }
+  /* Linhas de Retorno/Sangria podem quebrar sem estourar a largura. */
+  .tr-retorno-linha {
+    flex-wrap: wrap;
+  }
+  .tr-retorno-valor {
+    max-width: none;
+  }
+  /* Modal fullscreen (casca 100dvh via main.css). O rodape fixo ja vem da regra base; aqui so
+     ampliamos a altura e respeitamos a safe-area do iOS. */
+  .tr-modal {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .tr-acoes {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

@@ -201,4 +201,33 @@ function disponivel(status: string | undefined) {
   color: #94a3b8;
   font-size: 11px;
 }
+
+/* --- Responsividade (560) — so layout. No celular o valor/status vao para BAIXO do lacre
+   (nao espremidos a direita) e os botoes tem alvo de toque >= 44px. --- */
+@media (width <= 560px) {
+  .malote-row {
+    flex-wrap: wrap;
+  }
+  .malote-editar {
+    order: 2;
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+  }
+  .malote-valor-bloco {
+    order: 3;
+    flex: 1 0 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    /* alinhado sob o texto (badge 40px + gap 12px) */
+    margin: 4px 0 0 52px;
+    text-align: left;
+  }
+  .malotes-novo {
+    min-height: 44px;
+  }
+}
 </style>

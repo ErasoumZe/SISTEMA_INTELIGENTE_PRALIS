@@ -392,4 +392,12 @@ function fechar() {
   --cat: var(--cat-resultado-base);
   --cat-soft: var(--cat-resultado-soft);
 }
+
+/* Celular: as categorias empilham em 1 coluna (a barra de cor e o total continuam visiveis). No
+   tablet o auto-fill/minmax ja mantem cards com largura confortavel (>=190px). */
+@media (width <= 560px) {
+  .cat-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
