@@ -28,6 +28,8 @@ import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
 import { registrarRotasClientes } from "./clientes/clientes.controller.js";
 import { registrarRotasContas } from "./contas/contas.controller.js";
+import { registrarRotasContasUsuarios } from "./contas-usuarios/contas-usuarios.controller.js";
+import { registrarRotasLacres } from "./lacres/lacres.controller.js";
 import { registrarRotasEmpresas } from "./empresas/empresas.controller.js";
 import { registrarRotasFormasPagamento } from "./formas-pagamento/formas-pagamento.controller.js";
 import { registrarRotasFornecedores } from "./fornecedores/fornecedores.controller.js";
@@ -153,6 +155,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasCaixa(app);
   await registrarRotasEmpresas(app);
   await registrarRotasContas(app);
+  await registrarRotasContasUsuarios(app);
+  await registrarRotasLacres(app);
   await registrarRotasFormasPagamento(app);
   await registrarRotasPdvs(app);
   await registrarRotasFornecedores(app);

@@ -80,7 +80,11 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_pdv_visualizar",
       "cadastro_empresas_visualizar",
       "cadastro_usuarios_visualizar",
-      "cadastro_permissoes_visualizar"
+      "cadastro_permissoes_visualizar",
+      // Gerencia configura o vinculo usuario<->conta (FOTO 4) — paridade com a referencia de producao.
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_excluir"
     ]
   },
   {
@@ -93,7 +97,10 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_malotes_visualizar",
       "cadastro_malotes_criar",
       "cadastro_malotes_editar",
-      "transferencias_visualizar"
+      "transferencias_visualizar",
+      // Tesouraria opera os LACRES (selo do movimento) — paridade com a referencia de producao.
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar"
     ]
   },
   {

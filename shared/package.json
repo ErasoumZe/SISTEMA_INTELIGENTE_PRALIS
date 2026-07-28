@@ -61,6 +61,16 @@
       "development": "./src/contas/index.ts",
       "default": "./dist/contas/index.js"
     },
+    "./contas-usuarios": {
+      "types": "./dist/contas-usuarios/index.d.ts",
+      "development": "./src/contas-usuarios/index.ts",
+      "default": "./dist/contas-usuarios/index.js"
+    },
+    "./lacres": {
+      "types": "./dist/lacres/index.d.ts",
+      "development": "./src/lacres/index.ts",
+      "default": "./dist/lacres/index.js"
+    },
     "./empresas": {
       "types": "./dist/empresas/index.d.ts",
       "development": "./src/empresas/index.ts",

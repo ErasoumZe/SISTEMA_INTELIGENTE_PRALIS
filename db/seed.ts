@@ -269,7 +269,16 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   }),
   Tesouraria: permissoesDoCargoSeed({
     ativas: ["malotes", "transferencias"],
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
+    // Mantido em paridade com db/src/referencia-permissoes.ts (producao): tambem gerencia os LACRES.
+    extras: [
+      "cadastro_malotes_criar",
+      "cadastro_malotes_editar",
+      "transferencias_criar",
+      "transferencias_conferir",
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar",
+      "cadastro_lacres_editar"
+    ]
   }),
   Gerencia: permissoesDoCargoSeed({
     ativas: [
@@ -314,6 +323,11 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "cadastro_turnos_excluir",
       // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
       "mercadorias_editar",
+      // Gerencia configura o ESCOPO de conta por usuario (FOTO 4). Paridade com referencia de producao.
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_editar",
+      "cadastro_contas_usuarios_excluir",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),

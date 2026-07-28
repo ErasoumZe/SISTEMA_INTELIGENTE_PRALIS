@@ -7,6 +7,7 @@ export {
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
   contas,
+  contasUsuarios,
   empresas,
   formasPagamento,
   fornecedores,

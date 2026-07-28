@@ -106,6 +106,13 @@
       "when": 1784827649402,
       "tag": "0014_malote_e_lacre",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785247435173,
+      "tag": "0015_lacres_e_contas_usuarios",
+      "breakpoints": true
     }
   ]
 }

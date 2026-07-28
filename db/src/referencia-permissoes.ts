@@ -150,8 +150,17 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   Tesouraria: permissoesDoCargo({
     ativas: ["malotes", "transferencias"],
     // Lanca transferencia + CONFERE (D7 — conferencia = Financeiro/Gerencia/Tesouraria). Confere no
-    // dominio que acessa (transferencias); os demais dominios ela nao ve.
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
+    // dominio que acessa (transferencias); os demais dominios ela nao ve. Tambem gerencia os LACRES
+    // (selo do movimento), espelhando o cadastro de malotes.
+    extras: [
+      "cadastro_malotes_criar",
+      "cadastro_malotes_editar",
+      "transferencias_criar",
+      "transferencias_conferir",
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar",
+      "cadastro_lacres_editar"
+    ]
   }),
   Gerencia: permissoesDoCargo({
     ativas: [
@@ -197,6 +206,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
       // (mercadorias_editar faltava; os demais editar ela ja tinha acima.)
       "mercadorias_editar",
+      // Gerencia configura o ESCOPO de conta por usuario (FOTO 4: quais contas cada um opera).
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_editar",
+      "cadastro_contas_usuarios_excluir",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),

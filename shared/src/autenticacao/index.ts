@@ -62,10 +62,22 @@ export const permissoes = [
   "cadastro_malotes_criar",
   "cadastro_malotes_editar",
   "cadastro_malotes_excluir",
+  // Lacres = selo do MOVIMENTO (registro do lacre de uma transferencia de saida/retorno). Cadastro
+  // vizinho de malotes; operado pela Tesouraria. Distinto de malotes.numero_lacre (ver app.schema.ts).
+  "cadastro_lacres_visualizar",
+  "cadastro_lacres_criar",
+  "cadastro_lacres_editar",
+  "cadastro_lacres_excluir",
   "cadastro_contas_visualizar",
   "cadastro_contas_criar",
   "cadastro_contas_editar",
   "cadastro_contas_excluir",
+  // Vinculo usuario<->conta (FOTO 4): ESCOPO de conta por usuario — quais contas cada um opera e quem
+  // confirma recebimento. Nao e permissao de tela; e cadastro de escopo, operado pela Gerencia.
+  "cadastro_contas_usuarios_visualizar",
+  "cadastro_contas_usuarios_criar",
+  "cadastro_contas_usuarios_editar",
+  "cadastro_contas_usuarios_excluir",
   "cadastro_grupos_visualizar",
   "cadastro_grupos_criar",
   "cadastro_grupos_editar",

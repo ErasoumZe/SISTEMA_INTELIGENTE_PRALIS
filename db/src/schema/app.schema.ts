@@ -1159,6 +1159,60 @@ export const transferencias = pgTable(
   ]
 );
 
+// contas_usuarios (FOTO 4 do PROJECT_BRAIN/14): vinculo N:N usuario<->conta. Define QUAIS contas cada
+// usuario pode operar (as que aparecem como Origem/Destino numa transferencia) e QUEM pode confirmar o
+// recebimento de uma transferencia destinada aquela conta. NAO e permissao de tela (isso sao as 9 acoes
+// por dominio) — e ESCOPO DE CONTA por usuario; as duas coisas sao complementares. Reconstrucao do
+// trabalho de 24/07 (a tabela chegou a existir mas nunca foi commitada).
+export const contasUsuarios = pgTable(
+  "contas_usuarios",
+  {
+    id: idUuid,
+    empresaId,
+    contaId: uuid("conta_id")
+      .notNull()
+      .references(() => contas.id, { onDelete: "cascade" }),
+    usuarioId: text("usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    criadoEm
+  },
+  (table) => [
+    unique("contas_usuarios_unica").on(table.contaId, table.usuarioId),
+    index("contas_usuarios_usuario_idx").on(table.usuarioId),
+    index("contas_usuarios_conta_idx").on(table.contaId)
+  ]
+);
+
+// lacres: registro UNICO do lacre de um MOVIMENTO (a saida de uma transferencia OU cada linha de
+// retorno/sangria). O numero vem impresso de fonte externa, e digitado pelo operador e nao se repete
+// por empresa. `rompido` vira true quando o lacre e usado para receber/abrir no destino (o selo e
+// quebrado) — a partir dai nunca mais pode ser reutilizado. Reconstrucao do trabalho de 24/07.
+//
+// DISTINCAO de `malotes.numero_lacre` (sao coisas diferentes, nao confundir):
+//   - `malotes.numero_lacre` = IDENTIDADE do malote-ENTIDADE (o objeto fisico cadastrado, colapsado
+//     com o lacre na D3). E cadastro de objeto reutilizavel.
+//   - `lacres.numero`        = selo de um EVENTO de transporte: a prova de que UMA transferencia
+//     especifica saiu lacrada e foi recebida. E o "lacre do setor" da FOTO 1.
+export const lacres = pgTable(
+  "lacres",
+  {
+    id: idUuid,
+    empresaId,
+    numero: text("numero").notNull(),
+    transferenciaId: uuid("transferencia_id").references(() => transferencias.id, { onDelete: "set null" }),
+    // Ponta do movimento que o lacre selou: 'saida' (ida da transferencia) ou 'retorno' (volta/sangria).
+    origem: text("origem").notNull(),
+    rompido: boolean("rompido").notNull().default(false),
+    criadoEm
+  },
+  (table) => [
+    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno')`),
+    unique("lacres_numero_unico").on(table.empresaId, table.numero),
+    index("lacres_transf_idx").on(table.transferenciaId)
+  ]
+);
+
 export const fechamentosCaixa = pgTable(
   "fechamentos_caixa",
   {
