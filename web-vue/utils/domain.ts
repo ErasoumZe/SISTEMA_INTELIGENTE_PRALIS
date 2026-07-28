@@ -208,7 +208,8 @@ export const itemPorTela: Record<string, ItemMenu> = {
     id: "contas_pagar",
     titulo: "Contas a pagar",
     permissao: "contas_pagar_visualizar",
-    icone: "mdi-receipt-text"
+    // Distinto de Despesas (mdi-receipt-text): no menu por eixo V2 os dois caem juntos em "Saidas".
+    icone: "mdi-cash-clock"
   },
   relatorio_vendas: {
     id: "relatorio_vendas",
@@ -368,6 +369,9 @@ export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], 
   return "Tela indisponivel para este perfil.";
 }
 
+// Menu curto do FAB "+ NOVO" (estilo Mobills). Ordem: Despesa, Mercadoria, Retirada, Transferencia
+// (a "Entrada" e prefixada na propria shell, pois e navegacao — venda manual foi descontinuada).
+// `cor` e a cor da categoria (token --cat-*), aplicada ao icone do item.
 export const opcoesNovo: AcaoNovo[] = [
   {
     entidade: "despesa",
@@ -375,7 +379,7 @@ export const opcoesNovo: AcaoNovo[] = [
     subtitulo: "Fornecedor, grupo e itens discriminados",
     permissao: "despesas_criar",
     icone: "mdi-receipt-text",
-    cor: "error"
+    cor: "var(--cat-despesas-base)"
   },
   {
     entidade: "mercadoria",
@@ -383,15 +387,7 @@ export const opcoesNovo: AcaoNovo[] = [
     subtitulo: "Compra, nota fiscal e documento",
     permissao: "mercadorias_criar",
     icone: "mdi-package-variant-closed",
-    cor: "info"
-  },
-  {
-    entidade: "transferencia",
-    titulo: "Transferencia",
-    subtitulo: "Contas, malote e lacre",
-    permissao: "transferencias_criar",
-    icone: "mdi-swap-horizontal",
-    cor: "primary"
+    cor: "var(--cat-mercadorias-base)"
   },
   {
     entidade: "retirada",
@@ -399,7 +395,15 @@ export const opcoesNovo: AcaoNovo[] = [
     subtitulo: "Colaborador, fornecedor ou retirada operacional",
     permissao: "retiradas_criar",
     icone: "mdi-wallet",
-    cor: "warning"
+    cor: "var(--cat-retiradas-base)"
+  },
+  {
+    entidade: "transferencia",
+    titulo: "Transferencia",
+    subtitulo: "Contas, malote e lacre",
+    permissao: "transferencias_criar",
+    icone: "mdi-swap-horizontal",
+    cor: "var(--cat-transferencias-base)"
   }
 ];
 

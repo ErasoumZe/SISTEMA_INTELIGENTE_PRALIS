@@ -1441,3 +1441,271 @@ body {
   }
 }
 /* ===================== FIM RESPONSIVIDADE MODAIS RODRIGO ===================== */
+
+/* =====================================================================
+   SHELL MOBILLS — redesenho do menu + navegacao + layout base (rodada de SHELL)
+   Bloco 100% ADITIVO e escopado sob .shell-mobills. Vence o chrome LARANJA (bloco LAB
+   acima) por especificidade (.shell-mobills .x) + ordem de fonte, sem edita-lo.
+   Reverter = remover a classe .shell-mobills do AppShell.vue + este bloco.
+   Consome os tokens Mobills/Material ja existentes (--brand, --cat-*, --canvas...).
+   NAO toca api/db/shared e NAO muda regra de permissao. Ref: docs/research/mobills +
+   PROJECT_BRAIN/03,04,10.
+   ===================================================================== */
+.shell-mobills {
+  --shell-brand: var(--brand, #6515dd);
+  --shell-brand-strong: var(--brand-strong, #35128c);
+  --shell-canvas: var(--canvas, #f4f6fa);
+  --shell-surface: var(--surface, #ffffff);
+  --shell-line: var(--line, #e4e8ef);
+  --shell-ink: #1f2733;
+  --shell-ink-soft: #64748b;
+  --shell-hover: #f3f5f9;
+  --shell-active-bg: color-mix(in srgb, var(--shell-brand) 10%, #ffffff);
+  --shell-active-ink: var(--shell-brand-strong);
+}
+
+/* Canvas Mobills (levemente mais frio que o creme laranja) */
+.shell-mobills.padaria-shell,
+.shell-mobills .padaria-main {
+  background: var(--shell-canvas) !important;
+}
+
+/* ---- Sidebar branca, neutra (sem tom laranja) ---- */
+.shell-mobills .padaria-sidebar {
+  background: var(--shell-surface) !important;
+  border-right: 1px solid var(--shell-line) !important;
+  box-shadow: 2px 0 16px rgb(15 23 42 / 0.05) !important;
+}
+.shell-mobills .padaria-sidebar .v-navigation-drawer__content {
+  background: var(--shell-surface);
+}
+.shell-mobills .sidebar-logo-row:hover {
+  background: var(--shell-hover);
+}
+.shell-mobills .sidebar-logo-row:focus-visible,
+.shell-mobills .sidebar-item:focus-visible,
+.shell-mobills .topbar-period-label:focus-visible,
+.shell-mobills .topbar-empresa:focus-visible,
+.shell-mobills .topbar-user:focus-visible {
+  outline: 2px solid var(--shell-brand);
+  outline-offset: 2px;
+}
+
+/* ---- FAB "+ NOVO" no topo: pill roxo Mobills (#6515dd, raio 25px) ---- */
+.shell-mobills .sidebar-actions {
+  margin: 4px 2px 6px;
+}
+.shell-mobills .sidebar-new-button {
+  min-height: 48px;
+  justify-content: center;
+  border-radius: 25px !important;
+  background: var(--shell-brand) !important;
+  color: #fff !important;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  box-shadow: 0 6px 16px rgb(101 21 221 / 0.28) !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.shell-mobills .sidebar-new-button:hover {
+  background: var(--shell-brand-strong) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgb(101 21 221 / 0.34) !important;
+}
+
+/* ---- Itens do menu: neutro; hover suave; ATIVO em realce ROXO (sem barra laranja) ---- */
+.shell-mobills .sidebar-item {
+  color: var(--shell-ink-soft);
+  font-weight: 600;
+  border-radius: 12px;
+}
+.shell-mobills .sidebar-item .v-icon {
+  color: var(--shell-ink-soft);
+}
+.shell-mobills .sidebar-item:hover:not(.disabled) {
+  background: var(--shell-hover);
+  color: var(--shell-ink);
+}
+.shell-mobills .sidebar-item.active {
+  background: var(--shell-active-bg) !important;
+  color: var(--shell-active-ink) !important;
+  font-weight: 800;
+}
+.shell-mobills .sidebar-item.active .v-icon {
+  color: var(--shell-brand) !important;
+}
+/* mata a barrinha laranja do estado ativo do bloco LAB */
+.shell-mobills .sidebar-item.active::before {
+  display: none !important;
+}
+.shell-mobills .sidebar-group-label {
+  color: var(--shell-ink-soft);
+  letter-spacing: 1.2px;
+}
+.shell-mobills .sidebar-scroll-shell::before {
+  background: linear-gradient(var(--shell-surface), rgb(255 255 255 / 0));
+}
+.shell-mobills .sidebar-scroll-shell::after {
+  background: linear-gradient(rgb(255 255 255 / 0), var(--shell-surface));
+}
+
+/* Menu do FAB "+ NOVO" (renderizado em overlay no body — NAO escopar sob .shell-mobills) */
+.fab-novo-list .v-list-item {
+  border-radius: 10px;
+}
+.fab-novo-icone {
+  margin-inline-end: 4px;
+}
+
+/* ---- TOPBAR: 3 zonas (titulo | mes | empresa+usuario) ---- */
+.shell-mobills .padaria-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  min-height: 64px;
+  background: var(--shell-surface) !important;
+  border-bottom: 1px solid var(--shell-line) !important;
+  box-shadow: none;
+}
+.shell-mobills .topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.shell-mobills .topbar-page-id {
+  color: var(--shell-ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+.shell-mobills .topbar-period {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.shell-mobills .topbar-period-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: var(--shell-surface);
+  padding: 6px 14px;
+  color: var(--shell-ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.shell-mobills .topbar-period-label:hover {
+  background: var(--shell-active-bg);
+  border-color: var(--shell-brand);
+}
+.shell-mobills .topbar-period .v-icon {
+  color: var(--shell-ink-soft);
+}
+.shell-mobills .topbar-actions {
+  justify-self: end;
+  gap: 8px;
+}
+.shell-mobills .topbar-empresa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: var(--shell-surface);
+  padding: 6px 12px;
+  color: var(--shell-ink);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.shell-mobills .topbar-empresa.estatica {
+  cursor: default;
+}
+.shell-mobills .topbar-empresa > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-mobills .topbar-empresa .v-icon {
+  color: var(--shell-brand);
+}
+.shell-mobills .topbar-user {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.shell-mobills .topbar-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--shell-brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ---- Responsivo (breakpoints do projeto: 1260/1024/768/560/390) ---- */
+@media (width <= 1024px) {
+  .shell-mobills .topbar-empresa {
+    max-width: 160px;
+  }
+}
+@media (width <= 768px) {
+  .shell-mobills .topbar-empresa > span {
+    display: none;
+  }
+  .shell-mobills .topbar-empresa {
+    max-width: none;
+    padding: 6px;
+  }
+  .shell-mobills .topbar-page-id {
+    font-size: 15px;
+  }
+}
+@media (width <= 560px) {
+  .shell-mobills .padaria-topbar {
+    gap: 6px;
+  }
+  .shell-mobills .topbar-period-label {
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+  .shell-mobills .topbar-period-label > span {
+    max-width: 104px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@media (width <= 390px) {
+  /* espaco minimo: o titulo da pagina cede para o seletor de mes caber */
+  .shell-mobills .topbar-page-id {
+    display: none;
+  }
+}
+
+/* ---- Modo escuro: tokens do shell (surfaces seguem o dark ja existente) ---- */
+:root[data-theme="dark"] .shell-mobills {
+  --shell-surface: #191f26;
+  --shell-canvas: #0f1318;
+  --shell-line: #2a323c;
+  --shell-ink: #e7e9ec;
+  --shell-ink-soft: #a6afba;
+  --shell-hover: #232b34;
+  --shell-active-bg: color-mix(in srgb, var(--shell-brand) 30%, #191f26);
+  --shell-active-ink: #d9c8ff;
+}
+/* ===================== FIM SHELL MOBILLS ===================== */

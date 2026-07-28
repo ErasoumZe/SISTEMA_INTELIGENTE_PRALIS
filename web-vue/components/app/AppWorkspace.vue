@@ -996,7 +996,10 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
 }
 
 async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
-  if (!caixaAberto.value) {
+  // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
+  // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
+  // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
+  if (!caixaAberto.value && entidade !== "transferencia") {
     notificar("Abra um caixa antes de registrar lancamentos.", "warning");
     void router.push("/caixa");
     return;
@@ -1651,10 +1654,15 @@ const pageContext = computed(() => ({
   telaAtiva: telaAtiva.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
+  // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
+  operacoesTela: operacoesDaTela.value,
   totalOperacoes: operacoesDaTela.value.length,
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   descricao: descricaoTela(telaAtiva.value),
+  // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
+  podeCriarTransferencia: temPermissao("transferencias_criar"),
+  podeEditarTransferencia: temPermissao("transferencias_editar"),
   caixaStatus: caixaStatus.value,
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
@@ -1827,15 +1835,33 @@ onBeforeUnmount(() => {
         <template #activator="{ props: menuProps }">
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
         </template>
-        <v-list min-width="280">
+        <v-list min-width="288" class="fab-novo-list">
+          <!-- Entrada = venda por integracao (nao ha lancamento manual): item navega para a tela. -->
+          <v-list-item
+            v-if="temPermissao('entradas_visualizar')"
+            :to="rotaTela('entradas')"
+            title="Entrada"
+            subtitle="Vendas e faturamento (integracao)"
+          >
+            <template #prepend>
+              <v-icon
+                icon="mdi-arrow-down-left"
+                class="fab-novo-icone"
+                :style="{ color: 'var(--cat-entradas-base)' }"
+              />
+            </template>
+          </v-list-item>
           <v-list-item
             v-for="acao in acoesNovo"
             :key="acao.titulo"
-            :prepend-icon="acao.icone"
             :title="acao.titulo"
             :subtitle="acao.subtitulo"
             @click="executarAcaoNovo(acao)"
-          />
+          >
+            <template #prepend>
+              <v-icon :icon="acao.icone" class="fab-novo-icone" :style="{ color: acao.cor }" />
+            </template>
+          </v-list-item>
         </v-list>
       </v-menu>
     </template>

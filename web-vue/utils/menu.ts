@@ -3,27 +3,33 @@
 // usePermissoes (telasPermitidas); aqui so se decide em que secao cada tela cai.
 import type { ItemMenu } from "~/types/padaria";
 
+// Grupos do menu na nomenclatura do Xmind V2 (PROJECT_BRAIN/10): as grandes categorias viram
+// Entradas / Transferencias / Saidas / Resultados / Configuracao. Isto e SO o esqueleto de grupos
+// (o menu montado por SETOR e trabalho posterior); aqui cada tela existente cai no seu eixo. Os
+// titulos seguem a convencao ASCII do resto do codigo (dominio em portugues sem acento).
 export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
-    titulo: "Operacao",
-    ids: [
-      "caixa",
-      "historico_caixas",
-      "entradas",
-      "despesas",
-      "retiradas",
-      "transferencias",
-      "mercadorias",
-      "fechamento",
-      "pedidos"
-    ]
+    // Entradas – Vendas / Faturamento: o caixa (onde a venda entra) + o historico + a tela de entradas.
+    titulo: "Entradas",
+    ids: ["caixa", "historico_caixas", "entradas"]
   },
   {
-    titulo: "Relatorios",
+    // Transferencias – Contas / Locais: cofre <-> caixa, malote/lacre e o plano de contas (eixo laranja).
+    titulo: "Transferencias",
+    ids: ["transferencias", "malotes", "contas"]
+  },
+  {
+    // Saidas – Despesas / Custos + Mercadorias / CMV + Retiradas / Investimentos (+ estoque e a pagar).
+    titulo: "Saidas",
+    ids: ["despesas", "mercadorias", "retiradas", "contas_pagar", "pedidos", "perdas_sobras", "estoque_produtos"]
+  },
+  {
+    // Resultados – Relatorios + Diferenca de fechamento.
+    titulo: "Resultados",
     ids: [
+      "fechamento",
       "relatorio_vendas",
       "relatorio_produtos",
-      "contas_pagar",
       "relatorio_dre",
       "relatorio_faltas",
       "relatorio_advertencias",
@@ -31,7 +37,8 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
     ]
   },
   {
-    titulo: "Cadastros",
+    // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).
+    titulo: "Configuracao",
     ids: [
       "produtos",
       "grupos",
@@ -41,19 +48,23 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "fornecedores",
       "clientes",
       "colaboradores",
-      "pdv",
-      "malotes",
-      "areas_setores",
+      "folha_ponto",
+      "avaliacao_qualidade",
+      "avaliacao_colaboradores",
+      "promocoes",
       "ficha_tecnica",
       "ingredientes",
       "fiscal_produtos",
       "patrimonio",
-      "notas_fiscais"
+      "notas_fiscais",
+      "pdv",
+      "areas_setores",
+      "empresas",
+      "usuarios",
+      "permissoes",
+      "integracoes",
+      "aparencia"
     ]
-  },
-  {
-    titulo: "Administracao",
-    ids: ["empresas", "contas", "usuarios", "permissoes", "integracoes", "aparencia"]
   }
 ];
 

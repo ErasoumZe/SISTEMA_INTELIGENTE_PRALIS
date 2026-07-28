@@ -42,6 +42,44 @@ const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value
 
 const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
 
+// Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
+const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuario");
+const emailUsuario = computed(() => props.sessao.user?.email ?? "");
+const iniciaisUsuario = computed(() => {
+  const partes = nomeUsuario.value.trim().split(/\s+/).filter(Boolean);
+  const iniciais = (partes[0]?.[0] ?? "") + (partes.length > 1 ? (partes[partes.length - 1]?.[0] ?? "") : "");
+  return iniciais.toUpperCase() || "U";
+});
+
+// Seletor de periodo (mes) da topbar — estilo Mobills. VISUAL nesta rodada de SHELL: guarda o mes
+// escolhido em estado LOCAL e ainda NAO filtra os dados das telas (a fiacao ao fluxo de dados fica
+// para a rodada de conteudo). Setas < > andam mes a mes; o rotulo abre a lista dos 12 meses do ano.
+const mesRef = ref(new Date());
+const rotuloMes = computed(() => {
+  const texto = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(mesRef.value);
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+});
+function passoMes(delta: number) {
+  const d = new Date(mesRef.value);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + delta);
+  mesRef.value = d;
+}
+const mesesDoAno = computed(() => {
+  const ano = mesRef.value.getFullYear();
+  const atual = mesRef.value.getMonth();
+  return Array.from({ length: 12 }, (_, m) => {
+    const nome = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(ano, m, 1));
+    return { valor: m, rotulo: `${nome.charAt(0).toUpperCase()}${nome.slice(1)} ${ano}`, ativo: m === atual };
+  });
+});
+function irParaMes(m: number) {
+  const d = new Date(mesRef.value);
+  d.setDate(1);
+  d.setMonth(m);
+  mesRef.value = d;
+}
+
 function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
 }
@@ -96,7 +134,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <v-layout class="padaria-shell">
+  <v-layout class="padaria-shell shell-mobills">
     <v-navigation-drawer
       :model-value="drawerAberto"
       :permanent="!viewportMobile"
@@ -119,36 +157,13 @@ onMounted(() => {
           >
             <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="sidebar-logo" />
           </button>
-          <div class="sidebar-brand">
-            <div class="brand-copy">
-              <div class="sidebar-label">EMPRESA ATIVA</div>
-              <v-menu v-if="empresas.length > 1" location="bottom start">
-                <template #activator="{ props: menuProps }">
-                  <button v-bind="menuProps" type="button" class="company-trigger">
-                    <span>{{ nomeEmpresaCurto }}</span>
-                    <v-icon icon="mdi-chevron-down" size="18" />
-                  </button>
-                </template>
-                <v-list min-width="260" density="compact">
-                  <v-list-item
-                    v-for="empresa in empresas"
-                    :key="empresa.id"
-                    :active="empresa.id === empresaId"
-                    :title="empresa.nome"
-                    :disabled="carregandoEmpresa"
-                    @click="emit('selecionarEmpresa', empresa.id)"
-                  />
-                </v-list>
-              </v-menu>
-              <div v-else class="company-name">{{ nomeEmpresaCurto }}</div>
-            </div>
-          </div>
 
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
-
+          <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->
           <div class="sidebar-actions">
             <slot name="actions" />
           </div>
+
+          <slot name="caixa" :caixa-aberto="caixaAberto" />
         </div>
 
         <div class="sidebar-scroll-shell">
@@ -208,11 +223,78 @@ onMounted(() => {
 
     <v-main class="padaria-main">
       <header class="padaria-topbar">
-        <!-- No desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay) ainda
-             e preciso um gatilho para abrir. -->
-        <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
-        <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
+        <!-- ESQUERDA: no desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay)
+             ainda e preciso um gatilho para abrir. -->
+        <div class="topbar-left">
+          <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
+          <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
+        </div>
+
+        <!-- CENTRO: seletor de periodo (mes), como no Mobills. Visual nesta rodada (ver script). -->
+        <div class="topbar-period">
+          <v-btn
+            icon="mdi-chevron-left"
+            variant="text"
+            density="comfortable"
+            title="Mes anterior"
+            aria-label="Mes anterior"
+            @click="passoMes(-1)"
+          />
+          <v-menu location="bottom center">
+            <template #activator="{ props: menuProps }">
+              <button v-bind="menuProps" type="button" class="topbar-period-label" aria-label="Selecionar mes">
+                <v-icon icon="mdi-calendar-month-outline" size="18" />
+                <span>{{ rotuloMes }}</span>
+                <v-icon icon="mdi-chevron-down" size="16" />
+              </button>
+            </template>
+            <v-list density="compact" min-width="200">
+              <v-list-item
+                v-for="mes in mesesDoAno"
+                :key="mes.valor"
+                :active="mes.ativo"
+                :title="mes.rotulo"
+                @click="irParaMes(mes.valor)"
+              />
+            </v-list>
+          </v-menu>
+          <v-btn
+            icon="mdi-chevron-right"
+            variant="text"
+            density="comfortable"
+            title="Proximo mes"
+            aria-label="Proximo mes"
+            @click="passoMes(1)"
+          />
+        </div>
+
+        <!-- DIREITA: empresa + tema + usuario. -->
         <div class="topbar-actions">
+          <v-menu v-if="empresas.length > 1" location="bottom end">
+            <template #activator="{ props: menuProps }">
+              <button v-bind="menuProps" type="button" class="topbar-empresa" aria-label="Trocar de empresa">
+                <v-icon icon="mdi-domain" size="18" />
+                <span>{{ nomeEmpresaCurto }}</span>
+                <v-icon icon="mdi-chevron-down" size="16" />
+              </button>
+            </template>
+            <v-list min-width="260" density="compact">
+              <v-list-subheader>Empresa ativa</v-list-subheader>
+              <v-list-item
+                v-for="empresa in empresas"
+                :key="empresa.id"
+                :active="empresa.id === empresaId"
+                :title="empresa.nome"
+                :disabled="carregandoEmpresa"
+                @click="emit('selecionarEmpresa', empresa.id)"
+              />
+            </v-list>
+          </v-menu>
+          <span v-else class="topbar-empresa estatica">
+            <v-icon icon="mdi-domain" size="18" />
+            <span>{{ nomeEmpresaCurto }}</span>
+          </span>
+
           <v-btn
             :icon="escuro ? 'mdi-weather-sunny' : 'mdi-weather-night'"
             variant="text"
@@ -220,6 +302,20 @@ onMounted(() => {
             :aria-label="escuro ? 'Ativar tema claro' : 'Ativar tema escuro'"
             @click="alternarModoEscuro"
           />
+
+          <v-menu location="bottom end">
+            <template #activator="{ props: menuProps }">
+              <button v-bind="menuProps" type="button" class="topbar-user" :title="nomeUsuario">
+                <span class="topbar-avatar">{{ iniciaisUsuario }}</span>
+              </button>
+            </template>
+            <v-list min-width="240" density="compact">
+              <v-list-item :title="nomeUsuario" :subtitle="emailUsuario" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-logout" title="Sair" :disabled="saindo" @click="emit('logout')" />
+            </v-list>
+          </v-menu>
+
           <slot name="heading-actions" />
         </div>
       </header>
