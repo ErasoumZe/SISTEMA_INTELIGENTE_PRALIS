@@ -55,6 +55,8 @@ const acoesExtras = computed(() => {
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }
     ];
+  // Vinculo usuario <-> contas (FOTO 4): botao "Contas" por linha de usuario.
+  if (props.tela === "usuarios") return [{ label: "Contas", event: "vincularContas", condicao: () => true }];
   return [];
 });
 </script>
