@@ -315,6 +315,13 @@ const hojeISO = computed(() => dataISO(0));
         </label>
       </div>
 
+      <!-- Descrição: obrigatória no backend (descricao NOT NULL) e importante para auditoria. Nao
+           esta no desenho enxuto, mas fica acessivel aqui. -->
+      <label class="lc-campo">
+        <span class="lc-campo-lbl">Descrição</span>
+        <input v-model="form.descricao" class="lc-input" placeholder="Ex.: Insumos — farinha e fermento" />
+      </label>
+
       <!-- Linha 4: Pagamento (S/N) · Data pagamento · Data Vencimento -->
       <div class="lc-tres lc-pagamento">
         <label class="lc-campo lc-toggle">
