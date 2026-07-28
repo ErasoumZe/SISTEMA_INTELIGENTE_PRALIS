@@ -110,7 +110,12 @@ const hojeISO = computed(() => dataISO(0));
         <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
       </label>
 
-      <div class="tr-rota">
+      <!-- Sem contas vinculadas ao usuario (contas_usuarios): aviso claro no lugar de selects vazios. -->
+      <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
+        <v-icon icon="mdi-alert-circle-outline" size="18" />
+        <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
+      </div>
+      <div v-else class="tr-rota">
         <label class="tr-campo">
           <span class="tr-campo-lbl">Origem / Saída</span>
           <select v-model="form.contaOrigemId" class="tr-input">
@@ -354,6 +359,19 @@ const hojeISO = computed(() => dataISO(0));
   border: 0.5px solid #e4e8ef;
   border-radius: 10px;
   background: #fbfcfe;
+}
+.tr-aviso-contas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  border: 1px solid #fcd9a8;
+  border-radius: 10px;
+  background: #fff8ec;
+  color: #92600a;
+  font-size: 13px;
+  font-weight: 600;
 }
 .tr-rota {
   display: flex;

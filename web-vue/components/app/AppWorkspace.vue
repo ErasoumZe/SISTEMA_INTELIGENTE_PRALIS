@@ -622,8 +622,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), [])
     ]);
   } else if (tela === "transferencias") {
+    // Origem/Destino: SO as contas que o usuario opera (contas_usuarios; admin ve todas). Ver
+    // /api/contas-usuarios/minhas-contas. Sem vinculo => vazio (o modal mostra o aviso).
     [dados.contas, dados.malotes] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Malotes", () => apiGet<Opcao[]>(`/api/malotes${query}`), [])
     ]);
   } else if (tela === "despesas") {
@@ -636,8 +638,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         gruposVazios
       )
     );
+    // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
     [dados.contas, dados.fornecedores] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), [])
     ]);
   } else if (tela === "contas_pagar") {
@@ -653,8 +656,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
+    // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
     [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
       carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
       carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), [])
@@ -670,8 +674,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta origem e obrigatoria no form de retirada (sem ela o select fica "No data available").
+    // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
     [dados.contas, dados.fornecedores, dados.colaboradores] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
       carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), [])
     ]);
@@ -941,7 +946,8 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
 
   const tarefas: Record<ChaveOpcaoOperacao, () => Promise<void>> = {
     contas: async () => {
-      alvo.contas = await apiGet<Opcao[]>(`/api/contas${query}`);
+      // Modal aberto pelo "+ NOVO" global: contas do usuario (contas_usuarios; admin ve todas).
+      alvo.contas = await apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`);
     },
     fornecedores: async () => {
       alvo.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);

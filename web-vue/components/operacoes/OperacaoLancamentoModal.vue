@@ -308,7 +308,12 @@ const hojeISO = computed(() => dataISO(0));
         </label>
         <label class="lc-campo">
           <span class="lc-campo-lbl">Conta</span>
-          <select v-model="form.contaOrigemId" class="lc-input">
+          <!-- Sem contas vinculadas (contas_usuarios): aviso no lugar de um select vazio. -->
+          <div v-if="!opcoesEmpresa.contas.length" class="lc-aviso-contas" role="alert">
+            <v-icon icon="mdi-alert-circle-outline" size="16" />
+            <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
+          </div>
+          <select v-else v-model="form.contaOrigemId" class="lc-input">
             <option value="">—</option>
             <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
           </select>
@@ -618,6 +623,18 @@ const hojeISO = computed(() => dataISO(0));
 .lc-campo {
   display: block;
   margin-bottom: 10px;
+}
+.lc-aviso-contas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fcd9a8;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #92600a;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 .lc-mt {
   margin-top: 4px;
