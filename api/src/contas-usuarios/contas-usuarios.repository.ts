@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { contasUsuarios } from "@padaria/db/schema/cadastro";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 const colunasVinculo = {
@@ -23,6 +23,19 @@ export async function listarContasUsuariosRepository(
     .from(contasUsuarios)
     .where(and(...condicoes))
     .orderBy(desc(contasUsuarios.criadoEm));
+}
+
+// Contas que o usuario opera (via vinculo contas_usuarios). Alimenta os seletores operacionais
+// (Origem/Destino da transferencia e Conta dos lancamentos). Retorna [] quando o usuario nao tem
+// nenhum vinculo — a regra "sem vinculo = nenhuma conta" (Jose, 27/07) mora no service, aqui so a
+// consulta pura.
+export async function listarContasDoUsuarioRepository(usuarioId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({ id: contas.id, empresaId: contas.empresaId, nome: contas.nome })
+    .from(contas)
+    .innerJoin(contasUsuarios, eq(contasUsuarios.contaId, contas.id))
+    .where(eq(contasUsuarios.usuarioId, usuarioId))
+    .orderBy(asc(contas.nome));
 }
 
 // Unicidade (conta+usuario) tambem e garantida pelo banco (contas_usuarios_unica); checagem previa

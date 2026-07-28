@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 async function usuarioIdPorEmail(email: string): Promise<string> {
   const linha = await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
@@ -116,5 +116,58 @@ describe("contas-usuarios integration", () => {
       payload: { empresaId: idsTeste.empresaA, contaId: idsTeste.contaCaixa, usuarioId: usuarioCaixaId }
     });
     assertProblem(criar, 403, "INSUFFICIENT_PERMISSION");
+  });
+
+  // ETAPA 2 — "as contas do usuario logado" alimentam os seletores. Regra (Jose, 27/07):
+  // usuario comum ve SO as vinculadas; admin ve TODAS; sem vinculo => vazio.
+  describe("minhas-contas (escopo de conta por usuario)", () => {
+    beforeEach(async () => {
+      // Isola o estado: zera os vinculos do usuario de caixa antes de cada caso (outros testes
+      // deste arquivo deixam vinculos pendurados de proposito).
+      await executarSql("delete from contas_usuarios where usuario_id = $1", [usuarioCaixaId]);
+    });
+
+    it("Deve_VerSoAsContasVinculadas_Quando_UsuarioComumComDoisVinculos", async () => {
+      await executarSql("insert into contas_usuarios (empresa_id, conta_id, usuario_id) values ($1,$2,$3),($1,$4,$3)", [
+        idsTeste.empresaA,
+        idsTeste.contaCofre,
+        usuarioCaixaId,
+        idsTeste.contaLivre
+      ]);
+      const cookie = await cookieSessao(contexto.app, "caixa");
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie }
+      });
+      assertOk(resposta);
+      const contas = json<{ data: Array<{ id: string }> }>(resposta).data;
+      expect([...contas.map((c) => c.id)].sort()).toEqual([idsTeste.contaCofre, idsTeste.contaLivre].sort());
+    });
+
+    it("Deve_VerTodasAsContas_Quando_UsuarioAdmin", async () => {
+      const cookie = await cookieSessao(contexto.app, "admin");
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie }
+      });
+      assertOk(resposta);
+      const ids = json<{ data: Array<{ id: string }> }>(resposta).data.map((c) => c.id);
+      expect(ids).toEqual(
+        expect.arrayContaining([idsTeste.contaCaixa, idsTeste.contaBanco, idsTeste.contaLivre, idsTeste.contaCofre])
+      );
+    });
+
+    it("Deve_NaoVerNenhumaConta_Quando_UsuarioComumSemVinculo", async () => {
+      const cookie = await cookieSessao(contexto.app, "caixa");
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/contas-usuarios/minhas-contas?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie }
+      });
+      assertOk(resposta);
+      expect(json<{ data: unknown[] }>(resposta).data).toEqual([]);
+    });
   });
 });

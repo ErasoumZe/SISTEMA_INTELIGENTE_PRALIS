@@ -1,13 +1,38 @@
 import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { buscarContaEmpresaRepository } from "../contas/contas.repository.js";
+import { listarContas } from "../contas/contas.service.js";
 import {
   buscarContaUsuarioRepository,
   criarContaUsuarioRepository,
   excluirContaUsuarioRepository,
   existeVinculoRepository,
+  listarContasDoUsuarioRepository,
   listarContasUsuariosRepository
 } from "./contas-usuarios.repository.js";
+
+// Perfil minimo para as decisoes de escopo (usuarioId + role). O role "usuario_admin" e o unico
+// com short-circuit (ve todas as contas), espelhando exatamente a regra de permissoes.
+type PerfilEscopo = { usuarioId: string; role: string };
+
+// Contas OPERAVEIS pelo usuario logado — feed dos seletores de Origem/Destino (transferencia) e
+// Conta (despesa/mercadoria/retirada). Regra (Jose, 27/07):
+//   - usuario_admin  -> TODAS as contas do escopo (short-circuit, como nas permissoes);
+//   - demais usuarios -> SO as vinculadas em contas_usuarios;
+//   - sem nenhum vinculo -> lista VAZIA (o front mostra "peca ao administrador").
+export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
+  if (perfil.role === "usuario_admin") return listarContas(escopoEmpresas);
+  const contasDoUsuario = await listarContasDoUsuarioRepository(perfil.usuarioId);
+  return contasDoUsuario.filter((conta) => escopoEmpresas.includes(conta.empresaId));
+}
+
+// Gancho para a ETAPA 2 (confirmacao de recebimento da transferencia): quem pode CONFIRMAR uma
+// conta de destino e o admin ou quem tem essa conta vinculada. Mesma regra dos seletores, por conta.
+export async function usuarioPodeOperarConta(perfil: PerfilEscopo, contaId: string): Promise<boolean> {
+  if (perfil.role === "usuario_admin") return true;
+  return Boolean(await existeVinculoRepository(contaId, perfil.usuarioId));
+}
 
 export async function listarContasUsuarios(filtro: {
   empresasPermitidas: string[];

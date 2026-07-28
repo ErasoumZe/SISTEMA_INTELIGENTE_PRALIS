@@ -4,14 +4,49 @@ import {
   contaUsuarioPayloadSchema,
   contasUsuariosQuerySchema
 } from "@padaria/shared/contas-usuarios";
-import { criadoId, erro, ok, semConteudo } from "@padaria/shared/api";
+import { criadoId, empresaQuerySchema, erro, ok, semConteudo } from "@padaria/shared/api";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
-import { criarContaUsuario, excluirContaUsuario, listarContasUsuarios } from "./contas-usuarios.service.js";
+import {
+  criarContaUsuario,
+  excluirContaUsuario,
+  listarContasOperaveis,
+  listarContasUsuarios
+} from "./contas-usuarios.service.js";
 
 export async function registrarRotasContasUsuarios(app: FastifyInstance): Promise<void> {
+  // "As contas do usuario logado" — feed dos seletores operacionais (Origem/Destino da transferencia
+  // e Conta dos lancamentos). Escopo por USUARIO (admin ve todas; sem vinculo => vazio). Permissao:
+  // quem opera esses lancamentos (mesma familia do GET /api/contas), nao a de cadastrar vinculo.
+  app.get(
+    "/api/contas-usuarios/minhas-contas",
+    {
+      preHandler: exigirAlgumaPermissao([
+        "cadastro_contas_visualizar",
+        "transferencias_visualizar",
+        "despesas_visualizar",
+        "mercadorias_visualizar",
+        "retiradas_visualizar",
+        "caixa_operar"
+      ])
+    },
+    async (request, reply) => {
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        if (!request.perfilUsuario) return ok([]);
+        return ok(await listarContasOperaveis(request.perfilUsuario, escopo));
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
+    }
+  );
+
   app.get(
     "/api/contas-usuarios",
     { preHandler: exigirPermissao("cadastro_contas_usuarios_visualizar") },
