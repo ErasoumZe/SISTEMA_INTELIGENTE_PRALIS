@@ -8,6 +8,7 @@ import {
   type TemaAplicacao
 } from "@padaria/shared";
 import type {
+  AcaoNovo,
   CadastroForm,
   CaixaStatus,
   EntidadeOperacional,
@@ -48,7 +49,8 @@ import {
   mensagemErro,
   entidadePorTela,
   opcoesFiltradasPorEmpresa,
-  opcoesNovo,
+  acoesNovoPermitidas,
+  categoriaInicialSaida,
   opcoesVazias,
   rotaTela,
   temaPadrao,
@@ -277,10 +279,10 @@ const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTe
 const operacoesPaginadas = computed(() =>
   operacoesDaTela.value.slice((paginaOperacoes.value - 1) * 10, paginaOperacoes.value * 10)
 );
-const acoesNovo = computed(() => {
-  if (!caixaAberto.value) return [];
-  return opcoesNovo.filter((item) => temPermissao(item.permissao));
-});
+// "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
+// caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
+// abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
+const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value));
 const {
   dadosCadastro,
   descricaoTela,
@@ -1050,9 +1052,34 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   modalOperacaoAberto.value = true;
 }
 
-function executarAcaoNovo(acao: (typeof opcoesNovo)[number]) {
-  if (acao.entidade) void abrirOperacao(acao.entidade);
-  if (acao.tela === "malote") abrirMaloteNovo();
+function executarAcaoNovo(acao: AcaoNovo) {
+  if (acao.telaDestino) {
+    void router.push(rotaTela(acao.telaDestino));
+    return;
+  }
+  if (!acao.entidade) return;
+  // "Saidas" abre o modal unico de lancamento na categoria que o perfil pode criar; as tres
+  // continuam alternaveis nos botoes do topo, sem fechar.
+  void abrirOperacao(acao.id === "saidas" ? categoriaInicialSaida(permissoesUsuario.value) : acao.entidade);
+}
+
+// Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 §4).
+// Mantem o que ja foi digitado (valor, datas, descricao) e limpa so o que e proprio da categoria
+// anterior: o grupo (cada categoria tem o seu) e o credor que a nova categoria nao aceita. Recarrega
+// as opcoes porque cada entidade usa listas diferentes (mercadoria precisa de produtos/unidades).
+async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
+  if (entidade === entidadeNova.value) return;
+  entidadeNova.value = entidade;
+  form.value.grupoDespesaId = "";
+  form.value.grupoMercadoriaId = "";
+  form.value.grupoRetiradaId = "";
+  if (entidade === "retirada") form.value.fornecedorId = "";
+  if (entidade === "mercadoria") form.value.colaboradorId = "";
+  try {
+    await carregarOpcoesParaOperacao(entidade);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
 }
 
 // Discriminacao: envia SO os itens via PATCH .../discriminar (sem trava de caixa). O servidor
@@ -1531,6 +1558,7 @@ provide(WORKSPACE_CONTEXT, {
   opcoesEmpresa,
   modalOperacaoAberto,
   entidadeNova,
+  trocarCategoriaLancamento,
   operacaoEditandoId,
   modoDiscriminacao,
   form,
@@ -1779,25 +1807,12 @@ onBeforeUnmount(() => {
         <template #activator="{ props: menuProps }">
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
         </template>
+        <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
+             abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
         <v-list min-width="288" class="fab-novo-list">
-          <!-- Entrada = venda por integracao (nao ha lancamento manual): item navega para a tela. -->
-          <v-list-item
-            v-if="temPermissao('entradas_visualizar')"
-            :to="rotaTela('entradas')"
-            title="Entrada"
-            subtitle="Vendas e faturamento (integracao)"
-          >
-            <template #prepend>
-              <v-icon
-                icon="mdi-arrow-down-left"
-                class="fab-novo-icone"
-                :style="{ color: 'var(--cat-entradas-base)' }"
-              />
-            </template>
-          </v-list-item>
           <v-list-item
             v-for="acao in acoesNovo"
-            :key="acao.titulo"
+            :key="acao.id"
             :title="acao.titulo"
             :subtitle="acao.subtitulo"
             @click="executarAcaoNovo(acao)"

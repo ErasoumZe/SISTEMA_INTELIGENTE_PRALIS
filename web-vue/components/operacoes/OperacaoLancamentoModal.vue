@@ -18,7 +18,19 @@ import "~/components/operacoes/operacao-lancamento.css";
 const bloco = useOperacaoLancamento();
 provide(OPERACAO_LANCAMENTO_KEY, bloco);
 
-const { aberto, cat, cfg, catVars, discriminando, operacaoEditandoId, salvandoOperacao, salvarOperacao } = bloco;
+const {
+  aberto,
+  cat,
+  cfg,
+  catVars,
+  CATEGORIAS_LANCAMENTO,
+  podeTrocarCategoria,
+  trocarCategoria,
+  discriminando,
+  operacaoEditandoId,
+  salvandoOperacao,
+  salvarOperacao
+} = bloco;
 </script>
 
 <template>
@@ -30,6 +42,26 @@ const { aberto, cat, cfg, catVars, discriminando, operacaoEditandoId, salvandoOp
         >
         <span class="lc-titulo"> {{ operacaoEditandoId ? "Editar" : "Nova" }} {{ cat }} </span>
         <v-icon class="lc-x" size="19" @click="aberto = false">mdi-close</v-icon>
+      </div>
+
+      <!-- 3 botoes no TOPO: troca a categoria sem fechar; a cor do modal acompanha (--cat). -->
+      <div v-if="podeTrocarCategoria" class="lc-cats" role="group" aria-label="Categoria do lancamento">
+        <button
+          v-for="opcao in CATEGORIAS_LANCAMENTO"
+          :key="opcao.id"
+          type="button"
+          class="lc-cat"
+          :class="{ ativa: cat === opcao.id }"
+          :style="{
+            '--cat-btn': `var(--cat-${opcao.token}-base)`,
+            '--cat-btn-soft': `var(--cat-${opcao.token}-soft)`
+          }"
+          :aria-pressed="cat === opcao.id"
+          @click="trocarCategoria(opcao.id)"
+        >
+          <v-icon size="16">{{ opcao.icone }}</v-icon>
+          <span>{{ opcao.titulo }}</span>
+        </button>
       </div>
 
       <OperacaoLancamentoValores />

@@ -372,43 +372,54 @@ export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], 
   return "Tela indisponivel para este perfil.";
 }
 
-// Menu curto do FAB "+ NOVO" (estilo Mobills). Ordem: Despesa, Mercadoria, Retirada, Transferencia
-// (a "Entrada" e prefixada na propria shell, pois e navegacao — venda manual foi descontinuada).
+// Menu curto do FAB "+ NOVO" (estilo Mobills) — PROJECT_BRAIN/17 §4: TRES itens, um por eixo.
+// Entradas NAVEGA para a tela (venda manual foi descontinuada: entrada so por integracao, D7);
+// Transferencias abre o modal de transferencia; Saidas abre o modal UNICO de lancamento, que ja
+// alterna Despesa/Mercadoria/Retirada nos 3 botoes do topo. Nao ha mais item por categoria aqui.
 // `cor` e a cor da categoria (token --cat-*), aplicada ao icone do item.
 export const opcoesNovo: AcaoNovo[] = [
   {
-    entidade: "despesa",
-    titulo: "Despesa",
-    subtitulo: "Fornecedor, grupo e itens discriminados",
-    permissao: "despesas_criar",
-    icone: "mdi-receipt-text",
-    cor: "var(--cat-despesas-base)"
+    id: "entradas",
+    titulo: "Entradas",
+    subtitulo: "Vendas e faturamento (integracao)",
+    permissoes: ["entradas_visualizar"],
+    icone: "mdi-arrow-down-left",
+    cor: "var(--cat-entradas-base)",
+    telaDestino: "entradas"
   },
   {
-    entidade: "mercadoria",
-    titulo: "Mercadoria",
-    subtitulo: "Compra, nota fiscal e documento",
-    permissao: "mercadorias_criar",
-    icone: "mdi-package-variant-closed",
-    cor: "var(--cat-mercadorias-base)"
-  },
-  {
-    entidade: "retirada",
-    titulo: "Retirada",
-    subtitulo: "Colaborador, fornecedor ou retirada operacional",
-    permissao: "retiradas_criar",
-    icone: "mdi-wallet",
-    cor: "var(--cat-retiradas-base)"
-  },
-  {
-    entidade: "transferencia",
-    titulo: "Transferencia",
-    subtitulo: "Contas, malote e lacre",
-    permissao: "transferencias_criar",
+    id: "transferencias",
+    titulo: "Transferencias",
+    subtitulo: "Entre contas, cofre e caixas",
+    permissoes: ["transferencias_criar"],
     icone: "mdi-swap-horizontal",
-    cor: "var(--cat-transferencias-base)"
+    cor: "var(--cat-transferencias-base)",
+    entidade: "transferencia"
+  },
+  {
+    id: "saidas",
+    titulo: "Saidas",
+    subtitulo: "Despesa, mercadoria ou retirada",
+    permissoes: ["despesas_criar", "mercadorias_criar", "retiradas_criar"],
+    icone: "mdi-arrow-up-right",
+    cor: "var(--cat-despesas-base)",
+    entidade: "despesa"
   }
 ];
+
+// Itens do "+ NOVO" que o perfil enxerga. Basta UMA das permissoes do eixo: quem so cria retirada
+// continua vendo "Saidas".
+export function acoesNovoPermitidas(permissoesUsuario: readonly Permissao[]) {
+  return opcoesNovo.filter((acao) => temAlgumaPermissao(permissoesUsuario, acao.permissoes));
+}
+
+// Categoria em que o modal de "Saidas" abre: a PRIMEIRA que o perfil pode criar — quem so cria
+// retirada nao pode cair na Despesa e travar no salvar. As tres seguem alternaveis nos botoes do topo.
+export function categoriaInicialSaida(permissoesUsuario: readonly Permissao[]): EntidadeOperacional {
+  if (temPermissao(permissoesUsuario, "despesas_criar")) return "despesa";
+  if (temPermissao(permissoesUsuario, "mercadorias_criar")) return "mercadoria";
+  return "retirada";
+}
 
 export const secoesPermissoes = [
   { titulo: "Areas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },

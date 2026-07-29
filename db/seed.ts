@@ -268,7 +268,9 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
   }),
   Tesouraria: permissoesDoCargoSeed({
-    ativas: ["malotes", "transferencias"],
+    // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
+    // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
+    ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
     // Mantido em paridade com db/src/referencia-permissoes.ts (producao): tambem gerencia os LACRES.
     extras: [
       "cadastro_malotes_criar",

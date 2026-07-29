@@ -46,6 +46,9 @@ export type WorkspaceContext = {
   opcoesEmpresa: ComputedRef<Opcoes>;
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
+  // Troca a categoria do lancamento com o modal ABERTO (3 botoes do topo): mantem o que foi
+  // digitado, limpa o que era da categoria anterior e recarrega as opcoes da nova.
+  trocarCategoriaLancamento: (entidade: EntidadeOperacional) => Promise<void>;
   operacaoEditandoId: Ref<string>;
   modoDiscriminacao: Ref<boolean>;
   form: Ref<OperacaoForm>;

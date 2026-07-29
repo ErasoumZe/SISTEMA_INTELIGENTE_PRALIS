@@ -279,13 +279,16 @@ export type ItemMenu = {
 };
 
 export type AcaoNovo = {
-  entidade?: EntidadeOperacional;
-  tela?: "malote";
+  id: string;
   titulo: string;
   subtitulo: string;
-  permissao: Permissao;
+  // Basta UMA das permissoes para o item aparecer (Saidas = despesa OU mercadoria OU retirada).
+  permissoes: readonly Permissao[];
   icone: string;
   cor: string;
+  // Ou NAVEGA para uma tela (Entradas) ou ABRE o modal de uma entidade — nunca os dois.
+  telaDestino?: string;
+  entidade?: EntidadeOperacional;
 };
 
 export type TreeItem = {

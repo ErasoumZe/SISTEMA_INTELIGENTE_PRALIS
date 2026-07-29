@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, rotaTela } from "~/utils/domain";
+import AppMenuItem from "~/components/app/AppMenuItem.vue";
+import { itemPorTela } from "~/utils/domain";
 import { agruparTelasMenu } from "~/utils/menu";
 
 const props = defineProps<{
@@ -41,6 +42,32 @@ const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.v
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
 
 const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
+
+// Categorias do menu (hoje so "Lancamentos"): abrem/fecham no clique. Fica aberta enquanto uma das
+// telas de dentro dela e a tela atual — quem esta em /despesas ve onde esta.
+const categoriasAbertas = ref<Record<string, boolean>>({});
+
+function categoriaAberta(id: string) {
+  return categoriasAbertas.value[id] ?? false;
+}
+
+function alternarCategoria(id: string) {
+  categoriasAbertas.value[id] = !categoriaAberta(id);
+}
+
+watch(
+  [() => props.telaAtiva, telasAgrupadas],
+  ([telaAtiva, grupos]) => {
+    for (const grupo of grupos) {
+      for (const no of grupo.itens) {
+        if (no.tipo === "categoria" && no.itens.some((tela) => tela.id === telaAtiva)) {
+          categoriasAbertas.value[no.id] = true;
+        }
+      }
+    }
+  },
+  { immediate: true }
+);
 
 // Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
 const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuario");
@@ -141,36 +168,44 @@ onMounted(() => {
           <nav class="sidebar-nav" aria-label="Menu principal">
             <div v-for="grupo in telasAgrupadas" :key="grupo.titulo" class="sidebar-group">
               <div class="sidebar-group-label">{{ grupo.titulo }}</div>
-              <template v-for="tela in grupo.itens" :key="tela.id">
-                <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" :text="textoTooltipTela(tela.id)">
-                  <template #activator="{ props: tooltipProps }">
-                    <span
-                      v-bind="tooltipProps"
-                      class="sidebar-disabled-wrapper"
-                      tabindex="0"
-                      role="button"
-                      aria-disabled="true"
-                      :aria-label="`${tela.titulo} — ${textoTooltipTela(tela.id)}`"
-                    >
-                      <span class="sidebar-item disabled">
-                        <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                        <span :style="tela.cor ? { color: tela.cor } : undefined">{{ tela.titulo }}</span>
-                      </span>
-                    </span>
-                  </template>
-                </v-tooltip>
-                <NuxtLink
+              <template v-for="no in grupo.itens" :key="no.id">
+                <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->
+                <template v-if="no.tipo === 'categoria'">
+                  <button
+                    type="button"
+                    class="sidebar-item sidebar-categoria"
+                    :class="{ aberta: categoriaAberta(no.id) }"
+                    :aria-expanded="categoriaAberta(no.id)"
+                    @click="alternarCategoria(no.id)"
+                  >
+                    <v-icon :icon="no.icone" size="21" />
+                    <span>{{ no.titulo }}</span>
+                    <v-icon
+                      class="sidebar-categoria-chevron"
+                      :icon="categoriaAberta(no.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                      size="18"
+                    />
+                  </button>
+                  <div v-if="categoriaAberta(no.id)" class="sidebar-subitens">
+                    <AppMenuItem
+                      v-for="tela in no.itens"
+                      :key="tela.id"
+                      :tela="tela"
+                      :tela-ativa="telaAtiva"
+                      :desabilitada="telasDesabilitadasSet.has(tela.id)"
+                      :motivo="textoTooltipTela(tela.id)"
+                      @navegar="fecharDrawerMobile"
+                    />
+                  </div>
+                </template>
+                <AppMenuItem
                   v-else
-                  :to="rotaTela(tela.id)"
-                  class="sidebar-item"
-                  :class="{ active: tela.id === telaAtiva }"
-                  @click="fecharDrawerMobile"
-                >
-                  <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                  <span :style="tela.cor && tela.id !== telaAtiva ? { color: tela.cor } : undefined">{{
-                    tela.titulo
-                  }}</span>
-                </NuxtLink>
+                  :tela="no"
+                  :tela-ativa="telaAtiva"
+                  :desabilitada="telasDesabilitadasSet.has(no.id)"
+                  :motivo="textoTooltipTela(no.id)"
+                  @navegar="fecharDrawerMobile"
+                />
               </template>
             </div>
           </nav>

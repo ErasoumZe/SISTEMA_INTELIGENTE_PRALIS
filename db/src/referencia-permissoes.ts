@@ -148,7 +148,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
   }),
   Tesouraria: permissoesDoCargo({
-    ativas: ["malotes", "transferencias"],
+    // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
+    // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
+    ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
     // Lanca transferencia + CONFERE (D7 — conferencia = Financeiro/Gerencia/Tesouraria). Confere no
     // dominio que acessa (transferencias); os demais dominios ela nao ve. Tambem gerencia os LACRES
     // (selo do movimento), espelhando o cadastro de malotes.

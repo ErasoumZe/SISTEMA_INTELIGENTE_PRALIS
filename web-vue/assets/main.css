@@ -899,6 +899,44 @@ body {
   background: var(--pralis-line);
 }
 
+/* ---- Categoria do menu (Lancamentos): entrada unica que abre/fecha as telas de dentro ---- */
+.sidebar-categoria {
+  grid-template-columns: 28px 1fr auto;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar-categoria.aberta {
+  color: var(--pralis-ink);
+}
+.sidebar-categoria-chevron {
+  color: var(--pralis-ink-soft);
+}
+.sidebar-subitens {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* Recuo + guia vertical: deixa explicito que as telas vivem DENTRO da categoria. */
+  margin-inline-start: 22px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--pralis-line, #e4e8ef);
+}
+/* No rail (so icones) o recuo nao cabe: os filhos voltam a ocupar a largura toda. */
+.padaria-sidebar.rail .sidebar-categoria {
+  grid-template-columns: 1fr;
+}
+.padaria-sidebar.rail .sidebar-categoria-chevron {
+  display: none;
+}
+.padaria-sidebar.rail .sidebar-subitens {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
 /* ---- Painel de filtros (cadastros / permissoes) ---- */
 .cadastro-filter-grid {
   background: var(--pralis-canvas);

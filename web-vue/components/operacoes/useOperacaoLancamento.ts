@@ -14,6 +14,7 @@ export function useOperacaoLancamento() {
   const {
     modalOperacaoAberto,
     entidadeNova,
+    trocarCategoriaLancamento,
     operacaoEditandoId,
     form,
     opcoesEmpresa,
@@ -52,6 +53,21 @@ export function useOperacaoLancamento() {
     "--cat": `var(--cat-${cfg.value.token}-base)`,
     "--cat-soft": `var(--cat-${cfg.value.token}-soft)`
   }));
+
+  // --- 3 botoes do TOPO: alternam a categoria SEM fechar o modal (PROJECT_BRAIN/17 §4). A cor do
+  // modal acompanha (vermelho/verde/azul) porque catVars deriva de `cat`. So aparece ao CRIAR: em
+  // edicao/discriminacao o registro ja tem categoria e trocar apontaria para outro endpoint. ---
+  const CATEGORIAS_LANCAMENTO = CATEGORIAS.map((id) => ({
+    id,
+    titulo: id === "despesa" ? "Despesa" : id === "mercadoria" ? "Mercadoria" : "Retirada",
+    icone: CFG[id].icone,
+    token: CFG[id].token
+  }));
+  const podeTrocarCategoria = computed(() => !operacaoEditandoId.value);
+  function trocarCategoria(destino: Cat) {
+    if (!podeTrocarCategoria.value) return;
+    void trocarCategoriaLancamento(destino);
+  }
 
   // --- Grupo: roteia para o campo suportado da categoria (grupoDespesa/Mercadoria/Retirada). ---
   const grupoOpcoes = computed(() =>
@@ -229,6 +245,10 @@ export function useOperacaoLancamento() {
     cat,
     cfg,
     catVars,
+    // alternancia de categoria (3 botoes do topo)
+    CATEGORIAS_LANCAMENTO,
+    podeTrocarCategoria,
+    trocarCategoria,
     // classificacao (grupo/credor)
     grupoOpcoes,
     grupoId,
