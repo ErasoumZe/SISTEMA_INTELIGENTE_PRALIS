@@ -44,7 +44,10 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "fiscal_produtos",
   "patrimonio",
   "ficha_tecnica",
-  "ingredientes"
+  "ingredientes",
+  // Malotes: nao ha tela de criar malote — o lacre e informado direto na Transferencia
+  // (PROJECT_BRAIN/15, D-C). Oculta do menu/permissoes; rota e backend seguem intactos nesta rodada.
+  "malotes"
 ]);
 
 export const itemPorTela: Record<string, ItemMenu> = {
