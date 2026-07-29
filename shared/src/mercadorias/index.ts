@@ -22,10 +22,14 @@ export const mercadoriaItemSchema = z.object({
   descricao: z.string().min(1),
   quantidade: z.coerce.number().positive(),
   valorUnitario: z.coerce.number().min(0).default(0),
-  // Desconto por item informado na discriminacao. tipo nulo = sem desconto;
-  // valor e % (tipo 'percentual') ou R$ (tipo 'valor'). O servidor recalcula o valorTotal liquido.
+  // Descontos por NIVEL (§5). tipo nulo = sem desconto naquele nivel; valor e % ('percentual') ou
+  // R$ ('valor'). O servidor recalcula os totais — o cliente nao decide dinheiro.
+  // Nivel 1: no V.UNIT (R$ POR UNIDADE quando 'valor').
   descontoTipo: z.enum(tiposDescontoItem).optional().nullable(),
   descontoValor: z.coerce.number().min(0).optional().nullable(),
+  // Nivel 2: no V.TOTAL do item.
+  descontoTotalTipo: z.enum(tiposDescontoItem).optional().nullable(),
+  descontoTotalValor: z.coerce.number().min(0).optional().nullable(),
   valorTotal: dinheiroSchema
 });
 
@@ -41,6 +45,9 @@ export const mercadoriaPayloadSchema = z.object({
   descricaoAcrescimo: z.string().optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),
   descricaoDesconto: z.string().optional().nullable(),
+  // Nivel 3 — desconto GERAL: guarda COMO foi informado. O R$ resolvido vai para valorDesconto.
+  descontoGeralTipo: z.enum(tiposDescontoItem).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   contaOrigemId: uuidSchema.optional().nullable(),
   fornecedorId: uuidSchema,
   grupoMercadoriaId: uuidSchema.optional().nullable(),
@@ -66,8 +73,11 @@ export const mercadoriaDtoSchema = z.object({
 });
 
 // Discriminacao: so os itens (o cabecalho ja existe). Nao passa pela trava de caixa aberto.
+// O desconto GERAL (nivel 3) vem junto: e nesta tela que ele e informado, e e ele que rateia.
 export const discriminarMercadoriaSchema = z.object({
   empresaId: uuidSchema,
+  descontoGeralTipo: z.enum(tiposDescontoItem).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   itensMercadoria: z.array(mercadoriaItemSchema).min(1)
 });
 

@@ -98,6 +98,31 @@ export function useCadastroView(params: {
       }));
     if (tela === "unidades")
       return listas.unidadesMedida.map((item) => ({ id: item.id, nome: item.nome, sigla: item.sigla }));
+    // Patrimonio (D2): uma tabela so com os GRUPOS (sigla) e os ITENS abaixo, cada linha sabendo o
+    // que e — a coluna Tipo. Grupo alimenta o campo Grupo da discriminacao de maquinario (§5).
+    if (tela === "patrimonio")
+      return [
+        ...listas.gruposPatrimonio.map((item) => ({
+          id: item.id,
+          tipo: "Grupo",
+          sig: item.sig ?? "",
+          nome: item.nome ?? "",
+          marca: "",
+          setor: "",
+          tipoPatrimonio: "grupo"
+        })),
+        ...listas.patrimonioItens.map((item) => ({
+          id: item.id,
+          tipo: "Item",
+          sig: item.sig ?? "",
+          nome: item.nome ?? "",
+          marca: item.marca ?? "",
+          setor: item.descricao ?? "",
+          grupoPatrimonioId: item.grupoPatrimonioId ?? "",
+          setorId: item.setorId ?? "",
+          tipoPatrimonio: "item"
+        }))
+      ];
     if (tela === "turnos")
       return listas.turnos.map((item) => ({
         id: item.id,
@@ -186,6 +211,7 @@ export function useCadastroView(params: {
       formas_pagamento: "Formas de pagamento usadas nas vendas.",
       grupos: "Hierarquia de grupos de despesas, mercadorias e retiradas.",
       unidades: "Unidades de medida usadas nos produtos.",
+      patrimonio: "Grupos (sigla) e itens de patrimonio. O grupo classifica maquinario na discriminacao.",
       turnos: "Turnos de trabalho (ex.: Manha 06:00-14:00). Pre-selecionam o turno na abertura do caixa.",
       areas_setores: "Areas e setores organizacionais.",
       usuarios: "Usuarios e acessos do sistema.",
@@ -208,6 +234,7 @@ export function useCadastroView(params: {
       pdv: ["Nome", "Conta", "Ativo"],
       grupos: ["Nome", "Tipo"],
       unidades: ["Nome", "Sigla"],
+      patrimonio: ["Tipo", "Sigla", "Nome", "Marca", "Setor"],
       turnos: ["Nome", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Role", "Cargos"],

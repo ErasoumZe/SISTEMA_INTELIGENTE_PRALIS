@@ -117,7 +117,7 @@ describe("discriminacao de operacoes integration", () => {
     expect(JSON.stringify(filaDepois.json())).not.toContain(mercadoriaId);
   });
 
-  it("Mercadoria: soma divergente por 1 centavo retorna 400 e nao grava itens", async () => {
+  it("Mercadoria: soma divergente por 1 centavo retorna 422 (D5) e nao grava itens", async () => {
     const mercadoriaId = await criarMercadoriaPendente(50);
 
     const resposta = await contexto.app.inject({
@@ -130,7 +130,8 @@ describe("discriminacao de operacoes integration", () => {
       }
     });
 
-    assertProblem(resposta, 400);
+    // D5 (§5): divergencia BLOQUEIA com 422 e detalhe de onde diverge (antes era um 400 seco).
+    assertProblem(resposta, 422, "DISCRIMINACAO_DIVERGENTE");
     const itens = await consultarTodos("select id from mercadorias_itens where mercadoria_id = $1", [mercadoriaId]);
     expect(itens).toHaveLength(0);
   });
@@ -211,7 +212,7 @@ describe("discriminacao de operacoes integration", () => {
     expect(JSON.stringify(filaDepois.json())).not.toContain(despesaId);
   });
 
-  it("Despesa: soma divergente retorna 400 e nao grava itens", async () => {
+  it("Despesa: soma divergente retorna 422 (D5) e nao grava itens", async () => {
     const despesaId = await criarDespesaPendente(40);
 
     const resposta = await contexto.app.inject({
@@ -224,7 +225,7 @@ describe("discriminacao de operacoes integration", () => {
       }
     });
 
-    assertProblem(resposta, 400);
+    assertProblem(resposta, 422, "DISCRIMINACAO_DIVERGENTE");
     const itens = await consultarTodos("select id from despesas_itens where despesa_id = $1", [despesaId]);
     expect(itens).toHaveLength(0);
   });

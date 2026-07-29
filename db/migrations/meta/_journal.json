@@ -113,6 +113,13 @@
       "when": 1785247435173,
       "tag": "0015_lacres_e_contas_usuarios",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785351128763,
+      "tag": "0016_patrimonio_e_descontos",
+      "breakpoints": true
     }
   ]
 }

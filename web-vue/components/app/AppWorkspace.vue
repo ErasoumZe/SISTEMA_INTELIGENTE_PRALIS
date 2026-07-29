@@ -627,6 +627,14 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       dados,
       await apiGet<Pick<Opcoes, "gruposDespesas" | "gruposMercadorias" | "gruposRetiradas">>(`/api/grupos${query}`)
     );
+  } else if (tela === "patrimonio") {
+    // Uma chamada traz grupos + itens; os setores alimentam o select do item.
+    const [patrimonio, setores] = await Promise.all([
+      apiGet<Pick<Opcoes, "gruposPatrimonio" | "patrimonioItens">>(`/api/patrimonio${query}`),
+      carregarOpcaoOpcional(faltas, "Setores", () => apiGet<Opcao[]>(`/api/setores${query}`), [])
+    ]);
+    Object.assign(dados, patrimonio);
+    dados.setores = setores;
   } else if (tela === "unidades") {
     dados.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
   } else if (tela === "turnos") {

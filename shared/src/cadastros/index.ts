@@ -91,6 +91,10 @@ export type CadastroForm = {
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId: string;
   tipoAreaSetor: "area" | "setor";
+  // Patrimonio (D2): a tela tem duas entidades (grupo/item), como areas/setores.
+  tipoPatrimonio: "grupo" | "item";
+  sig: string;
+  grupoPatrimonioId: string;
   areaId: string;
   setorPaiId: string;
   setorId: string;
@@ -280,6 +284,17 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
           unidadesIndividuais: Number(conversao.unidadesIndividuais)
         }))
     };
+  }
+  if (tela === "patrimonio") {
+    return form.tipoPatrimonio === "grupo"
+      ? { empresaId, sig: form.sig, nome: form.nome }
+      : {
+          empresaId,
+          nome: form.nome,
+          marca: form.marca || null,
+          grupoPatrimonioId: form.grupoPatrimonioId,
+          setorId: form.setorId || null
+        };
   }
   if (tela === "areas_setores") {
     return form.tipoAreaSetor === "setor"

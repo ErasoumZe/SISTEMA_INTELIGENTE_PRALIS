@@ -15,13 +15,13 @@ import type {
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
-  calcularTotalItemMercadoria,
+  exigirDiscriminacaoConferida,
+  itemMercadoriaParaDiscriminacao,
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   obterCaixaParaLancamento,
   podeVerLancamentosPagos,
-  somaConfereCentavos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -47,11 +47,10 @@ export function validarMercadoria(dados: MercadoriaPayload): void {
   if (!dados.grupoMercadoriaId && !dados.itensMercadoria.length) {
     throw new Error("Grupo ou itens de mercadoria obrigatorios");
   }
-  if (dados.itensMercadoria.length) {
-    const valores = dados.itensMercadoria.map(calcularTotalItemMercadoria);
-    if (!somaConfereCentavos(valores, dados.valorOriginal))
-      throw new Error("Soma das mercadorias deve bater com o valor original");
-  }
+  // D5 (§5): a soma da discriminacao tem de bater com o Valor do lancamento. Nao bateu, NAO SALVA —
+  // e a resposta diz ONDE diverge (422 com detalhe), em vez de um 400 seco.
+  if (dados.itensMercadoria.length)
+    exigirDiscriminacaoConferida(dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao), dados.valorOriginal);
 }
 
 export async function listarMercadorias(
@@ -156,14 +155,12 @@ export async function discriminarMercadoria(
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
 
-    const valores = dados.itensMercadoria.map(calcularTotalItemMercadoria);
-    if (!somaConfereCentavos(valores, existente.valorOriginal))
-      throw new Error("Soma das mercadorias deve bater com o valor original");
+    exigirDiscriminacaoConferida(dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao), existente.valorOriginal);
 
     const referenciaInvalida = await validarReferenciasItensMercadoria(dados.empresaId, dados.itensMercadoria, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    await discriminarMercadoriaRepository(mercadoriaId, dados.itensMercadoria, existente.grupoMercadoriaId ?? null, tx);
+    await discriminarMercadoriaRepository(mercadoriaId, dados, existente.grupoMercadoriaId ?? null, tx);
     return { id: mercadoriaId, computar: existente.computar };
   });
 }

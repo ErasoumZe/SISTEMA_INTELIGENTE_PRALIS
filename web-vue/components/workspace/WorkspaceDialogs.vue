@@ -523,6 +523,45 @@ const validacaoQtdPreview = computed(() =>
               :disabled="Boolean(cadastroEditandoId)"
             />
           </v-col>
+          <!-- Patrimonio (D2): grupo (sigla + nome) ou item (nome + marca + grupo + setor). -->
+          <v-col v-if="cadastroTela === 'patrimonio'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.tipoPatrimonio"
+              :items="['grupo', 'item']"
+              label="Tipo"
+              :disabled="Boolean(cadastroEditandoId)"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'grupo'" cols="12" md="6">
+            <v-text-field
+              v-model="formCadastro.sig"
+              label="Sigla"
+              hint="2 a 4 letras maiusculas (FIS, MAT, UTS, MAQ, MOB, EMB)"
+              persistent-hint
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.grupoPatrimonioId"
+              :items="opcoesEmpresa.gruposPatrimonio"
+              item-title="nome"
+              item-value="id"
+              label="Grupo de patrimonio"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-text-field v-model="formCadastro.marca" label="Marca" />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.setorId"
+              :items="opcoesEmpresa.setores"
+              item-title="nome"
+              item-value="id"
+              label="Setor"
+              clearable
+            />
+          </v-col>
           <v-col
             v-if="cadastroTela !== 'produtos'"
             cols="12"

@@ -777,11 +777,16 @@ export async function criarAcertoSaldoCaixaRepository(
       .returning({ id: despesas.id });
     if (!despesa) throw new Error("Despesa de diferenca nao criada");
 
+    // Item unico, sem desconto: 1 x valor. Os campos com desconto repetem o valor (§5).
     await db.insert(despesasItens).values({
       despesaId: despesa.id,
       grupoDespesaId: input.grupoDespesaId,
       descricao: "Diferenca de caixa",
-      valor
+      quantidade: "1",
+      valorUnitario: valor,
+      valor,
+      valorUnitarioComDesconto: valor,
+      valorTotalComDesconto: valor
     });
 
     const [debito] = await db

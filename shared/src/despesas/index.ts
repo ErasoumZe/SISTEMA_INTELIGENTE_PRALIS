@@ -18,10 +18,21 @@ export const despesasQuerySchema = z
   })
   .merge(paginationQuerySchema);
 
+export const tiposDescontoItemDespesa = ["percentual", "valor"] as const;
+
 export const despesaItemSchema = z.object({
   grupoDespesaId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema.optional().nullable(),
   descricao: z.string().min(1),
+  // Quantidade/unitario chegaram com os 3 niveis de desconto (§5). O item de despesa continua
+  // podendo ser so "descricao + valor": sem quantidade, o servidor assume 1 x valor.
+  quantidade: z.coerce.number().positive().optional(),
+  valorUnitario: z.coerce.number().min(0).optional(),
+  // Nivel 1: no V.UNIT (R$ POR UNIDADE quando 'valor'). Nivel 2: no V.TOTAL do item.
+  descontoTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoValor: z.coerce.number().min(0).optional().nullable(),
+  descontoTotalTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoTotalValor: z.coerce.number().min(0).optional().nullable(),
   valor: dinheiroSchema
 });
 
@@ -37,6 +48,9 @@ export const despesaPayloadSchema = z.object({
   descricaoAcrescimo: z.string().optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),
   descricaoDesconto: z.string().optional().nullable(),
+  // Nivel 3 — desconto GERAL: guarda COMO foi informado. O R$ resolvido vai para valorDesconto.
+  descontoGeralTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   contaOrigemId: uuidSchema.optional().nullable(),
   fornecedorId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema.optional().nullable(),
@@ -63,8 +77,11 @@ export const despesaDtoSchema = z.object({
 });
 
 // Discriminacao: so os itens (o cabecalho ja existe). Nao passa pela trava de caixa aberto.
+// O desconto GERAL (nivel 3) vem junto: e nesta tela que ele e informado, e e ele que rateia.
 export const discriminarDespesaSchema = z.object({
   empresaId: uuidSchema,
+  descontoGeralTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   itensDespesa: z.array(despesaItemSchema).min(1)
 });
 

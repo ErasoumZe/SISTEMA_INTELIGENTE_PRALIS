@@ -1,6 +1,13 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import { temPermissao, type DominioLancamentoPagavel, type Permissao, type PerfilUsuario } from "@padaria/shared";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import {
+  calcularDiscriminacao,
+  conferirDiscriminacao,
+  type ItemDiscriminacao,
+  type TipoDesconto
+} from "@padaria/shared/discriminacao";
+import { naoProcessavel } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -301,6 +308,84 @@ export function podeVerLancamentosPagos(permissoes: readonly Permissao[], domini
 export function somaConfereCentavos(valores: number[], total: number): boolean {
   const soma = valores.reduce((acumulado, valor) => acumulado + paraCentavos(valor), 0);
   return soma === paraCentavos(total);
+}
+
+// --- Discriminacao com descontos em 3 niveis (PROJECT_BRAIN/17 §5) ----------------------------
+// O nivel 3 (geral) RATEIA entre os itens, entao o calculo e da LISTA INTEIRA, nunca item a item.
+// A regra mora no shared (calcularDiscriminacao); aqui so se traduz o payload de cada dominio.
+
+// Item de despesa aceita a forma curta "descricao + valor": sem quantidade, e 1 x valor.
+export function itemDespesaParaDiscriminacao(item: DespesaItemPayload): ItemDiscriminacao {
+  const quantidade = item.quantidade ?? 1;
+  return {
+    quantidade,
+    valorUnitario: item.valorUnitario ?? (quantidade > 0 ? item.valor / quantidade : 0),
+    descontoTipo: item.descontoTipo ?? null,
+    descontoValor: item.descontoValor ?? null,
+    descontoTotalTipo: item.descontoTotalTipo ?? null,
+    descontoTotalValor: item.descontoTotalValor ?? null
+  };
+}
+
+export function itemMercadoriaParaDiscriminacao(item: MercadoriaItemPayload): ItemDiscriminacao {
+  return {
+    quantidade: item.quantidade,
+    valorUnitario: item.valorUnitario,
+    descontoTipo: item.descontoTipo ?? null,
+    descontoValor: item.descontoValor ?? null,
+    descontoTotalTipo: item.descontoTotalTipo ?? null,
+    descontoTotalValor: item.descontoTotalValor ?? null
+  };
+}
+
+type CabecalhoComDescontoGeral = {
+  descontoGeralTipo?: TipoDesconto | null | undefined;
+  descontoGeralValor?: number | null | undefined;
+};
+
+export function calcularDiscriminacaoDespesa(
+  dados: { itensDespesa: DespesaItemPayload[] } & CabecalhoComDescontoGeral
+) {
+  return calcularDiscriminacao({
+    itens: dados.itensDespesa.map(itemDespesaParaDiscriminacao),
+    descontoGeralTipo: dados.descontoGeralTipo ?? null,
+    descontoGeralValor: dados.descontoGeralValor ?? null
+  });
+}
+
+export function calcularDiscriminacaoMercadoria(
+  dados: { itensMercadoria: MercadoriaItemPayload[] } & CabecalhoComDescontoGeral
+) {
+  return calcularDiscriminacao({
+    itens: dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao),
+    descontoGeralTipo: dados.descontoGeralTipo ?? null,
+    descontoGeralValor: dados.descontoGeralValor ?? null
+  });
+}
+
+// D5 (BLOQUEANTE): a soma da discriminacao tem de bater com o Valor do lancamento. Quando nao bate,
+// levanta 422 com ONDE diverge — diferenca em R$ e a linha provavel — em vez de um 400 seco.
+export function exigirDiscriminacaoConferida(itens: readonly ItemDiscriminacao[], valorLancamento: number): void {
+  const divergencia = conferirDiscriminacao(itens, valorLancamento);
+  if (!divergencia) return;
+  const diferenca = deCentavos(divergencia.diferencaCentavos);
+  const sobra = divergencia.diferencaCentavos > 0;
+  throw naoProcessavel(
+    `A discriminacao ${sobra ? "excede" : "nao alcanca"} o valor do lancamento em ${dinheiroBr(Math.abs(diferenca))}.` +
+      (divergencia.linhaProvavel ? ` Confira a linha ${divergencia.linhaProvavel} (a de maior valor).` : ""),
+    "DISCRIMINACAO_DIVERGENTE",
+    {
+      diferenca,
+      totalItens: deCentavos(divergencia.totalItensCentavos),
+      valorLancamento: deCentavos(divergencia.valorLancamentoCentavos),
+      linhaProvavel: divergencia.linhaProvavel,
+      campoProvavel: divergencia.campoProvavel
+    }
+  );
+}
+
+function dinheiroBr(valor: number): string {
+  return `R$ ${valor.toFixed(2).replace(".", ",")}`;
 }
 
 // Total liquido do item de mercadoria. Sem desconto, respeita o valorTotal informado (permite

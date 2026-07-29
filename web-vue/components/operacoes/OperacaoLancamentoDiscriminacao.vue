@@ -85,6 +85,9 @@ const {
                 </select>
                 <input v-model="item.descricao" class="disc-in disc-desc" placeholder="Descrição" />
               </td>
+              <!-- Grupo (§5): hoje so a lista do cadastro de PRODUTOS. A lista de PATRIMONIO
+                   (maquinario/manutencao) depende de uma coluna propria no item — grupo_mercadoria_id
+                   e FK de grupos_mercadorias e nao aceita um id de patrimonio. Ver o handoff. -->
               <td>
                 <select v-model="item.grupoMercadoriaId" class="disc-in">
                   <option value="">—</option>

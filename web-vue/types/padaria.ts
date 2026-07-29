@@ -62,6 +62,9 @@ export type Opcao = {
   cnpj?: string | null;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
+  // Patrimonio (D2)
+  sig?: string;
+  grupoPatrimonioId?: string | null;
   grupoMercadoriaId?: string | null;
   unidadeMedidaId?: string | null;
   unidadeIndividualId?: string | null;
@@ -134,6 +137,7 @@ export type Opcao = {
   codigoPermissao?: string;
   permissaoCodigo?: string;
   tipoAreaSetor?: "area" | "setor";
+  tipoPatrimonio?: "grupo" | "item";
 };
 
 export type PermissoesPaginadas = {
@@ -170,6 +174,8 @@ export type Opcoes = {
   malotes: Opcao[];
   pdvs: Opcao[];
   turnos: Opcao[];
+  gruposPatrimonio: Opcao[];
+  patrimonioItens: Opcao[];
 };
 
 export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";

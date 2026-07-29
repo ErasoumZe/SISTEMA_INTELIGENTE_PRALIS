@@ -10,33 +10,49 @@ import type {
   MercadoriasAprovacaoQuery,
   MercadoriasQuery
 } from "@padaria/shared/mercadorias";
+import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
+import type { TipoDesconto } from "@padaria/shared/discriminacao";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import {
-  calcularTotalItemMercadoria,
+  calcularDiscriminacaoMercadoria,
   filtrosEmpresa,
   numeroDecimal,
   valoresBase,
   valoresBaseEdicao
 } from "../lancamentos/lancamentos.dominio.js";
 
-// Valores de uma linha de item. O servidor recalcula o valorTotal (desconto) e persiste tipo/valor.
-function valoresItemMercadoria(
-  item: MercadoriaItemPayload,
-  mercadoriaId: string,
-  grupoMercadoriaIdHeader: string | null
+// Linhas de item de UMA mercadoria. O calculo e da LISTA inteira porque o desconto geral (nivel 3)
+// rateia entre os itens (§5/D4) — nao da para resolver item a item. O servidor decide todo o
+// dinheiro: valor_total (liquido dos niveis 1 e 2) e os dois campos *_com_desconto.
+function linhasItensMercadoria(
+  dados: {
+    itensMercadoria: MercadoriaItemPayload[];
+    descontoGeralTipo?: TipoDesconto | null | undefined;
+    descontoGeralValor?: number | null | undefined;
+    grupoMercadoriaId?: string | null | undefined;
+  },
+  mercadoriaId: string
 ) {
-  return {
-    mercadoriaId,
-    produtoId: item.produtoId ?? null,
-    grupoMercadoriaId: item.grupoMercadoriaId ?? grupoMercadoriaIdHeader ?? null,
-    unidadeMedidaId: item.unidadeMedidaId ?? null,
-    descricao: item.descricao,
-    quantidade: String(item.quantidade),
-    valorUnitario: String(item.valorUnitario),
-    descontoTipo: item.descontoTipo ?? null,
-    descontoValor: item.descontoValor != null ? String(item.descontoValor) : null,
-    valorTotal: String(calcularTotalItemMercadoria(item))
-  };
+  const calculo = calcularDiscriminacaoMercadoria(dados);
+  return dados.itensMercadoria.map((item, indice) => {
+    const calculado = calculo.itens[indice];
+    return {
+      mercadoriaId,
+      produtoId: item.produtoId ?? null,
+      grupoMercadoriaId: item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null,
+      unidadeMedidaId: item.unidadeMedidaId ?? null,
+      descricao: item.descricao,
+      quantidade: String(item.quantidade),
+      valorUnitario: String(item.valorUnitario),
+      descontoTipo: item.descontoTipo ?? null,
+      descontoValor: item.descontoValor != null ? String(item.descontoValor) : null,
+      descontoTotalTipo: item.descontoTotalTipo ?? null,
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : null,
+      valorTotal: centavosParaDecimalBanco(calculado?.valorTotalCentavos ?? 0),
+      valorUnitarioComDesconto: centavosParaDecimalBanco(calculado?.valorUnitarioComDescontoCentavos ?? 0),
+      valorTotalComDesconto: centavosParaDecimalBanco(calculado?.valorTotalComDescontoCentavos ?? 0)
+    };
+  });
 }
 
 export async function listarMercadoriasRepository(
@@ -110,10 +126,8 @@ export async function criarMercadoriaRepository(
       .returning({ id: mercadorias.id });
     if (!mercadoria) throw new Error("Mercadoria nao criada");
 
-    for (const item of dados.itensMercadoria) {
-      await tx
-        .insert(mercadoriasItens)
-        .values(valoresItemMercadoria(item, mercadoria.id, dados.grupoMercadoriaId ?? null));
+    for (const linha of linhasItensMercadoria(dados, mercadoria.id)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
 
     return mercadoria;
@@ -207,10 +221,8 @@ export async function atualizarMercadoriaRepository(
       .where(eq(mercadorias.id, mercadoriaId));
 
     await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
-    for (const item of dados.itensMercadoria) {
-      await tx
-        .insert(mercadoriasItens)
-        .values(valoresItemMercadoria(item, mercadoriaId, dados.grupoMercadoriaId ?? null));
+    for (const linha of linhasItensMercadoria(dados, mercadoriaId)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
   });
 }
@@ -306,17 +318,32 @@ export async function recusarMercadoriaRepository(mercadoriaId: string, empresaI
   return atualizadas.length;
 }
 
-// Discriminacao: substitui SO os itens (o cabecalho e valorOriginal ficam intactos).
+// Discriminacao: substitui SO os itens (valorOriginal do cabecalho fica intacto). O desconto geral
+// e do cabecalho: grava o R$ resolvido em valor_desconto (que alimenta os agregados) e o COMO em
+// desconto_geral_tipo/valor.
 export async function discriminarMercadoriaRepository(
   mercadoriaId: string,
-  itens: MercadoriaItemPayload[],
+  dados: {
+    itensMercadoria: MercadoriaItemPayload[];
+    descontoGeralTipo?: TipoDesconto | null | undefined;
+    descontoGeralValor?: number | null | undefined;
+  },
   grupoMercadoriaIdHeader: string | null,
   db?: ExecutorBanco
 ): Promise<void> {
   await executarComTransacaoOpcional(db, async (tx) => {
+    const calculo = calcularDiscriminacaoMercadoria(dados);
     await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
-    for (const item of itens) {
-      await tx.insert(mercadoriasItens).values(valoresItemMercadoria(item, mercadoriaId, grupoMercadoriaIdHeader));
+    for (const linha of linhasItensMercadoria({ ...dados, grupoMercadoriaId: grupoMercadoriaIdHeader }, mercadoriaId)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
+    await tx
+      .update(mercadorias)
+      .set({
+        descontoGeralTipo: dados.descontoGeralTipo ?? null,
+        descontoGeralValor: dados.descontoGeralValor != null ? String(dados.descontoGeralValor) : null,
+        valorDesconto: centavosParaDecimalBanco(calculo.descontoGeralCentavos)
+      })
+      .where(eq(mercadorias.id, mercadoriaId));
   });
 }

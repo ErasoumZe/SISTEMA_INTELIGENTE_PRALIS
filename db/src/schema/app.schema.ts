@@ -31,6 +31,44 @@ const empresaId = uuid("empresa_id")
   .references(() => empresas.id, { onDelete: "cascade" });
 const valorMonetario = (nome: string) => numeric(nome, { precision: 14, scale: 2 });
 
+// --- Descontos da discriminacao em 3 NIVEIS (PROJECT_BRAIN/17 §5) ---------------------------
+// Niveis 1 e 2 vivem no ITEM; o nivel 3 (geral) vive no CABECALHO do lancamento. Em todos,
+// tipo null = sem desconto naquele nivel; os niveis sao CUMULATIVOS.
+const descontosPorNivelItem = {
+  // Nivel 1 — desconto no V.UNIT (R$ POR UNIDADE quando tipo='valor'). Nao rateia nada.
+  descontoTipo: text("desconto_tipo"),
+  descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
+  // Nivel 2 — desconto no V.TOTAL do item; recalcula o unitario daquele item (D4).
+  descontoTotalTipo: text("desconto_total_tipo"),
+  descontoTotalValor: numeric("desconto_total_valor", { precision: 14, scale: 4 })
+};
+
+// Resultado do calculo dos tres niveis, gravado pelo servidor (nunca pelo cliente).
+//
+// FONTE DA VERDADE: `valor_total_com_desconto` e AUTORITATIVO — e ele que soma e reconcilia com o
+// valor do lancamento. `valor_unitario_com_desconto` e DERIVADO (total / quantidade, arredondado
+// em centavos) e existe para custo e exibicao. unitario x quantidade PODE NAO reconciliar com o
+// total por arredondamento (ex.: 3,30 / 4 = 0,825 -> 0,83; 0,83 x 4 = 3,32) e isso e ESPERADO.
+// Nunca recalcule o total a partir do unitario.
+const valoresComDescontoItem = {
+  valorUnitarioComDesconto: numeric("valor_unitario_com_desconto", { precision: 14, scale: 4 }).notNull(),
+  valorTotalComDesconto: valorMonetario("valor_total_com_desconto").notNull()
+};
+
+// Nivel 3 — desconto GERAL, no cabecalho. Guarda COMO foi informado (ex.: 17,5 + 'percentual');
+// o R$ resolvido continua em `valor_desconto`, que e quem alimenta liquidoCentavos e os agregados.
+const descontoGeralLancamento = {
+  descontoGeralTipo: text("desconto_geral_tipo"),
+  descontoGeralValor: numeric("desconto_geral_valor", { precision: 14, scale: 4 })
+};
+
+function checksDescontoGeral(tabela: string, tipo: AnyPgColumn, valor: AnyPgColumn) {
+  return [
+    check(`${tabela}_desconto_geral_tipo_check`, sql`${tipo} is null or ${tipo} in ('percentual', 'valor')`),
+    check(`${tabela}_desconto_geral_valor_check`, sql`${valor} is null or ${valor} >= 0`)
+  ];
+}
+
 export const empresas = pgTable("empresas", {
   id: idUuid,
   nome: text("nome").notNull(),
@@ -304,6 +342,46 @@ export const gruposVendas = pgTable("grupos_vendas", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+// PATRIMONIO (PROJECT_BRAIN/17, D2) — cadastro MINIMO, espelhando a aba PATRIMONIO da planilha:
+// grupos com sigla (FIS estrutura fisica, MAT materia prima, UTS utensilios, MAQ maquinas,
+// MOB mobiliarios, EMB embalagens) e itens com marca/setor. Alimenta o campo Grupo da
+// discriminacao quando o item e maquinario/manutencao (§5).
+// A sigla NAO e travada nos seis valores: isto e um cadastro com CRUD, e travar no banco faria o
+// "novo grupo" so saber falhar. Unica por empresa + formato (2-4 maiusculas).
+export const gruposPatrimonio = pgTable(
+  "grupos_patrimonio",
+  {
+    id: idUuid,
+    empresaId,
+    sig: text("sig").notNull(),
+    nome: text("nome").notNull(),
+    criadoEm
+  },
+  (table) => [
+    unique("grupos_patrimonio_sig_unica").on(table.empresaId, table.sig),
+    check("grupos_patrimonio_sig_check", sql`${table.sig} ~ '^[A-Z]{2,4}$'`)
+  ]
+);
+
+export const patrimonioItens = pgTable(
+  "patrimonio_itens",
+  {
+    id: idUuid,
+    empresaId,
+    grupoPatrimonioId: uuid("grupo_patrimonio_id")
+      .notNull()
+      .references(() => gruposPatrimonio.id),
+    setorId: uuid("setor_id").references(() => setores.id, { onDelete: "set null" }),
+    nome: text("nome").notNull(),
+    marca: text("marca"),
+    criadoEm
+  },
+  (table) => [
+    index("patrimonio_itens_empresa_idx").on(table.empresaId),
+    index("patrimonio_itens_grupo_idx").on(table.grupoPatrimonioId)
+  ]
+);
 
 export const unidadesMedida = pgTable("unidades_medida", {
   id: idUuid,
@@ -853,6 +931,7 @@ export const despesas = pgTable(
     descricaoAcrescimo: text("descricao_acrescimo"),
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
+    ...descontoGeralLancamento,
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     computar: boolean("computar").notNull().default(true),
     fotoDocumentoUrl: text("foto_documento_url"),
@@ -866,6 +945,7 @@ export const despesas = pgTable(
     check("despesas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksDescontoGeral("despesas", table.descontoGeralTipo, table.descontoGeralValor),
     index("despesas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("despesas_caixa_idx").on(table.caixaId)
   ]
@@ -881,10 +961,34 @@ export const despesasItens = pgTable(
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
     descricao: text("descricao").notNull(),
-    valor: valorMonetario("valor").notNull()
+    // Quantidade/unitario chegaram com os 3 niveis de desconto (§5): item antigo = 1 x valor.
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("1"),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    ...descontosPorNivelItem,
+    valor: valorMonetario("valor").notNull(),
+    ...valoresComDescontoItem
   },
   (table) => [
     check("despesas_itens_valor_check", sql`${table.valor} >= 0`),
+    check("despesas_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    check("despesas_itens_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
+    check(
+      "despesas_itens_desconto_tipo_check",
+      sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('percentual', 'valor')`
+    ),
+    check("despesas_itens_desconto_valor_check", sql`${table.descontoValor} is null or ${table.descontoValor} >= 0`),
+    check(
+      "despesas_itens_desconto_total_tipo_check",
+      sql`${table.descontoTotalTipo} is null or ${table.descontoTotalTipo} in ('percentual', 'valor')`
+    ),
+    check(
+      "despesas_itens_desconto_total_valor_check",
+      sql`${table.descontoTotalValor} is null or ${table.descontoTotalValor} >= 0`
+    ),
+    check(
+      "despesas_itens_valor_com_desconto_check",
+      sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
+    ),
     index("despesas_itens_despesa_idx").on(table.despesaId)
   ]
 );
@@ -955,6 +1059,7 @@ export const mercadorias = pgTable(
     descricaoAcrescimo: text("descricao_acrescimo"),
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
+    ...descontoGeralLancamento,
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     notaFiscalId: text("nota_fiscal_id"),
     temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
@@ -970,6 +1075,7 @@ export const mercadorias = pgTable(
     check("mercadorias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksDescontoGeral("mercadorias", table.descontoGeralTipo, table.descontoGeralValor),
     index("mercadorias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("mercadorias_caixa_idx").on(table.caixaId)
   ]
@@ -988,11 +1094,11 @@ export const mercadoriasItens = pgTable(
     descricao: text("descricao").notNull(),
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
     valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
-    // Desconto por item, informado na discriminacao. tipo null = sem desconto;
-    // valor e % (quando tipo='percentual') ou R$ (quando tipo='valor'). valor_total ja e liquido.
-    descontoTipo: text("desconto_tipo"),
-    descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
-    valorTotal: valorMonetario("valor_total").notNull()
+    ...descontosPorNivelItem,
+    // valor_total = V.Total do item ja LIQUIDO dos descontos DE ITEM (niveis 1 e 2). E a soma dele
+    // que a validacao D5 compara com o valor do lancamento.
+    valorTotal: valorMonetario("valor_total").notNull(),
+    ...valoresComDescontoItem
   },
   (table) => [
     check("mercadorias_itens_quantidade_check", sql`${table.quantidade} > 0`),
@@ -1002,6 +1108,18 @@ export const mercadoriasItens = pgTable(
       sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('percentual', 'valor')`
     ),
     check("mercadorias_itens_desconto_valor_check", sql`${table.descontoValor} is null or ${table.descontoValor} >= 0`),
+    check(
+      "mercadorias_itens_desconto_total_tipo_check",
+      sql`${table.descontoTotalTipo} is null or ${table.descontoTotalTipo} in ('percentual', 'valor')`
+    ),
+    check(
+      "mercadorias_itens_desconto_total_valor_check",
+      sql`${table.descontoTotalValor} is null or ${table.descontoTotalValor} >= 0`
+    ),
+    check(
+      "mercadorias_itens_valor_com_desconto_check",
+      sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
+    ),
     index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId)
   ]
 );

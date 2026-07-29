@@ -42,7 +42,6 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "avaliacao_colaboradores",
   "relatorio_fiscal",
   "fiscal_produtos",
-  "patrimonio",
   "ficha_tecnica",
   "ingredientes",
   // Malotes: nao ha tela de criar malote — o lacre e informado direto na Transferencia
@@ -478,7 +477,9 @@ export function opcoesVazias(): Opcoes {
     produtos: [],
     malotes: [],
     pdvs: [],
-    turnos: []
+    turnos: [],
+    gruposPatrimonio: [],
+    patrimonioItens: []
   };
 }
 
@@ -583,6 +584,9 @@ export function formCadastroVazio(): CadastroForm {
     tipoGrupo: "despesa",
     grupoPaiId: "",
     tipoAreaSetor: "area",
+    tipoPatrimonio: "item",
+    sig: "",
+    grupoPatrimonioId: "",
     areaId: "",
     setorPaiId: "",
     setorId: "",
@@ -680,6 +684,8 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
         : form?.tipoGrupo === "vendas"
           ? "grupos-vendas"
           : "grupos-despesas";
+  // Patrimonio (D2) tem duas entidades na mesma tela, como areas/setores: o formulario diz qual.
+  if (tela === "patrimonio") return form?.tipoPatrimonio === "grupo" ? "patrimonio-grupos" : "patrimonio-itens";
   const mapa: Record<string, string> = {
     empresas: "empresas",
     contas: "contas",
@@ -844,6 +850,9 @@ export function formCadastroDeLinha(
     grupoPaiId: linha.grupoPaiId ?? "",
     tipoAreaSetor:
       (linha.tipoAreaSetor as CadastroForm["tipoAreaSetor"]) || (linha.areaId || linha.setorPaiId ? "setor" : "area"),
+    tipoPatrimonio: (linha.tipoPatrimonio as CadastroForm["tipoPatrimonio"]) || "item",
+    sig: linha.sig ?? "",
+    grupoPatrimonioId: linha.grupoPatrimonioId ?? "",
     areaId: linha.areaId ?? "",
     setorPaiId: linha.setorPaiId ?? "",
     setorId: linha.setorId ?? "",

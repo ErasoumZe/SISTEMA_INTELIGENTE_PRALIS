@@ -16,7 +16,8 @@ import {
   exigirPermissaoPagar,
   obterCaixaParaLancamento,
   podeVerLancamentosPagos,
-  somaConfereCentavos,
+  exigirDiscriminacaoConferida,
+  itemDespesaParaDiscriminacao,
   validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -36,11 +37,10 @@ import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from ".
 
 export function validarDespesa(dados: DespesaPayload): void {
   if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
-  if (dados.itensDespesa.length) {
-    const valores = dados.itensDespesa.map((item) => item.valor);
-    if (!somaConfereCentavos(valores, dados.valorOriginal))
-      throw new Error("Soma dos itens da despesa deve bater com o valor original");
-  }
+  // D5 (§5): a soma da discriminacao tem de bater com o Valor do lancamento. Nao bateu, NAO SALVA —
+  // e a resposta diz ONDE diverge (422 com detalhe), em vez de um 400 seco.
+  if (dados.itensDespesa.length)
+    exigirDiscriminacaoConferida(dados.itensDespesa.map(itemDespesaParaDiscriminacao), dados.valorOriginal);
 }
 
 export async function listarDespesas(
@@ -141,16 +141,14 @@ export async function discriminarDespesa(
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
 
-    const valores = dados.itensDespesa.map((item) => item.valor);
-    if (!somaConfereCentavos(valores, existente.valorOriginal))
-      throw new Error("Soma dos itens da despesa deve bater com o valor original");
+    exigirDiscriminacaoConferida(dados.itensDespesa.map(itemDespesaParaDiscriminacao), existente.valorOriginal);
 
     const referenciaInvalida = await validarReferenciasItensDespesa(dados.empresaId, dados.itensDespesa, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     await discriminarDespesaRepository(
       despesaId,
-      dados.itensDespesa,
+      dados,
       existente.grupoDespesaId ?? null,
       existente.colaboradorId ?? null,
       tx

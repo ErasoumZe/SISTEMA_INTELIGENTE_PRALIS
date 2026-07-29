@@ -1,10 +1,12 @@
 import AdmZip from "adm-zip";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { empresas, fornecedores } from "@padaria/db/schema/cadastro";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { empresas, fornecedores, produtos } from "@padaria/db/schema/cadastro";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import { notasFiscais, notasFiscaisItens } from "@padaria/db/schema/nota-fiscal";
 import type { DadosExternos } from "@padaria/shared/api";
 import type { NotaFiscalDetalheDto, NotaFiscalDto, NotasFiscaisQuery } from "@padaria/shared/notas-fiscais";
+import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
+import { calcularDiscriminacao, resolverItemPorEan, type ProdutoPorEan } from "@padaria/shared/discriminacao";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import { apenasDigitos } from "../utils.js";
 import { extrairNotasDoFiltro, fileIdDaNota, notaCancelada, type NfeParseada } from "./notas-fiscais.parser.js";
@@ -26,6 +28,34 @@ const registroConsole: RegistroWebhook = {
 
 function padCnpj(valor: string | null): string {
   return (apenasDigitos(valor) ?? "").padStart(14, "0");
+}
+
+// EAN -> produto cadastrado (§5). Uma consulta so para a nota inteira, restrita aos EANs que a nota
+// realmente traz e a empresa dona da nota — sem N+1 e sem cruzar cadastro de outra empresa.
+async function mapaProdutosPorEan(
+  empresaId: string,
+  itens: readonly { ean?: string | null }[],
+  db: ExecutorBanco
+): Promise<Map<string, ProdutoPorEan>> {
+  const eans = [...new Set(itens.map((item) => (item.ean ?? "").trim()).filter(Boolean))];
+  if (!eans.length) return new Map();
+  const linhas = await db
+    .select({
+      id: produtos.id,
+      descricao: produtos.descricao,
+      grupoMercadoriaId: produtos.grupoMercadoriaId,
+      codigoBarras: produtos.codigoBarras
+    })
+    .from(produtos)
+    .where(
+      and(eq(produtos.empresaId, empresaId), isNotNull(produtos.codigoBarras), inArray(produtos.codigoBarras, eans))
+    );
+  return new Map(
+    linhas.map((linha) => [
+      linha.codigoBarras ?? "",
+      { id: linha.id, descricao: linha.descricao, grupoMercadoriaId: linha.grupoMercadoriaId }
+    ])
+  );
 }
 
 function emLotes<T>(itens: T[], tamanho: number): T[][] {
@@ -260,16 +290,26 @@ export async function importarNotaFiscalRepository(
 
     // 4) Itens da mercadoria (revisaveis). Itens sem quantidade positiva ficam so na nota fiscal
     //    (mercadorias_itens exige quantidade > 0); o detalhe fiscal completo vai no passo 5.
+    //    A DESCRICAO vem do cadastro quando o EAN casa com produtos.codigoBarras (§5); sem match,
+    //    fica o texto da nota e o item nasce sem produtoId — o sinal de "nao cadastrado".
+    const produtosPorEan = await mapaProdutosPorEan(empresaId, nfe.itens, tx);
     for (const item of nfe.itens) {
       const quantidade = item.quantidade ? Number(item.quantidade) : 0;
       if (!(quantidade > 0)) continue;
       const valorUnitario = item.valorUnitario ? Number(item.valorUnitario) : 0;
+      const resolvido = resolverItemPorEan(item, produtosPorEan);
+      const calculo = calcularDiscriminacao({ itens: [{ quantidade, valorUnitario }] });
+      const calculado = calculo.itens[0];
       await tx.insert(mercadoriasItens).values({
         mercadoriaId: mercadoria.id,
-        descricao: item.descricao ?? "Item sem descricao",
+        produtoId: resolvido.produtoId,
+        grupoMercadoriaId: resolvido.grupoMercadoriaId,
+        descricao: resolvido.descricao,
         quantidade: String(quantidade),
         valorUnitario: String(valorUnitario),
-        valorTotal: (quantidade * valorUnitario).toFixed(2)
+        valorTotal: centavosParaDecimalBanco(calculado?.valorTotalCentavos ?? 0),
+        valorUnitarioComDesconto: centavosParaDecimalBanco(calculado?.valorUnitarioComDescontoCentavos ?? 0),
+        valorTotalComDesconto: centavosParaDecimalBanco(calculado?.valorTotalComDescontoCentavos ?? 0)
       });
     }
 

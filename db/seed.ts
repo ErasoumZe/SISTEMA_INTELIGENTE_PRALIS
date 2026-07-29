@@ -6,6 +6,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import {
   TELA_TEMA_RESUMO_CAIXA,
+  gruposPatrimonioPadrao,
   permissoes,
   permissoesAcessoTotal,
   type Permissao,
@@ -34,6 +35,7 @@ import {
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
   gruposVendas,
   integracoesCamposConfig,
@@ -832,6 +834,13 @@ const grupoRetiradaPai = (
 )[0];
 if (!grupoRetiradaPai) throw new Error("Grupo de retirada pai nao foi criado");
 await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
+
+// Grupos de patrimonio (D2): as seis siglas da aba PATRIMONIO da planilha. Idempotente pela
+// unica (empresa_id, sig) — rodar o seed de novo nao duplica.
+await banco
+  .insert(gruposPatrimonio)
+  .values(gruposPatrimonioPadrao.map((grupo) => ({ empresaId, sig: grupo.sig, nome: grupo.nome })))
+  .onConflictDoNothing();
 
 const grupoVendaPai = (
   await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id })

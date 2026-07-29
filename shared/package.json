@@ -111,10 +111,20 @@
       "development": "./src/dinheiro/index.ts",
       "default": "./dist/dinheiro/index.js"
     },
+    "./discriminacao": {
+      "types": "./dist/discriminacao/index.d.ts",
+      "development": "./src/discriminacao/index.ts",
+      "default": "./dist/discriminacao/index.js"
+    },
     "./malotes": {
       "types": "./dist/malotes/index.d.ts",
       "development": "./src/malotes/index.ts",
       "default": "./dist/malotes/index.js"
+    },
+    "./patrimonio": {
+      "types": "./dist/patrimonio/index.d.ts",
+      "development": "./src/patrimonio/index.ts",
+      "default": "./dist/patrimonio/index.js"
     },
     "./pdvs": {
       "types": "./dist/pdvs/index.d.ts",
