@@ -150,10 +150,10 @@ describe("caixa integration", () => {
     expect(json<DetalheJson>(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
   });
 
-  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_AdminTemFlagSomenteCaixaAberto", async () => {
-    // usuario_admin recebe TODAS as permissoes, inclusive menu_entradas_somente_caixa_aberto.
-    // Por isso o detalhe nao pode reusar /api/vendas: aquela rota trocaria o caixaId pedido pelo
-    // caixa aberto do proprio admin. Aqui o caixa consultado (caixaAberto) tem a venda do seed.
+  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_ConsultarDetalheDeOutroCaixa", async () => {
+    // O detalhe nao pode reusar /api/vendas: aquela rota aplica o escopo operacional "somente caixa
+    // aberto" e, para um perfil com essa flag, trocaria o caixaId pedido pelo caixa aberto dele.
+    // Aqui o caixa consultado (caixaAberto) tem a venda do seed.
     const detalhe = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,

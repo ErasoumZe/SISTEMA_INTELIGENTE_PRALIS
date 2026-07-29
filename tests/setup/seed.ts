@@ -1,7 +1,7 @@
 import pg from "pg";
 import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import { permissoes, type Permissao, type RegrasPermissoes } from "@padaria/shared";
+import { permissoes, permissoesAcessoTotal, type Permissao, type RegrasPermissoes } from "@padaria/shared";
 import {
   areas,
   cargos,
@@ -53,7 +53,9 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorAdmin,
     colaboradorCargoId: idsTeste.colaboradorCargoAdmin,
     role: "usuario_admin",
-    permissoes: [...permissoes]
+    // Acesso TOTAL = catalogo sem as flags `_somente_caixa_aberto` (restricoes). O role
+    // usuario_admin ja resolve assim no perfil.service; o cargo espelha para nao mentir.
+    permissoes: [...permissoesAcessoTotal]
   },
   {
     perfil: "caixa",
@@ -117,16 +119,25 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorMultiempresa,
     colaboradorCargoId: idsTeste.colaboradorCargoMultiempresa,
     role: "usuario_admin",
-    permissoes: [...permissoes]
+    permissoes: [...permissoesAcessoTotal]
   },
   {
     // So visualiza e discrimina (sem criar/editar/caixa) — prova a permissao propria isolada.
+    // Carrega TAMBEM as flags `_somente_caixa_aberto` e NAO tem caixa aberto: e a fixture do
+    // escopo restrito por caixa (o admin deixou de servir para isso, ele nao herda restricao).
     perfil: "discriminador",
     cargoId: idsTeste.cargoDiscriminador,
     colaboradorId: idsTeste.colaboradorDiscriminador,
     colaboradorCargoId: idsTeste.colaboradorCargoDiscriminador,
     role: "usuario_comum",
-    permissoes: ["mercadorias_visualizar", "mercadorias_discriminar", "despesas_visualizar", "despesas_discriminar"]
+    permissoes: [
+      "mercadorias_visualizar",
+      "mercadorias_discriminar",
+      "despesas_visualizar",
+      "despesas_discriminar",
+      "menu_mercadorias_somente_caixa_aberto",
+      "menu_despesas_somente_caixa_aberto"
+    ]
   },
   {
     // Ciclo de vida R7 (Fase 1): opera caixa e lanca/edita despesa, mas NAO paga, NAO ve/edita pago.

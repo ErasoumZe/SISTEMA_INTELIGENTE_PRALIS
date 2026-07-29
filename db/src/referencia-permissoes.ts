@@ -2,7 +2,7 @@
 // (db/seed-referencia-prod.ts). Espelha o mesmo esquema de db/seed.ts (dev) — se um mudar o
 // conjunto de permissoes de um cargo, ajuste o outro. So define dados/funcoes puras (sem efeito
 // colateral / sem acesso a banco): seguro de importar.
-import { permissoes, type Permissao, type RegrasPermissoes } from "@padaria/shared";
+import { permissoesAcessoTotal, type Permissao, type RegrasPermissoes } from "@padaria/shared";
 
 const telasSomenteCaixaAberto = new Set<string>([
   "entradas",
@@ -86,7 +86,9 @@ function menuSomenteCaixaAberto(tela: TelaPermissao) {
 }
 
 export function permissoesDoCargo(config: ConfigPermissoesCargo): Permissao[] {
-  if (config.todas) return [...permissoes];
+  // "todas" NAO inclui as flags `_somente_caixa_aberto`: elas restringem (prendem menu e listagens
+  // ao caixa aberto) e quem tem acesso total nao herda restricao.
+  if (config.todas) return [...permissoesAcessoTotal];
   const resultado = new Set<Permissao>(config.extras ?? []);
   for (const tela of config.ativas ?? []) {
     resultado.add(permissaoAcessoPorTela[tela]);

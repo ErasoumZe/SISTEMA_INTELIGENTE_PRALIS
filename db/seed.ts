@@ -7,6 +7,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import {
   TELA_TEMA_RESUMO_CAIXA,
   permissoes,
+  permissoesAcessoTotal,
   type Permissao,
   type RegrasPermissoes,
   type RoleUsuario
@@ -219,7 +220,9 @@ function menuSomenteCaixaAbertoSeed(tela: TelaPermissaoSeed) {
 }
 
 function permissoesDoCargoSeed(config: PermissoesCargoSeed): Permissao[] {
-  if (config.todas) return [...permissoes];
+  // "todas" NAO inclui as flags `_somente_caixa_aberto` (restricoes) — paridade com
+  // db/src/referencia-permissoes.ts e com o atalho de usuario_admin em api/src/auth/perfil.service.
+  if (config.todas) return [...permissoesAcessoTotal];
   const resultado = new Set<Permissao>(config.extras ?? []);
   for (const tela of config.ativas ?? []) {
     resultado.add(permissaoAcessoPorTelaSeed[tela]);

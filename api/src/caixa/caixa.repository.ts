@@ -501,8 +501,8 @@ export async function listarEdicoesCaixaRepository(caixaId: string, db: Executor
 // Lancamentos de UM caixa, por categoria. Mesmos criterios de calcularTotaisCaixaOperacionalRepository
 // (computar + nao cancelado), para o detalhe bater com os totais da linha.
 // Nao reusa /api/vendas e afins de proposito: aquelas rotas aplicam o escopo operacional
-// "somente caixa aberto" e, para um usuario_admin (que tem todos os flags), trocariam o caixaId
-// pedido pelo caixa aberto do proprio usuario — o detalhe mostraria o caixa errado.
+// "somente caixa aberto" e, para quem tem essa flag (cargo Caixa), trocariam o caixaId pedido pelo
+// caixa aberto do proprio usuario — o detalhe mostraria o caixa errado.
 export async function listarLancamentosCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
   const ativo = (tabela: typeof vendas | typeof despesas | typeof retiradas | typeof mercadorias) =>
     and(eq(tabela.caixaId, caixaId), eq(tabela.computar, true), ne(tabela.status, "cancelado"));

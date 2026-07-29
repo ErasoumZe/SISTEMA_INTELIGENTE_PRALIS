@@ -255,6 +255,25 @@ export type Permissao = (typeof permissoes)[number];
 
 export type RegrasPermissoes = Partial<Record<Permissao, boolean>>;
 
+// Permissoes que RESTRINGEM em vez de conceder: quem as tem fica preso ao caixa aberto — some do
+// menu e as listagens ficam presas ao proprio caixa (ver resolverEscopoListagemPorCaixa). Existem
+// para o cargo Caixa, que so opera com o caixa aberto.
+export const permissoesRestricao = permissoes.filter((permissao) =>
+  permissao.endsWith("_somente_caixa_aberto")
+) as readonly Permissao[];
+
+// O que "todas as permissoes" significa (usuario_admin / cargo com `todas`): o catalogo INTEIRO
+// MENOS as restricoes. O dono do sistema nao herda restricao — antes o admin recebia as flags
+// `_somente_caixa_aberto` junto com tudo e, sem caixa aberto, PERDIA Lancamentos/Entradas do menu e
+// via listagens vazias (decisao do Jose, 29/07).
+export const permissoesAcessoTotal = permissoes.filter(
+  (permissao) => !permissoesRestricao.includes(permissao)
+) as readonly Permissao[];
+
+export function ehPermissaoRestricao(permissao: Permissao): boolean {
+  return permissoesRestricao.includes(permissao);
+}
+
 // DE-PARA oficial (Fase 1) do modelo de 9 acoes do Xmind. Mantemos os codigos LEGADOS como
 // CANONICOS (nada e renomeado agora): `*_criar` desempenha o papel da acao "lancar"; visualizar/
 // editar/excluir ja casam com as acoes sem sufixo D/Pago. As acoes novas (pagar/efetuar/conferir/

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { permissoes as catalogoPermissoes, type Permissao } from "@padaria/shared";
+import { ehPermissaoRestricao, permissoesAcessoTotal, permissoesRestricao, type Permissao } from "@padaria/shared";
 import { acoesNovoPermitidas, categoriaInicialSaida, itemPorTela } from "./domain";
 import { CATEGORIA_LANCAMENTOS, agruparTelasMenu } from "./menu";
 import { usePermissoes } from "~/composables/usePermissoes";
@@ -106,7 +106,10 @@ describe("categoria Lancamentos no menu", () => {
   const papeisDeGestao: Record<string, Permissao[]> = {
     Gerencia: [...acessoLancamentos, "caixa_operar", "caixas_gerenciar", "entradas_visualizar"],
     Tesouraria: [...acessoLancamentos, "transferencias_visualizar"],
-    Financeiro: [...acessoLancamentos, "contas_pagar_visualizar", "relatorio_vendas_visualizar"]
+    Financeiro: [...acessoLancamentos, "contas_pagar_visualizar", "relatorio_vendas_visualizar"],
+    // Diretor Geral opera como usuario_admin: recebe acesso TOTAL, que e o catalogo MENOS as
+    // restricoes `_somente_caixa_aberto` (o dono do sistema nao herda restricao).
+    "Diretor Geral / Admin": [...permissoesAcessoTotal]
   };
 
   // Cargo Caixa: tem acesso as tres telas, mas com a flag que as prende ao caixa aberto.
@@ -147,17 +150,12 @@ describe("categoria Lancamentos no menu", () => {
     });
   }
 
-  it("aparece para Diretor Geral / Admin (usuario_admin recebe o catalogo inteiro)", () => {
-    const menu = menuDoPerfil([...catalogoPermissoes], true);
-    expect(categoriaLancamentos(menu)?.itens.map((tela) => tela.id)).toEqual(["despesas", "mercadorias", "retiradas"]);
+  // Regressao: enquanto "todas as permissoes" era o catalogo INTEIRO, o admin herdava as flags
+  // `_somente_caixa_aberto` (que sao RESTRICOES) e perdia Lancamentos com o caixa fechado.
+  it("acesso total nao carrega nenhuma restricao de caixa aberto", () => {
+    expect(permissoesAcessoTotal.filter((permissao) => ehPermissaoRestricao(permissao))).toEqual([]);
+    expect(permissoesRestricao.length).toBeGreaterThan(0);
   });
-
-  // PENDENTE (decisao do Jose): usuario_admin recebe TODAS as permissoes do catalogo, e as flags
-  // menu_*_somente_caixa_aberto sao RESTRICOES — entao com o caixa fechado o admin/Diretor Geral
-  // perde Lancamentos, contra a regra "sempre visivel" da §4. Corrigir exige tirar essas flags do
-  // atalho de admin no servidor (api/src/auth/perfil.service.ts), que TAMBEM deixa de prender as
-  // listagens do admin ao caixa aberto (api/src/caixa/caixa.service.ts) — mudanca de backend.
-  it.todo("aparece para Diretor Geral / Admin mesmo com o caixa FECHADO (exige tirar as flags do admin)");
 
   it("aparece para o cargo Caixa com o caixa ABERTO", () => {
     const menu = menuDoPerfil(cargoCaixa, true);
@@ -184,13 +182,13 @@ describe("categoria Lancamentos no menu", () => {
 // integracao, D7); Transferencias e Saidas abrem modal — Saidas alterna a categoria por dentro.
 describe("+ NOVO por papel", () => {
   it("tem exatamente Entradas, Transferencias e Saidas — nada por categoria", () => {
-    const acoes = acoesNovoPermitidas([...catalogoPermissoes]);
+    const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
     expect(acoes.map((acao) => acao.id)).toEqual(["entradas", "transferencias", "saidas"]);
     expect(acoes.map((acao) => acao.titulo)).toEqual(["Entradas", "Transferencias", "Saidas"]);
   });
 
   it("Entradas navega para a tela (nao abre modal) e Saidas abre o lancamento", () => {
-    const acoes = acoesNovoPermitidas([...catalogoPermissoes]);
+    const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
     const entradas = acoes.find((acao) => acao.id === "entradas");
     const saidas = acoes.find((acao) => acao.id === "saidas");
     expect(entradas).toMatchObject({ telaDestino: "entradas" });
