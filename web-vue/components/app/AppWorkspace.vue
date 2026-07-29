@@ -161,12 +161,6 @@ const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: 
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoOperacao = ref(false);
 const caixaSalvando = ref(false);
-const modalCaixaDrawerAberto = ref(false);
-const formCaixaDrawer = reactive({
-  pdvId: "",
-  turnoId: "",
-  dataHoraAbertura: ""
-});
 
 const formMalote = ref({ numeroLacre: "", valor: 0 });
 const maloteEditandoId = ref("");
@@ -453,60 +447,6 @@ function atualizarDocumentoCadastro(valor: string) {
   const documento = mascararDocumento(valor);
   formCadastro.value.documento = documento;
   if (cadastroTela.value === "clientes" && !documentoEhCpf(documento)) formCadastro.value.dataNascimento = "";
-}
-
-// So abre caixa. Com caixa aberto o card leva para a tela /caixa, onde vive o fluxo novo de
-// alterar horario (token do autorizador) — o PUT /abertura com tokenEdicao legado nao tem mais
-// entrada na interface.
-async function abrirModalCaixaDrawer() {
-  // O botao "Abrir caixa" e global; a lista de PDVs pode nao ter sido carregada pela tela atual
-  // (ex.: Painel). Garante os PDVs da empresa ativa antes de montar o dropdown do dialogo.
-  // Turnos/colaboradores sao opcionais: se a permissao faltar (403), o modal ABRE mesmo assim com
-  // esses campos vazios e um aviso discreto — nunca falha em silencio (bug 2 do QA de 15/07).
-  if (empresaId.value) {
-    const faltas: string[] = [];
-    opcoes.value.pdvs = await carregarOpcaoOpcional(
-      faltas,
-      "PDVs",
-      () => apiGet<Opcao[]>(`/api/pdvs?empresaId=${empresaId.value}`),
-      opcoes.value.pdvs
-    );
-    opcoes.value.turnos = await carregarOpcaoOpcional(
-      faltas,
-      "Turnos",
-      () => apiGetPaginado<Opcao>(`/api/turnos?empresaId=${empresaId.value}`).then((r) => r.itens),
-      opcoes.value.turnos
-    );
-    if (!opcoes.value.colaboradores.length) {
-      opcoes.value.colaboradores = await carregarOpcaoOpcional(
-        faltas,
-        "Colaboradores",
-        () => apiGet<Opcao[]>(`/api/colaboradores?empresaId=${empresaId.value}`),
-        opcoes.value.colaboradores
-      );
-    }
-    const aviso = avisoOpcoesIndisponiveis(faltas);
-    if (aviso) notificar(aviso, "warning");
-  }
-  formCaixaDrawer.pdvId = opcoesEmpresa.value.pdvs[0]?.id || "";
-  // Pre-seleciona o turno pelo turno padrao do colaborador do usuario logado (server tambem aplica).
-  const colaboradorLogado = opcoesEmpresa.value.colaboradores.find(
-    (colaborador) => colaborador.id === sessao.value?.perfil?.colaboradorId
-  );
-  formCaixaDrawer.turnoId = colaboradorLogado?.turnoPadraoId || "";
-  formCaixaDrawer.dataHoraAbertura = dataHoraLocal();
-  modalCaixaDrawerAberto.value = true;
-}
-
-async function salvarCaixaDrawer() {
-  const ok = await abrirCaixaOperacional({
-    pdvId: formCaixaDrawer.pdvId,
-    usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
-    turnoId: formCaixaDrawer.turnoId || null,
-    dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
-    observacao: null
-  });
-  if (ok) modalCaixaDrawerAberto.value = false;
 }
 
 function telasDoUsuario() {
@@ -1588,11 +1528,7 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 }
 
 provide(WORKSPACE_CONTEXT, {
-  modalCaixaDrawerAberto,
-  formCaixaDrawer,
   opcoesEmpresa,
-  caixaSalvando,
-  salvarCaixaDrawer,
   modalOperacaoAberto,
   entidadeNova,
   operacaoEditandoId,
@@ -1822,6 +1758,8 @@ onBeforeUnmount(() => {
         >
           Gerenciar caixa
         </v-btn>
+        <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
+             so NAVEGA para la — nao existe mais modal de abertura. -->
         <v-btn
           v-else
           class="mt-4 caixa-edit"
@@ -1829,9 +1767,9 @@ onBeforeUnmount(() => {
           size="small"
           variant="tonal"
           prepend-icon="mdi-cash-plus"
-          @click="abrirModalCaixaDrawer()"
+          to="/caixa"
         >
-          Abrir caixa
+          Ir para o caixa
         </v-btn>
       </div>
     </template>

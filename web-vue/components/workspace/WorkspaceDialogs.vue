@@ -26,11 +26,7 @@ const perfisAcessoUsuario = [
 const workspace = useWorkspaceContext();
 
 const {
-  modalCaixaDrawerAberto,
-  formCaixaDrawer,
   opcoesEmpresa,
-  caixaSalvando,
-  salvarCaixaDrawer,
   modalOperacaoAberto,
   entidadeNova,
   operacaoEditandoId,
@@ -139,53 +135,8 @@ const validacaoQtdPreview = computed(() =>
 </script>
 
 <template>
-  <v-dialog v-model="modalCaixaDrawerAberto" max-width="680">
-    <v-card>
-      <v-card-title>Abrir caixa</v-card-title>
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="formCaixaDrawer.pdvId"
-              :items="opcoesEmpresa.pdvs"
-              item-title="nome"
-              item-value="id"
-              label="PDV"
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="formCaixaDrawer.turnoId"
-              :items="opcoesEmpresa.turnos"
-              item-title="nome"
-              item-value="id"
-              label="Turno"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="formCaixaDrawer.dataHoraAbertura"
-              type="datetime-local"
-              label="Data e hora de abertura"
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="outlined" :disabled="caixaSalvando" @click="modalCaixaDrawerAberto = false">Cancelar</v-btn>
-        <v-btn
-          color="primary"
-          :loading="caixaSalvando"
-          :disabled="!formCaixaDrawer.pdvId || !formCaixaDrawer.dataHoraAbertura"
-          @click="salvarCaixaDrawer"
-        >
-          Salvar
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <!-- Abertura de caixa vive num unico fluxo: o form inline da CaixaResumoPage (/caixa). O modal
+       antigo daqui foi removido (Definition of Done: nada e pronto enquanto o caminho antigo existir). -->
 
   <!-- Lancamento (despesa/mercadoria/retirada) e Transferencia tem modais proprios fieis ao desenho
        do Rodrigo (FOTO 2 / FOTO 1); o generico cobre so a venda. -->

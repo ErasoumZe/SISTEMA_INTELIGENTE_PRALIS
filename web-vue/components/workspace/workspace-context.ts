@@ -3,12 +3,6 @@ import type { TemaAplicacao } from "@padaria/shared";
 import type { secoesPermissoes } from "~/utils/domain";
 import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
-export type CaixaDrawerForm = {
-  pdvId: string;
-  turnoId: string;
-  dataHoraAbertura: string;
-};
-
 export type ItemDespesaForm = {
   descricao: string;
   valor: string;
@@ -49,11 +43,7 @@ export type FormMalote = {
 export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
-  modalCaixaDrawerAberto: Ref<boolean>;
-  formCaixaDrawer: CaixaDrawerForm;
   opcoesEmpresa: ComputedRef<Opcoes>;
-  caixaSalvando: Ref<boolean>;
-  salvarCaixaDrawer: () => Promise<void>;
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
   operacaoEditandoId: Ref<string>;
