@@ -1,0 +1,108 @@
+/* Discriminação (FOTO 3) — tabela com rolagem horizontal (não estoura o modal). Extraído do
+   <style scoped> do OperacaoLancamentoModal para o bloco coeso OperacaoLancamentoDiscriminacao.
+   Classes com prefixo unico .disc-*; herdam --cat/--cat-soft do .lc-modal. */
+.disc {
+  margin-bottom: 8px;
+}
+.disc-scroll {
+  overflow-x: auto;
+}
+.disc-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.disc-tabela th {
+  padding: 4px 6px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 0.5px solid #e4e8ef;
+}
+.disc-tabela td {
+  padding: 3px 5px;
+  border-bottom: 0.5px solid #f1f3f7;
+  vertical-align: middle;
+}
+.disc-in {
+  width: 100%;
+  min-width: 64px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 6px;
+  padding: 6px 7px;
+  font-size: 12px;
+  color: #1f2733;
+  background: #fff;
+  outline: none;
+}
+.disc-in:focus {
+  border-color: var(--cat);
+}
+.disc-desc {
+  margin-top: 3px;
+}
+.disc-qtd {
+  min-width: 52px;
+  max-width: 64px;
+}
+.disc-num {
+  min-width: 72px;
+  max-width: 96px;
+}
+.disc-calc {
+  color: var(--cat);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.disc-foot-lbl {
+  color: #64748b;
+  font-weight: 700;
+  text-align: right;
+}
+.disc-foot {
+  border-top: 0.5px solid #e4e8ef;
+}
+.disc-rodape {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.disc-vale {
+  min-width: 220px;
+}
+.disc-vale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.disc-modo {
+  display: flex;
+  border: 0.5px solid #cbd2dc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.disc-modo-btn {
+  border: 0;
+  background: #fff;
+  padding: 7px 12px;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.disc-modo-btn.ativo {
+  background: var(--cat-soft);
+  color: var(--cat);
+  font-weight: 600;
+}
+.disc-vale-res {
+  color: var(--cat);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
