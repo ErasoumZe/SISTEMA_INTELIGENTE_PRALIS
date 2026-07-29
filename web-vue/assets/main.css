@@ -316,14 +316,6 @@ body {
   color: var(--padaria-brand, #6d28d9);
 }
 
-.sidebar-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top: 1px solid var(--padaria-border);
-  padding-top: 12px;
-}
-
 .padaria-sidebar.rail .drawer-shell {
   padding-inline: 10px;
 }
@@ -816,13 +808,6 @@ body {
 }
 .padaria-sidebar.rail .sidebar-item.active::before {
   left: 0;
-}
-.sidebar-bottom {
-  border-top: 1px solid var(--pralis-line-soft);
-}
-.sidebar-bottom .v-btn {
-  color: var(--pralis-ink-soft) !important;
-  font-weight: 700;
 }
 
 /* ---- Topbar (branca, saudacao) ---- */

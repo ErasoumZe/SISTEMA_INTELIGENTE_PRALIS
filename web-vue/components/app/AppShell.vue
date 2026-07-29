@@ -204,20 +204,8 @@ onMounted(() => {
             </div>
           </nav>
         </div>
-
-        <div class="sidebar-bottom">
-          <v-btn
-            v-if="drawerRecolhido"
-            icon="mdi-logout"
-            variant="tonal"
-            :loading="saindo"
-            :title="'Sair'"
-            @click="emit('logout')"
-          />
-          <v-btn v-else block prepend-icon="mdi-logout" variant="tonal" :loading="saindo" @click="emit('logout')">
-            Sair
-          </v-btn>
-        </div>
+        <!-- Logout unico: vive no menu do perfil do usuario (topbar). O botao "Sair" da sidebar foi
+             removido para nao existir dois caminhos para o mesmo ato (Definition of Done). -->
       </div>
     </v-navigation-drawer>
 
