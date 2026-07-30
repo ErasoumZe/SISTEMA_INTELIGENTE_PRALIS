@@ -959,6 +959,12 @@ export const despesasItens = pgTable(
       .notNull()
       .references(() => despesas.id, { onDelete: "cascade" }),
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    // Grupo do item vindo do cadastro de PATRIMONIO (§5: "se maquinario/manutencao"). Precisa ser
+    // coluna PROPRIA: grupo_despesa_id e FK de grupos_despesas e nao aceita um id de patrimonio —
+    // gravar la daria erro de FK, ou pior, casaria com um grupo de despesa de mesmo id.
+    // As duas sao OPCIONAIS e MUTUAMENTE EXCLUSIVAS (check abaixo): item sem grupo e legitimo e
+    // existe aos milhares no historico, entao a regra e "no maximo um", nunca "exatamente um".
+    grupoPatrimonioId: uuid("grupo_patrimonio_id").references(() => gruposPatrimonio.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
     descricao: text("descricao").notNull(),
     // Quantidade/unitario chegaram com os 3 niveis de desconto (§5): item antigo = 1 x valor.
@@ -989,7 +995,19 @@ export const despesasItens = pgTable(
       "despesas_itens_valor_com_desconto_check",
       sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
     ),
-    index("despesas_itens_despesa_idx").on(table.despesaId)
+    // O grupo do item vem de UMA origem so: despesas OU patrimonio. Nenhum e permitido (item sem
+    // grupo, o caso do historico); os dois juntos nao — seria um item em duas arvores de grupo, e
+    // qualquer relatorio que agrupe contaria ele duas vezes.
+    check(
+      "despesas_itens_grupo_unico_check",
+      sql`num_nonnulls(${table.grupoDespesaId}, ${table.grupoPatrimonioId}) <= 1`
+    ),
+    index("despesas_itens_despesa_idx").on(table.despesaId),
+    // Parcial: a coluna e esparsa (so item de maquinario/manutencao preenche). Serve o DELETE de
+    // grupos_patrimonio (FK sem indice varre a tabela filha inteira) e o filtro por grupo.
+    index("despesas_itens_grupo_patrimonio_idx")
+      .on(table.grupoPatrimonioId)
+      .where(sql`${table.grupoPatrimonioId} is not null`)
   ]
 );
 
@@ -1090,6 +1108,8 @@ export const mercadoriasItens = pgTable(
       .references(() => mercadorias.id, { onDelete: "cascade" }),
     produtoId: uuid("produto_id").references(() => produtos.id),
     grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    // Ver a nota em despesas_itens.grupo_patrimonio_id: mesma regra, mesmo motivo (FK diferente).
+    grupoPatrimonioId: uuid("grupo_patrimonio_id").references(() => gruposPatrimonio.id),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     descricao: text("descricao").notNull(),
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
@@ -1120,7 +1140,15 @@ export const mercadoriasItens = pgTable(
       "mercadorias_itens_valor_com_desconto_check",
       sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
     ),
-    index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId)
+    // Mesma regra de despesas_itens: no maximo uma origem de grupo (mercadorias OU patrimonio).
+    check(
+      "mercadorias_itens_grupo_unico_check",
+      sql`num_nonnulls(${table.grupoMercadoriaId}, ${table.grupoPatrimonioId}) <= 1`
+    ),
+    index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId),
+    index("mercadorias_itens_grupo_patrimonio_idx")
+      .on(table.grupoPatrimonioId)
+      .where(sql`${table.grupoPatrimonioId} is not null`)
   ]
 );
 

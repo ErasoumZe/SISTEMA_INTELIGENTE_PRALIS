@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { formOperacaoVazio } from "./domain";
 import {
   formOperacaoDeDetalhe,
+  grupoItemEscolhido,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
   montarPayloadOperacao,
+  opcaoGrupoItem,
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "./operacoes";
@@ -39,8 +43,21 @@ describe("formOperacaoDeDetalhe", () => {
       itensDespesa: [{ grupoDespesaId: "g1", descricao: "Item", valor: 5 }]
     });
     expect(preenchido.discriminandoDespesa).toBe(true);
-    expect(preenchido.itensDespesa).toEqual([{ descricao: "Item", valor: "5", grupoDespesaId: "g1" }]);
+    // grupoPatrimonioId entra vazio: o detalhe nao trouxe, e o form usa "" para "nenhum".
+    expect(preenchido.itensDespesa).toEqual([
+      { descricao: "Item", valor: "5", grupoDespesaId: "g1", grupoPatrimonioId: "" }
+    ]);
     expect(preenchido.itensVenda).toBeUndefined();
+  });
+
+  it("traz de volta o grupo de patrimonio do item (§5 item 6)", () => {
+    const preenchido = formOperacaoDeDetalhe("despesa", {
+      ...detalheBase,
+      itensDespesa: [{ grupoDespesaId: null, grupoPatrimonioId: "pat-1", descricao: "Correia", valor: 5 }]
+    });
+    expect(preenchido.itensDespesa).toEqual([
+      { descricao: "Correia", valor: "5", grupoDespesaId: "", grupoPatrimonioId: "pat-1" }
+    ]);
   });
 
   it("so inclui dataVencimento quando o detalhe traz", () => {
@@ -122,11 +139,48 @@ describe("montarPayloadOperacao", () => {
 
   it("so inclui itens de despesa quando discriminando", () => {
     const form = { ...formOperacaoVazio(), valorOriginal: "5" };
-    const itensDespesa = [{ descricao: "Item", valor: "5", grupoDespesaId: "g1" }];
+    const itensDespesa = [{ ...itemDespesaVazio(), descricao: "Item", valor: "5", grupoDespesaId: "g1" }];
     expect(montarPayloadOperacao("despesa", { ...base, form, itensDespesa }).itensDespesa).toEqual([]);
     expect(
       montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
-    ).toEqual([{ descricao: "Item", valor: 5, grupoDespesaId: "g1" }]);
+    ).toEqual([{ descricao: "Item", valor: 5, grupoDespesaId: "g1", grupoPatrimonioId: null }]);
+  });
+
+  // O ID em branco do ITEM tem de virar null, igual aos do cabecalho: o zod usa uuid() e responde
+  // 400 "Invalid UUID" para "". Como Grupo e opcional (e a primeira opcao do select e vazia), este
+  // era o caminho PADRAO de quem discrimina sem classificar — e ele quebrava.
+  it("converte para null os IDs em branco do item (nao manda string vazia)", () => {
+    const form = { ...formOperacaoVazio(), valorOriginal: "5" };
+    const itensDespesa = [{ ...itemDespesaVazio(), descricao: "Sem grupo", valor: "5" }];
+    expect(
+      montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
+    ).toEqual([{ descricao: "Sem grupo", valor: 5, grupoDespesaId: null, grupoPatrimonioId: null }]);
+
+    const itensMercadoria = [{ ...itemMercadoriaVazio(), descricao: "Livre", quantidade: "1", valorTotal: "5" }];
+    const [itemMercadoria] = montarPayloadOperacao("mercadoria", {
+      ...base,
+      form,
+      itensMercadoria,
+      discriminandoMercadoria: true
+    }).itensMercadoria;
+    expect(itemMercadoria).toMatchObject({
+      produtoId: null,
+      grupoMercadoriaId: null,
+      grupoPatrimonioId: null,
+      unidadeMedidaId: null
+    });
+  });
+
+  // §5 item 6: o Grupo do item tem duas origens e elas sao EXCLUSIVAS. Escolher patrimonio limpa o
+  // grupo proprio (e vice-versa), entao a tela nao consegue montar o item que o CHECK recusaria.
+  it("escolher grupo de patrimonio zera o grupo proprio, e vice-versa", () => {
+    expect(grupoItemEscolhido("pat:abc")).toEqual({ grupoProprioId: "", grupoPatrimonioId: "abc" });
+    expect(grupoItemEscolhido("g1")).toEqual({ grupoProprioId: "g1", grupoPatrimonioId: "" });
+    expect(grupoItemEscolhido("")).toEqual({ grupoProprioId: "", grupoPatrimonioId: "" });
+    // ida e volta: o select mostra de volta a origem que foi gravada
+    expect(opcaoGrupoItem("", "abc")).toBe("pat:abc");
+    expect(opcaoGrupoItem("g1", "")).toBe("g1");
+    expect(opcaoGrupoItem("", "")).toBe("");
   });
 });
 

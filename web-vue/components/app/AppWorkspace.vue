@@ -58,6 +58,8 @@ import {
 } from "~/utils/domain";
 import {
   formOperacaoDeDetalhe,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
   montarPayloadOperacao,
   totalItemMercadoriaForm,
   validarOperacaoParaEnvio,
@@ -145,20 +147,8 @@ const aprovacaoMercadoriaSalvandoId = ref("");
 const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
-const itensDespesa = ref([{ descricao: "", valor: "", grupoDespesaId: "" }]);
-const itensMercadoria = ref([
-  {
-    descricao: "",
-    quantidade: "1",
-    valorUnitario: "",
-    descontoTipo: "",
-    descontoValor: "",
-    valorTotal: "",
-    produtoId: "",
-    grupoMercadoriaId: "",
-    unidadeMedidaId: ""
-  }
-]);
+const itensDespesa = ref([itemDespesaVazio()]);
+const itensMercadoria = ref([itemMercadoriaVazio()]);
 const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }]);
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoOperacao = ref(false);
@@ -581,9 +571,17 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
-    [dados.contas, dados.fornecedores] = await Promise.all([
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6). Opcional —
+    // quem nao tem permissao de patrimonio segue lancando so com os grupos de despesa.
+    [dados.contas, dados.fornecedores, dados.gruposPatrimonio] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Grupos de patrimonio",
+        async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
+        []
+      )
     ]);
   } else if (tela === "contas_pagar") {
     dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []);
@@ -599,12 +597,25 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
     // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
-    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
-      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), [])
-    ]);
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6).
+    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos, dados.gruposPatrimonio] =
+      await Promise.all([
+        carregarOpcaoOpcional(
+          faltas,
+          "Contas",
+          () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+          []
+        ),
+        carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
+        carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
+        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+        carregarOpcaoOpcional(
+          faltas,
+          "Grupos de patrimonio",
+          async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
+          []
+        )
+      ]);
   } else if (tela === "retiradas") {
     Object.assign(
       dados,
@@ -969,20 +980,8 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   discriminandoMercadoria.value = false;
   itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
   tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-  itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
-  itensMercadoria.value = [
-    {
-      descricao: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      valorTotal: "",
-      produtoId: "",
-      grupoMercadoriaId: "",
-      unidadeMedidaId: ""
-    }
-  ];
+  itensDespesa.value = [itemDespesaVazio()];
+  itensMercadoria.value = [itemMercadoriaVazio()];
   // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
   try {
     await carregarOpcoesParaOperacao(entidade);
@@ -1029,20 +1028,8 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = entidade === "despesa";
   discriminandoMercadoria.value = entidade === "mercadoria";
-  itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
-  itensMercadoria.value = [
-    {
-      descricao: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      valorTotal: "",
-      produtoId: "",
-      grupoMercadoriaId: "",
-      unidadeMedidaId: ""
-    }
-  ];
+  itensDespesa.value = [itemDespesaVazio()];
+  itensMercadoria.value = [itemMercadoriaVazio()];
   try {
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);

@@ -36,10 +36,16 @@ export type OperacaoDetalhe = {
     valorTotal: number;
   }[];
   tiposPagamento?: { formaPagamentoId: string | null; numeroVendas: number; totalPago: number }[];
-  itensDespesa?: { grupoDespesaId: string | null; descricao: string; valor: number }[];
+  itensDespesa?: {
+    grupoDespesaId: string | null;
+    grupoPatrimonioId?: string | null;
+    descricao: string;
+    valor: number;
+  }[];
   itensMercadoria?: {
     produtoId: string | null;
     grupoMercadoriaId: string | null;
+    grupoPatrimonioId?: string | null;
     unidadeMedidaId: string | null;
     descricao: string;
     quantidade: number;
@@ -58,7 +64,14 @@ export type ItemVendaForm = {
   produtoId: string;
 };
 export type TipoPagamentoForm = { formaPagamentoId: string; totalPago: string; numeroVendas: string };
-export type ItemDespesaForm = { descricao: string; valor: string; grupoDespesaId: string };
+// grupoPatrimonioId: grupo do item vindo do cadastro de PATRIMONIO (§5, item 6). Exclusivo com o
+// grupo proprio — o select da tela escreve num OU no outro, nunca nos dois.
+export type ItemDespesaForm = {
+  descricao: string;
+  valor: string;
+  grupoDespesaId: string;
+  grupoPatrimonioId: string;
+};
 export type ItemMercadoriaForm = {
   descricao: string;
   quantidade: string;
@@ -69,8 +82,51 @@ export type ItemMercadoriaForm = {
   valorTotal: string;
   produtoId: string;
   grupoMercadoriaId: string;
+  grupoPatrimonioId: string;
   unidadeMedidaId: string;
 };
+
+// Linha em branco da discriminacao. Existe como FUNCAO (e nao como literal repetido em cada tela)
+// porque o literal estava copiado em quatro lugares: bastava um campo novo entrar em tres deles
+// para a quarta tela montar um item sem o campo. Foi assim que o "" de ID sobreviveu.
+export function itemDespesaVazio(): ItemDespesaForm {
+  return { descricao: "", valor: "", grupoDespesaId: "", grupoPatrimonioId: "" };
+}
+
+export function itemMercadoriaVazio(): ItemMercadoriaForm {
+  return {
+    descricao: "",
+    quantidade: "1",
+    valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
+    valorTotal: "",
+    produtoId: "",
+    grupoMercadoriaId: "",
+    grupoPatrimonioId: "",
+    unidadeMedidaId: ""
+  };
+}
+
+// --- Campo Grupo do ITEM: duas origens, uma lista so (§5, item 6) ----------------------------
+// O item guarda DOIS campos exclusivos — o grupo do cadastro proprio (despesa/mercadoria) e o de
+// PATRIMONIO — mas a pessoa ve UM campo, com os dois blocos. O <option> carrega a origem no valor
+// porque o id sozinho nao diz de qual cadastro ele veio: dois uuid quaisquer sao indistinguiveis.
+//
+// A exclusividade sai de graca aqui: grupoItemEscolhido SEMPRE devolve um dos dois vazio, entao a
+// tela nao tem como montar um item com as duas origens (que o contrato e o CHECK recusariam).
+export const PREFIXO_GRUPO_PATRIMONIO = "pat:";
+
+export function opcaoGrupoItem(grupoProprioId: string, grupoPatrimonioId: string): string {
+  return grupoPatrimonioId ? PREFIXO_GRUPO_PATRIMONIO + grupoPatrimonioId : grupoProprioId;
+}
+
+export function grupoItemEscolhido(valor: string): { grupoProprioId: string; grupoPatrimonioId: string } {
+  if (valor.startsWith(PREFIXO_GRUPO_PATRIMONIO)) {
+    return { grupoProprioId: "", grupoPatrimonioId: valor.slice(PREFIXO_GRUPO_PATRIMONIO.length) };
+  }
+  return { grupoProprioId: valor, grupoPatrimonioId: "" };
+}
 
 // Total liquido de um item de mercadoria no cliente (espelha o recalculo do servidor). Sem desconto,
 // usa o valorTotal digitado (permite valor cheio). Com desconto, e qtd*unit menos o desconto, >= 0.
@@ -146,7 +202,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     preenchido.itensDespesa = detalhe.itensDespesa.map((item) => ({
       descricao: item.descricao,
       valor: String(item.valor),
-      grupoDespesaId: item.grupoDespesaId ?? ""
+      grupoDespesaId: item.grupoDespesaId ?? "",
+      grupoPatrimonioId: item.grupoPatrimonioId ?? ""
     }));
   }
   if (entidade === "mercadoria" && detalhe.itensMercadoria?.length) {
@@ -159,6 +216,7 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
       valorTotal: String(item.valorTotal),
       produtoId: item.produtoId ?? "",
       grupoMercadoriaId: item.grupoMercadoriaId ?? "",
+      grupoPatrimonioId: item.grupoPatrimonioId ?? "",
       unidadeMedidaId: item.unidadeMedidaId ?? ""
     }));
   }
@@ -178,24 +236,38 @@ export type DadosPayloadOperacao = {
 };
 
 export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: DadosPayloadOperacao) {
+  // Os IDs opcionais do ITEM seguem a MESMA regra dos do cabecalho (ver o comentario no return):
+  // "" vira null, porque o zod usa uuid().optional().nullable() e REJEITA "" com "Invalid UUID".
+  // Antes o item ia por spread e levava o "" junto — discriminar sem escolher Grupo (o padrao: o
+  // campo e opcional e a primeira opcao do select e vazia) respondia 400. Por isso os campos sao
+  // listados um a um aqui em vez de espalhados.
   const itensDespesa =
     entidade === "despesa" && dados.discriminandoDespesa
       ? dados.itensDespesa
           .filter((item) => item.descricao || item.valor)
-          .map((item) => ({ ...item, valor: deCentavos(paraCentavos(item.valor)) }))
+          .map((item) => ({
+            descricao: item.descricao,
+            valor: deCentavos(paraCentavos(item.valor)),
+            grupoDespesaId: item.grupoDespesaId || null,
+            grupoPatrimonioId: item.grupoPatrimonioId || null
+          }))
       : [];
   const itensMercadoria =
     entidade === "mercadoria" && dados.discriminandoMercadoria
       ? dados.itensMercadoria
           .filter((item) => item.descricao || item.produtoId)
           .map((item) => ({
-            ...item,
+            descricao: item.descricao,
             quantidade: Number(item.quantidade || 0),
             valorUnitario: Number(item.valorUnitario || 0),
             descontoTipo: item.descontoTipo || null,
             descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
             // Servidor recalcula, mas mandamos o total ja liquido para casar com a soma na hora.
-            valorTotal: totalItemMercadoriaForm(item)
+            valorTotal: totalItemMercadoriaForm(item),
+            produtoId: item.produtoId || null,
+            grupoMercadoriaId: item.grupoMercadoriaId || null,
+            grupoPatrimonioId: item.grupoPatrimonioId || null,
+            unidadeMedidaId: item.unidadeMedidaId || null
           }))
       : [];
   const itensVenda =

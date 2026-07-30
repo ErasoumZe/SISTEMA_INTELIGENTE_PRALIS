@@ -72,7 +72,11 @@ export const idsTeste = {
   colaboradorCargoCaixaCiclo: "11111111-1111-4111-8111-111111112003",
   cargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112011",
   colaboradorFinanceiroCiclo: "11111111-1111-4111-8111-111111112012",
-  colaboradorCargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112013"
+  colaboradorCargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112013",
+  // Patrimonio (D2): segunda origem do campo Grupo da discriminacao (§5, item 6). O grupo da
+  // empresa B existe para provar que o escopo por empresa vale tambem para esta origem.
+  grupoPatrimonioMaquinas: "11111111-1111-4111-8111-111111112101",
+  grupoPatrimonioOutraEmpresa: "33333333-3333-4333-8333-333333332101"
 } as const;
 
 export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; senha: string }> = {

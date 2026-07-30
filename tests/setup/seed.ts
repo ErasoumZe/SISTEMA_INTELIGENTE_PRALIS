@@ -15,6 +15,7 @@ import {
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
   gruposVendas,
   integracoesCamposConfig,
@@ -320,6 +321,13 @@ export async function aplicarSeedIntegracao() {
   await banco
     .insert(gruposMercadorias)
     .values({ id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" });
+  // Sigla UTS (utensilios) de proposito: grupos_patrimonio tem unique(empresa_id, sig) e o teste de
+  // cadastro (cadastros/patrimonio.test.ts) cria MAQ e MOB na empresa A. Um seed com MAQ faria
+  // aquele POST falhar por sigla duplicada — o seed nao pode ocupar as siglas que os testes criam.
+  await banco.insert(gruposPatrimonio).values([
+    { id: idsTeste.grupoPatrimonioMaquinas, empresaId: idsTeste.empresaA, sig: "UTS", nome: "Utensilios" },
+    { id: idsTeste.grupoPatrimonioOutraEmpresa, empresaId: idsTeste.empresaB, sig: "UTS", nome: "Utensilios" }
+  ]);
   await banco
     .insert(gruposRetiradas)
     .values({ id: idsTeste.grupoRetiradaSangria, empresaId: idsTeste.empresaA, nome: "Sangria" });

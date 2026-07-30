@@ -3,37 +3,11 @@ import type { TemaAplicacao } from "@padaria/shared";
 import type { secoesPermissoes } from "~/utils/domain";
 import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
-export type ItemDespesaForm = {
-  descricao: string;
-  valor: string;
-  grupoDespesaId: string;
-};
-
-export type ItemMercadoriaForm = {
-  descricao: string;
-  quantidade: string;
-  valorUnitario: string;
-  descontoTipo: string;
-  descontoValor: string;
-  valorTotal: string;
-  produtoId: string;
-  grupoMercadoriaId: string;
-  unidadeMedidaId: string;
-};
-
-export type ItemVendaForm = {
-  descricaoProduto: string;
-  quantidade: string;
-  valorUnitario: string;
-  valorTotal: string;
-  produtoId: string;
-};
-
-export type TipoPagamentoForm = {
-  formaPagamentoId: string;
-  totalPago: string;
-  numeroVendas: string;
-};
+// As formas de item vivem em utils/operacoes (junto do payload que as consome) e sao REEXPORTADAS
+// aqui. Antes o contexto declarava copias identicas: ao ganhar grupoPatrimonioId, os dois tipos se
+// separaram e o mesmo objeto deixou de ser atribuivel a si mesmo. Uma definicao so, sempre.
+export type { ItemDespesaForm, ItemMercadoriaForm, ItemVendaForm, TipoPagamentoForm } from "~/utils/operacoes";
+import type { ItemDespesaForm, ItemMercadoriaForm, ItemVendaForm, TipoPagamentoForm } from "~/utils/operacoes";
 
 export type FormMalote = {
   numeroLacre: string;

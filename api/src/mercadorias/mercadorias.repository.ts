@@ -36,10 +36,14 @@ function linhasItensMercadoria(
   const calculo = calcularDiscriminacaoMercadoria(dados);
   return dados.itensMercadoria.map((item, indice) => {
     const calculado = calculo.itens[indice];
+    // Ver a nota em linhasItensDespesa: grupo de patrimonio no item DESLIGA a heranca do grupo do
+    // cabecalho, senao o item nasceria com duas origens e violaria o CHECK.
+    const grupoPatrimonioId = item.grupoPatrimonioId ?? null;
     return {
       mercadoriaId,
       produtoId: item.produtoId ?? null,
-      grupoMercadoriaId: item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null,
+      grupoMercadoriaId: grupoPatrimonioId ? null : (item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null),
+      grupoPatrimonioId,
       unidadeMedidaId: item.unidadeMedidaId ?? null,
       descricao: item.descricao,
       quantidade: String(item.quantidade),
@@ -172,6 +176,7 @@ export async function buscarMercadoriaDetalheRepository(
     .select({
       produtoId: mercadoriasItens.produtoId,
       grupoMercadoriaId: mercadoriasItens.grupoMercadoriaId,
+      grupoPatrimonioId: mercadoriasItens.grupoPatrimonioId,
       unidadeMedidaId: mercadoriasItens.unidadeMedidaId,
       descricao: mercadoriasItens.descricao,
       quantidade: mercadoriasItens.quantidade,

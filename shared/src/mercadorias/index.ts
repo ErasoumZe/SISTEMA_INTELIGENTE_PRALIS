@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { itemTemGrupoDeDuasOrigens, MENSAGEM_GRUPO_DE_DUAS_ORIGENS } from "../discriminacao/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -15,23 +16,35 @@ export const mercadoriasQuerySchema = z
 
 export const tiposDescontoItem = ["percentual", "valor"] as const;
 
-export const mercadoriaItemSchema = z.object({
-  produtoId: uuidSchema.optional().nullable(),
-  grupoMercadoriaId: uuidSchema.optional().nullable(),
-  unidadeMedidaId: uuidSchema.optional().nullable(),
-  descricao: z.string().min(1),
-  quantidade: z.coerce.number().positive(),
-  valorUnitario: z.coerce.number().min(0).default(0),
-  // Descontos por NIVEL (§5). tipo nulo = sem desconto naquele nivel; valor e % ('percentual') ou
-  // R$ ('valor'). O servidor recalcula os totais — o cliente nao decide dinheiro.
-  // Nivel 1: no V.UNIT (R$ POR UNIDADE quando 'valor').
-  descontoTipo: z.enum(tiposDescontoItem).optional().nullable(),
-  descontoValor: z.coerce.number().min(0).optional().nullable(),
-  // Nivel 2: no V.TOTAL do item.
-  descontoTotalTipo: z.enum(tiposDescontoItem).optional().nullable(),
-  descontoTotalValor: z.coerce.number().min(0).optional().nullable(),
-  valorTotal: dinheiroSchema
-});
+export const mercadoriaItemSchema = z
+  .object({
+    produtoId: uuidSchema.optional().nullable(),
+    grupoMercadoriaId: uuidSchema.optional().nullable(),
+    // Grupo vindo do cadastro de PATRIMONIO (§5). Exclusivo com grupoMercadoriaId — ver o refine.
+    grupoPatrimonioId: uuidSchema.optional().nullable(),
+    unidadeMedidaId: uuidSchema.optional().nullable(),
+    descricao: z.string().min(1),
+    quantidade: z.coerce.number().positive(),
+    valorUnitario: z.coerce.number().min(0).default(0),
+    // Descontos por NIVEL (§5). tipo nulo = sem desconto naquele nivel; valor e % ('percentual') ou
+    // R$ ('valor'). O servidor recalcula os totais — o cliente nao decide dinheiro.
+    // Nivel 1: no V.UNIT (R$ POR UNIDADE quando 'valor').
+    descontoTipo: z.enum(tiposDescontoItem).optional().nullable(),
+    descontoValor: z.coerce.number().min(0).optional().nullable(),
+    // Nivel 2: no V.TOTAL do item.
+    descontoTotalTipo: z.enum(tiposDescontoItem).optional().nullable(),
+    descontoTotalValor: z.coerce.number().min(0).optional().nullable(),
+    valorTotal: dinheiroSchema
+  })
+  .superRefine((item, ctx) => {
+    if (itemTemGrupoDeDuasOrigens(item.grupoMercadoriaId, item.grupoPatrimonioId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["grupoPatrimonioId"],
+        message: MENSAGEM_GRUPO_DE_DUAS_ORIGENS
+      });
+    }
+  });
 
 export const mercadoriaPayloadSchema = z.object({
   empresaId: uuidSchema,

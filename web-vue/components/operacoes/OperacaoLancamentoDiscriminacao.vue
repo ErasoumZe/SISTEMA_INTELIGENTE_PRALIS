@@ -14,6 +14,12 @@ const {
   opcoesEmpresa,
   escolherProduto,
   novoItemMercadoria,
+  novoItemDespesa,
+  gruposPatrimonio,
+  grupoItemDespesa,
+  definirGrupoItemDespesa,
+  grupoItemMercadoria,
+  definirGrupoItemMercadoria,
   unitComDesc,
   totalLinha,
   totalLinhaComDesc,
@@ -35,20 +41,32 @@ const {
       <span class="lc-flex" />
       <v-icon size="16">{{ discriminando ? "mdi-chevron-down" : "mdi-chevron-right" }}</v-icon>
     </button>
-    <!-- Despesa: descrição e grupo LIVRES (FOTO 3, nota). -->
+    <!-- Despesa: descrição e grupo LIVRES (FOTO 3, nota). O Grupo tem DUAS origens (§5): o cadastro
+         de despesas e o de patrimônio (maquinário/manutenção), num select só com dois blocos. -->
     <div v-if="discriminando && cat === 'despesa'" class="lc-itens">
       <div v-for="(item, i) in itensDespesa" :key="`d-${i}`" class="lc-item">
         <input v-model="item.descricao" class="lc-input" placeholder="Descrição (livre)" />
-        <select v-model="item.grupoDespesaId" class="lc-input lc-item-grupo">
+        <select
+          :value="grupoItemDespesa(item)"
+          class="lc-input lc-item-grupo"
+          @change="definirGrupoItemDespesa(item, ($event.target as HTMLSelectElement).value)"
+        >
           <option value="">Grupo</option>
-          <option v-for="g in opcoesEmpresa.gruposDespesas" :key="g.id" :value="g.id">{{ g.nome }}</option>
+          <optgroup label="Despesas">
+            <option v-for="g in opcoesEmpresa.gruposDespesas" :key="g.id" :value="g.id">{{ g.nome }}</option>
+          </optgroup>
+          <optgroup v-if="gruposPatrimonio.length" label="Patrimônio">
+            <option v-for="g in gruposPatrimonio" :key="g.id" :value="`pat:${g.id}`">
+              {{ g.sig ? `${g.sig} — ${g.nome}` : g.nome }}
+            </option>
+          </optgroup>
         </select>
         <input v-model="item.valor" type="number" class="lc-input lc-item-valor" placeholder="R$" />
         <v-icon size="18" class="lc-item-del" @click="itensDespesa.length > 1 && itensDespesa.splice(i, 1)"
           >mdi-close</v-icon
         >
       </div>
-      <button type="button" class="lc-add" @click="itensDespesa.push({ descricao: '', valor: '', grupoDespesaId: '' })">
+      <button type="button" class="lc-add" @click="novoItemDespesa">
         <v-icon size="15">mdi-plus</v-icon> Adicionar item
       </button>
     </div>
@@ -85,15 +103,26 @@ const {
                 </select>
                 <input v-model="item.descricao" class="disc-in disc-desc" placeholder="Descrição" />
               </td>
-              <!-- Grupo (§5): hoje so a lista do cadastro de PRODUTOS. A lista de PATRIMONIO
-                   (maquinario/manutencao) depende de uma coluna propria no item — grupo_mercadoria_id
-                   e FK de grupos_mercadorias e nao aceita um id de patrimonio. Ver o handoff. -->
+              <!-- Grupo (§5): duas origens — o cadastro de MERCADORIAS e o de PATRIMÔNIO, quando o
+                   item é maquinário/manutenção. Cada origem grava na sua coluna (são FKs de tabelas
+                   diferentes); o valor do <option> carrega qual delas é. -->
               <td>
-                <select v-model="item.grupoMercadoriaId" class="disc-in">
+                <select
+                  :value="grupoItemMercadoria(item)"
+                  class="disc-in"
+                  @change="definirGrupoItemMercadoria(item, ($event.target as HTMLSelectElement).value)"
+                >
                   <option value="">—</option>
-                  <option v-for="g in opcoesEmpresa.gruposMercadorias" :key="g.id" :value="g.id">
-                    {{ g.nome }}
-                  </option>
+                  <optgroup label="Mercadorias">
+                    <option v-for="g in opcoesEmpresa.gruposMercadorias" :key="g.id" :value="g.id">
+                      {{ g.nome }}
+                    </option>
+                  </optgroup>
+                  <optgroup v-if="gruposPatrimonio.length" label="Patrimônio">
+                    <option v-for="g in gruposPatrimonio" :key="g.id" :value="`pat:${g.id}`">
+                      {{ g.sig ? `${g.sig} — ${g.nome}` : g.nome }}
+                    </option>
+                  </optgroup>
                 </select>
               </td>
               <td><input v-model="item.valorUnitario" type="number" class="disc-in disc-num" /></td>

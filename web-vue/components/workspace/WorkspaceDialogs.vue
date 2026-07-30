@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
-import { totalItemMercadoriaForm } from "~/utils/operacoes";
+import { itemMercadoriaVazio, totalItemMercadoriaForm } from "~/utils/operacoes";
 import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
 import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
 import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
@@ -384,19 +384,7 @@ const validacaoQtdPreview = computed(() =>
                 size="small"
                 variant="outlined"
                 prepend-icon="mdi-plus"
-                @click="
-                  itensMercadoria.push({
-                    descricao: '',
-                    quantidade: '1',
-                    valorUnitario: '',
-                    descontoTipo: '',
-                    descontoValor: '',
-                    valorTotal: '',
-                    produtoId: '',
-                    grupoMercadoriaId: '',
-                    unidadeMedidaId: ''
-                  })
-                "
+                @click="itensMercadoria.push(itemMercadoriaVazio())"
                 >Adicionar mercadoria</v-btn
               >
             </div>

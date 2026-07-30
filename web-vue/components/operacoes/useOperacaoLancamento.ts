@@ -5,7 +5,7 @@
 // api/db/shared; os campos NOVOS seguem data-pendente="regra" (estado local, nunca enviado).
 import { computed, inject, ref, watch, type InjectionKey } from "vue";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
-import type { ItemMercadoriaForm } from "~/utils/operacoes";
+import { grupoItemEscolhido, opcaoGrupoItem, type ItemDespesaForm, type ItemMercadoriaForm } from "~/utils/operacoes";
 
 export type Cat = "despesa" | "mercadoria" | "retirada";
 type TipoCredor = "fornecedor" | "colaborador" | "socios_setores";
@@ -222,8 +222,33 @@ export function useOperacaoLancamento() {
       valorTotal: "",
       produtoId: "",
       grupoMercadoriaId: "",
+      grupoPatrimonioId: "",
       unidadeMedidaId: ""
     });
+  }
+  function novoItemDespesa() {
+    itensDespesa.value.push({ descricao: "", valor: "", grupoDespesaId: "", grupoPatrimonioId: "" });
+  }
+
+  // --- Campo Grupo do ITEM (§5, item 6): grupo do cadastro proprio OU do patrimonio ------------
+  // Um select so, dois blocos (<optgroup>). A logica pura vive em utils/operacoes: aqui so ligamos
+  // no item. Escrever por aqui zera sempre a outra origem — nao ha estado intermediario invalido.
+  const gruposPatrimonio = computed(() => opcoesEmpresa.value.gruposPatrimonio);
+  function grupoItemDespesa(item: ItemDespesaForm) {
+    return opcaoGrupoItem(item.grupoDespesaId, item.grupoPatrimonioId);
+  }
+  function definirGrupoItemDespesa(item: ItemDespesaForm, valor: string) {
+    const escolha = grupoItemEscolhido(valor);
+    item.grupoDespesaId = escolha.grupoProprioId;
+    item.grupoPatrimonioId = escolha.grupoPatrimonioId;
+  }
+  function grupoItemMercadoria(item: ItemMercadoriaForm) {
+    return opcaoGrupoItem(item.grupoMercadoriaId, item.grupoPatrimonioId);
+  }
+  function definirGrupoItemMercadoria(item: ItemMercadoriaForm, valor: string) {
+    const escolha = grupoItemEscolhido(valor);
+    item.grupoMercadoriaId = escolha.grupoProprioId;
+    item.grupoPatrimonioId = escolha.grupoPatrimonioId;
   }
 
   function dataISO(offset: number) {
@@ -284,6 +309,13 @@ export function useOperacaoLancamento() {
     brn,
     escolherProduto,
     novoItemMercadoria,
+    novoItemDespesa,
+    // campo Grupo do item (duas origens)
+    gruposPatrimonio,
+    grupoItemDespesa,
+    definirGrupoItemDespesa,
+    grupoItemMercadoria,
+    definirGrupoItemMercadoria,
     // recorrencia
     recorrenciaAberta,
     recorrenciaNumero,

@@ -36,9 +36,14 @@ function linhasItensDespesa(
   return dados.itensDespesa.map((item, indice) => {
     const calculado = calculo.itens[indice];
     const quantidade = item.quantidade ?? 1;
+    // Grupo de PATRIMONIO no item (§5, item 6) DESLIGA a heranca do grupo do cabecalho: herdar por
+    // cima dele deixaria o item com as duas origens e o banco recusaria (despesas_itens_grupo_
+    // unico_check). O cabecalho so preenche quem esta sem grupo nenhum.
+    const grupoPatrimonioId = item.grupoPatrimonioId ?? null;
     return {
       despesaId,
-      grupoDespesaId: item.grupoDespesaId ?? grupoDespesaIdHeader ?? null,
+      grupoDespesaId: grupoPatrimonioId ? null : (item.grupoDespesaId ?? grupoDespesaIdHeader ?? null),
+      grupoPatrimonioId,
       colaboradorId: item.colaboradorId ?? colaboradorIdHeader ?? null,
       descricao: item.descricao,
       quantidade: String(quantidade),
@@ -198,6 +203,7 @@ export async function buscarDespesaDetalheRepository(
   const itens = await db
     .select({
       grupoDespesaId: despesasItens.grupoDespesaId,
+      grupoPatrimonioId: despesasItens.grupoPatrimonioId,
       colaboradorId: despesasItens.colaboradorId,
       descricao: despesasItens.descricao,
       valor: despesasItens.valor

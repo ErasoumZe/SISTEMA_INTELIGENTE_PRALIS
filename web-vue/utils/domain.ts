@@ -671,7 +671,12 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     produtos: itensDaEmpresa(listas.produtos, idEmpresa),
     malotes: itensDaEmpresa(listas.malotes, idEmpresa),
     pdvs: itensDaEmpresa(listas.pdvs, idEmpresa),
-    turnos: itensDaEmpresa(listas.turnos, idEmpresa)
+    turnos: itensDaEmpresa(listas.turnos, idEmpresa),
+    // Patrimonio (D2): alimenta o campo Grupo da discriminacao (§5, item 6) alem da propria tela.
+    // Sem este filtro as duas listas vazavam por `...listas` com grupo de OUTRA empresa — e o
+    // servidor rejeitaria o lancamento ("Grupo de patrimonio"), sem a pessoa entender por que.
+    gruposPatrimonio: itensDaEmpresa(listas.gruposPatrimonio, idEmpresa),
+    patrimonioItens: itensDaEmpresa(listas.patrimonioItens, idEmpresa)
   };
 }
 

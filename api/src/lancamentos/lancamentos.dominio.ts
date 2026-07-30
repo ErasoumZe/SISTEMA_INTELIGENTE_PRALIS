@@ -18,6 +18,7 @@ import {
   formasPagamento,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
   malotes,
   pdvs,
@@ -167,6 +168,13 @@ export async function validarReferenciasDespesa(
     if (grupoId && !(await existeNaEmpresa(gruposDespesas, grupoId, dados.empresaId, db))) return "Grupo de despesa";
   }
 
+  // Grupo de PATRIMONIO no item (§5, item 6): mesma checagem de empresa dos demais — id valido de
+  // OUTRA empresa nao entra.
+  for (const grupoId of [...new Set(dados.itensDespesa.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, dados.empresaId, db)))
+      return "Grupo de patrimonio";
+  }
+
   for (const colaboradorId of [...new Set(dados.itensDespesa.map((item) => item.colaboradorId).filter(Boolean))]) {
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, dados.empresaId, db)))
       return "Colaborador";
@@ -192,6 +200,12 @@ export async function validarReferenciasMercadoria(
   for (const grupoId of [...new Set(dados.itensMercadoria.map((item) => item.grupoMercadoriaId).filter(Boolean))]) {
     if (grupoId && !(await existeNaEmpresa(gruposMercadorias, grupoId, dados.empresaId, db)))
       return "Grupo de mercadoria";
+  }
+
+  // Grupo de PATRIMONIO no item (§5, item 6): mesma checagem de empresa dos demais.
+  for (const grupoId of [...new Set(dados.itensMercadoria.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, dados.empresaId, db)))
+      return "Grupo de patrimonio";
   }
 
   for (const produtoId of [...new Set(dados.itensMercadoria.map((item) => item.produtoId).filter(Boolean))]) {
@@ -408,6 +422,9 @@ export async function validarReferenciasItensMercadoria(
   for (const grupoId of [...new Set(itens.map((item) => item.grupoMercadoriaId).filter(Boolean))]) {
     if (grupoId && !(await existeNaEmpresa(gruposMercadorias, grupoId, empresaId, db))) return "Grupo de mercadoria";
   }
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, empresaId, db))) return "Grupo de patrimonio";
+  }
   for (const produtoId of [...new Set(itens.map((item) => item.produtoId).filter(Boolean))]) {
     if (produtoId && !(await existeNaEmpresa(produtos, produtoId, empresaId, db))) return "Produto";
   }
@@ -425,6 +442,9 @@ export async function validarReferenciasItensDespesa(
 ): Promise<string | null> {
   for (const grupoId of [...new Set(itens.map((item) => item.grupoDespesaId).filter(Boolean))]) {
     if (grupoId && !(await existeNaEmpresa(gruposDespesas, grupoId, empresaId, db))) return "Grupo de despesa";
+  }
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, empresaId, db))) return "Grupo de patrimonio";
   }
   for (const colaboradorId of [...new Set(itens.map((item) => item.colaboradorId).filter(Boolean))]) {
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, empresaId, db))) return "Colaborador";

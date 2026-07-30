@@ -187,6 +187,27 @@ export function resolverItemPorEan(
   };
 }
 
+// --- Origem do GRUPO do item (§5, item 6) ----------------------------------------------------
+// "Grupo: do cadastro de produtos; se maquinario/manutencao -> do cadastro de patrimonio." Sao
+// cadastros em tabelas diferentes, entao o item carrega DOIS campos (grupo proprio + patrimonio) e
+// no maximo UM vem preenchido.
+//
+// NENHUM preenchido e legitimo: item sem grupo sempre foi aceito (o contrato, o servico e a UI
+// permitem) e o historico esta cheio deles. A regra e "no maximo um", nunca "exatamente um".
+//
+// Este predicado e o mesmo do CHECK *_grupo_unico_check no banco, de proposito: aqui a pessoa
+// recebe 400 com mensagem util; la o dado nao tem como entrar errado por nenhuma outra porta
+// (script, seed, importacao). Regra de dinheiro/integridade se defende nas duas pontas.
+export const MENSAGEM_GRUPO_DE_DUAS_ORIGENS =
+  "O item aceita grupo de UMA origem so: o do cadastro proprio ou o do patrimonio.";
+
+export function itemTemGrupoDeDuasOrigens(
+  grupoProprioId: string | null | undefined,
+  grupoPatrimonioId: string | null | undefined
+): boolean {
+  return Boolean(grupoProprioId) && Boolean(grupoPatrimonioId);
+}
+
 // --- Validacao D5 (BLOQUEANTE) ---------------------------------------------------------------
 // A soma da discriminacao tem de bater com o Valor do lancamento. Quando nao bate, o servidor NAO
 // salva e devolve ONDE diverge: a diferenca em centavos e a linha provavel (a de maior valor, que

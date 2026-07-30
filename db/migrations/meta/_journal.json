@@ -120,6 +120,13 @@
       "when": 1785351128763,
       "tag": "0016_patrimonio_e_descontos",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785414436434,
+      "tag": "0017_grupo_patrimonio_no_item",
+      "breakpoints": true
     }
   ]
 }
