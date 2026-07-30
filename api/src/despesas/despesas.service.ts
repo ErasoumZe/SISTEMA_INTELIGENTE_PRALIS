@@ -34,6 +34,12 @@ import {
   listarDespesasRepository
 } from "./despesas.repository.js";
 import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
+import {
+  caixaDaOcorrencia,
+  exigirPermissaoRecorrencia,
+  payloadDaOcorrencia,
+  planejarRecorrencia
+} from "../lancamentos/lancamentos.recorrencia.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
   if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
@@ -61,14 +67,47 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo: *_pagar OU o legado
   // caixas_gerenciar). Sem, 403 em vez do antigo strip silencioso.
   exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento);
+  // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
+  exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const despesa = await criarDespesaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
-    return { id: despesa.id, computar };
+
+    // Recorrencia (D3): a serie inteira nasce aqui, na MESMA transacao. Ou entram todos os 12
+    // lancamentos, ou nenhum — meia serie gravada seria pior que erro nenhum.
+    const plano = await planejarRecorrencia(
+      {
+        empresaId: dados.empresaId,
+        dominio: "despesa",
+        dataReferencia: dados.dataReferencia,
+        dataVencimento: dados.dataVencimento,
+        recorrencia: dados.recorrencia,
+        perfil
+      },
+      tx
+    );
+    if (!plano) {
+      const despesa = await criarDespesaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+      return { id: despesa.id, computar };
+    }
+
+    let primeira = "";
+    for (const ocorrencia of plano.ocorrencias) {
+      const criada = await criarDespesaRepository(
+        payloadDaOcorrencia(normalizados, ocorrencia),
+        computar,
+        perfil.usuarioId,
+        caixaDaOcorrencia(caixa.id, ocorrencia),
+        tx,
+        ocorrencia.vinculo
+      );
+      if (ocorrencia.ehPrimeira) primeira = criada.id;
+    }
+    // O id devolvido e o do lancamento que a pessoa criou (o 1o da serie), nao o do ultimo.
+    return { id: primeira, computar, serie: plano.ocorrencias.length, serieLimitada: plano.limitadaPeloTeto };
   });
 }
 

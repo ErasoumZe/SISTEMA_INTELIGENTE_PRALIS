@@ -21,6 +21,12 @@ import {
   validarReferenciasRetirada
 } from "../lancamentos/lancamentos.dominio.js";
 import {
+  caixaDaOcorrencia,
+  exigirPermissaoRecorrencia,
+  payloadDaOcorrencia,
+  planejarRecorrencia
+} from "../lancamentos/lancamentos.recorrencia.js";
+import {
   atualizarRetiradaRepository,
   buscarRetiradaDetalheRepository,
   criarRetiradaRepository,
@@ -43,14 +49,45 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento);
+  // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
+  exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const retirada = await criarRetiradaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
-    return { id: retirada.id, computar };
+
+    // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
+    const plano = await planejarRecorrencia(
+      {
+        empresaId: dados.empresaId,
+        dominio: "retirada",
+        dataReferencia: dados.dataReferencia,
+        dataVencimento: dados.dataVencimento,
+        recorrencia: dados.recorrencia,
+        perfil
+      },
+      tx
+    );
+    if (!plano) {
+      const retirada = await criarRetiradaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+      return { id: retirada.id, computar };
+    }
+
+    let primeira = "";
+    for (const ocorrencia of plano.ocorrencias) {
+      const criada = await criarRetiradaRepository(
+        payloadDaOcorrencia(normalizados, ocorrencia),
+        computar,
+        perfil.usuarioId,
+        caixaDaOcorrencia(caixa.id, ocorrencia),
+        tx,
+        ocorrencia.vinculo
+      );
+      if (ocorrencia.ehPrimeira) primeira = criada.id;
+    }
+    return { id: primeira, computar, serie: plano.ocorrencias.length, serieLimitada: plano.limitadaPeloTeto };
   });
 }
 

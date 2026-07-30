@@ -126,13 +126,14 @@ export async function criarDespesaRepository(
   computar: boolean,
   criadoPor: string,
   caixaId?: string | null,
-  db?: ExecutorBanco
+  db?: ExecutorBanco,
+  recorrencia?: { id: string; ordem: number } | null
 ): Promise<{ id: string }> {
   return executarComTransacaoOpcional(db, async (tx) => {
     const [despesa] = await tx
       .insert(despesas)
       .values({
-        ...valoresBase(dados, computar, criadoPor, caixaId),
+        ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,

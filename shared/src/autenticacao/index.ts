@@ -50,6 +50,11 @@ export const permissoes = [
   "retiradas_visualizar_dpago",
   "retiradas_editar_dpago",
   "retiradas_excluir_dpago",
+  // Recorrencia de lancamento (PROJECT_BRAIN/17, D3): "so Admin, Gerencia e Financeiro podem usar
+  // recorrencia". E UMA permissao para os tres dominios (despesa/mercadoria/retirada) e nao uma por
+  // dominio, porque a regra do negocio e sobre QUEM cria serie, nao sobre onde. Quem nao tem recebe
+  // 403 no servidor mesmo que consiga mexer na tela.
+  "lancamentos_recorrencia_criar",
   "caixa_operar",
   "caixas_gerenciar",
   "caixa_alterar_horario",

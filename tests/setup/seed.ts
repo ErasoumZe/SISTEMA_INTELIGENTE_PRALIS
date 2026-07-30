@@ -174,6 +174,24 @@ const usuarios: UsuarioSeed[] = [
       "despesas_visualizar_dpago",
       "menu_despesas_mostrar"
     ]
+  },
+  {
+    // Recorrencia (D3): lanca despesa e retirada, NAO opera caixa e NAO tem
+    // lancamentos_recorrencia_criar. Sem caixa_operar de proposito: os perfis *Ciclo esbarrariam
+    // antes no "abra um caixa" e o teste provaria a regra errada.
+    perfil: "semRecorrencia",
+    cargoId: idsTeste.cargoSemRecorrencia,
+    colaboradorId: idsTeste.colaboradorSemRecorrencia,
+    colaboradorCargoId: idsTeste.colaboradorCargoSemRecorrencia,
+    role: "usuario_comum",
+    permissoes: [
+      "despesas_visualizar",
+      "despesas_criar",
+      "retiradas_visualizar",
+      "retiradas_criar",
+      "menu_despesas_mostrar",
+      "menu_retiradas_mostrar"
+    ]
   }
 ];
 

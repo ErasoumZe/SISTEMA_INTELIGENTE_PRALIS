@@ -14,7 +14,9 @@ export type PerfilTeste =
   | "discriminador"
   // Ciclo de vida R7 (Fase 1): operadores de caixa com perfis de pagamento distintos para a matriz.
   | "caixaCiclo"
-  | "financeiroCiclo";
+  | "financeiroCiclo"
+  // Recorrencia (D3): lanca sem operar caixa e SEM a permissao de recorrencia.
+  | "semRecorrencia";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -76,7 +78,13 @@ export const idsTeste = {
   // Patrimonio (D2): segunda origem do campo Grupo da discriminacao (§5, item 6). O grupo da
   // empresa B existe para provar que o escopo por empresa vale tambem para esta origem.
   grupoPatrimonioMaquinas: "11111111-1111-4111-8111-111111112101",
-  grupoPatrimonioOutraEmpresa: "33333333-3333-4333-8333-333333332101"
+  grupoPatrimonioOutraEmpresa: "33333333-3333-4333-8333-333333332101",
+  // Recorrencia (D3): lanca despesa/retirada SEM operar caixa e SEM a permissao de recorrencia.
+  // E a fixture do 403 isolado — os perfis *Ciclo tem caixa_operar e esbarrariam antes, no
+  // "abra um caixa", provando a regra errada.
+  cargoSemRecorrencia: "11111111-1111-4111-8111-111111112201",
+  colaboradorSemRecorrencia: "11111111-1111-4111-8111-111111112202",
+  colaboradorCargoSemRecorrencia: "11111111-1111-4111-8111-111111112203"
 } as const;
 
 export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; senha: string }> = {
@@ -112,5 +120,10 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "financeiro-ciclo.integracao@padaria.local",
     nome: "Financeiro Ciclo Integracao",
     senha: "Teste#2026!finciclo"
+  },
+  semRecorrencia: {
+    email: "sem-recorrencia.integracao@padaria.local",
+    nome: "Sem Recorrencia Integracao",
+    senha: "Teste#2026!semrecor"
   }
 };

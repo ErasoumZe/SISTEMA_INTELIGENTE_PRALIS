@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { itemTemGrupoDeDuasOrigens, MENSAGEM_GRUPO_DE_DUAS_ORIGENS } from "../discriminacao/index.js";
+import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -68,6 +69,8 @@ export const mercadoriaPayloadSchema = z.object({
   temNotaFiscal: z.boolean().default(false),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
+  recorrencia: recorrenciaSchema.optional(),
   itensMercadoria: z.array(mercadoriaItemSchema).default([])
 });
 
@@ -134,7 +137,8 @@ export const mercadoriaAprovacaoDtoSchema = z.object({
 
 export const mercadoriaCriadaSchema = z.object({
   id: z.string(),
-  computar: z.boolean()
+  computar: z.boolean(),
+  ...resultadoSerieSchema
 });
 
 export type MercadoriasQuery = z.input<typeof mercadoriasQuerySchema>;

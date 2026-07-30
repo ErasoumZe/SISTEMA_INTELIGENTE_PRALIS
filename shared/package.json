@@ -131,6 +131,11 @@
       "development": "./src/pdvs/index.ts",
       "default": "./dist/pdvs/index.js"
     },
+    "./recorrencia": {
+      "types": "./dist/recorrencia/index.d.ts",
+      "development": "./src/recorrencia/index.ts",
+      "default": "./dist/recorrencia/index.js"
+    },
     "./permissoes": {
       "types": "./dist/permissoes/index.d.ts",
       "development": "./src/permissoes/index.ts",

@@ -34,6 +34,11 @@
       "development": "./src/schema/despesa/despesa.schema.ts",
       "default": "./dist/src/schema/despesa/despesa.schema.js"
     },
+    "./schema/lancamento": {
+      "types": "./dist/src/schema/lancamento/lancamento.schema.d.ts",
+      "development": "./src/schema/lancamento/lancamento.schema.ts",
+      "default": "./dist/src/schema/lancamento/lancamento.schema.js"
+    },
     "./schema/mercadoria": {
       "types": "./dist/src/schema/mercadoria/mercadoria.schema.d.ts",
       "development": "./src/schema/mercadoria/mercadoria.schema.ts",

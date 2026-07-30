@@ -113,13 +113,14 @@ export async function criarMercadoriaRepository(
   computar: boolean,
   criadoPor: string,
   caixaId?: string | null,
-  db?: ExecutorBanco
+  db?: ExecutorBanco,
+  recorrencia?: { id: string; ordem: number } | null
 ): Promise<{ id: string }> {
   return executarComTransacaoOpcional(db, async (tx) => {
     const [mercadoria] = await tx
       .insert(mercadorias)
       .values({
-        ...valoresBase(dados, computar, criadoPor, caixaId),
+        ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,

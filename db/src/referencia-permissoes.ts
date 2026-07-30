@@ -215,6 +215,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_contas_usuarios_criar",
       "cadastro_contas_usuarios_editar",
       "cadastro_contas_usuarios_excluir",
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -268,6 +270,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
       "cadastro_formas_pagamento_criar",
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
       // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e as
       // variantes *_dpago (mexer em lancamento ja pago). E o unico cargo com _dpago (fora o admin).
       ...acoesLancamentoPorDominio(

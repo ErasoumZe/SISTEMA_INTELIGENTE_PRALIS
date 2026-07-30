@@ -922,12 +922,68 @@ export const vendasComprovantes = pgTable("vendas_comprovantes", {
   criadoEm
 });
 
+// RECORRENCIA de lancamento (PROJECT_BRAIN/17, D3 + PROJECT_BRAIN/14). Guarda a DEFINICAO —
+// "toda terca e sexta, 20 vezes, a partir de 30/07" — enquanto os lancamentos da serie sao criados
+// na hora do salvar e apontam de volta para ca (recorrencia_id + recorrencia_ordem).
+//
+// A serie NAO e gerada por job noturno de proposito: lancamento que so aparece se um job rodou e
+// lancamento em que ninguem confia, e a conferencia do dia passaria a depender de infraestrutura.
+//
+// A definicao fica gravada mesmo depois de a serie existir porque e ela que responde "de onde
+// vieram estes 12 lancamentos iguais?" — sem isso eles sao indistinguiveis de digitacao repetida.
+export const lancamentosRecorrencias = pgTable(
+  "lancamentos_recorrencias",
+  {
+    id: idUuid,
+    empresaId,
+    dominio: text("dominio").notNull(), // despesa | mercadoria | retirada
+    frequencia: text("frequencia").notNull(), // dia | semana | quinzena | mes | trimestre
+    // Dias da semana ISO ("2,5" = terca e sexta), so na frequencia 'semana'; null nas demais,
+    // porque "toda terca" nao significa nada numa serie mensal. Texto e nao array: o campo e lido
+    // por gente conferindo no psql e nunca e filtrado por.
+    diasSemana: text("dias_semana"),
+    // TOTAL pedido pela pessoa, JA CONTANDO o lancamento inicial. Pode ser MAIOR que o numero de
+    // lancamentos criados: o teto de 12 meses corta a serie e o corte fica visivel nesta diferenca.
+    repeticoes: integer("repeticoes").notNull(),
+    dataInicial: date("data_inicial").notNull(),
+    criadoPor: text("criado_por"),
+    criadoEm
+  },
+  (table) => [
+    check("lancamentos_recorrencias_dominio_check", sql`${table.dominio} in ('despesa', 'mercadoria', 'retirada')`),
+    check(
+      "lancamentos_recorrencias_frequencia_check",
+      sql`${table.frequencia} in ('dia', 'semana', 'quinzena', 'mes', 'trimestre')`
+    ),
+    check("lancamentos_recorrencias_repeticoes_check", sql`${table.repeticoes} between 1 and 366`),
+    // Lista ISO nao vazia, sem separador solto. So a frequencia 'semana' preenche.
+    check("lancamentos_recorrencias_dias_semana_check", sql`${table.diasSemana} ~ '^[1-7](,[1-7])*$'`),
+    index("lancamentos_recorrencias_empresa_idx").on(table.empresaId)
+  ]
+);
+
+// Vinculo do lancamento com a serie que o gerou. As duas colunas andam JUNTAS (check abaixo em cada
+// tabela): ordem sem recorrencia seria um numero sem serie, e recorrencia sem ordem esconderia a
+// posicao que a tela mostra como "3/12".
+const vinculoRecorrencia = {
+  recorrenciaId: uuid("recorrencia_id").references((): AnyPgColumn => lancamentosRecorrencias.id),
+  recorrenciaOrdem: integer("recorrencia_ordem")
+};
+
+function checksVinculoRecorrencia(tabela: string, recorrenciaId: AnyPgColumn, recorrenciaOrdem: AnyPgColumn) {
+  return [
+    check(`${tabela}_recorrencia_par_check`, sql`num_nonnulls(${recorrenciaId}, ${recorrenciaOrdem}) <> 1`),
+    check(`${tabela}_recorrencia_ordem_check`, sql`${recorrenciaOrdem} is null or ${recorrenciaOrdem} >= 1`)
+  ];
+}
+
 export const despesas = pgTable(
   "despesas",
   {
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
@@ -956,8 +1012,14 @@ export const despesas = pgTable(
     check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     ...checksDescontoGeral("despesas", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksVinculoRecorrencia("despesas", table.recorrenciaId, table.recorrenciaOrdem),
     index("despesas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("despesas_caixa_idx").on(table.caixaId)
+    index("despesas_caixa_idx").on(table.caixaId),
+    // Parcial: so lancamento de serie preenche. Serve o "mostre a serie inteira" e o DELETE da
+    // recorrencia (FK sem indice varre a tabela filha).
+    index("despesas_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 
@@ -1075,6 +1137,7 @@ export const mercadorias = pgTable(
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
     dataReferencia: date("data_referencia").notNull(),
@@ -1104,8 +1167,12 @@ export const mercadorias = pgTable(
     check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     ...checksDescontoGeral("mercadorias", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksVinculoRecorrencia("mercadorias", table.recorrenciaId, table.recorrenciaOrdem),
     index("mercadorias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("mercadorias_caixa_idx").on(table.caixaId)
+    index("mercadorias_caixa_idx").on(table.caixaId),
+    index("mercadorias_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 
@@ -1232,6 +1299,7 @@ export const retiradas = pgTable(
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
     colaboradorId: uuid("colaborador_id")
       .notNull()
@@ -1258,8 +1326,12 @@ export const retiradas = pgTable(
     check("retiradas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("retiradas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksVinculoRecorrencia("retiradas", table.recorrenciaId, table.recorrenciaOrdem),
     index("retiradas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("retiradas_caixa_idx").on(table.caixaId)
+    index("retiradas_caixa_idx").on(table.caixaId),
+    index("retiradas_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 

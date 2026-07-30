@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { formOperacaoVazio } from "./domain";
 import {
+  estadoRecorrenciaVazio,
   formOperacaoDeDetalhe,
   grupoItemEscolhido,
   itemDespesaVazio,
   itemMercadoriaVazio,
   montarPayloadOperacao,
+  montarRecorrencia,
   opcaoGrupoItem,
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
@@ -229,5 +231,69 @@ describe("validarOperacaoParaEnvio", () => {
 
   it("aceita IDs nulos (campos opcionais em branco) sem quebrar", () => {
     expect(validarOperacaoParaEnvio("venda", { ...ok, grupoDespesaId: null, contaOrigemId: null })).toBeNull();
+  });
+});
+
+// Recorrencia (D3): o bloco so vira payload quando ha serie de verdade, e os dias da semana so
+// acompanham a frequencia semanal.
+describe("montarRecorrencia", () => {
+  it("nao manda recorrencia quando o bloco esta fechado", () => {
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), numero: "12" })).toBeUndefined();
+  });
+
+  it("'repetir 1 vez' e o mesmo que nao repetir — nao manda nada", () => {
+    // Importa porque mandar a recorrencia faria o servidor exigir a permissao (403) de quem so
+    // queria um lancamento avulso.
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), aberta: true, numero: "1" })).toBeUndefined();
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), aberta: true, numero: "" })).toBeUndefined();
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), aberta: true, numero: "abc" })).toBeUndefined();
+  });
+
+  it("monta a serie mensal sem dias da semana", () => {
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), aberta: true, numero: "12" })).toEqual({
+      frequencia: "mes",
+      repeticoes: 12
+    });
+  });
+
+  it("inclui os dias marcados APENAS na frequencia semanal", () => {
+    const dias = [false, true, false, false, true, false]; // Ter e Sx
+    expect(montarRecorrencia({ aberta: true, numero: "10", frequencia: "semana", dias })).toEqual({
+      frequencia: "semana",
+      repeticoes: 10,
+      diasSemana: [2, 5]
+    });
+
+    // Os mesmos dias marcados numa serie mensal sao descartados: nao significam nada la.
+    expect(montarRecorrencia({ aberta: true, numero: "10", frequencia: "mes", dias })).toEqual({
+      frequencia: "mes",
+      repeticoes: 10
+    });
+  });
+
+  it("semanal sem nenhum dia marcado nao manda diasSemana (o servidor usa o dia da data)", () => {
+    expect(montarRecorrencia({ ...estadoRecorrenciaVazio(), aberta: true, numero: "5", frequencia: "semana" })).toEqual(
+      { frequencia: "semana", repeticoes: 5 }
+    );
+  });
+
+  it("a recorrencia nao entra no payload de venda nem de transferencia", () => {
+    const base = {
+      empresaId: "e1",
+      itensVenda: [],
+      tiposPagamento: [],
+      itensDespesa: [],
+      itensMercadoria: [],
+      discriminandoDespesa: false,
+      discriminandoMercadoria: false,
+      produtos: [] as Array<{ id: string; descricao?: string | null; nome?: string | null }>
+    };
+    const form = { ...formOperacaoVazio(), valorOriginal: "10" };
+    const recorrencia = { frequencia: "mes" as const, repeticoes: 3 };
+    // Venda vem da integracao e transferencia e movimento imediato: o contrato delas nao tem o
+    // campo (schema .strict()), entao manda-lo seria 400.
+    expect(montarPayloadOperacao("venda", { ...base, form, recorrencia })).not.toHaveProperty("recorrencia");
+    expect(montarPayloadOperacao("transferencia", { ...base, form, recorrencia })).not.toHaveProperty("recorrencia");
+    expect(montarPayloadOperacao("despesa", { ...base, form, recorrencia })).toMatchObject({ recorrencia });
   });
 });

@@ -21,6 +21,7 @@ export * from "./patrimonio/index.js";
 export * from "./pdvs/index.js";
 export * from "./permissoes/index.js";
 export * from "./produtos/index.js";
+export * from "./recorrencia/index.js";
 export * from "./setores/index.js";
 export * from "./unidades-medida/index.js";
 export * from "./usuarios/index.js";

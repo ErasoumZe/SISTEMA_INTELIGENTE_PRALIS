@@ -5,7 +5,15 @@
 // api/db/shared; os campos NOVOS seguem data-pendente="regra" (estado local, nunca enviado).
 import { computed, inject, ref, watch, type InjectionKey } from "vue";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
-import { grupoItemEscolhido, opcaoGrupoItem, type ItemDespesaForm, type ItemMercadoriaForm } from "~/utils/operacoes";
+import type { FrequenciaRecorrencia } from "@padaria/shared/recorrencia";
+import {
+  DIAS_RECORRENCIA,
+  FREQUENCIAS_RECORRENCIA,
+  grupoItemEscolhido,
+  opcaoGrupoItem,
+  type ItemDespesaForm,
+  type ItemMercadoriaForm
+} from "~/utils/operacoes";
 
 export type Cat = "despesa" | "mercadoria" | "retirada";
 type TipoCredor = "fornecedor" | "colaborador" | "socios_setores";
@@ -27,7 +35,9 @@ export function useOperacaoLancamento() {
     fotoDocumentoExistente,
     selecionarFotoDocumento,
     salvandoOperacao,
-    salvarOperacao
+    salvarOperacao,
+    podeUsarRecorrencia,
+    recorrencia
   } = useWorkspaceContext();
 
   const CATEGORIAS: Cat[] = ["despesa", "mercadoria", "retirada"];
@@ -158,13 +168,37 @@ export function useOperacaoLancamento() {
     const arquivo = (e.target as HTMLInputElement).files?.[0];
     fotoInternaNome.value = arquivo?.name ?? "";
   }
-  // TODO(regras): Recorrencia (numero de repeticoes, dias da semana, frequencia).
-  const recorrenciaAberta = ref(false);
-  const recorrenciaNumero = ref("1");
-  const DIAS = ["Sg", "Ter", "Qa", "Qi", "Sx", "Sa"];
-  const recorrenciaDias = ref<boolean[]>([false, false, false, false, false, false]);
-  const FREQUENCIAS = ["dia", "semana", "mês", "quinzena", "3 em 3"];
-  const recorrenciaFrequencia = ref("mês");
+  // --- Recorrencia (D3) — SUPORTADA: o servidor cria a serie inteira no salvar. ---------------
+  // O estado vive no workspace (e de la que o payload sai); aqui ficam so os atalhos de leitura e
+  // escrita que o bloco da tela usa. Os DIAS so aparecem na frequencia 'semana': "toda terca" nao
+  // significa nada numa serie mensal.
+  const DIAS = DIAS_RECORRENCIA;
+  const FREQUENCIAS = FREQUENCIAS_RECORRENCIA;
+  const recorrenciaAberta = computed({
+    get: () => recorrencia.value.aberta,
+    set: (v: boolean) => {
+      recorrencia.value = { ...recorrencia.value, aberta: v };
+    }
+  });
+  const recorrenciaNumero = computed({
+    get: () => recorrencia.value.numero,
+    set: (v: string) => {
+      recorrencia.value = { ...recorrencia.value, numero: v };
+    }
+  });
+  const recorrenciaFrequencia = computed({
+    get: () => recorrencia.value.frequencia,
+    set: (v: FrequenciaRecorrencia) => {
+      recorrencia.value = { ...recorrencia.value, frequencia: v };
+    }
+  });
+  const recorrenciaDias = computed(() => recorrencia.value.dias);
+  function alternarDiaRecorrencia(indice: number) {
+    const dias = [...recorrencia.value.dias];
+    dias[indice] = !dias[indice];
+    recorrencia.value = { ...recorrencia.value, dias };
+  }
+  const recorrenciaSemanal = computed(() => recorrencia.value.frequencia === "semana");
 
   const discriminando = computed({
     get: () => (cat.value === "despesa" ? discriminandoDespesa.value : discriminandoMercadoria.value),
@@ -316,13 +350,16 @@ export function useOperacaoLancamento() {
     definirGrupoItemDespesa,
     grupoItemMercadoria,
     definirGrupoItemMercadoria,
-    // recorrencia
+    // recorrencia (D3) — suportada
     recorrenciaAberta,
     recorrenciaNumero,
     DIAS,
     recorrenciaDias,
     FREQUENCIAS,
-    recorrenciaFrequencia
+    recorrenciaFrequencia,
+    recorrenciaSemanal,
+    alternarDiaRecorrencia,
+    podeUsarRecorrencia
   };
 }
 

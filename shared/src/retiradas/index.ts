@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -26,7 +27,9 @@ export const retiradaPayloadSchema = z.object({
   contaOrigemId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema,
   grupoRetiradaId: uuidSchema.optional().nullable(),
-  computar: z.boolean().default(true)
+  computar: z.boolean().default(true),
+  // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
+  recorrencia: recorrenciaSchema.optional()
 });
 
 export const retiradaDtoSchema = z.object({
@@ -41,7 +44,8 @@ export const retiradaDtoSchema = z.object({
 
 export const retiradaCriadaSchema = z.object({
   id: z.string(),
-  computar: z.boolean()
+  computar: z.boolean(),
+  ...resultadoSerieSchema
 });
 
 export type RetiradasQuery = z.input<typeof retiradasQuerySchema>;

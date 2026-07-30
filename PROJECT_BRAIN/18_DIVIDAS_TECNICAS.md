@@ -84,6 +84,32 @@ escolher qual caminho morre é decisão de produto, não de código.
 
 ---
 
+## D-04 · Cancelar / editar a série de recorrência em bloco
+
+**Status:** aberto · **Prioridade:** média · **Decidido em:** 30/07, junto com a entrega do S5.
+
+A recorrência (D3) já **grava o vínculo**: `lancamentos_recorrencias` guarda a definição e cada
+lançamento gerado aponta para ela (`recorrencia_id` + `recorrencia_ordem`). Essa era a parte
+impossível de recuperar depois — sem o vínculo, os 12 lançamentos seriam indistinguíveis de
+digitação avulsa.
+
+**Falta** a operação em bloco:
+
+- **cancelar a série inteira** (só as futuras e não pagas — as pagas já viraram dinheiro);
+- **editar em bloco** (mudou o valor do aluguel: alterar as futuras de uma vez);
+- exibir **"3/12"** na listagem, para a pessoa ver que aquele lançamento faz parte de uma série.
+
+Não entrou agora porque mexe no ciclo de vida dos lançamentos, que tem permissões próprias por
+domínio (`*_excluir`, `*_excluir_dpago`) e regra de caixa aberto — é entrega própria, não apêndice.
+
+Enquanto isso: errou a série, apaga lançamento a lançamento. O `recorrencia_id` permite achar todos
+de uma vez (`select * from despesas where recorrencia_id = ...`).
+
+Editar um lançamento de uma série hoje mexe **só naquele** — a recorrência não é reprocessada. É o
+comportamento correto e está travado no código (o payload só manda `recorrencia` na criação).
+
+---
+
 ## D-03 · `format:check` vermelho no repositório inteiro (CRLF)
 
 **Status:** aberto · **Prioridade:** baixa (ruído, não defeito).

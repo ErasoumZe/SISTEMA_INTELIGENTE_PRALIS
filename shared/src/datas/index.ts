@@ -55,3 +55,35 @@ export function somarDias(dia: string, dias: number): string {
   data.setUTCDate(data.getUTCDate() + dias);
   return data.toISOString().slice(0, 10);
 }
+
+/**
+ * Soma meses a um dia contabil, GRAMPEANDO no ultimo dia do mes de destino.
+ *
+ * 31/01 + 1 mes = 28/02 (nao 03/03, que e o que `setUTCMonth` faz sozinho: ele transborda). Uma
+ * conta que vence dia 31 tem de cair no ultimo dia dos meses curtos, nao pular para o mes seguinte.
+ *
+ * Some sempre a partir da data ORIGINAL (nunca da anterior) para nao acumular o grampo: 31/01
+ * gera 28/02 e 31/03 — encadeando a partir do resultado daria 28/03, e a serie perderia o dia 31.
+ */
+export function somarMeses(dia: string, meses: number): string {
+  const [ano = 0, mes = 1, diaDoMes = 1] = dia.split("-").map(Number);
+  const totalMeses = mes - 1 + meses;
+  const anoDestino = ano + Math.floor(totalMeses / 12);
+  const mesDestino = ((totalMeses % 12) + 12) % 12;
+  // Dia 0 do mes SEGUINTE = ultimo dia do mes de destino.
+  const ultimoDiaDoMes = new Date(Date.UTC(anoDestino, mesDestino + 1, 0)).getUTCDate();
+  const destino = new Date(Date.UTC(anoDestino, mesDestino, Math.min(diaDoMes, ultimoDiaDoMes)));
+  return destino.toISOString().slice(0, 10);
+}
+
+/** Quantos dias de `de` ate `ate` (negativo quando `ate` e anterior). */
+export function diferencaEmDias(de: string, ate: string): number {
+  const MS_POR_DIA = 86_400_000;
+  return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / MS_POR_DIA);
+}
+
+/** Dia da semana ISO-8601: 1 = segunda ... 7 = domingo. */
+export function diaDaSemanaIso(dia: string): number {
+  const diaJs = new Date(`${dia}T00:00:00Z`).getUTCDay(); // 0 = domingo
+  return diaJs === 0 ? 7 : diaJs;
+}

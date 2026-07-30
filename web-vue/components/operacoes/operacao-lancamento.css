@@ -329,6 +329,14 @@
   color: var(--cat);
   font-weight: 500;
 }
+/* Nota do bloco: a recorrencia CRIA lancamentos, entao a tela diz o que vai acontecer antes de
+   acontecer — 12 despesas aparecendo sem aviso e o tipo de surpresa que derruba a confianca. */
+.lc-recorrencia-nota {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
 .lc-acoes {
   position: sticky;
   bottom: 0;

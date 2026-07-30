@@ -2,6 +2,7 @@
 // extraidos do AppWorkspace para serem testaveis: detalhe da API -> formulario, e
 // formulario -> payload da API. Dinheiro em centavos (mesma regra do servidor).
 import { deCentavos, paraCentavos } from "@padaria/shared";
+import type { FrequenciaRecorrencia, Recorrencia } from "@padaria/shared/recorrencia";
 import type { EntidadeOperacional, OperacaoForm } from "~/types/padaria";
 
 // Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
@@ -85,6 +86,53 @@ export type ItemMercadoriaForm = {
   grupoPatrimonioId: string;
   unidadeMedidaId: string;
 };
+
+// --- Recorrencia (D3) --------------------------------------------------------------------------
+// Os rotulos sao os do desenho do Rodrigo; os valores sao os que o contrato aceita. "3 em 3" =
+// trimestral e os DIAS so valem na frequencia semanal (decisoes do Jose, 30/07).
+export const DIAS_RECORRENCIA = [
+  { rotulo: "Sg", iso: 1 },
+  { rotulo: "Ter", iso: 2 },
+  { rotulo: "Qa", iso: 3 },
+  { rotulo: "Qi", iso: 4 },
+  { rotulo: "Sx", iso: 5 },
+  { rotulo: "Sa", iso: 6 }
+] as const;
+
+export const FREQUENCIAS_RECORRENCIA = [
+  { rotulo: "dia", valor: "dia" },
+  { rotulo: "semana", valor: "semana" },
+  { rotulo: "mês", valor: "mes" },
+  { rotulo: "quinzena", valor: "quinzena" },
+  { rotulo: "3 em 3", valor: "trimestre" }
+] as const;
+
+export type EstadoRecorrencia = {
+  aberta: boolean;
+  numero: string;
+  frequencia: FrequenciaRecorrencia;
+  dias: boolean[];
+};
+
+export function estadoRecorrenciaVazio(): EstadoRecorrencia {
+  return { aberta: false, numero: "1", frequencia: "mes", dias: [false, false, false, false, false, false] };
+}
+
+/**
+ * Bloco `recorrencia` do payload — `undefined` quando nao ha serie a criar.
+ *
+ * "Repetir 1 vez" e o mesmo que nao repetir: mandar a recorrencia nesse caso faria o servidor
+ * exigir a permissao (403) de quem so queria um lancamento avulso.
+ */
+export function montarRecorrencia(estado: EstadoRecorrencia): Recorrencia | undefined {
+  const repeticoes = Number(estado.numero || 1);
+  if (!estado.aberta || !Number.isFinite(repeticoes) || repeticoes < 2) return undefined;
+  const diasSemana =
+    estado.frequencia === "semana"
+      ? DIAS_RECORRENCIA.filter((_, indice) => estado.dias[indice]).map((dia) => dia.iso)
+      : [];
+  return { frequencia: estado.frequencia, repeticoes, ...(diasSemana.length ? { diasSemana } : {}) };
+}
 
 // Linha em branco da discriminacao. Existe como FUNCAO (e nao como literal repetido em cada tela)
 // porque o literal estava copiado em quatro lugares: bastava um campo novo entrar em tres deles
@@ -233,6 +281,8 @@ export type DadosPayloadOperacao = {
   discriminandoDespesa: boolean;
   discriminandoMercadoria: boolean;
   produtos: Array<{ id: string; descricao?: string | null; nome?: string | null }>;
+  // Recorrencia (D3): so nas SAIDAS (despesa/mercadoria/retirada) e so na CRIACAO — ver o payload.
+  recorrencia?: Recorrencia | undefined;
 };
 
 export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: DadosPayloadOperacao) {
@@ -314,6 +364,11 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
     valorAcrescimo: deCentavos(paraCentavos(dados.form.valorAcrescimo)),
     valorDesconto: deCentavos(paraCentavos(dados.form.valorDesconto)),
+    // Recorrencia so existe em despesa/mercadoria/retirada. Venda vem da integracao e transferencia
+    // e movimento imediato — mandar o campo la seria rejeitado pelo contrato (schema .strict()).
+    ...(dados.recorrencia && entidade !== "venda" && entidade !== "transferencia"
+      ? { recorrencia: dados.recorrencia }
+      : {}),
     itensVenda,
     tiposPagamento,
     itensDespesa,

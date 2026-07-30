@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema, discriminarDespesaSchema } from "@padaria/shared/despesas";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
-import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
+import { apiIdParamsSchema, criadoId, erro, extrasDaSerie, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarDespesa,
@@ -55,7 +55,7 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
     }
     try {
       const despesa = await criarDespesa(dados, perfil);
-      return criadoId(reply, despesa.id);
+      return criadoId(reply, despesa.id, extrasDaSerie(despesa));
     } catch (error) {
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });

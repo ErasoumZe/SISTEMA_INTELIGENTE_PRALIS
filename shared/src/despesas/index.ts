@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { itemTemGrupoDeDuasOrigens, MENSAGEM_GRUPO_DE_DUAS_ORIGENS } from "../discriminacao/index.js";
+import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -70,6 +71,8 @@ export const despesaPayloadSchema = z.object({
   grupoDespesaId: uuidSchema.optional().nullable(),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
+  recorrencia: recorrenciaSchema.optional(),
   itensDespesa: z.array(despesaItemSchema).default([])
 });
 
@@ -100,7 +103,8 @@ export const discriminarDespesaSchema = z.object({
 
 export const despesaCriadaSchema = z.object({
   id: z.string(),
-  computar: z.boolean()
+  computar: z.boolean(),
+  ...resultadoSerieSchema
 });
 
 export type DespesasQuery = z.input<typeof despesasQuerySchema>;

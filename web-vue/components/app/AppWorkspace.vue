@@ -57,10 +57,12 @@ import {
   tipoEndpointCadastro
 } from "~/utils/domain";
 import {
+  estadoRecorrenciaVazio,
   formOperacaoDeDetalhe,
   itemDespesaVazio,
   itemMercadoriaVazio,
   montarPayloadOperacao,
+  montarRecorrencia,
   totalItemMercadoriaForm,
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
@@ -149,6 +151,10 @@ const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
 const itensDespesa = ref([itemDespesaVazio()]);
 const itensMercadoria = ref([itemMercadoriaVazio()]);
+// Recorrencia (D3): estado do bloco fica AQUI, junto dos demais campos que salvam, porque e daqui
+// que salvarOperacao monta o payload. O bloco da tela so le e escreve via provide/inject.
+const recorrencia = ref(estadoRecorrenciaVazio());
+const recorrenciaPayload = computed(() => montarRecorrencia(recorrencia.value));
 const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }]);
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoOperacao = ref(false);
@@ -224,6 +230,8 @@ const {
   motivosTelasDesabilitadas
 } = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
+// Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
 const perfilCaixaOperacional = computed(
   () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
 );
@@ -991,6 +999,9 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
   itensDespesa.value = [itemDespesaVazio()];
   itensMercadoria.value = [itemMercadoriaVazio()];
+  // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+  // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+  recorrencia.value = estadoRecorrenciaVazio();
   // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
   try {
     await carregarOpcoesParaOperacao(entidade);
@@ -1039,6 +1050,9 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   discriminandoMercadoria.value = entidade === "mercadoria";
   itensDespesa.value = [itemDespesaVazio()];
   itensMercadoria.value = [itemMercadoriaVazio()];
+  // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+  // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+  recorrencia.value = estadoRecorrenciaVazio();
   try {
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
@@ -1126,6 +1140,14 @@ async function salvarDiscriminacao() {
   notificar("Discriminacao salva com sucesso.");
 }
 
+// Recorrencia (D3): a serie criada tem de aparecer na mensagem. Quando o teto de 12 meses corta a
+// serie, dizer so "salvo" deixaria a pessoa achar que os 24 lancamentos que pediu existem.
+function mensagemLancamentoSalvo(resultado: { serie?: number; serieLimitada?: boolean }) {
+  if (!resultado.serie) return "Lancamento salvo com sucesso.";
+  const base = `Serie criada: ${resultado.serie} lancamentos.`;
+  return resultado.serieLimitada ? `${base} A serie foi limitada a 12 meses.` : base;
+}
+
 async function salvarOperacao() {
   salvandoOperacao.value = true;
   try {
@@ -1142,7 +1164,10 @@ async function salvarOperacao() {
       itensMercadoria: itensMercadoria.value,
       discriminandoDespesa: discriminandoDespesa.value,
       discriminandoMercadoria: discriminandoMercadoria.value,
-      produtos: opcoesEmpresa.value.produtos
+      produtos: opcoesEmpresa.value.produtos,
+      // Recorrencia so na CRIACAO: editar um lancamento da serie mexe naquele, nao regenera a
+      // serie inteira (cancelar/editar em bloco e entrega propria — PROJECT_BRAIN/18 D-04).
+      ...(operacaoEditandoId.value ? {} : { recorrencia: recorrenciaPayload.value })
     });
     // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
     const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
@@ -1162,9 +1187,10 @@ async function salvarOperacao() {
     }
     const editandoId = operacaoEditandoId.value;
     const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
+    type OperacaoSalva = { id: string; computar: boolean; serie?: number; serieLimitada?: boolean };
     const operacaoSalva = editandoId
-      ? await apiPut<{ id: string; computar: boolean }>(`/api/${endpoint}/${editandoId}`, payload)
-      : await apiPost<{ id: string; computar: boolean }>(`/api/${endpoint}`, payload);
+      ? await apiPut<OperacaoSalva>(`/api/${endpoint}/${editandoId}`, payload)
+      : await apiPost<OperacaoSalva>(`/api/${endpoint}`, payload);
     // Anexa a foto do documento (nota/cupom) so em despesas/mercadorias, apos o registro existir.
     const fotoUrl =
       entidadeNova.value === "despesa" || entidadeNova.value === "mercadoria"
@@ -1187,7 +1213,7 @@ async function salvarOperacao() {
       operacoes.value.unshift(linhaAtualizada);
     }
     modalOperacaoAberto.value = false;
-    notificar(editandoId ? "Lancamento atualizado com sucesso." : "Lancamento salvo com sucesso.");
+    notificar(editandoId ? "Lancamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1575,6 +1601,8 @@ provide(WORKSPACE_CONTEXT, {
   itensMercadoria,
   salvandoOperacao,
   salvarOperacao,
+  podeUsarRecorrencia,
+  recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,
   fotoDocumentoExistente: fotoDocumento.existente,
   selecionarFotoDocumento: fotoDocumento.selecionar,

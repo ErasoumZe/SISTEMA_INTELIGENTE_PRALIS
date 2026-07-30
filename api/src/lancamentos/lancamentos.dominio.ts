@@ -89,11 +89,21 @@ export function valoresBaseEdicao(dados: BasePayload, computar: boolean) {
   };
 }
 
-export function valoresBase(dados: BasePayload, computar: boolean, criadoPor: string, caixaId?: string | null) {
+export function valoresBase(
+  dados: BasePayload,
+  computar: boolean,
+  criadoPor: string,
+  caixaId?: string | null,
+  // Vinculo com a serie que gerou o lancamento (D3). So despesas/mercadorias/retiradas tem essas
+  // colunas — por isso o spread e CONDICIONAL: venda e transferencia chamam sem o argumento e nao
+  // recebem as chaves.
+  recorrencia?: { id: string; ordem: number } | null
+) {
   return {
     empresaId: dados.empresaId,
     caixaId: caixaId ?? null,
     criadoPor,
+    ...(recorrencia ? { recorrenciaId: recorrencia.id, recorrenciaOrdem: recorrencia.ordem } : {}),
     ...valoresBaseEdicao(dados, computar)
   };
 }

@@ -183,8 +183,17 @@ export function paginadoDeResultado<T>(resultado: { itens: T[]; total: number; p
   return paginado(resultado.itens, criarPaginationMeta(resultado.total, resultado.page, resultado.pageSize));
 }
 
-export function criadoId(reply: ReplyHttp, id: string) {
-  return reply.status(201).send(ok({ id }));
+// `extras` carrega o que a criacao produziu ALEM do id — hoje o resultado da serie de recorrencia
+// (quantos lancamentos nasceram e se o teto de 12 meses cortou). Sem isso a tela so saberia o id e
+// diria "salvo" para uma acao que criou 13 registros.
+export function criadoId(reply: ReplyHttp, id: string, extras?: Record<string, JsonValue>) {
+  return reply.status(201).send(ok({ id, ...extras }));
+}
+
+// Campos do resultado de serie que vao na resposta de criacao. Ausentes no lancamento avulso.
+export function extrasDaSerie(resultado: { serie?: number | undefined; serieLimitada?: boolean | undefined }) {
+  if (!resultado.serie) return undefined;
+  return { serie: resultado.serie, serieLimitada: Boolean(resultado.serieLimitada) };
 }
 
 export function semConteudo(reply: ReplyHttp) {

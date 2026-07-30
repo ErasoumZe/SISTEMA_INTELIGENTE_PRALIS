@@ -134,6 +134,13 @@
       "when": 1785419930481,
       "tag": "0018_conta_com_fundo",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785425890954,
+      "tag": "0019_recorrencia_de_lancamento",
+      "breakpoints": true
     }
   ]
 }

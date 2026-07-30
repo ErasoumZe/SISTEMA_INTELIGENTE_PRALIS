@@ -6,8 +6,20 @@ import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } f
 // As formas de item vivem em utils/operacoes (junto do payload que as consome) e sao REEXPORTADAS
 // aqui. Antes o contexto declarava copias identicas: ao ganhar grupoPatrimonioId, os dois tipos se
 // separaram e o mesmo objeto deixou de ser atribuivel a si mesmo. Uma definicao so, sempre.
-export type { ItemDespesaForm, ItemMercadoriaForm, ItemVendaForm, TipoPagamentoForm } from "~/utils/operacoes";
-import type { ItemDespesaForm, ItemMercadoriaForm, ItemVendaForm, TipoPagamentoForm } from "~/utils/operacoes";
+export type {
+  EstadoRecorrencia,
+  ItemDespesaForm,
+  ItemMercadoriaForm,
+  ItemVendaForm,
+  TipoPagamentoForm
+} from "~/utils/operacoes";
+import type {
+  EstadoRecorrencia,
+  ItemDespesaForm,
+  ItemMercadoriaForm,
+  ItemVendaForm,
+  TipoPagamentoForm
+} from "~/utils/operacoes";
 
 export type FormMalote = {
   numeroLacre: string;
@@ -35,6 +47,10 @@ export type WorkspaceContext = {
   itensMercadoria: Ref<ItemMercadoriaForm[]>;
   salvandoOperacao: Ref<boolean>;
   salvarOperacao: () => Promise<void>;
+  // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
+  // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
+  podeUsarRecorrencia: ComputedRef<boolean>;
+  recorrencia: Ref<EstadoRecorrencia>;
   fotoDocumentoPreview: Ref<string>;
   fotoDocumentoExistente: Ref<boolean>;
   selecionarFotoDocumento: (entrada: File | File[] | null) => void;
