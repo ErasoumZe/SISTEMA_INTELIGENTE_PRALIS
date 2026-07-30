@@ -121,6 +121,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     usuarioCaixaId: caixa.usuarioCaixaId,
     usuarioCaixaNome: caixa.usuarioCaixaNome ?? "Usuario",
     colaboradorId: caixa.colaboradorId,
+    dataMovimento: caixa.dataMovimento,
     dataHoraAbertura: serializarData(caixa.dataHoraAbertura) ?? "",
     abertoEm: serializarData(caixa.abertoEm) ?? "",
     dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
@@ -179,6 +180,9 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
 export interface EscopoListagemCaixa {
   bloquear: boolean;
   caixaId: string | undefined;
+  // Dia CONTABIL do caixa aberto. So a tela de Entradas usa (D7): la o escopo e o DIA, nao o caixa
+  // — ver resolverEscopoEntradasDoDia.
+  dia?: string | undefined;
 }
 
 /**
@@ -200,6 +204,35 @@ export async function resolverEscopoListagemPorCaixa(
   const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
   if (!caixa) return { bloquear: true, caixaId: undefined };
   return { bloquear: false, caixaId: caixa.id };
+}
+
+/**
+ * Escopo da tela de ENTRADAS (PROJECT_BRAIN/17, D7): "a tela lista TODAS as entradas do DIA".
+ *
+ * Difere do escopo das demais telas em UMA coisa, que e o ponto do D7: quem tem
+ * `menu_entradas_somente_caixa_aberto` continua PRECISANDO de caixa aberto para ver a tela, mas o
+ * que ela lista passa a ser o DIA do caixa — nao o caixa.
+ *
+ * O motivo e concreto: a venda integrada do CREARE so recebe caixa_id quando existe um caixa aberto
+ * NAQUELE PDV no instante da venda (integracoes.service). A venda da madrugada, a de antes da
+ * abertura e a de PDV sem caixa ficam com caixa_id NULL — e sob o filtro por caixa elas sumiam
+ * justamente da tela do operador, que e quem precisa conferir o dia.
+ */
+export async function resolverEscopoEntradasDoDia(
+  perfil: PerfilUsuario | undefined,
+  empresaId: string | undefined,
+  caixaIdSolicitado: string | undefined
+): Promise<EscopoListagemCaixa> {
+  const exigeCaixaAberto = Boolean(perfil) && temPermissao(perfil?.permissoes, "menu_entradas_somente_caixa_aberto");
+  // Sem a flag (gestao/retaguarda): nada muda — segue livre, com filtro opcional por caixa e as
+  // datas que a propria tela mandar. Prender a gestao ao dia tiraria o acesso ao historico.
+  if (!exigeCaixaAberto) return { bloquear: false, caixaId: caixaIdSolicitado };
+  if (!perfil || !empresaId) return { bloquear: true, caixaId: undefined };
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
+  if (!caixa) return { bloquear: true, caixaId: undefined };
+  // dataMovimento e o dia CONTABIL do caixa (nao "hoje"): num caixa que virou a meia-noite, o dia
+  // do operador continua sendo o da abertura.
+  return { bloquear: false, caixaId: undefined, dia: caixa.dataMovimento };
 }
 
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {

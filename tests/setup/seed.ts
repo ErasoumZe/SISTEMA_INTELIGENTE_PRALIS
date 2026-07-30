@@ -192,6 +192,17 @@ const usuarios: UsuarioSeed[] = [
       "menu_despesas_mostrar",
       "menu_retiradas_mostrar"
     ]
+  },
+  {
+    // Entradas do dia (D7): a flag `menu_entradas_somente_caixa_aberto` E um caixa aberto proprio
+    // (caixaAbertoEntradas, no pdvLivre). E a unica combinacao que exercita o escopo da tela de
+    // Entradas — sem a flag o escopo nem se aplica, sem o caixa a listagem so bloqueia.
+    perfil: "operadorEntradas",
+    cargoId: idsTeste.cargoOperadorEntradas,
+    colaboradorId: idsTeste.colaboradorOperadorEntradas,
+    colaboradorCargoId: idsTeste.colaboradorCargoOperadorEntradas,
+    role: "usuario_comum",
+    permissoes: ["caixa_operar", "entradas_visualizar", "menu_entradas_mostrar", "menu_entradas_somente_caixa_aberto"]
   }
 ];
 
@@ -307,7 +318,8 @@ export async function aplicarSeedIntegracao() {
     { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
     { id: idsTeste.contaBanco, empresaId: idsTeste.empresaA, nome: "Banco Integracao", ativa: true },
     { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
-    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true }
+    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true },
+    { id: idsTeste.contaEntradas, empresaId: idsTeste.empresaA, nome: "Conta Entradas Integracao", ativa: true }
   ]);
   // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
   await banco.update(empresas).set({ contaCofreId: idsTeste.contaCofre }).where(eq(empresas.id, idsTeste.empresaA));
@@ -326,6 +338,16 @@ export async function aplicarSeedIntegracao() {
       nome: "PDV Livre Integracao",
       codigo: "PDV-LIVRE",
       contaId: idsTeste.contaLivre,
+      ativo: true
+    },
+    {
+      // PDV exclusivo do caixa aberto do operadorEntradas (D7). Existe para NAO ocupar o pdvLivre,
+      // que e onde turnos/caixa/alteracao-horario abrem caixa.
+      id: idsTeste.pdvEntradas,
+      empresaId: idsTeste.empresaA,
+      nome: "PDV Entradas Integracao",
+      codigo: "PDV-ENTRADAS",
+      contaId: idsTeste.contaEntradas,
       ativo: true
     }
   ]);
@@ -378,7 +400,8 @@ export async function aplicarSeedIntegracao() {
 
   const adminId = usuarioIds.get("admin");
   const caixaId = usuarioIds.get("caixa");
-  if (!adminId || !caixaId) throw new Error("Usuarios base de integracao nao foram criados");
+  const operadorEntradasId = usuarioIds.get("operadorEntradas");
+  if (!adminId || !caixaId || !operadorEntradasId) throw new Error("Usuarios base de integracao nao foram criados");
 
   await banco.insert(fechamentosCaixa).values([
     {
@@ -414,6 +437,27 @@ export async function aplicarSeedIntegracao() {
       saldo: "42.00",
       status: "fechado",
       criadoPor: caixaId
+    },
+    {
+      // Entradas do dia (D7): caixa ABERTO do operadorEntradas, no PDV EXCLUSIVO dele. Nao pode ser
+      // o pdvLivre: la os testes de turnos/caixa/alteracao-horario ABREM caixa, e um aberto no seed
+      // os faz falhar por caixa_aberto_unico_por_pdv (migration 0003).
+      id: idsTeste.caixaAbertoEntradas,
+      empresaId: idsTeste.empresaA,
+      pdvId: idsTeste.pdvEntradas,
+      usuarioId: operadorEntradasId,
+      usuarioCaixaId: operadorEntradasId,
+      colaboradorId: idsTeste.colaboradorOperadorEntradas,
+      // Dia PROPRIO (01/07), diferente do 30/06 do caixaAberto: o teste de historico do caixa
+      // filtra por 2026-06-30 e espera exatamente um caixa naquele dia. O teste de entradas cria
+      // as vendas que precisa neste dia, entao nao depende do seed de ninguem.
+      dataMovimento: "2026-07-01",
+      dataHoraAbertura: new Date("2026-07-01T08:00:00.000Z"),
+      abertoEm: new Date("2026-07-01T08:00:00.000Z"),
+      tokenEdicao: "TOKEN-ABERTO-ENTRADAS",
+      observacao: "Caixa aberto do operador de entradas",
+      status: "aberto",
+      criadoPor: operadorEntradasId
     }
   ]);
 

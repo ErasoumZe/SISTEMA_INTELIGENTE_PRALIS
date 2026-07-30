@@ -262,6 +262,8 @@ export type CaixaOperacional = {
   usuarioCaixaId: string;
   usuarioCaixaNome: string;
   colaboradorId: string;
+  // Dia CONTABIL do caixa ("yyyy-MM-dd") — o que a tela de Entradas lista para quem opera caixa.
+  dataMovimento: string;
   dataHoraAbertura: string;
   abertoEm: string;
   dataHoraFechamento: string | null;

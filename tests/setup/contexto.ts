@@ -16,7 +16,9 @@ export type PerfilTeste =
   | "caixaCiclo"
   | "financeiroCiclo"
   // Recorrencia (D3): lanca sem operar caixa e SEM a permissao de recorrencia.
-  | "semRecorrencia";
+  | "semRecorrencia"
+  // Entradas do dia (D7): tem a flag de caixa aberto E um caixa aberto proprio.
+  | "operadorEntradas";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -84,7 +86,24 @@ export const idsTeste = {
   // "abra um caixa", provando a regra errada.
   cargoSemRecorrencia: "11111111-1111-4111-8111-111111112201",
   colaboradorSemRecorrencia: "11111111-1111-4111-8111-111111112202",
-  colaboradorCargoSemRecorrencia: "11111111-1111-4111-8111-111111112203"
+  colaboradorCargoSemRecorrencia: "11111111-1111-4111-8111-111111112203",
+  // Entradas do dia (D7): operador COM a flag menu_entradas_somente_caixa_aberto e COM caixa
+  // aberto — a unica combinacao que exercita o escopo da tela de Entradas. O perfil "caixa" nao
+  // serve: ele nao tem a flag, e e usado por 12 testes que nao devem mudar de comportamento.
+  cargoOperadorEntradas: "11111111-1111-4111-8111-111111112301",
+  colaboradorOperadorEntradas: "11111111-1111-4111-8111-111111112302",
+  colaboradorCargoOperadorEntradas: "11111111-1111-4111-8111-111111112303",
+  caixaAbertoEntradas: "11111111-1111-4111-8111-111111112304",
+  // PDV PROPRIO do caixa aberto acima. NAO reusar o pdvLivre: ele existe justamente para os testes
+  // ABRIREM caixa nele (turnos, caixa, alteracao-horario) e um caixa aberto ali quebra os tres por
+  // caixa_aberto_unico_por_pdv (migration 0003).
+  pdvEntradas: "11111111-1111-4111-8111-111111112305",
+  contaEntradas: "11111111-1111-4111-8111-111111112306",
+  // Vendas SEM caixa_id (o caso da venda integrada fora de periodo de caixa aberto), criadas pelo
+  // proprio teste de entradas do dia.
+  vendaSemCaixaDoDia: "11111111-1111-4111-8111-111111112311",
+  vendaSemCaixaOutroDia: "11111111-1111-4111-8111-111111112312",
+  vendaComCaixaDoDia: "11111111-1111-4111-8111-111111112313"
 } as const;
 
 export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; senha: string }> = {
@@ -125,5 +144,10 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "sem-recorrencia.integracao@padaria.local",
     nome: "Sem Recorrencia Integracao",
     senha: "Teste#2026!semrecor"
+  },
+  operadorEntradas: {
+    email: "operador-entradas.integracao@padaria.local",
+    nome: "Operador Entradas Integracao",
+    senha: "Teste#2026!operentr"
   }
 };

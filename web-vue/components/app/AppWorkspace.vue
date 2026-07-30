@@ -67,6 +67,13 @@ import {
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
+import {
+  TAMANHO_PAGINA_OPERACOES,
+  diaInicialEntradas,
+  paramsListagemOperacoes,
+  podeConsultarOutrosDias,
+  totalPaginasOperacoes as calcularTotalPaginasOperacoes
+} from "~/utils/entradas";
 import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
@@ -203,6 +210,12 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
+const totalOperacoes = ref(0);
+// Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda — so Entradas manda.
+const totalLiquidoOperacoes = ref<number | null>(null);
+// Dia que a tela de Entradas esta listando (S6). Filtro de data: o operador confere o dia corrente
+// e a retaguarda navega para outros dias. Vazio ate a primeira carga (ver sincronizarDiaEntradas).
+const diaEntradas = ref("");
 
 const empresasDisponiveis = computed(() => empresas.value);
 const empresaId = computed(() => empresaSelecionadaId.value);
@@ -273,10 +286,14 @@ const operacoesDaTela = computed(() =>
     ? operacoes.value.filter((operacao) => operacao.pendenteDiscriminacao)
     : operacoes.value
 );
-const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTela.value.length / 10)));
-const operacoesPaginadas = computed(() =>
-  operacoesDaTela.value.slice((paginaOperacoes.value - 1) * 10, paginaOperacoes.value * 10)
-);
+// `operacoes` JA e a pagina vinda do servidor; o total tambem. O fatiamento em memoria saiu junto
+// com a paginacao falsa (ver carregarOperacoes).
+const totalPaginasOperacoes = computed(() => calcularTotalPaginasOperacoes(totalOperacoes.value));
+const operacoesPaginadas = computed(() => operacoesDaTela.value);
+// Filtro de data das Entradas: quem esta preso ao caixa aberto nao troca de dia (o servidor forca o
+// dia do caixa em resolverEscopoEntradasDoDia); a tela mostra o campo desabilitado em vez de fingir
+// que funciona.
+const podeConsultarOutrosDiasEntradas = computed(() => podeConsultarOutrosDias(permissoesUsuario.value));
 // "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
 // caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
 // abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
@@ -337,8 +354,13 @@ const alvosFiltroPermissoes = computed(() => {
   ];
 });
 
+// Excluir o ultimo item de uma pagina pode deixar a pagina atual fora do total: volta e recarrega
+// (com paginacao no servidor, ficar numa pagina inexistente devolveria lista vazia).
 watch(totalPaginasOperacoes, (total) => {
-  if (paginaOperacoes.value > total) paginaOperacoes.value = total;
+  if (paginaOperacoes.value > total) {
+    paginaOperacoes.value = total;
+    void carregarOperacoes();
+  }
 });
 
 // Ao filtrar a fila de pendencias, volta para a primeira pagina e recarrega os lancamentos
@@ -774,11 +796,24 @@ async function carregarTudo() {
   }
 }
 
+// Mantem `diaEntradas` coerente com o perfil e com o caixa: quem pode navegar entre dias comeca em
+// hoje e depois manda no campo; quem esta preso ao caixa acompanha o dia CONTABIL do caixa aberto
+// (abrir ou fechar caixa troca o dia listado), que e o que o servidor forca de qualquer forma.
+function sincronizarDiaEntradas() {
+  if (podeConsultarOutrosDiasEntradas.value) {
+    if (!diaEntradas.value) diaEntradas.value = diaInicialEntradas({ podeConsultarOutrosDias: true });
+    return;
+  }
+  diaEntradas.value = diaInicialEntradas({
+    podeConsultarOutrosDias: false,
+    dataMovimentoCaixa: caixaAberto.value?.dataMovimento
+  });
+}
+
 async function carregarOperacoes(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
   const entidade = entidadePorTela[telaAtiva.value];
   if (!entidade) return;
-  const params = new URLSearchParams({ empresaId: idEmpresa });
   // Fila de pendentes: mostra lancamentos sem discriminacao de qualquer caixa (inclusive os
   // vindos de NF-e com caixa_id NULL), ignorando o filtro de caixa aberto.
   const pendentes = filtroPendentesDiscriminacao.value && telaSuportaDiscriminacao.value;
@@ -786,16 +821,25 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
   const item = itemPorTela[telaAtiva.value];
   if (!pendentes && item && dependeCaixaAberto(item) && !caixaId) {
     operacoes.value = [];
+    totalOperacoes.value = 0;
     return;
   }
-  if (pendentes) {
-    params.set("pendenteDiscriminacao", "true");
-  } else if (caixaId) {
-    params.set("caixaId", caixaId);
-  }
-  operacoes.value = await apiGet<OperacaoResumo[]>(
+  // So Entradas recorta por DIA (D7). As demais telas seguem com o escopo do caixa/periodo delas.
+  if (telaAtiva.value === "entradas") sincronizarDiaEntradas();
+  const params = paramsListagemOperacoes({
+    empresaId: idEmpresa,
+    pagina: paginaOperacoes.value,
+    pendenteDiscriminacao: pendentes,
+    caixaId,
+    dia: telaAtiva.value === "entradas" ? diaEntradas.value : ""
+  });
+  const pagina = await apiGetPaginado<OperacaoResumo, { totalLiquido?: number }>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
   );
+  operacoes.value = pagina.itens;
+  totalOperacoes.value = pagina.total;
+  // Totalizador do topo (S6): so a listagem de Entradas manda o total em dinheiro do filtro.
+  totalLiquidoOperacoes.value = pagina.meta?.totalLiquido ?? null;
 }
 
 // Fila de aprovacao (NF-e): visao de retaguarda, ignora o caixa. Carregada sob demanda ao ligar
@@ -1648,6 +1692,17 @@ provide(WORKSPACE_CONTEXT, {
 
 function atualizarPaginaOperacoes(pagina: number) {
   paginaOperacoes.value = pagina;
+  // Com a paginacao no servidor, mudar de pagina e uma nova consulta — antes era so um slice.
+  void carregarOperacoes();
+}
+
+// Filtro de data das Entradas (S6). Trocar o dia recomeca na pagina 1: a pagina 4 do dia anterior
+// nao tem relacao com o dia novo e voltaria uma lista vazia.
+function atualizarDiaEntradas(dia: string) {
+  if (!dia || dia === diaEntradas.value || !podeConsultarOutrosDiasEntradas.value) return;
+  diaEntradas.value = dia;
+  paginaOperacoes.value = 1;
+  void carregarOperacoes();
 }
 
 const pageContext = computed(() => ({
@@ -1658,7 +1713,14 @@ const pageContext = computed(() => ({
   operacoesPaginadas: operacoesPaginadas.value,
   // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
   operacoesTela: operacoesDaTela.value,
-  totalOperacoes: operacoesDaTela.value.length,
+  // Total do FILTRO INTEIRO (vem do servidor), nao o tamanho da pagina — e ele que o totalizador
+  // do topo e o controle de paginas usam. Antes era operacoesDaTela.length, que com a paginacao
+  // falsa dava sempre no maximo 10.
+  totalOperacoes: totalOperacoes.value,
+  totalLiquidoOperacoes: totalLiquidoOperacoes.value,
+  // Filtro de data das Entradas (S6): o dia listado e se o perfil pode trocar de dia.
+  diaEntradas: diaEntradas.value,
+  podeConsultarOutrosDiasEntradas: podeConsultarOutrosDiasEntradas.value,
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   descricao: descricaoTela(telaAtiva.value),
@@ -1709,6 +1771,7 @@ const pageContext = computed(() => ({
     modalVendaDetalheAberto.value = valor;
   },
   atualizarPaginaOperacoes,
+  atualizarDiaEntradas,
   abrirCaixaOperacional,
   acertarSaldoOperacional,
   fecharCaixaOperacional,

@@ -260,6 +260,9 @@ export const caixaOperacionalSchema = z.object({
   usuarioCaixaId: z.string(),
   usuarioCaixaNome: z.string(),
   colaboradorId: uuidSchema,
+  // Dia CONTABIL do caixa ("yyyy-MM-dd"), nao "hoje": num caixa que virou a meia-noite o dia do
+  // operador continua sendo o da abertura. A tela de Entradas mostra este dia (S6/D7).
+  dataMovimento: z.string(),
   dataHoraAbertura: z.string(),
   abertoEm: z.string(),
   dataHoraFechamento: z.string().nullable(),

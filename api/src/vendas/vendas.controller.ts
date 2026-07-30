@@ -4,10 +4,11 @@ import { vendaParamsSchema, vendaPayloadSchema, vendasQuerySchema } from "@padar
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
+import { deCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import { atualizarVenda, criarVenda, listarVendas, obterVenda, totaisVendas } from "./vendas.service.js";
 import { statusErroValidacao } from "../utils.js";
-import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
+import { resolverEscopoEntradasDoDia } from "../caixa/caixa.service.js";
 
 export async function registrarRotasVendas(app: FastifyInstance): Promise<void> {
   app.get("/api/vendas", { preHandler: exigirPermissao("entradas_visualizar") }, async (request, reply) => {
@@ -20,15 +21,23 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     }
 
-    const escopoCaixa = await resolverEscopoListagemPorCaixa(
-      request.perfilUsuario,
-      "entradas",
-      query.empresaId,
-      query.caixaId
-    );
-    if (escopoCaixa.bloquear) return paginadoDeArray([], query.page, query.pageSize);
-    const queryComCaixa = { ...query, caixaId: escopoCaixa.caixaId };
-    return paginadoDeArray(await listarVendas(queryComCaixa, escopoDados), query.page, query.pageSize);
+    // D7: a tela de Entradas lista TODAS as entradas do DIA — inclusive a venda integrada que
+    // ficou sem caixa_id (venda fora de um periodo de caixa aberto no PDV). Ver
+    // resolverEscopoEntradasDoDia.
+    const escopo = await resolverEscopoEntradasDoDia(request.perfilUsuario, query.empresaId, query.caixaId);
+    if (escopo.bloquear) return paginadoDeArray([], query.page, query.pageSize);
+    const queryComEscopo = {
+      ...query,
+      caixaId: escopo.caixaId,
+      ...(escopo.dia ? { dataInicio: escopo.dia, dataFim: escopo.dia } : {})
+    };
+    const lista = await listarVendas(queryComEscopo, escopoDados);
+    const pagina = paginadoDeArray(lista, query.page, query.pageSize);
+    // Totalizador do topo (S6): soma do FILTRO INTEIRO, nao da pagina — quem confere o dia precisa
+    // do total do dia, e a pagina e so um recorte. Usa valorLiquido, que ja e o canonico
+    // (original - desconto + acrescimo), para nao criar uma segunda conta de dinheiro.
+    const totalLiquido = deCentavos(somarCentavos(...lista.map((venda) => venda.valorLiquido)));
+    return { ...pagina, meta: { ...pagina.meta, totalLiquido } };
   });
 
   app.get(
