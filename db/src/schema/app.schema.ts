@@ -131,15 +131,25 @@ export const usuariosEmpresas = pgTable(
   (table) => [primaryKey({ columns: [table.usuarioId, table.empresaId] })]
 );
 
-export const contas = pgTable("contas", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  ativa: boolean("ativa").notNull().default(true),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+// contas (PROJECT_BRAIN/17, D8): conta com FUNDO. `saldo_inicial` e o ponto de partida declarado no
+// cadastro (ex.: CONTA COFRE nasce com 10.000) — NAO e o saldo atual e NUNCA e sobrescrito pelos
+// movimentos. O saldo atual e DERIVADO: saldo_inicial + entradas - saidas (ver saldoContaCentavos
+// no shared). Guardar o saldo numa coluna mutavel foi descartado de proposito: ele sairia de sincronia
+// no primeiro lancamento que falhasse no meio, e nao haveria como reconstruir a verdade.
+export const contas = pgTable(
+  "contas",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    saldoInicial: valorMonetario("saldo_inicial").notNull().default("0"),
+    ativa: boolean("ativa").notNull().default(true),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [check("contas_saldo_inicial_check", sql`${table.saldoInicial} >= 0`)]
+);
 
 export const formasPagamento = pgTable(
   "formas_pagamento",

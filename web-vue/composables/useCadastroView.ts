@@ -20,7 +20,17 @@ export function useCadastroView(params: {
         nome: item.nome ?? "",
         cnpj: item.cnpj ? String(item.cnpj) : undefined
       }));
-    if (tela === "contas") return listas.contas.map((item) => ({ id: item.id, nome: item.nome }));
+    if (tela === "contas")
+      return listas.contas.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        // Fundo e Saldo atual vem de /api/contas/saldos (D8). O saldo NAO e coluna: e derivado dos
+        // movimentos a cada carga — por isso nao ha "atualizar saldo" em lugar nenhum.
+        fundo: dinheiro(item.saldoInicial ?? 0),
+        saldoAtual: dinheiro(item.saldoAtual ?? 0),
+        saldoInicial: item.saldoInicial != null ? String(item.saldoInicial) : "",
+        usuariosIds: (item.usuariosIds ?? []).join(",")
+      }));
     if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
     if (tela === "pdv")
       return listas.pdvs.map((item) => ({
@@ -229,7 +239,8 @@ export function useCadastroView(params: {
   function colunasCadastro(tela: string) {
     const colunas: Record<string, string[]> = {
       empresas: ["Nome", "CNPJ"],
-      contas: ["Nome"],
+      // Fundo = ponto de partida declarado; Saldo atual = derivado dos movimentos (D8).
+      contas: ["Nome", "Fundo", "Saldo atual"],
       formas_pagamento: ["Nome"],
       pdv: ["Nome", "Conta", "Ativo"],
       grupos: ["Nome", "Tipo"],

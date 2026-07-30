@@ -516,7 +516,16 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     gruposRetiradas: []
   };
 
-  if (tela === "entradas") {
+  if (tela === "contas") {
+    // Tela de Contas (D8): a listagem precisa do fundo, do saldo ATUAL derivado e de quem opera a
+    // conta — /api/contas/saldos. As demais telas seguem no GET /api/contas (id+nome), que e lista
+    // de opcao de formulario e nao paga as consultas de movimento.
+    // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
+    [dados.contas, dados.usuarios] = await Promise.all([
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
+      carregarOpcaoOpcional(faltas, "Usuarios", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
+    ]);
+  } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),

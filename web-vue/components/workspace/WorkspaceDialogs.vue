@@ -87,6 +87,22 @@ const {
 // Preview do preco de venda: mesma fonte usada no payload, para preview e valor salvo nunca divergirem.
 const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.value));
 
+// --- Usuarios que operam a CONTA (D8) --------------------------------------------------------
+// Os vinculos viajam no proprio formulario da conta (formCadastro.usuariosIds) e sao gravados na
+// MESMA transacao do cadastro. Antes isso era um dialogo separado na tela de Usuarios, com POST/
+// DELETE por clique: o vinculo salvava mesmo se o cadastro fosse cancelado. Agora e um ato so.
+function usuariosDaConta(): string[] {
+  return formCadastro.value.usuariosIds ?? [];
+}
+function contaTemUsuario(usuarioId: string | undefined) {
+  return Boolean(usuarioId) && usuariosDaConta().includes(String(usuarioId));
+}
+function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
+  if (!usuarioId) return;
+  const atuais = usuariosDaConta().filter((id) => id !== usuarioId);
+  formCadastro.value.usuariosIds = marcar ? [...atuais, String(usuarioId)] : atuais;
+}
+
 // Nome + gramatura + medida => Descricao automatica (regra do Pralis). O campo principal e o NOME.
 const unidadeSiglaProduto = computed(
   () => opcoesEmpresa.value.unidadesMedida.find((u) => u.id === formCadastro.value.unidadeIndividualId)?.sigla ?? ""
@@ -553,9 +569,48 @@ const validacaoQtdPreview = computed(() =>
           <v-col
             v-if="cadastroTela !== 'produtos'"
             cols="12"
-            :md="['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes'].includes(cadastroTela) ? 6 : 12"
+            :md="['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes', 'contas'].includes(cadastroTela) ? 6 : 12"
             ><v-text-field v-model="formCadastro.nome" label="Nome"
           /></v-col>
+          <!-- Conta com FUNDO (D8). O fundo e o PONTO DE PARTIDA do saldo, nao o saldo: quem move o
+               saldo sao os lancamentos. Por isso o campo fica editavel e o saldo atual, ao lado,
+               so leitura — deixar os dois editaveis convidaria a "acertar" o saldo na mao. -->
+          <v-col v-if="cadastroTela === 'contas'" cols="12" md="6">
+            <v-text-field
+              v-model="formCadastro.saldoInicial"
+              type="number"
+              min="0"
+              step="0.01"
+              label="Fundo (saldo inicial)"
+              hint="Ponto de partida da conta. Ex.: CONTA COFRE = 10.000,00"
+              persistent-hint
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'contas'" cols="12">
+            <div class="text-caption text-medium-emphasis mb-1">
+              Quem pode movimentar esta conta (origem/destino de transferência e conta dos lançamentos). Sem ninguém
+              marcado, a conta não aparece para nenhum operador.
+            </div>
+            <v-alert v-if="!opcoesEmpresa.usuarios.length" type="info" variant="tonal" density="compact">
+              Nenhum usuário nesta empresa.
+            </v-alert>
+            <v-list v-else density="compact" class="py-0 lc-usuarios-conta">
+              <v-list-item
+                v-for="usuario in opcoesEmpresa.usuarios"
+                :key="usuario.usuarioId ?? usuario.id"
+                class="px-1"
+              >
+                <template #prepend>
+                  <v-checkbox-btn
+                    :model-value="contaTemUsuario(usuario.usuarioId ?? usuario.id)"
+                    color="primary"
+                    @update:model-value="alternarUsuarioConta(usuario.usuarioId ?? usuario.id, Boolean($event))"
+                  />
+                </template>
+                <v-list-item-title>{{ usuario.nome ?? usuario.email ?? usuario.id }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-col>
           <v-col v-if="cadastroTela === 'empresas'" cols="12" md="6">
             <v-text-field
               :model-value="formCadastro.cnpj"

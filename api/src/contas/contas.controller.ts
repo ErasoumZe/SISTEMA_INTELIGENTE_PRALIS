@@ -10,7 +10,7 @@ import { criadoId, erro, ok, paginadoDeArray, semConteudo } from "@padaria/share
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
-import { exportarConta, importarContas, listarContas, salvarConta } from "./contas.service.js";
+import { exportarConta, importarContas, listarContas, listarContasComSaldo, salvarConta } from "./contas.service.js";
 
 export async function registrarRotasContas(app: FastifyInstance): Promise<void> {
   // Lista consumida como OPCAO de formulario (conta origem em despesas/retiradas/transferencias e
@@ -66,6 +66,25 @@ export async function registrarRotasContas(app: FastifyInstance): Promise<void> 
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  // Tela de Contas (D8): fundo + saldo ATUAL derivado + usuarios vinculados. So o cadastro de
+  // contas ve — e informacao de gestao, nao lista de opcao de formulario (essa e a GET /api/contas).
+  app.get(
+    "/api/contas/saldos",
+    { preHandler: exigirPermissao("cadastro_contas_visualizar") },
+    async (request, reply) => {
+      const query = empresaQuerySchema.parse(request.query);
+      try {
+        const escopo = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        return ok(await listarContasComSaldo(escopo));
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
+    }
+  );
 
   app.post("/api/contas/importar", { preHandler: exigirPermissao("cadastro_contas_criar") }, async (request, reply) => {
     try {

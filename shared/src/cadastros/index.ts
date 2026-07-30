@@ -34,6 +34,10 @@ export type ProdutoConversaoForm = {
 
 export type CadastroForm = {
   nome: string;
+  // Conta com fundo (D8): o fundo digitado e a lista de quem opera a conta. Vivem no formulario do
+  // cadastro porque sao gravados no MESMO salvar — ver cadastroPayload("contas").
+  saldoInicial?: string;
+  usuariosIds?: string[];
   documento: string;
   dataNascimento: string;
   whatsapp: string;
@@ -221,7 +225,16 @@ export function promocoesDoFormProduto(form: CadastroForm) {
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
-  if (tela === "contas") return { empresaId, nome: form.nome };
+  // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
+  // campo em branco significa "sem fundo", e mandar undefined faria o servidor MANTER o fundo
+  // anterior — o admin que apagasse o campo veria o valor voltar sozinho.
+  if (tela === "contas")
+    return {
+      empresaId,
+      nome: form.nome,
+      saldoInicial: Number(form.saldoInicial || 0),
+      usuariosIds: form.usuariosIds ?? []
+    };
   if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
   if (tela === "pdv") return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
   if (tela === "grupos")

@@ -62,6 +62,11 @@ export type Opcao = {
   cnpj?: string | null;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
+  // Conta com fundo (D8), vindo de /api/contas/saldos. saldoAtual e DERIVADO dos movimentos —
+  // nunca ha coluna de saldo. Ausentes no GET /api/contas comum (lista de opcao de formulario).
+  saldoInicial?: number;
+  saldoAtual?: number;
+  usuariosIds?: string[];
   // Patrimonio (D2)
   sig?: string;
   grupoPatrimonioId?: string | null;

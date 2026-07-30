@@ -516,6 +516,8 @@ export function formOperacaoVazio(): OperacaoForm {
 export function formCadastroVazio(): CadastroForm {
   return {
     nome: "",
+    saldoInicial: "",
+    usuariosIds: [],
     documento: "",
     dataNascimento: "",
     whatsapp: "",
@@ -804,6 +806,10 @@ export function formCadastroDeLinha(
   return {
     ...formCadastroVazio(),
     nome: linha.nome ?? "",
+    // Conta com fundo (D8): reabre o fundo digitado e as marcacoes de quem opera a conta. Sem isso
+    // editar o nome zeraria o fundo e apagaria todos os vinculos no salvar.
+    saldoInicial: linha.saldoInicial ?? "",
+    usuariosIds: linha.usuariosIds ? linha.usuariosIds.split(",").filter(Boolean) : [],
     documento: linha.documento ? mascararDocumento(linha.documento) : "",
     dataNascimento: linha.dataNascimento ?? "",
     whatsapp: linha.whatsapp ? mascararWhatsapp(linha.whatsapp) : "",

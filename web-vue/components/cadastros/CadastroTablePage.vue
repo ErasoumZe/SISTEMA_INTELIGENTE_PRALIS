@@ -55,8 +55,9 @@ const acoesExtras = computed(() => {
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }
     ];
-  // Vinculo usuario <-> contas (FOTO 4): botao "Contas" por linha de usuario.
-  if (props.tela === "usuarios") return [{ label: "Contas", event: "vincularContas", condicao: () => true }];
+  // O vinculo usuario <-> contas era editado tambem por aqui (botao "Contas" na linha do usuario).
+  // Removido: o D8 poe fundo e "quem opera" no cadastro da CONTA, num salvar so. Manter os dois
+  // lados seria a segunda rota para o mesmo ato (DoD item 2).
   return [];
 });
 </script>

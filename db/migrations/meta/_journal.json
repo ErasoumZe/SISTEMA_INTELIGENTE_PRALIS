@@ -127,6 +127,13 @@
       "when": 1785414436434,
       "tag": "0017_grupo_patrimonio_no_item",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785419930481,
+      "tag": "0018_conta_com_fundo",
+      "breakpoints": true
     }
   ]
 }
