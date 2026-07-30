@@ -69,7 +69,22 @@ Estratégia: script idempotente, **dry-run com contagens primeiro**, José aprov
 - **Validação D5:** total da discriminação ≠ Valor do lançamento → **não salva** e aponta a diferença.
 - A telinha de desconto existente é mantida, com esse funcionamento.
 
-## 6. Fora deste escopo (congelado)
+## 6. Decisões tomadas na implementação (30/07) — ficam aqui, não no prompt
+
+Ambiguidades que o briefing não fechou e que o José decidiu ao revisar o S5:
+
+| Ponto                                | Decisão                                                                            | Por quê                                                                                                                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **"3 em 3"** (frequência do desenho) | **trimestral** (a cada 3 meses)                                                    | leitura natural em conta a pagar: água, seguro, IPTU                                                                                                                   |
+| **Dias da semana**                   | só valem e só aparecem na frequência **semana**; descartados nas demais            | "toda terça" não significa nada numa série mensal                                                                                                                      |
+| **"Número de repetições"**           | é o **TOTAL**, já contando o lançamento sendo criado ("repetir 3" = 3 na tela)     | é como Mobills conta; quem digita 12 espera o ano fechado, não 13                                                                                                      |
+| **DOMINGO na recorrência**           | **incluído** (ISO 7), além dos 6 dias do rascunho                                  | **decisão do José, não do desenho:** o rascunho do Rodrigo tem Sg..Sa, mas a padaria abre domingo — costuma ser o dia mais forte. O banco já aceitava 7; era só a tela |
+| **Teto da série**                    | **12 meses** a partir da 1ª data, sempre                                           | protege do erro de digitação (999 diárias) e do lançamento futuro que ninguém lembra por que existe                                                                    |
+| **Filtro do saldo da conta (D8)**    | `computar = true AND status <> 'cancelado'`, e `valor_original` puro fora da venda | **igual ao ADR-001 do saldo do caixa**: duas fórmulas de dinheiro com filtros diferentes viram divergência inexplicável entre as duas telas                            |
+| **Grupo do item (§5)**               | as duas origens são **mutuamente exclusivas permitindo os dois nulos**             | item sem grupo sempre foi aceito e o histórico está cheio deles                                                                                                        |
+| **Vínculo usuário × conta**          | editado **no cadastro da CONTA**; o caminho pela tela de Usuários foi removido     | D8 põe fundo e usuários no mesmo salvar; manter os dois lados seria a segunda rota para o mesmo ato                                                                    |
+
+## 7. Fora deste escopo (congelado)
 
 Transferências (regras já definidas) · Entradas (integração pronta — só a listagem do dia D7) ·
 Cockpit/abertura (consolidação própria).

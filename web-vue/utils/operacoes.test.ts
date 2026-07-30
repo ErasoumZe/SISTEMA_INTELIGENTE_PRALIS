@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formOperacaoVazio } from "./domain";
 import {
+  DIAS_RECORRENCIA,
   estadoRecorrenciaVazio,
   formOperacaoDeDetalhe,
   grupoItemEscolhido,
@@ -256,8 +257,14 @@ describe("montarRecorrencia", () => {
     });
   });
 
+  // Marca por ISO, nao por posicao: a ordem de DIAS_RECORRENCIA ja mudou uma vez (domingo entrou
+  // na frente) e um array literal de posicoes quebra silenciosamente a cada mudanca dessas.
+  function marcar(...isos: number[]) {
+    return DIAS_RECORRENCIA.map((dia) => isos.includes(dia.iso));
+  }
+
   it("inclui os dias marcados APENAS na frequencia semanal", () => {
-    const dias = [false, true, false, false, true, false]; // Ter e Sx
+    const dias = marcar(2, 5); // Ter e Sx
     expect(montarRecorrencia({ aberta: true, numero: "10", frequencia: "semana", dias })).toEqual({
       frequencia: "semana",
       repeticoes: 10,
@@ -268,6 +275,16 @@ describe("montarRecorrencia", () => {
     expect(montarRecorrencia({ aberta: true, numero: "10", frequencia: "mes", dias })).toEqual({
       frequencia: "mes",
       repeticoes: 10
+    });
+  });
+
+  // Domingo (ISO 7) e decisao do Jose, nao do desenho do Rodrigo — a padaria abre domingo.
+  it("aceita DOMINGO, que nao estava no rascunho", () => {
+    expect(DIAS_RECORRENCIA.map((dia) => dia.iso)).toContain(7);
+    expect(montarRecorrencia({ aberta: true, numero: "4", frequencia: "semana", dias: marcar(7) })).toEqual({
+      frequencia: "semana",
+      repeticoes: 4,
+      diasSemana: [7]
     });
   });
 

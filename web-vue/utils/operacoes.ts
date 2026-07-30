@@ -90,7 +90,11 @@ export type ItemMercadoriaForm = {
 // --- Recorrencia (D3) --------------------------------------------------------------------------
 // Os rotulos sao os do desenho do Rodrigo; os valores sao os que o contrato aceita. "3 em 3" =
 // trimestral e os DIAS so valem na frequencia semanal (decisoes do Jose, 30/07).
+//
+// DOMINGO (iso 7) e decisao do JOSE, nao do desenho: o rascunho tem seis dias (Sg..Sa), mas a
+// padaria abre domingo — costuma ser o dia mais forte. Registrado em PROJECT_BRAIN/17 §6.
 export const DIAS_RECORRENCIA = [
+  { rotulo: "Dom", iso: 7 },
   { rotulo: "Sg", iso: 1 },
   { rotulo: "Ter", iso: 2 },
   { rotulo: "Qa", iso: 3 },
@@ -115,7 +119,9 @@ export type EstadoRecorrencia = {
 };
 
 export function estadoRecorrenciaVazio(): EstadoRecorrencia {
-  return { aberta: false, numero: "1", frequencia: "mes", dias: [false, false, false, false, false, false] };
+  // O tamanho acompanha DIAS_RECORRENCIA: derivar evita o array de 6 posicoes sobrar quando um dia
+  // novo entra na lista (foi o que aconteceu ao incluir domingo).
+  return { aberta: false, numero: "1", frequencia: "mes", dias: DIAS_RECORRENCIA.map(() => false) };
 }
 
 /**
