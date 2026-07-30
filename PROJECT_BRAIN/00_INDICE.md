@@ -25,6 +25,9 @@
 | [12](12_DECISAO_FUNDO_SIMPLES.md)      | **Fundo simples (24/07)**    | o déficit foi revogado — malote é fundo; o que sai do código                                     |
 | [14](14_TELAS_RODRIGO_TRANSCRICAO.md)  | **Telas do Rodrigo (27/07)** | transcrição dos 5 wireframes: campos, regras novas, impacto                                      |
 | [15](15_DECISOES_27_07.md)             | **Decisões 27/07**           | sem seletor de mês · um só Sair · Malotes oculto (lacre inline) · contas do usuário = prioridade |
+| [16](16_DEFINITION_OF_DONE.md)         | **Definition of Done**       | o contrato de qualidade: quando uma entrega pode ser chamada de pronta                           |
+| [17](17_REGRAS_LANCAMENTOS_FINAIS.md)  | **Regras de Lançamentos**    | D1–D12 respondidas — a spec vigente de Lançamentos                                               |
+| [18](18_DIVIDAS_TECNICAS.md)           | **Dívidas técnicas**         | o que foi achado numa entrega e adiado de propósito, para não se perder                          |
 
 ## Regra de ouro deste brain
 
