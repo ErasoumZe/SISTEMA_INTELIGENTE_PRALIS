@@ -85,6 +85,7 @@
     "bootstrap:prod": "tsx bootstrap-prod.ts",
     "bootstrap:contas-usuarios": "tsx bootstrap-contas-usuarios.ts",
     "diagnostico:fuso": "tsx diagnostico-fuso.ts",
+    "planilha:inspecionar": "tsx planilha-inspecionar.ts",
     "seed:referencia:prod": "tsx seed-referencia-prod.ts",
     "seed:dev": "tsx --conditions=development seed.ts",
     "backfill:codigos": "tsx --conditions=development backfill-codigos.ts",
