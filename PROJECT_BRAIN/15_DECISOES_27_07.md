@@ -35,6 +35,16 @@ recebimento de uma transferência.
 - **`contas_usuarios`** = _em quais contas_ ele pode fazer.
   São camadas complementares, não substitutas.
 
-**Ponto em aberto (o agente vai propor):** o que fazer com usuário **sem nenhum vínculo**
-cadastrado — ver todas (não quebra a operação atual) ou não ver nenhuma (mais seguro). Sugestão:
-ver todas + TODO para endurecer depois da migração dos vínculos reais.
+**✅ DECIDIDO (José, 27/07): usuário sem vínculo NÃO VÊ NENHUMA CONTA.**
+Sem vínculo, os seletores vêm vazios. Só `usuario_admin`/admin enxerga todas (short-circuit, igual
+ao que já acontece com permissões).
+
+**⚠ Consequência operacional — obrigatória de tratar:** hoje **ninguém** tem vínculo. Ao subir essa
+regra, a operação **para** (nenhum operador consegue lançar). Por isso o Prompt 0 exige, na mesma
+entrega, um **seed de vínculos iniciais derivado do histórico real**: cada usuário é vinculado às
+contas que ele já usa (contas que aparecem em lançamentos/transferências/caixas criados por ele, +
+a conta do PDV dos caixas que abriu). O agente deve **mostrar a query e a contagem antes de
+aplicar** — não descobrir em produção que alguém ficou sem conta.
+
+**UI do caso vazio:** quando não houver conta vinculada, mostrar
+_"Nenhuma conta vinculada ao seu usuário — peça ao administrador"_ em vez de um select vazio.
