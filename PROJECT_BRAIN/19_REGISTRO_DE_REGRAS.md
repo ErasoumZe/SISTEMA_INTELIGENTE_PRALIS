@@ -96,11 +96,14 @@ Colhidas perguntando uma a uma. **Fala dele entre aspas.**
 
 ### Fluxo do caixa
 
-| Id           | Decisão                                                                                        | Detalhe                                                                                                                                  |
-| ------------ | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **R-032**    | Transferência sem caixa aberto: **só tesouraria, gerência, financeiro, diretor geral e admin** | O cargo **Caixa** continua precisando de caixa aberto. Mesma lógica de R-073/R-074. Some a regra atual que exige caixa para _todo mundo_ |
-| **R-008**    | O retorno ao cofre é **lançado pela pessoa antes de fechar** — o sistema não cria sozinho      | E o sistema **recusa fechar se sobrar saldo**. Fiel ao que ela já faz na mão hoje                                                        |
-| **R-033** 🆕 | Abrir caixa **sem lacre é permitido** — abre zerado e o fundo chega depois                     | Não trava o operador na correria da manhã                                                                                                |
+| Id            | Decisão                                                                                        | Detalhe                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R-032**     | Transferência sem caixa aberto: **só tesouraria, gerência, financeiro, diretor geral e admin** | O cargo **Caixa** continua precisando de caixa aberto. Mesma lógica de R-073/R-074. Some a regra atual que exige caixa para _todo mundo_                 |
+| **R-008**     | O retorno ao cofre é **lançado pela pessoa antes de fechar** — o sistema não cria sozinho      | E o sistema **recusa fechar se sobrar saldo**. Fiel ao que ela já faz na mão hoje                                                                        |
+| **R-033** 🆕  | Abrir caixa **sem lacre é permitido** — abre zerado e o fundo chega depois                     | Não trava o operador na correria da manhã                                                                                                                |
+| **R-008b** 🆕 | O retorno do fechamento vai para o **COFRE PRINCIPAL**                                         | José, 31/07. A planilha tem **dois** cofres (`CNT CONTA - COFRE PRINCIPAL` e `CNT CONTA - COFRE TROCO`); o brain falava de "o cofre" no singular         |
+| **R-020** 🆕  | As contas nascem no sistema **com o saldo da planilha** como fundo                             | José, 31/07. É a foto do dia da virada: dali em diante cada movimento soma ou subtrai. Vale para **todas** as contas, não só os cofres                   |
+| **R-021** 🆕  | A quebra de caixa vive em **tabela própria**, nunca em `contas`                                | Decisão técnica minha, 31/07 (o José já tinha definido a REGRA em 30/07). Saldo por PESSOA não pode encostar no saldo das contas, que alimenta o ADR-001 |
 
 ### R-015 — Quebra de caixa: o fluxo completo (novo, nada disso existia)
 

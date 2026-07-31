@@ -1159,12 +1159,19 @@ const despesa = (
 )[0];
 if (!despesa) throw new Error("Despesa seed nao foi criada");
 
+// As colunas *_com_desconto entraram NOT NULL na migration 0016 (descontos em 3 niveis) e este
+// insert nunca foi atualizado — so nao quebrava porque o banco de dev jamais era recriado do zero
+// (divida D-01: dev sincroniza por push). Sem desconto, o "com desconto" e igual ao valor cheio.
 await banco.insert(despesasItens).values({
   despesaId: despesa.id,
   grupoDespesaId: grupoDespesaSub.id,
   colaboradorId: colaboradorFinanceiroId,
   descricao: "Troca de resistencia",
-  valor: "35.00"
+  quantidade: "1.000",
+  valorUnitario: "35.0000",
+  valor: "35.00",
+  valorUnitarioComDesconto: "35.0000",
+  valorTotalComDesconto: "35.00"
 });
 
 const mercadoria = (
@@ -1191,6 +1198,7 @@ const mercadoria = (
 )[0];
 if (!mercadoria) throw new Error("Mercadoria seed nao foi criada");
 
+// Mesmo caso do item de despesa acima: *_com_desconto sao NOT NULL desde a 0016.
 await banco.insert(mercadoriasItens).values({
   mercadoriaId: mercadoria.id,
   produtoId: produto.id,
@@ -1199,7 +1207,9 @@ await banco.insert(mercadoriasItens).values({
   descricao: "Farinha de trigo",
   quantidade: "10.000",
   valorUnitario: "4.4000",
-  valorTotal: "44.00"
+  valorTotal: "44.00",
+  valorUnitarioComDesconto: "4.4000",
+  valorTotalComDesconto: "44.00"
 });
 
 const retirada = (
