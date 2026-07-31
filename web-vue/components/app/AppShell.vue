@@ -41,6 +41,9 @@ async function sair() {
     } catch {
       // A sessao local ainda precisa sair mesmo quando a API estiver indisponivel.
     }
+    // O perfil do usuario que sai NAO pode sobreviver ao logout: sem isto, o proximo login na mesma
+    // aba reaproveita `sessao`/`workspaceCarregado` do anterior e o sistema avalia permissao errada.
+    limparEstadoWorkspace(useNuxtApp().payload.state);
     await router.push("/login");
   } finally {
     saindo.value = false;
