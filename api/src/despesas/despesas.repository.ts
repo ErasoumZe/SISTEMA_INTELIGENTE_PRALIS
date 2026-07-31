@@ -128,7 +128,10 @@ export async function atualizarFotoNotaDespesaRepository(
   fotoNotaUrl: string,
   db: ExecutorBanco = banco
 ): Promise<void> {
-  await db.update(despesas).set({ fotoNotaUrl }).where(and(eq(despesas.id, id), eq(despesas.empresaId, empresaId)));
+  await db
+    .update(despesas)
+    .set({ fotoNotaUrl })
+    .where(and(eq(despesas.id, id), eq(despesas.empresaId, empresaId)));
 }
 
 export async function criarDespesaRepository(
@@ -205,6 +208,8 @@ export async function buscarDespesaDetalheRepository(
       descricaoAcrescimo: despesas.descricaoAcrescimo,
       valorDesconto: despesas.valorDesconto,
       descricaoDesconto: despesas.descricaoDesconto,
+      descontoGeralTipo: despesas.descontoGeralTipo,
+      descontoGeralValor: despesas.descontoGeralValor,
       contaOrigemId: despesas.contaOrigemId,
       fornecedorId: despesas.fornecedorId,
       colaboradorId: despesas.colaboradorId,
@@ -229,6 +234,12 @@ export async function buscarDespesaDetalheRepository(
       grupoPatrimonioId: despesasItens.grupoPatrimonioId,
       colaboradorId: despesasItens.colaboradorId,
       descricao: despesasItens.descricao,
+      quantidade: despesasItens.quantidade,
+      valorUnitario: despesasItens.valorUnitario,
+      descontoTipo: despesasItens.descontoTipo,
+      descontoValor: despesasItens.descontoValor,
+      descontoTotalTipo: despesasItens.descontoTotalTipo,
+      descontoTotalValor: despesasItens.descontoTotalValor,
       valor: despesasItens.valor
     })
     .from(despesasItens)
@@ -238,10 +249,20 @@ export async function buscarDespesaDetalheRepository(
     ...despesa,
     valorOriginal: numeroDecimal(despesa.valorOriginal),
     valorAcrescimo: numeroDecimal(despesa.valorAcrescimo),
-    jurosValorInformado:
-      despesa.jurosValorInformado == null ? null : numeroDecimal(despesa.jurosValorInformado),
+    jurosValorInformado: despesa.jurosValorInformado == null ? null : numeroDecimal(despesa.jurosValorInformado),
     valorDesconto: numeroDecimal(despesa.valorDesconto),
-    itensDespesa: itens.map((item) => ({ ...item, valor: numeroDecimal(item.valor) }))
+    descontoGeralTipo: despesa.descontoGeralTipo as DespesaDetalheDto["descontoGeralTipo"],
+    descontoGeralValor: despesa.descontoGeralValor == null ? null : numeroDecimal(despesa.descontoGeralValor),
+    itensDespesa: itens.map((item) => ({
+      ...item,
+      quantidade: item.quantidade == null ? undefined : Number(item.quantidade),
+      valorUnitario: item.valorUnitario == null ? undefined : Number(item.valorUnitario),
+      descontoTipo: item.descontoTipo as DespesaItemPayload["descontoTipo"],
+      descontoValor: item.descontoValor == null ? null : Number(item.descontoValor),
+      descontoTotalTipo: item.descontoTotalTipo as DespesaItemPayload["descontoTotalTipo"],
+      descontoTotalValor: item.descontoTotalValor == null ? null : Number(item.descontoTotalValor),
+      valor: numeroDecimal(item.valor)
+    }))
   };
 }
 

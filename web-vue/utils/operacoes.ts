@@ -20,6 +20,8 @@ export type OperacaoDetalhe = {
   jurosValorInformado?: number | null;
   valorDesconto: number;
   descricaoDesconto?: string | null;
+  descontoGeralTipo?: "percentual" | "valor" | null;
+  descontoGeralValor?: number | null;
   contaOrigemId?: string | null;
   contaDestinoId?: string | null;
   fornecedorId?: string | null;
@@ -54,6 +56,12 @@ export type OperacaoDetalhe = {
     grupoPatrimonioId?: string | null;
     descricao: string;
     valor: number;
+    quantidade?: number;
+    valorUnitario?: number;
+    descontoTipo?: "percentual" | "valor" | null;
+    descontoValor?: number | null;
+    descontoTotalTipo?: "percentual" | "valor" | null;
+    descontoTotalValor?: number | null;
   }[];
   itensMercadoria?: {
     produtoId: string | null;
@@ -65,6 +73,8 @@ export type OperacaoDetalhe = {
     valorUnitario: number;
     descontoTipo?: "percentual" | "valor" | null;
     descontoValor?: number | null;
+    descontoTotalTipo?: "percentual" | "valor" | null;
+    descontoTotalValor?: number | null;
     valorTotal: number;
   }[];
 };
@@ -84,6 +94,12 @@ export type ItemDespesaForm = {
   valor: string;
   grupoDespesaId: string;
   grupoPatrimonioId: string;
+  quantidade: string;
+  valorUnitario: string;
+  descontoTipo: string;
+  descontoValor: string;
+  descontoTotalTipo: string;
+  descontoTotalValor: string;
 };
 export type ItemMercadoriaForm = {
   descricao: string;
@@ -92,6 +108,8 @@ export type ItemMercadoriaForm = {
   // Desconto por item (discriminacao). tipo vazio = sem desconto. valor e % ou R$ conforme o tipo.
   descontoTipo: string;
   descontoValor: string;
+  descontoTotalTipo: string;
+  descontoTotalValor: string;
   valorTotal: string;
   produtoId: string;
   grupoMercadoriaId: string;
@@ -156,7 +174,18 @@ export function montarRecorrencia(estado: EstadoRecorrencia): Recorrencia | unde
 // porque o literal estava copiado em quatro lugares: bastava um campo novo entrar em tres deles
 // para a quarta tela montar um item sem o campo. Foi assim que o "" de ID sobreviveu.
 export function itemDespesaVazio(): ItemDespesaForm {
-  return { descricao: "", valor: "", grupoDespesaId: "", grupoPatrimonioId: "" };
+  return {
+    descricao: "",
+    valor: "",
+    grupoDespesaId: "",
+    grupoPatrimonioId: "",
+    quantidade: "1",
+    valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
+    descontoTotalTipo: "",
+    descontoTotalValor: ""
+  };
 }
 
 export function itemMercadoriaVazio(): ItemMercadoriaForm {
@@ -166,6 +195,8 @@ export function itemMercadoriaVazio(): ItemMercadoriaForm {
     valorUnitario: "",
     descontoTipo: "",
     descontoValor: "",
+    descontoTotalTipo: "",
+    descontoTotalValor: "",
     valorTotal: "",
     produtoId: "",
     grupoMercadoriaId: "",
@@ -197,11 +228,24 @@ export function grupoItemEscolhido(valor: string): { grupoProprioId: string; gru
 // Total liquido de um item de mercadoria no cliente (espelha o recalculo do servidor). Sem desconto,
 // usa o valorTotal digitado (permite valor cheio). Com desconto, e qtd*unit menos o desconto, >= 0.
 export function totalItemMercadoriaForm(item: ItemMercadoriaForm): number {
-  if (!item.descontoTipo) return deCentavos(paraCentavos(item.valorTotal));
+  if (!item.descontoTipo && !item.descontoTotalTipo) return deCentavos(paraCentavos(item.valorTotal));
   const bruto = Number(item.quantidade || 0) * Number(item.valorUnitario || 0);
   const descNum = Number(item.descontoValor || 0);
-  const desconto = item.descontoTipo === "percentual" ? (bruto * descNum) / 100 : descNum;
-  const liquido = bruto - desconto;
+  const descontoUnitario =
+    item.descontoTipo === "percentual"
+      ? (bruto * descNum) / 100
+      : item.descontoTipo === "valor"
+        ? descNum * Number(item.quantidade || 0)
+        : 0;
+  const aposUnitario = Math.max(0, bruto - descontoUnitario);
+  const descontoTotalNumero = Number(item.descontoTotalValor || 0);
+  const descontoTotal =
+    item.descontoTotalTipo === "percentual"
+      ? (aposUnitario * descontoTotalNumero) / 100
+      : item.descontoTotalTipo === "valor"
+        ? descontoTotalNumero
+        : 0;
+  const liquido = aposUnitario - descontoTotal;
   return deCentavos(paraCentavos(liquido > 0 ? liquido : 0));
 }
 
@@ -230,6 +274,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     jurosValorInformado: detalhe.jurosValorInformado != null ? String(detalhe.jurosValorInformado) : "",
     valorDesconto: detalhe.valorDesconto ? String(detalhe.valorDesconto) : "",
     descricaoDesconto: detalhe.descricaoDesconto ?? "",
+    descontoGeralTipo: detalhe.descontoGeralTipo ?? "",
+    descontoGeralValor: detalhe.descontoGeralValor != null ? String(detalhe.descontoGeralValor) : "",
     contaOrigemId: detalhe.contaOrigemId ?? "",
     contaDestinoId: detalhe.contaDestinoId ?? "",
     fornecedorId: detalhe.fornecedorId ?? "",
@@ -282,7 +328,13 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
       descricao: item.descricao,
       valor: String(item.valor),
       grupoDespesaId: item.grupoDespesaId ?? "",
-      grupoPatrimonioId: item.grupoPatrimonioId ?? ""
+      grupoPatrimonioId: item.grupoPatrimonioId ?? "",
+      quantidade: String(item.quantidade ?? 1),
+      valorUnitario: String(item.valorUnitario ?? item.valor),
+      descontoTipo: item.descontoTipo ?? "",
+      descontoValor: item.descontoValor != null ? String(item.descontoValor) : "",
+      descontoTotalTipo: item.descontoTotalTipo ?? "",
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : ""
     }));
   }
   if (entidade === "mercadoria" && detalhe.itensMercadoria?.length) {
@@ -292,6 +344,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
       valorUnitario: String(item.valorUnitario),
       descontoTipo: item.descontoTipo ?? "",
       descontoValor: item.descontoValor != null ? String(item.descontoValor) : "",
+      descontoTotalTipo: item.descontoTotalTipo ?? "",
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : "",
       valorTotal: String(item.valorTotal),
       produtoId: item.produtoId ?? "",
       grupoMercadoriaId: item.grupoMercadoriaId ?? "",
@@ -329,6 +383,12 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
           .map((item) => ({
             descricao: item.descricao,
             valor: deCentavos(paraCentavos(item.valor)),
+            quantidade: Number(item.quantidade || 1),
+            valorUnitario: Number(item.valorUnitario || item.valor || 0),
+            descontoTipo: item.descontoTipo || null,
+            descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
+            descontoTotalTipo: item.descontoTotalTipo || null,
+            descontoTotalValor: item.descontoTotalValor ? Number(item.descontoTotalValor) : null,
             grupoDespesaId: item.grupoDespesaId || null,
             grupoPatrimonioId: item.grupoPatrimonioId || null
           }))
@@ -343,6 +403,8 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
             valorUnitario: Number(item.valorUnitario || 0),
             descontoTipo: item.descontoTipo || null,
             descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
+            descontoTotalTipo: item.descontoTotalTipo || null,
+            descontoTotalValor: item.descontoTotalValor ? Number(item.descontoTotalValor) : null,
             // Servidor recalcula, mas mandamos o total ja liquido para casar com a soma na hora.
             valorTotal: totalItemMercadoriaForm(item),
             produtoId: item.produtoId || null,
@@ -415,6 +477,12 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
       ? Number(String(dados.form.jurosValorInformado).replace(",", "."))
       : null,
     valorDesconto: deCentavos(paraCentavos(dados.form.valorDesconto)),
+    ...(entidade === "despesa" || entidade === "mercadoria"
+      ? {
+          descontoGeralTipo: dados.form.descontoGeralTipo || null,
+          descontoGeralValor: dados.form.descontoGeralValor ? Number(dados.form.descontoGeralValor) : null
+        }
+      : {}),
     // Recorrencia so existe em despesa/mercadoria/retirada. Venda vem da integracao e transferencia
     // e movimento imediato — mandar o campo la seria rejeitado pelo contrato (schema .strict()).
     ...(dados.recorrencia && entidade !== "venda" && entidade !== "transferencia"

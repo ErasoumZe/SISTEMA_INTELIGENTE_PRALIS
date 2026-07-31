@@ -514,6 +514,8 @@ export function formOperacaoVazio(): OperacaoForm {
     jurosValorInformado: "",
     valorDesconto: "",
     descricaoDesconto: "",
+    descontoGeralTipo: "",
+    descontoGeralValor: "",
     contaOrigemId: "",
     contaDestinoId: "",
     fornecedorId: "",

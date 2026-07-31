@@ -23,11 +23,13 @@ function isProblemDetails(valor: unknown): valor is ProblemDetails {
 export class ErroApiCliente extends Error {
   status: number;
   codigo?: string;
-  constructor(mensagem: string, status: number, codigo?: string) {
+  details?: unknown;
+  constructor(mensagem: string, status: number, codigo?: string, details?: unknown) {
     super(mensagem);
     this.name = "ErroApiCliente";
     this.status = status;
     this.codigo = codigo;
+    this.details = details;
   }
 }
 
@@ -82,7 +84,8 @@ async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body
   const payload = await lerJson(resposta);
   if (!resposta.ok) {
     const codigo = isProblemDetails(payload) ? payload.code : undefined;
-    throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo);
+    const details = isProblemDetails(payload) ? payload.details : undefined;
+    throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo, details);
   }
   return payload;
 }

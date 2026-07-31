@@ -162,6 +162,8 @@ const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
 const itensDespesa = ref([itemDespesaVazio()]);
 const itensMercadoria = ref([itemMercadoriaVazio()]);
+const erroDiscriminacaoLinha = ref<number | null>(null);
+const erroDiscriminacaoCampo = ref<string | null>(null);
 // Recorrencia (D3): estado do bloco fica AQUI, junto dos demais campos que salvam, porque e daqui
 // que salvarOperacao monta o payload. O bloco da tela so le e escreve via provide/inject.
 const recorrencia = ref(estadoRecorrenciaVazio());
@@ -1199,6 +1201,8 @@ async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
 // Discriminacao: envia SO os itens via PATCH .../discriminar (sem trava de caixa). O servidor
 // valida a soma contra o valor do cabecalho e recalcula o total de cada item pelo desconto.
 async function salvarDiscriminacao() {
+  erroDiscriminacaoLinha.value = null;
+  erroDiscriminacaoCampo.value = null;
   const entidade = entidadeNova.value;
   const payload = montarPayloadOperacao(entidade, {
     empresaId: empresaId.value,
@@ -1213,8 +1217,18 @@ async function salvarDiscriminacao() {
   });
   const corpo =
     entidade === "mercadoria"
-      ? { empresaId: empresaId.value, itensMercadoria: payload.itensMercadoria }
-      : { empresaId: empresaId.value, itensDespesa: payload.itensDespesa };
+      ? {
+          empresaId: empresaId.value,
+          descontoGeralTipo: payload.descontoGeralTipo,
+          descontoGeralValor: payload.descontoGeralValor,
+          itensMercadoria: payload.itensMercadoria
+        }
+      : {
+          empresaId: empresaId.value,
+          descontoGeralTipo: payload.descontoGeralTipo,
+          descontoGeralValor: payload.descontoGeralValor,
+          itensDespesa: payload.itensDespesa
+        };
   const itens = entidade === "mercadoria" ? payload.itensMercadoria : payload.itensDespesa;
   if (!itens.length) {
     notificar("Informe ao menos um item para discriminar.", "error");
@@ -1312,6 +1326,17 @@ async function salvarOperacao() {
     await carregarStatusCaixa(empresaId.value);
     return { id: operacaoSalva.id };
   } catch (error) {
+    if (error instanceof ErroApiCliente && error.status === 422 && error.details && typeof error.details === "object") {
+      const detalhe = error.details as { linhaProvavel?: unknown; campoProvavel?: unknown };
+      erroDiscriminacaoLinha.value = Number(detalhe.linhaProvavel) || null;
+      erroDiscriminacaoCampo.value = typeof detalhe.campoProvavel === "string" ? detalhe.campoProvavel : null;
+      await nextTick();
+      document
+        .querySelector<HTMLElement>(
+          `[data-linha-discriminacao="${erroDiscriminacaoLinha.value}"] [data-campo-discriminacao="${erroDiscriminacaoCampo.value}"]`
+        )
+        ?.focus();
+    }
     notificar(mensagemErro(error), "error");
   } finally {
     salvandoOperacao.value = false;
@@ -1697,6 +1722,8 @@ provide(WORKSPACE_CONTEXT, {
   tiposPagamento,
   itensDespesa,
   itensMercadoria,
+  erroDiscriminacaoLinha,
+  erroDiscriminacaoCampo,
   salvandoOperacao,
   salvarOperacao,
   podeUsarRecorrencia,

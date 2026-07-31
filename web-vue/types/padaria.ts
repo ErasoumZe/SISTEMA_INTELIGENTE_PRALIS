@@ -349,6 +349,8 @@ export type OperacaoForm = {
   jurosValorInformado: string;
   valorDesconto: string;
   descricaoDesconto: string;
+  descontoGeralTipo: "" | "percentual" | "valor";
+  descontoGeralValor: string;
   contaOrigemId: string;
   contaDestinoId: string;
   fornecedorId: string;

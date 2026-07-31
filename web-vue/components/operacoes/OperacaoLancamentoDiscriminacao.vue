@@ -29,6 +29,8 @@ const {
   descontoValorReais,
   modoDesconto,
   descontoInput,
+  erroDiscriminacaoLinha,
+  erroDiscriminacaoCampo,
   brn
 } = useOperacaoLancamentoBloco();
 </script>
@@ -44,7 +46,13 @@ const {
     <!-- Despesa: descrição e grupo LIVRES (FOTO 3, nota). O Grupo tem DUAS origens (§5): o cadastro
          de despesas e o de patrimônio (maquinário/manutenção), num select só com dois blocos. -->
     <div v-if="discriminando && cat === 'despesa'" class="lc-itens">
-      <div v-for="(item, i) in itensDespesa" :key="`d-${i}`" class="lc-item">
+      <div
+        v-for="(item, i) in itensDespesa"
+        :key="`d-${i}`"
+        class="lc-item"
+        :class="{ 'disc-linha-erro': erroDiscriminacaoLinha === i + 1 }"
+        :data-linha-discriminacao="i + 1"
+      >
         <input v-model="item.descricao" class="lc-input" placeholder="Descrição (livre)" />
         <select
           :value="grupoItemDespesa(item)"
@@ -62,6 +70,12 @@ const {
           </optgroup>
         </select>
         <input v-model="item.valor" type="number" class="lc-input lc-item-valor" placeholder="R$" />
+        <select v-model="item.descontoTotalTipo" class="lc-input">
+          <option value="">Sem desc.</option>
+          <option value="valor">R$</option>
+          <option value="percentual">%</option>
+        </select>
+        <input v-model="item.descontoTotalValor" type="number" class="lc-input" placeholder="Desc. total" />
         <v-icon size="18" class="lc-item-del" @click="itensDespesa.length > 1 && itensDespesa.splice(i, 1)"
           >mdi-close</v-icon
         >
@@ -90,7 +104,12 @@ const {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, i) in itensMercadoria" :key="`m-${i}`">
+            <tr
+              v-for="(item, i) in itensMercadoria"
+              :key="`m-${i}`"
+              :class="{ 'disc-linha-erro': erroDiscriminacaoLinha === i + 1 }"
+              :data-linha-discriminacao="i + 1"
+            >
               <td><input v-model="item.quantidade" type="number" class="disc-in disc-qtd" /></td>
               <td>
                 <select
@@ -126,9 +145,31 @@ const {
                 </select>
               </td>
               <td><input v-model="item.valorUnitario" type="number" class="disc-in disc-num" /></td>
-              <td class="disc-calc">{{ brn(unitComDesc(item)) }}</td>
+              <td class="disc-calc">
+                <select v-model="item.descontoTipo" class="disc-in">
+                  <option value="">—</option>
+                  <option value="valor">R$</option>
+                  <option value="percentual">%</option>
+                </select>
+                <input v-model="item.descontoValor" type="number" class="disc-in disc-num" placeholder="0" />
+                {{ brn(unitComDesc(item)) }}
+              </td>
               <td class="disc-calc">{{ brn(totalLinha(item)) }}</td>
-              <td class="disc-calc">{{ brn(totalLinhaComDesc(item)) }}</td>
+              <td class="disc-calc">
+                <select v-model="item.descontoTotalTipo" class="disc-in">
+                  <option value="">—</option>
+                  <option value="valor">R$</option>
+                  <option value="percentual">%</option>
+                </select>
+                <input
+                  v-model="item.descontoTotalValor"
+                  type="number"
+                  class="disc-in disc-num"
+                  placeholder="0"
+                  data-campo-discriminacao="valorTotal"
+                />
+                {{ brn(totalLinhaComDesc(item)) }}
+              </td>
               <td class="disc-calc">{{ brn(pctEfetivo) }}%</td>
               <td>
                 <v-icon

@@ -178,6 +178,8 @@ export async function buscarMercadoriaDetalheRepository(
       descricaoAcrescimo: mercadorias.descricaoAcrescimo,
       valorDesconto: mercadorias.valorDesconto,
       descricaoDesconto: mercadorias.descricaoDesconto,
+      descontoGeralTipo: mercadorias.descontoGeralTipo,
+      descontoGeralValor: mercadorias.descontoGeralValor,
       contaOrigemId: mercadorias.contaOrigemId,
       fornecedorId: mercadorias.fornecedorId,
       credorTipo: mercadorias.credorTipo,
@@ -209,6 +211,8 @@ export async function buscarMercadoriaDetalheRepository(
       valorUnitario: mercadoriasItens.valorUnitario,
       descontoTipo: mercadoriasItens.descontoTipo,
       descontoValor: mercadoriasItens.descontoValor,
+      descontoTotalTipo: mercadoriasItens.descontoTotalTipo,
+      descontoTotalValor: mercadoriasItens.descontoTotalValor,
       valorTotal: mercadoriasItens.valorTotal
     })
     .from(mercadoriasItens)
@@ -219,15 +223,18 @@ export async function buscarMercadoriaDetalheRepository(
     fornecedorId: mercadoria.fornecedorId,
     valorOriginal: numeroDecimal(mercadoria.valorOriginal),
     valorAcrescimo: numeroDecimal(mercadoria.valorAcrescimo),
-    jurosValorInformado:
-      mercadoria.jurosValorInformado == null ? null : numeroDecimal(mercadoria.jurosValorInformado),
+    jurosValorInformado: mercadoria.jurosValorInformado == null ? null : numeroDecimal(mercadoria.jurosValorInformado),
     valorDesconto: numeroDecimal(mercadoria.valorDesconto),
+    descontoGeralTipo: mercadoria.descontoGeralTipo as MercadoriaDetalheDto["descontoGeralTipo"],
+    descontoGeralValor: mercadoria.descontoGeralValor == null ? null : numeroDecimal(mercadoria.descontoGeralValor),
     itensMercadoria: itens.map((item) => ({
       ...item,
       quantidade: Number(item.quantidade),
       valorUnitario: Number(item.valorUnitario),
       descontoTipo: item.descontoTipo as MercadoriaItemPayload["descontoTipo"],
       descontoValor: item.descontoValor != null ? Number(item.descontoValor) : null,
+      descontoTotalTipo: item.descontoTotalTipo as MercadoriaItemPayload["descontoTotalTipo"],
+      descontoTotalValor: item.descontoTotalValor != null ? Number(item.descontoTotalValor) : null,
       valorTotal: numeroDecimal(item.valorTotal)
     }))
   };

@@ -106,3 +106,8 @@
   font-weight: 600;
   white-space: nowrap;
 }
+.disc-linha-erro {
+  outline: 2px solid var(--v-theme-error, #b91c1c);
+  outline-offset: -2px;
+  background: rgb(185 28 28 / 0.08);
+}

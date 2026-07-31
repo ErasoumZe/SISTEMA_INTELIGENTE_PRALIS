@@ -70,9 +70,12 @@ describe("formOperacaoDeDetalhe", () => {
     });
     expect(preenchido.discriminandoDespesa).toBe(true);
     // grupoPatrimonioId entra vazio: o detalhe nao trouxe, e o form usa "" para "nenhum".
-    expect(preenchido.itensDespesa).toEqual([
-      { descricao: "Item", valor: "5", grupoDespesaId: "g1", grupoPatrimonioId: "" }
-    ]);
+    expect(preenchido.itensDespesa?.[0]).toMatchObject({
+      descricao: "Item",
+      valor: "5",
+      grupoDespesaId: "g1",
+      grupoPatrimonioId: ""
+    });
     expect(preenchido.itensVenda).toBeUndefined();
   });
 
@@ -81,9 +84,12 @@ describe("formOperacaoDeDetalhe", () => {
       ...detalheBase,
       itensDespesa: [{ grupoDespesaId: null, grupoPatrimonioId: "pat-1", descricao: "Correia", valor: 5 }]
     });
-    expect(preenchido.itensDespesa).toEqual([
-      { descricao: "Correia", valor: "5", grupoDespesaId: "", grupoPatrimonioId: "pat-1" }
-    ]);
+    expect(preenchido.itensDespesa?.[0]).toMatchObject({
+      descricao: "Correia",
+      valor: "5",
+      grupoDespesaId: "",
+      grupoPatrimonioId: "pat-1"
+    });
   });
 
   it("so inclui dataVencimento quando o detalhe traz", () => {
@@ -169,7 +175,9 @@ describe("montarPayloadOperacao", () => {
     expect(montarPayloadOperacao("despesa", { ...base, form, itensDespesa }).itensDespesa).toEqual([]);
     expect(
       montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
-    ).toEqual([{ descricao: "Item", valor: 5, grupoDespesaId: "g1", grupoPatrimonioId: null }]);
+    ).toEqual([
+      expect.objectContaining({ descricao: "Item", valor: 5, grupoDespesaId: "g1", grupoPatrimonioId: null })
+    ]);
   });
 
   // O ID em branco do ITEM tem de virar null, igual aos do cabecalho: o zod usa uuid() e responde
@@ -180,7 +188,9 @@ describe("montarPayloadOperacao", () => {
     const itensDespesa = [{ ...itemDespesaVazio(), descricao: "Sem grupo", valor: "5" }];
     expect(
       montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
-    ).toEqual([{ descricao: "Sem grupo", valor: 5, grupoDespesaId: null, grupoPatrimonioId: null }]);
+    ).toEqual([
+      expect.objectContaining({ descricao: "Sem grupo", valor: 5, grupoDespesaId: null, grupoPatrimonioId: null })
+    ]);
 
     const itensMercadoria = [{ ...itemMercadoriaVazio(), descricao: "Livre", quantidade: "1", valorTotal: "5" }];
     const [itemMercadoria] = montarPayloadOperacao("mercadoria", {
@@ -194,6 +204,42 @@ describe("montarPayloadOperacao", () => {
       grupoMercadoriaId: null,
       grupoPatrimonioId: null,
       unidadeMedidaId: null
+    });
+  });
+
+  it("envia os tres niveis de desconto da discriminacao", () => {
+    const form = {
+      ...formOperacaoVazio(),
+      valorOriginal: "13.50",
+      descontoGeralTipo: "percentual" as const,
+      descontoGeralValor: "10"
+    };
+    const itensMercadoria = [
+      {
+        ...itemMercadoriaVazio(),
+        descricao: "Item",
+        quantidade: "2",
+        valorUnitario: "10",
+        descontoTipo: "valor",
+        descontoValor: "1",
+        descontoTotalTipo: "valor",
+        descontoTotalValor: "3",
+        valorTotal: "15"
+      }
+    ];
+    const payload = montarPayloadOperacao("mercadoria", {
+      ...base,
+      form,
+      itensMercadoria,
+      discriminandoMercadoria: true
+    });
+    expect(payload).toMatchObject({ descontoGeralTipo: "percentual", descontoGeralValor: 10 });
+    expect(payload.itensMercadoria[0]).toMatchObject({
+      descontoTipo: "valor",
+      descontoValor: 1,
+      descontoTotalTipo: "valor",
+      descontoTotalValor: 3,
+      valorTotal: 15
     });
   });
 

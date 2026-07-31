@@ -98,6 +98,12 @@ saldo usa uma única convenção compartilhada: pendente já reduz a origem, ain
 destino e é mostrado separadamente. A rota reaproveitada `/fechamento` virou `/pendencias`.
 A catraca `data-pendente` desceu de 23 para 0.
 
+### Corujão v2 — Etapa 4
+
+**ENTREGUE em 31/07/2026.** A discriminação envia e reabre desconto unitário, desconto no total do
+item e desconto geral. O cliente preserva os detalhes do erro 422, destaca `linhaProvavel` e leva
+o foco a `campoProvavel` para a pessoa corrigir sem procurar a divergência às cegas.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

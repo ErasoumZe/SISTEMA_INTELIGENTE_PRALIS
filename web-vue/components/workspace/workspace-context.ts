@@ -46,6 +46,8 @@ export type WorkspaceContext = {
   tiposPagamento: Ref<TipoPagamentoForm[]>;
   itensDespesa: Ref<ItemDespesaForm[]>;
   itensMercadoria: Ref<ItemMercadoriaForm[]>;
+  erroDiscriminacaoLinha: Ref<number | null>;
+  erroDiscriminacaoCampo: Ref<string | null>;
   salvandoOperacao: Ref<boolean>;
   salvarOperacao: () => Promise<{ id: string } | void>;
   // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que

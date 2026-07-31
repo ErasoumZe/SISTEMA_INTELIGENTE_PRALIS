@@ -31,6 +31,8 @@ export function useOperacaoLancamento() {
     discriminandoMercadoria,
     itensDespesa,
     itensMercadoria,
+    erroDiscriminacaoLinha,
+    erroDiscriminacaoCampo,
     fotoDocumentoPreview,
     fotoDocumentoExistente,
     selecionarFotoDocumento,
@@ -220,8 +222,14 @@ export function useOperacaoLancamento() {
   // --- Discriminação (FOTO 3): desconto GERAL "Vale Presente" (R$ ou %) distribuído nas linhas. O
   // valor em R$ vai para form.valorDesconto (SUPORTADO — salva). As colunas c/Desc e % e os totais
   // são RECÁLCULO no front (não persistidos). Em Mercadoria a Descrição vem do cadastro de produto. ---
-  const modoDesconto = ref<"valor" | "percentual">("valor");
-  const descontoInput = ref("");
+  const modoDesconto = computed<"valor" | "percentual">({
+    get: () => form.value.descontoGeralTipo || "valor",
+    set: (valor) => (form.value.descontoGeralTipo = valor)
+  });
+  const descontoInput = computed({
+    get: () => form.value.descontoGeralValor,
+    set: (valor: string) => (form.value.descontoGeralValor = valor)
+  });
   const totalGeralBruto = computed(() =>
     itensMercadoria.value.reduce((soma, it) => soma + Number(it.quantidade || 0) * Number(it.valorUnitario || 0), 0)
   );
@@ -240,11 +248,16 @@ export function useOperacaoLancamento() {
   function totalLinha(it: ItemMercadoriaForm) {
     return Number(it.quantidade || 0) * Number(it.valorUnitario || 0);
   }
+  function aplicarDesconto(valor: number, tipo: string, informado: string) {
+    const numero = Number(informado || 0);
+    return Math.max(0, valor - (tipo === "percentual" ? (valor * numero) / 100 : tipo === "valor" ? numero : 0));
+  }
   function unitComDesc(it: ItemMercadoriaForm) {
-    return Number(it.valorUnitario || 0) * (1 - descontoFrac.value);
+    return aplicarDesconto(Number(it.valorUnitario || 0), it.descontoTipo, it.descontoValor);
   }
   function totalLinhaComDesc(it: ItemMercadoriaForm) {
-    return totalLinha(it) * (1 - descontoFrac.value);
+    const aposUnitario = unitComDesc(it) * Number(it.quantidade || 0);
+    return aplicarDesconto(aposUnitario, it.descontoTotalTipo, it.descontoTotalValor) * (1 - descontoFrac.value);
   }
   function brn(n: number) {
     return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -262,6 +275,8 @@ export function useOperacaoLancamento() {
       valorUnitario: "",
       descontoTipo: "",
       descontoValor: "",
+      descontoTotalTipo: "",
+      descontoTotalValor: "",
       valorTotal: "",
       produtoId: "",
       grupoMercadoriaId: "",
@@ -270,7 +285,18 @@ export function useOperacaoLancamento() {
     });
   }
   function novoItemDespesa() {
-    itensDespesa.value.push({ descricao: "", valor: "", grupoDespesaId: "", grupoPatrimonioId: "" });
+    itensDespesa.value.push({
+      descricao: "",
+      valor: "",
+      grupoDespesaId: "",
+      grupoPatrimonioId: "",
+      quantidade: "1",
+      valorUnitario: "",
+      descontoTipo: "",
+      descontoValor: "",
+      descontoTotalTipo: "",
+      descontoTotalValor: ""
+    });
   }
 
   // --- Campo Grupo do ITEM (§5, item 6): grupo do cadastro proprio OU do patrimonio ------------
@@ -341,6 +367,8 @@ export function useOperacaoLancamento() {
     discriminando,
     itensDespesa,
     itensMercadoria,
+    erroDiscriminacaoLinha,
+    erroDiscriminacaoCampo,
     modoDesconto,
     descontoInput,
     totalGeralBruto,
