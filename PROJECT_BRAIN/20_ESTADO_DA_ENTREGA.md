@@ -88,6 +88,19 @@ R-019 e R-037 possuem casa comum em `notificacoes`, mas a criação dos alertas 
 transferência continua corretamente na Etapa 3; não estão sendo declaradas como comportamento
 entregue nesta etapa.
 
+### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
+
+Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro
+`TOTAL ` descartou 9 totalizadores; o apply inseriu 98 grupos de despesa, 76 de mercadoria, 12 de
+retirada, 33 contas, 4 áreas, 24 setores, 31 cargos e 146 produtos. A segunda passagem retornou
+zero novos em todos os alvos e a consulta final encontrou zero grupos com nome `TOTAL %`.
+
+Na edição de Conta, o servidor já persistia `saldoInicial` e `usuariosIds`. A perda estava no cache
+do front: depois do PUT ele conservava apenas `id/nome`; ao reabrir, enviava fundo zero e lista vazia.
+Contas agora sempre recarregam `/api/contas/saldos` após salvar. Provas:
+`cadastro-local.test.ts` e `conta-fundo-saldo.test.ts`, incluindo PUT seguido de consulta direta a
+`contas` e `contas_usuarios`.
+
 ---
 
 ## 3. Pendências que TRAVAM (precisam do José)

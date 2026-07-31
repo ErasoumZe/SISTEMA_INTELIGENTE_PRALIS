@@ -163,6 +163,34 @@ describe("conta com fundo e saldo derivado (D8) integration", () => {
     expect(await consultarTodos("select id from contas_usuarios where conta_id = $1", [contaId])).toHaveLength(0);
   });
 
+  it("edita fundo e usuarios pelo PUT e persiste ambos no banco", async () => {
+    const contaId = await criarConta({ nome: "Conta antes da edicao", saldoInicial: 100, usuariosIds: [] });
+
+    const editar = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/contas/${contaId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Conta editada",
+        saldoInicial: 4321.09,
+        usuariosIds: [usuarioCaixaId]
+      }
+    });
+    expect(editar.statusCode, editar.body).toBe(204);
+
+    const conta = await consultarUm<{ nome: string; saldo_inicial: string }>(
+      "select nome, saldo_inicial from contas where id = $1",
+      [contaId]
+    );
+    const vinculos = await consultarTodos<{ usuario_id: string; empresa_id: string }>(
+      "select usuario_id, empresa_id from contas_usuarios where conta_id = $1",
+      [contaId]
+    );
+    expect(conta).toMatchObject({ nome: "Conta editada", saldo_inicial: "4321.09" });
+    expect(vinculos).toEqual([{ usuario_id: usuarioCaixaId, empresa_id: idsTeste.empresaA }]);
+  });
+
   it("editar sem mandar o fundo NAO zera o fundo ja gravado", async () => {
     const contaId = await criarConta({ nome: "Cofre a renomear", saldoInicial: 10_000 });
 

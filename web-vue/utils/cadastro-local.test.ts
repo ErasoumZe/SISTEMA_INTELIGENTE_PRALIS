@@ -60,6 +60,16 @@ describe("atualizarCadastroLocal", () => {
     expect(opcoes.contas).toEqual([]);
   });
 
+  it("contas com id recarrega fundo e usuarios da API", () => {
+    const { atualizarCadastroLocal, opcoes } = montarCenario();
+    opcoes.contas.push({ id: "c1", nome: "Antiga", saldoInicial: 100, usuariosIds: ["u1"] });
+
+    expect(
+      atualizarCadastroLocal("contas", form({ nome: "Editada", saldoInicial: "250", usuariosIds: ["u2"] }), "c1")
+    ).toBe(false);
+    expect(opcoes.contas[0]).toMatchObject({ nome: "Antiga", saldoInicial: 100, usuariosIds: ["u1"] });
+  });
+
   it("empresas: upsert em empresas e opcoes.empresas (sem empresaId no item)", () => {
     const { atualizarCadastroLocal, opcoes, empresas } = montarCenario();
     expect(atualizarCadastroLocal("empresas", form({ nome: "Padaria", cnpj: "123" }), "e1")).toBe(true);
