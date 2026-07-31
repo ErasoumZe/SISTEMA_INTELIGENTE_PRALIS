@@ -143,7 +143,12 @@ type Extracao = {
   dominioComputar: string[];
   dominioDocFnf: string[];
   dominioTiposProduto: string[];
+  totalizadoresDescartados: string[];
 };
+
+function ehTotalizador(valor: string): boolean {
+  return normalizar(valor).toUpperCase().startsWith("TOTAL ");
+}
 
 function lerPlanilha(planilha: Planilha): Extracao {
   const achar = (parte: string) => {
@@ -168,7 +173,8 @@ function lerPlanilha(planilha: Planilha): Extracao {
   const parGrupo = (letraNome: string, letraRef: string): GrupoComPai[] =>
     gruposref
       .map((linha) => ({ nome: celula(linha, letraNome), pai: celula(linha, letraRef) }))
-      .filter((item) => item.nome);
+      .filter((item) => item.nome && !ehTotalizador(item.nome))
+      .map((item) => ({ ...item, pai: ehTotalizador(item.pai) ? "" : item.pai }));
 
   const despesas = parGrupo("I", "H");
   const mercadorias = parGrupo("K", "J");
@@ -252,7 +258,10 @@ function lerPlanilha(planilha: Planilha): Extracao {
       .map((linha) => ({ grupo: celula(linha, "K"), tipo: celula(linha, "M") })),
     dominioComputar: distintos(coluna(gruposref, "P")),
     dominioDocFnf: distintos(coluna(gruposref, "Q")),
-    dominioTiposProduto: distintos(coluna(gruposref, "T"))
+    dominioTiposProduto: distintos(coluna(gruposref, "T")),
+    totalizadoresDescartados: distintos(
+      ["H", "I", "J", "K", "U", "V"].flatMap((letra) => coluna(gruposref, letra)).filter(ehTotalizador)
+    )
   };
 }
 
@@ -434,6 +443,10 @@ blocos.push({
 // Relatorio
 // --------------------------------------------------------------------------------------------
 console.info("=== O QUE ENTRA (contagens) ===");
+console.info(
+  `  Filtro TOTAL ativo: ${extracao.totalizadoresDescartados.length} totalizador(es) descartado(s)` +
+    `${extracao.totalizadoresDescartados.length ? ` (${extracao.totalizadoresDescartados.slice(0, 5).join(" | ")})` : ""}`
+);
 console.info("  ALVO                                          | NOVOS | JA EXISTEM");
 for (const bloco of blocos) {
   console.info(
