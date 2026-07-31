@@ -81,6 +81,7 @@ import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
+import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
 
 type TipoPagina =
   | "inicio"
@@ -1068,52 +1069,60 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
   if (aviso) notificar(aviso, "warning");
 }
 
+const abrirOperacaoUmaVez = criarGuardaAberturaOperacao();
+
 async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
-  // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
-  // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
-  // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
-  if (!caixaAberto.value && entidade !== "transferencia") {
-    notificar("Abra um caixa antes de registrar lancamentos.", "warning");
-    void router.push("/caixa");
-    return;
-  }
-  entidadeNova.value = entidade;
-  operacaoEditandoId.value = operacao?.id ?? "";
-  modoDiscriminacao.value = false;
-  fotoDocumento.limpar();
-  fotoNota.limpar();
-  form.value = formOperacaoVazio();
-  discriminandoDespesa.value = false;
-  discriminandoMercadoria.value = false;
-  itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
-  tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-  itensDespesa.value = [itemDespesaVazio()];
-  itensMercadoria.value = [itemMercadoriaVazio()];
-  // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
-  // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
-  recorrencia.value = estadoRecorrenciaVazio();
-  // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
-  try {
-    await carregarOpcoesParaOperacao(entidade);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  }
-  if (operacao?.id) {
-    try {
-      const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-      preencherFormOperacao(entidade, detalhe);
-      if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
-        void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+  return abrirOperacaoUmaVez(
+    () =>
+      modalOperacaoAberto.value && entidadeNova.value === entidade && operacaoEditandoId.value === (operacao?.id ?? ""),
+    async () => {
+      // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
+      // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
+      // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
+      if (!caixaAberto.value && entidade !== "transferencia") {
+        notificar("Abra um caixa antes de registrar lancamentos.", "warning");
+        void router.push("/caixa");
+        return;
       }
-      if (detalhe.fotoNotaUrl) {
-        void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
+      entidadeNova.value = entidade;
+      operacaoEditandoId.value = operacao?.id ?? "";
+      modoDiscriminacao.value = false;
+      fotoDocumento.limpar();
+      fotoNota.limpar();
+      form.value = formOperacaoVazio();
+      discriminandoDespesa.value = false;
+      discriminandoMercadoria.value = false;
+      itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
+      tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
+      itensDespesa.value = [itemDespesaVazio()];
+      itensMercadoria.value = [itemMercadoriaVazio()];
+      // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+      // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+      recorrencia.value = estadoRecorrenciaVazio();
+      // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
+      try {
+        await carregarOpcoesParaOperacao(entidade);
+      } catch (error) {
+        notificar(mensagemErro(error), "error");
       }
-    } catch (error) {
-      notificar(mensagemErro(error), "error");
-      return;
+      if (operacao?.id) {
+        try {
+          const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
+          preencherFormOperacao(entidade, detalhe);
+          if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
+            void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+          }
+          if (detalhe.fotoNotaUrl) {
+            void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
+          }
+        } catch (error) {
+          notificar(mensagemErro(error), "error");
+          return;
+        }
+      }
+      modalOperacaoAberto.value = true;
     }
-  }
-  modalOperacaoAberto.value = true;
+  );
 }
 
 // Detalhe somente leitura da venda (integrada): itens + pagamento + total. Reusa o GET de detalhe.
