@@ -19,10 +19,13 @@
  * "divergencias" no fim da execucao). A linha 5 de cada aba tem o cabecalho real; o dado comeca na 11.
  */
 import "dotenv/config";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import pg from "pg";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { abrirPlanilha, type Planilha } from "../db/planilha-xlsx.js";
+import { ehTotalizadorPlanilha, normalizarTextoPlanilha } from "./seed-planilha-regras.js";
 import { schema } from "../db/src/schema/schema.js";
 import {
   areas,
@@ -37,8 +40,15 @@ import {
   setores
 } from "../db/src/schema/index.js";
 
-const ARQUIVO_PADRAO =
-  "CADASTRO DE PRODUTOS/tabela/Cópia de CENTRAL PRODUTOS (BASE) - CICLUZ GESTÃO PROFISSIONAL  (1).xlsx";
+const ARQUIVO_PADRAO = "db/planilhas/CICLUZ GP - LANÇAMENTO (VND_MER_DES_RET).xlsx";
+const ARQUIVO_PRODUTOS_PADRAO = (() => {
+  const diretorio = "CADASTRO DE PRODUTOS/tabela";
+  const nome = readdirSync(diretorio).find(
+    (item) => item.includes("CENTRAL PRODUTOS (BASE)") && item.endsWith("(1).xlsx")
+  );
+  if (!nome) throw new Error(`Planilha de produtos esperada em ${diretorio}/*CENTRAL PRODUTOS (BASE)*(1).xlsx`);
+  return join(diretorio, nome);
+})();
 
 /** O dado util comeca na linha 11 em todas as abas de configuracao (1-10 sao cabecalho/rotulos). */
 const PRIMEIRA_LINHA_DE_DADO = 10;
@@ -67,10 +77,7 @@ class RollbackDoEnsaio extends Error {
  * busca por "DES IMPOSTOS - FEDERAL" nao acha nada e ninguem entende por que. Limpa na entrada.
  */
 function normalizar(valor: string | undefined): string {
-  return (valor ?? "")
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizarTextoPlanilha(valor);
 }
 
 /** Indice 0-based a partir da letra da coluna ("A" -> 0, "AA" -> 26). */
@@ -108,8 +115,8 @@ function distintos(valores: string[]): string[] {
 // Leitura da planilha
 // --------------------------------------------------------------------------------------------
 
-type GrupoComPai = { nome: string; pai: string };
-type ContaLida = { nome: string; ativa: boolean };
+type GrupoComPai = { nome: string; pai: string; ativa: boolean; usos: number };
+type ContaLida = { nome: string; ativa: boolean; saldoInicial: number };
 type GrupoPatrimonioLido = { sig: string; nome: string };
 type ProdutoLido = {
   descricao: string;
@@ -147,41 +154,65 @@ type Extracao = {
 };
 
 function ehTotalizador(valor: string): boolean {
-  return normalizar(valor).toUpperCase().startsWith("TOTAL ");
+  return ehTotalizadorPlanilha(valor);
 }
 
-function lerPlanilha(planilha: Planilha): Extracao {
-  const achar = (parte: string) => {
-    const nome = planilha.abas.find((aba) => aba.includes(parte));
-    if (!nome) throw new Error(`Aba com "${parte}" nao existe. Abas: ${planilha.abas.join(" | ")}`);
-    return planilha.ler(nome).linhas.slice(PRIMEIRA_LINHA_DE_DADO);
+function lerPlanilha(planilha: Planilha, planilhaProdutos: Planilha): Extracao {
+  const achar = (fonte: Planilha, parte: string, primeiraLinha = PRIMEIRA_LINHA_DE_DADO) => {
+    const nome = fonte.abas.find((aba) => aba.includes(parte));
+    if (!nome) throw new Error(`Aba com "${parte}" nao existe. Abas: ${fonte.abas.join(" | ")}`);
+    return fonte.ler(nome).linhas.slice(primeiraLinha);
   };
 
-  const gruposref = achar("GRUPOSREF");
-  const patrimonio = achar("PATRIMONIO");
-  const folha = achar("FOLHA PAGAME");
+  const gruposref = achar(planilhaProdutos, "GRUPOSREF");
+  const patrimonio = achar(planilha, "PATRIMONIO");
+  const folha = achar(planilha, "FOLHA PAGAME");
+  const despesasOperacionais = achar(planilha, "(TNP) GRUPO DESPESAS", 9);
+  const retiradasOperacionais = achar(planilha, "(TNP) GRUPO RETIRADAS", 8);
+  const saldosContas = achar(planilha, "(TNP) SALDOS CONTAS");
   // O catalogo real esta na aba (BASE), com a coluna LOJAS dizendo de quem e cada produto. As abas
   // por loja — (TNP), (LI), (HORA) — sao modelos vazios neste arquivo (4 linhas de teste); semear a
   // partir delas traria 3 produtos e passaria a impressao de que o cadastro foi importado.
-  const produtosBase = achar("(BASE) CADASTRO PRODUTOS");
+  const produtosBase = achar(planilhaProdutos, "(BASE) CADASTRO PRODUTOS");
 
   // GRUPOSREF — cabecalho real na linha 5:
   //   H=REF despesas   I=GRUPODESPESAS
   //   J=REF mercadorias K=GRUPOMERCADORIAS  L=MARGEM %  M=TIPO
   //   U=REF retiradas   V=GRUPORETIRADAS
   //   X=GRUPOCONTAS (todas)  W=ATIVA  Y=GRUPOCONTAS (so as ativas)
-  const parGrupo = (letraNome: string, letraRef: string): GrupoComPai[] =>
-    gruposref
-      .map((linha) => ({ nome: celula(linha, letraNome), pai: celula(linha, letraRef) }))
-      .filter((item) => item.nome && !ehTotalizador(item.nome))
-      .map((item) => ({ ...item, pai: ehTotalizador(item.pai) ? "" : item.pai }));
+  // A hierarquia nasce do separador do proprio nome. Mantemos o nome completo do filho para nao
+  // quebrar os textos ja usados nos lancamentos; o trecho anterior ao primeiro " - " vira o pai.
+  const decompor = (nome: string, usos: number, ativa = usos > 1): GrupoComPai => {
+    const [pai = ""] = nome.split(" - ");
+    return { nome, pai: nome.includes(" - ") ? pai.trim() : "", ativa, usos };
+  };
+  const gruposPorUso = (linhas: string[][]): GrupoComPai[] => {
+    const contagens = new Map<string, number>();
+    for (const linha of linhas) {
+      const nome = celula(linha, "G");
+      if (!nome || ehTotalizador(nome)) continue;
+      contagens.set(nome, (contagens.get(nome) ?? 0) + 1);
+    }
+    return [...contagens].map(([nome, usos]) => decompor(nome, usos));
+  };
 
-  const despesas = parGrupo("I", "H");
-  const mercadorias = parGrupo("K", "J");
-  const retiradas = parGrupo("V", "U");
+  const despesas = gruposPorUso(despesasOperacionais);
+  const retiradas = gruposPorUso(retiradasOperacionais);
+  const mercadorias = distintos([...coluna(gruposref, "K"), ...coluna(gruposref, "N")])
+    .filter((nome) => nome.startsWith("MER ") && !ehTotalizador(nome))
+    .map((nome) => decompor(nome, 0, true));
 
+  const saldosPorConta = new Map(
+    saldosContas
+      .map((linha) => [celula(linha, "C"), Number(celula(linha, "D"))] as const)
+      .filter(([nome, saldo]) => nome && Number.isFinite(saldo))
+  );
   const contasLidas: ContaLida[] = gruposref
-    .map((linha) => ({ nome: celula(linha, "X"), ativa: celula(linha, "W") === "ATIVA" }))
+    .map((linha) => ({
+      nome: celula(linha, "X"),
+      ativa: celula(linha, "W") === "ATIVA",
+      saldoInicial: saldosPorConta.get(celula(linha, "X")) ?? 0
+    }))
     .filter((item) => item.nome);
 
   // PATRIMONIO — E=SIG  F=grupo  G=item  H=TNP(SIM/NAO)  I=LI  J=MARCA
@@ -259,9 +290,11 @@ function lerPlanilha(planilha: Planilha): Extracao {
     dominioComputar: distintos(coluna(gruposref, "P")),
     dominioDocFnf: distintos(coluna(gruposref, "Q")),
     dominioTiposProduto: distintos(coluna(gruposref, "T")),
-    totalizadoresDescartados: distintos(
-      ["H", "I", "J", "K", "U", "V"].flatMap((letra) => coluna(gruposref, letra)).filter(ehTotalizador)
-    )
+    totalizadoresDescartados: distintos([
+      ...["H", "I", "J", "K", "N", "U", "V"].flatMap((letra) => coluna(gruposref, letra)),
+      ...despesasOperacionais.map((linha) => celula(linha, "G")),
+      ...retiradasOperacionais.map((linha) => celula(linha, "G"))
+    ]).filter(ehTotalizador)
   };
 }
 
@@ -286,10 +319,12 @@ function areaDoSetor(nomeDoSetor: string): string | undefined {
 // --------------------------------------------------------------------------------------------
 
 const caminho = argumento("arquivo") ?? ARQUIVO_PADRAO;
+const caminhoProdutos = argumento("produtos") ?? ARQUIVO_PRODUTOS_PADRAO;
 console.info(`Planilha: ${caminho}`);
+console.info(`Cadastro de produtos: ${caminhoProdutos}`);
 console.info(APLICAR ? "MODO: APLICAR (grava no banco)" : "MODO: DRY-RUN (nao grava nada)");
 
-const extracao = lerPlanilha(abrirPlanilha(caminho));
+const extracao = lerPlanilha(abrirPlanilha(caminho), abrirPlanilha(caminhoProdutos));
 
 const databaseUrl = process.env["DATABASE_URL"]?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL obrigatoria (mesmo no dry-run: ele confere o que ja existe)");
@@ -333,7 +368,7 @@ type TabelaComNome =
   | typeof cargos;
 
 /** Colunas alem de (empresaId, nome) que o cadastro preenche na CRIACAO. */
-type ColunasExtras = { areaId?: string; ativa?: boolean };
+type ColunasExtras = { areaId?: string; ativa?: boolean; saldoInicial?: string };
 
 type Bloco = { titulo: string; novos: string[]; existentes: number; observacao?: string };
 const blocos: Bloco[] = [];
@@ -362,7 +397,8 @@ registrar("Grupos de despesas — REF (grupo pai)", paisDespesa, despesasExisten
 registrar(
   "Grupos de despesas",
   extracao.despesas.map((item) => item.nome),
-  despesasExistentes
+  despesasExistentes,
+  `${extracao.despesas.filter((item) => item.ativa).length} ativos / ${extracao.despesas.filter((item) => !item.ativa).length} raros inativos (corte conservador: 1 uso)`
 );
 registrar("Grupos de mercadorias — REF (grupo pai)", paisMercadoria, mercadoriasExistentes);
 registrar(
@@ -374,15 +410,29 @@ registrar("Grupos de retiradas — REF (grupo pai)", paisRetirada, retiradasExis
 registrar(
   "Grupos de retiradas",
   extracao.retiradas.map((item) => item.nome),
-  retiradasExistentes
+  retiradasExistentes,
+  `${extracao.retiradas.filter((item) => item.ativa).length} ativos / ${extracao.retiradas.filter((item) => !item.ativa).length} raros inativos (corte conservador: 1 uso)`
 );
 
 const contasExistentes = await nomesExistentes(contas);
+const movimentosResultado = await pool.query<{ nome: string; movimentos: string }>(
+  `select c.nome,
+     ((select count(*) from vendas v where v.conta_origem_id = c.id) +
+      (select count(*) from despesas d where d.conta_origem_id = c.id) +
+      (select count(*) from mercadorias m where m.conta_origem_id = c.id) +
+      (select count(*) from retiradas r where r.conta_origem_id = c.id) +
+      (select count(*) from transferencias t where t.conta_origem_id = c.id or t.conta_destino_id = c.id))::text movimentos
+   from contas c where c.empresa_id = $1 and c.nome = any($2::text[])`,
+  [empresaId, extracao.contas.map((item) => item.nome)]
+);
+const movimentosPorConta = new Map(movimentosResultado.rows.map((item) => [item.nome, Number(item.movimentos)]));
+const contasComMovimento = extracao.contas.filter((item) => (movimentosPorConta.get(item.nome) ?? 0) > 0);
+const podeAplicarContas = contasComMovimento.length === 0;
 registrar(
   "Contas (CNT CONTA - *)",
   extracao.contas.map((item) => item.nome),
   contasExistentes,
-  `${extracao.contas.filter((c) => c.ativa).length} ativas / ${extracao.contas.filter((c) => !c.ativa).length} inativas — fundo (saldo_inicial) entra 0, a planilha nao tem o valor`
+  `${extracao.contas.filter((c) => c.ativa).length} ativas / ${extracao.contas.filter((c) => !c.ativa).length} inativas; ${extracao.contas.filter((c) => c.saldoInicial > 0).length} com fundo da aba SALDOS; movimentos anteriores: ${contasComMovimento.length}${podeAplicarContas ? "" : " — ALVO CONTAS SERA PULADO"}`
 );
 
 const areasExistentes = await nomesExistentes(areas);
@@ -463,6 +513,16 @@ for (const bloco of blocos) {
   for (const item of mostrar) console.info(`    - ${item}`);
   if (!DETALHE && bloco.novos.length > mostrar.length)
     console.info(`    ... +${bloco.novos.length - mostrar.length} (use --detalhe)`);
+}
+
+console.info("\n=== GUARDA DE MOVIMENTO DAS CONTAS ===");
+if (contasComMovimento.length) {
+  for (const conta of contasComMovimento.slice(0, 5))
+    console.info(`  PULAR: ${conta.nome} tem ${movimentosPorConta.get(conta.nome) ?? 0} movimento(s)`);
+} else {
+  console.info(
+    "  OK: nenhuma das contas da planilha tem movimento anterior; fundo pode ser aplicado sem duplicar dinheiro."
+  );
 }
 
 if (produtosSemGrupoCasado.length) {
@@ -563,7 +623,7 @@ try {
       itens: GrupoComPai[]
     ): Promise<void> {
       const pais = distintos(itens.map((item) => item.pai).filter(Boolean));
-      const porNome = await garantirPorNome(tabela, `${rotulo} — REF (grupo pai)`, pais);
+      const porNome = await garantirPorNome(tabela, `${rotulo} — pai`, pais, () => ({ ativa: true }));
       const existentes = await trx
         .select({ id: tabela.id, nome: tabela.nome })
         .from(tabela)
@@ -575,9 +635,17 @@ try {
         await trx.insert(tabela).values(
           faltando.map((item) => {
             const grupoPaiId = item.pai ? porNome.get(item.pai) : undefined;
-            return { empresaId, nome: item.nome, ...(grupoPaiId ? { grupoPaiId } : {}) };
+            return { empresaId, nome: item.nome, ativa: item.ativa, ...(grupoPaiId ? { grupoPaiId } : {}) };
           })
         );
+      }
+      for (const item of itens) {
+        const id = porNome.get(item.nome);
+        if (!id) continue;
+        await trx
+          .update(tabela)
+          .set({ grupoPaiId: item.pai ? (porNome.get(item.pai) ?? null) : null, ativa: item.ativa })
+          .where(eq(tabela.id, id));
       }
       console.info(`  ${String(faltando.length).padStart(5)} novos · ${rotulo} (${itens.length} na planilha)`);
     }
@@ -588,14 +656,28 @@ try {
 
     // Contas: o `ativa` da planilha vale so na criacao — nao sobrescreve conta ja cadastrada, que
     // pode ter sido ativada/desativada no sistema depois.
-    await garantirPorNome(
-      contas,
-      "contas",
-      extracao.contas.map((item) => item.nome),
-      (nome) => ({
-        ativa: extracao.contas.find((item) => item.nome === nome)?.ativa ?? true
-      })
-    );
+    if (podeAplicarContas) {
+      const contasPorNome = await garantirPorNome(
+        contas,
+        "contas",
+        extracao.contas.map((item) => item.nome),
+        (nome) => {
+          const conta = extracao.contas.find((item) => item.nome === nome);
+          return { ativa: conta?.ativa ?? true, saldoInicial: (conta?.saldoInicial ?? 0).toFixed(2) };
+        }
+      );
+      for (const conta of extracao.contas) {
+        const id = contasPorNome.get(conta.nome);
+        if (id)
+          await trx
+            .update(contas)
+            .set({ ativa: conta.ativa, saldoInicial: conta.saldoInicial.toFixed(2) })
+            .where(eq(contas.id, id));
+      }
+      console.info("      fundos e status das contas aplicados (guarda de movimento = zero)");
+    } else {
+      console.info(`      contas PULADAS: ${contasComMovimento.length} conta(s) com movimento anterior`);
+    }
 
     // Patrimonio: so os grupos (itens nao tem grupo na planilha — ver o relatorio acima).
     const sigsNoBanco = new Set(

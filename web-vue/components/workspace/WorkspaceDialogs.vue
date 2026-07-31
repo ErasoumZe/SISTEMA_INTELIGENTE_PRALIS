@@ -181,6 +181,9 @@ const validacaoQtdPreview = computed(() =>
               :disabled="Boolean(cadastroEditandoId)"
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'grupos'" cols="12">
+            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo nos lançamentos" />
+          </v-col>
           <v-col v-if="cadastroTela === 'areas_setores'" cols="12">
             <v-select
               v-model="formCadastro.tipoAreaSetor"

@@ -123,6 +123,22 @@ quatro domínios; admin continua recebendo o catálogo completo. O item Entradas
 filtrado por `entradas_visualizar`, com prova em `menu.test.ts`. A edição de Conta permanece coberta
 pelo teste de integração entregue em `8c9843f`.
 
+### Corujão v2 — Etapa 7
+
+**ENTREGUE no dev em 31/07/2026.** O seed passou a usar a planilha operacional para os 75 grupos
+de despesa, 3 de retirada, saldos de conta, patrimônio e folha, preservando a planilha de cadastro
+como fonte dos produtos e grupos de mercadoria. O dry-run descartou 9 `TOTAL `, encontrou zero
+movimentos anteriores nas 33 contas e ficou abaixo do limite de 200 grupos. A migration
+`0023_grupos_ativos_seed_planilha.sql` foi gerada pelo Drizzle, renomeada, ensaiada numa cópia do
+dev e aplicada somente no dev. O apply criou 18 pais de despesa, 1 grupo de despesa que faltava,
+14 pais de mercadoria e 2 pais de retirada; marcou 11 despesas e 1 retirada de uso único como
+inativas e aplicou os cinco fundos da aba SALDOS. A segunda passagem apresentou zero novos em todos
+os alvos, e a consulta final encontrou zero totalizadores no banco.
+
+Os 26 itens de patrimônio TNP não foram gravados: a planilha traz listas verticais independentes e
+não liga cada item ao grupo, enquanto a FK `grupo_patrimonio_id` é obrigatória. Os 8 grupos de
+patrimônio foram preservados. Associar itens por posição inventaria uma relação contábil.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

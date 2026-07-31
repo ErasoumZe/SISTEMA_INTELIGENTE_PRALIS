@@ -286,21 +286,21 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### LACRE E TRANSFERÊNCIA
 
-| Id    | Regra                                                                                   | Origem                                            | Status                       | Teste |
-| ----- | --------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------- | ----- |
-| R-020 | O malote **é** o lacre. Não existe "código de malote"                                   | José — _"não existe em lugar nenhum esse codigo"_ | ✅                           | —     |
-| R-021 | O lacre é um número único, de fonte física externa, **digitado à mão**                  | José                                              | ✅                           | —     |
-| R-022 | **Não existe tela para criar malote.** O lacre nasce inline na transferência            | José, 27/07 (repetido 3×)                         | ⚠️ tela oculta, não removida | —     |
-| R-023 | O campo "malote (saco)" **não deve existir** na tela                                    | José — _"ja falei duzentas vezes"_                | ✅ removido                  | —     |
-| R-024 | A transferência com lacre do cofre para o caixa **gera** o malote                       | José                                              | ❓                           | —     |
-| R-025 | Lacre obrigatório na ida                                                                | José                                              | ❓                           | —     |
-| R-026 | Lacre do retorno: **ver C-01** — obrigatório vs. opcional                               | José (as duas)                                    | ⚠️ **contradição**           | —     |
-| R-027 | Cada movimento consome um lacre novo                                                    | `02`                                              | ❓                           | —     |
-| R-028 | Transferência tem duas pontas: quem envia e quem **confirma o recebimento**             | FOTO 1                                            | ❓                           | —     |
-| R-029 | Transferência pode ser **agendada**                                                     | FOTO 1                                            | ❌                           | —     |
-| R-030 | Transferência aceita **múltiplo destino** (rateio)                                      | FOTO 1                                            | ❌                           | —     |
-| R-031 | Retorno/sangria vive **no mesmo formulário** da transferência (checkbox que expande)    | FOTO 1                                            | ❓                           | —     |
-| R-032 | **Transferência entre contas NÃO exige caixa aberto** — ela é o que habilita a abertura | derivado de R-024 + FOTO 5                        | ❌ **bloqueia o fluxo novo** | —     |
+| Id    | Regra                                                                                   | Origem                             | Status                        | Teste |
+| ----- | --------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------- | ----- |
+| R-020 | Contas nascem com o saldo da planilha como fundo, somente sem movimento anterior        | José, 31/07                        | ✅ aplicado no dev com guarda | seed  |
+| R-021 | O lacre é um número único, de fonte física externa, **digitado à mão**                  | José                               | ✅                            | —     |
+| R-022 | **Não existe tela para criar malote.** O lacre nasce inline na transferência            | José, 27/07 (repetido 3×)          | ⚠️ tela oculta, não removida  | —     |
+| R-023 | O campo "malote (saco)" **não deve existir** na tela                                    | José — _"ja falei duzentas vezes"_ | ✅ removido                   | —     |
+| R-024 | A transferência com lacre do cofre para o caixa **gera** o malote                       | José                               | ❓                            | —     |
+| R-025 | Lacre obrigatório na ida                                                                | José                               | ❓                            | —     |
+| R-026 | Lacre do retorno: **ver C-01** — obrigatório vs. opcional                               | José (as duas)                     | ⚠️ **contradição**            | —     |
+| R-027 | Cada movimento consome um lacre novo                                                    | `02`                               | ❓                            | —     |
+| R-028 | Transferência tem duas pontas: quem envia e quem **confirma o recebimento**             | FOTO 1                             | ❓                            | —     |
+| R-029 | Transferência pode ser **agendada**                                                     | FOTO 1                             | ❌                            | —     |
+| R-030 | Transferência aceita **múltiplo destino** (rateio)                                      | FOTO 1                             | ❌                            | —     |
+| R-031 | Retorno/sangria vive **no mesmo formulário** da transferência (checkbox que expande)    | FOTO 1                             | ❓                            | —     |
+| R-032 | **Transferência entre contas NÃO exige caixa aberto** — ela é o que habilita a abertura | derivado de R-024 + FOTO 5         | ❌ **bloqueia o fluxo novo**  | —     |
 
 ### LANÇAMENTO
 

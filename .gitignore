@@ -14,6 +14,9 @@ playwright-report
 test-results
 storage
 
+# Planilha operacional (dado financeiro real): local, nunca versionada nem servida.
+db/planilhas/*.xlsx
+
 # Referencia/documentacao — fora do git por decisao do Ze (NAO remover do disco; so tirar do source control)
 CADASTRO DE PRODUTOS/
 PROJECT_BRAIN - Copia/

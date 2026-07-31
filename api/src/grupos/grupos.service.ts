@@ -35,7 +35,8 @@ export async function salvarGrupo(tipo: string, id: string | null, body: DadosEx
     empresaId: dados.empresaId,
     tipoGrupo,
     nome: dados.nome.trim(),
-    grupoPaiId: dados.grupoPaiId ?? null
+    grupoPaiId: dados.grupoPaiId ?? null,
+    ativa: dados.ativa
   });
 }
 

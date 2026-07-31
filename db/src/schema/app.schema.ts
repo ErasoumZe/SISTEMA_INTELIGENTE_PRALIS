@@ -389,6 +389,7 @@ export const gruposDespesas = pgTable("grupos_despesas", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposDespesas.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -399,6 +400,7 @@ export const gruposMercadorias = pgTable("grupos_mercadorias", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposMercadorias.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -409,6 +411,7 @@ export const gruposRetiradas = pgTable("grupos_retiradas", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposRetiradas.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")

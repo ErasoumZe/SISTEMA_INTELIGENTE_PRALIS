@@ -241,7 +241,13 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
   if (tela === "maquininhas")
     return { empresaId, numeroSerie: form.numeroSerie, apelido: form.nome, ativo: form.ativo };
   if (tela === "grupos")
-    return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
+    return {
+      empresaId,
+      nome: form.nome,
+      tipoGrupo: form.tipoGrupo,
+      grupoPaiId: form.grupoPaiId || null,
+      ativa: form.ativo
+    };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
   if (tela === "turnos")
     return { empresaId, nome: form.nome, horaInicio: form.horaInicio, horaFim: form.horaFim, ativo: form.ativo };

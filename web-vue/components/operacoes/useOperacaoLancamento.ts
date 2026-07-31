@@ -87,11 +87,12 @@ export function useOperacaoLancamento() {
 
   // --- Grupo: roteia para o campo suportado da categoria (grupoDespesa/Mercadoria/Retirada). ---
   const grupoOpcoes = computed(() =>
-    cat.value === "despesa"
+    (cat.value === "despesa"
       ? opcoesEmpresa.value.gruposDespesas
       : cat.value === "mercadoria"
         ? opcoesEmpresa.value.gruposMercadorias
         : opcoesEmpresa.value.gruposRetiradas
+    ).filter((grupo) => grupo.ativo !== false)
   );
   const grupoId = computed({
     get: () =>
