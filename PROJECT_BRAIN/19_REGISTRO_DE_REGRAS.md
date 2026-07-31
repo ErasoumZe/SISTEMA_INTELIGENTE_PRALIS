@@ -71,6 +71,59 @@ trocado, não. E repaginar agora reescreveria telas que mudam de novo quando os 
 ➜ **A identidade Cicluz (`docs/prompts/IDENTIDADE-VISUAL-CICLUZ-2026-07-30.md`) fica na fila,
 pronta, e só roda depois do S2.**
 
+### 🔴 C-07 · A Gerência opera caixa, ou só supervisiona? — **decisão do José, nada foi alterado**
+
+Três testes de integração esperavam **403** para o cargo Gerência em rotas de caixa. A matriz
+concede **200**. O commit `428665e` (31/07, antes desta rodada) **já tinha virado a expectativa dos
+testes para 200**, ou seja: decidiu em favor da matriz, em silêncio. Isto aqui desfaz o silêncio —
+o código **não** foi tocado nesta rodada.
+
+| Rota                       | Gate               | Teste esperava | Matriz concede | Quem me parece certo |
+| -------------------------- | ------------------ | -------------- | -------------- | -------------------- |
+| `GET /api/caixa/status`    | `caixa_operar`     | 403            | 200            | **o teste**          |
+| `GET /api/caixa/historico` | `caixas_gerenciar` | 403            | 200            | **a matriz**         |
+| `POST /api/caixa/abrir`    | `caixa_operar`     | 403            | passa o gate   | **o teste**          |
+
+**Não são a mesma pergunta.** `caixas_gerenciar` é supervisão (ver o histórico de todos os caixas) —
+é exatamente o trabalho da Gerência, e a própria matriz registra a decisão de negócio na linha 184.
+`caixa_operar` é **operar** um caixa: abrir, fechar, lançar. Aí vale a fala do José de 31/07:
+_"tesouraria com caixa pra abrir, ou ter que abrir caixa pra fazer algo, não existe isso"_ — e a
+R-032, que trata Gerência como retaguarda, junto com Tesouraria e Financeiro.
+
+**R-076/R-077 não decidem isto.** Elas falam de _lançamento_ ("gerência efetua, financeiro paga";
+"conferência é do financeiro, gerência e tesouraria"), não de operar caixa. Quem responde é a R-032
+mais a fala acima.
+
+**Minha recomendação:** tirar `"caixa"` das `ativas` da Gerência (isso remove `caixa_operar` e
+`menu_caixa_mostrar`) e **manter** `caixas_gerenciar`. Os três testes voltam ao esperado original
+sem mexer em teste nenhum.
+
+**O custo, que precisa entrar na conta antes de decidir.** Três rotas aceitam `caixa_operar` como
+alternativa e a Gerência **não tem a outra permissão da lista**:
+
+- `GET /api/colaboradores` — pede `cadastro_colaboradores_visualizar` **ou** `caixa_operar`;
+- `GET /api/pdvs` — pede `cadastro_pdv_visualizar` **ou** `caixa_operar`;
+- `GET /api/maquininhas` — pede `cadastro_pdv_*` **ou** `caixa_operar`.
+
+Sem compensar, a Gerência perde a lista de colaboradores (usada como credor da retirada) e a de
+PDVs. Então a mudança completa é: **remover `"caixa"` das ativas E acrescentar
+`cadastro_colaboradores_visualizar` + `cadastro_pdv_visualizar` aos extras.** `/api/contas`,
+`/api/contas-usuarios` e `/api/turnos` continuam funcionando por outras permissões que ela já tem.
+
+### ⚠️ C-06 · COLISÃO DE ID resolvida por mim (31/07) — José pode vetar
+
+O prompt de 31/07 batizou a regra nova de **R-040** ("abrir o caixa informando o lacre É confirmar").
+Só que **R-040 já estava ocupado** desde o `§3`: _"Campo Valor = valor total da despesa"_. Duas
+regras com o mesmo id quebram o contrato deste arquivo ("prompt cita o id"), então isso não podia
+ficar.
+
+**O que eu decidi, e por quê:** o id **R-040 fica com a regra nova** — é o que está no prompt, nos
+commits e nos comentários do código, e é a que vai ser citada em conversa. A antiga virou **R-064**,
+por ser uma linha sem teste e sem nada no código citando o número.
+
+**Se preferir o contrário, é uma renomeação de duas linhas aqui + os comentários do
+`caixa.service.ts`.**
+
 ### C-04 · Docs no git
 
 - **R-110:** _"nao quero docs no git por enquanto"_
@@ -167,6 +220,37 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 | **R-037** 🆕 | Estourado o tempo de confirmação (R-035), o sistema **trava** quem enviou **e** quem deveria ter confirmado. **Ambos recebem notificação**                                                                                                |
 | **R-038** 🆕 | O bloco Retorno/Sangria da FOTO 1 são **sangrias independentes** do dia — cada linha é uma transferência própria, agrupadas na mesma tela por comodidade                                                                                  |
 | **R-039** 🆕 | **Maquininha de cartão tem cadastro próprio** (nº de série, apelido, empresa), escolhida na abertura de caixa. **Preencher é OPCIONAL** e continua assim. Vem da FOTO 5 — são os 3 `data-pendente` de `CaixaResumoPage.vue` (José, 31/07) |
+
+### §1-C · R-040 — abrir o caixa É confirmar (José, 31/07)
+
+> _"criar transferência com lacre, pra vários caixas, deixar em aberto; o caixa abre usando o lacre
+> da transferência, completa data de recebimento e a transferência é concluída e vai pro caixa"_
+
+**O problema medido em 31/07:** existiam **dois modelos paralelos que não se falavam**. A abertura
+consumia um **malote** (`buscarMaloteDisponivelPorLacreRepository`) e o
+`POST /api/transferencias/:id/confirmar` confirmava a **transferência com lacre**. Na prática o
+tesoureiro criava a transferência com lacre e o caixa **não conseguia abrir com ele** — o front já
+mandava `lacreAbertura`, e o backend simplesmente ignorava o campo.
+
+**A regra.** Informar o lacre na abertura não é "mais um campo": é o **ato de confirmar**. Numa só
+transação: o lacre identifica a transferência pendente · o caixa que abre **vence a disputa**
+(R-030) · `data_recebimento` e `confirmado_por` são preenchidos (R-028) · o valor entra **naquele**
+caixa e sai do pendente da origem (R-036) · o **lacre é rompido** (R-027). Meia confirmação é
+impossível: qualquer falha derruba a abertura inteira, inclusive o caixa.
+
+**O caminho antigo morreu** (R-114): tabela `malotes`, módulo, rota, tela, permissões e schema.
+`POST /api/transferencias/:id/confirmar` **continua existindo** para o caso sem caixa (cofre ↔
+banco), mas não existem mais dois jeitos de confirmar a mesma transferência de abertura — quem
+abre caixa usa a abertura, e só ela.
+
+**Duas decisões minhas dentro da regra, para o José vetar se quiser:**
+
+1. **Não exijo `contas_usuarios` na abertura.** A R-028 usa esse vínculo para dizer quem confirma.
+   Na abertura, quem abre o caixa naquele PDV **já é** o operador daquela conta — exigir um segundo
+   vínculo travaria o operador na manhã. O que continua valendo é a lista de **candidatos** (R-030).
+2. **Mantive "quem envia não confirma o próprio envio"** (R-028). Consequência prática: o José
+   precisa de **dois logins** para testar o fluxo (tesouraria cria, caixa abre). Com um login só, a
+   abertura recusa — de propósito.
 
 ### Execução do Corujão v2 — Etapa 2 (31/07)
 
@@ -301,7 +385,8 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | R-021 | O lacre é um número único, de fonte física externa, **digitado à mão**               | José                               | ✅                                                                             | —                            |
 | R-022 | **Não existe tela para criar malote.** O lacre nasce inline na transferência         | José, 27/07 (repetido 3×)          | ⚠️ tela oculta, não removida                                                   | —                            |
 | R-023 | O campo "malote (saco)" **não deve existir** na tela                                 | José — _"ja falei duzentas vezes"_ | ✅ removido                                                                    | —                            |
-| R-024 | A transferência com lacre do cofre para o caixa **gera** o malote                    | José                               | ❌ gera `lacre`, não `malote`; reconciliação necessária registrada em D-07     | —                            |
+| R-024 | 🚫 ~~A transferência com lacre do cofre para o caixa **gera** o malote~~             | José                               | 🚫 revogada pela **R-040** (31/07): o malote-entidade deixou de existir        | —                            |
+| R-040 | **Abrir o caixa informando o lacre É confirmar o recebimento da transferência**      | José, 31/07                        | ✅ `caixa.service.ts:287`; 8 testes de integração                              | `caixa-abertura-lacre`       |
 | R-025 | Lacre obrigatório na ida                                                             | José                               | ✅ validado pelo serviço e por integração                                      | `transferencias-confirmacao` |
 | R-026 | Lacre do retorno é **opcional**; se ausente, o servidor gera identificação técnica   | José, 30/07 (C-01)                 | ✅ decisão reconciliada e retorno sem digitação de lacre                       | `caixa-retorno-sangria`      |
 | R-027 | Cada movimento consome um lacre novo                                                 | `02`                               | ✅ UNIQUE no banco e tentativa de reuso rejeitada pela API                     | `transferencias-confirmacao` |
@@ -315,7 +400,7 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 | Id    | Regra                                                                                                      | Origem                                         | Status                                                                                    | Teste                     |
 | ----- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------- |
-| R-040 | Campo Valor = valor total da despesa                                                                       | José                                           | ✅                                                                                        | —                         |
+| R-064 | Campo Valor = valor total da despesa (**era R-040 até 31/07** — ver C-06)                                  | José                                           | ✅                                                                                        | —                         |
 | R-041 | Juros em **R$ ou %** sobre o valor                                                                         | José                                           | ✅                                                                                        | `lancamento-juros`        |
 | R-042 | Valor Total = Valor + Juros                                                                                | José                                           | ✅                                                                                        | `lancamento-juros`        |
 | R-043 | Data de lançamento = dia atual                                                                             | José                                           | ✅                                                                                        | —                         |

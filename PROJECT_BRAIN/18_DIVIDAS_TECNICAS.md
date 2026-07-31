@@ -181,3 +181,78 @@ Para reconciliar os modelos, é preciso definir e implementar atomicamente o cic
 
 Essa reconciliação exige decisão de domínio e migration; por ordem expressa do P4, nenhuma mudança
 de código ou banco foi feita nesta rodada.
+
+---
+
+## D-07 · RESOLVIDA em 31/07/2026 pela R-040
+
+A reconciliação foi feita escolhendo **um lado**, não juntando os dois: o malote-entidade deixou de
+existir. A medição que decidiu isso está no relatório da R-040 — nada do que `malotes` guardava
+ficou sem casa (`numero_lacre` → `lacres.numero`, `valor` → `transferencias.valor_original`,
+`status` → `lacres.rompido` + `transferencias.status`). O único atributo exclusivo era **existir
+solto**, sem transferência nenhuma, que é exatamente o conceito revogado pela R-022.
+
+Migration `0026_malote_morre_lacre_unico.sql`: backfill primeiro (o histórico de qual lacre selou
+qual transferência não podia morrer com a tabela), drops depois. Aplicada só no dev.
+
+---
+
+## D-08 · `divida_cofre` e `saldoProprio` são legado da R8 revogada
+
+**Status:** aberto · **Prioridade:** baixa · **Registrado em:** 31/07/2026, junto com a R-040.
+
+A R8 ("o caixa nasce devendo o malote") foi revogada pela **R-001** ("agora é fundo mesmo"). Desde a
+R-040 a coluna `fechamentos_caixa.divida_cofre` é gravada **sempre com 0** e nenhum fluxo escreve
+outro valor. Consequência: `resumo.saldoProprio` passou a ser sempre o resultado OPERACIONAL do
+caixa (entradas − saídas, sem transferências), e `resumo.dividaCofre` é sempre 0 na tela.
+
+A função pura `saldoProprioCentavos(totais, dividaCofre)` continua aceitando o parâmetro e tem
+teste, mas o ramo com dívida > 0 é **inalcançável em produção**. Remover a coluna e o campo do
+contrato muda o que a tela mostra — é decisão do José, não faxina automática.
+
+---
+
+## D-09 · 🔴 Juros e desconto do lançamento NÃO entram no total do caixa
+
+**Status:** aberto · **Prioridade:** ALTA · **Descoberto em:** 31/07/2026, percorrendo o fluxo do dia.
+
+### O que foi medido
+
+Uma despesa de **R$ 50,00 com 10% de juros** (`jurosTipo: "percentual"`,
+`jurosValorInformado: 10`) grava corretamente `valor_acrescimo = 5,00` — a R-041/R-042 funcionam no
+lançamento. Mas o caixa desconta **apenas R$ 50,00**: a proposta de retorno veio **230,00**
+(300 de fundo − 50 da despesa − 20 da retirada), e não 225,00.
+
+A causa está em `api/src/caixa/caixa.repository.ts`, em
+`calcularTotaisCaixaOperacionalRepository`: vendas são somadas com `liquidoCentavos` (original −
+desconto + acréscimo), mas **despesas, retiradas e mercadorias são somadas só por
+`valor_original`**. O mesmo acontece no saldo por conta (`contas.repository.ts`).
+
+### Por que importa
+
+A padaria pagou R$ 55,00 e o sistema tirou R$ 50,00 do caixa. Os R$ 5,00 de diferença viram
+**quebra de caixa falsa** no fechamento — e a R-015 atribui a quebra **ao operador**, que vai
+prestar contas de um dinheiro que ele não perdeu. É o tipo de erro que faz o operador deixar de
+confiar na tela.
+
+### Por que não foi corrigido nesta rodada
+
+Mudar a fórmula altera o saldo de **todo caixa já fechado** e de todas as contas. Isso é decisão
+contábil do José (R-115), não faxina de código. A correção provável é usar o mesmo
+`liquidoCentavos` já aplicado às vendas também nas três saídas — em um só lugar, nos dois
+repositórios.
+
+---
+
+## D-10 · Contas importadas da planilha nascem sem operador (`contas_usuarios` vazia)
+
+**Status:** contornado no dev · **Prioridade:** média · **Descoberto em:** 31/07/2026, no fluxo do dia.
+
+O `seed-planilha` cria as 33 contas mas **não vincula ninguém** a elas. Como a R-071 diz que usuário
+sem vínculo não vê conta nenhuma, a Tesouraria abria a tela de Transferência com Origem e Destino
+**vazios** — o passo 1 do dia do José travava antes de começar, sem mensagem que explicasse por quê.
+
+Contornado no dev com `insert into contas_usuarios` para tesouraria (cofres) e caixa (conta do PDV).
+Falta decidir o caminho definitivo: ou o cadastro de conta passa a exigir operador (R-072 já diz
+que "quem opera" é escolhido no mesmo salvar), ou a tela avisa "esta conta não tem operador" em vez
+de mostrar uma lista vazia.

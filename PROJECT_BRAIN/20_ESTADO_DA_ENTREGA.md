@@ -367,3 +367,48 @@ npx vitest run --config ./vitest.config.ts --project integration tests/integrati
 Cockpit/abertura de caixa. Os 3 PNGs de marca em `web-vue/public/cicluz/` (`3ea387e`) estão
 versionados mas **não referenciados por nenhum componente**, e `logo-cicluz-branca.png` é byte a byte
 igual a `logo-cicluz.png` — a variante branca ainda precisa ser exportada.
+
+---
+
+## 7. Fluxo do dia — 31/07/2026
+
+**O dia inteiro roda de ponta a ponta contra o dev real.** Não é teste automatizado: é o fluxo do
+José, executado passo a passo pela API, com tesouraria e caixa em logins separados.
+
+| #   | Passo                                                                                      | Resultado                             |
+| --- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
+| 1   | Tesouraria cria transferência do COFRE PRINCIPAL, com lacre, múltiplos destinos, em aberto | ✅ de primeira                        |
+| 2   | Operador abre o caixa informando o lacre (R-040)                                           | ✅ **depois da entrega desta rodada** |
+| 2b  | Dinheiro entrou naquele caixa (saldo 300)                                                  | ✅                                    |
+| 3   | Entradas do dia respondem (R-096)                                                          | ✅                                    |
+| 4   | Despesa com juros %, doc fiscal, credor tipado                                             | ✅                                    |
+| 4b  | Despesa **reabre** com tudo salvo (R-041/R-044/R-045/R-046)                                | ✅ 10% sobre 50 → acréscimo 5         |
+| 5   | Retirada com sócio/gestor                                                                  | ✅                                    |
+| 6   | Retorno ao COFRE PRINCIPAL (R-008b)                                                        | ✅                                    |
+| 6b  | Saldo zerou (R-008)                                                                        | ✅                                    |
+| 6c  | Caixa fecha                                                                                | ✅                                    |
+| 7   | Sem observação **não** fecha havendo quebra (R-016)                                        | ✅                                    |
+| 7b  | Com observação fecha                                                                       | ✅                                    |
+| 7c  | Tesouraria recebe a notificação da quebra (R-017)                                          | ✅                                    |
+| 7d  | Tesouraria marca verificado (R-018)                                                        | ✅ **depois do fix do 500**           |
+
+### O que travou pelo caminho e como foi resolvido
+
+1. **Passo 2 não existia** — a abertura procurava malote, não transferência. É a R-040; ver `19` §1-C.
+2. **`contas_usuarios` estava vazia** (0 vínculos): a Tesouraria via a tela de Transferência com
+   Origem e Destino em branco e o passo 1 travava sem explicar por quê. Contornado no dev; dívida
+   registrada em `18` D-10.
+3. **`empresas.conta_cofre_id` apontava para a conta "Cofre" do seed antigo**, não para
+   `CNT CONTA - COFRE PRINCIPAL`. O retorno do fechamento ia para a conta errada e o cofre principal
+   fechava o dia com menos dinheiro do que devia (R-008b). Corrigido no dev por UPDATE.
+4. **R-018 devolvia 500** — `PUT .../verificar` com corpo JSON vazio virava "Erro interno". O Fastify
+   já levantava 400; o handler global só respeitava o 429 e mascarava o resto. Corrigido em
+   `54d1f0c`, com teste de regressão.
+5. **Nenhum sócio/gestor cadastrado no dev** — o cadastro existe (R-047), a tabela estava vazia. Um
+   foi criado durante o percurso.
+
+### Achado que NÃO foi corrigido (decisão do José)
+
+**Juros e desconto do lançamento não entram no total do caixa** — `18` D-09. Medido: despesa de 50
+com 10% de juros tira 50 do caixa, não 55. A diferença vira quebra falsa, atribuída ao operador
+pela R-015. Corrigir muda o saldo de todo caixa já fechado, então parou aqui.
