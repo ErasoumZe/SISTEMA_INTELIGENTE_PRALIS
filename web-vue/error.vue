@@ -4,14 +4,14 @@ import type { NuxtError } from "#app";
 const props = defineProps<{ error: NuxtError }>();
 
 const titulo = computed(() => {
-  if (props.error.statusCode === 404) return "Pagina nao encontrada";
+  if (props.error.statusCode === 404) return "Página não encontrada";
   if (props.error.statusCode === 403) return "Sem permissao";
-  return "Nao foi possivel abrir esta pagina";
+  return "Não foi possível abrir esta página";
 });
 
 const mensagem = computed(() => {
-  if (props.error.statusCode === 404) return "A rota informada nao existe.";
-  if (props.error.statusCode === 403) return "Seu usuario nao tem permissao para acessar esta pagina.";
+  if (props.error.statusCode === 404) return "A rota informada não existe.";
+  if (props.error.statusCode === 403) return "Seu usuário não tem permissão para acessar esta página.";
   return props.error.statusMessage || props.error.message || "Tente novamente.";
 });
 

@@ -14,6 +14,12 @@ export default defineNuxtConfig({
   },
   modules: ["vuetify-nuxt-module"],
   css: ["@mdi/font/css/materialdesignicons.css", "~/assets/main.css"],
+  app: {
+    head: {
+      title: "Cicluz Gestão Profissional",
+      link: [{ rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" }]
+    }
+  },
   runtimeConfig: {
     public: {
       apiUrl: process.env.NUXT_PUBLIC_API_URL || process.env.PUBLIC_API_URL || "http://localhost:4100"

@@ -221,9 +221,9 @@ body {
 }
 
 .caixa-edit {
-  border: 1px solid var(--pralis-line);
-  background: var(--pralis-canvas);
-  color: var(--pralis-ink);
+  border: 1px solid var(--marca-linha);
+  background: var(--marca-fundo);
+  color: var(--marca-tinta);
   font-weight: 800;
 }
 
@@ -587,24 +587,24 @@ body {
 }
 
 /* =====================================================================
-   PRALIS ADMIN v2 — LAB de design (branch lab/admin-dashboard-v2-design)
-   Visual apenas. Admin CLARO/branco com identidade Pralis (acento laranja).
+   CICLUZ ADMIN — casca visual do sistema
+   Visual claro/branco com identidade Cicluz.
    Bloco ADITIVO: sobrescreve o chrome do dashboard. Reverter = remover este
    bloco + a linha @import do topo + os ajustes de AppShell.vue/index.vue.
-   Usa tokens FIXOS (--pralis-*) para nao ser sobrescrito pelo tema por empresa.
+   Usa tokens FIXOS (--marca-*) para nao ser sobrescrito pelo tema por empresa.
    ===================================================================== */
 :root {
-  --pralis-orange: #f37435;
-  --pralis-orange-strong: #e2632a;
-  --pralis-orange-soft: #fdeee5;
-  --pralis-gold: #b8860b;
-  --pralis-ink: #2f2320;
-  --pralis-ink-soft: #6f635c;
-  --pralis-surface: #ffffff;
-  --pralis-canvas: #f7f5f2;
-  --pralis-line: #ece7e1;
-  --pralis-line-soft: #f1ede8;
-  --pralis-shadow: 0 10px 30px rgba(94, 55, 49, 0.06);
+  --marca-acento: #6515dd;
+  --marca-acento-forte: #35128c;
+  --marca-acento-suave: #efe9fd;
+  --marca-destaque: #b8860b;
+  --marca-tinta: #2b2b2f;
+  --marca-tinta-suave: #6b6b73;
+  --marca-superficie: #ffffff;
+  --marca-fundo: #f6f6f8;
+  --marca-linha: #e8e8ec;
+  --marca-linha-suave: #f0f0f4;
+  --marca-sombra: 0 10px 30px rgba(43, 43, 47, 0.06);
 }
 
 html,
@@ -621,24 +621,24 @@ body {
 /* ---- Base / canvas ---- */
 .padaria-shell,
 .padaria-main {
-  background: var(--pralis-canvas) !important;
+  background: var(--marca-fundo) !important;
 }
 
 /* ---- Sidebar (branca, premium) ---- */
 .padaria-sidebar {
-  background: var(--pralis-surface) !important;
-  border-right: 1px solid var(--pralis-line) !important;
+  background: var(--marca-superficie) !important;
+  border-right: 1px solid var(--marca-linha) !important;
   box-shadow: 4px 0 26px rgba(94, 55, 49, 0.05) !important;
 }
 .padaria-sidebar .v-navigation-drawer__content {
-  background: var(--pralis-surface);
+  background: var(--marca-superficie);
 }
 .drawer-shell {
   gap: 8px;
   padding: 14px 12px 14px;
 }
 
-/* Logo Pralis (topo) — agora e o BOTAO que recolhe/expande o menu (sem botao separado). */
+/* Logo Cicluz (topo) — agora e o BOTAO que recolhe/expande o menu (sem botao separado). */
 .sidebar-logo-row {
   display: flex;
   align-items: center;
@@ -654,7 +654,7 @@ body {
   background: #f4f1ec;
 }
 .sidebar-logo-row:focus-visible {
-  outline: 2px solid var(--pralis-orange);
+  outline: 2px solid var(--marca-acento);
   outline-offset: 2px;
 }
 .sidebar-logo {
@@ -683,17 +683,17 @@ body {
   gap: 8px;
   padding: 0 6px 10px;
   margin-bottom: 2px;
-  border-bottom: 1px solid var(--pralis-line-soft);
+  border-bottom: 1px solid var(--marca-linha-suave);
 }
 .sidebar-label {
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1.4px;
 }
 .company-trigger,
 .company-name {
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.2px;
@@ -702,23 +702,23 @@ body {
   min-height: 40px;
 }
 .company-trigger:hover {
-  color: var(--pralis-orange-strong);
+  color: var(--marca-acento-forte);
 }
 .company-trigger:focus-visible {
-  outline: 2px solid var(--pralis-orange);
+  outline: 2px solid var(--marca-acento);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
 /* Caixa card */
 .caixa-card {
-  border: 1px solid var(--pralis-line);
+  border: 1px solid var(--marca-linha);
   border-radius: 16px;
   background: linear-gradient(180deg, #fffdfb, #faf7f3);
-  box-shadow: var(--pralis-shadow);
+  box-shadow: var(--marca-sombra);
 }
 .caixa-title {
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
 }
 .status-pill {
   background: #8a6608;
@@ -742,10 +742,10 @@ body {
 
 /* Gradientes de scroll (brancos) */
 .sidebar-scroll-shell::before {
-  background: linear-gradient(var(--pralis-surface), rgb(255 255 255 / 0));
+  background: linear-gradient(var(--marca-superficie), rgb(255 255 255 / 0));
 }
 .sidebar-scroll-shell::after {
-  background: linear-gradient(rgb(255 255 255 / 0), var(--pralis-surface));
+  background: linear-gradient(rgb(255 255 255 / 0), var(--marca-superficie));
 }
 
 /* Itens de menu */
@@ -755,7 +755,7 @@ body {
 }
 .sidebar-item {
   position: relative;
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
   font-size: 13.5px;
   font-weight: 600;
   border-radius: 11px;
@@ -764,7 +764,7 @@ body {
     color 0.15s ease;
 }
 .sidebar-item .v-icon {
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
   transition:
     color 0.15s ease,
     transform 0.15s ease;
@@ -773,23 +773,23 @@ body {
    so o icone desliza levemente — nao altera a area clicavel do link. */
 .sidebar-item:hover:not(.disabled) {
   background: #f4f1ec;
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
 }
 .sidebar-item:hover:not(.disabled) .v-icon {
   transform: translateX(2px);
 }
 .sidebar-item:focus-visible {
-  outline: 2px solid var(--pralis-orange);
+  outline: 2px solid var(--marca-acento);
   outline-offset: 2px;
 }
 .sidebar-disabled-wrapper:focus-visible {
-  outline: 2px solid var(--pralis-orange);
+  outline: 2px solid var(--marca-acento);
   outline-offset: 2px;
   border-radius: 11px;
 }
 .sidebar-item.active {
-  background: var(--pralis-orange-soft) !important;
-  color: #8f3d16 !important; /* AA ~5.9:1 sobre orange-soft */
+  background: var(--marca-acento-suave) !important;
+  color: var(--marca-acento-forte) !important;
   font-weight: 800;
 }
 .sidebar-item.active .v-icon {
@@ -804,7 +804,7 @@ body {
   width: 3px;
   height: 60%;
   border-radius: 0 3px 3px 0;
-  background: var(--pralis-orange);
+  background: var(--marca-acento);
 }
 .padaria-sidebar.rail .sidebar-item.active::before {
   left: 0;
@@ -812,13 +812,13 @@ body {
 
 /* ---- Topbar (branca, saudacao) ---- */
 .padaria-topbar {
-  background: var(--pralis-surface) !important;
-  border-bottom: 1px solid var(--pralis-line) !important;
+  background: var(--marca-superficie) !important;
+  border-bottom: 1px solid var(--marca-linha) !important;
   min-height: 64px;
   box-shadow: 0 1px 0 rgba(94, 55, 49, 0.02);
 }
 .topbar-page-id {
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.2px;
@@ -831,7 +831,7 @@ body {
 
 /* ---- Painel (hero de boas-vindas) ---- */
 .inicio-vazio {
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
   gap: 6px;
 }
 .inicio-hero {
@@ -840,9 +840,10 @@ body {
   gap: 8px;
   padding: 30px;
   border-radius: 24px;
-  background: radial-gradient(120% 90% at 50% 0%, rgba(243, 116, 53, 0.08) 0%, transparent 60%), var(--pralis-surface);
-  border: 1px solid var(--pralis-line);
-  box-shadow: var(--pralis-shadow);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(243, 116, 53, 0.08) 0%, transparent 60%), var(--marca-superficie);
+  border: 1px solid var(--marca-linha);
+  box-shadow: var(--marca-sombra);
 }
 .inicio-hero-logo {
   width: clamp(160px, 40%, 200px);
@@ -850,13 +851,13 @@ body {
   object-fit: contain;
 }
 .inicio-vazio h1 {
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
   font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.3px;
 }
 .inicio-vazio p {
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
   font-weight: 600;
 }
 .inicio-hero-hint {
@@ -866,8 +867,8 @@ body {
   margin-top: 6px;
   padding: 7px 14px;
   border-radius: 999px;
-  background: var(--pralis-orange-soft);
-  color: var(--pralis-orange-strong);
+  background: var(--marca-acento-suave);
+  color: var(--marca-acento-forte);
   font-size: 12.5px;
   font-weight: 700;
 }
@@ -887,7 +888,7 @@ body {
   font-weight: 800;
   letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: var(--pralis-ink-soft); /* #6f635c sobre branco = 5.8:1 (AA) */
+  color: var(--marca-tinta-suave); /* #6f635c sobre branco = 5.8:1 (AA) */
 }
 /* No modo recolhido (rail): rotulo vira um divisor fino */
 .padaria-sidebar.rail .sidebar-group-label {
@@ -896,7 +897,7 @@ body {
   margin: 10px 16px;
   overflow: hidden;
   color: transparent;
-  background: var(--pralis-line);
+  background: var(--marca-linha);
 }
 
 /* ---- Categoria do menu (Lancamentos): entrada unica que abre/fecha as telas de dentro ---- */
@@ -910,10 +911,10 @@ body {
   cursor: pointer;
 }
 .sidebar-categoria.aberta {
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
 }
 .sidebar-categoria-chevron {
-  color: var(--pralis-ink-soft);
+  color: var(--marca-tinta-suave);
 }
 .sidebar-subitens {
   display: flex;
@@ -922,7 +923,7 @@ body {
   /* Recuo + guia vertical: deixa explicito que as telas vivem DENTRO da categoria. */
   margin-inline-start: 22px;
   padding-inline-start: 8px;
-  border-inline-start: 1px solid var(--pralis-line, #e4e8ef);
+  border-inline-start: 1px solid var(--marca-linha, #e4e8ef);
 }
 /* No rail (so icones) o recuo nao cabe: os filhos voltam a ocupar a largura toda. */
 .padaria-sidebar.rail .sidebar-categoria {
@@ -939,8 +940,8 @@ body {
 
 /* ---- Painel de filtros (cadastros / permissoes) ---- */
 .cadastro-filter-grid {
-  background: var(--pralis-canvas);
-  border: 1px solid var(--pralis-line);
+  background: var(--marca-fundo);
+  border: 1px solid var(--marca-linha);
   border-radius: 14px;
   padding: 14px;
   align-items: end;
@@ -973,27 +974,27 @@ body {
 }
 .cadastro-card-title .text-h6 {
   font-weight: 800;
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
   letter-spacing: -0.2px;
 }
 
 /* ---- Tabela premium (cadastros / permissoes) ---- */
 .responsive-table-shell {
-  border: 1px solid var(--pralis-line);
+  border: 1px solid var(--marca-linha);
   border-radius: 14px;
   overflow-x: auto; /* preserva scroll horizontal em tabelas largas (nao clipar) */
 }
 .responsive-table-shell .v-table thead th {
-  background: var(--pralis-canvas) !important;
-  color: var(--pralis-ink) !important;
+  background: var(--marca-fundo) !important;
+  color: var(--marca-tinta) !important;
   font-weight: 800 !important;
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.4px;
-  border-bottom: 1px solid var(--pralis-line) !important;
+  border-bottom: 1px solid var(--marca-linha) !important;
 }
 .responsive-table-shell .v-table tbody tr:hover td {
-  background: var(--pralis-line-soft);
+  background: var(--marca-linha-suave);
 }
 
 /* Alvos de toque das acoes de linha / caixa (A11y >= 40px) */
@@ -1029,14 +1030,14 @@ body {
   gap: 6px;
   padding: 3px 6px 3px 10px;
   border-radius: 999px;
-  background: var(--pralis-surface);
-  border: 1px solid var(--pralis-line);
+  background: var(--marca-superficie);
+  border: 1px solid var(--marca-linha);
   font-size: 11.5px;
   line-height: 1.4;
 }
 .regra-chave {
   font-weight: 700;
-  color: var(--pralis-ink);
+  color: var(--marca-tinta);
   letter-spacing: 0.1px;
 }
 .regra-valor {
@@ -1062,15 +1063,15 @@ body {
   color: #c0392b;
 }
 .regra-neutro .regra-valor {
-  background: var(--pralis-line-soft);
-  color: var(--pralis-ink-soft);
+  background: var(--marca-linha-suave);
+  color: var(--marca-tinta-suave);
 }
 
 /* Cartoes gerais mais "premium" no admin claro */
 .svelte-table-card {
-  border: 1px solid var(--pralis-line) !important;
+  border: 1px solid var(--marca-linha) !important;
   border-radius: 18px !important;
-  box-shadow: var(--pralis-shadow) !important;
+  box-shadow: var(--marca-sombra) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1089,10 +1090,10 @@ body {
 /* ===================== FIM PRALIS ADMIN v2 (lab) ===================== */
 
 /* =====================================================================
-   PRALIS ADMIN — RESPONSIVIDADE OFICIAL (branch lab/admin-responsive-polish)
+   CICLUZ ADMIN — RESPONSIVIDADE OFICIAL
    Bloco ADITIVO no fim do arquivo (vence conflitos por ordem de fonte).
    Breakpoints oficiais: 1920 / 1366 / 1024 / 768 / 390 / 360.
-   Somente CSS/layout. Nenhuma logica/dado/token --pralis-* alterado.
+   Somente CSS/layout. Nenhuma logica/dado/token --marca-* alterado.
    ===================================================================== */
 
 /* G0 — box model previsivel: padding/borda nao somam na largura (evita vazamento) */
@@ -1177,14 +1178,14 @@ body {
     height: 8px;
   }
   .responsive-table-shell::-webkit-scrollbar-thumb {
-    background: var(--pralis-line);
+    background: var(--marca-linha);
     border-radius: 999px;
   }
   .responsive-table-shell .v-table td:last-child,
   .responsive-table-shell .v-table th:last-child {
     position: sticky;
     right: 0;
-    background: var(--pralis-surface);
+    background: var(--marca-superficie);
     box-shadow: -8px 0 12px -8px rgba(94, 55, 49, 0.18);
   }
 }
@@ -1222,8 +1223,8 @@ body {
   .v-dialog > .v-overlay__content > .v-card > .v-card-actions {
     position: sticky;
     bottom: 0;
-    background: var(--pralis-surface);
-    border-top: 1px solid var(--pralis-line);
+    background: var(--marca-superficie);
+    border-top: 1px solid var(--marca-linha);
   }
 }
 /* P3 — toggle Herdar/Permitir/Negar ocupa a largura em telas minimas */
@@ -1317,8 +1318,8 @@ body {
 /* ===================== FIM RESPONSIVIDADE OFICIAL ===================== */
 
 /* =====================================================================
-   PRALIS — IDENTIDADE LARANJA COMO PADRAO (nao mais forcada)
-   O laranja Pralis agora e o DEFAULT do tema (nuxt.config + shared
+   CICLUZ — IDENTIDADE DA MARCA COMO PADRÃO
+   A identidade Cicluz é o DEFAULT do tema (nuxt.config + shared
    temaPadraoAplicacao + shim padraoComIdentidade em utils/tema.ts).
    A personalizacao por empresa/tela (Aparencia) volta a vencer: o
    aplicarTema injeta as vars inline e nada aqui as sobrepoe.
@@ -1336,14 +1337,14 @@ body {
   --padaria-muted: #232b34 !important;
   --padaria-muted-foreground: #a6afba !important;
   --padaria-border: #2a323c !important;
-  --pralis-surface: #191f26 !important;
-  --pralis-canvas: #0f1318 !important;
-  --pralis-line: #2a323c !important;
-  --pralis-line-soft: #232b34 !important;
-  --pralis-ink: #e7e9ec !important;
-  --pralis-ink-soft: #a6afba !important;
-  --pralis-orange-soft: #3a2a1e !important;
-  --pralis-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
+  --marca-superficie: #191f26 !important;
+  --marca-fundo: #0f1318 !important;
+  --marca-linha: #2a323c !important;
+  --marca-linha-suave: #232b34 !important;
+  --marca-tinta: #e7e9ec !important;
+  --marca-tinta-suave: #a6afba !important;
+  --marca-acento-suave: #2d2242 !important;
+  --marca-sombra: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
   --v-theme-background: 15, 19, 24 !important;
   --v-theme-surface: 25, 31, 38 !important;
   --v-theme-on-surface: 231, 233, 236 !important;
@@ -1356,7 +1357,7 @@ body {
   color: var(--padaria-foreground);
 }
 :root[data-theme="dark"] .topbar-page-id {
-  color: var(--pralis-ink) !important;
+  color: var(--marca-tinta) !important;
 }
 :root[data-theme="dark"] .caixa-card {
   background: linear-gradient(180deg, #1c232b, #171d24) !important;
@@ -1366,8 +1367,8 @@ body {
 }
 :root[data-theme="dark"] .inicio-card,
 :root[data-theme="dark"] .v-card {
-  background: var(--pralis-surface) !important;
-  color: var(--pralis-ink);
+  background: var(--marca-superficie) !important;
+  color: var(--marca-tinta);
 }
 
 /* =====================================================================

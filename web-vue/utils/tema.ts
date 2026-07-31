@@ -36,7 +36,7 @@ export const temaPadraoPorTela: Record<string, Partial<TemaAplicacao>> = Object.
 );
 
 // Cores "de fabrica" gravadas no banco de empresas nunca personalizadas: o roxo/teal original e o
-// laranja Pralis (persistido em quem abriu Aparencia e salvou). Ambos migram para a marca neutra.
+// acento legado (persistido em quem abriu Aparencia e salvou). Ambos migram para a marca neutra.
 const primariasDeFabrica = new Set(["#6d28d9", "#c0521d"]);
 const secundariasDeFabrica = new Set(["#0891b2", "#b8480f"]);
 const marcaAtual = { corPrimaria: "#6515dd", corSecundaria: "#35128c" };

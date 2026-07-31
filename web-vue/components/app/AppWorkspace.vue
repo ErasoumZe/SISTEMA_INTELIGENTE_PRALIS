@@ -23,6 +23,7 @@ import type {
 } from "~/types/padaria";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
+import ConfirmacaoDialog from "~/components/comum/ConfirmacaoDialog.vue";
 import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
@@ -130,6 +131,22 @@ const atualizandoOperacoesAutomaticamente = ref(false);
 const erro = ref("");
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
+const confirmacao = reactive({ aberto: false, titulo: "Confirmar ação", mensagem: "", textoConfirmar: "Confirmar" });
+let resolverConfirmacao: ((valor: boolean) => void) | null = null;
+
+function confirmarAcao(mensagem: string, titulo = "Confirmar ação", textoConfirmar = "Confirmar") {
+  if (resolverConfirmacao) resolverConfirmacao(false);
+  Object.assign(confirmacao, { aberto: true, titulo, mensagem, textoConfirmar });
+  return new Promise<boolean>((resolve) => {
+    resolverConfirmacao = resolve;
+  });
+}
+
+function responderConfirmacao(confirmou: boolean) {
+  confirmacao.aberto = false;
+  resolverConfirmacao?.(confirmou);
+  resolverConfirmacao = null;
+}
 
 const modalOperacaoAberto = ref(false);
 const modalMaloteAberto = ref(false);
@@ -1444,7 +1461,7 @@ async function salvarCadastro() {
     } catch (error) {
       // Produto duplicado (nome/codigo de barras na loja): oferece "cadastrar mesmo assim".
       if (error instanceof ErroApiCliente && error.codigo === "DUPLICATE_PRODUCT") {
-        if (!window.confirm(`${error.message} Cadastrar mesmo assim?`)) return;
+        if (!(await confirmarAcao(error.message, "Produto já cadastrado", "Cadastrar mesmo assim"))) return;
         resultado = await enviar({ ...(payload as Record<string, unknown>), forcar: true });
       } else {
         throw error;
@@ -1507,7 +1524,14 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
   const alvoId = linha.alvoId || linha.cargoId || linha.setorId || linha.usuarioId;
   const permissao = linha.permissao;
   if (!tipoPermissao || !alvoId || !permissao) return;
-  if (!window.confirm(`Excluir a permissao ${permissao} de ${linha.alvo || alvoId}?`)) return;
+  if (
+    !(await confirmarAcao(
+      `Excluir a permissão ${permissao} de ${linha.alvo || alvoId}?`,
+      "Excluir permissão",
+      "Excluir permissão"
+    ))
+  )
+    return;
   permissaoExcluindoId.value = linha.id ?? `${tipoPermissao}:${alvoId}:${permissao}`;
   try {
     const params = new URLSearchParams({
@@ -1584,7 +1608,7 @@ const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional 
   carregarDadosTela,
   notificar,
   mensagemErro,
-  confirmar: (mensagem) => window.confirm(mensagem)
+  confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
 });
 
 function abrirImportacao(tela = telaAtiva.value) {
@@ -1654,9 +1678,11 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   if (!cargoId) return;
   const nome = linha.alvo ?? "cargo";
   if (
-    !window.confirm(
-      `Restaurar as permissoes do cargo "${nome}" para o padrao? Isso SUBSTITUI as regras atuais (inclusive as desligadas manualmente).`
-    )
+    !(await confirmarAcao(
+      `Restaurar as permissões do cargo "${nome}" para o padrão? Isso substitui as regras atuais, inclusive as desligadas manualmente.`,
+      "Restaurar permissões",
+      "Restaurar padrão"
+    ))
   ) {
     return;
   }
@@ -1921,7 +1947,7 @@ onBeforeUnmount(() => {
           <span class="status-pill">Aberto</span>
         </div>
         <div v-else>
-          <div class="caixa-title">Nao ha caixa aberto</div>
+          <div class="caixa-title">Não há caixa aberto</div>
           <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
         </div>
         <v-btn
@@ -1982,6 +2008,13 @@ onBeforeUnmount(() => {
 
     <slot v-else v-bind="pageContext" />
     <WorkspaceDialogs />
+    <ConfirmacaoDialog
+      :aberto="confirmacao.aberto"
+      :titulo="confirmacao.titulo"
+      :mensagem="confirmacao.mensagem"
+      :texto-confirmar="confirmacao.textoConfirmar"
+      @responder="responderConfirmacao"
+    />
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>

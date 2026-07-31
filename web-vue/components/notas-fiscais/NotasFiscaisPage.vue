@@ -200,7 +200,7 @@ watch(filtroStatus, () => void buscar());
           <thead>
             <tr>
               <th>Emissao</th>
-              <th>Numero/Serie</th>
+              <th>Número/Série</th>
               <th>Fornecedor</th>
               <th>Chave</th>
               <th class="text-right">Valor</th>
@@ -296,7 +296,7 @@ watch(filtroStatus, () => void buscar());
               </div>
             </v-col>
             <v-col cols="6" md="3">
-              <div class="text-caption text-muted">Numero/Serie</div>
+              <div class="text-caption text-muted">Número/Série</div>
               <div>{{ detalhe.numero ?? "—" }} / {{ detalhe.serie ?? "—" }}</div>
             </v-col>
             <v-col cols="6" md="3">
@@ -350,7 +350,7 @@ watch(filtroStatus, () => void buscar());
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Descricao</th>
+                  <th>Descrição</th>
                   <th>EAN</th>
                   <th>NCM</th>
                   <th>CFOP</th>

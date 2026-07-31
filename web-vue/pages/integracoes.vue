@@ -379,7 +379,7 @@ onMounted(async () => {
 
       <v-tabs v-model="aba" density="comfortable">
         <v-tab value="chaves">Chaves</v-tab>
-        <v-tab value="historico">Historico</v-tab>
+        <v-tab value="historico">Histórico</v-tab>
         <v-tab value="dicionario">Dicionario</v-tab>
         <v-tab value="pendentes">Sem conversao ({{ vinculosSemConversao.length }})</v-tab>
       </v-tabs>
@@ -397,7 +397,7 @@ onMounted(async () => {
               <v-table>
                 <thead>
                   <tr>
-                    <th>Codigo</th>
+                    <th>Código</th>
                     <th>Status</th>
                     <th>Criada em</th>
                     <th class="text-right">Acoes</th>
@@ -439,7 +439,7 @@ onMounted(async () => {
                 <thead>
                   <tr>
                     <th>Dia</th>
-                    <th>Integracao</th>
+                    <th>Integração</th>
                     <th>Recebidos</th>
                     <th>Novos</th>
                     <th>Atualizados</th>
@@ -548,7 +548,7 @@ onMounted(async () => {
                     <tr>
                       <th>Tipo</th>
                       <th>Identificador externo</th>
-                      <th>Descricao</th>
+                      <th>Descrição</th>
                       <th>Registro do sistema</th>
                     </tr>
                   </thead>
@@ -599,7 +599,7 @@ onMounted(async () => {
                   <tr>
                     <th>Tipo</th>
                     <th>Identificador externo</th>
-                    <th>Descricao</th>
+                    <th>Descrição</th>
                     <th>Registro do sistema</th>
                   </tr>
                 </thead>

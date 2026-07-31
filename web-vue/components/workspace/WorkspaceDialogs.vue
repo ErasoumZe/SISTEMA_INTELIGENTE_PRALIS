@@ -79,7 +79,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
   formCadastro.value.usuariosIds = marcar ? [...atuais, String(usuarioId)] : atuais;
 }
 
-// Nome + gramatura + medida => Descricao automatica (regra do Pralis). O campo principal e o NOME.
+// Nome + gramatura + medida => descricao automatica da operacao. O campo principal e o NOME.
 const unidadeSiglaProduto = computed(
   () => opcoesEmpresa.value.unidadesMedida.find((u) => u.id === formCadastro.value.unidadeIndividualId)?.sigla ?? ""
 );
@@ -87,7 +87,7 @@ const descricaoAutoPreview = computed(() =>
   montarDescricao(formCadastro.value.descricao, formCadastro.value.quantidadeIndividual, unidadeSiglaProduto.value)
 );
 
-// "Como se compra" — versao amigavel do formulario do Pralis ("Saco de 25 KG — descricao").
+// "Como se compra" — versao amigavel do formulario ("Saco de 25 KG — descricao").
 const EMB_LABEL: Record<string, string> = {
   SACO: "Saco",
   PCT: "Pacote",
@@ -112,7 +112,7 @@ const comoSeCompraPreview = computed(() => {
   return [rotulo, cde, qtd, desc ? "— " + desc : ""].filter(Boolean).join(" ");
 });
 
-// Validacao de quantidade (transformacao): texto automatico da regra do Pralis.
+// Validacao de quantidade (transformacao): texto automatico da regra operacional.
 const diasSemana = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const validacaoQtdPreview = computed(() =>
   formCadastro.value.tipo === "transformacao"
@@ -886,8 +886,8 @@ const validacaoQtdPreview = computed(() =>
 
   <v-dialog v-model="modalTemaAberto" max-width="560">
     <v-card>
-      <v-card-title>Aparencia</v-card-title>
-      <v-card-subtitle>Padrao vale para todas as telas; escolha uma tela para personalizar so ela.</v-card-subtitle>
+      <v-card-title>Aparência</v-card-title>
+      <v-card-subtitle>Padrão vale para todas as telas; escolha uma tela para personalizar só ela.</v-card-subtitle>
       <v-card-text>
         <v-select
           v-model="temaTelaEdicao"

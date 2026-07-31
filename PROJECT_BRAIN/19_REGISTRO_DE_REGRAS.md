@@ -348,21 +348,21 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### UI E MENU
 
-| Id    | Regra                                                                                   | Origem                       | Status                                              |
-| ----- | --------------------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------- |
-| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ✅ ação e implementação únicas em `AppShell.vue`    |
-| R-091 | Fechamento existe somente dentro de `/caixa`; rota de notificações é `/pendencias`      | José (repetido)              | ✅ páginas e componente antigos removidos           |
-| R-092 | Modal único com **3 botões no topo** (despesa/mercadoria/retirada)                      | José                         | ✅                                                  |
-| R-093 | "+ Novo" tem **só** Entradas · Transferências · Saídas                                  | José                         | ✅                                                  |
-| R-094 | Subtítulos: "Vendas e faturamento" · "Entre contas" · "Despesa, mercadoria ou retirada" | José, 30/07                  | ❌ pendente                                         |
-| R-095 | "Lançamentos" é categoria do menu; as listagens seguem separadas por categoria          | José (D6)                    | ❓                                                  |
-| R-096 | Entradas lista **todas** as do dia, paginada                                            | José (D7)                    | ✅ `87ea945` — 16 testes de front + 6 de integração |
-| R-097 | **Menu lateral simplificado pelo Xmind** do Rodrigo                                     | José, 30/07                  | ❌                                                  |
-| R-098 | Identidade visual **Cicluz Gestão Profissional** substitui Pralis                       | José, 30/07                  | ❌ prompt pronto                                    |
-| R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                         |
-| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ❌                                                  |
-| R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ❌ 4 ocorrências                                    |
-| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ❓                                                  |
+| Id    | Regra                                                                                   | Origem                       | Status                                                  |
+| ----- | --------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------- |
+| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ✅ ação e implementação únicas em `AppShell.vue`        |
+| R-091 | Fechamento existe somente dentro de `/caixa`; rota de notificações é `/pendencias`      | José (repetido)              | ✅ páginas e componente antigos removidos               |
+| R-092 | Modal único com **3 botões no topo** (despesa/mercadoria/retirada)                      | José                         | ✅                                                      |
+| R-093 | "+ Novo" tem **só** Entradas · Transferências · Saídas                                  | José                         | ✅                                                      |
+| R-094 | Subtítulos: "Vendas e faturamento" · "Entre contas" · "Despesa, mercadoria ou retirada" | José, 30/07                  | ✅ `utils/domain.ts`                                    |
+| R-095 | "Lançamentos" é categoria do menu; as listagens seguem separadas por categoria          | José (D6)                    | ❓                                                      |
+| R-096 | Entradas lista **todas** as do dia, paginada                                            | José (D7)                    | ✅ `87ea945` — 16 testes de front + 6 de integração     |
+| R-097 | **Menu lateral simplificado pelo Xmind** do Rodrigo                                     | José, 30/07                  | ❌                                                      |
+| R-098 | Identidade visual **Cicluz Gestão Profissional** substitui Pralis                       | José, 30/07                  | ✅ sidebar, login, metadados e assets antigos removidos |
+| R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                             |
+| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ✅ camada visual principal revisada                     |
+| R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências    |
+| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ❓                                                      |
 
 ### PROCESSO (o contrato de trabalho)
 

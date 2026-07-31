@@ -89,7 +89,7 @@ describe("padraoComIdentidade", () => {
     expect(efetivo.corSecundaria).toBe("#35128c");
   });
 
-  it("troca o laranja Pralis persistido pela marca neutra", () => {
+  it("troca o acento legado persistido pela marca neutra", () => {
     const efetivo = padraoComIdentidade(laranjaFabrica);
     expect(efetivo.corPrimaria).toBe("#6515dd");
     expect(efetivo.corSecundaria).toBe("#35128c");

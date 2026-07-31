@@ -18,7 +18,7 @@ export type DepsAcoesCaixa = {
   carregarDadosTela: (tela: string, idEmpresa: string) => Promise<void>;
   notificar: (mensagem: string, tipo?: string) => void;
   mensagemErro: (error: DadosExternos) => string;
-  confirmar: (mensagem: string) => boolean;
+  confirmar: (mensagem: string) => Promise<boolean>;
 };
 
 export type AberturaCaixaPayload = {
@@ -60,7 +60,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function retornarSaldoOperacional(payload: RetornoSaldoPayload): Promise<void> {
-    if (!deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`)) return;
+    if (!(await deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`))) return;
     deps.setSalvando(true);
     try {
       await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {

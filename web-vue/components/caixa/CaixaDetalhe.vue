@@ -48,7 +48,7 @@ onMounted(carregar);
     <template v-else-if="detalhe">
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->
-      <div class="text-subtitle-2 mb-2">Lancamentos deste caixa</div>
+      <div class="text-subtitle-2 mb-2">Lançamentos deste caixa</div>
       <v-expansion-panels variant="accordion" class="mb-4">
         <v-expansion-panel v-for="grupo in detalhe.lancamentos" :key="grupo.categoria">
           <v-expansion-panel-title :disabled="!grupo.itens.length">
@@ -65,7 +65,7 @@ onMounted(carregar);
                 <thead>
                   <tr>
                     <th>Data</th>
-                    <th>Descricao</th>
+                    <th>Descrição</th>
                     <th class="text-end">Valor</th>
                   </tr>
                 </thead>
@@ -122,7 +122,7 @@ onMounted(carregar);
 
       <!-- Acerto de saldo: a diferenca vira despesa e debito do colaborador. -->
       <div class="text-subtitle-2 mb-2">Acerto de saldo</div>
-      <p v-if="!detalhe.ajuste" class="text-body-2 text-medium-emphasis">Este caixa nao teve acerto de diferenca.</p>
+      <p v-if="!detalhe.ajuste" class="text-body-2 text-medium-emphasis">Este caixa não teve acerto de diferença.</p>
       <v-alert v-else type="warning" variant="tonal" density="compact">
         Diferenca de <strong>{{ dinheiro(detalhe.ajuste.valorDiferenca) }}</strong> atribuida a
         <strong>{{ detalhe.ajuste.colaboradorNome || "colaborador do caixa" }}</strong>

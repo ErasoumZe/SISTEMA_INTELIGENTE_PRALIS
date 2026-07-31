@@ -151,7 +151,7 @@ watch(
   <v-card>
     <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
-        <div class="text-h6">Relatorio de Vendas</div>
+        <div class="text-h6">Relatório de Vendas</div>
         <div class="text-body-2 text-muted">Vendas com filtros por periodo, PDV, cliente e pagamento.</div>
       </div>
       <v-btn color="primary" prepend-icon="mdi-magnify" :loading="carregando" @click="aplicarFiltros">Buscar</v-btn>
@@ -225,7 +225,7 @@ watch(
                 Hora
                 <v-icon :icon="ordem === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="14" />
               </th>
-              <th>Descricao</th>
+              <th>Descrição</th>
               <th>PDV</th>
               <th>Cliente</th>
               <th>Pagamento</th>

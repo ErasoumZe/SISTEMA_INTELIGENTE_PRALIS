@@ -173,7 +173,19 @@ onMounted(() => {
             :aria-label="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
             @click="alternarDrawer"
           >
-            <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="sidebar-logo" />
+            <img
+              :src="
+                drawerRail
+                  ? '/cicluz/cicluz-simbolo.png'
+                  : escuro
+                    ? '/cicluz/logo-cicluz-branca.png'
+                    : '/cicluz/logo-cicluz.png'
+              "
+              alt="Cicluz Gestão Profissional"
+              class="sidebar-logo"
+              width="220"
+              height="72"
+            />
           </button>
 
           <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->

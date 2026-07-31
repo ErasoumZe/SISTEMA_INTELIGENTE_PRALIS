@@ -37,7 +37,7 @@ watch(
   <v-card>
     <v-card-title class="report-card-head">
       <div class="text-h6">Produtos mais vendidos</div>
-      <div class="text-body-2 text-muted">Relatorio permitido para caixa e gerente.</div>
+      <div class="text-body-2 text-muted">Relatório permitido para caixa e gerente.</div>
     </v-card-title>
     <v-card-text>
       <v-alert v-if="erro" type="error" variant="tonal" class="mb-3">{{ erro }}</v-alert>

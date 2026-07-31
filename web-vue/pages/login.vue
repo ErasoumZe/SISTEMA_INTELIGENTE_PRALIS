@@ -22,7 +22,7 @@ async function login() {
   if (response.ok) {
     await router.push("/");
   } else {
-    error.value = "Email ou senha invalidos.";
+    error.value = "E-mail ou senha inválidos.";
   }
 
   loading.value = false;
@@ -33,7 +33,13 @@ async function login() {
   <v-main class="login-page d-flex align-center justify-center pa-4">
     <div class="login-card">
       <div class="login-brand">
-        <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="login-logo" />
+        <img
+          src="/cicluz/logo-cicluz.png"
+          alt="Cicluz Gestão Profissional"
+          class="login-logo"
+          width="300"
+          height="98"
+        />
       </div>
 
       <div class="login-head">
@@ -45,7 +51,7 @@ async function login() {
         <v-text-field
           v-model="email"
           label="E-mail"
-          placeholder="voce@pralis.com.br"
+          placeholder="voce@cicluz.com.br"
           autocomplete="email"
           name="email"
           type="email"
@@ -98,7 +104,7 @@ async function login() {
 .login-page {
   min-height: 100dvh;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(243, 116, 53, 0.1) 0%, transparent 55%), var(--pralis-canvas, #f7f5f2);
+    radial-gradient(120% 80% at 50% -10%, rgba(192, 82, 29, 0.1) 0%, transparent 55%), var(--marca-fundo, #f6f6f8);
 }
 
 .login-card {
@@ -106,8 +112,8 @@ async function login() {
   width: 100%;
   max-width: min(420px, calc(100vw - 32px)); /* nunca ultrapassa a viewport */
   min-width: 0;
-  background: var(--pralis-surface, #fff);
-  border: 1px solid var(--pralis-line, #ece7e1);
+  background: var(--marca-superficie, #fff);
+  border: 1px solid var(--marca-linha, #e8e8ec);
   border-radius: 24px;
   padding: 34px 32px 26px;
   box-shadow: 0 24px 60px rgba(94, 55, 49, 0.1);
@@ -140,13 +146,13 @@ async function login() {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.3px;
-  color: var(--pralis-ink, #2f2320);
+  color: var(--marca-tinta, #2b2b2f);
 }
 .login-sub {
   margin: 4px 0 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--pralis-ink-soft, #6f635c);
+  color: var(--marca-tinta-suave, #6b6b73);
 }
 
 .login-form {
@@ -181,11 +187,11 @@ async function login() {
   margin-top: 2px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--pralis-ink-soft, #6f635c);
+  color: var(--marca-tinta-suave, #6b6b73);
   text-decoration: none;
 }
 .login-link:hover {
-  color: var(--pralis-orange-strong, #e2632a);
+  color: var(--marca-acento-forte, #35128c);
 }
 
 .login-slogan {
@@ -193,15 +199,15 @@ async function login() {
   text-align: center;
   font-style: italic;
   font-size: 12.5px;
-  color: var(--pralis-ink-soft, #6f635c);
+  color: var(--marca-tinta-suave, #6b6b73);
 }
 
 /* Foco laranja nos campos (sem depender do tema por empresa) */
 .login-card :deep(.v-field--focused .v-field__outline) {
-  color: var(--pralis-orange, #f37435);
+  color: #c0521d;
 }
 .login-card :deep(.v-field--focused .v-label) {
-  color: var(--pralis-orange-strong, #e2632a);
+  color: #9f4216;
 }
 
 @keyframes login-in {

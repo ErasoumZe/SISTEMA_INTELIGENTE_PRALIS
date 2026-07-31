@@ -14,7 +14,7 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
     carregarDadosTela: vi.fn().mockResolvedValue(undefined),
     notificar: vi.fn(),
     mensagemErro: (error) => `erro:${String((error as Error).message ?? error)}`,
-    confirmar: () => true,
+    confirmar: async () => true,
     ...over
   };
   return deps;
@@ -63,7 +63,7 @@ describe("retornarSaldoOperacional", () => {
   const payload = { caixaId: "cx-1", valor: 15, observacao: null };
 
   it("com confirmacao posta retorno ao cofre, notifica e re-busca status", async () => {
-    const deps = montarDeps({ confirmar: vi.fn().mockReturnValue(true) });
+    const deps = montarDeps({ confirmar: vi.fn().mockResolvedValue(true) });
     await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
     expect(deps.confirmar).toHaveBeenCalledOnce();
@@ -77,7 +77,7 @@ describe("retornarSaldoOperacional", () => {
   });
 
   it("aborta sem chamar a API se a confirmacao for negada", async () => {
-    const deps = montarDeps({ confirmar: () => false });
+    const deps = montarDeps({ confirmar: async () => false });
     await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
     expect(deps.api.post).not.toHaveBeenCalled();

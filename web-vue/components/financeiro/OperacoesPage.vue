@@ -90,7 +90,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
         <div class="summary-value">{{ dinheiro(resumo.totalEntradas) }}</div>
       </article>
       <article class="summary-card card-transferencias">
-        <div class="summary-label"><v-icon icon="mdi-swap-horizontal" size="16" /> Transferencias</div>
+        <div class="summary-label"><v-icon icon="mdi-swap-horizontal" size="16" /> Transferências</div>
         <div class="summary-value">{{ dinheiro(resumo.totalTransferencias) }}</div>
       </article>
       <article class="summary-card card-despesas">
@@ -112,7 +112,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
         <div class="table-heading d-flex align-start justify-space-between ga-4 flex-wrap">
           <div>
             <h2>{{ telaAtual?.titulo }}</h2>
-            <p>{{ descricao || `Lancamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+            <p>{{ descricao || `Lançamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
             <!-- Totalizador do DIA (S6): soma do filtro inteiro, nao da pagina. Quem confere o dia
                  precisa do total do dia — a pagina e so um recorte. -->
             <p v-if="totalLiquidoOperacoes !== null && totalLiquidoOperacoes !== undefined" class="op-totalizador">
@@ -178,7 +178,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
               <thead>
                 <tr>
                   <th>Data</th>
-                  <th>Descricao</th>
+                  <th>Descrição</th>
                   <th class="text-right">Valor</th>
                   <th class="text-right">Acoes</th>
                 </tr>

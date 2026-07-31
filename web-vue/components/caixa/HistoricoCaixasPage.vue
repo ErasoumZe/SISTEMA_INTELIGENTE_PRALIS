@@ -136,7 +136,7 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
 
 <template>
   <v-card>
-    <v-card-title>Historico de caixas</v-card-title>
+    <v-card-title>Histórico de caixas</v-card-title>
     <v-card-text>
       <v-row dense>
         <v-col cols="12" md="2">

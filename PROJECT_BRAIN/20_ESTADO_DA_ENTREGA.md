@@ -139,6 +139,14 @@ Os 26 itens de patrimônio TNP não foram gravados: a planilha traz listas verti
 não liga cada item ao grupo, enquanto a FK `grupo_patrimonio_id` é obrigatória. Os 8 grupos de
 patrimônio foram preservados. Associar itens por posição inventaria uma relação contábil.
 
+### Corujão v2 — Etapa 8
+
+**ENTREGUE em 31/07/2026.** A identidade visível agora é Cicluz Gestão Profissional no login,
+sidebar, título e favicon; os seis assets Pralis foram removidos. Os tokens fixos passaram de
+`--pralis-*` para `--marca-*`, mantendo `#6515dd` como primária e `#c0521d` exclusivamente no botão
+de acesso. Os subtítulos do "+ Novo" seguem a R-094, a camada visual principal recebeu acentuação
+e as quatro confirmações nativas foram substituídas por um único diálogo Vuetify reutilizável.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

@@ -180,12 +180,12 @@ export function useApi() {
     // empresa escolhe um cartao escuro (modo escuro segue protegido pelos !important em main.css).
     const raiz = document.documentElement.style;
     const { ink, inkSoft } = inkParaSuperficie(tema.corCartao);
-    // Camada de identidade Pralis (--pralis-*, definida em :root) — sobreposta aqui inline para
+    // Camada de identidade Cicluz (--marca-*, definida em :root) — sobreposta aqui inline para
     // que fundo/cartao/texto do menu tambem sigam a aparencia da empresa.
-    raiz.setProperty("--pralis-canvas", tema.corFundo);
-    raiz.setProperty("--pralis-surface", tema.corCartao);
-    raiz.setProperty("--pralis-ink", ink);
-    raiz.setProperty("--pralis-ink-soft", inkSoft);
+    raiz.setProperty("--marca-fundo", tema.corFundo);
+    raiz.setProperty("--marca-superficie", tema.corCartao);
+    raiz.setProperty("--marca-tinta", ink);
+    raiz.setProperty("--marca-tinta-suave", inkSoft);
     // Variaveis proprias (hex) usadas pelo CSS da aplicacao (sidebar, cards, resumo de caixa).
     document.documentElement.style.setProperty("--padaria-background", tema.corFundo);
     document.documentElement.style.setProperty("--padaria-card", tema.corCartao);

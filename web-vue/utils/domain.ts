@@ -59,7 +59,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   transferencias: {
     id: "transferencias",
-    titulo: "Transferencias",
+    titulo: "Transferências",
     permissao: "transferencias_visualizar",
     icone: "mdi-swap-horizontal",
     cor: corCategoriaPorTela["transferencias"]
@@ -103,11 +103,11 @@ export const itemPorTela: Record<string, ItemMenu> = {
   // Retaguarda: quem gerencia caixas ve o historico de todos. Operador de caixa nao entra aqui.
   historico_caixas: {
     id: "historico_caixas",
-    titulo: "Historico de caixas",
+    titulo: "Histórico de caixas",
     permissao: "caixas_gerenciar",
     icone: "mdi-history"
   },
-  promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
+  promocoes: { id: "promocoes", titulo: "Promoções", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",
     titulo: "Faltas e atestados",
@@ -116,7 +116,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   relatorio_advertencias: {
     id: "relatorio_advertencias",
-    titulo: "Advertencias e suspensoes",
+    titulo: "Advertências e suspensões",
     permissao: "relatorio_advertencias_visualizar",
     icone: "mdi-clipboard-check"
   },
@@ -135,7 +135,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   relatorio_dre: {
     id: "relatorio_dre",
-    titulo: "Relatorio de DRE",
+    titulo: "Relatório de DRE",
     permissao: "relatorio_dre_visualizar",
     icone: "mdi-chart-bar"
   },
@@ -180,19 +180,19 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   avaliacao_qualidade: {
     id: "avaliacao_qualidade",
-    titulo: "Avaliacao de qualidade",
+    titulo: "Avaliação de qualidade",
     permissao: "avaliacao_qualidade_visualizar",
     icone: "mdi-clipboard-check"
   },
   avaliacao_colaboradores: {
     id: "avaliacao_colaboradores",
-    titulo: "Avaliacao de colaboradores",
+    titulo: "Avaliação de colaboradores",
     permissao: "avaliacao_colaboradores_visualizar",
     icone: "mdi-clipboard-check"
   },
   relatorio_fiscal: {
     id: "relatorio_fiscal",
-    titulo: "Relatorio fiscal dos produtos",
+    titulo: "Relatório fiscal dos produtos",
     permissao: "relatorio_fiscal_visualizar",
     icone: "mdi-file-document"
   },
@@ -204,13 +204,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   patrimonio: {
     id: "patrimonio",
-    titulo: "Patrimonio",
+    titulo: "Patrimônio",
     permissao: "cadastro_patrimonio_visualizar",
     icone: "mdi-bank"
   },
   ficha_tecnica: {
     id: "ficha_tecnica",
-    titulo: "Ficha tecnica",
+    titulo: "Ficha técnica",
     permissao: "cadastro_ficha_tecnica_visualizar",
     icone: "mdi-clipboard-list"
   },
@@ -229,7 +229,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   relatorio_vendas: {
     id: "relatorio_vendas",
-    titulo: "Relatorio de Vendas",
+    titulo: "Relatório de Vendas",
     permissao: "relatorio_vendas_visualizar",
     icone: "mdi-hand-coin",
     cor: corCategoriaPorTela["relatorio_vendas"]
@@ -249,7 +249,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   integracoes: {
     id: "integracoes",
-    titulo: "Integracoes",
+    titulo: "Integrações",
     permissao: "integracoes_visualizar",
     icone: "mdi-connection"
   },
@@ -270,23 +270,23 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   areas_setores: {
     id: "areas_setores",
-    titulo: "Areas e setores",
+    titulo: "Áreas e setores",
     permissao: "cadastro_areas_setores_visualizar",
     icone: "mdi-map-marker"
   },
   usuarios: {
     id: "usuarios",
-    titulo: "Usuarios",
+    titulo: "Usuários",
     permissao: "cadastro_usuarios_visualizar",
     icone: "mdi-account-group"
   },
   permissoes: {
     id: "permissoes",
-    titulo: "Permissoes",
+    titulo: "Permissões",
     permissao: "cadastro_permissoes_visualizar",
     icone: "mdi-shield-check"
   },
-  aparencia: { id: "aparencia", titulo: "Aparencia", permissao: "aparencia_visualizar", icone: "mdi-palette" }
+  aparencia: { id: "aparencia", titulo: "Aparência", permissao: "aparencia_visualizar", icone: "mdi-palette" }
 };
 
 const permissoesMenuOcultas = Array.from(telasOcultasNoDrawerEPermissoes).flatMap((telaId) => [
@@ -394,7 +394,7 @@ export const opcoesNovo: AcaoNovo[] = [
   {
     id: "entradas",
     titulo: "Entradas",
-    subtitulo: "Vendas e faturamento (integracao)",
+    subtitulo: "Vendas e faturamento",
     permissoes: ["entradas_visualizar"],
     icone: "mdi-arrow-down-left",
     cor: "var(--cat-entradas-base)",
@@ -402,8 +402,8 @@ export const opcoesNovo: AcaoNovo[] = [
   },
   {
     id: "transferencias",
-    titulo: "Transferencias",
-    subtitulo: "Entre contas, cofre e caixas",
+    titulo: "Transferências",
+    subtitulo: "Entre contas",
     permissoes: ["transferencias_criar"],
     icone: "mdi-swap-horizontal",
     cor: "var(--cat-transferencias-base)",
@@ -411,7 +411,7 @@ export const opcoesNovo: AcaoNovo[] = [
   },
   {
     id: "saidas",
-    titulo: "Saidas",
+    titulo: "Saídas",
     subtitulo: "Despesa, mercadoria ou retirada",
     permissoes: ["despesas_criar", "mercadorias_criar", "retiradas_criar"],
     icone: "mdi-arrow-up-right",
@@ -435,7 +435,7 @@ export function categoriaInicialSaida(permissoesUsuario: readonly Permissao[]): 
 }
 
 export const secoesPermissoes = [
-  { titulo: "Areas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
+  { titulo: "Áreas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
   { titulo: "Caixa", prefixos: ["caixa_", "caixas_", "menu_caixa"] },
   { titulo: "Clientes", prefixos: ["cadastro_clientes", "menu_clientes"] },
   { titulo: "Colaboradores", prefixos: ["cadastro_colaboradores", "menu_colaboradores"] },
@@ -443,23 +443,23 @@ export const secoesPermissoes = [
   { titulo: "Contas a pagar", prefixos: ["contas_pagar", "menu_contas_pagar"] },
   { titulo: "Despesas", prefixos: ["despesas", "menu_despesas"] },
   { titulo: "Empresas", prefixos: ["cadastro_empresas", "menu_empresas"] },
-  { titulo: "Fechamento com diferenca", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
+  { titulo: "Fechamento com diferença", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
   { titulo: "Formas de pagamento", prefixos: ["cadastro_formas_pagamento", "menu_formas_pagamento"] },
   { titulo: "Fornecedores", prefixos: ["cadastro_fornecedores", "menu_fornecedores"] },
   { titulo: "Grupos", prefixos: ["cadastro_grupos", "menu_grupos"] },
-  { titulo: "Integracoes", prefixos: ["integracoes", "menu_integracoes"] },
+  { titulo: "Integrações", prefixos: ["integracoes", "menu_integracoes"] },
   { titulo: "Malotes", prefixos: ["cadastro_malotes", "menu_malotes"] },
   { titulo: "Mercadorias", prefixos: ["mercadorias", "menu_mercadorias"] },
   { titulo: "PDV", prefixos: ["cadastro_pdv", "menu_pdv"] },
-  { titulo: "Permissoes", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
+  { titulo: "Permissões", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
   { titulo: "Produtos", prefixos: ["cadastro_produtos", "menu_produtos"] },
   { titulo: "Produtos mais vendidos", prefixos: ["relatorio_produtos", "menu_relatorio_produtos"] },
-  { titulo: "Relatorio de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
+  { titulo: "Relatório de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
   { titulo: "Retiradas", prefixos: ["retiradas", "menu_retiradas"] },
-  { titulo: "Tema e aparencia", prefixos: ["aparencia", "menu_aparencia"] },
-  { titulo: "Transferencias", prefixos: ["transferencias", "menu_transferencias"] },
+  { titulo: "Tema e aparência", prefixos: ["aparencia", "menu_aparencia"] },
+  { titulo: "Transferências", prefixos: ["transferencias", "menu_transferencias"] },
   { titulo: "Unidades de medida", prefixos: ["cadastro_unidades_medida", "menu_unidades"] },
-  { titulo: "Usuarios", prefixos: ["cadastro_usuarios", "menu_usuarios"] },
+  { titulo: "Usuários", prefixos: ["cadastro_usuarios", "menu_usuarios"] },
   { titulo: "Vendas", prefixos: ["entradas", "menu_entradas"] },
   { titulo: "Outras", prefixos: [] }
 ];

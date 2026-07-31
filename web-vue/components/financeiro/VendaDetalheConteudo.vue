@@ -57,7 +57,7 @@ const totalVenda = computed(() => Number(props.detalhe?.valorOriginal ?? 0));
         <div v-for="(pagamento, indice) in pagamentos" :key="indice" class="text-body-2">
           {{ nomeForma(pagamento.formaPagamentoId) }}: <strong>{{ dinheiro(pagamento.totalPago) }}</strong>
         </div>
-        <div v-if="!pagamentos.length" class="text-body-2 text-medium-emphasis">Nao informado</div>
+        <div v-if="!pagamentos.length" class="text-body-2 text-medium-emphasis">Não informado</div>
       </div>
       <div class="text-right">
         <div class="text-caption text-medium-emphasis">Total da venda</div>
