@@ -342,18 +342,18 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### PERMISSÃO
 
-| Id    | Regra                                                                                   | Origem      | Status                                                                      |
-| ----- | --------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------- |
-| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅                                                                          |
-| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅                                                                          |
-| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅                                                                          |
-| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅                                                                          |
-| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅                                                                          |
-| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅                                                                          |
-| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ✅ matriz de referência + teste                                             |
-| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ✅ matriz de referência + teste                                             |
-| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ⚠️ `utils/domain.ts:437` + `WorkspaceDialogs.vue:848`; sem teste            |
-| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ❌ `db/seed.ts:401` cobre 10 cargos e deixa `Operador de caixa` sem usuário |
+| Id    | Regra                                                                                   | Origem      | Status                                                                                   |
+| ----- | --------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
+| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅                                                                                       |
+| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅                                                                                       |
+| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅                                                                                       |
+| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅                                                                                       |
+| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅                                                                                       |
+| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅                                                                                       |
+| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ✅ matriz de referência + teste                                                          |
+| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ✅ matriz de referência + teste                                                          |
+| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ⚠️ `utils/domain.ts:437` + `WorkspaceDialogs.vue:848`; sem teste                         |
+| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ✅ seed cobre dinamicamente os 41 cargos; 41/41 verificados no dev, sem permissão direta |
 
 ### UI E MENU
 

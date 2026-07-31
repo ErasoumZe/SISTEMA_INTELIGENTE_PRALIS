@@ -1,6 +1,6 @@
 import "dotenv/config";
 import pg from "pg";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
@@ -398,14 +398,16 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   })
 };
 
-const usuariosSeed: Array<{
+type UsuarioSeed = {
   nome: string;
   email: string;
   senha: string;
   cargo: string;
   cpf: string;
   role: RoleUsuario;
-}> = [
+};
+
+const usuariosSeed: UsuarioSeed[] = [
   {
     nome: "Diretor Geral",
     email: "diretor@email.com",
@@ -484,7 +486,7 @@ async function usuarioPorEmail(email: string) {
   return usuario ?? null;
 }
 
-async function criarUsuario(seed: (typeof usuariosSeed)[number], empresaId: string | null) {
+async function criarUsuario(seed: UsuarioSeed, empresaId: string | null) {
   let usuario = await usuarioPorEmail(seed.email);
   if (!usuario) {
     await auth.api.signUpEmail({
@@ -589,6 +591,11 @@ const setoresEmpresa = await banco
   .from(setores)
   .where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")));
 const setorIds = setoresEmpresa.map((setorLinha) => setorLinha.id);
+const perfisCargoTeste = await banco
+  .select({ usuarioId: perfisUsuarios.usuarioId })
+  .from(perfisUsuarios)
+  .where(and(eq(perfisUsuarios.empresaId, empresaId), ilike(perfisUsuarios.email, "cargo.%@email.com")));
+const idsUsuariosCargoTeste = perfisCargoTeste.map((perfil) => perfil.usuarioId);
 
 if (caixaIds.length) {
   await banco.delete(ajustesFechamentoCaixa).where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
@@ -632,6 +639,11 @@ await banco.delete(colaboradores).where(
     )
   )
 );
+// Os logins dinamicos da R-079 sao preservados entre execucoes, mas seus colaboradores precisam
+// sair antes de recriar o setor "Loja". O onDelete cascade remove somente os vinculos de cargo.
+if (idsUsuariosCargoTeste.length) {
+  await banco.delete(colaboradores).where(inArray(colaboradores.usuarioId, idsUsuariosCargoTeste));
+}
 await banco
   .delete(malotes)
   .where(and(eq(malotes.empresaId, empresaId), inArray(malotes.numeroLacre, ["LACRE-001", "LACRE-002", "LACRE-003"])));
@@ -931,6 +943,89 @@ for (const usuario of usuariosSeed) {
   if (colaboradorCargo) colaboradorCargoIds.set(usuario.email, colaboradorCargo.id);
 }
 console.info("[seed] OK Colaboradores seed vinculados aos usuarios e cargos");
+
+// R-079: os dez cargos da matriz fixa ja tem usuarios nomeados acima. A planilha, porem, pode
+// acrescentar cargos operacionais. Para a permissao EFETIVA de cada um ser testavel no dev, todo
+// cargo ainda sem usuario recebe um usuario comum, um colaborador e o vinculo ao proprio cargo.
+// Nenhuma permissao e gravada no usuario: ele herda exatamente permissoes_cargos (e setor Loja,
+// cuja matriz e vazia), inclusive quando o cargo da planilha ainda nao tem permissao configurada.
+function identificadorCargoTeste(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.|\.$/g, "")
+    .slice(0, 40);
+}
+
+const todosCargos = await banco
+  .select({ id: cargos.id, nome: cargos.nome })
+  .from(cargos)
+  .where(eq(cargos.empresaId, empresaId))
+  .orderBy(cargos.nome);
+const cargosComUsuario = await banco
+  .selectDistinct({ cargoId: colaboradoresCargos.cargoId })
+  .from(colaboradoresCargos)
+  .innerJoin(colaboradores, eq(colaboradores.id, colaboradoresCargos.colaboradorId))
+  .where(
+    and(
+      eq(colaboradoresCargos.empresaId, empresaId),
+      eq(colaboradoresCargos.ativo, true),
+      isNotNull(colaboradores.usuarioId)
+    )
+  );
+const idsCargosComUsuario = new Set(cargosComUsuario.map((item) => item.cargoId));
+const usuariosCargoCriados: Array<{ cargo: string; email: string }> = [];
+
+for (const cargo of todosCargos) {
+  if (idsCargosComUsuario.has(cargo.id)) continue;
+  const email = `cargo.${identificadorCargoTeste(cargo.nome)}.${cargo.id.slice(0, 8)}@email.com`;
+  const usuarioId = await criarUsuario(
+    {
+      nome: `Teste ${cargo.nome}`,
+      email,
+      senha: senhaPadraoSeed,
+      cargo: cargo.nome,
+      cpf: "",
+      role: "usuario_comum"
+    },
+    empresaId
+  );
+
+  let [colaborador] = await banco
+    .select({ id: colaboradores.id })
+    .from(colaboradores)
+    .where(eq(colaboradores.usuarioId, usuarioId))
+    .limit(1);
+  colaborador ??= (
+    await banco
+      .insert(colaboradores)
+      .values({ empresaId, nome: `Teste ${cargo.nome}`, setorId: setor.id, usuarioId })
+      .returning({ id: colaboradores.id })
+  )[0];
+  if (!colaborador) throw new Error(`Colaborador de teste nao criado para o cargo ${cargo.nome}`);
+
+  await banco
+    .insert(colaboradoresCargos)
+    .values({
+      empresaId,
+      colaboradorId: colaborador.id,
+      setorId: setor.id,
+      cargoId: cargo.id,
+      remuneracaoMinuto: "0.136364",
+      dataInicio: dataISO(-30),
+      ativo: true
+    })
+    .onConflictDoNothing();
+  usuariosCargoCriados.push({ cargo: cargo.nome, email });
+}
+console.info(
+  `[seed] OK Cobertura R-079: ${todosCargos.length} cargos com usuário; ${usuariosCargoCriados.length} vínculos adicionais garantidos`
+);
+for (const usuario of usuariosCargoCriados) {
+  console.info(`[seed] - ${usuario.email} / ${senhaPadraoSeed} / usuario_comum / ${usuario.cargo}`);
+}
 
 const colaboradorCaixaId = colaboradorIds.get("caixa@email.com");
 const colaboradorComprasId = colaboradorIds.get("compras@email.com");

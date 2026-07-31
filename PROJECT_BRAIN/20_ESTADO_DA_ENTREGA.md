@@ -156,6 +156,14 @@ sem modificar códigos/identificadores, com teste unitário. A varredura de cód
 três camadas; R-100 continua ⚠️ até inspeção visual humana de todas as telas, para não transformar
 check estático em prova visual.
 
+### Corujão v3 — P3.3
+
+**ENTREGUE em 31/07/2026.** O seed de desenvolvimento mantém os 10 usuários nomeados da matriz e
+cria, de forma idempotente, um usuário comum para cada cargo adicional importado da planilha. Cada
+usuário recebe colaborador e vínculo ao cargo, sem regra em `permissoes_usuarios`: portanto herda
+exatamente a matriz do cargo. Execução no dev: **41 cargos, 41 cobertos, 0 sem usuário e 0
+permissões diretas** nos 31 usuários adicionais.
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas
