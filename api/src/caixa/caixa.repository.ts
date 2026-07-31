@@ -31,6 +31,7 @@ import {
   turnos
 } from "@padaria/db/schema/cadastro";
 import {
+  alteracoesPosFechamentoCaixa,
   ajustesFechamentoCaixa,
   debitosColaboradores,
   edicoesCaixa,
@@ -564,6 +565,23 @@ export async function listarEdicoesCaixaRepository(caixaId: string, db: Executor
     .orderBy(desc(edicoesCaixa.editadoEm));
 }
 
+export async function listarAlteracoesPosFechamentoRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: alteracoesPosFechamentoCaixa.id,
+      vendaId: alteracoesPosFechamentoCaixa.vendaId,
+      alteradoEm: alteracoesPosFechamentoCaixa.alteradoEm,
+      identificadorExterno: vendas.identificadorExterno,
+      descricao: vendas.descricao,
+      dataVenda: vendas.dataVenda,
+      valor: vendas.valorOriginal
+    })
+    .from(alteracoesPosFechamentoCaixa)
+    .innerJoin(vendas, eq(vendas.id, alteracoesPosFechamentoCaixa.vendaId))
+    .where(eq(alteracoesPosFechamentoCaixa.fechamentoCaixaId, caixaId))
+    .orderBy(desc(alteracoesPosFechamentoCaixa.alteradoEm));
+}
+
 // Lancamentos de UM caixa, por categoria. Mesmos criterios de calcularTotaisCaixaOperacionalRepository
 // (computar + nao cancelado), para o detalhe bater com os totais da linha.
 // Nao reusa /api/vendas e afins de proposito: aquelas rotas aplicam o escopo operacional
@@ -945,4 +963,12 @@ export async function caixasComAjusteRepository(caixaIds: string[], db: Executor
     .selectDistinct({ caixaId: ajustesFechamentoCaixa.fechamentoCaixaId })
     .from(ajustesFechamentoCaixa)
     .where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
+}
+
+export async function caixasAlteradosPosFechamentoRepository(caixaIds: string[], db: ExecutorBanco = banco) {
+  if (!caixaIds.length) return [];
+  return db
+    .selectDistinct({ caixaId: alteracoesPosFechamentoCaixa.fechamentoCaixaId })
+    .from(alteracoesPosFechamentoCaixa)
+    .where(inArray(alteracoesPosFechamentoCaixa.fechamentoCaixaId, caixaIds));
 }

@@ -56,8 +56,10 @@ import {
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarEdicoesCaixaRepository,
+  listarAlteracoesPosFechamentoRepository,
   listarHistoricoCaixaRepository,
   listarLancamentosCaixaRepository,
+  caixasAlteradosPosFechamentoRepository,
   listarUsuariosTesourariaRepository,
   listarTransferenciasCaixaRepository,
   marcarMaloteEmUsoRepository,
@@ -708,11 +710,13 @@ export async function listarHistoricoCaixa(
   const filtros = filtrosDoHistorico(query);
   const { itens, total } = await listarHistoricoCaixaRepository(filtros, query.page, query.pageSize);
   // Totais do filtro inteiro (rodape) e o flag de acerto so das linhas da pagina.
-  const [totais, ajustes] = await Promise.all([
+  const [totais, ajustes, alterados] = await Promise.all([
     totaisHistoricoCaixaRepository(filtros),
-    caixasComAjusteRepository(itens.map((caixa) => caixa.id))
+    caixasComAjusteRepository(itens.map((caixa) => caixa.id)),
+    caixasAlteradosPosFechamentoRepository(itens.map((caixa) => caixa.id))
   ]);
   const comAjuste = new Set(ajustes.map((ajuste) => ajuste.caixaId));
+  const alteradoPosFechamento = new Set(alterados.map((alteracao) => alteracao.caixaId));
 
   return {
     itens: itens.map((caixa) => ({
@@ -730,7 +734,8 @@ export async function listarHistoricoCaixa(
       totalMercadorias: numero(caixa.totalMercadorias),
       saldo: numero(caixa.saldo),
       status: statusCaixaSchema.parse(caixa.status),
-      temAjuste: comAjuste.has(caixa.id)
+      temAjuste: comAjuste.has(caixa.id),
+      alteradoAposFechamento: alteradoPosFechamento.has(caixa.id)
     })),
     total,
     page: query.page,
@@ -768,14 +773,24 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
 
-  const [edicoes, ajuste, lancamentos] = await Promise.all([
+  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),
     buscarAjusteCaixaRepository(caixaId),
-    listarLancamentosCaixaRepository(caixaId)
+    listarLancamentosCaixaRepository(caixaId),
+    listarAlteracoesPosFechamentoRepository(caixaId)
   ]);
 
   return {
     lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
+    alteracoesPosFechamento: alteracoesPosFechamento.map((alteracao) => ({
+      id: alteracao.id,
+      vendaId: alteracao.vendaId,
+      identificadorExterno: alteracao.identificadorExterno,
+      descricao: alteracao.descricao,
+      valor: numero(alteracao.valor),
+      dataVenda: serializarData(alteracao.dataVenda),
+      alteradoEm: serializarData(alteracao.alteradoEm) ?? ""
+    })),
     edicoes: edicoes.map((edicao) => ({
       id: edicao.id,
       editadoPor: edicao.editadoPor,

@@ -922,6 +922,7 @@ export const vendas = pgTable(
     check("vendas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("vendas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    unique("vendas_id_empresa_unica").on(table.id, table.empresaId),
     index("vendas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("vendas_caixa_idx").on(table.caixaId),
     // Suporta a revinculacao retroativa: achar vendas ORFAS (caixa_id NULL) de um PDV num intervalo.
@@ -1652,6 +1653,34 @@ export const fechamentosCaixa = pgTable(
       .on(table.pdvId)
       .where(sql`${table.status} = 'aberto'`),
     index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
+  ]
+);
+
+// Trilha imutavel da R-013: uma venda integrada recebida depois da conferencia continua entrando
+// no caixa correspondente ao horario em que ocorreu, mas deixa evidencia visivel no fechamento.
+// Uma venda gera no maximo uma marca por fechamento mesmo se o PDV reenviar atualizacoes.
+export const alteracoesPosFechamentoCaixa = pgTable(
+  "alteracoes_pos_fechamento_caixa",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    vendaId: uuid("venda_id").notNull(),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "alteracoes_pos_fechamento_caixa_fechamento_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.vendaId, table.empresaId],
+      foreignColumns: [vendas.id, vendas.empresaId],
+      name: "alteracoes_pos_fechamento_caixa_venda_empresa_fk"
+    }).onDelete("cascade"),
+    unique("alteracoes_pos_fechamento_caixa_venda_unica").on(table.fechamentoCaixaId, table.vendaId),
+    index("alteracoes_pos_fechamento_caixa_empresa_idx").on(table.empresaId, table.fechamentoCaixaId)
   ]
 );
 

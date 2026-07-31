@@ -10,7 +10,7 @@ import {
   produtos,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
-import { fechamentosCaixa } from "@padaria/db/schema/caixa";
+import { alteracoesPosFechamentoCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   integracoesCamposConfig,
   integracoesChaves,
@@ -603,9 +603,9 @@ export async function buscarCaixaParaVendaRepository(
   pdvId: string,
   dataVenda: Date,
   db: ExecutorBanco = banco
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; status: string } | null> {
   const [caixa] = await db
-    .select({ id: fechamentosCaixa.id })
+    .select({ id: fechamentosCaixa.id, status: fechamentosCaixa.status })
     .from(fechamentosCaixa)
     .where(
       and(
@@ -618,6 +618,18 @@ export async function buscarCaixaParaVendaRepository(
     .orderBy(desc(fechamentosCaixa.dataHoraAbertura))
     .limit(1);
   return caixa ?? null;
+}
+
+export async function registrarAlteracaoPosFechamentoRepository(
+  input: { empresaId: string; fechamentoCaixaId: string; vendaId: string },
+  db: ExecutorBanco = banco
+) {
+  await db
+    .insert(alteracoesPosFechamentoCaixa)
+    .values(input)
+    .onConflictDoNothing({
+      target: [alteracoesPosFechamentoCaixa.fechamentoCaixaId, alteracoesPosFechamentoCaixa.vendaId]
+    });
 }
 
 export async function criarOuAtualizarVendaIntegradaRepository(

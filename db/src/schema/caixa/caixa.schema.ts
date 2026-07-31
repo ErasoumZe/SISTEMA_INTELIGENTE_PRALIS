@@ -1,4 +1,5 @@
 export {
+  alteracoesPosFechamentoCaixa,
   ajustesFechamentoCaixa,
   caixaAutorizacoes,
   debitosColaboradores,

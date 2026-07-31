@@ -176,6 +176,13 @@
       "when": 1785516746041,
       "tag": "0024_fechado_por",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785517214155,
+      "tag": "0025_venda_tardia_caixa_fechado",
+      "breakpoints": true
     }
   ]
 }

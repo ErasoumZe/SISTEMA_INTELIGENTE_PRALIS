@@ -58,6 +58,7 @@ const colunas = [
   { title: "Turno", key: "turnoNome", sortable: false },
   { title: "Abertura -> Fechamento", key: "periodo", sortable: false },
   { title: "Fechado por", key: "fechadoPorNome", sortable: false },
+  { title: "Pós-fechamento", key: "alteradoAposFechamento", sortable: false },
   { title: "Entradas", key: "totalEntradas", align: "end" as const, sortable: false },
   { title: "Despesas", key: "totalDespesas", align: "end" as const, sortable: false },
   { title: "Retiradas", key: "totalRetiradas", align: "end" as const, sortable: false },
@@ -232,6 +233,12 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
           {{ item.dataHoraFechamento ? formatarDataHora(item.dataHoraFechamento) : "em aberto" }}
         </template>
         <template #[`item.fechadoPorNome`]="{ item }">{{ item.fechadoPorNome || "--" }}</template>
+        <template #[`item.alteradoAposFechamento`]="{ item }">
+          <v-chip v-if="item.alteradoAposFechamento" color="warning" size="small" variant="tonal">
+            Alterado após fechamento
+          </v-chip>
+          <span v-else>--</span>
+        </template>
         <template #[`item.totalEntradas`]="{ item }">{{ valorColuna(item, item.totalEntradas) }}</template>
         <template #[`item.totalDespesas`]="{ item }">{{ valorColuna(item, item.totalDespesas) }}</template>
         <template #[`item.totalRetiradas`]="{ item }">{{ valorColuna(item, item.totalRetiradas) }}</template>

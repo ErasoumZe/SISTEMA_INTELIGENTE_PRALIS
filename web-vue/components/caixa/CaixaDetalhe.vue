@@ -51,6 +51,22 @@ onMounted(carregar);
         >.
       </v-alert>
 
+      <v-alert
+        v-if="detalhe.alteracoesPosFechamento.length"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mb-4"
+      >
+        <div class="font-weight-bold mb-2">Alterado após o fechamento</div>
+        <div v-for="alteracao in detalhe.alteracoesPosFechamento" :key="alteracao.id" class="text-body-2 mb-1">
+          {{ formatarDataHora(alteracao.alteradoEm) }} — venda
+          <strong>{{ alteracao.identificadorExterno || alteracao.vendaId }}</strong>
+          ({{ alteracao.dataVenda ? formatarDataHora(alteracao.dataVenda) : "horário não informado" }},
+          {{ dinheiro(alteracao.valor) }}).
+        </div>
+      </v-alert>
+
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->
       <div class="text-subtitle-2 mb-2">Lançamentos deste caixa</div>

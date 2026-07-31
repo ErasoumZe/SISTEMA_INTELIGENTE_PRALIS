@@ -213,4 +213,90 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     );
     expect(linha?.caixa_id).toBeNull();
   });
+
+  it("aceita venda tardia e marca qual venda alterou o caixa depois do fechamento (R-013)", async () => {
+    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta venda tardia" });
+    const contaId = json<{ data: { id: string } }>(conta).data.id;
+    const pdv = await criar("/api/pdvs", {
+      empresaId: idsTeste.empresaA,
+      nome: "PDV venda tardia",
+      contaId,
+      ativo: true
+    });
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+    const vinculo = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/integracoes/vinculos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        tipo: "vendas",
+        tipoRegistro: "pdv",
+        identificadorExterno: "PDV-VENDA-TARDIA",
+        descricaoExterna: "PDV venda tardia",
+        registroSistemaId: pdvId
+      }
+    });
+    expect(vinculo.statusCode, vinculo.body).toBe(204);
+
+    const abertura = await criar("/api/caixa/abrir", {
+      empresaId: idsTeste.empresaA,
+      pdvId,
+      usuarioCaixaId: await usuarioAdminId(),
+      dataHoraAbertura: "2026-07-29T08:00:00.000Z",
+      observacao: "Caixa para provar venda tardia"
+    });
+    const caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    const fechamento = await post(`/api/caixa/${caixaId}/fechar`, {});
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
+
+    const venda = await post(
+      "/api/integracoes",
+      payloadVendaIntegrada("VENDA-TARDIA-R013", "PDV-VENDA-TARDIA", 37.5, "2026-07-29T12:00:00.000Z"),
+      { "x-api-key": idsTeste.integracaoCodigo }
+    );
+    assertOk(venda);
+
+    const auditoria = await consultarUm<{
+      fechamento_caixa_id: string;
+      venda_id: string;
+      alterado_em: Date;
+      identificador_externo: string;
+    }>(
+      `select a.fechamento_caixa_id, a.venda_id, a.alterado_em, v.identificador_externo
+         from alteracoes_pos_fechamento_caixa a
+         join vendas v on v.id = a.venda_id
+        where a.fechamento_caixa_id = $1`,
+      [caixaId]
+    );
+    expect(auditoria).toMatchObject({
+      fechamento_caixa_id: caixaId,
+      identificador_externo: "VENDA-TARDIA-R013"
+    });
+    expect(auditoria?.alterado_em).toBeInstanceOf(Date);
+
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(historico);
+    const linha = json<{ data: Array<{ id: string; alteradoAposFechamento: boolean }> }>(historico).data.find(
+      (item) => item.id === caixaId
+    );
+    expect(linha?.alteradoAposFechamento).toBe(true);
+
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/${caixaId}/detalhe`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(detalhe);
+    expect(
+      json<{ data: { alteracoesPosFechamento: Array<{ vendaId: string; identificadorExterno: string }> } }>(detalhe)
+        .data.alteracoesPosFechamento
+    ).toContainEqual(
+      expect.objectContaining({ vendaId: auditoria?.venda_id, identificadorExterno: "VENDA-TARDIA-R013" })
+    );
+  });
 });

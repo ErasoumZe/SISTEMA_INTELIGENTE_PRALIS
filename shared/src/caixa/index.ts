@@ -105,6 +105,7 @@ export const linhaHistoricoCaixaSchema = z.object({
   saldo: z.number(),
   status: statusCaixaSchema,
   temAjuste: z.boolean(),
+  alteradoAposFechamento: z.boolean(),
   observacao: z.string().nullable()
 });
 
@@ -158,8 +159,19 @@ export const categoriaLancamentosCaixaSchema = z.object({
   itens: z.array(lancamentoCaixaSchema)
 });
 
+export const alteracaoPosFechamentoCaixaSchema = z.object({
+  id: uuidSchema,
+  vendaId: uuidSchema,
+  identificadorExterno: z.string().nullable(),
+  descricao: z.string(),
+  valor: z.number(),
+  dataVenda: z.string().nullable(),
+  alteradoEm: z.string()
+});
+
 export const detalheCaixaResponseSchema = z.object({
   lancamentos: z.array(categoriaLancamentosCaixaSchema),
+  alteracoesPosFechamento: z.array(alteracaoPosFechamentoCaixaSchema),
   edicoes: z.array(edicaoHorarioCaixaSchema),
   ajuste: ajusteCaixaSchema.nullable()
 });
@@ -299,6 +311,7 @@ export type EdicaoHorarioCaixa = z.infer<typeof edicaoHorarioCaixaSchema>;
 export type AjusteCaixa = z.infer<typeof ajusteCaixaSchema>;
 export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
 export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
+export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
