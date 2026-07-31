@@ -6,15 +6,19 @@ import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
 // M2 (R3/R4/R6): sangria (turno) e retorno (fechamento) = caixa -> cofre, mesma entidade com tipo.
-// Cobre: (a) a fórmula do déficit NAO descontar em dobro apos sangria; (b) retorno proposto pela
+// Cobre: (a) a sangria so MOVER dinheiro, sem divida com o cofre (R-001); (b) retorno proposto pela
 // sobra zera o saldo e libera o fechamento; (c) agregacao "aba TRANSFERENCIAS" por caixa+dia.
 describe("caixa - retorno/sangria (M2)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
+    ]);
   }, 120_000);
 
   afterAll(async () => {
@@ -41,19 +45,35 @@ describe("caixa - retorno/sangria (M2)", () => {
     return json<{ data: { id: string } }>(r).data.id;
   }
 
-  async function criarMalote(numeroLacre: string, valor: number) {
-    return criar("/api/malotes", { empresaId, numeroLacre, valor });
-  }
-
-  async function abrir(nome: string, dataHora: string, maloteId?: string) {
+  // R-040: o fundo chega por uma transferencia da TESOURARIA, e o caixa a confirma ao abrir
+  // informando o lacre. Quem envia nunca confirma o proprio envio (R-028) — dai a tesouraria.
+  async function abrir(nome: string, dataHora: string, fundo?: { lacre: string; valor: number }) {
     const contaId = await criar("/api/contas", { empresaId, nome: `Conta ${nome}` });
     const pdvId = await criar("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
+    if (fundo) {
+      const envio = await contexto.app.inject({
+        method: "POST",
+        url: "/api/transferencias",
+        headers: { cookie: cookieTesouraria },
+        payload: {
+          empresaId,
+          dataReferencia: dataHora.slice(0, 10),
+          descricao: `Fundo de troco ${nome}`,
+          valorOriginal: fundo.valor,
+          contaOrigemId: idsTeste.contaCofre,
+          contaDestinoId: contaId,
+          nLacreDoc: fundo.lacre,
+          tempoConfirmacao: "1dia"
+        }
+      });
+      expect(envio.statusCode, envio.body).toBe(201);
+    }
     const abrirResp = await post("/api/caixa/abrir", {
       empresaId,
       pdvId,
       usuarioCaixaId: await usuarioAdminId(),
       dataHoraAbertura: dataHora,
-      ...(maloteId ? { maloteId } : {})
+      ...(fundo ? { lacreAbertura: fundo.lacre } : {})
     });
     expect(abrirResp.statusCode, abrirResp.body).toBe(201);
     return { contaId, pdvId, caixaId: json<{ data: { id: string } }>(abrirResp).data.id };
@@ -107,18 +127,22 @@ describe("caixa - retorno/sangria (M2)", () => {
     }>(r).data;
   }
 
-  it("Sangria NAO desconta o deficit em dobro (saldoProprio correto)", async () => {
-    const maloteId = await criarMalote("LAC-SANGRIA", 490);
-    const { contaId, pdvId, caixaId } = await abrir("sangria", "2026-08-01T08:00", maloteId);
+  it("Sangria apenas MOVE dinheiro: o saldo fisico cai e nao ha divida com o cofre (R-001)", async () => {
+    const { contaId, pdvId, caixaId } = await abrir("sangria", "2026-08-01T08:00", {
+      lacre: "LAC-SANGRIA",
+      valor: 490
+    });
 
     await venda(contaId, pdvId, "2026-08-01", 490);
-    // Divida quitada: saldoProprio == 0, saldo fisico == 980 (490 abertura + 490 vendas).
-    expect(await resumoAtual()).toMatchObject({ dividaCofre: 490, saldoProprio: 0, saldo: 980 });
+    // R-001: o fundo e fundo, nao emprestimo — dividaCofre = 0, sem deficit a rastrear.
+    // saldo FISICO = 980 (490 de fundo + 490 de venda); saldoProprio e OPERACIONAL e exclui as
+    // transferencias, entao conta so a venda: 490.
+    expect(await resumoAtual()).toMatchObject({ dividaCofre: 0, saldoProprio: 490, saldo: 980 });
 
-    // Sangria de 200: so MOVE dinheiro -> saldoProprio continua 0; saldo fisico cai 200.
+    // Sangria de 200: so MOVE dinheiro -> o fisico cai 200 e o operacional nao se mexe.
     const sangria = await transferenciaCofre(caixaId, "sangria", 200);
     expect(sangria.statusCode, sangria.body).toBe(200);
-    expect(await resumoAtual()).toMatchObject({ dividaCofre: 490, saldoProprio: 0, saldo: 780 });
+    expect(await resumoAtual()).toMatchObject({ dividaCofre: 0, saldoProprio: 490, saldo: 780 });
   });
 
   it("Retorno da sobra zera o saldo e libera o fechamento", async () => {
@@ -138,8 +162,7 @@ describe("caixa - retorno/sangria (M2)", () => {
   });
 
   it("Agrega por caixa+dia: 1a/2a saida (abertura+suprimento) e 1a/2a entrada (sangria+retorno)", async () => {
-    const maloteId = await criarMalote("LAC-AGREGA", 490);
-    const { contaId, caixaId } = await abrir("agrega", "2026-08-03T08:00", maloteId);
+    const { contaId, caixaId } = await abrir("agrega", "2026-08-03T08:00", { lacre: "LAC-AGREGA", valor: 490 });
 
     // 2o suprimento (cofre -> caixa) pela rota manual de transferencias.
     await criar("/api/transferencias", {

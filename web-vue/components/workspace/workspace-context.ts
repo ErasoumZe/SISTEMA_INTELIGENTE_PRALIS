@@ -21,11 +21,6 @@ import type {
   TipoPagamentoForm
 } from "~/utils/operacoes";
 
-export type FormMalote = {
-  numeroLacre: string;
-  valor: number;
-};
-
 export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
@@ -60,11 +55,6 @@ export type WorkspaceContext = {
   fotoNotaPreview: Ref<string>;
   fotoNotaExistente: Ref<boolean>;
   selecionarFotoNota: (entrada: File | File[] | null) => void;
-  modalMaloteAberto: Ref<boolean>;
-  maloteEditandoId: Ref<string>;
-  formMalote: Ref<FormMalote>;
-  maloteSalvando: Ref<boolean>;
-  salvarMalote: () => Promise<void>;
   modalCadastroAberto: Ref<boolean>;
   cadastroEditandoId: Ref<string>;
   cadastroTela: Ref<string>;

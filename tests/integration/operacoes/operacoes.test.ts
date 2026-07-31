@@ -260,9 +260,9 @@ describe("operacoes integration", () => {
         descricao: "Transferencia referencia invalida",
         valorOriginal: 1,
         contaOrigemId: idsTeste.contaCaixa,
-        contaDestinoId: idsTeste.contaBanco,
-        nLacreDoc: "OPERACOES-REFERENCIA-OUTRA-EMPRESA",
-        maloteId: idsTeste.maloteB
+        // Referencia que NAO e conta da empresa A: a validacao de referencia tem de barrar.
+        contaDestinoId: idsTeste.grupoPatrimonioOutraEmpresa,
+        nLacreDoc: "OPERACOES-REFERENCIA-OUTRA-EMPRESA"
       }
     });
     const cookieCaixa = await cookieSessao(contexto.app, "caixa");

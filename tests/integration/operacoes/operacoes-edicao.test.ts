@@ -222,24 +222,6 @@ describe("operacoes edicao integration", () => {
       nLacreDoc: "EDICAO-TR-001"
     });
 
-    // Trocar malote/lacre na edicao e proibido (estado do lacre e derivado da criacao).
-    const trocaMalote = await contexto.app.inject({
-      method: "PUT",
-      url: `/api/transferencias/${transferenciaId}`,
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        dataReferencia: dataRef,
-        descricao: "Transferencia com malote",
-        valorOriginal: 9,
-        contaOrigemId: contaPdvId,
-        contaDestinoId: idsTeste.contaBanco,
-        nLacreDoc: "EDICAO-TR-001",
-        maloteId: "99999999-9999-4999-8999-999999999999"
-      }
-    });
-    assertProblem(trocaMalote, 400);
-
     await atualizar(`/api/mercadorias/${mercadoriaId}`, {
       empresaId: idsTeste.empresaA,
       dataReferencia: dataRef,

@@ -16,7 +16,6 @@ export {
   gruposPatrimonio,
   gruposRetiradas,
   gruposVendas,
-  malotes,
   maquininhas,
   patrimonioItens,
   pdvs,

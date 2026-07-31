@@ -150,7 +150,6 @@ function responderConfirmacao(confirmou: boolean) {
 }
 
 const modalOperacaoAberto = ref(false);
-const modalMaloteAberto = ref(false);
 const modalCadastroAberto = ref(false);
 const modalTemaAberto = ref(false);
 const modalCopiaAberto = ref(false);
@@ -189,11 +188,6 @@ const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: 
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoOperacao = ref(false);
 const caixaSalvando = ref(false);
-
-const formMalote = ref({ numeroLacre: "", valor: 0 });
-const maloteEditandoId = ref("");
-const maloteSalvando = ref(false);
-const maloteEditandoCarregandoId = ref("");
 
 const cadastroTela = ref("");
 const cadastroEditandoId = ref("");
@@ -631,10 +625,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "transferencias") {
     // Origem/Destino: SO as contas que o usuario opera (contas_usuarios; admin ve todas). Ver
     // /api/contas-usuarios/minhas-contas. Sem vinculo => vazio (o modal mostra o aviso).
-    [dados.contas, dados.malotes] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Malotes", () => apiGet<Opcao[]>(`/api/malotes${query}`), [])
-    ]);
+    dados.contas = await carregarOpcaoOpcional(
+      faltas,
+      "Contas",
+      () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+      []
+    );
   } else if (tela === "despesas") {
     Object.assign(
       dados,
@@ -753,8 +749,6 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     permissoesBuscou.value = false;
     permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
-  } else if (tela === "malotes") {
-    dados.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
   } else if (tela === "colaboradores") {
     [dados.colaboradores, dados.cargos, dados.setores] = await Promise.all([
       apiGet<Opcao[]>(`/api/colaboradores${query}`),
@@ -987,7 +981,6 @@ type ChaveOpcaoOperacao =
   | "formasPagamento"
   | "pdvs"
   | "unidadesMedida"
-  | "malotes"
   | "grupos";
 
 // Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
@@ -999,7 +992,7 @@ const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   despesa: ["contas", "fornecedores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
   retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
-  transferencia: ["contas", "malotes"]
+  transferencia: ["contas"]
 };
 
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
@@ -1034,9 +1027,6 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     unidadesMedida: async () => {
       alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
     },
-    malotes: async () => {
-      alvo.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
-    },
     grupos: async () => {
       Object.assign(
         alvo,
@@ -1054,7 +1044,6 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",
     unidadesMedida: "Unidades de medida",
-    malotes: "Malotes",
     grupos: "Grupos"
   };
   // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal
@@ -1351,56 +1340,6 @@ async function salvarOperacao() {
   }
 }
 
-function abrirMaloteNovo() {
-  maloteEditandoId.value = "";
-  formMalote.value = { numeroLacre: "", valor: 0 };
-  modalMaloteAberto.value = true;
-}
-
-// O malote E o lacre (D3): o item ja esta em opcoes.malotes (numero + valor), sem buscar lacres.
-function abrirMaloteEditar(linha: Record<string, string | undefined>) {
-  if (!linha.id) return;
-  const malote = opcoes.value.malotes.find((item) => item.id === linha.id);
-  maloteEditandoId.value = linha.id;
-  formMalote.value = {
-    numeroLacre: malote?.numeroLacre ?? linha.lacre ?? "",
-    valor: Number(malote?.valor ?? 0)
-  };
-  modalMaloteAberto.value = true;
-}
-
-async function salvarMalote() {
-  maloteSalvando.value = true;
-  try {
-    const payload = {
-      empresaId: empresaId.value,
-      numeroLacre: formMalote.value.numeroLacre.trim(),
-      valor: formMalote.value.valor
-    };
-    const resposta = maloteEditandoId.value
-      ? await apiPut<{ id?: string }>(`/api/malotes/${maloteEditandoId.value}`, payload)
-      : await apiPost<{ id?: string }>("/api/malotes", payload);
-    const id = resposta?.id ?? maloteEditandoId.value;
-    const indiceAtual = opcoes.value.malotes.findIndex((item) => item.id === id);
-    // Status: novo nasce "disponivel"; edicao mantem o status atual (ciclo e do caixa, nao do cadastro).
-    const item: Opcao = {
-      id,
-      empresaId: empresaId.value,
-      numeroLacre: payload.numeroLacre,
-      valor: payload.valor,
-      status: indiceAtual >= 0 ? (opcoes.value.malotes[indiceAtual]?.status ?? "disponivel") : "disponivel"
-    };
-    if (indiceAtual >= 0) opcoes.value.malotes.splice(indiceAtual, 1, item);
-    else opcoes.value.malotes.unshift(item);
-    modalMaloteAberto.value = false;
-    notificar(maloteEditandoId.value ? "Malote atualizado com sucesso." : "Malote cadastrado com sucesso.");
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    maloteSalvando.value = false;
-  }
-}
-
 // Atualizacao local de cadastro: mapeamento tela->item + upsert nas listas reativas extraidos
 // para utils/cadastro-local.ts (factory testavel). O componente injeta os getters de estado e o
 // callback de permissoes; a factory muta as mesmas listas reativas (comportamento identico).
@@ -1436,12 +1375,6 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 }
 
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
-  // Malotes tem modal proprio (com lacres): o botao Editar embutido abre o editor de malote,
-  // e nao o cadastro generico. Isso substitui a acao "Editar" extra duplicada que existia.
-  if (telaAtiva.value === "malotes") {
-    void abrirMaloteEditar(linha);
-    return;
-  }
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
   formCadastro.value = formCadastroDeLinha(linha, regrasDaLinha(linha));
@@ -1736,11 +1669,6 @@ provide(WORKSPACE_CONTEXT, {
   fotoNotaPreview: fotoNota.previewUrl,
   fotoNotaExistente: fotoNota.existente,
   selecionarFotoNota: fotoNota.selecionar,
-  modalMaloteAberto,
-  maloteEditandoId,
-  formMalote,
-  maloteSalvando,
-  salvarMalote,
   modalCadastroAberto,
   cadastroEditandoId,
   cadastroTela,
@@ -1835,7 +1763,6 @@ const pageContext = computed(() => ({
   treeItens: telaAtiva.value === "areas_setores" ? treeAreasSetores() : treeGrupos(),
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
-  maloteEditandoCarregandoId: maloteEditandoCarregandoId.value,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,
@@ -1868,7 +1795,7 @@ const pageContext = computed(() => ({
     await carregarStatusCaixa(empresaId.value);
     await carregarOperacoes(empresaId.value);
   },
-  abrirCadastroNovo: () => (telaAtiva.value === "malotes" ? abrirMaloteNovo() : abrirCadastroNovo(telaAtiva.value)),
+  abrirCadastroNovo: () => abrirCadastroNovo(telaAtiva.value),
   abrirImportacao: () => abrirImportacao(telaAtiva.value),
   abrirExportacao,
   abrirCadastroEditar,

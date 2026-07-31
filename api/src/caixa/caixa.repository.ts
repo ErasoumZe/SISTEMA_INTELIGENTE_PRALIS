@@ -21,10 +21,8 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   colaboradores,
   colaboradoresCargos,
-  contas,
   cargos,
   empresas,
-  malotes,
   maquininhas,
   pdvs,
   perfisUsuarios,
@@ -41,7 +39,7 @@ import {
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
-import { transferencias } from "@padaria/db/schema/transferencia";
+import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
 import {
   transferenciaContaComoEntrada,
@@ -245,10 +243,9 @@ export async function criarCaixaRepository(
     tokenEdicao: string;
     turnoId: string | null;
     observacao: string | null;
-    // Abertura com malote (R8): vinculo do malote/lacre e a divida com o cofre (= valor do malote).
-    maloteAberturaId?: string | null;
+    // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. R-001: o
+    // fundo NAO e emprestimo, entao dividaCofre nasce zero (coluna legado, ver 18 D-08).
     lacreAbertura?: string | null;
-    dividaCofreCentavos?: number;
     maquininhaId?: string | null;
   },
   db: ExecutorBanco = banco
@@ -267,10 +264,9 @@ export async function criarCaixaRepository(
       abertoEm: new Date(),
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
-      maloteAberturaId: input.maloteAberturaId ?? null,
       lacreAbertura: input.lacreAbertura ?? null,
       maquininhaId: input.maquininhaId ?? null,
-      dividaCofre: centavosParaDecimalBanco(input.dividaCofreCentavos ?? 0),
+      dividaCofre: centavosParaDecimalBanco(0),
       status: "aberto",
       criadoPor: input.usuarioId
     })
@@ -334,69 +330,79 @@ export async function buscarContaCofreEmpresaRepository(
   return empresa?.contaCofreId ?? null;
 }
 
-export async function contaPertenceEmpresaRepository(
-  contaId: string,
+// R-040: a transferencia PENDENTE identificada pelo lacre digitado na abertura. O caixa que abre e
+// um dos destinos candidatos (R-030) — a disputa e resolvida no UPDATE atomico abaixo, nao aqui.
+// Retorna o suficiente para o servico distinguir os motivos de recusa (inexistente / rompido /
+// nao-pendente / caixa fora dos candidatos) em vez de um "lacre invalido" generico.
+export async function buscarTransferenciaPorLacreAberturaRepository(
   empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<boolean> {
-  const [conta] = await db
-    .select({ id: contas.id })
-    .from(contas)
-    .where(and(eq(contas.id, contaId), eq(contas.empresaId, empresaId)))
-    .limit(1);
-  return Boolean(conta);
-}
-
-export async function buscarMaloteParaAberturaRepository(
-  maloteId: string,
-  empresaId: string,
+  numeroLacre: string,
+  contaCaixaId: string,
   db: ExecutorBanco = banco
 ) {
-  const [malote] = await db
-    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, valor: malotes.valor, status: malotes.status })
-    .from(malotes)
-    .where(and(eq(malotes.id, maloteId), eq(malotes.empresaId, empresaId)))
+  const [linha] = await db
+    .select({
+      lacreId: lacres.id,
+      lacreRompido: lacres.rompido,
+      transferenciaId: transferencias.id,
+      status: transferencias.status,
+      valorOriginal: transferencias.valorOriginal,
+      contaOrigemId: transferencias.contaOrigemId,
+      criadoPor: transferencias.criadoPor,
+      candidatoId: transferenciasDestinosCandidatos.id
+    })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaId))
+    .leftJoin(
+      transferenciasDestinosCandidatos,
+      and(
+        eq(transferenciasDestinosCandidatos.transferenciaId, transferencias.id),
+        eq(transferenciasDestinosCandidatos.contaId, contaCaixaId)
+      )
+    )
+    .where(and(eq(lacres.empresaId, empresaId), ilike(lacres.numero, numeroLacre), eq(lacres.origem, "saida")))
     .limit(1);
-  return malote ?? null;
+  return linha ?? null;
 }
 
-export async function marcarMaloteEmUsoRepository(maloteId: string, db: ExecutorBanco = banco): Promise<void> {
-  await db.update(malotes).set({ status: "em_uso" }).where(eq(malotes.id, maloteId));
-}
-
-// Transferencia automatica de abertura (cofre -> caixa), tipo 'abertura', criada pelo servidor na
-// mesma transacao da abertura. Nasce 'aprovado'/'computar=true' pelos defaults do schema.
-export async function criarTransferenciaAberturaRepository(
+// R-040: o ato unico de confirmar. Vence a disputa (R-030) e rompe o lacre (R-027) na MESMA
+// transacao da abertura do caixa. O `where status = 'pendente'` e a trava: sob concorrencia o
+// segundo caixa bloqueia na linha, reavalia e nao atualiza nada — devolve null e o servico recusa.
+// Meia confirmacao e impossivel: qualquer falha aqui derruba a transacao inteira, inclusive o caixa.
+export async function confirmarTransferenciaAberturaRepository(
   input: {
-    empresaId: string;
-    caixaId: string;
-    contaCofreId: string;
+    transferenciaId: string;
+    lacreId: string;
     contaCaixaId: string;
-    valorCentavos: number;
-    dataReferencia: string;
-    maloteId: string;
-    descricao: string;
-    criadoPor: string;
+    caixaId: string;
+    usuarioId: string;
+    agora: Date;
   },
   db: ExecutorBanco = banco
-): Promise<{ id: string }> {
-  const [transferencia] = await db
-    .insert(transferencias)
-    .values({
-      empresaId: input.empresaId,
-      caixaId: input.caixaId,
-      dataReferencia: input.dataReferencia,
-      descricao: input.descricao,
-      valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
-      contaOrigemId: input.contaCofreId,
+): Promise<{ id: string; valorOriginal: string } | null> {
+  const [vencedora] = await db
+    .update(transferencias)
+    .set({
       contaDestinoId: input.contaCaixaId,
-      maloteId: input.maloteId,
+      caixaId: input.caixaId,
+      // A transferencia so vira "abertura" no instante em que um caixa a reivindica: ate ali ela e
+      // uma saida do cofre que ainda nao sabe qual caixa vai abrir (R-030).
       tipo: "abertura",
-      criadoPor: input.criadoPor
+      status: "recebido",
+      confirmadoPor: input.usuarioId,
+      dataRecebimento: input.agora,
+      atualizadoEm: input.agora
     })
-    .returning({ id: transferencias.id });
-  if (!transferencia) throw new Error("Transferencia de abertura nao criada");
-  return transferencia;
+    .where(and(eq(transferencias.id, input.transferenciaId), eq(transferencias.status, "pendente")))
+    .returning({ id: transferencias.id, valorOriginal: transferencias.valorOriginal });
+  if (!vencedora) return null;
+
+  const [lacre] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(and(eq(lacres.id, input.lacreId), eq(lacres.rompido, false)))
+    .returning({ id: lacres.id });
+  return lacre ? vencedora : null;
 }
 
 // --- Retorno / sangria (M2, R3/R4/R6) ---------------------------------------------------------
@@ -413,19 +419,18 @@ export async function proximaOrdemTransferenciaRepository(
   return Number(linha?.total ?? 0) + 1;
 }
 
-// Malote-selo disponivel da empresa por numero de lacre — o retorno/sangria usa um malote como selo
-// da volta (D5 opcional; o malote E o lacre).
-export async function buscarMaloteDisponivelPorLacreRepository(
-  empresaId: string,
-  numero: string,
+// Lacre do RETORNO/sangria (R-026: opcional; R-027: numero novo a cada movimento). Nasce nao
+// rompido — a volta so e "recebida" quando a tesouraria confere o malote no cofre.
+export async function criarLacreRetornoRepository(
+  input: { empresaId: string; numero: string; transferenciaId: string },
   db: ExecutorBanco = banco
-) {
-  const [malote] = await db
-    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, status: malotes.status })
-    .from(malotes)
-    .where(and(eq(malotes.empresaId, empresaId), ilike(malotes.numeroLacre, numero)))
-    .limit(1);
-  return malote ?? null;
+): Promise<void> {
+  await db.insert(lacres).values({
+    empresaId: input.empresaId,
+    numero: input.numero,
+    transferenciaId: input.transferenciaId,
+    origem: "retorno"
+  });
 }
 
 // Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
@@ -440,7 +445,7 @@ export async function criarTransferenciaCofreRepository(
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
-    maloteId: string | null;
+    nLacreDoc: string | null;
     descricao: string;
     observacao: string | null;
     criadoPor: string;
@@ -459,7 +464,7 @@ export async function criarTransferenciaCofreRepository(
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
-      maloteId: input.maloteId,
+      nLacreDoc: input.nLacreDoc,
       tipo: input.tipo,
       ordem: input.ordem,
       criadoPor: input.criadoPor
@@ -480,12 +485,11 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         valorOriginal: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
-        // O malote E o lacre: o "lacre" da linha e o numero de lacre do malote da transferencia.
-        lacreNumero: malotes.numeroLacre,
+        // O lacre da linha e o numero digitado na propria transferencia (R-021: fonte externa).
+        lacreNumero: transferencias.nLacreDoc,
         dataTransferencia: transferencias.dataTransferencia
       })
       .from(transferencias)
-      .leftJoin(malotes, eq(malotes.id, transferencias.maloteId))
       .where(
         and(
           eq(transferencias.caixaId, caixaId),

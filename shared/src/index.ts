@@ -17,7 +17,6 @@ export * from "./datas/index.js";
 export * from "./dinheiro/index.js";
 export * from "./discriminacao/index.js";
 export * from "./integracoes/index.js";
-export * from "./malotes/index.js";
 export * from "./patrimonio/index.js";
 export * from "./pdvs/index.js";
 export * from "./permissoes/index.js";

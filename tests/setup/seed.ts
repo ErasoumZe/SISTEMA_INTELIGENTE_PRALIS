@@ -21,7 +21,6 @@ import {
   integracoesCamposConfig,
   integracoesChaves,
   integracoesVinculos,
-  malotes,
   pdvs,
   perfisUsuarios,
   permissoesTabela,
@@ -75,9 +74,6 @@ const usuarios: UsuarioSeed[] = [
     permissoes: [
       "aparencia_visualizar",
       "aparencia_editar",
-      "cadastro_malotes_visualizar",
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
       "transferencias_visualizar",
       "transferencias_criar",
       "transferencias_conferir",
@@ -101,9 +97,6 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoTesouraria,
     role: "usuario_comum",
     permissoes: [
-      "cadastro_malotes_visualizar",
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
       "transferencias_visualizar",
       "transferencias_criar",
       "transferencias_conferir",
@@ -540,26 +533,6 @@ export async function aplicarSeedIntegracao() {
       descricaoExterna: "Dinheiro",
       registroSistemaId: idsTeste.formaPagamentoDinheiro,
       pendente: false
-    }
-  ]);
-
-  // Malote === lacre (D3): a identidade e o numero do lacre; valor > 0 para servir a abertura (R8).
-  await banco.insert(malotes).values([
-    {
-      id: idsTeste.maloteA,
-      empresaId: idsTeste.empresaA,
-      numeroLacre: "LACRE-A",
-      valor: "300.00",
-      status: "disponivel",
-      criadoPor: usuarioIds.get("tesouraria") ?? null
-    },
-    {
-      id: idsTeste.maloteB,
-      empresaId: idsTeste.empresaB,
-      numeroLacre: "LACRE-B",
-      valor: "300.00",
-      status: "disponivel",
-      criadoPor: null
     }
   ]);
 }

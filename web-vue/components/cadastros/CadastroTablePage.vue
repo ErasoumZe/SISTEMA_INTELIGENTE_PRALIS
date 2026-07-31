@@ -8,7 +8,7 @@ const props = defineProps<{
   descricao: string;
   colunas: string[];
   linhas: Array<Record<string, string | undefined>>;
-  editarCarregandoId: string;
+  editarCarregandoId?: string;
   modoServidor?: boolean;
   busca?: string;
   tipoPermissaoFiltro?: string;
@@ -41,11 +41,10 @@ const emit = defineEmits<{
   (event: "update:paginaServidor", pagina: number): void;
 }>();
 
-const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
+const acao = "Novo cadastro";
 const podeEditar = computed(() => true);
-const podeCopia = computed(() => !["permissoes", "malotes", "socios_gestores"].includes(props.tela));
+const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
-  // Malotes usa o botao Editar embutido (podeEditar); a acao extra "Editar" era uma duplicata, removida.
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
   if (props.tela === "permissoes")
     return [

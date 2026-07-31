@@ -183,6 +183,13 @@
       "when": 1785517214155,
       "tag": "0025_venda_tardia_caixa_fechado",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785526241502,
+      "tag": "0026_malote_morre_lacre_unico",
+      "breakpoints": true
     }
   ]
 }

@@ -26,7 +26,6 @@ import {
   gruposMercadorias,
   gruposPatrimonio,
   gruposRetiradas,
-  malotes,
   pdvs,
   produtos,
   sociosGestores,
@@ -294,7 +293,6 @@ export async function validarReferenciasTransferencia(
 ): Promise<string | null> {
   if (!(await existeNaEmpresa(contas, dados.contaOrigemId, dados.empresaId, db))) return "Conta de origem";
   if (!(await existeNaEmpresa(contas, dados.contaDestinoId, dados.empresaId, db))) return "Conta de destino";
-  if (dados.maloteId && !(await existeNaEmpresa(malotes, dados.maloteId, dados.empresaId, db))) return "Malote";
   return null;
 }
 

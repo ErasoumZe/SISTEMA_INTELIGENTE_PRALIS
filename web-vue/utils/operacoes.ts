@@ -33,7 +33,6 @@ export type OperacaoDetalhe = {
   grupoDespesaId?: string | null;
   grupoMercadoriaId?: string | null;
   grupoRetiradaId?: string | null;
-  maloteId?: string | null;
   nLacreDoc?: string | null;
   agendadaPara?: string | null;
   dataRecebimento?: string | null;
@@ -291,7 +290,6 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     grupoDespesaId: detalhe.grupoDespesaId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
-    maloteId: detalhe.maloteId ?? "",
     nLacreDoc: detalhe.nLacreDoc ?? "",
     agendadaPara: detalhe.agendadaPara?.slice(0, 16) ?? "",
     dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
@@ -448,7 +446,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     dataPagamento: dados.form.dataPagamento || null,
     // IDs opcionais nao selecionados vao como null (nao ""). O schema zod usa uuid().optional()
     // .nullable(): aceita UUID, null ou undefined, mas REJEITA "" com "Invalid UUID". Sem isso,
-    // qualquer campo de ID em branco (conta/fornecedor/colaborador/grupo/malote) quebra o envio.
+    // qualquer campo de ID em branco (conta/fornecedor/colaborador/grupo) quebra o envio.
     contaOrigemId: dados.form.contaOrigemId || null,
     contaDestinoId: dados.form.contaDestinoId || null,
     fornecedorId: dados.form.fornecedorId || null,
@@ -462,7 +460,6 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     grupoDespesaId: dados.form.grupoDespesaId || null,
     grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
     grupoRetiradaId: dados.form.grupoRetiradaId || null,
-    maloteId: dados.form.maloteId || null,
     ...(entidade === "transferencia"
       ? {
           nLacreDoc: dados.form.nLacreDoc || null,

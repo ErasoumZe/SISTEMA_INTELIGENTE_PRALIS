@@ -20,11 +20,6 @@ const workspace = useWorkspaceContext();
 
 const {
   opcoesEmpresa,
-  modalMaloteAberto,
-  maloteEditandoId,
-  formMalote,
-  maloteSalvando,
-  salvarMalote,
   modalCadastroAberto,
   cadastroEditandoId,
   cadastroTela,
@@ -129,43 +124,6 @@ const validacaoQtdPreview = computed(() =>
 <template>
   <!-- Abertura de caixa vive num unico fluxo: o form inline da CaixaResumoPage (/caixa). O modal
        antigo daqui foi removido (Definition of Done: nada e pronto enquanto o caminho antigo existir). -->
-
-  <v-dialog v-model="modalMaloteAberto" max-width="640">
-    <v-card>
-      <v-card-title>{{ maloteEditandoId ? "Editar malote" : "Novo malote" }}</v-card-title>
-      <v-card-text>
-        <!-- O malote E o lacre (D3): so o numero do lacre (identidade unica) + o valor. Sem codigo, sem saco.
-             O status nasce "disponivel" automaticamente. -->
-        <div class="d-grid ga-4">
-          <v-text-field
-            v-model="formMalote.numeroLacre"
-            label="Número do lacre"
-            placeholder="Ex.: 007"
-            hint="Identidade unica do malote (vem impresso no lacre)"
-            persistent-hint
-            autofocus
-            hide-details="auto"
-          />
-          <v-text-field
-            v-model.number="formMalote.valor"
-            label="Valor (R$)"
-            type="number"
-            min="0"
-            step="0.01"
-            prefix="R$"
-            hint="Quanto de dinheiro vai dentro do malote"
-            persistent-hint
-            hide-details="auto"
-          />
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="outlined" :disabled="maloteSalvando" @click="modalMaloteAberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="maloteSalvando" @click="salvarMalote">Salvar</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
 
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
     <v-card>

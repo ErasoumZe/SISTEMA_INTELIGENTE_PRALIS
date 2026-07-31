@@ -20,12 +20,11 @@ export const abrirCaixaPayloadSchema = z.object({
   dataHoraAbertura: dataHoraSchema,
   // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
   turnoId: uuidSchema.optional().nullable(),
-  // Malote selecionado na abertura (R8): o servidor cria a transferencia cofre -> caixa pelo valor
-  // do malote e inicia o caixa em deficit. Opcional (abrir sem malote continua valido).
-  maloteId: uuidSchema.optional().nullable(),
   // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
   maquininhaId: uuidSchema.optional().nullable(),
-  // Lacre da IDA (D1/D5): preenchimento opcional por enquanto; o campo ja existe.
+  // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
+  // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
+  // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
   lacreAbertura: z.string().trim().min(1).optional().nullable(),
   observacao: z.string().optional().nullable()
 });

@@ -27,7 +27,6 @@ const permissaoAcessoPorTela = {
   // Financeiro/Admin sao R9/D8 (doc 02) — Fase 1 NAO muda comportamento aqui.
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
-  malotes: "cadastro_malotes_visualizar",
   caixa: "caixa_operar",
   promocoes: "promocoes_visualizar",
   relatorio_faltas: "relatorio_faltas_visualizar",
@@ -152,12 +151,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   Tesouraria: permissoesDoCargo({
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
-    ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
-    // gerencia os LACRES (selo do movimento), espelhando o cadastro de malotes.
+    // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
       "transferencias_criar",
       ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",

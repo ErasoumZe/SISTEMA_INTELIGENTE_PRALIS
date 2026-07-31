@@ -92,48 +92,39 @@ describe("montarResumoCaixa", () => {
     });
   });
 
-  it("Deve_ExporDividaCofre_E_SaldoProprioNegativo_Quando_AberturaComMalote", () => {
-    // Malote de 490: a transferencia de abertura entra como transferenciasEntrada (dinheiro na
-    // gaveta) e dividaCofre = 490. Sem vendas, o saldo proprio nasce em -490 (deficit).
-    const resumo = montarResumoCaixa(totais({ transferenciasEntrada: 49000 }), 49000);
-    expect(resumo.dividaCofre).toBe(490);
+  it("Deve_ManterDividaCofreZero_Quando_OFundoChegaPorTransferencia (R-001/R-040)", () => {
+    // Fundo de 490 recebido na abertura pelo lacre: entra como transferenciasEntrada (dinheiro na
+    // gaveta). R-001 revogou a R8 — o fundo NAO e emprestimo, entao nao nasce divida nenhuma.
+    const resumo = montarResumoCaixa(totais({ transferenciasEntrada: 49000 }), 0);
+    expect(resumo.dividaCofre).toBe(0);
     expect(resumo.saldo).toBe(490); // saldo fisico (formula canonica intacta)
-    expect(resumo.saldoProprio).toBe(-490); // deficit com o cofre
+    expect(resumo.saldoProprio).toBe(0); // operacional: nao ha venda nem despesa ainda
   });
 });
 
-describe("saldoProprioCentavos (R8 — deficit do malote, Opcao A/Lente B)", () => {
-  it("Deve_NascerEmDeficit_Quando_AberturaComMalote490SemVendas", () => {
-    // Abertura: transferencia cofre->caixa de 490 (transferenciasEntrada) e divida 490.
-    const saldoProprio = saldoProprioCentavos(totais({ transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(-49000);
+// `saldoProprioCentavos` continua recebendo a divida como parametro, mas desde a R-001/R-040 a
+// producao SEMPRE passa 0 (a coluna divida_cofre e legado — ver 18 D-08). Os casos com divida > 0
+// ficam como guarda da funcao pura; nenhum fluxo do sistema os alcanca.
+describe("saldoProprioCentavos (divida sempre 0 na producao; parametro legado)", () => {
+  it("Deve_IgualarOperacional_Quando_FundoEntraSemDivida", () => {
+    // Fundo de 490 na gaveta, sem venda: o operacional e 0 (transferencia nao e resultado).
+    expect(saldoProprioCentavos(totais({ transferenciasEntrada: 49000 }), 0)).toBe(0);
   });
 
-  it("Deve_QuitarDivida_Quando_VendasEmDinheiroIgualamOMalote", () => {
-    // 490 em vendas dinheiro sobre o malote de 490: deficit zerado.
-    const saldoProprio = saldoProprioCentavos(totais({ entradas: 49000, transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(0);
+  it("Deve_ContarSomenteOOperacional_Quando_HaVendasSobreOFundo", () => {
+    // 490 de venda sobre 490 de fundo: o resultado do caixa e a venda, nao o fundo.
+    expect(saldoProprioCentavos(totais({ entradas: 49000, transferenciasEntrada: 49000 }), 0)).toBe(49000);
   });
 
-  it("Deve_VirarResultado_Quando_VendasSuperamOMalote", () => {
-    // 600 em vendas sobre malote de 490: 110 de resultado do caixa.
-    const saldoProprio = saldoProprioCentavos(totais({ entradas: 60000, transferenciasEntrada: 49000 }), 49000);
-    expect(saldoProprio).toBe(11000);
+  it("Deve_IgualarSaldoFisico_Quando_SemDivida_E_SemTransferencias", () => {
+    const semFundo = totais({ entradas: 30000, despesas: 5000 });
+    expect(saldoProprioCentavos(semFundo, 0)).toBe(saldoCaixaCentavos(semFundo));
   });
 
-  it("Deve_IgualarSaldoFisico_Quando_SemMalote_E_SemTransferencias", () => {
-    // Retrocompat: sem malote (divida 0) e sem transferencias, saldo proprio == saldo canonico.
-    const semMalote = totais({ entradas: 30000, despesas: 5000 });
-    expect(saldoProprioCentavos(semMalote, 0)).toBe(saldoCaixaCentavos(semMalote));
-  });
-
-  it("Deve_NaoDescontarEmDobro_Quando_HaSangria_ou_Retorno (M2)", () => {
-    // Malote 490, 490 em vendas dinheiro e uma sangria de 200 (caixa->cofre, transferenciasSaida).
-    // A sangria so MOVE dinheiro: nao pode mexer no rastreador de deficit -> continua 0 (divida quitada).
+  it("Deve_NaoSerAfetado_Quando_HaSangria_ou_Retorno (M2)", () => {
+    // Sangria/retorno so MOVEM dinheiro: nao entram no resultado operacional do caixa.
     const comSangria = totais({ entradas: 49000, transferenciasEntrada: 49000, transferenciasSaida: 20000 });
-    expect(saldoProprioCentavos(comSangria, 49000)).toBe(0);
-    // Prova do bug antigo: a formula errada (saldo fisico - 2*divida) daria -20000 aqui.
-    expect(saldoCaixaCentavos(comSangria) - 2 * 49000).toBe(-20000);
+    expect(saldoProprioCentavos(comSangria, 0)).toBe(49000);
   });
 });
 

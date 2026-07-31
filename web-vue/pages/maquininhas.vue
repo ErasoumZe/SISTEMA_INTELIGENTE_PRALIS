@@ -11,7 +11,6 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
       :descricao="ctx.descricao"
       :colunas="ctx.colunasCadastro"
       :linhas="ctx.linhasCadastro"
-      :editar-carregando-id="ctx.maloteEditandoCarregandoId"
       :pode-excluir="false"
       @acionar="ctx.abrirCadastroNovo"
       @editar="ctx.abrirCadastroEditar"

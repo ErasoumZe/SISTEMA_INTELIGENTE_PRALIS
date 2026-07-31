@@ -123,14 +123,12 @@ describe("montarPayloadOperacao", () => {
       ...formOperacaoVazio(),
       valorOriginal: "10,50",
       valorAcrescimo: "",
-      valorDesconto: "",
-      maloteId: ""
+      valorDesconto: ""
     };
     const payload = montarPayloadOperacao("retirada", { ...base, form });
     expect(payload.empresaId).toBe("e1");
     expect(payload.valorOriginal).toBe(10.5);
     expect(payload.valorAcrescimo).toBe(0);
-    expect(payload.maloteId).toBeNull();
     expect(payload.dataPagamento).toBeNull();
   });
 
@@ -144,7 +142,6 @@ describe("montarPayloadOperacao", () => {
     expect(payload.grupoDespesaId).toBeNull();
     expect(payload.grupoMercadoriaId).toBeNull();
     expect(payload.grupoRetiradaId).toBeNull();
-    expect(payload.maloteId).toBeNull();
     // IDs preenchidos passam intactos.
     const preenchido = montarPayloadOperacao("despesa", {
       ...base,

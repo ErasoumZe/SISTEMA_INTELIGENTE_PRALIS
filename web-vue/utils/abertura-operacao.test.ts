@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { criarGuardaAberturaOperacao } from "./abertura-operacao";
 
 describe("guarda de abertura de operacao", () => {
-  it("faz uma unica busca de malotes ao abrir o modal de transferencia", async () => {
+  it("faz uma unica busca de contas ao abrir o modal de transferencia", async () => {
     const abrirUmaVez = criarGuardaAberturaOperacao();
-    const buscarMalotes = vi.fn(async () => [{ id: "malote-1", nome: "Malote 1" }]);
+    const buscarContas = vi.fn(async () => [{ id: "conta-1", nome: "Conta 1" }]);
     let modalAberto = false;
     let liberarCarregamento!: () => void;
     const carregamentoPendente = new Promise<void>((resolve) => {
@@ -15,7 +15,7 @@ describe("guarda de abertura de operacao", () => {
       abrirUmaVez(
         () => modalAberto,
         async () => {
-          await buscarMalotes();
+          await buscarContas();
           await carregamentoPendente;
           modalAberto = true;
         }
@@ -27,7 +27,7 @@ describe("guarda de abertura de operacao", () => {
     await Promise.all([primeiraAbertura, realimentacaoEnquantoCarrega]);
     await abrirTransferencia();
 
-    expect(buscarMalotes).toHaveBeenCalledTimes(1);
+    expect(buscarContas).toHaveBeenCalledTimes(1);
     expect(modalAberto).toBe(true);
   });
 });

@@ -44,7 +44,6 @@ import {
   integracoesRegistros,
   integracoesSemNovidade,
   integracoesVinculos,
-  malotes,
   mercadorias,
   mercadoriasItens,
   pdvs,
@@ -163,7 +162,6 @@ const permissaoAcessoPorTelaSeed = {
   retiradas: "retiradas_visualizar",
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
-  malotes: "cadastro_malotes_visualizar",
   caixa: "caixa_operar",
   promocoes: "promocoes_visualizar",
   relatorio_faltas: "relatorio_faltas_visualizar",
@@ -275,11 +273,9 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Tesouraria: permissoesDoCargoSeed({
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
-    ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
     // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
     extras: [
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
       "transferencias_criar",
       ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",
@@ -644,9 +640,6 @@ await banco.delete(colaboradores).where(
 if (idsUsuariosCargoTeste.length) {
   await banco.delete(colaboradores).where(inArray(colaboradores.usuarioId, idsUsuariosCargoTeste));
 }
-await banco
-  .delete(malotes)
-  .where(and(eq(malotes.empresaId, empresaId), inArray(malotes.numeroLacre, ["LACRE-001", "LACRE-002", "LACRE-003"])));
 await banco
   .delete(formasPagamento)
   .where(
@@ -1115,19 +1108,7 @@ await banco.insert(integracoesCamposConfig).values(
   }))
 );
 
-// Malote === lacre (D3): cada malote e um lacre com valor e status proprios. Um em_uso (usado numa
-// transferencia seed), um disponivel (pronto p/ abrir caixa) e um devolvido.
 const criadoPorTesouraria = usuarioIds.get("tesouraria@email.com") ?? null;
-const malotesSeed = await banco
-  .insert(malotes)
-  .values([
-    { empresaId, numeroLacre: "LACRE-001", valor: "200.00", status: "em_uso", criadoPor: criadoPorTesouraria },
-    { empresaId, numeroLacre: "LACRE-002", valor: "490.00", status: "disponivel", criadoPor: criadoPorTesouraria },
-    { empresaId, numeroLacre: "LACRE-003", valor: "0.00", status: "devolvido", criadoPor: criadoPorTesouraria }
-  ])
-  .returning({ id: malotes.id, numeroLacre: malotes.numeroLacre });
-const malote = malotesSeed.find((item) => item.numeroLacre === "LACRE-001");
-if (!malote) throw new Error("Malote nao foi criado");
 
 const caixaFechado = (
   await banco
@@ -1325,12 +1306,12 @@ await banco.insert(transferencias).values({
   caixaId: caixaFechado.id,
   dataReferencia: dataISO(-1),
   descricao: "Transferencia para banco seed",
-  observacao: "Transferencia fake com malote (lacre)",
+  observacao: "Transferencia seed com lacre digitado (R-021)",
   valorOriginal: "20.00",
   contaOrigemId: contaCaixa.id,
   contaDestinoId: contaBanco.id,
-  maloteId: malote.id,
-  criadoPor: usuarioIds.get("tesouraria@email.com") ?? null
+  nLacreDoc: "LACRE-001",
+  criadoPor: criadoPorTesouraria
 });
 
 await banco.insert(ajustesFechamentoCaixa).values({

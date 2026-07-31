@@ -63,12 +63,8 @@ export const permissoes = [
   "relatorio_vendas_visualizar",
   "relatorio_vendas_comprovantes_criar",
   "contas_pagar_visualizar",
-  "cadastro_malotes_visualizar",
-  "cadastro_malotes_criar",
-  "cadastro_malotes_editar",
-  "cadastro_malotes_excluir",
-  // Lacres = selo do MOVIMENTO (registro do lacre de uma transferencia de saida/retorno). Cadastro
-  // vizinho de malotes; operado pela Tesouraria. Distinto de malotes.numero_lacre (ver app.schema.ts).
+  // Lacres = selo do MOVIMENTO (registro do lacre de uma transferencia de saida/retorno), operado
+  // pela Tesouraria. O cadastro de malotes morreu com a R-040: malote-entidade nao existe mais.
   "cadastro_lacres_visualizar",
   "cadastro_lacres_criar",
   "cadastro_lacres_editar",
@@ -185,8 +181,6 @@ export const permissoes = [
   "menu_relatorio_produtos_mostrar",
   "menu_relatorio_produtos_desabilitado",
   "menu_relatorio_produtos_somente_caixa_aberto",
-  "menu_malotes_mostrar",
-  "menu_malotes_desabilitado",
   "menu_caixa_mostrar",
   "menu_caixa_desabilitado",
   "menu_promocoes_mostrar",

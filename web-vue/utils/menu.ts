@@ -40,9 +40,9 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
     ids: ["caixa", "historico_caixas", "entradas"]
   },
   {
-    // Transferencias – Contas / Locais: cofre <-> caixa, malote/lacre e o plano de contas (eixo laranja).
+    // Transferencias – Contas / Locais: cofre <-> caixa, o lacre do movimento e o plano de contas.
     titulo: "Transferencias",
-    ids: ["transferencias", "malotes", "contas"]
+    ids: ["transferencias", "contas"]
   },
   {
     // Saidas – Lancamentos (Despesas / Mercadorias / Retiradas, agrupadas na categoria) + estoque e a pagar.

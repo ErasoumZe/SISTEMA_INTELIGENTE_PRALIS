@@ -44,10 +44,7 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "relatorio_fiscal",
   "fiscal_produtos",
   "ficha_tecnica",
-  "ingredientes",
-  // Malotes: nao ha tela de criar malote — o lacre e informado direto na Transferencia
-  // (PROJECT_BRAIN/15, D-C). Oculta do menu/permissoes; rota e backend seguem intactos nesta rodada.
-  "malotes"
+  "ingredientes"
 ]);
 
 export const itemPorTela: Record<string, ItemMenu> = {
@@ -93,12 +90,6 @@ export const itemPorTela: Record<string, ItemMenu> = {
     titulo: "Produtos mais vendidos",
     permissao: "relatorio_produtos_visualizar",
     icone: "mdi-chart-bar"
-  },
-  malotes: {
-    id: "malotes",
-    titulo: "Malotes",
-    permissao: "cadastro_malotes_visualizar",
-    icone: "mdi-briefcase"
   },
   caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-cash-register" },
   // Retaguarda: quem gerencia caixas ve o historico de todos. Operador de caixa nao entra aqui.
@@ -449,7 +440,6 @@ export const secoesPermissoes = [
   { titulo: "Fornecedores", prefixos: ["cadastro_fornecedores", "menu_fornecedores"] },
   { titulo: "Grupos", prefixos: ["cadastro_grupos", "menu_grupos"] },
   { titulo: "Integrações", prefixos: ["integracoes", "menu_integracoes"] },
-  { titulo: "Malotes", prefixos: ["cadastro_malotes", "menu_malotes"] },
   { titulo: "Mercadorias", prefixos: ["mercadorias", "menu_mercadorias"] },
   { titulo: "PDV", prefixos: ["cadastro_pdv", "menu_pdv"] },
   { titulo: "Permissões", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
@@ -503,7 +493,6 @@ export function opcoesVazias(): Opcoes {
     usuariosPermissoes: [],
     usuarios: [],
     produtos: [],
-    malotes: [],
     pdvs: [],
     turnos: [],
     gruposPatrimonio: [],
@@ -541,7 +530,6 @@ export function formOperacaoVazio(): OperacaoForm {
     grupoDespesaId: "",
     grupoMercadoriaId: "",
     grupoRetiradaId: "",
-    maloteId: "",
     numeroLacre: "",
     nLacreDoc: "",
     agendadaPara: "",
@@ -718,7 +706,6 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     usuariosPermissoes: listas.usuariosPermissoes.filter((item) => !item.usuarioId || usuariosIds.has(item.usuarioId)),
     usuarios,
     produtos: itensDaEmpresa(listas.produtos, idEmpresa),
-    malotes: itensDaEmpresa(listas.malotes, idEmpresa),
     pdvs: itensDaEmpresa(listas.pdvs, idEmpresa),
     turnos: itensDaEmpresa(listas.turnos, idEmpresa),
     // Patrimonio (D2): alimenta o campo Grupo da discriminacao (§5, item 6) alem da propria tela.

@@ -852,29 +852,11 @@ export const integracoesSemNovidade = pgTable("integracoes_sem_novidade", {
   criadoEm
 });
 
-export const malotes = pgTable(
-  "malotes",
-  {
-    id: idUuid,
-    empresaId,
-    // O malote E o lacre (D3): o numero do lacre e a identidade unica do malote. Nao existe mais
-    // "codigo do malote" nem o "saco". Vem impresso de fonte externa e e digitado pelo operador.
-    numeroLacre: text("numero_lacre").notNull(),
-    // Valor do malote (fundo/troco emprestado do cofre). Vira a divida do caixa na abertura (R8).
-    valor: valorMonetario("valor").notNull().default("0"),
-    // Ciclo do malote/lacre: disponivel -> em_uso (aberto num caixa ou usado numa sangria/retorno)
-    // -> devolvido (M2). Um so ciclo (antes havia status duplo malote+lacre).
-    status: text("status").notNull().default("disponivel"),
-    criadoPor: text("criado_por"),
-    criadoEm,
-    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-    idImportado: uuid("id_importado")
-  },
-  (table) => [
-    uniqueIndex("malotes_empresa_numero_lacre_unico_idx").on(table.empresaId, sql`lower(${table.numeroLacre})`),
-    check("malotes_status_check", sql`${table.status} in ('disponivel', 'em_uso', 'devolvido')`)
-  ]
-);
+// R-040 (31/07/2026): a tabela `malotes` foi REMOVIDA. O malote-entidade (objeto reutilizavel com
+// estoque de lacres disponiveis) nao existe mais — o lacre nasce inline na transferencia (R-022) e
+// vive em `lacres` como selo de um EVENTO. Nada do que `malotes` guardava ficou sem casa:
+// numero_lacre -> lacres.numero (UNIQUE por empresa), valor -> transferencias.valor_original,
+// status -> lacres.rompido + transferencias.status. Migration 0026.
 
 export const vendas = pgTable(
   "vendas",
@@ -1491,8 +1473,8 @@ export const transferencias = pgTable(
     travaLiberadaPor: text("trava_liberada_por").references(() => perfisUsuarios.usuarioId),
     travaLiberadaEm: timestamp("trava_liberada_em", { withTimezone: true }),
     // O malote/lacre envolvido na transferencia (abertura usa o malote de abertura; sangria/retorno
-    // usa o malote-selo da volta). Antes havia um lacre_malote_id separado — agora malote === lacre.
-    maloteId: uuid("malote_id").references(() => malotes.id),
+    // R-040: `malote_id` foi removida. O lacre da transferencia esta em `n_lacre_doc` (digitado) e
+    // em `lacres` (o selo do movimento, com `rompido`). Migration 0026 fez o backfill antes do drop.
     // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
     // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
     tipo: text("tipo").notNull().default("suprimento"),
@@ -1627,10 +1609,9 @@ export const fechamentosCaixa = pgTable(
     fechadoPor: text("fechado_por").references(() => perfisUsuarios.usuarioId),
     tokenEdicao: text("token_edicao"),
     observacao: text("observacao"),
-    // Abertura com malote (M1, R8): malote selecionado, lacre da ida e a divida com o cofre
-    // (= valor do malote). divida_cofre NAO entra na formula canonica de saldo (ADR-001 intacto);
-    // e a base do "saldo proprio" derivado. Caixas sem malote ficam com divida_cofre = 0.
-    maloteAberturaId: uuid("malote_abertura_id").references(() => malotes.id),
+    // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. A coluna
+    // `malote_abertura_id` foi removida na 0026 (o vinculo agora e transferencias.caixa_id).
+    // `divida_cofre` e legado da R8 revogada pela R-001 (o fundo nao e emprestimo): sempre 0.
     lacreAbertura: text("lacre_abertura"),
     maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),

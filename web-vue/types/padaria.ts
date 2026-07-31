@@ -103,7 +103,6 @@ export type Opcao = {
   caminho?: string;
   nivel?: number;
   selecionavel?: boolean;
-  // Malote (D3): o malote E o lacre — identidade = numero do lacre + valor + status.
   numeroLacre?: string;
   valor?: string | number | null;
   cpf?: string;
@@ -180,7 +179,6 @@ export type Opcoes = {
   usuariosPermissoes: Opcao[];
   usuarios: Opcao[];
   produtos: Opcao[];
-  malotes: Opcao[];
   pdvs: Opcao[];
   turnos: Opcao[];
   gruposPatrimonio: Opcao[];
@@ -364,7 +362,6 @@ export type OperacaoForm = {
   grupoDespesaId: string;
   grupoMercadoriaId: string;
   grupoRetiradaId: string;
-  maloteId: string;
   numeroLacre: string;
   nLacreDoc: string;
   agendadaPara: string;

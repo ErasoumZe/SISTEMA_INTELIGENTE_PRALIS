@@ -29,8 +29,6 @@ export const transferenciaPayloadSchema = z.object({
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
   agendadaPara: z.string().datetime().optional().nullable(),
   tempoConfirmacao: tempoConfirmacaoSchema.optional().default("1dia"),
-  // O malote E o lacre (D3): a transferencia referencia o malote; nao ha mais lacre_malote_id.
-  maloteId: uuidSchema.optional().nullable(),
   computar: z.boolean().default(true)
 });
 
