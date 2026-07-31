@@ -191,6 +191,15 @@ Estado confirmado no código e nos testes:
 
 A tabela genérica `notificacoes` atende quebra, divergência e prazo sem mecanismos concorrentes.
 
+### Fechamento do P0 do Corujão v3 (31/07)
+
+O loop de opções foi medido antes da correção. O chamador repetido era a abertura de uma
+operação nova (`abrirOperacao("transferencia")`); edição e troca de categoria não disparavam o
+ciclo, e o `watch` de totais de venda não chama o carregador. A abertura agora é idempotente:
+reentradas durante o carregamento e chamadas para o mesmo modal já aberto são descartadas. O teste
+`web-vue/utils/abertura-operacao.test.ts` prova uma única busca de malotes mesmo sob realimentação.
+Implementação: `3999e82`.
+
 ### ⚠️ Correção de status (31/07) — o registro estava mentindo
 
 **R-041** (juros em R$ ou %) e **R-042** (Valor Total) apareciam como ❌ e foram **entregues** nos
