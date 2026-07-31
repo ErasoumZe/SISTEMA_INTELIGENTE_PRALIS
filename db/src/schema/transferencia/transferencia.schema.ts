@@ -1,1 +1,1 @@
-export { transferencias, lacres } from "../app.schema.js";
+export { transferencias, transferenciasDestinosCandidatos, lacres } from "../app.schema.js";

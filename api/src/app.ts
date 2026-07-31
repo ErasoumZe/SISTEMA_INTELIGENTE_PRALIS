@@ -45,6 +45,7 @@ import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controll
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
+import { usuarioEstaTravadoRepository } from "./transferencias/transferencias.repository.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
 // (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
@@ -144,6 +145,30 @@ export async function buildApp(): Promise<FastifyInstance> {
     const rota = request.routeOptions.url;
     if (!rota || rotasComAutenticacaoPropria.has(rota)) return;
     await exigirAutenticacao(request, reply);
+  });
+
+  // R-037: depois do prazo, origem e operadores dos destinos ficam impedidos de executar novas
+  // mutacoes. Confirmar a propria transferencia e a liberacao excepcional continuam acessiveis.
+  app.addHook("preHandler", async (request, reply) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method) || !request.perfilUsuario) return;
+    const rota = request.routeOptions.url ?? "";
+    if (
+      rota.endsWith("/confirmar") ||
+      rota.endsWith("/liberar-trava") ||
+      rota.startsWith("/api/notificacoes") ||
+      rota.startsWith("/api/auth")
+    ) {
+      return;
+    }
+    if (await usuarioEstaTravadoRepository(request.perfilUsuario.usuarioId)) {
+      return erro(
+        reply,
+        423,
+        "Existe transferencia com prazo de confirmacao estourado",
+        "TRANSFERENCIA_CONFIRMATION_OVERDUE"
+      );
+    }
+    return undefined;
   });
 
   await registrarRotasSaude(app);

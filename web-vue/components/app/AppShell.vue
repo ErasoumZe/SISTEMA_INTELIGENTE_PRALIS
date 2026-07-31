@@ -289,7 +289,7 @@ onMounted(() => {
               </v-list>
               <v-card-text v-else>Nenhuma pendência.</v-card-text>
               <v-card-actions>
-                <v-btn to="/fechamento" variant="text">Ver todas</v-btn>
+                <v-btn to="/pendencias" variant="text">Ver todas</v-btn>
               </v-card-actions>
             </v-card>
           </v-menu>

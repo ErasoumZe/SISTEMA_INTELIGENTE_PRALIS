@@ -229,6 +229,14 @@ export type OperacaoResumo = {
   valorLiquido?: string;
   computar: boolean;
   status: string;
+  contaOrigemId?: string;
+  contaDestinoId?: string;
+  contaOrigemNome?: string;
+  contaDestinoNome?: string;
+  nLacreDoc?: string | null;
+  prazoConfirmacaoEm?: string | null;
+  dataRecebimento?: string | null;
+  confirmadoPor?: string | null;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
@@ -356,6 +364,11 @@ export type OperacaoForm = {
   grupoRetiradaId: string;
   maloteId: string;
   numeroLacre: string;
+  nLacreDoc: string;
+  agendadaPara: string;
+  dataRecebimento: string;
+  tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias";
+  contasDestinoIds: string[];
   documento: string;
   numeroNotaFiscal: string;
   chaveAcesso: string;

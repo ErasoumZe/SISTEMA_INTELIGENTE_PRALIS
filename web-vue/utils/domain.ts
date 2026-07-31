@@ -529,6 +529,11 @@ export function formOperacaoVazio(): OperacaoForm {
     grupoRetiradaId: "",
     maloteId: "",
     numeroLacre: "",
+    nLacreDoc: "",
+    agendadaPara: "",
+    dataRecebimento: "",
+    tempoConfirmacao: "1dia",
+    contasDestinoIds: [],
     documento: "",
     numeroNotaFiscal: "",
     chaveAcesso: "",
@@ -907,7 +912,7 @@ export function formCadastroDeLinha(
 }
 
 export function rotaTela(tela: string) {
-  return `/${tela}`;
+  return tela === "fechamento" ? "/pendencias" : `/${tela}`;
 }
 
 export { temPermissao };

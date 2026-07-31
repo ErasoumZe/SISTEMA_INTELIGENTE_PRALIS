@@ -1297,7 +1297,7 @@ async function salvarOperacao() {
       descricao: form.value.descricao,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
       computar: operacaoSalva.computar,
-      status: "aprovado",
+      status: entidadeNova.value === "transferencia" ? (form.value.agendadaPara ? "agendada" : "pendente") : "aprovado",
       ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {}),
       ...(fotoNotaUrl ? { fotoNotaUrl } : {})
     };
@@ -1310,6 +1310,7 @@ async function salvarOperacao() {
     modalOperacaoAberto.value = false;
     notificar(editandoId ? "Lancamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
+    return { id: operacaoSalva.id };
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -1682,6 +1683,7 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 
 provide(WORKSPACE_CONTEXT, {
   opcoesEmpresa,
+  empresaId,
   modalOperacaoAberto,
   entidadeNova,
   trocarCategoriaLancamento,
@@ -1826,6 +1828,7 @@ const pageContext = computed(() => ({
     modalVendaDetalheAberto.value = valor;
   },
   atualizarPaginaOperacoes,
+  recarregarOperacoes: carregarOperacoes,
   atualizarDiaEntradas,
   abrirCaixaOperacional,
   retornarSaldoOperacional,

@@ -29,6 +29,7 @@ export const contaComSaldoSchema = z.object({
   nome: z.string(),
   saldoInicial: z.number(),
   saldoAtual: z.number(),
+  saldoPendente: z.number(),
   usuariosIds: z.array(z.string())
 });
 

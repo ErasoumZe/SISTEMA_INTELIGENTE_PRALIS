@@ -1,14 +1,19 @@
 <script setup lang="ts">
-// Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1). VISUAL-FIRST:
-// os campos que o backend JA suporta (valor, data lanc., origem, destino, descricao) salvam normal
-// via salvarOperacao; os campos NOVOS (N Lacre/Doc do setor, agendamento + data, data de
-// recebimento, multiplo destino, sempre confirmar, retorno/sangria) sao ESTADO LOCAL marcado
-// data-pendente="regra" e NAO vao para a API — a persistencia vem na rodada de regras.
+// Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 
-const { modalOperacaoAberto, entidadeNova, operacaoEditandoId, form, opcoesEmpresa, salvandoOperacao, salvarOperacao } =
-  useWorkspaceContext();
+const {
+  modalOperacaoAberto,
+  entidadeNova,
+  operacaoEditandoId,
+  empresaId,
+  form,
+  opcoesEmpresa,
+  salvandoOperacao,
+  salvarOperacao
+} = useWorkspaceContext();
+const { apiPost } = useApi();
 
 const aberto = computed({
   get: () => modalOperacaoAberto.value && entidadeNova.value === "transferencia",
@@ -17,18 +22,15 @@ const aberto = computed({
   }
 });
 
-// --- Campos SEM backend nesta rodada (data-pendente="regra"): estado LOCAL, nunca enviado. ---
-// TODO(regras): N Lacre/Doc "do setor" digitado (tabela `lacres` da Fase A).
-const lacreDoc = ref("");
-// TODO(regras): agendamento da transferencia (+ data de agendamento).
-const agendamento = ref(false);
-const dataAgendamento = ref("");
-// TODO(regras): data de recebimento — preenchida quando o destinatario CONFIRMA (fluxo 2 pontas).
+// Campos persistidos da transferencia e linhas independentes de retorno/sangria.
+const agendamento = computed({
+  get: () => Boolean(form.value.agendadaPara),
+  set: (ativo: boolean) => {
+    form.value.agendadaPara = ativo ? new Date(Date.now() + 3_600_000).toISOString().slice(0, 16) : "";
+  }
+});
 const dataRecebimento = ref("");
-// TODO(regras): multiplo destino (broadcast) e "sempre confirmar".
 const multiploDestino = ref(false);
-const sempreConfirmar = ref(false);
-// TODO(regras): bloco Retorno/Sangria — linhas repetiveis com sinal (+/-), valor e lacre.
 const retornoAberto = ref(false);
 type LinhaRetorno = { sinal: "+" | "-"; valor: string; lacre: string };
 const retornos = ref<LinhaRetorno[]>([{ sinal: "+", valor: "", lacre: "" }]);
@@ -47,6 +49,30 @@ const totalEntrada = computed(() =>
 const saldo = computed(() => totalEntrada.value - totalSaida.value);
 function br(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function salvarTransferenciaCompleta() {
+  const edicao = Boolean(operacaoEditandoId.value);
+  const principal = await salvarOperacao();
+  if (!principal || edicao || !retornoAberto.value) return;
+  for (const [indice, linha] of retornos.value.entries()) {
+    const valor = Number(linha.valor || 0);
+    if (valor <= 0 || !linha.lacre.trim()) continue;
+    const retorno = linha.sinal === "+";
+    await apiPost("/api/transferencias", {
+      empresaId: empresaId.value,
+      dataReferencia: form.value.dataReferencia,
+      descricao: `${retorno ? "Retorno" : "Sangria"} vinculado a ${principal.id} (${indice + 1})`,
+      valorOriginal: valor,
+      contaOrigemId: retorno ? form.value.contaDestinoId : form.value.contaOrigemId,
+      contaDestinoId: retorno ? form.value.contaOrigemId : form.value.contaDestinoId,
+      contasDestinoIds: [],
+      nLacreDoc: linha.lacre,
+      tempoConfirmacao: form.value.tempoConfirmacao,
+      computar: true
+    });
+  }
+  retornos.value = [{ sinal: "+", valor: "", lacre: "" }];
 }
 
 function dataISO(offset: number) {
@@ -77,7 +103,7 @@ const hojeISO = computed(() => dataISO(0));
       <div class="tr-dois">
         <label class="tr-campo">
           <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
-          <input v-model="lacreDoc" data-pendente="regra" class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+          <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
         </label>
         <label class="tr-campo">
           <span class="tr-campo-lbl">Data Lanç</span>
@@ -96,17 +122,17 @@ const hojeISO = computed(() => dataISO(0));
       </div>
 
       <label class="tr-check">
-        <input v-model="agendamento" type="checkbox" data-pendente="regra" />
+        <input v-model="agendamento" type="checkbox" />
         <span>Agendamento</span>
       </label>
       <label v-if="agendamento" class="tr-campo tr-indent">
         <span class="tr-campo-lbl">Data Agendamento</span>
-        <input v-model="dataAgendamento" type="datetime-local" data-pendente="regra" class="tr-input" />
+        <input v-model="form.agendadaPara" type="datetime-local" class="tr-input" />
       </label>
 
       <label class="tr-campo">
         <span class="tr-campo-lbl">Data Recebimento</span>
-        <input :value="dataRecebimento" data-pendente="regra" class="tr-input tr-input-ro" readonly placeholder="—" />
+        <input :value="form.dataRecebimento" class="tr-input tr-input-ro" readonly placeholder="—" />
         <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
       </label>
 
@@ -135,18 +161,37 @@ const hojeISO = computed(() => dataISO(0));
 
       <div class="tr-checks">
         <label class="tr-check">
-          <input v-model="multiploDestino" type="checkbox" data-pendente="regra" /><span>Múltiplo Destino</span>
+          <input v-model="multiploDestino" type="checkbox" /><span>Múltiplo Destino</span>
+        </label>
+        <div v-if="multiploDestino" class="tr-campo">
+          <span class="tr-campo-lbl">Contas que podem receber</span>
+          <label
+            v-for="c in opcoesEmpresa.contas.filter((item) => item.id !== form.contaOrigemId)"
+            :key="c.id"
+            class="tr-check"
+          >
+            <input v-model="form.contasDestinoIds" type="checkbox" :value="c.id" />
+            <span>{{ c.nome }}</span>
+          </label>
+        </div>
+        <label class="tr-check">
+          <select v-model="form.tempoConfirmacao" class="tr-input">
+            <option value="5min">5 minutos</option>
+            <option value="10min">10 minutos</option>
+            <option value="30min">30 minutos</option>
+            <option value="1h">1 hora</option>
+            <option value="1dia">1 dia</option>
+            <option value="10dias">10 dias</option>
+            <option value="30dias">30 dias</option>
+          </select>
         </label>
         <label class="tr-check">
-          <input v-model="sempreConfirmar" type="checkbox" data-pendente="regra" /><span>Sempre confirmar</span>
-        </label>
-        <label class="tr-check">
-          <input v-model="retornoAberto" type="checkbox" data-pendente="regra" /><span>Transf. Retorno / Sangria</span>
+          <input v-model="retornoAberto" type="checkbox" /><span>Transf. Retorno / Sangria</span>
         </label>
       </div>
 
       <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
-      <div v-if="retornoAberto" class="tr-retorno" data-pendente="regra">
+      <div v-if="retornoAberto" class="tr-retorno">
         <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
         <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
           <button
@@ -186,10 +231,12 @@ const hojeISO = computed(() => dataISO(0));
       </div>
 
       <div class="tr-acoes">
-        <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="salvarOperacao">
+        <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="salvarTransferenciaCompleta">
           Salvar e criar nova
         </button>
-        <button type="button" class="tr-salvar" :disabled="salvandoOperacao" @click="salvarOperacao">Salvar</button>
+        <button type="button" class="tr-salvar" :disabled="salvandoOperacao" @click="salvarTransferenciaCompleta">
+          Salvar
+        </button>
       </div>
     </div>
   </v-dialog>

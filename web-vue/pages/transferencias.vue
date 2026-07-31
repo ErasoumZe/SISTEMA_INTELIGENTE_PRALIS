@@ -21,6 +21,7 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       @nova="ctx.abrirOperacao('transferencia')"
       @editar="(op) => ctx.abrirOperacao('transferencia', op)"
       @update:pagina="ctx.atualizarPaginaOperacoes"
+      @recarregar="ctx.recarregarOperacoes"
     />
   </AppWorkspace>
 </template>

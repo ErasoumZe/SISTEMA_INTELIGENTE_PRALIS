@@ -10,7 +10,14 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-type ContaComSaldo = { id: string; nome: string; saldoInicial: number; saldoAtual: number; usuariosIds: string[] };
+type ContaComSaldo = {
+  id: string;
+  nome: string;
+  saldoInicial: number;
+  saldoAtual: number;
+  saldoPendente: number;
+  usuariosIds: string[];
+};
 
 async function usuarioIdPorEmail(email: string): Promise<string> {
   const linha = await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
@@ -89,14 +96,16 @@ describe("conta com fundo e saldo derivado (D8) integration", () => {
         descricao: "Suprimento do cofre para o caixa 1",
         valorOriginal: 500,
         contaOrigemId: cofreId,
-        contaDestinoId: destinoId
+        contaDestinoId: destinoId,
+        nLacreDoc: `D8-${Date.now()}`
       }
     });
     expect(transferencia.statusCode, transferencia.body).toBe(201);
 
     const lista = await saldos();
     expect(lista.find((linha) => linha.id === cofreId)?.saldoAtual).toBe(9_500);
-    expect((lista.find((linha) => linha.id === destinoId)?.saldoAtual ?? 0) - destinoAntes).toBe(500);
+    expect((lista.find((linha) => linha.id === destinoId)?.saldoAtual ?? 0) - destinoAntes).toBe(0);
+    expect(lista.find((linha) => linha.id === cofreId)?.saldoPendente).toBe(500);
 
     // A coluna do fundo NAO foi tocada: ela e ponto de partida, nao saldo.
     const cofre = await consultarUm<{ saldo_inicial: string }>("select saldo_inicial from contas where id = $1", [

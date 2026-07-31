@@ -61,6 +61,9 @@ export type TotaisContaCentavos = {
   transferenciasEntrada: number;
   // Saidas: transferencias que SAEM dela + os lancamentos pagos por ela.
   transferenciasSaida: number;
+  // Parcela informativa das saidas acima que ainda aguarda confirmacao. Nunca entra novamente
+  // no disponivel: a saida ja foi descontada quando passou a pendente (R-036).
+  transferenciasPendentes?: number;
   despesas: number;
   retiradas: number;
   mercadorias: number;
@@ -76,4 +79,16 @@ export function saldoContaCentavos(saldoInicialCentavos: number, totais: TotaisC
     totais.retiradas -
     totais.mercadorias
   );
+}
+
+export function saldoPendenteContaCentavos(totais: TotaisContaCentavos): number {
+  return totais.transferenciasPendentes ?? 0;
+}
+
+export function transferenciaContaComoSaida(status: string): boolean {
+  return status === "pendente" || status === "recebido";
+}
+
+export function transferenciaContaComoEntrada(status: string): boolean {
+  return status === "recebido";
 }

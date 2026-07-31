@@ -1,5 +1,6 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
+  ConfirmarTransferenciaPayload,
   TransferenciaCriada,
   TransferenciaDetalheDto,
   TransferenciaDto,
@@ -7,7 +8,9 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { buscarCaixaAbertoUsuarioRepository } from "../caixa/caixa.repository.js";
+import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
+import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
@@ -18,12 +21,25 @@ import { podeAcessarEmpresa } from "../auth/empresa.js";
 import {
   atualizarTransferenciaRepository,
   buscarTransferenciaDetalheRepository,
+  confirmarTransferenciaRepository,
+  contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
+  efetivarTransferenciasAgendadasRepository,
+  liberarTravaTransferenciaRepository,
+  listarDestinatariosTransferenciaRepository,
+  listarTransferenciasVencidasRepository,
   listarTransferenciasRepository
 } from "./transferencias.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contaOrigemId === dados.contaDestinoId) throw new Error("Conta de destino deve ser diferente da origem");
+  if (!dados.nLacreDoc?.trim()) throw new Error("Numero do lacre/documento e obrigatorio");
+  if (dados.contasDestinoIds.includes(dados.contaOrigemId)) {
+    throw new Error("A conta de origem nao pode ser destino candidato");
+  }
+  if (dados.agendadaPara && new Date(dados.agendadaPara).getTime() <= Date.now()) {
+    throw new Error("Agendamento precisa estar no futuro");
+  }
 }
 
 function normalizarCargo(nome: string) {
@@ -60,6 +76,12 @@ export async function criarTransferencia(
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+    const contasValidas = await contasPertencemEmpresaRepository(
+      [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
+      dados.empresaId,
+      tx
+    );
+    if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
     const transferenciaLivre = podeTransferirSemCaixa(perfil);
     const caixa = transferenciaLivre
@@ -80,6 +102,86 @@ export async function criarTransferencia(
     );
     return { id: transferencia.id, computar };
   });
+}
+
+export async function confirmarTransferencia(
+  transferenciaId: string,
+  dados: ConfirmarTransferenciaPayload,
+  perfil: PerfilUsuario
+) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  return executarEmTransacao(async (tx) => {
+    const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+    if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+    const confirmada = await confirmarTransferenciaRepository(transferenciaId, dados, perfil.usuarioId, tx);
+    if (!confirmada) throw new Error("Somente operador de uma conta destino pode confirmar uma unica vez");
+
+    if (dados.valorRecebido != null && paraCentavos(dados.valorRecebido) !== paraCentavos(existente.valorOriginal)) {
+      const tesouraria = await listarUsuariosTesourariaRepository(existente.empresaId, tx);
+      await criarNotificacoesRepository(
+        {
+          empresaId: existente.empresaId,
+          tipo: "transferencia_divergencia",
+          destinatariosUsuarioIds: [
+            ...new Set([
+              perfil.usuarioId,
+              ...tesouraria.map((item) => item.usuarioId).filter((id): id is string => Boolean(id))
+            ])
+          ],
+          referenciaId: transferenciaId,
+          titulo: `Divergencia na transferencia ${existente.nLacreDoc ?? transferenciaId}`,
+          valorCentavos: paraCentavos(dados.valorRecebido) - paraCentavos(existente.valorOriginal)
+        },
+        tx
+      );
+    }
+    return { id: confirmada.id };
+  });
+}
+
+export async function processarTransferenciasTemporais(agora = new Date()) {
+  await executarEmTransacao(async (tx) => {
+    await efetivarTransferenciasAgendadasRepository(agora, tx);
+    const vencidas = await listarTransferenciasVencidasRepository(agora, tx);
+    for (const transferencia of vencidas) {
+      const destinatarios = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
+      await criarNotificacoesRepository(
+        {
+          empresaId: transferencia.empresaId,
+          tipo: "transferencia_prazo_confirmacao",
+          destinatariosUsuarioIds: [
+            ...new Set(
+              [transferencia.criadoPor, ...destinatarios.map((item) => item.usuarioId)].filter((id): id is string =>
+                Boolean(id)
+              )
+            )
+          ],
+          referenciaId: transferencia.id,
+          titulo: "Prazo de confirmacao de transferencia estourado",
+          valorCentavos: paraCentavos(transferencia.valor)
+        },
+        tx
+      );
+    }
+  });
+}
+
+export function podeLiberarTravaTransferencia(perfil: PerfilUsuario) {
+  if (perfil.role === "admin" || perfil.role === "usuario_admin") return true;
+  return perfil.cargos.some((cargo) => {
+    const nome = normalizarCargo(cargo.nome);
+    return nome.startsWith("tesouraria") || nome.startsWith("gerencia") || nome.startsWith("gerente");
+  });
+}
+
+export async function liberarTravaTransferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  if (!podeLiberarTravaTransferencia(perfil)) throw new Error("Somente Tesouraria, Gerencia ou Admin pode liberar");
+  const transferencia = await obterTransferencia(transferenciaId, perfil);
+  if (transferencia.status !== "pendente") throw new Error("Transferencia nao esta pendente");
+  const item = await liberarTravaTransferenciaRepository(transferenciaId, perfil.usuarioId);
+  if (!item) throw new Error("Trava ja liberada ou transferencia inexistente");
+  return item;
 }
 
 export async function obterTransferencia(

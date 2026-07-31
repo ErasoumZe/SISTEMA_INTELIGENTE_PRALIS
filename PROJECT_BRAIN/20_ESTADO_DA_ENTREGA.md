@@ -88,6 +88,16 @@ R-019 e R-037 possuem casa comum em `notificacoes`, mas a criação dos alertas 
 transferência continua corretamente na Etapa 3; não estão sendo declaradas como comportamento
 entregue nesta etapa.
 
+### Corujão v2 — Etapa 3
+
+**ENTREGUE no dev em 31/07/2026.** A migration
+`0022_transferencias_confirmacao_agendamento.sql` foi gerada pelo Drizzle, renomeada, ensaiada em
+uma cópia descartável e aplicada somente no dev. Transferências manuais agora têm lacre, prazo,
+agendamento, confirmação exclusiva por operador do destino, disputa atômica e notificações. O
+saldo usa uma única convenção compartilhada: pendente já reduz a origem, ainda não aumenta o
+destino e é mostrado separadamente. A rota reaproveitada `/fechamento` virou `/pendencias`.
+A catraca `data-pendente` desceu de 23 para 0.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

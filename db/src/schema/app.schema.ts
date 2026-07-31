@@ -1478,6 +1478,14 @@ export const transferencias = pgTable(
     contaDestinoId: uuid("conta_destino_id")
       .notNull()
       .references(() => contas.id),
+    nLacreDoc: text("n_lacre_doc"),
+    agendadaPara: timestamp("agendada_para", { withTimezone: true }),
+    tempoConfirmacao: text("tempo_confirmacao"),
+    prazoConfirmacaoEm: timestamp("prazo_confirmacao_em", { withTimezone: true }),
+    dataRecebimento: timestamp("data_recebimento", { withTimezone: true }),
+    confirmadoPor: text("confirmado_por").references(() => perfisUsuarios.usuarioId),
+    travaLiberadaPor: text("trava_liberada_por").references(() => perfisUsuarios.usuarioId),
+    travaLiberadaEm: timestamp("trava_liberada_em", { withTimezone: true }),
     // O malote/lacre envolvido na transferencia (abertura usa o malote de abertura; sangria/retorno
     // usa o malote-selo da volta). Antes havia um lacre_malote_id separado — agora malote === lacre.
     maloteId: uuid("malote_id").references(() => malotes.id),
@@ -1492,13 +1500,23 @@ export const transferencias = pgTable(
     contabil: text("contabil"),
     ordem: integer("ordem"),
     computar: boolean("computar").notNull().default(true),
-    status: text("status").notNull().default("aprovado"),
+    status: text("status").notNull().default("recebido"),
     criadoPor: text("criado_por"),
     criadoEm,
     atualizadoEm
   },
   (table) => [
-    check("transferencias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("transferencias_status_check", sql`${table.status} in ('pendente', 'recebido', 'agendada', 'cancelada')`),
+    check(
+      "transferencias_prazo_check",
+      sql`${table.tempoConfirmacao} is null or ${table.tempoConfirmacao} in ('5min', '10min', '30min', '1h', '1dia', '10dias', '30dias')`
+    ),
+    check(
+      "transferencias_recebimento_check",
+      sql`(${table.status} = 'recebido' and ${table.dataRecebimento} is not null and ${table.confirmadoPor} is not null)
+        or (${table.status} <> 'recebido' and ${table.dataRecebimento} is null and ${table.confirmadoPor} is null)
+        or (${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno') and ${table.status} = 'recebido')`
+    ),
     check("transferencias_tipo_check", sql`${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno')`),
     check("transferencias_ordem_check", sql`${table.ordem} is null or ${table.ordem} >= 1`),
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
@@ -1507,6 +1525,25 @@ export const transferencias = pgTable(
     check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
     index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("transferencias_caixa_idx").on(table.caixaId)
+  ]
+);
+
+export const transferenciasDestinosCandidatos = pgTable(
+  "transferencias_destinos_candidatos",
+  {
+    id: idUuid,
+    empresaId,
+    transferenciaId: uuid("transferencia_id")
+      .notNull()
+      .references(() => transferencias.id, { onDelete: "cascade" }),
+    contaId: uuid("conta_id")
+      .notNull()
+      .references(() => contas.id, { onDelete: "cascade" }),
+    criadoEm
+  },
+  (table) => [
+    unique("transferencias_destinos_candidatos_unica").on(table.transferenciaId, table.contaId),
+    index("transferencias_destinos_candidatos_conta_idx").on(table.contaId)
   ]
 );
 

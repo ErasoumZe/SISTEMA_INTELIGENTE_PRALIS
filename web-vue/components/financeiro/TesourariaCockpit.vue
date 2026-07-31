@@ -5,10 +5,7 @@
 // A criacao/edicao REUSA o modal de transferencia do workspace (eventos "nova"/"editar"); o botao
 // NAO depende de caixa aberto.
 //
-// Dados reais hoje na lista: data, descricao (carrega o "origem -> destino" por convencao), valor.
-// Origem->destino nominal, lacre, confirmacao e data de recebimento dependem do backend de
-// confirmacao (Prompt A, Etapa 2), que NAO esta nesta branch — ficam somente-leitura com
-// data-pendente="regra" ate a fiacao.
+// A lista recebe da API o trajeto nominal, lacre, estado e data de recebimento.
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
@@ -33,16 +30,46 @@ const emit = defineEmits<{
   (event: "nova"): void;
   (event: "editar", operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
+  (event: "recarregar"): void;
 }>();
+const { apiPost } = useApi();
+const confirmando = ref<OperacaoResumo | null>(null);
+const contaConfirmacaoId = ref("");
+const lacreConfirmacao = ref("");
+const valorRecebido = ref("");
+const erroConfirmacao = ref("");
+async function confirmarRecebimento() {
+  if (!confirmando.value) return;
+  erroConfirmacao.value = "";
+  try {
+    await apiPost(`/api/transferencias/${confirmando.value.id}/confirmar`, {
+      contaDestinoId: contaConfirmacaoId.value || confirmando.value.contaDestinoId,
+      nLacreDoc: lacreConfirmacao.value,
+      ...(valorRecebido.value ? { valorRecebido: Number(valorRecebido.value) } : {})
+    });
+    confirmando.value = null;
+    emit("recarregar");
+  } catch (error) {
+    erroConfirmacao.value = error instanceof Error ? error.message : "Falha ao confirmar";
+  }
+}
 
 // Total do periodo (sempre confiavel — soma da lista carregada).
 const totalPeriodo = computed(() => props.operacoesTela.reduce((soma, op) => soma + Number(op.valorOriginal || 0), 0));
 
 // Split direcional Saida/Entrada/Saldo: so existe quando ha resumo (contexto de caixa). Para o
 // tesoureiro puro (sem caixa) o resumo e nulo -> os cards ficam pendentes de backend.
-const saida = computed(() => props.resumo?.totalTransferenciasSaida ?? null);
-const entrada = computed(() => props.resumo?.totalTransferenciasEntrada ?? null);
-const saldo = computed(() => (saida.value != null && entrada.value != null ? entrada.value - saida.value : null));
+const saida = computed(() =>
+  props.operacoesTela
+    .filter((op) => op.status === "pendente" || op.status === "recebido")
+    .reduce((total, op) => total + Number(op.valorOriginal), 0)
+);
+const entrada = computed(() =>
+  props.operacoesTela
+    .filter((op) => op.status === "recebido")
+    .reduce((total, op) => total + Number(op.valorOriginal), 0)
+);
+const saldo = computed(() => entrada.value - saida.value);
 </script>
 
 <template>
@@ -66,44 +93,25 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
 
     <!-- Cards de total: Saida · Entrada · Saldo (cor --cat-transferencias) -->
     <section class="tes-cards" aria-label="Totais de transferências">
-      <article class="tes-card" :data-pendente="saida === null ? 'regra' : undefined">
+      <article class="tes-card">
         <span class="tes-cic"><v-icon icon="mdi-arrow-up-right" size="20" /></span>
         <span class="tes-copy">
-          <span class="tes-lbl"
-            >Saída
-            <span v-if="saida === null" class="tes-regra" title="Aguardando backend de confirmação (Etapa 2)"
-              >regra</span
-            ></span
-          >
-          <span class="tes-val neg" :class="{ pend: saida === null }">{{
-            saida === null ? "—" : dinheiro(saida)
-          }}</span>
+          <span class="tes-lbl">Saída </span>
+          <span class="tes-val neg" :class="{ pend: saida === null }">{{ dinheiro(saida) }}</span>
         </span>
       </article>
-      <article class="tes-card" :data-pendente="entrada === null ? 'regra' : undefined">
+      <article class="tes-card">
         <span class="tes-cic"><v-icon icon="mdi-arrow-down-left" size="20" /></span>
         <span class="tes-copy">
-          <span class="tes-lbl"
-            >Entrada
-            <span v-if="entrada === null" class="tes-regra" title="Aguardando backend de confirmação (Etapa 2)"
-              >regra</span
-            ></span
-          >
-          <span class="tes-val pos" :class="{ pend: entrada === null }">{{
-            entrada === null ? "—" : dinheiro(entrada)
-          }}</span>
+          <span class="tes-lbl">Entrada </span>
+          <span class="tes-val pos" :class="{ pend: entrada === null }">{{ dinheiro(entrada) }}</span>
         </span>
       </article>
-      <article class="tes-card" :data-pendente="saldo === null ? 'regra' : undefined">
+      <article class="tes-card">
         <span class="tes-cic"><v-icon icon="mdi-scale-balance" size="20" /></span>
         <span class="tes-copy">
-          <span class="tes-lbl"
-            >Saldo
-            <span v-if="saldo === null" class="tes-regra" title="Aguardando backend de confirmação (Etapa 2)"
-              >regra</span
-            ></span
-          >
-          <span class="tes-val" :class="{ pend: saldo === null }">{{ saldo === null ? "—" : dinheiro(saldo) }}</span>
+          <span class="tes-lbl">Saldo </span>
+          <span class="tes-val">{{ dinheiro(saldo) }}</span>
         </span>
       </article>
     </section>
@@ -123,34 +131,28 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
 
         <div v-for="op in operacoesPaginadas" :key="op.id" class="tes-row" role="row">
           <!-- Confirmacao: sem backend de confirmacao nesta branch -> somente leitura + regra. -->
-          <span class="tes-conf" data-pendente="regra" data-col="Confirmação">
-            <span class="tes-status-chip" title="Confirmação de recebimento — aguardando backend (Etapa 2)">
-              <v-icon icon="mdi-clock-outline" size="13" /> Pendente
+          <span class="tes-conf" data-col="Confirmação">
+            <span class="tes-status-chip">
+              <v-icon :icon="op.status === 'recebido' ? 'mdi-check-circle-outline' : 'mdi-clock-outline'" size="13" />
+              {{ op.status }}
             </span>
           </span>
           <span class="tes-data" data-col="Data">{{ formatarDataSomenteDia(op.dataReferencia) }}</span>
-          <!-- A descricao (obrigatoria) carrega o "origem -> destino" por convencao. -->
           <span class="tes-desc" data-col="Origem → destino" :title="op.descricao">
-            <v-icon icon="mdi-swap-horizontal" size="16" class="tes-desc-ic" />{{ op.descricao }}
+            <v-icon icon="mdi-swap-horizontal" size="16" class="tes-desc-ic" />{{ op.contaOrigemNome }} →
+            {{ op.contaDestinoNome }}
           </span>
-          <span
-            class="tes-lacre"
-            data-pendente="regra"
-            data-col="Lacre"
-            title="Número do lacre — aguardando backend (Etapa 2)"
-            >—</span
-          >
+          <span class="tes-lacre" data-col="Lacre">{{ op.nLacreDoc || "—" }}</span>
           <span class="tes-valor tes-num" data-col="Valor">{{ dinheiro(op.valorOriginal) }}</span>
-          <span
-            class="tes-receb"
-            data-pendente="regra"
-            data-col="Recebimento"
-            title="Data de recebimento — aguardando backend (Etapa 2)"
-            >—</span
-          >
+          <span class="tes-receb" data-col="Recebimento">{{
+            op.dataRecebimento ? formatarDataSomenteDia(op.dataRecebimento) : "—"
+          }}</span>
           <span class="tes-acoes" data-col="Ações">
             <v-btn v-if="podeEditar" size="small" variant="tonal" prepend-icon="mdi-pencil" @click="emit('editar', op)">
               Editar
+            </v-btn>
+            <v-btn v-if="op.status === 'pendente'" size="small" variant="tonal" @click="confirmando = op">
+              Confirmar
             </v-btn>
           </span>
         </div>
@@ -185,11 +187,22 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
       </div>
     </v-card>
 
-    <p class="tes-nota">
-      <v-icon icon="mdi-information-outline" size="15" />
-      Origem→destino nominal, lacre, confirmação e data de recebimento aguardam o backend de confirmação (Etapa 2) —
-      marcados como <code>data-pendente="regra"</code>. A descrição já traz o trajeto do movimento.
-    </p>
+    <v-dialog
+      :model-value="Boolean(confirmando)"
+      max-width="430"
+      @update:model-value="(v) => !v && (confirmando = null)"
+    >
+      <v-card title="Confirmar recebimento" class="pa-4">
+        <v-text-field v-model="contaConfirmacaoId" label="ID da conta que recebeu" />
+        <v-text-field v-model="lacreConfirmacao" label="Nº do lacre/documento" />
+        <v-text-field v-model="valorRecebido" type="number" label="Valor recebido" />
+        <v-alert v-if="erroConfirmacao" type="error">{{ erroConfirmacao }}</v-alert>
+        <v-card-actions
+          ><v-spacer /><v-btn @click="confirmando = null">Cancelar</v-btn
+          ><v-btn color="primary" @click="confirmarRecebimento">Confirmar</v-btn></v-card-actions
+        >
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -252,11 +265,6 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
     0 2px 1px -1px rgb(0 0 0 / 0.2),
     0 1px 1px 0 rgb(0 0 0 / 0.14),
     0 1px 3px 0 rgb(0 0 0 / 0.12);
-}
-.tes-card[data-pendente="regra"] {
-  border: 1px dashed var(--cat-transferencias-base, #c2410c);
-  box-shadow: none;
-  background: transparent;
 }
 .tes-cic {
   display: grid;
@@ -387,9 +395,6 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
 .tes-acoes-h {
   justify-self: end;
 }
-[data-pendente="regra"] {
-  opacity: 0.85;
-}
 
 .tes-empty {
   display: grid;
@@ -435,7 +440,7 @@ const saldo = computed(() => (saida.value != null && entrada.value != null ? ent
   .tes-row {
     grid-template-columns: 108px 76px minmax(0, 1fr) 104px 96px;
   }
-  /* some Lacre e Recebimento (viram data-pendente de qualquer forma) para densidade */
+  /* Lacre e recebimento ficam compactos para preservar a densidade. */
   .tes-row-head > :nth-child(4),
   .tes-row-head > :nth-child(6),
   .tes-lacre,

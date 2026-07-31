@@ -5,7 +5,13 @@ import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
-import { saldoContaCentavos, type TotaisContaCentavos } from "@padaria/shared";
+import {
+  saldoContaCentavos,
+  saldoPendenteContaCentavos,
+  transferenciaContaComoEntrada,
+  transferenciaContaComoSaida,
+  type TotaisContaCentavos
+} from "@padaria/shared";
 import { centavosParaDecimalBanco, deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import {
@@ -63,10 +69,11 @@ export async function saldosDasContasRepository(
       .select({
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
-        valorOriginal: transferencias.valorOriginal
+        valorOriginal: transferencias.valorOriginal,
+        status: transferencias.status
       })
       .from(transferencias)
-      .where(and(eq(transferencias.computar, true), ne(transferencias.status, "cancelado"))),
+      .where(eq(transferencias.computar, true)),
     db
       .select({ contaOrigemId: despesas.contaOrigemId, valorOriginal: despesas.valorOriginal })
       .from(despesas)
@@ -94,7 +101,15 @@ export async function saldosDasContasRepository(
   const totaisPorConta = new Map<string, TotaisContaCentavos>(
     contaIds.map((id) => [
       id,
-      { vendas: 0, transferenciasEntrada: 0, transferenciasSaida: 0, despesas: 0, retiradas: 0, mercadorias: 0 }
+      {
+        vendas: 0,
+        transferenciasEntrada: 0,
+        transferenciasSaida: 0,
+        transferenciasPendentes: 0,
+        despesas: 0,
+        retiradas: 0,
+        mercadorias: 0
+      }
     ])
   );
   const acumular = (contaId: string | null, campo: keyof TotaisContaCentavos, centavos: number) => {
@@ -106,8 +121,9 @@ export async function saldosDasContasRepository(
   for (const linha of linhasVendas) acumular(linha.contaOrigemId, "vendas", liquidoCentavos(linha));
   for (const linha of linhasTransferencias) {
     const valor = paraCentavos(linha.valorOriginal);
-    acumular(linha.contaDestinoId, "transferenciasEntrada", valor);
-    acumular(linha.contaOrigemId, "transferenciasSaida", valor);
+    if (transferenciaContaComoEntrada(linha.status)) acumular(linha.contaDestinoId, "transferenciasEntrada", valor);
+    if (transferenciaContaComoSaida(linha.status)) acumular(linha.contaOrigemId, "transferenciasSaida", valor);
+    if (linha.status === "pendente") acumular(linha.contaOrigemId, "transferenciasPendentes", valor);
   }
   for (const linha of linhasDespesas) acumular(linha.contaOrigemId, "despesas", paraCentavos(linha.valorOriginal));
   for (const linha of linhasRetiradas) acumular(linha.contaOrigemId, "retiradas", paraCentavos(linha.valorOriginal));
@@ -140,7 +156,7 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
   if (!linhas.length) return [];
 
   const [saldos, vinculos] = await Promise.all([
-    saldosDasContasRepository(empresasPermitidasIds),
+    saldosComPendenciaDasContasRepository(empresasPermitidasIds),
     banco
       .select({ contaId: contasUsuarios.contaId, usuarioId: contasUsuarios.usuarioId })
       .from(contasUsuarios)
@@ -164,9 +180,41 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
     empresaId: linha.empresaId,
     nome: linha.nome,
     saldoInicial: deCentavos(paraCentavos(linha.saldoInicial)),
-    saldoAtual: saldos.get(linha.id) ?? deCentavos(paraCentavos(linha.saldoInicial)),
+    saldoAtual: saldos.get(linha.id)?.disponivel ?? deCentavos(paraCentavos(linha.saldoInicial)),
+    saldoPendente: saldos.get(linha.id)?.pendente ?? 0,
     usuariosIds: usuariosPorConta.get(linha.id) ?? []
   }));
+}
+
+async function saldosComPendenciaDasContasRepository(empresasPermitidasIds: string[] | null) {
+  const disponiveis = await saldosDasContasRepository(empresasPermitidasIds);
+  const linhas = await banco
+    .select({ contaOrigemId: transferencias.contaOrigemId, valor: transferencias.valorOriginal })
+    .from(transferencias)
+    .where(and(eq(transferencias.computar, true), eq(transferencias.status, "pendente")));
+  const pendentes = new Map<string, number>();
+  for (const linha of linhas) {
+    pendentes.set(linha.contaOrigemId, (pendentes.get(linha.contaOrigemId) ?? 0) + paraCentavos(linha.valor));
+  }
+  return new Map(
+    [...disponiveis].map(([id, disponivel]) => [
+      id,
+      {
+        disponivel,
+        pendente: deCentavos(
+          saldoPendenteContaCentavos({
+            vendas: 0,
+            transferenciasEntrada: 0,
+            transferenciasSaida: pendentes.get(id) ?? 0,
+            transferenciasPendentes: pendentes.get(id) ?? 0,
+            despesas: 0,
+            retiradas: 0,
+            mercadorias: 0
+          })
+        )
+      }
+    ])
+  );
 }
 
 export async function salvarContaRepository(

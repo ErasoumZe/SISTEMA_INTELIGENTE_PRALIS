@@ -32,6 +32,11 @@ export type OperacaoDetalhe = {
   grupoMercadoriaId?: string | null;
   grupoRetiradaId?: string | null;
   maloteId?: string | null;
+  nLacreDoc?: string | null;
+  agendadaPara?: string | null;
+  dataRecebimento?: string | null;
+  tempoConfirmacao?: OperacaoForm["tempoConfirmacao"];
+  contasDestinoIds?: string[];
   temNotaFiscal?: boolean;
   computar: boolean;
   fotoDocumentoUrl?: string | null;
@@ -239,6 +244,11 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
     maloteId: detalhe.maloteId ?? "",
+    nLacreDoc: detalhe.nLacreDoc ?? "",
+    agendadaPara: detalhe.agendadaPara?.slice(0, 16) ?? "",
+    dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
+    tempoConfirmacao: detalhe.tempoConfirmacao ?? "1dia",
+    contasDestinoIds: detalhe.contasDestinoIds ?? [],
     temNotaFiscal: detalhe.temNotaFiscal ?? false,
     computar: detalhe.computar
   };
@@ -388,6 +398,14 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
     grupoRetiradaId: dados.form.grupoRetiradaId || null,
     maloteId: dados.form.maloteId || null,
+    ...(entidade === "transferencia"
+      ? {
+          nLacreDoc: dados.form.nLacreDoc || null,
+          agendadaPara: dados.form.agendadaPara ? new Date(dados.form.agendadaPara).toISOString() : null,
+          tempoConfirmacao: dados.form.tempoConfirmacao,
+          contasDestinoIds: dados.form.contasDestinoIds
+        }
+      : {}),
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
     valorAcrescimo: deCentavos(paraCentavos(dados.form.valorAcrescimo)),
     // R-041: manda COMO foi informado. O servidor recalcula o valorAcrescimo a partir daqui e

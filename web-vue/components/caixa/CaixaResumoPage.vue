@@ -25,6 +25,7 @@ const emit = defineEmits<{
       usuarioCaixaId: string;
       turnoId?: string | null;
       maquininhaId?: string | null;
+      lacreAbertura?: string | null;
       dataHoraAbertura: string;
       observacao: string | null;
     }
@@ -39,10 +40,7 @@ const abertura = reactive({
   turnoId: "",
   dataHoraAbertura: dataHoraLocal()
 });
-// Campos da FOTO 5 SEM backend nesta rodada (data-pendente="regra"): estado LOCAL, nunca enviado no
-// abrir(). A persistencia vem na rodada de regras.
-// TODO(regras): abertura por N Lacre da transferencia de entrada (Fase A / tabela lacres).
-// TODO(regras): maquina de cartao / N de serie vinculada ao caixa (PDV/turno).
+// Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
 const fechamento = reactive({ observacao: "" });
 
@@ -110,6 +108,7 @@ function abrir() {
     usuarioCaixaId: props.usuarioId,
     turnoId: abertura.turnoId || null,
     maquininhaId: aberturaExtra.maquininhaId || null,
+    lacreAbertura: aberturaExtra.numeroLacre || null,
     dataHoraAbertura: abertura.dataHoraAbertura,
     observacao: null
   });
@@ -172,8 +171,7 @@ function fechar() {
               v-model="aberturaExtra.numeroLacre"
               label="Transf. Entrada / N° Lacre"
               placeholder="Ex.: 001"
-              data-pendente="regra"
-              hint="A abertura por lacre entra na rodada de regras."
+              hint="Lacre da transferencia de entrada."
               persistent-hint
             />
           </v-col>

@@ -1,7 +1,13 @@
 // Saldo da CONTA (PROJECT_BRAIN/17, D8): "saldo = fundo + entradas - saidas", derivado dos
 // movimentos. O fundo e so o ponto de partida e nunca e reescrito.
 import { describe, expect, it } from "vitest";
-import { saldoContaCentavos, type TotaisContaCentavos } from "@padaria/shared/caixa";
+import {
+  saldoContaCentavos,
+  saldoPendenteContaCentavos,
+  transferenciaContaComoEntrada,
+  transferenciaContaComoSaida,
+  type TotaisContaCentavos
+} from "@padaria/shared/caixa";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 
 function totais(parcial: Partial<TotaisContaCentavos> = {}): TotaisContaCentavos {
@@ -17,6 +23,14 @@ function totais(parcial: Partial<TotaisContaCentavos> = {}): TotaisContaCentavos
 }
 
 describe("saldoContaCentavos (D8)", () => {
+  it("R-036 desconta a saida pendente uma vez e nao credita o destino", () => {
+    const resumo = totais({ transferenciasSaida: paraCentavos(500), transferenciasPendentes: paraCentavos(500) });
+    expect(deCentavos(saldoContaCentavos(paraCentavos(10_000), resumo))).toBe(9_500);
+    expect(deCentavos(saldoPendenteContaCentavos(resumo))).toBe(500);
+    expect(transferenciaContaComoSaida("pendente")).toBe(true);
+    expect(transferenciaContaComoEntrada("pendente")).toBe(false);
+    expect(transferenciaContaComoEntrada("recebido")).toBe(true);
+  });
   // O exemplo que o Jose escreveu na spec, em teste: se este quebrar, a regra mudou.
   it("exemplo do Jose: cofre 10.000, transferencia de 500 -> exibe 9.500", () => {
     const cofre = saldoContaCentavos(paraCentavos(10_000), totais({ transferenciasSaida: paraCentavos(500) }));

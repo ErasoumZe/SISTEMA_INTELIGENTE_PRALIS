@@ -124,3 +124,14 @@ comportamento correto e está travado no código (o payload só manda `recorrenc
 código. Validar arquivo a arquivo com `npx prettier --check --end-of-line auto <arquivos>`.
 Resolver de verdade = decidir a política de fim de linha (`.gitattributes` com `* text=auto`) e
 normalizar num commit próprio, separado de qualquer entrega.
+
+---
+
+## D-05 · Agendador de transferências em processo
+
+**Status:** aberto · **Prioridade:** média · **Criado em:** 31/07/2026, Etapa 3 do Corujão v2.
+
+O agendamento e a fiscalização de prazo rodam a cada minuto no processo da API, com execução
+idempotente no banco. É a infraestrutura mais simples que funciona no dev e em uma única réplica.
+Antes de escalar horizontalmente, mover para worker/cron com eleição ou fila distribuída para não
+executar a varredura em todas as réplicas.

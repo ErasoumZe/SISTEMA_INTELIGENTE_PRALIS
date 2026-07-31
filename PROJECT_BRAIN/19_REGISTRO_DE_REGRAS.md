@@ -172,20 +172,24 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 
 Estado confirmado no código e nos testes:
 
-| Regra          | Estado                     | Prova                                                                                                                                     |
-| -------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| R-008/R-008b   | ✅                         | fechamento recusa saldo positivo; o operador lança o retorno explícito para a conta de cofre configurada da empresa                       |
-| R-015/R-016    | ✅                         | `quebras_caixa` guarda o fato contábil por empresa e usuário; observação não vazia é exigida no serviço e por CHECK no banco              |
-| R-017/R-018    | ✅                         | quebra gera `notificacoes` para Tesouraria; destinatário verifica pelo sininho/tela de pendências; o banco impede estado meio-verificado  |
-| R-019          | 🟡 infraestrutura entregue | `notificacoes.tipo` já aceita `transferencia_divergencia`; a emissão pela confirmação divergente pertence à Etapa 3                       |
-| R-021 (quebra) | ✅                         | quebra não altera `contas` e vive em tabela própria, com `empresa_id` e FK composta que impede cruzamento de tenant                       |
-| R-032          | ✅                         | Tesouraria, Gerência/Gerente, Financeiro, Diretor Geral e admin transferem sem caixa; Caixa continua exigindo caixa aberto e conta do PDV |
-| R-033          | ✅                         | abertura sem lacre continua permitida e pode começar zerada                                                                               |
-| R-039          | ✅                         | cadastro de maquininha por empresa, série, apelido e estado; seleção opcional na abertura                                                 |
+| Regra          | Estado | Prova                                                                                                                                     |
+| -------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| R-008/R-008b   | ✅     | fechamento recusa saldo positivo; o operador lança o retorno explícito para a conta de cofre configurada da empresa                       |
+| R-015/R-016    | ✅     | `quebras_caixa` guarda o fato contábil por empresa e usuário; observação não vazia é exigida no serviço e por CHECK no banco              |
+| R-017/R-018    | ✅     | quebra gera `notificacoes` para Tesouraria; destinatário verifica pelo sininho/tela de pendências; o banco impede estado meio-verificado  |
+| R-019          | ✅     | confirmação com valor divergente emite `transferencia_divergencia` para destinatário e Tesouraria                                         |
+| R-021 (quebra) | ✅     | quebra não altera `contas` e vive em tabela própria, com `empresa_id` e FK composta que impede cruzamento de tenant                       |
+| R-032          | ✅     | Tesouraria, Gerência/Gerente, Financeiro, Diretor Geral e admin transferem sem caixa; Caixa continua exigindo caixa aberto e conta do PDV |
+| R-033          | ✅     | abertura sem lacre continua permitida e pode começar zerada                                                                               |
+| R-039          | ✅     | cadastro de maquininha por empresa, série, apelido e estado; seleção opcional na abertura                                                 |
+| R-025/R-027    | ✅     | transferência manual exige lacre novo; confirmação rompe o lacre atomicamente e impede reuso                                              |
+| R-028/R-030    | ✅     | só operador de conta destino confirma; disputa entre múltiplos destinos tem uma única atualização vencedora                               |
+| R-029/R-035    | ✅     | agendamento e prazo persistem; processo periódico ativa o agendamento e calcula o vencimento                                              |
+| R-036          | ✅     | origem é debitada já no estado pendente; destino só recebe após confirmação; pendente é exibido fora do disponível                        |
+| R-037          | ✅     | prazo vencido notifica origem e destinos, bloqueia mutações e permite liberação auditada por Tesouraria/Gerência/Admin                    |
+| R-038          | ✅     | linhas de retorno/sangria do modal são gravadas como transferências independentes, cada uma com seu lacre                                 |
 
-A tabela genérica `notificacoes` também reserva `transferencia_prazo_confirmacao` para a R-037 da
-Etapa 3. Isto evita três mecanismos de alerta concorrentes. R-019 e R-037 só serão marcadas como
-entregues quando os eventos de transferência efetivamente criarem essas notificações.
+A tabela genérica `notificacoes` atende quebra, divergência e prazo sem mecanismos concorrentes.
 
 ### ⚠️ Correção de status (31/07) — o registro estava mentindo
 

@@ -30,6 +30,7 @@ export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
   opcoesEmpresa: ComputedRef<Opcoes>;
+  empresaId: Ref<string>;
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
   // Troca a categoria do lancamento com o modal ABERTO (3 botoes do topo): mantem o que foi
@@ -46,7 +47,7 @@ export type WorkspaceContext = {
   itensDespesa: Ref<ItemDespesaForm[]>;
   itensMercadoria: Ref<ItemMercadoriaForm[]>;
   salvandoOperacao: Ref<boolean>;
-  salvarOperacao: () => Promise<void>;
+  salvarOperacao: () => Promise<{ id: string } | void>;
   // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
   // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
   podeUsarRecorrencia: ComputedRef<boolean>;

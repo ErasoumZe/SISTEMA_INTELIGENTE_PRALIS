@@ -42,7 +42,11 @@ import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
-import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
+import {
+  transferenciaContaComoEntrada,
+  transferenciaContaComoSaida,
+  type TotaisCaixaCentavos
+} from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -755,16 +759,11 @@ export async function calcularTotaisCaixaOperacionalRepository(
       .select({
         valorOriginal: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
-        contaDestinoId: transferencias.contaDestinoId
+        contaDestinoId: transferencias.contaDestinoId,
+        status: transferencias.status
       })
       .from(transferencias)
-      .where(
-        and(
-          eq(transferencias.caixaId, caixaId),
-          eq(transferencias.computar, true),
-          ne(transferencias.status, "cancelado")
-        )
-      ),
+      .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true))),
     db
       .select({ valorOriginal: despesas.valorOriginal })
       .from(despesas)
@@ -784,9 +783,14 @@ export async function calcularTotaisCaixaOperacionalRepository(
   }
   for (const movimento of linhasTransferencias) {
     const valor = paraCentavos(movimento.valorOriginal);
-    totais.transferencias += valor;
-    if (movimento.contaDestinoId === pdvContaId) totais.transferenciasEntrada += valor;
-    if (movimento.contaOrigemId === pdvContaId) totais.transferenciasSaida += valor;
+    if (transferenciaContaComoEntrada(movimento.status) && movimento.contaDestinoId === pdvContaId) {
+      totais.transferencias += valor;
+      totais.transferenciasEntrada += valor;
+    }
+    if (transferenciaContaComoSaida(movimento.status) && movimento.contaOrigemId === pdvContaId) {
+      totais.transferencias += valor;
+      totais.transferenciasSaida += valor;
+    }
   }
   for (const movimento of linhasDespesas) {
     totais.despesas += paraCentavos(movimento.valorOriginal);
