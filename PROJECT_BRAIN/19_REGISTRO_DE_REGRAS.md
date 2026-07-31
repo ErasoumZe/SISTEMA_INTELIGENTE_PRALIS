@@ -126,6 +126,56 @@ Desdobra em cinco regras:
 **Por que isto importa:** a R-015 é a regra que hoje devolve **"Erro interno"** na tela (o print de
 30/07). A regra está certa e a implementação falha calada. R-016 a R-019 nunca foram construídas.
 
+### Transferência — a FOTO 1 completa (José, 31/07)
+
+Nada disto existe no código: não há `data_recebimento`, `confirmado_por`, `agendamento`,
+`tempo_confirmacao` nem múltiplo destino no schema. **21 das 33 marcas `data-pendente` são isto** —
+10 no `OperacaoTransferenciaModal` e 11 no `TesourariaCockpit`, que mostra Saída/Entrada/Saldo
+vazios exatamente porque depende deste backend.
+
+| Id           | Regra                                                                                                                                          | Fala do José                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **R-029**    | **Agendamento executa sozinho na data** — o dinheiro sai e entra automaticamente                                                               | escolha de 31/07                                                                 |
+| **R-028**    | **Só quem opera a conta de destino confirma** o recebimento (usa o vínculo `contas_usuarios`, FOTO 4). Quem envia não confirma o próprio envio | escolha de 31/07                                                                 |
+| **R-030**    | **Múltiplo destino é DISPUTA, não rateio**                                                                                                     | ver abaixo                                                                       |
+| **R-035** 🆕 | **Tempo de confirmação** — quem envia escolhe em quanto tempo o destino deve confirmar: 5min · 10min · 30min · 1h · 1 dia · 10 dias · 30 dias  | _"esse campo foi invenção da IA, ele na verdade é o campo tempo de confirmação"_ |
+
+#### R-030 — múltiplo destino, na palavra dele
+
+> _"multiplos destinos é pra vc escolher varios destinos pra mesma transferencia… eu tenho check
+> pra escolher varias contas destino, quem das contas destino confirmar primeiro o recebimento da
+> transferencia colocando o lacre dela, isso faz com que a transferencia vá pra essa unica conta
+> que confirmou o recebimento, a data de recebimento se completa e salva como recebido, a
+> transferencia vai pra essa conta especifica e as outras não recebem nada, e não se pode mais
+> usar esse lacre, aquela regra de lacre rompido já comentada"_
+
+Mecânica: N contas candidatas → a primeira que confirmar **informando o lacre** fica com o valor
+**inteiro** → `data_recebimento` preenchida, status `recebido` → as demais candidatas são
+descartadas → **o lacre é rompido** e não pode ser reusado.
+
+É o "reivindica/confirma" que o `PROJECT_BRAIN/14` mencionava. Faz sentido operacional: o
+tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica.
+
+> ⚠️ **Correção no `PROJECT_BRAIN/14`:** o item "Sempre confirmar" da FOTO 1 foi **erro de
+> transcrição meu** — eu li como flag de comportamento. O campo é **tempo de confirmação** (R-035).
+
+#### O dinheiro em trânsito e o prazo (José, 31/07)
+
+| Id           | Regra                                                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa |
+| **R-037** 🆕 | Estourado o tempo de confirmação (R-035), o sistema **trava** quem enviou **e** quem deveria ter confirmado. **Ambos recebem notificação**                                                   |
+| **R-038** 🆕 | O bloco Retorno/Sangria da FOTO 1 são **sangrias independentes** do dia — cada linha é uma transferência própria, agrupadas na mesma tela por comodidade                                     |
+
+> **Acréscimo meu à R-037, para o José vetar se quiser:** travar um operador no meio do turno pode
+> parar a padaria. Proponho que **tesouraria ou admin possa liberar a trava**, com registro de quem
+> liberou — o mesmo mecanismo do "verificado" da quebra (R-018). Sem essa válvula, um esquecimento
+> às 6h da manhã trava o caixa até alguém acordar.
+
+> **Consequência de modelagem da R-036:** o saldo da conta passa a ter **três parcelas** —
+> `fundo + confirmado − saído`, mais o **pendente** exibido à parte. O pendente **não** pode entrar
+> na mesma soma do disponível, senão o cofre parece ter dinheiro que já saiu fisicamente.
+
 ### Recorrência
 
 | Id           | Decisão                                                                                                                                                                                                                   |
