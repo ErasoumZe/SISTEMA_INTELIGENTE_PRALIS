@@ -48,15 +48,15 @@ O briefing fechou as decisões **D1–D12** no `17`. A execução foi fatiada em
 
 ## 2. Estado por vertical
 
-| S   | Status        | Migration | Prova                                                                 |
-| --- | ------------- | --------- | --------------------------------------------------------------------- |
-| S1  | ENTREGUE      | —         | `menu.test.ts`                                                        |
-| S2  | **NÃO FEITO** | —         | 9 campos da FOTO 2 não persistem (`19` §2)                            |
-| S3  | ENTREGUE      | 0016/0017 | testes de integração de discriminação                                 |
-| S4  | ENTREGUE      | 0018      | `GET /api/contas/saldos`, tela de Contas                              |
-| S5  | ENTREGUE      | **0019**  | série criada na mesma transação; **migration não aplicada** (§3)      |
-| S6  | ENTREGUE      | —         | 16 testes de front (`utils/entradas.test.ts`) + 6 de integração       |
-| S7  | **PARCIAL**   | —         | mapa confirmado + dry-run/ensaio verdes; `--apply` nunca rodou (§3.2) |
+| S   | Status         | Migration | Prova                                                                        |
+| --- | -------------- | --------- | ---------------------------------------------------------------------------- |
+| S1  | ENTREGUE       | —         | `menu.test.ts`                                                               |
+| S2  | **NÃO FEITO**  | —         | 9 campos da FOTO 2 não persistem (`19` §2)                                   |
+| S3  | ENTREGUE       | 0016/0017 | testes de integração de discriminação                                        |
+| S4  | ENTREGUE       | 0018      | `GET /api/contas/saldos`, tela de Contas                                     |
+| S5  | ENTREGUE       | 0019      | série criada na mesma transação; migration registrada no dev (§3.1)          |
+| S6  | ENTREGUE       | —         | 16 testes de front (`utils/entradas.test.ts`) + 6 de integração              |
+| S7  | ENTREGUE (dev) | —         | `--apply` rodou no dev; 2ª passada gravou 0 (idempotente). Prod: nada (§3.2) |
 
 **Nada disso foi mergeado.** A branch inteira está à frente da `main`
 (`git rev-list --count main..HEAD`) e o item 5 do DoD ("diff revisado pelo José") não foi feito.
@@ -74,16 +74,37 @@ dia do caixa — campo visível só para a pessoa saber QUAL dia está vendo).
 
 ## 3. Pendências que TRAVAM (precisam do José)
 
-### 3.1 Migration 0019 não aplicada — em lugar nenhum
+### 3.1 Migrations do sprint — RESOLVIDO no dev, **produção continua pendente**
 
-`0019_recorrencia_de_lancamento.sql` **não rodou nem no dev nem em produção**. O código do S5 está na
-branch e depende dela: sem `lancamentos_recorrencias`, salvar com recorrência quebra.
-0016/0017/0018 foram aplicadas no dev por `psql`; **em produção, nenhuma das quatro.**
+> Atualizado em 30/07. A redação anterior (“0019 não rodou nem no dev nem em produção”) estava
+> imprecisa e vale registrar por quê, porque a confusão é fácil de repetir.
 
-Ver `18` D-01: o dev sincroniza por `push`, não por `migrate` — o caminho de migration nunca é
-exercitado antes da produção.
+**No dev o schema já estava completo.** Conferido objeto por objeto: `grupos_patrimonio` e
+`patrimonio_itens` (0016), `despesas_itens.grupo_patrimonio_id` + o CHECK `grupo_unico` (0017),
+`contas.saldo_inicial` + CHECK (0018), `lancamentos_recorrencias` + os `recorrencia_id/ordem` nas
+três tabelas de lançamento e as FKs (0019) — **todos presentes**. O que faltava não era schema, era
+o **registro**: `drizzle.__drizzle_migrations` estava vazia. Por isso `db:migrate` teria tentado
+aplicar da 0000 e quebrado em objeto existente — o sintoma que parecia “migration não rodou”.
 
-### 3.2 S7 — mapa confirmado, apply escrito, **aguardando o OK do José**
+**O que foi feito:** `db/baseline-migrations.ts` (`npm run db:baseline`) registra as 20 migrations
+que o banco já reflete, **sem reexecutar nenhuma**. Ele se recusa a rodar se a tabela de controle
+não estiver vazia, ou se marcadores da última migration estiverem ausentes — marcar como aplicada
+uma migration que não está no banco faria o `migrate` pular ela para sempre.
+
+Detalhe que torna o baseline confiável: o drizzle decide o que aplicar **só pelo `created_at`**
+(`pg-core/dialect.js`: `if (!ultima || Number(ultima.created_at) < migration.folderMillis)`). O hash
+é gravado mas não entra na decisão — ainda assim gravamos o sha256 correto do arquivo.
+
+**Prova:** `select count(*) from drizzle.__drizzle_migrations` → **20** (era 0), e
+`npm run db:migrate` no dev termina **exit 0** sem reaplicar nada. É exatamente o critério de
+“como saber que foi resolvido” do `18` D-01. Backup antes em `backups/dev_antes_baseline_*.dump`.
+
+**Em produção: nada foi feito.** Se o banco de produção já tem `__drizzle_migrations` populada até a
+0015, o caminho normal (`db:migrate`) aplica 0016–0019 sozinho e **não** se usa o baseline lá — ele
+existe só para banco que nunca passou por migration. Isso continua sendo decisão de deploy do José,
+e a branch nem foi mergeada.
+
+### 3.2 S7 — mapa confirmado e **aplicado no dev** (produção ainda não)
 
 > Atualizado em 30/07 pela entrega do `scripts/seed-planilha.ts`.
 
@@ -120,8 +141,22 @@ O `17` §3 continua desatualizado — **vale este quadro**, não o de lá.
 `margem` e `tipo` existem na planilha mas **não têm coluna em `grupos_mercadorias`** — precisariam de
 migration; hoje não entram. O **REF entra como `grupo_pai_id`**, que já existe.
 
-**Estado:** `npm run seed:planilha` (dry-run) e `-- --ensaio` (escreve tudo numa transação e dá
-rollback) rodam verdes. O `--apply` existe e **nunca foi executado** — é a decisão que falta.
+**Estado (30/07): APLICADO NO DEV.** `--apply` rodou no banco local com o OK do José. Gravou
+exatamente o previsto pelo dry-run: 106 grupos de despesa (8 REF + 98), 77 de mercadoria, 14 de
+retirada, 33 contas (21 ativas / 12 inativas), 4 áreas, 24 setores, 31 cargos, 8 grupos de
+patrimônio e 146 produtos com EAN normalizado.
+
+**Idempotência provada, não prometida:** a segunda passada do `--apply` gravou **0** em todas as
+tabelas e as contagens não mudaram (110/38/147/41). Rodar de novo não duplica.
+
+**Em produção: nada.** O seed só rodou no dev.
+
+Dois achados de qualidade do dado (da planilha, não do script):
+
+- 12 produtos ficaram **sem grupo de mercadoria** — a planilha não informa grupo para eles;
+- 2 pares de produtos têm **EAN diferente e descrição idêntica** (`TIAL MANGA 200,000 ML`,
+  `TÔNICA ANTÁRTICA 350,000 LT`). A chave natural é o EAN, então os dois entraram — mas na tela
+  viram duas linhas iguais. Quem for corrigir, corrige na planilha.
 
 ### 3.3 Item 5 — 3 duplicidades achadas, nenhuma corrigida
 

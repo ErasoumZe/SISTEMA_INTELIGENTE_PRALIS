@@ -14,6 +14,7 @@
     "drizzle.config.ts",
     "planilha-xlsx.ts",
     "planilha-inspecionar.ts",
+    "baseline-migrations.ts",
     "../shared/src/**/*.ts"
   ]
 }

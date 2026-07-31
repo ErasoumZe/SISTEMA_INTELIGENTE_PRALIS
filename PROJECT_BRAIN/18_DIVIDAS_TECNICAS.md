@@ -8,8 +8,14 @@
 
 ## D-01 · O caminho de migration NUNCA é exercitado em desenvolvimento
 
-**Status:** aberto · **Prioridade:** alta · **Quando:** depois do sprint de Lançamentos (decisão do
-José, 30/07) · **Descoberto em:** 30/07, ao aplicar a 0017.
+**Status:** passo 1 FEITO (30/07) · **Prioridade:** alta · **Descoberto em:** 30/07, ao aplicar a 0017.
+
+> **Passo 1 (baseline) concluído em 30/07.** `db/baseline-migrations.ts` registrou as 20 migrations
+> que o dev já refletia, sem reexecutar nenhuma. `__drizzle_migrations` saiu de 0 para 20 e
+> `npm run db:migrate` no dev agora termina exit 0 — o critério de "como saber que foi resolvido"
+> abaixo está satisfeito. **Os passos 2, 3 e 4 continuam abertos**: o dev ainda é sincronizado por
+> `push` no dia a dia (`setup:dev`), e o passo 4 — aplicar migrations sobre um dump ANONIMIZADO de
+> produção no CI — é o que fecha o buraco de verdade e não foi feito.
 
 ### O que é
 

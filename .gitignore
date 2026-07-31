@@ -24,3 +24,6 @@ docs/
 
 # Config local do Claude Code (agents/skills/permissoes) — fora do git por decisao do Ze
 .claude/
+
+# Dumps do pg_dump (scripts/backup-db.mjs grava aqui). Sao dados reais: nunca vao para o git.
+backups/

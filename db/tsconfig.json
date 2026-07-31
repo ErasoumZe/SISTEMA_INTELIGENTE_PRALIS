@@ -12,6 +12,7 @@
     "drizzle.config.ts",
     "bootstrap-contas-usuarios.ts",
     "planilha-xlsx.ts",
-    "planilha-inspecionar.ts"
+    "planilha-inspecionar.ts",
+    "baseline-migrations.ts"
   ]
 }
