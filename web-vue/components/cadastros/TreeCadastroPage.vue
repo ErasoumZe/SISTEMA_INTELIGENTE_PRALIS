@@ -16,7 +16,7 @@ const emit = defineEmits<{
   (event: "criarFilho", linha: Record<string, string | undefined>): void;
 }>();
 
-const titulo = computed(() => (props.tela === "grupos" ? "Grupos" : "Areas e setores"));
+const titulo = computed(() => (props.tela === "grupos" ? "Grupos" : "Áreas e setores"));
 const acao = computed(() => (props.tela === "grupos" ? "Novo grupo" : "Novo item"));
 </script>
 

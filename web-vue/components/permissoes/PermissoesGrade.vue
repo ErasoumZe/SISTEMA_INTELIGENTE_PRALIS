@@ -52,7 +52,7 @@ function proximoEstado(codigo: string) {
 
 // Icone/cor por estado (mockup: check verde = permite, x vermelho = nega, traco = herdado).
 function icone(codigo: string | null) {
-  if (!codigo) return { i: "mdi-minus", cor: "#cbd2dc", titulo: "sem esta acao" };
+  if (!codigo) return { i: "mdi-minus", cor: "#cbd2dc", titulo: "sem esta ação" };
   const estado = estadoRegraPermissao(codigo);
   if (estado === "permitir") return { i: "mdi-check", cor: "#16a34a", titulo: "permite" };
   if (estado === "negar") return { i: "mdi-close", cor: "#c0392b", titulo: "nega" };

@@ -64,7 +64,7 @@ export function useFotoDocumento() {
       credentials: "include",
       body: formData
     });
-    if (!resposta.ok) throw new Error("Nao foi possivel enviar a foto do documento.");
+    if (!resposta.ok) throw new Error("Não foi possível enviar a foto do documento.");
     const corpo = (await resposta.json()) as { data?: Record<string, string | undefined> } | null;
     return corpo?.data?.[chaveResposta] ?? "anexada";
   }

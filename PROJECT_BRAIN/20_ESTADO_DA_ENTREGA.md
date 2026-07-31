@@ -150,6 +150,12 @@ confirmações nativas foram substituídas por um único diálogo Vuetify reutil
 passa de 150 strings, a revisão parou nessa camada: textos secundários de cadastro/integração e
 mensagens antigas da API ainda precisam de uma rodada própria; R-100 permanece ⚠️.
 
+**Complemento do Corujão v3 (31/07):** cadastros secundários e a tela de integrações foram
+revisados. Mensagens legadas da API agora são acentuadas na fronteira HTTP por palavras inteiras,
+sem modificar códigos/identificadores, com teste unitário. A varredura de código chegou até essas
+três camadas; R-100 continua ⚠️ até inspeção visual humana de todas as telas, para não transformar
+check estático em prova visual.
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas

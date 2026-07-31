@@ -55,7 +55,7 @@ watch(
       <v-expansion-panel v-for="item in itens" :key="item.id">
         <v-expansion-panel-title>
           <div class="d-flex flex-wrap align-center ga-3 w-100">
-            <span class="font-weight-bold">{{ item.fornecedorNome || "Fornecedor nao identificado" }}</span>
+            <span class="font-weight-bold">{{ item.fornecedorNome || "Fornecedor não identificado" }}</span>
             <v-chip size="x-small" variant="tonal" color="primary">{{ dinheiro(item.valorOriginal) }}</v-chip>
             <span class="text-caption text-medium-emphasis">{{ formatarDataSomenteDia(item.dataReferencia) }}</span>
             <span v-if="item.notaFiscalId" class="text-caption text-medium-emphasis">

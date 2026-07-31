@@ -257,7 +257,7 @@ async function salvarCampo(config: IntegracaoCampoConfigDto) {
   salvandoCampo.value = config.campo;
   try {
     await apiPut("/api/integracoes/campos", config);
-    notificar("Configuracao salva.");
+    notificar("Configuração salva.");
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -277,7 +277,7 @@ async function salvarVinculo(vinculo: IntegracaoVinculoDto, registroSistemaId: s
       descricaoExterna: vinculo.descricaoExterna,
       registroSistemaId
     });
-    notificar("Vinculo salvo.");
+    notificar("Vínculo salvo.");
     await carregarDicionario();
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -298,7 +298,7 @@ async function criarVinculoManual() {
       descricaoExterna: formVinculoManual.descricaoExterna.trim() || null,
       registroSistemaId: formVinculoManual.registroSistemaId
     });
-    notificar("Vinculo criado.");
+    notificar("Vínculo criado.");
     formVinculoManual.identificadorExterno = "";
     formVinculoManual.descricaoExterna = "";
     formVinculoManual.registroSistemaId = "";
@@ -329,7 +329,7 @@ onMounted(async () => {
       return;
     }
     if (!temPermissao("integracoes_visualizar")) {
-      erro.value = "Sem permissao para acessar esta pagina.";
+      erro.value = "Sem permissão para acessar esta página.";
       return;
     }
     await carregarEmpresas();
@@ -363,15 +363,15 @@ onMounted(async () => {
     <div v-else class="d-grid ga-4">
       <div class="d-flex flex-wrap align-center justify-space-between ga-3">
         <div>
-          <h1 class="text-h5 font-weight-bold">Integracoes</h1>
-          <div class="text-body-2 text-muted">Chaves, funcionamento e dicionario de conversao do PDV.</div>
+          <h1 class="text-h5 font-weight-bold">Integrações</h1>
+          <div class="text-body-2 text-muted">Chaves, funcionamento e dicionário de conversão do PDV.</div>
         </div>
         <v-select
           v-model="tipoSelecionado"
           :items="integracoes"
           item-title="nome"
           item-value="tipo"
-          label="Integracao"
+          label="Integração"
           hide-details
           max-width="260"
         />
@@ -380,8 +380,8 @@ onMounted(async () => {
       <v-tabs v-model="aba" density="comfortable">
         <v-tab value="chaves">Chaves</v-tab>
         <v-tab value="historico">Histórico</v-tab>
-        <v-tab value="dicionario">Dicionario</v-tab>
-        <v-tab value="pendentes">Sem conversao ({{ vinculosSemConversao.length }})</v-tab>
+        <v-tab value="dicionario">Dicionário</v-tab>
+        <v-tab value="pendentes">Sem conversão ({{ vinculosSemConversao.length }})</v-tab>
       </v-tabs>
 
       <v-window v-model="aba">
@@ -400,7 +400,7 @@ onMounted(async () => {
                     <th>Código</th>
                     <th>Status</th>
                     <th>Criada em</th>
-                    <th class="text-right">Acoes</th>
+                    <th class="text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -433,7 +433,7 @@ onMounted(async () => {
 
         <v-window-item value="historico">
           <v-card>
-            <v-card-title>Funcionamento diario</v-card-title>
+            <v-card-title>Funcionamento diário</v-card-title>
             <div class="responsive-table-shell">
               <v-table>
                 <thead>
@@ -466,7 +466,7 @@ onMounted(async () => {
         <v-window-item value="dicionario">
           <div class="d-grid ga-4">
             <v-card>
-              <v-card-title>Regras automaticas</v-card-title>
+              <v-card-title>Regras automáticas</v-card-title>
               <v-progress-linear v-if="dicionarioCarregando" indeterminate />
               <div class="responsive-table-shell">
                 <v-table>
@@ -500,7 +500,7 @@ onMounted(async () => {
             </v-card>
 
             <v-card>
-              <v-card-title>Vinculos externos</v-card-title>
+              <v-card-title>Vínculos externos</v-card-title>
               <v-card-text>
                 <v-row dense>
                   <v-col cols="12" md="3">
@@ -516,7 +516,7 @@ onMounted(async () => {
                     <v-text-field v-model="formVinculoManual.identificadorExterno" label="Identificador externo" />
                   </v-col>
                   <v-col cols="12" md="3">
-                    <v-text-field v-model="formVinculoManual.descricaoExterna" label="Descricao externa" />
+                    <v-text-field v-model="formVinculoManual.descricaoExterna" label="Descrição externa" />
                   </v-col>
                   <v-col cols="12" md="3">
                     <v-select
@@ -536,7 +536,7 @@ onMounted(async () => {
                       :loading="salvandoVinculoManual"
                       @click="criarVinculoManual"
                     >
-                      Criar vinculo
+                      Criar vínculo
                     </v-btn>
                   </v-col>
                 </v-row>
@@ -581,7 +581,7 @@ onMounted(async () => {
         <v-window-item value="pendentes">
           <v-card>
             <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-3">
-              <span>Itens sem conversao</span>
+              <span>Itens sem conversão</span>
               <v-select
                 v-model="filtroTipoPendente"
                 :items="tiposFiltroPendente"

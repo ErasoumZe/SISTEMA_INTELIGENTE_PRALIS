@@ -160,7 +160,7 @@ function proximaPagina() {
           :items="[
             { title: 'Cargo', value: 'cargo' },
             { title: 'Setor', value: 'setor' },
-            { title: 'Usuario', value: 'usuario' }
+            { title: 'Usuário', value: 'usuario' }
           ]"
           label="Tipo"
           density="compact"
@@ -171,7 +171,7 @@ function proximaPagina() {
         <v-select
           :model-value="permissaoFiltro"
           :items="permissoesFiltro"
-          label="Permissao"
+          label="Permissão"
           density="compact"
           hide-details
           clearable
@@ -190,7 +190,7 @@ function proximaPagina() {
           <thead>
             <tr>
               <th v-for="coluna in colunas" :key="coluna">{{ coluna }}</th>
-              <th v-if="temAcoes" class="text-right">Acoes</th>
+              <th v-if="temAcoes" class="text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -273,7 +273,7 @@ function proximaPagina() {
             append-icon="mdi-chevron-right"
             :disabled="paginaAtual === totalPaginas || carregandoBusca"
             @click="proximaPagina"
-            >Proxima</v-btn
+            >Próxima</v-btn
           >
         </div>
       </div>

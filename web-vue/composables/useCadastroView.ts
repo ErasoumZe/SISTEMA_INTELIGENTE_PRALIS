@@ -38,7 +38,7 @@ export function useCadastroView(params: {
         nome: item.nome,
         conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
         contaId: item.contaId,
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "fornecedores")
       return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
@@ -46,14 +46,14 @@ export function useCadastroView(params: {
       return listas.sociosGestores.map((item) => ({
         id: item.id,
         nome: item.nome,
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "maquininhas")
       return listas.maquininhas.map((item) => ({
         id: item.id,
         nome: item.apelido ?? item.nome,
         numeroSerie: item.numeroSerie,
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "clientes")
       return listas.clientes.map((item) => ({
@@ -152,7 +152,7 @@ export function useCadastroView(params: {
         nome: item.nome ?? "",
         inicio: (item.horaInicio ?? "").slice(0, 5),
         fim: (item.horaFim ?? "").slice(0, 5),
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "usuarios")
       return listas.usuarios.map((item) => ({
@@ -213,7 +213,7 @@ export function useCadastroView(params: {
     }
     if (tela === "areas_setores") {
       return [
-        ...listas.areas.map((item) => ({ id: item.id, nome: item.nome, tipo: "Area", tipoAreaSetor: "area" })),
+        ...listas.areas.map((item) => ({ id: item.id, nome: item.nome, tipo: "Área", tipoAreaSetor: "area" })),
         ...listas.setores.map((item) => ({
           id: item.id,
           nome: item.nome,
@@ -229,17 +229,17 @@ export function useCadastroView(params: {
 
   function descricaoTela(tela: string) {
     const descricoes: Record<string, string> = {
-      empresas: "Empresas disponiveis no sistema.",
-      contas: "Contas usadas nos lancamentos financeiros.",
+      empresas: "Empresas disponíveis no sistema.",
+      contas: "Contas usadas nos lançamentos financeiros.",
       formas_pagamento: "Formas de pagamento usadas nas vendas.",
       grupos: "Hierarquia de grupos de despesas, mercadorias e retiradas.",
       unidades: "Unidades de medida usadas nos produtos.",
-      patrimonio: "Grupos (sigla) e itens de patrimonio. O grupo classifica maquinario na discriminacao.",
-      turnos: "Turnos de trabalho (ex.: Manha 06:00-14:00). Pre-selecionam o turno na abertura do caixa.",
-      areas_setores: "Areas e setores organizacionais.",
-      usuarios: "Usuarios e acessos do sistema.",
-      permissoes: "Permissoes por cargo, setor ou usuario.",
-      malotes: "Cada malote e o seu lacre.",
+      patrimonio: "Grupos (sigla) e itens de patrimônio. O grupo classifica maquinário na discriminação.",
+      turnos: "Turnos de trabalho (ex.: Manhã 06:00-14:00). Pré-selecionam o turno na abertura do caixa.",
+      areas_setores: "Áreas e setores organizacionais.",
+      usuarios: "Usuários e acessos do sistema.",
+      permissoes: "Permissões por cargo, setor ou usuário.",
+      malotes: "Cada malote é o seu lacre.",
       colaboradores: "Cadastro de colaboradores.",
       fornecedores: "Cadastro de fornecedores.",
       socios_gestores: "Cadastro de sócios e gestores que podem ser credores de retiradas.",
@@ -271,7 +271,7 @@ export function useCadastroView(params: {
       socios_gestores: ["Nome", "Ativo"],
       maquininhas: ["Apelido", "Número de série", "Ativo"],
       clientes: ["Nome", "Documento"],
-      produtos: ["Codigo", "Nome", "Marca", "Unidade", "Preco atual"]
+      produtos: ["Código", "Nome", "Marca", "Unidade", "Preço atual"]
     };
     return colunas[tela] ?? ["Nome"];
   }

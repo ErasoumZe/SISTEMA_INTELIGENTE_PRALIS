@@ -5,7 +5,7 @@ const props = defineProps<{ error: NuxtError }>();
 
 const titulo = computed(() => {
   if (props.error.statusCode === 404) return "Página não encontrada";
-  if (props.error.statusCode === 403) return "Sem permissao";
+  if (props.error.statusCode === 403) return "Sem permissão";
   return "Não foi possível abrir esta página";
 });
 

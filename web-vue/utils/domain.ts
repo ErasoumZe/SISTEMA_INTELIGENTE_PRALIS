@@ -1,4 +1,5 @@
 import {
+  acentuarMensagemExibida,
   TELA_TEMA_RESUMO_CAIXA,
   permissoes as permissoesCompartilhadas,
   temAlgumaPermissao,
@@ -660,12 +661,12 @@ export function mensagemErro(error: unknown) {
   if (error instanceof Error) {
     try {
       const dados = JSON.parse(error.message) as { message?: string; error?: string; erro?: string };
-      return dados.message || dados.error || dados.erro || error.message;
+      return acentuarMensagemExibida(dados.message || dados.error || dados.erro || error.message);
     } catch {
-      return error.message;
+      return acentuarMensagemExibida(error.message);
     }
   }
-  return "Nao foi possivel concluir a acao.";
+  return "Não foi possível concluir a ação.";
 }
 
 export function itensDaEmpresa(itens: Opcao[], idEmpresa: string) {
@@ -894,7 +895,7 @@ export function formCadastroDeLinha(
     ...promoFormDeLinha(linha.promocoes),
     produtoConversoes: conversoesDeLinha(linha.conversoes),
     contaId: linha.contaId ?? "",
-    ativo: linha.ativo !== "Nao",
+    ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
     grupoPaiId: linha.grupoPaiId ?? "",
     tipoAreaSetor:

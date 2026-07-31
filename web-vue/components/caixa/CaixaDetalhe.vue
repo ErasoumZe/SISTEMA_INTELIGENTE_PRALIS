@@ -145,7 +145,7 @@ onMounted(carregar);
       <div class="text-subtitle-2 mb-2">Acerto de saldo</div>
       <p v-if="!detalhe.ajuste" class="text-body-2 text-medium-emphasis">Este caixa não teve acerto de diferença.</p>
       <v-alert v-else type="warning" variant="tonal" density="compact">
-        Diferenca de <strong>{{ dinheiro(detalhe.ajuste.valorDiferenca) }}</strong> atribuida a
+        Diferença de <strong>{{ dinheiro(detalhe.ajuste.valorDiferenca) }}</strong> atribuída a
         <strong>{{ detalhe.ajuste.colaboradorNome || "colaborador do caixa" }}</strong>
         em {{ formatarDataHora(detalhe.ajuste.criadoEm) }}.
         <template v-if="detalhe.ajuste.observacao"> Motivo: {{ detalhe.ajuste.observacao }}</template>

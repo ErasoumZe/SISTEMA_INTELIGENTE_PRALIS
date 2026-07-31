@@ -156,7 +156,7 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
             type="date"
             label="Data final"
             :error="periodoInvertido"
-            :error-messages="periodoInvertido ? 'A data final e anterior a inicial.' : undefined"
+            :error-messages="periodoInvertido ? 'A data final é anterior à inicial.' : undefined"
             hide-details="auto"
           />
         </v-col>

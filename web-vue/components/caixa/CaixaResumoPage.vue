@@ -273,7 +273,7 @@ function fechar() {
             </v-btn>
           </v-col>
           <v-col cols="12" md="8">
-            <v-text-field v-model="fechamento.observacao" label="Observacao do fechamento" />
+            <v-text-field v-model="fechamento.observacao" label="Observação do fechamento" />
           </v-col>
           <v-col cols="12">
             <v-btn

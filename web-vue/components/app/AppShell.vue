@@ -90,7 +90,7 @@ watch(
 );
 
 // Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
-const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuario");
+const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuário");
 const emailUsuario = computed(() => props.sessao.user?.email ?? "");
 const iniciaisUsuario = computed(() => {
   const partes = nomeUsuario.value.trim().split(/\s+/).filter(Boolean);

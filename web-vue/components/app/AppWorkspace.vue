@@ -278,7 +278,7 @@ const telaBloqueadaPorCaixa = computed(() => {
 // Opcoes do seletor de aparencia com rotulo explicito: "padrao" (global) primeiro, o resumo do
 // caixa, e cada tela como "Somente a tela: X" — deixa claro se a cor vale para tudo ou uma so.
 const telasTemaPermitidas = computed(() => [
-  { id: "padrao", titulo: "Padrao (todas as telas)" },
+  { id: "padrao", titulo: "Padrão (todas as telas)" },
   { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
   ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
 ]);
@@ -376,7 +376,7 @@ const alvosFiltroPermissoes = computed(() => {
     ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` })),
     ...opcoesEmpresa.value.usuarios.map((item) => ({
       id: item.usuarioId ?? item.id,
-      nome: `Usuario: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
+      nome: `Usuário: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
     }))
   ];
 });
@@ -462,7 +462,7 @@ watch(
     if (!workspaceCarregado.value || !sessao.value) return;
     erro.value = "";
     if (!telasDoUsuario().includes(novaTela)) {
-      erro.value = "Sem permissao para acessar esta pagina.";
+      erro.value = "Sem permissão para acessar esta página.";
       return;
     }
     await carregarDadosTela(novaTela, empresaId.value);
@@ -583,7 +583,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
     [dados.contas, dados.usuarios] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
-      carregarOpcaoOpcional(faltas, "Usuarios", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
+      carregarOpcaoOpcional(faltas, "Usuários", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
     ]);
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
@@ -822,7 +822,7 @@ async function carregarTudo() {
     }
     const telas = telasDoUsuario();
     if (!paginaInicialNeutra.value && !telas.includes(telaAtiva.value)) {
-      erro.value = "Sem permissao para acessar esta pagina.";
+      erro.value = "Sem permissão para acessar esta página.";
       return;
     }
     await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
@@ -1261,7 +1261,7 @@ async function salvarDiscriminacao() {
 // Recorrencia (D3): a serie criada tem de aparecer na mensagem. Quando o teto de 12 meses corta a
 // serie, dizer so "salvo" deixaria a pessoa achar que os 24 lancamentos que pediu existem.
 function mensagemLancamentoSalvo(resultado: { serie?: number; serieLimitada?: boolean }) {
-  if (!resultado.serie) return "Lancamento salvo com sucesso.";
+  if (!resultado.serie) return "Lançamento salvo com sucesso.";
   const base = `Serie criada: ${resultado.serie} lancamentos.`;
   return resultado.serieLimitada ? `${base} A serie foi limitada a 12 meses.` : base;
 }
@@ -1330,7 +1330,7 @@ async function salvarOperacao() {
       operacoes.value.unshift(linhaAtualizada);
     }
     modalOperacaoAberto.value = false;
-    notificar(editandoId ? "Lancamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
+    notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
     return { id: operacaoSalva.id };
   } catch (error) {
@@ -1550,7 +1550,7 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
       permissao
     });
     await apiDelete(`/api/permissoes/regras?${params.toString()}`);
-    notificar("Permissao excluida com sucesso.");
+    notificar("Permissão excluída com sucesso.");
     await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1697,7 +1697,7 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   }
   try {
     await apiPost(`/api/permissoes/cargo/${cargoId}/restaurar-padrao`, {});
-    notificar(`Permissoes do cargo "${nome}" restauradas para o padrao.`);
+    notificar(`Permissões do cargo "${nome}" restauradas para o padrão.`);
     if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");

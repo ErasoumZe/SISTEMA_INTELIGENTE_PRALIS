@@ -13,7 +13,7 @@ const props = defineProps<{
 }>();
 
 function nomeForma(formaPagamentoId: string | null): string {
-  if (!formaPagamentoId) return "Nao informado";
+  if (!formaPagamentoId) return "Não informado";
   return props.formasPagamento?.find((forma) => forma.id === formaPagamentoId)?.nome ?? "Forma removida";
 }
 

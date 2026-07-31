@@ -180,7 +180,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                   <th>Data</th>
                   <th>Descrição</th>
                   <th class="text-right">Valor</th>
-                  <th class="text-right">Acoes</th>
+                  <th class="text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -279,7 +279,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                 :disabled="pagina === totalPaginas"
                 @click="emit('update:pagina', Math.min(totalPaginas, pagina + 1))"
               >
-                Proxima
+                Próxima
               </v-btn>
             </div>
           </div>

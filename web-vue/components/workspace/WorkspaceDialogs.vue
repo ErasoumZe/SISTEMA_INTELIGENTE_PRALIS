@@ -11,7 +11,7 @@ import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
 const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferencias"];
 
 const perfisAcessoUsuario = [
-  { title: "Usuario comum (permissoes por cargo, setor e usuario)", value: "usuario_comum" },
+  { title: "Usuário comum (permissões por cargo, setor e usuário)", value: "usuario_comum" },
   { title: "Administrador total", value: "usuario_admin" },
   { title: "Admin legado (permissoes por cargo, setor e usuario)", value: "admin" }
 ];
@@ -139,7 +139,7 @@ const validacaoQtdPreview = computed(() =>
         <div class="d-grid ga-4">
           <v-text-field
             v-model="formMalote.numeroLacre"
-            label="Numero do lacre"
+            label="Número do lacre"
             placeholder="Ex.: 007"
             hint="Identidade unica do malote (vem impresso no lacre)"
             persistent-hint
@@ -325,7 +325,7 @@ const validacaoQtdPreview = computed(() =>
               <v-text-field v-model="formCadastro.rua" label="Rua" />
             </v-col>
             <v-col cols="12" md="4">
-              <v-text-field v-model="formCadastro.numero" label="Numero" />
+              <v-text-field v-model="formCadastro.numero" label="Número" />
             </v-col>
             <v-col cols="12" md="8">
               <v-text-field v-model="formCadastro.complemento" label="Complemento" />
@@ -392,16 +392,16 @@ const validacaoQtdPreview = computed(() =>
               @update:model-value="formCadastro.cpf = mascararCpf(String($event || ''))"
           /></v-col>
           <template v-if="cadastroTela === 'produtos'">
-            <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigo" label="Codigo" /></v-col>
+            <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigo" label="Código" /></v-col>
             <v-col cols="12" md="4"
-              ><v-text-field v-model="formCadastro.codigoBarras" label="Codigo de barras"
+              ><v-text-field v-model="formCadastro.codigoBarras" label="Código de barras"
             /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="formCadastro.marca" label="Marca" /></v-col>
             <v-col cols="12"><v-text-field v-model="formCadastro.descricao" label="Nome do produto *" /></v-col>
             <v-col cols="12">
               <v-text-field
                 :model-value="descricaoAutoPreview"
-                label="Descricao (automatica)"
+                label="Descrição (automática)"
                 readonly
                 bg-color="grey-lighten-4"
                 placeholder="Preencha nome, quantidade individual e unidade"
@@ -596,7 +596,7 @@ const validacaoQtdPreview = computed(() =>
               </v-col>
             </template>
             <template v-if="formCadastro.tipo === 'revenda'">
-              <v-col cols="12"><div class="text-body-2 font-weight-bold">Promocao</div></v-col>
+              <v-col cols="12"><div class="text-body-2 font-weight-bold">Promoção</div></v-col>
               <v-col cols="12" md="4">
                 <v-select
                   v-model="formCadastro.promoTipo"
@@ -607,7 +607,7 @@ const validacaoQtdPreview = computed(() =>
                   ]"
                   item-title="titulo"
                   item-value="valor"
-                  label="Promocao"
+                  label="Promoção"
                 />
               </v-col>
               <template v-if="formCadastro.promoTipo !== 'nenhum'">
@@ -656,7 +656,7 @@ const validacaoQtdPreview = computed(() =>
                       unidadesIndividuais: '1'
                     })
                   "
-                  >Adicionar conversao</v-btn
+                  >Adicionar conversão</v-btn
                 >
               </div>
               <v-row v-for="(conversao, index) in formCadastro.produtoConversoes" :key="index" dense>
@@ -763,7 +763,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.turnos"
               item-title="nome"
               item-value="id"
-              label="Turno padrao"
+              label="Turno padrão"
               clearable
             />
           </v-col>
@@ -814,7 +814,7 @@ const validacaoQtdPreview = computed(() =>
               ><v-select
                 v-model="formCadastro.tipoPermissao"
                 :items="['cargo', 'setor', 'usuario']"
-                label="Tipo de permissao"
+                label="Tipo de permissão"
             /></v-col>
             <v-col v-if="formCadastro.tipoPermissao === 'cargo'" cols="12" md="8">
               <v-select
@@ -839,7 +839,7 @@ const validacaoQtdPreview = computed(() =>
                 :items="opcoesEmpresa.usuarios"
                 item-title="nome"
                 item-value="usuarioId"
-                label="Usuario"
+                label="Usuário"
             /></v-col>
             <v-col cols="12">
               <div class="text-body-2 font-weight-bold mb-2">Operacoes (telas x acoes)</div>
@@ -850,7 +850,7 @@ const validacaoQtdPreview = computed(() =>
                 <v-sheet class="pa-3 rounded-lg soft-bg">
                   <div class="text-body-2 font-weight-bold mb-2">{{ secao.titulo }}</div>
                   <div class="text-caption text-muted mb-3">
-                    Herdar nao concede acesso sozinho; a permissao precisa estar como Permitir em alguma camada efetiva.
+                    Herdar não concede acesso sozinho; a permissão precisa estar como Permitir em alguma camada efetiva.
                   </div>
                   <v-row dense>
                     <v-col v-for="permissao in permissoesDaSecao(secao)" :key="permissao" cols="12">

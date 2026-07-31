@@ -50,7 +50,7 @@ const acoesExtras = computed(() => {
   if (props.tela === "permissoes")
     return [
       {
-        label: "Restaurar padrao",
+        label: "Restaurar padrão",
         event: "restaurarPadraoCargo",
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }

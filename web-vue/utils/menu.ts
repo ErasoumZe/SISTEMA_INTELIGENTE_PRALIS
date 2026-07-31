@@ -64,7 +64,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   },
   {
     // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).
-    titulo: "Configuracao",
+    titulo: "Configuração",
     ids: [
       "produtos",
       "grupos",

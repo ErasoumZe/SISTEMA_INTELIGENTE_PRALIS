@@ -124,7 +124,7 @@ async function enviarComprovante() {
     });
     if (!resposta.ok) {
       const body = (await resposta.json().catch(() => null)) as { title?: string } | null;
-      throw new Error(body?.title ?? "Nao foi possivel enviar o comprovante.");
+      throw new Error(body?.title ?? "Não foi possível enviar o comprovante.");
     }
     arquivoInput.value = null;
     await abrirComprovantes(vendaSelecionada.value);
@@ -152,7 +152,7 @@ watch(
     <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
         <div class="text-h6">Relatório de Vendas</div>
-        <div class="text-body-2 text-muted">Vendas com filtros por periodo, PDV, cliente e pagamento.</div>
+        <div class="text-body-2 text-muted">Vendas com filtros por período, PDV, cliente e pagamento.</div>
       </div>
       <v-btn color="primary" prepend-icon="mdi-magnify" :loading="carregando" @click="aplicarFiltros">Buscar</v-btn>
     </v-card-title>
@@ -230,7 +230,7 @@ watch(
               <th>Cliente</th>
               <th>Pagamento</th>
               <th>Valor</th>
-              <th class="text-right">Acoes</th>
+              <th class="text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -265,7 +265,7 @@ watch(
       <div v-if="totais" class="totais-rodape mt-4 pa-3 rounded-lg">
         <div class="d-flex justify-space-between align-center flex-wrap ga-2">
           <div class="text-subtitle-1 font-weight-bold">Total geral: {{ dinheiro(totais.totalGeral) }}</div>
-          <div class="text-body-2 text-muted">{{ totais.quantidade }} vendas no periodo filtrado</div>
+          <div class="text-body-2 text-muted">{{ totais.quantidade }} vendas no período filtrado</div>
         </div>
         <div v-if="totais.porFormaPagamento.length" class="d-flex flex-wrap ga-2 mt-2">
           <v-chip
