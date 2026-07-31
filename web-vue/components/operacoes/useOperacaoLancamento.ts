@@ -34,6 +34,9 @@ export function useOperacaoLancamento() {
     fotoDocumentoPreview,
     fotoDocumentoExistente,
     selecionarFotoDocumento,
+    fotoNotaPreview,
+    fotoNotaExistente,
+    selecionarFotoNota,
     salvandoOperacao,
     salvarOperacao,
     podeUsarRecorrencia,
@@ -145,7 +148,7 @@ export function useOperacaoLancamento() {
   watch(
     () => form.value.credorTipo,
     (tipo) => {
-      if (tipo && CREDORES[cat.value].includes(tipo as TipoCredor)) tipoCredor.value = tipo as TipoCredor;
+      if (tipo && CREDORES[cat.value].includes(tipo)) tipoCredor.value = tipo;
     },
     { immediate: true }
   );
@@ -171,11 +174,8 @@ export function useOperacaoLancamento() {
   function onFotoDocumento(e: Event) {
     selecionarFotoDocumento((e.target as HTMLInputElement).files?.[0] ?? null);
   }
-  // TODO(regras): segunda foto (nota/interno) — sem upload nesta rodada.
-  const fotoInternaNome = ref("");
-  function selecionarFotoInterna(e: Event) {
-    const arquivo = (e.target as HTMLInputElement).files?.[0];
-    fotoInternaNome.value = arquivo?.name ?? "";
+  function onFotoNota(e: Event) {
+    selecionarFotoNota((e.target as HTMLInputElement).files?.[0] ?? null);
   }
   // --- Recorrencia (D3) — SUPORTADA: o servidor cria a serie inteira no salvar. ---------------
   // O estado vive no workspace (e de la que o payload sai); aqui ficam so os atalhos de leitura e
@@ -334,8 +334,9 @@ export function useOperacaoLancamento() {
     fotoDocumentoPreview,
     fotoDocumentoExistente,
     onFotoDocumento,
-    fotoInternaNome,
-    selecionarFotoInterna,
+    fotoNotaPreview,
+    fotoNotaExistente,
+    onFotoNota,
     // discriminacao
     discriminando,
     itensDespesa,

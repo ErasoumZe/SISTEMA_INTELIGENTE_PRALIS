@@ -3,7 +3,7 @@
 // (PROJECT_BRAIN/14, FOTO 2). Container ENXUTO: useOperacaoLancamento concentra TODA a logica/estado
 // (chamado UMA vez aqui, sempre montado) e distribui aos blocos coesos via provide — foi assim que o
 // componente de 999 linhas ficou dentro do teto de ~400 (R5), sem mudar campo nem regra. VISUAL-FIRST:
-// muda de cor por categoria (--cat-*); campos NOVOS sao data-pendente="regra" (local, nunca vao a API).
+// muda de cor por categoria (--cat-*); todos os campos visiveis fazem parte do payload persistido.
 import { provide } from "vue";
 import { OPERACAO_LANCAMENTO_KEY, useOperacaoLancamento } from "~/components/operacoes/useOperacaoLancamento";
 import OperacaoLancamentoValores from "~/components/operacoes/OperacaoLancamentoValores.vue";

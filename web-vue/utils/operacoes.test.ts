@@ -25,6 +25,29 @@ const detalheBase: OperacaoDetalhe = {
 };
 
 describe("formOperacaoDeDetalhe", () => {
+  it("reabre credor tipado, documento fiscal e as duas fotos do S2", () => {
+    const preenchido = formOperacaoDeDetalhe("retirada", {
+      ...detalheBase,
+      socioGestorId: "11111111-1111-4111-8111-111111111111",
+      credorTipo: "socio_gestor",
+      dataDocumentoFiscal: "2026-07-30",
+      numeroDocumentoFiscal: "NF-123",
+      fotoDocumentoUrl: "retiradas/1/documento.png",
+      fotoNotaUrl: "retiradas/1/nota.png",
+      jurosTipo: "percentual",
+      jurosValorInformado: 5
+    });
+    expect(preenchido.form).toMatchObject({
+      socioGestorId: "11111111-1111-4111-8111-111111111111",
+      credorTipo: "socio_gestor",
+      dataDocumentoFiscal: "2026-07-30",
+      numeroDocumentoFiscal: "NF-123",
+      fotoDocumentoUrl: "retiradas/1/documento.png",
+      fotoNotaUrl: "retiradas/1/nota.png",
+      jurosTipo: "percentual",
+      jurosValorInformado: "5"
+    });
+  });
   it("mapeia venda com itens e pagamentos para strings do formulario", () => {
     const preenchido = formOperacaoDeDetalhe("venda", {
       ...detalheBase,
@@ -218,8 +241,15 @@ describe("validarOperacaoParaEnvio", () => {
     expect(validarOperacaoParaEnvio("mercadoria", ok)).toBeNull();
   });
 
-  it("retirada: exige colaborador", () => {
-    expect(validarOperacaoParaEnvio("retirada", { ...ok, colaboradorId: "" })).toMatch(/colaborador/i);
+  it("retirada: exige colaborador ou socio/gestor", () => {
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, colaboradorId: "" })).toMatch(/credor/i);
+    expect(
+      validarOperacaoParaEnvio("retirada", {
+        ...ok,
+        colaboradorId: "",
+        socioGestorId: "11111111-1111-4111-8111-111111111111"
+      })
+    ).toBeNull();
     expect(validarOperacaoParaEnvio("retirada", ok)).toBeNull();
   });
 

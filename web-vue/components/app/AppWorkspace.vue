@@ -140,6 +140,7 @@ const entidadeNova = ref<EntidadeOperacional>("venda");
 const operacaoEditandoId = ref("");
 // Foto do documento (nota/cupom) de despesas e mercadorias: anexada no modal de lancamento.
 const fotoDocumento = useFotoDocumento();
+const fotoNota = useFotoDocumento();
 // Detalhe (somente leitura) da venda integrada (CREARE) — itens, pagamento e total. O cargo caixa
 // so visualiza; editar exige entradas_editar (na pratica, admin).
 const modalVendaDetalheAberto = ref(false);
@@ -733,6 +734,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "fornecedores") {
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+  } else if (tela === "socios_gestores") {
+    dados.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
   } else if (tela === "clientes") {
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
@@ -1047,6 +1050,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
   operacaoEditandoId.value = operacao?.id ?? "";
   modoDiscriminacao.value = false;
   fotoDocumento.limpar();
+  fotoNota.limpar();
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = false;
   discriminandoMercadoria.value = false;
@@ -1069,6 +1073,9 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
       preencherFormOperacao(entidade, detalhe);
       if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
         void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+      }
+      if (detalhe.fotoNotaUrl) {
+        void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
       }
     } catch (error) {
       notificar(mensagemErro(error), "error");
@@ -1100,6 +1107,7 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   operacaoEditandoId.value = operacao.id;
   modoDiscriminacao.value = true;
   fotoDocumento.limpar();
+  fotoNota.limpar();
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = entidade === "despesa";
   discriminandoMercadoria.value = entidade === "mercadoria";
@@ -1114,6 +1122,9 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
     preencherFormOperacao(entidade, detalhe);
     if (detalhe.fotoDocumentoUrl) {
       void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+    }
+    if (detalhe.fotoNotaUrl) {
+      void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
     }
     // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
     discriminandoDespesa.value = entidade === "despesa";
@@ -1247,11 +1258,8 @@ async function salvarOperacao() {
     const operacaoSalva = editandoId
       ? await apiPut<OperacaoSalva>(`/api/${endpoint}/${editandoId}`, payload)
       : await apiPost<OperacaoSalva>(`/api/${endpoint}`, payload);
-    // Anexa a foto do documento (nota/cupom) so em despesas/mercadorias, apos o registro existir.
-    const fotoUrl =
-      entidadeNova.value === "despesa" || entidadeNova.value === "mercadoria"
-        ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id)
-        : null;
+    const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
+    const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
     const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
@@ -1260,7 +1268,8 @@ async function salvarOperacao() {
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
       computar: operacaoSalva.computar,
       status: "aprovado",
-      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {})
+      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {}),
+      ...(fotoNotaUrl ? { fotoNotaUrl } : {})
     };
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
@@ -1581,6 +1590,7 @@ function tipoCopiaTela(tela = telaAtiva.value) {
     unidades: "unidades-medida",
     areas_setores: "areas-setores",
     fornecedores: "fornecedores",
+    socios_gestores: "socios-gestores",
     produtos: "produtos",
     colaboradores: "colaboradores"
   };
@@ -1662,6 +1672,9 @@ provide(WORKSPACE_CONTEXT, {
   fotoDocumentoPreview: fotoDocumento.previewUrl,
   fotoDocumentoExistente: fotoDocumento.existente,
   selecionarFotoDocumento: fotoDocumento.selecionar,
+  fotoNotaPreview: fotoNota.previewUrl,
+  fotoNotaExistente: fotoNota.existente,
+  selecionarFotoNota: fotoNota.selecionar,
   modalMaloteAberto,
   maloteEditandoId,
   formMalote,

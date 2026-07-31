@@ -1,11 +1,19 @@
+import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { retiradaPayloadSchema, retiradasQuerySchema } from "@padaria/shared/retiradas";
-import { exigirPermissao } from "../auth/guards.js";
+import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { apiIdParamsSchema, criadoId, erro, extrasDaSerie, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
-import { atualizarRetirada, criarRetirada, listarRetiradas, obterRetirada } from "./retiradas.service.js";
+import {
+  atualizarRetirada,
+  criarRetirada,
+  listarRetiradas,
+  obterFotoRetirada,
+  obterRetirada,
+  salvarFotoRetirada
+} from "./retiradas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
 
@@ -80,4 +88,37 @@ export async function registrarRotasRetiradas(app: FastifyInstance): Promise<voi
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  for (const campo of ["foto", "foto-nota"] as const) {
+    const tipo = campo === "foto-nota" ? "nota" : "documento";
+    app.post(
+      `/api/retiradas/:id/${campo}`,
+      { preHandler: exigirAlgumaPermissao(["retiradas_criar", "retiradas_editar"]) },
+      async (request, reply) => {
+        const { id } = apiIdParamsSchema.parse(request.params);
+        try {
+          const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+          return reply.status(201).send(ok(await salvarFotoRetirada(id, tipo, arquivo, request.perfilUsuario!)));
+        } catch (error) {
+          const mensagem = mensagemDominioOuRelancar(error);
+          return erro(reply, statusErroValidacao(mensagem), mensagem);
+        }
+      }
+    );
+    app.get(
+      `/api/retiradas/:id/${campo}`,
+      { preHandler: exigirPermissao("retiradas_visualizar") },
+      async (request, reply) => {
+        const { id } = apiIdParamsSchema.parse(request.params);
+        try {
+          const { caminhoAbsoluto, mimeType } = await obterFotoRetirada(id, tipo, request.perfilUsuario!);
+          reply.header("Content-Type", mimeType);
+          return reply.send(createReadStream(caminhoAbsoluto));
+        } catch (error) {
+          const mensagem = mensagemDominioOuRelancar(error);
+          return erro(reply, statusErroValidacao(mensagem), mensagem);
+        }
+      }
+    );
+  }
 }

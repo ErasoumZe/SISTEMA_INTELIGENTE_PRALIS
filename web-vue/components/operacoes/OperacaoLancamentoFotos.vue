@@ -1,10 +1,15 @@
 <script setup lang="ts">
-// Bloco das duas fotos: Recibo/Boleto/Nota (SUPORTADO — salva) e Nota/interno (data-pendente,
-// sem upload nesta rodada). Estado vem do modal via provide/inject.
+// Bloco das duas fotos persistidas do lançamento.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
-const { fotoDocumentoPreview, fotoDocumentoExistente, onFotoDocumento, fotoInternaNome, selecionarFotoInterna } =
-  useOperacaoLancamentoBloco();
+const {
+  fotoDocumentoPreview,
+  fotoDocumentoExistente,
+  onFotoDocumento,
+  fotoNotaPreview,
+  fotoNotaExistente,
+  onFotoNota
+} = useOperacaoLancamentoBloco();
 </script>
 
 <template>
@@ -19,16 +24,10 @@ const { fotoDocumentoPreview, fotoDocumentoExistente, onFotoDocumento, fotoInter
     </label>
     <label class="lc-foto">
       <span class="lc-campo-lbl">Foto (Nota / interno)</span>
-      <input
-        type="file"
-        accept="image/*,application/pdf"
-        data-pendente="regra"
-        class="lc-file"
-        @change="selecionarFotoInterna"
-      />
-      <span v-if="fotoInternaNome" class="lc-foto-ok"
-        ><v-icon size="14">mdi-paperclip</v-icon> {{ fotoInternaNome }}</span
-      >
+      <input type="file" accept="image/*,application/pdf" class="lc-file" @change="onFotoNota" />
+      <span v-if="fotoNotaPreview || fotoNotaExistente" class="lc-foto-ok">
+        <v-icon size="14">mdi-paperclip</v-icon> anexado
+      </span>
     </label>
   </div>
 </template>

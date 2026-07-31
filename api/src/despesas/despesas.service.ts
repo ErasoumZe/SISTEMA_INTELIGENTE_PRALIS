@@ -28,6 +28,7 @@ import {
 import {
   atualizarDespesaRepository,
   atualizarFotoDespesaRepository,
+  atualizarFotoNotaDespesaRepository,
   buscarDespesaDetalheRepository,
   criarDespesaRepository,
   discriminarDespesaRepository,
@@ -141,6 +142,32 @@ export async function obterFotoDespesa(
   return {
     caminhoAbsoluto: caminhoAbsolutoDocumento(despesa.fotoDocumentoUrl),
     mimeType: mimePorCaminho(despesa.fotoDocumentoUrl)
+  };
+}
+
+export async function salvarFotoNotaDespesa(
+  despesaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+): Promise<{ fotoNotaUrl: string }> {
+  const despesa = await buscarDespesaDetalheRepository(despesaId);
+  if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("despesas", despesaId, arquivo);
+  await atualizarFotoNotaDespesaRepository(despesaId, despesa.empresaId, caminhoRelativo);
+  return { fotoNotaUrl: caminhoRelativo };
+}
+
+export async function obterFotoNotaDespesa(
+  despesaId: string,
+  perfil: PerfilUsuario
+): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const despesa = await buscarDespesaDetalheRepository(despesaId);
+  if (!despesa || !podeAcessarEmpresa(perfil, despesa.empresaId)) throw new Error("Registro nao encontrado");
+  if (!despesa.fotoNotaUrl) throw new Error("Foto nao encontrada");
+  return {
+    caminhoAbsoluto: caminhoAbsolutoDocumento(despesa.fotoNotaUrl),
+    mimeType: mimePorCaminho(despesa.fotoNotaUrl)
   };
 }
 

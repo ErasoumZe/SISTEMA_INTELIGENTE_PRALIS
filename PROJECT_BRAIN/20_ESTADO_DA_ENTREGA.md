@@ -25,40 +25,31 @@ O briefing fechou as decisões **D1–D12** no `17`. A execução foi fatiada em
 **S1…S7** — numeração que **nunca foi escrita em lugar nenhum**, só nos prompts. É por isso que
 "rodar o S7" não significa nada para quem abre o repositório. Fica registrada aqui:
 
-| S      | O que é                                         | Spec              | Commit                |
-| ------ | ----------------------------------------------- | ----------------- | --------------------- |
-| **S1** | Menu "Lançamentos", "+ Novo" com 3 eixos        | `17` D6 + §4      | `f21b874`             |
-| **S2** | Campos do lançamento (FOTO 2) — **nunca feito** | `17` §4, `19` §2  | **nenhum**            |
-| **S3** | Discriminação: 3 níveis de desconto, rateio     | `17` §5, D4/D5/D9 | `9338d10` + `5540e5a` |
-| **S4** | Conta com FUNDO + quem opera                    | `17` §2, D8       | `04aaa37`             |
-| **S5** | Recorrência cria a série no salvar              | `17` D3, §6       | `2e42b41` + `96f6063` |
-| **S6** | Entradas: lista completa do dia, paginada       | `17` D7           | `87ea945`             |
-| **S7** | Seeding do cadastro a partir da planilha        | `17` D11 + §3     | `a4e77d5` + seed      |
+| S      | O que é                                     | Spec              | Commit                  |
+| ------ | ------------------------------------------- | ----------------- | ----------------------- |
+| **S1** | Menu "Lançamentos", "+ Novo" com 3 eixos    | `17` D6 + §4      | `f21b874`               |
+| **S2** | Campos do lançamento (FOTO 2)               | `17` §4, `19` §2  | `7cd11c0` + este commit |
+| **S3** | Discriminação: 3 níveis de desconto, rateio | `17` §5, D4/D5/D9 | `9338d10` + `5540e5a`   |
+| **S4** | Conta com FUNDO + quem opera                | `17` §2, D8       | `04aaa37`               |
+| **S5** | Recorrência cria a série no salvar          | `17` D3, §6       | `2e42b41` + `96f6063`   |
+| **S6** | Entradas: lista completa do dia, paginada   | `17` D7           | `87ea945`               |
+| **S7** | Seeding do cadastro a partir da planilha    | `17` D11 + §3     | `a4e77d5` + seed        |
 
-> **O S2 é o buraco, e ele é o maior deles.** O `19` §2 mostra por quê: **9 dos 17 campos que o
-> Rodrigo desenhou na FOTO 2 não chegam ao banco** — juros em R$ ou % (R-041), data e número do
-> documento fiscal (R-044/R-045), tipo de credor e sócio/gestor (R-046/R-047), segunda foto (R-049).
-> Vários já estão **na tela**, marcados `data-pendente`: aparecem, a pessoa digita, e nada salva.
-> É a vertical que a spec chama de "o coração" e **não tem um único commit**.
->
-> Ou seja: S3–S6 foram construídos **em cima** de um S2 que não existe. Priorizar isso antes de
-> abrir o S7 é decisão sua, mas é a pergunta que este documento existe para fazer.
+> **S2 fechado em 31/07.** Juros, documento fiscal, credor tipado, sócio/gestor e as duas fotos
+> persistem e reabrem nos três domínios. Os 9 `data-pendente` do lançamento foram removidos; a
+> catraca versionada ficou em 24, com alvo final zero.
 
 ---
 
 ## 2. Estado por vertical
 
-> **Pausa em 31/07/2026 — WIP do Corujão/Etapa 1.** A pedido do José, o trabalho foi interrompido
-> durante a ligação do S2. Já foram iniciados: contrato dos campos fiscais/credor/fotos, seleção e
-> reabertura desses campos nos três repositories, opção de sócio/gestor no formulário e o esqueleto
-> de repository/service/controller de `socios_gestores`. **Ainda não está funcional nem validado.**
-> Faltam concluir o upload da segunda foto (o patch dos services/controllers não foi aplicado),
-> integrar a tela de cadastro, corrigir tipos/checks, criar os testes, a catraca e rodar validação.
+> **Retomada em 31/07/2026 — Etapa 1 concluída.** O WIP foi completado com tela de sócios/gestores,
+> upload parametrizado das duas fotos nos três domínios, reabertura integral, catraca e testes.
 
 | S   | Status         | Migration | Prova                                                                        |
 | --- | -------------- | --------- | ---------------------------------------------------------------------------- |
 | S1  | ENTREGUE       | —         | `menu.test.ts`                                                               |
-| S2  | **NÃO FEITO**  | —         | 9 campos da FOTO 2 não persistem (`19` §2)                                   |
+| S2  | ENTREGUE       | 0020      | `s2-campos-lancamento.test.ts` (3) + `operacoes.test.ts` (25) + seed do zero |
 | S3  | ENTREGUE       | 0016/0017 | testes de integração de discriminação                                        |
 | S4  | ENTREGUE       | 0018      | `GET /api/contas/saldos`, tela de Contas                                     |
 | S5  | ENTREGUE       | 0019      | série criada na mesma transação; migration registrada no dev (§3.1)          |

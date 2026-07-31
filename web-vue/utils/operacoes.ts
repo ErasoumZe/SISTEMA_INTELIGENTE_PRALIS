@@ -16,6 +16,8 @@ export type OperacaoDetalhe = {
   valorOriginal: number;
   valorAcrescimo: number;
   descricaoAcrescimo?: string | null;
+  jurosTipo?: "percentual" | "valor" | null;
+  jurosValorInformado?: number | null;
   valorDesconto: number;
   descricaoDesconto?: string | null;
   contaOrigemId?: string | null;
@@ -219,6 +221,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     valorOriginal: String(detalhe.valorOriginal),
     valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
     descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
+    jurosTipo: detalhe.jurosTipo ?? "",
+    jurosValorInformado: detalhe.jurosValorInformado != null ? String(detalhe.jurosValorInformado) : "",
     valorDesconto: detalhe.valorDesconto ? String(detalhe.valorDesconto) : "",
     descricaoDesconto: detalhe.descricaoDesconto ?? "",
     contaOrigemId: detalhe.contaOrigemId ?? "",
@@ -229,6 +233,8 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     credorTipo: detalhe.credorTipo ?? "",
     dataDocumentoFiscal: detalhe.dataDocumentoFiscal ?? "",
     numeroDocumentoFiscal: detalhe.numeroDocumentoFiscal ?? "",
+    fotoDocumentoUrl: detalhe.fotoDocumentoUrl ?? "",
+    fotoNotaUrl: detalhe.fotoNotaUrl ?? "",
     grupoDespesaId: detalhe.grupoDespesaId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
@@ -376,6 +382,8 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     credorTipo: dados.form.credorTipo || null,
     dataDocumentoFiscal: dados.form.dataDocumentoFiscal || null,
     numeroDocumentoFiscal: dados.form.numeroDocumentoFiscal || null,
+    fotoDocumentoUrl: dados.form.fotoDocumentoUrl || null,
+    fotoNotaUrl: dados.form.fotoNotaUrl || null,
     grupoDespesaId: dados.form.grupoDespesaId || null,
     grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
     grupoRetiradaId: dados.form.grupoRetiradaId || null,
@@ -432,8 +440,7 @@ export function validarOperacaoParaEnvio(
   }
 
   // Schema: retirada exige colaboradorId.
-  if (entidade === "retirada" && !dados.colaboradorId && !dados.socioGestorId)
-    return "Selecione o credor da retirada.";
+  if (entidade === "retirada" && !dados.colaboradorId && !dados.socioGestorId) return "Selecione o credor da retirada.";
 
   if (entidade === "transferencia") {
     // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.

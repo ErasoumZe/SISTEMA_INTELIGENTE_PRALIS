@@ -54,6 +54,9 @@ export type WorkspaceContext = {
   fotoDocumentoPreview: Ref<string>;
   fotoDocumentoExistente: Ref<boolean>;
   selecionarFotoDocumento: (entrada: File | File[] | null) => void;
+  fotoNotaPreview: Ref<string>;
+  fotoNotaExistente: Ref<boolean>;
+  selecionarFotoNota: (entrada: File | File[] | null) => void;
   modalMaloteAberto: Ref<boolean>;
   maloteEditandoId: Ref<string>;
   formMalote: Ref<FormMalote>;

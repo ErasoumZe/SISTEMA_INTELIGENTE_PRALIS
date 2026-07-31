@@ -62,6 +62,33 @@ function executarMigrate(databaseUrl: string) {
   });
 }
 
+function executarSeed(databaseUrl: string) {
+  return new Promise<void>((resolve, reject) => {
+    const processo = spawn("npm", ["run", "seed:dev", "--workspace", "@padaria/db"], {
+      cwd: raizRepositorio,
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        DATABASE_URL: databaseUrl,
+        NODE_OPTIONS: [process.env["NODE_OPTIONS"], "--conditions=development"].filter(Boolean).join(" ")
+      },
+      shell: process.platform === "win32",
+      windowsHide: true,
+      stdio: "inherit"
+    });
+    const timer = setTimeout(() => {
+      processo.kill("SIGTERM");
+      reject(new Error("seed de desenvolvimento excedeu o timeout"));
+    }, 180_000);
+    processo.on("error", reject);
+    processo.on("exit", (codigo) => {
+      clearTimeout(timer);
+      if (codigo === 0) resolve();
+      else reject(new Error(`seed de desenvolvimento terminou com codigo ${codigo ?? "desconhecido"}`));
+    });
+  });
+}
+
 describe("migracoes integration", () => {
   let container: StartedPostgreSqlContainer;
   let bancoMigrado: pg.Pool;
@@ -75,8 +102,9 @@ describe("migracoes integration", () => {
       .start();
 
     await executarMigrate(container.getConnectionUri());
+    await executarSeed(container.getConnectionUri());
     bancoMigrado = new pg.Pool({ connectionString: container.getConnectionUri() });
-  }, 180_000);
+  }, 300_000);
 
   afterAll(async () => {
     await bancoMigrado?.end();
@@ -88,6 +116,18 @@ describe("migracoes integration", () => {
       "select count(*)::int as total from drizzle.__drizzle_migrations"
     );
     expect(rows[0]?.total).toBe(totalMigracoesEsperado);
+  });
+
+  it("Deve_RodarSeedCompleto_Quando_BancoNascerDoZero", async () => {
+    const { rows } = await bancoMigrado.query<{ empresas: number; despesas: number; mercadorias: number }>(
+      `select
+         (select count(*)::int from empresas) as empresas,
+         (select count(*)::int from despesas) as despesas,
+         (select count(*)::int from mercadorias) as mercadorias`
+    );
+    expect(rows[0]?.empresas).toBeGreaterThan(0);
+    expect(rows[0]?.despesas).toBeGreaterThan(0);
+    expect(rows[0]?.mercadorias).toBeGreaterThan(0);
   });
 
   it("Deve_GerarEstruturaIdenticaAoPush_Quando_ProvisionarViaMigrate", async () => {

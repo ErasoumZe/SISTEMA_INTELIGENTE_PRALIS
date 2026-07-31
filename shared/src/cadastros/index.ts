@@ -243,6 +243,7 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
   if (tela === "turnos")
     return { empresaId, nome: form.nome, horaInicio: form.horaInicio, horaFim: form.horaFim, ativo: form.ativo };
   if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
+  if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")
     return {
       empresaId,

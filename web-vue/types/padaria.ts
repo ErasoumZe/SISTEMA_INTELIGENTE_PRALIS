@@ -263,10 +263,6 @@ export type CaixaOperacional = {
   usuarioCaixaId: string;
   usuarioCaixaNome: string;
   colaboradorId: string;
-  socioGestorId: string;
-  credorTipo: "" | "fornecedor" | "colaborador" | "socio_gestor";
-  dataDocumentoFiscal: string;
-  numeroDocumentoFiscal: string;
   // Dia CONTABIL do caixa ("yyyy-MM-dd") — o que a tela de Entradas lista para quem opera caixa.
   dataMovimento: string;
   dataHoraAbertura: string;
@@ -343,6 +339,12 @@ export type OperacaoForm = {
   contaDestinoId: string;
   fornecedorId: string;
   colaboradorId: string;
+  socioGestorId: string;
+  credorTipo: "" | "fornecedor" | "colaborador" | "socio_gestor";
+  dataDocumentoFiscal: string;
+  numeroDocumentoFiscal: string;
+  fotoDocumentoUrl: string;
+  fotoNotaUrl: string;
   grupoDespesaId: string;
   grupoMercadoriaId: string;
   grupoRetiradaId: string;

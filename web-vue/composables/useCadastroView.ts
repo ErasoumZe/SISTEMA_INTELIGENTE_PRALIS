@@ -42,6 +42,12 @@ export function useCadastroView(params: {
       }));
     if (tela === "fornecedores")
       return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
+    if (tela === "socios_gestores")
+      return listas.sociosGestores.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        ativo: item.ativo === false ? "Nao" : "Sim"
+      }));
     if (tela === "clientes")
       return listas.clientes.map((item) => ({
         id: item.id,
@@ -229,6 +235,7 @@ export function useCadastroView(params: {
       malotes: "Cada malote e o seu lacre.",
       colaboradores: "Cadastro de colaboradores.",
       fornecedores: "Cadastro de fornecedores.",
+      socios_gestores: "Cadastro de sócios e gestores que podem ser credores de retiradas.",
       clientes: "Cadastro de clientes.",
       produtos: "Cadastro de produtos.",
       pdv: "Pontos de venda vinculados a uma conta de caixa."
@@ -253,6 +260,7 @@ export function useCadastroView(params: {
       malotes: ["Lacre", "Valor", "Status"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento"],
+      socios_gestores: ["Nome", "Ativo"],
       clientes: ["Nome", "Documento"],
       produtos: ["Codigo", "Nome", "Marca", "Unidade", "Preco atual"]
     };

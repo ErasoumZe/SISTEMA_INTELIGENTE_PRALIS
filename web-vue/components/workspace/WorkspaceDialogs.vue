@@ -690,6 +690,9 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="cadastroTela === 'pdv'" cols="12" md="4">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
+          <v-col v-if="cadastroTela === 'socios_gestores'" cols="12" md="4">
+            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
+          </v-col>
           <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
             ><v-text-field v-model="formCadastro.sigla" label="Sigla"
           /></v-col>

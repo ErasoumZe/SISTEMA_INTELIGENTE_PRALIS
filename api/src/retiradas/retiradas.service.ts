@@ -1,3 +1,4 @@
+import type { MultipartFile } from "@fastify/multipart";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   RetiradaCriada,
@@ -27,11 +28,13 @@ import {
   planejarRecorrencia
 } from "../lancamentos/lancamentos.recorrencia.js";
 import {
+  atualizarFotoRetiradaRepository,
   atualizarRetiradaRepository,
   buscarRetiradaDetalheRepository,
   criarRetiradaRepository,
   listarRetiradasRepository
 } from "./retiradas.repository.js";
+import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 export async function listarRetiradas(
   query: RetiradasQuery,
@@ -95,6 +98,28 @@ export async function obterRetirada(retiradaId: string, perfil: PerfilUsuario): 
   const retirada = await buscarRetiradaDetalheRepository(retiradaId);
   if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
   return retirada;
+}
+
+export async function salvarFotoRetirada(
+  retiradaId: string,
+  campo: "documento" | "nota",
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+) {
+  const retirada = await buscarRetiradaDetalheRepository(retiradaId);
+  if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("retiradas", retiradaId, arquivo);
+  await atualizarFotoRetiradaRepository(retiradaId, retirada.empresaId, campo, caminhoRelativo);
+  return campo === "nota" ? { fotoNotaUrl: caminhoRelativo } : { fotoDocumentoUrl: caminhoRelativo };
+}
+
+export async function obterFotoRetirada(retiradaId: string, campo: "documento" | "nota", perfil: PerfilUsuario) {
+  const retirada = await buscarRetiradaDetalheRepository(retiradaId);
+  if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
+  const caminho = campo === "nota" ? retirada.fotoNotaUrl : retirada.fotoDocumentoUrl;
+  if (!caminho) throw new Error("Foto nao encontrada");
+  return { caminhoAbsoluto: caminhoAbsolutoDocumento(caminho), mimeType: mimePorCaminho(caminho) };
 }
 
 export async function atualizarRetirada(

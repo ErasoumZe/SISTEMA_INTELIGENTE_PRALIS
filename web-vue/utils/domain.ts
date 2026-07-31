@@ -151,6 +151,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_fornecedores_visualizar",
     icone: "mdi-domain"
   },
+  socios_gestores: {
+    id: "socios_gestores",
+    titulo: "Sócios e gestores",
+    permissao: "retiradas_visualizar",
+    permissoesAlternativas: ["retiradas_criar", "retiradas_editar"],
+    icone: "mdi-account-tie"
+  },
   produtos: { id: "produtos", titulo: "Produtos", permissao: "cadastro_produtos_visualizar", icone: "mdi-basket" },
   colaboradores: {
     id: "colaboradores",
@@ -507,6 +514,8 @@ export function formOperacaoVazio(): OperacaoForm {
     credorTipo: "",
     dataDocumentoFiscal: "",
     numeroDocumentoFiscal: "",
+    fotoDocumentoUrl: "",
+    fotoNotaUrl: "",
     grupoDespesaId: "",
     grupoMercadoriaId: "",
     grupoRetiradaId: "",
@@ -659,6 +668,7 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     contas: itensDaEmpresa(listas.contas, idEmpresa),
     formasPagamento: itensDaEmpresa(listas.formasPagamento, idEmpresa),
     fornecedores: itensDaEmpresa(listas.fornecedores, idEmpresa),
+    sociosGestores: itensDaEmpresa(listas.sociosGestores, idEmpresa),
     clientes: itensDaEmpresa(listas.clientes, idEmpresa),
     colaboradores: itensDaEmpresa(listas.colaboradores, idEmpresa),
     cargos: itensDaEmpresa(listas.cargos, idEmpresa),
@@ -711,6 +721,7 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
     pdv: "pdvs",
     formas_pagamento: "formas-pagamento",
     fornecedores: "fornecedores",
+    socios_gestores: "socios-gestores",
     produtos: "produtos"
   };
   return mapa[tela] ?? tela.replaceAll("_", "-");

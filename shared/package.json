@@ -81,6 +81,11 @@
       "development": "./src/fornecedores/index.ts",
       "default": "./dist/fornecedores/index.js"
     },
+    "./socios-gestores": {
+      "types": "./dist/socios-gestores/index.d.ts",
+      "development": "./src/socios-gestores/index.ts",
+      "default": "./dist/socios-gestores/index.js"
+    },
     "./formas-pagamento": {
       "types": "./dist/formas-pagamento/index.d.ts",
       "development": "./src/formas-pagamento/index.ts",

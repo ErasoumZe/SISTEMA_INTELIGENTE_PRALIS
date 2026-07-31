@@ -39,6 +39,7 @@ import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import {
   aprovarMercadoriaRepository,
   atualizarFotoMercadoriaRepository,
+  atualizarFotoNotaMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
   criarMercadoriaRepository,
@@ -151,6 +152,32 @@ export async function obterFotoMercadoria(
   return {
     caminhoAbsoluto: caminhoAbsolutoDocumento(mercadoria.fotoDocumentoUrl),
     mimeType: mimePorCaminho(mercadoria.fotoDocumentoUrl)
+  };
+}
+
+export async function salvarFotoNotaMercadoria(
+  mercadoriaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+): Promise<{ fotoNotaUrl: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("mercadorias", mercadoriaId, arquivo);
+  await atualizarFotoNotaMercadoriaRepository(mercadoriaId, mercadoria.empresaId, caminhoRelativo);
+  return { fotoNotaUrl: caminhoRelativo };
+}
+
+export async function obterFotoNotaMercadoria(
+  mercadoriaId: string,
+  perfil: PerfilUsuario
+): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!mercadoria.fotoNotaUrl) throw new Error("Foto nao encontrada");
+  return {
+    caminhoAbsoluto: caminhoAbsolutoDocumento(mercadoria.fotoNotaUrl),
+    mimeType: mimePorCaminho(mercadoria.fotoNotaUrl)
   };
 }
 

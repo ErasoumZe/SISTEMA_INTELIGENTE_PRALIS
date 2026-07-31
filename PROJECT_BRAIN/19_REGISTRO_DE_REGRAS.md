@@ -173,6 +173,10 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 **R-041** (juros em R$ ou %) e **R-042** (Valor Total) apareciam como ❌ e foram **entregues** nos
 commits `655a91e` e `ef6bcc9`, com 11 testes na regra pura e o servidor recalculando. Passam a ✅.
 
+**R-044 a R-047 e R-049** foram fechadas na Etapa 1 do Corujão v2: os campos fiscais, o tipo de
+credor, o cadastro próprio de sócios/gestores e as duas fotos persistem e reabrem nos três
+domínios. Provas: `s2-campos-lancamento.test.ts` e `web-vue/utils/operacoes.test.ts`.
+
 É o defeito que o §4 deste arquivo previu: status não atualizado junto com a entrega faz o registro
 mentir em dois dias. **Atualizar o status é parte da entrega, no mesmo commit.**
 
@@ -280,15 +284,15 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | Id    | Regra                                                                                                      | Origem                                         | Status                          | Teste                     |
 | ----- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------- | ------------------------- |
 | R-040 | Campo Valor = valor total da despesa                                                                       | José                                           | ✅                              | —                         |
-| R-041 | Juros em **R$ ou %** sobre o valor                                                                         | José                                           | ❌ **§2**                       | —                         |
-| R-042 | Valor Total = Valor + Juros                                                                                | José                                           | ❌ **§2**                       | —                         |
+| R-041 | Juros em **R$ ou %** sobre o valor                                                                         | José                                           | ✅                              | `lancamento-juros`        |
+| R-042 | Valor Total = Valor + Juros                                                                                | José                                           | ✅                              | `lancamento-juros`        |
 | R-043 | Data de lançamento = dia atual                                                                             | José                                           | ✅                              | —                         |
-| R-044 | Data do documento fiscal = emissão                                                                         | José                                           | ❌ **§2**                       | —                         |
-| R-045 | Número do documento fiscal                                                                                 | José                                           | ❌ **§2**                       | —                         |
-| R-046 | Tipo de credor escolhido **antes** do credor                                                               | José                                           | ❌ **§2**                       | —                         |
-| R-047 | Sócio/Gestor é um tipo de credor, com cadastro próprio                                                     | José (D1)                                      | ❌ **§2**                       | —                         |
+| R-044 | Data do documento fiscal = emissão                                                                         | José                                           | ✅                              | `s2-campos-lancamento`    |
+| R-045 | Número do documento fiscal                                                                                 | José                                           | ✅                              | `s2-campos-lancamento`    |
+| R-046 | Tipo de credor escolhido **antes** do credor                                                               | José                                           | ✅                              | `s2-campos-lancamento`    |
+| R-047 | Sócio/Gestor é um tipo de credor, com cadastro próprio                                                     | José (D1)                                      | ✅                              | `s2-campos-lancamento`    |
 | R-048 | Pagamento S/N; se pago, abre Data de pagamento                                                             | José                                           | ✅                              | —                         |
-| R-049 | Pago ou não, sempre: Vencimento + **duas** fotos                                                           | José                                           | ⚠️ 1 foto só                    | —                         |
+| R-049 | Pago ou não, sempre: Vencimento + **duas** fotos                                                           | José                                           | ✅                              | `s2-campos-lancamento`    |
 | R-050 | Retirada **não tem** discriminação                                                                         | José (D12)                                     | ✅                              | —                         |
 | R-051 | Discriminação: quant · descrição · grupo · v.unit · v.unit c/desc · v.total · v.total c/desc · total geral | José                                           | ⚠️ colunas c/desc não persistem | —                         |
 | R-052 | Descrição do item vem do **código de barras** cruzado com o cadastro de produtos, não do texto da nota     | José (repetido 2×)                             | ✅                              | integração                |

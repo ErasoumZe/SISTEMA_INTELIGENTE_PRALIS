@@ -43,7 +43,7 @@ const emit = defineEmits<{
 
 const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
 const podeEditar = computed(() => true);
-const podeCopia = computed(() => !["permissoes", "malotes"].includes(props.tela));
+const podeCopia = computed(() => !["permissoes", "malotes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
   // Malotes usa o botao Editar embutido (podeEditar); a acao extra "Editar" era uma duplicata, removida.
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
