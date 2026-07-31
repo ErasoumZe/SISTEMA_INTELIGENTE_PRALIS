@@ -137,7 +137,12 @@ export function abrirPlanilha(caminho: string): Planilha {
     const linhas: string[][] = [];
     for (const linhaXml of xml.split("<row ").slice(1)) {
       const celulas: string[] = [];
-      for (const achado of linhaXml.matchAll(/<c r="([A-Z]+\d+)"([^>]*)>([\s\S]*?)<\/c>/g)) {
+      // A alternativa `\/>` vem ANTES do corpo de proposito: celula vazia e escrita self-closing
+      // (`<c r="D14" s="603"/>`). Sem tratar isso, o `<\/c>` mais proximo e o da celula SEGUINTE — a
+      // vazia engolia a proxima, gravando o valor na coluna errada e perdendo o `t="s"` no caminho
+      // (o indice do sharedStrings vazava como numero cru: "860", "870"). Era silencioso e deslocava
+      // colunas inteiras — exatamente o erro que faz um seed gravar cadastro com nome trocado.
+      for (const achado of linhaXml.matchAll(/<c r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
         const referencia = achado[1] ?? "";
         const atributos = achado[2] ?? "";
         const corpo = achado[3] ?? "";

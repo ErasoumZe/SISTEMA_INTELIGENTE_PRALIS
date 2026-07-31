@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "baseUrl": "..",
+    "types": ["node"],
+    "paths": {
+      "@padaria/shared": ["shared/src/index.ts"],
+      "@padaria/shared/*": ["shared/src/*/index.ts"]
+    }
+  },
+  "include": ["seed-planilha.ts", "../db/planilha-xlsx.ts", "../db/src/**/*.ts", "../shared/src/**/*.ts"]
+}

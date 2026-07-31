@@ -13,7 +13,8 @@
   "scripts": {
     "prepare": "husky",
     "build": "npm run build --workspace @padaria/shared && npm run build --workspace @padaria/db && npm run build --workspace @padaria/api && npm run build --workspace @padaria/web-vue",
-    "check": "npm run check:texto && npm run check:arquitetura && npm run check --workspace @padaria/shared && npm run check --workspace @padaria/db && npm run check --workspace @padaria/api && npm run check --workspace @padaria/web-vue && npm run check --workspace @padaria/tests",
+    "check": "npm run check:texto && npm run check:arquitetura && npm run check --workspace @padaria/shared && npm run check --workspace @padaria/db && npm run check:scripts && npm run check --workspace @padaria/api && npm run check --workspace @padaria/web-vue && npm run check --workspace @padaria/tests",
+    "check:scripts": "tsc -p scripts/tsconfig.json --noEmit",
     "check:arquitetura": "node scripts/verificar-arquitetura.mjs",
     "check:texto": "node scripts/verificar-texto.mjs",
     "typecheck": "npm run check",
@@ -43,6 +44,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:destroy": "node scripts/dev-destroy.mjs",
     "dev:down": "npm run dev:destroy",
+    "seed:planilha": "tsx --conditions=development scripts/seed-planilha.ts",
     "db:backup": "node scripts/backup-db.mjs",
     "db:restore": "node scripts/restore-db.mjs",
     "db:dev:up": "docker compose -p padaria-db-dev -f db/docker-compose-db.yml -f db/docker-compose-db.dev.yml up -d --wait",

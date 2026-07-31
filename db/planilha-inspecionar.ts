@@ -99,11 +99,22 @@ function main() {
 
   console.log(`
 --------------------------------------------------------------------------
-CONFERIR ANTES DE QUALQUER GRAVACAO (PROJECT_BRAIN/17 §3 x arquivo real):
-  o §3 mapeia contas em "G/Z/AA" e retiradas em "X/Y", mas neste arquivo as
-  CONTAS estao em X/Y ("CNT CONTA - ...") e nao ha coluna com prefixo "RET".
-  O §3 tambem aponta tipos de produto em "V", onde estao os "INVESTIMENTO - ".
-  Enquanto o mapa nao for confirmado pelo Jose, NAO existe caminho de apply.
+MAPA CONFIRMADO (linha 5 de cada aba tem o cabecalho; o dado comeca na 11).
+O PROJECT_BRAIN/17 §3 esta desatualizado — o que vale e isto:
+
+  GRUPOSREF   H=REF despesas      I=GRUPODESPESAS
+              J=REF mercadorias   K=GRUPOMERCADORIAS  L=MARGEM %  M=TIPO
+              U=REF retiradas     V=GRUPORETIRADAS
+              X=GRUPOCONTAS (33)  W=ATIVA (de X)      Y=so as ativas (21)
+              P/Q/T sao LISTAS DE VALORES POSSIVEIS, nao atributo por grupo.
+  PATRIMONIO  E=SIG  F=grupo  G=item  H=TNP  I=LI  J=MARCA
+  FOLHA       G=cargos  Q=setores  P=areas (listas verticais independentes)
+  PRODUTOS    aba (BASE); D=LOJAS diz de quem e o produto. As abas (TNP)/(LI)/
+              (HORA) sao modelos vazios neste arquivo.
+
+A leitura anterior ("contas em X/Y, nenhuma coluna RET, tipos de produto em V")
+saiu de um bug do leitor: celula vazia self-closing engolia a celula seguinte e
+deslocava as colunas. Corrigido em planilha-xlsx.ts.
 --------------------------------------------------------------------------`);
 }
 
