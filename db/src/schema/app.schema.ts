@@ -73,20 +73,22 @@ function checksDescontoGeral(tabela: string, tipo: AnyPgColumn, valor: AnyPgColu
 //   valor_acrescimo (ja existia) — o juros em R$ SEMPRE JA CALCULADO. E esta coluna que entra no
 //     liquidoCentavos(original - desconto + acrescimo). Guardar o percentual aqui somaria R$ 2,00
 //     no lugar de R$ 20,00 e corromperia caixa, conta e relatorio de uma vez.
-//   juros_tipo — 'real' | 'percentual'.
+//   juros_tipo — 'percentual' | 'valor'. MESMA convencao do desconto_geral_tipo, tres linhas acima:
+//     duas convencoes para o mesmo conceito (uma dizendo 'real', outra 'valor') e exatamente o
+//     "conflito com regras antigas" que este sprint existe para matar. Decisao do Jose, 30/07.
 //   juros_valor_informado — o que a pessoa DIGITOU (2 para 2%, 20.00 para R$ 20,00). Existe porque
 //     guardar so o R$ perde a informacao de que era 2%, e recalcular por divisao deriva com
 //     arredondamento: 333,33 a 2% da 6,67, que de volta vira 2,001%. A tela reabre com o informado.
 // Nas 3 tabelas de lancamento, descricao_acrescimo fica SEM USO — o campo generico de acrescimo foi
 // aposentado aqui (um campo, um nome). Em vendas/transferencias valor_acrescimo segue generico.
 const jurosLancamento = {
-  jurosTipo: text("juros_tipo").$type<"real" | "percentual">(),
+  jurosTipo: text("juros_tipo").$type<"percentual" | "valor">(),
   jurosValorInformado: numeric("juros_valor_informado", { precision: 14, scale: 4 })
 };
 
 function checksJuros(tabela: string, tipo: AnyPgColumn, valorInformado: AnyPgColumn) {
   return [
-    check(`${tabela}_juros_tipo_check`, sql`${tipo} is null or ${tipo} in ('real', 'percentual')`),
+    check(`${tabela}_juros_tipo_check`, sql`${tipo} is null or ${tipo} in ('percentual', 'valor')`),
     check(`${tabela}_juros_valor_informado_check`, sql`${valorInformado} is null or ${valorInformado} >= 0`)
   ];
 }

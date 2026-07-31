@@ -1,5 +1,5 @@
 {
-  "id": "d25f4f51-9774-4546-b285-441c902ce1f9",
+  "id": "bce0a65b-54e8-44de-bd8c-d4c499f74e56",
   "prevId": "afc09903-a4ee-4ef1-ae90-afc29e6d5844",
   "version": "7",
   "dialect": "postgresql",
@@ -1782,7 +1782,7 @@
         },
         "despesas_juros_tipo_check": {
           "name": "despesas_juros_tipo_check",
-          "value": "\"despesas\".\"juros_tipo\" is null or \"despesas\".\"juros_tipo\" in ('real', 'percentual')"
+          "value": "\"despesas\".\"juros_tipo\" is null or \"despesas\".\"juros_tipo\" in ('percentual', 'valor')"
         },
         "despesas_juros_valor_informado_check": {
           "name": "despesas_juros_valor_informado_check",
@@ -4318,7 +4318,7 @@
         },
         "mercadorias_juros_tipo_check": {
           "name": "mercadorias_juros_tipo_check",
-          "value": "\"mercadorias\".\"juros_tipo\" is null or \"mercadorias\".\"juros_tipo\" in ('real', 'percentual')"
+          "value": "\"mercadorias\".\"juros_tipo\" is null or \"mercadorias\".\"juros_tipo\" in ('percentual', 'valor')"
         },
         "mercadorias_juros_valor_informado_check": {
           "name": "mercadorias_juros_valor_informado_check",
@@ -6643,7 +6643,7 @@
         },
         "retiradas_juros_tipo_check": {
           "name": "retiradas_juros_tipo_check",
-          "value": "\"retiradas\".\"juros_tipo\" is null or \"retiradas\".\"juros_tipo\" in ('real', 'percentual')"
+          "value": "\"retiradas\".\"juros_tipo\" is null or \"retiradas\".\"juros_tipo\" in ('percentual', 'valor')"
         },
         "retiradas_juros_valor_informado_check": {
           "name": "retiradas_juros_valor_informado_check",
