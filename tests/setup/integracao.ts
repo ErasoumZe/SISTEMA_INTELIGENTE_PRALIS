@@ -34,6 +34,24 @@ export async function executarSql(sql: string, params: unknown[] = []) {
   }
 }
 
+// Alguns testes de caixa montam um estado contabil ja recebido, mas nao testam a autorizacao da
+// confirmacao (essa vertical tem teste proprio). Mantem a fixture coerente com os CHECKs e rompe o
+// lacre junto, sem repetir em cada arquivo o SQL de transicao.
+export async function confirmarTransferenciaPorLacreDireto(numeroLacre: string, usuarioId: string) {
+  const pool = poolTeste();
+  try {
+    await pool.query(
+      `update transferencias
+          set status = 'recebido', confirmado_por = $2, data_recebimento = now(), atualizado_em = now()
+        where n_lacre_doc = $1`,
+      [numeroLacre, usuarioId]
+    );
+    await pool.query("update lacres set rompido = true where numero = $1", [numeroLacre]);
+  } finally {
+    await pool.end();
+  }
+}
+
 export function json<T>(resposta: { json: () => unknown }) {
   return resposta.json() as T;
 }

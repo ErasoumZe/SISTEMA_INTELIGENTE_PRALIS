@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
 describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", () => {
   let contexto: ContextoApiTeste;
@@ -11,6 +11,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
   let cookieCaixa: string;
   let cookieTesouraria: string;
   let usuarioCaixaId: string;
+  let sequenciaLacre = 0;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -68,7 +69,8 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
       descricao: "Transferencia etapa 2",
       valorOriginal: valor,
       contaOrigemId,
-      contaDestinoId
+      contaDestinoId,
+      nLacreDoc: `E2-${++sequenciaLacre}`
     });
   }
 
@@ -114,6 +116,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     const { contaId, pdvId } = await criarContaEPdv("retorno");
     const caixaId = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, idsTeste.contaBanco, contaId, 20)).statusCode).toBe(201);
+    await confirmarTransferenciaPorLacreDireto(`E2-${sequenciaLacre}`, usuarioCaixaId);
 
     const bloqueado = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {});
     assertProblem(bloqueado, 400);

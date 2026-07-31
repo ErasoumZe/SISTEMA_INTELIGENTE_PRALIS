@@ -113,7 +113,8 @@ describe("operacoes edicao integration", () => {
       descricao: "Transferencia edicao",
       valorOriginal: 1,
       contaOrigemId: contaPdvId,
-      contaDestinoId: idsTeste.contaBanco
+      contaDestinoId: idsTeste.contaBanco,
+      nLacreDoc: "EDICAO-TR-001"
     });
     const mercadoriaId = await criar("/api/mercadorias", {
       empresaId: idsTeste.empresaA,
@@ -217,7 +218,8 @@ describe("operacoes edicao integration", () => {
       descricao: "Transferencia editada",
       valorOriginal: 9,
       contaOrigemId: contaPdvId,
-      contaDestinoId: idsTeste.contaBanco
+      contaDestinoId: idsTeste.contaBanco,
+      nLacreDoc: "EDICAO-TR-001"
     });
 
     // Trocar malote/lacre na edicao e proibido (estado do lacre e derivado da criacao).
@@ -232,6 +234,7 @@ describe("operacoes edicao integration", () => {
         valorOriginal: 9,
         contaOrigemId: contaPdvId,
         contaDestinoId: idsTeste.contaBanco,
+        nLacreDoc: "EDICAO-TR-001",
         maloteId: "99999999-9999-4999-8999-999999999999"
       }
     });

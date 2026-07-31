@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
@@ -202,19 +202,27 @@ export async function confirmarTransferenciaRepository(
 }
 
 export async function efetivarTransferenciasAgendadasRepository(agora = new Date(), db: ExecutorBanco = banco) {
-  return db
-    .update(transferencias)
-    .set({
-      status: "pendente",
-      prazoConfirmacaoEm: sql`now() + case ${transferencias.tempoConfirmacao}
-        when '5min' then interval '5 minutes' when '10min' then interval '10 minutes'
-        when '30min' then interval '30 minutes' when '1h' then interval '1 hour'
-        when '10dias' then interval '10 days' when '30dias' then interval '30 days'
-        else interval '1 day' end`,
-      atualizadoEm: agora
-    })
-    .where(and(eq(transferencias.status, "agendada"), lt(transferencias.agendadaPara, agora)))
-    .returning({ id: transferencias.id });
+  const prazos: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
+  const efetivadas: Array<{ id: string }> = [];
+  for (const prazo of prazos) {
+    const linhas = await db
+      .update(transferencias)
+      .set({
+        status: "pendente",
+        prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
+        atualizadoEm: agora
+      })
+      .where(
+        and(
+          eq(transferencias.status, "agendada"),
+          eq(transferencias.tempoConfirmacao, prazo),
+          lt(transferencias.agendadaPara, agora)
+        )
+      )
+      .returning({ id: transferencias.id });
+    efetivadas.push(...linhas);
+  }
+  return efetivadas;
 }
 
 export async function listarTransferenciasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {

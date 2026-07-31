@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 type LinhaHistorico = { id: string; tokenEdicao?: string };
 type HistoricoJson = {
@@ -173,9 +173,9 @@ describe("caixa integration", () => {
     await executarSql(
       `insert into transferencias (id, empresa_id, caixa_id, data_referencia, descricao, valor_original,
          conta_origem_id, conta_destino_id, computar, status)
-       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'aprovado'),
-              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'aprovado'),
-              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'aprovado')`,
+       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'pendente'),
+              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'pendente'),
+              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'pendente')`,
       [
         "22222222-2222-4222-8222-222222220001",
         idsTeste.empresaA,
@@ -601,7 +601,8 @@ describe("caixa integration", () => {
           descricao: "Transferencia entrada ciclo",
           valorOriginal: 50,
           contaOrigemId: idsTeste.contaBanco,
-          contaDestinoId: contaPdvId
+          contaDestinoId: contaPdvId,
+          nLacreDoc: "CAIXA-CICLO-ENTRADA"
         }
       },
       {
@@ -612,7 +613,8 @@ describe("caixa integration", () => {
           descricao: "Transferencia saida ciclo",
           valorOriginal: 30,
           contaOrigemId: contaPdvId,
-          contaDestinoId: idsTeste.contaBanco
+          contaDestinoId: idsTeste.contaBanco,
+          nLacreDoc: "CAIXA-CICLO-SAIDA"
         }
       },
       {
@@ -667,6 +669,8 @@ describe("caixa integration", () => {
       });
       expect(resposta.statusCode, `${lancamento.url}: ${resposta.body}`).toBe(201);
     }
+    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-ENTRADA", usuarioAdminId);
+    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-SAIDA", usuarioAdminId);
 
     // Formula oficial: entradas + transf entrada - transf saida - despesas - retiradas - mercadorias
     // 100 + 50 - 30 - 20 - 10 - 15 = 75

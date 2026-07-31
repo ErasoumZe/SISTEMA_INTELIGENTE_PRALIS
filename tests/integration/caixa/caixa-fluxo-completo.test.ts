@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
 // Fluxo operacional COMPLETO do caixa, narrado para visualizacao (pedido do Ze):
 // abre o caixa -> cria ENTRADA (venda), DESPESA, RETIRADA, TRANSFERENCIA e MERCADORIA ->
@@ -92,8 +92,10 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       descricao: "Suprimento do caixa",
       valorOriginal: 20,
       contaOrigemId: idsTeste.contaBanco,
-      contaDestinoId: contaId
+      contaDestinoId: contaId,
+      nLacreDoc: "FLUXO-ENTRADA-001"
     });
+    await confirmarTransferenciaPorLacreDireto("FLUXO-ENTRADA-001", await usuarioAdminId());
     // DESPESA -40
     await criar("/api/despesas", {
       empresaId: idsTeste.empresaA,
@@ -137,7 +139,8 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       descricao: "Deposito no banco",
       valorOriginal: 35,
       contaOrigemId: contaId,
-      contaDestinoId: idsTeste.contaBanco
+      contaDestinoId: idsTeste.contaBanco,
+      nLacreDoc: "FLUXO-SAIDA-001"
     });
 
     // Formula oficial: 100 + 20 - 40 - 30 - 15 - 35 = 0

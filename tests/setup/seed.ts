@@ -80,6 +80,7 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_malotes_editar",
       "transferencias_visualizar",
       "transferencias_criar",
+      "transferencias_conferir",
       "cadastro_contas_visualizar",
       "cadastro_pdv_visualizar",
       "cadastro_empresas_visualizar",
@@ -103,6 +104,7 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_malotes_editar",
       "transferencias_visualizar",
       "transferencias_criar",
+      "transferencias_conferir",
       // Tesouraria opera os LACRES (selo do movimento) — paridade com a referencia de producao.
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar"

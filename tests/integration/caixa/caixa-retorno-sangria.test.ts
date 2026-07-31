@@ -148,7 +148,8 @@ describe("caixa - retorno/sangria (M2)", () => {
       descricao: "Suprimento reforco",
       valorOriginal: 100,
       contaOrigemId: idsTeste.contaCofre,
-      contaDestinoId: contaId
+      contaDestinoId: contaId,
+      nLacreDoc: "RET-SUPRIMENTO-001"
     });
     // Duas entradas (caixa -> cofre): sangria 200 + retorno 150.
     expect((await transferenciaCofre(caixaId, "sangria", 200)).statusCode).toBe(200);

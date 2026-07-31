@@ -157,6 +157,23 @@ R-027, R-028, R-031, R-078 e R-102) e cinco ficaram ❌: R-007,
 R-010, R-013, R-024 e R-079 (cinco regras). A soma correta é 3 ✅ + 7 ⚠️ + 5 ❌ = 15.
 As evidências por arquivo e linha estão na coluna Status do `19`.
 
+### Corujão v2 — Etapa 10
+
+**QA concluído em 31/07/2026.** Foi acrescentada uma prova vertical de integração para a lacuna
+mais arriscada da Etapa 3: origem debitada imediatamente com pendente informativo, múltiplos
+destinos concorrendo, um único vencedor, lacre rompido, notificação nos dois lados, trava 423 por
+prazo e liberação pela Tesouraria. As fixtures antigas foram atualizadas para não tratar
+transferência pendente como entrada confirmada e para usar os estados aceitos pelo CHECK atual.
+
+Resultado final automatizado: `lint` ✅; `check` ✅; catraca `data-pendente` **0/0**; 115 testes
+unitários ✅; web teve 150/151 na rodada geral por uma expectativa sem acento, corrigida e validada
+no arquivo afetado (28/28) ✅; integração completa executada uma vez, **69 arquivos e 325 testes,
+todos verdes**, em 28 minutos. Não houve teste pulado.
+
+A responsividade tem breakpoints para 1024/768/390 e regras contra vazamento horizontal, mas não
+foi possível fazer inspeção visual automatizada em navegador nas quatro larguras neste ambiente;
+R-102 permanece ⚠️ por esse motivo. Produção não foi tocada e não houve merge.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

@@ -15,7 +15,7 @@ try {
   console.info(`[api] Web origin/CORS: ${env.WEB_ORIGIN}`);
   console.info(`[api] Listen address: ${address}`);
   const executarAgendadorTransferencias = () => {
-    void processarTransferenciasTemporais().catch((error: unknown) => app.log.error(error));
+    void processarTransferenciasTemporais().catch((error) => app.log.error(error));
   };
   executarAgendadorTransferencias();
   const agendadorTransferencias = setInterval(executarAgendadorTransferencias, 60_000);

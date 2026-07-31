@@ -184,7 +184,7 @@ describe("+ NOVO por papel", () => {
   it("tem exatamente Entradas, Transferencias e Saidas — nada por categoria", () => {
     const acoes = acoesNovoPermitidas([...permissoesAcessoTotal]);
     expect(acoes.map((acao) => acao.id)).toEqual(["entradas", "transferencias", "saidas"]);
-    expect(acoes.map((acao) => acao.titulo)).toEqual(["Entradas", "Transferencias", "Saidas"]);
+    expect(acoes.map((acao) => acao.titulo)).toEqual(["Entradas", "Transferências", "Saídas"]);
   });
 
   it("Entradas navega para a tela (nao abre modal) e Saidas abre o lancamento", () => {

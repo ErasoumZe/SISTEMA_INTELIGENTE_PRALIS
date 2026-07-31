@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
 
 // DEMONSTRACAO: caixa aberto com despesa/retirada/transferencia/mercadoria (manuais) + uma ENTRADA
 // vinda da INTEGRACAO de vendas (CREARE). Mostra a relacao venda integrada <-> resumo do caixa.
@@ -149,8 +149,10 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       descricao: "Suprimento do caixa",
       valorOriginal: 50,
       contaOrigemId: idsTeste.contaBanco,
-      contaDestinoId: contaId
+      contaDestinoId: contaId,
+      nLacreDoc: "VENDA-SUPRIMENTO-001"
     });
+    await confirmarTransferenciaPorLacreDireto("VENDA-SUPRIMENTO-001", await usuarioAdminId());
     await criar("/api/mercadorias", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
