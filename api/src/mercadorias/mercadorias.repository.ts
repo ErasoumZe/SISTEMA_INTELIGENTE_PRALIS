@@ -167,6 +167,7 @@ export async function buscarMercadoriaDetalheRepository(
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
       caixaId: mercadorias.caixaId,
+      recorrenciaId: mercadorias.recorrenciaId,
       status: mercadorias.status,
       dataReferencia: mercadorias.dataReferencia,
       dataVencimento: mercadorias.dataVencimento,

@@ -104,6 +104,14 @@ A catraca `data-pendente` desceu de 23 para 0.
 item e desconto geral. O cliente preserva os detalhes do erro 422, destaca `linhaProvavel` e leva
 o foco a `campoProvavel` para a pessoa corrigir sem procurar a divergência às cegas.
 
+### Corujão v2 — Etapa 5
+
+**ENTREGUE em 31/07/2026.** A frequência anual voltou e anual/trimestral obedecem ao número de
+repetições, enquanto as frequências curtas continuam limitadas a 12 meses. A edição de um
+lançamento recorrente oferece cancelamento da série; o servidor remove somente vencimentos futuros
+sem pagamento e preserva o atual, os passados e os pagos. Provas: 16 testes unitários de recorrência
+e 11 testes de integração, incluindo uma série com o segundo lançamento pago.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

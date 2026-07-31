@@ -254,8 +254,8 @@ Você disse, está no transcript, e **não existe no código**. Esta é a lista 
 | **R-049** | **Segunda foto** (nota com os itens)         | _"foto do recibo/boleto/nota e foto da nota com os itens"_                                            | Só `foto_documento_url` existe. A 2ª guarda o nome do arquivo numa ref e some                 | S2      |
 | **R-054** | Desconto nos **3 níveis**, cumulativos       | _"um desconto n exclui o outro"_                                                                      | ✅ Tela envia descontos unitário, total do item e geral; backend recalcula e reabre           | própria |
 | **R-057** | Divergência **mostra ONDE** diverge          | _"avisa onde está divergindo pra pessoa conferir"_                                                    | ✅ O 422 destaca a linha provável e leva o foco ao campo apontado                             | própria |
-| **R-059** | Recorrência inclui **ano**                   | _"por dia, semana, mês, ano"_                                                                         | Frequências são `dia/semana/quinzena/mes/trimestre`. **Anual sumiu sem registro**             | própria |
-| —         | Cancelar série de recorrência                | pedido na spec do S5                                                                                  | Virou dívida (`18` D-04) sem alterar a spec                                                   | própria |
+| **R-059** | Recorrência inclui **ano**                   | _"por dia, semana, mês, ano"_                                                                         | ✅ `ano` na função compartilhada e na tela; unit prova quatro anuais                          | própria |
+| **R-063** | Cancelar série de recorrência                | pedido na spec do S5                                                                                  | ✅ Remove só futuras não pagas; integração preserva uma paga no meio                          | própria |
 
 **Nove dos dezessete campos que o Rodrigo desenhou na FOTO 2 não chegam ao banco.** Todos são do
 S2 — a entrega que a spec chama de "o coração" e que **não tem um único commit**.
@@ -325,8 +325,9 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | R-056 | Desconto aplicado direto no unitário não recalcula nada                                                    | José                                           | ✅                              | —                         |
 | R-057 | Divergência nota × discriminação **bloqueia o salvar** e **mostra onde**                                   | José                                           | ⚠️ bloqueia ✅, "onde" ❌       | —                         |
 | R-058 | Recorrência registra **e cria** os lançamentos futuros                                                     | José (D3)                                      | ✅                              | 10 integração             |
-| R-059 | Recorrência: dia, semana, quinzena, mês, **ano**                                                           | José                                           | ⚠️ "ano" sumiu; virou trimestre | —                         |
-| R-060 | Série limitada a 12 meses, com o corte avisado na tela                                                     | José, 30/07                                    | ✅                              | unit                      |
+| R-059 | Recorrência: dia, semana, quinzena, mês, **ano**                                                           | José                                           | ✅                              | `recorrencia` unit        |
+| R-060 | Teto por frequência: anual/trimestral por repetições; diária/semanal até 12 meses                          | José, 30/07 e 31/07                            | ✅                              | `recorrencia` unit        |
+| R-063 | Cancelar série apaga somente lançamentos futuros não pagos                                                 | José, 31/07                                    | ✅                              | `recorrencia` integração  |
 | R-061 | Domingo (ISO 7) entra na recorrência semanal                                                               | **José, 30/07 — decisão dele, não do desenho** | ✅                              | front                     |
 | R-062 | Entradas vêm prontas da integração — não se lança venda à mão                                              | José                                           | ✅                              | —                         |
 

@@ -21,6 +21,7 @@ type TipoCredor = "fornecedor" | "colaborador" | "socio_gestor";
 export function useOperacaoLancamento() {
   const {
     modalOperacaoAberto,
+    empresaId,
     entidadeNova,
     trocarCategoriaLancamento,
     operacaoEditandoId,
@@ -210,6 +211,23 @@ export function useOperacaoLancamento() {
     recorrencia.value = { ...recorrencia.value, dias };
   }
   const recorrenciaSemanal = computed(() => recorrencia.value.frequencia === "semana");
+  const confirmarCancelamentoSerie = ref(false);
+  const cancelandoSerie = ref(false);
+  async function cancelarSerie() {
+    if (!form.value.recorrenciaId) return;
+    cancelandoSerie.value = true;
+    try {
+      const { apiPatch } = useApi();
+      await apiPatch(`/api/recorrencias/${form.value.recorrenciaId}/cancelar`, {
+        empresaId: empresaId.value,
+        dominio: cat.value
+      });
+      confirmarCancelamentoSerie.value = false;
+      form.value.recorrenciaId = "";
+    } finally {
+      cancelandoSerie.value = false;
+    }
+  }
 
   const discriminando = computed({
     get: () => (cat.value === "despesa" ? discriminandoDespesa.value : discriminandoMercadoria.value),
@@ -396,6 +414,9 @@ export function useOperacaoLancamento() {
     FREQUENCIAS,
     recorrenciaFrequencia,
     recorrenciaSemanal,
+    confirmarCancelamentoSerie,
+    cancelandoSerie,
+    cancelarSerie,
     alternarDiaRecorrencia,
     podeUsarRecorrencia
   };

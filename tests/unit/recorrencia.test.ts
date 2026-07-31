@@ -6,6 +6,15 @@ import { datasDaRecorrencia, LIMITE_MESES_RECORRENCIA } from "@padaria/shared/re
 import { diaDaSemanaIso, somarMeses } from "@padaria/shared";
 
 describe("datasDaRecorrencia", () => {
+  it("R-059/R-060 gera anual e trimestral pelo numero de repeticoes, sem teto de 12 meses", () => {
+    expect(datasDaRecorrencia("2026-01-31", { frequencia: "ano", repeticoes: 4 }).datas).toEqual([
+      "2026-01-31",
+      "2027-01-31",
+      "2028-01-31",
+      "2029-01-31"
+    ]);
+    expect(datasDaRecorrencia("2026-01-31", { frequencia: "trimestre", repeticoes: 6 }).datas).toHaveLength(6);
+  });
   it("repeticoes conta o lancamento atual: 3 mensais = 3 datas, nao 4", () => {
     const { datas } = datasDaRecorrencia("2026-07-30", { frequencia: "mes", repeticoes: 3 });
     expect(datas).toEqual(["2026-07-30", "2026-08-30", "2026-09-30"]);

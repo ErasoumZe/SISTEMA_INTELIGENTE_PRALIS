@@ -104,6 +104,7 @@ export async function buscarRetiradaDetalheRepository(
       id: retiradas.id,
       empresaId: retiradas.empresaId,
       caixaId: retiradas.caixaId,
+      recorrenciaId: retiradas.recorrenciaId,
       status: retiradas.status,
       dataReferencia: retiradas.dataReferencia,
       dataVencimento: retiradas.dataVencimento,
@@ -137,8 +138,7 @@ export async function buscarRetiradaDetalheRepository(
     ...retirada,
     valorOriginal: numeroDecimal(retirada.valorOriginal),
     valorAcrescimo: numeroDecimal(retirada.valorAcrescimo),
-    jurosValorInformado:
-      retirada.jurosValorInformado == null ? null : numeroDecimal(retirada.jurosValorInformado),
+    jurosValorInformado: retirada.jurosValorInformado == null ? null : numeroDecimal(retirada.jurosValorInformado),
     valorDesconto: numeroDecimal(retirada.valorDesconto)
   };
 }

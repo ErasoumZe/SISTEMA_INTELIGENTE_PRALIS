@@ -39,6 +39,7 @@ export type OperacaoDetalhe = {
   dataRecebimento?: string | null;
   tempoConfirmacao?: OperacaoForm["tempoConfirmacao"];
   contasDestinoIds?: string[];
+  recorrenciaId?: string | null;
   temNotaFiscal?: boolean;
   computar: boolean;
   fotoDocumentoUrl?: string | null;
@@ -138,7 +139,8 @@ export const FREQUENCIAS_RECORRENCIA = [
   { rotulo: "semana", valor: "semana" },
   { rotulo: "mês", valor: "mes" },
   { rotulo: "quinzena", valor: "quinzena" },
-  { rotulo: "3 em 3", valor: "trimestre" }
+  { rotulo: "3 em 3", valor: "trimestre" },
+  { rotulo: "ano", valor: "ano" }
 ] as const;
 
 export type EstadoRecorrencia = {
@@ -295,6 +297,7 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
     tempoConfirmacao: detalhe.tempoConfirmacao ?? "1dia",
     contasDestinoIds: detalhe.contasDestinoIds ?? [],
+    recorrenciaId: detalhe.recorrenciaId ?? "",
     temNotaFiscal: detalhe.temNotaFiscal ?? false,
     computar: detalhe.computar
   };

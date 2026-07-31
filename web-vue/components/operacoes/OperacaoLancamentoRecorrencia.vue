@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Bloco Recorrência (D3) — SUPORTADO: ao salvar, o servidor cria a série inteira de lançamentos
-// futuros (não-pagos, vencendo na data), com teto de 12 meses. Estado vem do modal via
+// futuros (não-pagos, vencendo na data), com teto por frequência. Estado vem do modal via
 // provide/inject. Só Admin/Gerência/Financeiro podem usar — sem a permissão o bloco nem aparece,
 // e o servidor devolve 403 de qualquer forma.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
@@ -13,6 +13,11 @@ const {
   DIAS,
   recorrenciaDias,
   recorrenciaSemanal,
+  form,
+  operacaoEditandoId,
+  confirmarCancelamentoSerie,
+  cancelandoSerie,
+  cancelarSerie,
   alternarDiaRecorrencia,
   podeUsarRecorrencia
 } = useOperacaoLancamentoBloco();
@@ -56,8 +61,26 @@ const {
       </template>
       <p class="lc-recorrencia-nota">
         O lançamento que você está criando conta como o 1º da série. Os seguintes nascem
-        <strong>não pagos</strong>, vencendo na data. A série não passa de 12 meses.
+        <strong>não pagos</strong>, vencendo na data. Frequências curtas não passam de 12 meses; anual e trimestral
+        seguem o número de repetições.
       </p>
     </div>
+    <button
+      v-if="operacaoEditandoId && form.recorrenciaId"
+      type="button"
+      class="lc-add"
+      @click="confirmarCancelamentoSerie = true"
+    >
+      Cancelar lançamentos futuros da série
+    </button>
+    <v-dialog v-model="confirmarCancelamentoSerie" max-width="420">
+      <v-card title="Cancelar série" text="Somente lançamentos futuros e ainda não pagos serão removidos.">
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="confirmarCancelamentoSerie = false">Voltar</v-btn>
+          <v-btn color="error" :loading="cancelandoSerie" @click="cancelarSerie">Cancelar futuros</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </template>
 </template>

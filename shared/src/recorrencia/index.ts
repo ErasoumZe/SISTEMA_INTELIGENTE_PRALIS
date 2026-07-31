@@ -12,16 +12,15 @@ import { diaDaSemanaIso, somarDias, somarMeses } from "../datas/index.js";
 
 // "3 em 3" do desenho do Rodrigo = a cada 3 MESES (decisao do Jose, 30/07). A leitura natural em
 // conta a pagar — agua, seguro, IPTU — e trimestral.
-export const frequenciasRecorrencia = ["dia", "semana", "quinzena", "mes", "trimestre"] as const;
+export const frequenciasRecorrencia = ["dia", "semana", "quinzena", "mes", "trimestre", "ano"] as const;
 export type FrequenciaRecorrencia = (typeof frequenciasRecorrencia)[number];
 
-// Teto duro da serie: nada e gerado depois de 12 meses da primeira data (decisao do Jose, 30/07).
-// Protege dos dois lados — do engano de digitacao (repeticoes = 999 na frequencia diaria) e do
-// lancamento futuro tao distante que ninguem lembra por que existe.
+// Frequencias curtas ficam no teto de 12 meses. Anual e trimestral obedecem ao numero de
+// repeticoes (decisao do Jose, 31/07), pois aplicar 12 meses ao anual criaria somente a primeira.
 export const LIMITE_MESES_RECORRENCIA = 12;
 
 // Teto do que o contrato aceita, so para o laco ser sempre finito mesmo com payload hostil. O
-// corte que vale na pratica e o de 12 meses acima; 366 e o maximo que a frequencia diaria alcanca.
+// 366 tambem limita payload hostil nas frequencias governadas pelo numero de repeticoes.
 export const MAXIMO_REPETICOES_RECORRENCIA = 366;
 
 export type Recorrencia = {
@@ -51,7 +50,7 @@ export const recorrenciaSchema = z
 export const resultadoSerieSchema = {
   // Quantos lancamentos a serie criou DE FATO (pode ser menor que `repeticoes`, ver abaixo).
   serie: z.number().int().optional(),
-  // true quando o teto de 12 meses cortou a serie — a tela avisa em vez de deixar a pessoa achar
+  // true quando um teto aplicavel cortou a serie — a tela avisa em vez de deixar a pessoa achar
   // que pediu 24 e recebeu 24.
   serieLimitada: z.boolean().optional()
 };
@@ -59,7 +58,7 @@ export const resultadoSerieSchema = {
 export type SerieRecorrencia = {
   // Inclui a data do lancamento que esta sendo criado, na primeira posicao.
   datas: string[];
-  // true quando a serie entregue e MENOR que a pedida — seja pelo teto de 12 meses, seja pelo
+  // true quando a serie entregue e MENOR que a pedida — seja pelo teto da frequencia, seja pelo
   // limite duro de repeticoes. A tela avisa quantos foram criados de fato, em vez de deixar a
   // pessoa achar que pediu 24 e recebeu 24.
   limitadaPeloTeto: boolean;
@@ -71,7 +70,8 @@ function passoFixo(frequencia: Exclude<FrequenciaRecorrencia, "semana">, inicio:
   if (frequencia === "dia") return somarDias(inicio, n);
   if (frequencia === "quinzena") return somarDias(inicio, 15 * n);
   if (frequencia === "mes") return somarMeses(inicio, n);
-  return somarMeses(inicio, 3 * n);
+  if (frequencia === "trimestre") return somarMeses(inicio, 3 * n);
+  return somarMeses(inicio, 12 * n);
 }
 
 /**
@@ -107,7 +107,7 @@ export function datasDaRecorrencia(dataInicial: string, recorrencia: Recorrencia
 
   for (let n = 1; datas.length < alvo; n += 1) {
     const proxima = passoFixo(recorrencia.frequencia, dataInicial, n);
-    if (proxima > teto) break;
+    if (recorrencia.frequencia !== "trimestre" && recorrencia.frequencia !== "ano" && proxima > teto) break;
     datas.push(proxima);
   }
   return limitada();

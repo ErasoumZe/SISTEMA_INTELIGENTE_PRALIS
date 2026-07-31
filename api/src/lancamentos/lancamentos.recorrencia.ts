@@ -23,7 +23,7 @@ export type OcorrenciaRecorrencia = {
 
 export type PlanoRecorrencia = {
   ocorrencias: OcorrenciaRecorrencia[];
-  // A serie pedida nao coube no teto de 12 meses; o servico usa isso para responder quantos criou.
+  // A serie pedida nao coube no teto da frequencia; o servico usa isso para responder quantos criou.
   limitadaPeloTeto: boolean;
 };
 

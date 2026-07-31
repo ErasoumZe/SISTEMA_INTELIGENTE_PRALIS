@@ -45,6 +45,7 @@ import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controll
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
+import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
 import { usuarioEstaTravadoRepository } from "./transferencias/transferencias.repository.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
@@ -180,6 +181,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasMercadorias(app);
   await registrarRotasNotasFiscais(app);
   await registrarRotasRetiradas(app);
+  await registrarRotasRecorrencias(app);
   await registrarRotasTransferencias(app);
   await registrarRotasCaixa(app);
   await registrarRotasEmpresas(app);

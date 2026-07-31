@@ -7,7 +7,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 type LinhaDespesa = {
   id: string;
@@ -225,6 +225,32 @@ describe("recorrencia de lancamento (D3) integration", () => {
       recorrencia: { frequencia: "decada", repeticoes: 3 }
     });
     expect(resposta.statusCode).toBe(400);
+  });
+
+  it("R-063 cancela so futuras nao pagas e preserva uma paga no meio", async () => {
+    const resposta = await criarDespesa(cookieAdmin, {
+      descricao: "Serie a cancelar",
+      recorrencia: { frequencia: "mes", repeticoes: 4 }
+    });
+    const criada = json<{ data: { id: string } }>(resposta).data;
+    const serie = await serieDe(criada.id);
+    const recorrenciaId = serie[0]?.recorrencia_id;
+    expect(recorrenciaId).toBeTruthy();
+    await executarSql("update despesas set data_pagamento = data_vencimento where id = $1", [serie[1]?.id]);
+
+    const cancelar = await contexto.app.inject({
+      method: "PATCH",
+      url: `/api/recorrencias/${recorrenciaId}/cancelar`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, dominio: "despesa" }
+    });
+    expect(cancelar.statusCode, cancelar.body).toBe(200);
+    expect(json<{ data: { removidas: number } }>(cancelar).data.removidas).toBe(2);
+    const restantes = await consultarTodos<{ id: string }>(
+      "select id from despesas where recorrencia_id = $1 order by recorrencia_ordem",
+      [recorrenciaId]
+    );
+    expect(restantes.map((item) => item.id)).toEqual([serie[0]?.id, serie[1]?.id]);
   });
 
   it("Retirada tambem aceita recorrencia", async () => {

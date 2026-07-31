@@ -197,6 +197,7 @@ export async function buscarDespesaDetalheRepository(
       id: despesas.id,
       empresaId: despesas.empresaId,
       caixaId: despesas.caixaId,
+      recorrenciaId: despesas.recorrenciaId,
       status: despesas.status,
       dataReferencia: despesas.dataReferencia,
       dataVencimento: despesas.dataVencimento,
