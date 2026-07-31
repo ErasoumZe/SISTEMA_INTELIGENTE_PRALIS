@@ -170,6 +170,14 @@ permissões diretas** nos 31 usuários adicionais.
 - R-031: `TransferenciaRetornoCampos.test.ts` prova que a checkbox expande retorno/sangria dentro do mesmo formulário de transferência.
 - R-078: o agrupamento usado pela tela tem uma função única e testada; todas as permissões visíveis pertencem a exatamente um módulo. Em sobreposição, vence o prefixo mais específico (`menu_contas_pagar_*` fica somente em Contas a pagar).
 
+### Corujão v3 — P4
+
+**Somente registro, sem implementação, como decidido pelo José.** O `18_DIVIDAS_TECNICAS.md`
+agora explicita: (D-06) a consequência diária da R-007 sobre diferença e atribuição indevida de
+quebra; (D-05) que o Coolify está em uma réplica e que uma segunda exige trava no banco; e (D-07)
+o descompasso entre o lacre criado pela transferência e o malote esperado pela R-024, incluindo o
+ciclo que precisa ser decidido antes da correção.
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas

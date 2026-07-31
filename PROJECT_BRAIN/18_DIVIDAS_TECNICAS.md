@@ -131,7 +131,53 @@ normalizar num commit próprio, separado de qualquer entrega.
 
 **Status:** aberto · **Prioridade:** média · **Criado em:** 31/07/2026, Etapa 3 do Corujão v2.
 
-O agendamento e a fiscalização de prazo rodam a cada minuto no processo da API, com execução
-idempotente no banco. É a infraestrutura mais simples que funciona no dev e em uma única réplica.
-Antes de escalar horizontalmente, mover para worker/cron com eleição ou fila distribuída para não
-executar a varredura em todas as réplicas.
+O agendamento e a fiscalização de prazo rodam a cada 60 segundos no processo da API
+(`api/src/server.ts`). Em 31/07/2026 foi confirmado que `infra/docker-compose.coolify.yml` não
+define `replicas` nem `deploy:`: há uma única réplica, portanto o desenho atual está seguro nesse
+ambiente.
+
+**Bloqueio para escalar:** antes de subir uma segunda réplica, é obrigatório coordenar a execução
+com trava no banco (por exemplo, advisory lock) ou mover o trabalho para um único worker/cron com
+eleição. Sem isso, as duas APIs podem selecionar a mesma transferência agendada e executá-la duas
+vezes. A idempotência parcial das atualizações atuais não substitui essa exclusão mútua.
+
+---
+
+## D-06 · R-007 mistura cartão/PIX com dinheiro físico no fechamento
+
+**Status:** aberto por decisão do José · **Prioridade:** crítica pelo efeito diário · **Decidido em:** 31/07/2026, Corujão v3 P4.
+
+O "Resultado no caixa" continua somando todas as vendas, inclusive cartão e PIX, embora esses
+valores não passem pela gaveta. A correção foi deliberadamente adiada; não alterar a fórmula nesta
+rodada.
+
+**Consequência operacional explícita:** enquanto isso valer, o fechamento acusará diferença sempre
+que houver venda em cartão ou PIX. A quebra da R-015 poderá então ser atribuída ao operador mesmo
+sem ele dever esse dinheiro. É dívida com efeito diário financeiro e de responsabilização, não
+cosmética.
+
+Para resolver, a fórmula única de saldo/fechamento deve separar formas que representam dinheiro
+físico das demais, com decisão de negócio sobre a classificação e testes de fechamento misto antes
+de migrar qualquer histórico.
+
+---
+
+## D-07 · R-024: transferência cria lacre, mas não cria malote
+
+**Status:** aberto · **Prioridade:** alta · **Registrado em:** 31/07/2026, Corujão v3 P4.
+
+O modelo descrito pelo José diz que a transferência com lacre do cofre para o caixa gera o malote.
+Hoje `criarTransferenciaRepository` cria uma linha em `lacres`, que representa o selo de um evento
+de transporte, mas não cria uma linha em `malotes`, usada pela abertura como entidade física com
+valor e estado. Portanto R-024 permanece ❌.
+
+Para reconciliar os modelos, é preciso definir e implementar atomicamente o ciclo completo:
+
+1. em qual momento a transferência cofre → caixa gera o malote (criação ou confirmação);
+2. como `transferencia`, `lacre` e `malote` ficam vinculados sem duplicar a identidade do número;
+3. qual valor e status inicial o malote recebe e como passa a `em_uso`/`disponivel` na abertura e
+   no retorno;
+4. como tratar cancelamento, agendamento e múltiplos destinos sem produzir malote órfão.
+
+Essa reconciliação exige decisão de domínio e migration; por ordem expressa do P4, nenhuma mudança
+de código ou banco foi feita nesta rodada.
