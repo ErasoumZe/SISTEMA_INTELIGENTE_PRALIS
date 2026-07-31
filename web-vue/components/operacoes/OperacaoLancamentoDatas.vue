@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// Bloco Data Lanç · Data Doc. Fiscal · N° Doc. Fiscal (FOTO 2, linha 2). Data/N Doc. Fiscal sao
-// data-pendente="regra" (estado local, nunca enviado). Estado vem do modal via provide/inject.
+// Bloco Data Lanç · Data Doc. Fiscal · N° Doc. Fiscal (FOTO 2, linha 2).
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
 const { form, hojeISO, dataDocFiscal, numeroDocFiscal } = useOperacaoLancamentoBloco();
@@ -25,11 +24,11 @@ const { form, hojeISO, dataDocFiscal, numeroDocFiscal } = useOperacaoLancamentoB
     </label>
     <label class="lc-campo">
       <span class="lc-campo-lbl">Data Doc. Fiscal</span>
-      <input v-model="dataDocFiscal" type="date" data-pendente="regra" class="lc-input" />
+      <input v-model="dataDocFiscal" type="date" class="lc-input" />
     </label>
     <label class="lc-campo">
       <span class="lc-campo-lbl">N° Doc. Fiscal</span>
-      <input v-model="numeroDocFiscal" data-pendente="regra" class="lc-input" placeholder="000000" />
+      <input v-model="numeroDocFiscal" class="lc-input" placeholder="000000" />
     </label>
   </div>
 </template>

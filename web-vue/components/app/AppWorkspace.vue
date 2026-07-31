@@ -672,10 +672,11 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     // Conta origem e obrigatoria no form de retirada (sem ela o select fica "No data available").
     // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
-    [dados.contas, dados.fornecedores, dados.colaboradores] = await Promise.all([
+    [dados.contas, dados.fornecedores, dados.colaboradores, dados.sociosGestores] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+      carregarOpcaoOpcional(faltas, "Sócios/gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
     ]);
   } else if (tela === "grupos") {
     Object.assign(
@@ -946,6 +947,7 @@ type ChaveOpcaoOperacao =
   | "contas"
   | "fornecedores"
   | "colaboradores"
+  | "sociosGestores"
   | "produtos"
   | "formasPagamento"
   | "pdvs"
@@ -961,7 +963,7 @@ const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
   despesa: ["contas", "fornecedores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  retirada: ["contas", "colaboradores", "grupos"],
+  retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
   transferencia: ["contas", "malotes"]
 };
 
@@ -981,6 +983,9 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     },
     colaboradores: async () => {
       alvo.colaboradores = await apiGet<Opcao[]>(`/api/colaboradores${query}`);
+    },
+    sociosGestores: async () => {
+      alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
     },
     produtos: async () => {
       alvo.produtos = await apiGet<Opcao[]>(`/api/produtos${query}`);
@@ -1009,6 +1014,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     contas: "Contas",
     fornecedores: "Fornecedores",
     colaboradores: "Colaboradores",
+    sociosGestores: "Sócios/gestores",
     produtos: "Produtos",
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",
@@ -1227,6 +1233,7 @@ async function salvarOperacao() {
       contaDestinoId: payload.contaDestinoId,
       fornecedorId: payload.fornecedorId,
       colaboradorId: payload.colaboradorId,
+      socioGestorId: payload.socioGestorId,
       qtdItensDespesa: payload.itensDespesa.length,
       qtdItensMercadoria: payload.itensMercadoria.length
     });

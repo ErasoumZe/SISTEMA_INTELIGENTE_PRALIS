@@ -26,7 +26,7 @@ function extensaoSegura(filename: string) {
 // Salva o arquivo em storage/<tipo>/<id>/<uuid>.ext e devolve o caminho RELATIVO (persistido em
 // foto_documento_url) + o mime.
 export async function salvarFotoDocumento(
-  tipo: "mercadorias" | "despesas",
+  tipo: "mercadorias" | "despesas" | "retiradas",
   id: string,
   arquivo: MultipartFile
 ): Promise<{ caminhoRelativo: string; mimeType: string }> {

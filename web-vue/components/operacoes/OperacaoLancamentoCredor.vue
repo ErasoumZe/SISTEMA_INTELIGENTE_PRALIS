@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// Bloco Classificação: Tipo de credor · Credor · Grupo · Conta · Descrição. "Sócios/setores" e o
-// Credor desse tipo sao data-pendente="regra". Grupo/Conta/Descrição nao estao no desenho enxuto,
+// Bloco Classificação: Tipo de credor · Credor · Grupo · Conta · Descrição. Grupo/Conta/Descrição nao estao no desenho enxuto,
 // mas o backend precisa deles para salvar. Estado vem do modal via provide/inject.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
@@ -18,7 +17,6 @@ const { cat, CREDORES, rotuloCredor, tipoCredor, credorId, credorOpcoes, grupoId
       type="button"
       class="lc-chip"
       :class="{ ativo: tipoCredor === t }"
-      :data-pendente="t === 'socios_setores' ? 'regra' : undefined"
       @click="tipoCredor = t"
     >
       {{ rotuloCredor[t] }}
@@ -26,7 +24,7 @@ const { cat, CREDORES, rotuloCredor, tipoCredor, credorId, credorOpcoes, grupoId
   </div>
   <label class="lc-campo">
     <span class="lc-campo-lbl">Credor</span>
-    <select v-model="credorId" class="lc-input" :data-pendente="tipoCredor === 'socios_setores' ? 'regra' : undefined">
+    <select v-model="credorId" class="lc-input">
       <option value="">—</option>
       <option v-for="o in credorOpcoes" :key="o.id" :value="o.id">{{ o.nome }}</option>
     </select>

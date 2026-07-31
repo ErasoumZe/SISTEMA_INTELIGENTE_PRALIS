@@ -37,8 +37,13 @@ export const retiradaPayloadSchema = z
     // a ser: a obrigatoriedade virou "um dos dois", no refine abaixo.
     colaboradorId: uuidSchema.optional().nullable(),
     socioGestorId: uuidSchema.optional().nullable(),
+    credorTipo: z.enum(["colaborador", "socio_gestor"]).optional().nullable(),
+    dataDocumentoFiscal: z.string().min(10).optional().nullable(),
+    numeroDocumentoFiscal: z.string().optional().nullable(),
     grupoRetiradaId: uuidSchema.optional().nullable(),
     computar: z.boolean().default(true),
+    fotoDocumentoUrl: z.string().optional().nullable(),
+    fotoNotaUrl: z.string().optional().nullable(),
     // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
     recorrencia: recorrenciaSchema.optional()
   })

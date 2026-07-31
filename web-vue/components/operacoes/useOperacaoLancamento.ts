@@ -2,7 +2,7 @@
 // para que o componente de 999 linhas vire um container enxuto + blocos coesos (R5). A LOGICA e
 // IDENTICA a original: este composable e chamado UMA vez no modal (sempre montado) e o estado e
 // distribuido aos blocos via provide/inject, exatamente como o workspace-context. Nada de
-// api/db/shared; os campos NOVOS seguem data-pendente="regra" (estado local, nunca enviado).
+// api/db/shared; este composable liga a tela ao contrato persistido.
 import { computed, inject, ref, watch, type InjectionKey } from "vue";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import type { FrequenciaRecorrencia } from "@padaria/shared/recorrencia";
@@ -16,7 +16,7 @@ import {
 } from "~/utils/operacoes";
 
 export type Cat = "despesa" | "mercadoria" | "retirada";
-type TipoCredor = "fornecedor" | "colaborador" | "socios_setores";
+type TipoCredor = "fornecedor" | "colaborador" | "socio_gestor";
 
 export function useOperacaoLancamento() {
   const {
@@ -105,13 +105,12 @@ export function useOperacaoLancamento() {
   const CREDORES: Record<Cat, TipoCredor[]> = {
     despesa: ["fornecedor", "colaborador"],
     mercadoria: ["fornecedor"],
-    // Retirada: o desenho traz "Sócios/setores"; mantemos Colaborador (que o backend exige) para salvar.
-    retirada: ["colaborador", "socios_setores"]
+    retirada: ["colaborador", "socio_gestor"]
   };
   const rotuloCredor: Record<TipoCredor, string> = {
     fornecedor: "Fornecedor",
     colaborador: "Colaborador",
-    socios_setores: "Sócios / setores"
+    socio_gestor: "Sócio / gestor"
   };
   const tipoCredor = ref<TipoCredor>("fornecedor");
   watch(
@@ -127,23 +126,29 @@ export function useOperacaoLancamento() {
       ? opcoesEmpresa.value.fornecedores
       : tipoCredor.value === "colaborador"
         ? opcoesEmpresa.value.colaboradores
-        : opcoesEmpresa.value.setores
+        : opcoesEmpresa.value.sociosGestores
   );
-  // TODO(regras): "Sócios/setores" nao tem coluna propria de credor — fica LOCAL (data-pendente).
-  const socioSetorId = ref("");
   const credorId = computed({
     get: () =>
       tipoCredor.value === "fornecedor"
         ? form.value.fornecedorId
         : tipoCredor.value === "colaborador"
           ? form.value.colaboradorId
-          : socioSetorId.value,
+          : form.value.socioGestorId,
     set: (v: string) => {
-      if (tipoCredor.value === "fornecedor") form.value.fornecedorId = v;
-      else if (tipoCredor.value === "colaborador") form.value.colaboradorId = v;
-      else socioSetorId.value = v;
+      form.value.fornecedorId = tipoCredor.value === "fornecedor" ? v : "";
+      form.value.colaboradorId = tipoCredor.value === "colaborador" ? v : "";
+      form.value.socioGestorId = tipoCredor.value === "socio_gestor" ? v : "";
+      form.value.credorTipo = tipoCredor.value;
     }
   });
+  watch(
+    () => form.value.credorTipo,
+    (tipo) => {
+      if (tipo && CREDORES[cat.value].includes(tipo as TipoCredor)) tipoCredor.value = tipo as TipoCredor;
+    },
+    { immediate: true }
+  );
 
   // Pagamento (toggle S/N): derivado de dataPagamento (campo suportado). Sem data = nao pago.
   const pago = computed({
@@ -153,10 +158,14 @@ export function useOperacaoLancamento() {
     }
   });
 
-  // --- Campos SEM backend nesta rodada (data-pendente="regra"): estado LOCAL, nunca enviado. ---
-  // TODO(regras): Data e N do Documento Fiscal no lancamento.
-  const dataDocFiscal = ref("");
-  const numeroDocFiscal = ref("");
+  const dataDocFiscal = computed({
+    get: () => form.value.dataDocumentoFiscal,
+    set: (valor: string) => (form.value.dataDocumentoFiscal = valor)
+  });
+  const numeroDocFiscal = computed({
+    get: () => form.value.numeroDocumentoFiscal,
+    set: (valor: string) => (form.value.numeroDocumentoFiscal = valor)
+  });
   // Foto 1 (Recibo/Boleto/Nota): campo SUPORTADO. Extrai o File do input nativo e reusa o handler do
   // contexto (que espera File | File[] | null, nao um Event).
   function onFotoDocumento(e: Event) {

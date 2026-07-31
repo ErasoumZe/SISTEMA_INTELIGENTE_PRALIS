@@ -34,6 +34,19 @@ export async function listarRetiradasRepository(
     .where(filtros.length ? and(...filtros) : undefined);
 }
 
+export async function atualizarFotoRetiradaRepository(
+  id: string,
+  empresaId: string,
+  campo: "documento" | "nota",
+  caminho: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(retiradas)
+    .set(campo === "nota" ? { fotoNotaUrl: caminho } : { fotoDocumentoUrl: caminho })
+    .where(and(eq(retiradas.id, id), eq(retiradas.empresaId, empresaId)));
+}
+
 export async function criarRetiradaRepository(
   dados: RetiradaPayload,
   computar: boolean,
@@ -53,7 +66,11 @@ export async function criarRetiradaRepository(
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         credorTipo: dados.socioGestorId ? "socio_gestor" : "colaborador",
         colaboradorId: dados.colaboradorId ?? null,
-        socioGestorId: dados.socioGestorId ?? null
+        socioGestorId: dados.socioGestorId ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .returning({ id: retiradas.id });
     if (!retirada) throw new Error("Retirada nao criada");
@@ -100,6 +117,14 @@ export async function buscarRetiradaDetalheRepository(
       descricaoDesconto: retiradas.descricaoDesconto,
       contaOrigemId: retiradas.contaOrigemId,
       colaboradorId: retiradas.colaboradorId,
+      socioGestorId: retiradas.socioGestorId,
+      credorTipo: retiradas.credorTipo,
+      dataDocumentoFiscal: retiradas.dataDocumentoFiscal,
+      numeroDocumentoFiscal: retiradas.numeroDocumentoFiscal,
+      fotoDocumentoUrl: retiradas.fotoDocumentoUrl,
+      fotoNotaUrl: retiradas.fotoNotaUrl,
+      jurosTipo: retiradas.jurosTipo,
+      jurosValorInformado: retiradas.jurosValorInformado,
       grupoRetiradaId: retiradas.grupoRetiradaId,
       computar: retiradas.computar
     })
@@ -112,6 +137,8 @@ export async function buscarRetiradaDetalheRepository(
     ...retirada,
     valorOriginal: numeroDecimal(retirada.valorOriginal),
     valorAcrescimo: numeroDecimal(retirada.valorAcrescimo),
+    jurosValorInformado:
+      retirada.jurosValorInformado == null ? null : numeroDecimal(retirada.jurosValorInformado),
     valorDesconto: numeroDecimal(retirada.valorDesconto)
   };
 }
@@ -134,7 +161,11 @@ export async function atualizarRetiradaRepository(
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         credorTipo: dados.socioGestorId ? "socio_gestor" : "colaborador",
         colaboradorId: dados.colaboradorId ?? null,
-        socioGestorId: dados.socioGestorId ?? null
+        socioGestorId: dados.socioGestorId ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .where(eq(retiradas.id, retiradaId));
 

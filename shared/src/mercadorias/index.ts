@@ -70,11 +70,15 @@ export const mercadoriaPayloadSchema = z.object({
   descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   contaOrigemId: uuidSchema.optional().nullable(),
   fornecedorId: uuidSchema,
+  credorTipo: z.literal("fornecedor").optional().nullable(),
+  dataDocumentoFiscal: z.string().min(10).optional().nullable(),
+  numeroDocumentoFiscal: z.string().optional().nullable(),
   grupoMercadoriaId: uuidSchema.optional().nullable(),
   notaFiscalId: z.string().optional().nullable(),
   temNotaFiscal: z.boolean().default(false),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  fotoNotaUrl: z.string().optional().nullable(),
   // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
   recorrencia: recorrenciaSchema.optional(),
   itensMercadoria: z.array(mercadoriaItemSchema).default([])

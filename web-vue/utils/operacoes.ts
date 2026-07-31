@@ -22,6 +22,10 @@ export type OperacaoDetalhe = {
   contaDestinoId?: string | null;
   fornecedorId?: string | null;
   colaboradorId?: string | null;
+  socioGestorId?: string | null;
+  credorTipo?: "fornecedor" | "colaborador" | "socio_gestor" | null;
+  dataDocumentoFiscal?: string | null;
+  numeroDocumentoFiscal?: string | null;
   grupoDespesaId?: string | null;
   grupoMercadoriaId?: string | null;
   grupoRetiradaId?: string | null;
@@ -29,6 +33,7 @@ export type OperacaoDetalhe = {
   temNotaFiscal?: boolean;
   computar: boolean;
   fotoDocumentoUrl?: string | null;
+  fotoNotaUrl?: string | null;
   itensVenda?: {
     produtoId: string | null;
     descricaoProduto: string;
@@ -220,6 +225,10 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     contaDestinoId: detalhe.contaDestinoId ?? "",
     fornecedorId: detalhe.fornecedorId ?? "",
     colaboradorId: detalhe.colaboradorId ?? "",
+    socioGestorId: detalhe.socioGestorId ?? "",
+    credorTipo: detalhe.credorTipo ?? "",
+    dataDocumentoFiscal: detalhe.dataDocumentoFiscal ?? "",
+    numeroDocumentoFiscal: detalhe.numeroDocumentoFiscal ?? "",
     grupoDespesaId: detalhe.grupoDespesaId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
@@ -363,6 +372,10 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     contaDestinoId: dados.form.contaDestinoId || null,
     fornecedorId: dados.form.fornecedorId || null,
     colaboradorId: dados.form.colaboradorId || null,
+    socioGestorId: dados.form.socioGestorId || null,
+    credorTipo: dados.form.credorTipo || null,
+    dataDocumentoFiscal: dados.form.dataDocumentoFiscal || null,
+    numeroDocumentoFiscal: dados.form.numeroDocumentoFiscal || null,
     grupoDespesaId: dados.form.grupoDespesaId || null,
     grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
     grupoRetiradaId: dados.form.grupoRetiradaId || null,
@@ -401,6 +414,7 @@ export function validarOperacaoParaEnvio(
     contaDestinoId: string | null;
     fornecedorId: string | null;
     colaboradorId: string | null;
+    socioGestorId?: string | null;
     qtdItensDespesa: number;
     qtdItensMercadoria: number;
   }
@@ -418,7 +432,8 @@ export function validarOperacaoParaEnvio(
   }
 
   // Schema: retirada exige colaboradorId.
-  if (entidade === "retirada" && !dados.colaboradorId) return "Selecione o colaborador da retirada.";
+  if (entidade === "retirada" && !dados.colaboradorId && !dados.socioGestorId)
+    return "Selecione o credor da retirada.";
 
   if (entidade === "transferencia") {
     // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.

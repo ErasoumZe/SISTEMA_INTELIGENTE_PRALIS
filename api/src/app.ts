@@ -39,6 +39,7 @@ import { registrarRotasPdvs } from "./pdvs/pdvs.controller.js";
 import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js";
 import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
+import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
@@ -168,6 +169,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasUnidadesMedida(app);
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
+  await registrarRotasSociosGestores(app);
   await registrarRotasTurnos(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);

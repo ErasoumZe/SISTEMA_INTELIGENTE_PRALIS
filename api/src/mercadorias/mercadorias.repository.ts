@@ -109,6 +109,18 @@ export async function atualizarFotoMercadoriaRepository(
     .where(and(eq(mercadorias.id, id), eq(mercadorias.empresaId, empresaId)));
 }
 
+export async function atualizarFotoNotaMercadoriaRepository(
+  id: string,
+  empresaId: string,
+  fotoNotaUrl: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(mercadorias)
+    .set({ fotoNotaUrl })
+    .where(and(eq(mercadorias.id, id), eq(mercadorias.empresaId, empresaId)));
+}
+
 export async function criarMercadoriaRepository(
   dados: MercadoriaPayload,
   computar: boolean,
@@ -126,10 +138,14 @@ export async function criarMercadoriaRepository(
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
+        credorTipo: dados.credorTipo ?? "fornecedor",
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
         notaFiscalId: dados.notaFiscalId ?? null,
         temNotaFiscal: dados.temNotaFiscal,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .returning({ id: mercadorias.id });
     if (!mercadoria) throw new Error("Mercadoria nao criada");
@@ -164,10 +180,16 @@ export async function buscarMercadoriaDetalheRepository(
       descricaoDesconto: mercadorias.descricaoDesconto,
       contaOrigemId: mercadorias.contaOrigemId,
       fornecedorId: mercadorias.fornecedorId,
+      credorTipo: mercadorias.credorTipo,
+      dataDocumentoFiscal: mercadorias.dataDocumentoFiscal,
+      numeroDocumentoFiscal: mercadorias.numeroDocumentoFiscal,
       grupoMercadoriaId: mercadorias.grupoMercadoriaId,
       notaFiscalId: mercadorias.notaFiscalId,
       temNotaFiscal: mercadorias.temNotaFiscal,
       fotoDocumentoUrl: mercadorias.fotoDocumentoUrl,
+      fotoNotaUrl: mercadorias.fotoNotaUrl,
+      jurosTipo: mercadorias.jurosTipo,
+      jurosValorInformado: mercadorias.jurosValorInformado,
       computar: mercadorias.computar
     })
     .from(mercadorias)
@@ -197,6 +219,8 @@ export async function buscarMercadoriaDetalheRepository(
     fornecedorId: mercadoria.fornecedorId,
     valorOriginal: numeroDecimal(mercadoria.valorOriginal),
     valorAcrescimo: numeroDecimal(mercadoria.valorAcrescimo),
+    jurosValorInformado:
+      mercadoria.jurosValorInformado == null ? null : numeroDecimal(mercadoria.jurosValorInformado),
     valorDesconto: numeroDecimal(mercadoria.valorDesconto),
     itensMercadoria: itens.map((item) => ({
       ...item,
@@ -223,10 +247,14 @@ export async function atualizarMercadoriaRepository(
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
+        credorTipo: dados.credorTipo ?? "fornecedor",
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
         notaFiscalId: dados.notaFiscalId ?? null,
         temNotaFiscal: dados.temNotaFiscal,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .where(eq(mercadorias.id, mercadoriaId));
 

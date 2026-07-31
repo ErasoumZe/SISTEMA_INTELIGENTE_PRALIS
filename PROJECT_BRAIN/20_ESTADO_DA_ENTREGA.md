@@ -48,6 +48,13 @@ O briefing fechou as decisões **D1–D12** no `17`. A execução foi fatiada em
 
 ## 2. Estado por vertical
 
+> **Pausa em 31/07/2026 — WIP do Corujão/Etapa 1.** A pedido do José, o trabalho foi interrompido
+> durante a ligação do S2. Já foram iniciados: contrato dos campos fiscais/credor/fotos, seleção e
+> reabertura desses campos nos três repositories, opção de sócio/gestor no formulário e o esqueleto
+> de repository/service/controller de `socios_gestores`. **Ainda não está funcional nem validado.**
+> Faltam concluir o upload da segunda foto (o patch dos services/controllers não foi aplicado),
+> integrar a tela de cadastro, corrigir tipos/checks, criar os testes, a catraca e rodar validação.
+
 | S   | Status         | Migration | Prova                                                                        |
 | --- | -------------- | --------- | ---------------------------------------------------------------------------- |
 | S1  | ENTREGUE       | —         | `menu.test.ts`                                                               |

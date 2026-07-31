@@ -75,8 +75,12 @@ export const despesaPayloadSchema = z.object({
   fornecedorId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema.optional().nullable(),
   grupoDespesaId: uuidSchema.optional().nullable(),
+  credorTipo: z.enum(["fornecedor", "colaborador"]).optional().nullable(),
+  dataDocumentoFiscal: z.string().min(10).optional().nullable(),
+  numeroDocumentoFiscal: z.string().optional().nullable(),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  fotoNotaUrl: z.string().optional().nullable(),
   // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
   recorrencia: recorrenciaSchema.optional(),
   itensDespesa: z.array(despesaItemSchema).default([])

@@ -159,6 +159,7 @@ export type Opcoes = {
   fornecedores: Opcao[];
   clientes: Opcao[];
   colaboradores: Opcao[];
+  sociosGestores: Opcao[];
   cargos: Opcao[];
   colaboradoresCargos: Opcao[];
   colaboradoresJornadas: Opcao[];
@@ -262,6 +263,10 @@ export type CaixaOperacional = {
   usuarioCaixaId: string;
   usuarioCaixaNome: string;
   colaboradorId: string;
+  socioGestorId: string;
+  credorTipo: "" | "fornecedor" | "colaborador" | "socio_gestor";
+  dataDocumentoFiscal: string;
+  numeroDocumentoFiscal: string;
   // Dia CONTABIL do caixa ("yyyy-MM-dd") — o que a tela de Entradas lista para quem opera caixa.
   dataMovimento: string;
   dataHoraAbertura: string;

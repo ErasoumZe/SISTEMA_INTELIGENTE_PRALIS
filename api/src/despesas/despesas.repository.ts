@@ -122,6 +122,15 @@ export async function atualizarFotoDespesaRepository(
     .where(and(eq(despesas.id, id), eq(despesas.empresaId, empresaId)));
 }
 
+export async function atualizarFotoNotaDespesaRepository(
+  id: string,
+  empresaId: string,
+  fotoNotaUrl: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db.update(despesas).set({ fotoNotaUrl }).where(and(eq(despesas.id, id), eq(despesas.empresaId, empresaId)));
+}
+
 export async function criarDespesaRepository(
   dados: DespesaPayload,
   computar: boolean,
@@ -140,8 +149,12 @@ export async function criarDespesaRepository(
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
+        credorTipo: dados.credorTipo ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoDespesaId: dados.grupoDespesaId ?? null,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .returning({ id: despesas.id });
     if (!despesa) throw new Error("Despesa nao criada");
@@ -195,8 +208,14 @@ export async function buscarDespesaDetalheRepository(
       contaOrigemId: despesas.contaOrigemId,
       fornecedorId: despesas.fornecedorId,
       colaboradorId: despesas.colaboradorId,
+      credorTipo: despesas.credorTipo,
+      dataDocumentoFiscal: despesas.dataDocumentoFiscal,
+      numeroDocumentoFiscal: despesas.numeroDocumentoFiscal,
       grupoDespesaId: despesas.grupoDespesaId,
       fotoDocumentoUrl: despesas.fotoDocumentoUrl,
+      fotoNotaUrl: despesas.fotoNotaUrl,
+      jurosTipo: despesas.jurosTipo,
+      jurosValorInformado: despesas.jurosValorInformado,
       computar: despesas.computar
     })
     .from(despesas)
@@ -219,6 +238,8 @@ export async function buscarDespesaDetalheRepository(
     ...despesa,
     valorOriginal: numeroDecimal(despesa.valorOriginal),
     valorAcrescimo: numeroDecimal(despesa.valorAcrescimo),
+    jurosValorInformado:
+      despesa.jurosValorInformado == null ? null : numeroDecimal(despesa.jurosValorInformado),
     valorDesconto: numeroDecimal(despesa.valorDesconto),
     itensDespesa: itens.map((item) => ({ ...item, valor: numeroDecimal(item.valor) }))
   };
@@ -241,8 +262,12 @@ export async function atualizarDespesaRepository(
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
+        credorTipo: dados.credorTipo ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoDespesaId: dados.grupoDespesaId ?? null,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .where(eq(despesas.id, despesaId));
 
