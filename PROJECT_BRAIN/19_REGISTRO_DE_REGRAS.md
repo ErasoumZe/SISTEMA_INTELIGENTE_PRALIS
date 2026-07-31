@@ -360,7 +360,7 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | R-097 | **Menu lateral simplificado pelo Xmind** do Rodrigo                                     | José, 30/07                  | ❌                                                                           |
 | R-098 | Identidade visual **Cicluz Gestão Profissional** substitui Pralis                       | José, 30/07                  | ✅ sidebar, login, metadados e assets antigos removidos                      |
 | R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                                                  |
-| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ✅ camada visual principal revisada                                          |
+| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ⚠️ camada principal revisada; catálogo secundário/API ainda não              |
 | R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências                         |
 | R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ⚠️ breakpoints em `assets/main.css:1120-1303`; sem teste visual automatizado |
 

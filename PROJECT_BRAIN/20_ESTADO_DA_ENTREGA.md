@@ -144,8 +144,11 @@ patrimônio foram preservados. Associar itens por posição inventaria uma rela�
 **ENTREGUE em 31/07/2026.** A identidade visível agora é Cicluz Gestão Profissional no login,
 sidebar, título e favicon; os seis assets Pralis foram removidos. Os tokens fixos passaram de
 `--pralis-*` para `--marca-*`, mantendo `#6515dd` como primária e `#c0521d` exclusivamente no botão
-de acesso. Os subtítulos do "+ Novo" seguem a R-094, a camada visual principal recebeu acentuação
-e as quatro confirmações nativas foram substituídas por um único diálogo Vuetify reutilizável.
+de acesso. Os subtítulos do "+ Novo" seguem a R-094, a camada visual principal (login, navegação,
+erros globais e páginas centrais de caixa/financeiro/relatórios) recebeu acentuação e as quatro
+confirmações nativas foram substituídas por um único diálogo Vuetify reutilizável. Como o inventário
+passa de 150 strings, a revisão parou nessa camada: textos secundários de cadastro/integração e
+mensagens antigas da API ainda precisam de uma rodada própria; R-100 permanece ⚠️.
 
 ### Corujão v2 — Etapa 9
 
