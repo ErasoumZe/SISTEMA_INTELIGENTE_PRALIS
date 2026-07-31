@@ -147,6 +147,16 @@ sidebar, título e favicon; os seis assets Pralis foram removidos. Os tokens fix
 de acesso. Os subtítulos do "+ Novo" seguem a R-094, a camada visual principal recebeu acentuação
 e as quatro confirmações nativas foram substituídas por um único diálogo Vuetify reutilizável.
 
+### Corujão v2 — Etapa 9
+
+**AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas
+`❓` (o cabeçalho dizia 20, mas cinco haviam sido resolvidas nas etapas anteriores). Pelo critério
+estrito de exigir implementação e teste, o sistema cumpre **3 das 15 regras auditadas**: R-008,
+R-014 e R-095. Sete ficaram ⚠️ por existirem sem prova automatizada completa (R-006, R-025,
+R-027, R-028, R-031, R-078 e R-102) e cinco ficaram ❌: R-007,
+R-010, R-013, R-024 e R-079 (cinco regras). A soma correta é 3 ✅ + 7 ⚠️ + 5 ❌ = 15.
+As evidências por arquivo e linha estão na coluna Status do `19`.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

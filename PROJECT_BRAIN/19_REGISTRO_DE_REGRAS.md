@@ -266,41 +266,41 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### DINHEIRO E CAIXA
 
-| Id    | Regra                                                                                                          | Origem                                                                | Status                                  | Teste               |
-| ----- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------- | ------------------- |
-| R-001 | O dinheiro que vem do cofre para o caixa é **fundo de troco**, não empréstimo. O caixa não nasce devendo       | José, 24/07 — _"agora é fundo mesmo"_                                 | ✅                                      | `conta-fundo-saldo` |
-| R-002 | 🚫 ~~A transferência do malote deixa o caixa em déficit com o cofre~~                                          | José, 22/07                                                           | 🚫 revogada por R-001                   | —                   |
-| R-003 | 🚫 ~~O valor que sai do cofre entra no caixa como despesa~~                                                    | José, 22/07                                                           | 🚫 revogada por R-001                   | —                   |
-| R-004 | Saldo da conta = **fundo + entradas − saídas**, derivado. A coluna do fundo nunca é sobrescrita                | José, 29/07 (D8)                                                      | ✅                                      | `conta-saldo`       |
-| R-005 | O filtro de dinheiro é sempre `computar = true AND status <> 'cancelado'` (ADR-001), igual no caixa e na conta | `17` §6                                                               | ✅                                      | integração          |
-| R-006 | Dinheiro só sai do cofre dentro de malote lacrado                                                              | José, 22/07                                                           | ❓                                      | —                   |
-| R-007 | Só o dinheiro **físico** transita pelo caixa; cartão e crediário não                                           | `02` (simulação Mobills)                                              | ❓                                      | —                   |
-| R-008 | O caixa fecha **zerado**; a sobra volta ao cofre por transferência de retorno                                  | **José, 30/07 (C-02)**                                                | ❓                                      | —                   |
-| R-009 | Fechamento com diferença **exige confirmação na tela** antes de salvar                                         | José, 24/07                                                           | ⚠️ usa `window.confirm` nativo          | —                   |
-| R-010 | Fechamento com diferença **registra quem** fechou                                                              | José, 24/07                                                           | ❓                                      | —                   |
-| R-011 | Fechamento com diferença **notifica** tesoureiro, gerente, financeiro e admin                                  | José, 24/07                                                           | ❌                                      | —                   |
-| R-015 | Diferença no fechamento é **atribuída ao usuário do caixa**                                                    | **José, 30/07 (C-02)** — _"diferença atribuída a usuário caso tenha"_ | ⚠️ tela faz, mas dá "Erro interno" (D3) | —                   |
-| R-012 | Venda nunca é gravada com data futura; o dia é o `diaNegocio()` em `America/Sao_Paulo`                         | José, 23/07 (bug de fuso)                                             | ✅                                      | unit                |
-| R-013 | Caixa fechado não recebe venda                                                                                 | José                                                                  | ❓                                      | —                   |
-| R-014 | O caixa registra as vendas de **todo o período** do turno                                                      | José                                                                  | ❓                                      | —                   |
+| Id    | Regra                                                                                                          | Origem                                                                | Status                                                                         | Teste               |
+| ----- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------- |
+| R-001 | O dinheiro que vem do cofre para o caixa é **fundo de troco**, não empréstimo. O caixa não nasce devendo       | José, 24/07 — _"agora é fundo mesmo"_                                 | ✅                                                                             | `conta-fundo-saldo` |
+| R-002 | 🚫 ~~A transferência do malote deixa o caixa em déficit com o cofre~~                                          | José, 22/07                                                           | 🚫 revogada por R-001                                                          | —                   |
+| R-003 | 🚫 ~~O valor que sai do cofre entra no caixa como despesa~~                                                    | José, 22/07                                                           | 🚫 revogada por R-001                                                          | —                   |
+| R-004 | Saldo da conta = **fundo + entradas − saídas**, derivado. A coluna do fundo nunca é sobrescrita                | José, 29/07 (D8)                                                      | ✅                                                                             | `conta-saldo`       |
+| R-005 | O filtro de dinheiro é sempre `computar = true AND status <> 'cancelado'` (ADR-001), igual no caixa e na conta | `17` §6                                                               | ✅                                                                             | integração          |
+| R-006 | Dinheiro só sai do cofre dentro de malote lacrado                                                              | José, 22/07                                                           | ⚠️ exige lacre em `transferencias.service.ts:36`, sem teste de cofre           | —                   |
+| R-007 | Só o dinheiro **físico** transita pelo caixa; cartão e crediário não                                           | `02` (simulação Mobills)                                              | ❌ `caixa.repository.ts:748` soma toda venda, sem filtrar forma                | —                   |
+| R-008 | O caixa fecha **zerado**; a sobra volta ao cofre por transferência de retorno                                  | **José, 30/07 (C-02)**                                                | ✅ `caixa.service.ts:548`; `caixa-fluxo-completo.test.ts:166`                  | integração          |
+| R-009 | Fechamento com diferença **exige confirmação na tela** antes de salvar                                         | José, 24/07                                                           | ⚠️ usa `window.confirm` nativo                                                 | —                   |
+| R-010 | Fechamento com diferença **registra quem** fechou                                                              | José, 24/07                                                           | ❌ schema `app.schema.ts:1607` não possui `fechado_por`                        | —                   |
+| R-011 | Fechamento com diferença **notifica** tesoureiro, gerente, financeiro e admin                                  | José, 24/07                                                           | ❌                                                                             | —                   |
+| R-015 | Diferença no fechamento é **atribuída ao usuário do caixa**                                                    | **José, 30/07 (C-02)** — _"diferença atribuída a usuário caso tenha"_ | ⚠️ tela faz, mas dá "Erro interno" (D3)                                        | —                   |
+| R-012 | Venda nunca é gravada com data futura; o dia é o `diaNegocio()` em `America/Sao_Paulo`                         | José, 23/07 (bug de fuso)                                             | ✅                                                                             | unit                |
+| R-013 | Caixa fechado não recebe venda                                                                                 | José                                                                  | ❌ `integracoes.repository.ts:601` aceita importação tardia no período fechado | —                   |
+| R-014 | O caixa registra as vendas de **todo o período** do turno                                                      | José                                                                  | ✅ `caixa.repository.ts:686`; `alteracao-horario-revinculacao.test.ts:105`     | integração          |
 
 ### LACRE E TRANSFERÊNCIA
 
-| Id    | Regra                                                                                   | Origem                             | Status                        | Teste |
-| ----- | --------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------- | ----- |
-| R-020 | Contas nascem com o saldo da planilha como fundo, somente sem movimento anterior        | José, 31/07                        | ✅ aplicado no dev com guarda | seed  |
-| R-021 | O lacre é um número único, de fonte física externa, **digitado à mão**                  | José                               | ✅                            | —     |
-| R-022 | **Não existe tela para criar malote.** O lacre nasce inline na transferência            | José, 27/07 (repetido 3×)          | ⚠️ tela oculta, não removida  | —     |
-| R-023 | O campo "malote (saco)" **não deve existir** na tela                                    | José — _"ja falei duzentas vezes"_ | ✅ removido                   | —     |
-| R-024 | A transferência com lacre do cofre para o caixa **gera** o malote                       | José                               | ❓                            | —     |
-| R-025 | Lacre obrigatório na ida                                                                | José                               | ❓                            | —     |
-| R-026 | Lacre do retorno: **ver C-01** — obrigatório vs. opcional                               | José (as duas)                     | ⚠️ **contradição**            | —     |
-| R-027 | Cada movimento consome um lacre novo                                                    | `02`                               | ❓                            | —     |
-| R-028 | Transferência tem duas pontas: quem envia e quem **confirma o recebimento**             | FOTO 1                             | ❓                            | —     |
-| R-029 | Transferência pode ser **agendada**                                                     | FOTO 1                             | ❌                            | —     |
-| R-030 | Transferência aceita **múltiplo destino** (rateio)                                      | FOTO 1                             | ❌                            | —     |
-| R-031 | Retorno/sangria vive **no mesmo formulário** da transferência (checkbox que expande)    | FOTO 1                             | ❓                            | —     |
-| R-032 | **Transferência entre contas NÃO exige caixa aberto** — ela é o que habilita a abertura | derivado de R-024 + FOTO 5         | ❌ **bloqueia o fluxo novo**  | —     |
+| Id    | Regra                                                                                   | Origem                             | Status                                                                  | Teste |
+| ----- | --------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- | ----- |
+| R-020 | Contas nascem com o saldo da planilha como fundo, somente sem movimento anterior        | José, 31/07                        | ✅ aplicado no dev com guarda                                           | seed  |
+| R-021 | O lacre é um número único, de fonte física externa, **digitado à mão**                  | José                               | ✅                                                                      | —     |
+| R-022 | **Não existe tela para criar malote.** O lacre nasce inline na transferência            | José, 27/07 (repetido 3×)          | ⚠️ tela oculta, não removida                                            | —     |
+| R-023 | O campo "malote (saco)" **não deve existir** na tela                                    | José — _"ja falei duzentas vezes"_ | ✅ removido                                                             | —     |
+| R-024 | A transferência com lacre do cofre para o caixa **gera** o malote                       | José                               | ❌ `transferencias.repository.ts:81` gera `lacre`, não `malote`         | —     |
+| R-025 | Lacre obrigatório na ida                                                                | José                               | ⚠️ validado em `transferencias.service.ts:36`, sem teste                | —     |
+| R-026 | Lacre do retorno: **ver C-01** — obrigatório vs. opcional                               | José (as duas)                     | ⚠️ **contradição**                                                      | —     |
+| R-027 | Cada movimento consome um lacre novo                                                    | `02`                               | ⚠️ `app.schema.ts:1601` impede reuso; sem teste da transferência manual | —     |
+| R-028 | Transferência tem duas pontas: quem envia e quem **confirma o recebimento**             | FOTO 1                             | ⚠️ `transferencias.repository.ts:157`, sem teste de integração          | —     |
+| R-029 | Transferência pode ser **agendada**                                                     | FOTO 1                             | ❌                                                                      | —     |
+| R-030 | Transferência aceita **múltiplo destino** (rateio)                                      | FOTO 1                             | ❌                                                                      | —     |
+| R-031 | Retorno/sangria vive **no mesmo formulário** da transferência (checkbox que expande)    | FOTO 1                             | ⚠️ `OperacaoTransferenciaModal.vue:189`, sem teste de componente        | —     |
+| R-032 | **Transferência entre contas NÃO exige caixa aberto** — ela é o que habilita a abertura | derivado de R-024 + FOTO 5         | ❌ **bloqueia o fluxo novo**                                            | —     |
 
 ### LANÇAMENTO
 
@@ -333,36 +333,36 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### PERMISSÃO
 
-| Id    | Regra                                                                                   | Origem      | Status                          |
-| ----- | --------------------------------------------------------------------------------------- | ----------- | ------------------------------- |
-| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅                              |
-| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅                              |
-| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅                              |
-| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅                              |
-| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅                              |
-| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅                              |
-| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ✅ matriz de referência + teste |
-| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ✅ matriz de referência + teste |
-| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ❓                              |
-| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ❓                              |
+| Id    | Regra                                                                                   | Origem      | Status                                                                      |
+| ----- | --------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------- |
+| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅                                                                          |
+| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅                                                                          |
+| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅                                                                          |
+| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅                                                                          |
+| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅                                                                          |
+| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅                                                                          |
+| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ✅ matriz de referência + teste                                             |
+| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ✅ matriz de referência + teste                                             |
+| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ⚠️ `utils/domain.ts:437` + `WorkspaceDialogs.vue:848`; sem teste            |
+| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ❌ `db/seed.ts:401` cobre 10 cargos e deixa `Operador de caixa` sem usuário |
 
 ### UI E MENU
 
-| Id    | Regra                                                                                   | Origem                       | Status                                                  |
-| ----- | --------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------- |
-| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ✅ ação e implementação únicas em `AppShell.vue`        |
-| R-091 | Fechamento existe somente dentro de `/caixa`; rota de notificações é `/pendencias`      | José (repetido)              | ✅ páginas e componente antigos removidos               |
-| R-092 | Modal único com **3 botões no topo** (despesa/mercadoria/retirada)                      | José                         | ✅                                                      |
-| R-093 | "+ Novo" tem **só** Entradas · Transferências · Saídas                                  | José                         | ✅                                                      |
-| R-094 | Subtítulos: "Vendas e faturamento" · "Entre contas" · "Despesa, mercadoria ou retirada" | José, 30/07                  | ✅ `utils/domain.ts`                                    |
-| R-095 | "Lançamentos" é categoria do menu; as listagens seguem separadas por categoria          | José (D6)                    | ❓                                                      |
-| R-096 | Entradas lista **todas** as do dia, paginada                                            | José (D7)                    | ✅ `87ea945` — 16 testes de front + 6 de integração     |
-| R-097 | **Menu lateral simplificado pelo Xmind** do Rodrigo                                     | José, 30/07                  | ❌                                                      |
-| R-098 | Identidade visual **Cicluz Gestão Profissional** substitui Pralis                       | José, 30/07                  | ✅ sidebar, login, metadados e assets antigos removidos |
-| R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                             |
-| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ✅ camada visual principal revisada                     |
-| R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências    |
-| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ❓                                                      |
+| Id    | Regra                                                                                   | Origem                       | Status                                                                       |
+| ----- | --------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ✅ ação e implementação únicas em `AppShell.vue`                             |
+| R-091 | Fechamento existe somente dentro de `/caixa`; rota de notificações é `/pendencias`      | José (repetido)              | ✅ páginas e componente antigos removidos                                    |
+| R-092 | Modal único com **3 botões no topo** (despesa/mercadoria/retirada)                      | José                         | ✅                                                                           |
+| R-093 | "+ Novo" tem **só** Entradas · Transferências · Saídas                                  | José                         | ✅                                                                           |
+| R-094 | Subtítulos: "Vendas e faturamento" · "Entre contas" · "Despesa, mercadoria ou retirada" | José, 30/07                  | ✅ `utils/domain.ts`                                                         |
+| R-095 | "Lançamentos" é categoria do menu; as listagens seguem separadas por categoria          | José (D6)                    | ✅ `utils/menu.test.ts:124-139`                                              |
+| R-096 | Entradas lista **todas** as do dia, paginada                                            | José (D7)                    | ✅ `87ea945` — 16 testes de front + 6 de integração                          |
+| R-097 | **Menu lateral simplificado pelo Xmind** do Rodrigo                                     | José, 30/07                  | ❌                                                                           |
+| R-098 | Identidade visual **Cicluz Gestão Profissional** substitui Pralis                       | José, 30/07                  | ✅ sidebar, login, metadados e assets antigos removidos                      |
+| R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                                                  |
+| R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ✅ camada visual principal revisada                                          |
+| R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências                         |
+| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ⚠️ breakpoints em `assets/main.css:1120-1303`; sem teste visual automatizado |
 
 ### PROCESSO (o contrato de trabalho)
 
@@ -391,5 +391,5 @@ Um registro que ninguém consulta é igual a não ter registro. O que o torna re
    porque `data-pendente` é a marca física de "campo que aparece e não salva", que é exatamente
    como R-041…R-046 morreram.
 3. **Toda entrega atualiza a coluna Status aqui.** Sem isso, em três dias este arquivo mente.
-4. **❓ é dívida, não conforto.** Cada `❓` significa que eu ainda não olhei o código. São 18.
-   Enquanto forem `❓`, não sabemos se o sistema faz o que você pediu.
+4. **❓ é dívida, não conforto.** A auditoria de 31/07 eliminou os 15 `❓` restantes:
+   3 regras comprovadas, 8 parciais/sem teste e 4 ausentes ou contrariadas pelo código.
