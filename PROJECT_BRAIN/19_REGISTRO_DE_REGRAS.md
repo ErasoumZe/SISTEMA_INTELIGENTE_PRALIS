@@ -333,25 +333,25 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 
 ### PERMISSÃO
 
-| Id    | Regra                                                                                   | Origem      | Status |
-| ----- | --------------------------------------------------------------------------------------- | ----------- | ------ |
-| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅     |
-| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅     |
-| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅     |
-| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅     |
-| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅     |
-| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅     |
-| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ❓     |
-| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ❓     |
-| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ❓     |
-| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ❓     |
+| Id    | Regra                                                                                   | Origem      | Status                          |
+| ----- | --------------------------------------------------------------------------------------- | ----------- | ------------------------------- |
+| R-070 | **Só o admin tem todas** as permissões                                                  | José        | ✅                              |
+| R-071 | Usuário **sem vínculo não vê nenhuma conta**; admin vê todas                            | José, 27/07 | ✅                              |
+| R-072 | Ao cadastrar conta, o admin escolhe o **fundo** e **quem opera** — no mesmo salvar      | José (D8)   | ✅                              |
+| R-073 | Lançamentos aparece sempre para gerência, tesouraria, financeiro, diretor geral e admin | José        | ✅                              |
+| R-074 | Para o cargo **Caixa**, Lançamentos só com caixa aberto                                 | José        | ✅                              |
+| R-075 | Recorrência: só admin, gerência e financeiro (403 para os demais)                       | José (D3)   | ✅                              |
+| R-076 | **Gerência efetua, financeiro paga**                                                    | José        | ✅ matriz de referência + teste |
+| R-077 | Conferência é do financeiro, gerência e tesouraria                                      | José        | ✅ matriz de referência + teste |
+| R-078 | Permissões organizadas por módulo                                                       | José (D12)  | ❓                              |
+| R-079 | Existe um usuário de teste para **cada** cargo                                          | José        | ❓                              |
 
 ### UI E MENU
 
 | Id    | Regra                                                                                   | Origem                       | Status                                              |
 | ----- | --------------------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------- |
-| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ⚠️ auditoria achou 3 lugares                        |
-| R-091 | **Sem seletor de mês** na topbar                                                        | José (repetido)              | ✅                                                  |
+| R-090 | **Um único botão Sair**, no menu do perfil                                              | José (repetido 3×)           | ✅ ação e implementação únicas em `AppShell.vue`    |
+| R-091 | Fechamento existe somente dentro de `/caixa`; rota de notificações é `/pendencias`      | José (repetido)              | ✅ páginas e componente antigos removidos           |
 | R-092 | Modal único com **3 botões no topo** (despesa/mercadoria/retirada)                      | José                         | ✅                                                  |
 | R-093 | "+ Novo" tem **só** Entradas · Transferências · Saídas                                  | José                         | ✅                                                  |
 | R-094 | Subtítulos: "Vendas e faturamento" · "Entre contas" · "Despesa, mercadoria ou retirada" | José, 30/07                  | ❌ pendente                                         |

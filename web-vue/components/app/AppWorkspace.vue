@@ -128,7 +128,6 @@ const carregando = ref(!workspaceCarregado.value);
 const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
 const erro = ref("");
-const saindo = ref(false);
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
@@ -457,23 +456,6 @@ function notificar(text: string, color = "success") {
   snackbar.text = text;
   snackbar.color = color;
   snackbar.show = true;
-}
-
-function limparWorkspacePersistido() {
-  workspaceCarregado.value = false;
-  sessao.value = null;
-  opcoes.value = opcoesVazias();
-  empresas.value = [];
-  operacoes.value = [];
-  resumo.value = null;
-  caixaStatus.value = null;
-  notificacoes.value.splice(0);
-  empresaSelecionadaId.value = "";
-  tema.value = temaPadrao();
-  temaAtual.value = temaPadrao();
-  temaResumoCaixa.value = temaPadrao();
-  temaTelaAtual.value = "";
-  temaResumoCaixaAtual.value = "";
 }
 
 function atualizarDocumentoCadastro(valor: string) {
@@ -1605,21 +1587,6 @@ const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional 
   confirmar: (mensagem) => window.confirm(mensagem)
 });
 
-async function logout() {
-  saindo.value = true;
-  try {
-    try {
-      await fetch(`${apiUrl}/api/auth/sign-out`, { method: "POST", credentials: "include" });
-    } catch {
-      // Se a API estiver fora, o logout local ainda precisa liberar a tela.
-    }
-    limparWorkspacePersistido();
-    await router.push("/login");
-  } finally {
-    saindo.value = false;
-  }
-}
-
 function abrirImportacao(tela = telaAtiva.value) {
   copiaModo.value = "importar";
   copiaTipo.value = tipoCopiaTela(tela);
@@ -1941,9 +1908,7 @@ onBeforeUnmount(() => {
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
-    :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
-    @logout="logout"
     @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>

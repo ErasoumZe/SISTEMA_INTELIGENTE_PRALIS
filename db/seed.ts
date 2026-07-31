@@ -276,12 +276,12 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
     ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
-    // Mantido em paridade com db/src/referencia-permissoes.ts (producao): tambem gerencia os LACRES.
+    // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
     extras: [
       "cadastro_malotes_criar",
       "cadastro_malotes_editar",
       "transferencias_criar",
-      "transferencias_conferir",
+      ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar",
       "cadastro_lacres_editar"
@@ -392,16 +392,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "cadastro_formas_pagamento_criar",
       // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
       "lancamentos_recorrencia_criar",
-      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e *_dpago.
-      ...acoesLancamentoPorDominio(
-        "pagar",
-        "efetuar",
-        "conferir",
-        "editar_dpago",
-        "visualizar_dpago",
-        "excluir",
-        "excluir_dpago"
-      )
+      // R-076/R-077: Financeiro paga e confere, sem efetuar; mantem as variantes *_dpago.
+      ...acoesLancamentoPorDominio("pagar", "conferir", "editar_dpago", "visualizar_dpago", "excluir", "excluir_dpago")
     ]
   })
 };

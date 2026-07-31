@@ -112,6 +112,17 @@ lançamento recorrente oferece cancelamento da série; o servidor remove somente
 sem pagamento e preserva o atual, os passados e os pagos. Provas: 16 testes unitários de recorrência
 e 11 testes de integração, incluindo uma série com o segundo lançamento pago.
 
+### Corujão v2 — Etapa 6
+
+**ENTREGUE em 31/07/2026.** O logout tem uma única implementação e um único botão, no menu do perfil
+de `AppShell`. O modal operacional genérico sem entrada alcançável foi removido; permanecem somente
+os modais próprios de lançamento e transferência. Os antigos `fechamento.vue` e
+`FechamentoCaixaPage.vue` já tinham sido removidos e a rota de notificações é `/pendencias`. A matriz
+agora é exclusiva: Gerência efetua, Financeiro paga, e Financeiro/Gerência/Tesouraria conferem os
+quatro domínios; admin continua recebendo o catálogo completo. O item Entradas do “+ Novo” já era
+filtrado por `entradas_visualizar`, com prova em `menu.test.ts`. A edição de Conta permanece coberta
+pelo teste de integração entregue em `8c9843f`.
+
 ### Reposição do cadastro dev e bloqueio de edição de Conta (31/07)
 
 Após a recriação do banco dev, `npm run seed:planilha` foi executado primeiro em dry-run. O filtro

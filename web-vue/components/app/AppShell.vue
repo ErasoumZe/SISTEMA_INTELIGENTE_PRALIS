@@ -16,19 +16,36 @@ const props = defineProps<{
   telasDesabilitadas?: string[];
   motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
-  saindo: boolean;
   notificacoes?: Notificacao[];
 }>();
 
 const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
-  (event: "logout"): void;
   (event: "verificarNotificacao", id: string): void;
 }>();
 
 const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
+const saindo = ref(false);
+const router = useRouter();
+
+async function sair() {
+  saindo.value = true;
+  try {
+    try {
+      await fetch(`${useRuntimeConfig().public.apiUrl || "http://localhost:4100"}/api/auth/sign-out`, {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch {
+      // A sessao local ainda precisa sair mesmo quando a API estiver indisponivel.
+    }
+    await router.push("/login");
+  } finally {
+    saindo.value = false;
+  }
+}
 
 const { escuro, inicializar: inicializarModoEscuro, alternar: alternarModoEscuro } = useModoEscuro();
 
@@ -303,7 +320,7 @@ onMounted(() => {
             <v-list min-width="240" density="compact">
               <v-list-item :title="nomeUsuario" :subtitle="emailUsuario" />
               <v-divider />
-              <v-list-item prepend-icon="mdi-logout" title="Sair" :disabled="saindo" @click="emit('logout')" />
+              <v-list-item prepend-icon="mdi-logout" title="Sair" :disabled="saindo" @click="sair" />
             </v-list>
           </v-menu>
 

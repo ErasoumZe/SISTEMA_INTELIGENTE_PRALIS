@@ -35,7 +35,6 @@ const empresaId = ref("");
 const caixaStatus = ref<CaixaStatus | null>(null);
 const carregando = ref(true);
 const empresaCarregando = ref(false);
-const saindo = ref(false);
 const erro = ref("");
 const aba = ref("chaves");
 const tipoSelecionado = ref<TipoIntegracao>("vendas");
@@ -153,23 +152,6 @@ function itensVinculo(vinculo: IntegracaoVinculoDto) {
 
 function tituloOpcao(item: Opcao) {
   return item.nome || item.descricao || item.codigo || item.id;
-}
-
-async function sair() {
-  saindo.value = true;
-  try {
-    try {
-      await fetch(`${useRuntimeConfig().public.apiUrl || "http://localhost:4100"}/api/auth/sign-out`, {
-        method: "POST",
-        credentials: "include"
-      });
-    } catch {
-      // Se a API estiver fora, o logout local ainda precisa liberar a tela.
-    }
-    await router.push("/login");
-  } finally {
-    saindo.value = false;
-  }
 }
 
 async function carregarEmpresas() {
@@ -374,9 +356,7 @@ onMounted(async () => {
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
-    :saindo="saindo"
     @selecionar-empresa="trocarEmpresa"
-    @logout="sair"
   >
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 

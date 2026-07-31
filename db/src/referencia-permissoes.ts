@@ -153,14 +153,13 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
     ativas: ["malotes", "transferencias", "despesas", "mercadorias", "retiradas"],
-    // Lanca transferencia + CONFERE (D7 — conferencia = Financeiro/Gerencia/Tesouraria). Confere no
-    // dominio que acessa (transferencias); os demais dominios ela nao ve. Tambem gerencia os LACRES
-    // (selo do movimento), espelhando o cadastro de malotes.
+    // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
+    // gerencia os LACRES (selo do movimento), espelhando o cadastro de malotes.
     extras: [
       "cadastro_malotes_criar",
       "cadastro_malotes_editar",
       "transferencias_criar",
-      "transferencias_conferir",
+      ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar",
       "cadastro_lacres_editar"
@@ -272,17 +271,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_formas_pagamento_criar",
       // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
       "lancamentos_recorrencia_criar",
-      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e as
-      // variantes *_dpago (mexer em lancamento ja pago). E o unico cargo com _dpago (fora o admin).
-      ...acoesLancamentoPorDominio(
-        "pagar",
-        "efetuar",
-        "conferir",
-        "editar_dpago",
-        "visualizar_dpago",
-        "excluir",
-        "excluir_dpago"
-      )
+      // R-076/R-077: Financeiro PAGA e CONFERE, mas nao efetua. Tambem e o unico cargo comum com
+      // as variantes *_dpago (mexer em lancamento ja pago).
+      ...acoesLancamentoPorDominio("pagar", "conferir", "editar_dpago", "visualizar_dpago", "excluir", "excluir_dpago")
     ]
   })
 };
