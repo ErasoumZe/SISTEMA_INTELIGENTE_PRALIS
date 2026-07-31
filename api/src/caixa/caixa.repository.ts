@@ -315,9 +315,9 @@ export async function listarUsuariosTesourariaRepository(empresaId: string, db: 
     );
 }
 
-// --- Abertura com malote (M1, R8) -------------------------------------------------------------
-// Conta contabil do cofre da empresa (origem da transferencia de abertura). Regra 5: mapeamento
-// explicito; null quando a empresa nao configurou (a abertura com malote falha com mensagem clara).
+// --- Abertura por LACRE (R-040) e retorno ao cofre ---------------------------------------------
+// Conta contabil do cofre da empresa: DESTINO do retorno/sangria do caixa (R-008b). Regra 5:
+// mapeamento explicito; null quando a empresa nao configurou (o retorno falha com mensagem clara).
 export async function buscarContaCofreEmpresaRepository(
   empresaId: string,
   db: ExecutorBanco = banco
@@ -420,7 +420,7 @@ export async function proximaOrdemTransferenciaRepository(
 }
 
 // Lacre do RETORNO/sangria (R-026: opcional; R-027: numero novo a cada movimento). Nasce nao
-// rompido — a volta so e "recebida" quando a tesouraria confere o malote no cofre.
+// rompido — a volta so e "recebida" quando a tesouraria confere o dinheiro no cofre.
 export async function criarLacreRetornoRepository(
   input: { empresaId: string; numero: string; transferenciaId: string },
   db: ExecutorBanco = banco

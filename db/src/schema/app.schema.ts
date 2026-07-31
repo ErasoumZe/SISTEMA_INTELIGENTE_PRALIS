@@ -111,8 +111,8 @@ export const empresas = pgTable("empresas", {
     .default(
       sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
     ),
-  // Conta contabil do COFRE da empresa (origem da transferencia automatica de abertura do caixa).
-  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, a abertura com malote falha em vez de inventar conta.
+  // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
+  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
   contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
   criadoEm
 });
@@ -1472,11 +1472,12 @@ export const transferencias = pgTable(
     confirmadoPor: text("confirmado_por").references(() => perfisUsuarios.usuarioId),
     travaLiberadaPor: text("trava_liberada_por").references(() => perfisUsuarios.usuarioId),
     travaLiberadaEm: timestamp("trava_liberada_em", { withTimezone: true }),
-    // O malote/lacre envolvido na transferencia (abertura usa o malote de abertura; sangria/retorno
     // R-040: `malote_id` foi removida. O lacre da transferencia esta em `n_lacre_doc` (digitado) e
     // em `lacres` (o selo do movimento, com `rompido`). Migration 0026 fez o backfill antes do drop.
-    // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
-    // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
+    //
+    // Papel da transferencia. `abertura` NAO nasce assim: a tesouraria cria como `suprimento` e ela
+    // vira `abertura` no instante em que um caixa a reivindica pelo lacre (R-040). `sangria`/
+    // `retorno` sao manuais (R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
     tipo: text("tipo").notNull().default("suprimento"),
     // M2 (rascunho Rodrigo): data REAL do movimento fisico (separada de dataReferencia contabil e do
     // criadoEm), vencimento e classificacao contabil (paridade com o lancamento da planilha), e o
@@ -1563,11 +1564,10 @@ export const contasUsuarios = pgTable(
 // por empresa. `rompido` vira true quando o lacre e usado para receber/abrir no destino (o selo e
 // quebrado) — a partir dai nunca mais pode ser reutilizado. Reconstrucao do trabalho de 24/07.
 //
-// DISTINCAO de `malotes.numero_lacre` (sao coisas diferentes, nao confundir):
-//   - `malotes.numero_lacre` = IDENTIDADE do malote-ENTIDADE (o objeto fisico cadastrado, colapsado
-//     com o lacre na D3). E cadastro de objeto reutilizavel.
-//   - `lacres.numero`        = selo de um EVENTO de transporte: a prova de que UMA transferencia
-//     especifica saiu lacrada e foi recebida. E o "lacre do setor" da FOTO 1.
+// Desde a R-040 esta e a UNICA tabela de lacre: `malotes.numero_lacre` (a identidade do
+// malote-ENTIDADE, um objeto reutilizavel de cadastro) deixou de existir. `lacres.numero` e o selo
+// de um EVENTO de transporte — a prova de que UMA transferencia especifica saiu lacrada e foi
+// recebida. E o "lacre do setor" da FOTO 1.
 export const lacres = pgTable(
   "lacres",
   {
