@@ -161,11 +161,20 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 
 #### O dinheiro em trânsito e o prazo (José, 31/07)
 
-| Id           | Regra                                                                                                                                                                                        |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa |
-| **R-037** 🆕 | Estourado o tempo de confirmação (R-035), o sistema **trava** quem enviou **e** quem deveria ter confirmado. **Ambos recebem notificação**                                                   |
-| **R-038** 🆕 | O bloco Retorno/Sangria da FOTO 1 são **sangrias independentes** do dia — cada linha é uma transferência própria, agrupadas na mesma tela por comodidade                                     |
+| Id           | Regra                                                                                                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R-036** 🆕 | O valor **sai da origem no momento em que a transferência é criada**, e fica como **SALDO PENDENTE** até alguém confirmar. Espelha o físico: o malote saiu do cofre antes de chegar ao caixa                                              |
+| **R-037** 🆕 | Estourado o tempo de confirmação (R-035), o sistema **trava** quem enviou **e** quem deveria ter confirmado. **Ambos recebem notificação**                                                                                                |
+| **R-038** 🆕 | O bloco Retorno/Sangria da FOTO 1 são **sangrias independentes** do dia — cada linha é uma transferência própria, agrupadas na mesma tela por comodidade                                                                                  |
+| **R-039** 🆕 | **Maquininha de cartão tem cadastro próprio** (nº de série, apelido, empresa), escolhida na abertura de caixa. **Preencher é OPCIONAL** e continua assim. Vem da FOTO 5 — são os 3 `data-pendente` de `CaixaResumoPage.vue` (José, 31/07) |
+
+### ⚠️ Correção de status (31/07) — o registro estava mentindo
+
+**R-041** (juros em R$ ou %) e **R-042** (Valor Total) apareciam como ❌ e foram **entregues** nos
+commits `655a91e` e `ef6bcc9`, com 11 testes na regra pura e o servidor recalculando. Passam a ✅.
+
+É o defeito que o §4 deste arquivo previu: status não atualizado junto com a entrega faz o registro
+mentir em dois dias. **Atualizar o status é parte da entrega, no mesmo commit.**
 
 > **Acréscimo meu à R-037, para o José vetar se quiser:** travar um operador no meio do turno pode
 > parar a padaria. Proponho que **tesouraria ou admin possa liberar a trava**, com registro de quem
