@@ -5,8 +5,8 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, type PerfilTeste } from "../../setup/contexto.js";
 
 // Matriz cargo x operacao de caixa (Fase 3). Prova os GATES DE PERMISSAO por rota, por perfil
-// do seed. Perfis: admin (todas), caixa (caixa_operar + entradas), gerente/tesouraria (sem
-// caixa), semPermissao (nenhuma). Complementa a prova generica de hierarquia (usuario>cargo>
+// do seed. Perfis: admin (todas), caixa (caixa_operar + entradas), gerente (opera e gerencia),
+// tesouraria (sem caixa) e semPermissao (nenhuma). Complementa a prova generica de hierarquia (usuario>cargo>
 // setor) com a cobertura especifica das rotas de caixa que faltava.
 describe("caixa permissoes por cargo integration", () => {
   let contexto: ContextoApiTeste;
@@ -27,7 +27,7 @@ describe("caixa permissoes por cargo integration", () => {
   it.each([
     ["admin", 200],
     ["caixa", 200],
-    ["gerente", 403],
+    ["gerente", 200],
     ["tesouraria", 403],
     ["semPermissao", 403]
   ] as const)("status do caixa: perfil %s espera %i", async (perfil, status) => {
@@ -44,7 +44,7 @@ describe("caixa permissoes por cargo integration", () => {
   it.each([
     ["admin", 200],
     ["caixa", 403],
-    ["gerente", 403],
+    ["gerente", 200],
     ["semPermissao", 403]
   ] as const)("historico do caixa: perfil %s espera %i", async (perfil, status) => {
     const resposta = await contexto.app.inject({
@@ -56,7 +56,7 @@ describe("caixa permissoes por cargo integration", () => {
     else assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 
-  it("Deve_Bloquear_Quando_GerenteTentaAbrirCaixaSemCaixaOperar", async () => {
+  it("Deve_PassarGateDePermissao_Quando_GerenteTentaAbrirCaixa", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -68,7 +68,9 @@ describe("caixa permissoes por cargo integration", () => {
         dataHoraAbertura: "2026-07-03T08:00"
       }
     });
-    assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
+    // Gerência tem caixa_operar na matriz vigente. O 400 vem da validação do usuário/PDV informado,
+    // depois do gate; um 403 indicaria regressão da permissão.
+    assertProblem(resposta, 400);
   });
 
   it("Deve_Bloquear_Quando_SemPermissaoTentaRetornarSaldo", async () => {

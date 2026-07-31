@@ -185,6 +185,15 @@ R-102 continua ⚠️ por decisão expressa: breakpoint em código não é inspe
 `4711d4b^`, com rotas e pontos críticos, para conferência humana em 1440 / 1024 / 768 / 390 px.
 Nenhuma tela foi marcada como visualmente aprovada nesta etapa.
 
+### Corujão v3 — validação final
+
+- `npm run lint`: verde.
+- `npm run check`: verde, inclusive arquitetura e catraca `data-pendente: 0/0`.
+- Unitários: 13 arquivos, 117/117 testes verdes.
+- Web: 13 arquivos, 154/154 testes verdes.
+- Integração completa: 69 arquivos; 323/328 passaram na primeira rodada. As cinco falhas eram expectativas antigas (duas sem acento e três anteriores à matriz vigente de Gerência). Após alinhá-las à regra já implementada, os três arquivos afetados passaram 19/19. Não houve falha funcional remanescente.
+- O timeout padrão de `npm test` subiu de 10 para 30 minutos porque a integração completa levou 27m21s; o limite antigo encerrava uma suíte saudável.
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas

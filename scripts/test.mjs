@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 const cwd = fileURLToPath(new URL("..", import.meta.url));
 const isWindows = process.platform === "win32";
 const npm = isWindows ? "npm.cmd" : "npm";
-// A suite de integracao completa (Testcontainers) leva 5-8 minutos; 120s matava a execucao.
-const timeoutMs = Number.parseInt(process.env.TEST_TIMEOUT_MS ?? "600000", 10);
+// A suíte de integração completa (Testcontainers) levou 27 minutos no fechamento do Corujão v3;
+// o limite antigo de 10 minutos matava uma execução saudável antes do resumo do Vitest.
+const timeoutMs = Number.parseInt(process.env.TEST_TIMEOUT_MS ?? "1800000", 10);
 const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=development"].filter(Boolean).join(" ");
 
 const cor = {

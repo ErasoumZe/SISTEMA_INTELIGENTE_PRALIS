@@ -145,7 +145,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
 
     const semObservacao = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {});
     assertProblem(semObservacao, 400);
-    expect(semObservacao.body).toMatch(/observacao obrigatoria/i);
+    expect(semObservacao.body).toMatch(/observação obrigatoria/i);
 
     const fechado = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {
       observacao: "Faltou dinheiro na conferência"
