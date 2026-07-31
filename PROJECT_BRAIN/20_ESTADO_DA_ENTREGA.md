@@ -178,6 +178,13 @@ quebra; (D-05) que o Coolify está em uma réplica e que uma segunda exige trava
 o descompasso entre o lacre criado pela transferência e o malote esperado pela R-024, incluindo o
 ciclo que precisa ser decidido antes da correção.
 
+### Corujão v3 — P5
+
+R-102 continua ⚠️ por decisão expressa: breakpoint em código não é inspeção visual. O relatório
+`docs/relatorios/CORUJAO-V3-RESPONSIVIDADE-PENDENTE.md` lista as 16 telas/fluxos tocados desde
+`4711d4b^`, com rotas e pontos críticos, para conferência humana em 1440 / 1024 / 768 / 390 px.
+Nenhuma tela foi marcada como visualmente aprovada nesta etapa.
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas

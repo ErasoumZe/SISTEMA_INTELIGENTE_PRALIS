@@ -371,7 +371,7 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | R-099 | Primária permanece `#6515dd`; categorias mantêm as cores da planilha                    | José, 30/07                  | ✅ decidido                                                                                                                 |
 | R-100 | **Texto de tela é português com acento.** Identificador e commit, sem                   | eu, 30/07 — aprovado por ele | ⚠️ principal + cadastros secundários + integrações revisados; API normaliza mensagens legadas; falta inspeção visual humana |
 | R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências                                                                        |
-| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ⚠️ breakpoints em `assets/main.css:1120-1303`; sem teste visual automatizado                                                |
+| R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ⚠️ exige inspeção humana; checklist de 16 telas em `CORUJAO-V3-RESPONSIVIDADE-PENDENTE.md`                                  |
 
 ### PROCESSO (o contrato de trabalho)
 
