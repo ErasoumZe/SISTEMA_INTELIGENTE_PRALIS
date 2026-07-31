@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -1605,6 +1606,7 @@ export const fechamentosCaixa = pgTable(
   },
   (table) => [
     check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
+    unique("fechamentos_caixa_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)
       .where(sql`${table.status} = 'aberto'`),
@@ -1613,32 +1615,76 @@ export const fechamentosCaixa = pgTable(
 );
 
 // Quebra de caixa (R-015..R-019/R-021): o valor tem sinal (negativo = faltou, positivo = sobrou)
-// e pertence ao usuario que operou o caixa. O saldo pendente e sempre derivado pela soma das linhas
-// nao verificadas; nao existe coluna de saldo e esta entidade jamais movimenta `contas`.
+// e pertence ao usuario que operou o caixa. O saldo pendente e derivado juntando estas linhas com
+// suas notificacoes ainda nao verificadas; nao existe coluna de saldo e esta entidade jamais
+// movimenta `contas`. A FK composta impede empresa_id divergente do fechamento no proprio banco.
 export const quebrasCaixa = pgTable(
   "quebras_caixa",
   {
     id: idUuid,
-    fechamentoCaixaId: uuid("fechamento_caixa_id")
-      .notNull()
-      .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
     usuarioId: text("usuario_id")
       .notNull()
       .references(() => perfisUsuarios.usuarioId),
     valor: valorMonetario("valor").notNull(),
     observacao: text("observacao").notNull(),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "quebras_caixa_fechamento_empresa_fk"
+    }).onDelete("cascade"),
+    unique("quebras_caixa_fechamento_unico").on(table.fechamentoCaixaId),
+    index("quebras_caixa_empresa_usuario_idx").on(table.empresaId, table.usuarioId),
+    check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`)
+  ]
+);
+
+// Caixa comum das notificacoes operacionais (R-017/R-019/R-037). Cada destinatario recebe sua
+// propria linha: no prazo de transferencia estourado, por exemplo, origem e destino sao notificados
+// sem compartilhar estado de leitura/verificacao. referencia_id aponta para a entidade do tipo
+// (quebra ou transferencia); a integridade dessa referencia polimorfica fica no servico.
+export const notificacoes = pgTable(
+  "notificacoes",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo")
+      .$type<"quebra_caixa" | "transferencia_divergencia" | "transferencia_prazo_confirmacao">()
+      .notNull(),
+    destinatarioUsuarioId: text("destinatario_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    referenciaId: uuid("referencia_id").notNull(),
+    titulo: text("titulo").notNull(),
+    valor: valorMonetario("valor"),
     verificado: boolean("verificado").notNull().default(false),
     verificadoPor: text("verificado_por").references(() => perfisUsuarios.usuarioId),
     verificadoEm: timestamp("verificado_em", { withTimezone: true }),
     criadoEm
   },
   (table) => [
-    unique("quebras_caixa_fechamento_unico").on(table.fechamentoCaixaId),
-    index("quebras_caixa_usuario_pendente_idx").on(table.usuarioId, table.verificado),
-    check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
-    check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`),
+    unique("notificacoes_tipo_destinatario_referencia_unica").on(
+      table.tipo,
+      table.destinatarioUsuarioId,
+      table.referenciaId
+    ),
+    index("notificacoes_empresa_destinatario_pendente_idx").on(
+      table.empresaId,
+      table.destinatarioUsuarioId,
+      table.verificado
+    ),
     check(
-      "quebras_caixa_verificacao_consistente_check",
+      "notificacoes_tipo_check",
+      sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao')`
+    ),
+    check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
+    check(
+      "notificacoes_verificacao_consistente_check",
       sql`(${table.verificado} = false and ${table.verificadoPor} is null and ${table.verificadoEm} is null)
         or (${table.verificado} = true and ${table.verificadoPor} is not null and ${table.verificadoEm} is not null)`
     )

@@ -1,5 +1,5 @@
 {
-  "id": "a05d755f-601a-4770-a128-fa5c6f8dbdd1",
+  "id": "8433b6ad-eaf8-42c5-b404-ece4415b4c74",
   "prevId": "bce0a65b-54e8-44de-bd8c-d4c499f74e56",
   "version": "7",
   "dialect": "postgresql",
@@ -2483,7 +2483,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "fechamentos_caixa_id_empresa_unica": {
+          "name": "fechamentos_caixa_id_empresa_unica",
+          "nullsNotDistinct": false,
+          "columns": ["id", "empresa_id"]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "fechamentos_caixa_status_check": {
@@ -5017,6 +5023,163 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notificacoes": {
+      "name": "notificacoes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuid_generate_v7()"
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destinatario_usuario_id": {
+          "name": "destinatario_usuario_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referencia_id": {
+          "name": "referencia_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titulo": {
+          "name": "titulo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor": {
+          "name": "valor",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verificado": {
+          "name": "verificado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "verificado_por": {
+          "name": "verificado_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verificado_em": {
+          "name": "verificado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "notificacoes_empresa_destinatario_pendente_idx": {
+          "name": "notificacoes_empresa_destinatario_pendente_idx",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "destinatario_usuario_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "verificado",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notificacoes_empresa_id_empresas_id_fk": {
+          "name": "notificacoes_empresa_id_empresas_id_fk",
+          "tableFrom": "notificacoes",
+          "tableTo": "empresas",
+          "columnsFrom": ["empresa_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notificacoes_destinatario_usuario_id_perfis_usuarios_usuario_id_fk": {
+          "name": "notificacoes_destinatario_usuario_id_perfis_usuarios_usuario_id_fk",
+          "tableFrom": "notificacoes",
+          "tableTo": "perfis_usuarios",
+          "columnsFrom": ["destinatario_usuario_id"],
+          "columnsTo": ["usuario_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notificacoes_verificado_por_perfis_usuarios_usuario_id_fk": {
+          "name": "notificacoes_verificado_por_perfis_usuarios_usuario_id_fk",
+          "tableFrom": "notificacoes",
+          "tableTo": "perfis_usuarios",
+          "columnsFrom": ["verificado_por"],
+          "columnsTo": ["usuario_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notificacoes_tipo_destinatario_referencia_unica": {
+          "name": "notificacoes_tipo_destinatario_referencia_unica",
+          "nullsNotDistinct": false,
+          "columns": ["tipo", "destinatario_usuario_id", "referencia_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "notificacoes_tipo_check": {
+          "name": "notificacoes_tipo_check",
+          "value": "\"notificacoes\".\"tipo\" in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao')"
+        },
+        "notificacoes_titulo_nao_vazio_check": {
+          "name": "notificacoes_titulo_nao_vazio_check",
+          "value": "length(btrim(\"notificacoes\".\"titulo\")) > 0"
+        },
+        "notificacoes_verificacao_consistente_check": {
+          "name": "notificacoes_verificacao_consistente_check",
+          "value": "(\"notificacoes\".\"verificado\" = false and \"notificacoes\".\"verificado_por\" is null and \"notificacoes\".\"verificado_em\" is null)\n        or (\"notificacoes\".\"verificado\" = true and \"notificacoes\".\"verificado_por\" is not null and \"notificacoes\".\"verificado_em\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.patrimonio_itens": {
       "name": "patrimonio_itens",
       "schema": "",
@@ -6442,6 +6605,12 @@
           "notNull": true,
           "default": "uuid_generate_v7()"
         },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "fechamento_caixa_id": {
           "name": "fechamento_caixa_id",
           "type": "uuid",
@@ -6466,25 +6635,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "verificado": {
-          "name": "verificado",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "verificado_por": {
-          "name": "verificado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "verificado_em": {
-          "name": "verificado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "criado_em": {
           "name": "criado_em",
           "type": "timestamp with time zone",
@@ -6494,17 +6644,17 @@
         }
       },
       "indexes": {
-        "quebras_caixa_usuario_pendente_idx": {
-          "name": "quebras_caixa_usuario_pendente_idx",
+        "quebras_caixa_empresa_usuario_idx": {
+          "name": "quebras_caixa_empresa_usuario_idx",
           "columns": [
             {
-              "expression": "usuario_id",
+              "expression": "empresa_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "verificado",
+              "expression": "usuario_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -6517,11 +6667,11 @@
         }
       },
       "foreignKeys": {
-        "quebras_caixa_fechamento_caixa_id_fechamentos_caixa_id_fk": {
-          "name": "quebras_caixa_fechamento_caixa_id_fechamentos_caixa_id_fk",
+        "quebras_caixa_empresa_id_empresas_id_fk": {
+          "name": "quebras_caixa_empresa_id_empresas_id_fk",
           "tableFrom": "quebras_caixa",
-          "tableTo": "fechamentos_caixa",
-          "columnsFrom": ["fechamento_caixa_id"],
+          "tableTo": "empresas",
+          "columnsFrom": ["empresa_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -6535,13 +6685,13 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "quebras_caixa_verificado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "quebras_caixa_verificado_por_perfis_usuarios_usuario_id_fk",
+        "quebras_caixa_fechamento_empresa_fk": {
+          "name": "quebras_caixa_fechamento_empresa_fk",
           "tableFrom": "quebras_caixa",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": ["verificado_por"],
-          "columnsTo": ["usuario_id"],
-          "onDelete": "no action",
+          "tableTo": "fechamentos_caixa",
+          "columnsFrom": ["fechamento_caixa_id", "empresa_id"],
+          "columnsTo": ["id", "empresa_id"],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -6562,10 +6712,6 @@
         "quebras_caixa_observacao_nao_vazia_check": {
           "name": "quebras_caixa_observacao_nao_vazia_check",
           "value": "length(btrim(\"quebras_caixa\".\"observacao\")) > 0"
-        },
-        "quebras_caixa_verificacao_consistente_check": {
-          "name": "quebras_caixa_verificacao_consistente_check",
-          "value": "(\"quebras_caixa\".\"verificado\" = false and \"quebras_caixa\".\"verificado_por\" is null and \"quebras_caixa\".\"verificado_em\" is null)\n        or (\"quebras_caixa\".\"verificado\" = true and \"quebras_caixa\".\"verificado_por\" is not null and \"quebras_caixa\".\"verificado_em\" is not null)"
         }
       },
       "isRLSEnabled": false
