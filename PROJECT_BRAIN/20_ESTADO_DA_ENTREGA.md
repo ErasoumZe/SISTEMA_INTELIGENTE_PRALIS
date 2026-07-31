@@ -193,6 +193,7 @@ Nenhuma tela foi marcada como visualmente aprovada nesta etapa.
 - Web: 13 arquivos, 154/154 testes verdes.
 - Integração completa: 69 arquivos; 323/328 passaram na primeira rodada. As cinco falhas eram expectativas antigas (duas sem acento e três anteriores à matriz vigente de Gerência). Após alinhá-las à regra já implementada, os três arquivos afetados passaram 19/19. Não houve falha funcional remanescente.
 - O timeout padrão de `npm test` subiu de 10 para 30 minutos porque a integração completa levou 27m21s; o limite antigo encerrava uma suíte saudável.
+- Auditoria canônica do §3: **64 ✅, 5 ⚠️ e 4 ❌ entre 73 regras avaliáveis**. Assim, o sistema cumpre 64 das 73 regras ativas com status. Há ainda 2 regras revogadas (🚫) e 11 regras de processo sem coluna de status, que não entram no denominador.
 
 ### Corujão v2 — Etapa 9
 
