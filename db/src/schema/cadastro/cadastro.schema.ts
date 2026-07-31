@@ -30,6 +30,7 @@ export {
   produtosPromocoes,
   produtosTransformacao,
   setores,
+  sociosGestores,
   turnos,
   unidadesMedida,
   usuariosEmpresas

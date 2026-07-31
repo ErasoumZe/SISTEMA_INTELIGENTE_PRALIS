@@ -32,18 +32,51 @@ com uma transferência de **+500**. Ou seja: **saldo da conta = fundo + entradas
 (derivado dos movimentos — não sobrescrever a coluna do fundo; o fundo é o ponto de partida).
 Isto materializa `contas.saldo_inicial` (o trabalho perdido de 24/07) + a FOTO 4 do Rodrigo.
 
-## 3. Seeding — fontes confirmadas NA PLANILHA (29/07)
+## 3. Seeding — fontes REAIS da planilha (corrigido em 30/07)
 
-| Alvo no sistema           | Fonte (aba)                         | O que traz                                                             |
-| ------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
-| Grupos de despesas        | `GRUPOSREF` col. I/J                | nomes + REF (`DES/F - VALOR/V` etc.)                                   |
-| Grupos de mercadorias     | `GRUPOSREF` col. M–U                | nome + **margem %** + tipo (VENDA/TRANSFORMAÇÃO) + computar + DOC/F-NF |
-| Grupos de retiradas       | `GRUPOSREF` col. X/Y                | nome + flag ATIVA (inclui sócios/pro-labore)                           |
-| Contas                    | `GRUPOSREF` col. G/Z/AA             | `CNT CONTA - CAIXA 1M..4T`, ITAU, BRADESCO, NUBANK, PAGBANK… + ativas  |
-| Tipos de produto          | `GRUPOSREF` col. V                  | PRO, MAT. PRIMA TRANSF., FAB. PRÓPRIA, BASE FAB. PRÓPRIA               |
-| Patrimônio (grupos+itens) | `PATRIMONIO`                        | SIG/grupo/item/marca/setor/empresa (máx 38 linhas)                     |
-| Setores/Cargos            | `FOLHA PAGAMENTO`                   | categorias, cargos, CBO, setor, regime, turno                          |
-| Produtos                  | pasta `CADASTRO DE PRODUTOS` (repo) | cadastro com código de barras                                          |
+> ⚠️ **A versão anterior desta seção estava ERRADA.** Ela foi montada lendo só a aba `GRUPOSREF`,
+> que é a lista de referência que alimenta os **dropdowns** — não o cadastro. Os dados de verdade
+> estão em **abas dedicadas por empresa**, e cada linha delas é um **lançamento**, não um grupo.
+> O erro foi meu (assistente), não do José. Verificado abrindo o arquivo em 30/07.
+
+**Arquivo correto:** `CICLUZ GP - LANÇAMENTO (VND_MER_DES_RET).xlsx` (a operacional, 43 MB).
+Não confundir com `CENTRAL PRODUTOS (BASE)`, que é o cadastro de produtos — e cuja cópia sem
+o sufixo `(1)` está **corrompida** (`#REF!` nas abas que importam). Use a com `(1)`.
+
+| Alvo no sistema       | Aba correta                          | Onde está                     | Medido em 30/07             |
+| --------------------- | ------------------------------------ | ----------------------------- | --------------------------- |
+| Grupos de despesas    | `(TNP) GRUPO DESPESAS`               | col. **G**, distintos         | **75 grupos** / 1.664 lanç. |
+| Grupos de retiradas   | `(TNP) GRUPO RETIRADAS`              | col. **G**, distintos         | **3 grupos** / 17 lanç.     |
+| Grupos de mercadorias | `(TNP) GRUPO MERCADORIAS`            | col. **G**, distintos         | a extrair (aba de 34 MB)    |
+| Contas                | `(TNP) SALDOS CONTAS`                | —                             | a extrair                   |
+| Patrimônio            | `(TNPLIHORA - EXP.) PATRIMONIO`      | col. F/G/H/I/J                | 32 linhas                   |
+| Setores/Cargos        | `(TNPLIHORA - EXP.) FOLHA PAGAMENTO` | col. G/I/N/O/P/Q/R/S/T/U/V    | 36 linhas                   |
+| Produtos              | `CENTRAL PRODUTOS (BASE) … (1).xlsx` | aba `(TNP) CADASTRO PRODUTOS` | com código de barras        |
+
+**Layout das abas de lançamento** (idêntico nas três — despesas, retiradas, mercadorias):
+
+| Col | Cabeçalho (linha 5)                 | Vira, no sistema                                                    |
+| --- | ----------------------------------- | ------------------------------------------------------------------- |
+| B   | `PLANILHA` (`TNP - DES`)            | empresa + domínio                                                   |
+| C   | `DATA REF`                          | data de referência                                                  |
+| F   | `CONTABIL` (`DOC/F`/`DOC/NF`)       | **é por LANÇAMENTO**, não por grupo — casa com o campo fiscal do S2 |
+| G   | `GRUPO DESPESA` / `GRUPO RETIRADAS` | **o grupo** (fonte do seeding)                                      |
+| H   | `FORNECEDOR / COLABORADOR`          | **o credor tipado** (R-046)                                         |
+| I   | `DISCRIMINAÇÃO`                     | descrição do item                                                   |
+| J   | `OBS:`                              | observação / nº da parcela                                          |
+| K   | `VENCIMENTO`                        | data de vencimento                                                  |
+
+> As colunas H e F provam que o desenho do Rodrigo (FOTO 2) **é a planilha**: credor tipado e
+> documento fiscal já existem lá desde sempre.
+
+### Decisões do José (30/07)
+
+| Ponto                     | Decisão                                                                                                                                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hierarquia dos grupos** | **Quebrar em pai e filho.** `DES ⁠MANUT. EMPRESA - MAT. E PECAS MÁQ./EQUIP.` vira pai `MANUT. EMPRESA` + filho `MAT. E PECAS MÁQ./EQUIP.`. Usa o `grupoPaiId` que já existe. Sem isso, relatório não soma por categoria — que é o que a planilha faz hoje |
+| **Quantos importar**      | **Todos os 75**, mas os de baixo uso entram **inativos** — não aparecem no dropdown até alguém ativar. Nada se perde e a tela fica limpa                                                                                                                  |
+| **Investimento**          | **Investimento É retirada**, confirmado. Comprar freezer ou balança entra como retirada, não despesa nem mercadoria. É por isso que a retirada se liga ao cadastro de patrimônio                                                                          |
+| **Correção do enigma**    | Nunca existiu coluna com prefixo `RET`. A col. **V** da `GRUPOSREF`, que esta seção chamava de "tipos de produto", é a lista de **grupos de retirada** (os `INVESTIMENTO - …`)                                                                            |
 
 Estratégia: script idempotente, **dry-run com contagens primeiro**, José aprova, grava. Só TNP.
 

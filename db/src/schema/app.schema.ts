@@ -69,6 +69,35 @@ function checksDescontoGeral(tabela: string, tipo: AnyPgColumn, valor: AnyPgColu
   ];
 }
 
+// JUROS do lancamento (R-041), nas 3 tabelas de lancamento. Sao TRES colunas, e a razao de cada uma:
+//   valor_acrescimo (ja existia) — o juros em R$ SEMPRE JA CALCULADO. E esta coluna que entra no
+//     liquidoCentavos(original - desconto + acrescimo). Guardar o percentual aqui somaria R$ 2,00
+//     no lugar de R$ 20,00 e corromperia caixa, conta e relatorio de uma vez.
+//   juros_tipo — 'real' | 'percentual'.
+//   juros_valor_informado — o que a pessoa DIGITOU (2 para 2%, 20.00 para R$ 20,00). Existe porque
+//     guardar so o R$ perde a informacao de que era 2%, e recalcular por divisao deriva com
+//     arredondamento: 333,33 a 2% da 6,67, que de volta vira 2,001%. A tela reabre com o informado.
+// Nas 3 tabelas de lancamento, descricao_acrescimo fica SEM USO — o campo generico de acrescimo foi
+// aposentado aqui (um campo, um nome). Em vendas/transferencias valor_acrescimo segue generico.
+const jurosLancamento = {
+  jurosTipo: text("juros_tipo").$type<"real" | "percentual">(),
+  jurosValorInformado: numeric("juros_valor_informado", { precision: 14, scale: 4 })
+};
+
+function checksJuros(tabela: string, tipo: AnyPgColumn, valorInformado: AnyPgColumn) {
+  return [
+    check(`${tabela}_juros_tipo_check`, sql`${tipo} is null or ${tipo} in ('real', 'percentual')`),
+    check(`${tabela}_juros_valor_informado_check`, sql`${valorInformado} is null or ${valorInformado} >= 0`)
+  ];
+}
+
+// Documento fiscal do lancamento (R-044 data de emissao, R-045 numero da nota). Os dois opcionais:
+// o historico inteiro nasceu sem eles, e nem todo lancamento tem nota.
+const documentoFiscalLancamento = {
+  dataDocumentoFiscal: date("data_documento_fiscal"),
+  numeroDocumentoFiscal: text("numero_documento_fiscal")
+};
+
 export const empresas = pgTable("empresas", {
   id: idUuid,
   nome: text("nome").notNull(),
@@ -196,6 +225,25 @@ export const fornecedores = pgTable("fornecedores", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+// SOCIOS / GESTORES (R-047, D1 do PROJECT_BRAIN/17): cadastro MINIMO — nome, empresa, ativo.
+// Nada alem disso de proposito: a planilha confirma que a lista e curta (RET. SOCIOS - RODRIGO,
+// PRO LABORE - RODRIGO). Nasce como terceiro tipo de credor, hoje so usado em RETIRADAS —
+// despesa e mercadoria nao ofertam socio (decisao do Jose, 30/07); se um dia ofertarem, e ADD COLUMN.
+export const sociosGestores = pgTable(
+  "socios_gestores",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm
+  },
+  (table) => [
+    uniqueIndex("socios_gestores_empresa_nome_unico").on(table.empresaId, sql`lower(${table.nome})`),
+    index("socios_gestores_empresa_idx").on(table.empresaId)
+  ]
+);
 
 export const clientes = pgTable(
   "clientes",
@@ -985,8 +1033,12 @@ export const despesas = pgTable(
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     ...vinculoRecorrencia,
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    // R-046: o tipo e ESCOLHA do operador e precisa sobreviver ao credor ser apagado — e nao e
+    // derivavel das FKs (com as duas nulas nao ha como saber em que aba reabrir a tela).
+    credorTipo: text("credor_tipo").$type<"fornecedor" | "colaborador">(),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
@@ -995,12 +1047,15 @@ export const despesas = pgTable(
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
     ...descontoGeralLancamento,
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     computar: boolean("computar").notNull().default(true),
     fotoDocumentoUrl: text("foto_documento_url"),
+    // R-049: foto 1 = recibo/boleto/nota (foto_documento_url); foto 2 = a nota COM OS ITENS.
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -1012,7 +1067,22 @@ export const despesas = pgTable(
     check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     ...checksDescontoGeral("despesas", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksJuros("despesas", table.jurosTipo, table.jurosValorInformado),
     ...checksVinculoRecorrencia("despesas", table.recorrenciaId, table.recorrenciaOrdem),
+    // Despesa nao oferta socio/gestor como credor (decisao do Jose, 30/07).
+    check(
+      "despesas_credor_tipo_check",
+      sql`${table.credorTipo} is null or ${table.credorTipo} in ('fornecedor', 'colaborador')`
+    ),
+    // Coerencia SEM cardinalidade retroativa. NAO exige credor (despesa aceita lancamento sem ele) e
+    // NAO reprova a linha legada que tem fornecedor_id e colaborador_id juntos — existe uma assim no
+    // dev hoje, e um `num_nonnulls(...) <= 1` abortaria nela. E o erro da 0017, de novo.
+    check(
+      "despesas_credor_coerente_check",
+      sql`${table.credorTipo} is null
+        or (${table.credorTipo} = 'fornecedor' and ${table.colaboradorId} is null)
+        or (${table.credorTipo} = 'colaborador' and ${table.fornecedorId} is null)`
+    ),
     index("despesas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("despesas_caixa_idx").on(table.caixaId),
     // Parcial: so lancamento de serie preenche. Serve o "mostre a serie inteira" e o DELETE da
@@ -1139,7 +1209,11 @@ export const mercadorias = pgTable(
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     ...vinculoRecorrencia,
     grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    // Mercadoria so oferta FORNECEDOR (nao tem colaborador_id nem socio_gestor_id). A coluna existe
+    // mesmo assim para a tela reabrir no tipo certo e para o contrato ser igual nos 3 dominios.
+    credorTipo: text("credor_tipo").$type<"fornecedor">(),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
@@ -1148,6 +1222,7 @@ export const mercadorias = pgTable(
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
     ...descontoGeralLancamento,
@@ -1156,6 +1231,7 @@ export const mercadorias = pgTable(
     temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
     computar: boolean("computar").notNull().default(true),
     fotoDocumentoUrl: text("foto_documento_url"),
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -1167,7 +1243,9 @@ export const mercadorias = pgTable(
     check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     ...checksDescontoGeral("mercadorias", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksJuros("mercadorias", table.jurosTipo, table.jurosValorInformado),
     ...checksVinculoRecorrencia("mercadorias", table.recorrenciaId, table.recorrenciaOrdem),
+    check("mercadorias_credor_tipo_check", sql`${table.credorTipo} is null or ${table.credorTipo} = 'fornecedor'`),
     index("mercadorias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("mercadorias_caixa_idx").on(table.caixaId),
     index("mercadorias_recorrencia_idx")
@@ -1301,9 +1379,13 @@ export const retiradas = pgTable(
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     ...vinculoRecorrencia,
     grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
-    colaboradorId: uuid("colaborador_id")
-      .notNull()
-      .references(() => colaboradores.id),
+    // R-046/R-047: retirada e o UNICO dominio que oferta socio/gestor (decisao do Jose, 30/07).
+    credorTipo: text("credor_tipo").$type<"colaborador" | "socio_gestor">(),
+    // colaborador_id DEIXA DE SER NOT NULL: com socio/gestor como credor nao ha colaborador, e
+    // exigir um forcaria inventar. DROP NOT NULL nao perde dado e nao aborta — so relaxa.
+    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    socioGestorId: uuid("socio_gestor_id").references(() => sociosGestores.id, { onDelete: "set null" }),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
@@ -1312,10 +1394,15 @@ export const retiradas = pgTable(
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     computar: boolean("computar").notNull().default(true),
+    // R-049: retirada nao tinha NENHUMA foto. Comprar um freezer tem nota como qualquer outra
+    // compra — a D12 tirou so a DISCRIMINACAO da retirada, nunca as fotos.
+    fotoDocumentoUrl: text("foto_documento_url"),
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -1326,7 +1413,20 @@ export const retiradas = pgTable(
     check("retiradas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("retiradas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksJuros("retiradas", table.jurosTipo, table.jurosValorInformado),
     ...checksVinculoRecorrencia("retiradas", table.recorrenciaId, table.recorrenciaOrdem),
+    check(
+      "retiradas_credor_tipo_check",
+      sql`${table.credorTipo} is null or ${table.credorTipo} in ('colaborador', 'socio_gestor')`
+    ),
+    // Mesmo desenho tolerante das despesas: so checa coerencia quando o tipo esta preenchido.
+    // O historico inteiro tem credor_tipo nulo e colaborador_id preenchido — e passa.
+    check(
+      "retiradas_credor_coerente_check",
+      sql`${table.credorTipo} is null
+        or (${table.credorTipo} = 'colaborador' and ${table.socioGestorId} is null)
+        or (${table.credorTipo} = 'socio_gestor' and ${table.colaboradorId} is null)`
+    ),
     index("retiradas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("retiradas_caixa_idx").on(table.caixaId),
     index("retiradas_recorrencia_idx")

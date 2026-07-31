@@ -141,6 +141,13 @@
       "when": 1785425890954,
       "tag": "0019_recorrencia_de_lancamento",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785461529967,
+      "tag": "0020_campos_do_lancamento",
+      "breakpoints": true
     }
   ]
 }
