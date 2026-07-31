@@ -329,6 +329,9 @@ export type OperacaoForm = {
   valorOriginal: string;
   valorAcrescimo: string;
   descricaoAcrescimo: string;
+  // R-041: juros. O tipo vazio significa "sem juros" — o payload converte para null.
+  jurosTipo: "" | "percentual" | "valor";
+  jurosValorInformado: string;
   valorDesconto: string;
   descricaoDesconto: string;
   contaOrigemId: string;

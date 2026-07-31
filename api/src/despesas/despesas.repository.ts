@@ -16,7 +16,8 @@ import {
   filtrosEmpresa,
   numeroDecimal,
   valoresBase,
-  valoresBaseEdicao
+  valoresBaseEdicao,
+  valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
 
 // Linhas de item de UMA despesa. Igual a mercadoria: o calculo e da LISTA inteira porque o desconto
@@ -134,6 +135,8 @@ export async function criarDespesaRepository(
       .insert(despesas)
       .values({
         ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
+        // R-041: DEPOIS do valoresBase de proposito — sobrescreve o valorAcrescimo do cliente.
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
@@ -234,6 +237,7 @@ export async function atualizarDespesaRepository(
       .update(despesas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,

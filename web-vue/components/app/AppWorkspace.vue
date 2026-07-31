@@ -4,6 +4,7 @@ import {
   deCentavos,
   paraCentavos,
   somarCentavos,
+  valorTotalCentavos,
   type AuthSession,
   type TemaAplicacao
 } from "@padaria/shared";
@@ -325,14 +326,18 @@ const totalItensVenda = computed(() => deCentavos(somarCentavos(...itensVenda.va
 const totalTiposPagamento = computed(() =>
   deCentavos(somarCentavos(...tiposPagamento.value.map((item) => item.totalPago)))
 );
+// R-042: a conta do Valor Total vive em @padaria/shared (valorTotalCentavos), testada. Aqui era
+// uma expressao inline sem funcao e sem teste — foi assim que a regra caiu em desuso sem nada
+// quebrar. O servidor recalcula a mesma coisa e nao confia neste numero (ver valoresJuros).
 const valorTotalOperacao = computed(() =>
   deCentavos(
-    Math.max(
-      0,
-      paraCentavos(form.value.valorOriginal) +
-        paraCentavos(form.value.valorAcrescimo) -
-        paraCentavos(form.value.valorDesconto)
-    )
+    valorTotalCentavos({
+      valorOriginal: form.value.valorOriginal,
+      // "" no form = sem juros; o contrato so conhece 'percentual' | 'valor' | null.
+      jurosTipo: form.value.jurosTipo || null,
+      jurosValorInformado: form.value.jurosValorInformado,
+      valorDesconto: form.value.valorDesconto
+    })
   )
 );
 const alvosFiltroPermissoes = computed(() => {

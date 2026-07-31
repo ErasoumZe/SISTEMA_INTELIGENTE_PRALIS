@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { tiposJuros } from "../dinheiro/index.js";
 import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
 const uuidSchema = z.string().uuid();
@@ -12,25 +13,52 @@ export const retiradasQuerySchema = z
   })
   .merge(paginationQuerySchema);
 
-export const retiradaPayloadSchema = z.object({
-  empresaId: uuidSchema,
-  dataReferencia: z.string().min(10),
-  dataVencimento: z.string().min(10),
-  dataPagamento: z.string().min(10).optional().nullable(),
-  descricao: z.string().min(1),
-  observacao: z.string().optional().nullable(),
-  valorOriginal: dinheiroSchema,
-  valorAcrescimo: dinheiroSchema.default(0),
-  descricaoAcrescimo: z.string().optional().nullable(),
-  valorDesconto: dinheiroSchema.default(0),
-  descricaoDesconto: z.string().optional().nullable(),
-  contaOrigemId: uuidSchema.optional().nullable(),
-  colaboradorId: uuidSchema,
-  grupoRetiradaId: uuidSchema.optional().nullable(),
-  computar: z.boolean().default(true),
-  // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
-  recorrencia: recorrenciaSchema.optional()
-});
+export const retiradaPayloadSchema = z
+  .object({
+    empresaId: uuidSchema,
+    dataReferencia: z.string().min(10),
+    dataVencimento: z.string().min(10),
+    dataPagamento: z.string().min(10).optional().nullable(),
+    descricao: z.string().min(1),
+    observacao: z.string().optional().nullable(),
+    valorOriginal: dinheiroSchema,
+    valorAcrescimo: dinheiroSchema.default(0),
+    descricaoAcrescimo: z.string().optional().nullable(),
+    // R-041 — juros. Guarda COMO foi informado; o R$ resolvido vai para valorAcrescimo, e quem
+    // resolve e o SERVIDOR (valoresJuros em lancamentos.dominio). O acrescimo que chega do cliente e
+    // IGNORADO quando ha jurosTipo: total que chega pronto do front e total que o front pode mentir.
+    jurosTipo: z.enum(tiposJuros).optional().nullable(),
+    jurosValorInformado: z.coerce.number().min(0).optional().nullable(),
+    valorDesconto: dinheiroSchema.default(0),
+    descricaoDesconto: z.string().optional().nullable(),
+    contaOrigemId: uuidSchema.optional().nullable(),
+    // R-047: a 0020 tirou o NOT NULL de retiradas.colaborador_id porque, com socio/gestor como
+    // credor, nao existe colaborador. Mas retirada SEM credor nenhum nunca foi aceita e nao passa
+    // a ser: a obrigatoriedade virou "um dos dois", no refine abaixo.
+    colaboradorId: uuidSchema.optional().nullable(),
+    socioGestorId: uuidSchema.optional().nullable(),
+    grupoRetiradaId: uuidSchema.optional().nullable(),
+    computar: z.boolean().default(true),
+    // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
+    recorrencia: recorrenciaSchema.optional()
+  })
+  .superRefine((retirada, ctx) => {
+    const credores = [retirada.colaboradorId, retirada.socioGestorId].filter(Boolean).length;
+    if (credores === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["colaboradorId"],
+        message: "Informe o credor da retirada: colaborador ou socio/gestor"
+      });
+    }
+    if (credores > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["socioGestorId"],
+        message: "A retirada tem um credor so: colaborador OU socio/gestor"
+      });
+    }
+  });
 
 export const retiradaDtoSchema = z.object({
   id: z.string(),

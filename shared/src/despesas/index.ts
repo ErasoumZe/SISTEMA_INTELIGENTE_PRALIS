@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { tiposJuros } from "../dinheiro/index.js";
 import { itemTemGrupoDeDuasOrigens, MENSAGEM_GRUPO_DE_DUAS_ORIGENS } from "../discriminacao/index.js";
 import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
@@ -60,6 +61,11 @@ export const despesaPayloadSchema = z.object({
   valorOriginal: dinheiroSchema,
   valorAcrescimo: dinheiroSchema.default(0),
   descricaoAcrescimo: z.string().optional().nullable(),
+  // R-041 — juros. Guarda COMO foi informado; o R$ resolvido vai para valorAcrescimo, e quem
+  // resolve e o SERVIDOR (valoresJuros em lancamentos.dominio). O acrescimo que chega do cliente e
+  // IGNORADO quando ha jurosTipo: total que chega pronto do front e total que o front pode mentir.
+  jurosTipo: z.enum(tiposJuros).optional().nullable(),
+  jurosValorInformado: z.coerce.number().min(0).optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),
   descricaoDesconto: z.string().optional().nullable(),
   // Nivel 3 — desconto GERAL: guarda COMO foi informado. O R$ resolvido vai para valorDesconto.

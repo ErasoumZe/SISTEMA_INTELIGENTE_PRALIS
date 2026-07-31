@@ -18,7 +18,8 @@ import {
   filtrosEmpresa,
   numeroDecimal,
   valoresBase,
-  valoresBaseEdicao
+  valoresBaseEdicao,
+  valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
 
 // Linhas de item de UMA mercadoria. O calculo e da LISTA inteira porque o desconto geral (nivel 3)
@@ -121,6 +122,8 @@ export async function criarMercadoriaRepository(
       .insert(mercadorias)
       .values({
         ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
+        // R-041: DEPOIS do valoresBase de proposito — sobrescreve o valorAcrescimo do cliente.
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
@@ -217,6 +220,7 @@ export async function atualizarMercadoriaRepository(
       .update(mercadorias)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,

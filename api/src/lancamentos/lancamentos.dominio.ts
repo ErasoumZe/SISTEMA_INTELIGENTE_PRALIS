@@ -1,6 +1,12 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import { temPermissao, type DominioLancamentoPagavel, type Permissao, type PerfilUsuario } from "@padaria/shared";
-import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import {
+  centavosParaDecimalBanco,
+  deCentavos,
+  jurosCentavos,
+  paraCentavos,
+  type TipoJuros
+} from "@padaria/shared/dinheiro";
 import {
   calcularDiscriminacao,
   conferirDiscriminacao,
@@ -23,6 +29,7 @@ import {
   malotes,
   pdvs,
   produtos,
+  sociosGestores,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
 import type { DespesaItemPayload, DespesaPayload } from "@padaria/shared/despesas";
@@ -70,6 +77,37 @@ export function filtrosEmpresa<T extends { empresaId: DadosExternos }>(
   if (query.empresaId) filtros.push(eq(tabela.empresaId as never, query.empresaId));
   else if (empresasPermitidasIds !== null) filtros.push(inArray(tabela.empresaId as never, empresasPermitidasIds));
   return filtros;
+}
+
+// JUROS (R-041/R-042) das TRES tabelas de lancamento. Fica fora de valoresBase de proposito:
+// valoresBase tambem serve transferencias, que nao tem as colunas de juros.
+//
+// O SERVIDOR RECALCULA e nao confia no cliente. Um valorAcrescimo que chega pronto do front e um
+// valor que o front pode mentir — mandar jurosTipo='percentual', jurosValorInformado=2 e
+// valorAcrescimo=999999 nao passa: o acrescimo e derivado aqui, do valor e do percentual.
+//
+// Sem jurosTipo (venda, transferencia, historico, lancamento sem juros) o acrescimo generico segue
+// intacto e as colunas de juros vao a null — importante na EDICAO, para limpar o juros de verdade
+// quando a pessoa apaga o campo.
+export function valoresJuros(dados: {
+  valorOriginal: number;
+  valorAcrescimo: number;
+  jurosTipo?: TipoJuros | null | undefined;
+  jurosValorInformado?: number | null | undefined;
+}) {
+  if (!dados.jurosTipo) {
+    return { valorAcrescimo: String(dados.valorAcrescimo), jurosTipo: null, jurosValorInformado: null };
+  }
+  const centavos = jurosCentavos({
+    valorOriginal: dados.valorOriginal,
+    jurosValorInformado: dados.jurosValorInformado,
+    jurosTipo: dados.jurosTipo
+  });
+  return {
+    valorAcrescimo: centavosParaDecimalBanco(centavos),
+    jurosTipo: dados.jurosTipo,
+    jurosValorInformado: String(dados.jurosValorInformado ?? 0)
+  };
 }
 
 // Campos editaveis comuns aos lancamentos. Na edicao, empresa, caixa e criadoPor NUNCA mudam.
@@ -236,7 +274,14 @@ export async function validarReferenciasRetirada(
 ): Promise<string | null> {
   const conta = await validarConta(dados, db);
   if (conta) return conta;
-  if (!(await existeNaEmpresa(colaboradores, dados.colaboradorId, dados.empresaId, db))) return "Colaborador";
+  // R-047: o credor da retirada e colaborador OU socio/gestor — o zod ja garante que e exatamente
+  // um dos dois; aqui so confirmamos que o escolhido existe NA EMPRESA.
+  if (dados.colaboradorId && !(await existeNaEmpresa(colaboradores, dados.colaboradorId, dados.empresaId, db))) {
+    return "Colaborador";
+  }
+  if (dados.socioGestorId && !(await existeNaEmpresa(sociosGestores, dados.socioGestorId, dados.empresaId, db))) {
+    return "Socio/gestor";
+  }
   if (dados.grupoRetiradaId && !(await existeNaEmpresa(gruposRetiradas, dados.grupoRetiradaId, dados.empresaId, db))) {
     return "Grupo de retirada";
   }

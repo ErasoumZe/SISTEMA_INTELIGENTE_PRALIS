@@ -369,6 +369,12 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     maloteId: dados.form.maloteId || null,
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
     valorAcrescimo: deCentavos(paraCentavos(dados.form.valorAcrescimo)),
+    // R-041: manda COMO foi informado. O servidor recalcula o valorAcrescimo a partir daqui e
+    // ignora o que mandamos acima — de proposito (valoresJuros em lancamentos.dominio).
+    jurosTipo: dados.form.jurosTipo || null,
+    jurosValorInformado: dados.form.jurosValorInformado
+      ? Number(String(dados.form.jurosValorInformado).replace(",", "."))
+      : null,
     valorDesconto: deCentavos(paraCentavos(dados.form.valorDesconto)),
     // Recorrencia so existe em despesa/mercadoria/retirada. Venda vem da integracao e transferencia
     // e movimento imediato — mandar o campo la seria rejeitado pelo contrato (schema .strict()).
