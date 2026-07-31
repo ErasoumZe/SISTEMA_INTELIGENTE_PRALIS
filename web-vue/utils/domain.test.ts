@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cadastroPayload } from "@padaria/shared";
-import { formCadastroDeLinha } from "./domain";
+import { formCadastroDeLinha, permissaoPertenceASecao, permissoes, secoesPermissoes } from "./domain";
 
 describe("formCadastroDeLinha", () => {
   it("reconstroi o formulario de produto (booleanos, conversoes JSON, precos)", () => {
@@ -66,5 +66,17 @@ describe("formCadastroDeLinha", () => {
 
   it("ativo=false quando a linha marca 'Nao'", () => {
     expect(formCadastroDeLinha({ nome: "Y", ativo: "Nao" }, {}).ativo).toBe(false);
+  });
+});
+
+describe("secoes de permissoes", () => {
+  it("organiza cada permissao visivel em exatamente um modulo", () => {
+    for (const permissao of permissoes) {
+      const secoes = secoesPermissoes.filter((secao) => permissaoPertenceASecao(permissao, secao));
+      expect(
+        secoes.map((secao) => secao.titulo),
+        permissao
+      ).toHaveLength(1);
+    }
   });
 });

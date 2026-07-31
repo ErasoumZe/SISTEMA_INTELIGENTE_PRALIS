@@ -10,6 +10,7 @@ import type {
 import { executarEmTransacao } from "../banco/conexao.js";
 import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
+import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -73,35 +74,45 @@ export async function criarTransferencia(
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  return executarEmTransacao(async (tx) => {
-    const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
-    if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const contasValidas = await contasPertencemEmpresaRepository(
-      [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
-      dados.empresaId,
-      tx
-    );
-    if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+  try {
+    return await executarEmTransacao(async (tx) => {
+      const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, dados.nLacreDoc!, tx);
+      if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
+      const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
+      if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
+      const contasValidas = await contasPertencemEmpresaRepository(
+        [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
+        dados.empresaId,
+        tx
+      );
+      if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
-    const transferenciaLivre = podeTransferirSemCaixa(perfil);
-    const caixa = transferenciaLivre
-      ? await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx)
-      : await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const envolveContaPdv =
-      caixa && (dados.contaOrigemId === caixa.pdvContaId || dados.contaDestinoId === caixa.pdvContaId);
-    if (!transferenciaLivre && !envolveContaPdv) {
-      throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
+      const transferenciaLivre = podeTransferirSemCaixa(perfil);
+      const caixa = transferenciaLivre
+        ? await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx)
+        : await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+      const envolveContaPdv =
+        caixa && (dados.contaOrigemId === caixa.pdvContaId || dados.contaDestinoId === caixa.pdvContaId);
+      if (!transferenciaLivre && !envolveContaPdv) {
+        throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
+      }
+
+      const transferencia = await criarTransferenciaRepository(
+        dados,
+        computar,
+        perfil.usuarioId,
+        envolveContaPdv ? caixa.id : null,
+        tx
+      );
+      return { id: transferencia.id, computar };
+    });
+  } catch (error) {
+    const banco = error as Error & { code?: string; constraint?: string };
+    if (banco.code === "23505" && banco.constraint === "lacres_numero_unico") {
+      throw new Error("Lacre ja utilizado em outro movimento", { cause: error });
     }
-
-    const transferencia = await criarTransferenciaRepository(
-      dados,
-      computar,
-      perfil.usuarioId,
-      envolveContaPdv ? caixa.id : null,
-      tx
-    );
-    return { id: transferencia.id, computar };
-  });
+    throw error;
+  }
 }
 
 export async function confirmarTransferencia(

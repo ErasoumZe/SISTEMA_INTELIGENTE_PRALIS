@@ -63,6 +63,36 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
     return json<{ data: SaldoConta[] }>(resposta).data;
   }
 
+  it("exige lacre na saida do cofre e impede reutilizar o lacre em outro movimento", async () => {
+    const semLacre = await request(cookieAdmin, "POST", "/api/transferencias", {
+      ...payloadTransferencia("QA-LACRE-OBRIGATORIO", idsTeste.contaCofre, idsTeste.contaLivre),
+      nLacreDoc: ""
+    });
+    expect(semLacre.statusCode, semLacre.body).toBe(400);
+
+    const primeira = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-LACRE-MOVIMENTO-UNICO", idsTeste.contaCofre, idsTeste.contaLivre)
+    );
+    expect(primeira.statusCode, primeira.body).toBe(201);
+
+    const reutilizada = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-LACRE-MOVIMENTO-UNICO", idsTeste.contaCofre, idsTeste.contaBanco)
+    );
+    expect(reutilizada.statusCode, reutilizada.body).toBe(400);
+    expect(
+      await consultarUm<{ quantidade: string }>(
+        "select count(*)::text as quantidade from lacres where empresa_id = $1 and numero = $2",
+        [idsTeste.empresaA, "QA-LACRE-MOVIMENTO-UNICO"]
+      )
+    ).toEqual({ quantidade: "1" });
+  });
+
   it("retira da origem imediatamente e somente um destino confirma com o lacre", async () => {
     const antes = await saldos();
     const criada = await request(

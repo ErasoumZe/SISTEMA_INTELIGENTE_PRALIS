@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
 // Harness de teste do web-vue. Resolve os aliases do Nuxt (~ e @) e o shared pela RAIZ
@@ -10,6 +11,7 @@ import { defineConfig } from "vitest/config";
 process.env["TZ"] = "America/Sao_Paulo";
 
 export default defineConfig({
+  plugins: [vue()],
   test: {
     environment: "happy-dom",
     globals: true,

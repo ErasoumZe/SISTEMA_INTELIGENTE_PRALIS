@@ -164,6 +164,12 @@ usuário recebe colaborador e vínculo ao cargo, sem regra em `permissoes_usuari
 exatamente a matriz do cargo. Execução no dev: **41 cargos, 41 cobertos, 0 sem usuário e 0
 permissões diretas** nos 31 usuários adicionais.
 
+### Corujão v3 — P3.4
+
+- R-006/R-025/R-027: integração em banco real prova que uma transferência saindo do cofre exige lacre e que o mesmo número não pode selar dois movimentos. A tentativa de reuso agora retorna erro de negócio, mantendo a restrição `lacres_numero_unico` como última barreira contra corrida.
+- R-031: `TransferenciaRetornoCampos.test.ts` prova que a checkbox expande retorno/sangria dentro do mesmo formulário de transferência.
+- R-078: o agrupamento usado pela tela tem uma função única e testada; todas as permissões visíveis pertencem a exatamente um módulo. Em sobreposição, vence o prefixo mais específico (`menu_contas_pagar_*` fica somente em Contas a pagar).
+
 ### Corujão v2 — Etapa 9
 
 **AUDITADA em 31/07/2026, sem correções de implementação.** Havia 15 regras ainda marcadas

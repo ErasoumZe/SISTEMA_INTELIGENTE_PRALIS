@@ -1,7 +1,8 @@
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
-import { dinheiro, permissoes, permissoesOcultasNaTela, secoesPermissoes } from "~/utils/domain";
+import { dinheiro, permissaoPertenceASecao, permissoes, permissoesOcultasNaTela } from "~/utils/domain";
+import type { SecaoPermissao } from "~/utils/domain";
 
 type LinhaCadastro = Record<string, string | undefined>;
 
@@ -335,15 +336,10 @@ export function useCadastroView(params: {
     return { ...linha, permissao: permissoesVisiveis.join(",") };
   }
 
-  function permissoesDaSecao(secao: (typeof secoesPermissoes)[number]) {
+  function permissoesDaSecao(secao: SecaoPermissao) {
     const usadas = new Set(Object.keys(params.formCadastro.value.regras));
     return permissoes
-      .filter((permissao) => {
-        if (secao.prefixos.length) return secao.prefixos.some((prefixo) => permissao.startsWith(prefixo));
-        return !secoesPermissoes.some(
-          (outra) => outra.prefixos.length && outra.prefixos.some((prefixo) => permissao.startsWith(prefixo))
-        );
-      })
+      .filter((permissao) => permissaoPertenceASecao(permissao, secao))
       .sort((a, b) => {
         const pesoA = usadas.has(a) ? 0 : 1;
         const pesoB = usadas.has(b) ? 0 : 1;

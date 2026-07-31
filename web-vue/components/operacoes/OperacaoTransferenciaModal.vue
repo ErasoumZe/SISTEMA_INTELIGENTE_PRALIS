@@ -159,39 +159,36 @@ const hojeISO = computed(() => dataISO(0));
         </label>
       </div>
 
-      <div class="tr-checks">
-        <label class="tr-check">
-          <input v-model="multiploDestino" type="checkbox" /><span>Múltiplo Destino</span>
-        </label>
-        <div v-if="multiploDestino" class="tr-campo">
-          <span class="tr-campo-lbl">Contas que podem receber</span>
-          <label
-            v-for="c in opcoesEmpresa.contas.filter((item) => item.id !== form.contaOrigemId)"
-            :key="c.id"
-            class="tr-check"
-          >
-            <input v-model="form.contasDestinoIds" type="checkbox" :value="c.id" />
-            <span>{{ c.nome }}</span>
+      <TransferenciaRetornoCampos v-model="retornoAberto">
+        <template #controles>
+          <label class="tr-check">
+            <input v-model="multiploDestino" type="checkbox" /><span>Múltiplo Destino</span>
           </label>
-        </div>
-        <label class="tr-check">
-          <select v-model="form.tempoConfirmacao" class="tr-input">
-            <option value="5min">5 minutos</option>
-            <option value="10min">10 minutos</option>
-            <option value="30min">30 minutos</option>
-            <option value="1h">1 hora</option>
-            <option value="1dia">1 dia</option>
-            <option value="10dias">10 dias</option>
-            <option value="30dias">30 dias</option>
-          </select>
-        </label>
-        <label class="tr-check">
-          <input v-model="retornoAberto" type="checkbox" /><span>Transf. Retorno / Sangria</span>
-        </label>
-      </div>
+          <div v-if="multiploDestino" class="tr-campo">
+            <span class="tr-campo-lbl">Contas que podem receber</span>
+            <label
+              v-for="c in opcoesEmpresa.contas.filter((item) => item.id !== form.contaOrigemId)"
+              :key="c.id"
+              class="tr-check"
+            >
+              <input v-model="form.contasDestinoIds" type="checkbox" :value="c.id" />
+              <span>{{ c.nome }}</span>
+            </label>
+          </div>
+          <label class="tr-check">
+            <select v-model="form.tempoConfirmacao" class="tr-input">
+              <option value="5min">5 minutos</option>
+              <option value="10min">10 minutos</option>
+              <option value="30min">30 minutos</option>
+              <option value="1h">1 hora</option>
+              <option value="1dia">1 dia</option>
+              <option value="10dias">10 dias</option>
+              <option value="30dias">30 dias</option>
+            </select>
+          </label>
+        </template>
 
-      <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
-      <div v-if="retornoAberto" class="tr-retorno">
+        <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
         <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
         <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
           <button
@@ -209,7 +206,7 @@ const hojeISO = computed(() => dataISO(0));
         <button type="button" class="tr-add" @click="addRetorno">
           <v-icon size="15">mdi-plus</v-icon> Adicionar linha
         </button>
-      </div>
+      </TransferenciaRetornoCampos>
 
       <!-- Descrição — obrigatória no backend; não está no desenho, fica discreta no rodapé. -->
       <label class="tr-campo">
@@ -397,16 +394,6 @@ const hojeISO = computed(() => dataISO(0));
   height: 16px;
   accent-color: var(--cat-transferencias-base, #c2410c);
 }
-.tr-checks {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 6px 0 12px;
-  padding: 10px 12px;
-  border: 0.5px solid #e4e8ef;
-  border-radius: 10px;
-  background: #fbfcfe;
-}
 .tr-aviso-contas {
   display: flex;
   align-items: center;
@@ -432,13 +419,6 @@ const hojeISO = computed(() => dataISO(0));
 .tr-seta {
   margin-bottom: 9px;
   color: var(--cat-transferencias-base, #c2410c);
-}
-.tr-retorno {
-  margin: 4px 0 12px;
-  padding: 10px 12px;
-  border: 0.5px solid var(--cat-transferencias-base, #c2410c);
-  border-radius: 10px;
-  background: var(--cat-transferencias-soft, #fff1e8);
 }
 .tr-retorno-linha {
   display: flex;

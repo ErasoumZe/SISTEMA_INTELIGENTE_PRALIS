@@ -465,6 +465,17 @@ export const secoesPermissoes = [
   { titulo: "Outras", prefixos: [] }
 ];
 
+export type SecaoPermissao = (typeof secoesPermissoes)[number];
+
+export function permissaoPertenceASecao(permissao: string, secao: SecaoPermissao) {
+  const correspondencias = secoesPermissoes.flatMap((outra) =>
+    outra.prefixos.filter((prefixo) => permissao.startsWith(prefixo)).map((prefixo) => ({ secao: outra, prefixo }))
+  );
+  if (!correspondencias.length) return secao.prefixos.length === 0;
+  const maisEspecifica = correspondencias.sort((a, b) => b.prefixo.length - a.prefixo.length)[0];
+  return maisEspecifica?.secao === secao;
+}
+
 export function opcoesVazias(): Opcoes {
   return {
     empresas: [],
