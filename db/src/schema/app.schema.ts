@@ -218,6 +218,26 @@ export const pdvs = pgTable(
   ]
 );
 
+// Maquininhas de cartao (R-039): cadastro proprio por empresa. A maquininha selecionada na
+// abertura fica gravada no fechamento_caixa, preservando o equipamento usado naquele PDV/turno.
+// O vinculo e opcional: caixa sem maquininha continua sendo uma abertura valida.
+export const maquininhas = pgTable(
+  "maquininhas",
+  {
+    id: idUuid,
+    empresaId,
+    numeroSerie: text("numero_serie").notNull(),
+    apelido: text("apelido").notNull(),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    uniqueIndex("maquininhas_empresa_numero_serie_unico_idx").on(table.empresaId, sql`lower(${table.numeroSerie})`),
+    index("maquininhas_empresa_ativo_idx").on(table.empresaId, table.ativo)
+  ]
+);
+
 export const fornecedores = pgTable("fornecedores", {
   id: idUuid,
   empresaId,
@@ -1569,6 +1589,7 @@ export const fechamentosCaixa = pgTable(
     // e a base do "saldo proprio" derivado. Caixas sem malote ficam com divida_cofre = 0.
     maloteAberturaId: uuid("malote_abertura_id").references(() => malotes.id),
     lacreAbertura: text("lacre_abertura"),
+    maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
     totalTransferencias: valorMonetario("total_transferencias").notNull().default("0"),
@@ -1588,6 +1609,39 @@ export const fechamentosCaixa = pgTable(
       .on(table.pdvId)
       .where(sql`${table.status} = 'aberto'`),
     index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
+  ]
+);
+
+// Quebra de caixa (R-015..R-019/R-021): o valor tem sinal (negativo = faltou, positivo = sobrou)
+// e pertence ao usuario que operou o caixa. O saldo pendente e sempre derivado pela soma das linhas
+// nao verificadas; nao existe coluna de saldo e esta entidade jamais movimenta `contas`.
+export const quebrasCaixa = pgTable(
+  "quebras_caixa",
+  {
+    id: idUuid,
+    fechamentoCaixaId: uuid("fechamento_caixa_id")
+      .notNull()
+      .references(() => fechamentosCaixa.id, { onDelete: "cascade" }),
+    usuarioId: text("usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    valor: valorMonetario("valor").notNull(),
+    observacao: text("observacao").notNull(),
+    verificado: boolean("verificado").notNull().default(false),
+    verificadoPor: text("verificado_por").references(() => perfisUsuarios.usuarioId),
+    verificadoEm: timestamp("verificado_em", { withTimezone: true }),
+    criadoEm
+  },
+  (table) => [
+    unique("quebras_caixa_fechamento_unico").on(table.fechamentoCaixaId),
+    index("quebras_caixa_usuario_pendente_idx").on(table.usuarioId, table.verificado),
+    check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`),
+    check(
+      "quebras_caixa_verificacao_consistente_check",
+      sql`(${table.verificado} = false and ${table.verificadoPor} is null and ${table.verificadoEm} is null)
+        or (${table.verificado} = true and ${table.verificadoPor} is not null and ${table.verificadoEm} is not null)`
+    )
   ]
 );
 

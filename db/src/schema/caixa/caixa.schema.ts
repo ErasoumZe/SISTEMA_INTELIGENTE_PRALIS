@@ -3,5 +3,6 @@ export {
   caixaAutorizacoes,
   debitosColaboradores,
   edicoesCaixa,
-  fechamentosCaixa
+  fechamentosCaixa,
+  quebrasCaixa
 } from "../app.schema.js";
