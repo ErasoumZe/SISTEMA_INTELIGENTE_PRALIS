@@ -108,6 +108,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       return erro(reply, 429, "Muitas requisicoes; aguarde e tente novamente", "RATE_LIMITED");
     }
 
+    // Erro de PROTOCOLO do proprio Fastify (corpo JSON vazio ou malformado, content-type nao
+    // suportado, payload grande demais). Ele ja traz o statusCode 4xx certo; sem este ramo virava
+    // 500 "Erro interno" — o cliente errou e a tela acusava falha do servidor, alem de sujar a
+    // captura de erros com o que nao e bug. Medido no fluxo do dia: PUT sem corpo devolvia 500.
+    const statusFastify = (error as { statusCode?: number }).statusCode;
+    const codigoFastify = (error as { code?: string }).code;
+    if (statusFastify && statusFastify >= 400 && statusFastify < 500 && codigoFastify?.startsWith("FST_")) {
+      return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
+    }
+
     request.log.error(error);
     capturarErro(error instanceof Error ? error : new Error(String(error)));
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
