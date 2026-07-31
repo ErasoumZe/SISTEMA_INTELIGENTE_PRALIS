@@ -1,0 +1,2 @@
+ALTER TABLE "fechamentos_caixa" ADD COLUMN "fechado_por" text;--> statement-breakpoint
+ALTER TABLE "fechamentos_caixa" ADD CONSTRAINT "fechamentos_caixa_fechado_por_perfis_usuarios_usuario_id_fk" FOREIGN KEY ("fechado_por") REFERENCES "public"."perfis_usuarios"("usuario_id") ON DELETE no action ON UPDATE no action;

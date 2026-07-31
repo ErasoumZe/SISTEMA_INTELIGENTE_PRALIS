@@ -1623,6 +1623,7 @@ export const fechamentosCaixa = pgTable(
     abertoEm: timestamp("aberto_em", { withTimezone: true }),
     dataHoraFechamento: timestamp("data_hora_fechamento", { withTimezone: true }),
     fechadoEm: timestamp("fechado_em", { withTimezone: true }),
+    fechadoPor: text("fechado_por").references(() => perfisUsuarios.usuarioId),
     tokenEdicao: text("token_edicao"),
     observacao: text("observacao"),
     // Abertura com malote (M1, R8): malote selecionado, lacre da ida e a divida com o cofre

@@ -51,6 +51,8 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
+const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
+
 export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: string, db: ExecutorBanco = banco) {
   const [pdv] = await db
     .select({
@@ -118,6 +120,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       maquininhaId: fechamentosCaixa.maquininhaId,
@@ -160,6 +163,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
       maquininhaId: fechamentosCaixa.maquininhaId,
@@ -810,6 +814,7 @@ export async function atualizarFechamentoCaixaRepository(
     caixaId: string;
     dataHoraFechamento: Date;
     observacao: string | null;
+    fechadoPor: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
   },
@@ -820,6 +825,7 @@ export async function atualizarFechamentoCaixaRepository(
     .set({
       dataHoraFechamento: input.dataHoraFechamento,
       fechadoEm: new Date(),
+      fechadoPor: input.fechadoPor,
       observacao: input.observacao,
       totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
       totalTransferencias: centavosParaDecimalBanco(
@@ -884,6 +890,8 @@ export async function listarHistoricoCaixaRepository(
       turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechadoPor: fechamentosCaixa.fechadoPor,
+      fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
@@ -898,6 +906,7 @@ export async function listarHistoricoCaixaRepository(
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(perfilFechador, eq(perfilFechador.usuarioId, fechamentosCaixa.fechadoPor))
     .leftJoin(colaboradores, eq(colaboradores.id, fechamentosCaixa.colaboradorId))
     .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(where)

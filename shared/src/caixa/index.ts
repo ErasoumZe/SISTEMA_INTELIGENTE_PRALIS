@@ -93,6 +93,8 @@ export const linhaHistoricoCaixaSchema = z.object({
   turnoNome: z.string().nullable(),
   dataHoraAbertura: z.string().nullable(),
   dataHoraFechamento: z.string().nullable(),
+  fechadoPor: z.string().nullable(),
+  fechadoPorNome: z.string().nullable(),
   totalEntradas: z.number(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number(),

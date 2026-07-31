@@ -584,6 +584,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         caixaId: caixa.id,
         dataHoraFechamento,
         observacao: observacao || caixa.observacao,
+        fechadoPor: perfil.usuarioId,
         totais,
         saldoCentavos
       },
@@ -718,6 +719,8 @@ export async function listarHistoricoCaixa(
       ...caixa,
       dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
       dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+      fechadoPor: caixa.fechadoPor,
+      fechadoPorNome: caixa.fechadoPorNome,
       totalEntradas: numero(caixa.totalEntradas),
       totalTransferencias: numero(caixa.totalTransferencias),
       totalTransferenciasEntrada: numero(caixa.totalTransferenciasEntrada),

@@ -46,6 +46,11 @@ onMounted(carregar);
     <v-alert v-else-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
 
     <template v-else-if="detalhe">
+      <v-alert v-if="caixa.fechadoPorNome" type="info" variant="tonal" density="compact" class="mb-4">
+        Fechamento executado por <strong>{{ caixa.fechadoPorNome }}</strong
+        >.
+      </v-alert>
+
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->
       <div class="text-subtitle-2 mb-2">Lançamentos deste caixa</div>

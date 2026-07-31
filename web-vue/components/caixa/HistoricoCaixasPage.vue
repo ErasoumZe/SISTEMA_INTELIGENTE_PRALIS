@@ -57,6 +57,7 @@ const colunas = [
   { title: "Operador", key: "operador", sortable: false },
   { title: "Turno", key: "turnoNome", sortable: false },
   { title: "Abertura -> Fechamento", key: "periodo", sortable: false },
+  { title: "Fechado por", key: "fechadoPorNome", sortable: false },
   { title: "Entradas", key: "totalEntradas", align: "end" as const, sortable: false },
   { title: "Despesas", key: "totalDespesas", align: "end" as const, sortable: false },
   { title: "Retiradas", key: "totalRetiradas", align: "end" as const, sortable: false },
@@ -230,6 +231,7 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
           {{ item.dataHoraAbertura ? formatarDataHora(item.dataHoraAbertura) : "--" }} ->
           {{ item.dataHoraFechamento ? formatarDataHora(item.dataHoraFechamento) : "em aberto" }}
         </template>
+        <template #[`item.fechadoPorNome`]="{ item }">{{ item.fechadoPorNome || "--" }}</template>
         <template #[`item.totalEntradas`]="{ item }">{{ valorColuna(item, item.totalEntradas) }}</template>
         <template #[`item.totalDespesas`]="{ item }">{{ valorColuna(item, item.totalDespesas) }}</template>
         <template #[`item.totalRetiradas`]="{ item }">{{ valorColuna(item, item.totalRetiradas) }}</template>

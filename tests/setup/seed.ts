@@ -86,6 +86,8 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_empresas_visualizar",
       "cadastro_usuarios_visualizar",
       "cadastro_permissoes_visualizar",
+      "caixa_operar",
+      "caixas_gerenciar",
       // Gerencia configura o vinculo usuario<->conta (FOTO 4) — paridade com a referencia de producao.
       "cadastro_contas_usuarios_visualizar",
       "cadastro_contas_usuarios_criar",

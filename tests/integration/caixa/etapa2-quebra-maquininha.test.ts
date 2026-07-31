@@ -9,15 +9,18 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieCaixa: string;
+  let cookieGerente: string;
   let cookieTesouraria: string;
   let usuarioCaixaId: string;
+  let usuarioGerenteId: string;
   let sequenciaLacre = 0;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieCaixa, cookieTesouraria] = await Promise.all([
+    [cookieAdmin, cookieCaixa, cookieGerente, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa"),
+      cookieSessao(contexto.app, "gerente"),
       cookieSessao(contexto.app, "tesouraria")
     ]);
     const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
@@ -25,6 +28,11 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     ]);
     if (!usuario) throw new Error("Usuario Caixa nao encontrado");
     usuarioCaixaId = usuario.id;
+    const gerente = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+      usuariosTeste.gerente.email
+    ]);
+    if (!gerente) throw new Error("Usuario Gerente nao encontrado");
+    usuarioGerenteId = gerente.id;
   }, 120_000);
 
   afterAll(async () => contexto.fechar());
@@ -174,5 +182,25 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
         [notificacao!.id]
       )
     ).toBeTruthy();
+  });
+
+  it("registra o gerente que fechou e mantem a quebra atribuida ao operador", async () => {
+    const { contaId, pdvId } = await criarContaEPdv("fechado-por-gerente");
+    const caixaId = await abrirCaixa(pdvId);
+    expect((await transferir(cookieCaixa, contaId, idsTeste.contaBanco, 4.56)).statusCode).toBe(201);
+
+    const fechado = await request(cookieGerente, "POST", `/api/caixa/${caixaId}/fechar`, {
+      observacao: "Gerente conferiu a falta do operador"
+    });
+    expect(fechado.statusCode, fechado.body).toBe(204);
+
+    const autoria = await consultarUm<{ fechado_por: string; usuario_id: string }>(
+      `select f.fechado_por, q.usuario_id
+         from fechamentos_caixa f
+         join quebras_caixa q on q.fechamento_caixa_id = f.id
+        where f.id = $1`,
+      [caixaId]
+    );
+    expect(autoria).toEqual({ fechado_por: usuarioGerenteId, usuario_id: usuarioCaixaId });
   });
 });

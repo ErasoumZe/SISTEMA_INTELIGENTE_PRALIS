@@ -169,6 +169,13 @@
       "when": 1785508495603,
       "tag": "0023_grupos_ativos_seed_planilha",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785516746041,
+      "tag": "0024_fechado_por",
+      "breakpoints": true
     }
   ]
 }
