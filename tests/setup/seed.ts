@@ -64,7 +64,7 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorCaixa,
     colaboradorCargoId: idsTeste.colaboradorCargoCaixa,
     role: "usuario_comum",
-    permissoes: ["caixa_operar", "entradas_visualizar", "entradas_criar"]
+    permissoes: ["caixa_operar", "entradas_visualizar", "entradas_criar", "transferencias_criar"]
   },
   {
     perfil: "gerente",
@@ -79,6 +79,7 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_malotes_criar",
       "cadastro_malotes_editar",
       "transferencias_visualizar",
+      "transferencias_criar",
       "cadastro_contas_visualizar",
       "cadastro_pdv_visualizar",
       "cadastro_empresas_visualizar",
@@ -101,6 +102,7 @@ const usuarios: UsuarioSeed[] = [
       "cadastro_malotes_criar",
       "cadastro_malotes_editar",
       "transferencias_visualizar",
+      "transferencias_criar",
       // Tesouraria opera os LACRES (selo do movimento) — paridade com a referencia de producao.
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar"

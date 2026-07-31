@@ -522,19 +522,18 @@ describe("caixa integration", () => {
     assertProblem(resposta, 400);
   });
 
-  it("Deve_Retornar403_Quando_AcertarSaldoDeCaixaDeOutroUsuario", async () => {
-    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+  it("Deve_Retornar404_ParaCaminhoAntigoDeAcertoRemovido", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaAberto}/acertar-saldo`,
-      headers: { cookie: cookieCaixa },
+      headers: { cookie: cookieAdmin },
       payload: {}
     });
 
-    assertProblem(resposta, 403);
+    expect(resposta.statusCode).toBe(404);
   });
 
-  it("Deve_CalcularSaldoAcertarEFechar_Quando_CicloOperacionalCompleto", async () => {
+  it("Deve_CalcularSaldoRetornarAoCofreEFechar_Quando_CicloOperacionalCompleto", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
 
     const conta = await contexto.app.inject({
@@ -692,49 +691,15 @@ describe("caixa integration", () => {
       }
     });
 
-    const acerto = await contexto.app.inject({
+    const retorno = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${caixaId}/acertar-saldo`,
+      url: `/api/caixa/${caixaId}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Acerto ciclo" }
+      payload: { tipo: "retorno", valor: 75, observacao: "Retorno ciclo" }
     });
-    expect(acerto.statusCode, acerto.body).toBe(201);
+    expect(retorno.statusCode, retorno.body).toBe(200);
 
-    // Efeitos completos do acerto: despesa pendente vinculada ao colaborador e ao caixa,
-    // item da despesa, debito FECHAMENTO_CAIXA e ajuste operacional — todos com 75.00.
-    const despesaAcerto = await consultarUm<{
-      id: string;
-      colaborador_id: string;
-      data_pagamento: string | null;
-      valor_original: string;
-    }>(
-      "select id, colaborador_id, data_pagamento, valor_original from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'",
-      [caixaId]
-    );
-    expect(despesaAcerto?.valor_original).toBe("75.00");
-    expect(despesaAcerto?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
-    expect(despesaAcerto?.data_pagamento).toBeNull();
-
-    const itemAcerto = await consultarUm<{ valor: string }>("select valor from despesas_itens where despesa_id = $1", [
-      despesaAcerto?.id
-    ]);
-    expect(itemAcerto?.valor).toBe("75.00");
-
-    const debito = await consultarUm<{ tipo: string; valor: string; colaborador_id: string }>(
-      "select tipo, valor, colaborador_id from debitos_colaboradores where caixa_id = $1 and despesa_id = $2",
-      [caixaId, despesaAcerto?.id]
-    );
-    expect(debito?.tipo).toBe("FECHAMENTO_CAIXA");
-    expect(debito?.valor).toBe("75.00");
-    expect(debito?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
-
-    const ajuste = await consultarUm<{ valor_diferenca: string }>(
-      "select valor_diferenca from ajustes_fechamento_caixa where fechamento_caixa_id = $1 and despesa_id = $2",
-      [caixaId, despesaAcerto?.id]
-    );
-    expect(ajuste?.valor_diferenca).toBe("75.00");
-
-    // A despesa de acerto entra no proprio caixa e zera o saldo (o bug antigo nao volta).
+    // O retorno e transferencia caixa -> cofre e zera o saldo sem criar despesa/debito artificial.
     const statusDepois = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -742,14 +707,14 @@ describe("caixa integration", () => {
     });
     assertOk(statusDepois);
     expect(statusDepois.json()).toMatchObject({
-      data: { caixaAberto: { id: caixaId }, resumo: { totalDespesas: 95, saldo: 0 } }
+      data: { caixaAberto: { id: caixaId }, resumo: { totalTransferenciasSaida: 105, totalDespesas: 20, saldo: 0 } }
     });
 
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Fechado apos acerto" }
+      payload: { observacao: "Fechado apos retorno" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(

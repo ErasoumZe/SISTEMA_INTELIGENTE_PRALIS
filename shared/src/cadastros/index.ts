@@ -34,6 +34,7 @@ export type ProdutoConversaoForm = {
 
 export type CadastroForm = {
   nome: string;
+  numeroSerie: string;
   // Conta com fundo (D8): o fundo digitado e a lista de quem opera a conta. Vivem no formulario do
   // cadastro porque sao gravados no MESMO salvar — ver cadastroPayload("contas").
   saldoInicial?: string;
@@ -237,6 +238,8 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     };
   if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
   if (tela === "pdv") return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
+  if (tela === "maquininhas")
+    return { empresaId, numeroSerie: form.numeroSerie, apelido: form.nome, ativo: form.ativo };
   if (tela === "grupos")
     return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };

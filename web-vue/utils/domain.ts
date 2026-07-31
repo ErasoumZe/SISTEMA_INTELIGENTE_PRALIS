@@ -81,7 +81,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   fechamento: {
     id: "fechamento",
-    titulo: "Fechamento com diferenca",
+    titulo: "Pendências operacionais",
     permissao: "fechamento_com_diferenca_visualizar",
     // Balanca (conferir diferenca): mdi-cash-register agora e da tela Caixa, vizinha na secao
     // Operacao — dois icones iguais lado a lado confundiam.
@@ -157,6 +157,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "retiradas_visualizar",
     permissoesAlternativas: ["retiradas_criar", "retiradas_editar"],
     icone: "mdi-account-tie"
+  },
+  maquininhas: {
+    id: "maquininhas",
+    titulo: "Maquininhas",
+    permissao: "cadastro_pdv_visualizar",
+    permissoesAlternativas: ["cadastro_pdv_criar", "cadastro_pdv_editar"],
+    icone: "mdi-credit-card-chip"
   },
   produtos: { id: "produtos", titulo: "Produtos", permissao: "cadastro_produtos_visualizar", icone: "mdi-basket" },
   colaboradores: {
@@ -466,6 +473,7 @@ export function opcoesVazias(): Opcoes {
     clientes: [],
     colaboradores: [],
     sociosGestores: [],
+    maquininhas: [],
     cargos: [],
     colaboradoresCargos: [],
     colaboradoresJornadas: [],
@@ -532,6 +540,7 @@ export function formOperacaoVazio(): OperacaoForm {
 export function formCadastroVazio(): CadastroForm {
   return {
     nome: "",
+    numeroSerie: "",
     saldoInicial: "",
     usuariosIds: [],
     documento: "",
@@ -669,6 +678,7 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     formasPagamento: itensDaEmpresa(listas.formasPagamento, idEmpresa),
     fornecedores: itensDaEmpresa(listas.fornecedores, idEmpresa),
     sociosGestores: itensDaEmpresa(listas.sociosGestores, idEmpresa),
+    maquininhas: itensDaEmpresa(listas.maquininhas, idEmpresa),
     clientes: itensDaEmpresa(listas.clientes, idEmpresa),
     colaboradores: itensDaEmpresa(listas.colaboradores, idEmpresa),
     cargos: itensDaEmpresa(listas.cargos, idEmpresa),
@@ -722,6 +732,7 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
     formas_pagamento: "formas-pagamento",
     fornecedores: "fornecedores",
     socios_gestores: "socios-gestores",
+    maquininhas: "maquininhas",
     produtos: "produtos"
   };
   return mapa[tela] ?? tela.replaceAll("_", "-");
@@ -824,6 +835,7 @@ export function formCadastroDeLinha(
   return {
     ...formCadastroVazio(),
     nome: linha.nome ?? "",
+    numeroSerie: linha.numeroSerie ?? "",
     // Conta com fundo (D8): reabre o fundo digitado e as marcacoes de quem opera a conta. Sem isso
     // editar o nome zeraria o fundo e apagaria todos os vinculos no salvar.
     saldoInicial: linha.saldoInicial ?? "",

@@ -47,6 +47,8 @@ export type Opcao = {
   nome?: string;
   email?: string;
   descricao?: string;
+  apelido?: string;
+  numeroSerie?: string;
   codigo?: string;
   codigoBarras?: string;
   documento?: string;
@@ -160,6 +162,7 @@ export type Opcoes = {
   clientes: Opcao[];
   colaboradores: Opcao[];
   sociosGestores: Opcao[];
+  maquininhas: Opcao[];
   cargos: Opcao[];
   colaboradoresCargos: Opcao[];
   colaboradoresJornadas: Opcao[];
@@ -271,6 +274,9 @@ export type CaixaOperacional = {
   fechadoEm: string | null;
   tokenEdicao: string | null;
   turnoId: string | null;
+  maquininhaId: string | null;
+  maquininhaApelido: string | null;
+  maquininhaNumeroSerie: string | null;
   observacao: string | null;
   status: string;
 };

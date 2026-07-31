@@ -569,8 +569,14 @@ const validacaoQtdPreview = computed(() =>
           <v-col
             v-if="cadastroTela !== 'produtos'"
             cols="12"
-            :md="['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes', 'contas'].includes(cadastroTela) ? 6 : 12"
-            ><v-text-field v-model="formCadastro.nome" label="Nome"
+            :md="
+              ['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes', 'contas', 'maquininhas'].includes(
+                cadastroTela
+              )
+                ? 6
+                : 12
+            "
+            ><v-text-field v-model="formCadastro.nome" :label="cadastroTela === 'maquininhas' ? 'Apelido *' : 'Nome'"
           /></v-col>
           <!-- Conta com FUNDO (D8). O fundo e o PONTO DE PARTIDA do saldo, nao o saldo: quem move o
                saldo sao os lancamentos. Por isso o campo fica editavel e o saldo atual, ao lado,
@@ -693,6 +699,14 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="cadastroTela === 'socios_gestores'" cols="12" md="4">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
+          <template v-if="cadastroTela === 'maquininhas'">
+            <v-col cols="12" md="4">
+              <v-text-field v-model="formCadastro.numeroSerie" label="Número de série *" />
+            </v-col>
+            <v-col cols="12" md="2">
+              <v-switch v-model="formCadastro.ativo" color="primary" label="Ativa" />
+            </v-col>
+          </template>
           <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
             ><v-text-field v-model="formCadastro.sigla" label="Sigla"
           /></v-col>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
+import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
-import { itemPorTela } from "~/utils/domain";
+import { dinheiro, itemPorTela } from "~/utils/domain";
 import { agruparTelasMenu } from "~/utils/menu";
 
 const props = defineProps<{
@@ -16,11 +17,13 @@ const props = defineProps<{
   motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
   saindo: boolean;
+  notificacoes?: Notificacao[];
 }>();
 
 const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
   (event: "logout"): void;
+  (event: "verificarNotificacao", id: string): void;
 }>();
 
 const drawerRecolhido = ref(false);
@@ -258,6 +261,38 @@ onMounted(() => {
             :aria-label="escuro ? 'Ativar tema claro' : 'Ativar tema escuro'"
             @click="alternarModoEscuro"
           />
+
+          <v-menu location="bottom end" :close-on-content-click="false">
+            <template #activator="{ props: menuProps }">
+              <v-badge :content="notificacoes?.length ?? 0" :model-value="Boolean(notificacoes?.length)" color="error">
+                <v-btn v-bind="menuProps" icon="mdi-bell-outline" variant="text" aria-label="Notificações" />
+              </v-badge>
+            </template>
+            <v-card min-width="320" max-width="420">
+              <v-card-title class="text-subtitle-1">Pendências</v-card-title>
+              <v-list v-if="notificacoes?.length" lines="three">
+                <v-list-item v-for="item in notificacoes" :key="item.id" :title="item.titulo">
+                  <template #subtitle>
+                    <span v-if="item.valor != null">{{ dinheiro(item.valor) }} · </span>
+                    {{ new Date(item.criadoEm).toLocaleString("pt-BR") }}
+                  </template>
+                  <template #append>
+                    <v-btn
+                      icon="mdi-check"
+                      size="small"
+                      variant="text"
+                      title="Marcar como verificada"
+                      @click="emit('verificarNotificacao', item.id)"
+                    />
+                  </template>
+                </v-list-item>
+              </v-list>
+              <v-card-text v-else>Nenhuma pendência.</v-card-text>
+              <v-card-actions>
+                <v-btn to="/fechamento" variant="text">Ver todas</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-menu>
 
           <v-menu location="bottom end">
             <template #activator="{ props: menuProps }">

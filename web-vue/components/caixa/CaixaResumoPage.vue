@@ -9,6 +9,7 @@ const props = defineProps<{
   status: CaixaStatus | null;
   pdvs: Opcao[];
   turnos?: Opcao[];
+  maquininhas?: Opcao[];
   empresaId: string;
   permissoes: string[];
   usuarioId: string;
@@ -23,11 +24,12 @@ const emit = defineEmits<{
       pdvId: string;
       usuarioCaixaId: string;
       turnoId?: string | null;
+      maquininhaId?: string | null;
       dataHoraAbertura: string;
       observacao: string | null;
     }
   ): void;
-  (event: "acertarSaldo", payload: { caixaId: string; observacao: string | null }): void;
+  (event: "retornarSaldo", payload: { caixaId: string; valor: number; observacao: string | null }): void;
   (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null }): void;
   (event: "recarregar"): void;
 }>();
@@ -41,12 +43,18 @@ const abertura = reactive({
 // abrir(). A persistencia vem na rodada de regras.
 // TODO(regras): abertura por N Lacre da transferencia de entrada (Fase A / tabela lacres).
 // TODO(regras): maquina de cartao / N de serie vinculada ao caixa (PDV/turno).
-const aberturaExtra = reactive({ numeroLacre: "", maqCartaoSerie: "" });
+const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
 const fechamento = reactive({ observacao: "" });
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
 const precisaAcerto = computed(() => Number(resumoAtual.value?.saldo ?? 0) > 0);
+const maquininhasSelect = computed(() =>
+  (props.maquininhas ?? []).map((item) => ({
+    ...item,
+    nome: `${item.apelido ?? item.nome} · ${item.numeroSerie ?? "sem série"}`
+  }))
+);
 
 // Cockpit por categoria: a cor entra como ACENTO (barra/chip/total) via os tokens --cat-* da main,
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
@@ -101,15 +109,17 @@ function abrir() {
     pdvId: abertura.pdvId,
     usuarioCaixaId: props.usuarioId,
     turnoId: abertura.turnoId || null,
+    maquininhaId: aberturaExtra.maquininhaId || null,
     dataHoraAbertura: abertura.dataHoraAbertura,
     observacao: null
   });
 }
 
-function acertar() {
+function retornarSaldo() {
   const caixa = caixaAberto.value;
-  if (!caixa) return;
-  emit("acertarSaldo", { caixaId: caixa.id, observacao: null });
+  const valor = Number(resumoAtual.value?.saldo ?? 0);
+  if (!caixa || valor <= 0) return;
+  emit("retornarSaldo", { caixaId: caixa.id, valor, observacao: fechamento.observacao || null });
 }
 
 function fechar() {
@@ -168,13 +178,14 @@ function fechar() {
             />
           </v-col>
           <v-col cols="12" md="6">
-            <v-text-field
-              v-model="aberturaExtra.maqCartaoSerie"
+            <v-select
+              v-model="aberturaExtra.maquininhaId"
+              :items="maquininhasSelect"
+              item-title="nome"
+              item-value="id"
               label="Maq. Cartão / N° Série"
-              placeholder="Ex.: 0742742…"
-              data-pendente="regra"
-              hint="Vínculo da maquininha entra na rodada de regras."
-              persistent-hint
+              hint="Opcional"
+              clearable
             />
           </v-col>
         </v-row>
@@ -210,6 +221,9 @@ function fechar() {
         <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
           <v-alert type="success" variant="tonal" class="flex-grow-1 mb-0">
             Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
+            <span v-if="caixaAberto.maquininhaId">
+              Maquininha: {{ caixaAberto.maquininhaApelido }} · {{ caixaAberto.maquininhaNumeroSerie }}.
+            </span>
           </v-alert>
           <CaixaAutorizacoes
             :empresa-id="empresaId"
@@ -251,14 +265,13 @@ function fechar() {
         <v-divider class="my-5" />
 
         <v-alert v-if="precisaAcerto" type="warning" variant="tonal" class="my-5">
-          Diferenca positiva de {{ dinheiro(resumoAtual?.saldo || 0) }}. Ao acertar, a diferenca sera atribuida ao
-          usuario do caixa.
+          Ainda há {{ dinheiro(resumoAtual?.saldo || 0) }} no caixa. Lance o retorno ao cofre antes de fechar.
         </v-alert>
 
         <v-row dense>
           <v-col v-if="precisaAcerto" cols="12">
-            <v-btn color="warning" prepend-icon="mdi-cash-sync" :loading="salvando" @click="acertar">
-              Acertar saldo
+            <v-btn color="warning" prepend-icon="mdi-bank-transfer-out" :loading="salvando" @click="retornarSaldo">
+              Lançar retorno de {{ dinheiro(resumoAtual?.saldo || 0) }}
             </v-btn>
           </v-col>
           <v-col cols="12" md="8">

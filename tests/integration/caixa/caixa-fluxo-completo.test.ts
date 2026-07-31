@@ -163,7 +163,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
 
-  it("FECHA COM diferenca: saldo positivo exige acerto, que atribui a diferenca ao colaborador e zera o caixa", async () => {
+  it("FECHA COM sobra: exige retorno explicito ao cofre e zera o caixa", async () => {
     const { caixaId, contaId, pdvId } = await abrirCaixa("com-diferenca", "2026-05-02T08:00");
     const dataReferencia = "2026-05-02";
 
@@ -190,23 +190,20 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     // Fechar com saldo positivo sem acerto e barrado.
     const fecharSemAcerto = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa sem acerto" });
     assertProblem(fecharSemAcerto, 400);
+    expect(fecharSemAcerto.body).toMatch(/R\$ 100\.00/);
 
-    // Acerto: gera a despesa "Diferenca de caixa" de 100 atribuida ao colaborador e zera o saldo.
-    const acerto = await post(`/api/caixa/${caixaId}/acertar-saldo`, { observacao: "Acerto do fechamento" });
-    expect(acerto.statusCode, acerto.body).toBe(201);
-
-    const despesaDiferenca = await consultarUm<{ valor_original: string; colaborador_id: string }>(
-      "select valor_original, colaborador_id from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'",
-      [caixaId]
-    );
-    expect(despesaDiferenca?.valor_original).toBe("100.00");
-    expect(despesaDiferenca?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
+    const retorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      tipo: "retorno",
+      valor: 100,
+      observacao: "Retorno do fechamento"
+    });
+    expect(retorno.statusCode, retorno.body).toBe(200);
 
     const depois = await resumoDoCaixa();
     expect(depois.resumo).toMatchObject({ saldo: 0 });
 
-    // Agora o caixa fecha, com saldo zero e a diferenca registrada.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos acerto" });
+    // Agora o caixa fecha com saldo zero e o retorno registrado como transferencia.
+    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos retorno" });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",

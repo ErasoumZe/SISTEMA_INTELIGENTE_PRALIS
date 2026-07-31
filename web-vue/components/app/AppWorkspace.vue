@@ -21,6 +21,7 @@ import type {
   PermissoesPaginadas,
   ResumoCaixa
 } from "~/types/padaria";
+import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
 import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
@@ -120,6 +121,7 @@ const empresas = useState<Opcao[]>("padaria.workspace.empresas", () => []);
 const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () => []);
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
+const notificacoes = ref<Notificacao[]>([]);
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
@@ -463,6 +465,7 @@ function limparWorkspacePersistido() {
   operacoes.value = [];
   resumo.value = null;
   caixaStatus.value = null;
+  notificacoes.value.splice(0);
   empresaSelecionadaId.value = "";
   tema.value = temaPadrao();
   temaAtual.value = temaPadrao();
@@ -506,7 +509,7 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
   try {
-    await carregarStatusCaixa(idEmpresa);
+    await Promise.all([carregarStatusCaixa(idEmpresa), carregarNotificacoes(idEmpresa)]);
     if (telaBloqueadaPorCaixa.value) {
       const dados = opcoesVazias();
       dados.empresas = empresas.value;
@@ -522,6 +525,25 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
     await carregarOperacoes(idEmpresa);
   } finally {
     empresaCarregando.value = false;
+  }
+}
+
+async function carregarNotificacoes(idEmpresa = empresaId.value) {
+  if (!idEmpresa) {
+    notificacoes.value.splice(0);
+    return;
+  }
+  const itens = await apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${encodeURIComponent(idEmpresa)}`);
+  notificacoes.value.splice(0, notificacoes.value.length, ...itens);
+}
+
+async function verificarNotificacao(notificacaoId: string) {
+  try {
+    await apiPut(`/api/notificacoes/${notificacaoId}/verificar?empresaId=${encodeURIComponent(empresaId.value)}`, {});
+    await carregarNotificacoes();
+    notificar("Notificacao verificada.");
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
   }
 }
 
@@ -571,12 +593,18 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "fechamento") {
     dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
   } else if (tela === "caixa") {
-    [dados.pdvs, dados.turnos] = await Promise.all([
+    [dados.pdvs, dados.turnos, dados.maquininhas] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
       carregarOpcaoOpcional(
         faltas,
         "Turnos",
         () => apiGetPaginado<Opcao>(`/api/turnos${query}`).then((r) => r.itens),
+        []
+      ),
+      carregarOpcaoOpcional(
+        faltas,
+        "Maquininhas",
+        () => apiGetPaginado<Opcao>(`/api/maquininhas${query}`).then((r) => r.itens),
         []
       )
     ]);
@@ -736,6 +764,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
   } else if (tela === "socios_gestores") {
     dados.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
+  } else if (tela === "maquininhas") {
+    dados.maquininhas = (await apiGetPaginado<Opcao>(`/api/maquininhas${query}`)).itens;
   } else if (tela === "clientes") {
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
@@ -793,7 +823,7 @@ async function carregarTudo() {
       erro.value = "Sem permissao para acessar esta pagina.";
       return;
     }
-    await carregarStatusCaixa(empresaId.value);
+    await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
     if (!paginaInicialNeutra.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(paginaInicialNeutra.value ? "padrao" : telaAtiva.value);
     await carregarTemaResumoCaixa();
@@ -1535,11 +1565,10 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
+const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
   api: { post: apiPost },
   empresaId: () => empresaId.value,
   telaAtiva: () => telaAtiva.value,
-  resumoSaldo: () => resumo.value?.saldo ?? null,
   setSalvando: (valor) => {
     caixaSalvando.value = valor;
   },
@@ -1591,6 +1620,7 @@ function tipoCopiaTela(tela = telaAtiva.value) {
     areas_setores: "areas-setores",
     fornecedores: "fornecedores",
     socios_gestores: "socios-gestores",
+    maquininhas: "maquininhas",
     produtos: "produtos",
     colaboradores: "colaboradores"
   };
@@ -1798,7 +1828,9 @@ const pageContext = computed(() => ({
   atualizarPaginaOperacoes,
   atualizarDiaEntradas,
   abrirCaixaOperacional,
-  acertarSaldoOperacional,
+  retornarSaldoOperacional,
+  notificacoes: notificacoes.value,
+  verificarNotificacao,
   fecharCaixaOperacional,
   recarregarCaixa: async () => {
     await carregarStatusCaixa(empresaId.value);
@@ -1875,12 +1907,14 @@ onBeforeUnmount(() => {
     :empresas="empresasDisponiveis"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
+    :notificacoes="notificacoes"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
     @logout="logout"
+    @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>
       <div v-if="temPermissao('caixa_operar')" class="caixa-card">

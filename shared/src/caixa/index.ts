@@ -23,6 +23,8 @@ export const abrirCaixaPayloadSchema = z.object({
   // Malote selecionado na abertura (R8): o servidor cria a transferencia cofre -> caixa pelo valor
   // do malote e inicia o caixa em deficit. Opcional (abrir sem malote continua valido).
   maloteId: uuidSchema.optional().nullable(),
+  // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
+  maquininhaId: uuidSchema.optional().nullable(),
   // Lacre da IDA (D1/D5): preenchimento opcional por enquanto; o campo ja existe.
   lacreAbertura: z.string().trim().min(1).optional().nullable(),
   observacao: z.string().optional().nullable()
@@ -37,10 +39,6 @@ export const editarAberturaCaixaPayloadSchema = z.object({
   pdvId: uuidSchema,
   usuarioCaixaId: z.string().min(1),
   dataHoraAbertura: dataHoraSchema,
-  observacao: z.string().optional().nullable()
-});
-
-export const acertarSaldoCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable()
 });
 
@@ -269,6 +267,9 @@ export const caixaOperacionalSchema = z.object({
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
+  maquininhaId: uuidSchema.nullable(),
+  maquininhaApelido: z.string().nullable(),
+  maquininhaNumeroSerie: z.string().nullable(),
   observacao: z.string().nullable(),
   status: z.string()
 });
@@ -276,12 +277,6 @@ export const caixaOperacionalSchema = z.object({
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable()
-});
-
-export const acertoSaldoCaixaResponseSchema = z.object({
-  despesaId: uuidSchema,
-  debitoId: uuidSchema,
-  valorDiferenca: z.number()
 });
 
 export const alterarHorarioCaixaResponseSchema = caixaStatusSchema.extend({
@@ -292,7 +287,6 @@ export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
 export type EditarAberturaCaixaPayload = z.infer<typeof editarAberturaCaixaPayloadSchema>;
-export type AcertarSaldoCaixaPayload = z.infer<typeof acertarSaldoCaixaPayloadSchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type StatusCaixa = z.infer<typeof statusCaixaSchema>;
@@ -328,7 +322,6 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
   };
 }
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
-export type AcertoSaldoCaixaResponse = z.infer<typeof acertoSaldoCaixaResponseSchema>;
 export type SolicitarAutorizacaoCaixaPayload = z.infer<typeof solicitarAutorizacaoCaixaPayloadSchema>;
 export type AlterarHorarioCaixaPayload = z.infer<typeof alterarHorarioCaixaPayloadSchema>;
 export type AlterarHorarioCaixaResponse = z.infer<typeof alterarHorarioCaixaResponseSchema>;

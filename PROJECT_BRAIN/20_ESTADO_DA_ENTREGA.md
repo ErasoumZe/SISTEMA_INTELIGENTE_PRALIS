@@ -68,6 +68,26 @@ Paginação no servidor (50/página), totalizador somando o **filtro inteiro** (
 filtro de data desabilitado para quem tem `menu_entradas_somente_caixa_aberto` (o servidor força o
 dia do caixa — campo visível só para a pessoa saber QUAL dia está vendo).
 
+### Corujão v2 — Etapa 2
+
+**ENTREGUE no dev em 31/07/2026.** A migration `0021_minor_hobgoblin.sql` foi ensaiada numa cópia
+descartável e depois aplicada somente no banco dev. O histórico passou a 22 migrations. Produção
+não foi tocada.
+
+A vertical inclui cadastro e seleção opcional de maquininha, transferência gerencial sem caixa,
+retorno explícito antes do fechamento, quebra por empresa/usuário com observação obrigatória,
+notificação genérica para Tesouraria e verificação pelo destinatário. O endpoint antigo de acerto
+automático e a segunda tela de fechamento foram removidos.
+
+Provas automatizadas: `etapa2-quebra-maquininha.test.ts` (4),
+`transferencia-sem-caixa.test.ts` (6) e suíte `tests/integration/caixa` (46). Os CHECKs de
+observação não vazia e verificação consistente, além da FK composta de tenant da quebra, também
+foram exercitados diretamente no ensaio da migration.
+
+R-019 e R-037 possuem casa comum em `notificacoes`, mas a criação dos alertas pelos eventos de
+transferência continua corretamente na Etapa 3; não estão sendo declaradas como comportamento
+entregue nesta etapa.
+
 ---
 
 ## 3. Pendências que TRAVAM (precisam do José)

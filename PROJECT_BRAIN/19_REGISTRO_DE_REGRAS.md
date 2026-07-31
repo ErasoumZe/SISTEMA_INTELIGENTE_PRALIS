@@ -168,6 +168,25 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 | **R-038** 🆕 | O bloco Retorno/Sangria da FOTO 1 são **sangrias independentes** do dia — cada linha é uma transferência própria, agrupadas na mesma tela por comodidade                                                                                  |
 | **R-039** 🆕 | **Maquininha de cartão tem cadastro próprio** (nº de série, apelido, empresa), escolhida na abertura de caixa. **Preencher é OPCIONAL** e continua assim. Vem da FOTO 5 — são os 3 `data-pendente` de `CaixaResumoPage.vue` (José, 31/07) |
 
+### Execução do Corujão v2 — Etapa 2 (31/07)
+
+Estado confirmado no código e nos testes:
+
+| Regra          | Estado                     | Prova                                                                                                                                     |
+| -------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| R-008/R-008b   | ✅                         | fechamento recusa saldo positivo; o operador lança o retorno explícito para a conta de cofre configurada da empresa                       |
+| R-015/R-016    | ✅                         | `quebras_caixa` guarda o fato contábil por empresa e usuário; observação não vazia é exigida no serviço e por CHECK no banco              |
+| R-017/R-018    | ✅                         | quebra gera `notificacoes` para Tesouraria; destinatário verifica pelo sininho/tela de pendências; o banco impede estado meio-verificado  |
+| R-019          | 🟡 infraestrutura entregue | `notificacoes.tipo` já aceita `transferencia_divergencia`; a emissão pela confirmação divergente pertence à Etapa 3                       |
+| R-021 (quebra) | ✅                         | quebra não altera `contas` e vive em tabela própria, com `empresa_id` e FK composta que impede cruzamento de tenant                       |
+| R-032          | ✅                         | Tesouraria, Gerência/Gerente, Financeiro, Diretor Geral e admin transferem sem caixa; Caixa continua exigindo caixa aberto e conta do PDV |
+| R-033          | ✅                         | abertura sem lacre continua permitida e pode começar zerada                                                                               |
+| R-039          | ✅                         | cadastro de maquininha por empresa, série, apelido e estado; seleção opcional na abertura                                                 |
+
+A tabela genérica `notificacoes` também reserva `transferencia_prazo_confirmacao` para a R-037 da
+Etapa 3. Isto evita três mecanismos de alerta concorrentes. R-019 e R-037 só serão marcadas como
+entregues quando os eventos de transferência efetivamente criarem essas notificações.
+
 ### ⚠️ Correção de status (31/07) — o registro estava mentindo
 
 **R-041** (juros em R$ ou %) e **R-042** (Valor Total) apareciam como ❌ e foram **entregues** nos

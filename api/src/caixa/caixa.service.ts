@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type {
   AbrirCaixaPayload,
-  AcertarSaldoCaixaPayload,
   AlterarHorarioCaixaPayload,
   AlterarHorarioCaixaResponse,
   CaixaOperacional,
@@ -40,8 +39,8 @@ import {
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
   buscarContaCofreEmpresaRepository,
-  buscarGrupoQuebraCaixa,
   buscarMaloteDisponivelPorLacreRepository,
+  buscarMaquininhaEmpresaRepository,
   buscarMaloteParaAberturaRepository,
   buscarPdvEmpresaRepository,
   buscarAjusteCaixaRepository,
@@ -50,8 +49,8 @@ import {
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   contaPertenceEmpresaRepository,
-  criarAcertoSaldoCaixaRepository,
   criarCaixaRepository,
+  criarQuebraCaixaRepository,
   criarTransferenciaAberturaRepository,
   criarTransferenciaCofreRepository,
   existeCaixaAbertoPdvRepository,
@@ -59,6 +58,7 @@ import {
   listarEdicoesCaixaRepository,
   listarHistoricoCaixaRepository,
   listarLancamentosCaixaRepository,
+  listarUsuariosTesourariaRepository,
   listarTransferenciasCaixaRepository,
   marcarMaloteEmUsoRepository,
   proximaOrdemTransferenciaRepository,
@@ -67,6 +67,7 @@ import {
   totaisHistoricoCaixaRepository,
   type FiltrosHistoricoCaixa
 } from "./caixa.repository.js";
+import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const indiceCaixaAbertoUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
@@ -128,6 +129,9 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
+    maquininhaId: caixa.maquininhaId ?? null,
+    maquininhaApelido: caixa.maquininhaApelido ?? null,
+    maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
     observacao: caixa.observacao,
     status: caixa.status
   };
@@ -293,6 +297,9 @@ async function abrirCaixaEmTransacao(
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
+    if (dados.maquininhaId && !(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {
+      throw new Error("Maquininha nao encontrada ou inativa");
+    }
 
     // R8: malote selecionado => transferencia cofre->caixa e caixa nasce devendo (deficit). Opcional.
     const aberturaMalote = dados.maloteId
@@ -313,7 +320,8 @@ async function abrirCaixaEmTransacao(
         observacao: dados.observacao?.trim() || null,
         maloteAberturaId: aberturaMalote?.maloteId ?? null,
         lacreAbertura: aberturaMalote?.numeroLacre ?? null,
-        dividaCofreCentavos: aberturaMalote?.valorCentavos ?? 0
+        dividaCofreCentavos: aberturaMalote?.valorCentavos ?? 0,
+        maquininhaId: dados.maquininhaId ?? null
       },
       tx
     );
@@ -525,38 +533,6 @@ export async function alterarHorarioCaixa(
   }
 }
 
-export async function acertarSaldoCaixaOperacional(
-  caixaId: string,
-  dados: AcertarSaldoCaixaPayload,
-  perfil: PerfilUsuario
-) {
-  return executarEmTransacao(async (tx) => {
-    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    const saldoCentavos = saldoCaixaCentavos(totais);
-    if (saldoCentavos <= 0) throw new Error("Nao ha diferenca positiva para acertar");
-    const grupo = await buscarGrupoQuebraCaixa(caixa.empresaId, tx);
-    const resultado = await criarAcertoSaldoCaixaRepository(
-      {
-        caixaId: caixa.id,
-        empresaId: caixa.empresaId,
-        colaboradorId: caixa.colaboradorId,
-        contaOrigemId: caixa.pdvContaId,
-        grupoDespesaId: grupo?.id ?? null,
-        valorDiferencaCentavos: saldoCentavos,
-        observacao: dados.observacao?.trim() || null,
-        criadoPor: perfil.usuarioId,
-        data: diaNegocio(new Date())
-      },
-      tx
-    );
-    return { ...resultado, valorDiferenca: deCentavos(saldoCentavos) };
-  });
-}
-
 export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, perfil: PerfilUsuario) {
   return executarEmTransacao(async (tx) => {
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
@@ -569,13 +545,45 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     }
     const totais = await calcularTotaisCaixaCentavos(caixa, tx);
     const saldoCentavos = saldoCaixaCentavos(totais);
-    if (saldoCentavos > 0) throw new Error("Acerto de saldo obrigatorio");
+    if (saldoCentavos > 0) {
+      throw new Error(`Retorno ao cofre obrigatorio: ainda sobram R$ ${deCentavos(saldoCentavos).toFixed(2)}`);
+    }
+
+    const observacao = dados.observacao?.trim() || null;
+    if (saldoCentavos < 0) {
+      if (!observacao) throw new Error("Observacao obrigatoria para fechar caixa com quebra");
+      if (!caixa.usuarioCaixaId) throw new Error("Caixa sem usuario responsavel");
+      const quebra = await criarQuebraCaixaRepository(
+        {
+          empresaId: caixa.empresaId,
+          fechamentoCaixaId: caixa.id,
+          usuarioId: caixa.usuarioCaixaId,
+          valorCentavos: saldoCentavos,
+          observacao
+        },
+        tx
+      );
+      const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+        .map((item) => item.usuarioId)
+        .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+      await criarNotificacoesRepository(
+        {
+          empresaId: caixa.empresaId,
+          tipo: "quebra_caixa",
+          destinatariosUsuarioIds: destinatarios,
+          referenciaId: quebra.id,
+          titulo: `Quebra de caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+          valorCentavos: saldoCentavos
+        },
+        tx
+      );
+    }
 
     await atualizarFechamentoCaixaRepository(
       {
         caixaId: caixa.id,
         dataHoraFechamento,
-        observacao: dados.observacao?.trim() || caixa.observacao,
+        observacao: observacao || caixa.observacao,
         totais,
         saldoCentavos
       },

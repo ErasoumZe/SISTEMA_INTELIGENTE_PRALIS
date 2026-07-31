@@ -126,6 +126,16 @@
       "development": "./src/malotes/index.ts",
       "default": "./dist/malotes/index.js"
     },
+    "./maquininhas": {
+      "types": "./dist/maquininhas/index.d.ts",
+      "development": "./src/maquininhas/index.ts",
+      "default": "./dist/maquininhas/index.js"
+    },
+    "./notificacoes": {
+      "types": "./dist/notificacoes/index.d.ts",
+      "development": "./src/notificacoes/index.ts",
+      "default": "./dist/notificacoes/index.js"
+    },
     "./patrimonio": {
       "types": "./dist/patrimonio/index.d.ts",
       "development": "./src/patrimonio/index.ts",

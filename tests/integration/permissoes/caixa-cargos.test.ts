@@ -71,12 +71,12 @@ describe("caixa permissoes por cargo integration", () => {
     assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 
-  it("Deve_Bloquear_Quando_SemPermissaoTentaAcertarSaldo", async () => {
+  it("Deve_Bloquear_Quando_SemPermissaoTentaRetornarSaldo", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${idsTeste.caixaAberto}/acertar-saldo`,
+      url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
       headers: { cookie: cookies.get("semPermissao")! },
-      payload: {}
+      payload: { tipo: "retorno", valor: 1 }
     });
     assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });

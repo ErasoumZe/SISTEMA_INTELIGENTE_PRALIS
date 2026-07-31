@@ -9,7 +9,6 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
     api: { post: vi.fn().mockResolvedValue(undefined) },
     empresaId: () => "emp-1",
     telaAtiva: () => "caixa",
-    resumoSaldo: () => 1500,
     setSalvando: vi.fn(),
     carregarStatusCaixa: vi.fn().mockResolvedValue(undefined),
     carregarDadosTela: vi.fn().mockResolvedValue(undefined),
@@ -60,34 +59,29 @@ describe("abrirCaixaOperacional", () => {
   });
 });
 
-describe("acertarSaldoOperacional", () => {
-  const payload = { caixaId: "cx-1", observacao: null };
+describe("retornarSaldoOperacional", () => {
+  const payload = { caixaId: "cx-1", valor: 15, observacao: null };
 
-  it("com confirmacao posta acerto-saldo, notifica e re-busca status", async () => {
+  it("com confirmacao posta retorno ao cofre, notifica e re-busca status", async () => {
     const deps = montarDeps({ confirmar: vi.fn().mockReturnValue(true) });
-    await criarAcoesCaixa(deps).acertarSaldoOperacional(payload);
+    await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
     expect(deps.confirmar).toHaveBeenCalledOnce();
-    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/acertar-saldo", { observacao: null });
-    expect(deps.notificar).toHaveBeenCalledWith("Saldo ajustado com sucesso.");
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/transferencia-cofre", {
+      tipo: "retorno",
+      valor: 15,
+      observacao: null
+    });
+    expect(deps.notificar).toHaveBeenCalledWith("Retorno ao cofre lançado com sucesso.");
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
   });
 
   it("aborta sem chamar a API se a confirmacao for negada", async () => {
     const deps = montarDeps({ confirmar: () => false });
-    await criarAcoesCaixa(deps).acertarSaldoOperacional(payload);
+    await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
     expect(deps.api.post).not.toHaveBeenCalled();
     expect(deps.setSalvando).not.toHaveBeenCalled();
-  });
-
-  it("aborta quando nao ha resumo (saldo null)", async () => {
-    const confirmar = vi.fn();
-    const deps = montarDeps({ resumoSaldo: () => null, confirmar });
-    await criarAcoesCaixa(deps).acertarSaldoOperacional(payload);
-
-    expect(confirmar).not.toHaveBeenCalled();
-    expect(deps.api.post).not.toHaveBeenCalled();
   });
 });
 

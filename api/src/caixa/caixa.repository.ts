@@ -20,16 +20,24 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import {
   colaboradores,
+  colaboradoresCargos,
   contas,
+  cargos,
   empresas,
-  gruposDespesas,
   malotes,
+  maquininhas,
   pdvs,
   perfisUsuarios,
   turnos
 } from "@padaria/db/schema/cadastro";
-import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
-import { despesas, despesasItens } from "@padaria/db/schema/despesa";
+import {
+  ajustesFechamentoCaixa,
+  debitosColaboradores,
+  edicoesCaixa,
+  fechamentosCaixa,
+  quebrasCaixa
+} from "@padaria/db/schema/caixa";
+import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
@@ -37,20 +45,7 @@ import { vendas } from "@padaria/db/schema/venda";
 import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
-
-export async function buscarGrupoQuebraCaixa(
-  empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<{ id: string } | null> {
-  const [grupo] = await db
-    .select({ id: gruposDespesas.id })
-    .from(gruposDespesas)
-    .where(and(eq(gruposDespesas.empresaId, empresaId), ilike(gruposDespesas.nome, "Quebra de caixa")))
-    .limit(1);
-
-  return grupo ?? null;
-}
+import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: string, db: ExecutorBanco = banco) {
   const [pdv] = await db
@@ -121,6 +116,9 @@ export async function buscarCaixaAbertoUsuarioRepository(
       fechadoEm: fechamentosCaixa.fechadoEm,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      maquininhaId: fechamentosCaixa.maquininhaId,
+      maquininhaApelido: maquininhas.apelido,
+      maquininhaNumeroSerie: maquininhas.numeroSerie,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -128,6 +126,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
     .where(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
@@ -159,6 +158,9 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       fechadoEm: fechamentosCaixa.fechadoEm,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      maquininhaId: fechamentosCaixa.maquininhaId,
+      maquininhaApelido: maquininhas.apelido,
+      maquininhaNumeroSerie: maquininhas.numeroSerie,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -166,6 +168,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
     .where(eq(fechamentosCaixa.id, caixaId))
     .limit(1);
   return caixa ?? null;
@@ -209,6 +212,19 @@ export async function existePeriodoCaixaRepository(
   });
 }
 
+export async function buscarMaquininhaEmpresaRepository(
+  maquininhaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [item] = await db
+    .select({ id: maquininhas.id })
+    .from(maquininhas)
+    .where(and(eq(maquininhas.id, maquininhaId), eq(maquininhas.empresaId, empresaId), eq(maquininhas.ativo, true)))
+    .limit(1);
+  return item ?? null;
+}
+
 export async function criarCaixaRepository(
   input: {
     empresaId: string;
@@ -224,6 +240,7 @@ export async function criarCaixaRepository(
     maloteAberturaId?: string | null;
     lacreAbertura?: string | null;
     dividaCofreCentavos?: number;
+    maquininhaId?: string | null;
   },
   db: ExecutorBanco = banco
 ) {
@@ -243,6 +260,7 @@ export async function criarCaixaRepository(
       observacao: input.observacao,
       maloteAberturaId: input.maloteAberturaId ?? null,
       lacreAbertura: input.lacreAbertura ?? null,
+      maquininhaId: input.maquininhaId ?? null,
       dividaCofre: centavosParaDecimalBanco(input.dividaCofreCentavos ?? 0),
       status: "aberto",
       criadoPor: input.usuarioId
@@ -250,6 +268,46 @@ export async function criarCaixaRepository(
     .returning({ id: fechamentosCaixa.id });
   if (!caixa) throw new Error("Caixa nao criado");
   return caixa;
+}
+
+export async function criarQuebraCaixaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    usuarioId: string;
+    valorCentavos: number;
+    observacao: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [quebra] = await db
+    .insert(quebrasCaixa)
+    .values({
+      empresaId: input.empresaId,
+      fechamentoCaixaId: input.fechamentoCaixaId,
+      usuarioId: input.usuarioId,
+      valor: centavosParaDecimalBanco(input.valorCentavos),
+      observacao: input.observacao
+    })
+    .returning({ id: quebrasCaixa.id });
+  if (!quebra) throw new Error("Quebra de caixa nao registrada");
+  return quebra;
+}
+
+export async function listarUsuariosTesourariaRepository(empresaId: string, db: ExecutorBanco = banco) {
+  return db
+    .selectDistinct({ usuarioId: colaboradores.usuarioId })
+    .from(colaboradoresCargos)
+    .innerJoin(colaboradores, eq(colaboradores.id, colaboradoresCargos.colaboradorId))
+    .innerJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
+    .where(
+      and(
+        eq(colaboradoresCargos.empresaId, empresaId),
+        eq(colaboradoresCargos.ativo, true),
+        ilike(cargos.nome, "%Tesouraria%"),
+        isNotNull(colaboradores.usuarioId)
+      )
+    );
 }
 
 // --- Abertura com malote (M1, R8) -------------------------------------------------------------
@@ -741,77 +799,6 @@ export async function calcularTotaisCaixaOperacionalRepository(
   }
 
   return totais;
-}
-
-export async function criarAcertoSaldoCaixaRepository(
-  input: {
-    caixaId: string;
-    empresaId: string;
-    colaboradorId: string;
-    contaOrigemId: string | null;
-    grupoDespesaId: string | null;
-    valorDiferencaCentavos: number;
-    observacao: string | null;
-    criadoPor: string;
-    data: string;
-  },
-  db?: ExecutorBanco
-) {
-  return executarComTransacaoOpcional(db, async (db) => {
-    const valor = centavosParaDecimalBanco(input.valorDiferencaCentavos);
-    const [despesa] = await db
-      .insert(despesas)
-      .values({
-        empresaId: input.empresaId,
-        dataReferencia: input.data,
-        dataVencimento: input.data,
-        descricao: "Diferenca de caixa",
-        observacao: input.observacao,
-        valorOriginal: valor,
-        contaOrigemId: input.contaOrigemId,
-        colaboradorId: input.colaboradorId,
-        grupoDespesaId: input.grupoDespesaId,
-        caixaId: input.caixaId,
-        criadoPor: input.criadoPor
-      })
-      .returning({ id: despesas.id });
-    if (!despesa) throw new Error("Despesa de diferenca nao criada");
-
-    // Item unico, sem desconto: 1 x valor. Os campos com desconto repetem o valor (§5).
-    await db.insert(despesasItens).values({
-      despesaId: despesa.id,
-      grupoDespesaId: input.grupoDespesaId,
-      descricao: "Diferenca de caixa",
-      quantidade: "1",
-      valorUnitario: valor,
-      valor,
-      valorUnitarioComDesconto: valor,
-      valorTotalComDesconto: valor
-    });
-
-    const [debito] = await db
-      .insert(debitosColaboradores)
-      .values({
-        empresaId: input.empresaId,
-        colaboradorId: input.colaboradorId,
-        tipo: "FECHAMENTO_CAIXA",
-        despesaId: despesa.id,
-        caixaId: input.caixaId,
-        valor,
-        observacao: input.observacao,
-        criadoPor: input.criadoPor
-      })
-      .returning({ id: debitosColaboradores.id });
-    if (!debito) throw new Error("Debito de colaborador nao criado");
-
-    await db.insert(ajustesFechamentoCaixa).values({
-      fechamentoCaixaId: input.caixaId,
-      despesaId: despesa.id,
-      valorDiferenca: valor
-    });
-
-    return { despesaId: despesa.id, debitoId: debito.id };
-  });
 }
 
 export async function atualizarFechamentoCaixaRepository(

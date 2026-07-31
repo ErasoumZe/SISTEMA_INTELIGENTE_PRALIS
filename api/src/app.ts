@@ -14,6 +14,7 @@ import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
 import { registrarRotasMalotes } from "./malotes/malotes.controller.js";
+import { registrarRotasMaquininhas } from "./maquininhas/maquininhas.controller.js";
 import { registrarRotasMercadorias } from "./mercadorias/mercadorias.controller.js";
 import { registrarRotasNotasFiscais } from "./notas-fiscais/notas-fiscais.controller.js";
 import { registrarRotasRetiradas } from "./retiradas/retiradas.controller.js";
@@ -40,6 +41,7 @@ import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js"
 import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
+import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controller.js";
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
@@ -170,6 +172,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
   await registrarRotasSociosGestores(app);
+  await registrarRotasMaquininhas(app);
+  await registrarRotasNotificacoes(app);
   await registrarRotasTurnos(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);
