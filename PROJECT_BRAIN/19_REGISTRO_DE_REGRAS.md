@@ -400,7 +400,86 @@ S2 — a entrega que a spec chama de "o coração" e que **não tem um único co
 | R-029 | Transferência pode ser **agendada**                                                  | FOTO 1                             | ✅ persistência e efetivação temporal                                          | `transferencias-confirmacao` |
 | R-030 | Transferência aceita **múltiplo destino** (disputa; um destino confirma)             | FOTO 1                             | ✅ candidatos persistidos e confirmação concorrente com um vencedor            | `transferencias-confirmacao` |
 | R-031 | Retorno/sangria vive **no mesmo formulário** da transferência (checkbox que expande) | FOTO 1                             | ✅ componente abre os campos no próprio formulário ao marcar a checkbox        | `TransferenciaRetornoCampos` |
-| R-032 | **Transferência entre contas NÃO exige caixa aberto** para perfis autorizados        | derivado de R-024 + FOTO 5         | ✅ gestão transfere livre; Caixa continua exigindo caixa aberto e conta do PDV | `transferencia-sem-caixa`    |
+| R-032 | **Transferência entre contas NÃO exige caixa aberto** para perfis autorizados        | derivado de R-024 + FOTO 5         | ✅ gestão transfere livre; Caixa continua exigindo caixa aberto e conta do PDV | `lancar-sem-caixa`           |
+
+### O operador de caixa e as SAÍDAS (José, 01/08/2026)
+
+> _"Operador de caixa deve ter permissão de lançar todas as saídas, desde que saia da conta do
+> caixa aberto."_
+
+O que a R-121 fecha não é permissão — o cargo Caixa **já tinha** os quatro `_criar`. O que faltava
+era a **amarração da conta**: o total do caixa soma despesa/mercadoria/retirada por `caixa_id` e
+ignora a conta; o saldo da conta soma por `conta_origem_id` e ignora o caixa. Com `conta_origem_id`
+nullable e o select livre, uma despesa lançada dentro do caixa apontando o Banco debitava **os
+dois** ao mesmo tempo — divergência silenciosa que voltava como **quebra de caixa falsa** no colo do
+operador (R-015).
+
+| Id           | Regra                                                                                                                                                                                     | Status                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **R-121** 🆕 | Operador de caixa lança **todas as saídas** (despesa, mercadoria, retirada, transferência) — a origem é **sempre** a conta do PDV do caixa aberto, travada na tela e validada no servidor | ✅ `exigirContaDoCaixaNoLancamento`; 12 de integração + 15 unitários          |
+| **R-122** 🆕 | Operador de caixa **edita** os próprios lançamentos enquanto **aquele** caixa estiver aberto. Nunca exclui; fechado o caixa, só a Tesouraria corrige                                      | ✅ `validarEdicaoDeSaidaNoCaixa` (403 dizendo qual condição falhou)           |
+| **R-123** 🆕 | Operador de caixa **não cria lançamento recorrente** — as ocorrências futuras nascem fora de caixa e não teriam conta válida                                                              | ✅ 400 com o motivo, antes do 403 genérico de permissão; bloco oculto na tela |
+
+Três notas de desenho, para não se perderem:
+
+- **Sem `_excluir`.** A R-015 depende do rastro: apagar lançamento apaga a explicação da diferença.
+- **Diferente da transferência de propósito.** Lá a conta do PDV vale como origem **ou** destino
+  (dinheiro entra e sai); nas três saídas é **só origem** — é saída, o dinheiro só pode sair de onde
+  o operador tem a gaveta.
+- **`podeTransferirSemCaixa` virou `podeLancarSemCaixa`** e mudou de endereço para
+  `lancamentos.dominio.ts`. A regra é a mesma (R-032, mesma lista de cargos); o que muda é ser
+  **fonte única** das quatro saídas, para "quem é de retaguarda" não ter duas definições que
+  divergem com o tempo.
+
+### O operador vê a própria dívida (José, 01/08/2026)
+
+> _"Tela de pendências deve estar liberada pro caixa também, afinal ele que gera a pendência, ele
+> deve saber quanto deve."_
+
+E, sobre o momento e o encerramento:
+
+> _"Na hora do fechamento, já que a quebra é dívida, e vai ser salvo e notificado ao tesoureiro. O
+> caixa fecha quebrado, e deve ser resolvido com o tesoureiro logo após o fechamento. Se resolvido
+> (ex.: quebra por conta de valor divergente do malote ou outro motivo justificável), só aí o
+> tesoureiro marca como resolvido."_
+
+**Liberar a tela sozinho não cumpre a regra.** Medido em 01/08: a notificação de quebra só tem a
+Tesouraria como destinatária (`caixa.service.ts:575-588`) e `quebras_caixa` é uma tabela
+**write-only** — existe o INSERT do fechamento e **nenhuma rota de leitura** em todo o projeto. O
+operador abriria `/pendencias` e leria "Nenhuma pendência aberta.", que é o oposto do pedido.
+
+| Id           | Regra                                                                                                                                                               | Status |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **R-124** 🆕 | O operador de caixa acessa a tela de Pendências **com caixa aberto ou fechado**, e vê **o próprio saldo** de quebras (dívida ou crédito) mais as pendências abertas | ⏳     |
+| **R-125** 🆕 | A quebra de caixa notifica **o operador que a gerou**, além da Tesouraria, **no ato do fechamento**                                                                 | ⏳     |
+| **R-126** 🆕 | Só a **Tesouraria resolve** a quebra. O operador lê e procura o tesoureiro; não encerra a própria pendência                                                         | ⏳     |
+
+Notas de desenho:
+
+- **A flag `somente_caixa_aberto` era perversa nesta tela.** A quebra nasce **no fechamento** — e
+  nesse instante o operador deixa de ter caixa aberto e perderia o acesso justamente quando precisa.
+  Por isso a R-124 vale com o caixa aberto **ou** fechado.
+- **Armadilha da R-125 sobre a R-126.** Tornar o operador destinatário da notificação lhe daria, de
+  graça, o poder de encerrar a própria quebra: `verificarNotificacaoRepository` autoriza qualquer
+  destinatário. O bloqueio é **no servidor**, não só escondendo o botão.
+- **O filtro de `quebras_caixa` é pelo `usuarioId` do perfil autenticado, nunca da query.** O índice
+  `quebras_caixa_empresa_usuario_idx` convida a consultar por empresa; fazer isso expõe a dívida de
+  um funcionário para os colegas. Ver todas exige permissão própria (Tesouraria/Gerência).
+- **O modelo não distingue os dois finais que o José descreveu**: quebra _justificada_ (não era
+  dívida dele — malote divergente) e quebra _quitada_ (era dívida e foi paga). Hoje há um booleano
+  `verificado` só. Enquanto for assim, o histórico não responde "quem quebra caixa por descuido".
+  Registrado no `18`; a separação é decisão do José.
+
+### Identidade visual do login (01/08/2026)
+
+A tela de login ficou com resíduo da marca antiga: botão `#c0521d` (laranja Pralis) cravado no CSS,
+foco dos campos laranja, brilho de fundo laranja e o slogan da padaria _"é provar e ser feliz"_.
+Passou a usar os tokens `--marca-*` que o resto do sistema já usa (`--marca-acento: #6515dd`), com o
+slogan da Cicluz. Contraste do botão com branco subiu de ~4,8:1 para ~7,8:1 (AAA).
+
+**Pendência de texto, não resolvida aqui:** o subtítulo diz _"Acesso de donos e gerentes"_, mas a
+partir da R-121 o **operador de caixa** é usuário de primeira classe deste login. O texto precisa
+mudar — decisão do José sobre a palavra.
 
 ### LANÇAMENTO
 

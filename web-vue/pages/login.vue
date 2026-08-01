@@ -98,7 +98,7 @@ async function login() {
         <NuxtLink to="/forgot-password" class="login-link">Esqueci minha senha</NuxtLink>
       </v-form>
 
-      <p class="login-slogan">é provar e ser feliz</p>
+      <p class="login-slogan">clareza em cada ciclo do seu negócio</p>
     </div>
   </v-main>
 </template>
@@ -107,7 +107,7 @@ async function login() {
 .login-page {
   min-height: 100dvh;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(192, 82, 29, 0.1) 0%, transparent 55%), var(--marca-fundo, #f6f6f8);
+    radial-gradient(120% 80% at 50% -10%, rgba(101, 21, 221, 0.08) 0%, transparent 55%), var(--marca-fundo, #f6f6f8);
 }
 
 .login-card {
@@ -166,22 +166,24 @@ async function login() {
   margin: -2px 0;
 }
 
+/* Roxo da marca (--marca-acento), o mesmo do "+ NOVO" do app. O laranja #c0521d que estava aqui era
+   residuo da Padaria Pralis (R-098). De quebra o contraste com branco sobe de ~4,8:1 para ~7,8:1. */
 .login-submit {
   margin-top: 4px;
-  background: #c0521d !important; /* laranja profundo: branco AA ~4.8:1 */
+  background: var(--marca-acento, #6515dd) !important;
   color: #fff !important;
   font-weight: 800;
   letter-spacing: 0.2px;
   text-transform: none;
   border-radius: 12px;
-  box-shadow: 0 10px 22px rgba(192, 82, 29, 0.3) !important;
+  box-shadow: 0 10px 22px rgba(101, 21, 221, 0.3) !important;
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
     background 0.15s ease;
 }
 .login-submit:hover {
-  background: #a8461a !important;
+  background: var(--marca-acento-forte, #35128c) !important;
   transform: translateY(-1px);
 }
 
@@ -205,12 +207,12 @@ async function login() {
   color: var(--marca-tinta-suave, #6b6b73);
 }
 
-/* Foco laranja nos campos (sem depender do tema por empresa) */
+/* Foco no roxo da marca (fixo: nao depende do tema por empresa, que aqui ainda nem carregou) */
 .login-card :deep(.v-field--focused .v-field__outline) {
-  color: #c0521d;
+  color: var(--marca-acento, #6515dd);
 }
 .login-card :deep(.v-field--focused .v-label) {
-  color: #9f4216;
+  color: var(--marca-acento-forte, #35128c);
 }
 
 @keyframes login-in {
