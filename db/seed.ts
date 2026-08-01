@@ -268,7 +268,19 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "fechamento",
       "relatorio_produtos"
     ],
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
+    // R-121/R-122: o operador lanca TODAS as saidas e CORRIGE as proprias enquanto o caixa esta
+    // aberto. Sem `_excluir`: a R-015 depende do rastro — apagar lancamento apaga a explicacao da
+    // quebra. Sem `_pagar`/`_efetuar`/`_conferir`: ciclo de vida e da retaguarda (R-076/R-077).
+    extras: [
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "despesas_editar",
+      "mercadorias_criar",
+      "mercadorias_editar",
+      "retiradas_criar",
+      "retiradas_editar"
+    ]
   }),
   Tesouraria: permissoesDoCargoSeed({
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"

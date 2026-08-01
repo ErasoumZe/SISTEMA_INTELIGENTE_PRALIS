@@ -265,6 +265,17 @@ const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia
 const perfilCaixaOperacional = computed(
   () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
 );
+// R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
+// nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
+const contaTravadaDoCaixa = computed(() => (perfilCaixaOperacional.value ? (caixaAberto.value?.pdvContaId ?? "") : ""));
+// O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador —
+// e ai ela nao existe na lista de opcoes e o campo apareceria cinza e VAZIO. A trava vem do caixa,
+// nao do vinculo: entao a tela sempre diz de qual conta a saida vai sair, com o PDV como reserva.
+const contaTravadaDoCaixaNome = computed(() => {
+  if (!contaTravadaDoCaixa.value) return "";
+  const conta = opcoesEmpresa.value.contas.find((item) => item.id === contaTravadaDoCaixa.value);
+  return conta?.nome ?? caixaAberto.value?.pdvNome ?? "Conta do caixa aberto";
+});
 const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
@@ -1661,6 +1672,8 @@ provide(WORKSPACE_CONTEXT, {
   erroDiscriminacaoCampo,
   salvandoOperacao,
   salvarOperacao,
+  contaTravadaDoCaixa,
+  contaTravadaDoCaixaNome,
   podeUsarRecorrencia,
   recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,

@@ -13,7 +13,7 @@ import {
   type ItemDiscriminacao,
   type TipoDesconto
 } from "@padaria/shared/discriminacao";
-import { naoProcessavel } from "../erros.js";
+import { naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -34,6 +34,7 @@ import {
 import type { DespesaItemPayload, DespesaPayload } from "@padaria/shared/despesas";
 import type { MercadoriaItemPayload, MercadoriaPayload } from "@padaria/shared/mercadorias";
 import type { RetiradaPayload } from "@padaria/shared/retiradas";
+import type { Recorrencia } from "@padaria/shared/recorrencia";
 import type { TransferenciaPayload } from "@padaria/shared/transferencias";
 import type { VendaPayload } from "@padaria/shared/vendas";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -150,8 +151,67 @@ export function numeroDecimal(valor: string | number | null | undefined): number
   return deCentavos(paraCentavos(valor));
 }
 
+function normalizarCargo(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+// Perfis de RETAGUARDA: lancam sem estar presos a um caixa e escolhem a conta livremente. Era
+// `podeTransferirSemCaixa`, exclusiva da transferencia (R-032); virou a fonte unica das QUATRO
+// saidas para que "quem e livre" nao tenha duas definicoes que divergem com o tempo.
+export function podeLancarSemCaixa(perfil: PerfilUsuario) {
+  if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
+  const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];
+  return perfil.cargos.some((cargo) =>
+    prefixosLiberados.some((prefixo) => normalizarCargo(cargo.nome).startsWith(prefixo))
+  );
+}
+
+// R-121: o operador de Caixa lanca TODA saida (despesa, mercadoria, retirada) — desde que saia da
+// conta do caixa aberto. Sem esta amarracao o valor debita a conta escolhida no saldo de contas E
+// debita o caixa no fechamento ao mesmo tempo: divergencia silenciosa que volta como quebra de
+// caixa falsa no colo do operador (R-015).
+//
+// Conta VAZIA e preenchida com a do PDV — o front trava o campo, mas payload sem conta nao pode
+// virar lancamento orfao. Conta DIFERENTE e recusada.
+//
+// Diferente da transferencia de proposito: la a conta do PDV vale como origem OU destino (dinheiro
+// entra e sai); aqui e saida, entao so ORIGEM.
+export function exigirContaDoCaixaNoLancamento<T extends { contaOrigemId?: string | null | undefined }>(
+  dados: T,
+  caixa: { pdvContaId: string | null },
+  perfil: PerfilUsuario
+): T {
+  if (podeLancarSemCaixa(perfil)) return dados;
+  if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
+  if (!dados.contaOrigemId) return { ...dados, contaOrigemId: caixa.pdvContaId };
+  if (dados.contaOrigemId !== caixa.pdvContaId) {
+    throw new Error("Lancamento do operador Caixa precisa sair da conta do PDV aberto");
+  }
+  return dados;
+}
+
+// R-123: as ocorrencias FUTURAS de uma serie nascem fora de qualquer caixa aberto
+// (lancamentos.recorrencia.ts: so a 1a recebe caixaId). Amarrar essas ocorrencias a conta de um PDV
+// que talvez nem exista em tres meses cria lancamento orfao por construcao — entao recorrencia e
+// ato de retaguarda. A permissao `lancamentos_recorrencia_criar` ja barra por outro caminho; esta
+// checagem existe para a recusa dizer o MOTIVO em vez de "permissao insuficiente".
+// A checagem e do OPERADOR DE CAIXA especificamente (`caixa_operar` sem ser retaguarda), nao de
+// "qualquer um sem a permissao": para os demais continua valendo a R-075, que responde 403 apontando
+// `lancamentos_recorrencia_criar`. Sem esse recorte, um perfil que apenas nao tem a permissao — e
+// nem opera caixa — receberia um motivo que nao e o dele.
+export function exigirRecorrenciaDeRetaguarda(perfil: PerfilUsuario, recorrencia: Recorrencia | undefined) {
+  if (!recorrencia || podeLancarSemCaixa(perfil)) return;
+  if (!temPermissao(perfil.permissoes, "caixa_operar")) return;
+  throw new Error("Lancamento recorrente e ato de Tesouraria/Financeiro");
+}
+
 // Regras de edicao de lancamento: o registro precisa existir na empresa acessivel,
 // nao pode trocar de empresa e precisa pertencer ao caixa aberto do usuario.
+// Serve venda, transferencia e as tres saidas — nao mexer no status daqui sem olhar os quatro.
 export async function validarEdicaoNoCaixaAberto(
   existente: { empresaId: string; caixaId: string | null } | null,
   dados: { empresaId: string },
@@ -162,6 +222,39 @@ export async function validarEdicaoNoCaixaAberto(
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
   const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
   if (existente.caixaId !== caixa.id) throw new Error("Lancamento nao pertence ao seu caixa aberto");
+  return caixa;
+}
+
+// R-122: edicao das SAIDAS (despesa/mercadoria/retirada). O operador de Caixa corrige o proprio
+// lancamento enquanto AQUELE caixa estiver aberto — as tres condicoes andam juntas: caixa aberto
+// proprio, lancamento daquele caixa e conta ainda a do PDV. Recusa e 403 (e uma questao de
+// autorizacao, nao de payload malformado) e a mensagem diz QUAL condicao falhou.
+//
+// Perfil de retaguarda cai no caminho de sempre, sem mudanca: unificar o comportamento dos outros
+// cargos e outra decisao, fora deste escopo.
+export async function validarEdicaoDeSaidaNoCaixa(
+  existente: { empresaId: string; caixaId: string | null } | null,
+  dados: { empresaId: string; contaOrigemId?: string | null | undefined },
+  perfil: PerfilUsuario,
+  tx?: ExecutorBanco
+) {
+  if (podeLancarSemCaixa(perfil)) return validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+
+  if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+  if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+
+  let caixa;
+  try {
+    caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+  } catch {
+    // Fechado o caixa, acabou: corrigir vira ato de tesouraria. E o que protege os totais ja
+    // congelados em `fechamentos_caixa`.
+    throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
+  }
+  if (existente.caixaId !== caixa.id) throw proibido("Lancamento nao pertence ao seu caixa aberto");
+  if (dados.contaOrigemId && dados.contaOrigemId !== caixa.pdvContaId) {
+    throw proibido("Lancamento do operador Caixa precisa sair da conta do PDV aberto");
+  }
   return caixa;
 }
 

@@ -268,6 +268,8 @@ export type CaixaOperacional = {
   empresaId: string;
   pdvId: string;
   pdvNome: string;
+  // R-121: conta do PDV — a unica origem valida das saidas do operador. A tela trava o campo nela.
+  pdvContaId: string | null;
   usuarioId: string;
   usuarioCaixaId: string;
   usuarioCaixaNome: string;

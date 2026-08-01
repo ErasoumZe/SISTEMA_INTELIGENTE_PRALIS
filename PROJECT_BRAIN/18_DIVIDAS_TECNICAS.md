@@ -256,3 +256,41 @@ Contornado no dev com `insert into contas_usuarios` para tesouraria (cofres) e c
 Falta decidir o caminho definitivo: ou o cadastro de conta passa a exigir operador (R-072 já diz
 que "quem opera" é escolhido no mesmo salvar), ou a tela avisa "esta conta não tem operador" em vez
 de mostrar uma lista vazia.
+
+---
+
+## D-11 · Divergência conta × caixa — FECHADA para o cargo Caixa, ABERTA para os demais
+
+**Status:** parcial · **Prioridade:** média · **Registrado em:** 01/08/2026, com a R-121.
+
+### O problema
+
+As três saídas (despesa, mercadoria, retirada) são contadas em **dois lugares que não se falam**:
+
+- **total do caixa** (`caixa.repository.ts`, `calcularTotaisCaixaOperacionalRepository`) soma por
+  `caixa_id` e **ignora a conta**;
+- **saldo da conta** (`contas.repository.ts`) soma por `conta_origem_id` e **ignora o caixa**.
+
+Como `conta_origem_id` é nullable e o select oferecia todas as contas do usuário, um lançamento
+feito dentro do caixa apontando outra conta debitava **as duas coisas ao mesmo tempo**.
+
+### O que a R-121 fechou
+
+Para o **cargo Caixa**: a origem é obrigatoriamente a conta do PDV do caixa aberto — travada na tela
+e validada no servidor (`exigirContaDoCaixaNoLancamento`). Para esse perfil, os dois números passam
+a falar da mesma conta e a divergência não tem como nascer.
+
+### O que continua aberto
+
+Para **Gerência, Financeiro, Tesouraria e admin** nada mudou: eles escolhem a conta livremente e
+podem lançar dentro de um caixa aberto apontando outra conta — a mesma divergência, no mesmo lugar.
+
+Não foi tocado de propósito: mudar isso altera o dia a dia de três cargos e **é decisão do José**.
+Ver a pergunta em aberto logo abaixo.
+
+### Pergunta em aberto (junto)
+
+Hoje Gerência/Financeiro/Tesouraria **precisam de caixa aberto** para lançar despesa, mercadoria e
+retirada (`obterCaixaAbertoParaLancamento`), o que **contradiz a R-032**, que os liberou justamente
+para transferência. Ou eles são retaguarda nas quatro saídas, ou em nenhuma. Do jeito que está, são
+retaguarda em uma só.

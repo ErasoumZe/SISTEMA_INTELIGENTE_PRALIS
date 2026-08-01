@@ -284,12 +284,15 @@ describe("operacoes integration", () => {
   });
 
   it("Deve_Retornar403_Quando_UsuarioNaoTemPermissaoDaOperacao", async () => {
-    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    // Desde a R-121 o operador de caixa LANCA despesa — quem prova o gate agora e o perfil que
+    // realmente nao tem `despesas_criar`. Antes o teste usava "caixa" e so passava porque o fixture
+    // divergia da producao (tinha 4 permissoes; o cargo real tem 13).
+    const cookieSemPermissao = await cookieSessao(contexto.app, "semPermissao");
 
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/despesas",
-      headers: { cookie: cookieCaixa },
+      headers: { cookie: cookieSemPermissao },
       payload: {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",

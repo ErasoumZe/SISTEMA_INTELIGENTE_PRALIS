@@ -25,8 +25,10 @@ import {
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
 import {
+  exigirContaDoCaixaNoLancamento,
+  exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
-  validarEdicaoNoCaixaAberto,
+  validarEdicaoDeSaidaNoCaixa,
   validarReferenciasMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -76,6 +78,9 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
   validarMercadoria(dados);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento);
+  // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
+  // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
+  exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   return executarEmTransacao(async (tx) => {
@@ -88,6 +93,8 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     );
     const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
+    const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
 
     // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
     const plano = await planejarRecorrencia(
@@ -102,14 +109,14 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       tx
     );
     if (!plano) {
-      const mercadoria = await criarMercadoriaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
       return { id: mercadoria.id, computar };
     }
 
     let primeira = "";
     for (const ocorrencia of plano.ocorrencias) {
       const criada = await criarMercadoriaRepository(
-        payloadDaOcorrencia(normalizados, ocorrencia),
+        payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
         caixaDaOcorrencia(caixa.id, ocorrencia),
@@ -190,7 +197,7 @@ export async function atualizarMercadoria(
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);

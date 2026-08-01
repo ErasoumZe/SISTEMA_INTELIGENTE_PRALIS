@@ -42,6 +42,8 @@ export function useOperacaoLancamento() {
     selecionarFotoNota,
     salvandoOperacao,
     salvarOperacao,
+    contaTravadaDoCaixa,
+    contaTravadaDoCaixaNome,
     podeUsarRecorrencia,
     recorrencia
   } = useWorkspaceContext();
@@ -57,6 +59,17 @@ export function useOperacaoLancamento() {
 
   const cat = computed<Cat>(() =>
     CATEGORIAS.includes(entidadeNova.value as Cat) ? (entidadeNova.value as Cat) : "despesa"
+  );
+
+  // R-121: com a conta travada, o campo nao e escolha — entao o formulario ja nasce com ela. Sem
+  // isto o select desabilitado apareceria em "—" e o payload sairia sem conta, deixando a correcao
+  // por conta do servidor em vez da tela. `immediate` cobre o caso do status do caixa chegar depois.
+  watch(
+    [aberto, contaTravadaDoCaixa],
+    ([estaAberto, conta]) => {
+      if (estaAberto && conta) form.value.contaOrigemId = conta;
+    },
+    { immediate: true }
   );
 
   const CFG: Record<Cat, { token: string; icone: string; discrimina: boolean }> = {
@@ -407,6 +420,8 @@ export function useOperacaoLancamento() {
     definirGrupoItemDespesa,
     grupoItemMercadoria,
     definirGrupoItemMercadoria,
+    contaTravadaDoCaixa,
+    contaTravadaDoCaixaNome,
     // recorrencia (D3) — suportada
     recorrenciaAberta,
     recorrenciaNumero,

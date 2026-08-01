@@ -267,6 +267,9 @@ export const caixaOperacionalSchema = z.object({
   empresaId: uuidSchema,
   pdvId: uuidSchema,
   pdvNome: z.string(),
+  // R-121: a conta do PDV e a UNICA origem valida das saidas do operador. O front precisa dela para
+  // travar o campo Conta; sem isso a tela so descobriria a regra pelo 400 do servidor.
+  pdvContaId: uuidSchema.nullable(),
   usuarioId: z.string(),
   usuarioCaixaId: z.string(),
   usuarioCaixaNome: z.string(),

@@ -3,8 +3,20 @@
 // mas o backend precisa deles para salvar. Estado vem do modal via provide/inject.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
-const { cat, CREDORES, rotuloCredor, tipoCredor, credorId, credorOpcoes, grupoId, grupoOpcoes, opcoesEmpresa, form } =
-  useOperacaoLancamentoBloco();
+const {
+  cat,
+  CREDORES,
+  rotuloCredor,
+  tipoCredor,
+  credorId,
+  credorOpcoes,
+  grupoId,
+  grupoOpcoes,
+  opcoesEmpresa,
+  form,
+  contaTravadaDoCaixa,
+  contaTravadaDoCaixaNome
+} = useOperacaoLancamentoBloco();
 </script>
 
 <template>
@@ -46,6 +58,14 @@ const { cat, CREDORES, rotuloCredor, tipoCredor, credorId, credorOpcoes, grupoId
         <v-icon icon="mdi-alert-circle-outline" size="16" />
         <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
       </div>
+      <!-- R-121: operador de caixa nao ESCOLHE a conta — a saida sai da conta do caixa aberto.
+           Campo de leitura, e nao um <select> desabilitado, porque a conta do PDV pode nao estar
+           entre as contas vinculadas ao operador: como <option> ela nao existiria e o campo
+           apareceria cinza e VAZIO. O valor persistido vive em form.contaOrigemId. -->
+      <template v-else-if="contaTravadaDoCaixa">
+        <input :value="contaTravadaDoCaixaNome" class="lc-input" readonly aria-label="Conta" />
+        <span class="lc-campo-nota">Saída do caixa aberto</span>
+      </template>
       <select v-else v-model="form.contaOrigemId" class="lc-input">
         <option value="">—</option>
         <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>

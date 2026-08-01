@@ -63,7 +63,24 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorCaixa,
     colaboradorCargoId: idsTeste.colaboradorCargoCaixa,
     role: "usuario_comum",
-    permissoes: ["caixa_operar", "entradas_visualizar", "entradas_criar", "transferencias_criar"]
+    // Espelha `db/src/referencia-permissoes.ts` (cargo Caixa). Antes so tinha 4 permissoes e a
+    // divergencia fazia o teste "provar" que o operador nao lanca despesa — que e o contrario da
+    // R-121. Fixture que nao espelha a producao testa um sistema que nao existe.
+    permissoes: [
+      "caixa_operar",
+      "entradas_visualizar",
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_visualizar",
+      "despesas_criar",
+      "despesas_editar",
+      "mercadorias_visualizar",
+      "mercadorias_criar",
+      "mercadorias_editar",
+      "retiradas_visualizar",
+      "retiradas_criar",
+      "retiradas_editar"
+    ]
   },
   {
     perfil: "gerente",

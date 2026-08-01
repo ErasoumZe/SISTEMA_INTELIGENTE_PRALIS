@@ -21,8 +21,10 @@ import {
   validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
 import {
+  exigirContaDoCaixaNoLancamento,
+  exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
-  validarEdicaoNoCaixaAberto,
+  validarEdicaoDeSaidaNoCaixa,
   validarReferenciasDespesa
 } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -68,6 +70,9 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo: *_pagar OU o legado
   // caixas_gerenciar). Sem, 403 em vez do antigo strip silencioso.
   exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento);
+  // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
+  // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
+  exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
@@ -76,6 +81,8 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
+    const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
 
     // Recorrencia (D3): a serie inteira nasce aqui, na MESMA transacao. Ou entram todos os 12
     // lancamentos, ou nenhum — meia serie gravada seria pior que erro nenhum.
@@ -91,14 +98,14 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
       tx
     );
     if (!plano) {
-      const despesa = await criarDespesaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+      const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
       return { id: despesa.id, computar };
     }
 
     let primeira = "";
     for (const ocorrencia of plano.ocorrencias) {
       const criada = await criarDespesaRepository(
-        payloadDaOcorrencia(normalizados, ocorrencia),
+        payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
         caixaDaOcorrencia(caixa.id, ocorrencia),
@@ -181,7 +188,7 @@ export async function atualizarDespesa(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
     // exige *_pagar. Ambos comparam com o estado atual do registro.
     exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);

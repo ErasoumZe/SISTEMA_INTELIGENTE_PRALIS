@@ -119,6 +119,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     empresaId: caixa.empresaId,
     pdvId: caixa.pdvId,
     pdvNome: caixa.pdvNome,
+    pdvContaId: caixa.pdvContaId ?? null,
     usuarioId: caixa.usuarioId,
     usuarioCaixaId: caixa.usuarioCaixaId,
     usuarioCaixaNome: caixa.usuarioCaixaNome ?? "Usuario",

@@ -45,6 +45,10 @@ export type WorkspaceContext = {
   erroDiscriminacaoCampo: Ref<string | null>;
   salvandoOperacao: Ref<boolean>;
   salvarOperacao: () => Promise<{ id: string } | void>;
+  // R-121: conta do PDV quando o usuario e operador de caixa; "" para perfis de retaguarda, que
+  // escolhem a conta livremente.
+  contaTravadaDoCaixa: ComputedRef<string>;
+  contaTravadaDoCaixaNome: ComputedRef<string>;
   // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
   // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
   podeUsarRecorrencia: ComputedRef<boolean>;

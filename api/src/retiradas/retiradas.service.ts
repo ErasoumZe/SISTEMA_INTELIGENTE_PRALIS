@@ -17,8 +17,10 @@ import {
   podeVerLancamentosPagos
 } from "../lancamentos/lancamentos.dominio.js";
 import {
+  exigirContaDoCaixaNoLancamento,
+  exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
-  validarEdicaoNoCaixaAberto,
+  validarEdicaoDeSaidaNoCaixa,
   validarReferenciasRetirada
 } from "../lancamentos/lancamentos.dominio.js";
 import {
@@ -52,6 +54,9 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento);
+  // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
+  // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
+  exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
@@ -60,6 +65,8 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
+    const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
 
     // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
     const plano = await planejarRecorrencia(
@@ -74,14 +81,14 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
       tx
     );
     if (!plano) {
-      const retirada = await criarRetiradaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
+      const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
       return { id: retirada.id, computar };
     }
 
     let primeira = "";
     for (const ocorrencia of plano.ocorrencias) {
       const criada = await criarRetiradaRepository(
-        payloadDaOcorrencia(normalizados, ocorrencia),
+        payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
         caixaDaOcorrencia(caixa.id, ocorrencia),
@@ -131,7 +138,7 @@ export async function atualizarRetirada(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "retiradas", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);

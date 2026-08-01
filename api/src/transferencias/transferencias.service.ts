@@ -12,7 +12,11 @@ import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository 
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { paraCentavos } from "@padaria/shared/dinheiro";
-import { exigirPermissaoLancamento, obterCaixaParaLancamento } from "../lancamentos/lancamentos.dominio.js";
+import {
+  exigirPermissaoLancamento,
+  obterCaixaParaLancamento,
+  podeLancarSemCaixa
+} from "../lancamentos/lancamentos.dominio.js";
 import {
   resolverComputarLancamento,
   validarEdicaoNoCaixaAberto,
@@ -51,14 +55,6 @@ function normalizarCargo(nome: string) {
     .toLowerCase();
 }
 
-export function podeTransferirSemCaixa(perfil: PerfilUsuario) {
-  if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
-  const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];
-  return perfil.cargos.some((cargo) =>
-    prefixosLiberados.some((prefixo) => normalizarCargo(cargo.nome).startsWith(prefixo))
-  );
-}
-
 export async function listarTransferencias(
   query: TransferenciasQuery,
   empresasPermitidasIds: string[] | null
@@ -87,7 +83,7 @@ export async function criarTransferencia(
       );
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
-      const transferenciaLivre = podeTransferirSemCaixa(perfil);
+      const transferenciaLivre = podeLancarSemCaixa(perfil);
       const caixa = transferenciaLivre
         ? await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx)
         : await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);

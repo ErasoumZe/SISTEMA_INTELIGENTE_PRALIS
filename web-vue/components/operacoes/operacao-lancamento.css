@@ -147,6 +147,15 @@
   font-size: 11px;
   color: #94a3b8;
 }
+/* Explica um campo travado (ex.: Conta do operador de caixa, R-121). Campo cinza sem motivo vira
+   chamado de suporte. */
+.lc-campo-nota {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-style: italic;
+  color: #94a3b8;
+}
 .lc-input {
   width: 100%;
   border: 0.5px solid #e4e8ef;
@@ -167,6 +176,13 @@
 .lc-input:disabled {
   background: #f4f6fa;
   color: #cbd2dc;
+}
+/* Campo travado por REGRA (Conta do operador de caixa, R-121): cinza como o desabilitado, mas com
+   o texto legivel — a pessoa precisa LER de qual conta a saida vai sair. */
+.lc-input[readonly] {
+  background: #f4f6fa;
+  color: #64748b;
+  cursor: not-allowed;
 }
 .lc-data-row {
   display: flex;
