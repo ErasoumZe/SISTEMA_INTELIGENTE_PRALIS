@@ -69,10 +69,14 @@ ETAPA 2 — Transferência em DUAS PONTAS (o item mais importante)
 - Fluxo: quem envia cria a transferência (com lacre); o DESTINATÁRIO confirma o recebimento →
   grava data_recebimento e rompe o lacre. Só quem tem a conta destino vinculada
   (contas_usuarios) pode confirmar.
-- "Sempre confirmar": exige confirmação mesmo quando origem e destino são do mesmo usuário.
-- Múltiplo destino: modelar como 1 transferência → N destinos (com valor por destino). Se achar
-  que deve ser N transferências agrupadas, PARE e me proponha as duas opções com prós/contras
-  ANTES de implementar.
+- ~~"Sempre confirmar": exige confirmação mesmo quando origem e destino são do mesmo usuário.~~
+  **OBSOLETO (31/07).** Não existe "Sempre confirmar" — era erro de transcrição do desenho. O campo
+  é **Tempo de confirmação** (R-035): quem envia escolhe o prazo (5min · 10min · 30min · 1h · 1 dia
+  · 10 dias · 30 dias). Estourado o prazo, R-037 trava as duas pontas.
+- ~~Múltiplo destino: modelar como 1 transferência → N destinos (com valor por destino).~~
+  **OBSOLETO (31/07).** A R-030 decidiu: múltiplo destino é **DISPUTA, não rateio**. 1 transferência
+  → N contas **candidatas**, sem valor por destino; a primeira que confirmar com o lacre leva o
+  valor inteiro e as demais são descartadas. Já implementado — não reabrir.
 - Abertura de caixa por N° de lacre: o operador informa o lacre da transferência de entrada; o
   sistema confirma o recebimento para a conta do PDV e funda o caixa (fundo simples, sem dívida).
 

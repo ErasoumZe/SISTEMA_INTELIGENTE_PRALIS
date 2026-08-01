@@ -30,3 +30,15 @@ docs/
 
 # Dumps do pg_dump (scripts/backup-db.mjs grava aqui). Sao dados reais: nunca vao para o git.
 backups/
+
+# Desenhos originais do Rodrigo (JPEG, ~650K). Sao a fonte da verdade VISUAL e ficam no disco — mas
+# binario nao versiona bem e nao rende diff. O indice + a transcricao por extenso continuam no git
+# em PROJECT_BRAIN/mockups-rodrigo/LEIA-ME.md e no 14_TELAS_RODRIGO_TRANSCRICAO.md.
+PROJECT_BRAIN/mockups-rodrigo/*.jpeg
+PROJECT_BRAIN/mockups-rodrigo/*.jpg
+PROJECT_BRAIN/mockups-rodrigo/*.png
+
+# Rascunhos de prompt e de mensagem de commit na raiz — mesma categoria de docs/ (fora do git,
+# no disco).
+/PROMPT-*.md
+/COMMIT-*.txt

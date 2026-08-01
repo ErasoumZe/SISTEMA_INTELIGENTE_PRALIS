@@ -2,6 +2,12 @@
 // Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
+// IMPORT EXPLICITO OBRIGATORIO: o auto-import do Nuxt registra este arquivo como
+// `OperacoesTransferenciaRetornoCampos` (pathPrefix pela pasta operacoes/). Usar
+// <TransferenciaRetornoCampos> sem importar deixa o componente NAO RESOLVIDO — a caixa com
+// "Multiplo Destino", "Tempo de confirmacao" e "Transf. Retorno / Sangria" simplesmente nao
+// renderiza, sem erro de lint, vue-tsc nem teste. Ver FOTO 1 (PROJECT_BRAIN/14).
+import TransferenciaRetornoCampos from "~/components/operacoes/TransferenciaRetornoCampos.vue";
 
 const {
   modalOperacaoAberto,
@@ -31,7 +37,34 @@ const agendamento = computed({
 });
 const dataRecebimento = ref("");
 const multiploDestino = ref(false);
+const tempoConfirmacaoAberto = ref(false);
 const retornoAberto = ref(false);
+
+// FOTO 1: o padrao da tela e "se ☑ abre esse campo" — as tres checkboxes ficam sempre visiveis e
+// cada uma REVELA o seu campo. Ao abrir, elas espelham o que ja esta no formulario: sem isto uma
+// transferencia em edicao apareceria com a caixa desmarcada e os candidatos guardados por baixo,
+// invisiveis — e o primeiro clique na checkbox os apagaria.
+watch(aberto, (estaAberto) => {
+  if (!estaAberto) return;
+  multiploDestino.value = form.value.contasDestinoIds.length > 0;
+  tempoConfirmacaoAberto.value = form.value.tempoConfirmacao !== "1dia";
+});
+
+// Desmarcar LIMPA: candidato fantasma nao pode viajar para o backend.
+watch(multiploDestino, (ativo) => {
+  if (!ativo) form.value.contasDestinoIds = [];
+});
+// R-035/R-037: a checkbox escolhe OUTRO prazo, nao a ausencia de prazo. Desmarcada, volta ao "1dia"
+// que o servidor ja aplica por default — sem prazo, a R-037 ficaria sem gatilho e a transferencia
+// pendente viveria para sempre.
+watch(tempoConfirmacaoAberto, (ativo) => {
+  if (!ativo) form.value.tempoConfirmacao = "1dia";
+});
+
+// R-030: a origem nunca e candidata a receber o proprio envio.
+const contasCandidatas = computed(() =>
+  opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaOrigemId)
+);
 type LinhaRetorno = { sinal: "+" | "-"; valor: string; lacre: string };
 const retornos = ref<LinhaRetorno[]>([{ sinal: "+", valor: "", lacre: "" }]);
 function addRetorno() {
@@ -160,22 +193,33 @@ const hojeISO = computed(() => dataISO(0));
       </div>
 
       <TransferenciaRetornoCampos v-model="retornoAberto">
+        <!-- FOTO 1: tres checkboxes de mesmo peso, uma embaixo da outra. A anotacao do Rodrigo ao
+             lado da terceira — "Se ☑ abre esse campo!" — vale para as tres: nenhum campo aparece
+             antes da checkbox ser marcada. A terceira vem do proprio TransferenciaRetornoCampos. -->
         <template #controles>
           <label class="tr-check">
-            <input v-model="multiploDestino" type="checkbox" /><span>Múltiplo Destino</span>
+            <input v-model="multiploDestino" type="checkbox" />
+            <span>Múltiplo Destino</span>
           </label>
-          <div v-if="multiploDestino" class="tr-campo">
+          <!-- R-030: multiplo destino e DISPUTA, nao rateio — quem confirmar primeiro informando o
+               lacre leva o valor INTEIRO e as demais nao recebem nada. Por isso aqui so se ESCOLHE
+               contas; nao existe (nem pode existir) campo de valor por destino. -->
+          <div v-if="multiploDestino" class="tr-campo tr-indent">
             <span class="tr-campo-lbl">Contas que podem receber</span>
-            <label
-              v-for="c in opcoesEmpresa.contas.filter((item) => item.id !== form.contaOrigemId)"
-              :key="c.id"
-              class="tr-check"
-            >
+            <label v-for="c in contasCandidatas" :key="c.id" class="tr-check">
               <input v-model="form.contasDestinoIds" type="checkbox" :value="c.id" />
               <span>{{ c.nome }}</span>
             </label>
           </div>
+
+          <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
+               FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
           <label class="tr-check">
+            <input v-model="tempoConfirmacaoAberto" type="checkbox" />
+            <span>Tempo de confirmação</span>
+          </label>
+          <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
+            <span class="tr-campo-lbl">Tempo de confirmação</span>
             <select v-model="form.tempoConfirmacao" class="tr-input">
               <option value="5min">5 minutos</option>
               <option value="10min">10 minutos</option>

@@ -24,8 +24,13 @@
 Checkboxes ao lado de Destino:
 
 - ☐ **Múltiplo Destino**
-- ☐ **Sempre confirmar**
+- ☐ **Tempo de confirmação** — corrigido em 31/07. A transcrição original dizia "Sempre confirmar";
+  releitura do desenho (`mockups-rodrigo/FOTO-1-transferencia-malote.jpeg`) confirma a palavra
+  **tempo**. É o campo da **R-035**, não uma flag de comportamento
 - ☑ **Transf. Retorno / Sangria** → _"Se ☑ abre esse campo!"_ (abre o Bloco B)
+
+> As três são **checkboxes que revelam o campo correspondente** — nenhuma delas mostra o campo
+> antes de ser marcada. É o padrão que a anotação _"Se ☑ abre esse campo!"_ registra.
 
 ### Bloco B · Transf. Entrada (Retorno / Sangria)
 
@@ -48,9 +53,13 @@ Saldo (+/−)  R$
 2. **Data de Recebimento com CONFIRMAÇÃO pelo destinatário** — 🆕 a transferência tem **duas
    pontas**: quem envia e quem confirma o recebimento. Isso explica o "reivindica/confirma" que a
    sessão do Claude Code implementou em 24/07 — **está no desenho**.
-3. **Múltiplo Destino** — volta a ideia de rateio (eu havia descartado na leitura do 1º rascunho).
-   Agora é explícito como **checkbox**.
-4. **"Sempre confirmar"** — flag de comportamento (exige confirmação sempre).
+3. **Múltiplo Destino** — ~~volta a ideia de rateio~~ **ERRADO, corrigido em 31/07 pela R-030**:
+   múltiplo destino é **DISPUTA, não rateio**. São N contas **candidatas**; a primeira que confirmar
+   informando o lacre leva o valor **inteiro** e as demais não recebem nada. Não existe valor por
+   destino. Ver a fala do José em `19_REGISTRO_DE_REGRAS.md` (R-030).
+4. ~~**"Sempre confirmar"** — flag de comportamento~~ **ERRO DE TRANSCRIÇÃO, corrigido em 31/07**:
+   o campo é **Tempo de confirmação** (R-035) — quem envia escolhe o prazo em que o destino deve
+   confirmar (5min · 10min · 30min · 1h · 1 dia · 10 dias · 30 dias).
 5. **Lacre "do setor"** — o lacre pertence ao **setor**, não ao malote genérico. Reforça o modelo
    de lacre por movimento (tabela `lacres`).
 6. **Retorno/Sangria no MESMO formulário** (checkbox que expande) — não é tela separada. Confirma R4.
@@ -179,8 +188,8 @@ diferentes e complementares.
 | --- | ----------------------------------------------------- | ------------- | ------------------------- |
 | 1   | Agendamento de transferência (+ data)                 | Transferência | médio                     |
 | 2   | Confirmação de recebimento pelo destinatário (+ data) | Transferência | **alto** (fluxo 2 pontas) |
-| 3   | Múltiplo destino                                      | Transferência | médio                     |
-| 4   | "Sempre confirmar"                                    | Transferência | baixo                     |
+| 3   | Múltiplo destino (disputa, R-030)                     | Transferência | médio                     |
+| 4   | Tempo de confirmação (R-035, era "Sempre confirmar")  | Transferência | baixo                     |
 | 5   | Juros + Valor Total                                   | Lançamentos   | baixo                     |
 | 6   | Data e N° do Doc. Fiscal                              | Lançamentos   | baixo                     |
 | 7   | Credor tipado (fornecedor/colaborador/sócio-setor)    | Lançamentos   | médio                     |

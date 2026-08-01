@@ -212,6 +212,12 @@ tesoureiro manda o malote sem saber qual caixa vai abrir; quem abrir, reivindica
 > ⚠️ **Correção no `PROJECT_BRAIN/14`:** o item "Sempre confirmar" da FOTO 1 foi **erro de
 > transcrição meu** — eu li como flag de comportamento. O campo é **tempo de confirmação** (R-035).
 
+> **Complemento da R-035, decisão minha para o José vetar (31/07):** deixar a checkbox "Tempo de
+> confirmação" **desmarcada não significa "sem prazo"** — significa aceitar o padrão de **1 dia**,
+> que o servidor já aplica. Se "desmarcado" fosse "sem prazo", a **R-037** ficaria sem gatilho e
+> transferência pendente viveria para sempre. A checkbox escolhe **outro** prazo, não a ausência
+> dele.
+
 #### O dinheiro em trânsito e o prazo (José, 31/07)
 
 | Id           | Regra                                                                                                                                                                                                                                     |
