@@ -125,6 +125,15 @@ const validacaoQtdPreview = computed(() =>
   <!-- Abertura de caixa vive num unico fluxo: o form inline da CaixaResumoPage (/caixa). O modal
        antigo daqui foi removido (Definition of Done: nada e pronto enquanto o caminho antigo existir). -->
 
+  <!-- Lancamento (despesa/mercadoria/retirada) e Transferencia tem modais proprios fieis ao desenho
+       do Rodrigo (FOTO 2 / FOTO 1). Eles LEEM `modalOperacaoAberto` do contexto e decidem sozinhos
+       se aparecem (ver OperacaoTransferenciaModal.vue:19 e useOperacaoLancamento.ts:52).
+       NAO REMOVER: sem estas duas tags o "+ Novo > Transferencias/Saidas" abre o estado e nada
+       renderiza — falha 100% silenciosa (import sem uso nao quebra lint, check nem teste).
+       Perdidas por engano no 9c35fae, restauradas em 31/07. -->
+  <OperacaoLancamentoModal />
+  <OperacaoTransferenciaModal />
+
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
     <v-card>
       <v-card-title>{{ cadastroEditandoId ? "Editar cadastro" : "Novo cadastro" }}</v-card-title>
