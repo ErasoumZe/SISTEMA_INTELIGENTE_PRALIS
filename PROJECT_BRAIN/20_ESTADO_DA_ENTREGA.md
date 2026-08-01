@@ -412,3 +412,18 @@ José, executado passo a passo pela API, com tesouraria e caixa em logins separa
 **Juros e desconto do lançamento não entram no total do caixa** — `18` D-09. Medido: despesa de 50
 com 10% de juros tira 50 do caixa, não 55. A diferença vira quebra falsa, atribuída ao operador
 pela R-015. Corrigir muda o saldo de todo caixa já fechado, então parou aqui.
+
+### Validação da rodada de 31/07 (R-040 + fluxo do dia)
+
+- `npm run lint`: verde.
+- `npm run check`: verde, inclusive arquitetura e catraca `data-pendente: 0/0`.
+- Unitários: 13 arquivos, **116/116**.
+- Web: 13 arquivos, **155/155** (inclui os 3 novos do vazamento de sessão).
+- Integração completa, executada **uma vez**: 69 arquivos, **320 passaram, 3 "skipped", 1 arquivo
+  falhou** — `unidades-medida.test.ts`. A falha foi de AMBIENTE, não de código: o `beforeAll` não
+  conseguiu subir o Testcontainers (as outras suítes e o script do fluxo do dia rodavam na mesma
+  máquina; a rodada levou 3h24 em vez dos ~28min normais). Os "3 skipped" são exatamente os 3
+  testes desse arquivo, que o vitest pula quando o `beforeAll` morre.
+- **Reexecutado isolado: `unidades-medida` passa 3/3.** Efetivo: **323/323**.
+- Lição para a próxima: não rodar outras suítes em paralelo com a integração completa — o
+  Testcontainers estoura o startup e a falha parece regressão.
