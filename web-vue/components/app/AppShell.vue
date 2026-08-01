@@ -211,26 +211,34 @@ onMounted(() => {
                     class="sidebar-item sidebar-categoria"
                     :class="{ aberta: categoriaAberta(no.id) }"
                     :aria-expanded="categoriaAberta(no.id)"
+                    :aria-controls="`sidebar-subitens-${no.id}`"
                     @click="alternarCategoria(no.id)"
                   >
                     <v-icon :icon="no.icone" size="21" />
                     <span>{{ no.titulo }}</span>
-                    <v-icon
-                      class="sidebar-categoria-chevron"
-                      :icon="categoriaAberta(no.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
-                      size="18"
-                    />
+                    <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
+                         movimento liga o estado fechado ao aberto em vez de cortar. -->
+                    <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
                   </button>
-                  <div v-if="categoriaAberta(no.id)" class="sidebar-subitens">
-                    <AppMenuItem
-                      v-for="tela in no.itens"
-                      :key="tela.id"
-                      :tela="tela"
-                      :tela-ativa="telaAtiva"
-                      :desabilitada="telasDesabilitadasSet.has(tela.id)"
-                      :motivo="textoTooltipTela(tela.id)"
-                      @navegar="fecharDrawerMobile"
-                    />
+                  <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
+                       e por isso os filhos ficam SEMPRE montados: com v-if nao ha o que animar.
+                       Fechado, o CSS tira a visibilidade — some tambem da ordem do Tab. -->
+                  <div
+                    :id="`sidebar-subitens-${no.id}`"
+                    class="sidebar-subitens-wrap"
+                    :class="{ aberta: categoriaAberta(no.id) }"
+                  >
+                    <div class="sidebar-subitens">
+                      <AppMenuItem
+                        v-for="tela in no.itens"
+                        :key="tela.id"
+                        :tela="tela"
+                        :tela-ativa="telaAtiva"
+                        :desabilitada="telasDesabilitadasSet.has(tela.id)"
+                        :motivo="textoTooltipTela(tela.id)"
+                        @navegar="fecharDrawerMobile"
+                      />
+                    </div>
                   </div>
                 </template>
                 <AppMenuItem
