@@ -47,7 +47,9 @@ async function login() {
 
       <div class="login-head">
         <h1 class="login-title">Sistema Inteligente</h1>
-        <p class="login-sub">Acesso de donos e gerentes</p>
+        <!-- Era "Acesso de donos e gerentes". Pela R-121 o operador de caixa virou usuario
+             de primeira classe deste login, entao o subtitulo excluia quem mais entra aqui. -->
+        <p class="login-sub">Acesso ao sistema</p>
       </div>
 
       <v-form class="login-form" @submit.prevent="login">
@@ -104,35 +106,68 @@ async function login() {
 </template>
 
 <style scoped>
+/* Login e a UNICA tela que carrega antes de existir empresa: nenhum tema em runtime,
+   tudo aqui e a camada de tokens crua (--cx-*, definida em assets/main.css). */
+
+/* Profundidade sem "aurora": duas luzes largas e fracas (6% e 4%), uma da marca no
+   alto e uma fria embaixo. O fundo tem volume, mas nada compete com o cartao. */
 .login-page {
   min-height: 100dvh;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(101, 21, 221, 0.08) 0%, transparent 55%), var(--marca-fundo, #f6f6f8);
+    radial-gradient(130% 85% at 50% -15%, color-mix(in srgb, var(--cx-brand) 6%, transparent) 0%, transparent 60%),
+    radial-gradient(
+      90% 60% at 50% 115%,
+      color-mix(in srgb, var(--cx-brand-strong) 4%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--cx-canvas);
 }
 
+/* Elevacao em camadas (contato + ambiente) e SEM borda: a separacao vem da sombra,
+   nao de uma linha cinza em volta. */
 .login-card {
   box-sizing: border-box;
   width: 100%;
   max-width: min(420px, calc(100vw - 32px)); /* nunca ultrapassa a viewport */
   min-width: 0;
-  background: var(--marca-superficie, #fff);
-  border: 1px solid var(--marca-linha, #e8e8ec);
-  border-radius: 24px;
-  padding: 34px 32px 26px;
-  box-shadow: 0 24px 60px rgba(94, 55, 49, 0.1);
-  animation: login-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  background: var(--cx-surface);
+  border-radius: var(--cx-r-xl);
+  padding: var(--cx-sp-8) var(--cx-sp-7) var(--cx-sp-6);
+  box-shadow: var(--cx-e-3);
+  animation: login-in var(--cx-dur-3) var(--cx-ease-out) both;
 }
 @media (max-width: 390px) {
   .login-card {
-    padding: 26px 18px 20px;
-    border-radius: 20px;
+    padding: var(--cx-sp-6) var(--cx-sp-5) var(--cx-sp-5);
+    border-radius: var(--cx-r-lg);
   }
+}
+
+/* Entrada escalonada: os blocos internos sobem em sequencia curta atras do cartao.
+   Cada movimento individual fica dentro de --cx-dur-3; o que escalona e o atraso. */
+.login-brand,
+.login-head,
+.login-form,
+.login-slogan {
+  animation: login-in var(--cx-dur-3) var(--cx-ease-out) both;
+}
+.login-brand {
+  animation-delay: 60ms;
+}
+.login-head {
+  animation-delay: 110ms;
+}
+.login-form {
+  animation-delay: 160ms;
+}
+.login-slogan {
+  animation-delay: 220ms;
 }
 
 .login-brand {
   display: flex;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: var(--cx-sp-5);
 }
 .login-logo {
   width: clamp(150px, 52%, 190px);
@@ -142,83 +177,99 @@ async function login() {
 
 .login-head {
   text-align: center;
-  margin-bottom: 22px;
+  margin-bottom: var(--cx-sp-6);
 }
 .login-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--marca-tinta, #2b2b2f);
+  font-size: var(--cx-fs-h2);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-tight);
+  color: var(--cx-ink);
 }
 .login-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--marca-tinta-suave, #6b6b73);
+  margin: var(--cx-sp-1) 0 0;
+  font-size: var(--cx-fs-body);
+  font-weight: 500;
+  color: var(--cx-ink-soft);
 }
 
 .login-form {
   display: grid;
-  gap: 16px;
+  gap: var(--cx-sp-4);
 }
 .login-alert {
   margin: -2px 0;
 }
 
-/* Roxo da marca (--marca-acento), o mesmo do "+ NOVO" do app. O laranja #c0521d que estava aqui era
+/* Roxo da marca (--cx-brand), o mesmo do "+ NOVO" do app. O laranja #c0521d que estava aqui era
    residuo da Padaria Pralis (R-098). De quebra o contraste com branco sobe de ~4,8:1 para ~7,8:1. */
 .login-submit {
-  margin-top: 4px;
-  background: var(--marca-acento, #6515dd) !important;
-  color: #fff !important;
-  font-weight: 800;
-  letter-spacing: 0.2px;
+  margin-top: var(--cx-sp-1);
+  background: var(--cx-brand) !important;
+  color: var(--cx-brand-on) !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   text-transform: none;
-  border-radius: 12px;
-  box-shadow: 0 10px 22px rgba(101, 21, 221, 0.3) !important;
+  border-radius: var(--cx-r-md);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--cx-brand) 30%, transparent) !important;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    background 0.15s ease;
+    transform var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-2) var(--cx-ease),
+    background var(--cx-dur-1) var(--cx-ease);
 }
 .login-submit:hover {
-  background: var(--marca-acento-forte, #35128c) !important;
+  background: var(--cx-brand-strong) !important;
   transform: translateY(-1px);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--cx-brand) 36%, transparent) !important;
+}
+/* Afunda no clique: o botao responde ao dedo antes de a rede responder. */
+.login-submit:active {
+  transform: translateY(1px);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--cx-brand) 28%, transparent) !important;
 }
 
 .login-link {
   justify-self: center;
   margin-top: 2px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--marca-tinta-suave, #6b6b73);
+  padding: var(--cx-sp-1) var(--cx-sp-2);
+  border-radius: var(--cx-r-sm);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  color: var(--cx-ink-soft);
   text-decoration: none;
+  transition:
+    color var(--cx-dur-1) var(--cx-ease),
+    background var(--cx-dur-1) var(--cx-ease);
 }
 .login-link:hover {
-  color: var(--marca-acento-forte, #35128c);
+  color: var(--cx-brand-strong);
+  background: var(--cx-hover);
 }
 
 .login-slogan {
-  margin: 22px 0 4px;
+  margin: var(--cx-sp-6) 0 var(--cx-sp-1);
   text-align: center;
   font-style: italic;
-  font-size: 12.5px;
-  color: var(--marca-tinta-suave, #6b6b73);
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
 }
 
-/* Foco no roxo da marca (fixo: nao depende do tema por empresa, que aqui ainda nem carregou) */
+/* Foco no roxo da marca (fixo: nao depende do tema por empresa, que aqui ainda nem carregou).
+   Alem da borda, o campo focado ganha o anel — o mesmo do resto do sistema. */
 .login-card :deep(.v-field--focused .v-field__outline) {
-  color: var(--marca-acento, #6515dd);
+  color: var(--cx-brand);
 }
 .login-card :deep(.v-field--focused .v-label) {
-  color: var(--marca-acento-forte, #35128c);
+  color: var(--cx-brand-strong);
+}
+.login-card :deep(.v-field--focused) {
+  box-shadow: 0 0 0 3px var(--cx-brand-ring);
 }
 
 @keyframes login-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -226,10 +277,15 @@ async function login() {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .login-card {
+  .login-card,
+  .login-brand,
+  .login-head,
+  .login-form,
+  .login-slogan {
     animation: none;
   }
-  .login-submit:hover {
+  .login-submit:hover,
+  .login-submit:active {
     transform: none;
   }
 }
