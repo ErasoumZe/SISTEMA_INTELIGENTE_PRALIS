@@ -1,14 +1,151 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap");
 
+/* =====================================================================
+   CICLUZ — CAMADA DE TOKENS (--cx-*)
+   FONTE UNICA de cor, espaco, raio, elevacao, tipografia e movimento.
+   Antes de criar um token novo, ler PROJECT_BRAIN/67_LINGUAGEM_VISUAL_CICLUZ.md.
+
+   Como a aparencia por empresa entra aqui:
+   useApi/aplicarTema injeta --empresa-* INLINE no <html>. Os --cx-* leem esse
+   valor com fallback de fabrica. Duas consequencias que sustentam o arquivo:
+   1) empresa personalizada continua vencendo (estilo inline vence folha);
+   2) o modo escuro redefine --cx-* (e NAO --empresa-*), entao nao precisa mais
+      de !important para vencer o inline — era isso que sustentava a pilha antiga.
+
+   Os quatro vocabularios historicos (--padaria-*, --marca-*, neutros V1 e
+   --shell-*) viram ALIAS destes tokens, cada um no seu bloco original. Nenhum
+   nome foi removido: todo CSS antigo continua lendo o nome de sempre e recebendo
+   o valor novo.
+   ===================================================================== */
 :root {
-  --padaria-background: #eaf1f9;
-  --padaria-foreground: #171717;
-  --padaria-card: #ffffff;
-  --padaria-muted: #eef2f7;
-  --padaria-muted-foreground: #71717a;
-  --padaria-border: #d9e1eb;
-  --padaria-brand: #6d28d9;
-  --padaria-accent: #0891b2;
+  color-scheme: light;
+
+  /* ---- Cor: primitivas ---- */
+  --cx-canvas: var(--empresa-fundo, #f4f6fa);
+  --cx-surface: var(--empresa-superficie, #ffffff);
+  --cx-ink: var(--empresa-tinta, #1f2733);
+  --cx-ink-soft: var(--empresa-tinta-suave, #5b6675);
+  --cx-line: #e4e8ef;
+  --cx-line-soft: #eef1f6;
+
+  /* Derivadas da propria superficie/tinta: seguem o tema da empresa E o modo
+     escuro sem precisar ser redeclaradas em nenhum dos dois lugares. */
+  --cx-surface-sunken: color-mix(in srgb, var(--cx-ink) 4%, var(--cx-surface));
+  --cx-hover: color-mix(in srgb, var(--cx-ink) 6%, transparent);
+  --cx-pressed: color-mix(in srgb, var(--cx-ink) 11%, transparent);
+
+  /* ---- Cor: marca (identidade Cicluz; hex verificados por teste) ----
+     LITERAL de proposito, e nao var(--empresa-primaria): o tema por empresa e
+     resolvido POR TELA (Entradas e amarelo, Mercadorias e verde, ver
+     corCategoriaPorTela). Se a marca da casca lesse a primaria da tela, o FAB, o
+     avatar e o item ativo trocariam de cor a cada navegacao — a casca inteira
+     piscando de cor. O acento por tela continua existindo, e continua chegando
+     por --padaria-brand (injetado inline por aplicarTema). */
+  --cx-brand: #6515dd;
+  --cx-brand-strong: #35128c;
+  --cx-brand-on: #ffffff;
+  --cx-brand-wash: color-mix(in srgb, var(--cx-brand) 10%, var(--cx-surface));
+  /* A marca usada como TEXTO (item ativo, link): no claro e a secundaria escura;
+     no escuro precisa clarear, senao roxo sobre fundo escuro reprova em AA. */
+  --cx-brand-text: var(--cx-brand-strong);
+  /* Anel de foco. Token PROPRIO, e nao --cx-brand direto: medido, #6515dd sobre a
+     superficie escura da 2,1:1 e reprova o minimo de 3:1 de elemento nao-textual
+     (WCAG 1.4.11) — o anel ficaria invisivel justamente para quem navega por
+     teclado no modo escuro. No claro segue sendo o roxo da marca (7,8:1). */
+  --cx-focus: var(--cx-brand);
+  --cx-brand-ring: color-mix(in srgb, var(--cx-focus) 40%, transparent);
+
+  /* ---- Cor: semantica de TEXTO (AA >= 4.5:1 sobre canvas e superficie) ----
+     Nao confundir com as cores de tema do Vuetify (success/error), que sao
+     fundo com texto branco e seguem outra regra de contraste (3:1). */
+  --cx-positive: #157f3c;
+  --cx-negative: #c62828;
+
+  /* ---- Espaco: escala de 4px ---- */
+  --cx-sp-1: 4px;
+  --cx-sp-2: 8px;
+  --cx-sp-3: 12px;
+  --cx-sp-4: 16px;
+  --cx-sp-5: 20px;
+  --cx-sp-6: 24px;
+  --cx-sp-7: 32px;
+  --cx-sp-8: 48px;
+
+  /* ---- Raio: por hierarquia (controle < card < superficie grande) ---- */
+  --cx-r-sm: 8px;
+  --cx-r-md: 12px;
+  --cx-r-lg: 16px;
+  --cx-r-xl: 22px;
+  --cx-r-pill: 999px;
+
+  /* ---- Elevacao: SEMPRE duas sombras (contato curto + ambiente difuso).
+     Sombra de uma camada so e o que faz a interface parecer Bootstrap. ---- */
+  --cx-e-1: 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 12px -4px rgb(15 23 42 / 0.08);
+  --cx-e-2: 0 1px 3px rgb(15 23 42 / 0.06), 0 12px 28px -10px rgb(15 23 42 / 0.14);
+  --cx-e-3: 0 2px 6px rgb(15 23 42 / 0.07), 0 28px 60px -18px rgb(15 23 42 / 0.2);
+
+  /* ---- Movimento: curto e com desaceleracao. Nada acima de --cx-dur-3. ---- */
+  --cx-dur-1: 120ms;
+  --cx-dur-2: 180ms;
+  --cx-dur-3: 260ms;
+  --cx-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --cx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- Tipografia: poucos tamanhos, bem espacados entre si ---- */
+  --cx-fs-micro: 11px;
+  --cx-fs-caption: 12px;
+  --cx-fs-body: 14px;
+  --cx-fs-lead: 15px;
+  --cx-fs-title: 17px;
+  --cx-fs-h2: 21px;
+  --cx-fs-h1: 27px;
+  --cx-tracking-tight: -0.018em;
+  --cx-tracking-wide: 0.08em;
+
+  /* ---- Material translucido: SO no chrome (sidebar/topbar/overlay).
+     Nunca em card de conteudo nem atras de texto de leitura. ---- */
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 72%, transparent);
+  --cx-chrome-blur: saturate(180%) blur(20px);
+  --cx-scrim: rgb(15 23 42 / 0.32);
+}
+
+/* ---- MODO ESCURO: inversao na camada de tokens ----
+   Redefine SO as primitivas; todo o resto (derivadas, aliases, componentes)
+   herda. Sem !important: o inline de aplicarTema toca --empresa-*, nao --cx-*. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --cx-canvas: #0f1318;
+  --cx-surface: #191f26;
+  --cx-ink: #e7e9ec;
+  --cx-ink-soft: #a6afba;
+  --cx-line: #2a323c;
+  --cx-line-soft: #232b34;
+
+  --cx-positive: #4ade80;
+  --cx-negative: #ff8a80;
+  /* Marca clareada para servir de tinta/grafico sobre superficie escura (6,9:1). */
+  --cx-brand-text: color-mix(in srgb, var(--cx-brand) 45%, #ffffff);
+  --cx-focus: var(--cx-brand-text);
+
+  --cx-e-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px -4px rgb(0 0 0 / 0.5);
+  --cx-e-2: 0 1px 3px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.6);
+  --cx-e-3: 0 2px 6px rgb(0 0 0 / 0.5), 0 28px 60px -18px rgb(0 0 0 / 0.7);
+
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  --cx-scrim: rgb(0 0 0 / 0.55);
+}
+
+/* ---- ALIAS 1/4: vocabulario --padaria-* (o mais antigo, main.css + telas) ---- */
+:root {
+  --padaria-background: var(--cx-canvas);
+  --padaria-foreground: var(--cx-ink);
+  --padaria-card: var(--cx-surface);
+  --padaria-muted: var(--cx-surface-sunken);
+  --padaria-muted-foreground: var(--cx-ink-soft);
+  --padaria-border: var(--cx-line);
+  --padaria-brand: var(--cx-brand);
+  --padaria-accent: var(--cx-brand-strong);
 }
 
 html {
@@ -502,20 +639,20 @@ body {
 
 .table-heading p {
   margin: 2px 0 0;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 13px;
 }
 
 .operacoes-table th {
-  color: #020617;
+  color: var(--cx-ink);
   font-weight: 900 !important;
 }
 
 .operacoes-table td,
 .operacoes-table th {
   height: 45px !important;
-  border-bottom: 1px solid #d7e2ef !important;
-  font-size: 14px;
+  border-bottom: 1px solid var(--cx-line) !important;
+  font-size: var(--cx-fs-body);
 }
 
 @media (width <= 1260px) {
@@ -593,18 +730,22 @@ body {
    bloco + a linha @import do topo + os ajustes de AppShell.vue/index.vue.
    Usa tokens FIXOS (--marca-*) para nao ser sobrescrito pelo tema por empresa.
    ===================================================================== */
+/* ---- ALIAS 2/4: vocabulario --marca-* (identidade Cicluz) ----
+   Era o bloco de tokens "fixos"; agora deriva de --cx-*. O acento continua sendo
+   o roxo da marca, e --marca-acento-suave/-sombra passam a acompanhar o modo
+   escuro sozinhos (antes precisavam de override com !important la embaixo). */
 :root {
-  --marca-acento: #6515dd;
-  --marca-acento-forte: #35128c;
-  --marca-acento-suave: #efe9fd;
+  --marca-acento: var(--cx-brand);
+  --marca-acento-forte: var(--cx-brand-strong);
+  --marca-acento-suave: var(--cx-brand-wash);
   --marca-destaque: #b8860b;
-  --marca-tinta: #2b2b2f;
-  --marca-tinta-suave: #6b6b73;
-  --marca-superficie: #ffffff;
-  --marca-fundo: #f6f6f8;
-  --marca-linha: #e8e8ec;
-  --marca-linha-suave: #f0f0f4;
-  --marca-sombra: 0 10px 30px rgba(43, 43, 47, 0.06);
+  --marca-tinta: var(--cx-ink);
+  --marca-tinta-suave: var(--cx-ink-soft);
+  --marca-superficie: var(--cx-surface);
+  --marca-fundo: var(--cx-canvas);
+  --marca-linha: var(--cx-line);
+  --marca-linha-suave: var(--cx-line-soft);
+  --marca-sombra: var(--cx-e-2);
 }
 
 html,
@@ -654,7 +795,7 @@ body {
   background: #f4f1ec;
 }
 .sidebar-logo-row:focus-visible {
-  outline: 2px solid var(--marca-acento);
+  outline: 2px solid var(--cx-focus);
   outline-offset: 2px;
 }
 .sidebar-logo {
@@ -705,7 +846,7 @@ body {
   color: var(--marca-acento-forte);
 }
 .company-trigger:focus-visible {
-  outline: 2px solid var(--marca-acento);
+  outline: 2px solid var(--cx-focus);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -713,8 +854,11 @@ body {
 /* Caixa card */
 .caixa-card {
   border: 1px solid var(--marca-linha);
-  border-radius: 16px;
-  background: linear-gradient(180deg, #fffdfb, #faf7f3);
+  border-radius: var(--cx-r-lg);
+  /* Era um creme cravado (#fffdfb/#faf7f3) que exigia um override no modo escuro.
+     Em token, o degrade e "superficie -> superficie levemente recuada" e serve aos
+     dois temas E ao cartao personalizado da empresa. */
+  background: linear-gradient(180deg, var(--cx-surface), var(--cx-surface-sunken));
   box-shadow: var(--marca-sombra);
 }
 .caixa-title {
@@ -779,11 +923,11 @@ body {
   transform: translateX(2px);
 }
 .sidebar-item:focus-visible {
-  outline: 2px solid var(--marca-acento);
+  outline: 2px solid var(--cx-focus);
   outline-offset: 2px;
 }
 .sidebar-disabled-wrapper:focus-visible {
-  outline: 2px solid var(--marca-acento);
+  outline: 2px solid var(--cx-focus);
   outline-offset: 2px;
   border-radius: 11px;
 }
@@ -837,11 +981,14 @@ body {
 .inicio-hero {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  padding: 30px;
-  border-radius: 24px;
+  gap: var(--cx-sp-2);
+  padding: var(--cx-sp-7);
+  border-radius: var(--cx-r-xl);
+  /* A luz difusa atras era laranja (residuo Pralis) e nao acompanhava tema nem
+     modo escuro. Agora e a propria marca, em 6%. */
   background:
-    radial-gradient(120% 90% at 50% 0%, rgba(243, 116, 53, 0.08) 0%, transparent 60%), var(--marca-superficie);
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--cx-brand) 6%, transparent) 0%, transparent 60%),
+    var(--marca-superficie);
   border: 1px solid var(--marca-linha);
   box-shadow: var(--marca-sombra);
 }
@@ -1326,50 +1473,23 @@ body {
    ===================================================================== */
 
 /* ===================== MODO ESCURO (claro/escuro) =====================
-   O toggle no topbar seta data-theme="dark" no <html>. As vars com !important
-   vencem o estilo inline (sem !important) que o aplicarTema (aparencia) injeta,
-   entao o escuro funciona mesmo com a personalizacao de cor ativa. Baseline:
-   superficies/bordas/texto. O laranja (identidade) e mantido. */
-:root[data-theme="dark"] {
-  --padaria-background: #0f1318 !important;
-  --padaria-foreground: #e7e9ec !important;
-  --padaria-card: #191f26 !important;
-  --padaria-muted: #232b34 !important;
-  --padaria-muted-foreground: #a6afba !important;
-  --padaria-border: #2a323c !important;
-  --marca-superficie: #191f26 !important;
-  --marca-fundo: #0f1318 !important;
-  --marca-linha: #2a323c !important;
-  --marca-linha-suave: #232b34 !important;
-  --marca-tinta: #e7e9ec !important;
-  --marca-tinta-suave: #a6afba !important;
-  --marca-acento-suave: #2d2242 !important;
-  --marca-sombra: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
-  --v-theme-background: 15, 19, 24 !important;
-  --v-theme-surface: 25, 31, 38 !important;
-  --v-theme-on-surface: 231, 233, 236 !important;
-  --v-theme-on-background: 231, 233, 236 !important;
-}
-/* Superficies com cor fixa (hardcoded) que o var nao cobre. */
-:root[data-theme="dark"] body,
-:root[data-theme="dark"] .padaria-main {
-  background: var(--padaria-background) !important;
-  color: var(--padaria-foreground);
-}
-:root[data-theme="dark"] .topbar-page-id {
-  color: var(--marca-tinta) !important;
-}
-:root[data-theme="dark"] .caixa-card {
-  background: linear-gradient(180deg, #1c232b, #171d24) !important;
-}
-:root[data-theme="dark"] .sidebar-item:hover:not(.disabled) {
-  background: #232b34 !important;
-}
-:root[data-theme="dark"] .inicio-card,
-:root[data-theme="dark"] .v-card {
-  background: var(--marca-superficie) !important;
-  color: var(--marca-tinta);
-}
+   REESCRITO: a inversao agora acontece UMA vez, na camada de tokens, no topo do
+   arquivo (:root[data-theme="dark"] redefinindo as primitivas --cx-*). Todos os
+   vocabularios sao alias delas, entao herdam sozinhos.
+
+   O que sumiu daqui e por que:
+   - as 14 vars com !important: eram para vencer o estilo inline do aplicarTema.
+     Ele agora injeta --empresa-*, que o modo escuro nao le. Sem disputa, sem
+     !important.
+   - as 4 vars --v-theme-*: viraram um tema Vuetify de verdade (padariaDark em
+     nuxt.config), trocado por useModoEscuro. Antes os componentes Vuetify
+     continuavam claros por dentro e so a var era remendada.
+   - os 5 seletores de superficie hardcoded: as regras-base passaram a usar
+     token (ver a camada de acabamento no fim do arquivo), entao nao existe mais
+     cor fixa para corrigir aqui.
+
+   Regra para quem vier depois: cor nova de superficie/texto NAO se acerta com um
+   seletor [data-theme="dark"] — se acerta usando --cx-* na regra original. */
 
 /* =====================================================================
    MOBILLS TEMA V1 — tokens + tipografia + raio Material (branch feat/tema-mobills)
@@ -1407,16 +1527,23 @@ body {
   --cat-resultado-soft: #f3edfd;
   --cat-resultado-strong: #54209f;
 
-  /* Neutros da V1 (Mobills/Material). ink/ink-soft/line sao rgba/hex que nao cabem como cor de
-     tema Vuetify — ficam como CSS vars, prontos para consumo nas proximas etapas. */
-  --canvas: #f4f6fa;
-  --surface: #ffffff;
-  --ink: rgba(0, 0, 0, 0.87);
-  --ink-soft: rgba(0, 0, 0, 0.54);
-  --line: #e4e8ef;
-  --brand: #6515dd;
-  --brand-strong: #35128c;
-  --brand-soft: #edf3fb;
+  /* ---- ALIAS 3/4: neutros V1 (Mobills/Material) ----
+     Consumidos por TesourariaCockpit, CardTotalCategoria e LinhaTransacao. */
+  --canvas: var(--cx-canvas);
+  --surface: var(--cx-surface);
+  --ink: var(--cx-ink);
+  --ink-soft: var(--cx-ink-soft);
+  --line: var(--cx-line);
+  --brand: var(--cx-brand);
+  --brand-strong: var(--cx-brand-strong);
+  --brand-soft: var(--cx-brand-wash);
+
+  /* --positive/--negative eram consumidos (CardTotalCategoria, LinhaTransacao,
+     TesourariaCockpit) sem nunca terem sido definidos: rodava sempre no fallback
+     #16a34a, que da 3,3:1 sobre branco e reprova em AA. Definidos aqui, ja no
+     tom que passa, e acompanhando o modo escuro. */
+  --positive: var(--cx-positive);
+  --negative: var(--cx-negative);
 }
 
 /* Tipografia: Noto Sans no corpo (vence o Montserrat do bloco LAB por ordem de fonte).
@@ -1475,17 +1602,22 @@ body {
    NAO toca api/db/shared e NAO muda regra de permissao. Ref: docs/research/mobills +
    PROJECT_BRAIN/03,04,10.
    ===================================================================== */
+/* ---- ALIAS 4/4: vocabulario --shell-* ----
+   A marca continua estavel entre telas (ver --cx-brand). O que muda: --shell-hover,
+   --shell-active-bg e --shell-active-ink deixaram de ter hex de tema claro cravados
+   (#ffffff no color-mix, #f3f5f9 no hover) e passaram a derivar da superficie/tinta
+   correntes — e por isso o bloco de escuro do shell, no fim do arquivo, sumiu. */
 .shell-mobills {
-  --shell-brand: var(--brand, #6515dd);
-  --shell-brand-strong: var(--brand-strong, #35128c);
-  --shell-canvas: var(--canvas, #f4f6fa);
-  --shell-surface: var(--surface, #ffffff);
-  --shell-line: var(--line, #e4e8ef);
-  --shell-ink: #1f2733;
-  --shell-ink-soft: #64748b;
-  --shell-hover: #f3f5f9;
-  --shell-active-bg: color-mix(in srgb, var(--shell-brand) 10%, #ffffff);
-  --shell-active-ink: var(--shell-brand-strong);
+  --shell-brand: var(--cx-brand);
+  --shell-brand-strong: var(--cx-brand-strong);
+  --shell-canvas: var(--cx-canvas);
+  --shell-surface: var(--cx-surface);
+  --shell-line: var(--cx-line);
+  --shell-ink: var(--cx-ink);
+  --shell-ink-soft: var(--cx-ink-soft);
+  --shell-hover: var(--cx-hover);
+  --shell-active-bg: var(--cx-brand-wash);
+  --shell-active-ink: var(--cx-brand-text);
 }
 
 /* Canvas Mobills (levemente mais frio que o creme laranja) */
@@ -1494,23 +1626,52 @@ body {
   background: var(--shell-canvas) !important;
 }
 
-/* ---- Sidebar branca, neutra (sem tom laranja) ---- */
+/* ---- Sidebar: material translucido (chrome) ----
+   backdrop-filter so no chrome — sidebar e topbar sao as superficies que ficam
+   POR CIMA do conteudo. Nunca em card de conteudo, nunca atras de texto de
+   leitura. Sem borda dura: a separacao vem da elevacao + diferenca de luminancia.
+   O !important aqui e para vencer o box-shadow/background do bloco LAB acima. */
 .shell-mobills .padaria-sidebar {
-  background: var(--shell-surface) !important;
-  border-right: 1px solid var(--shell-line) !important;
-  box-shadow: 2px 0 16px rgb(15 23 42 / 0.05) !important;
+  background: var(--cx-chrome) !important;
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  border-right: 1px solid var(--cx-line-soft) !important;
+  box-shadow: var(--cx-e-1) !important;
+  /* transform entra na lista de proposito: o drawer do mobile desliza por
+     transform e o shorthand substituiria a transicao propria do Vuetify. */
+  transition:
+    width var(--cx-dur-3) var(--cx-ease),
+    transform var(--cx-dur-3) var(--cx-ease),
+    background var(--cx-dur-2) var(--cx-ease);
 }
+/* Fallback solido: sem suporte a backdrop-filter, a sidebar nao pode ficar semitransparente. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .padaria-sidebar {
+    background: var(--cx-surface) !important;
+  }
+}
+/* O content interno era opaco e anulava o material do pai. */
 .shell-mobills .padaria-sidebar .v-navigation-drawer__content {
-  background: var(--shell-surface);
+  background: transparent;
+}
+.shell-mobills .sidebar-logo-row {
+  border-radius: var(--cx-r-md);
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    transform var(--cx-dur-1) var(--cx-ease);
 }
 .shell-mobills .sidebar-logo-row:hover {
   background: var(--shell-hover);
+}
+.shell-mobills .sidebar-logo-row:active {
+  background: var(--cx-pressed);
+  transform: scale(0.985);
 }
 .shell-mobills .sidebar-logo-row:focus-visible,
 .shell-mobills .sidebar-item:focus-visible,
 .shell-mobills .topbar-empresa:focus-visible,
 .shell-mobills .topbar-user:focus-visible {
-  outline: 2px solid var(--shell-brand);
+  outline: 2px solid var(--cx-focus);
   outline-offset: 2px;
 }
 
@@ -1521,36 +1682,53 @@ body {
 .shell-mobills .sidebar-new-button {
   min-height: 48px;
   justify-content: center;
-  border-radius: 25px !important;
-  background: var(--shell-brand) !important;
-  color: #fff !important;
+  border-radius: var(--cx-r-pill) !important;
+  background: var(--cx-brand) !important;
+  color: var(--cx-brand-on) !important;
   font-weight: 800;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  box-shadow: 0 6px 16px rgb(101 21 221 / 0.28) !important;
+  /* A sombra colorida era o roxo de fabrica cravado: empresa com outra primaria
+     ficava com halo roxo sob um botao de outra cor. Agora deriva da marca ativa. */
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--cx-brand) 30%, transparent) !important;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    background 0.15s ease;
+    transform var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-2) var(--cx-ease),
+    background var(--cx-dur-1) var(--cx-ease);
 }
 .shell-mobills .sidebar-new-button:hover {
-  background: var(--shell-brand-strong) !important;
+  background: var(--cx-brand-strong) !important;
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgb(101 21 221 / 0.34) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--cx-brand) 36%, transparent) !important;
+}
+.shell-mobills .sidebar-new-button:active {
+  transform: translateY(1px);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cx-brand) 28%, transparent) !important;
 }
 
-/* ---- Itens do menu: neutro; hover suave; ATIVO em realce ROXO (sem barra laranja) ---- */
+/* ---- Itens do menu: neutro; hover suave; ATIVO em realce ROXO ----
+   O ativo se le por TRES sinais (fundo, peso de fonte e barra), nunca so por cor:
+   quem nao distingue matiz continua enxergando onde esta. */
 .shell-mobills .sidebar-item {
   color: var(--shell-ink-soft);
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: var(--cx-r-md);
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    color var(--cx-dur-1) var(--cx-ease);
 }
 .shell-mobills .sidebar-item .v-icon {
   color: var(--shell-ink-soft);
+  transition: color var(--cx-dur-1) var(--cx-ease);
 }
 .shell-mobills .sidebar-item:hover:not(.disabled) {
   background: var(--shell-hover);
   color: var(--shell-ink);
+}
+/* O item afunda 1px no clique — o feedback de "apertei" que faltava. */
+.shell-mobills .sidebar-item:active:not(.disabled) {
+  background: var(--cx-pressed);
+  transform: translateY(1px);
 }
 .shell-mobills .sidebar-item.active {
   background: var(--shell-active-bg) !important;
@@ -1558,21 +1736,39 @@ body {
   font-weight: 800;
 }
 .shell-mobills .sidebar-item.active .v-icon {
-  color: var(--shell-brand) !important;
+  color: var(--shell-active-ink) !important;
 }
-/* mata a barrinha laranja do estado ativo do bloco LAB */
+/* Barra do ativo: reaproveita o ::before do bloco LAB (que o shell tinha desligado),
+   agora na cor da marca e entrando com o movimento da casca. */
 .shell-mobills .sidebar-item.active::before {
-  display: none !important;
+  display: block !important;
+  width: 3px;
+  height: 55%;
+  border-radius: 0 var(--cx-r-sm) var(--cx-r-sm) 0;
+  background: var(--cx-brand);
+  animation: cx-barra-ativa var(--cx-dur-2) var(--cx-ease-out) both;
+}
+@keyframes cx-barra-ativa {
+  from {
+    height: 0%;
+    opacity: 0;
+  }
+  to {
+    height: 55%;
+    opacity: 1;
+  }
 }
 .shell-mobills .sidebar-group-label {
   color: var(--shell-ink-soft);
   letter-spacing: 1.2px;
 }
+/* O branco-transparente (rgb(255 255 255 / 0)) das pontas embacava o degrade sobre
+   superficie escura; "transparent" interpola em alfa pre-multiplicado e some limpo. */
 .shell-mobills .sidebar-scroll-shell::before {
-  background: linear-gradient(var(--shell-surface), rgb(255 255 255 / 0));
+  background: linear-gradient(var(--cx-surface), transparent);
 }
 .shell-mobills .sidebar-scroll-shell::after {
-  background: linear-gradient(rgb(255 255 255 / 0), var(--shell-surface));
+  background: linear-gradient(transparent, var(--cx-surface));
 }
 
 /* Menu do FAB "+ NOVO" (renderizado em overlay no body — NAO escopar sob .shell-mobills) */
@@ -1583,44 +1779,67 @@ body {
   margin-inline-end: 4px;
 }
 
-/* ---- TOPBAR: 2 zonas (titulo | empresa+usuario) ---- */
+/* ---- TOPBAR: 2 zonas (titulo | empresa+usuario) ----
+   Material translucido: o conteudo rola POR BAIXO dela (sticky), entao aqui o
+   blur nao e decoracao — e o que separa a barra da pagina sem uma linha dura. */
 .shell-mobills .padaria-topbar {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px;
+  gap: var(--cx-sp-3);
   min-height: 64px;
-  background: var(--shell-surface) !important;
-  border-bottom: 1px solid var(--shell-line) !important;
+  background: var(--cx-chrome) !important;
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  border-bottom: 1px solid var(--cx-line-soft) !important;
   box-shadow: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .padaria-topbar {
+    background: var(--cx-surface) !important;
+  }
 }
 .shell-mobills .topbar-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--cx-sp-2);
   min-width: 0;
 }
+/* Hierarquia da topbar: o titulo da pagina e o unico elemento com peso; empresa,
+   tema, sino e avatar sao satelites. Antes os cinco competiam pelo mesmo peso. */
 .shell-mobills .topbar-page-id {
-  color: var(--shell-ink);
-  font-size: 16px;
-  font-weight: 800;
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-tight);
 }
 .shell-mobills .topbar-actions {
   justify-self: end;
-  gap: 8px;
+  gap: var(--cx-sp-1);
 }
 .shell-mobills .topbar-empresa {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--cx-sp-1);
   max-width: 220px;
-  border: 1px solid var(--shell-line);
-  border-radius: 999px;
-  background: var(--shell-surface);
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface-sunken);
   padding: 6px 12px;
-  color: var(--shell-ink);
-  font-size: 13.5px;
-  font-weight: 700;
+  color: var(--cx-ink-soft);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    color var(--cx-dur-1) var(--cx-ease);
+}
+.shell-mobills .topbar-empresa:hover:not(.estatica) {
+  background: var(--cx-hover);
+  color: var(--cx-ink);
+}
+.shell-mobills .topbar-empresa:active:not(.estatica) {
+  background: var(--cx-pressed);
 }
 .shell-mobills .topbar-empresa.estatica {
   cursor: default;
@@ -1631,13 +1850,55 @@ body {
   white-space: nowrap;
 }
 .shell-mobills .topbar-empresa .v-icon {
-  color: var(--shell-brand);
+  color: var(--cx-ink-soft);
+}
+/* Botoes de icone da topbar (tema, sino): alvo de 40px e realce so no hover. */
+.shell-mobills .topbar-actions > .v-btn--icon,
+.shell-mobills .topbar-actions .v-badge .v-btn--icon {
+  width: 40px;
+  height: 40px;
+  color: var(--cx-ink-soft);
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    color var(--cx-dur-1) var(--cx-ease);
+}
+.shell-mobills .topbar-actions .v-btn--icon:hover {
+  color: var(--cx-ink);
+}
+/* O badge do sino aparece com escala, em vez de piscar do nada. */
+.shell-mobills .topbar-actions .v-badge__badge {
+  font-weight: 700;
+  animation: cx-badge-in var(--cx-dur-2) var(--cx-ease-out) both;
+}
+@keyframes cx-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .shell-mobills .topbar-user {
+  /* O botao media 38x38 e reprovava o minimo de 40px de alvo de toque. O avatar
+     continua com 38 (o desenho nao muda); quem cresce e a area clicavel. */
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
   border: 0;
   background: transparent;
   padding: 0;
   cursor: pointer;
+  border-radius: 50%;
+  transition: transform var(--cx-dur-1) var(--cx-ease);
+}
+.shell-mobills .topbar-user:hover {
+  transform: scale(1.06);
+}
+.shell-mobills .topbar-user:active {
+  transform: scale(0.96);
 }
 .shell-mobills .topbar-avatar {
   display: grid;
@@ -1645,10 +1906,11 @@ body {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: var(--shell-brand);
-  color: #fff;
+  background: var(--cx-brand);
+  color: var(--cx-brand-on);
   font-size: 13px;
   font-weight: 800;
+  box-shadow: var(--cx-e-1);
 }
 
 /* ---- Responsivo (breakpoints do projeto: 1260/1024/768/560/390) ---- */
@@ -1675,15 +1937,302 @@ body {
   }
 }
 
-/* ---- Modo escuro: tokens do shell (surfaces seguem o dark ja existente) ---- */
-:root[data-theme="dark"] .shell-mobills {
-  --shell-surface: #191f26;
-  --shell-canvas: #0f1318;
-  --shell-line: #2a323c;
-  --shell-ink: #e7e9ec;
-  --shell-ink-soft: #a6afba;
-  --shell-hover: #232b34;
-  --shell-active-bg: color-mix(in srgb, var(--shell-brand) 30%, #191f26);
-  --shell-active-ink: #d9c8ff;
-}
+/* ---- Modo escuro do shell: nao existe mais bloco aqui ----
+   Os --shell-* sao alias de --cx-*, que ja invertem no topo do arquivo. O bloco
+   antigo re-cravava os hex do escuro e, de quebra, cravava --shell-active-ink em
+   um roxo fixo — era por isso que o realce do menu ignorava o tema da empresa no
+   escuro. Nao repor: mexer no escuro do shell = mexer nas primitivas --cx-*. */
 /* ===================== FIM SHELL MOBILLS ===================== */
+
+/* =====================================================================
+   CICLUZ — CAMADA DE ACABAMENTO  [CANONICA: regra nova entra AQUI]
+   Linguagem visual macOS/Apple aplicada sobre a casca existente: espaco,
+   profundidade em camadas, estados vivos, movimento curto. Consome APENAS
+   tokens --cx-* (topo do arquivo). Nenhum hex solto, nenhuma duracao solta.
+
+   Este e o ultimo bloco do arquivo de proposito: os blocos acima (LAB,
+   RESPONSIVIDADE, MOBILLS V1, SHELL) sao historicos e estao congelados.
+   Regra nova de aparencia entra aqui; token novo entra la em cima.
+   Documentacao: PROJECT_BRAIN/67_LINGUAGEM_VISUAL_CICLUZ.md
+   ===================================================================== */
+
+/* ---------- 1. Base ---------- */
+
+/* Renderizacao de texto: o padrao do Chrome/Windows engorda a Noto Sans em
+   superficie clara. Suaviza sem trocar a familia (fonte e decisao de marca). */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Titulos grandes com tracking negativo — o sinal tipografico mais barato de
+   "produto desenhado". :where = especificidade 0: qualquer classe ainda vence. */
+:where(h1, h2, .text-h4, .text-h5) {
+  letter-spacing: var(--cx-tracking-tight);
+}
+
+/* NUMERO DE DINHEIRO NAO DANCA.
+   tabular-nums trava a largura do digito: valor que muda (total, saldo, contador)
+   para de empurrar o layout a cada atualizacao. Vale para toda celula de tabela
+   (em texto o efeito e nulo) e para os valores de card/resumo. */
+.v-table td,
+.v-table th,
+.summary-value,
+.card-total-valor,
+.cx-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Foco visivel em TODO ponto focavel — nunca outline: none.
+   Anel de 2px na marca + offset, para nao encostar na borda do controle. */
+:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+
+/* ---------- 2. Menu lateral: rail e grupos ---------- */
+
+/* RAIL — os rotulos encolhem junto com a coluna (0fr) em vez de sumirem de
+   uma vez com display:none. O icone fica no mesmo eixo nos dois estados. */
+.shell-mobills .sidebar-item {
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    color var(--cx-dur-1) var(--cx-ease),
+    grid-template-columns var(--cx-dur-3) var(--cx-ease);
+}
+.shell-mobills .padaria-sidebar.rail .sidebar-item {
+  grid-template-columns: 28px 0fr;
+  /* column-gap: 0 nao e detalhe. O .sidebar-item tem gap 10px, e o gap continua
+     entrando na conta mesmo com a segunda coluna em 0fr: media, o icone ficava 5px
+     a esquerda do eixo do rail. Zerado, o eixo bate nos dois estados do menu. */
+  column-gap: 0;
+  justify-content: center;
+  justify-items: center;
+}
+.shell-mobills .padaria-sidebar.rail .sidebar-categoria {
+  grid-template-columns: 28px 0fr auto;
+}
+.shell-mobills .padaria-sidebar.rail .sidebar-item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity var(--cx-dur-1) var(--cx-ease);
+}
+.shell-mobills .sidebar-item span {
+  opacity: 1;
+  transition: opacity var(--cx-dur-2) var(--cx-ease) var(--cx-dur-1);
+}
+
+/* GRUPOS EXPANSIVEIS — altura animada de verdade.
+   grid-template-rows 0fr -> 1fr anima a altura real do conteudo, sem max-height
+   chutado (que ou corta a lista grande ou faz a pequena abrir devagar demais).
+   O filho precisa de overflow:hidden + min-height:0 para poder ser espremido. */
+.sidebar-subitens-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-subitens-wrap.aberta {
+  grid-template-rows: 1fr;
+}
+.sidebar-subitens-wrap > .sidebar-subitens {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Fechado, os links nao podem continuar no caminho do Tab. A visibilidade so cai
+   DEPOIS do colapso (delay = duracao), senao o conteudo some antes de encolher. */
+.sidebar-subitens-wrap:not(.aberta) > .sidebar-subitens {
+  visibility: hidden;
+  transition: visibility 0s linear var(--cx-dur-2);
+}
+.shell-mobills .sidebar-categoria-chevron {
+  transition: transform var(--cx-dur-2) var(--cx-ease);
+}
+.shell-mobills .sidebar-categoria.aberta .sidebar-categoria-chevron {
+  transform: rotate(90deg);
+}
+
+/* ---------- 3. Superficies de conteudo ---------- */
+
+/* Cards: elevacao em DUAS camadas, sem borda. A separacao vem da sombra e da
+   diferenca de luminancia — borda cinza em volta de tudo e o que faz a tela
+   parecer painel administrativo generico. */
+/* O !important nao e preguica: a prop `elevation` do Vuetify gera .elevation-N
+   com !important, entao sem ele metade dos cards ficaria com a sombra Material
+   de uma camada so e a outra metade com a nossa. Especificidade maior + !important
+   unifica os dois casos sem precisar mexer na prop de nenhum componente. */
+.content-frame .v-card {
+  border-radius: var(--cx-r-lg);
+  box-shadow: var(--cx-e-1) !important;
+  transition: box-shadow var(--cx-dur-2) var(--cx-ease);
+}
+/* Cards de total sao o primeiro elemento de varias telas: sobem uma camada. */
+.content-frame .card-total.v-card {
+  box-shadow: var(--cx-e-2) !important;
+}
+.svelte-table-card {
+  border: 1px solid var(--cx-line-soft) !important;
+  border-radius: var(--cx-r-lg) !important;
+  box-shadow: var(--cx-e-1) !important;
+}
+
+/* ---------- 4. Tabelas ---------- */
+
+.responsive-table-shell {
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+}
+.responsive-table-shell .v-table thead th {
+  background: var(--cx-surface-sunken) !important;
+  color: var(--cx-ink-soft) !important;
+  font-size: var(--cx-fs-micro);
+  font-weight: 700 !important;
+  letter-spacing: var(--cx-tracking-wide);
+  /* Cabecalho grudado: so tem efeito quando a casca vira area de rolagem
+     (ver max-height abaixo); em tabela curta e inofensivo. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.responsive-table-shell .v-table tbody td {
+  height: 48px;
+  border-bottom: 1px solid var(--cx-line-soft) !important;
+}
+.responsive-table-shell .v-table tbody tr {
+  transition: background var(--cx-dur-1) var(--cx-ease);
+}
+.responsive-table-shell .v-table tbody tr:hover td {
+  background: var(--cx-hover);
+}
+/* Coluna de valor alinhada a direita ja vem das telas (.text-right). */
+.v-table .text-right {
+  font-variant-numeric: tabular-nums;
+}
+/* No desktop a tabela longa rola por dentro e o cabecalho fica a vista.
+   REVERTER = apagar este @media. Fora dele, nada muda. */
+@media (min-width: 1025px) {
+  .responsive-table-shell {
+    max-height: calc(100dvh - 260px);
+    overflow-y: auto;
+  }
+}
+
+/* ---------- 5. Modais e overlays ---------- */
+
+.v-overlay__scrim {
+  background: var(--cx-scrim);
+}
+.v-overlay__content > .v-card {
+  border-radius: var(--cx-r-xl);
+  box-shadow: var(--cx-e-3);
+}
+/* Entrada com escala sutil junto da opacidade: o modal cresce para o lugar em vez
+   de aparecer pronto. 0.98 -> 1 e o limite entre "vivo" e "saltitante". */
+.v-dialog > .v-overlay__content {
+  animation: cx-modal-in var(--cx-dur-3) var(--cx-ease-out) both;
+}
+@keyframes cx-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Menus (empresa, perfil, sino, FAB) descem curto a partir da borda. */
+.v-menu > .v-overlay__content {
+  border-radius: var(--cx-r-md);
+  box-shadow: var(--cx-e-2);
+  animation: cx-menu-in var(--cx-dur-2) var(--cx-ease-out) both;
+}
+@keyframes cx-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.v-list-item {
+  border-radius: var(--cx-r-sm);
+  transition: background var(--cx-dur-1) var(--cx-ease);
+}
+
+/* ---------- 6. Estados vazios ---------- */
+
+/* "Nenhum registro" era uma linha de texto solta no meio da tabela. Vira um
+   bloco centrado com respiro — muda a percepcao de acabamento mais que sombra.
+   Alcanca o padrao ja usado nas telas (td.text-center.text-muted) sem tocar em
+   nenhum template. */
+.v-table td.text-center.text-muted,
+.soft-bg.text-center.text-muted {
+  padding-block: var(--cx-sp-8) !important;
+  background: transparent;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-lead);
+  font-weight: 500;
+}
+.soft-bg.text-center.text-muted {
+  border: 1px dashed var(--cx-line);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface-sunken);
+}
+
+/* ---------- 7. Controles ---------- */
+
+/* Botao afunda 1px no clique. Vuetify anima elevacao, nao posicao — e a posicao
+   que o dedo/mouse le como "apertei". */
+.v-btn:not(.v-btn--disabled):active {
+  transform: translateY(1px);
+}
+.v-btn {
+  letter-spacing: 0.01em;
+  transition:
+    transform var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-2) var(--cx-ease),
+    background-color var(--cx-dur-1) var(--cx-ease);
+}
+/* Campo focado ganha um anel na marca, alem da borda que o Vuetify ja engrossa. */
+.v-field--focused {
+  box-shadow: 0 0 0 3px var(--cx-brand-ring);
+  transition: box-shadow var(--cx-dur-1) var(--cx-ease);
+}
+/* Alvo de toque >= 40px em qualquer botao de icone (A11y). */
+.v-btn--icon {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+/* ---------- 8. Movimento reduzido ---------- */
+
+/* OBRIGATORIO: toda animacao criada acima tem a contraparte que a desliga.
+   Regra geral (pega inclusive o que vier depois) + os casos em que "quase zero"
+   nao basta e o efeito precisa ser neutralizado explicitamente. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  .shell-mobills .sidebar-item:active:not(.disabled),
+  .shell-mobills .sidebar-new-button:hover,
+  .shell-mobills .sidebar-new-button:active,
+  .shell-mobills .sidebar-logo-row:active,
+  .shell-mobills .topbar-user:hover,
+  .shell-mobills .topbar-user:active,
+  .v-btn:not(.v-btn--disabled):active {
+    transform: none !important;
+  }
+}
+/* ===================== FIM CAMADA DE ACABAMENTO ===================== */
