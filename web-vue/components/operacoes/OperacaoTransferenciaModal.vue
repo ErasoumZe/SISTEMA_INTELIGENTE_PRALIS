@@ -65,6 +65,40 @@ watch(tempoConfirmacaoAberto, (ativo) => {
 const contasCandidatas = computed(() =>
   opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaOrigemId)
 );
+
+// Com Multiplo Destino a escolha acontece no PROPRIO campo Destino. As duas colunas do formulario
+// viram uma so lista aqui: `contaDestinoId` e NOT NULL no banco (app.schema.ts) e serve apenas de
+// ANCORA de armazenamento — o backend faz `[...new Set([contaDestinoId, ...contasDestinoIds])]` e
+// grava TODAS em transferencias_destinos_candidatos. Pela R-030 nenhuma tem privilegio sobre a
+// outra: desmarcar a ancora simplesmente promove a proxima.
+const destinosSelecionados = computed<string[]>({
+  get: () => {
+    const ancora = form.value.contaDestinoId;
+    const demais = form.value.contasDestinoIds;
+    return ancora ? [ancora, ...demais.filter((id) => id !== ancora)] : [...demais];
+  },
+  set: (ids) => {
+    const unicos = [...new Set(ids)];
+    form.value.contaDestinoId = unicos[0] ?? "";
+    form.value.contasDestinoIds = unicos.slice(1);
+  }
+});
+
+// Trocar a ORIGEM para uma conta que estava marcada tira ela da lista E da selecao. Sem isto o
+// insert morre no CHECK `conta_origem_id <> conta_destino_id` com erro cru do banco.
+watch(
+  () => form.value.contaOrigemId,
+  (origem) => {
+    if (origem && destinosSelecionados.value.includes(origem)) {
+      destinosSelecionados.value = destinosSelecionados.value.filter((id) => id !== origem);
+    }
+  }
+);
+
+const erroDestino = ref("");
+watch(destinosSelecionados, (ids) => {
+  if (ids.length) erroDestino.value = "";
+});
 type LinhaRetorno = { sinal: "+" | "-"; valor: string; lacre: string };
 const retornos = ref<LinhaRetorno[]>([{ sinal: "+", valor: "", lacre: "" }]);
 function addRetorno() {
@@ -84,7 +118,34 @@ function br(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Olho do resumo: mesma ideia de app de banco. A escolha e do USUARIO, entao sobrevive a fechar e
+// reabrir o modal. Default visivel; le no onMounted para nao tocar em localStorage durante o SSR.
+const CHAVE_RESUMO_VISIVEL = "cicluz:transferencia:resumo-visivel";
+const resumoVisivel = ref(true);
+onMounted(() => {
+  resumoVisivel.value = localStorage.getItem(CHAVE_RESUMO_VISIVEL) !== "0";
+});
+watch(resumoVisivel, (visivel) => localStorage.setItem(CHAVE_RESUMO_VISIVEL, visivel ? "1" : "0"));
+// Oculto, o NUMERO some e o rotulo fica. A largura do card e do flex, nao do texto — nao pula.
+function valorResumo(n: number) {
+  return resumoVisivel.value ? `R$ ${br(n)}` : "R$ ••••";
+}
+
+// `contaDestinoId` vazio passaria batido aqui e estouraria no backend com erro cru. Barra antes,
+// no campo, dizendo o que fazer.
+function destinoValido() {
+  if (form.value.contaDestinoId) {
+    erroDestino.value = "";
+    return true;
+  }
+  erroDestino.value = multiploDestino.value
+    ? "Selecione ao menos uma conta de destino."
+    : "Escolha a conta de destino.";
+  return false;
+}
+
 async function salvarTransferenciaCompleta() {
+  if (!destinoValido()) return;
   const edicao = Boolean(operacaoEditandoId.value);
   const principal = await salvarOperacao();
   if (!principal || edicao || !retornoAberto.value) return;
@@ -123,6 +184,33 @@ const hojeISO = computed(() => dataISO(0));
         <span class="tr-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
         <span class="tr-titulo">{{ operacaoEditandoId ? "Editar transferência" : "Nova transferência" }}</span>
         <v-icon class="tr-x" size="19" @click="aberto = false">mdi-close</v-icon>
+      </div>
+
+      <!-- Bloco C · Resumo — no TOPO: e a resposta de "o que isto faz com o meu dinheiro", e o
+           usuario nao deveria ter que rolar ate o fim para ve-la. Valores sao os mesmos computed
+           de sempre; nada e recalculado nem persistido. -->
+      <div class="tr-cards">
+        <div class="tr-card">
+          <span class="tr-card-lbl">Saída (−)</span>
+          <b class="tr-card-val">{{ valorResumo(totalSaida) }}</b>
+        </div>
+        <div class="tr-card">
+          <span class="tr-card-lbl">Entrada (+)</span>
+          <b class="tr-card-val">{{ valorResumo(totalEntrada) }}</b>
+        </div>
+        <div class="tr-card tr-card-saldo">
+          <span class="tr-card-lbl">Saldo (±)</span>
+          <b class="tr-card-val">{{ valorResumo(saldo) }}</b>
+        </div>
+        <button
+          type="button"
+          class="tr-olho"
+          :aria-label="resumoVisivel ? 'Ocultar valores' : 'Mostrar valores'"
+          :aria-pressed="!resumoVisivel"
+          @click="resumoVisivel = !resumoVisivel"
+        >
+          <v-icon size="18">{{ resumoVisivel ? "mdi-eye-outline" : "mdi-eye-off-outline" }}</v-icon>
+        </button>
       </div>
 
       <!-- Bloco A · Transf. Saída -->
@@ -174,7 +262,7 @@ const hojeISO = computed(() => dataISO(0));
         <v-icon icon="mdi-alert-circle-outline" size="18" />
         <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
       </div>
-      <div v-else class="tr-rota">
+      <div v-else class="tr-rota" :class="{ 'tr-rota-lista': multiploDestino }">
         <label class="tr-campo">
           <span class="tr-campo-lbl">Origem / Saída</span>
           <select v-model="form.contaOrigemId" class="tr-input">
@@ -183,13 +271,24 @@ const hojeISO = computed(() => dataISO(0));
           </select>
         </label>
         <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
-        <label class="tr-campo">
+        <!-- <div>, nao <label>: com Multiplo Destino este campo contem <label> por conta, e label
+             aninhado rouba o clique das checkboxes de dentro. -->
+        <div class="tr-campo">
           <span class="tr-campo-lbl">Destino / Entrada</span>
-          <select v-model="form.contaDestinoId" class="tr-input">
+          <select v-if="!multiploDestino" v-model="form.contaDestinoId" class="tr-input" aria-label="Destino / Entrada">
             <option value="">—</option>
             <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
           </select>
-        </label>
+          <!-- R-030: candidatas, todas iguais. A primeira que confirmar com o lacre leva o valor
+               INTEIRO — por isso a lista so marca contas e nao tem valor por destino. -->
+          <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
+            <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
+              <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
+              <span>{{ c.nome }}</span>
+            </label>
+          </div>
+          <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
+        </div>
       </div>
 
       <TransferenciaRetornoCampos v-model="retornoAberto">
@@ -201,16 +300,8 @@ const hojeISO = computed(() => dataISO(0));
             <input v-model="multiploDestino" type="checkbox" />
             <span>Múltiplo Destino</span>
           </label>
-          <!-- R-030: multiplo destino e DISPUTA, nao rateio — quem confirmar primeiro informando o
-               lacre leva o valor INTEIRO e as demais nao recebem nada. Por isso aqui so se ESCOLHE
-               contas; nao existe (nem pode existir) campo de valor por destino. -->
-          <div v-if="multiploDestino" class="tr-campo tr-indent">
-            <span class="tr-campo-lbl">Contas que podem receber</span>
-            <label v-for="c in contasCandidatas" :key="c.id" class="tr-check">
-              <input v-model="form.contasDestinoIds" type="checkbox" :value="c.id" />
-              <span>{{ c.nome }}</span>
-            </label>
-          </div>
+          <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
+               desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
 
           <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
                FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
@@ -257,19 +348,6 @@ const hojeISO = computed(() => dataISO(0));
         <span class="tr-campo-lbl">Descrição</span>
         <input v-model="form.descricao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
       </label>
-
-      <!-- Bloco C · Resumo (calculado no front) -->
-      <div class="tr-resumo">
-        <div class="tr-resumo-linha">
-          <span>Saída (−)</span><b>R$ {{ br(totalSaida) }}</b>
-        </div>
-        <div class="tr-resumo-linha">
-          <span>Entrada (+)</span><b>R$ {{ br(totalEntrada) }}</b>
-        </div>
-        <div class="tr-resumo-linha tr-resumo-saldo">
-          <span>Saldo (±)</span><b>R$ {{ br(saldo) }}</b>
-        </div>
-      </div>
 
       <div class="tr-acoes">
         <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="salvarTransferenciaCompleta">
@@ -464,6 +542,18 @@ const hojeISO = computed(() => dataISO(0));
   margin-bottom: 9px;
   color: var(--cat-transferencias-base, #c2410c);
 }
+/* Com a lista de destinos, a linha cresce para baixo: ancora tudo no TOPO e desce a seta ate a
+   altura do primeiro campo, senao Origem e seta ficariam boiando no rodape da lista. */
+.tr-rota-lista {
+  align-items: flex-start;
+}
+.tr-rota-lista .tr-campo {
+  margin-bottom: 0;
+}
+.tr-rota-lista .tr-seta {
+  margin-top: 26px;
+  margin-bottom: 0;
+}
 .tr-retorno-linha {
   display: flex;
   align-items: center;
@@ -504,29 +594,81 @@ const hojeISO = computed(() => dataISO(0));
   font-size: 12px;
   cursor: pointer;
 }
-.tr-resumo {
-  margin: 6px 0 14px;
-  padding: 10px 12px;
+/* Resumo em 3 mini cards, no topo. Saldo e o card de destaque: e o numero que decide. */
+.tr-cards {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tr-card {
+  /* flex igual + min-width 0: a largura vem do flex, nao do texto. Alternar o olho nao mexe no
+     layout — nada pula. */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0.5px solid #e4e8ef;
   border-radius: 10px;
   background: #f4f6fa;
 }
-.tr-resumo-linha {
+.tr-card-lbl {
+  display: block;
+  font-size: 10px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.tr-card-val {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #1f2733;
+  /* Numero longo encolhe a fonte em vez de quebrar no meio. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tr-card-saldo {
+  border-color: var(--cat-transferencias-base, #c2410c);
+  background: var(--cat-transferencias-soft, #fff1e8);
+}
+.tr-card-saldo .tr-card-val {
+  color: var(--cat-transferencias-base, #c2410c);
+}
+.tr-olho {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #64748b;
-  padding: 2px 0;
+  justify-content: center;
+  width: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #94a3b8;
+  cursor: pointer;
 }
-.tr-resumo-saldo {
+.tr-olho:hover {
+  color: var(--cat-transferencias-base, #c2410c);
+}
+/* Lista de contas candidatas — ocupa o lugar do select de Destino. Rola a partir de ~4 contas em
+   vez de esticar o modal. */
+.tr-destinos {
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 8px;
+  background: #fff;
+}
+.tr-destino-item:last-child {
+  margin-bottom: 0;
+}
+.tr-erro {
+  display: block;
   margin-top: 4px;
-  padding-top: 6px;
-  border-top: 0.5px solid #e4e8ef;
-  color: var(--cat-resultado-base, #6d28d9);
-  font-weight: 700;
-}
-.tr-resumo-saldo b {
-  color: var(--cat-resultado-base, #6d28d9);
+  font-size: 11px;
+  color: var(--cat-despesas-base, #c0392b);
 }
 .tr-acoes {
   position: sticky;
@@ -582,6 +724,29 @@ const hojeISO = computed(() => dataISO(0));
   .tr-seta {
     margin: 2px auto;
     transform: rotate(90deg);
+  }
+  /* Empilhado, a seta volta a ficar entre os dois campos (nao ha mais coluna a alinhar). */
+  .tr-rota-lista .tr-seta {
+    margin: 2px auto;
+  }
+  .tr-rota-lista .tr-campo {
+    margin-bottom: 8px;
+  }
+  /* Os 3 cards QUEBRAM em vez de espremer o numero: a base cabe "R$ 1.234.567,00" inteiro, entao
+     o que nao couber lado a lado desce para a linha seguinte. Cortar o saldo com reticencias seria
+     esconder justamente o numero que decide. */
+  .tr-cards {
+    flex-wrap: wrap;
+  }
+  .tr-card {
+    flex: 1 1 132px;
+  }
+  /* O olho sobe para a propria linha, encostado a direita — assim nunca sobra sozinho embaixo. */
+  .tr-olho {
+    order: -1;
+    width: 100%;
+    height: 22px;
+    justify-content: flex-end;
   }
   /* Linhas de Retorno/Sangria podem quebrar sem estourar a largura. */
   .tr-retorno-linha {
