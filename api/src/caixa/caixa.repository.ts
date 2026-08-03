@@ -48,6 +48,7 @@ import {
 } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
@@ -614,7 +615,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: transferencias.id,
-        descricao: transferencias.descricao,
+        descricao: textoDoMovimento(transferencias),
         data: transferencias.dataReferencia,
         valor: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
@@ -632,7 +633,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: despesas.id,
-        descricao: despesas.descricao,
+        descricao: textoDoMovimento(despesas),
         data: despesas.dataReferencia,
         valor: despesas.valorOriginal
       })
@@ -642,7 +643,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: retiradas.id,
-        descricao: retiradas.descricao,
+        descricao: textoDoMovimento(retiradas),
         data: retiradas.dataReferencia,
         valor: retiradas.valorOriginal
       })
@@ -652,7 +653,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: mercadorias.id,
-        descricao: mercadorias.descricao,
+        descricao: textoDoMovimento(mercadorias),
         data: mercadorias.dataReferencia,
         valor: mercadorias.valorOriginal
       })

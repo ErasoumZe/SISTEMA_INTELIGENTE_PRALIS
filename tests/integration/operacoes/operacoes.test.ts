@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
+
+// R-129: data de pagamento nao pode ser retroativa. O teste e sobre CRIAR os cinco movimentos com
+// banco real; a data de pagamento so precisa ser aceitavel.
+const PAGO_EM = diaNegocio(new Date());
 
 describe("operacoes integration", () => {
   let contexto: ContextoApiTeste;
@@ -43,7 +48,7 @@ describe("operacoes integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Venda criada por integracao",
         valorOriginal: 12,
         contaOrigemId: idsTeste.contaCaixa,
@@ -71,7 +76,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Despesa criada por integracao",
         valorOriginal: 3,
         contaOrigemId: idsTeste.contaCaixa,
@@ -88,7 +93,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Mercadoria criada por integracao",
         valorOriginal: 4,
         contaOrigemId: idsTeste.contaCaixa,
@@ -107,7 +112,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Retirada criada por integracao",
         valorOriginal: 2,
         contaOrigemId: idsTeste.contaCaixa,

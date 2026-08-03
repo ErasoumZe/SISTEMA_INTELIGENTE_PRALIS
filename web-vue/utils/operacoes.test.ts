@@ -25,6 +25,24 @@ const detalheBase: OperacaoDetalhe = {
 };
 
 describe("formOperacaoDeDetalhe", () => {
+  // R-127: o campo da tela e a Observacao. Registro gravado antes da regra so tem `descricao` — sem
+  // o fallback ele reabriria com o campo VAZIO e salvar apagaria o texto do movimento.
+  it("reabre o texto do movimento pela observacao, com fallback na descricao", () => {
+    const comObservacao = formOperacaoDeDetalhe("despesa", {
+      ...detalheBase,
+      descricao: "texto velho",
+      observacao: "Farinha e fermento"
+    });
+    expect(comObservacao.form.observacao).toBe("Farinha e fermento");
+
+    const soDescricao = formOperacaoDeDetalhe("despesa", {
+      ...detalheBase,
+      descricao: "Compra de farinha",
+      observacao: null
+    });
+    expect(soDescricao.form.observacao).toBe("Compra de farinha");
+  });
+
   it("reabre credor tipado, documento fiscal e as duas fotos do S2", () => {
     const preenchido = formOperacaoDeDetalhe("retirada", {
       ...detalheBase,
@@ -266,9 +284,13 @@ describe("validarOperacaoParaEnvio", () => {
     qtdItensMercadoria: 0
   };
 
-  it("exige descricao em qualquer operacao", () => {
-    expect(validarOperacaoParaEnvio("despesa", { ...ok, descricao: "   " })).toMatch(/descricao/i);
-    expect(validarOperacaoParaEnvio("venda", { ...ok, descricao: "" })).toMatch(/descricao/i);
+  // R-127: o texto do movimento e a OBSERVACAO no lancamento; so a venda ficou com `descricao`.
+  it("exige o texto do movimento: observacao no lancamento, descricao na venda", () => {
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, descricao: "", observacao: "   " })).toMatch(/observacao/i);
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, descricao: "", observacao: "Farinha" })).toBeNull();
+    // Lancamento antigo reaberto: chega so com `descricao` e continua valido.
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, observacao: "" })).toBeNull();
+    expect(validarOperacaoParaEnvio("venda", { ...ok, descricao: "", observacao: "" })).toMatch(/descricao/i);
   });
 
   it("despesa: exige grupo OU itens discriminados (o bug relatado)", () => {
@@ -284,16 +306,20 @@ describe("validarOperacaoParaEnvio", () => {
     expect(validarOperacaoParaEnvio("mercadoria", ok)).toBeNull();
   });
 
-  it("retirada: exige colaborador ou socio/gestor", () => {
-    expect(validarOperacaoParaEnvio("retirada", { ...ok, colaboradorId: "" })).toMatch(/credor/i);
+  // R-128: o credor da retirada e fornecedor OU socio/gestor. Colaborador saiu do leque novo, mas
+  // continua valendo aqui porque o historico tem retirada gravada assim e ela precisa poder salvar.
+  it("retirada: exige um credor — fornecedor, socio/gestor ou (historico) colaborador", () => {
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, fornecedorId: "", colaboradorId: "" })).toMatch(/credor/i);
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, colaboradorId: "" })).toBeNull();
     expect(
       validarOperacaoParaEnvio("retirada", {
         ...ok,
+        fornecedorId: "",
         colaboradorId: "",
         socioGestorId: "11111111-1111-4111-8111-111111111111"
       })
     ).toBeNull();
-    expect(validarOperacaoParaEnvio("retirada", ok)).toBeNull();
+    expect(validarOperacaoParaEnvio("retirada", { ...ok, fornecedorId: "" })).toBeNull();
   });
 
   it("transferencia: exige conta origem, conta destino e que sejam diferentes", () => {

@@ -20,6 +20,7 @@ import {
   itemDespesaParaDiscriminacao,
   validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
+import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
@@ -70,12 +71,14 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo: *_pagar OU o legado
   // caixas_gerenciar). Sem, 403 em vez do antigo strip silencioso.
   exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento);
+  // R-129: pagamento retroativo nao entra na CRIACAO (fuso do negocio, nao UTC).
+  exigirDataPagamentoNaoRetroativa(dados.dataPagamento);
   // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
   // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
-  const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+  const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
@@ -193,9 +196,11 @@ export async function atualizarDespesa(
     // exige *_pagar. Ambos comparam com o estado atual do registro.
     exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento, existente!.dataPagamento ?? null);
+    // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
+    exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: despesaId, computar };
   });

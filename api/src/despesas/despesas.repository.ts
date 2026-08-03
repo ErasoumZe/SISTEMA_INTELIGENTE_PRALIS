@@ -19,6 +19,7 @@ import {
   valoresBaseEdicao,
   valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
 // Linhas de item de UMA despesa. Igual a mercadoria: o calculo e da LISTA inteira porque o desconto
 // geral (nivel 3) rateia entre os itens (§5/D4). `valor` continua sendo o V.Total liquido dos
@@ -87,7 +88,7 @@ export async function listarDespesasRepository(
       dataReferencia: despesas.dataReferencia,
       dataVencimento: despesas.dataVencimento,
       dataPagamento: despesas.dataPagamento,
-      descricao: despesas.descricao,
+      descricao: textoDoMovimento(despesas),
       valorOriginal: despesas.valorOriginal,
       computar: despesas.computar,
       status: despesas.status,
@@ -202,7 +203,7 @@ export async function buscarDespesaDetalheRepository(
       dataReferencia: despesas.dataReferencia,
       dataVencimento: despesas.dataVencimento,
       dataPagamento: despesas.dataPagamento,
-      descricao: despesas.descricao,
+      descricao: textoDoMovimento(despesas),
       observacao: despesas.observacao,
       valorOriginal: despesas.valorOriginal,
       valorAcrescimo: despesas.valorAcrescimo,

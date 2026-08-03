@@ -87,3 +87,20 @@ export function diaDaSemanaIso(dia: string): number {
   const diaJs = new Date(`${dia}T00:00:00Z`).getUTCDay(); // 0 = domingo
   return diaJs === 0 ? 7 : diaJs;
 }
+
+/**
+ * R-129: a data de pagamento nao pode ser anterior a HOJE na criacao do lancamento.
+ *
+ * "Hoje" e o dia CONTABIL no fuso do negocio, nao `new Date()` em UTC. Se fosse UTC, quem lanca as
+ * 21h em Sao Paulo ja estaria no dia seguinte para o servidor e levaria erro num pagamento marcado
+ * para hoje — o mesmo BUG B que a `diaNegocio` resolveu.
+ *
+ * Compara texto "yyyy-MM-dd" de proposito: esse e o formato da coluna `date` e da string que a tela
+ * envia, e a ordem lexicografica dele coincide com a cronologica. Converter para Date so
+ * reintroduziria fuso onde nao ha hora nenhuma.
+ */
+export function dataPagamentoNoPassado(dataPagamento: string | null | undefined, agora: Date = new Date()): boolean {
+  const dia = dataPagamento?.trim().slice(0, 10);
+  if (!dia) return false;
+  return dia < diaNegocio(agora);
+}

@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
+
+// R-129: data de pagamento nao pode ser retroativa. O fluxo do caixa nao depende do DIA do
+// pagamento — os totais fecham por caixa_id — entao a data de referencia continua fixa e so o
+// pagamento anda para hoje.
+const PAGO_EM = diaNegocio(new Date());
 
 // Fluxo operacional COMPLETO do caixa, narrado para visualizacao (pedido do Ze):
 // abre o caixa -> cria ENTRADA (venda), DESPESA, RETIRADA, TRANSFERENCIA e MERCADORIA ->
@@ -74,7 +80,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     await criar("/api/vendas", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Venda do dia",
       valorOriginal: 100,
       contaOrigemId: contaId,
@@ -101,7 +107,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Conta de luz",
       valorOriginal: 40,
       contaOrigemId: contaId,
@@ -112,7 +118,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Vale funcionario",
       valorOriginal: 30,
       contaOrigemId: contaId,
@@ -124,7 +130,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Compra de farinha",
       valorOriginal: 15,
       contaOrigemId: contaId,
@@ -174,7 +180,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     await criar("/api/vendas", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Venda do dia",
       valorOriginal: 100,
       contaOrigemId: contaId,

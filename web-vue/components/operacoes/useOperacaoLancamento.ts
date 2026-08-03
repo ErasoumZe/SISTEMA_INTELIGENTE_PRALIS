@@ -6,6 +6,11 @@
 import { computed, inject, ref, watch, type InjectionKey } from "vue";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import type { FrequenciaRecorrencia } from "@padaria/shared/recorrencia";
+// Pela RAIZ do pacote, nao por `@padaria/shared/datas`: o `nuxt.config` apelida `@padaria/shared`
+// para o ARQUIVO `shared/src/index.ts`, e o alias do Vite casa por prefixo — o subcaminho viraria
+// `.../index.ts/datas` e o modulo vem 404 no navegador. O typecheck passa (resolve por exports do
+// package.json) e a tela quebra calada: foi o que aconteceu aqui.
+import { diaNegocio } from "@padaria/shared";
 import {
   DIAS_RECORRENCIA,
   FREQUENCIAS_RECORRENCIA,
@@ -122,10 +127,13 @@ export function useOperacaoLancamento() {
   });
 
   // --- Tipo de credor (define a fonte de busca do campo Credor) ---
+  // R-128: a Retirada oferece FORNECEDOR e SOCIO/GESTOR, fiel a FOTO 2 ("Fornecedor — Despesas /
+  // Mercadorias / Retiradas" e "Socios — Retiradas"). Colaborador nunca esteve na Retirada no
+  // desenho; era o codigo que divergia.
   const CREDORES: Record<Cat, TipoCredor[]> = {
     despesa: ["fornecedor", "colaborador"],
     mercadoria: ["fornecedor"],
-    retirada: ["colaborador", "socio_gestor"]
+    retirada: ["fornecedor", "socio_gestor"]
   };
   const rotuloCredor: Record<TipoCredor, string> = {
     fornecedor: "Fornecedor",
@@ -133,11 +141,47 @@ export function useOperacaoLancamento() {
     socio_gestor: "Sócio / gestor"
   };
   const tipoCredor = ref<TipoCredor>("fornecedor");
+  // O tipo do registro em edicao. `credorTipo` e a resposta boa, mas o historico tem lancamento com
+  // a coluna NULA — ali quem responde e o ID que veio preenchido. Sem esse segundo caminho a
+  // retirada antiga (colaborador, credor_tipo nulo) abria com o campo Credor em "—" e salvar
+  // apagaria, na cara do usuario, quem recebeu o dinheiro. Verificado na tela: era o que acontecia.
+  const credorTipoGravado = computed<TipoCredor | null>(() => {
+    const tipo = form.value.credorTipo as TipoCredor | "" | undefined;
+    if (tipo) return tipo;
+    if (form.value.colaboradorId) return "colaborador";
+    if (form.value.socioGestorId) return "socio_gestor";
+    if (form.value.fornecedorId) return "fornecedor";
+    return null;
+  });
+  // R-128: retirada ANTIGA foi gravada com colaborador. O tipo legado entra na lista SO quando o
+  // registro ABERTO usa ele — lancamento novo nao ganha a opcao de volta.
+  //
+  // Fica preso ao REGISTRO, nao ao estado corrente do formulario: derivado direto do form, o chip
+  // "Colaborador" sumia no instante em que o usuario clicava em "Fornecedor" para olhar, e ele nao
+  // tinha como voltar — so cancelando a edicao inteira. Zera quando o modal troca de registro.
+  const credorLegado = ref<TipoCredor | null>(null);
+  let registroDoLegado: string | null | undefined;
+  watch(
+    [() => operacaoEditandoId.value, credorTipoGravado, cat],
+    ([id, tipo, categoria]) => {
+      if (id !== registroDoLegado) {
+        registroDoLegado = id;
+        credorLegado.value = null;
+      }
+      if (tipo && !CREDORES[categoria].includes(tipo)) credorLegado.value = tipo;
+    },
+    { immediate: true }
+  );
+  const credoresOferecidos = computed<TipoCredor[]>(() => {
+    const oferta = CREDORES[cat.value];
+    const legado = credorLegado.value;
+    return legado && !oferta.includes(legado) ? [...oferta, legado] : oferta;
+  });
   watch(
     cat,
     (c) => {
       const primeiro = CREDORES[c][0];
-      if (primeiro && !CREDORES[c].includes(tipoCredor.value)) tipoCredor.value = primeiro;
+      if (primeiro && !credoresOferecidos.value.includes(tipoCredor.value)) tipoCredor.value = primeiro;
     },
     { immediate: true }
   );
@@ -163,12 +207,23 @@ export function useOperacaoLancamento() {
     }
   });
   watch(
-    () => form.value.credorTipo,
+    credorTipoGravado,
     (tipo) => {
-      if (tipo && CREDORES[cat.value].includes(tipo)) tipoCredor.value = tipo;
+      if (tipo && credoresOferecidos.value.includes(tipo)) tipoCredor.value = tipo;
     },
     { immediate: true }
   );
+  // Clicar no chip e escolha do usuario e tem de VENCER o que estava gravado — por isso limpa os
+  // tres ids e assume o tipo. Sem limpar, trocar de tipo num registro antigo deixaria o id do credor
+  // velho no payload (dois credores, que o servidor recusa) e `credorTipoGravado` puxaria o chip de
+  // volta para o tipo legado, prendendo o usuario no valor que ele acabou de tentar trocar.
+  function escolherTipoCredor(tipo: TipoCredor) {
+    tipoCredor.value = tipo;
+    form.value.fornecedorId = "";
+    form.value.colaboradorId = "";
+    form.value.socioGestorId = "";
+    form.value.credorTipo = tipo;
+  }
 
   // Pagamento (toggle S/N): derivado de dataPagamento (campo suportado). Sem data = nao pago.
   const pago = computed({
@@ -352,10 +407,13 @@ export function useOperacaoLancamento() {
     item.grupoPatrimonioId = escolha.grupoPatrimonioId;
   }
 
+  // R-129: "hoje" e o dia CONTABIL no fuso do negocio, nao `toISOString()` em UTC. Com UTC, quem
+  // lanca as 21h em Sao Paulo ja veria o dia seguinte e o `min` do campo barraria um pagamento
+  // marcado para hoje. Mesmo helper que o servidor usa — as duas pontas concordam sobre "hoje".
   function dataISO(offset: number) {
     const d = new Date();
     d.setDate(d.getDate() + offset);
-    return d.toISOString().slice(0, 10);
+    return diaNegocio(d);
   }
   const hojeISO = computed(() => dataISO(0));
 
@@ -379,6 +437,8 @@ export function useOperacaoLancamento() {
     grupoOpcoes,
     grupoId,
     CREDORES,
+    credoresOferecidos,
+    escolherTipoCredor,
     rotuloCredor,
     tipoCredor,
     credorOpcoes,

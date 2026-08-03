@@ -267,7 +267,10 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     dataReferencia: detalhe.dataReferencia,
     dataPagamento: detalhe.dataPagamento ?? "",
     descricao: detalhe.descricao,
-    observacao: detalhe.observacao ?? "",
+    // R-127: o texto do movimento e a observacao. Registro antigo pode ter so `descricao` (o backfill
+    // da 0027 cobre o que existia, mas o detalhe ja chega com o coalesce do textoDoMovimento) — sem
+    // este fallback o modal reabriria com o campo Observacao VAZIO e salvar apagaria o texto.
+    observacao: detalhe.observacao ?? detalhe.descricao ?? "",
     valorOriginal: String(detalhe.valorOriginal),
     valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
     descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
@@ -502,6 +505,7 @@ export function validarOperacaoParaEnvio(
   entidade: EntidadeOperacional,
   dados: {
     descricao: string;
+    observacao?: string | null;
     grupoDespesaId: string | null;
     grupoMercadoriaId: string | null;
     contaOrigemId: string | null;
@@ -513,7 +517,12 @@ export function validarOperacaoParaEnvio(
     qtdItensMercadoria: number;
   }
 ): string | null {
-  if (!dados.descricao.trim()) return "Informe a descricao do lancamento.";
+  // R-127: o texto do movimento e a OBSERVACAO — e o campo que o usuario preenche na tela. A venda
+  // ficou de fora da regra e continua com `descricao`, entao o texto exigido e "observacao ou
+  // descricao": sem isto o lancamento novo (que so preenche observacao) seria barrado AQUI, antes de
+  // chegar ao servidor, com uma mensagem falando de um campo que nao existe mais na tela.
+  const texto = (dados.observacao ?? "").trim() || dados.descricao.trim();
+  if (!texto) return entidade === "venda" ? "Informe a descricao da venda." : "Informe a observacao do lancamento.";
 
   if (entidade === "despesa" && !dados.grupoDespesaId && dados.qtdItensDespesa === 0)
     return "Selecione o grupo da despesa ou discrimine os itens da despesa.";
@@ -525,8 +534,10 @@ export function validarOperacaoParaEnvio(
       return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
   }
 
-  // Schema: retirada exige colaboradorId.
-  if (entidade === "retirada" && !dados.colaboradorId && !dados.socioGestorId) return "Selecione o credor da retirada.";
+  // R-128: a retirada exige UM credor, e ele pode ser fornecedor, socio/gestor ou (historico)
+  // colaborador. Sem o fornecedor aqui, a retirada nova para fornecedor era barrada na tela.
+  if (entidade === "retirada" && !dados.fornecedorId && !dados.colaboradorId && !dados.socioGestorId)
+    return "Selecione o credor da retirada.";
 
   if (entidade === "transferencia") {
     // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.

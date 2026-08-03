@@ -13,6 +13,7 @@ import {
 } from "@padaria/shared/transferencias";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
@@ -27,7 +28,7 @@ export async function listarTransferenciasRepository(
       id: transferencias.id,
       empresaId: transferencias.empresaId,
       dataReferencia: transferencias.dataReferencia,
-      descricao: transferencias.descricao,
+      descricao: textoDoMovimento(transferencias),
       valorOriginal: transferencias.valorOriginal,
       computar: transferencias.computar,
       status: transferencias.status,
@@ -99,7 +100,7 @@ export async function buscarTransferenciaDetalheRepository(
       caixaId: transferencias.caixaId,
       status: transferencias.status,
       dataReferencia: transferencias.dataReferencia,
-      descricao: transferencias.descricao,
+      descricao: textoDoMovimento(transferencias),
       observacao: transferencias.observacao,
       valorOriginal: transferencias.valorOriginal,
       valorAcrescimo: transferencias.valorAcrescimo,

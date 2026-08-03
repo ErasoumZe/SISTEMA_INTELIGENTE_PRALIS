@@ -1290,6 +1290,7 @@ async function salvarOperacao() {
     // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
     const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
       descricao: payload.descricao,
+      observacao: payload.observacao,
       grupoDespesaId: payload.grupoDespesaId,
       grupoMercadoriaId: payload.grupoMercadoriaId,
       contaOrigemId: payload.contaOrigemId,

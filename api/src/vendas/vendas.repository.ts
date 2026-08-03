@@ -221,6 +221,9 @@ export async function criarVendaRepository(
       .insert(vendas)
       .values({
         ...valoresBase(dados, computar, criadoPor, caixaId),
+        // VENDA fica FORA da R-127: a descricao dela e GERADA pela integracao (R-062), nao digitada,
+        // e a coluna segue NOT NULL. Reafirma o campo depois do spread, que agora aceita nulo.
+        descricao: dados.descricao,
         pdvId: dados.pdvId ?? null,
         colaboradorId: dados.colaboradorId ?? null
       })
@@ -336,6 +339,8 @@ export async function atualizarVendaRepository(
       .update(vendas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        // Venda fora da R-127 (ver a nota no insert): descricao NOT NULL, gerada pela integracao.
+        descricao: dados.descricao,
         pdvId: dados.pdvId ?? null,
         colaboradorId: dados.colaboradorId ?? null
       })

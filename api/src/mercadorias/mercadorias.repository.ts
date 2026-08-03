@@ -21,6 +21,7 @@ import {
   valoresBaseEdicao,
   valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
 // Linhas de item de UMA mercadoria. O calculo e da LISTA inteira porque o desconto geral (nivel 3)
 // rateia entre os itens (§5/D4) — nao da para resolver item a item. O servidor decide todo o
@@ -74,7 +75,7 @@ export async function listarMercadoriasRepository(
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
       dataReferencia: mercadorias.dataReferencia,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       status: mercadorias.status,
@@ -172,7 +173,7 @@ export async function buscarMercadoriaDetalheRepository(
       dataReferencia: mercadorias.dataReferencia,
       dataVencimento: mercadorias.dataVencimento,
       dataPagamento: mercadorias.dataPagamento,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       observacao: mercadorias.observacao,
       valorOriginal: mercadorias.valorOriginal,
       valorAcrescimo: mercadorias.valorAcrescimo,
@@ -287,7 +288,7 @@ export async function listarMercadoriasAguardandoAprovacaoRepository(
       empresaId: mercadorias.empresaId,
       dataReferencia: mercadorias.dataReferencia,
       dataVencimento: mercadorias.dataVencimento,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       fornecedorId: mercadorias.fornecedorId,

@@ -10,6 +10,7 @@ import {
   valoresBaseEdicao,
   valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
 export async function listarRetiradasRepository(
   query: RetiradasQuery,
@@ -25,7 +26,7 @@ export async function listarRetiradasRepository(
       id: retiradas.id,
       empresaId: retiradas.empresaId,
       dataReferencia: retiradas.dataReferencia,
-      descricao: retiradas.descricao,
+      descricao: textoDoMovimento(retiradas),
       valorOriginal: retiradas.valorOriginal,
       computar: retiradas.computar,
       status: retiradas.status
@@ -64,7 +65,10 @@ export async function criarRetiradaRepository(
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
-        credorTipo: dados.socioGestorId ? "socio_gestor" : "colaborador",
+        // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
+        // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
+        fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
         socioGestorId: dados.socioGestorId ?? null,
         dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
@@ -109,7 +113,7 @@ export async function buscarRetiradaDetalheRepository(
       dataReferencia: retiradas.dataReferencia,
       dataVencimento: retiradas.dataVencimento,
       dataPagamento: retiradas.dataPagamento,
-      descricao: retiradas.descricao,
+      descricao: textoDoMovimento(retiradas),
       observacao: retiradas.observacao,
       valorOriginal: retiradas.valorOriginal,
       valorAcrescimo: retiradas.valorAcrescimo,
@@ -117,6 +121,7 @@ export async function buscarRetiradaDetalheRepository(
       valorDesconto: retiradas.valorDesconto,
       descricaoDesconto: retiradas.descricaoDesconto,
       contaOrigemId: retiradas.contaOrigemId,
+      fornecedorId: retiradas.fornecedorId,
       colaboradorId: retiradas.colaboradorId,
       socioGestorId: retiradas.socioGestorId,
       credorTipo: retiradas.credorTipo,
@@ -159,7 +164,10 @@ export async function atualizarRetiradaRepository(
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
-        credorTipo: dados.socioGestorId ? "socio_gestor" : "colaborador",
+        // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
+        // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
+        fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
         socioGestorId: dados.socioGestorId ?? null,
         dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,

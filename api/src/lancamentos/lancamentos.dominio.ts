@@ -44,7 +44,8 @@ type BasePayload = {
   empresaId: string;
   dataReferencia: string;
   dataPagamento?: string | null | undefined;
-  descricao: string;
+  // R-127: `descricao` e legado e ja pode vir ausente; o texto vive em `observacao`.
+  descricao?: string | null | undefined;
   observacao?: string | null | undefined;
   valorOriginal: number;
   valorAcrescimo: number;
@@ -115,7 +116,9 @@ export function valoresBaseEdicao(dados: BasePayload, computar: boolean) {
   return {
     dataReferencia: dados.dataReferencia,
     dataPagamento: dados.dataPagamento ?? null,
-    descricao: dados.descricao,
+    // R-127: grava so `observacao`. `descricao` para de ser escrita e fica congelada no que o
+    // historico ja tinha — e o que permite a migration futura remove-la sem perder nada.
+    descricao: dados.descricao ?? null,
     observacao: dados.observacao ?? null,
     valorOriginal: String(dados.valorOriginal),
     valorAcrescimo: String(dados.valorAcrescimo),

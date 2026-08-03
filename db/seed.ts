@@ -46,6 +46,7 @@ import {
   integracoesVinculos,
   mercadorias,
   mercadoriasItens,
+  notificacoes,
   pdvs,
   permissoesCargos,
   permissoesSetores,
@@ -628,6 +629,15 @@ if (despesaIds.length) {
 if (mercadoriaIds.length) {
   await banco.delete(mercadoriasItens).where(inArray(mercadoriasItens.mercadoriaId, mercadoriaIds));
 }
+// `notificacoes` e dado OPERACIONAL (R-017/R-019/R-037) e sai junto com o resto do movimento.
+// Precisa morrer ANTES de `removerUsuariosSeed()`: `destinatario_usuario_id` tem ON DELETE CASCADE,
+// mas `verificado_por` NAO tem — entao bastava alguem clicar "Marcar como verificada" uma vez para
+// a linha sobreviver ao cascade e travar a exclusao do usuario com
+// `notificacoes_verificado_por_perfis_usuarios_usuario_id_fk`. Foi o que derrubou o seed em 01/08,
+// no primeiro dia em que a R-018 foi de fato exercida na tela.
+// A FK sem cascade esta CERTA: quem verificou e auditoria, nao pode sumir por efeito colateral de
+// apagar um usuario. Quem estava errado era o seed, que nunca soube desta tabela.
+await banco.delete(notificacoes).where(eq(notificacoes.empresaId, empresaId));
 await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId, empresaId));
 await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
 await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
@@ -1292,6 +1302,10 @@ await banco.insert(mercadoriasItens).values({
   valorTotalComDesconto: "44.00"
 });
 
+// R-128: esta retirada e o caso HISTORICO — credor colaborador, gravada antes de a regra mudar.
+// Fica de proposito: e ela que alimenta o debito de colaborador (R-047) e e o registro que a tela
+// precisa continuar reabrindo com o nome de quem recebeu. A retirada no formato NOVO (fornecedor)
+// vem logo abaixo.
 const retirada = (
   await banco
     .insert(retiradas)
@@ -1312,6 +1326,24 @@ const retirada = (
     .returning({ id: retiradas.id })
 )[0];
 if (!retirada) throw new Error("Retirada seed nao foi criada");
+
+// R-128: retirada no formato NOVO — credor fornecedor, com credor_tipo preenchido. Existe para o
+// banco recriado do zero ja ter a coluna nova em uso (e nao so a forma antiga, que passaria pelo
+// CHECK por credor_tipo nulo e esconderia um erro de coerencia).
+await banco.insert(retiradas).values({
+  empresaId,
+  caixaId: caixaFechado.id,
+  grupoRetiradaId: grupoRetiradaPai.id,
+  fornecedorId: fornecedor.id,
+  credorTipo: "fornecedor",
+  dataReferencia: dataISO(-1),
+  dataVencimento: dataISO(-1),
+  dataPagamento: dataISO(-1),
+  observacao: "Retirada para fornecedor seed",
+  valorOriginal: "18.00",
+  contaOrigemId: contaCaixa.id,
+  criadoPor: usuarioIds.get("caixa@email.com") ?? null
+});
 
 await banco.insert(transferencias).values({
   empresaId,

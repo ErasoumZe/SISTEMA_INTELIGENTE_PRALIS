@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
@@ -569,13 +570,17 @@ describe("caixa integration", () => {
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
 
     const dataRef = "2026-03-01";
+    // R-129: data de pagamento nao pode ser retroativa. Este teste e sobre o CICLO do caixa, nao
+    // sobre datas — a data de referencia continua fixa (o caixa se fecha por caixa_id, nao por dia)
+    // e so o pagamento anda para hoje, que e o unico valor que a regra aceita.
+    const pagoEm = diaNegocio(new Date());
     const lancamentos = [
       {
         url: "/api/vendas",
         payload: {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Venda ciclo",
           valorOriginal: 100,
           contaOrigemId: contaPdvId,
@@ -623,7 +628,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Despesa ciclo",
           valorOriginal: 20,
           contaOrigemId: contaPdvId,
@@ -636,7 +641,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Retirada ciclo",
           valorOriginal: 10,
           contaOrigemId: contaPdvId,
@@ -650,7 +655,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Mercadoria ciclo",
           valorOriginal: 15,
           contaOrigemId: contaPdvId,

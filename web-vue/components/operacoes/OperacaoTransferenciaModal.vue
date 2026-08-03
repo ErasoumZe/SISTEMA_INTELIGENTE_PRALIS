@@ -343,10 +343,10 @@ const hojeISO = computed(() => dataISO(0));
         </button>
       </TransferenciaRetornoCampos>
 
-      <!-- Descrição — obrigatória no backend; não está no desenho, fica discreta no rodapé. -->
+      <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
       <label class="tr-campo">
-        <span class="tr-campo-lbl">Descrição</span>
-        <input v-model="form.descricao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
+        <span class="tr-campo-lbl">Observação</span>
+        <input v-model="form.observacao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
       </label>
 
       <div class="tr-acoes">

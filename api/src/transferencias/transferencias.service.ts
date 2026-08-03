@@ -22,6 +22,10 @@ import {
   validarEdicaoNoCaixaAberto,
   validarReferenciasTransferencia
 } from "../lancamentos/lancamentos.dominio.js";
+// R-127: a transferencia nao tem data de pagamento (a R-129 nao a alcanca), mas TEM texto — e o
+// contrato dela afrouxou junto com o dos outros tres. Sem este passo, transferencia sem texto
+// nenhum passaria a ser aceita, que e o oposto do que a regra pediu.
+import { resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import {
   atualizarTransferenciaRepository,
@@ -94,7 +98,7 @@ export async function criarTransferencia(
       }
 
       const transferencia = await criarTransferenciaRepository(
-        dados,
+        resolverObservacaoDoLancamento(dados),
         computar,
         perfil.usuarioId,
         envolveContaPdv ? caixa.id : null,
@@ -218,7 +222,7 @@ export async function atualizarTransferencia(
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
-    await atualizarTransferenciaRepository(transferenciaId, dados, computar, tx);
+    await atualizarTransferenciaRepository(transferenciaId, resolverObservacaoDoLancamento(dados), computar, tx);
     return { id: transferenciaId, computar };
   });
 }

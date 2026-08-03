@@ -3,6 +3,7 @@
 // "Recorrencia registra E cria lancamentos futuros automaticamente (como nao-pagos, vencendo na
 // data). So Admin, Gerencia e Financeiro podem usar recorrencia." Teto de 12 meses na serie.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
@@ -18,6 +19,8 @@ type LinhaDespesa = {
   recorrencia_id: string | null;
   recorrencia_ordem: number | null;
 };
+
+const PAGO_EM = diaNegocio(new Date());
 
 describe("recorrencia de lancamento (D3) integration", () => {
   let contexto: ContextoApiTeste;
@@ -127,13 +130,15 @@ describe("recorrencia de lancamento (D3) integration", () => {
   it("as futuras nascem NAO PAGAS e FORA do caixa, mesmo com o inicial pago", async () => {
     const resposta = await criarDespesa(cookieAdmin, {
       descricao: "Aluguel pago a vista",
-      dataPagamento: "2026-07-30",
+      // R-129: o inicial da serie precisa nascer com data de pagamento aceitavel. O que o teste
+      // mede e a serie FUTURA nascer nao-paga, nao o dia do pagamento do primeiro.
+      dataPagamento: PAGO_EM,
       recorrencia: { frequencia: "mes", repeticoes: 3 }
     });
     expect(resposta.statusCode, resposta.body).toBe(201);
     const serie = await serieDe(json<{ data: { id: string } }>(resposta).data.id);
 
-    expect(serie[0]?.data_pagamento).toBe("2026-07-30");
+    expect(serie[0]?.data_pagamento).toBe(PAGO_EM);
     // D3: "como nao-pagos, vencendo na data" — o de agosto nao esta pago so porque o de julho estava.
     expect(serie[1]?.data_pagamento).toBeNull();
     expect(serie[2]?.data_pagamento).toBeNull();

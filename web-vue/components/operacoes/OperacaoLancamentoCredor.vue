@@ -4,8 +4,8 @@
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
 const {
-  cat,
-  CREDORES,
+  credoresOferecidos,
+  escolherTipoCredor,
   rotuloCredor,
   tipoCredor,
   credorId,
@@ -24,12 +24,12 @@ const {
   <div class="lc-campo-lbl lc-mt">Tipo de credor</div>
   <div class="lc-credor-tipos">
     <button
-      v-for="t in CREDORES[cat]"
+      v-for="t in credoresOferecidos"
       :key="t"
       type="button"
       class="lc-chip"
       :class="{ ativo: tipoCredor === t }"
-      @click="tipoCredor = t"
+      @click="escolherTipoCredor(t)"
     >
       {{ rotuloCredor[t] }}
     </button>
@@ -73,10 +73,10 @@ const {
     </label>
   </div>
 
-  <!-- Descrição: obrigatória no backend (descricao NOT NULL) e importante para auditoria. Nao
-       esta no desenho enxuto, mas fica acessivel aqui. -->
+  <!-- R-127: o texto do movimento e a OBSERVACAO. Grava em `observacao`; `descricao` virou legado e
+       sai numa migration futura. Registro antigo reabre com o texto porque o form cai no fallback. -->
   <label class="lc-campo">
-    <span class="lc-campo-lbl">Descrição</span>
-    <input v-model="form.descricao" class="lc-input" placeholder="Ex.: Insumos — farinha e fermento" />
+    <span class="lc-campo-lbl">Observação</span>
+    <input v-model="form.observacao" class="lc-input" placeholder="Ex.: Insumos — farinha e fermento" />
   </label>
 </template>

@@ -24,6 +24,7 @@ import {
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
+import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
@@ -78,6 +79,8 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
   validarMercadoria(dados);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento);
+  // R-129: pagamento retroativo nao entra na CRIACAO (fuso do negocio, nao UTC).
+  exigirDataPagamentoNaoRetroativa(dados.dataPagamento);
   // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
   // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
@@ -91,7 +94,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
@@ -201,13 +204,15 @@ export async function atualizarMercadoria(
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
+    // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
+    exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     const computar = deveComputarMercadoria(
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
     return { id: mercadoriaId, computar };
   });

@@ -4,10 +4,13 @@ import path from "node:path";
 const raiz = process.cwd();
 const falhas = [];
 
+const PASTAS_IGNORADAS = new Set(["node_modules", ".nuxt", ".output", "dist", ".cache"]);
+
 function listarArquivos(diretorio, filtro) {
   if (!existsSync(diretorio)) return [];
   const encontrados = [];
   for (const entrada of readdirSync(diretorio)) {
+    if (PASTAS_IGNORADAS.has(entrada)) continue;
     const caminho = path.join(diretorio, entrada);
     const stat = statSync(caminho);
     if (stat.isDirectory()) encontrados.push(...listarArquivos(caminho, filtro));
@@ -46,6 +49,25 @@ for (const arquivo of arquivosApi) {
   }
   if (arquivo.endsWith(".repository.ts") && /\.service\.js|\.controller\.js/u.test(conteudo)) {
     falhar(arquivo, "repository nao pode importar service/controller");
+  }
+}
+
+// web-vue so importa `@padaria/shared` pela RAIZ quando o import gera codigo. O `nuxt.config`
+// apelida `@padaria/shared` para o ARQUIVO `shared/src/index.ts` e o alias do Vite casa por
+// prefixo: `@padaria/shared/datas` viraria `.../index.ts/datas` e o modulo vem 404 NO NAVEGADOR —
+// com typecheck e lint verdes, porque os dois resolvem pelo `exports` do package.json. `import type`
+// e ignorado aqui: some na compilacao e nunca chega ao resolvedor.
+const arquivosWeb = listarArquivos(
+  path.join(raiz, "web-vue"),
+  (arquivo) => arquivo.endsWith(".ts") || arquivo.endsWith(".vue")
+);
+for (const arquivo of arquivosWeb) {
+  const semTipos = texto(arquivo).replace(/import\s+type\s[\s\S]*?from\s*["'][^"']+["']/gu, "");
+  if (/from\s*["']@padaria\/shared\/[^"']+["']/u.test(semTipos)) {
+    falhar(
+      arquivo,
+      "web-vue importa @padaria/shared pela raiz; subcaminho quebra o alias do nuxt e da 404 no navegador"
+    );
   }
 }
 

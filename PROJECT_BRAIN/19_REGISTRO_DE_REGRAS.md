@@ -543,6 +543,36 @@ mudar — decisão do José sobre a palavra.
 | R-101 | Nada de diálogo nativo do navegador (`window.confirm`)                                  | eu, 30/07                    | ✅ componente Vuetify reutilizável; zero ocorrências                                                                        |
 | R-102 | Responsivo em 1440 / 1024 / 768 / 390, sem scroll horizontal                            | José + `16`                  | ⚠️ exige inspeção humana; checklist de 16 telas em `CORUJAO-V3-RESPONSIVIDADE-PENDENTE.md`                                  |
 
+### Texto, credor e data de pagamento (03/08/2026)
+
+Três ajustes de regra e de **dado**, cada um com a sua migration, feitos antes da produção porque
+depois teriam de conviver com histórico.
+
+| Id           | Regra                                                                                                                                             | Status | Teste                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| **R-127** 🆕 | O texto do movimento é a **Observação**. `descricao` deixa de ser o campo do usuário no lançamento (despesa, mercadoria, retirada, transferência) | ✅     | `texto-do-movimento` (unit) · `texto-credor-data-pagamento` |
+| **R-128** 🆕 | O credor da **Retirada** é **Fornecedor** ou **Sócio/Gestor**. Colaborador sai da tela — mas não do histórico                                     | ✅     | `texto-credor-data-pagamento` (inclui retirada antiga)      |
+| **R-129** 🆕 | **Data de pagamento não pode ser anterior a hoje** no fuso do negócio. Vale para todos os perfis                                                  | ✅     | `texto-do-movimento` (unit) · `texto-credor-data-pagamento` |
+
+Notas de desenho:
+
+- **`descricao` não foi derrubada** (migration `0027`): o backfill copiou o texto para `observacao`
+  e a coluna virou nullable. Derrubar antes de a produção rodar estável não deixaria volta se algo
+  ainda lesse o campo. A leitura passa por `textoDoMovimento()` —
+  `coalesce(nullif(observacao,''), descricao, '')` — então registro antigo continua legível pelos
+  dois nomes. A **venda ficou de fora** da R-127 e a coluna dela segue `NOT NULL`.
+- **`colaborador_id` da retirada fica** (migration `0028`, que só **adiciona** `fornecedor_id`).
+  Converter o histórico faria o registro mentir sobre o que foi lançado na época. Na tela, o tipo
+  legado entra no leque **só quando o registro em edição usa ele** — sem isso a retirada antiga
+  abriria em "Fornecedor" com o campo Credor vazio, apagando na cara do usuário quem recebeu.
+- **R-129 compara com `diaNegocio()`, nunca com `toISOString()`.** Com UTC o dia viraria às 21:00
+  BRT e o servidor passaria a recusar como "passado" um pagamento marcado para **hoje** — o BUG B
+  de novo, agora barrando lançamento em vez de contabilizar no dia errado.
+- **Editar sem mexer na data continua valendo.** A regra só morde quando a data de pagamento
+  **muda**; senão nenhum lançamento do passado poderia ter o valor corrigido.
+- **❓ Decisão pendente do José:** a R-129 vale hoje para **todos**, inclusive Tesouraria e
+  Financeiro. Retaguarda deve ter exceção para registrar pagamento retroativo?
+
 ### PROCESSO (o contrato de trabalho)
 
 | Id    | Regra                                                                                                          | Origem            |

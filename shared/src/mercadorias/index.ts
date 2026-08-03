@@ -53,7 +53,10 @@ export const mercadoriaPayloadSchema = z.object({
   dataReferencia: z.string().min(10),
   dataVencimento: z.string().min(10),
   dataPagamento: z.string().min(10).optional().nullable(),
-  descricao: z.string().min(1),
+  // R-127: o texto do movimento e a OBSERVACAO. `descricao` continua ACEITA (compatibilidade com
+  // chamada antiga) mas nao e exigida — o servidor grava o que vier em observacao, ou a descricao
+  // como reserva, e recusa quando os dois vem vazios.
+  descricao: z.string().optional().nullable(),
   observacao: z.string().optional().nullable(),
   valorOriginal: dinheiroSchema,
   valorAcrescimo: dinheiroSchema.default(0),

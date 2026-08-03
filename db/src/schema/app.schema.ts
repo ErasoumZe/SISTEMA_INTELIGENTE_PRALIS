@@ -867,6 +867,8 @@ export const vendas = pgTable(
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     dataReferencia: date("data_referencia").notNull(),
     dataVenda: timestamp("data_venda", { withTimezone: true }),
+    // VENDA fica FORA da R-127: a entrada vem pronta da integracao (R-062) e a descricao dela e
+    // gerada, nao digitada. A 0027 nao tocou nesta coluna — continua NOT NULL no banco.
     descricao: text("descricao").notNull(),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
@@ -1051,7 +1053,9 @@ export const despesas = pgTable(
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
@@ -1226,7 +1230,9 @@ export const mercadorias = pgTable(
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
@@ -1389,16 +1395,21 @@ export const retiradas = pgTable(
     ...vinculoRecorrencia,
     grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
     // R-046/R-047: retirada e o UNICO dominio que oferta socio/gestor (decisao do Jose, 30/07).
-    credorTipo: text("credor_tipo").$type<"colaborador" | "socio_gestor">(),
+    // R-128: a tela oferece FORNECEDOR ou SOCIO/GESTOR (fiel a FOTO 2). `colaborador` continua no
+    // tipo porque o HISTORICO tem retirada gravada assim — sai da tela, nao do banco.
+    credorTipo: text("credor_tipo").$type<"fornecedor" | "colaborador" | "socio_gestor">(),
     // colaborador_id DEIXA DE SER NOT NULL: com socio/gestor como credor nao ha colaborador, e
     // exigir um forcaria inventar. DROP NOT NULL nao perde dado e nao aborta — so relaxa.
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
     socioGestorId: uuid("socio_gestor_id").references(() => sociosGestores.id, { onDelete: "set null" }),
     ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
@@ -1426,15 +1437,16 @@ export const retiradas = pgTable(
     ...checksVinculoRecorrencia("retiradas", table.recorrenciaId, table.recorrenciaOrdem),
     check(
       "retiradas_credor_tipo_check",
-      sql`${table.credorTipo} is null or ${table.credorTipo} in ('colaborador', 'socio_gestor')`
+      sql`${table.credorTipo} is null or ${table.credorTipo} in ('fornecedor', 'colaborador', 'socio_gestor')`
     ),
     // Mesmo desenho tolerante das despesas: so checa coerencia quando o tipo esta preenchido.
     // O historico inteiro tem credor_tipo nulo e colaborador_id preenchido — e passa.
     check(
       "retiradas_credor_coerente_check",
       sql`${table.credorTipo} is null
-        or (${table.credorTipo} = 'colaborador' and ${table.socioGestorId} is null)
-        or (${table.credorTipo} = 'socio_gestor' and ${table.colaboradorId} is null)`
+        or (${table.credorTipo} = 'fornecedor' and ${table.colaboradorId} is null and ${table.socioGestorId} is null)
+        or (${table.credorTipo} = 'colaborador' and ${table.fornecedorId} is null and ${table.socioGestorId} is null)
+        or (${table.credorTipo} = 'socio_gestor' and ${table.fornecedorId} is null and ${table.colaboradorId} is null)`
     ),
     index("retiradas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("retiradas_caixa_idx").on(table.caixaId),
@@ -1451,7 +1463,9 @@ export const transferencias = pgTable(
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     dataReferencia: date("data_referencia").notNull(),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
