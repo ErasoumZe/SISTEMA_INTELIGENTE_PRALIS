@@ -1,6 +1,7 @@
 // Logica PURA de aparencia por empresa/tela, extraida do AppWorkspace. O diff/merge do
 // tema especifico por pagina e fiddly (fonte de bug); isolar aqui deixa testavel.
 import type { ConfiguracaoAparenciaEmpresa, TemaAplicacao } from "@padaria/shared";
+import { CATEGORIA_POR_TELA, corDaCategoria } from "./cores-categoria";
 
 const camposTema = [
   "corPrimaria",
@@ -19,15 +20,13 @@ export function diferencasTema(temaSalvo: TemaAplicacao, padrao: TemaAplicacao):
   );
 }
 
-// Identidade visual por categoria: cor "de fabrica" por tela operacional, usada no menu
-// (icone) e como default do tema da tela. Fonte unica dos hex — nao duplicar em outro lugar.
-export const corCategoriaPorTela: Record<string, string> = {
-  entradas: "#ca8a04", // vendas/entradas = amarelo
-  relatorio_vendas: "#ca8a04",
-  transferencias: "#ea580c", // laranja
-  mercadorias: "#16a34a", // verde
-  retiradas: "#2563eb" // lucros/retiradas = azul
-};
+// Identidade visual por categoria: cor "de fabrica" por tela operacional, usada no menu (icone) e
+// como default do tema da tela. Os hex NAO moram mais aqui — vem de `cores-categoria.ts`, que e a
+// fonte unica de verdade (ver o cabecalho de la). Antes esta lista tinha hex proprios, diferentes
+// dos tokens --cat-* do main.css, e nao tinha `despesas` — o que deixava aquele item do menu cinza.
+export const corCategoriaPorTela: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORIA_POR_TELA).map(([tela, categoria]) => [tela, corDaCategoria(categoria)])
+);
 
 // Default de categoria como tema PARCIAL (so a cor primaria): fundo/cartao/aviso/etc
 // continuam vindo do padrao da empresa.

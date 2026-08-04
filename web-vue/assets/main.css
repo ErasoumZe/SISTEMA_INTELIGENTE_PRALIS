@@ -1501,31 +1501,46 @@ body {
 
 /* Tokens de CATEGORIA — semantica de negocio, FIXOS (nao seguem o tema por empresa).
    Traduzidos da planilha (abas coloridas) em PROJECT_BRAIN/03_MODELO_DE_CORES.md.
-   -base (icone/borda/barra/texto), -soft (fundo de chip/secao/hover), -strong (hover/ativo). */
+   -base (icone/borda/barra/texto), -soft (fundo de chip/secao/hover), -strong (hover/ativo),
+   -faixa (fundo do cabecalho de modal, onde o texto e BRANCO).
+
+   ⚠ A FONTE DESTES HEX E `web-vue/utils/cores-categoria.ts`, nao este arquivo. CSS nao importa TS,
+   entao os valores aparecem escritos aqui — e `utils/cores-categoria.test.ts` LE este bloco e falha
+   se os dois divergirem. Mudou aqui? Mude la (ou o contrario). Ate 03/08/2026 existiam duas fontes
+   com hex diferentes para a mesma categoria e ninguem percebia; o guardiao existe por isso.
+
+   Valores subidos de saturacao em 01/08/2026 por decisao do Jose ("bem vivo e evidente"). O
+   PROJECT_BRAIN/67 dizia que estes tokens nao mudavam — mudou, e o 67 foi atualizado junto. */
 :root {
-  --cat-entradas-base: #b7791f;
-  --cat-entradas-soft: #fef6e4;
-  --cat-entradas-strong: #8f6115;
+  --cat-entradas-base: #ca8a04;
+  --cat-entradas-soft: #fbf6eb;
+  --cat-entradas-strong: #a26e03;
+  --cat-entradas-faixa: #9e6c03;
 
-  --cat-transferencias-base: #c2410c;
-  --cat-transferencias-soft: #fff1e8;
-  --cat-transferencias-strong: #9a3412;
+  --cat-transferencias-base: #ea580c;
+  --cat-transferencias-soft: #fdf2ec;
+  --cat-transferencias-strong: #bb460a;
+  --cat-transferencias-faixa: #cc4d0a;
 
-  --cat-despesas-base: #c0392b;
-  --cat-despesas-soft: #fdecea;
-  --cat-despesas-strong: #96261b;
+  --cat-despesas-base: #dc2626;
+  --cat-despesas-soft: #fceeee;
+  --cat-despesas-strong: #b01e1e;
+  --cat-despesas-faixa: #dc2626;
 
-  --cat-mercadorias-base: #15803d;
-  --cat-mercadorias-soft: #e9f7ee;
-  --cat-mercadorias-strong: #106430;
+  --cat-mercadorias-base: #16a34a;
+  --cat-mercadorias-soft: #ecf8f1;
+  --cat-mercadorias-strong: #12823b;
+  --cat-mercadorias-faixa: #12873d;
 
-  --cat-retiradas-base: #1d4ed8;
-  --cat-retiradas-soft: #eaf0fe;
-  --cat-retiradas-strong: #1739a8;
+  --cat-retiradas-base: #2563eb;
+  --cat-retiradas-soft: #eef3fd;
+  --cat-retiradas-strong: #1e4fbc;
+  --cat-retiradas-faixa: #2563eb;
 
   --cat-resultado-base: #6d28d9;
-  --cat-resultado-soft: #f3edfd;
-  --cat-resultado-strong: #54209f;
+  --cat-resultado-soft: #f3eefc;
+  --cat-resultado-strong: #5720ae;
+  --cat-resultado-faixa: #6d28d9;
 
   /* ---- ALIAS 3/4: neutros V1 (Mobills/Material) ----
      Consumidos por TesourariaCockpit, CardTotalCategoria e LinhaTransacao. */
