@@ -1167,7 +1167,12 @@ export const despesasItens = pgTable(
     // grupos_patrimonio (FK sem indice varre a tabela filha inteira) e o filtro por grupo.
     index("despesas_itens_grupo_patrimonio_idx")
       .on(table.grupoPatrimonioId)
-      .where(sql`${table.grupoPatrimonioId} is not null`)
+      .where(sql`${table.grupoPatrimonioId} is not null`),
+    // E6: mesma razao do indice acima — serve o DELETE em patrimonio_itens (FK sem indice varre a
+    // tabela filha inteira). Precisa existir AQUI e nao so na 0029: o `migracoes.test` compara o
+    // schema construido por migrate com o construido por push, e um indice so na migration faz os
+    // dois divergirem.
+    index("despesas_itens_patrimonio_item_idx").on(table.patrimonioItemId)
   ]
 );
 
