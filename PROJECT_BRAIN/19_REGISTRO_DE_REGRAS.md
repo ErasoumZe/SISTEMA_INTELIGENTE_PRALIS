@@ -575,15 +575,15 @@ Notas de desenho:
 
 ### Cor de categoria e discriminação (04/08/2026)
 
-| Id           | Regra                                                                                                                                                            | Status | Teste                         |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------- |
-| **R-130** 🆕 | **Uma fonte só para a cor de categoria**: `web-vue/utils/cores-categoria.ts`. O `main.css` repete os valores (CSS não importa TS) e um teste falha se divergirem | ✅     | `cores-categoria` (29)        |
-| **R-131** 🆕 | O **item ativo** do menu fica na **cor da categoria** (preenchimento sólido, texto branco). Tela sem categoria segue no roxo da marca                            | ✅     | verificado na tela            |
-| **R-132** 🆕 | **Grupo não aparece** no modal de despesa e mercadoria — vive só na discriminação. Continua no cabeçalho da **retirada**, que não discrimina                     | ✅     | verificado na tela            |
-| **R-133** 🆕 | **Grupo e itens são OPCIONAIS** em despesa e mercadoria. Lançamento simples salva sem classificação                                                              | ✅     | `texto-credor-data-pagamento` |
-| **R-134** 🆕 | A **discriminação é a mesma tabela** (8 colunas) em despesa e mercadoria. Sem descrição livre: o item vem sempre de um cadastro                                  | ✅     | verificado na tela            |
-| **R-135** 🆕 | O item da discriminação vem de **Produtos** (mercadoria) e de **Patrimônio / Colaboradores** (despesa), e preenche descrição e grupo                             | ✅     | verificado na tela            |
-| **R-136** 🆕 | **Dinheiro formata a cada tecla**, com o cursor ancorado pelo número de dígitos à esquerda                                                                       | ✅     | `campo-dinheiro` (18)         |
+| Id           | Regra                                                                                                                                                            | Status | Teste                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------------------------- |
+| **R-130** 🆕 | **Uma fonte só para a cor de categoria**: `web-vue/utils/cores-categoria.ts`. O `main.css` repete os valores (CSS não importa TS) e um teste falha se divergirem | ✅     | `cores-categoria` (29)           |
+| **R-131** 🆕 | O **item ativo** do menu fica na **cor da categoria** (preenchimento sólido, texto branco). Tela sem categoria segue no roxo da marca                            | ✅     | verificado na tela               |
+| **R-132** 🆕 | **Grupo não aparece** no modal de despesa e mercadoria — vive só na discriminação. Continua no cabeçalho da **retirada**, que não discrimina                     | ✅     | verificado na tela               |
+| **R-133** 🆕 | **Grupo e itens são OPCIONAIS** em despesa e mercadoria. Lançamento simples salva sem classificação                                                              | ✅     | `texto-credor-data-pagamento`    |
+| **R-134** 🆕 | A **discriminação é a mesma tabela** (8 colunas) em despesa e mercadoria. Sem descrição livre: o item vem sempre de um cadastro                                  | ✅     | verificado na tela               |
+| **R-135** 🆕 | O item da discriminação vem de **Produtos** (mercadoria) e de **Patrimônio / Colaboradores** (despesa), e preenche descrição e grupo                             | ✅     | `discriminacao-item-do-cadastro` |
+| **R-136** 🆕 | **Dinheiro formata a cada tecla**, com o cursor ancorado pelo número de dígitos à esquerda                                                                       | ✅     | `campo-dinheiro` (18)            |
 
 Notas de desenho:
 
@@ -594,6 +594,27 @@ Notas de desenho:
 - **Registro antigo continua legível, sempre.** Item de discriminação sem vínculo reabre com o
   select vazio e a **descrição gravada visível** abaixo dele. Mesmo cuidado da R-128 com a retirada
   de colaborador: a tela não pode apagar o histórico na cara do usuário.
+- **A R-135 vale no SERVIDOR, e não só na tela** (fechado em 04/08/2026, após a auditoria da PR #26).
+  A regra tinha sido implementada só tirando o campo de descrição livre do formulário — o contrato
+  `zod` continuava aceitando `{descricao, valor}` sem vínculo nenhum, então qualquer cliente que não
+  fosse aquela tela (chamada direta, script, front antigo em cache) repunha texto solto no banco. O
+  que ficou decidido:
+  - **Vínculo exigido na despesa:** `patrimonioItemId` **ou** `colaboradorId`, **exatamente um**. Os
+    dois juntos são recusados — a linha ficaria com duas identidades e a tela mostraria só a
+    primeira, escondendo a outra. Grupo **não** conta como vínculo: grupo classifica, não identifica.
+  - **Como o servidor sabe se a linha é nova:** não há id de item no payload (a gravação apaga e
+    reinsere a lista inteira), então a identidade vem do que já está **persistido**. Uma linha sem
+    vínculo só passa se o registro já tiver, gravada, uma linha sem vínculo com a **mesma descrição**
+    — e cada linha gravada é consumida uma única vez. Consequências, todas testadas: histórico reabre
+    e salva; descrição livre nova não entra; duplicar a linha legada não entra; **reescrever o texto**
+    de uma linha legada não entra (preservar histórico ≠ poder editá-lo à mão).
+  - **Mercadoria fica de fora, de propósito.** A importação de NF-e cria item **sem `produtoId`**
+    quando o EAN não casa com o cadastro — é o sinal de "não cadastrado". Exigir o vínculo lá
+    quebraria a importação inteira. A simetria com Produtos vive na tela, não no servidor.
+- **`patrimonioItemId` também é checado por empresa.** A FK garante que o id existe, não que ele é da
+  empresa do lançamento — os vizinhos (`grupoDespesaId`, `grupoPatrimonioId`, `colaboradorId`) sempre
+  tiveram essa checagem e este não tinha. Vale nos dois caminhos de escrita: criação/edição e a tela
+  de Discriminação.
 - **Tirar o Grupo do modal tornou "grupo ou itens" impossível de cumprir.** A validação antiga
   apontava um campo que a tela não tem mais; por isso a R-133. O preço, aceito e registrado:
   lançamento sem grupo e sem itens fica **sem classificação** no cockpit por categoria e no DRE —

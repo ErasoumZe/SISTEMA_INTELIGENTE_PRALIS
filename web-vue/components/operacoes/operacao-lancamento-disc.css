@@ -1,6 +1,11 @@
 /* Discriminação (FOTO 3) — tabela com rolagem horizontal (não estoura o modal). Extraído do
    <style scoped> do OperacaoLancamentoModal para o bloco coeso OperacaoLancamentoDiscriminacao.
-   Classes com prefixo unico .disc-*; herdam --cat/--cat-soft do .lc-modal. */
+   Classes com prefixo unico .disc-*; herdam --cat/--cat-soft/--cat-tinta do .lc-modal.
+
+   Os neutros aqui eram hex cravados (#fff, #e4e8ef, #1f2733, #94a3b8...) — a tabela inteira ficava
+   branca no modo escuro, com texto escuro por cima. Passaram a ler os tokens --cx-*, que e a regra
+   da casa: "cor nova de superficie/texto NAO se acerta com um seletor [data-theme=dark] — se acerta
+   usando --cx-* na regra original" (main.css). Auditoria de 04/08/2026. */
 .disc {
   margin-bottom: 8px;
 }
@@ -14,28 +19,28 @@
 }
 .disc-tabela th {
   padding: 4px 6px;
-  color: #94a3b8;
+  color: var(--cx-ink-soft);
   font-size: 10px;
   font-weight: 700;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
-  border-bottom: 0.5px solid #e4e8ef;
+  border-bottom: 0.5px solid var(--cx-line);
 }
 .disc-tabela td {
   padding: 3px 5px;
-  border-bottom: 0.5px solid #f1f3f7;
+  border-bottom: 0.5px solid var(--cx-line-soft);
   vertical-align: middle;
 }
 .disc-in {
   width: 100%;
   min-width: 64px;
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid var(--cx-line);
   border-radius: 6px;
   padding: 6px 7px;
   font-size: 12px;
-  color: #1f2733;
-  background: #fff;
+  color: var(--cx-ink);
+  background: var(--cx-surface);
   outline: none;
 }
 .disc-in:focus {
@@ -43,6 +48,15 @@
 }
 .disc-desc {
   margin-top: 3px;
+}
+/* Descricao GRAVADA de um item legado (sem vinculo de cadastro). Some do fluxo de edicao mas
+   continua visivel: a tela nao pode apagar o historico na cara do usuario (R-135). */
+.disc-desc-legada {
+  display: block;
+  margin-top: 3px;
+  color: var(--cx-ink-soft);
+  font-size: 11px;
+  font-style: italic;
 }
 .disc-qtd {
   min-width: 52px;
@@ -53,17 +67,17 @@
   max-width: 96px;
 }
 .disc-calc {
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-weight: 600;
   white-space: nowrap;
 }
 .disc-foot-lbl {
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-weight: 700;
   text-align: right;
 }
 .disc-foot {
-  border-top: 0.5px solid #e4e8ef;
+  border-top: 0.5px solid var(--cx-line);
 }
 .disc-rodape {
   display: flex;
@@ -83,31 +97,31 @@
 }
 .disc-modo {
   display: flex;
-  border: 0.5px solid #cbd2dc;
+  border: 0.5px solid var(--cx-line);
   border-radius: 8px;
   overflow: hidden;
 }
 .disc-modo-btn {
   border: 0;
-  background: #fff;
+  background: var(--cx-surface);
   padding: 7px 12px;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 12px;
   cursor: pointer;
 }
 .disc-modo-btn.ativo {
   background: var(--cat-soft);
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-weight: 600;
 }
 .disc-vale-res {
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
 .disc-linha-erro {
-  outline: 2px solid var(--v-theme-error, #b91c1c);
+  outline: 2px solid var(--cx-negative);
   outline-offset: -2px;
-  background: rgb(185 28 28 / 0.08);
+  background: color-mix(in srgb, var(--cx-negative) 8%, transparent);
 }

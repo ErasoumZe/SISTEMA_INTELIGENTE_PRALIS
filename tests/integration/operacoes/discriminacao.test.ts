@@ -194,9 +194,16 @@ describe("discriminacao de operacoes integration", () => {
       headers: { cookie: cookieDiscriminador },
       payload: {
         empresaId: idsTeste.empresaA,
+        // R-135: linha NOVA de discriminacao vem do cadastro — uma por Patrimonio, outra por
+        // Colaborador, que sao as duas origens que a tela oferece.
         itensDespesa: [
-          { descricao: "Energia", valor: 10, grupoDespesaId: idsTeste.grupoDespesaOperacional },
-          { descricao: "Agua", valor: 5 }
+          {
+            descricao: "Energia",
+            valor: 10,
+            grupoDespesaId: idsTeste.grupoDespesaOperacional,
+            colaboradorId: idsTeste.colaboradorAdmin
+          },
+          { descricao: "Agua", valor: 5, patrimonioItemId: idsTeste.patrimonioItemForno }
         ]
       }
     });

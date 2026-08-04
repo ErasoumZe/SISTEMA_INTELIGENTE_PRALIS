@@ -40,22 +40,43 @@ Para cada categoria, três tokens: `-base` (ícone, borda, barra, texto de desta
 > menu era `#16a34a` e o card da mesma categoria era `#15803D`. Um teste
 > (`cores-categoria.test.ts`) agora falha se as duas divergirem.
 
-| Categoria                    | `--cat-*-base` | `--cat-*-soft` | `--cat-*-strong` | `--cat-*-faixa` | Uso                             |
-| ---------------------------- | -------------- | -------------- | ---------------- | --------------- | ------------------------------- |
-| **Entradas / Vendas** 🟡     | `#ca8a04`      | `#fbf6eb`      | `#a26e03`        | `#9e6c03`       | receita, venda, entrada         |
-| **Transferências** 🟠        | `#ea580c`      | `#fdf2ec`      | `#bb460a`        | `#cc4d0a`       | cofre ⇄ caixa, lacre            |
-| **Despesas** 🔴              | `#dc2626`      | `#fceeee`      | `#b01e1e`        | `#dc2626`       | despesa operacional             |
-| **Mercadorias** 🟢           | `#16a34a`      | `#ecf8f1`      | `#12823b`        | `#12873d`       | compra de mercadoria, NF-e      |
-| **Retiradas** 🔵             | `#2563eb`      | `#eef3fd`      | `#1e4fbc`        | `#2563eb`       | retirada de sócio, adiantamento |
-| **Resultado / Diferença** 🟣 | `#6d28d9`      | `#f3eefc`      | `#5720ae`        | `#6d28d9`       | saldo, DRE, quebra              |
+| Categoria                    | `--cat-*-base` | `--cat-*-soft` | `--cat-*-strong` | `--cat-*-faixa` | `--cat-*-tinta` | Uso                             |
+| ---------------------------- | -------------- | -------------- | ---------------- | --------------- | --------------- | ------------------------------- |
+| **Entradas / Vendas** 🟡     | `#ca8a04`      | `#fbf6eb`      | `#a26e03`        | `#9e6c03`       | `#7d5602`       | receita, venda, entrada         |
+| **Transferências** 🟠        | `#ea580c`      | `#fdf2ec`      | `#bb460a`        | `#cc4d0a`       | `#913707`       | cofre ⇄ caixa, lacre            |
+| **Despesas** 🔴              | `#dc2626`      | `#fceeee`      | `#b01e1e`        | `#dc2626`       | `#881818`       | despesa operacional             |
+| **Mercadorias** 🟢           | `#16a34a`      | `#ecf8f1`      | `#12823b`        | `#12873d`       | `#0e652e`       | compra de mercadoria, NF-e      |
+| **Retiradas** 🔵             | `#2563eb`      | `#eef3fd`      | `#1e4fbc`        | `#2563eb`       | `#173d92`       | retirada de sócio, adiantamento |
+| **Resultado / Diferença** 🟣 | `#6d28d9`      | `#f3eefc`      | `#5720ae`        | `#6d28d9`       | `#441987`       | saldo, DRE, quebra              |
 
-**`-soft` e `-strong` são derivados por fórmula** da base (8% sobre branco / 20% mais escura), e não
-escolhas avulsas — uma base nova não exige inventar mais dois hex à mão. Há teste para isso.
+**`-soft`, `-strong` e `-tinta` são derivados por fórmula** da base (8% sobre branco / 20% mais
+escura / 62% sobre preto), e não escolhas avulsas — uma base nova não exige inventar mais hex à mão.
+Há teste para cada fórmula.
 
 **`-faixa` é o único medido**, e existe porque o cabeçalho colorido dos modais leva texto **branco**:
 a `base` reprova em 4,5:1 nas categorias claras (entradas 2,94 · transferências 3,56 ·
 mercadorias 3,30) e em entradas nem o `strong` resolve (4,40). Escurecer só quem precisa mantém as
 outras vivas em vez de rebaixar todas para igualar a pior.
+
+**`-tinta` é a categoria usada como TEXTO** (número calculado, chip ativo, rótulo, título do card).
+Entrou em 04/08/2026, na auditoria da PR #26. Não é preciosismo: medida sobre branco, a `base`
+reprova em entradas (2,94), mercadorias (3,02) e transferências (3,24) — a tabela de discriminação
+pintava texto com `var(--cat)` desde sempre e **nunca** passou em AA. São dois mínimos diferentes do
+WCAG e por isso dois tokens: `base` para **borda/barra/anel de foco** (gráfico, 3:1) e `tinta` para
+**texto** (4,5:1).
+
+### Modo escuro das categorias
+
+`-base` e `-faixa` **não mudam**: são a identidade da categoria e são usados como preenchimento com
+texto branco por cima, onde clarear reprovaria. Mudam os dois tokens que encostam na superfície:
+
+| Token    | Claro                | Escuro                               | Por quê                                                                                                                                                                    |
+| -------- | -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-soft`  | 8% da base no branco | `color-mix(… base 18%, transparent)` | o hex claro (quase-branco) virava um bloco aceso sobre a superfície `#191f26`. Translúcido porque o mesmo token pinta faixa, chip e linha de tabela — elevações diferentes |
+| `-tinta` | 62% da base no preto | 62% da base no **branco**            | sobre a superfície escura a base cai para 2,34 (resultado) e 3,21 (retiradas). Mesmo raciocínio do `--cx-brand-text`                                                       |
+
+Os hex e a porcentagem são verificados por `cores-categoria.test.ts` — inclusive o contraste em
+**ambos** os modos. A fonte única vale para os dois ou não vale para nenhum.
 
 **"Contas / Cadastros" saiu da tabela.** Não é categoria: essas telas ficam **neutras de propósito**
 — hover cinza no menu e item ativo no roxo da marca. Ver `PROJECT_BRAIN/67`.
@@ -86,7 +107,9 @@ Neutros (base Mobills — claro, arejado):
    **cabeçalho da seção do cockpit**, **valor** quando for total da categoria.
 4. **Sinal de dinheiro tem precedência sobre categoria** em colunas de valor:
    entrada em `--positive`, saída em `--negative`. A categoria fica no chip/ícone da linha.
-5. **Nunca texto branco sobre as cores `-base`** sem checar contraste. Use `-strong`.
+5. **Nunca texto branco sobre as cores `-base`.** Para fundo com texto branco existe `-faixa`, que é
+   a variante medida. E **nunca `-base` como cor de texto**: para isso existe `-tinta`. A `base` fica
+   na borda, na barra e no anel de foco — onde o mínimo é 3:1, não 4,5:1.
 6. Uma tela = **uma cor dominante** (a da sua categoria) + neutros. O cockpit é a exceção:
    ele mostra as seis, uma por seção.
 

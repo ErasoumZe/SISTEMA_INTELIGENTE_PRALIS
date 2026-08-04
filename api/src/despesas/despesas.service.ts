@@ -17,6 +17,7 @@ import {
   obterCaixaParaLancamento,
   podeVerLancamentosPagos,
   exigirDiscriminacaoConferida,
+  exigirVinculoDosItensDespesa,
   itemDespesaParaDiscriminacao,
   validarReferenciasItensDespesa
 } from "../lancamentos/lancamentos.dominio.js";
@@ -74,6 +75,8 @@ export async function listarDespesas(
 export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_criar");
   validarDespesa(dados);
+  // R-135: na CRIACAO nada e legado — toda linha e nova e tem de vir do cadastro.
+  exigirVinculoDosItensDespesa(dados.itensDespesa, null);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo: *_pagar OU o legado
   // caixas_gerenciar). Sem, 403 em vez do antigo strip silencioso.
@@ -205,6 +208,11 @@ export async function atualizarDespesa(
     exigirPermissaoPagar(perfil.permissoes, "despesas", dados.dataPagamento, existente!.dataPagamento ?? null);
     // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
     exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
+    // R-135 na EDICAO, DEPOIS das travas de identidade/permissao: a linha JA GRAVADA sem vinculo
+    // continua podendo ser salva (registro historico nao pode virar refem da regra nova); linha nova
+    // sem vinculo, nao. Se viesse antes, um id inexistente responderia "falta vinculo" em vez de
+    // "registro nao encontrado".
+    exigirVinculoDosItensDespesa(dados.itensDespesa, existente!.itensDespesa);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
@@ -227,6 +235,9 @@ export async function discriminarDespesa(
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
 
     exigirDiscriminacaoConferida(dados.itensDespesa.map(itemDespesaParaDiscriminacao), existente.valorOriginal);
+    // R-135 na DISCRIMINACAO: o cabecalho pendente nao tem item gravado, entao aqui e tudo linha
+    // nova e tudo precisa vir do cadastro. Rediscriminar um registro legado preserva as linhas dele.
+    exigirVinculoDosItensDespesa(dados.itensDespesa, existente.itensDespesa);
 
     const referenciaInvalida = await validarReferenciasItensDespesa(dados.empresaId, dados.itensDespesa, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);

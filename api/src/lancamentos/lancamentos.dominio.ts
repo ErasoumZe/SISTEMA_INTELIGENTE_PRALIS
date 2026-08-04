@@ -13,7 +13,7 @@ import {
   type ItemDiscriminacao,
   type TipoDesconto
 } from "@padaria/shared/discriminacao";
-import { naoProcessavel, proibido } from "../erros.js";
+import { erroValidacao, naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -26,6 +26,7 @@ import {
   gruposMercadorias,
   gruposPatrimonio,
   gruposRetiradas,
+  patrimonioItens,
   pdvs,
   produtos,
   sociosGestores,
@@ -323,6 +324,13 @@ export async function validarReferenciasDespesa(
       return "Colaborador";
   }
 
+  // E6/R-135: o ITEM de patrimonio segue a MESMA checagem dos vizinhos. A FK garante que o id
+  // existe, nao que ele e DESTA empresa — sem esta linha um id valido da empresa B entrava numa
+  // despesa da empresa A e a descricao dela vazava no detalhe. Auditoria de 04/08/2026.
+  for (const itemId of [...new Set(dados.itensDespesa.map((item) => item.patrimonioItemId).filter(Boolean))]) {
+    if (itemId && !(await existeNaEmpresa(patrimonioItens, itemId, dados.empresaId, db))) return "Item de patrimonio";
+  }
+
   return null;
 }
 
@@ -598,7 +606,91 @@ export async function validarReferenciasItensDespesa(
   for (const colaboradorId of [...new Set(itens.map((item) => item.colaboradorId).filter(Boolean))]) {
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, empresaId, db))) return "Colaborador";
   }
+  // E6/R-135: mesma checagem de empresa do item de patrimonio na criacao/edicao — a tela de
+  // Discriminacao e outro caminho de escrita e nao pode ser a porta que o isolamento nao cobre.
+  for (const itemId of [...new Set(itens.map((item) => item.patrimonioItemId).filter(Boolean))]) {
+    if (itemId && !(await existeNaEmpresa(patrimonioItens, itemId, empresaId, db))) return "Item de patrimonio";
+  }
   return null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// R-135 no SERVIDOR — o item da discriminacao de DESPESA vem de um cadastro
+// ---------------------------------------------------------------------------------------------
+// Ate 04/08/2026 a regra existia so na TELA (o campo de descricao livre saiu do formulario). O
+// contrato zod continuava aceitando `{descricao, valor}` sem vinculo nenhum, entao qualquer cliente
+// que nao fosse aquela tela — chamada direta, script, uma versao antiga do front em cache — repunha
+// texto solto no banco e a R-135 valia so por convencao. Auditoria de 04/08/2026.
+//
+// A regra e de DESPESA, e nao de mercadoria. Nao e esquecimento: a importacao de NF-e cria item de
+// mercadoria SEM `produtoId` de proposito quando o EAN nao casa com o cadastro — e o sinal de "nao
+// cadastrado" (notas-fiscais.repository.ts). Exigir o vinculo la quebraria a importacao inteira.
+//
+// VINCULO ACEITO: `patrimonioItemId` OU `colaboradorId`, exatamente um. Sao as duas origens que a
+// tela oferece (origensDoItem em useOperacaoLancamento.ts) e as duas colunas que o repositorio
+// grava. Os dois juntos e ambiguidade, nao rigor: a linha ficaria com duas identidades e o
+// `itemVinculado()` da tela mostraria so a primeira, escondendo a outra do usuario.
+
+/** Um item so esta VINCULADO quando aponta um cadastro; grupo nao conta — grupo classifica, nao identifica. */
+function temVinculoDeCadastro(item: Pick<DespesaItemPayload, "patrimonioItemId" | "colaboradorId">): boolean {
+  return Boolean(item.patrimonioItemId) || Boolean(item.colaboradorId);
+}
+
+/** Descricao normalizada so no espaco das bordas: mudar o TEXTO de uma linha legada e criar uma nova. */
+function chaveDaLinhaLegada(descricao: string): string {
+  return descricao.trim();
+}
+
+/**
+ * Exige que toda linha NOVA da discriminacao de despesa traga um item do cadastro, sem destruir o
+ * historico ja gravado.
+ *
+ * Como o servidor distingue "linha nova" de "linha legada": nao ha id de item no payload (o
+ * repositorio apaga e reinsere a lista inteira a cada gravacao), entao a identidade vem do que ja
+ * esta PERSISTIDO. Uma linha sem vinculo so passa se o registro ja tiver, gravada, uma linha sem
+ * vinculo com a MESMA descricao — e cada linha gravada e consumida uma unica vez. Isso da, de uma
+ * vez:
+ *   - registro historico reabre e salva (a linha antiga casa com ela mesma);
+ *   - descricao livre NOVA nao entra (nao ha linha gravada para casar);
+ *   - duplicar a linha legada tambem nao entra (a segunda copia nao acha par);
+ *   - editar o TEXTO de uma linha legada nao entra — o historico se preserva, nao se reescreve.
+ *
+ * @param itensPersistidos itens hoje no banco, ou `null` na CRIACAO (onde nada e legado por definicao).
+ */
+export function exigirVinculoDosItensDespesa(
+  itens: readonly DespesaItemPayload[],
+  itensPersistidos: readonly Pick<DespesaItemPayload, "patrimonioItemId" | "colaboradorId" | "descricao">[] | null
+): void {
+  const legadasDisponiveis = new Map<string, number>();
+  for (const item of itensPersistidos ?? []) {
+    if (temVinculoDeCadastro(item)) continue;
+    const chave = chaveDaLinhaLegada(item.descricao);
+    legadasDisponiveis.set(chave, (legadasDisponiveis.get(chave) ?? 0) + 1);
+  }
+
+  itens.forEach((item, indice) => {
+    const linha = indice + 1;
+    if (item.patrimonioItemId && item.colaboradorId) {
+      throw erroValidacao(
+        `A linha ${linha} da discriminacao aponta Patrimonio E Colaborador ao mesmo tempo. O item vem de um cadastro so.`,
+        "ITEM_DISCRIMINACAO_AMBIGUO",
+        { linha }
+      );
+    }
+    if (temVinculoDeCadastro(item)) return;
+
+    const chave = chaveDaLinhaLegada(item.descricao);
+    const restantes = legadasDisponiveis.get(chave) ?? 0;
+    if (restantes > 0) {
+      legadasDisponiveis.set(chave, restantes - 1);
+      return;
+    }
+    throw erroValidacao(
+      `A linha ${linha} da discriminacao precisa de um item do cadastro (Patrimonio ou Colaborador).`,
+      "ITEM_DISCRIMINACAO_SEM_VINCULO",
+      { linha, descricao: item.descricao }
+    );
+  });
 }
 
 export async function obterCaixaParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {

@@ -149,8 +149,15 @@ describe("discriminacao: grupo de patrimonio no item (§5 item 6) integration", 
         descricao: "Despesa com item de patrimonio",
         valorOriginal: 150,
         contaOrigemId: idsTeste.contaCaixa,
+        // R-135: a linha traz o ITEM do cadastro (patrimonioItemId) alem do grupo. Sem ele o
+        // servico recusa — e o que este arquivo passou a exercitar depois da auditoria de 04/08.
         itensDespesa: [
-          { descricao: "Troca de correia", valor: 150, grupoPatrimonioId: idsTeste.grupoPatrimonioMaquinas }
+          {
+            descricao: "Troca de correia",
+            valor: 150,
+            grupoPatrimonioId: idsTeste.grupoPatrimonioMaquinas,
+            patrimonioItemId: idsTeste.patrimonioItemForno
+          }
         ]
       }
     });

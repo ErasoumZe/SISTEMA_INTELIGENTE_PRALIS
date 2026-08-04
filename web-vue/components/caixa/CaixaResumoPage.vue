@@ -304,7 +304,8 @@ function fechar() {
 /* Card NA COR da categoria (decisao do Jose, 04/08/2026 — antes era neutro de proposito, com a cor
    so na barra de 4px). Fundo em -soft, borda em -base e barra mais grossa: os cinco retangulos
    passam a ser reconheciveis de longe, que era o pedido.
-   O valor usa -strong e nao -base porque ele fica SOBRE o -soft; a base perderia contraste. */
+   O valor usa -tinta e nao -base porque ele fica SOBRE o -soft; a base perderia contraste — e a
+   tinta e a unica variante medida para os DOIS modos (auditoria de 04/08/2026). */
 .cat-card {
   position: relative;
   display: flex;
@@ -338,13 +339,13 @@ function fechar() {
   border-radius: 9px;
   /* O chip agora fica SOBRE o fundo -soft: se ele tambem fosse -soft, sumiria. Cheio, com icone
      branco, ele volta a ser o ponto de leitura do card. */
-  background: var(--cat);
+  background: var(--cat-faixa);
   color: #fff;
 }
 
 .cat-titulo {
   overflow: hidden;
-  color: var(--cat-strong);
+  color: var(--cat-tinta);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.3px;
@@ -355,7 +356,7 @@ function fechar() {
 
 .cat-valor {
   margin-top: 8px;
-  color: var(--cat-strong);
+  color: var(--cat-tinta);
   font-size: 20px;
   font-weight: 800;
   line-height: 1.1;
@@ -382,36 +383,45 @@ function fechar() {
   font-size: 26px;
 }
 
-/* Token por categoria (base = barra/chip/total; soft = fundo do chip). Fixos da main. */
+/* Token por categoria. Fixos da main.css.
+   base = borda e barra · faixa = chip (icone branco por cima) · soft = fundo do card ·
+   tinta = titulo e valor (TEXTO sobre o soft). O -strong saiu: ele foi escolhido por contraste
+   sobre o soft CLARO e, com o soft escuro, virava escuro-sobre-escuro. */
 .cat-entradas {
   --cat: var(--cat-entradas-base);
   --cat-soft: var(--cat-entradas-soft);
-  --cat-strong: var(--cat-entradas-strong);
+  --cat-tinta: var(--cat-entradas-tinta);
+  --cat-faixa: var(--cat-entradas-faixa);
 }
 .cat-transferencias {
   --cat: var(--cat-transferencias-base);
   --cat-soft: var(--cat-transferencias-soft);
-  --cat-strong: var(--cat-transferencias-strong);
+  --cat-tinta: var(--cat-transferencias-tinta);
+  --cat-faixa: var(--cat-transferencias-faixa);
 }
 .cat-despesas {
   --cat: var(--cat-despesas-base);
   --cat-soft: var(--cat-despesas-soft);
-  --cat-strong: var(--cat-despesas-strong);
+  --cat-tinta: var(--cat-despesas-tinta);
+  --cat-faixa: var(--cat-despesas-faixa);
 }
 .cat-mercadorias {
   --cat: var(--cat-mercadorias-base);
   --cat-soft: var(--cat-mercadorias-soft);
-  --cat-strong: var(--cat-mercadorias-strong);
+  --cat-tinta: var(--cat-mercadorias-tinta);
+  --cat-faixa: var(--cat-mercadorias-faixa);
 }
 .cat-retiradas {
   --cat: var(--cat-retiradas-base);
   --cat-soft: var(--cat-retiradas-soft);
-  --cat-strong: var(--cat-retiradas-strong);
+  --cat-tinta: var(--cat-retiradas-tinta);
+  --cat-faixa: var(--cat-retiradas-faixa);
 }
 .cat-resultado {
   --cat: var(--cat-resultado-base);
   --cat-soft: var(--cat-resultado-soft);
-  --cat-strong: var(--cat-resultado-strong);
+  --cat-tinta: var(--cat-resultado-tinta);
+  --cat-faixa: var(--cat-resultado-faixa);
 }
 
 /* Celular: as categorias empilham em 1 coluna (a barra de cor e o total continuam visiveis). No

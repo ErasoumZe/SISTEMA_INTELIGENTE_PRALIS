@@ -1,6 +1,16 @@
 /* Estilos do Lancamento (FOTO 2 do Rodrigo) — extraidos do <style scoped> do OperacaoLancamentoModal
    para serem compartilhados pelos blocos coesos. Classes com prefixo unico .lc-* (sem colisao). Os
-   tokens --cat/--cat-soft trocam por categoria e sao herdados do .lc-modal (via :style="catVars"). */
+   tokens --cat/--cat-soft/--cat-faixa/--cat-tinta trocam por categoria e sao herdados do .lc-modal
+   (via :style="catVars").
+
+   QUAL token de categoria usar (WCAG tem minimos diferentes por tipo de elemento):
+   - `--cat`        borda, barra, anel de foco — grafico, minimo 3:1;
+   - `--cat-tinta`  TEXTO sobre a superficie   — minimo 4,5:1 (a base reprova, ver cores-categoria);
+   - `--cat-faixa`  fundo com texto BRANCO     — variante medida;
+   - `--cat-soft`   fundo de chip/linha ativa.
+
+   Os NEUTROS eram hex cravados (#fff, #e4e8ef, #1f2733...) e o modal inteiro ficava branco no modo
+   escuro. Agora leem --cx-*, como manda a camada de tokens. Auditoria de 04/08/2026. */
 /* Coluna flex: FAIXA (fixa) · CORPO (rola) · ACOES (fixo). Antes o modal inteiro era o scroller e o
    rodape era `sticky` dentro dele — o conteudo passava por baixo dos botoes, e o
    `margin-bottom: -20px` do rodape ainda comia o padding inferior. Tirar o rodape do fluxo que rola
@@ -8,8 +18,8 @@
 .lc-modal {
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 0.5px solid #e4e8ef;
+  background: var(--cx-surface);
+  border: 0.5px solid var(--cx-line);
   border-radius: 16px;
   /* Nunca ultrapassa a viewport: quem rola e o .lc-corpo. */
   max-height: calc(100dvh - 48px);
@@ -65,8 +75,17 @@
 .lc-x:hover {
   background: rgb(255 255 255 / 22%);
 }
-/* Alternador de categoria (3 botoes do topo). Cada botao carrega a SUA cor (--cat-btn), entao os
-   tres aparecem em vermelho/verde/azul; o ativo fica preenchido e o modal inteiro segue --cat. */
+/* Alternador de categoria (3 botoes do topo). Ele fica DENTRO da faixa colorida, e nao sobre a
+   superficie — por isso e o unico bloco do modal que NAO segue claro/escuro: a faixa e a mesma cor
+   saturada nos dois modos, entao o alternador vive na regua dela, em branco.
+   (Antes ele usava -soft como preenchimento. Enquanto o -soft era um quase-branco fixo isso passava
+   por acidente; quando o -soft ganhou tratamento escuro, o rotulo lavou. Medido em 04/08/2026.)
+
+   INATIVO nao tem preenchimento de proposito: branco sobre a faixa pura da 4,53–7,10, e QUALQUER
+   veu branco por baixo derruba para 3,2–4,3. A afordancia fica na borda, que e elemento
+   nao-textual (minimo 3:1). Por isso o hover mexe na BORDA, nunca no fundo.
+   ATIVO e a pilula branca com o rotulo em -faixa — a variante medida justamente para o par
+   branco x cor, que aqui so vale ao contrario (4,53–7,10 tambem). */
 .lc-cats {
   display: flex;
   gap: 6px;
@@ -80,10 +99,10 @@
   gap: 6px;
   min-height: 36px;
   padding: 0 8px;
-  border: 1px solid #e4e8ef;
+  border: 1px solid rgb(255 255 255 / 45%);
   border-radius: 10px;
-  background: #fff;
-  color: #64748b;
+  background: none;
+  color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -92,17 +111,16 @@
     border-color 0.15s ease,
     color 0.15s ease;
 }
-.lc-cat:hover {
-  border-color: var(--cat-btn);
-  color: var(--cat-btn);
+.lc-cat:hover:not(.ativa) {
+  border-color: #fff;
 }
 .lc-cat.ativa {
-  border-color: var(--cat-btn);
-  background: var(--cat-btn-soft);
-  color: var(--cat-btn);
+  border-color: #fff;
+  background: #fff;
+  color: var(--cat-btn-faixa);
 }
 .lc-cat:focus-visible {
-  outline: 2px solid var(--cat-btn);
+  outline: 2px solid #fff;
   outline-offset: 2px;
 }
 /* Celular: o rotulo some e ficam so os 3 icones coloridos (nao quebra a linha). */
@@ -121,14 +139,14 @@
 }
 .lc-cifra {
   font-size: 16px;
-  color: var(--cat);
+  color: var(--cat-tinta);
 }
 .lc-valor {
   width: 100%;
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-size: 32px;
   font-weight: 500;
   letter-spacing: -0.5px;
@@ -153,15 +171,18 @@
   display: block;
   margin-bottom: 10px;
 }
+/* Aviso de atencao. Usa a escala de ENTRADAS porque o ambar dela E a cor de atencao deste sistema
+   (nao existe --cx-warning) — e, por vir da escala, ja acompanha o modo escuro em vez de ser mais
+   um trio de hex claros cravados. */
 .lc-aviso-contas {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid #fcd9a8;
+  border: 1px solid color-mix(in srgb, var(--cat-entradas-base) 35%, transparent);
   border-radius: 8px;
-  background: #fff8ec;
-  color: #92600a;
+  background: var(--cat-entradas-soft);
+  color: var(--cat-entradas-tinta);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -172,7 +193,7 @@
   display: block;
   margin-bottom: 3px;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--cx-ink-soft);
 }
 /* Explica um campo travado (ex.: Conta do operador de caixa, R-121). Campo cinza sem motivo vira
    chamado de suporte. */
@@ -181,34 +202,34 @@
   margin-top: 3px;
   font-size: 10px;
   font-style: italic;
-  color: #94a3b8;
+  color: var(--cx-ink-soft);
 }
 .lc-input {
   width: 100%;
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid var(--cx-line);
   border-radius: 8px;
   padding: 9px 10px;
   font-size: 13px;
-  color: #1f2733;
-  background: #fff;
+  color: var(--cx-ink);
+  background: var(--cx-surface);
   outline: none;
 }
 .lc-input:focus {
   border-color: var(--cat);
 }
 .lc-input-ro {
-  background: #f4f6fa;
-  color: #64748b;
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
 }
 .lc-input:disabled {
-  background: #f4f6fa;
-  color: #cbd2dc;
+  background: var(--cx-surface-sunken);
+  color: color-mix(in srgb, var(--cx-ink) 32%, transparent);
 }
 /* Campo travado por REGRA (Conta do operador de caixa, R-121): cinza como o desabilitado, mas com
    o texto legivel — a pessoa precisa LER de qual conta a saida vai sair. */
 .lc-input[readonly] {
-  background: #f4f6fa;
-  color: #64748b;
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
   cursor: not-allowed;
 }
 .lc-data-row {
@@ -220,18 +241,18 @@
   flex: 1;
 }
 .lc-pill {
-  border: 0.5px solid #cbd2dc;
+  border: 0.5px solid var(--cx-line);
   background: none;
   padding: 8px 10px;
   border-radius: 999px;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 12px;
   cursor: pointer;
 }
 .lc-pill.ativo {
   background: var(--cat-soft);
   border-color: transparent;
-  color: var(--cat);
+  color: var(--cat-tinta);
 }
 .lc-credor-tipos {
   display: flex;
@@ -240,18 +261,18 @@
   margin-bottom: 10px;
 }
 .lc-chip {
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid var(--cx-line);
   border-radius: 999px;
   padding: 6px 14px;
-  background: #fff;
-  color: #64748b;
+  background: var(--cx-surface);
+  color: var(--cx-ink-soft);
   font-size: 12px;
   cursor: pointer;
 }
 .lc-chip.ativo {
   border-color: transparent;
   background: var(--cat-soft);
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-weight: 500;
 }
 .lc-pagamento .lc-toggle {
@@ -259,18 +280,18 @@
 }
 .lc-sn {
   width: 100%;
-  border: 0.5px solid #cbd2dc;
+  border: 0.5px solid var(--cx-line);
   border-radius: 8px;
   padding: 9px 0;
-  background: #fff;
-  color: #64748b;
+  background: var(--cx-surface);
+  color: var(--cx-ink-soft);
   font-size: 13px;
   cursor: pointer;
 }
 .lc-sn.sim {
   border-color: transparent;
   background: var(--cat-soft);
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-weight: 500;
 }
 .lc-foto {
@@ -281,7 +302,7 @@
 .lc-file {
   width: 100%;
   font-size: 11px;
-  color: #64748b;
+  color: var(--cx-ink-soft);
 }
 .lc-foto-ok {
   display: inline-flex;
@@ -289,7 +310,7 @@
   gap: 3px;
   margin-top: 2px;
   font-size: 11px;
-  color: var(--cat);
+  color: var(--cat-tinta);
 }
 .lc-linha {
   display: flex;
@@ -299,12 +320,12 @@
   padding: 8px 0;
   border: 0;
   background: none;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 13px;
   cursor: pointer;
 }
 .lc-linha-top {
-  border-top: 0.5px solid #e4e8ef;
+  border-top: 0.5px solid var(--cx-line);
 }
 .lc-flex {
   flex: 1;
@@ -325,18 +346,18 @@
   max-width: 70px;
 }
 .lc-item-del {
-  color: #94a3b8;
+  color: var(--cx-ink-soft);
   cursor: pointer;
 }
 .lc-add {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid var(--cx-line);
   border-radius: 8px;
   padding: 6px 12px;
   background: none;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 12px;
   cursor: pointer;
 }
@@ -346,9 +367,9 @@
 .lc-recorrencia {
   margin-bottom: 8px;
   padding: 10px 12px;
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid var(--cx-line);
   border-radius: 10px;
-  background: #fbfcfe;
+  background: var(--cx-surface-sunken);
 }
 .lc-dias {
   display: flex;
@@ -358,25 +379,25 @@
 }
 .lc-dia {
   min-width: 38px;
-  border: 0.5px solid #cbd2dc;
+  border: 0.5px solid var(--cx-line);
   border-radius: 8px;
   padding: 6px 0;
-  background: #fff;
-  color: #64748b;
+  background: var(--cx-surface);
+  color: var(--cx-ink-soft);
   font-size: 12px;
   cursor: pointer;
 }
 .lc-dia.ativo {
   border-color: transparent;
   background: var(--cat-soft);
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-weight: 500;
 }
 /* Nota do bloco: a recorrencia CRIA lancamentos, entao a tela diz o que vai acontecer antes de
    acontecer — 12 despesas aparecendo sem aviso e o tipo de surpresa que derruba a confianca. */
 .lc-recorrencia-nota {
   margin: 10px 0 0;
-  color: #64748b;
+  color: var(--cx-ink-soft);
   font-size: 11.5px;
   line-height: 1.45;
 }
@@ -387,22 +408,24 @@
   justify-content: flex-end;
   gap: 14px;
   padding: 12px 22px;
-  background: #fff;
-  border-top: 0.5px solid #e4e8ef;
+  background: var(--cx-surface);
+  border-top: 0.5px solid var(--cx-line);
 }
 .lc-salvar-nova {
   border: 0;
   background: none;
-  color: var(--cat);
+  color: var(--cat-tinta);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
 }
+/* Botao primario: texto BRANCO sobre a cor, entao usa --cat-faixa e nao --cat — a base reprova
+   4,5:1 em mercadorias (3,30). E a mesma razao da faixa do cabecalho, e o mesmo token. */
 .lc-salvar {
   border: 0;
   border-radius: 8px;
   padding: 9px 22px;
-  background: var(--cat);
+  background: var(--cat-faixa);
   color: #fff;
   font-size: 13px;
   font-weight: 500;

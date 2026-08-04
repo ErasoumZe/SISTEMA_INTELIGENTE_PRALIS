@@ -1516,31 +1516,37 @@ body {
   --cat-entradas-soft: #fbf6eb;
   --cat-entradas-strong: #a26e03;
   --cat-entradas-faixa: #9e6c03;
+  --cat-entradas-tinta: #7d5602;
 
   --cat-transferencias-base: #ea580c;
   --cat-transferencias-soft: #fdf2ec;
   --cat-transferencias-strong: #bb460a;
   --cat-transferencias-faixa: #cc4d0a;
+  --cat-transferencias-tinta: #913707;
 
   --cat-despesas-base: #dc2626;
   --cat-despesas-soft: #fceeee;
   --cat-despesas-strong: #b01e1e;
   --cat-despesas-faixa: #dc2626;
+  --cat-despesas-tinta: #881818;
 
   --cat-mercadorias-base: #16a34a;
   --cat-mercadorias-soft: #ecf8f1;
   --cat-mercadorias-strong: #12823b;
   --cat-mercadorias-faixa: #12873d;
+  --cat-mercadorias-tinta: #0e652e;
 
   --cat-retiradas-base: #2563eb;
   --cat-retiradas-soft: #eef3fd;
   --cat-retiradas-strong: #1e4fbc;
   --cat-retiradas-faixa: #2563eb;
+  --cat-retiradas-tinta: #173d92;
 
   --cat-resultado-base: #6d28d9;
   --cat-resultado-soft: #f3eefc;
   --cat-resultado-strong: #5720ae;
   --cat-resultado-faixa: #6d28d9;
+  --cat-resultado-tinta: #441987;
 
   /* ---- ALIAS 3/4: neutros V1 (Mobills/Material) ----
      Consumidos por TesourariaCockpit, CardTotalCategoria e LinhaTransacao. */
@@ -1559,6 +1565,43 @@ body {
      tom que passa, e acompanhando o modo escuro. */
   --positive: var(--cx-positive);
   --negative: var(--cx-negative);
+}
+
+/* ---- MODO ESCURO das categorias (auditoria de 04/08/2026) ----
+   Os `-base` e `-faixa` NAO mudam: sao a identidade da categoria e sao usados como PREENCHIMENTO
+   com texto branco por cima, onde clarear reprovaria o contraste. O que muda sao os dois tokens que
+   encostam na superficie:
+
+   `-soft` era um quase-branco (#fbf6eb, #fceeee...) calculado para pousar sobre papel branco. Sobre
+   a superficie escura (#191f26) ele vira um bloco branco aceso no meio do modal. Aqui ele passa a
+   ser uma tinta TRANSLUCIDA da propria base: 18% sobre o que estiver atras. Translucido, e nao um
+   hex novo, porque o mesmo token pinta a faixa, o chip e a linha da tabela — superficies com
+   elevacoes diferentes, e um hex fixo so acertaria uma delas.
+
+   `-tinta` CLAREIA (62% da base sobre branco). Medido: a base como texto sobre a superficie escura
+   da 2,34 em resultado e 3,21 em retiradas — reprova AA com folga. Mesmo raciocinio do
+   --cx-brand-text la em cima, que existe exatamente por isso.
+
+   Os hex e as porcentagens daqui sao verificados por `utils/cores-categoria.test.ts`, igual aos do
+   bloco claro: a fonte unica vale para os dois modos ou nao vale para nenhum. */
+:root[data-theme="dark"] {
+  --cat-entradas-soft: color-mix(in srgb, var(--cat-entradas-base) 18%, transparent);
+  --cat-entradas-tinta: #deb663;
+
+  --cat-transferencias-soft: color-mix(in srgb, var(--cat-transferencias-base) 18%, transparent);
+  --cat-transferencias-tinta: #f29768;
+
+  --cat-despesas-soft: color-mix(in srgb, var(--cat-despesas-base) 18%, transparent);
+  --cat-despesas-tinta: #e97878;
+
+  --cat-mercadorias-soft: color-mix(in srgb, var(--cat-mercadorias-base) 18%, transparent);
+  --cat-mercadorias-tinta: #6fc68f;
+
+  --cat-retiradas-soft: color-mix(in srgb, var(--cat-retiradas-base) 18%, transparent);
+  --cat-retiradas-tinta: #789ef3;
+
+  --cat-resultado-soft: color-mix(in srgb, var(--cat-resultado-base) 18%, transparent);
+  --cat-resultado-tinta: #a47ae7;
 }
 
 /* Tipografia: Noto Sans no corpo (vence o Montserrat do bloco LAB por ordem de fonte).

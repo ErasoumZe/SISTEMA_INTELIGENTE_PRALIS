@@ -30,21 +30,83 @@ export type EscalaCategoria = {
    * mantém as outras vivas, em vez de rebaixar todas para igualar a pior.
    */
   faixa: string;
+  /**
+   * A categoria usada como TEXTO sobre a superfície (número calculado, chip ativo, rótulo). NÃO é a
+   * `base`: medida sobre branco, a base reprova em entradas (2,94), mercadorias (3,02) e
+   * transferências (3,24) — o texto colorido da tabela de discriminação nunca passou em AA.
+   * Fórmula: 62% da base sobre PRETO.
+   */
+  tinta: string;
+  /**
+   * A mesma tinta no MODO ESCURO, onde escurecer piora: sobre a superfície escura a base cai para
+   * 2,34 (resultado) e 3,21 (retiradas). Aqui a base CLAREIA — mesmo raciocínio do `--cx-brand-text`
+   * na camada de tokens. Fórmula: 62% da base sobre BRANCO.
+   */
+  tintaEscura: string;
 };
+
+/**
+ * Quanto da base entra no `-soft` do MODO ESCURO. No claro o soft é 8% sobre branco (um hex fixo);
+ * no escuro ele é uma tinta TRANSLÚCIDA sobre o que estiver atrás, porque o mesmo token pinta faixa,
+ * chip e linha de tabela — superfícies com elevações diferentes. 8% sumiria no fundo escuro.
+ */
+export const MISTURA_SOFT_ESCURO = 18;
 
 export const CORES_CATEGORIA: Record<Categoria, EscalaCategoria> = {
   // contraste do branco sobre `faixa`, medido: 4,57
-  entradas: { base: "#ca8a04", soft: "#fbf6eb", strong: "#a26e03", faixa: "#9e6c03" },
+  entradas: {
+    base: "#ca8a04",
+    soft: "#fbf6eb",
+    strong: "#a26e03",
+    faixa: "#9e6c03",
+    tinta: "#7d5602",
+    tintaEscura: "#deb663"
+  },
   // 4,53
-  transferencias: { base: "#ea580c", soft: "#fdf2ec", strong: "#bb460a", faixa: "#cc4d0a" },
+  transferencias: {
+    base: "#ea580c",
+    soft: "#fdf2ec",
+    strong: "#bb460a",
+    faixa: "#cc4d0a",
+    tinta: "#913707",
+    tintaEscura: "#f29768"
+  },
   // 4,83 — a base já passa
-  despesas: { base: "#dc2626", soft: "#fceeee", strong: "#b01e1e", faixa: "#dc2626" },
+  despesas: {
+    base: "#dc2626",
+    soft: "#fceeee",
+    strong: "#b01e1e",
+    faixa: "#dc2626",
+    tinta: "#881818",
+    tintaEscura: "#e97878"
+  },
   // 4,61
-  mercadorias: { base: "#16a34a", soft: "#ecf8f1", strong: "#12823b", faixa: "#12873d" },
+  mercadorias: {
+    base: "#16a34a",
+    soft: "#ecf8f1",
+    strong: "#12823b",
+    faixa: "#12873d",
+    tinta: "#0e652e",
+    tintaEscura: "#6fc68f"
+  },
   // 5,17 — a base já passa
-  retiradas: { base: "#2563eb", soft: "#eef3fd", strong: "#1e4fbc", faixa: "#2563eb" },
+  retiradas: {
+    base: "#2563eb",
+    soft: "#eef3fd",
+    strong: "#1e4fbc",
+    faixa: "#2563eb",
+    tinta: "#173d92",
+    tintaEscura: "#789ef3"
+  },
   // 7,10 — a base já passa
-  resultado: { base: "#6d28d9", soft: "#f3eefc", strong: "#5720ae", faixa: "#6d28d9" }
+  resultado: {
+    base: "#6d28d9",
+    soft: "#f3eefc",
+    strong: "#5720ae",
+    faixa: "#6d28d9",
+    tinta: "#441987",
+    tintaEscura: "#a47ae7"
+  }
 };
 
 /**

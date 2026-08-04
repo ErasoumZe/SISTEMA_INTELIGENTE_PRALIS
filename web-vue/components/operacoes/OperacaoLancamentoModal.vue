@@ -56,10 +56,7 @@ const {
             type="button"
             class="lc-cat"
             :class="{ ativa: cat === opcao.id }"
-            :style="{
-              '--cat-btn': `var(--cat-${opcao.token}-base)`,
-              '--cat-btn-soft': `var(--cat-${opcao.token}-soft)`
-            }"
+            :style="{ '--cat-btn-faixa': `var(--cat-${opcao.token}-faixa)` }"
             :aria-pressed="cat === opcao.id"
             @click="trocarCategoria(opcao.id)"
           >

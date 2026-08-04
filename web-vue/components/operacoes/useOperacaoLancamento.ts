@@ -104,7 +104,10 @@ export function useOperacaoLancamento() {
     "--cat-soft": `var(--cat-${cfg.value.token}-soft)`,
     // Fundo da FAIXA do cabecalho, onde o texto e branco: a base reprova em 4,5:1 nas categorias
     // claras. Ver cores-categoria.ts.
-    "--cat-faixa": `var(--cat-${cfg.value.token}-faixa)`
+    "--cat-faixa": `var(--cat-${cfg.value.token}-faixa)`,
+    // A categoria como TEXTO (numero calculado, chip ativo, rotulo). Separada de --cat porque a
+    // base reprova em AA como tinta nos DOIS modos, e no escuro ela precisa clarear, nao escurecer.
+    "--cat-tinta": `var(--cat-${cfg.value.token}-tinta)`
   }));
 
   // --- 3 botoes do TOPO: alternam a categoria SEM fechar o modal (PROJECT_BRAIN/17 §4). A cor do
