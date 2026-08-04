@@ -21,4 +21,3 @@ export const clientePayloadSchema = z.object({
 });
 
 export type ClientePayload = z.infer<typeof clientePayloadSchema>;
-

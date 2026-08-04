@@ -15,9 +15,11 @@ export async function registrarRotasProdutosMaisVendidos(app: FastifyInstance): 
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
 
-      return paginadoDeArray(await obterProdutosMaisVendidos(query.empresaId, query.caixaId), query.page, query.pageSize);
+      return paginadoDeArray(
+        await obterProdutosMaisVendidos(query.empresaId, query.caixaId),
+        query.page,
+        query.pageSize
+      );
     }
   );
 }
-
-

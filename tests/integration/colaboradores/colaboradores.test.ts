@@ -32,7 +32,12 @@ describe("colaboradores integration", () => {
       method: "POST",
       url: "/api/colaboradores",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Colaborador criado por integracao", setorId: idsTeste.setorA, cargoId }
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Colaborador criado por integracao",
+        setorId: idsTeste.setorA,
+        cargoId
+      }
     });
     expect(colaboradorResposta.statusCode).toBe(201);
     const colaboradorId = json<{ data: { id: string } }>(colaboradorResposta).data.id;
@@ -197,9 +202,18 @@ describe("colaboradores integration", () => {
     expect(colaborador.statusCode).toBe(204);
     expect(cargo.statusCode).toBe(204);
     expect(statusVinculo.statusCode).toBe(204);
-    await expect(consultarUm("select id from colaboradores where id = $1 and nome = $2", [idsTeste.colaboradorGerente, "Gerente Integracao Editado"])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from cargos where id = $1 and nome = $2", [idsTeste.cargoGerente, "Cargo gerente editado"])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from colaboradores_cargos where id = $1 and ativo = false", [vinculoId])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from colaboradores where id = $1 and nome = $2", [
+        idsTeste.colaboradorGerente,
+        "Gerente Integracao Editado"
+      ])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from cargos where id = $1 and nome = $2", [idsTeste.cargoGerente, "Cargo gerente editado"])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from colaboradores_cargos where id = $1 and ativo = false", [vinculoId])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_Retornar403_Quando_CriarJornadaOuFaltaEmEmpresaNaoPermitida", async () => {
@@ -253,8 +267,18 @@ describe("colaboradores integration", () => {
           {
             diaDaSemana: "TERCA",
             faixas: [
-              { horaEntrada: "08:00", cargaHorariaDiariaEmMinutos: 240, intervaloMinutos: 0, colaboradorCargoId: idsTeste.colaboradorCargoAdmin },
-              { horaEntrada: "09:00", cargaHorariaDiariaEmMinutos: 240, intervaloMinutos: 0, colaboradorCargoId: idsTeste.colaboradorCargoAdmin }
+              {
+                horaEntrada: "08:00",
+                cargaHorariaDiariaEmMinutos: 240,
+                intervaloMinutos: 0,
+                colaboradorCargoId: idsTeste.colaboradorCargoAdmin
+              },
+              {
+                horaEntrada: "09:00",
+                cargaHorariaDiariaEmMinutos: 240,
+                intervaloMinutos: 0,
+                colaboradorCargoId: idsTeste.colaboradorCargoAdmin
+              }
             ]
           }
         ]
@@ -325,7 +349,10 @@ describe("colaboradores importacao/exportacao integration", () => {
       "delete from colaboradores_cargos where colaborador_id in (select id from colaboradores where empresa_id = $1 and importado_de = $2)",
       [idsTeste.empresaB, idsTeste.empresaA]
     );
-    await executarSql("delete from colaboradores where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from colaboradores where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -336,7 +363,12 @@ describe("colaboradores importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from colaboradores where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from colaboradores where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarColaboradorParaEmpresaPermitida", async () => {
@@ -359,7 +391,12 @@ describe("colaboradores importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from colaboradores where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.colaboradorGerente])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from colaboradores where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.colaboradorGerente
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

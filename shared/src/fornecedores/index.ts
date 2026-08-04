@@ -24,4 +24,3 @@ export const fornecedorParamsSchema = apiIdParamsSchema;
 export type FornecedorPayload = z.infer<typeof fornecedorPayloadSchema>;
 export type ImportarFornecedoresPayload = ImportarEmpresaPayload;
 export type ExportarFornecedorPayload = ExportarEmpresaPayload;
-

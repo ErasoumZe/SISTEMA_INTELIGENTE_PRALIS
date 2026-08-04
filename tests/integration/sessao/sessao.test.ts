@@ -66,4 +66,3 @@ describe("sessao integration", () => {
     assertProblem(resposta, 403, "PROFILE_NOT_CONFIGURED");
   });
 });
-

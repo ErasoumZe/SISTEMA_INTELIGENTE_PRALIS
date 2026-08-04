@@ -1,9 +1,6 @@
 import type { SocioGestorPayload } from "@padaria/shared/socios-gestores";
 import { filtrarPorEmpresas } from "../auth/empresa.js";
-import {
-  listarSociosGestoresRepository,
-  salvarSocioGestorRepository
-} from "./socios-gestores.repository.js";
+import { listarSociosGestoresRepository, salvarSocioGestorRepository } from "./socios-gestores.repository.js";
 
 export async function listarSociosGestores(escopoDados: string[], somenteAtivos: boolean) {
   const itens = filtrarPorEmpresas(await listarSociosGestoresRepository(), escopoDados);

@@ -23,7 +23,11 @@ describe("fornecedores integration", () => {
       method: "POST",
       url: "/api/fornecedores",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Fornecedor criado por integracao", documento: "11.111.111/0001-11" }
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Fornecedor criado por integracao",
+        documento: "11.111.111/0001-11"
+      }
     });
     expect(criado.statusCode).toBe(201);
     const fornecedorId = json<{ data: { id: string } }>(criado).data.id;
@@ -35,7 +39,12 @@ describe("fornecedores integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Fornecedor editado por integracao", documento: "11111111000111" }
     });
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from fornecedores where id = $1 and nome = $2", [fornecedorId, "Fornecedor editado por integracao"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from fornecedores where id = $1 and nome = $2", [
+        fornecedorId,
+        "Fornecedor editado por integracao"
+      ])
+    ).resolves.toBeTruthy();
   });
 });
 
@@ -53,7 +62,10 @@ describe("fornecedores importacao/exportacao integration", () => {
   });
 
   it("Deve_ImportarFornecedoresEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from fornecedores where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from fornecedores where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -64,7 +76,12 @@ describe("fornecedores importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from fornecedores where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from fornecedores where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarFornecedorParaEmpresaPermitida", async () => {
@@ -83,7 +100,12 @@ describe("fornecedores importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from fornecedores where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.fornecedor])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from fornecedores where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.fornecedor
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

@@ -86,4 +86,3 @@ describe("vendas comprovantes integration", () => {
     assertProblem(resposta, 400);
   });
 });
-

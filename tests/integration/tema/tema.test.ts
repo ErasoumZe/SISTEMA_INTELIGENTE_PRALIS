@@ -84,4 +84,3 @@ describe("tema integration", () => {
     assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 });
-

@@ -43,6 +43,11 @@ describe("formas de pagamento integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Pix editado por integracao" }
     });
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from formas_pagamento where id = $1 and nome = $2", [formaId, "Pix editado por integracao"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from formas_pagamento where id = $1 and nome = $2", [
+        formaId,
+        "Pix editado por integracao"
+      ])
+    ).resolves.toBeTruthy();
   });
 });
