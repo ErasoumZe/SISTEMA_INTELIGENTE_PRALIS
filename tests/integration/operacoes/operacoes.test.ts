@@ -190,31 +190,6 @@ describe("operacoes integration", () => {
         itensVenda: [{ descricaoProduto: "Produto", quantidade: 1, valorUnitario: 5, valorTotal: 5 }]
       }
     });
-    const despesaSemGrupo = await contexto.app.inject({
-      method: "POST",
-      url: "/api/despesas",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        dataReferencia: "2026-06-30",
-        dataVencimento: "2026-06-30",
-        descricao: "Despesa invalida",
-        valorOriginal: 1
-      }
-    });
-    const mercadoriaSemGrupo = await contexto.app.inject({
-      method: "POST",
-      url: "/api/mercadorias",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        dataReferencia: "2026-06-30",
-        dataVencimento: "2026-06-30",
-        descricao: "Mercadoria invalida",
-        valorOriginal: 1,
-        fornecedorId: idsTeste.fornecedor
-      }
-    });
     const transferenciaMesmaConta = await contexto.app.inject({
       method: "POST",
       url: "/api/transferencias",
@@ -243,13 +218,10 @@ describe("operacoes integration", () => {
       }
     });
 
-    for (const resposta of [
-      vendaSomaInvalida,
-      despesaSemGrupo,
-      mercadoriaSemGrupo,
-      transferenciaMesmaConta,
-      transferenciaSemLacre
-    ]) {
+    // R-133 (04/08/2026): despesa e mercadoria SEM grupo e SEM itens deixaram de ser invalidas — o
+    // campo Grupo saiu do modal e discriminar continua opcional. Os dois casos foram para o
+    // `texto-credor-data-pagamento`, agora esperando 201. O que sobra aqui segue invalido.
+    for (const resposta of [vendaSomaInvalida, transferenciaMesmaConta, transferenciaSemLacre]) {
       assertProblem(resposta, 400);
     }
   });
