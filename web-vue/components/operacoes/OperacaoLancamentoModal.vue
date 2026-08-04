@@ -36,41 +36,51 @@ const {
 <template>
   <v-dialog v-model="aberto" :max-width="discriminando && cat === 'mercadoria' ? 920 : 560">
     <div class="lc-modal" :style="catVars">
-      <div class="lc-head">
-        <span class="lc-ic"
-          ><v-icon size="19">{{ cfg.icone }}</v-icon></span
-        >
-        <span class="lc-titulo"> {{ operacaoEditandoId ? "Editar" : "Nova" }} {{ cat }} </span>
-        <v-icon class="lc-x" size="19" @click="aberto = false">mdi-close</v-icon>
+      <!-- FAIXA do cabecalho na cor da categoria (E2). Sangra ate a borda do modal pelos margins
+           negativos, do mesmo jeito que .lc-acoes ja fazia no rodape. Repinta sozinha ao trocar de
+           categoria porque --cat-faixa vem de catVars, que deriva de `cat`. -->
+      <div class="lc-faixa">
+        <div class="lc-head">
+          <span class="lc-ic"
+            ><v-icon size="19">{{ cfg.icone }}</v-icon></span
+          >
+          <span class="lc-titulo"> {{ operacaoEditandoId ? "Editar" : "Nova" }} {{ cat }} </span>
+          <v-icon class="lc-x" size="19" @click="aberto = false">mdi-close</v-icon>
+        </div>
+
+        <!-- 3 botoes no TOPO: troca a categoria sem fechar; a cor do modal acompanha (--cat). -->
+        <div v-if="podeTrocarCategoria" class="lc-cats" role="group" aria-label="Categoria do lancamento">
+          <button
+            v-for="opcao in CATEGORIAS_LANCAMENTO"
+            :key="opcao.id"
+            type="button"
+            class="lc-cat"
+            :class="{ ativa: cat === opcao.id }"
+            :style="{
+              '--cat-btn': `var(--cat-${opcao.token}-base)`,
+              '--cat-btn-soft': `var(--cat-${opcao.token}-soft)`
+            }"
+            :aria-pressed="cat === opcao.id"
+            @click="trocarCategoria(opcao.id)"
+          >
+            <v-icon size="16">{{ opcao.icone }}</v-icon>
+            <span>{{ opcao.titulo }}</span>
+          </button>
+        </div>
       </div>
 
-      <!-- 3 botoes no TOPO: troca a categoria sem fechar; a cor do modal acompanha (--cat). -->
-      <div v-if="podeTrocarCategoria" class="lc-cats" role="group" aria-label="Categoria do lancamento">
-        <button
-          v-for="opcao in CATEGORIAS_LANCAMENTO"
-          :key="opcao.id"
-          type="button"
-          class="lc-cat"
-          :class="{ ativa: cat === opcao.id }"
-          :style="{
-            '--cat-btn': `var(--cat-${opcao.token}-base)`,
-            '--cat-btn-soft': `var(--cat-${opcao.token}-soft)`
-          }"
-          :aria-pressed="cat === opcao.id"
-          @click="trocarCategoria(opcao.id)"
-        >
-          <v-icon size="16">{{ opcao.icone }}</v-icon>
-          <span>{{ opcao.titulo }}</span>
-        </button>
+      <!-- CORPO rolavel. O rodape fica FORA dele (irmao, nao filho): era `position: sticky` dentro do
+           mesmo scroller, e ai o conteudo passava por baixo dos botoes por construcao — nenhum
+           padding compensa isso, porque o proprio rodape era o ultimo elemento do fluxo. -->
+      <div class="lc-corpo">
+        <OperacaoLancamentoValores />
+        <OperacaoLancamentoDatas />
+        <OperacaoLancamentoCredor />
+        <OperacaoLancamentoPagamento />
+        <OperacaoLancamentoFotos />
+        <OperacaoLancamentoDiscriminacao />
+        <OperacaoLancamentoRecorrencia />
       </div>
-
-      <OperacaoLancamentoValores />
-      <OperacaoLancamentoDatas />
-      <OperacaoLancamentoCredor />
-      <OperacaoLancamentoPagamento />
-      <OperacaoLancamentoFotos />
-      <OperacaoLancamentoDiscriminacao />
-      <OperacaoLancamentoRecorrencia />
 
       <div class="lc-acoes">
         <button type="button" class="lc-salvar-nova" :disabled="salvandoOperacao" @click="salvarOperacao">

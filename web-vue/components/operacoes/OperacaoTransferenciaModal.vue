@@ -181,174 +181,188 @@ const hojeISO = computed(() => dataISO(0));
 <template>
   <v-dialog v-model="aberto" max-width="470">
     <div class="tr-modal">
-      <div class="tr-head">
-        <span class="tr-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
-        <span class="tr-titulo">{{ operacaoEditandoId ? "Editar transferência" : "Nova transferência" }}</span>
-        <v-icon class="tr-x" size="19" @click="aberto = false">mdi-close</v-icon>
+      <!-- FAIXA do cabecalho na cor da categoria (E2), igual aos modais de Lancamento. Sangra ate a
+           borda pelo margin negativo que anula o padding do .tr-modal. Laranja fixo: a transferencia
+           nao troca de categoria. -->
+      <div class="tr-faixa">
+        <div class="tr-head">
+          <span class="tr-ic"><v-icon size="19">mdi-swap-horizontal</v-icon></span>
+          <span class="tr-titulo">{{ operacaoEditandoId ? "Editar transferência" : "Nova transferência" }}</span>
+          <v-icon class="tr-x" size="19" @click="aberto = false">mdi-close</v-icon>
+        </div>
       </div>
 
-      <!-- Bloco C · Resumo — no TOPO: e a resposta de "o que isto faz com o meu dinheiro", e o
+      <!-- CORPO rolavel. O rodape fica FORA dele: era sticky dentro do mesmo scroller, e o conteudo
+           passava por baixo dos botoes por construcao. -->
+      <div class="tr-corpo">
+        <!-- Bloco C · Resumo — no TOPO: e a resposta de "o que isto faz com o meu dinheiro", e o
            usuario nao deveria ter que rolar ate o fim para ve-la. Valores sao os mesmos computed
            de sempre; nada e recalculado nem persistido. -->
-      <div class="tr-cards">
-        <div class="tr-card">
-          <span class="tr-card-lbl">Saída (−)</span>
-          <b class="tr-card-val">{{ valorResumo(totalSaida) }}</b>
-        </div>
-        <div class="tr-card">
-          <span class="tr-card-lbl">Entrada (+)</span>
-          <b class="tr-card-val">{{ valorResumo(totalEntrada) }}</b>
-        </div>
-        <div class="tr-card tr-card-saldo">
-          <span class="tr-card-lbl">Saldo (±)</span>
-          <b class="tr-card-val">{{ valorResumo(saldo) }}</b>
-        </div>
-        <button
-          type="button"
-          class="tr-olho"
-          :aria-label="resumoVisivel ? 'Ocultar valores' : 'Mostrar valores'"
-          :aria-pressed="!resumoVisivel"
-          @click="resumoVisivel = !resumoVisivel"
-        >
-          <v-icon size="18">{{ resumoVisivel ? "mdi-eye-outline" : "mdi-eye-off-outline" }}</v-icon>
-        </button>
-      </div>
-
-      <!-- Bloco A · Transf. Saída -->
-      <div class="tr-secao">Transf. Saída</div>
-
-      <div class="tr-hero">
-        <span class="tr-cifra">R$</span>
-        <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
-      </div>
-
-      <div class="tr-dois">
-        <label class="tr-campo">
-          <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
-          <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
-        </label>
-        <label class="tr-campo">
-          <span class="tr-campo-lbl">Data Lanç</span>
-          <div class="tr-data-row">
-            <button
-              type="button"
-              class="tr-pill"
-              :class="{ ativo: form.dataReferencia === hojeISO }"
-              @click="form.dataReferencia = hojeISO"
-            >
-              Hoje
-            </button>
-            <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
+        <div class="tr-cards">
+          <div class="tr-card">
+            <span class="tr-card-lbl">Saída (−)</span>
+            <b class="tr-card-val">{{ valorResumo(totalSaida) }}</b>
           </div>
-        </label>
-      </div>
-
-      <label class="tr-check">
-        <input v-model="agendamento" type="checkbox" />
-        <span>Agendamento</span>
-      </label>
-      <label v-if="agendamento" class="tr-campo tr-indent">
-        <span class="tr-campo-lbl">Data Agendamento</span>
-        <input v-model="form.agendadaPara" type="datetime-local" class="tr-input" />
-      </label>
-
-      <label class="tr-campo">
-        <span class="tr-campo-lbl">Data Recebimento</span>
-        <input :value="form.dataRecebimento" class="tr-input tr-input-ro" readonly placeholder="—" />
-        <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
-      </label>
-
-      <!-- Sem contas vinculadas ao usuario (contas_usuarios): aviso claro no lugar de selects vazios. -->
-      <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
-        <v-icon icon="mdi-alert-circle-outline" size="18" />
-        <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
-      </div>
-      <div v-else class="tr-rota" :class="{ 'tr-rota-lista': multiploDestino }">
-        <label class="tr-campo">
-          <span class="tr-campo-lbl">Origem / Saída</span>
-          <select v-model="form.contaOrigemId" class="tr-input">
-            <option value="">—</option>
-            <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
-          </select>
-        </label>
-        <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
-        <!-- <div>, nao <label>: com Multiplo Destino este campo contem <label> por conta, e label
-             aninhado rouba o clique das checkboxes de dentro. -->
-        <div class="tr-campo">
-          <span class="tr-campo-lbl">Destino / Entrada</span>
-          <select v-if="!multiploDestino" v-model="form.contaDestinoId" class="tr-input" aria-label="Destino / Entrada">
-            <option value="">—</option>
-            <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
-          </select>
-          <!-- R-030: candidatas, todas iguais. A primeira que confirmar com o lacre leva o valor
-               INTEIRO — por isso a lista so marca contas e nao tem valor por destino. -->
-          <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
-            <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
-              <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
-              <span>{{ c.nome }}</span>
-            </label>
+          <div class="tr-card">
+            <span class="tr-card-lbl">Entrada (+)</span>
+            <b class="tr-card-val">{{ valorResumo(totalEntrada) }}</b>
           </div>
-          <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
-        </div>
-      </div>
-
-      <TransferenciaRetornoCampos v-model="retornoAberto">
-        <!-- FOTO 1: tres checkboxes de mesmo peso, uma embaixo da outra. A anotacao do Rodrigo ao
-             lado da terceira — "Se ☑ abre esse campo!" — vale para as tres: nenhum campo aparece
-             antes da checkbox ser marcada. A terceira vem do proprio TransferenciaRetornoCampos. -->
-        <template #controles>
-          <label class="tr-check">
-            <input v-model="multiploDestino" type="checkbox" />
-            <span>Múltiplo Destino</span>
-          </label>
-          <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
-               desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
-
-          <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
-               FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
-          <label class="tr-check">
-            <input v-model="tempoConfirmacaoAberto" type="checkbox" />
-            <span>Tempo de confirmação</span>
-          </label>
-          <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
-            <span class="tr-campo-lbl">Tempo de confirmação</span>
-            <select v-model="form.tempoConfirmacao" class="tr-input">
-              <option value="5min">5 minutos</option>
-              <option value="10min">10 minutos</option>
-              <option value="30min">30 minutos</option>
-              <option value="1h">1 hora</option>
-              <option value="1dia">1 dia</option>
-              <option value="10dias">10 dias</option>
-              <option value="30dias">30 dias</option>
-            </select>
-          </label>
-        </template>
-
-        <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
-        <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
-        <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
+          <div class="tr-card tr-card-saldo">
+            <span class="tr-card-lbl">Saldo (±)</span>
+            <b class="tr-card-val">{{ valorResumo(saldo) }}</b>
+          </div>
           <button
             type="button"
-            class="tr-sinal"
-            :class="{ neg: l.sinal === '-' }"
-            @click="l.sinal = l.sinal === '+' ? '-' : '+'"
+            class="tr-olho"
+            :aria-label="resumoVisivel ? 'Ocultar valores' : 'Mostrar valores'"
+            :aria-pressed="!resumoVisivel"
+            @click="resumoVisivel = !resumoVisivel"
           >
-            {{ l.sinal }}
+            <v-icon size="18">{{ resumoVisivel ? "mdi-eye-outline" : "mdi-eye-off-outline" }}</v-icon>
           </button>
-          <CampoDinheiro v-model="l.valor" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
-          <input v-model="l.lacre" class="tr-input" placeholder="N° Lacre / Doc" />
-          <v-icon size="18" class="tr-item-del" @click="removerRetorno(i)">mdi-close</v-icon>
         </div>
-        <button type="button" class="tr-add" @click="addRetorno">
-          <v-icon size="15">mdi-plus</v-icon> Adicionar linha
-        </button>
-      </TransferenciaRetornoCampos>
 
-      <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
-      <label class="tr-campo">
-        <span class="tr-campo-lbl">Observação</span>
-        <input v-model="form.observacao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
-      </label>
+        <!-- Bloco A · Transf. Saída -->
+        <div class="tr-secao">Transf. Saída</div>
+
+        <div class="tr-hero">
+          <span class="tr-cifra">R$</span>
+          <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
+        </div>
+
+        <div class="tr-dois">
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
+            <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+          </label>
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">Data Lanç</span>
+            <div class="tr-data-row">
+              <button
+                type="button"
+                class="tr-pill"
+                :class="{ ativo: form.dataReferencia === hojeISO }"
+                @click="form.dataReferencia = hojeISO"
+              >
+                Hoje
+              </button>
+              <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
+            </div>
+          </label>
+        </div>
+
+        <label class="tr-check">
+          <input v-model="agendamento" type="checkbox" />
+          <span>Agendamento</span>
+        </label>
+        <label v-if="agendamento" class="tr-campo tr-indent">
+          <span class="tr-campo-lbl">Data Agendamento</span>
+          <input v-model="form.agendadaPara" type="datetime-local" class="tr-input" />
+        </label>
+
+        <label class="tr-campo">
+          <span class="tr-campo-lbl">Data Recebimento</span>
+          <input :value="form.dataRecebimento" class="tr-input tr-input-ro" readonly placeholder="—" />
+          <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
+        </label>
+
+        <!-- Sem contas vinculadas ao usuario (contas_usuarios): aviso claro no lugar de selects vazios. -->
+        <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
+          <v-icon icon="mdi-alert-circle-outline" size="18" />
+          <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
+        </div>
+        <div v-else class="tr-rota" :class="{ 'tr-rota-lista': multiploDestino }">
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">Origem / Saída</span>
+            <select v-model="form.contaOrigemId" class="tr-input">
+              <option value="">—</option>
+              <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
+            </select>
+          </label>
+          <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
+          <!-- <div>, nao <label>: com Multiplo Destino este campo contem <label> por conta, e label
+             aninhado rouba o clique das checkboxes de dentro. -->
+          <div class="tr-campo">
+            <span class="tr-campo-lbl">Destino / Entrada</span>
+            <select
+              v-if="!multiploDestino"
+              v-model="form.contaDestinoId"
+              class="tr-input"
+              aria-label="Destino / Entrada"
+            >
+              <option value="">—</option>
+              <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
+            </select>
+            <!-- R-030: candidatas, todas iguais. A primeira que confirmar com o lacre leva o valor
+               INTEIRO — por isso a lista so marca contas e nao tem valor por destino. -->
+            <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
+              <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
+                <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
+                <span>{{ c.nome }}</span>
+              </label>
+            </div>
+            <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
+          </div>
+        </div>
+
+        <TransferenciaRetornoCampos v-model="retornoAberto">
+          <!-- FOTO 1: tres checkboxes de mesmo peso, uma embaixo da outra. A anotacao do Rodrigo ao
+             lado da terceira — "Se ☑ abre esse campo!" — vale para as tres: nenhum campo aparece
+             antes da checkbox ser marcada. A terceira vem do proprio TransferenciaRetornoCampos. -->
+          <template #controles>
+            <label class="tr-check">
+              <input v-model="multiploDestino" type="checkbox" />
+              <span>Múltiplo Destino</span>
+            </label>
+            <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
+               desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
+
+            <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
+               FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
+            <label class="tr-check">
+              <input v-model="tempoConfirmacaoAberto" type="checkbox" />
+              <span>Tempo de confirmação</span>
+            </label>
+            <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
+              <span class="tr-campo-lbl">Tempo de confirmação</span>
+              <select v-model="form.tempoConfirmacao" class="tr-input">
+                <option value="5min">5 minutos</option>
+                <option value="10min">10 minutos</option>
+                <option value="30min">30 minutos</option>
+                <option value="1h">1 hora</option>
+                <option value="1dia">1 dia</option>
+                <option value="10dias">10 dias</option>
+                <option value="30dias">30 dias</option>
+              </select>
+            </label>
+          </template>
+
+          <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
+          <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
+          <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
+            <button
+              type="button"
+              class="tr-sinal"
+              :class="{ neg: l.sinal === '-' }"
+              @click="l.sinal = l.sinal === '+' ? '-' : '+'"
+            >
+              {{ l.sinal }}
+            </button>
+            <CampoDinheiro v-model="l.valor" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
+            <input v-model="l.lacre" class="tr-input" placeholder="N° Lacre / Doc" />
+            <v-icon size="18" class="tr-item-del" @click="removerRetorno(i)">mdi-close</v-icon>
+          </div>
+          <button type="button" class="tr-add" @click="addRetorno">
+            <v-icon size="15">mdi-plus</v-icon> Adicionar linha
+          </button>
+        </TransferenciaRetornoCampos>
+
+        <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
+        <label class="tr-campo">
+          <span class="tr-campo-lbl">Observação</span>
+          <input v-model="form.observacao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
+        </label>
+      </div>
 
       <div class="tr-acoes">
         <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="salvarTransferenciaCompleta">
@@ -365,20 +379,34 @@ const hojeISO = computed(() => dataISO(0));
 <style scoped>
 /* FOTO 1 do Rodrigo. Laranja = token de categoria "transferencias". */
 .tr-modal {
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 0.5px solid #e4e8ef;
   border-radius: 16px;
-  padding: 20px 22px;
-  /* Nunca ultrapassa a viewport: rola por dentro em qualquer largura (rodape fixo abaixo). Sem
-     isto, com todas as secoes abertas o "Salvar" saía para fora da tela. */
+  /* Nunca ultrapassa a viewport: quem rola e o .tr-corpo. */
   max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+.tr-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  padding: 0 22px var(--cx-sp-4);
+}
+/* Usa --cat-transferencias-faixa (nao -base): o texto por cima e BRANCO e a base da 3,56:1, que
+   reprova. A faixa e a variante medida para 4,5:1. Ver web-vue/utils/cores-categoria.ts. */
+.tr-faixa {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+  padding: var(--cx-sp-4) var(--cx-sp-5);
+  background: var(--cat-transferencias-faixa, #cc4d0a);
+  border-radius: 16px 16px 0 0;
 }
 .tr-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
 }
 .tr-ic {
   display: flex;
@@ -387,18 +415,23 @@ const hojeISO = computed(() => dataISO(0));
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--cat-transferencias-soft, #fff1e8);
-  color: var(--cat-transferencias-base, #c2410c);
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
 }
 .tr-titulo {
   flex: 1;
   font-size: 16px;
-  font-weight: 500;
-  color: #1f2733;
+  font-weight: 600;
+  color: #fff;
 }
 .tr-x {
-  color: #94a3b8;
+  color: #fff;
   cursor: pointer;
+  border-radius: var(--cx-r-sm);
+  transition: background var(--cx-dur-1) var(--cx-ease);
+}
+.tr-x:hover {
+  background: rgb(255 255 255 / 22%);
 }
 .tr-secao {
   margin: 6px 0 8px;
@@ -672,15 +705,11 @@ const hojeISO = computed(() => dataISO(0));
   color: var(--cat-despesas-base, #c0392b);
 }
 .tr-acoes {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 14px;
-  /* margens negativas = rodape "full-bleed" ate as bordas do modal (padding 20/22). */
-  margin: 12px -22px -20px;
   padding: 12px 22px;
   background: #fff;
   border-top: 0.5px solid #e4e8ef;
