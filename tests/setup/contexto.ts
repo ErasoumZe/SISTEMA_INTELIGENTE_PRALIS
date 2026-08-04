@@ -79,6 +79,11 @@ export const idsTeste = {
   // empresa B existe para provar que o escopo por empresa vale tambem para esta origem.
   grupoPatrimonioMaquinas: "11111111-1111-4111-8111-111111112101",
   grupoPatrimonioOutraEmpresa: "33333333-3333-4333-8333-333333332101",
+  // E6/R-135: o ITEM de patrimonio (nao o grupo) e o que a discriminacao de despesa exige. O item
+  // da empresa B existe para provar que a FK sozinha NAO isola por empresa — era o furo da
+  // auditoria de 04/08/2026.
+  patrimonioItemForno: "11111111-1111-4111-8111-111111112102",
+  patrimonioItemOutraEmpresa: "33333333-3333-4333-8333-333333332102",
   // Recorrencia (D3): lanca despesa/retirada SEM operar caixa e SEM a permissao de recorrencia.
   // E a fixture do 403 isolado — os perfis *Ciclo tem caixa_operar e esbarrariam antes, no
   // "abra um caixa", provando a regra errada.

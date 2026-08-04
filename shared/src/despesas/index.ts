@@ -31,7 +31,11 @@ export const despesaItemSchema = z
     colaboradorId: uuidSchema.optional().nullable(),
     // E6: o item vem de um CADASTRO — Patrimonio ou Colaborador — como a mercadoria ja vinha de
     // produtos. Continua `optional().nullable()` no contrato porque registro ANTIGO nao tem vinculo
-    // e precisa poder ser reaberto e salvo; quem exige o vinculo em lancamento novo e o servico.
+    // e precisa poder ser reaberto e salvo.
+    //
+    // Quem exige o vinculo e o SERVICO, nao o zod: a obrigatoriedade depende de a linha ser nova ou
+    // ja estar gravada, e o schema nao enxerga o banco. Ver `exigirVinculoDosItensDespesa`
+    // (lancamentos.dominio.ts) — e a R-135 no PROJECT_BRAIN/19.
     patrimonioItemId: uuidSchema.optional().nullable(),
     descricao: z.string().min(1),
     // Quantidade/unitario chegaram com os 3 niveis de desconto (§5). O item de despesa continua

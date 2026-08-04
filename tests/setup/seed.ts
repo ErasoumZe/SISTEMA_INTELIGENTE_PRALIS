@@ -21,6 +21,7 @@ import {
   integracoesCamposConfig,
   integracoesChaves,
   integracoesVinculos,
+  patrimonioItens,
   pdvs,
   perfisUsuarios,
   permissoesTabela,
@@ -383,6 +384,22 @@ export async function aplicarSeedIntegracao() {
   await banco.insert(gruposPatrimonio).values([
     { id: idsTeste.grupoPatrimonioMaquinas, empresaId: idsTeste.empresaA, sig: "UTS", nome: "Utensilios" },
     { id: idsTeste.grupoPatrimonioOutraEmpresa, empresaId: idsTeste.empresaB, sig: "UTS", nome: "Utensilios" }
+  ]);
+  // Itens de patrimonio (E6/R-135): a discriminacao de despesa exige um ITEM, nao um grupo. O da
+  // empresa B e a fixture do teste de isolamento — id valido, empresa errada.
+  await banco.insert(patrimonioItens).values([
+    {
+      id: idsTeste.patrimonioItemForno,
+      empresaId: idsTeste.empresaA,
+      grupoPatrimonioId: idsTeste.grupoPatrimonioMaquinas,
+      nome: "Forno de lastro"
+    },
+    {
+      id: idsTeste.patrimonioItemOutraEmpresa,
+      empresaId: idsTeste.empresaB,
+      grupoPatrimonioId: idsTeste.grupoPatrimonioOutraEmpresa,
+      nome: "Forno da outra empresa"
+    }
   ]);
   await banco
     .insert(gruposRetiradas)
