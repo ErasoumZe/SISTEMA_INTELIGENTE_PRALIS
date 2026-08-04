@@ -24,6 +24,16 @@ ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# `shared` PRECISA ser compilado antes do generate, igual o api/Dockerfile.prod ja faz. O
+# `.dockerignore` exclui `**/dist`, entao `shared/dist` nao existe na imagem — e o `vue-tsc` (o
+# nuxt.config liga `typeCheck: true`) resolve os SUBCAMINHOS de @padaria/shared pelo `exports.types`
+# do package.json, que aponta para `./dist/<sub>/index.d.ts`. Sem esse passo, todo
+# `@padaria/shared/notificacoes|recorrencia|api` vira TS2307 e o generate sai com codigo 2.
+#
+# Na maquina de quem desenvolve isso nao aparece: `npm run lint` roda `build:libs` e deixa o
+# `shared/dist` no disco, entao o `nuxt typecheck` local se apoia num resto de build anterior. So a
+# imagem limpa conta a verdade. Derrubou o deploy de 04/08/2026.
+RUN npm run build --workspace @padaria/shared
 RUN npm run generate --workspace @padaria/web-vue
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
