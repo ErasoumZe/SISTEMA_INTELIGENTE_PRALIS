@@ -54,9 +54,8 @@ import {
 import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 export function validarMercadoria(dados: MercadoriaPayload): void {
-  if (!dados.grupoMercadoriaId && !dados.itensMercadoria.length) {
-    throw new Error("Grupo ou itens de mercadoria obrigatorios");
-  }
+  // GRUPO e ITENS sao OPCIONAIS (decisao do Jose, 04/08/2026) — mesma razao da despesa: o campo
+  // Grupo saiu do modal e vive so na discriminacao, que continua opcional. Ver validarDespesa.
   // D5 (§5): a soma da discriminacao tem de bater com o Valor do lancamento. Nao bateu, NAO SALVA —
   // e a resposta diz ONDE diverge (422 com detalhe), em vez de um 400 seco.
   if (dados.itensMercadoria.length)

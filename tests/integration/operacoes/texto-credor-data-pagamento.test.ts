@@ -97,6 +97,45 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
     expect(itens.find((item) => item.id === id)?.descricao).toBe("Aparece na lista");
   });
 
+  // Grupo e itens deixaram de ser exigidos em 04/08/2026: o campo Grupo saiu do modal de despesa e
+  // mercadoria (vive so na discriminacao) e discriminar continua OPCIONAL. Antes o servidor recusava
+  // com "Grupo ou itens da despesa obrigatorios" — o que, sem o campo na tela, deixaria o lancamento
+  // simples impossivel. Este teste guarda a decisao contra um "conserto" futuro da validacao.
+  it("despesa salva sem grupo e sem itens", async () => {
+    const semGrupo = await contexto.app.inject({
+      method: "POST",
+      url: "/api/despesas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: HOJE,
+        dataVencimento: HOJE,
+        observacao: "Despesa simples, sem classificacao",
+        valorOriginal: 30,
+        contaOrigemId: idsTeste.contaBanco
+      }
+    });
+    expect(semGrupo.statusCode, semGrupo.body).toBe(201);
+  });
+
+  it("mercadoria salva sem grupo e sem itens (fornecedor continua obrigatorio)", async () => {
+    const semGrupo = await contexto.app.inject({
+      method: "POST",
+      url: "/api/mercadorias",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: HOJE,
+        dataVencimento: HOJE,
+        observacao: "Mercadoria simples, sem classificacao",
+        valorOriginal: 40,
+        fornecedorId: idsTeste.fornecedor,
+        contaOrigemId: idsTeste.contaBanco
+      }
+    });
+    expect(semGrupo.statusCode, semGrupo.body).toBe(201);
+  });
+
   // A transferencia entrou na R-127 junto com as tres saidas: o contrato dela tambem afrouxou
   // `descricao`, entao e o servidor que precisa exigir o texto — senao passaria movimento sem frase
   // nenhuma, que e o contrario do que a regra pediu.

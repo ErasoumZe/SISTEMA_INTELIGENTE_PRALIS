@@ -4,6 +4,7 @@
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
 const {
+  cat,
   credoresOferecidos,
   escolherTipoCredor,
   rotuloCredor,
@@ -42,9 +43,12 @@ const {
     </select>
   </label>
 
-  <!-- Grupo + Conta (nao estao no desenho, mas o backend precisa para salvar) -->
+  <!-- Conta (nao esta no desenho, mas o backend precisa para salvar).
+       O GRUPO saiu daqui em despesa e mercadoria (decisao do Jose, 04/08/2026): nessas duas o grupo
+       e do ITEM e vive na discriminacao, onde vem preenchido do cadastro. Continua no cabecalho da
+       RETIRADA, que nao discrimina (R-050) e portanto nao tem outro lugar para ele. -->
   <div class="lc-dois">
-    <label class="lc-campo">
+    <label v-if="cat === 'retirada'" class="lc-campo">
       <span class="lc-campo-lbl">Grupo</span>
       <select v-model="grupoId" class="lc-input">
         <option value="">—</option>

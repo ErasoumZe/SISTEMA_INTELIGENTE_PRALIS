@@ -46,7 +46,14 @@ import {
 } from "../lancamentos/lancamentos.recorrencia.js";
 
 export function validarDespesa(dados: DespesaPayload): void {
-  if (!dados.grupoDespesaId && !dados.itensDespesa.length) throw new Error("Grupo ou itens da despesa obrigatorios");
+  // GRUPO e ITENS sao OPCIONAIS (decisao do Jose, 04/08/2026). Antes exigia "grupo ou itens", mas o
+  // campo Grupo saiu do modal — ele agora vive so na discriminacao, e a discriminacao continua
+  // opcional. Exigir aqui deixaria o lancamento simples impossivel de salvar, com uma mensagem
+  // apontando um campo que nao existe mais na tela.
+  //
+  // Consequencia aceita e registrada: lancamento sem grupo e sem itens fica SEM classificacao no
+  // cockpit por categoria e no DRE. Ele conta no total e no caixa normalmente; o que ele nao tem e
+  // grupo. A coluna ja era nullable no banco e o contrato ja era `optional().nullable()`.
   // D5 (§5): a soma da discriminacao tem de bater com o Valor do lancamento. Nao bateu, NAO SALVA —
   // e a resposta diz ONDE diverge (422 com detalhe), em vez de um 400 seco.
   if (dados.itensDespesa.length)
