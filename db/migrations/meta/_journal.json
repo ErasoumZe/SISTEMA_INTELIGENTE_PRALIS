@@ -204,6 +204,13 @@
       "when": 1785772900000,
       "tag": "0028_retirada_credor_fornecedor",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785859200000,
+      "tag": "0029_item_de_despesa_vem_do_cadastro",
+      "breakpoints": true
     }
   ]
 }

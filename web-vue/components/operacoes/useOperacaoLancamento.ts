@@ -15,12 +15,28 @@ import {
   DIAS_RECORRENCIA,
   FREQUENCIAS_RECORRENCIA,
   grupoItemEscolhido,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
   opcaoGrupoItem,
   type ItemDespesaForm,
   type ItemMercadoriaForm
 } from "~/utils/operacoes";
 
 export type Cat = "despesa" | "mercadoria" | "retirada";
+
+// O que a tabela de discriminacao precisa saber de um item, seja de despesa ou de mercadoria. As
+// duas formas ja tem estes campos — tipar pela FORMA e o que permite uma tabela so, sem ramo por
+// categoria dentro do template (E6).
+type ItemDiscriminado = {
+  descricao: string;
+  quantidade: string;
+  valorUnitario: string;
+  descontoTipo: string;
+  descontoValor: string;
+  descontoTotalTipo: string;
+  descontoTotalValor: string;
+  grupoPatrimonioId: string;
+};
 type TipoCredor = "fornecedor" | "colaborador" | "socio_gestor";
 
 export function useOperacaoLancamento() {
@@ -85,7 +101,10 @@ export function useOperacaoLancamento() {
   const cfg = computed(() => CFG[cat.value]);
   const catVars = computed(() => ({
     "--cat": `var(--cat-${cfg.value.token}-base)`,
-    "--cat-soft": `var(--cat-${cfg.value.token}-soft)`
+    "--cat-soft": `var(--cat-${cfg.value.token}-soft)`,
+    // Fundo da FAIXA do cabecalho, onde o texto e branco: a base reprova em 4,5:1 nas categorias
+    // claras. Ver cores-categoria.ts.
+    "--cat-faixa": `var(--cat-${cfg.value.token}-faixa)`
   }));
 
   // --- 3 botoes do TOPO: alternam a categoria SEM fechar o modal (PROJECT_BRAIN/17 §4). A cor do
@@ -332,22 +351,101 @@ export function useOperacaoLancamento() {
   watch(descontoValorReais, (v) => {
     form.value.valorDesconto = v ? v.toFixed(2) : "";
   });
-  function totalLinha(it: ItemMercadoriaForm) {
+  function totalLinha(it: ItemDiscriminado) {
     return Number(it.quantidade || 0) * Number(it.valorUnitario || 0);
   }
   function aplicarDesconto(valor: number, tipo: string, informado: string) {
     const numero = Number(informado || 0);
     return Math.max(0, valor - (tipo === "percentual" ? (valor * numero) / 100 : tipo === "valor" ? numero : 0));
   }
-  function unitComDesc(it: ItemMercadoriaForm) {
+  function unitComDesc(it: ItemDiscriminado) {
     return aplicarDesconto(Number(it.valorUnitario || 0), it.descontoTipo, it.descontoValor);
   }
-  function totalLinhaComDesc(it: ItemMercadoriaForm) {
+  function totalLinhaComDesc(it: ItemDiscriminado) {
     const aposUnitario = unitComDesc(it) * Number(it.quantidade || 0);
     return aplicarDesconto(aposUnitario, it.descontoTotalTipo, it.descontoTotalValor) * (1 - descontoFrac.value);
   }
   function brn(n: number) {
     return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // ===== E6: uma tabela de discriminacao para despesa E mercadoria ==============================
+  // O mecanismo e o mesmo nas duas — escolher um item de um CADASTRO preenche descricao e grupo. O
+  // que muda e a ORIGEM: mercadoria vem de Produtos; despesa vem de Patrimonio e Colaboradores.
+  // Decisao do Jose (04/08/2026). A descricao livre saiu: o item passa a ser sempre do cadastro.
+  // Retirada NAO discrimina (R-050) e nao entra aqui.
+
+  /** A lista de itens da categoria corrente. `splice`/`push` mutam o array original. */
+  const itensDaDiscriminacao = computed<(ItemDespesaForm | ItemMercadoriaForm)[]>(() =>
+    cat.value === "despesa" ? itensDespesa.value : itensMercadoria.value
+  );
+
+  /** Blocos do select de item (viram <optgroup>). Prefixo no valor diz de qual cadastro veio. */
+  const origensDoItem = computed(() =>
+    cat.value === "mercadoria"
+      ? [{ rotulo: "Produtos", opcoes: opcoesEmpresa.value.produtos, prefixo: "prod" }]
+      : [
+          { rotulo: "Patrimônio", opcoes: opcoesEmpresa.value.patrimonioItens, prefixo: "pat" },
+          { rotulo: "Colaboradores", opcoes: opcoesEmpresa.value.colaboradores, prefixo: "col" }
+        ]
+  );
+
+  function rotuloDaOpcao(opcao: { nome?: string; descricao?: string }) {
+    return opcao.descricao ?? opcao.nome ?? "";
+  }
+
+  /** Valor atual do select de item — vazio no registro ANTIGO, que nao tem vinculo. */
+  function itemVinculado(item: ItemDespesaForm | ItemMercadoriaForm) {
+    if ("produtoId" in item) return item.produtoId ? `prod:${item.produtoId}` : "";
+    if (item.patrimonioItemId) return `pat:${item.patrimonioItemId}`;
+    return item.colaboradorId ? `col:${item.colaboradorId}` : "";
+  }
+
+  /**
+   * Escolher o item preenche DESCRICAO e GRUPO sozinho — e essa a razao de o campo livre ter saido.
+   * Colaborador nao tem grupo no cadastro: preenche so a descricao e deixa o Grupo para a pessoa.
+   */
+  function escolherItemVinculado(item: ItemDespesaForm | ItemMercadoriaForm, valor: string) {
+    const [prefixo, id] = valor.split(":");
+    if ("produtoId" in item) {
+      item.produtoId = prefixo === "prod" ? (id ?? "") : "";
+      const produto = opcoesEmpresa.value.produtos.find((o) => o.id === id);
+      if (produto) item.descricao = rotuloDaOpcao(produto);
+      return;
+    }
+    item.patrimonioItemId = prefixo === "pat" ? (id ?? "") : "";
+    item.colaboradorId = prefixo === "col" ? (id ?? "") : "";
+    const origem = (prefixo === "pat" ? opcoesEmpresa.value.patrimonioItens : opcoesEmpresa.value.colaboradores).find(
+      (o) => o.id === id
+    );
+    if (!origem) return;
+    item.descricao = rotuloDaOpcao(origem);
+    // O item de patrimonio ja carrega o grupo (a coluna e NOT NULL no cadastro): o Grupo da linha
+    // vem de graca, sem consulta extra.
+    if (prefixo === "pat" && origem.grupoPatrimonioId) definirGrupoItemDespesa(item, `pat:${origem.grupoPatrimonioId}`);
+  }
+
+  /** Grupo da linha, roteado para o campo da categoria. */
+  function grupoDoItem(item: ItemDespesaForm | ItemMercadoriaForm) {
+    return "produtoId" in item ? grupoItemMercadoria(item) : grupoItemDespesa(item);
+  }
+  function definirGrupoDoItem(item: ItemDespesaForm | ItemMercadoriaForm, valor: string) {
+    if ("produtoId" in item) definirGrupoItemMercadoria(item, valor);
+    else definirGrupoItemDespesa(item, valor);
+  }
+
+  /** Grupos proprios da categoria (o bloco "Patrimonio" e acrescentado no template). */
+  const gruposDoItem = computed(() =>
+    cat.value === "mercadoria" ? opcoesEmpresa.value.gruposMercadorias : opcoesEmpresa.value.gruposDespesas
+  );
+
+  function novoItemDaDiscriminacao() {
+    if (cat.value === "mercadoria") novoItemMercadoria();
+    else novoItemDespesa();
+  }
+  function removerItemDaDiscriminacao(indice: number) {
+    const lista = cat.value === "mercadoria" ? itensMercadoria.value : itensDespesa.value;
+    if (lista.length > 1) lista.splice(indice, 1);
   }
   // Mercadoria: a Descrição vem do cadastro de produto (preenche produtoId + descrição).
   function escolherProduto(item: ItemMercadoriaForm, produtoId: string) {
@@ -355,35 +453,15 @@ export function useOperacaoLancamento() {
     const p = opcoesEmpresa.value.produtos.find((x) => x.id === produtoId);
     if (p?.descricao) item.descricao = p.descricao;
   }
+  // Mesma razao do novoItemDespesa: a fabrica e o unico lugar que precisa saber os campos do item.
   function novoItemMercadoria() {
-    itensMercadoria.value.push({
-      descricao: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      descontoTotalTipo: "",
-      descontoTotalValor: "",
-      valorTotal: "",
-      produtoId: "",
-      grupoMercadoriaId: "",
-      grupoPatrimonioId: "",
-      unidadeMedidaId: ""
-    });
+    itensMercadoria.value.push(itemMercadoriaVazio());
   }
+  // Usa a FABRICA em vez de um literal proprio. O literal daqui foi exatamente o caso que o
+  // comentario de `itemDespesaVazio` descreve: campo novo entra no tipo e na fabrica, e a copia
+  // solta fica para tras. Aconteceu com `patrimonioItemId`/`colaboradorId` (E6).
   function novoItemDespesa() {
-    itensDespesa.value.push({
-      descricao: "",
-      valor: "",
-      grupoDespesaId: "",
-      grupoPatrimonioId: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      descontoTotalTipo: "",
-      descontoTotalValor: ""
-    });
+    itensDespesa.value.push(itemDespesaVazio());
   }
 
   // --- Campo Grupo do ITEM (§5, item 6): grupo do cadastro proprio OU do patrimonio ------------
@@ -472,6 +550,16 @@ export function useOperacaoLancamento() {
     totalLinhaComDesc,
     brn,
     escolherProduto,
+    itensDaDiscriminacao,
+    origensDoItem,
+    rotuloDaOpcao,
+    itemVinculado,
+    escolherItemVinculado,
+    grupoDoItem,
+    definirGrupoDoItem,
+    gruposDoItem,
+    novoItemDaDiscriminacao,
+    removerItemDaDiscriminacao,
     novoItemMercadoria,
     novoItemDespesa,
     // campo Grupo do item (duas origens)

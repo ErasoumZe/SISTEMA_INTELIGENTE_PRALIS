@@ -47,6 +47,9 @@ function linhasItensDespesa(
       grupoDespesaId: grupoPatrimonioId ? null : (item.grupoDespesaId ?? grupoDespesaIdHeader ?? null),
       grupoPatrimonioId,
       colaboradorId: item.colaboradorId ?? colaboradorIdHeader ?? null,
+      // E6: de qual item de patrimonio veio a linha. Sem isto o vinculo escolhido na tela nao
+      // chegaria ao banco e a descricao voltaria a ser texto solto.
+      patrimonioItemId: item.patrimonioItemId ?? null,
       descricao: item.descricao,
       quantidade: String(quantidade),
       valorUnitario: String(item.valorUnitario ?? (quantidade > 0 ? item.valor / quantidade : 0)),
@@ -235,6 +238,9 @@ export async function buscarDespesaDetalheRepository(
       grupoDespesaId: despesasItens.grupoDespesaId,
       grupoPatrimonioId: despesasItens.grupoPatrimonioId,
       colaboradorId: despesasItens.colaboradorId,
+      // Sem isto o item reabriria SEM o vinculo e a tela cairia no "sem item escolhido" — o mesmo
+      // erro que a retirada antiga teve com o credor (R-128).
+      patrimonioItemId: despesasItens.patrimonioItemId,
       descricao: despesasItens.descricao,
       quantidade: despesasItens.quantidade,
       valorUnitario: despesasItens.valorUnitario,

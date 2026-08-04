@@ -20,6 +20,24 @@ export async function listarPatrimonio(escopoDados: string[]) {
   };
 }
 
+/**
+ * Lista ENXUTA para o campo de item da discriminacao de despesa (E6): so id, nome e o grupo, que e
+ * o que a tela precisa para preencher descricao e Grupo sozinha.
+ *
+ * Existe separada de `listarPatrimonio` por causa de PERMISSAO, nao de desempenho. Com a saida da
+ * descricao livre, quem lanca despesa PRECISA desta lista — e exigir `cadastro_patrimonio_visualizar`
+ * daria a um operador de caixa o cadastro inteiro de patrimonio (incluindo a tela no menu) so para
+ * ele poder discriminar. Aqui ele ve o minimo, e nada mais.
+ */
+export async function listarOpcoesItensPatrimonio(escopoDados: string[]) {
+  const itens = await listarPatrimonioItensRepository();
+  return filtrarPorEmpresas(itens, escopoDados).map((item) => ({
+    id: item.id,
+    nome: item.nome,
+    grupoPatrimonioId: item.grupoPatrimonioId
+  }));
+}
+
 export async function salvarGrupoPatrimonio(id: string | null, body: DadosExternos) {
   const dados = grupoPatrimonioPayloadSchema.parse(body);
   return salvarGrupoPatrimonioRepository({ ...(id ? { id } : {}), ...dados });

@@ -29,6 +29,10 @@ export const despesaItemSchema = z
     // Grupo vindo do cadastro de PATRIMONIO (§5). Exclusivo com grupoDespesaId — ver o refine.
     grupoPatrimonioId: uuidSchema.optional().nullable(),
     colaboradorId: uuidSchema.optional().nullable(),
+    // E6: o item vem de um CADASTRO — Patrimonio ou Colaborador — como a mercadoria ja vinha de
+    // produtos. Continua `optional().nullable()` no contrato porque registro ANTIGO nao tem vinculo
+    // e precisa poder ser reaberto e salvo; quem exige o vinculo em lancamento novo e o servico.
+    patrimonioItemId: uuidSchema.optional().nullable(),
     descricao: z.string().min(1),
     // Quantidade/unitario chegaram com os 3 niveis de desconto (§5). O item de despesa continua
     // podendo ser so "descricao + valor": sem quantidade, o servidor assume 1 x valor.
