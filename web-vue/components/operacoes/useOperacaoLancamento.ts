@@ -138,7 +138,7 @@ export function useOperacaoLancamento() {
   const rotuloCredor: Record<TipoCredor, string> = {
     fornecedor: "Fornecedor",
     colaborador: "Colaborador",
-    socio_gestor: "Sócio / gestor"
+    socio_gestor: "Sócio ou Gestor"
   };
   const tipoCredor = ref<TipoCredor>("fornecedor");
   // O tipo do registro em edicao. `credorTipo` e a resposta boa, mas o historico tem lancamento com

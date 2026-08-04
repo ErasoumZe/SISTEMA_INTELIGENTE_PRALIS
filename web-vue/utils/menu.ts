@@ -12,7 +12,7 @@ export type CategoriaMenu = { id: string; titulo: string; icone: string; ids: re
 // a de cada tela — cargo sem nenhuma das tres (ou Caixa com o caixa fechado) nao ve a categoria.
 export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   id: "lancamentos",
-  titulo: "Lancamentos",
+  titulo: "Lançamentos",
   icone: "mdi-format-list-checks",
   ids: ["despesas", "mercadorias", "retiradas"]
 };

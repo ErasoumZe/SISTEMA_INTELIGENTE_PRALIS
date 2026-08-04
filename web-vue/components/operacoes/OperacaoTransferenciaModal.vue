@@ -8,6 +8,7 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 // "Multiplo Destino", "Tempo de confirmacao" e "Transf. Retorno / Sangria" simplesmente nao
 // renderiza, sem erro de lint, vue-tsc nem teste. Ver FOTO 1 (PROJECT_BRAIN/14).
 import TransferenciaRetornoCampos from "~/components/operacoes/TransferenciaRetornoCampos.vue";
+import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
 const {
   modalOperacaoAberto,
@@ -218,7 +219,7 @@ const hojeISO = computed(() => dataISO(0));
 
       <div class="tr-hero">
         <span class="tr-cifra">R$</span>
-        <input v-model="form.valorOriginal" class="tr-valor" type="number" inputmode="decimal" placeholder="0,00" />
+        <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
       </div>
 
       <div class="tr-dois">
@@ -334,7 +335,7 @@ const hojeISO = computed(() => dataISO(0));
           >
             {{ l.sinal }}
           </button>
-          <input v-model="l.valor" type="number" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
+          <CampoDinheiro v-model="l.valor" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
           <input v-model="l.lacre" class="tr-input" placeholder="N° Lacre / Doc" />
           <v-icon size="18" class="tr-item-del" @click="removerRetorno(i)">mdi-close</v-icon>
         </div>

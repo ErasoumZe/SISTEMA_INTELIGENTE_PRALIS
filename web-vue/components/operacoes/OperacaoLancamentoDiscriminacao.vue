@@ -3,6 +3,7 @@
 // Mercadoria e a tabela rica da FOTO 3, com o desconto geral "Vale Presente" (R$/%) recalculado no
 // front; o valor em R$ espelha em form.valorDesconto (SUPORTADO). Estado via provide/inject.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
+import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import "~/components/operacoes/operacao-lancamento-disc.css";
 
 const {
@@ -69,13 +70,13 @@ const {
             </option>
           </optgroup>
         </select>
-        <input v-model="item.valor" type="number" class="lc-input lc-item-valor" placeholder="R$" />
+        <CampoDinheiro v-model="item.valor" class="lc-input lc-item-valor" placeholder="R$" />
         <select v-model="item.descontoTotalTipo" class="lc-input">
           <option value="">Sem desc.</option>
           <option value="valor">R$</option>
           <option value="percentual">%</option>
         </select>
-        <input v-model="item.descontoTotalValor" type="number" class="lc-input" placeholder="Desc. total" />
+        <CampoDinheiro v-model="item.descontoTotalValor" :casas="4" class="lc-input" placeholder="Desc. total" />
         <v-icon size="18" class="lc-item-del" @click="itensDespesa.length > 1 && itensDespesa.splice(i, 1)"
           >mdi-close</v-icon
         >
@@ -110,6 +111,11 @@ const {
               :class="{ 'disc-linha-erro': erroDiscriminacaoLinha === i + 1 }"
               :data-linha-discriminacao="i + 1"
             >
+              <!-- Quantidade NAO e dinheiro: a coluna e `scale 3` e o campo de dinheiro exibe no
+                   minimo 2 casas. Passar por aqui mostraria "1,00" para uma unidade e, pior,
+                   arredondaria 1,005 para 1,01 — perda silenciosa do que a pessoa digitou. Fica
+                   como esta nesta rodada; a virgula do teclado brasileiro aqui e problema real e
+                   esta relatado. -->
               <td><input v-model="item.quantidade" type="number" class="disc-in disc-qtd" /></td>
               <td>
                 <select
@@ -144,14 +150,14 @@ const {
                   </optgroup>
                 </select>
               </td>
-              <td><input v-model="item.valorUnitario" type="number" class="disc-in disc-num" /></td>
+              <td><CampoDinheiro v-model="item.valorUnitario" :casas="4" class="disc-in disc-num" /></td>
               <td class="disc-calc">
                 <select v-model="item.descontoTipo" class="disc-in">
                   <option value="">—</option>
                   <option value="valor">R$</option>
                   <option value="percentual">%</option>
                 </select>
-                <input v-model="item.descontoValor" type="number" class="disc-in disc-num" placeholder="0" />
+                <CampoDinheiro v-model="item.descontoValor" :casas="4" class="disc-in disc-num" placeholder="0,00" />
                 {{ brn(unitComDesc(item)) }}
               </td>
               <td class="disc-calc">{{ brn(totalLinha(item)) }}</td>
@@ -161,11 +167,11 @@ const {
                   <option value="valor">R$</option>
                   <option value="percentual">%</option>
                 </select>
-                <input
+                <CampoDinheiro
                   v-model="item.descontoTotalValor"
-                  type="number"
+                  :casas="4"
                   class="disc-in disc-num"
-                  placeholder="0"
+                  placeholder="0,00"
                   data-campo-discriminacao="valorTotal"
                 />
                 {{ brn(totalLinhaComDesc(item)) }}
@@ -218,7 +224,7 @@ const {
                 %
               </button>
             </div>
-            <input v-model="descontoInput" type="number" class="disc-in disc-num" placeholder="0" />
+            <CampoDinheiro v-model="descontoInput" :casas="4" class="disc-in disc-num" placeholder="0,00" />
             <span class="disc-vale-res">= R$ {{ brn(descontoValorReais) }}</span>
           </div>
         </div>

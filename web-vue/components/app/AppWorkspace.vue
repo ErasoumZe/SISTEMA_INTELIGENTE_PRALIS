@@ -714,7 +714,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
       carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Sócios/gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
     ]);
   } else if (tela === "grupos") {
     Object.assign(
@@ -1050,7 +1050,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     contas: "Contas",
     fornecedores: "Fornecedores",
     colaboradores: "Colaboradores",
-    sociosGestores: "Sócios/gestores",
+    sociosGestores: "Sócios e Gestores",
     produtos: "Produtos",
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",

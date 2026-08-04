@@ -121,13 +121,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   estoque_produtos: {
     id: "estoque_produtos",
-    titulo: "Estoque de produtos",
+    titulo: "Estoques de produtos",
     permissao: "estoque_produtos_visualizar",
     icone: "mdi-warehouse"
   },
   relatorio_dre: {
     id: "relatorio_dre",
-    titulo: "Relatório de DRE",
+    titulo: "Relatórios de DRE",
     permissao: "relatorio_dre_visualizar",
     icone: "mdi-chart-bar"
   },
@@ -145,7 +145,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   socios_gestores: {
     id: "socios_gestores",
-    titulo: "Sócios e gestores",
+    titulo: "Sócios e Gestores",
     permissao: "retiradas_visualizar",
     permissoesAlternativas: ["retiradas_criar", "retiradas_editar"],
     icone: "mdi-account-tie"
@@ -166,31 +166,31 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   folha_ponto: {
     id: "folha_ponto",
-    titulo: "Folha ponto",
+    titulo: "Folhas de ponto",
     permissao: "folha_ponto_visualizar",
     icone: "mdi-calendar-clock"
   },
   avaliacao_qualidade: {
     id: "avaliacao_qualidade",
-    titulo: "Avaliação de qualidade",
+    titulo: "Avaliações de qualidade",
     permissao: "avaliacao_qualidade_visualizar",
     icone: "mdi-clipboard-check"
   },
   avaliacao_colaboradores: {
     id: "avaliacao_colaboradores",
-    titulo: "Avaliação de colaboradores",
+    titulo: "Avaliações de colaboradores",
     permissao: "avaliacao_colaboradores_visualizar",
     icone: "mdi-clipboard-check"
   },
   relatorio_fiscal: {
     id: "relatorio_fiscal",
-    titulo: "Relatório fiscal dos produtos",
+    titulo: "Relatórios fiscais dos produtos",
     permissao: "relatorio_fiscal_visualizar",
     icone: "mdi-file-document"
   },
   fiscal_produtos: {
     id: "fiscal_produtos",
-    titulo: "Fiscal de produtos",
+    titulo: "Fiscais de produtos",
     permissao: "cadastro_fiscal_produtos_visualizar",
     icone: "mdi-file-text"
   },
@@ -221,7 +221,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   relatorio_vendas: {
     id: "relatorio_vendas",
-    titulo: "Relatório de Vendas",
+    titulo: "Relatório de vendas",
     permissao: "relatorio_vendas_visualizar",
     icone: "mdi-hand-coin",
     cor: corCategoriaPorTela["relatorio_vendas"]
