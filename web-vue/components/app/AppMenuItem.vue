@@ -4,6 +4,7 @@
 // duplicar a marcacao do item em dois lugares.
 import type { ItemMenu } from "~/types/padaria";
 import { rotaTela } from "~/utils/domain";
+import { CATEGORIA_POR_TELA, CORES_CATEGORIA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
   tela: ItemMenu;
@@ -15,6 +16,24 @@ const props = defineProps<{
 const emit = defineEmits<{ (event: "navegar"): void }>();
 
 const ativa = computed(() => props.tela.id === props.telaAtiva);
+
+// A cor da categoria desce para o CSS como custom property no proprio item. O `:hover` e o `.active`
+// coloridos (main.css) leem `--item-cor` / `--item-cor-faixa` — assim a lista de quem tem cor
+// continua sendo uma so, a do `CATEGORIA_POR_TELA`, e nao nasce uma copia dentro da folha de estilo.
+// `com-cor` existe para o seletor nao depender de casar texto do atributo style.
+//
+// Sao DUAS cores porque o ATIVO e preenchimento solido com texto branco, e a base reprova em 4,5:1
+// para entradas, transferencias e mercadorias. `faixa` e a variante medida para o branco por cima.
+const escalaDaTela = computed(() => {
+  const categoria = CATEGORIA_POR_TELA[props.tela.id];
+  return categoria ? CORES_CATEGORIA[categoria] : null;
+});
+const temCor = computed(() => escalaDaTela.value !== null);
+const estiloCor = computed(() =>
+  escalaDaTela.value
+    ? { "--item-cor": escalaDaTela.value.base, "--item-cor-faixa": escalaDaTela.value.faixa }
+    : undefined
+);
 </script>
 
 <template>
@@ -35,7 +54,14 @@ const ativa = computed(() => props.tela.id === props.telaAtiva);
       </span>
     </template>
   </v-tooltip>
-  <NuxtLink v-else :to="rotaTela(tela.id)" class="sidebar-item" :class="{ active: ativa }" @click="emit('navegar')">
+  <NuxtLink
+    v-else
+    :to="rotaTela(tela.id)"
+    class="sidebar-item"
+    :class="{ active: ativa, 'com-cor': temCor }"
+    :style="estiloCor"
+    @click="emit('navegar')"
+  >
     <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
     <span :style="tela.cor && !ativa ? { color: tela.cor } : undefined">{{ tela.titulo }}</span>
   </NuxtLink>

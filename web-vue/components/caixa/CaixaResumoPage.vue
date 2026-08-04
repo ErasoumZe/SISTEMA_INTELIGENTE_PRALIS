@@ -301,19 +301,21 @@ function fechar() {
   gap: 12px;
 }
 
-/* Card neutro: a cor NAO e fundo de bloco. O acento vem da barra lateral, do chip do icone e do
-   total, todos derivados do token --cat da categoria (definido nas classes .cat-* abaixo). */
+/* Card NA COR da categoria (decisao do Jose, 04/08/2026 — antes era neutro de proposito, com a cor
+   so na barra de 4px). Fundo em -soft, borda em -base e barra mais grossa: os cinco retangulos
+   passam a ser reconheciveis de longe, que era o pedido.
+   O valor usa -strong e nao -base porque ele fica SOBRE o -soft; a base perderia contraste. */
 .cat-card {
   position: relative;
   display: flex;
   overflow: hidden;
-  border: 1px solid var(--padaria-border, #d9e1eb);
+  border: 1px solid var(--cat);
   border-radius: 14px;
-  background: var(--padaria-card, #fff);
+  background: var(--cat-soft);
 }
 
 .cat-bar {
-  flex: 0 0 4px;
+  flex: 0 0 6px;
   background: var(--cat);
 }
 
@@ -334,13 +336,15 @@ function fechar() {
   width: 28px;
   height: 28px;
   border-radius: 9px;
-  background: var(--cat-soft);
-  color: var(--cat);
+  /* O chip agora fica SOBRE o fundo -soft: se ele tambem fosse -soft, sumiria. Cheio, com icone
+     branco, ele volta a ser o ponto de leitura do card. */
+  background: var(--cat);
+  color: #fff;
 }
 
 .cat-titulo {
   overflow: hidden;
-  color: var(--padaria-muted-foreground, #71717a);
+  color: var(--cat-strong);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.3px;
@@ -351,7 +355,7 @@ function fechar() {
 
 .cat-valor {
   margin-top: 8px;
-  color: var(--cat);
+  color: var(--cat-strong);
   font-size: 20px;
   font-weight: 800;
   line-height: 1.1;
@@ -382,26 +386,32 @@ function fechar() {
 .cat-entradas {
   --cat: var(--cat-entradas-base);
   --cat-soft: var(--cat-entradas-soft);
+  --cat-strong: var(--cat-entradas-strong);
 }
 .cat-transferencias {
   --cat: var(--cat-transferencias-base);
   --cat-soft: var(--cat-transferencias-soft);
+  --cat-strong: var(--cat-transferencias-strong);
 }
 .cat-despesas {
   --cat: var(--cat-despesas-base);
   --cat-soft: var(--cat-despesas-soft);
+  --cat-strong: var(--cat-despesas-strong);
 }
 .cat-mercadorias {
   --cat: var(--cat-mercadorias-base);
   --cat-soft: var(--cat-mercadorias-soft);
+  --cat-strong: var(--cat-mercadorias-strong);
 }
 .cat-retiradas {
   --cat: var(--cat-retiradas-base);
   --cat-soft: var(--cat-retiradas-soft);
+  --cat-strong: var(--cat-retiradas-strong);
 }
 .cat-resultado {
   --cat: var(--cat-resultado-base);
   --cat-soft: var(--cat-resultado-soft);
+  --cat-strong: var(--cat-resultado-strong);
 }
 
 /* Celular: as categorias empilham em 1 coluna (a barra de cor e o total continuam visiveis). No

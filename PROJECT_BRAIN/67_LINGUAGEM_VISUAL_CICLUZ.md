@@ -98,8 +98,32 @@ espalhados por 1689 linhas de CSS e 13 componentes.
 
 ### Categoria
 
-`--cat-*` (6 categorias × base/soft/strong) sao **semantica de negocio e nao mudam**.
-Fonte: `PROJECT_BRAIN/03_MODELO_DE_CORES.md`.
+`--cat-*` (6 categorias × base/soft/strong/**faixa**) sao **semantica de negocio**.
+Fonte de verdade dos hex: **`web-vue/utils/cores-categoria.ts`** — nao mais este documento nem o
+`main.css`, que apenas repete os valores porque CSS nao importa TS. Quem garante que os dois nao
+divergem e `web-vue/utils/cores-categoria.test.ts`, que le o `main.css` e falha na diferenca.
+
+> **Mudaram em 04/08/2026, por decisao do Jose ("bem vivo e evidente").** Ate essa data este
+> documento dizia que elas "nao mudam" — nao era verdade, e a versao antiga ficou por engano.
+> Valores atuais: entradas `#ca8a04` · transferencias `#ea580c` · despesas `#dc2626` ·
+> mercadorias `#16a34a` · retiradas `#2563eb` · resultado `#6d28d9`.
+> `-soft` e `-strong` sao DERIVADOS por formula (8% sobre branco / 20% mais escuro), nao escolhas
+> avulsas: base nova nao exige inventar dois hex a mao.
+
+**`-faixa` e o unico escolhido por medicao.** E o fundo do cabecalho de modal, onde o texto e
+BRANCO: a `base` reprova em 4,5:1 para entradas (2,94), transferencias (3,56) e mercadorias (3,30) —
+e em entradas nem o `strong` salva (4,40). Escurecer so quem precisa mantem as outras vivas, em vez
+de rebaixar todas para igualar a pior. Um teste prende os 4,5:1.
+
+**Onde a cor de categoria aparece** (04/08/2026): icone e rotulo do menu · **hover do item do menu**
+(fundo tingido a 12%) · **item ATIVO do menu** (preenchimento solido em `-faixa`, texto branco) ·
+faixa de cabecalho dos modais de Lancamento e Transferencia · cards da tela de Caixa · linhas de
+transacao · cockpit.
+
+**Tela SEM categoria continua neutra — e isso e decisao, nao esquecimento.** Caixa, Contas, os
+cadastros e a Configuracao nao tem cor de categoria: o hover delas fica no cinza de sempre e o item
+ativo segue no roxo da marca. Colorir metade do menu e deixar a outra cinza sem criterio ficaria
+pior que tudo neutro. A lista de quem tem cor e uma so: `CATEGORIA_POR_TELA`, no mesmo modulo.
 
 ---
 

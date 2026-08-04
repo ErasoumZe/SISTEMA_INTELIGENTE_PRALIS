@@ -62,7 +62,15 @@ export const itemPorTela: Record<string, ItemMenu> = {
     icone: "mdi-swap-horizontal",
     cor: corCategoriaPorTela["transferencias"]
   },
-  despesas: { id: "despesas", titulo: "Despesas", permissao: "despesas_visualizar", icone: "mdi-receipt-text" },
+  // `cor` faltava aqui — junto com a ausencia de `despesas` no mapa de cores, era o que deixava este
+  // item cinza no menu enquanto Entradas, Transferencias, Mercadorias e Retiradas tinham cor.
+  despesas: {
+    id: "despesas",
+    titulo: "Despesas",
+    permissao: "despesas_visualizar",
+    icone: "mdi-receipt-text",
+    cor: corCategoriaPorTela["despesas"]
+  },
   mercadorias: {
     id: "mercadorias",
     titulo: "Mercadorias",

@@ -293,15 +293,16 @@ describe("validarOperacaoParaEnvio", () => {
     expect(validarOperacaoParaEnvio("venda", { ...ok, descricao: "", observacao: "" })).toMatch(/descricao/i);
   });
 
-  it("despesa: exige grupo OU itens discriminados (o bug relatado)", () => {
-    expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "" })).toMatch(/grupo da despesa/i);
+  // Grupo e itens sao OPCIONAIS desde 04/08/2026 (o campo Grupo saiu do modal). Este teste guarda a
+  // decisao: se alguem "consertar" a validacao de volta, ele fica vermelho.
+  it("despesa: salva sem grupo e sem itens — os dois sao opcionais", () => {
+    expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "", qtdItensDespesa: 0 })).toBeNull();
     expect(validarOperacaoParaEnvio("despesa", ok)).toBeNull();
-    expect(validarOperacaoParaEnvio("despesa", { ...ok, grupoDespesaId: "", qtdItensDespesa: 2 })).toBeNull();
   });
 
-  it("mercadoria: exige fornecedor E (grupo OU itens)", () => {
+  it("mercadoria: exige so o fornecedor — grupo e itens sao opcionais", () => {
     expect(validarOperacaoParaEnvio("mercadoria", { ...ok, fornecedorId: "" })).toMatch(/fornecedor/i);
-    expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "" })).toMatch(/grupo da mercadoria/i);
+    expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "", qtdItensMercadoria: 0 })).toBeNull();
     expect(validarOperacaoParaEnvio("mercadoria", { ...ok, grupoMercadoriaId: "", qtdItensMercadoria: 1 })).toBeNull();
     expect(validarOperacaoParaEnvio("mercadoria", ok)).toBeNull();
   });

@@ -573,6 +573,38 @@ Notas de desenho:
 - **❓ Decisão pendente do José:** a R-129 vale hoje para **todos**, inclusive Tesouraria e
   Financeiro. Retaguarda deve ter exceção para registrar pagamento retroativo?
 
+### Cor de categoria e discriminação (04/08/2026)
+
+| Id           | Regra                                                                                                                                                            | Status | Teste                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------- |
+| **R-130** 🆕 | **Uma fonte só para a cor de categoria**: `web-vue/utils/cores-categoria.ts`. O `main.css` repete os valores (CSS não importa TS) e um teste falha se divergirem | ✅     | `cores-categoria` (29)        |
+| **R-131** 🆕 | O **item ativo** do menu fica na **cor da categoria** (preenchimento sólido, texto branco). Tela sem categoria segue no roxo da marca                            | ✅     | verificado na tela            |
+| **R-132** 🆕 | **Grupo não aparece** no modal de despesa e mercadoria — vive só na discriminação. Continua no cabeçalho da **retirada**, que não discrimina                     | ✅     | verificado na tela            |
+| **R-133** 🆕 | **Grupo e itens são OPCIONAIS** em despesa e mercadoria. Lançamento simples salva sem classificação                                                              | ✅     | `texto-credor-data-pagamento` |
+| **R-134** 🆕 | A **discriminação é a mesma tabela** (8 colunas) em despesa e mercadoria. Sem descrição livre: o item vem sempre de um cadastro                                  | ✅     | verificado na tela            |
+| **R-135** 🆕 | O item da discriminação vem de **Produtos** (mercadoria) e de **Patrimônio / Colaboradores** (despesa), e preenche descrição e grupo                             | ✅     | verificado na tela            |
+| **R-136** 🆕 | **Dinheiro formata a cada tecla**, com o cursor ancorado pelo número de dígitos à esquerda                                                                       | ✅     | `campo-dinheiro` (18)         |
+
+Notas de desenho:
+
+- **A "fonte única" já foi só um comentário.** O `tema.ts` dizia _"fonte única dos hex — não
+  duplicar em outro lugar"_ enquanto os tokens do `main.css` tinham valores **diferentes** para as
+  mesmas categorias, e `despesas` nem existia lá — era o motivo de aquele item do menu ficar cinza.
+  O que torna a R-130 real é o teste que lê o CSS, não a frase.
+- **Registro antigo continua legível, sempre.** Item de discriminação sem vínculo reabre com o
+  select vazio e a **descrição gravada visível** abaixo dele. Mesmo cuidado da R-128 com a retirada
+  de colaborador: a tela não pode apagar o histórico na cara do usuário.
+- **Tirar o Grupo do modal tornou "grupo ou itens" impossível de cumprir.** A validação antiga
+  apontava um campo que a tela não tem mais; por isso a R-133. O preço, aceito e registrado:
+  lançamento sem grupo e sem itens fica **sem classificação** no cockpit por categoria e no DRE —
+  conta no total e no caixa normalmente.
+- **Sem descrição livre, a lista de itens virou pré-requisito para discriminar.** Por isso a rota
+  enxuta `/api/patrimonio/opcoes-itens` aceita `despesas_criar`/`despesas_editar`: exigir
+  `cadastro_patrimonio_visualizar` daria ao operador de caixa o cadastro inteiro de patrimônio (com
+  a tela no menu) só para ele escolher um item.
+- **❓ Ponto de atenção para o José:** se a empresa **não tiver itens de patrimônio cadastrados**, a
+  despesa só poderá ser discriminada por Colaborador. Antes, a descrição livre cobria qualquer caso.
+
 ### PROCESSO (o contrato de trabalho)
 
 | Id    | Regra                                                                                                          | Origem            |

@@ -1,22 +1,43 @@
 /* Estilos do Lancamento (FOTO 2 do Rodrigo) — extraidos do <style scoped> do OperacaoLancamentoModal
    para serem compartilhados pelos blocos coesos. Classes com prefixo unico .lc-* (sem colisao). Os
    tokens --cat/--cat-soft trocam por categoria e sao herdados do .lc-modal (via :style="catVars"). */
+/* Coluna flex: FAIXA (fixa) · CORPO (rola) · ACOES (fixo). Antes o modal inteiro era o scroller e o
+   rodape era `sticky` dentro dele — o conteudo passava por baixo dos botoes, e o
+   `margin-bottom: -20px` do rodape ainda comia o padding inferior. Tirar o rodape do fluxo que rola
+   resolve a causa; padding de compensacao so disfarcaria. */
 .lc-modal {
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 0.5px solid #e4e8ef;
   border-radius: 16px;
-  padding: 20px 22px;
-  /* Nunca ultrapassa a viewport: rola por dentro em qualquer largura (o rodape de acoes fica fixo,
-     abaixo). Sem isto, formularios altos cortavam o "Salvar" fora da tela. */
+  /* Nunca ultrapassa a viewport: quem rola e o .lc-corpo. */
   max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+.lc-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  padding: 0 22px var(--cx-sp-4);
+}
+/* FAIXA do cabecalho na cor da categoria. Sangra ate a borda pelo margin negativo que anula o
+   padding do .lc-modal (mesma tecnica do .lc-acoes). Usa --cat-faixa, nao --cat: o texto aqui e
+   BRANCO, e a base reprova em 4,5:1 nas categorias claras (ver cores-categoria.ts). */
+.lc-faixa {
+  flex: 0 0 auto;
+  padding: var(--cx-sp-4) var(--cx-sp-5) var(--cx-sp-3);
+  background: var(--cat-faixa);
+  border-radius: 16px 16px 0 0;
+  transition: background var(--cx-dur-1) var(--cx-ease);
 }
 .lc-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: var(--cx-sp-3);
 }
+/* Circulo do icone: branco a 20% sobre a faixa da o volume sem introduzir uma segunda cor. */
 .lc-ic {
   display: flex;
   width: 34px;
@@ -24,19 +45,25 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--cat-soft);
-  color: var(--cat);
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
 }
 .lc-titulo {
   flex: 1;
   font-size: 16px;
-  font-weight: 500;
-  color: #1f2733;
+  font-weight: 600;
+  color: #fff;
   text-transform: capitalize;
 }
+/* Branco sobre a faixa, com hover visivel — cinza aqui sumiria dentro da cor. */
 .lc-x {
-  color: #94a3b8;
+  color: #fff;
   cursor: pointer;
+  border-radius: var(--cx-r-sm);
+  transition: background var(--cx-dur-1) var(--cx-ease);
+}
+.lc-x:hover {
+  background: rgb(255 255 255 / 22%);
 }
 /* Alternador de categoria (3 botoes do topo). Cada botao carrega a SUA cor (--cat-btn), entao os
    tres aparecem em vermelho/verde/azul; o ativo fica preenchido e o modal inteiro segue --cat. */
@@ -354,15 +381,11 @@
   line-height: 1.45;
 }
 .lc-acoes {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 14px;
-  /* margens negativas = rodape "full-bleed" ate as bordas do modal (padding 20/22). */
-  margin: 12px -22px -20px;
   padding: 12px 22px;
   background: #fff;
   border-top: 0.5px solid #e4e8ef;

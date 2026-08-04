@@ -1,26 +1,29 @@
 <script setup lang="ts">
-// Bloco Discriminar itens (despesa/mercadoria). Só aparece quando a categoria discrimina (cfg). Em
-// Mercadoria e a tabela rica da FOTO 3, com o desconto geral "Vale Presente" (R$/%) recalculado no
-// front; o valor em R$ espelha em form.valorDesconto (SUPORTADO). Estado via provide/inject.
+// Bloco Discriminar itens. UMA tabela para despesa E mercadoria (E6, decisao do Jose 04/08/2026).
+// Antes eram duas telas diferentes: a mercadoria tinha a tabela rica da FOTO 3 e a despesa, cinco
+// caixinhas soltas sem quantidade nem valor unitario. Agora as duas usam as mesmas 8 colunas.
+//
+// O que muda entre elas e so a ORIGEM do item (`origensDoItem`): mercadoria vem de Produtos;
+// despesa vem de Patrimonio e Colaboradores. Escolher o item preenche descricao e grupo — por isso
+// a descricao livre saiu. Retirada NAO discrimina (R-050) e nem chega aqui (cfg.discrimina).
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import "~/components/operacoes/operacao-lancamento-disc.css";
 
 const {
   cfg,
-  cat,
   discriminando,
-  itensDespesa,
-  itensMercadoria,
-  opcoesEmpresa,
-  escolherProduto,
-  novoItemMercadoria,
-  novoItemDespesa,
+  itensDaDiscriminacao,
+  origensDoItem,
+  rotuloDaOpcao,
+  itemVinculado,
+  escolherItemVinculado,
+  grupoDoItem,
+  definirGrupoDoItem,
+  gruposDoItem,
   gruposPatrimonio,
-  grupoItemDespesa,
-  definirGrupoItemDespesa,
-  grupoItemMercadoria,
-  definirGrupoItemMercadoria,
+  novoItemDaDiscriminacao,
+  removerItemDaDiscriminacao,
   unitComDesc,
   totalLinha,
   totalLinhaComDesc,
@@ -31,64 +34,19 @@ const {
   modoDesconto,
   descontoInput,
   erroDiscriminacaoLinha,
-  erroDiscriminacaoCampo,
   brn
 } = useOperacaoLancamentoBloco();
 </script>
 
 <template>
-  <!-- Discriminar itens (despesa/mercadoria) — a tabela rica vem na tela de Discriminação. -->
   <template v-if="cfg.discrimina">
     <button type="button" class="lc-linha" @click="discriminando = !discriminando">
       <v-icon size="17">mdi-format-list-bulleted</v-icon> Discriminar itens
       <span class="lc-flex" />
       <v-icon size="16">{{ discriminando ? "mdi-chevron-down" : "mdi-chevron-right" }}</v-icon>
     </button>
-    <!-- Despesa: descrição e grupo LIVRES (FOTO 3, nota). O Grupo tem DUAS origens (§5): o cadastro
-         de despesas e o de patrimônio (maquinário/manutenção), num select só com dois blocos. -->
-    <div v-if="discriminando && cat === 'despesa'" class="lc-itens">
-      <div
-        v-for="(item, i) in itensDespesa"
-        :key="`d-${i}`"
-        class="lc-item"
-        :class="{ 'disc-linha-erro': erroDiscriminacaoLinha === i + 1 }"
-        :data-linha-discriminacao="i + 1"
-      >
-        <input v-model="item.descricao" class="lc-input" placeholder="Descrição (livre)" />
-        <select
-          :value="grupoItemDespesa(item)"
-          class="lc-input lc-item-grupo"
-          @change="definirGrupoItemDespesa(item, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">Grupo</option>
-          <optgroup label="Despesas">
-            <option v-for="g in opcoesEmpresa.gruposDespesas" :key="g.id" :value="g.id">{{ g.nome }}</option>
-          </optgroup>
-          <optgroup v-if="gruposPatrimonio.length" label="Patrimônio">
-            <option v-for="g in gruposPatrimonio" :key="g.id" :value="`pat:${g.id}`">
-              {{ g.sig ? `${g.sig} — ${g.nome}` : g.nome }}
-            </option>
-          </optgroup>
-        </select>
-        <CampoDinheiro v-model="item.valor" class="lc-input lc-item-valor" placeholder="R$" />
-        <select v-model="item.descontoTotalTipo" class="lc-input">
-          <option value="">Sem desc.</option>
-          <option value="valor">R$</option>
-          <option value="percentual">%</option>
-        </select>
-        <CampoDinheiro v-model="item.descontoTotalValor" :casas="4" class="lc-input" placeholder="Desc. total" />
-        <v-icon size="18" class="lc-item-del" @click="itensDespesa.length > 1 && itensDespesa.splice(i, 1)"
-          >mdi-close</v-icon
-        >
-      </div>
-      <button type="button" class="lc-add" @click="novoItemDespesa">
-        <v-icon size="15">mdi-plus</v-icon> Adicionar item
-      </button>
-    </div>
 
-    <!-- Mercadoria: tabela de Discriminação (FOTO 3). Itens do cadastro de produto; colunas
-         c/Desc e % recalculadas no front a partir do Vale Presente geral. -->
-    <div v-if="discriminando && cat === 'mercadoria'" class="disc">
+    <div v-if="discriminando" class="disc">
       <div class="disc-scroll">
         <table class="disc-tabela">
           <thead>
@@ -106,42 +64,51 @@ const {
           </thead>
           <tbody>
             <tr
-              v-for="(item, i) in itensMercadoria"
-              :key="`m-${i}`"
+              v-for="(item, i) in itensDaDiscriminacao"
+              :key="`item-${i}`"
               :class="{ 'disc-linha-erro': erroDiscriminacaoLinha === i + 1 }"
               :data-linha-discriminacao="i + 1"
             >
               <!-- Quantidade NAO e dinheiro: a coluna e `scale 3` e o campo de dinheiro exibe no
                    minimo 2 casas. Passar por aqui mostraria "1,00" para uma unidade e, pior,
-                   arredondaria 1,005 para 1,01 — perda silenciosa do que a pessoa digitou. Fica
-                   como esta nesta rodada; a virgula do teclado brasileiro aqui e problema real e
-                   esta relatado. -->
+                   arredondaria 1,005 para 1,01 — perda silenciosa do que a pessoa digitou. -->
               <td><input v-model="item.quantidade" type="number" class="disc-in disc-qtd" /></td>
+
+              <!-- ITEM: vem do cadastro, sempre. O "— livre —" saiu (E6). Registro ANTIGO nao tem
+                   vinculo: o select fica vazio e a `descricao` gravada continua visivel logo
+                   abaixo, para o historico nao sumir da tela. -->
               <td>
                 <select
-                  :value="item.produtoId"
+                  :value="itemVinculado(item)"
                   class="disc-in"
-                  @change="escolherProduto(item, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">— livre —</option>
-                  <option v-for="p in opcoesEmpresa.produtos" :key="p.id" :value="p.id">{{ p.descricao }}</option>
-                </select>
-                <input v-model="item.descricao" class="disc-in disc-desc" placeholder="Descrição" />
-              </td>
-              <!-- Grupo (§5): duas origens — o cadastro de MERCADORIAS e o de PATRIMÔNIO, quando o
-                   item é maquinário/manutenção. Cada origem grava na sua coluna (são FKs de tabelas
-                   diferentes); o valor do <option> carrega qual delas é. -->
-              <td>
-                <select
-                  :value="grupoItemMercadoria(item)"
-                  class="disc-in"
-                  @change="definirGrupoItemMercadoria(item, ($event.target as HTMLSelectElement).value)"
+                  aria-label="Item"
+                  @change="escolherItemVinculado(item, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">—</option>
-                  <optgroup label="Mercadorias">
-                    <option v-for="g in opcoesEmpresa.gruposMercadorias" :key="g.id" :value="g.id">
-                      {{ g.nome }}
+                  <optgroup v-for="origem in origensDoItem" :key="origem.prefixo" :label="origem.rotulo">
+                    <option v-for="o in origem.opcoes" :key="o.id" :value="`${origem.prefixo}:${o.id}`">
+                      {{ rotuloDaOpcao(o) }}
                     </option>
+                  </optgroup>
+                </select>
+                <span v-if="!itemVinculado(item) && item.descricao" class="disc-desc-legada">
+                  {{ item.descricao }}
+                </span>
+              </td>
+
+              <!-- Grupo (§5): duas origens — o cadastro da categoria e o de PATRIMONIO. Cada uma
+                   grava na sua coluna (sao FKs de tabelas diferentes); o prefixo do <option> diz
+                   qual. Vem preenchido quando o item escolhido e de patrimonio. -->
+              <td>
+                <select
+                  :value="grupoDoItem(item)"
+                  class="disc-in"
+                  aria-label="Grupo do item"
+                  @change="definirGrupoDoItem(item, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">—</option>
+                  <optgroup :label="cfg.token === 'mercadorias' ? 'Mercadorias' : 'Despesas'">
+                    <option v-for="g in gruposDoItem" :key="g.id" :value="g.id">{{ g.nome }}</option>
                   </optgroup>
                   <optgroup v-if="gruposPatrimonio.length" label="Patrimônio">
                     <option v-for="g in gruposPatrimonio" :key="g.id" :value="`pat:${g.id}`">
@@ -150,9 +117,10 @@ const {
                   </optgroup>
                 </select>
               </td>
+
               <td><CampoDinheiro v-model="item.valorUnitario" :casas="4" class="disc-in disc-num" /></td>
               <td class="disc-calc">
-                <select v-model="item.descontoTipo" class="disc-in">
+                <select v-model="item.descontoTipo" class="disc-in" aria-label="Tipo de desconto no unitário">
                   <option value="">—</option>
                   <option value="valor">R$</option>
                   <option value="percentual">%</option>
@@ -162,7 +130,7 @@ const {
               </td>
               <td class="disc-calc">{{ brn(totalLinha(item)) }}</td>
               <td class="disc-calc">
-                <select v-model="item.descontoTotalTipo" class="disc-in">
+                <select v-model="item.descontoTotalTipo" class="disc-in" aria-label="Tipo de desconto no total">
                   <option value="">—</option>
                   <option value="valor">R$</option>
                   <option value="percentual">%</option>
@@ -178,12 +146,7 @@ const {
               </td>
               <td class="disc-calc">{{ brn(pctEfetivo) }}%</td>
               <td>
-                <v-icon
-                  size="18"
-                  class="lc-item-del"
-                  @click="itensMercadoria.length > 1 && itensMercadoria.splice(i, 1)"
-                  >mdi-close</v-icon
-                >
+                <v-icon size="18" class="lc-item-del" @click="removerItemDaDiscriminacao(i)">mdi-close</v-icon>
               </td>
             </tr>
           </tbody>
@@ -200,7 +163,7 @@ const {
       </div>
 
       <div class="disc-rodape">
-        <button type="button" class="lc-add" @click="novoItemMercadoria">
+        <button type="button" class="lc-add" @click="novoItemDaDiscriminacao">
           <v-icon size="15">mdi-plus</v-icon> Adicionar item
         </button>
         <div class="disc-vale">
@@ -232,3 +195,15 @@ const {
     </div>
   </template>
 </template>
+
+<style scoped>
+/* Descricao de item ANTIGO, que nao tem vinculo com o cadastro. Fica visivel abaixo do select para
+   o historico nao desaparecer da tela quando o registro for reaberto. */
+.disc-desc-legada {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: italic;
+  color: #64748b;
+}
+</style>

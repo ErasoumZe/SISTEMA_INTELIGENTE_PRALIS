@@ -54,6 +54,8 @@ export type OperacaoDetalhe = {
   itensDespesa?: {
     grupoDespesaId: string | null;
     grupoPatrimonioId?: string | null;
+    patrimonioItemId?: string | null;
+    colaboradorId?: string | null;
     descricao: string;
     valor: number;
     quantidade?: number;
@@ -91,6 +93,9 @@ export type TipoPagamentoForm = { formaPagamentoId: string; totalPago: string; n
 // grupo proprio — o select da tela escreve num OU no outro, nunca nos dois.
 export type ItemDespesaForm = {
   descricao: string;
+  // E6: de qual cadastro veio a linha. Um dos dois, nunca os dois.
+  patrimonioItemId: string;
+  colaboradorId: string;
   valor: string;
   grupoDespesaId: string;
   grupoPatrimonioId: string;
@@ -177,6 +182,8 @@ export function montarRecorrencia(estado: EstadoRecorrencia): Recorrencia | unde
 export function itemDespesaVazio(): ItemDespesaForm {
   return {
     descricao: "",
+    patrimonioItemId: "",
+    colaboradorId: "",
     valor: "",
     grupoDespesaId: "",
     grupoPatrimonioId: "",
@@ -330,6 +337,12 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
   if (entidade === "despesa" && detalhe.itensDespesa?.length) {
     preenchido.itensDespesa = detalhe.itensDespesa.map((item) => ({
       descricao: item.descricao,
+      // E6: item ANTIGO nao tem vinculo — foi digitado a mao antes de 04/08/2026. Ele reabre com os
+      // campos vazios e a `descricao` gravada visivel, que continua sendo o que a pessoa escreveu.
+      // Zerar a descricao aqui apagaria o historico na cara do usuario (o erro que a R-128 pegou na
+      // retirada com colaborador).
+      patrimonioItemId: item.patrimonioItemId ?? "",
+      colaboradorId: item.colaboradorId ?? "",
       valor: String(item.valor),
       grupoDespesaId: item.grupoDespesaId ?? "",
       grupoPatrimonioId: item.grupoPatrimonioId ?? "",
@@ -524,14 +537,13 @@ export function validarOperacaoParaEnvio(
   const texto = (dados.observacao ?? "").trim() || dados.descricao.trim();
   if (!texto) return entidade === "venda" ? "Informe a descricao da venda." : "Informe a observacao do lancamento.";
 
-  if (entidade === "despesa" && !dados.grupoDespesaId && dados.qtdItensDespesa === 0)
-    return "Selecione o grupo da despesa ou discrimine os itens da despesa.";
-
+  // GRUPO e ITENS sao OPCIONAIS em despesa e mercadoria (decisao do Jose, 04/08/2026): o campo Grupo
+  // saiu do modal — vive so na discriminacao — e discriminar continua opcional. A exigencia antiga
+  // ("grupo ou itens") apontava um campo que a tela nao tem mais. Espelha validarDespesa/
+  // validarMercadoria no servidor; se um lado voltar a exigir, o outro tem de voltar junto.
   if (entidade === "mercadoria") {
-    // Schema: fornecedorId e obrigatorio; grupo OU itens tambem.
+    // Schema: fornecedorId continua obrigatorio.
     if (!dados.fornecedorId) return "Selecione o fornecedor da mercadoria.";
-    if (!dados.grupoMercadoriaId && dados.qtdItensMercadoria === 0)
-      return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
   }
 
   // R-128: a retirada exige UM credor, e ele pode ser fornecedor, socio/gestor ou (historico)

@@ -655,16 +655,36 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
     // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6). Opcional —
     // quem nao tem permissao de patrimonio segue lancando so com os grupos de despesa.
-    [dados.contas, dados.fornecedores, dados.gruposPatrimonio] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(
-        faltas,
-        "Grupos de patrimonio",
-        async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
-        []
-      )
-    ]);
+    [dados.contas, dados.fornecedores, dados.colaboradores, dados.gruposPatrimonio, dados.patrimonioItens] =
+      await Promise.all([
+        carregarOpcaoOpcional(
+          faltas,
+          "Contas",
+          () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+          []
+        ),
+        carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
+        // E6: colaboradores sao a SEGUNDA origem do item na discriminacao de despesa (a primeira e
+        // patrimonio). A tela de despesas nao os carregava — o select ficava so com "—" e nao havia
+        // como discriminar, ja que a descricao livre saiu.
+        carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+        carregarOpcaoOpcional(
+          faltas,
+          "Grupos de patrimonio",
+          async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
+          []
+        ),
+        // E6: os ITENS de patrimonio sao a origem do item na discriminacao de despesa. Rota ENXUTA
+        // (so id/nome/grupo) que aceita tambem quem apenas LANCA despesa — sem ela, quem nao tem
+        // `cadastro_patrimonio_visualizar` ficaria sem como discriminar, agora que a descricao livre
+        // saiu da tela.
+        carregarOpcaoOpcional(
+          faltas,
+          "Itens de patrimonio",
+          () => apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`),
+          []
+        )
+      ]);
   } else if (tela === "contas_pagar") {
     dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []);
   } else if (tela === "mercadorias" || tela === "pedidos") {

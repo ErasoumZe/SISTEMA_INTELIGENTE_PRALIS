@@ -1121,6 +1121,11 @@ export const despesasItens = pgTable(
     // existe aos milhares no historico, entao a regra e "no maximo um", nunca "exatamente um".
     grupoPatrimonioId: uuid("grupo_patrimonio_id").references(() => gruposPatrimonio.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    // E6: o item da despesa vem de um CADASTRO (Patrimonio ou Colaborador), como a mercadoria ja
+    // vinha de produtos. NULLABLE: toda despesa discriminada antes de 04/08/2026 tem descricao
+    // digitada a mao e nenhum vinculo — exigir aqui invalidaria o historico. A obrigatoriedade e do
+    // formulario e do servico, para lancamento novo.
+    patrimonioItemId: uuid("patrimonio_item_id").references(() => patrimonioItens.id),
     descricao: text("descricao").notNull(),
     // Quantidade/unitario chegaram com os 3 niveis de desconto (§5): item antigo = 1 x valor.
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("1"),
@@ -1162,7 +1167,12 @@ export const despesasItens = pgTable(
     // grupos_patrimonio (FK sem indice varre a tabela filha inteira) e o filtro por grupo.
     index("despesas_itens_grupo_patrimonio_idx")
       .on(table.grupoPatrimonioId)
-      .where(sql`${table.grupoPatrimonioId} is not null`)
+      .where(sql`${table.grupoPatrimonioId} is not null`),
+    // E6: mesma razao do indice acima — serve o DELETE em patrimonio_itens (FK sem indice varre a
+    // tabela filha inteira). Precisa existir AQUI e nao so na 0029: o `migracoes.test` compara o
+    // schema construido por migrate com o construido por push, e um indice so na migration faz os
+    // dois divergirem.
+    index("despesas_itens_patrimonio_item_idx").on(table.patrimonioItemId)
   ]
 );
 
