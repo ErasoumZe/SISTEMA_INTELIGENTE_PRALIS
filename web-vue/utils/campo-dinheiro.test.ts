@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatarCampoDinheiro, limparDigitacaoDinheiro, numeroDoCampo } from "./campo-dinheiro";
+import {
+  contarDigitos,
+  formatarCampoDinheiro,
+  limparDigitacaoDinheiro,
+  numeroDoCampo,
+  posicaoAposDigitos
+} from "./campo-dinheiro";
 
 // O campo de dinheiro tem DOIS mundos: o que a pessoa digita (pt-BR, virgula) e o que vai no payload
 // (decimal com ponto, que o `z.coerce.number()` do contrato espera). Estes testes prendem a
@@ -82,5 +88,36 @@ describe("limparDigitacaoDinheiro", () => {
   it("nao atrapalha quem ainda nao digitou separador nenhum", () => {
     expect(limparDigitacaoDinheiro("50")).toBe("50");
     expect(limparDigitacaoDinheiro("")).toBe("");
+  });
+});
+
+// E5: formatar A CADA TECLA sem o cursor pular. A ancora e o numero de DIGITOS a esquerda do
+// cursor, nunca a posicao em caracteres — o separador de milhar entra e sai sozinho.
+describe("cursor ancorado por digitos (formatacao ao digitar)", () => {
+  it("conta digitos, ignorando separadores", () => {
+    expect(contarDigitos("1.234,56")).toBe(6);
+    expect(contarDigitos("15,")).toBe(2);
+    expect(contarDigitos("")).toBe(0);
+  });
+
+  it("devolve a posicao logo apos o n-esimo digito", () => {
+    expect(posicaoAposDigitos("1,00", 1)).toBe(1);
+    expect(posicaoAposDigitos("15,00", 2)).toBe(2);
+    // 4 digitos em "1.234,00" caem depois do "4", pulando o ponto de milhar.
+    expect(posicaoAposDigitos("1.234,00", 4)).toBe(5);
+    expect(posicaoAposDigitos("15,50", 3)).toBe(4);
+  });
+
+  it("zero digitos fica no comeco; digitos demais param no fim", () => {
+    expect(posicaoAposDigitos("1.234,00", 0)).toBe(0);
+    expect(posicaoAposDigitos("1,00", 99)).toBe(4);
+  });
+
+  // O caminho que o Jose descreveu: digitar 1 mostra 1,00; depois 5 mostra 15,00.
+  it("a sequencia de digitacao produz o texto esperado", () => {
+    expect(formatarCampoDinheiro(numeroDoCampo(limparDigitacaoDinheiro("1")) as number)).toBe("1,00");
+    expect(formatarCampoDinheiro(numeroDoCampo(limparDigitacaoDinheiro("15")) as number)).toBe("15,00");
+    expect(formatarCampoDinheiro(numeroDoCampo(limparDigitacaoDinheiro("1234")) as number)).toBe("1.234,00");
+    expect(formatarCampoDinheiro(numeroDoCampo(limparDigitacaoDinheiro("15,5")) as number)).toBe("15,50");
   });
 });

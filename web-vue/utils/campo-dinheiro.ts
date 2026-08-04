@@ -25,6 +25,25 @@ export function formatarCampoDinheiro(valor: number, casas = 2): string {
   return valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: casas });
 }
 
+/** Quantos DIGITOS ha no texto — a ancora do cursor. Contar caracteres nao serve: o separador de
+ *  milhar entra e sai sozinho conforme o numero cresce, e o cursor pularia junto. */
+export function contarDigitos(texto: string): number {
+  return (texto.match(/\d/gu) ?? []).length;
+}
+
+/** Onde fica o cursor depois de `quantos` digitos no texto ja formatado. Inverso de contarDigitos. */
+export function posicaoAposDigitos(texto: string, quantos: number): number {
+  if (quantos <= 0) return 0;
+  let vistos = 0;
+  for (let i = 0; i < texto.length; i++) {
+    if (/\d/u.test(texto[i] as string)) {
+      vistos++;
+      if (vistos === quantos) return i + 1;
+    }
+  }
+  return texto.length;
+}
+
 /**
  * Mantem so digitos e UM separador decimal. Sem isto o campo aceitaria "1,2,3" e o payload sairia
  * como NaN, com o erro aparecendo la no servidor em vez de aqui.

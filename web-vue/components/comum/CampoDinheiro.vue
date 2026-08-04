@@ -11,8 +11,14 @@
 // virar `50,00`). Existe porque nem toda coluna deste sistema e de 2 casas — valor unitario,
 // desconto e juros sao `scale 4` no banco, e arredondar na tela para 2 apagaria o que o usuario
 // digitou. Quem e dinheiro de verdade (`scale 2`) usa o default.
-import { computed, ref } from "vue";
-import { formatarCampoDinheiro, limparDigitacaoDinheiro, numeroDoCampo } from "~/utils/campo-dinheiro";
+import { computed } from "vue";
+import {
+  contarDigitos,
+  formatarCampoDinheiro,
+  limparDigitacaoDinheiro,
+  numeroDoCampo,
+  posicaoAposDigitos
+} from "~/utils/campo-dinheiro";
 
 const props = withDefaults(
   defineProps<{
@@ -26,39 +32,39 @@ const props = withDefaults(
 
 const emit = defineEmits<{ "update:modelValue": [string] }>();
 
-// Enquanto o campo esta em foco, o texto e do usuario: reformatar a cada tecla faria o cursor pular
-// e transformaria digitar "1.234,5" numa briga com o campo.
-const editando = ref(false);
-const rascunho = ref("");
-
 const exibido = computed(() => {
-  if (editando.value) return rascunho.value;
   const numero = numeroDoCampo(props.modelValue);
   // Campo vazio continua VAZIO: forcar "0,00" apagaria a diferenca entre zero e nao informado.
   return numero === null ? "" : formatarCampoDinheiro(numero, props.casas);
 });
 
+// Formata A CADA TECLA (decisao do Jose, 04/08/2026 — antes so no blur). A versao anterior deixava
+// para o blur com o argumento de que reformatar faria o cursor pular; a preocupacao era legitima, a
+// conclusao nao. O que impede o pulo e reancorar o cursor pelo numero de DIGITOS a esquerda dele, e
+// nao pela posicao em caracteres: assim o separador de milhar pode entrar ou sair que o cursor
+// continua onde a pessoa estava. Digitar 1 mostra 1,00; 1234 mostra 1.234,00 sem o cursor sair do
+// lugar. NAO volte para "so no blur" sem ler isto.
 function aoDigitar(evento: Event) {
   const alvo = evento.target as HTMLInputElement;
-  const limpo = limparDigitacaoDinheiro(alvo.value);
-  rascunho.value = limpo;
-  if (alvo.value !== limpo) alvo.value = limpo;
-  const numero = numeroDoCampo(limpo);
+  const digitado = (evento as InputEvent).data;
+  const bruto = alvo.value;
+  const posicao = alvo.selectionStart ?? bruto.length;
+  const digitosAEsquerda = contarDigitos(bruto.slice(0, posicao));
+
+  const numero = numeroDoCampo(limparDigitacaoDinheiro(bruto));
   emit("update:modelValue", numero === null ? "" : String(numero));
-}
 
-function aoFocar(evento: FocusEvent) {
-  const numero = numeroDoCampo(props.modelValue);
-  // Entra em edicao com o numero cru em virgula, sem separador de milhar: ninguem digita por cima
-  // de "1.234,56" sem esbarrar no ponto.
-  rascunho.value = numero === null ? "" : String(numero).replace(".", ",");
-  editando.value = true;
-  (evento.target as HTMLInputElement).value = rascunho.value;
-}
+  const formatado = numero === null ? "" : formatarCampoDinheiro(numero, props.casas);
+  alvo.value = formatado;
 
-function aoSair() {
-  editando.value = false;
-  rascunho.value = "";
+  // Digitou o separador: o cursor pula para DEPOIS da virgula, para os proximos digitos caírem nos
+  // centavos. Sem isto, "15" + "," + "5" viraria "155,00" em vez de "15,50".
+  const virgula = formatado.indexOf(",");
+  const destino =
+    (digitado === "," || digitado === ".") && virgula >= 0
+      ? virgula + 1
+      : posicaoAposDigitos(formatado, digitosAEsquerda);
+  alvo.setSelectionRange(destino, destino);
 }
 </script>
 
@@ -74,8 +80,6 @@ function aoSair() {
     :placeholder="props.placeholder"
     :disabled="props.disabled"
     @input="aoDigitar"
-    @focus="aoFocar"
-    @blur="aoSair"
   />
 </template>
 
