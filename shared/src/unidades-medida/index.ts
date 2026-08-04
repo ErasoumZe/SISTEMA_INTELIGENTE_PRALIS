@@ -24,4 +24,3 @@ export const unidadeMedidaParamsSchema = apiIdParamsSchema;
 export type UnidadeMedidaPayload = z.infer<typeof unidadeMedidaPayloadSchema>;
 export type ImportarUnidadesMedidaPayload = ImportarEmpresaPayload;
 export type ExportarUnidadeMedidaPayload = ExportarEmpresaPayload;
-

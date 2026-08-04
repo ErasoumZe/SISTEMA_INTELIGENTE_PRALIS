@@ -88,7 +88,13 @@ const hashDependencias = hashDeArquivos([
   "web-vue/package.json"
 ]);
 
-const hashPreparoDev = hashDeArquivos(["package-lock.json", "db/drizzle.config.ts", "db/setup-dev.mjs", "db/seed.ts", "db/migrations"]);
+const hashPreparoDev = hashDeArquivos([
+  "package-lock.json",
+  "db/drizzle.config.ts",
+  "db/setup-dev.mjs",
+  "db/seed.ts",
+  "db/migrations"
+]);
 const cacheDirDev = path.join(cwd, "node_modules", ".cache", "padaria-dev");
 const marcadorDependencias = path.join(cacheDirDev, `deps-${hashDependencias}`);
 const marcadorPreparo = path.join(cacheDirDev, `prepare-${hashPreparoDev}`);
@@ -273,7 +279,11 @@ function ambienteLocal(extra = {}) {
   };
 }
 
-async function aguardarHttp(nome, url, { timeoutMs = 120_000, aceitarStatus = (status) => status >= 200 && status < 500 } = {}) {
+async function aguardarHttp(
+  nome,
+  url,
+  { timeoutMs = 120_000, aceitarStatus = (status) => status >= 200 && status < 500 } = {}
+) {
   const inicio = Date.now();
   while (Date.now() - inicio < timeoutMs) {
     try {
@@ -409,7 +419,18 @@ async function mainContainer() {
     await executar(
       "prepare",
       docker,
-      [...composeAppDev, "run", "--rm", "--no-deps", "api", "npm", "run", "api:dev:prepare", "--workspace", "@padaria/api"],
+      [
+        ...composeAppDev,
+        "run",
+        "--rm",
+        "--no-deps",
+        "api",
+        "npm",
+        "run",
+        "api:dev:prepare",
+        "--workspace",
+        "@padaria/api"
+      ],
       { env: { POSTGRES_PORT: dbPort } }
     );
     gravarMarcador(marcadorPreparo);
@@ -422,7 +443,10 @@ async function mainContainer() {
   if (
     !forcarBuild &&
     (await servicoComposeHealthy(composeAppDev, "api", { POSTGRES_PORT: dbPort })) &&
-    (await aguardarHttp("api", `http://localhost:${apiPort}/health`, { aceitarStatus: (status) => status === 200, timeoutMs: 3_000 }).then(
+    (await aguardarHttp("api", `http://localhost:${apiPort}/health`, {
+      aceitarStatus: (status) => status === 200,
+      timeoutMs: 3_000
+    }).then(
       () => true,
       () => false
     ))
@@ -430,18 +454,31 @@ async function mainContainer() {
     ok("API reaproveitada do container em execucao");
   } else {
     info("iniciando API em container...");
-    await executar("compose-up", docker, [...composeAppDev, "up", "-d", "--remove-orphans", "api"], { env: { POSTGRES_PORT: dbPort } });
+    await executar("compose-up", docker, [...composeAppDev, "up", "-d", "--remove-orphans", "api"], {
+      env: { POSTGRES_PORT: dbPort }
+    });
     await aguardarServicoCompose(composeAppDev, "api", { timeoutMs: 240_000, env: { POSTGRES_PORT: dbPort } });
-    await aguardarHttp("api", `http://localhost:${apiPort}/health`, { aceitarStatus: (status) => status === 200, timeoutMs: 240_000 });
+    await aguardarHttp("api", `http://localhost:${apiPort}/health`, {
+      aceitarStatus: (status) => status === 200,
+      timeoutMs: 240_000
+    });
     ok("API pronta");
   }
 
   info("iniciando Web Vue no host...");
-  const web = criarProcesso("web", npm, ["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort], {
-    env: ambienteLocal({ PORT: webPort })
-  });
+  const web = criarProcesso(
+    "web",
+    npm,
+    ["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort],
+    {
+      env: ambienteLocal({ PORT: webPort })
+    }
+  );
   observarProcessos([["web", web]]);
-  await aguardarHttp("web", `http://localhost:${webPort}`, { aceitarStatus: (status) => status < 500, timeoutMs: 180_000 });
+  await aguardarHttp("web", `http://localhost:${webPort}`, {
+    aceitarStatus: (status) => status < 500,
+    timeoutMs: 180_000
+  });
 
   linha();
   titulo("Ambiente pronto");
@@ -451,14 +488,18 @@ async function mainContainer() {
   ok(`Postgres localhost:${dbPort} (container em /db)`);
   ok("Login    diretor@email.com / 123456");
   ok("Login    caixa@email.com / 123456");
-  linha(`${cor.cinza}Pressione Ctrl+C para encerrar API e Web. Use npm run dev:destroy para remover volumes.${cor.reset}`);
+  linha(
+    `${cor.cinza}Pressione Ctrl+C para encerrar API e Web. Use npm run dev:destroy para remover volumes.${cor.reset}`
+  );
 
   if (executarUmaVez) {
     encerrar(0);
     return;
   }
 
-  const composeLogs = criarProcesso("compose", docker, [...composeAppDev, "logs", "-f", "api"], { env: { POSTGRES_PORT: dbPort } });
+  const composeLogs = criarProcesso("compose", docker, [...composeAppDev, "logs", "-f", "api"], {
+    env: { POSTGRES_PORT: dbPort }
+  });
   observarProcessos([["compose", composeLogs]]);
   anexarLogs("compose", composeLogs);
   anexarLogs("web", web);
@@ -476,9 +517,14 @@ async function mainLocal() {
 
   info("iniciando API e Web locais...");
   const api = criarProcesso("api", npm, ["run", "dev", "--workspace", "@padaria/api"], { env: ambienteLocal() });
-  const web = criarProcesso("web", npm, ["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort], {
-    env: ambienteLocal({ PORT: webPort })
-  });
+  const web = criarProcesso(
+    "web",
+    npm,
+    ["run", "dev", "--workspace", "@padaria/web-vue", "--", "--host", "0.0.0.0", "--port", webPort],
+    {
+      env: ambienteLocal({ PORT: webPort })
+    }
+  );
 
   observarProcessos([
     ["api", api],
@@ -508,6 +554,7 @@ async function mainLocal() {
 
 (executarLocal ? mainLocal() : mainContainer()).catch((error) => {
   falha(error instanceof Error ? error.message : String(error));
-  for (const nome of ["db-dev", "build", "deps", "prepare", "marker", "compose-up", "api", "web", "compose"]) imprimirUltimosLogs(nome);
+  for (const nome of ["db-dev", "build", "deps", "prepare", "marker", "compose-up", "api", "web", "compose"])
+    imprimirUltimosLogs(nome);
   encerrar(1);
 });

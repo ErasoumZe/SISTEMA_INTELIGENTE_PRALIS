@@ -23,5 +23,3 @@ export async function registrarRotasTema(app: FastifyInstance) {
     return semConteudo(reply);
   });
 }
-
-

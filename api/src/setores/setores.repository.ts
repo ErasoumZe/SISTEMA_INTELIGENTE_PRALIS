@@ -16,7 +16,11 @@ export async function listarSetoresRepository() {
 }
 
 export async function buscarSetorEmpresaRepository(setorId: string, db: ExecutorBanco = banco) {
-  const [setor] = await db.select({ empresaId: setores.empresaId }).from(setores).where(eq(setores.id, setorId)).limit(1);
+  const [setor] = await db
+    .select({ empresaId: setores.empresaId })
+    .from(setores)
+    .where(eq(setores.id, setorId))
+    .limit(1);
   return setor ?? null;
 }
 

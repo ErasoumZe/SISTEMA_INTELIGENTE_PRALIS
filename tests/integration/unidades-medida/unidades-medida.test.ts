@@ -35,7 +35,12 @@ describe("unidades de medida integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Quilo editado por integracao", sigla: "kg" }
     });
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from unidades_medida where id = $1 and nome = $2", [unidadeId, "Quilo editado por integracao"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from unidades_medida where id = $1 and nome = $2", [
+        unidadeId,
+        "Quilo editado por integracao"
+      ])
+    ).resolves.toBeTruthy();
   });
 });
 
@@ -53,7 +58,10 @@ describe("unidades de medida importacao/exportacao integration", () => {
   });
 
   it("Deve_ImportarUnidadesMedidaEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from unidades_medida where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from unidades_medida where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -64,7 +72,12 @@ describe("unidades de medida importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from unidades_medida where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from unidades_medida where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarUnidadeMedidaParaEmpresaPermitida", async () => {
@@ -83,7 +96,12 @@ describe("unidades de medida importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from unidades_medida where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.unidade])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from unidades_medida where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.unidade
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

@@ -66,4 +66,3 @@ describe("autenticacao integration", () => {
     expect([200, 204]).toContain(resposta.statusCode);
   });
 });
-

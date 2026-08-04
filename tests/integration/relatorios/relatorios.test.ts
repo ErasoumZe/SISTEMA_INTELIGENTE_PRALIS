@@ -42,4 +42,3 @@ describe("relatorios integration", () => {
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 });
-

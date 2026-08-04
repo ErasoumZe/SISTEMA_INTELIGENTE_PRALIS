@@ -48,7 +48,9 @@ describe("clientes integration", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "Cliente editado por integracao", documento: "12345678901" }
     });
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from clientes where id = $1 and nome = $2", [clienteId, "Cliente editado por integracao"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from clientes where id = $1 and nome = $2", [clienteId, "Cliente editado por integracao"])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_Retornar403_Quando_CriarClienteEmEmpresaNaoPermitida", async () => {

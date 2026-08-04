@@ -20,19 +20,16 @@ export async function criarComprovanteVendaRepository(input: {
   tamanhoBytes: number;
   criadoPor: string;
 }) {
-  const [criado] = await banco
-    .insert(vendasComprovantes)
-    .values(input)
-    .returning({
-      id: vendasComprovantes.id,
-      vendaId: vendasComprovantes.vendaId,
-      nomeOriginal: vendasComprovantes.nomeOriginal,
-      nomeArquivo: vendasComprovantes.nomeArquivo,
-      caminho: vendasComprovantes.caminho,
-      mimeType: vendasComprovantes.mimeType,
-      tamanhoBytes: vendasComprovantes.tamanhoBytes,
-      criadoEm: vendasComprovantes.criadoEm
-    });
+  const [criado] = await banco.insert(vendasComprovantes).values(input).returning({
+    id: vendasComprovantes.id,
+    vendaId: vendasComprovantes.vendaId,
+    nomeOriginal: vendasComprovantes.nomeOriginal,
+    nomeArquivo: vendasComprovantes.nomeArquivo,
+    caminho: vendasComprovantes.caminho,
+    mimeType: vendasComprovantes.mimeType,
+    tamanhoBytes: vendasComprovantes.tamanhoBytes,
+    criadoEm: vendasComprovantes.criadoEm
+  });
   return criado;
 }
 

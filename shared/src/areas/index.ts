@@ -23,4 +23,3 @@ export const areaSetorParamsSchema = apiIdParamsSchema;
 export type AreaPayload = z.infer<typeof areaPayloadSchema>;
 export type ImportarAreasSetoresPayload = ImportarEmpresaPayload;
 export type ExportarAreaSetorPayload = ExportarEmpresaPayload;
-

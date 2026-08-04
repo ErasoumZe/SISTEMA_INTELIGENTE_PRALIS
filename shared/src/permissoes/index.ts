@@ -38,4 +38,3 @@ export type TipoPermissao = z.infer<typeof tipoPermissaoSchema>;
 export type PermissaoPayload = z.infer<typeof permissaoPayloadSchema>;
 export type PermissoesPaginadasQuery = z.infer<typeof permissoesPaginadasQuerySchema>;
 export type ExcluirPermissaoQuery = z.infer<typeof excluirPermissaoQuerySchema>;
-

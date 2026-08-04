@@ -31,7 +31,12 @@ describe("pdvs integration", () => {
       method: "POST",
       url: "/api/pdvs",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "PDV criado por integracao", contaId: idsTeste.contaBanco, ativo: true }
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "PDV criado por integracao",
+        contaId: idsTeste.contaBanco,
+        ativo: true
+      }
     });
 
     expect(resposta.statusCode).toBe(201);

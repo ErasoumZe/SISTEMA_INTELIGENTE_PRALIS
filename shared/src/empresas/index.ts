@@ -8,4 +8,3 @@ export const empresaPayloadSchema = z.object({
 });
 
 export type EmpresaPayload = z.infer<typeof empresaPayloadSchema>;
-

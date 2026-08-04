@@ -12,4 +12,3 @@ export const setorPayloadSchema = z.object({
 });
 
 export type SetorPayload = z.infer<typeof setorPayloadSchema>;
-

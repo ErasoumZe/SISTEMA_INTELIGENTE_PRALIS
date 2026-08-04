@@ -12,7 +12,14 @@ import {
   listarComprovantesVendaRepository
 } from "./comprovantes.repository.js";
 
-const mimeTypesPermitidos = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+const mimeTypesPermitidos = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif"
+]);
 const storageRoot = path.resolve(process.cwd(), "storage");
 
 function extensaoSegura(filename: string) {
@@ -40,7 +47,11 @@ export async function listarComprovantesVenda(vendaId: string, perfil: PerfilUsu
   return listarComprovantesVendaRepository(vendaId);
 }
 
-export async function salvarComprovanteVenda(vendaId: string, arquivo: MultipartFile | undefined, perfil: PerfilUsuario) {
+export async function salvarComprovanteVenda(
+  vendaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+) {
   await validarVenda(vendaId, perfil);
   if (!arquivo) throw new Error("Arquivo obrigatorio");
   if (!mimeTypesPermitidos.has(arquivo.mimetype)) throw new Error("Tipo de arquivo nao permitido");
@@ -65,4 +76,3 @@ export async function salvarComprovanteVenda(vendaId: string, arquivo: Multipart
     })
   );
 }
-
