@@ -30,15 +30,35 @@ utilizável**, no espírito do Mobills (fundo claro, cor como acento e sinal, n�
 Para cada categoria, três tokens: `-base` (ícone, borda, barra, texto de destaque),
 `-soft` (fundo de chip/seção/hover) e `-strong` (hover/ativo). Valores AA-safe sobre branco.
 
-| Categoria                    | `--cat-*-base` | `--cat-*-soft` | `--cat-*-strong` | Uso                             |
-| ---------------------------- | -------------- | -------------- | ---------------- | ------------------------------- |
-| **Entradas / Vendas** 🟡     | `#B7791F`      | `#FEF6E4`      | `#8F6115`        | receita, venda, entrada         |
-| **Transferências** 🟠        | `#C2410C`      | `#FFF1E8`      | `#9A3412`        | cofre ⇄ caixa, malote, lacre    |
-| **Despesas** 🔴              | `#C0392B`      | `#FDECEA`      | `#96261B`        | despesa operacional             |
-| **Mercadorias** 🟢           | `#15803D`      | `#E9F7EE`      | `#106430`        | compra de mercadoria, NF-e      |
-| **Retiradas** 🔵             | `#1D4ED8`      | `#EAF0FE`      | `#1739A8`        | retirada de sócio, adiantamento |
-| **Resultado / Diferença** 🟣 | `#6D28D9`      | `#F3EDFD`      | `#54209F`        | saldo, DRE, quebra              |
-| **Contas / Cadastros** ⚫    | `#334155`      | `#F1F5F9`      | `#1E293B`        | referência, cadastro            |
+> ⚠️ **Atualizado em 04/08/2026.** Os valores abaixo substituem a paleta original desta seção, por
+> decisão do José: ele pediu cores **"bem vivas e evidentes"**, e as anteriores eram dessaturadas
+> demais para o que a tela precisava mostrar. A tabela antiga ficou registrada no histórico do git.
+>
+> **A fonte de verdade dos hex não é mais este documento** — é `web-vue/utils/cores-categoria.ts`.
+> Até esta data havia DUAS fontes com valores diferentes para a mesma categoria (os tokens do
+> `main.css` e o `corCategoriaPorTela` do `tema.ts`), e ninguém percebia: o ícone de Mercadorias no
+> menu era `#16a34a` e o card da mesma categoria era `#15803D`. Um teste
+> (`cores-categoria.test.ts`) agora falha se as duas divergirem.
+
+| Categoria                    | `--cat-*-base` | `--cat-*-soft` | `--cat-*-strong` | `--cat-*-faixa` | Uso                             |
+| ---------------------------- | -------------- | -------------- | ---------------- | --------------- | ------------------------------- |
+| **Entradas / Vendas** 🟡     | `#ca8a04`      | `#fbf6eb`      | `#a26e03`        | `#9e6c03`       | receita, venda, entrada         |
+| **Transferências** 🟠        | `#ea580c`      | `#fdf2ec`      | `#bb460a`        | `#cc4d0a`       | cofre ⇄ caixa, lacre            |
+| **Despesas** 🔴              | `#dc2626`      | `#fceeee`      | `#b01e1e`        | `#dc2626`       | despesa operacional             |
+| **Mercadorias** 🟢           | `#16a34a`      | `#ecf8f1`      | `#12823b`        | `#12873d`       | compra de mercadoria, NF-e      |
+| **Retiradas** 🔵             | `#2563eb`      | `#eef3fd`      | `#1e4fbc`        | `#2563eb`       | retirada de sócio, adiantamento |
+| **Resultado / Diferença** 🟣 | `#6d28d9`      | `#f3eefc`      | `#5720ae`        | `#6d28d9`       | saldo, DRE, quebra              |
+
+**`-soft` e `-strong` são derivados por fórmula** da base (8% sobre branco / 20% mais escura), e não
+escolhas avulsas — uma base nova não exige inventar mais dois hex à mão. Há teste para isso.
+
+**`-faixa` é o único medido**, e existe porque o cabeçalho colorido dos modais leva texto **branco**:
+a `base` reprova em 4,5:1 nas categorias claras (entradas 2,94 · transferências 3,56 ·
+mercadorias 3,30) e em entradas nem o `strong` resolve (4,40). Escurecer só quem precisa mantém as
+outras vivas em vez de rebaixar todas para igualar a pior.
+
+**"Contas / Cadastros" saiu da tabela.** Não é categoria: essas telas ficam **neutras de propósito**
+— hover cinza no menu e item ativo no roxo da marca. Ver `PROJECT_BRAIN/67`.
 
 Neutros (base Mobills — claro, arejado):
 
