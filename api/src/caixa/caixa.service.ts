@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type {
   AbrirCaixaPayload,
-  AcertarSaldoCaixaPayload,
   AlterarHorarioCaixaPayload,
   AlterarHorarioCaixaResponse,
   CaixaOperacional,
@@ -40,33 +39,36 @@ import {
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
   buscarContaCofreEmpresaRepository,
-  buscarGrupoQuebraCaixa,
-  buscarMaloteDisponivelPorLacreRepository,
-  buscarMaloteParaAberturaRepository,
+  buscarMaquininhaEmpresaRepository,
+  buscarTransferenciaPorLacreAberturaRepository,
   buscarPdvEmpresaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
   caixaTemLancamentosRepository,
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
-  contaPertenceEmpresaRepository,
-  criarAcertoSaldoCaixaRepository,
   criarCaixaRepository,
-  criarTransferenciaAberturaRepository,
+  confirmarTransferenciaAberturaRepository,
+  criarLacreRetornoRepository,
+  criarQuebraCaixaRepository,
   criarTransferenciaCofreRepository,
   existeCaixaAbertoPdvRepository,
   existePeriodoCaixaRepository,
   listarEdicoesCaixaRepository,
+  listarAlteracoesPosFechamentoRepository,
   listarHistoricoCaixaRepository,
   listarLancamentosCaixaRepository,
+  caixasAlteradosPosFechamentoRepository,
+  listarUsuariosTesourariaRepository,
   listarTransferenciasCaixaRepository,
-  marcarMaloteEmUsoRepository,
   proximaOrdemTransferenciaRepository,
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
   type FiltrosHistoricoCaixa
 } from "./caixa.repository.js";
+import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
+import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const indiceCaixaAbertoUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
@@ -117,16 +119,21 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     empresaId: caixa.empresaId,
     pdvId: caixa.pdvId,
     pdvNome: caixa.pdvNome,
+    pdvContaId: caixa.pdvContaId ?? null,
     usuarioId: caixa.usuarioId,
     usuarioCaixaId: caixa.usuarioCaixaId,
     usuarioCaixaNome: caixa.usuarioCaixaNome ?? "Usuario",
     colaboradorId: caixa.colaboradorId,
+    dataMovimento: caixa.dataMovimento,
     dataHoraAbertura: serializarData(caixa.dataHoraAbertura) ?? "",
     abertoEm: serializarData(caixa.abertoEm) ?? "",
     dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
+    maquininhaId: caixa.maquininhaId ?? null,
+    maquininhaApelido: caixa.maquininhaApelido ?? null,
+    maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
     observacao: caixa.observacao,
     status: caixa.status
   };
@@ -162,7 +169,7 @@ export async function revincularVendasAoCaixa(
 
 export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: ExecutorBanco): Promise<ResumoCaixa> {
   const totais = await calcularTotaisCaixaCentavos(caixa, db);
-  // dividaCofre (valor do malote da abertura; 0 sem malote) alimenta o saldo proprio derivado (R8).
+  // dividaCofre e legado da R8, revogada pela R-001: hoje e sempre 0 (ver 18 D-08).
   return montarResumoCaixa(totais, paraCentavos(caixa.dividaCofre));
 }
 
@@ -179,6 +186,9 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
 export interface EscopoListagemCaixa {
   bloquear: boolean;
   caixaId: string | undefined;
+  // Dia CONTABIL do caixa aberto. So a tela de Entradas usa (D7): la o escopo e o DIA, nao o caixa
+  // — ver resolverEscopoEntradasDoDia.
+  dia?: string | undefined;
 }
 
 /**
@@ -202,6 +212,35 @@ export async function resolverEscopoListagemPorCaixa(
   return { bloquear: false, caixaId: caixa.id };
 }
 
+/**
+ * Escopo da tela de ENTRADAS (PROJECT_BRAIN/17, D7): "a tela lista TODAS as entradas do DIA".
+ *
+ * Difere do escopo das demais telas em UMA coisa, que e o ponto do D7: quem tem
+ * `menu_entradas_somente_caixa_aberto` continua PRECISANDO de caixa aberto para ver a tela, mas o
+ * que ela lista passa a ser o DIA do caixa — nao o caixa.
+ *
+ * O motivo e concreto: a venda integrada do CREARE so recebe caixa_id quando existe um caixa aberto
+ * NAQUELE PDV no instante da venda (integracoes.service). A venda da madrugada, a de antes da
+ * abertura e a de PDV sem caixa ficam com caixa_id NULL — e sob o filtro por caixa elas sumiam
+ * justamente da tela do operador, que e quem precisa conferir o dia.
+ */
+export async function resolverEscopoEntradasDoDia(
+  perfil: PerfilUsuario | undefined,
+  empresaId: string | undefined,
+  caixaIdSolicitado: string | undefined
+): Promise<EscopoListagemCaixa> {
+  const exigeCaixaAberto = Boolean(perfil) && temPermissao(perfil?.permissoes, "menu_entradas_somente_caixa_aberto");
+  // Sem a flag (gestao/retaguarda): nada muda — segue livre, com filtro opcional por caixa e as
+  // datas que a propria tela mandar. Prender a gestao ao dia tiraria o acesso ao historico.
+  if (!exigeCaixaAberto) return { bloquear: false, caixaId: caixaIdSolicitado };
+  if (!perfil || !empresaId) return { bloquear: true, caixaId: undefined };
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
+  if (!caixa) return { bloquear: true, caixaId: undefined };
+  // dataMovimento e o dia CONTABIL do caixa (nao "hoje"): num caixa que virou a meia-noite, o dia
+  // do operador continua sendo o da abertura.
+  return { bloquear: false, caixaId: undefined, dia: caixa.dataMovimento };
+}
+
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, dados.empresaId)) throw new Error("Empresa nao permitida");
   const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
@@ -214,35 +253,43 @@ export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario
   }
 }
 
-// Dados resolvidos da abertura com malote (R8): valida o malote e o cofre ANTES de criar o caixa,
-// para que a transacao inteira falhe cedo e com mensagem clara em vez de meia-abertura.
-type AberturaMalote = {
-  maloteId: string;
+// R-040: abrir o caixa informando o lacre E o ato de confirmar o recebimento da transferencia.
+// Esta funcao so RESOLVE e valida (leitura) — a confirmacao atomica acontece depois, ja com o
+// caixa criado, para que a disputa (R-030) seja decidida pelo banco e nao por leitura otimista.
+type AberturaPorLacre = {
+  transferenciaId: string;
+  lacreId: string;
   numeroLacre: string;
   valorCentavos: number;
-  contaCofreId: string;
 };
 
-async function prepararAberturaComMalote(
+async function prepararAberturaPorLacre(
   empresaId: string,
-  maloteId: string,
+  numeroLacre: string,
   contaCaixaId: string,
+  usuarioId: string,
   tx: ExecutorBanco
-): Promise<AberturaMalote> {
-  const malote = await buscarMaloteParaAberturaRepository(maloteId, empresaId, tx);
-  if (!malote) throw new Error("Malote nao encontrado");
-  if (malote.status !== "disponivel") throw new Error("Malote indisponivel");
-  const valorCentavos = paraCentavos(malote.valor);
-  if (valorCentavos <= 0) throw new Error("Malote sem valor para emprestar ao caixa");
+): Promise<AberturaPorLacre> {
+  const achado = await buscarTransferenciaPorLacreAberturaRepository(empresaId, numeroLacre, contaCaixaId, tx);
+  // Motivos separados de proposito: "lacre inexistente" e "lacre ja rompido" mandam o operador para
+  // acoes diferentes (redigitar x procurar a tesouraria).
+  if (!achado) throw new Error("Lacre inexistente");
+  if (achado.lacreRompido) throw new Error("Lacre já rompido — não pode ser reutilizado");
+  if (achado.status === "agendada") throw new Error("Transferência agendada ainda não foi liberada");
+  if (achado.status !== "pendente") throw new Error("Transferência deste lacre não está pendente de recebimento");
+  // R-030: so um dos destinos CANDIDATOS pode reivindicar. Caixa fora da lista nao disputa.
+  if (!achado.candidatoId) throw new Error("A conta deste caixa não é destino desta transferência");
+  // R-028: quem envia nao confirma o proprio envio.
+  if (achado.criadoPor === usuarioId) throw new Error("Quem enviou a transferência não pode confirmar o recebimento");
+  if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem não pode ser a mesma do caixa");
 
-  // Regra 5: origem = conta do cofre mapeada na empresa. Sem mapeamento, PARA (nao inventa conta).
-  const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
-  if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para abertura com malote");
-  if (contaCofreId === contaCaixaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
-  if (!(await contaPertenceEmpresaRepository(contaCofreId, empresaId, tx))) throw new Error("Conta de cofre invalida");
-
-  // O malote E o lacre (D3): o lacre da ida e o proprio numero do malote selecionado.
-  return { maloteId, numeroLacre: malote.numeroLacre, valorCentavos, contaCofreId };
+  const valorCentavos = paraCentavos(achado.valorOriginal);
+  return {
+    transferenciaId: achado.transferenciaId,
+    lacreId: achado.lacreId,
+    numeroLacre,
+    valorCentavos
+  };
 }
 
 async function abrirCaixaEmTransacao(
@@ -260,10 +307,15 @@ async function abrirCaixaEmTransacao(
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
+    if (dados.maquininhaId && !(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {
+      throw new Error("Maquininha nao encontrada ou inativa");
+    }
 
-    // R8: malote selecionado => transferencia cofre->caixa e caixa nasce devendo (deficit). Opcional.
-    const aberturaMalote = dados.maloteId
-      ? await prepararAberturaComMalote(dados.empresaId, dados.maloteId, pdv.contaId, tx)
+    // R-040: o lacre e opcional (R-033 — sem lacre o caixa abre zerado e o fundo chega depois).
+    // Informado, ele identifica a transferencia pendente que este caixa vai reivindicar.
+    const lacreInformado = dados.lacreAbertura?.trim() || null;
+    const abertura = lacreInformado
+      ? await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx)
       : null;
 
     const caixa = await criarCaixaRepository(
@@ -278,30 +330,28 @@ async function abrirCaixaEmTransacao(
         // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
         turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
         observacao: dados.observacao?.trim() || null,
-        maloteAberturaId: aberturaMalote?.maloteId ?? null,
-        lacreAbertura: aberturaMalote?.numeroLacre ?? null,
-        dividaCofreCentavos: aberturaMalote?.valorCentavos ?? 0
+        lacreAbertura: abertura?.numeroLacre ?? null,
+        maquininhaId: dados.maquininhaId ?? null
       },
       tx
     );
 
-    // Transferencia de abertura + consumo do malote (o malote E o lacre), na mesma transacao.
-    if (aberturaMalote) {
-      await criarTransferenciaAberturaRepository(
+    // R-040 na MESMA transacao: vence a disputa (R-030), preenche data_recebimento/confirmado_por
+    // (R-028), leva o dinheiro para ESTE caixa (R-036) e rompe o lacre (R-027). Perder a disputa
+    // derruba a abertura inteira — nao existe caixa aberto com transferencia ainda pendente.
+    if (abertura) {
+      const confirmada = await confirmarTransferenciaAberturaRepository(
         {
-          empresaId: dados.empresaId,
-          caixaId: caixa.id,
-          contaCofreId: aberturaMalote.contaCofreId,
+          transferenciaId: abertura.transferenciaId,
+          lacreId: abertura.lacreId,
           contaCaixaId: pdv.contaId,
-          valorCentavos: aberturaMalote.valorCentavos,
-          dataReferencia: diaNegocio(dataHoraAbertura),
-          maloteId: aberturaMalote.maloteId,
-          descricao: `Abertura de caixa - malote ${aberturaMalote.numeroLacre}`,
-          criadoPor: perfil.usuarioId
+          caixaId: caixa.id,
+          usuarioId: perfil.usuarioId,
+          agora: new Date()
         },
         tx
       );
-      await marcarMaloteEmUsoRepository(aberturaMalote.maloteId, tx);
+      if (!confirmada) throw new Error("Lacre já utilizado por outro caixa");
     }
 
     const aberto = await buscarCaixaPorIdRepository(caixa.id, tx);
@@ -492,38 +542,6 @@ export async function alterarHorarioCaixa(
   }
 }
 
-export async function acertarSaldoCaixaOperacional(
-  caixaId: string,
-  dados: AcertarSaldoCaixaPayload,
-  perfil: PerfilUsuario
-) {
-  return executarEmTransacao(async (tx) => {
-    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    const saldoCentavos = saldoCaixaCentavos(totais);
-    if (saldoCentavos <= 0) throw new Error("Nao ha diferenca positiva para acertar");
-    const grupo = await buscarGrupoQuebraCaixa(caixa.empresaId, tx);
-    const resultado = await criarAcertoSaldoCaixaRepository(
-      {
-        caixaId: caixa.id,
-        empresaId: caixa.empresaId,
-        colaboradorId: caixa.colaboradorId,
-        contaOrigemId: caixa.pdvContaId,
-        grupoDespesaId: grupo?.id ?? null,
-        valorDiferencaCentavos: saldoCentavos,
-        observacao: dados.observacao?.trim() || null,
-        criadoPor: perfil.usuarioId,
-        data: diaNegocio(new Date())
-      },
-      tx
-    );
-    return { ...resultado, valorDiferenca: deCentavos(saldoCentavos) };
-  });
-}
-
 export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, perfil: PerfilUsuario) {
   return executarEmTransacao(async (tx) => {
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
@@ -536,13 +554,46 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     }
     const totais = await calcularTotaisCaixaCentavos(caixa, tx);
     const saldoCentavos = saldoCaixaCentavos(totais);
-    if (saldoCentavos > 0) throw new Error("Acerto de saldo obrigatorio");
+    if (saldoCentavos > 0) {
+      throw new Error(`Retorno ao cofre obrigatorio: ainda sobram R$ ${deCentavos(saldoCentavos).toFixed(2)}`);
+    }
+
+    const observacao = dados.observacao?.trim() || null;
+    if (saldoCentavos < 0) {
+      if (!observacao) throw new Error("Observacao obrigatoria para fechar caixa com quebra");
+      if (!caixa.usuarioCaixaId) throw new Error("Caixa sem usuario responsavel");
+      const quebra = await criarQuebraCaixaRepository(
+        {
+          empresaId: caixa.empresaId,
+          fechamentoCaixaId: caixa.id,
+          usuarioId: caixa.usuarioCaixaId,
+          valorCentavos: saldoCentavos,
+          observacao
+        },
+        tx
+      );
+      const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+        .map((item) => item.usuarioId)
+        .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+      await criarNotificacoesRepository(
+        {
+          empresaId: caixa.empresaId,
+          tipo: "quebra_caixa",
+          destinatariosUsuarioIds: destinatarios,
+          referenciaId: quebra.id,
+          titulo: `Quebra de caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+          valorCentavos: saldoCentavos
+        },
+        tx
+      );
+    }
 
     await atualizarFechamentoCaixaRepository(
       {
         caixaId: caixa.id,
         dataHoraFechamento,
-        observacao: dados.observacao?.trim() || caixa.observacao,
+        observacao: observacao || caixa.observacao,
+        fechadoPor: perfil.usuarioId,
         totais,
         saldoCentavos
       },
@@ -575,18 +626,15 @@ export async function criarTransferenciaCofreCaixa(
     if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
     if (contaCofreId === caixa.pdvContaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
 
-    // Malote-selo da volta (D5 opcional): um malote disponivel da empresa e usado como selo do
-    // retorno/sangria (o malote E o lacre) e passa a em_uso.
-    let maloteSeloId: string | null = null;
-    if (dados.lacre?.trim()) {
-      const malote = await buscarMaloteDisponivelPorLacreRepository(caixa.empresaId, dados.lacre.trim(), tx);
-      if (!malote) throw new Error("Lacre inexistente");
-      if (malote.status !== "disponivel") throw new Error("Lacre indisponivel");
-      maloteSeloId = malote.id;
+    // Lacre da VOLTA (R-026: opcional; R-027: numero novo, nunca reutilizado). Digitado pelo
+    // operador como na ida — nao existe mais estoque de malote para "escolher".
+    const lacreVolta = dados.lacre?.trim() || null;
+    if (lacreVolta && (await existeNumeroLacreRepository(caixa.empresaId, lacreVolta, tx))) {
+      throw new Error("Lacre já utilizado em outro movimento");
     }
 
     const ordem = await proximaOrdemTransferenciaRepository(caixa.id, dados.tipo, tx);
-    await criarTransferenciaCofreRepository(
+    const transferencia = await criarTransferenciaCofreRepository(
       {
         empresaId: caixa.empresaId,
         caixaId: caixa.id,
@@ -597,14 +645,19 @@ export async function criarTransferenciaCofreCaixa(
         ordem,
         dataReferencia: caixa.dataMovimento ?? diaNegocio(new Date()),
         dataTransferencia: diaNegocio(new Date()),
-        maloteId: maloteSeloId,
+        nLacreDoc: lacreVolta,
         descricao: dados.tipo === "retorno" ? "Retorno de fechamento" : "Sangria",
         observacao: dados.observacao?.trim() || null,
         criadoPor: perfil.usuarioId
       },
       tx
     );
-    if (maloteSeloId) await marcarMaloteEmUsoRepository(maloteSeloId, tx);
+    if (lacreVolta) {
+      await criarLacreRetornoRepository(
+        { empresaId: caixa.empresaId, numero: lacreVolta, transferenciaId: transferencia.id },
+        tx
+      );
+    }
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
@@ -666,17 +719,21 @@ export async function listarHistoricoCaixa(
   const filtros = filtrosDoHistorico(query);
   const { itens, total } = await listarHistoricoCaixaRepository(filtros, query.page, query.pageSize);
   // Totais do filtro inteiro (rodape) e o flag de acerto so das linhas da pagina.
-  const [totais, ajustes] = await Promise.all([
+  const [totais, ajustes, alterados] = await Promise.all([
     totaisHistoricoCaixaRepository(filtros),
-    caixasComAjusteRepository(itens.map((caixa) => caixa.id))
+    caixasComAjusteRepository(itens.map((caixa) => caixa.id)),
+    caixasAlteradosPosFechamentoRepository(itens.map((caixa) => caixa.id))
   ]);
   const comAjuste = new Set(ajustes.map((ajuste) => ajuste.caixaId));
+  const alteradoPosFechamento = new Set(alterados.map((alteracao) => alteracao.caixaId));
 
   return {
     itens: itens.map((caixa) => ({
       ...caixa,
       dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
       dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+      fechadoPor: caixa.fechadoPor,
+      fechadoPorNome: caixa.fechadoPorNome,
       totalEntradas: numero(caixa.totalEntradas),
       totalTransferencias: numero(caixa.totalTransferencias),
       totalTransferenciasEntrada: numero(caixa.totalTransferenciasEntrada),
@@ -686,7 +743,8 @@ export async function listarHistoricoCaixa(
       totalMercadorias: numero(caixa.totalMercadorias),
       saldo: numero(caixa.saldo),
       status: statusCaixaSchema.parse(caixa.status),
-      temAjuste: comAjuste.has(caixa.id)
+      temAjuste: comAjuste.has(caixa.id),
+      alteradoAposFechamento: alteradoPosFechamento.has(caixa.id)
     })),
     total,
     page: query.page,
@@ -724,14 +782,24 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
 
-  const [edicoes, ajuste, lancamentos] = await Promise.all([
+  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),
     buscarAjusteCaixaRepository(caixaId),
-    listarLancamentosCaixaRepository(caixaId)
+    listarLancamentosCaixaRepository(caixaId),
+    listarAlteracoesPosFechamentoRepository(caixaId)
   ]);
 
   return {
     lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
+    alteracoesPosFechamento: alteracoesPosFechamento.map((alteracao) => ({
+      id: alteracao.id,
+      vendaId: alteracao.vendaId,
+      identificadorExterno: alteracao.identificadorExterno,
+      descricao: alteracao.descricao,
+      valor: numero(alteracao.valor),
+      dataVenda: serializarData(alteracao.dataVenda),
+      alteradoEm: serializarData(alteracao.alteradoEm) ?? ""
+    })),
     edicoes: edicoes.map((edicao) => ({
       id: edicao.id,
       editadoPor: edicao.editadoPor,

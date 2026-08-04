@@ -50,6 +50,11 @@ export const permissoes = [
   "retiradas_visualizar_dpago",
   "retiradas_editar_dpago",
   "retiradas_excluir_dpago",
+  // Recorrencia de lancamento (PROJECT_BRAIN/17, D3): "so Admin, Gerencia e Financeiro podem usar
+  // recorrencia". E UMA permissao para os tres dominios (despesa/mercadoria/retirada) e nao uma por
+  // dominio, porque a regra do negocio e sobre QUEM cria serie, nao sobre onde. Quem nao tem recebe
+  // 403 no servidor mesmo que consiga mexer na tela.
+  "lancamentos_recorrencia_criar",
   "caixa_operar",
   "caixas_gerenciar",
   "caixa_alterar_horario",
@@ -58,14 +63,22 @@ export const permissoes = [
   "relatorio_vendas_visualizar",
   "relatorio_vendas_comprovantes_criar",
   "contas_pagar_visualizar",
-  "cadastro_malotes_visualizar",
-  "cadastro_malotes_criar",
-  "cadastro_malotes_editar",
-  "cadastro_malotes_excluir",
+  // Lacres = selo do MOVIMENTO (registro do lacre de uma transferencia de saida/retorno), operado
+  // pela Tesouraria. O cadastro de malotes morreu com a R-040: malote-entidade nao existe mais.
+  "cadastro_lacres_visualizar",
+  "cadastro_lacres_criar",
+  "cadastro_lacres_editar",
+  "cadastro_lacres_excluir",
   "cadastro_contas_visualizar",
   "cadastro_contas_criar",
   "cadastro_contas_editar",
   "cadastro_contas_excluir",
+  // Vinculo usuario<->conta (FOTO 4): ESCOPO de conta por usuario — quais contas cada um opera e quem
+  // confirma recebimento. Nao e permissao de tela; e cadastro de escopo, operado pela Gerencia.
+  "cadastro_contas_usuarios_visualizar",
+  "cadastro_contas_usuarios_criar",
+  "cadastro_contas_usuarios_editar",
+  "cadastro_contas_usuarios_excluir",
   "cadastro_grupos_visualizar",
   "cadastro_grupos_criar",
   "cadastro_grupos_editar",
@@ -139,6 +152,9 @@ export const permissoes = [
   "relatorio_fiscal_visualizar",
   "cadastro_fiscal_produtos_visualizar",
   "cadastro_patrimonio_visualizar",
+  "cadastro_patrimonio_criar",
+  "cadastro_patrimonio_editar",
+  "cadastro_patrimonio_excluir",
   "cadastro_ficha_tecnica_visualizar",
   "cadastro_ingredientes_visualizar",
   "notas_fiscais_visualizar",
@@ -165,8 +181,6 @@ export const permissoes = [
   "menu_relatorio_produtos_mostrar",
   "menu_relatorio_produtos_desabilitado",
   "menu_relatorio_produtos_somente_caixa_aberto",
-  "menu_malotes_mostrar",
-  "menu_malotes_desabilitado",
   "menu_caixa_mostrar",
   "menu_caixa_desabilitado",
   "menu_promocoes_mostrar",
@@ -242,6 +256,25 @@ export const permissoes = [
 export type Permissao = (typeof permissoes)[number];
 
 export type RegrasPermissoes = Partial<Record<Permissao, boolean>>;
+
+// Permissoes que RESTRINGEM em vez de conceder: quem as tem fica preso ao caixa aberto — some do
+// menu e as listagens ficam presas ao proprio caixa (ver resolverEscopoListagemPorCaixa). Existem
+// para o cargo Caixa, que so opera com o caixa aberto.
+export const permissoesRestricao = permissoes.filter((permissao) =>
+  permissao.endsWith("_somente_caixa_aberto")
+) as readonly Permissao[];
+
+// O que "todas as permissoes" significa (usuario_admin / cargo com `todas`): o catalogo INTEIRO
+// MENOS as restricoes. O dono do sistema nao herda restricao — antes o admin recebia as flags
+// `_somente_caixa_aberto` junto com tudo e, sem caixa aberto, PERDIA Lancamentos/Entradas do menu e
+// via listagens vazias (decisao do Jose, 29/07).
+export const permissoesAcessoTotal = permissoes.filter(
+  (permissao) => !permissoesRestricao.includes(permissao)
+) as readonly Permissao[];
+
+export function ehPermissaoRestricao(permissao: Permissao): boolean {
+  return permissoesRestricao.includes(permissao);
+}
 
 // DE-PARA oficial (Fase 1) do modelo de 9 acoes do Xmind. Mantemos os codigos LEGADOS como
 // CANONICOS (nada e renomeado agora): `*_criar` desempenha o papel da acao "lancar"; visualizar/

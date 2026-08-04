@@ -1,4 +1,5 @@
 import {
+  acentuarMensagemExibida,
   TELA_TEMA_RESUMO_CAIXA,
   permissoes as permissoesCompartilhadas,
   temAlgumaPermissao,
@@ -42,7 +43,6 @@ export const telasOcultasNoDrawerEPermissoes = new Set([
   "avaliacao_colaboradores",
   "relatorio_fiscal",
   "fiscal_produtos",
-  "patrimonio",
   "ficha_tecnica",
   "ingredientes"
 ]);
@@ -57,7 +57,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   transferencias: {
     id: "transferencias",
-    titulo: "Transferencias",
+    titulo: "Transferências",
     permissao: "transferencias_visualizar",
     icone: "mdi-swap-horizontal",
     cor: corCategoriaPorTela["transferencias"]
@@ -79,7 +79,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   fechamento: {
     id: "fechamento",
-    titulo: "Fechamento com diferenca",
+    titulo: "Pendências operacionais",
     permissao: "fechamento_com_diferenca_visualizar",
     // Balanca (conferir diferenca): mdi-cash-register agora e da tela Caixa, vizinha na secao
     // Operacao — dois icones iguais lado a lado confundiam.
@@ -91,21 +91,15 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "relatorio_produtos_visualizar",
     icone: "mdi-chart-bar"
   },
-  malotes: {
-    id: "malotes",
-    titulo: "Malotes",
-    permissao: "cadastro_malotes_visualizar",
-    icone: "mdi-briefcase"
-  },
   caixa: { id: "caixa", titulo: "Caixa", permissao: "caixa_operar", icone: "mdi-cash-register" },
   // Retaguarda: quem gerencia caixas ve o historico de todos. Operador de caixa nao entra aqui.
   historico_caixas: {
     id: "historico_caixas",
-    titulo: "Historico de caixas",
+    titulo: "Histórico de caixas",
     permissao: "caixas_gerenciar",
     icone: "mdi-history"
   },
-  promocoes: { id: "promocoes", titulo: "Promocoes", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
+  promocoes: { id: "promocoes", titulo: "Promoções", permissao: "promocoes_visualizar", icone: "mdi-hand-coin" },
   relatorio_faltas: {
     id: "relatorio_faltas",
     titulo: "Faltas e atestados",
@@ -114,7 +108,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   relatorio_advertencias: {
     id: "relatorio_advertencias",
-    titulo: "Advertencias e suspensoes",
+    titulo: "Advertências e suspensões",
     permissao: "relatorio_advertencias_visualizar",
     icone: "mdi-clipboard-check"
   },
@@ -127,13 +121,13 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   estoque_produtos: {
     id: "estoque_produtos",
-    titulo: "Estoque de produtos",
+    titulo: "Estoques de produtos",
     permissao: "estoque_produtos_visualizar",
     icone: "mdi-warehouse"
   },
   relatorio_dre: {
     id: "relatorio_dre",
-    titulo: "Relatorio de DRE",
+    titulo: "Relatórios de DRE",
     permissao: "relatorio_dre_visualizar",
     icone: "mdi-chart-bar"
   },
@@ -149,6 +143,20 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_fornecedores_visualizar",
     icone: "mdi-domain"
   },
+  socios_gestores: {
+    id: "socios_gestores",
+    titulo: "Sócios e Gestores",
+    permissao: "retiradas_visualizar",
+    permissoesAlternativas: ["retiradas_criar", "retiradas_editar"],
+    icone: "mdi-account-tie"
+  },
+  maquininhas: {
+    id: "maquininhas",
+    titulo: "Maquininhas",
+    permissao: "cadastro_pdv_visualizar",
+    permissoesAlternativas: ["cadastro_pdv_criar", "cadastro_pdv_editar"],
+    icone: "mdi-credit-card-chip"
+  },
   produtos: { id: "produtos", titulo: "Produtos", permissao: "cadastro_produtos_visualizar", icone: "mdi-basket" },
   colaboradores: {
     id: "colaboradores",
@@ -158,43 +166,43 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   folha_ponto: {
     id: "folha_ponto",
-    titulo: "Folha ponto",
+    titulo: "Folhas de ponto",
     permissao: "folha_ponto_visualizar",
     icone: "mdi-calendar-clock"
   },
   avaliacao_qualidade: {
     id: "avaliacao_qualidade",
-    titulo: "Avaliacao de qualidade",
+    titulo: "Avaliações de qualidade",
     permissao: "avaliacao_qualidade_visualizar",
     icone: "mdi-clipboard-check"
   },
   avaliacao_colaboradores: {
     id: "avaliacao_colaboradores",
-    titulo: "Avaliacao de colaboradores",
+    titulo: "Avaliações de colaboradores",
     permissao: "avaliacao_colaboradores_visualizar",
     icone: "mdi-clipboard-check"
   },
   relatorio_fiscal: {
     id: "relatorio_fiscal",
-    titulo: "Relatorio fiscal dos produtos",
+    titulo: "Relatórios fiscais dos produtos",
     permissao: "relatorio_fiscal_visualizar",
     icone: "mdi-file-document"
   },
   fiscal_produtos: {
     id: "fiscal_produtos",
-    titulo: "Fiscal de produtos",
+    titulo: "Fiscais de produtos",
     permissao: "cadastro_fiscal_produtos_visualizar",
     icone: "mdi-file-text"
   },
   patrimonio: {
     id: "patrimonio",
-    titulo: "Patrimonio",
+    titulo: "Patrimônio",
     permissao: "cadastro_patrimonio_visualizar",
     icone: "mdi-bank"
   },
   ficha_tecnica: {
     id: "ficha_tecnica",
-    titulo: "Ficha tecnica",
+    titulo: "Ficha técnica",
     permissao: "cadastro_ficha_tecnica_visualizar",
     icone: "mdi-clipboard-list"
   },
@@ -208,11 +216,12 @@ export const itemPorTela: Record<string, ItemMenu> = {
     id: "contas_pagar",
     titulo: "Contas a pagar",
     permissao: "contas_pagar_visualizar",
-    icone: "mdi-receipt-text"
+    // Distinto de Despesas (mdi-receipt-text): no menu por eixo V2 os dois caem juntos em "Saidas".
+    icone: "mdi-cash-clock"
   },
   relatorio_vendas: {
     id: "relatorio_vendas",
-    titulo: "Relatorio de Vendas",
+    titulo: "Relatório de vendas",
     permissao: "relatorio_vendas_visualizar",
     icone: "mdi-hand-coin",
     cor: corCategoriaPorTela["relatorio_vendas"]
@@ -232,7 +241,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   integracoes: {
     id: "integracoes",
-    titulo: "Integracoes",
+    titulo: "Integrações",
     permissao: "integracoes_visualizar",
     icone: "mdi-connection"
   },
@@ -253,23 +262,23 @@ export const itemPorTela: Record<string, ItemMenu> = {
   },
   areas_setores: {
     id: "areas_setores",
-    titulo: "Areas e setores",
+    titulo: "Áreas e setores",
     permissao: "cadastro_areas_setores_visualizar",
     icone: "mdi-map-marker"
   },
   usuarios: {
     id: "usuarios",
-    titulo: "Usuarios",
+    titulo: "Usuários",
     permissao: "cadastro_usuarios_visualizar",
     icone: "mdi-account-group"
   },
   permissoes: {
     id: "permissoes",
-    titulo: "Permissoes",
+    titulo: "Permissões",
     permissao: "cadastro_permissoes_visualizar",
     icone: "mdi-shield-check"
   },
-  aparencia: { id: "aparencia", titulo: "Aparencia", permissao: "aparencia_visualizar", icone: "mdi-palette" }
+  aparencia: { id: "aparencia", titulo: "Aparência", permissao: "aparencia_visualizar", icone: "mdi-palette" }
 };
 
 const permissoesMenuOcultas = Array.from(telasOcultasNoDrawerEPermissoes).flatMap((telaId) => [
@@ -368,51 +377,57 @@ export function motivoTelaDesabilitada(permissoesUsuario: readonly Permissao[], 
   return "Tela indisponivel para este perfil.";
 }
 
+// Menu curto do FAB "+ NOVO" (estilo Mobills) — PROJECT_BRAIN/17 §4: TRES itens, um por eixo.
+// Entradas NAVEGA para a tela (venda manual foi descontinuada: entrada so por integracao, D7);
+// Transferencias abre o modal de transferencia; Saidas abre o modal UNICO de lancamento, que ja
+// alterna Despesa/Mercadoria/Retirada nos 3 botoes do topo. Nao ha mais item por categoria aqui.
+// `cor` e a cor da categoria (token --cat-*), aplicada ao icone do item.
 export const opcoesNovo: AcaoNovo[] = [
   {
-    entidade: "despesa",
-    titulo: "Despesa",
-    subtitulo: "Fornecedor, grupo e itens discriminados",
-    permissao: "despesas_criar",
-    icone: "mdi-receipt-text",
-    cor: "error"
+    id: "entradas",
+    titulo: "Entradas",
+    subtitulo: "Vendas e faturamento",
+    permissoes: ["entradas_visualizar"],
+    icone: "mdi-arrow-down-left",
+    cor: "var(--cat-entradas-base)",
+    telaDestino: "entradas"
   },
   {
-    entidade: "mercadoria",
-    titulo: "Mercadoria",
-    subtitulo: "Compra, nota fiscal e documento",
-    permissao: "mercadorias_criar",
-    icone: "mdi-package-variant-closed",
-    cor: "info"
-  },
-  {
-    entidade: "transferencia",
-    titulo: "Transferencia",
-    subtitulo: "Contas, malote e lacre",
-    permissao: "transferencias_criar",
+    id: "transferencias",
+    titulo: "Transferências",
+    subtitulo: "Entre contas",
+    permissoes: ["transferencias_criar"],
     icone: "mdi-swap-horizontal",
-    cor: "primary"
+    cor: "var(--cat-transferencias-base)",
+    entidade: "transferencia"
   },
   {
-    entidade: "retirada",
-    titulo: "Retirada",
-    subtitulo: "Colaborador, fornecedor ou retirada operacional",
-    permissao: "retiradas_criar",
-    icone: "mdi-wallet",
-    cor: "warning"
-  },
-  {
-    tela: "malote",
-    titulo: "Malote",
-    subtitulo: "Numero do lacre + valor",
-    permissao: "cadastro_malotes_criar",
-    icone: "mdi-briefcase",
-    cor: "secondary"
+    id: "saidas",
+    titulo: "Saídas",
+    subtitulo: "Despesa, mercadoria ou retirada",
+    permissoes: ["despesas_criar", "mercadorias_criar", "retiradas_criar"],
+    icone: "mdi-arrow-up-right",
+    cor: "var(--cat-despesas-base)",
+    entidade: "despesa"
   }
 ];
 
+// Itens do "+ NOVO" que o perfil enxerga. Basta UMA das permissoes do eixo: quem so cria retirada
+// continua vendo "Saidas".
+export function acoesNovoPermitidas(permissoesUsuario: readonly Permissao[]) {
+  return opcoesNovo.filter((acao) => temAlgumaPermissao(permissoesUsuario, acao.permissoes));
+}
+
+// Categoria em que o modal de "Saidas" abre: a PRIMEIRA que o perfil pode criar — quem so cria
+// retirada nao pode cair na Despesa e travar no salvar. As tres seguem alternaveis nos botoes do topo.
+export function categoriaInicialSaida(permissoesUsuario: readonly Permissao[]): EntidadeOperacional {
+  if (temPermissao(permissoesUsuario, "despesas_criar")) return "despesa";
+  if (temPermissao(permissoesUsuario, "mercadorias_criar")) return "mercadoria";
+  return "retirada";
+}
+
 export const secoesPermissoes = [
-  { titulo: "Areas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
+  { titulo: "Áreas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
   { titulo: "Caixa", prefixos: ["caixa_", "caixas_", "menu_caixa"] },
   { titulo: "Clientes", prefixos: ["cadastro_clientes", "menu_clientes"] },
   { titulo: "Colaboradores", prefixos: ["cadastro_colaboradores", "menu_colaboradores"] },
@@ -420,26 +435,36 @@ export const secoesPermissoes = [
   { titulo: "Contas a pagar", prefixos: ["contas_pagar", "menu_contas_pagar"] },
   { titulo: "Despesas", prefixos: ["despesas", "menu_despesas"] },
   { titulo: "Empresas", prefixos: ["cadastro_empresas", "menu_empresas"] },
-  { titulo: "Fechamento com diferenca", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
+  { titulo: "Fechamento com diferença", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
   { titulo: "Formas de pagamento", prefixos: ["cadastro_formas_pagamento", "menu_formas_pagamento"] },
   { titulo: "Fornecedores", prefixos: ["cadastro_fornecedores", "menu_fornecedores"] },
   { titulo: "Grupos", prefixos: ["cadastro_grupos", "menu_grupos"] },
-  { titulo: "Integracoes", prefixos: ["integracoes", "menu_integracoes"] },
-  { titulo: "Malotes", prefixos: ["cadastro_malotes", "menu_malotes"] },
+  { titulo: "Integrações", prefixos: ["integracoes", "menu_integracoes"] },
   { titulo: "Mercadorias", prefixos: ["mercadorias", "menu_mercadorias"] },
   { titulo: "PDV", prefixos: ["cadastro_pdv", "menu_pdv"] },
-  { titulo: "Permissoes", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
+  { titulo: "Permissões", prefixos: ["cadastro_permissoes", "menu_permissoes"] },
   { titulo: "Produtos", prefixos: ["cadastro_produtos", "menu_produtos"] },
   { titulo: "Produtos mais vendidos", prefixos: ["relatorio_produtos", "menu_relatorio_produtos"] },
-  { titulo: "Relatorio de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
+  { titulo: "Relatório de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
   { titulo: "Retiradas", prefixos: ["retiradas", "menu_retiradas"] },
-  { titulo: "Tema e aparencia", prefixos: ["aparencia", "menu_aparencia"] },
-  { titulo: "Transferencias", prefixos: ["transferencias", "menu_transferencias"] },
+  { titulo: "Tema e aparência", prefixos: ["aparencia", "menu_aparencia"] },
+  { titulo: "Transferências", prefixos: ["transferencias", "menu_transferencias"] },
   { titulo: "Unidades de medida", prefixos: ["cadastro_unidades_medida", "menu_unidades"] },
-  { titulo: "Usuarios", prefixos: ["cadastro_usuarios", "menu_usuarios"] },
+  { titulo: "Usuários", prefixos: ["cadastro_usuarios", "menu_usuarios"] },
   { titulo: "Vendas", prefixos: ["entradas", "menu_entradas"] },
   { titulo: "Outras", prefixos: [] }
 ];
+
+export type SecaoPermissao = (typeof secoesPermissoes)[number];
+
+export function permissaoPertenceASecao(permissao: string, secao: SecaoPermissao) {
+  const correspondencias = secoesPermissoes.flatMap((outra) =>
+    outra.prefixos.filter((prefixo) => permissao.startsWith(prefixo)).map((prefixo) => ({ secao: outra, prefixo }))
+  );
+  if (!correspondencias.length) return secao.prefixos.length === 0;
+  const maisEspecifica = correspondencias.sort((a, b) => b.prefixo.length - a.prefixo.length)[0];
+  return maisEspecifica?.secao === secao;
+}
 
 export function opcoesVazias(): Opcoes {
   return {
@@ -449,6 +474,8 @@ export function opcoesVazias(): Opcoes {
     fornecedores: [],
     clientes: [],
     colaboradores: [],
+    sociosGestores: [],
+    maquininhas: [],
     cargos: [],
     colaboradoresCargos: [],
     colaboradoresJornadas: [],
@@ -466,9 +493,10 @@ export function opcoesVazias(): Opcoes {
     usuariosPermissoes: [],
     usuarios: [],
     produtos: [],
-    malotes: [],
     pdvs: [],
-    turnos: []
+    turnos: [],
+    gruposPatrimonio: [],
+    patrimonioItens: []
   };
 }
 
@@ -483,17 +511,32 @@ export function formOperacaoVazio(): OperacaoForm {
     valorOriginal: "",
     valorAcrescimo: "",
     descricaoAcrescimo: "",
+    jurosTipo: "",
+    jurosValorInformado: "",
     valorDesconto: "",
     descricaoDesconto: "",
+    descontoGeralTipo: "",
+    descontoGeralValor: "",
     contaOrigemId: "",
     contaDestinoId: "",
     fornecedorId: "",
     colaboradorId: "",
+    socioGestorId: "",
+    credorTipo: "",
+    dataDocumentoFiscal: "",
+    numeroDocumentoFiscal: "",
+    fotoDocumentoUrl: "",
+    fotoNotaUrl: "",
     grupoDespesaId: "",
     grupoMercadoriaId: "",
     grupoRetiradaId: "",
-    maloteId: "",
     numeroLacre: "",
+    nLacreDoc: "",
+    agendadaPara: "",
+    dataRecebimento: "",
+    tempoConfirmacao: "1dia",
+    contasDestinoIds: [],
+    recorrenciaId: "",
     documento: "",
     numeroNotaFiscal: "",
     chaveAcesso: "",
@@ -505,6 +548,9 @@ export function formOperacaoVazio(): OperacaoForm {
 export function formCadastroVazio(): CadastroForm {
   return {
     nome: "",
+    numeroSerie: "",
+    saldoInicial: "",
+    usuariosIds: [],
     documento: "",
     dataNascimento: "",
     whatsapp: "",
@@ -573,6 +619,9 @@ export function formCadastroVazio(): CadastroForm {
     tipoGrupo: "despesa",
     grupoPaiId: "",
     tipoAreaSetor: "area",
+    tipoPatrimonio: "item",
+    sig: "",
+    grupoPatrimonioId: "",
     areaId: "",
     setorPaiId: "",
     setorId: "",
@@ -611,12 +660,12 @@ export function mensagemErro(error: unknown) {
   if (error instanceof Error) {
     try {
       const dados = JSON.parse(error.message) as { message?: string; error?: string; erro?: string };
-      return dados.message || dados.error || dados.erro || error.message;
+      return acentuarMensagemExibida(dados.message || dados.error || dados.erro || error.message);
     } catch {
-      return error.message;
+      return acentuarMensagemExibida(error.message);
     }
   }
-  return "Nao foi possivel concluir a acao.";
+  return "Não foi possível concluir a ação.";
 }
 
 export function itensDaEmpresa(itens: Opcao[], idEmpresa: string) {
@@ -636,6 +685,8 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     contas: itensDaEmpresa(listas.contas, idEmpresa),
     formasPagamento: itensDaEmpresa(listas.formasPagamento, idEmpresa),
     fornecedores: itensDaEmpresa(listas.fornecedores, idEmpresa),
+    sociosGestores: itensDaEmpresa(listas.sociosGestores, idEmpresa),
+    maquininhas: itensDaEmpresa(listas.maquininhas, idEmpresa),
     clientes: itensDaEmpresa(listas.clientes, idEmpresa),
     colaboradores: itensDaEmpresa(listas.colaboradores, idEmpresa),
     cargos: itensDaEmpresa(listas.cargos, idEmpresa),
@@ -655,9 +706,13 @@ export function opcoesFiltradasPorEmpresa(listas: Opcoes, idEmpresa: string): Op
     usuariosPermissoes: listas.usuariosPermissoes.filter((item) => !item.usuarioId || usuariosIds.has(item.usuarioId)),
     usuarios,
     produtos: itensDaEmpresa(listas.produtos, idEmpresa),
-    malotes: itensDaEmpresa(listas.malotes, idEmpresa),
     pdvs: itensDaEmpresa(listas.pdvs, idEmpresa),
-    turnos: itensDaEmpresa(listas.turnos, idEmpresa)
+    turnos: itensDaEmpresa(listas.turnos, idEmpresa),
+    // Patrimonio (D2): alimenta o campo Grupo da discriminacao (§5, item 6) alem da propria tela.
+    // Sem este filtro as duas listas vazavam por `...listas` com grupo de OUTRA empresa — e o
+    // servidor rejeitaria o lancamento ("Grupo de patrimonio"), sem a pessoa entender por que.
+    gruposPatrimonio: itensDaEmpresa(listas.gruposPatrimonio, idEmpresa),
+    patrimonioItens: itensDaEmpresa(listas.patrimonioItens, idEmpresa)
   };
 }
 
@@ -670,6 +725,8 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
         : form?.tipoGrupo === "vendas"
           ? "grupos-vendas"
           : "grupos-despesas";
+  // Patrimonio (D2) tem duas entidades na mesma tela, como areas/setores: o formulario diz qual.
+  if (tela === "patrimonio") return form?.tipoPatrimonio === "grupo" ? "patrimonio-grupos" : "patrimonio-itens";
   const mapa: Record<string, string> = {
     empresas: "empresas",
     contas: "contas",
@@ -681,6 +738,8 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
     pdv: "pdvs",
     formas_pagamento: "formas-pagamento",
     fornecedores: "fornecedores",
+    socios_gestores: "socios-gestores",
+    maquininhas: "maquininhas",
     produtos: "produtos"
   };
   return mapa[tela] ?? tela.replaceAll("_", "-");
@@ -783,6 +842,11 @@ export function formCadastroDeLinha(
   return {
     ...formCadastroVazio(),
     nome: linha.nome ?? "",
+    numeroSerie: linha.numeroSerie ?? "",
+    // Conta com fundo (D8): reabre o fundo digitado e as marcacoes de quem opera a conta. Sem isso
+    // editar o nome zeraria o fundo e apagaria todos os vinculos no salvar.
+    saldoInicial: linha.saldoInicial ?? "",
+    usuariosIds: linha.usuariosIds ? linha.usuariosIds.split(",").filter(Boolean) : [],
     documento: linha.documento ? mascararDocumento(linha.documento) : "",
     dataNascimento: linha.dataNascimento ?? "",
     whatsapp: linha.whatsapp ? mascararWhatsapp(linha.whatsapp) : "",
@@ -829,11 +893,14 @@ export function formCadastroDeLinha(
     ...promoFormDeLinha(linha.promocoes),
     produtoConversoes: conversoesDeLinha(linha.conversoes),
     contaId: linha.contaId ?? "",
-    ativo: linha.ativo !== "Nao",
+    ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",
     grupoPaiId: linha.grupoPaiId ?? "",
     tipoAreaSetor:
       (linha.tipoAreaSetor as CadastroForm["tipoAreaSetor"]) || (linha.areaId || linha.setorPaiId ? "setor" : "area"),
+    tipoPatrimonio: (linha.tipoPatrimonio as CadastroForm["tipoPatrimonio"]) || "item",
+    sig: linha.sig ?? "",
+    grupoPatrimonioId: linha.grupoPatrimonioId ?? "",
     areaId: linha.areaId ?? "",
     setorPaiId: linha.setorPaiId ?? "",
     setorId: linha.setorId ?? "",
@@ -847,7 +914,7 @@ export function formCadastroDeLinha(
 }
 
 export function rotaTela(tela: string) {
-  return `/${tela}`;
+  return tela === "fechamento" ? "/pendencias" : `/${tela}`;
 }
 
 export { temPermissao };

@@ -183,18 +183,93 @@ export function paginadoDeResultado<T>(resultado: { itens: T[]; total: number; p
   return paginado(resultado.itens, criarPaginationMeta(resultado.total, resultado.page, resultado.pageSize));
 }
 
-export function criadoId(reply: ReplyHttp, id: string) {
-  return reply.status(201).send(ok({ id }));
+// `extras` carrega o que a criacao produziu ALEM do id — hoje o resultado da serie de recorrencia
+// (quantos lancamentos nasceram e se o teto de 12 meses cortou). Sem isso a tela so saberia o id e
+// diria "salvo" para uma acao que criou 13 registros.
+export function criadoId(reply: ReplyHttp, id: string, extras?: Record<string, JsonValue>) {
+  return reply.status(201).send(ok({ id, ...extras }));
+}
+
+// Campos do resultado de serie que vao na resposta de criacao. Ausentes no lancamento avulso.
+export function extrasDaSerie(resultado: { serie?: number | undefined; serieLimitada?: boolean | undefined }) {
+  if (!resultado.serie) return undefined;
+  return { serie: resultado.serie, serieLimitada: Boolean(resultado.serieLimitada) };
 }
 
 export function semConteudo(reply: ReplyHttp) {
   return reply.status(204).send();
 }
 
+// R-100 na fronteira HTTP: mensagens antigas do domínio ainda usam identificadores/textos sem
+// acento internamente. Antes de exibi-las ao usuário, corrigimos somente palavras portuguesas
+// inteiras; códigos, nomes de campos e identificadores permanecem byte a byte.
+const acentosDeMensagem: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bNao\b/g, "Não"],
+  [/\bnao\b/g, "não"],
+  [/\bAcao\b/g, "Ação"],
+  [/\bacao\b/g, "ação"],
+  [/\bAcoes\b/g, "Ações"],
+  [/\bacoes\b/g, "ações"],
+  [/\bAutenticacao\b/g, "Autenticação"],
+  [/\bautenticacao\b/g, "autenticação"],
+  [/\bConfiguracao\b/g, "Configuração"],
+  [/\bconfiguracao\b/g, "configuração"],
+  [/\bConfirmacao\b/g, "Confirmação"],
+  [/\bconfirmacao\b/g, "confirmação"],
+  [/\bConversao\b/g, "Conversão"],
+  [/\bconversao\b/g, "conversão"],
+  [/\bCriacao\b/g, "Criação"],
+  [/\bcriacao\b/g, "criação"],
+  [/\bDescricao\b/g, "Descrição"],
+  [/\bdescricao\b/g, "descrição"],
+  [/\bDiferenca\b/g, "Diferença"],
+  [/\bdiferenca\b/g, "diferença"],
+  [/\bEdicao\b/g, "Edição"],
+  [/\bedicao\b/g, "edição"],
+  [/\bHistorico\b/g, "Histórico"],
+  [/\bhistorico\b/g, "histórico"],
+  [/\bInvalida\b/g, "Inválida"],
+  [/\binvalida\b/g, "inválida"],
+  [/\bInvalido\b/g, "Inválido"],
+  [/\binvalido\b/g, "inválido"],
+  [/\bIntegracao\b/g, "Integração"],
+  [/\bintegracao\b/g, "integração"],
+  [/\bNumero\b/g, "Número"],
+  [/\bnumero\b/g, "número"],
+  [/\bObservacao\b/g, "Observação"],
+  [/\bobservacao\b/g, "observação"],
+  [/\bOperacao\b/g, "Operação"],
+  [/\boperacao\b/g, "operação"],
+  [/\bPeriodo\b/g, "Período"],
+  [/\bperiodo\b/g, "período"],
+  [/\bPermissao\b/g, "Permissão"],
+  [/\bpermissao\b/g, "permissão"],
+  [/\bPossivel\b/g, "Possível"],
+  [/\bpossivel\b/g, "possível"],
+  [/\bProducao\b/g, "Produção"],
+  [/\bproducao\b/g, "produção"],
+  [/\bRequisicoes\b/g, "Requisições"],
+  [/\brequisicoes\b/g, "requisições"],
+  [/\bTransferencia\b/g, "Transferência"],
+  [/\btransferencia\b/g, "transferência"],
+  [/\bUsuario\b/g, "Usuário"],
+  [/\busuario\b/g, "usuário"],
+  [/\bUsuarios\b/g, "Usuários"],
+  [/\busuarios\b/g, "usuários"],
+  [/\bVinculo\b/g, "Vínculo"],
+  [/\bvinculo\b/g, "vínculo"],
+  [/\bVinculos\b/g, "Vínculos"],
+  [/\bvinculos\b/g, "vínculos"]
+];
+
+export function acentuarMensagemExibida(mensagem: string) {
+  return acentosDeMensagem.reduce((texto, [padrao, substituicao]) => texto.replace(padrao, substituicao), mensagem);
+}
+
 export function erro(reply: ReplyHttp, status: number, title: string, code?: string, details?: JsonValue) {
   const body: ProblemDetails = {
     type: "about:blank",
-    title,
+    title: acentuarMensagemExibida(title),
     status,
     ...(code ? { code } : {}),
     ...(details === undefined ? {} : { details })

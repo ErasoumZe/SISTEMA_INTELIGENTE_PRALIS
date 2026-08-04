@@ -1,4 +1,4 @@
-import { permissoes as catalogoPermissoes, resolverPermissoesEfetivas, type PerfilUsuario } from "@padaria/shared";
+import { permissoesAcessoTotal, resolverPermissoesEfetivas, type PerfilUsuario } from "@padaria/shared";
 import { obterPerfilPorUsuarioId } from "./perfil.repository.js";
 
 export async function buscarPerfilUsuario(usuarioId: string): Promise<PerfilUsuario | null> {
@@ -6,9 +6,11 @@ export async function buscarPerfilUsuario(usuarioId: string): Promise<PerfilUsua
   if (!perfil) return null;
   // usuario_admin concede todas as permissoes (nao afeta o escopo de empresas, que segue por empresaIds).
   // O role "admin" NAO tem efeito especial (decisao de negocio: manter como esta).
+  // "Todas" = permissoesAcessoTotal, ou seja SEM as flags `_somente_caixa_aberto`: elas restringem
+  // (prendem menu e listagens ao caixa aberto) e o dono do sistema nao herda restricao.
   const permissoesEfetivas =
     perfil.role === "usuario_admin"
-      ? [...catalogoPermissoes]
+      ? [...permissoesAcessoTotal]
       : resolverPermissoesEfetivas([
           [perfil.regras_permissoes.setor],
           perfil.regras_permissoes.cargos,

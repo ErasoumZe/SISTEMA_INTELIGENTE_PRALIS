@@ -3,59 +3,34 @@ import type { TemaAplicacao } from "@padaria/shared";
 import type { secoesPermissoes } from "~/utils/domain";
 import type { CadastroForm, EntidadeOperacional, OperacaoForm, Opcao, Opcoes } from "~/types/padaria";
 
-export type CaixaDrawerForm = {
-  pdvId: string;
-  turnoId: string;
-  dataHoraAbertura: string;
-};
-
-export type ItemDespesaForm = {
-  descricao: string;
-  valor: string;
-  grupoDespesaId: string;
-};
-
-export type ItemMercadoriaForm = {
-  descricao: string;
-  quantidade: string;
-  valorUnitario: string;
-  descontoTipo: string;
-  descontoValor: string;
-  valorTotal: string;
-  produtoId: string;
-  grupoMercadoriaId: string;
-  unidadeMedidaId: string;
-};
-
-export type ItemVendaForm = {
-  descricaoProduto: string;
-  quantidade: string;
-  valorUnitario: string;
-  valorTotal: string;
-  produtoId: string;
-};
-
-export type TipoPagamentoForm = {
-  formaPagamentoId: string;
-  totalPago: string;
-  numeroVendas: string;
-};
-
-export type FormMalote = {
-  numeroLacre: string;
-  valor: number;
-};
+// As formas de item vivem em utils/operacoes (junto do payload que as consome) e sao REEXPORTADAS
+// aqui. Antes o contexto declarava copias identicas: ao ganhar grupoPatrimonioId, os dois tipos se
+// separaram e o mesmo objeto deixou de ser atribuivel a si mesmo. Uma definicao so, sempre.
+export type {
+  EstadoRecorrencia,
+  ItemDespesaForm,
+  ItemMercadoriaForm,
+  ItemVendaForm,
+  TipoPagamentoForm
+} from "~/utils/operacoes";
+import type {
+  EstadoRecorrencia,
+  ItemDespesaForm,
+  ItemMercadoriaForm,
+  ItemVendaForm,
+  TipoPagamentoForm
+} from "~/utils/operacoes";
 
 export type SecaoPermissao = (typeof secoesPermissoes)[number];
 
 export type WorkspaceContext = {
-  modalCaixaDrawerAberto: Ref<boolean>;
-  formCaixaDrawer: CaixaDrawerForm;
   opcoesEmpresa: ComputedRef<Opcoes>;
-  caixaSalvando: Ref<boolean>;
-  salvarCaixaDrawer: () => Promise<void>;
+  empresaId: Ref<string>;
   modalOperacaoAberto: Ref<boolean>;
   entidadeNova: Ref<EntidadeOperacional>;
+  // Troca a categoria do lancamento com o modal ABERTO (3 botoes do topo): mantem o que foi
+  // digitado, limpa o que era da categoria anterior e recarrega as opcoes da nova.
+  trocarCategoriaLancamento: (entidade: EntidadeOperacional) => Promise<void>;
   operacaoEditandoId: Ref<string>;
   modoDiscriminacao: Ref<boolean>;
   form: Ref<OperacaoForm>;
@@ -66,16 +41,24 @@ export type WorkspaceContext = {
   tiposPagamento: Ref<TipoPagamentoForm[]>;
   itensDespesa: Ref<ItemDespesaForm[]>;
   itensMercadoria: Ref<ItemMercadoriaForm[]>;
+  erroDiscriminacaoLinha: Ref<number | null>;
+  erroDiscriminacaoCampo: Ref<string | null>;
   salvandoOperacao: Ref<boolean>;
-  salvarOperacao: () => Promise<void>;
+  salvarOperacao: () => Promise<{ id: string } | void>;
+  // R-121: conta do PDV quando o usuario e operador de caixa; "" para perfis de retaguarda, que
+  // escolhem a conta livremente.
+  contaTravadaDoCaixa: ComputedRef<string>;
+  contaTravadaDoCaixaNome: ComputedRef<string>;
+  // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
+  // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
+  podeUsarRecorrencia: ComputedRef<boolean>;
+  recorrencia: Ref<EstadoRecorrencia>;
   fotoDocumentoPreview: Ref<string>;
   fotoDocumentoExistente: Ref<boolean>;
   selecionarFotoDocumento: (entrada: File | File[] | null) => void;
-  modalMaloteAberto: Ref<boolean>;
-  maloteEditandoId: Ref<string>;
-  formMalote: Ref<FormMalote>;
-  maloteSalvando: Ref<boolean>;
-  salvarMalote: () => Promise<void>;
+  fotoNotaPreview: Ref<string>;
+  fotoNotaExistente: Ref<boolean>;
+  selecionarFotoNota: (entrada: File | File[] | null) => void;
   modalCadastroAberto: Ref<boolean>;
   cadastroEditandoId: Ref<string>;
   cadastroTela: Ref<string>;

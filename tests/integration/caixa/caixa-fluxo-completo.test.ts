@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
+
+// R-129: data de pagamento nao pode ser retroativa. O fluxo do caixa nao depende do DIA do
+// pagamento — os totais fecham por caixa_id — entao a data de referencia continua fixa e so o
+// pagamento anda para hoje.
+const PAGO_EM = diaNegocio(new Date());
 
 // Fluxo operacional COMPLETO do caixa, narrado para visualizacao (pedido do Ze):
 // abre o caixa -> cria ENTRADA (venda), DESPESA, RETIRADA, TRANSFERENCIA e MERCADORIA ->
@@ -74,7 +80,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     await criar("/api/vendas", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Venda do dia",
       valorOriginal: 100,
       contaOrigemId: contaId,
@@ -92,14 +98,16 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       descricao: "Suprimento do caixa",
       valorOriginal: 20,
       contaOrigemId: idsTeste.contaBanco,
-      contaDestinoId: contaId
+      contaDestinoId: contaId,
+      nLacreDoc: "FLUXO-ENTRADA-001"
     });
+    await confirmarTransferenciaPorLacreDireto("FLUXO-ENTRADA-001", await usuarioAdminId());
     // DESPESA -40
     await criar("/api/despesas", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Conta de luz",
       valorOriginal: 40,
       contaOrigemId: contaId,
@@ -110,7 +118,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Vale funcionario",
       valorOriginal: 30,
       contaOrigemId: contaId,
@@ -122,7 +130,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       empresaId: idsTeste.empresaA,
       dataReferencia,
       dataVencimento: dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Compra de farinha",
       valorOriginal: 15,
       contaOrigemId: contaId,
@@ -137,7 +145,8 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       descricao: "Deposito no banco",
       valorOriginal: 35,
       contaOrigemId: contaId,
-      contaDestinoId: idsTeste.contaBanco
+      contaDestinoId: idsTeste.contaBanco,
+      nLacreDoc: "FLUXO-SAIDA-001"
     });
 
     // Formula oficial: 100 + 20 - 40 - 30 - 15 - 35 = 0
@@ -163,7 +172,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
 
-  it("FECHA COM diferenca: saldo positivo exige acerto, que atribui a diferenca ao colaborador e zera o caixa", async () => {
+  it("FECHA COM sobra: exige retorno explicito ao cofre e zera o caixa", async () => {
     const { caixaId, contaId, pdvId } = await abrirCaixa("com-diferenca", "2026-05-02T08:00");
     const dataReferencia = "2026-05-02";
 
@@ -171,7 +180,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     await criar("/api/vendas", {
       empresaId: idsTeste.empresaA,
       dataReferencia,
-      dataPagamento: dataReferencia,
+      dataPagamento: PAGO_EM,
       descricao: "Venda do dia",
       valorOriginal: 100,
       contaOrigemId: contaId,
@@ -190,23 +199,20 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     // Fechar com saldo positivo sem acerto e barrado.
     const fecharSemAcerto = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa sem acerto" });
     assertProblem(fecharSemAcerto, 400);
+    expect(fecharSemAcerto.body).toMatch(/R\$ 100\.00/);
 
-    // Acerto: gera a despesa "Diferenca de caixa" de 100 atribuida ao colaborador e zera o saldo.
-    const acerto = await post(`/api/caixa/${caixaId}/acertar-saldo`, { observacao: "Acerto do fechamento" });
-    expect(acerto.statusCode, acerto.body).toBe(201);
-
-    const despesaDiferenca = await consultarUm<{ valor_original: string; colaborador_id: string }>(
-      "select valor_original, colaborador_id from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'",
-      [caixaId]
-    );
-    expect(despesaDiferenca?.valor_original).toBe("100.00");
-    expect(despesaDiferenca?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
+    const retorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      tipo: "retorno",
+      valor: 100,
+      observacao: "Retorno do fechamento"
+    });
+    expect(retorno.statusCode, retorno.body).toBe(200);
 
     const depois = await resumoDoCaixa();
     expect(depois.resumo).toMatchObject({ saldo: 0 });
 
-    // Agora o caixa fecha, com saldo zero e a diferenca registrada.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos acerto" });
+    // Agora o caixa fecha com saldo zero e o retorno registrado como transferencia.
+    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos retorno" });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",

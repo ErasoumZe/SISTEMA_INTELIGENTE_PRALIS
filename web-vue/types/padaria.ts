@@ -47,6 +47,8 @@ export type Opcao = {
   nome?: string;
   email?: string;
   descricao?: string;
+  apelido?: string;
+  numeroSerie?: string;
   codigo?: string;
   codigoBarras?: string;
   documento?: string;
@@ -62,6 +64,14 @@ export type Opcao = {
   cnpj?: string | null;
   configuracoesAparencia?: ConfiguracaoAparenciaEmpresa;
   marca?: string | null;
+  // Conta com fundo (D8), vindo de /api/contas/saldos. saldoAtual e DERIVADO dos movimentos —
+  // nunca ha coluna de saldo. Ausentes no GET /api/contas comum (lista de opcao de formulario).
+  saldoInicial?: number;
+  saldoAtual?: number;
+  usuariosIds?: string[];
+  // Patrimonio (D2)
+  sig?: string;
+  grupoPatrimonioId?: string | null;
   grupoMercadoriaId?: string | null;
   unidadeMedidaId?: string | null;
   unidadeIndividualId?: string | null;
@@ -93,7 +103,6 @@ export type Opcao = {
   caminho?: string;
   nivel?: number;
   selecionavel?: boolean;
-  // Malote (D3): o malote E o lacre — identidade = numero do lacre + valor + status.
   numeroLacre?: string;
   valor?: string | number | null;
   cpf?: string;
@@ -134,6 +143,7 @@ export type Opcao = {
   codigoPermissao?: string;
   permissaoCodigo?: string;
   tipoAreaSetor?: "area" | "setor";
+  tipoPatrimonio?: "grupo" | "item";
 };
 
 export type PermissoesPaginadas = {
@@ -150,6 +160,8 @@ export type Opcoes = {
   fornecedores: Opcao[];
   clientes: Opcao[];
   colaboradores: Opcao[];
+  sociosGestores: Opcao[];
+  maquininhas: Opcao[];
   cargos: Opcao[];
   colaboradoresCargos: Opcao[];
   colaboradoresJornadas: Opcao[];
@@ -167,9 +179,10 @@ export type Opcoes = {
   usuariosPermissoes: Opcao[];
   usuarios: Opcao[];
   produtos: Opcao[];
-  malotes: Opcao[];
   pdvs: Opcao[];
   turnos: Opcao[];
+  gruposPatrimonio: Opcao[];
+  patrimonioItens: Opcao[];
 };
 
 export type EntidadeOperacional = "venda" | "despesa" | "mercadoria" | "retirada" | "transferencia";
@@ -214,6 +227,14 @@ export type OperacaoResumo = {
   valorLiquido?: string;
   computar: boolean;
   status: string;
+  contaOrigemId?: string;
+  contaDestinoId?: string;
+  contaOrigemNome?: string;
+  contaDestinoNome?: string;
+  nLacreDoc?: string | null;
+  prazoConfirmacaoEm?: string | null;
+  dataRecebimento?: string | null;
+  confirmadoPor?: string | null;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
@@ -247,16 +268,23 @@ export type CaixaOperacional = {
   empresaId: string;
   pdvId: string;
   pdvNome: string;
+  // R-121: conta do PDV — a unica origem valida das saidas do operador. A tela trava o campo nela.
+  pdvContaId: string | null;
   usuarioId: string;
   usuarioCaixaId: string;
   usuarioCaixaNome: string;
   colaboradorId: string;
+  // Dia CONTABIL do caixa ("yyyy-MM-dd") — o que a tela de Entradas lista para quem opera caixa.
+  dataMovimento: string;
   dataHoraAbertura: string;
   abertoEm: string;
   dataHoraFechamento: string | null;
   fechadoEm: string | null;
   tokenEdicao: string | null;
   turnoId: string | null;
+  maquininhaId: string | null;
+  maquininhaApelido: string | null;
+  maquininhaNumeroSerie: string | null;
   observacao: string | null;
   status: string;
 };
@@ -279,13 +307,16 @@ export type ItemMenu = {
 };
 
 export type AcaoNovo = {
-  entidade?: EntidadeOperacional;
-  tela?: "malote";
+  id: string;
   titulo: string;
   subtitulo: string;
-  permissao: Permissao;
+  // Basta UMA das permissoes para o item aparecer (Saidas = despesa OU mercadoria OU retirada).
+  permissoes: readonly Permissao[];
   icone: string;
   cor: string;
+  // Ou NAVEGA para uma tela (Entradas) ou ABRE o modal de uma entidade — nunca os dois.
+  telaDestino?: string;
+  entidade?: EntidadeOperacional;
 };
 
 export type TreeItem = {
@@ -313,17 +344,33 @@ export type OperacaoForm = {
   valorOriginal: string;
   valorAcrescimo: string;
   descricaoAcrescimo: string;
+  // R-041: juros. O tipo vazio significa "sem juros" — o payload converte para null.
+  jurosTipo: "" | "percentual" | "valor";
+  jurosValorInformado: string;
   valorDesconto: string;
   descricaoDesconto: string;
+  descontoGeralTipo: "" | "percentual" | "valor";
+  descontoGeralValor: string;
   contaOrigemId: string;
   contaDestinoId: string;
   fornecedorId: string;
   colaboradorId: string;
+  socioGestorId: string;
+  credorTipo: "" | "fornecedor" | "colaborador" | "socio_gestor";
+  dataDocumentoFiscal: string;
+  numeroDocumentoFiscal: string;
+  fotoDocumentoUrl: string;
+  fotoNotaUrl: string;
   grupoDespesaId: string;
   grupoMercadoriaId: string;
   grupoRetiradaId: string;
-  maloteId: string;
   numeroLacre: string;
+  nLacreDoc: string;
+  agendadaPara: string;
+  dataRecebimento: string;
+  tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias";
+  contasDestinoIds: string[];
+  recorrenciaId: string;
   documento: string;
   numeroNotaFiscal: string;
   chaveAcesso: string;

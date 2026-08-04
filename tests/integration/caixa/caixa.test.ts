@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 type LinhaHistorico = { id: string; tokenEdicao?: string };
 type HistoricoJson = {
@@ -150,10 +151,10 @@ describe("caixa integration", () => {
     expect(json<DetalheJson>(resposta).data).toMatchObject({ edicoes: [], ajuste: null });
   });
 
-  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_AdminTemFlagSomenteCaixaAberto", async () => {
-    // usuario_admin recebe TODAS as permissoes, inclusive menu_entradas_somente_caixa_aberto.
-    // Por isso o detalhe nao pode reusar /api/vendas: aquela rota trocaria o caixaId pedido pelo
-    // caixa aberto do proprio admin. Aqui o caixa consultado (caixaAberto) tem a venda do seed.
+  it("Deve_TrazerLancamentosDoCaixaPedido_Quando_ConsultarDetalheDeOutroCaixa", async () => {
+    // O detalhe nao pode reusar /api/vendas: aquela rota aplica o escopo operacional "somente caixa
+    // aberto" e, para um perfil com essa flag, trocaria o caixaId pedido pelo caixa aberto dele.
+    // Aqui o caixa consultado (caixaAberto) tem a venda do seed.
     const detalhe = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
@@ -173,9 +174,9 @@ describe("caixa integration", () => {
     await executarSql(
       `insert into transferencias (id, empresa_id, caixa_id, data_referencia, descricao, valor_original,
          conta_origem_id, conta_destino_id, computar, status)
-       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'aprovado'),
-              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'aprovado'),
-              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'aprovado')`,
+       values ($1,$2,$3,$4,'Entrada no PDV',$5,$6,$7,true,'pendente'),
+              ($8,$2,$3,$4,'Saida do PDV',$5,$7,$6,true,'pendente'),
+              ($9,$2,$3,$4,'Fora do PDV',$5,$6,$10,true,'pendente')`,
       [
         "22222222-2222-4222-8222-222222220001",
         idsTeste.empresaA,
@@ -522,19 +523,18 @@ describe("caixa integration", () => {
     assertProblem(resposta, 400);
   });
 
-  it("Deve_Retornar403_Quando_AcertarSaldoDeCaixaDeOutroUsuario", async () => {
-    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+  it("Deve_Retornar404_ParaCaminhoAntigoDeAcertoRemovido", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaAberto}/acertar-saldo`,
-      headers: { cookie: cookieCaixa },
+      headers: { cookie: cookieAdmin },
       payload: {}
     });
 
-    assertProblem(resposta, 403);
+    expect(resposta.statusCode).toBe(404);
   });
 
-  it("Deve_CalcularSaldoAcertarEFechar_Quando_CicloOperacionalCompleto", async () => {
+  it("Deve_CalcularSaldoRetornarAoCofreEFechar_Quando_CicloOperacionalCompleto", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
 
     const conta = await contexto.app.inject({
@@ -570,13 +570,17 @@ describe("caixa integration", () => {
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
 
     const dataRef = "2026-03-01";
+    // R-129: data de pagamento nao pode ser retroativa. Este teste e sobre o CICLO do caixa, nao
+    // sobre datas — a data de referencia continua fixa (o caixa se fecha por caixa_id, nao por dia)
+    // e so o pagamento anda para hoje, que e o unico valor que a regra aceita.
+    const pagoEm = diaNegocio(new Date());
     const lancamentos = [
       {
         url: "/api/vendas",
         payload: {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Venda ciclo",
           valorOriginal: 100,
           contaOrigemId: contaPdvId,
@@ -602,7 +606,8 @@ describe("caixa integration", () => {
           descricao: "Transferencia entrada ciclo",
           valorOriginal: 50,
           contaOrigemId: idsTeste.contaBanco,
-          contaDestinoId: contaPdvId
+          contaDestinoId: contaPdvId,
+          nLacreDoc: "CAIXA-CICLO-ENTRADA"
         }
       },
       {
@@ -613,7 +618,8 @@ describe("caixa integration", () => {
           descricao: "Transferencia saida ciclo",
           valorOriginal: 30,
           contaOrigemId: contaPdvId,
-          contaDestinoId: idsTeste.contaBanco
+          contaDestinoId: idsTeste.contaBanco,
+          nLacreDoc: "CAIXA-CICLO-SAIDA"
         }
       },
       {
@@ -622,7 +628,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Despesa ciclo",
           valorOriginal: 20,
           contaOrigemId: contaPdvId,
@@ -635,7 +641,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Retirada ciclo",
           valorOriginal: 10,
           contaOrigemId: contaPdvId,
@@ -649,7 +655,7 @@ describe("caixa integration", () => {
           empresaId: idsTeste.empresaA,
           dataReferencia: dataRef,
           dataVencimento: dataRef,
-          dataPagamento: dataRef,
+          dataPagamento: pagoEm,
           descricao: "Mercadoria ciclo",
           valorOriginal: 15,
           contaOrigemId: contaPdvId,
@@ -668,6 +674,8 @@ describe("caixa integration", () => {
       });
       expect(resposta.statusCode, `${lancamento.url}: ${resposta.body}`).toBe(201);
     }
+    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-ENTRADA", usuarioAdminId);
+    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-SAIDA", usuarioAdminId);
 
     // Formula oficial: entradas + transf entrada - transf saida - despesas - retiradas - mercadorias
     // 100 + 50 - 30 - 20 - 10 - 15 = 75
@@ -692,49 +700,15 @@ describe("caixa integration", () => {
       }
     });
 
-    const acerto = await contexto.app.inject({
+    const retorno = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${caixaId}/acertar-saldo`,
+      url: `/api/caixa/${caixaId}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Acerto ciclo" }
+      payload: { tipo: "retorno", valor: 75, observacao: "Retorno ciclo" }
     });
-    expect(acerto.statusCode, acerto.body).toBe(201);
+    expect(retorno.statusCode, retorno.body).toBe(200);
 
-    // Efeitos completos do acerto: despesa pendente vinculada ao colaborador e ao caixa,
-    // item da despesa, debito FECHAMENTO_CAIXA e ajuste operacional — todos com 75.00.
-    const despesaAcerto = await consultarUm<{
-      id: string;
-      colaborador_id: string;
-      data_pagamento: string | null;
-      valor_original: string;
-    }>(
-      "select id, colaborador_id, data_pagamento, valor_original from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'",
-      [caixaId]
-    );
-    expect(despesaAcerto?.valor_original).toBe("75.00");
-    expect(despesaAcerto?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
-    expect(despesaAcerto?.data_pagamento).toBeNull();
-
-    const itemAcerto = await consultarUm<{ valor: string }>("select valor from despesas_itens where despesa_id = $1", [
-      despesaAcerto?.id
-    ]);
-    expect(itemAcerto?.valor).toBe("75.00");
-
-    const debito = await consultarUm<{ tipo: string; valor: string; colaborador_id: string }>(
-      "select tipo, valor, colaborador_id from debitos_colaboradores where caixa_id = $1 and despesa_id = $2",
-      [caixaId, despesaAcerto?.id]
-    );
-    expect(debito?.tipo).toBe("FECHAMENTO_CAIXA");
-    expect(debito?.valor).toBe("75.00");
-    expect(debito?.colaborador_id).toBe(idsTeste.colaboradorAdmin);
-
-    const ajuste = await consultarUm<{ valor_diferenca: string }>(
-      "select valor_diferenca from ajustes_fechamento_caixa where fechamento_caixa_id = $1 and despesa_id = $2",
-      [caixaId, despesaAcerto?.id]
-    );
-    expect(ajuste?.valor_diferenca).toBe("75.00");
-
-    // A despesa de acerto entra no proprio caixa e zera o saldo (o bug antigo nao volta).
+    // O retorno e transferencia caixa -> cofre e zera o saldo sem criar despesa/debito artificial.
     const statusDepois = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -742,14 +716,14 @@ describe("caixa integration", () => {
     });
     assertOk(statusDepois);
     expect(statusDepois.json()).toMatchObject({
-      data: { caixaAberto: { id: caixaId }, resumo: { totalDespesas: 95, saldo: 0 } }
+      data: { caixaAberto: { id: caixaId }, resumo: { totalTransferenciasSaida: 105, totalDespesas: 20, saldo: 0 } }
     });
 
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Fechado apos acerto" }
+      payload: { observacao: "Fechado apos retorno" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(

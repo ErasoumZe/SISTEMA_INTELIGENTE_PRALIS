@@ -13,10 +13,16 @@ import { consultarUm } from "../../setup/integracao.js";
 // aberta). Segue o padrao ja existente de /api/pdvs e /api/malotes.
 //
 // Permissoes do seed (setup/seed.ts) usadas aqui:
-//   caixa        -> caixa_operar
+//   caixa        -> caixa_operar + despesas/mercadorias/retiradas (visualizar/criar/editar)
 //   discriminador-> despesas_visualizar, mercadorias_visualizar
 //   tesouraria   -> transferencias_visualizar
 //   semPermissao -> (nenhuma)
+//
+// ATUALIZADO em 01/08/2026 (R-121): o operador de caixa PASSOU a enxergar grupos, fornecedores e
+// produtos. Nao e afrouxamento de gate — o fixture e que estava divergente da producao (so tinha 4
+// permissoes) e fazia o teste "provar" que o operador nao ve as opcoes do proprio formulario. Sem
+// elas, o modal de despesa do operador abre com Grupo e Fornecedor vazios. `semPermissao` continua
+// sendo o negativo de verdade.
 
 const query = `?empresaId=${idsTeste.empresaA}`;
 
@@ -25,9 +31,9 @@ const rotas: Array<{ rota: string; permite: PerfilTeste[]; nega: PerfilTeste[] }
   { rota: "/api/turnos", permite: ["caixa"], nega: ["discriminador", "semPermissao"] },
   { rota: "/api/contas", permite: ["caixa", "discriminador", "tesouraria"], nega: ["semPermissao"] },
   { rota: "/api/colaboradores", permite: ["caixa"], nega: ["discriminador", "semPermissao"] },
-  { rota: "/api/grupos", permite: ["discriminador"], nega: ["caixa", "semPermissao"] },
-  { rota: "/api/fornecedores", permite: ["discriminador"], nega: ["caixa", "semPermissao"] },
-  { rota: "/api/produtos", permite: ["discriminador"], nega: ["caixa", "semPermissao"] }
+  { rota: "/api/grupos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
+  { rota: "/api/fornecedores", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
+  { rota: "/api/produtos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] }
 ];
 
 const permitidos = rotas.flatMap(({ rota, permite }) => permite.map((perfil) => ({ rota, perfil })));

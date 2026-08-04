@@ -1,13 +1,19 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
-import { transferenciaPayloadSchema, transferenciasQuerySchema } from "@padaria/shared/transferencias";
+import {
+  confirmarTransferenciaPayloadSchema,
+  transferenciaPayloadSchema,
+  transferenciasQuerySchema
+} from "@padaria/shared/transferencias";
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
 import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarTransferencia,
+  confirmarTransferencia,
   criarTransferencia,
+  liberarTravaTransferencia,
   listarTransferencias,
   obterTransferencia
 } from "./transferencias.service.js";
@@ -93,4 +99,29 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       }
     }
   );
+
+  app.post(
+    "/api/transferencias/:id/confirmar",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const dados = confirmarTransferenciaPayloadSchema.parse(request.body);
+      try {
+        return ok(await confirmarTransferencia(id, dados, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.put("/api/transferencias/:id/liberar-trava", async (request, reply) => {
+    const { id } = apiIdParamsSchema.parse(request.params);
+    try {
+      return ok(await liberarTravaTransferencia(id, request.perfilUsuario!));
+    } catch (error) {
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErroValidacao(mensagem), mensagem);
+    }
+  });
 }

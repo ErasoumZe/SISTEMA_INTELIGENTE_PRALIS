@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -31,6 +32,75 @@ const empresaId = uuid("empresa_id")
   .references(() => empresas.id, { onDelete: "cascade" });
 const valorMonetario = (nome: string) => numeric(nome, { precision: 14, scale: 2 });
 
+// --- Descontos da discriminacao em 3 NIVEIS (PROJECT_BRAIN/17 §5) ---------------------------
+// Niveis 1 e 2 vivem no ITEM; o nivel 3 (geral) vive no CABECALHO do lancamento. Em todos,
+// tipo null = sem desconto naquele nivel; os niveis sao CUMULATIVOS.
+const descontosPorNivelItem = {
+  // Nivel 1 — desconto no V.UNIT (R$ POR UNIDADE quando tipo='valor'). Nao rateia nada.
+  descontoTipo: text("desconto_tipo"),
+  descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
+  // Nivel 2 — desconto no V.TOTAL do item; recalcula o unitario daquele item (D4).
+  descontoTotalTipo: text("desconto_total_tipo"),
+  descontoTotalValor: numeric("desconto_total_valor", { precision: 14, scale: 4 })
+};
+
+// Resultado do calculo dos tres niveis, gravado pelo servidor (nunca pelo cliente).
+//
+// FONTE DA VERDADE: `valor_total_com_desconto` e AUTORITATIVO — e ele que soma e reconcilia com o
+// valor do lancamento. `valor_unitario_com_desconto` e DERIVADO (total / quantidade, arredondado
+// em centavos) e existe para custo e exibicao. unitario x quantidade PODE NAO reconciliar com o
+// total por arredondamento (ex.: 3,30 / 4 = 0,825 -> 0,83; 0,83 x 4 = 3,32) e isso e ESPERADO.
+// Nunca recalcule o total a partir do unitario.
+const valoresComDescontoItem = {
+  valorUnitarioComDesconto: numeric("valor_unitario_com_desconto", { precision: 14, scale: 4 }).notNull(),
+  valorTotalComDesconto: valorMonetario("valor_total_com_desconto").notNull()
+};
+
+// Nivel 3 — desconto GERAL, no cabecalho. Guarda COMO foi informado (ex.: 17,5 + 'percentual');
+// o R$ resolvido continua em `valor_desconto`, que e quem alimenta liquidoCentavos e os agregados.
+const descontoGeralLancamento = {
+  descontoGeralTipo: text("desconto_geral_tipo"),
+  descontoGeralValor: numeric("desconto_geral_valor", { precision: 14, scale: 4 })
+};
+
+function checksDescontoGeral(tabela: string, tipo: AnyPgColumn, valor: AnyPgColumn) {
+  return [
+    check(`${tabela}_desconto_geral_tipo_check`, sql`${tipo} is null or ${tipo} in ('percentual', 'valor')`),
+    check(`${tabela}_desconto_geral_valor_check`, sql`${valor} is null or ${valor} >= 0`)
+  ];
+}
+
+// JUROS do lancamento (R-041), nas 3 tabelas de lancamento. Sao TRES colunas, e a razao de cada uma:
+//   valor_acrescimo (ja existia) — o juros em R$ SEMPRE JA CALCULADO. E esta coluna que entra no
+//     liquidoCentavos(original - desconto + acrescimo). Guardar o percentual aqui somaria R$ 2,00
+//     no lugar de R$ 20,00 e corromperia caixa, conta e relatorio de uma vez.
+//   juros_tipo — 'percentual' | 'valor'. MESMA convencao do desconto_geral_tipo, tres linhas acima:
+//     duas convencoes para o mesmo conceito (uma dizendo 'real', outra 'valor') e exatamente o
+//     "conflito com regras antigas" que este sprint existe para matar. Decisao do Jose, 30/07.
+//   juros_valor_informado — o que a pessoa DIGITOU (2 para 2%, 20.00 para R$ 20,00). Existe porque
+//     guardar so o R$ perde a informacao de que era 2%, e recalcular por divisao deriva com
+//     arredondamento: 333,33 a 2% da 6,67, que de volta vira 2,001%. A tela reabre com o informado.
+// Nas 3 tabelas de lancamento, descricao_acrescimo fica SEM USO — o campo generico de acrescimo foi
+// aposentado aqui (um campo, um nome). Em vendas/transferencias valor_acrescimo segue generico.
+const jurosLancamento = {
+  jurosTipo: text("juros_tipo").$type<"percentual" | "valor">(),
+  jurosValorInformado: numeric("juros_valor_informado", { precision: 14, scale: 4 })
+};
+
+function checksJuros(tabela: string, tipo: AnyPgColumn, valorInformado: AnyPgColumn) {
+  return [
+    check(`${tabela}_juros_tipo_check`, sql`${tipo} is null or ${tipo} in ('percentual', 'valor')`),
+    check(`${tabela}_juros_valor_informado_check`, sql`${valorInformado} is null or ${valorInformado} >= 0`)
+  ];
+}
+
+// Documento fiscal do lancamento (R-044 data de emissao, R-045 numero da nota). Os dois opcionais:
+// o historico inteiro nasceu sem eles, e nem todo lancamento tem nota.
+const documentoFiscalLancamento = {
+  dataDocumentoFiscal: date("data_documento_fiscal"),
+  numeroDocumentoFiscal: text("numero_documento_fiscal")
+};
+
 export const empresas = pgTable("empresas", {
   id: idUuid,
   nome: text("nome").notNull(),
@@ -41,8 +111,8 @@ export const empresas = pgTable("empresas", {
     .default(
       sql`'{"padrao":{"corPrimaria":"#6d28d9","corSecundaria":"#0891b2","corFundo":"#eaf1f9","corCartao":"#ffffff","corSucesso":"#16a34a","corAviso":"#f59e0b","corErro":"#ef4444"},"especifico":[]}'::jsonb`
     ),
-  // Conta contabil do COFRE da empresa (origem da transferencia automatica de abertura do caixa).
-  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, a abertura com malote falha em vez de inventar conta.
+  // Conta contabil do COFRE da empresa: destino do retorno/sangria do caixa (R-008b).
+  // Regra 5 (M1): mapeamento EXPLICITO; sem ela, o retorno falha em vez de inventar uma conta.
   contaCofreId: uuid("conta_cofre_id").references((): AnyPgColumn => contas.id, { onDelete: "set null" }),
   criadoEm
 });
@@ -93,15 +163,25 @@ export const usuariosEmpresas = pgTable(
   (table) => [primaryKey({ columns: [table.usuarioId, table.empresaId] })]
 );
 
-export const contas = pgTable("contas", {
-  id: idUuid,
-  empresaId,
-  nome: text("nome").notNull(),
-  ativa: boolean("ativa").notNull().default(true),
-  criadoEm,
-  importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-  idImportado: uuid("id_importado")
-});
+// contas (PROJECT_BRAIN/17, D8): conta com FUNDO. `saldo_inicial` e o ponto de partida declarado no
+// cadastro (ex.: CONTA COFRE nasce com 10.000) — NAO e o saldo atual e NUNCA e sobrescrito pelos
+// movimentos. O saldo atual e DERIVADO: saldo_inicial + entradas - saidas (ver saldoContaCentavos
+// no shared). Guardar o saldo numa coluna mutavel foi descartado de proposito: ele sairia de sincronia
+// no primeiro lancamento que falhasse no meio, e nao haveria como reconstruir a verdade.
+export const contas = pgTable(
+  "contas",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    saldoInicial: valorMonetario("saldo_inicial").notNull().default("0"),
+    ativa: boolean("ativa").notNull().default(true),
+    criadoEm,
+    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
+    idImportado: uuid("id_importado")
+  },
+  (table) => [check("contas_saldo_inicial_check", sql`${table.saldoInicial} >= 0`)]
+);
 
 export const formasPagamento = pgTable(
   "formas_pagamento",
@@ -139,6 +219,26 @@ export const pdvs = pgTable(
   ]
 );
 
+// Maquininhas de cartao (R-039): cadastro proprio por empresa. A maquininha selecionada na
+// abertura fica gravada no fechamento_caixa, preservando o equipamento usado naquele PDV/turno.
+// O vinculo e opcional: caixa sem maquininha continua sendo uma abertura valida.
+export const maquininhas = pgTable(
+  "maquininhas",
+  {
+    id: idUuid,
+    empresaId,
+    numeroSerie: text("numero_serie").notNull(),
+    apelido: text("apelido").notNull(),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    uniqueIndex("maquininhas_empresa_numero_serie_unico_idx").on(table.empresaId, sql`lower(${table.numeroSerie})`),
+    index("maquininhas_empresa_ativo_idx").on(table.empresaId, table.ativo)
+  ]
+);
+
 export const fornecedores = pgTable("fornecedores", {
   id: idUuid,
   empresaId,
@@ -148,6 +248,25 @@ export const fornecedores = pgTable("fornecedores", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+// SOCIOS / GESTORES (R-047, D1 do PROJECT_BRAIN/17): cadastro MINIMO — nome, empresa, ativo.
+// Nada alem disso de proposito: a planilha confirma que a lista e curta (RET. SOCIOS - RODRIGO,
+// PRO LABORE - RODRIGO). Nasce como terceiro tipo de credor, hoje so usado em RETIRADAS —
+// despesa e mercadoria nao ofertam socio (decisao do Jose, 30/07); se um dia ofertarem, e ADD COLUMN.
+export const sociosGestores = pgTable(
+  "socios_gestores",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm
+  },
+  (table) => [
+    uniqueIndex("socios_gestores_empresa_nome_unico").on(table.empresaId, sql`lower(${table.nome})`),
+    index("socios_gestores_empresa_idx").on(table.empresaId)
+  ]
+);
 
 export const clientes = pgTable(
   "clientes",
@@ -270,6 +389,7 @@ export const gruposDespesas = pgTable("grupos_despesas", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposDespesas.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -280,6 +400,7 @@ export const gruposMercadorias = pgTable("grupos_mercadorias", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposMercadorias.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -290,6 +411,7 @@ export const gruposRetiradas = pgTable("grupos_retiradas", {
   empresaId,
   nome: text("nome").notNull(),
   grupoPaiId: uuid("grupo_pai_id").references((): AnyPgColumn => gruposRetiradas.id),
+  ativa: boolean("ativa").notNull().default(true),
   criadoEm,
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
@@ -304,6 +426,46 @@ export const gruposVendas = pgTable("grupos_vendas", {
   importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
   idImportado: uuid("id_importado")
 });
+
+// PATRIMONIO (PROJECT_BRAIN/17, D2) — cadastro MINIMO, espelhando a aba PATRIMONIO da planilha:
+// grupos com sigla (FIS estrutura fisica, MAT materia prima, UTS utensilios, MAQ maquinas,
+// MOB mobiliarios, EMB embalagens) e itens com marca/setor. Alimenta o campo Grupo da
+// discriminacao quando o item e maquinario/manutencao (§5).
+// A sigla NAO e travada nos seis valores: isto e um cadastro com CRUD, e travar no banco faria o
+// "novo grupo" so saber falhar. Unica por empresa + formato (2-4 maiusculas).
+export const gruposPatrimonio = pgTable(
+  "grupos_patrimonio",
+  {
+    id: idUuid,
+    empresaId,
+    sig: text("sig").notNull(),
+    nome: text("nome").notNull(),
+    criadoEm
+  },
+  (table) => [
+    unique("grupos_patrimonio_sig_unica").on(table.empresaId, table.sig),
+    check("grupos_patrimonio_sig_check", sql`${table.sig} ~ '^[A-Z]{2,4}$'`)
+  ]
+);
+
+export const patrimonioItens = pgTable(
+  "patrimonio_itens",
+  {
+    id: idUuid,
+    empresaId,
+    grupoPatrimonioId: uuid("grupo_patrimonio_id")
+      .notNull()
+      .references(() => gruposPatrimonio.id),
+    setorId: uuid("setor_id").references(() => setores.id, { onDelete: "set null" }),
+    nome: text("nome").notNull(),
+    marca: text("marca"),
+    criadoEm
+  },
+  (table) => [
+    index("patrimonio_itens_empresa_idx").on(table.empresaId),
+    index("patrimonio_itens_grupo_idx").on(table.grupoPatrimonioId)
+  ]
+);
 
 export const unidadesMedida = pgTable("unidades_medida", {
   id: idUuid,
@@ -690,29 +852,11 @@ export const integracoesSemNovidade = pgTable("integracoes_sem_novidade", {
   criadoEm
 });
 
-export const malotes = pgTable(
-  "malotes",
-  {
-    id: idUuid,
-    empresaId,
-    // O malote E o lacre (D3): o numero do lacre e a identidade unica do malote. Nao existe mais
-    // "codigo do malote" nem o "saco". Vem impresso de fonte externa e e digitado pelo operador.
-    numeroLacre: text("numero_lacre").notNull(),
-    // Valor do malote (fundo/troco emprestado do cofre). Vira a divida do caixa na abertura (R8).
-    valor: valorMonetario("valor").notNull().default("0"),
-    // Ciclo do malote/lacre: disponivel -> em_uso (aberto num caixa ou usado numa sangria/retorno)
-    // -> devolvido (M2). Um so ciclo (antes havia status duplo malote+lacre).
-    status: text("status").notNull().default("disponivel"),
-    criadoPor: text("criado_por"),
-    criadoEm,
-    importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
-    idImportado: uuid("id_importado")
-  },
-  (table) => [
-    uniqueIndex("malotes_empresa_numero_lacre_unico_idx").on(table.empresaId, sql`lower(${table.numeroLacre})`),
-    check("malotes_status_check", sql`${table.status} in ('disponivel', 'em_uso', 'devolvido')`)
-  ]
-);
+// R-040 (31/07/2026): a tabela `malotes` foi REMOVIDA. O malote-entidade (objeto reutilizavel com
+// estoque de lacres disponiveis) nao existe mais — o lacre nasce inline na transferencia (R-022) e
+// vive em `lacres` como selo de um EVENTO. Nada do que `malotes` guardava ficou sem casa:
+// numero_lacre -> lacres.numero (UNIQUE por empresa), valor -> transferencias.valor_original,
+// status -> lacres.rompido + transferencias.status. Migration 0026.
 
 export const vendas = pgTable(
   "vendas",
@@ -723,6 +867,8 @@ export const vendas = pgTable(
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     dataReferencia: date("data_referencia").notNull(),
     dataVenda: timestamp("data_venda", { withTimezone: true }),
+    // VENDA fica FORA da R-127: a entrada vem pronta da integracao (R-062) e a descricao dela e
+    // gerada, nao digitada. A 0027 nao tocou nesta coluna — continua NOT NULL no banco.
     descricao: text("descricao").notNull(),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
@@ -760,6 +906,7 @@ export const vendas = pgTable(
     check("vendas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("vendas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("vendas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    unique("vendas_id_empresa_unica").on(table.id, table.empresaId),
     index("vendas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("vendas_caixa_idx").on(table.caixaId),
     // Suporta a revinculacao retroativa: achar vendas ORFAS (caixa_id NULL) de um PDV num intervalo.
@@ -834,28 +981,94 @@ export const vendasComprovantes = pgTable("vendas_comprovantes", {
   criadoEm
 });
 
+// RECORRENCIA de lancamento (PROJECT_BRAIN/17, D3 + PROJECT_BRAIN/14). Guarda a DEFINICAO —
+// "toda terca e sexta, 20 vezes, a partir de 30/07" — enquanto os lancamentos da serie sao criados
+// na hora do salvar e apontam de volta para ca (recorrencia_id + recorrencia_ordem).
+//
+// A serie NAO e gerada por job noturno de proposito: lancamento que so aparece se um job rodou e
+// lancamento em que ninguem confia, e a conferencia do dia passaria a depender de infraestrutura.
+//
+// A definicao fica gravada mesmo depois de a serie existir porque e ela que responde "de onde
+// vieram estes 12 lancamentos iguais?" — sem isso eles sao indistinguiveis de digitacao repetida.
+export const lancamentosRecorrencias = pgTable(
+  "lancamentos_recorrencias",
+  {
+    id: idUuid,
+    empresaId,
+    dominio: text("dominio").notNull(), // despesa | mercadoria | retirada
+    frequencia: text("frequencia").notNull(), // dia | semana | quinzena | mes | trimestre
+    // Dias da semana ISO ("2,5" = terca e sexta), so na frequencia 'semana'; null nas demais,
+    // porque "toda terca" nao significa nada numa serie mensal. Texto e nao array: o campo e lido
+    // por gente conferindo no psql e nunca e filtrado por.
+    diasSemana: text("dias_semana"),
+    // TOTAL pedido pela pessoa, JA CONTANDO o lancamento inicial. Pode ser MAIOR que o numero de
+    // lancamentos criados: o teto de 12 meses corta a serie e o corte fica visivel nesta diferenca.
+    repeticoes: integer("repeticoes").notNull(),
+    dataInicial: date("data_inicial").notNull(),
+    criadoPor: text("criado_por"),
+    criadoEm
+  },
+  (table) => [
+    check("lancamentos_recorrencias_dominio_check", sql`${table.dominio} in ('despesa', 'mercadoria', 'retirada')`),
+    check(
+      "lancamentos_recorrencias_frequencia_check",
+      sql`${table.frequencia} in ('dia', 'semana', 'quinzena', 'mes', 'trimestre')`
+    ),
+    check("lancamentos_recorrencias_repeticoes_check", sql`${table.repeticoes} between 1 and 366`),
+    // Lista ISO nao vazia, sem separador solto. So a frequencia 'semana' preenche.
+    check("lancamentos_recorrencias_dias_semana_check", sql`${table.diasSemana} ~ '^[1-7](,[1-7])*$'`),
+    index("lancamentos_recorrencias_empresa_idx").on(table.empresaId)
+  ]
+);
+
+// Vinculo do lancamento com a serie que o gerou. As duas colunas andam JUNTAS (check abaixo em cada
+// tabela): ordem sem recorrencia seria um numero sem serie, e recorrencia sem ordem esconderia a
+// posicao que a tela mostra como "3/12".
+const vinculoRecorrencia = {
+  recorrenciaId: uuid("recorrencia_id").references((): AnyPgColumn => lancamentosRecorrencias.id),
+  recorrenciaOrdem: integer("recorrencia_ordem")
+};
+
+function checksVinculoRecorrencia(tabela: string, recorrenciaId: AnyPgColumn, recorrenciaOrdem: AnyPgColumn) {
+  return [
+    check(`${tabela}_recorrencia_par_check`, sql`num_nonnulls(${recorrenciaId}, ${recorrenciaOrdem}) <> 1`),
+    check(`${tabela}_recorrencia_ordem_check`, sql`${recorrenciaOrdem} is null or ${recorrenciaOrdem} >= 1`)
+  ];
+}
+
 export const despesas = pgTable(
   "despesas",
   {
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    // R-046: o tipo e ESCOLHA do operador e precisa sobreviver ao credor ser apagado — e nao e
+    // derivavel das FKs (com as duas nulas nao ha como saber em que aba reabrir a tela).
+    credorTipo: text("credor_tipo").$type<"fornecedor" | "colaborador">(),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
+    ...descontoGeralLancamento,
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     computar: boolean("computar").notNull().default(true),
     fotoDocumentoUrl: text("foto_documento_url"),
+    // R-049: foto 1 = recibo/boleto/nota (foto_documento_url); foto 2 = a nota COM OS ITENS.
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -866,8 +1079,30 @@ export const despesas = pgTable(
     check("despesas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("despesas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("despesas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksDescontoGeral("despesas", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksJuros("despesas", table.jurosTipo, table.jurosValorInformado),
+    ...checksVinculoRecorrencia("despesas", table.recorrenciaId, table.recorrenciaOrdem),
+    // Despesa nao oferta socio/gestor como credor (decisao do Jose, 30/07).
+    check(
+      "despesas_credor_tipo_check",
+      sql`${table.credorTipo} is null or ${table.credorTipo} in ('fornecedor', 'colaborador')`
+    ),
+    // Coerencia SEM cardinalidade retroativa. NAO exige credor (despesa aceita lancamento sem ele) e
+    // NAO reprova a linha legada que tem fornecedor_id e colaborador_id juntos — existe uma assim no
+    // dev hoje, e um `num_nonnulls(...) <= 1` abortaria nela. E o erro da 0017, de novo.
+    check(
+      "despesas_credor_coerente_check",
+      sql`${table.credorTipo} is null
+        or (${table.credorTipo} = 'fornecedor' and ${table.colaboradorId} is null)
+        or (${table.credorTipo} = 'colaborador' and ${table.fornecedorId} is null)`
+    ),
     index("despesas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("despesas_caixa_idx").on(table.caixaId)
+    index("despesas_caixa_idx").on(table.caixaId),
+    // Parcial: so lancamento de serie preenche. Serve o "mostre a serie inteira" e o DELETE da
+    // recorrencia (FK sem indice varre a tabela filha).
+    index("despesas_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 
@@ -879,13 +1114,55 @@ export const despesasItens = pgTable(
       .notNull()
       .references(() => despesas.id, { onDelete: "cascade" }),
     grupoDespesaId: uuid("grupo_despesa_id").references(() => gruposDespesas.id),
+    // Grupo do item vindo do cadastro de PATRIMONIO (§5: "se maquinario/manutencao"). Precisa ser
+    // coluna PROPRIA: grupo_despesa_id e FK de grupos_despesas e nao aceita um id de patrimonio —
+    // gravar la daria erro de FK, ou pior, casaria com um grupo de despesa de mesmo id.
+    // As duas sao OPCIONAIS e MUTUAMENTE EXCLUSIVAS (check abaixo): item sem grupo e legitimo e
+    // existe aos milhares no historico, entao a regra e "no maximo um", nunca "exatamente um".
+    grupoPatrimonioId: uuid("grupo_patrimonio_id").references(() => gruposPatrimonio.id),
     colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
     descricao: text("descricao").notNull(),
-    valor: valorMonetario("valor").notNull()
+    // Quantidade/unitario chegaram com os 3 niveis de desconto (§5): item antigo = 1 x valor.
+    quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull().default("1"),
+    valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
+    ...descontosPorNivelItem,
+    valor: valorMonetario("valor").notNull(),
+    ...valoresComDescontoItem
   },
   (table) => [
     check("despesas_itens_valor_check", sql`${table.valor} >= 0`),
-    index("despesas_itens_despesa_idx").on(table.despesaId)
+    check("despesas_itens_quantidade_check", sql`${table.quantidade} > 0`),
+    check("despesas_itens_valor_unitario_check", sql`${table.valorUnitario} >= 0`),
+    check(
+      "despesas_itens_desconto_tipo_check",
+      sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('percentual', 'valor')`
+    ),
+    check("despesas_itens_desconto_valor_check", sql`${table.descontoValor} is null or ${table.descontoValor} >= 0`),
+    check(
+      "despesas_itens_desconto_total_tipo_check",
+      sql`${table.descontoTotalTipo} is null or ${table.descontoTotalTipo} in ('percentual', 'valor')`
+    ),
+    check(
+      "despesas_itens_desconto_total_valor_check",
+      sql`${table.descontoTotalValor} is null or ${table.descontoTotalValor} >= 0`
+    ),
+    check(
+      "despesas_itens_valor_com_desconto_check",
+      sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
+    ),
+    // O grupo do item vem de UMA origem so: despesas OU patrimonio. Nenhum e permitido (item sem
+    // grupo, o caso do historico); os dois juntos nao — seria um item em duas arvores de grupo, e
+    // qualquer relatorio que agrupe contaria ele duas vezes.
+    check(
+      "despesas_itens_grupo_unico_check",
+      sql`num_nonnulls(${table.grupoDespesaId}, ${table.grupoPatrimonioId}) <= 1`
+    ),
+    index("despesas_itens_despesa_idx").on(table.despesaId),
+    // Parcial: a coluna e esparsa (so item de maquinario/manutencao preenche). Serve o DELETE de
+    // grupos_patrimonio (FK sem indice varre a tabela filha inteira) e o filtro por grupo.
+    index("despesas_itens_grupo_patrimonio_idx")
+      .on(table.grupoPatrimonioId)
+      .where(sql`${table.grupoPatrimonioId} is not null`)
   ]
 );
 
@@ -943,23 +1220,33 @@ export const mercadorias = pgTable(
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    // Mercadoria so oferta FORNECEDOR (nao tem colaborador_id nem socio_gestor_id). A coluna existe
+    // mesmo assim para a tela reabrir no tipo certo e para o contrato ser igual nos 3 dominios.
+    credorTipo: text("credor_tipo").$type<"fornecedor">(),
     fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
+    ...descontoGeralLancamento,
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     notaFiscalId: text("nota_fiscal_id"),
     temNotaFiscal: boolean("tem_nota_fiscal").notNull().default(false),
     computar: boolean("computar").notNull().default(true),
     fotoDocumentoUrl: text("foto_documento_url"),
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -970,8 +1257,15 @@ export const mercadorias = pgTable(
     check("mercadorias_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("mercadorias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("mercadorias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksDescontoGeral("mercadorias", table.descontoGeralTipo, table.descontoGeralValor),
+    ...checksJuros("mercadorias", table.jurosTipo, table.jurosValorInformado),
+    ...checksVinculoRecorrencia("mercadorias", table.recorrenciaId, table.recorrenciaOrdem),
+    check("mercadorias_credor_tipo_check", sql`${table.credorTipo} is null or ${table.credorTipo} = 'fornecedor'`),
     index("mercadorias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("mercadorias_caixa_idx").on(table.caixaId)
+    index("mercadorias_caixa_idx").on(table.caixaId),
+    index("mercadorias_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 
@@ -984,15 +1278,17 @@ export const mercadoriasItens = pgTable(
       .references(() => mercadorias.id, { onDelete: "cascade" }),
     produtoId: uuid("produto_id").references(() => produtos.id),
     grupoMercadoriaId: uuid("grupo_mercadoria_id").references(() => gruposMercadorias.id),
+    // Ver a nota em despesas_itens.grupo_patrimonio_id: mesma regra, mesmo motivo (FK diferente).
+    grupoPatrimonioId: uuid("grupo_patrimonio_id").references(() => gruposPatrimonio.id),
     unidadeMedidaId: uuid("unidade_medida_id").references(() => unidadesMedida.id),
     descricao: text("descricao").notNull(),
     quantidade: numeric("quantidade", { precision: 14, scale: 3 }).notNull(),
     valorUnitario: numeric("valor_unitario", { precision: 14, scale: 4 }).notNull().default("0"),
-    // Desconto por item, informado na discriminacao. tipo null = sem desconto;
-    // valor e % (quando tipo='percentual') ou R$ (quando tipo='valor'). valor_total ja e liquido.
-    descontoTipo: text("desconto_tipo"),
-    descontoValor: numeric("desconto_valor", { precision: 14, scale: 4 }),
-    valorTotal: valorMonetario("valor_total").notNull()
+    ...descontosPorNivelItem,
+    // valor_total = V.Total do item ja LIQUIDO dos descontos DE ITEM (niveis 1 e 2). E a soma dele
+    // que a validacao D5 compara com o valor do lancamento.
+    valorTotal: valorMonetario("valor_total").notNull(),
+    ...valoresComDescontoItem
   },
   (table) => [
     check("mercadorias_itens_quantidade_check", sql`${table.quantidade} > 0`),
@@ -1002,7 +1298,27 @@ export const mercadoriasItens = pgTable(
       sql`${table.descontoTipo} is null or ${table.descontoTipo} in ('percentual', 'valor')`
     ),
     check("mercadorias_itens_desconto_valor_check", sql`${table.descontoValor} is null or ${table.descontoValor} >= 0`),
-    index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId)
+    check(
+      "mercadorias_itens_desconto_total_tipo_check",
+      sql`${table.descontoTotalTipo} is null or ${table.descontoTotalTipo} in ('percentual', 'valor')`
+    ),
+    check(
+      "mercadorias_itens_desconto_total_valor_check",
+      sql`${table.descontoTotalValor} is null or ${table.descontoTotalValor} >= 0`
+    ),
+    check(
+      "mercadorias_itens_valor_com_desconto_check",
+      sql`${table.valorTotalComDesconto} >= 0 and ${table.valorUnitarioComDesconto} >= 0`
+    ),
+    // Mesma regra de despesas_itens: no maximo uma origem de grupo (mercadorias OU patrimonio).
+    check(
+      "mercadorias_itens_grupo_unico_check",
+      sql`num_nonnulls(${table.grupoMercadoriaId}, ${table.grupoPatrimonioId}) <= 1`
+    ),
+    index("mercadorias_itens_mercadoria_idx").on(table.mercadoriaId),
+    index("mercadorias_itens_grupo_patrimonio_idx")
+      .on(table.grupoPatrimonioId)
+      .where(sql`${table.grupoPatrimonioId} is not null`)
   ]
 );
 
@@ -1076,22 +1392,37 @@ export const retiradas = pgTable(
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    ...vinculoRecorrencia,
     grupoRetiradaId: uuid("grupo_retirada_id").references(() => gruposRetiradas.id),
-    colaboradorId: uuid("colaborador_id")
-      .notNull()
-      .references(() => colaboradores.id),
+    // R-046/R-047: retirada e o UNICO dominio que oferta socio/gestor (decisao do Jose, 30/07).
+    // R-128: a tela oferece FORNECEDOR ou SOCIO/GESTOR (fiel a FOTO 2). `colaborador` continua no
+    // tipo porque o HISTORICO tem retirada gravada assim — sai da tela, nao do banco.
+    credorTipo: text("credor_tipo").$type<"fornecedor" | "colaborador" | "socio_gestor">(),
+    // colaborador_id DEIXA DE SER NOT NULL: com socio/gestor como credor nao ha colaborador, e
+    // exigir um forcaria inventar. DROP NOT NULL nao perde dado e nao aborta — so relaxa.
+    fornecedorId: uuid("fornecedor_id").references(() => fornecedores.id),
+    colaboradorId: uuid("colaborador_id").references(() => colaboradores.id),
+    socioGestorId: uuid("socio_gestor_id").references(() => sociosGestores.id, { onDelete: "set null" }),
+    ...documentoFiscalLancamento,
     dataReferencia: date("data_referencia").notNull(),
     dataVencimento: date("data_vencimento").notNull(),
     dataPagamento: date("data_pagamento"),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
+    ...jurosLancamento,
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
     descricaoDesconto: text("descricao_desconto"),
     contaOrigemId: uuid("conta_origem_id").references(() => contas.id),
     computar: boolean("computar").notNull().default(true),
+    // R-049: retirada nao tinha NENHUMA foto. Comprar um freezer tem nota como qualquer outra
+    // compra — a D12 tirou so a DISCRIMINACAO da retirada, nunca as fotos.
+    fotoDocumentoUrl: text("foto_documento_url"),
+    fotoNotaUrl: text("foto_nota_url"),
     status: text("status").notNull().default("aprovado"),
     criadoPor: text("criado_por"),
     criadoEm,
@@ -1102,8 +1433,26 @@ export const retiradas = pgTable(
     check("retiradas_valor_original_check", sql`${table.valorOriginal} >= 0`),
     check("retiradas_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("retiradas_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
+    ...checksJuros("retiradas", table.jurosTipo, table.jurosValorInformado),
+    ...checksVinculoRecorrencia("retiradas", table.recorrenciaId, table.recorrenciaOrdem),
+    check(
+      "retiradas_credor_tipo_check",
+      sql`${table.credorTipo} is null or ${table.credorTipo} in ('fornecedor', 'colaborador', 'socio_gestor')`
+    ),
+    // Mesmo desenho tolerante das despesas: so checa coerencia quando o tipo esta preenchido.
+    // O historico inteiro tem credor_tipo nulo e colaborador_id preenchido — e passa.
+    check(
+      "retiradas_credor_coerente_check",
+      sql`${table.credorTipo} is null
+        or (${table.credorTipo} = 'fornecedor' and ${table.colaboradorId} is null and ${table.socioGestorId} is null)
+        or (${table.credorTipo} = 'colaborador' and ${table.fornecedorId} is null and ${table.socioGestorId} is null)
+        or (${table.credorTipo} = 'socio_gestor' and ${table.fornecedorId} is null and ${table.colaboradorId} is null)`
+    ),
     index("retiradas_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("retiradas_caixa_idx").on(table.caixaId)
+    index("retiradas_caixa_idx").on(table.caixaId),
+    index("retiradas_recorrencia_idx")
+      .on(table.recorrenciaId)
+      .where(sql`${table.recorrenciaId} is not null`)
   ]
 );
 
@@ -1114,7 +1463,9 @@ export const transferencias = pgTable(
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
     dataReferencia: date("data_referencia").notNull(),
-    descricao: text("descricao").notNull(),
+    // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
+    // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
+    descricao: text("descricao"),
     observacao: text("observacao"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
@@ -1127,11 +1478,20 @@ export const transferencias = pgTable(
     contaDestinoId: uuid("conta_destino_id")
       .notNull()
       .references(() => contas.id),
-    // O malote/lacre envolvido na transferencia (abertura usa o malote de abertura; sangria/retorno
-    // usa o malote-selo da volta). Antes havia um lacre_malote_id separado — agora malote === lacre.
-    maloteId: uuid("malote_id").references(() => malotes.id),
-    // Papel da transferencia: abertura (cofre->caixa, automatica no M1), suprimento/sangria/retorno
-    // (manuais, R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
+    nLacreDoc: text("n_lacre_doc"),
+    agendadaPara: timestamp("agendada_para", { withTimezone: true }),
+    tempoConfirmacao: text("tempo_confirmacao"),
+    prazoConfirmacaoEm: timestamp("prazo_confirmacao_em", { withTimezone: true }),
+    dataRecebimento: timestamp("data_recebimento", { withTimezone: true }),
+    confirmadoPor: text("confirmado_por").references(() => perfisUsuarios.usuarioId),
+    travaLiberadaPor: text("trava_liberada_por").references(() => perfisUsuarios.usuarioId),
+    travaLiberadaEm: timestamp("trava_liberada_em", { withTimezone: true }),
+    // R-040: `malote_id` foi removida. O lacre da transferencia esta em `n_lacre_doc` (digitado) e
+    // em `lacres` (o selo do movimento, com `rompido`). Migration 0026 fez o backfill antes do drop.
+    //
+    // Papel da transferencia. `abertura` NAO nasce assim: a tesouraria cria como `suprimento` e ela
+    // vira `abertura` no instante em que um caixa a reivindica pelo lacre (R-040). `sangria`/
+    // `retorno` sao manuais (R4/R6). Default 'suprimento' para linhas existentes (nao-destrutivo).
     tipo: text("tipo").notNull().default("suprimento"),
     // M2 (rascunho Rodrigo): data REAL do movimento fisico (separada de dataReferencia contabil e do
     // criadoEm), vencimento e classificacao contabil (paridade com o lancamento da planilha), e o
@@ -1141,13 +1501,23 @@ export const transferencias = pgTable(
     contabil: text("contabil"),
     ordem: integer("ordem"),
     computar: boolean("computar").notNull().default(true),
-    status: text("status").notNull().default("aprovado"),
+    status: text("status").notNull().default("recebido"),
     criadoPor: text("criado_por"),
     criadoEm,
     atualizadoEm
   },
   (table) => [
-    check("transferencias_status_check", sql`${table.status} in ('aprovado', 'aguardando_aprovacao', 'cancelado')`),
+    check("transferencias_status_check", sql`${table.status} in ('pendente', 'recebido', 'agendada', 'cancelada')`),
+    check(
+      "transferencias_prazo_check",
+      sql`${table.tempoConfirmacao} is null or ${table.tempoConfirmacao} in ('5min', '10min', '30min', '1h', '1dia', '10dias', '30dias')`
+    ),
+    check(
+      "transferencias_recebimento_check",
+      sql`(${table.status} = 'recebido' and ${table.dataRecebimento} is not null and ${table.confirmadoPor} is not null)
+        or (${table.status} <> 'recebido' and ${table.dataRecebimento} is null and ${table.confirmadoPor} is null)
+        or (${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno') and ${table.status} = 'recebido')`
+    ),
     check("transferencias_tipo_check", sql`${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno')`),
     check("transferencias_ordem_check", sql`${table.ordem} is null or ${table.ordem} >= 1`),
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
@@ -1156,6 +1526,78 @@ export const transferencias = pgTable(
     check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
     index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("transferencias_caixa_idx").on(table.caixaId)
+  ]
+);
+
+export const transferenciasDestinosCandidatos = pgTable(
+  "transferencias_destinos_candidatos",
+  {
+    id: idUuid,
+    empresaId,
+    transferenciaId: uuid("transferencia_id")
+      .notNull()
+      .references(() => transferencias.id, { onDelete: "cascade" }),
+    contaId: uuid("conta_id")
+      .notNull()
+      .references(() => contas.id, { onDelete: "cascade" }),
+    criadoEm
+  },
+  (table) => [
+    unique("transferencias_destinos_candidatos_unica").on(table.transferenciaId, table.contaId),
+    index("transferencias_destinos_candidatos_conta_idx").on(table.contaId)
+  ]
+);
+
+// contas_usuarios (FOTO 4 do PROJECT_BRAIN/14): vinculo N:N usuario<->conta. Define QUAIS contas cada
+// usuario pode operar (as que aparecem como Origem/Destino numa transferencia) e QUEM pode confirmar o
+// recebimento de uma transferencia destinada aquela conta. NAO e permissao de tela (isso sao as 9 acoes
+// por dominio) — e ESCOPO DE CONTA por usuario; as duas coisas sao complementares. Reconstrucao do
+// trabalho de 24/07 (a tabela chegou a existir mas nunca foi commitada).
+export const contasUsuarios = pgTable(
+  "contas_usuarios",
+  {
+    id: idUuid,
+    empresaId,
+    contaId: uuid("conta_id")
+      .notNull()
+      .references(() => contas.id, { onDelete: "cascade" }),
+    usuarioId: text("usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    criadoEm
+  },
+  (table) => [
+    unique("contas_usuarios_unica").on(table.contaId, table.usuarioId),
+    index("contas_usuarios_usuario_idx").on(table.usuarioId),
+    index("contas_usuarios_conta_idx").on(table.contaId)
+  ]
+);
+
+// lacres: registro UNICO do lacre de um MOVIMENTO (a saida de uma transferencia OU cada linha de
+// retorno/sangria). O numero vem impresso de fonte externa, e digitado pelo operador e nao se repete
+// por empresa. `rompido` vira true quando o lacre e usado para receber/abrir no destino (o selo e
+// quebrado) — a partir dai nunca mais pode ser reutilizado. Reconstrucao do trabalho de 24/07.
+//
+// Desde a R-040 esta e a UNICA tabela de lacre: `malotes.numero_lacre` (a identidade do
+// malote-ENTIDADE, um objeto reutilizavel de cadastro) deixou de existir. `lacres.numero` e o selo
+// de um EVENTO de transporte — a prova de que UMA transferencia especifica saiu lacrada e foi
+// recebida. E o "lacre do setor" da FOTO 1.
+export const lacres = pgTable(
+  "lacres",
+  {
+    id: idUuid,
+    empresaId,
+    numero: text("numero").notNull(),
+    transferenciaId: uuid("transferencia_id").references(() => transferencias.id, { onDelete: "set null" }),
+    // Ponta do movimento que o lacre selou: 'saida' (ida da transferencia) ou 'retorno' (volta/sangria).
+    origem: text("origem").notNull(),
+    rompido: boolean("rompido").notNull().default(false),
+    criadoEm
+  },
+  (table) => [
+    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno')`),
+    unique("lacres_numero_unico").on(table.empresaId, table.numero),
+    index("lacres_transf_idx").on(table.transferenciaId)
   ]
 );
 
@@ -1178,13 +1620,14 @@ export const fechamentosCaixa = pgTable(
     abertoEm: timestamp("aberto_em", { withTimezone: true }),
     dataHoraFechamento: timestamp("data_hora_fechamento", { withTimezone: true }),
     fechadoEm: timestamp("fechado_em", { withTimezone: true }),
+    fechadoPor: text("fechado_por").references(() => perfisUsuarios.usuarioId),
     tokenEdicao: text("token_edicao"),
     observacao: text("observacao"),
-    // Abertura com malote (M1, R8): malote selecionado, lacre da ida e a divida com o cofre
-    // (= valor do malote). divida_cofre NAO entra na formula canonica de saldo (ADR-001 intacto);
-    // e a base do "saldo proprio" derivado. Caixas sem malote ficam com divida_cofre = 0.
-    maloteAberturaId: uuid("malote_abertura_id").references(() => malotes.id),
+    // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. A coluna
+    // `malote_abertura_id` foi removida na 0026 (o vinculo agora e transferencias.caixa_id).
+    // `divida_cofre` e legado da R8 revogada pela R-001 (o fundo nao e emprestimo): sempre 0.
     lacreAbertura: text("lacre_abertura"),
+    maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
     totalTransferencias: valorMonetario("total_transferencias").notNull().default("0"),
@@ -1200,10 +1643,116 @@ export const fechamentosCaixa = pgTable(
   },
   (table) => [
     check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
+    unique("fechamentos_caixa_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)
       .where(sql`${table.status} = 'aberto'`),
     index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
+  ]
+);
+
+// Trilha imutavel da R-013: uma venda integrada recebida depois da conferencia continua entrando
+// no caixa correspondente ao horario em que ocorreu, mas deixa evidencia visivel no fechamento.
+// Uma venda gera no maximo uma marca por fechamento mesmo se o PDV reenviar atualizacoes.
+export const alteracoesPosFechamentoCaixa = pgTable(
+  "alteracoes_pos_fechamento_caixa",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    vendaId: uuid("venda_id").notNull(),
+    alteradoEm: timestamp("alterado_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "alteracoes_pos_fechamento_caixa_fechamento_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.vendaId, table.empresaId],
+      foreignColumns: [vendas.id, vendas.empresaId],
+      name: "alteracoes_pos_fechamento_caixa_venda_empresa_fk"
+    }).onDelete("cascade"),
+    unique("alteracoes_pos_fechamento_caixa_venda_unica").on(table.fechamentoCaixaId, table.vendaId),
+    index("alteracoes_pos_fechamento_caixa_empresa_idx").on(table.empresaId, table.fechamentoCaixaId)
+  ]
+);
+
+// Quebra de caixa (R-015..R-019/R-021): o valor tem sinal (negativo = faltou, positivo = sobrou)
+// e pertence ao usuario que operou o caixa. O saldo pendente e derivado juntando estas linhas com
+// suas notificacoes ainda nao verificadas; nao existe coluna de saldo e esta entidade jamais
+// movimenta `contas`. A FK composta impede empresa_id divergente do fechamento no proprio banco.
+export const quebrasCaixa = pgTable(
+  "quebras_caixa",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    usuarioId: text("usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    valor: valorMonetario("valor").notNull(),
+    observacao: text("observacao").notNull(),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "quebras_caixa_fechamento_empresa_fk"
+    }).onDelete("cascade"),
+    unique("quebras_caixa_fechamento_unico").on(table.fechamentoCaixaId),
+    index("quebras_caixa_empresa_usuario_idx").on(table.empresaId, table.usuarioId),
+    check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`)
+  ]
+);
+
+// Caixa comum das notificacoes operacionais (R-017/R-019/R-037). Cada destinatario recebe sua
+// propria linha: no prazo de transferencia estourado, por exemplo, origem e destino sao notificados
+// sem compartilhar estado de leitura/verificacao. referencia_id aponta para a entidade do tipo
+// (quebra ou transferencia); a integridade dessa referencia polimorfica fica no servico.
+export const notificacoes = pgTable(
+  "notificacoes",
+  {
+    id: idUuid,
+    empresaId,
+    tipo: text("tipo")
+      .$type<"quebra_caixa" | "transferencia_divergencia" | "transferencia_prazo_confirmacao">()
+      .notNull(),
+    destinatarioUsuarioId: text("destinatario_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    referenciaId: uuid("referencia_id").notNull(),
+    titulo: text("titulo").notNull(),
+    valor: valorMonetario("valor"),
+    verificado: boolean("verificado").notNull().default(false),
+    verificadoPor: text("verificado_por").references(() => perfisUsuarios.usuarioId),
+    verificadoEm: timestamp("verificado_em", { withTimezone: true }),
+    criadoEm
+  },
+  (table) => [
+    unique("notificacoes_tipo_destinatario_referencia_unica").on(
+      table.tipo,
+      table.destinatarioUsuarioId,
+      table.referenciaId
+    ),
+    index("notificacoes_empresa_destinatario_pendente_idx").on(
+      table.empresaId,
+      table.destinatarioUsuarioId,
+      table.verificado
+    ),
+    check(
+      "notificacoes_tipo_check",
+      sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao')`
+    ),
+    check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
+    check(
+      "notificacoes_verificacao_consistente_check",
+      sql`(${table.verificado} = false and ${table.verificadoPor} is null and ${table.verificadoEm} is null)
+        or (${table.verificado} = true and ${table.verificadoPor} is not null and ${table.verificadoEm} is not null)`
+    )
   ]
 );
 

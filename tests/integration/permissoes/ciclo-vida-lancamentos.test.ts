@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
@@ -11,6 +12,12 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 //
 // caixaCiclo: opera caixa, lanca/edita despesa — NAO paga, NAO ve/edita pago.
 // financeiroCiclo: opera caixa + ciclo de pagamento completo (pagar + *_dpago + visualizar_dpago).
+// R-129: data de pagamento nao pode ser retroativa. Esta matriz e sobre PERMISSAO — a data so
+// precisa ser aceitavel para o teste chegar ao gate que ele quer medir. A unica data literal que
+// sobra e a do lancamento marcado como pago DIRETO NO BANCO: ali a edicao repete a mesma data, que
+// e o caso que a R-129 libera de proposito (editar registro antigo sem mexer no pagamento).
+const PAGO_EM = diaNegocio(new Date());
+
 describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_dpago)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
@@ -96,7 +103,7 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
     const comPagamento = await post(
       cookieCaixa,
       "/api/despesas",
-      despesaPayload(contaId, { descricao: "Tentando pagar", dataPagamento: "2026-05-01" })
+      despesaPayload(contaId, { descricao: "Tentando pagar", dataPagamento: PAGO_EM })
     );
     assertProblem(comPagamento, 403, "INSUFFICIENT_PERMISSION");
     expect(comPagamento.body).toContain("despesas_pagar");
@@ -112,7 +119,7 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
     const resposta = await post(
       cookieFinanceiro,
       "/api/despesas",
-      despesaPayload(contaId, { descricao: "Despesa paga", dataPagamento: "2026-05-02" })
+      despesaPayload(contaId, { descricao: "Despesa paga", dataPagamento: PAGO_EM })
     );
     expect(resposta.statusCode, resposta.body).toBe(201);
     const id = json<{ data: { id: string } }>(resposta).data.id;
@@ -120,7 +127,7 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
       "select to_char(data_pagamento, 'YYYY-MM-DD') as data_pagamento from despesas where id = $1",
       [id]
     );
-    expect(linha?.data_pagamento).toBe("2026-05-02");
+    expect(linha?.data_pagamento).toBe(PAGO_EM);
   });
 
   it("Editar lancamento JA PAGO: 403 sem *_editar_dpago (Caixa) / 200 com (Financeiro)", async () => {
@@ -149,14 +156,14 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
     const criadaFin = await post(
       cookieFinanceiro,
       "/api/despesas",
-      despesaPayload(fin.contaId, { descricao: "Paga editavel", dataPagamento: "2026-05-04" })
+      despesaPayload(fin.contaId, { descricao: "Paga editavel", dataPagamento: PAGO_EM })
     );
     expect(criadaFin.statusCode, criadaFin.body).toBe(201);
     const idFin = json<{ data: { id: string } }>(criadaFin).data.id;
     const edicaoFin = await put(
       cookieFinanceiro,
       `/api/despesas/${idFin}`,
-      despesaPayload(fin.contaId, { descricao: "Pago editado", dataPagamento: "2026-05-04" })
+      despesaPayload(fin.contaId, { descricao: "Pago editado", dataPagamento: PAGO_EM })
     );
     assertOk(edicaoFin);
   });
@@ -196,7 +203,7 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
     const pagaFin = await post(
       cookieFinanceiro,
       "/api/despesas",
-      despesaPayload(fin.contaId, { descricao: "LISTA-FIN-PAGA", dataPagamento: "2026-05-06" })
+      despesaPayload(fin.contaId, { descricao: "LISTA-FIN-PAGA", dataPagamento: PAGO_EM })
     );
     expect(pagaFin.statusCode, pagaFin.body).toBe(201);
     const listaFin = await contexto.app.inject({

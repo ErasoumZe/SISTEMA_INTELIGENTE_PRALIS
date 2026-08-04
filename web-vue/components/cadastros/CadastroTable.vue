@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { chipStatusMalote } from "~/utils/malote";
-
 const props = withDefaults(
   defineProps<{
     titulo: string;
@@ -160,7 +158,7 @@ function proximaPagina() {
           :items="[
             { title: 'Cargo', value: 'cargo' },
             { title: 'Setor', value: 'setor' },
-            { title: 'Usuario', value: 'usuario' }
+            { title: 'Usuário', value: 'usuario' }
           ]"
           label="Tipo"
           density="compact"
@@ -171,7 +169,7 @@ function proximaPagina() {
         <v-select
           :model-value="permissaoFiltro"
           :items="permissoesFiltro"
-          label="Permissao"
+          label="Permissão"
           density="compact"
           hide-details
           clearable
@@ -190,24 +188,13 @@ function proximaPagina() {
           <thead>
             <tr>
               <th v-for="coluna in colunas" :key="coluna">{{ coluna }}</th>
-              <th v-if="temAcoes" class="text-right">Acoes</th>
+              <th v-if="temAcoes" class="text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="linha in linhasPaginadas" :key="linha.id ?? JSON.stringify(linha)">
               <td v-for="coluna in colunas" :key="coluna">
-                <span v-if="chaveColuna(coluna) === 'lacre'" class="malote-lacre-badge">{{
-                  valorLinha(linha, coluna)
-                }}</span>
-                <v-chip
-                  v-else-if="chaveColuna(coluna) === 'status' && chipStatusMalote(linha.status)"
-                  :color="chipStatusMalote(linha.status)!.cor"
-                  size="small"
-                  variant="tonal"
-                  label
-                  >{{ chipStatusMalote(linha.status)!.label }}</v-chip
-                >
-                <template v-else>{{ valorLinha(linha, coluna) }}</template>
+                {{ valorLinha(linha, coluna) }}
               </td>
               <td v-if="temAcoes" class="text-right">
                 <div class="row-actions d-flex justify-end ga-1">
@@ -273,25 +260,10 @@ function proximaPagina() {
             append-icon="mdi-chevron-right"
             :disabled="paginaAtual === totalPaginas || carregandoBusca"
             @click="proximaPagina"
-            >Proxima</v-btn
+            >Próxima</v-btn
           >
         </div>
       </div>
     </v-card-text>
   </v-card>
 </template>
-
-<style scoped>
-/* Malote = lacre (D3): numero do lacre em destaque como badge laranja (token de categoria V1). */
-.malote-lacre-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: var(--cat-transferencias-soft, #fff1e8);
-  color: var(--cat-transferencias-strong, #9a3412);
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.2px;
-}
-</style>

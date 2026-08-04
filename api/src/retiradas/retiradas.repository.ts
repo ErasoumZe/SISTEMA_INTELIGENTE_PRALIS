@@ -3,7 +3,14 @@ import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDetalheDto, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
-import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
+import {
+  filtrosEmpresa,
+  numeroDecimal,
+  valoresBase,
+  valoresBaseEdicao,
+  valoresJuros
+} from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
 export async function listarRetiradasRepository(
   query: RetiradasQuery,
@@ -19,7 +26,7 @@ export async function listarRetiradasRepository(
       id: retiradas.id,
       empresaId: retiradas.empresaId,
       dataReferencia: retiradas.dataReferencia,
-      descricao: retiradas.descricao,
+      descricao: textoDoMovimento(retiradas),
       valorOriginal: retiradas.valorOriginal,
       computar: retiradas.computar,
       status: retiradas.status
@@ -28,35 +35,65 @@ export async function listarRetiradasRepository(
     .where(filtros.length ? and(...filtros) : undefined);
 }
 
+export async function atualizarFotoRetiradaRepository(
+  id: string,
+  empresaId: string,
+  campo: "documento" | "nota",
+  caminho: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(retiradas)
+    .set(campo === "nota" ? { fotoNotaUrl: caminho } : { fotoDocumentoUrl: caminho })
+    .where(and(eq(retiradas.id, id), eq(retiradas.empresaId, empresaId)));
+}
+
 export async function criarRetiradaRepository(
   dados: RetiradaPayload,
   computar: boolean,
   criadoPor: string,
   caixaId?: string | null,
-  db?: ExecutorBanco
+  db?: ExecutorBanco,
+  recorrencia?: { id: string; ordem: number } | null
 ): Promise<{ id: string }> {
   return executarComTransacaoOpcional(db, async (tx) => {
     const [retirada] = await tx
       .insert(retiradas)
       .values({
-        ...valoresBase(dados, computar, criadoPor, caixaId),
+        ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
+        // R-041: DEPOIS do valoresBase de proposito — sobrescreve o valorAcrescimo do cliente.
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
-        colaboradorId: dados.colaboradorId
+        // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
+        // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
+        fornecedorId: dados.fornecedorId ?? null,
+        colaboradorId: dados.colaboradorId ?? null,
+        socioGestorId: dados.socioGestorId ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .returning({ id: retiradas.id });
     if (!retirada) throw new Error("Retirada nao criada");
 
-    await tx.insert(debitosColaboradores).values({
-      empresaId: dados.empresaId,
-      colaboradorId: dados.colaboradorId,
-      tipo: "RETIRADA",
-      retiradaId: retirada.id,
-      caixaId: caixaId ?? null,
-      valor: String(dados.valorOriginal),
-      observacao: dados.observacao ?? null,
-      criadoPor
-    });
+    // R-047: o debito de colaborador so existe quando o credor E um colaborador. Retirada de
+    // socio/gestor e pro-labore, nao divida de funcionario — e debitos_colaboradores.colaborador_id
+    // e NOT NULL, entao inventar um colaborador aqui seria mentir no banco para satisfazer o tipo.
+    if (dados.colaboradorId) {
+      await tx.insert(debitosColaboradores).values({
+        empresaId: dados.empresaId,
+        colaboradorId: dados.colaboradorId,
+        tipo: "RETIRADA",
+        retiradaId: retirada.id,
+        caixaId: caixaId ?? null,
+        valor: String(dados.valorOriginal),
+        observacao: dados.observacao ?? null,
+        criadoPor
+      });
+    }
 
     return retirada;
   });
@@ -71,11 +108,12 @@ export async function buscarRetiradaDetalheRepository(
       id: retiradas.id,
       empresaId: retiradas.empresaId,
       caixaId: retiradas.caixaId,
+      recorrenciaId: retiradas.recorrenciaId,
       status: retiradas.status,
       dataReferencia: retiradas.dataReferencia,
       dataVencimento: retiradas.dataVencimento,
       dataPagamento: retiradas.dataPagamento,
-      descricao: retiradas.descricao,
+      descricao: textoDoMovimento(retiradas),
       observacao: retiradas.observacao,
       valorOriginal: retiradas.valorOriginal,
       valorAcrescimo: retiradas.valorAcrescimo,
@@ -83,7 +121,16 @@ export async function buscarRetiradaDetalheRepository(
       valorDesconto: retiradas.valorDesconto,
       descricaoDesconto: retiradas.descricaoDesconto,
       contaOrigemId: retiradas.contaOrigemId,
+      fornecedorId: retiradas.fornecedorId,
       colaboradorId: retiradas.colaboradorId,
+      socioGestorId: retiradas.socioGestorId,
+      credorTipo: retiradas.credorTipo,
+      dataDocumentoFiscal: retiradas.dataDocumentoFiscal,
+      numeroDocumentoFiscal: retiradas.numeroDocumentoFiscal,
+      fotoDocumentoUrl: retiradas.fotoDocumentoUrl,
+      fotoNotaUrl: retiradas.fotoNotaUrl,
+      jurosTipo: retiradas.jurosTipo,
+      jurosValorInformado: retiradas.jurosValorInformado,
       grupoRetiradaId: retiradas.grupoRetiradaId,
       computar: retiradas.computar
     })
@@ -96,6 +143,7 @@ export async function buscarRetiradaDetalheRepository(
     ...retirada,
     valorOriginal: numeroDecimal(retirada.valorOriginal),
     valorAcrescimo: numeroDecimal(retirada.valorAcrescimo),
+    jurosValorInformado: retirada.jurosValorInformado == null ? null : numeroDecimal(retirada.jurosValorInformado),
     valorDesconto: numeroDecimal(retirada.valorDesconto)
   };
 }
@@ -113,23 +161,37 @@ export async function atualizarRetiradaRepository(
       .update(retiradas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
-        colaboradorId: dados.colaboradorId
+        // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
+        // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
+        fornecedorId: dados.fornecedorId ?? null,
+        colaboradorId: dados.colaboradorId ?? null,
+        socioGestorId: dados.socioGestorId ?? null,
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .where(eq(retiradas.id, retiradaId));
 
-    // O debito de colaborador e derivado do lancamento: substitui conforme o novo payload.
+    // O debito de colaborador e derivado do lancamento: substitui conforme o novo payload. O DELETE
+    // vem sempre — trocar o credor de colaborador para socio/gestor tem de APAGAR o debito antigo,
+    // senao sobra divida de um funcionario que nao recebeu mais nada.
     await tx.delete(debitosColaboradores).where(eq(debitosColaboradores.retiradaId, retiradaId));
-    await tx.insert(debitosColaboradores).values({
-      empresaId: dados.empresaId,
-      colaboradorId: dados.colaboradorId,
-      tipo: "RETIRADA",
-      retiradaId,
-      caixaId,
-      valor: String(dados.valorOriginal),
-      observacao: dados.observacao ?? null,
-      criadoPor
-    });
+    if (dados.colaboradorId) {
+      await tx.insert(debitosColaboradores).values({
+        empresaId: dados.empresaId,
+        colaboradorId: dados.colaboradorId,
+        tipo: "RETIRADA",
+        retiradaId,
+        caixaId,
+        valor: String(dados.valorOriginal),
+        observacao: dados.observacao ?? null,
+        criadoPor
+      });
+    }
   });
 }

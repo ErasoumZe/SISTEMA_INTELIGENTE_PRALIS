@@ -1,6 +1,19 @@
 import type { DadosExternos } from "@padaria/shared/api";
 import { temPermissao, type DominioLancamentoPagavel, type Permissao, type PerfilUsuario } from "@padaria/shared";
-import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import {
+  centavosParaDecimalBanco,
+  deCentavos,
+  jurosCentavos,
+  paraCentavos,
+  type TipoJuros
+} from "@padaria/shared/dinheiro";
+import {
+  calcularDiscriminacao,
+  conferirDiscriminacao,
+  type ItemDiscriminacao,
+  type TipoDesconto
+} from "@padaria/shared/discriminacao";
+import { naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
@@ -11,15 +24,17 @@ import {
   formasPagamento,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
-  malotes,
   pdvs,
   produtos,
+  sociosGestores,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
 import type { DespesaItemPayload, DespesaPayload } from "@padaria/shared/despesas";
 import type { MercadoriaItemPayload, MercadoriaPayload } from "@padaria/shared/mercadorias";
 import type { RetiradaPayload } from "@padaria/shared/retiradas";
+import type { Recorrencia } from "@padaria/shared/recorrencia";
 import type { TransferenciaPayload } from "@padaria/shared/transferencias";
 import type { VendaPayload } from "@padaria/shared/vendas";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -29,7 +44,8 @@ type BasePayload = {
   empresaId: string;
   dataReferencia: string;
   dataPagamento?: string | null | undefined;
-  descricao: string;
+  // R-127: `descricao` e legado e ja pode vir ausente; o texto vive em `observacao`.
+  descricao?: string | null | undefined;
   observacao?: string | null | undefined;
   valorOriginal: number;
   valorAcrescimo: number;
@@ -64,12 +80,45 @@ export function filtrosEmpresa<T extends { empresaId: DadosExternos }>(
   return filtros;
 }
 
+// JUROS (R-041/R-042) das TRES tabelas de lancamento. Fica fora de valoresBase de proposito:
+// valoresBase tambem serve transferencias, que nao tem as colunas de juros.
+//
+// O SERVIDOR RECALCULA e nao confia no cliente. Um valorAcrescimo que chega pronto do front e um
+// valor que o front pode mentir — mandar jurosTipo='percentual', jurosValorInformado=2 e
+// valorAcrescimo=999999 nao passa: o acrescimo e derivado aqui, do valor e do percentual.
+//
+// Sem jurosTipo (venda, transferencia, historico, lancamento sem juros) o acrescimo generico segue
+// intacto e as colunas de juros vao a null — importante na EDICAO, para limpar o juros de verdade
+// quando a pessoa apaga o campo.
+export function valoresJuros(dados: {
+  valorOriginal: number;
+  valorAcrescimo: number;
+  jurosTipo?: TipoJuros | null | undefined;
+  jurosValorInformado?: number | null | undefined;
+}) {
+  if (!dados.jurosTipo) {
+    return { valorAcrescimo: String(dados.valorAcrescimo), jurosTipo: null, jurosValorInformado: null };
+  }
+  const centavos = jurosCentavos({
+    valorOriginal: dados.valorOriginal,
+    jurosValorInformado: dados.jurosValorInformado,
+    jurosTipo: dados.jurosTipo
+  });
+  return {
+    valorAcrescimo: centavosParaDecimalBanco(centavos),
+    jurosTipo: dados.jurosTipo,
+    jurosValorInformado: String(dados.jurosValorInformado ?? 0)
+  };
+}
+
 // Campos editaveis comuns aos lancamentos. Na edicao, empresa, caixa e criadoPor NUNCA mudam.
 export function valoresBaseEdicao(dados: BasePayload, computar: boolean) {
   return {
     dataReferencia: dados.dataReferencia,
     dataPagamento: dados.dataPagamento ?? null,
-    descricao: dados.descricao,
+    // R-127: grava so `observacao`. `descricao` para de ser escrita e fica congelada no que o
+    // historico ja tinha — e o que permite a migration futura remove-la sem perder nada.
+    descricao: dados.descricao ?? null,
     observacao: dados.observacao ?? null,
     valorOriginal: String(dados.valorOriginal),
     valorAcrescimo: String(dados.valorAcrescimo),
@@ -81,11 +130,21 @@ export function valoresBaseEdicao(dados: BasePayload, computar: boolean) {
   };
 }
 
-export function valoresBase(dados: BasePayload, computar: boolean, criadoPor: string, caixaId?: string | null) {
+export function valoresBase(
+  dados: BasePayload,
+  computar: boolean,
+  criadoPor: string,
+  caixaId?: string | null,
+  // Vinculo com a serie que gerou o lancamento (D3). So despesas/mercadorias/retiradas tem essas
+  // colunas — por isso o spread e CONDICIONAL: venda e transferencia chamam sem o argumento e nao
+  // recebem as chaves.
+  recorrencia?: { id: string; ordem: number } | null
+) {
   return {
     empresaId: dados.empresaId,
     caixaId: caixaId ?? null,
     criadoPor,
+    ...(recorrencia ? { recorrenciaId: recorrencia.id, recorrenciaOrdem: recorrencia.ordem } : {}),
     ...valoresBaseEdicao(dados, computar)
   };
 }
@@ -95,8 +154,67 @@ export function numeroDecimal(valor: string | number | null | undefined): number
   return deCentavos(paraCentavos(valor));
 }
 
+function normalizarCargo(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+// Perfis de RETAGUARDA: lancam sem estar presos a um caixa e escolhem a conta livremente. Era
+// `podeTransferirSemCaixa`, exclusiva da transferencia (R-032); virou a fonte unica das QUATRO
+// saidas para que "quem e livre" nao tenha duas definicoes que divergem com o tempo.
+export function podeLancarSemCaixa(perfil: PerfilUsuario) {
+  if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
+  const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];
+  return perfil.cargos.some((cargo) =>
+    prefixosLiberados.some((prefixo) => normalizarCargo(cargo.nome).startsWith(prefixo))
+  );
+}
+
+// R-121: o operador de Caixa lanca TODA saida (despesa, mercadoria, retirada) — desde que saia da
+// conta do caixa aberto. Sem esta amarracao o valor debita a conta escolhida no saldo de contas E
+// debita o caixa no fechamento ao mesmo tempo: divergencia silenciosa que volta como quebra de
+// caixa falsa no colo do operador (R-015).
+//
+// Conta VAZIA e preenchida com a do PDV — o front trava o campo, mas payload sem conta nao pode
+// virar lancamento orfao. Conta DIFERENTE e recusada.
+//
+// Diferente da transferencia de proposito: la a conta do PDV vale como origem OU destino (dinheiro
+// entra e sai); aqui e saida, entao so ORIGEM.
+export function exigirContaDoCaixaNoLancamento<T extends { contaOrigemId?: string | null | undefined }>(
+  dados: T,
+  caixa: { pdvContaId: string | null },
+  perfil: PerfilUsuario
+): T {
+  if (podeLancarSemCaixa(perfil)) return dados;
+  if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
+  if (!dados.contaOrigemId) return { ...dados, contaOrigemId: caixa.pdvContaId };
+  if (dados.contaOrigemId !== caixa.pdvContaId) {
+    throw new Error("Lancamento do operador Caixa precisa sair da conta do PDV aberto");
+  }
+  return dados;
+}
+
+// R-123: as ocorrencias FUTURAS de uma serie nascem fora de qualquer caixa aberto
+// (lancamentos.recorrencia.ts: so a 1a recebe caixaId). Amarrar essas ocorrencias a conta de um PDV
+// que talvez nem exista em tres meses cria lancamento orfao por construcao — entao recorrencia e
+// ato de retaguarda. A permissao `lancamentos_recorrencia_criar` ja barra por outro caminho; esta
+// checagem existe para a recusa dizer o MOTIVO em vez de "permissao insuficiente".
+// A checagem e do OPERADOR DE CAIXA especificamente (`caixa_operar` sem ser retaguarda), nao de
+// "qualquer um sem a permissao": para os demais continua valendo a R-075, que responde 403 apontando
+// `lancamentos_recorrencia_criar`. Sem esse recorte, um perfil que apenas nao tem a permissao — e
+// nem opera caixa — receberia um motivo que nao e o dele.
+export function exigirRecorrenciaDeRetaguarda(perfil: PerfilUsuario, recorrencia: Recorrencia | undefined) {
+  if (!recorrencia || podeLancarSemCaixa(perfil)) return;
+  if (!temPermissao(perfil.permissoes, "caixa_operar")) return;
+  throw new Error("Lancamento recorrente e ato de Tesouraria/Financeiro");
+}
+
 // Regras de edicao de lancamento: o registro precisa existir na empresa acessivel,
 // nao pode trocar de empresa e precisa pertencer ao caixa aberto do usuario.
+// Serve venda, transferencia e as tres saidas — nao mexer no status daqui sem olhar os quatro.
 export async function validarEdicaoNoCaixaAberto(
   existente: { empresaId: string; caixaId: string | null } | null,
   dados: { empresaId: string },
@@ -107,6 +225,39 @@ export async function validarEdicaoNoCaixaAberto(
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
   const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
   if (existente.caixaId !== caixa.id) throw new Error("Lancamento nao pertence ao seu caixa aberto");
+  return caixa;
+}
+
+// R-122: edicao das SAIDAS (despesa/mercadoria/retirada). O operador de Caixa corrige o proprio
+// lancamento enquanto AQUELE caixa estiver aberto — as tres condicoes andam juntas: caixa aberto
+// proprio, lancamento daquele caixa e conta ainda a do PDV. Recusa e 403 (e uma questao de
+// autorizacao, nao de payload malformado) e a mensagem diz QUAL condicao falhou.
+//
+// Perfil de retaguarda cai no caminho de sempre, sem mudanca: unificar o comportamento dos outros
+// cargos e outra decisao, fora deste escopo.
+export async function validarEdicaoDeSaidaNoCaixa(
+  existente: { empresaId: string; caixaId: string | null } | null,
+  dados: { empresaId: string; contaOrigemId?: string | null | undefined },
+  perfil: PerfilUsuario,
+  tx?: ExecutorBanco
+) {
+  if (podeLancarSemCaixa(perfil)) return validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+
+  if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+  if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+
+  let caixa;
+  try {
+    caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+  } catch {
+    // Fechado o caixa, acabou: corrigir vira ato de tesouraria. E o que protege os totais ja
+    // congelados em `fechamentos_caixa`.
+    throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
+  }
+  if (existente.caixaId !== caixa.id) throw proibido("Lancamento nao pertence ao seu caixa aberto");
+  if (dados.contaOrigemId && dados.contaOrigemId !== caixa.pdvContaId) {
+    throw proibido("Lancamento do operador Caixa precisa sair da conta do PDV aberto");
+  }
   return caixa;
 }
 
@@ -160,6 +311,13 @@ export async function validarReferenciasDespesa(
     if (grupoId && !(await existeNaEmpresa(gruposDespesas, grupoId, dados.empresaId, db))) return "Grupo de despesa";
   }
 
+  // Grupo de PATRIMONIO no item (§5, item 6): mesma checagem de empresa dos demais — id valido de
+  // OUTRA empresa nao entra.
+  for (const grupoId of [...new Set(dados.itensDespesa.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, dados.empresaId, db)))
+      return "Grupo de patrimonio";
+  }
+
   for (const colaboradorId of [...new Set(dados.itensDespesa.map((item) => item.colaboradorId).filter(Boolean))]) {
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, dados.empresaId, db)))
       return "Colaborador";
@@ -187,6 +345,12 @@ export async function validarReferenciasMercadoria(
       return "Grupo de mercadoria";
   }
 
+  // Grupo de PATRIMONIO no item (§5, item 6): mesma checagem de empresa dos demais.
+  for (const grupoId of [...new Set(dados.itensMercadoria.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, dados.empresaId, db)))
+      return "Grupo de patrimonio";
+  }
+
   for (const produtoId of [...new Set(dados.itensMercadoria.map((item) => item.produtoId).filter(Boolean))]) {
     if (produtoId && !(await existeNaEmpresa(produtos, produtoId, dados.empresaId, db))) return "Produto";
   }
@@ -205,7 +369,14 @@ export async function validarReferenciasRetirada(
 ): Promise<string | null> {
   const conta = await validarConta(dados, db);
   if (conta) return conta;
-  if (!(await existeNaEmpresa(colaboradores, dados.colaboradorId, dados.empresaId, db))) return "Colaborador";
+  // R-047: o credor da retirada e colaborador OU socio/gestor — o zod ja garante que e exatamente
+  // um dos dois; aqui so confirmamos que o escolhido existe NA EMPRESA.
+  if (dados.colaboradorId && !(await existeNaEmpresa(colaboradores, dados.colaboradorId, dados.empresaId, db))) {
+    return "Colaborador";
+  }
+  if (dados.socioGestorId && !(await existeNaEmpresa(sociosGestores, dados.socioGestorId, dados.empresaId, db))) {
+    return "Socio/gestor";
+  }
   if (dados.grupoRetiradaId && !(await existeNaEmpresa(gruposRetiradas, dados.grupoRetiradaId, dados.empresaId, db))) {
     return "Grupo de retirada";
   }
@@ -218,7 +389,6 @@ export async function validarReferenciasTransferencia(
 ): Promise<string | null> {
   if (!(await existeNaEmpresa(contas, dados.contaOrigemId, dados.empresaId, db))) return "Conta de origem";
   if (!(await existeNaEmpresa(contas, dados.contaDestinoId, dados.empresaId, db))) return "Conta de destino";
-  if (dados.maloteId && !(await existeNaEmpresa(malotes, dados.maloteId, dados.empresaId, db))) return "Malote";
   return null;
 }
 
@@ -303,6 +473,84 @@ export function somaConfereCentavos(valores: number[], total: number): boolean {
   return soma === paraCentavos(total);
 }
 
+// --- Discriminacao com descontos em 3 niveis (PROJECT_BRAIN/17 §5) ----------------------------
+// O nivel 3 (geral) RATEIA entre os itens, entao o calculo e da LISTA INTEIRA, nunca item a item.
+// A regra mora no shared (calcularDiscriminacao); aqui so se traduz o payload de cada dominio.
+
+// Item de despesa aceita a forma curta "descricao + valor": sem quantidade, e 1 x valor.
+export function itemDespesaParaDiscriminacao(item: DespesaItemPayload): ItemDiscriminacao {
+  const quantidade = item.quantidade ?? 1;
+  return {
+    quantidade,
+    valorUnitario: item.valorUnitario ?? (quantidade > 0 ? item.valor / quantidade : 0),
+    descontoTipo: item.descontoTipo ?? null,
+    descontoValor: item.descontoValor ?? null,
+    descontoTotalTipo: item.descontoTotalTipo ?? null,
+    descontoTotalValor: item.descontoTotalValor ?? null
+  };
+}
+
+export function itemMercadoriaParaDiscriminacao(item: MercadoriaItemPayload): ItemDiscriminacao {
+  return {
+    quantidade: item.quantidade,
+    valorUnitario: item.valorUnitario,
+    descontoTipo: item.descontoTipo ?? null,
+    descontoValor: item.descontoValor ?? null,
+    descontoTotalTipo: item.descontoTotalTipo ?? null,
+    descontoTotalValor: item.descontoTotalValor ?? null
+  };
+}
+
+type CabecalhoComDescontoGeral = {
+  descontoGeralTipo?: TipoDesconto | null | undefined;
+  descontoGeralValor?: number | null | undefined;
+};
+
+export function calcularDiscriminacaoDespesa(
+  dados: { itensDespesa: DespesaItemPayload[] } & CabecalhoComDescontoGeral
+) {
+  return calcularDiscriminacao({
+    itens: dados.itensDespesa.map(itemDespesaParaDiscriminacao),
+    descontoGeralTipo: dados.descontoGeralTipo ?? null,
+    descontoGeralValor: dados.descontoGeralValor ?? null
+  });
+}
+
+export function calcularDiscriminacaoMercadoria(
+  dados: { itensMercadoria: MercadoriaItemPayload[] } & CabecalhoComDescontoGeral
+) {
+  return calcularDiscriminacao({
+    itens: dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao),
+    descontoGeralTipo: dados.descontoGeralTipo ?? null,
+    descontoGeralValor: dados.descontoGeralValor ?? null
+  });
+}
+
+// D5 (BLOQUEANTE): a soma da discriminacao tem de bater com o Valor do lancamento. Quando nao bate,
+// levanta 422 com ONDE diverge — diferenca em R$ e a linha provavel — em vez de um 400 seco.
+export function exigirDiscriminacaoConferida(itens: readonly ItemDiscriminacao[], valorLancamento: number): void {
+  const divergencia = conferirDiscriminacao(itens, valorLancamento);
+  if (!divergencia) return;
+  const diferenca = deCentavos(divergencia.diferencaCentavos);
+  const sobra = divergencia.diferencaCentavos > 0;
+  throw naoProcessavel(
+    `A discriminacao ${sobra ? "excede" : "nao alcanca"} o valor do lancamento em ${dinheiroBr(Math.abs(diferenca))}.` +
+      (divergencia.linhaProvavel ? ` Confira a linha ${divergencia.linhaProvavel} (a de maior valor).` : ""),
+    "DISCRIMINACAO_DIVERGENTE",
+    {
+      diferenca,
+      totalItens: deCentavos(divergencia.totalItensCentavos),
+      valorLancamento: deCentavos(divergencia.valorLancamentoCentavos),
+      linhaProvavel: divergencia.linhaProvavel,
+      campoProvavel: divergencia.campoProvavel
+    }
+  );
+}
+
+function dinheiroBr(valor: number): string {
+  return `R$ ${valor.toFixed(2).replace(".", ",")}`;
+}
+
 // Total liquido do item de mercadoria. Sem desconto, respeita o valorTotal informado (permite
 // lancamento por soma direta / valor cheio). Com desconto, o servidor RECALCULA: bruto (qtd*unit)
 // menos o desconto (% quando 'percentual', R$ quando 'valor'), nunca abaixo de zero.
@@ -323,6 +571,9 @@ export async function validarReferenciasItensMercadoria(
   for (const grupoId of [...new Set(itens.map((item) => item.grupoMercadoriaId).filter(Boolean))]) {
     if (grupoId && !(await existeNaEmpresa(gruposMercadorias, grupoId, empresaId, db))) return "Grupo de mercadoria";
   }
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, empresaId, db))) return "Grupo de patrimonio";
+  }
   for (const produtoId of [...new Set(itens.map((item) => item.produtoId).filter(Boolean))]) {
     if (produtoId && !(await existeNaEmpresa(produtos, produtoId, empresaId, db))) return "Produto";
   }
@@ -340,6 +591,9 @@ export async function validarReferenciasItensDespesa(
 ): Promise<string | null> {
   for (const grupoId of [...new Set(itens.map((item) => item.grupoDespesaId).filter(Boolean))]) {
     if (grupoId && !(await existeNaEmpresa(gruposDespesas, grupoId, empresaId, db))) return "Grupo de despesa";
+  }
+  for (const grupoId of [...new Set(itens.map((item) => item.grupoPatrimonioId).filter(Boolean))]) {
+    if (grupoId && !(await existeNaEmpresa(gruposPatrimonio, grupoId, empresaId, db))) return "Grupo de patrimonio";
   }
   for (const colaboradorId of [...new Set(itens.map((item) => item.colaboradorId).filter(Boolean))]) {
     if (colaboradorId && !(await existeNaEmpresa(colaboradores, colaboradorId, empresaId, db))) return "Colaborador";

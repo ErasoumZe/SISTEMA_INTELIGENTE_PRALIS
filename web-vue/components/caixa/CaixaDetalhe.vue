@@ -46,9 +46,30 @@ onMounted(carregar);
     <v-alert v-else-if="erro" type="error" variant="tonal" density="compact">{{ erro }}</v-alert>
 
     <template v-else-if="detalhe">
+      <v-alert v-if="caixa.fechadoPorNome" type="info" variant="tonal" density="compact" class="mb-4">
+        Fechamento executado por <strong>{{ caixa.fechadoPorNome }}</strong
+        >.
+      </v-alert>
+
+      <v-alert
+        v-if="detalhe.alteracoesPosFechamento.length"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mb-4"
+      >
+        <div class="font-weight-bold mb-2">Alterado após o fechamento</div>
+        <div v-for="alteracao in detalhe.alteracoesPosFechamento" :key="alteracao.id" class="text-body-2 mb-1">
+          {{ formatarDataHora(alteracao.alteradoEm) }} — venda
+          <strong>{{ alteracao.identificadorExterno || alteracao.vendaId }}</strong>
+          ({{ alteracao.dataVenda ? formatarDataHora(alteracao.dataVenda) : "horário não informado" }},
+          {{ dinheiro(alteracao.valor) }}).
+        </div>
+      </v-alert>
+
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->
-      <div class="text-subtitle-2 mb-2">Lancamentos deste caixa</div>
+      <div class="text-subtitle-2 mb-2">Lançamentos deste caixa</div>
       <v-expansion-panels variant="accordion" class="mb-4">
         <v-expansion-panel v-for="grupo in detalhe.lancamentos" :key="grupo.categoria">
           <v-expansion-panel-title :disabled="!grupo.itens.length">
@@ -65,7 +86,7 @@ onMounted(carregar);
                 <thead>
                   <tr>
                     <th>Data</th>
-                    <th>Descricao</th>
+                    <th>Descrição</th>
                     <th class="text-end">Valor</th>
                   </tr>
                 </thead>
@@ -122,9 +143,9 @@ onMounted(carregar);
 
       <!-- Acerto de saldo: a diferenca vira despesa e debito do colaborador. -->
       <div class="text-subtitle-2 mb-2">Acerto de saldo</div>
-      <p v-if="!detalhe.ajuste" class="text-body-2 text-medium-emphasis">Este caixa nao teve acerto de diferenca.</p>
+      <p v-if="!detalhe.ajuste" class="text-body-2 text-medium-emphasis">Este caixa não teve acerto de diferença.</p>
       <v-alert v-else type="warning" variant="tonal" density="compact">
-        Diferenca de <strong>{{ dinheiro(detalhe.ajuste.valorDiferenca) }}</strong> atribuida a
+        Diferença de <strong>{{ dinheiro(detalhe.ajuste.valorDiferenca) }}</strong> atribuída a
         <strong>{{ detalhe.ajuste.colaboradorNome || "colaborador do caixa" }}</strong>
         em {{ formatarDataHora(detalhe.ajuste.criadoEm) }}.
         <template v-if="detalhe.ajuste.observacao"> Motivo: {{ detalhe.ajuste.observacao }}</template>

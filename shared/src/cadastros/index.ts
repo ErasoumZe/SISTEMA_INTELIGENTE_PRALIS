@@ -34,6 +34,11 @@ export type ProdutoConversaoForm = {
 
 export type CadastroForm = {
   nome: string;
+  numeroSerie: string;
+  // Conta com fundo (D8): o fundo digitado e a lista de quem opera a conta. Vivem no formulario do
+  // cadastro porque sao gravados no MESMO salvar — ver cadastroPayload("contas").
+  saldoInicial?: string;
+  usuariosIds?: string[];
   documento: string;
   dataNascimento: string;
   whatsapp: string;
@@ -91,6 +96,10 @@ export type CadastroForm = {
   tipoGrupo: "despesa" | "mercadoria" | "retirada" | "vendas";
   grupoPaiId: string;
   tipoAreaSetor: "area" | "setor";
+  // Patrimonio (D2): a tela tem duas entidades (grupo/item), como areas/setores.
+  tipoPatrimonio: "grupo" | "item";
+  sig: string;
+  grupoPatrimonioId: string;
   areaId: string;
   setorPaiId: string;
   setorId: string;
@@ -217,15 +226,33 @@ export function promocoesDoFormProduto(form: CadastroForm) {
 
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
-  if (tela === "contas") return { empresaId, nome: form.nome };
+  // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
+  // campo em branco significa "sem fundo", e mandar undefined faria o servidor MANTER o fundo
+  // anterior — o admin que apagasse o campo veria o valor voltar sozinho.
+  if (tela === "contas")
+    return {
+      empresaId,
+      nome: form.nome,
+      saldoInicial: Number(form.saldoInicial || 0),
+      usuariosIds: form.usuariosIds ?? []
+    };
   if (tela === "formas_pagamento") return { empresaId, nome: form.nome };
   if (tela === "pdv") return { empresaId, nome: form.nome, contaId: form.contaId, ativo: form.ativo };
+  if (tela === "maquininhas")
+    return { empresaId, numeroSerie: form.numeroSerie, apelido: form.nome, ativo: form.ativo };
   if (tela === "grupos")
-    return { empresaId, nome: form.nome, tipoGrupo: form.tipoGrupo, grupoPaiId: form.grupoPaiId || null };
+    return {
+      empresaId,
+      nome: form.nome,
+      tipoGrupo: form.tipoGrupo,
+      grupoPaiId: form.grupoPaiId || null,
+      ativa: form.ativo
+    };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
   if (tela === "turnos")
     return { empresaId, nome: form.nome, horaInicio: form.horaInicio, horaFim: form.horaFim, ativo: form.ativo };
   if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
+  if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")
     return {
       empresaId,
@@ -280,6 +307,17 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
           unidadesIndividuais: Number(conversao.unidadesIndividuais)
         }))
     };
+  }
+  if (tela === "patrimonio") {
+    return form.tipoPatrimonio === "grupo"
+      ? { empresaId, sig: form.sig, nome: form.nome }
+      : {
+          empresaId,
+          nome: form.nome,
+          marca: form.marca || null,
+          grupoPatrimonioId: form.grupoPatrimonioId,
+          setorId: form.setorId || null
+        };
   }
   if (tela === "areas_setores") {
     return form.tipoAreaSetor === "setor"

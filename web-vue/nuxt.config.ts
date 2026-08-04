@@ -14,6 +14,12 @@ export default defineNuxtConfig({
   },
   modules: ["vuetify-nuxt-module"],
   css: ["@mdi/font/css/materialdesignicons.css", "~/assets/main.css"],
+  app: {
+    head: {
+      title: "Cicluz Gestão Profissional",
+      link: [{ rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" }]
+    }
+  },
   runtimeConfig: {
     public: {
       apiUrl: process.env.NUXT_PUBLIC_API_URL || process.env.PUBLIC_API_URL || "http://localhost:4100"
@@ -24,25 +30,40 @@ export default defineNuxtConfig({
       icons: {
         defaultSet: "mdi"
       },
+      // Uma linha aqui repinta o sistema inteiro: v-text-field aparece 107x, v-btn 98x,
+      // v-select 62x, v-card 39x, v-alert 33x. Raio segue a escala unica de
+      // PROJECT_BRAIN/67 (controle = 8px "lg" no vocabulario do Vuetify; card e
+      // superficie grande sobem para 16/22px via main.css, que o Vuetify nao expressa).
       defaults: {
         VBtn: {
-          // Cara Material/Mobills: botoes/FAB como pills (~25px). Cards recebem raio 14px via main.css.
-          rounded: "pill"
+          // Era "pill" em TODO botao (heranca Mobills). Pill para tudo quebra a escala de
+          // raio por hierarquia; o FAB "+ NOVO" continua pill pelo CSS, que e onde ele e
+          // de fato um FAB. Botao comum volta para o retangulo arredondado de 8px.
+          rounded: "lg"
         },
         VCard: {
           rounded: "lg"
         },
         VTextField: {
           density: "comfortable",
-          variant: "outlined"
+          variant: "outlined",
+          rounded: "lg"
         },
         VTextarea: {
           density: "comfortable",
-          variant: "outlined"
+          variant: "outlined",
+          rounded: "lg"
         },
         VSelect: {
           density: "comfortable",
-          variant: "outlined"
+          variant: "outlined",
+          rounded: "lg"
+        },
+        VAlert: {
+          rounded: "lg"
+        },
+        VChip: {
+          rounded: "pill"
         }
       },
       theme: {
@@ -61,6 +82,26 @@ export default defineNuxtConfig({
               warning: "#b7791f",
               error: "#dc2626",
               info: "#2196f3"
+            }
+          },
+          // Tema escuro DE VERDADE. Antes o modo escuro so remendava --v-theme-* com
+          // !important no main.css: as vars mudavam, mas os componentes Vuetify seguiam
+          // calculados como claros por dentro. useModoEscuro troca de tema por aqui.
+          padariaDark: {
+            dark: true,
+            colors: {
+              background: "#0f1318",
+              surface: "#191f26",
+              // Renditicao ESCURA da marca, nao troca de identidade: #6515dd sobre
+              // superficie escura da 2,1:1 e reprova como texto/link (color="primary" em
+              // botao de texto). Clareado, da 5,5:1 sobre o fundo, e o Vuetify passa a
+              // escolher tinta escura por cima quando ele vira preenchimento.
+              primary: "#a97bff",
+              secondary: "#c9b0ff",
+              success: "#4ade80",
+              warning: "#e0a23a",
+              error: "#ff8a80",
+              info: "#64b5f6"
             }
           }
         }

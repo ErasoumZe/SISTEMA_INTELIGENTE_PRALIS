@@ -2,7 +2,6 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
   abrirCaixaPayloadSchema,
-  acertarSaldoCaixaPayloadSchema,
   alterarHorarioCaixaPayloadSchema,
   autorizacaoCaixaParamsSchema,
   autorizacoesCaixaQuerySchema,
@@ -18,7 +17,6 @@ import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
 import {
   abrirCaixa,
-  acertarSaldoCaixaOperacional,
   alterarHorarioCaixa,
   criarTransferenciaCofreCaixa,
   editarAberturaCaixa,
@@ -74,22 +72,6 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
-
-  app.post(
-    "/api/caixa/:caixaId/acertar-saldo",
-    { preHandler: exigirPermissao("caixa_operar") },
-    async (request, reply) => {
-      const { caixaId } = caixaParamsSchema.parse(request.params);
-      const body = acertarSaldoCaixaPayloadSchema.parse(request.body);
-      try {
-        const acerto = await acertarSaldoCaixaOperacional(caixaId, body, request.perfilUsuario!);
-        return criadoId(reply, acerto.despesaId);
-      } catch (error) {
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, statusErro(mensagem), mensagem);
-      }
-    }
-  );
 
   app.post("/api/caixa/:caixaId/fechar", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);

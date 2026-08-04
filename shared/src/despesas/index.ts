@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import { tiposJuros } from "../dinheiro/index.js";
+import { itemTemGrupoDeDuasOrigens, MENSAGEM_GRUPO_DE_DUAS_ORIGENS } from "../discriminacao/index.js";
+import { recorrenciaSchema, resultadoSerieSchema } from "../recorrencia/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -18,31 +21,71 @@ export const despesasQuerySchema = z
   })
   .merge(paginationQuerySchema);
 
-export const despesaItemSchema = z.object({
-  grupoDespesaId: uuidSchema.optional().nullable(),
-  colaboradorId: uuidSchema.optional().nullable(),
-  descricao: z.string().min(1),
-  valor: dinheiroSchema
-});
+export const tiposDescontoItemDespesa = ["percentual", "valor"] as const;
+
+export const despesaItemSchema = z
+  .object({
+    grupoDespesaId: uuidSchema.optional().nullable(),
+    // Grupo vindo do cadastro de PATRIMONIO (§5). Exclusivo com grupoDespesaId — ver o refine.
+    grupoPatrimonioId: uuidSchema.optional().nullable(),
+    colaboradorId: uuidSchema.optional().nullable(),
+    descricao: z.string().min(1),
+    // Quantidade/unitario chegaram com os 3 niveis de desconto (§5). O item de despesa continua
+    // podendo ser so "descricao + valor": sem quantidade, o servidor assume 1 x valor.
+    quantidade: z.coerce.number().positive().optional(),
+    valorUnitario: z.coerce.number().min(0).optional(),
+    // Nivel 1: no V.UNIT (R$ POR UNIDADE quando 'valor'). Nivel 2: no V.TOTAL do item.
+    descontoTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+    descontoValor: z.coerce.number().min(0).optional().nullable(),
+    descontoTotalTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+    descontoTotalValor: z.coerce.number().min(0).optional().nullable(),
+    valor: dinheiroSchema
+  })
+  .superRefine((item, ctx) => {
+    if (itemTemGrupoDeDuasOrigens(item.grupoDespesaId, item.grupoPatrimonioId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["grupoPatrimonioId"],
+        message: MENSAGEM_GRUPO_DE_DUAS_ORIGENS
+      });
+    }
+  });
 
 export const despesaPayloadSchema = z.object({
   empresaId: uuidSchema,
   dataReferencia: z.string().min(10),
   dataVencimento: z.string().min(10),
   dataPagamento: z.string().min(10).optional().nullable(),
-  descricao: z.string().min(1),
+  // R-127: o texto do movimento e a OBSERVACAO. `descricao` continua ACEITA (compatibilidade com
+  // chamada antiga) mas nao e exigida — o servidor grava o que vier em observacao, ou a descricao
+  // como reserva, e recusa quando os dois vem vazios.
+  descricao: z.string().optional().nullable(),
   observacao: z.string().optional().nullable(),
   valorOriginal: dinheiroSchema,
   valorAcrescimo: dinheiroSchema.default(0),
   descricaoAcrescimo: z.string().optional().nullable(),
+  // R-041 — juros. Guarda COMO foi informado; o R$ resolvido vai para valorAcrescimo, e quem
+  // resolve e o SERVIDOR (valoresJuros em lancamentos.dominio). O acrescimo que chega do cliente e
+  // IGNORADO quando ha jurosTipo: total que chega pronto do front e total que o front pode mentir.
+  jurosTipo: z.enum(tiposJuros).optional().nullable(),
+  jurosValorInformado: z.coerce.number().min(0).optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),
   descricaoDesconto: z.string().optional().nullable(),
+  // Nivel 3 — desconto GERAL: guarda COMO foi informado. O R$ resolvido vai para valorDesconto.
+  descontoGeralTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   contaOrigemId: uuidSchema.optional().nullable(),
   fornecedorId: uuidSchema.optional().nullable(),
   colaboradorId: uuidSchema.optional().nullable(),
   grupoDespesaId: uuidSchema.optional().nullable(),
+  credorTipo: z.enum(["fornecedor", "colaborador"]).optional().nullable(),
+  dataDocumentoFiscal: z.string().min(10).optional().nullable(),
+  numeroDocumentoFiscal: z.string().optional().nullable(),
   computar: z.boolean().default(true),
   fotoDocumentoUrl: z.string().optional().nullable(),
+  fotoNotaUrl: z.string().optional().nullable(),
+  // Recorrencia (D3): presente = o servidor cria a serie inteira no salvar. Exige permissao.
+  recorrencia: recorrenciaSchema.optional(),
   itensDespesa: z.array(despesaItemSchema).default([])
 });
 
@@ -63,14 +106,18 @@ export const despesaDtoSchema = z.object({
 });
 
 // Discriminacao: so os itens (o cabecalho ja existe). Nao passa pela trava de caixa aberto.
+// O desconto GERAL (nivel 3) vem junto: e nesta tela que ele e informado, e e ele que rateia.
 export const discriminarDespesaSchema = z.object({
   empresaId: uuidSchema,
+  descontoGeralTipo: z.enum(tiposDescontoItemDespesa).optional().nullable(),
+  descontoGeralValor: z.coerce.number().min(0).optional().nullable(),
   itensDespesa: z.array(despesaItemSchema).min(1)
 });
 
 export const despesaCriadaSchema = z.object({
   id: z.string(),
-  computar: z.boolean()
+  computar: z.boolean(),
+  ...resultadoSerieSchema
 });
 
 export type DespesasQuery = z.input<typeof despesasQuerySchema>;

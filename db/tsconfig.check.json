@@ -9,5 +9,12 @@
       "@padaria/shared/*": ["shared/src/*/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "drizzle.config.ts", "../shared/src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "drizzle.config.ts",
+    "planilha-xlsx.ts",
+    "planilha-inspecionar.ts",
+    "baseline-migrations.ts",
+    "../shared/src/**/*.ts"
+  ]
 }

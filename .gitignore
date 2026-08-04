@@ -14,6 +14,9 @@ playwright-report
 test-results
 storage
 
+# Planilha operacional (dado financeiro real): local, nunca versionada nem servida.
+db/planilhas/*.xlsx
+
 # Referencia/documentacao — fora do git por decisao do Ze (NAO remover do disco; so tirar do source control)
 CADASTRO DE PRODUTOS/
 PROJECT_BRAIN - Copia/
@@ -24,3 +27,22 @@ docs/
 
 # Config local do Claude Code (agents/skills/permissoes) — fora do git por decisao do Ze
 .claude/
+
+# Dumps do pg_dump (scripts/backup-db.mjs grava aqui). Sao dados reais: nunca vao para o git.
+backups/
+
+# Desenhos originais do Rodrigo (JPEG, ~650K). Sao a fonte da verdade VISUAL e ficam no disco — mas
+# binario nao versiona bem e nao rende diff. O indice + a transcricao por extenso continuam no git
+# em PROJECT_BRAIN/mockups-rodrigo/LEIA-ME.md e no 14_TELAS_RODRIGO_TRANSCRICAO.md.
+PROJECT_BRAIN/mockups-rodrigo/*.jpeg
+PROJECT_BRAIN/mockups-rodrigo/*.jpg
+PROJECT_BRAIN/mockups-rodrigo/*.png
+
+# Rascunhos de prompt e de mensagem de commit na raiz — mesma categoria de docs/ (fora do git,
+# no disco).
+/PROMPT-*.md
+/COMMIT-*.txt
+
+# Saida crua de comando que falhou, salva na raiz para ler depois (ex.: erro-seed.txt). E log de uma
+# execucao local: util no disco, ruido no historico.
+/erro-*.txt

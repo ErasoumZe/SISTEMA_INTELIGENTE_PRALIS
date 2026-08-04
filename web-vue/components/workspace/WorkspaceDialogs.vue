@@ -3,16 +3,15 @@ import { computed } from "vue";
 import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
-import { totalItemMercadoriaForm } from "~/utils/operacoes";
+import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
+import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
+import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
 
-const tiposDescontoItem = [
-  { title: "Sem desconto", value: "" },
-  { title: "Percentual (%)", value: "percentual" },
-  { title: "Valor (R$)", value: "valor" }
-];
+// Telas operacionais que a grade (PermissoesGrade) cobre — escondidas da lista abaixo p/ nao duplicar.
+const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferencias"];
 
 const perfisAcessoUsuario = [
-  { title: "Usuario comum (permissoes por cargo, setor e usuario)", value: "usuario_comum" },
+  { title: "Usuário comum (permissões por cargo, setor e usuário)", value: "usuario_comum" },
   { title: "Administrador total", value: "usuario_admin" },
   { title: "Admin legado (permissoes por cargo, setor e usuario)", value: "admin" }
 ];
@@ -20,33 +19,7 @@ const perfisAcessoUsuario = [
 const workspace = useWorkspaceContext();
 
 const {
-  modalCaixaDrawerAberto,
-  formCaixaDrawer,
   opcoesEmpresa,
-  caixaSalvando,
-  salvarCaixaDrawer,
-  modalOperacaoAberto,
-  entidadeNova,
-  operacaoEditandoId,
-  modoDiscriminacao,
-  form,
-  discriminandoDespesa,
-  discriminandoMercadoria,
-  valorTotalOperacao,
-  itensVenda,
-  tiposPagamento,
-  itensDespesa,
-  itensMercadoria,
-  salvandoOperacao,
-  salvarOperacao,
-  fotoDocumentoPreview,
-  fotoDocumentoExistente,
-  selecionarFotoDocumento,
-  modalMaloteAberto,
-  maloteEditandoId,
-  formMalote,
-  maloteSalvando,
-  salvarMalote,
   modalCadastroAberto,
   cadastroEditandoId,
   cadastroTela,
@@ -85,7 +58,23 @@ const {
 // Preview do preco de venda: mesma fonte usada no payload, para preview e valor salvo nunca divergirem.
 const precoVendaPreview = computed(() => precoVendaDoFormProduto(formCadastro.value));
 
-// Nome + gramatura + medida => Descricao automatica (regra do Pralis). O campo principal e o NOME.
+// --- Usuarios que operam a CONTA (D8) --------------------------------------------------------
+// Os vinculos viajam no proprio formulario da conta (formCadastro.usuariosIds) e sao gravados na
+// MESMA transacao do cadastro. Antes isso era um dialogo separado na tela de Usuarios, com POST/
+// DELETE por clique: o vinculo salvava mesmo se o cadastro fosse cancelado. Agora e um ato so.
+function usuariosDaConta(): string[] {
+  return formCadastro.value.usuariosIds ?? [];
+}
+function contaTemUsuario(usuarioId: string | undefined) {
+  return Boolean(usuarioId) && usuariosDaConta().includes(String(usuarioId));
+}
+function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
+  if (!usuarioId) return;
+  const atuais = usuariosDaConta().filter((id) => id !== usuarioId);
+  formCadastro.value.usuariosIds = marcar ? [...atuais, String(usuarioId)] : atuais;
+}
+
+// Nome + gramatura + medida => descricao automatica da operacao. O campo principal e o NOME.
 const unidadeSiglaProduto = computed(
   () => opcoesEmpresa.value.unidadesMedida.find((u) => u.id === formCadastro.value.unidadeIndividualId)?.sigla ?? ""
 );
@@ -93,7 +82,7 @@ const descricaoAutoPreview = computed(() =>
   montarDescricao(formCadastro.value.descricao, formCadastro.value.quantidadeIndividual, unidadeSiglaProduto.value)
 );
 
-// "Como se compra" — versao amigavel do formulario do Pralis ("Saco de 25 KG — descricao").
+// "Como se compra" — versao amigavel do formulario ("Saco de 25 KG — descricao").
 const EMB_LABEL: Record<string, string> = {
   SACO: "Saco",
   PCT: "Pacote",
@@ -118,7 +107,7 @@ const comoSeCompraPreview = computed(() => {
   return [rotulo, cde, qtd, desc ? "— " + desc : ""].filter(Boolean).join(" ");
 });
 
-// Validacao de quantidade (transformacao): texto automatico da regra do Pralis.
+// Validacao de quantidade (transformacao): texto automatico da regra operacional.
 const diasSemana = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
 const validacaoQtdPreview = computed(() =>
   formCadastro.value.tipo === "transformacao"
@@ -133,468 +122,17 @@ const validacaoQtdPreview = computed(() =>
 </script>
 
 <template>
-  <v-dialog v-model="modalCaixaDrawerAberto" max-width="680">
-    <v-card>
-      <v-card-title>Abrir caixa</v-card-title>
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="formCaixaDrawer.pdvId"
-              :items="opcoesEmpresa.pdvs"
-              item-title="nome"
-              item-value="id"
-              label="PDV"
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="formCaixaDrawer.turnoId"
-              :items="opcoesEmpresa.turnos"
-              item-title="nome"
-              item-value="id"
-              label="Turno"
-              clearable
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-              v-model="formCaixaDrawer.dataHoraAbertura"
-              type="datetime-local"
-              label="Data e hora de abertura"
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="outlined" :disabled="caixaSalvando" @click="modalCaixaDrawerAberto = false">Cancelar</v-btn>
-        <v-btn
-          color="primary"
-          :loading="caixaSalvando"
-          :disabled="!formCaixaDrawer.pdvId || !formCaixaDrawer.dataHoraAbertura"
-          @click="salvarCaixaDrawer"
-        >
-          Salvar
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <!-- Abertura de caixa vive num unico fluxo: o form inline da CaixaResumoPage (/caixa). O modal
+       antigo daqui foi removido (Definition of Done: nada e pronto enquanto o caminho antigo existir). -->
 
-  <v-dialog v-model="modalOperacaoAberto" max-width="960" scrollable>
-    <v-card>
-      <v-card-title>
-        {{
-          (modoDiscriminacao ? "Discriminar " : operacaoEditandoId ? "Editar " : "Nova ") +
-          entidadeNova.charAt(0).toUpperCase() +
-          entidadeNova.slice(1)
-        }}
-      </v-card-title>
-      <v-card-subtitle v-if="modoDiscriminacao">
-        Detalhe os itens deste lancamento. A soma dos itens deve bater com o valor do cabecalho.
-      </v-card-subtitle>
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" md="4"
-            ><v-text-field v-model="form.dataReferencia" type="date" label="Data de referencia"
-          /></v-col>
-          <v-col cols="12" md="4"
-            ><v-text-field v-model="form.dataVencimento" type="date" label="Data de vencimento"
-          /></v-col>
-          <v-col cols="12" md="4"
-            ><v-text-field
-              v-model="form.valorOriginal"
-              type="number"
-              label="Valor original"
-              prefix="R$"
-              :readonly="discriminandoDespesa || discriminandoMercadoria"
-          /></v-col>
-          <v-col cols="12"><v-text-field v-model="form.descricao" label="Descricao *" /></v-col>
-          <v-col cols="12"><v-textarea v-model="form.observacao" label="Observacao" rows="2" /></v-col>
-          <v-col
-            v-if="['venda', 'despesa', 'transferencia', 'mercadoria', 'retirada'].includes(entidadeNova)"
-            cols="12"
-            md="6"
-          >
-            <v-select
-              v-model="form.contaOrigemId"
-              :items="opcoesEmpresa.contas"
-              item-title="nome"
-              item-value="id"
-              :label="entidadeNova === 'transferencia' ? 'Conta origem *' : 'Conta origem'"
-            />
-          </v-col>
-          <v-col v-if="['venda', 'despesa', 'mercadoria', 'retirada'].includes(entidadeNova)" cols="12" md="6"
-            ><v-text-field v-model="form.dataPagamento" type="date" label="Data de pagamento"
-          /></v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
-            <v-select
-              v-model="form.contaDestinoId"
-              :items="opcoesEmpresa.contas"
-              item-title="nome"
-              item-value="id"
-              label="Conta destino *"
-            />
-          </v-col>
-          <v-col v-if="['despesa', 'mercadoria'].includes(entidadeNova)" cols="12" md="6">
-            <v-select
-              v-model="form.fornecedorId"
-              :items="opcoesEmpresa.fornecedores"
-              item-title="nome"
-              item-value="id"
-              :label="entidadeNova === 'mercadoria' ? 'Fornecedor *' : 'Fornecedor'"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'retirada'" cols="12" md="6">
-            <v-select
-              v-model="form.colaboradorId"
-              :items="opcoesEmpresa.colaboradores"
-              item-title="nome"
-              item-value="id"
-              label="Colaborador *"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'mercadoria'" cols="12" md="6">
-            <v-select
-              v-model="form.grupoMercadoriaId"
-              :items="opcoesEmpresa.gruposMercadorias"
-              item-title="nome"
-              item-value="id"
-              label="Grupo mercadoria (ou discrimine os itens)"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'retirada'" cols="12" md="6">
-            <v-select
-              v-model="form.grupoRetiradaId"
-              :items="opcoesEmpresa.gruposRetiradas"
-              item-title="nome"
-              item-value="id"
-              label="Grupo retirada"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6">
-            <v-select
-              v-model="form.maloteId"
-              :items="opcoesEmpresa.malotes"
-              item-title="codigo"
-              item-value="id"
-              label="Malote"
-              clearable
-            />
-          </v-col>
-          <v-col v-if="entidadeNova === 'transferencia'" cols="12" md="6"
-            ><v-text-field v-model="form.numeroLacre" label="Numero do lacre"
-          /></v-col>
-          <v-col cols="12" md="4"
-            ><v-text-field v-model="form.valorAcrescimo" type="number" label="Acrescimo" prefix="R$"
-          /></v-col>
-          <v-col cols="12" md="8"
-            ><v-text-field v-model="form.descricaoAcrescimo" label="Descricao do acrescimo"
-          /></v-col>
-          <v-col cols="12" md="4"
-            ><v-text-field v-model="form.valorDesconto" type="number" label="Desconto" prefix="R$"
-          /></v-col>
-          <v-col cols="12" md="8"
-            ><v-text-field v-model="form.descricaoDesconto" label="Descricao do desconto"
-          /></v-col>
-          <v-col cols="12" md="4"><v-switch v-model="form.computar" label="Computar" color="primary" /></v-col>
-          <v-col cols="12" md="4"
-            ><v-switch v-model="form.temNotaFiscal" label="Tem nota fiscal" color="primary"
-          /></v-col>
-          <v-col cols="12" md="4"
-            ><div class="text-caption text-muted">Total</div>
-            <div class="text-h6">{{ dinheiro(valorTotalOperacao) }}</div></v-col
-          >
-        </v-row>
-        <v-row v-if="['despesa', 'mercadoria'].includes(entidadeNova)" dense class="mb-1">
-          <v-col cols="12" md="7">
-            <v-file-input
-              label="Foto do documento (nota/cupom)"
-              accept="image/*,application/pdf"
-              prepend-icon="mdi-camera"
-              density="comfortable"
-              clearable
-              hide-details="auto"
-              hint="Anexe a foto da nota; a retaguarda usa para discriminar depois."
-              persistent-hint
-              @update:model-value="selecionarFotoDocumento"
-            />
-          </v-col>
-          <v-col cols="12" md="5" class="d-flex align-center">
-            <a v-if="fotoDocumentoPreview" :href="fotoDocumentoPreview" target="_blank" rel="noopener">
-              <v-img
-                :src="fotoDocumentoPreview"
-                height="80"
-                width="128"
-                cover
-                class="rounded-lg border"
-                alt="Foto do documento"
-              />
-            </a>
-            <span v-else-if="fotoDocumentoExistente" class="text-caption text-medium-emphasis">
-              <v-icon size="small" icon="mdi-paperclip" /> Documento anexado
-            </span>
-          </v-col>
-        </v-row>
-        <v-divider class="my-4" />
-        <div v-if="entidadeNova === 'venda'" class="d-grid ga-4">
-          <section>
-            <div class="d-flex align-center justify-space-between mb-2">
-              <h3 class="text-subtitle-1">Itens da venda</h3>
-              <v-btn
-                size="small"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="
-                  itensVenda.push({
-                    descricaoProduto: '',
-                    quantidade: '1',
-                    valorUnitario: '',
-                    valorTotal: '',
-                    produtoId: ''
-                  })
-                "
-                >Adicionar item</v-btn
-              >
-            </div>
-            <v-row v-for="(item, index) in itensVenda" :key="`venda-${index}`" dense>
-              <v-col cols="12" md="4">
-                <v-select
-                  v-model="item.produtoId"
-                  :items="opcoesEmpresa.produtos"
-                  item-title="descricao"
-                  item-value="id"
-                  label="Produto"
-                  clearable
-                />
-              </v-col>
-              <v-col cols="12" md="3"><v-text-field v-model="item.descricaoProduto" label="Descricao" /></v-col>
-              <v-col cols="6" md="2"><v-text-field v-model="item.quantidade" type="number" label="Qtd." /></v-col>
-              <v-col cols="6" md="2"><v-text-field v-model="item.valorTotal" type="number" label="Total" /></v-col>
-              <v-col cols="12" md="1" class="d-flex align-center justify-end">
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  :disabled="itensVenda.length === 1"
-                  @click="itensVenda.splice(index, 1)"
-                />
-              </v-col>
-            </v-row>
-          </section>
-
-          <section>
-            <div class="d-flex align-center justify-space-between mb-2">
-              <h3 class="text-subtitle-1">Tipos de pagamento</h3>
-              <v-btn
-                size="small"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="tiposPagamento.push({ formaPagamentoId: '', totalPago: '', numeroVendas: '1' })"
-                >Adicionar pagamento</v-btn
-              >
-            </div>
-            <v-row v-for="(item, index) in tiposPagamento" :key="`pagamento-${index}`" dense>
-              <v-col cols="12" md="5">
-                <v-select
-                  v-model="item.formaPagamentoId"
-                  :items="opcoesEmpresa.formasPagamento"
-                  item-title="nome"
-                  item-value="id"
-                  label="Forma de pagamento"
-                  clearable
-                />
-              </v-col>
-              <v-col cols="6" md="3"
-                ><v-text-field v-model="item.numeroVendas" type="number" label="Numero vendas"
-              /></v-col>
-              <v-col cols="6" md="3"><v-text-field v-model="item.totalPago" type="number" label="Total pago" /></v-col>
-              <v-col cols="12" md="1" class="d-flex align-center justify-end">
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  :disabled="tiposPagamento.length === 1"
-                  @click="tiposPagamento.splice(index, 1)"
-                />
-              </v-col>
-            </v-row>
-          </section>
-        </div>
-
-        <section v-if="entidadeNova === 'despesa'" class="mt-2">
-          <v-switch
-            v-model="discriminandoDespesa"
-            label="Discriminar itens da despesa"
-            color="primary"
-            :disabled="modoDiscriminacao"
-          />
-          <div v-if="discriminandoDespesa">
-            <div class="d-flex justify-end mb-2">
-              <v-btn
-                size="small"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="itensDespesa.push({ descricao: '', valor: '', grupoDespesaId: '' })"
-                >Adicionar item</v-btn
-              >
-            </div>
-            <v-row v-for="(item, index) in itensDespesa" :key="`despesa-${index}`" dense>
-              <v-col cols="12" md="5"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
-              <v-col cols="12" md="4">
-                <v-select
-                  v-model="item.grupoDespesaId"
-                  :items="opcoesEmpresa.gruposDespesas"
-                  item-title="nome"
-                  item-value="id"
-                  label="Grupo"
-                  clearable
-                />
-              </v-col>
-              <v-col cols="8" md="2"><v-text-field v-model="item.valor" type="number" label="Valor" /></v-col>
-              <v-col cols="4" md="1" class="d-flex align-center justify-end">
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  :disabled="itensDespesa.length === 1"
-                  @click="itensDespesa.splice(index, 1)"
-                />
-              </v-col>
-            </v-row>
-          </div>
-        </section>
-
-        <section v-if="entidadeNova === 'mercadoria'" class="mt-2">
-          <v-switch
-            v-model="discriminandoMercadoria"
-            label="Discriminar mercadorias"
-            color="primary"
-            :disabled="modoDiscriminacao"
-          />
-          <div v-if="discriminandoMercadoria">
-            <div class="d-flex justify-end mb-2">
-              <v-btn
-                size="small"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="
-                  itensMercadoria.push({
-                    descricao: '',
-                    quantidade: '1',
-                    valorUnitario: '',
-                    descontoTipo: '',
-                    descontoValor: '',
-                    valorTotal: '',
-                    produtoId: '',
-                    grupoMercadoriaId: '',
-                    unidadeMedidaId: ''
-                  })
-                "
-                >Adicionar mercadoria</v-btn
-              >
-            </div>
-            <v-row v-for="(item, index) in itensMercadoria" :key="`mercadoria-${index}`" dense>
-              <v-col cols="12" md="3">
-                <v-select
-                  v-model="item.produtoId"
-                  :items="opcoesEmpresa.produtos"
-                  item-title="descricao"
-                  item-value="id"
-                  label="Produto"
-                  clearable
-                />
-              </v-col>
-              <v-col cols="12" md="3"><v-text-field v-model="item.descricao" label="Descricao" /></v-col>
-              <v-col cols="6" md="1"><v-text-field v-model="item.quantidade" type="number" label="Qtd." /></v-col>
-              <v-col cols="6" md="2"
-                ><v-text-field v-model="item.valorUnitario" type="number" label="Unitario" prefix="R$"
-              /></v-col>
-              <v-col cols="6" md="2">
-                <v-select
-                  v-model="item.descontoTipo"
-                  :items="tiposDescontoItem"
-                  item-title="title"
-                  item-value="value"
-                  label="Desconto"
-                />
-              </v-col>
-              <v-col cols="6" md="1">
-                <v-text-field
-                  v-model="item.descontoValor"
-                  type="number"
-                  label="Desc."
-                  :disabled="!item.descontoTipo"
-                  :suffix="item.descontoTipo === 'percentual' ? '%' : item.descontoTipo === 'valor' ? 'R$' : ''"
-                />
-              </v-col>
-              <v-col cols="8" md="2">
-                <v-text-field
-                  v-if="item.descontoTipo"
-                  :model-value="totalItemMercadoriaForm(item).toFixed(2)"
-                  label="Total"
-                  prefix="R$"
-                  readonly
-                />
-                <v-text-field v-else v-model="item.valorTotal" type="number" label="Total" prefix="R$" />
-              </v-col>
-              <v-col cols="4" md="1" class="d-flex align-center justify-end">
-                <v-btn
-                  icon="mdi-delete"
-                  variant="text"
-                  :disabled="itensMercadoria.length === 1"
-                  @click="itensMercadoria.splice(index, 1)"
-                />
-              </v-col>
-            </v-row>
-          </div>
-        </section>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="outlined" :disabled="salvandoOperacao" @click="modalOperacaoAberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="salvandoOperacao" @click="salvarOperacao">Salvar</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <v-dialog v-model="modalMaloteAberto" max-width="640">
-    <v-card>
-      <v-card-title>{{ maloteEditandoId ? "Editar malote" : "Novo malote" }}</v-card-title>
-      <v-card-text>
-        <!-- O malote E o lacre (D3): so o numero do lacre (identidade unica) + o valor. Sem codigo, sem saco.
-             O status nasce "disponivel" automaticamente. -->
-        <div class="d-grid ga-4">
-          <v-text-field
-            v-model="formMalote.numeroLacre"
-            label="Numero do lacre"
-            placeholder="Ex.: 007"
-            hint="Identidade unica do malote (vem impresso no lacre)"
-            persistent-hint
-            autofocus
-            hide-details="auto"
-          />
-          <v-text-field
-            v-model.number="formMalote.valor"
-            label="Valor (R$)"
-            type="number"
-            min="0"
-            step="0.01"
-            prefix="R$"
-            hint="Quanto de dinheiro vai dentro do malote"
-            persistent-hint
-            hide-details="auto"
-          />
-        </div>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="outlined" :disabled="maloteSalvando" @click="modalMaloteAberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="maloteSalvando" @click="salvarMalote">Salvar</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <!-- Lancamento (despesa/mercadoria/retirada) e Transferencia tem modais proprios fieis ao desenho
+       do Rodrigo (FOTO 2 / FOTO 1). Eles LEEM `modalOperacaoAberto` do contexto e decidem sozinhos
+       se aparecem (ver OperacaoTransferenciaModal.vue:19 e useOperacaoLancamento.ts:52).
+       NAO REMOVER: sem estas duas tags o "+ Novo > Transferencias/Saidas" abre o estado e nada
+       renderiza — falha 100% silenciosa (import sem uso nao quebra lint, check nem teste).
+       Perdidas por engano no 9c35fae, restauradas em 31/07. -->
+  <OperacaoLancamentoModal />
+  <OperacaoTransferenciaModal />
 
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
     <v-card>
@@ -610,6 +148,9 @@ const validacaoQtdPreview = computed(() =>
               :disabled="Boolean(cadastroEditandoId)"
             />
           </v-col>
+          <v-col v-if="cadastroTela === 'grupos'" cols="12">
+            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo nos lançamentos" />
+          </v-col>
           <v-col v-if="cadastroTela === 'areas_setores'" cols="12">
             <v-select
               v-model="formCadastro.tipoAreaSetor"
@@ -618,12 +159,96 @@ const validacaoQtdPreview = computed(() =>
               :disabled="Boolean(cadastroEditandoId)"
             />
           </v-col>
+          <!-- Patrimonio (D2): grupo (sigla + nome) ou item (nome + marca + grupo + setor). -->
+          <v-col v-if="cadastroTela === 'patrimonio'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.tipoPatrimonio"
+              :items="['grupo', 'item']"
+              label="Tipo"
+              :disabled="Boolean(cadastroEditandoId)"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'grupo'" cols="12" md="6">
+            <v-text-field
+              v-model="formCadastro.sig"
+              label="Sigla"
+              hint="2 a 4 letras maiusculas (FIS, MAT, UTS, MAQ, MOB, EMB)"
+              persistent-hint
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.grupoPatrimonioId"
+              :items="opcoesEmpresa.gruposPatrimonio"
+              item-title="nome"
+              item-value="id"
+              label="Grupo de patrimonio"
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-text-field v-model="formCadastro.marca" label="Marca" />
+          </v-col>
+          <v-col v-if="cadastroTela === 'patrimonio' && formCadastro.tipoPatrimonio === 'item'" cols="12" md="6">
+            <v-select
+              v-model="formCadastro.setorId"
+              :items="opcoesEmpresa.setores"
+              item-title="nome"
+              item-value="id"
+              label="Setor"
+              clearable
+            />
+          </v-col>
           <v-col
             v-if="cadastroTela !== 'produtos'"
             cols="12"
-            :md="['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes'].includes(cadastroTela) ? 6 : 12"
-            ><v-text-field v-model="formCadastro.nome" label="Nome"
+            :md="
+              ['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes', 'contas', 'maquininhas'].includes(
+                cadastroTela
+              )
+                ? 6
+                : 12
+            "
+            ><v-text-field v-model="formCadastro.nome" :label="cadastroTela === 'maquininhas' ? 'Apelido *' : 'Nome'"
           /></v-col>
+          <!-- Conta com FUNDO (D8). O fundo e o PONTO DE PARTIDA do saldo, nao o saldo: quem move o
+               saldo sao os lancamentos. Por isso o campo fica editavel e o saldo atual, ao lado,
+               so leitura — deixar os dois editaveis convidaria a "acertar" o saldo na mao. -->
+          <v-col v-if="cadastroTela === 'contas'" cols="12" md="6">
+            <v-text-field
+              v-model="formCadastro.saldoInicial"
+              type="number"
+              min="0"
+              step="0.01"
+              label="Fundo (saldo inicial)"
+              hint="Ponto de partida da conta. Ex.: CONTA COFRE = 10.000,00"
+              persistent-hint
+            />
+          </v-col>
+          <v-col v-if="cadastroTela === 'contas'" cols="12">
+            <div class="text-caption text-medium-emphasis mb-1">
+              Quem pode movimentar esta conta (origem/destino de transferência e conta dos lançamentos). Sem ninguém
+              marcado, a conta não aparece para nenhum operador.
+            </div>
+            <v-alert v-if="!opcoesEmpresa.usuarios.length" type="info" variant="tonal" density="compact">
+              Nenhum usuário nesta empresa.
+            </v-alert>
+            <v-list v-else density="compact" class="py-0 lc-usuarios-conta">
+              <v-list-item
+                v-for="usuario in opcoesEmpresa.usuarios"
+                :key="usuario.usuarioId ?? usuario.id"
+                class="px-1"
+              >
+                <template #prepend>
+                  <v-checkbox-btn
+                    :model-value="contaTemUsuario(usuario.usuarioId ?? usuario.id)"
+                    color="primary"
+                    @update:model-value="alternarUsuarioConta(usuario.usuarioId ?? usuario.id, Boolean($event))"
+                  />
+                </template>
+                <v-list-item-title>{{ usuario.nome ?? usuario.email ?? usuario.id }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-col>
           <v-col v-if="cadastroTela === 'empresas'" cols="12" md="6">
             <v-text-field
               :model-value="formCadastro.cnpj"
@@ -667,7 +292,7 @@ const validacaoQtdPreview = computed(() =>
               <v-text-field v-model="formCadastro.rua" label="Rua" />
             </v-col>
             <v-col cols="12" md="4">
-              <v-text-field v-model="formCadastro.numero" label="Numero" />
+              <v-text-field v-model="formCadastro.numero" label="Número" />
             </v-col>
             <v-col cols="12" md="8">
               <v-text-field v-model="formCadastro.complemento" label="Complemento" />
@@ -703,6 +328,17 @@ const validacaoQtdPreview = computed(() =>
           <v-col v-if="cadastroTela === 'pdv'" cols="12" md="4">
             <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
           </v-col>
+          <v-col v-if="cadastroTela === 'socios_gestores'" cols="12" md="4">
+            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
+          </v-col>
+          <template v-if="cadastroTela === 'maquininhas'">
+            <v-col cols="12" md="4">
+              <v-text-field v-model="formCadastro.numeroSerie" label="Número de série *" />
+            </v-col>
+            <v-col cols="12" md="2">
+              <v-switch v-model="formCadastro.ativo" color="primary" label="Ativa" />
+            </v-col>
+          </template>
           <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
             ><v-text-field v-model="formCadastro.sigla" label="Sigla"
           /></v-col>
@@ -723,16 +359,16 @@ const validacaoQtdPreview = computed(() =>
               @update:model-value="formCadastro.cpf = mascararCpf(String($event || ''))"
           /></v-col>
           <template v-if="cadastroTela === 'produtos'">
-            <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigo" label="Codigo" /></v-col>
+            <v-col cols="12" md="4"><v-text-field v-model="formCadastro.codigo" label="Código" /></v-col>
             <v-col cols="12" md="4"
-              ><v-text-field v-model="formCadastro.codigoBarras" label="Codigo de barras"
+              ><v-text-field v-model="formCadastro.codigoBarras" label="Código de barras"
             /></v-col>
             <v-col cols="12" md="4"><v-text-field v-model="formCadastro.marca" label="Marca" /></v-col>
             <v-col cols="12"><v-text-field v-model="formCadastro.descricao" label="Nome do produto *" /></v-col>
             <v-col cols="12">
               <v-text-field
                 :model-value="descricaoAutoPreview"
-                label="Descricao (automatica)"
+                label="Descrição (automática)"
                 readonly
                 bg-color="grey-lighten-4"
                 placeholder="Preencha nome, quantidade individual e unidade"
@@ -927,7 +563,7 @@ const validacaoQtdPreview = computed(() =>
               </v-col>
             </template>
             <template v-if="formCadastro.tipo === 'revenda'">
-              <v-col cols="12"><div class="text-body-2 font-weight-bold">Promocao</div></v-col>
+              <v-col cols="12"><div class="text-body-2 font-weight-bold">Promoção</div></v-col>
               <v-col cols="12" md="4">
                 <v-select
                   v-model="formCadastro.promoTipo"
@@ -938,7 +574,7 @@ const validacaoQtdPreview = computed(() =>
                   ]"
                   item-title="titulo"
                   item-value="valor"
-                  label="Promocao"
+                  label="Promoção"
                 />
               </v-col>
               <template v-if="formCadastro.promoTipo !== 'nenhum'">
@@ -987,7 +623,7 @@ const validacaoQtdPreview = computed(() =>
                       unidadesIndividuais: '1'
                     })
                   "
-                  >Adicionar conversao</v-btn
+                  >Adicionar conversão</v-btn
                 >
               </div>
               <v-row v-for="(conversao, index) in formCadastro.produtoConversoes" :key="index" dense>
@@ -1094,7 +730,7 @@ const validacaoQtdPreview = computed(() =>
               :items="opcoesEmpresa.turnos"
               item-title="nome"
               item-value="id"
-              label="Turno padrao"
+              label="Turno padrão"
               clearable
             />
           </v-col>
@@ -1145,7 +781,7 @@ const validacaoQtdPreview = computed(() =>
               ><v-select
                 v-model="formCadastro.tipoPermissao"
                 :items="['cargo', 'setor', 'usuario']"
-                label="Tipo de permissao"
+                label="Tipo de permissão"
             /></v-col>
             <v-col v-if="formCadastro.tipoPermissao === 'cargo'" cols="12" md="8">
               <v-select
@@ -1170,14 +806,18 @@ const validacaoQtdPreview = computed(() =>
                 :items="opcoesEmpresa.usuarios"
                 item-title="nome"
                 item-value="usuarioId"
-                label="Usuario"
+                label="Usuário"
             /></v-col>
+            <v-col cols="12">
+              <div class="text-body-2 font-weight-bold mb-2">Operacoes (telas x acoes)</div>
+              <PermissoesGrade />
+            </v-col>
             <template v-for="secao in secoesPermissoes" :key="secao.titulo">
-              <v-col v-if="permissoesDaSecao(secao).length" cols="12">
+              <v-col v-if="permissoesDaSecao(secao).length && !secoesOperacionais.includes(secao.titulo)" cols="12">
                 <v-sheet class="pa-3 rounded-lg soft-bg">
                   <div class="text-body-2 font-weight-bold mb-2">{{ secao.titulo }}</div>
                   <div class="text-caption text-muted mb-3">
-                    Herdar nao concede acesso sozinho; a permissao precisa estar como Permitir em alguma camada efetiva.
+                    Herdar não concede acesso sozinho; a permissão precisa estar como Permitir em alguma camada efetiva.
                   </div>
                   <v-row dense>
                     <v-col v-for="permissao in permissoesDaSecao(secao)" :key="permissao" cols="12">
@@ -1213,8 +853,8 @@ const validacaoQtdPreview = computed(() =>
 
   <v-dialog v-model="modalTemaAberto" max-width="560">
     <v-card>
-      <v-card-title>Aparencia</v-card-title>
-      <v-card-subtitle>Padrao vale para todas as telas; escolha uma tela para personalizar so ela.</v-card-subtitle>
+      <v-card-title>Aparência</v-card-title>
+      <v-card-subtitle>Padrão vale para todas as telas; escolha uma tela para personalizar só ela.</v-card-subtitle>
       <v-card-text>
         <v-select
           v-model="temaTelaEdicao"

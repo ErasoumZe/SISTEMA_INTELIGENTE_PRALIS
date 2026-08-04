@@ -16,7 +16,8 @@ export const grupoPayloadSchema = z.object({
   empresaId: uuidSchema,
   tipoGrupo: tipoGrupoSchema,
   nome: z.string().min(1),
-  grupoPaiId: uuidSchema.optional().nullable()
+  grupoPaiId: uuidSchema.optional().nullable(),
+  ativa: z.boolean().default(true)
 });
 
 export const gruposQuerySchema = empresaQuerySchema;
@@ -28,4 +29,3 @@ export type GrupoPayload = z.infer<typeof grupoPayloadSchema>;
 export type TipoGrupo = z.infer<typeof tipoGrupoSchema>;
 export type ImportarGruposPayload = ImportarEmpresaPayload;
 export type ExportarGrupoPayload = ExportarEmpresaPayload;
-

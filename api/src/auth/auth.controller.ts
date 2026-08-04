@@ -48,7 +48,7 @@ export async function registrarRotasAuth(app: FastifyInstance) {
         return reply.send(response.body ? await response.text() : null);
       } catch (error) {
         request.log.error(error, "authentication route failed");
-        return erro(reply, 500, "Internal authentication error", "AUTH_FAILURE");
+        return erro(reply, 500, "Erro interno de autenticação", "AUTH_FAILURE");
       }
     }
   });

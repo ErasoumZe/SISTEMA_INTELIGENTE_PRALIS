@@ -14,7 +14,11 @@ export type PerfilTeste =
   | "discriminador"
   // Ciclo de vida R7 (Fase 1): operadores de caixa com perfis de pagamento distintos para a matriz.
   | "caixaCiclo"
-  | "financeiroCiclo";
+  | "financeiroCiclo"
+  // Recorrencia (D3): lanca sem operar caixa e SEM a permissao de recorrencia.
+  | "semRecorrencia"
+  // Entradas do dia (D7): tem a flag de caixa aberto E um caixa aberto proprio.
+  | "operadorEntradas";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -63,8 +67,6 @@ export const idsTeste = {
   vendaSeed: "11111111-1111-4111-8111-111111111723",
   integracaoChave: "11111111-1111-4111-8111-111111111724",
   integracaoCodigo: "INTEGRACAO-TESTE-CHAVE",
-  maloteA: "11111111-1111-4111-8111-111111111801",
-  maloteB: "33333333-3333-4333-8333-333333333801",
   lacreA: "11111111-1111-4111-8111-111111111901",
   lacreB: "33333333-3333-4333-8333-333333333901",
   cargoCaixaCiclo: "11111111-1111-4111-8111-111111112001",
@@ -72,7 +74,34 @@ export const idsTeste = {
   colaboradorCargoCaixaCiclo: "11111111-1111-4111-8111-111111112003",
   cargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112011",
   colaboradorFinanceiroCiclo: "11111111-1111-4111-8111-111111112012",
-  colaboradorCargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112013"
+  colaboradorCargoFinanceiroCiclo: "11111111-1111-4111-8111-111111112013",
+  // Patrimonio (D2): segunda origem do campo Grupo da discriminacao (§5, item 6). O grupo da
+  // empresa B existe para provar que o escopo por empresa vale tambem para esta origem.
+  grupoPatrimonioMaquinas: "11111111-1111-4111-8111-111111112101",
+  grupoPatrimonioOutraEmpresa: "33333333-3333-4333-8333-333333332101",
+  // Recorrencia (D3): lanca despesa/retirada SEM operar caixa e SEM a permissao de recorrencia.
+  // E a fixture do 403 isolado — os perfis *Ciclo tem caixa_operar e esbarrariam antes, no
+  // "abra um caixa", provando a regra errada.
+  cargoSemRecorrencia: "11111111-1111-4111-8111-111111112201",
+  colaboradorSemRecorrencia: "11111111-1111-4111-8111-111111112202",
+  colaboradorCargoSemRecorrencia: "11111111-1111-4111-8111-111111112203",
+  // Entradas do dia (D7): operador COM a flag menu_entradas_somente_caixa_aberto e COM caixa
+  // aberto — a unica combinacao que exercita o escopo da tela de Entradas. O perfil "caixa" nao
+  // serve: ele nao tem a flag, e e usado por 12 testes que nao devem mudar de comportamento.
+  cargoOperadorEntradas: "11111111-1111-4111-8111-111111112301",
+  colaboradorOperadorEntradas: "11111111-1111-4111-8111-111111112302",
+  colaboradorCargoOperadorEntradas: "11111111-1111-4111-8111-111111112303",
+  caixaAbertoEntradas: "11111111-1111-4111-8111-111111112304",
+  // PDV PROPRIO do caixa aberto acima. NAO reusar o pdvLivre: ele existe justamente para os testes
+  // ABRIREM caixa nele (turnos, caixa, alteracao-horario) e um caixa aberto ali quebra os tres por
+  // caixa_aberto_unico_por_pdv (migration 0003).
+  pdvEntradas: "11111111-1111-4111-8111-111111112305",
+  contaEntradas: "11111111-1111-4111-8111-111111112306",
+  // Vendas SEM caixa_id (o caso da venda integrada fora de periodo de caixa aberto), criadas pelo
+  // proprio teste de entradas do dia.
+  vendaSemCaixaDoDia: "11111111-1111-4111-8111-111111112311",
+  vendaSemCaixaOutroDia: "11111111-1111-4111-8111-111111112312",
+  vendaComCaixaDoDia: "11111111-1111-4111-8111-111111112313"
 } as const;
 
 export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; senha: string }> = {
@@ -108,5 +137,15 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "financeiro-ciclo.integracao@padaria.local",
     nome: "Financeiro Ciclo Integracao",
     senha: "Teste#2026!finciclo"
+  },
+  semRecorrencia: {
+    email: "sem-recorrencia.integracao@padaria.local",
+    nome: "Sem Recorrencia Integracao",
+    senha: "Teste#2026!semrecor"
+  },
+  operadorEntradas: {
+    email: "operador-entradas.integracao@padaria.local",
+    nome: "Operador Entradas Integracao",
+    senha: "Teste#2026!operentr"
   }
 };

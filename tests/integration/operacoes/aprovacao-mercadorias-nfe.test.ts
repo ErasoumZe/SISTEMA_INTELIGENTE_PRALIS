@@ -24,8 +24,11 @@ describe("mercadorias: aprovacao das compras vindas de NF-e", () => {
     );
     const id = linha!.id;
     await executarSql(
-      `insert into mercadorias_itens (mercadoria_id, descricao, quantidade, valor_unitario, valor_total)
-       values ($1, 'Farinha de trigo', '10', '10.00', '100.00')`,
+      // Sem desconto: os campos com desconto repetem o total/unitario (§5).
+      `insert into mercadorias_itens
+         (mercadoria_id, descricao, quantidade, valor_unitario, valor_total,
+          valor_unitario_com_desconto, valor_total_com_desconto)
+       values ($1, 'Farinha de trigo', '10', '10.00', '100.00', '10.00', '100.00')`,
       [id]
     );
     return id;

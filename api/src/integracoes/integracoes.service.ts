@@ -45,6 +45,7 @@ import {
   criarPdvComContaRepository,
   criarProdutoRepository,
   inativarChaveIntegracaoRepository,
+  registrarAlteracaoPosFechamentoRepository,
   listarCamposConfigRepository,
   listarChavesIntegracaoRepository,
   listarEmailsAdminsDaEmpresaRepository,
@@ -343,12 +344,19 @@ async function resolverVinculosVenda(
   const colaboradorId = await resolverColaborador(chave, venda, db);
 
   // Liga a venda ao caixa do mesmo PDV cujo periodo aberto contem a dataVenda (null se nao houver).
-  const caixaId =
-    pdvId !== null
-      ? ((await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db))?.id ?? null)
-      : null;
+  const caixa =
+    pdvId !== null ? await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db) : null;
+  const caixaId = caixa?.id ?? null;
 
-  return { pdvId, clienteId, colaboradorId, caixaId, produtosPorIdentificador, formasPagamentoPorIdentificador };
+  return {
+    pdvId,
+    clienteId,
+    colaboradorId,
+    caixaId,
+    caixaFechado: caixa?.status !== "aberto" && caixa !== null,
+    produtosPorIdentificador,
+    formasPagamentoPorIdentificador
+  };
 }
 
 export async function listarIntegracoes(query: IntegracaoQuery, perfil: PerfilUsuario) {
@@ -732,6 +740,13 @@ export async function receberVendaIntegracao(
         },
         tx
       );
+
+      if (vinculos.caixaFechado && vinculos.caixaId) {
+        await registrarAlteracaoPosFechamentoRepository(
+          { empresaId: chave.empresaId, fechamentoCaixaId: vinculos.caixaId, vendaId: venda.id },
+          tx
+        );
+      }
 
       await upsertRegistroIntegracaoRepository(
         {

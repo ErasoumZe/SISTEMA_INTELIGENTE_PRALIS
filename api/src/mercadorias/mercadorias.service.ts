@@ -15,24 +15,34 @@ import type {
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
-  calcularTotalItemMercadoria,
+  exigirDiscriminacaoConferida,
+  itemMercadoriaParaDiscriminacao,
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   obterCaixaParaLancamento,
   podeVerLancamentosPagos,
-  somaConfereCentavos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
+import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
+  exigirContaDoCaixaNoLancamento,
+  exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
-  validarEdicaoNoCaixaAberto,
+  validarEdicaoDeSaidaNoCaixa,
   validarReferenciasMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
+import {
+  caixaDaOcorrencia,
+  exigirPermissaoRecorrencia,
+  payloadDaOcorrencia,
+  planejarRecorrencia
+} from "../lancamentos/lancamentos.recorrencia.js";
 import { deveComputarMercadoria } from "./mercadorias.regras.js";
 import {
   aprovarMercadoriaRepository,
   atualizarFotoMercadoriaRepository,
+  atualizarFotoNotaMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
   criarMercadoriaRepository,
@@ -47,11 +57,10 @@ export function validarMercadoria(dados: MercadoriaPayload): void {
   if (!dados.grupoMercadoriaId && !dados.itensMercadoria.length) {
     throw new Error("Grupo ou itens de mercadoria obrigatorios");
   }
-  if (dados.itensMercadoria.length) {
-    const valores = dados.itensMercadoria.map(calcularTotalItemMercadoria);
-    if (!somaConfereCentavos(valores, dados.valorOriginal))
-      throw new Error("Soma das mercadorias deve bater com o valor original");
-  }
+  // D5 (§5): a soma da discriminacao tem de bater com o Valor do lancamento. Nao bateu, NAO SALVA —
+  // e a resposta diz ONDE diverge (422 com detalhe), em vez de um 400 seco.
+  if (dados.itensMercadoria.length)
+    exigirDiscriminacaoConferida(dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao), dados.valorOriginal);
 }
 
 export async function listarMercadorias(
@@ -70,6 +79,13 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
   validarMercadoria(dados);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento);
+  // R-129: pagamento retroativo nao entra na CRIACAO (fuso do negocio, nao UTC).
+  exigirDataPagamentoNaoRetroativa(dados.dataPagamento);
+  // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
+  // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
+  exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
+  // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
+  exigirPermissaoRecorrencia(perfil, dados.recorrencia);
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
@@ -78,10 +94,41 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const mercadoria = await criarMercadoriaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
-    return { id: mercadoria.id, computar };
+    // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
+    const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+
+    // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
+    const plano = await planejarRecorrencia(
+      {
+        empresaId: dados.empresaId,
+        dominio: "mercadoria",
+        dataReferencia: dados.dataReferencia,
+        dataVencimento: dados.dataVencimento,
+        recorrencia: dados.recorrencia,
+        perfil
+      },
+      tx
+    );
+    if (!plano) {
+      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      return { id: mercadoria.id, computar };
+    }
+
+    let primeira = "";
+    for (const ocorrencia of plano.ocorrencias) {
+      const criada = await criarMercadoriaRepository(
+        payloadDaOcorrencia(lancamento, ocorrencia),
+        computar,
+        perfil.usuarioId,
+        caixaDaOcorrencia(caixa.id, ocorrencia),
+        tx,
+        ocorrencia.vinculo
+      );
+      if (ocorrencia.ehPrimeira) primeira = criada.id;
+    }
+    return { id: primeira, computar, serie: plano.ocorrencias.length, serieLimitada: plano.limitadaPeloTeto };
   });
 }
 
@@ -118,6 +165,32 @@ export async function obterFotoMercadoria(
   };
 }
 
+export async function salvarFotoNotaMercadoria(
+  mercadoriaId: string,
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+): Promise<{ fotoNotaUrl: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("mercadorias", mercadoriaId, arquivo);
+  await atualizarFotoNotaMercadoriaRepository(mercadoriaId, mercadoria.empresaId, caminhoRelativo);
+  return { fotoNotaUrl: caminhoRelativo };
+}
+
+export async function obterFotoNotaMercadoria(
+  mercadoriaId: string,
+  perfil: PerfilUsuario
+): Promise<{ caminhoAbsoluto: string; mimeType: string }> {
+  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
+  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
+  if (!mercadoria.fotoNotaUrl) throw new Error("Foto nao encontrada");
+  return {
+    caminhoAbsoluto: caminhoAbsolutoDocumento(mercadoria.fotoNotaUrl),
+    mimeType: mimePorCaminho(mercadoria.fotoNotaUrl)
+  };
+}
+
 export async function atualizarMercadoria(
   mercadoriaId: string,
   dados: MercadoriaPayload,
@@ -127,17 +200,19 @@ export async function atualizarMercadoria(
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
+    // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
+    exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     const computar = deveComputarMercadoria(
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
     return { id: mercadoriaId, computar };
   });
@@ -156,14 +231,12 @@ export async function discriminarMercadoria(
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
 
-    const valores = dados.itensMercadoria.map(calcularTotalItemMercadoria);
-    if (!somaConfereCentavos(valores, existente.valorOriginal))
-      throw new Error("Soma das mercadorias deve bater com o valor original");
+    exigirDiscriminacaoConferida(dados.itensMercadoria.map(itemMercadoriaParaDiscriminacao), existente.valorOriginal);
 
     const referenciaInvalida = await validarReferenciasItensMercadoria(dados.empresaId, dados.itensMercadoria, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    await discriminarMercadoriaRepository(mercadoriaId, dados.itensMercadoria, existente.grupoMercadoriaId ?? null, tx);
+    await discriminarMercadoriaRepository(mercadoriaId, dados, existente.grupoMercadoriaId ?? null, tx);
     return { id: mercadoriaId, computar: existente.computar };
   });
 }

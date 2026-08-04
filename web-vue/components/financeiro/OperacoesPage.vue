@@ -22,6 +22,13 @@ defineProps<{
   empresaAtiva: Opcao | null;
   operacoesPaginadas: OperacaoResumo[];
   totalOperacoes: number;
+  // Soma em dinheiro do filtro INTEIRO (S6). null quando a listagem nao manda (so Entradas manda).
+  totalLiquidoOperacoes?: number | null;
+  // Dia listado pela tela de Entradas ("yyyy-MM-dd"). Vazio nas demais telas, que nao recortam por dia.
+  diaEntradas?: string;
+  // Falso para o perfil preso ao caixa aberto: o servidor forca o dia do caixa, entao o campo fica
+  // visivel (para ele saber QUAL dia esta vendo) mas desabilitado.
+  podeConsultarOutrosDiasEntradas?: boolean;
   pagina: number;
   totalPaginas: number;
   descricao: string;
@@ -43,6 +50,7 @@ defineProps<{
 const emit = defineEmits<{
   (event: "editar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
+  (event: "update:dia", dia: string): void;
   (event: "discriminar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
   (event: "update:pendentes", valor: boolean): void;
   (event: "update:aprovacao", valor: boolean): void;
@@ -82,7 +90,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
         <div class="summary-value">{{ dinheiro(resumo.totalEntradas) }}</div>
       </article>
       <article class="summary-card card-transferencias">
-        <div class="summary-label"><v-icon icon="mdi-swap-horizontal" size="16" /> Transferencias</div>
+        <div class="summary-label"><v-icon icon="mdi-swap-horizontal" size="16" /> Transferências</div>
         <div class="summary-value">{{ dinheiro(resumo.totalTransferencias) }}</div>
       </article>
       <article class="summary-card card-despesas">
@@ -104,9 +112,36 @@ function alternarDetalhe(operacao: OperacaoResumo) {
         <div class="table-heading d-flex align-start justify-space-between ga-4 flex-wrap">
           <div>
             <h2>{{ telaAtual?.titulo }}</h2>
-            <p>{{ descricao || `Lancamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+            <p>{{ descricao || `Lançamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+            <!-- Totalizador do DIA (S6): soma do filtro inteiro, nao da pagina. Quem confere o dia
+                 precisa do total do dia — a pagina e so um recorte. -->
+            <p v-if="totalLiquidoOperacoes !== null && totalLiquidoOperacoes !== undefined" class="op-totalizador">
+              <strong>{{ totalOperacoes }}</strong>
+              {{ totalOperacoes === 1 ? "entrada" : "entradas" }} em {{ formatarDataSomenteDia(diaEntradas) }} ·
+              <strong>R$ {{ dinheiro(totalLiquidoOperacoes) }}</strong>
+            </p>
           </div>
-          <div class="d-flex flex-column align-end">
+          <div class="d-flex flex-column align-end ga-2">
+            <!-- Filtro de data (S6): consulta outros dias. Para o perfil preso ao caixa aberto o
+                 servidor forca o dia do caixa, entao o campo aparece so para ele saber QUAL dia
+                 esta vendo — desabilitado, com o motivo escrito. -->
+            <v-text-field
+              v-if="diaEntradas"
+              :model-value="diaEntradas"
+              type="date"
+              label="Dia"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="op-filtro-dia"
+              :disabled="!podeConsultarOutrosDiasEntradas"
+              :title="
+                podeConsultarOutrosDiasEntradas
+                  ? 'Consultar as entradas de outro dia'
+                  : 'Seu perfil ve somente o dia do caixa aberto.'
+              "
+              @update:model-value="emit('update:dia', String($event ?? ''))"
+            />
             <v-switch
               v-if="mostrarAprovacaoMercadorias"
               :model-value="aprovacaoMercadoriasAtiva"
@@ -143,9 +178,9 @@ function alternarDetalhe(operacao: OperacaoResumo) {
               <thead>
                 <tr>
                   <th>Data</th>
-                  <th>Descricao</th>
+                  <th>Descrição</th>
                   <th class="text-right">Valor</th>
-                  <th class="text-right">Acoes</th>
+                  <th class="text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,24 +257,31 @@ function alternarDetalhe(operacao: OperacaoResumo) {
               </tbody>
             </v-table>
           </div>
-          <div v-if="totalOperacoes > 10" class="mt-4 d-flex justify-end align-center ga-2">
-            <v-btn
-              size="small"
-              variant="outlined"
-              :disabled="pagina === 1"
-              @click="emit('update:pagina', Math.max(1, pagina - 1))"
-            >
-              Anterior
-            </v-btn>
-            <span>{{ pagina }} / {{ totalPaginas }}</span>
-            <v-btn
-              size="small"
-              variant="outlined"
-              :disabled="pagina === totalPaginas"
-              @click="emit('update:pagina', Math.min(totalPaginas, pagina + 1))"
-            >
-              Proxima
-            </v-btn>
+          <!-- Mostra o controle quando ha mais de uma pagina — comparar com um 10 fixo escondia a
+               paginacao desde que o tamanho da pagina virou 50. -->
+          <div v-if="totalPaginas > 1" class="mt-4 d-flex justify-space-between align-center ga-2">
+            <span class="text-caption text-medium-emphasis">
+              Mostrando {{ operacoesPaginadas.length }} de {{ totalOperacoes }}
+            </span>
+            <div class="d-flex align-center ga-2">
+              <v-btn
+                size="small"
+                variant="outlined"
+                :disabled="pagina === 1"
+                @click="emit('update:pagina', Math.max(1, pagina - 1))"
+              >
+                Anterior
+              </v-btn>
+              <span>{{ pagina }} / {{ totalPaginas }}</span>
+              <v-btn
+                size="small"
+                variant="outlined"
+                :disabled="pagina === totalPaginas"
+                @click="emit('update:pagina', Math.min(totalPaginas, pagina + 1))"
+              >
+                Próxima
+              </v-btn>
+            </div>
           </div>
         </template>
       </v-card-text>
@@ -261,5 +303,15 @@ function alternarDetalhe(operacao: OperacaoResumo) {
 .venda-detalhe-inline {
   border-top: 1px solid rgba(128, 128, 128, 0.2);
   background: rgba(128, 128, 128, 0.04);
+}
+/* Totalizador do dia: destaque discreto, logo abaixo da descricao da tela. */
+.op-totalizador {
+  margin-top: 4px;
+  font-size: 13px;
+}
+/* Filtro de data: estreito o bastante para nao competir com o titulo da tela. */
+.op-filtro-dia {
+  min-width: 170px;
+  max-width: 190px;
 }
 </style>

@@ -50,8 +50,10 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
     }
 
     if (tela === "contas") {
-      upsertOpcao(opcoes.contas, { ...itemBase, nome: form.nome });
-      return true;
+      // Fundo, saldo derivado e vínculos vêm do endpoint agregado. Atualizar só id/nome aqui
+      // descartava saldoInicial/usuariosIds do cache; a edição seguinte reabria 0/[] e então
+      // sobrescrevia no banco dados que tinham sido salvos corretamente no primeiro PUT.
+      return false;
     }
 
     if (tela === "formas_pagamento") {

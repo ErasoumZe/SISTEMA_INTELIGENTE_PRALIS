@@ -9,11 +9,15 @@ import { executarSql, json } from "../../setup/integracao.js";
 // essas mercadorias ficavam INVISIVEIS. Com o toggle ligado, a listagem deve ignorar o caixa.
 describe("mercadorias: fila de pendentes de discriminacao ignora o filtro de caixa", () => {
   let contexto: ContextoApiTeste;
-  let cookieAdmin: string; // admin tem menu_mercadorias_somente_caixa_aberto E um caixa aberto no seed
+  let cookieAdmin: string;
+  // Perfil com menu_mercadorias_somente_caixa_aberto e SEM caixa aberto: e ele que sente o escopo
+  // restrito (o admin nao herda restricao — ver permissoesAcessoTotal em shared).
+  let cookieRestrito: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieRestrito = await cookieSessao(contexto.app, "discriminador");
     // Mercadoria "de NF-e": caixa_id NULL, sem itens -> pendente de discriminacao.
     await executarSql(
       `insert into mercadorias
@@ -29,9 +33,9 @@ describe("mercadorias: fila de pendentes de discriminacao ignora o filtro de cai
     await contexto.fechar();
   });
 
-  function listar(pendente: boolean) {
+  function listar(pendente: boolean, cookie = cookieAdmin) {
     const url = `/api/mercadorias?empresaId=${idsTeste.empresaA}${pendente ? "&pendenteDiscriminacao=true" : ""}`;
-    return contexto.app.inject({ method: "GET", url, headers: { cookie: cookieAdmin } });
+    return contexto.app.inject({ method: "GET", url, headers: { cookie } });
   }
 
   it("com o toggle ligado, a mercadoria de NF-e (caixa_id NULL) aparece na fila", async () => {
@@ -43,10 +47,26 @@ describe("mercadorias: fila de pendentes de discriminacao ignora o filtro de cai
     expect(alvo!.pendenteDiscriminacao).toBe(true);
   });
 
-  it("sem o toggle, ela fica presa ao filtro do caixa aberto (nao aparece) — comportamento contrastante", async () => {
-    const resposta = await listar(false);
+  it("o toggle ligado vence o escopo de caixa de quem TEM a flag somente_caixa_aberto", async () => {
+    const resposta = await listar(true, cookieRestrito);
+    expect(resposta.statusCode).toBe(200);
+    const linhas = json<{ data: Array<{ descricao: string }> }>(resposta).data;
+    expect(linhas.find((m) => m.descricao === "NF-E-PENDENTE-TESTE")).toBeDefined();
+  });
+
+  it("sem o toggle, quem tem a flag fica preso ao caixa aberto (nao aparece) — comportamento contrastante", async () => {
+    const resposta = await listar(false, cookieRestrito);
     expect(resposta.statusCode).toBe(200);
     const linhas = json<{ data: Array<{ descricao: string }> }>(resposta).data;
     expect(linhas.find((m) => m.descricao === "NF-E-PENDENTE-TESTE")).toBeUndefined();
+  });
+
+  it("o admin NAO herda a restricao: sem o toggle, ainda ve a mercadoria de NF-e", async () => {
+    // Antes o admin recebia menu_mercadorias_somente_caixa_aberto junto com "todas as permissoes" e
+    // sua listagem ficava presa ao proprio caixa. O dono do sistema nao herda restricao.
+    const resposta = await listar(false);
+    expect(resposta.statusCode).toBe(200);
+    const linhas = json<{ data: Array<{ descricao: string }> }>(resposta).data;
+    expect(linhas.find((m) => m.descricao === "NF-E-PENDENTE-TESTE")).toBeDefined();
   });
 });

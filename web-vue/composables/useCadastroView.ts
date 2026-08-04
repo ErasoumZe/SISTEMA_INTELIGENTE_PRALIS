@@ -1,7 +1,8 @@
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
-import { dinheiro, permissoes, permissoesOcultasNaTela, secoesPermissoes } from "~/utils/domain";
+import { dinheiro, permissaoPertenceASecao, permissoes, permissoesOcultasNaTela } from "~/utils/domain";
+import type { SecaoPermissao } from "~/utils/domain";
 
 type LinhaCadastro = Record<string, string | undefined>;
 
@@ -20,7 +21,17 @@ export function useCadastroView(params: {
         nome: item.nome ?? "",
         cnpj: item.cnpj ? String(item.cnpj) : undefined
       }));
-    if (tela === "contas") return listas.contas.map((item) => ({ id: item.id, nome: item.nome }));
+    if (tela === "contas")
+      return listas.contas.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        // Fundo e Saldo atual vem de /api/contas/saldos (D8). O saldo NAO e coluna: e derivado dos
+        // movimentos a cada carga — por isso nao ha "atualizar saldo" em lugar nenhum.
+        fundo: dinheiro(item.saldoInicial ?? 0),
+        saldoAtual: dinheiro(item.saldoAtual ?? 0),
+        saldoInicial: item.saldoInicial != null ? String(item.saldoInicial) : "",
+        usuariosIds: (item.usuariosIds ?? []).join(",")
+      }));
     if (tela === "formas_pagamento") return listas.formasPagamento.map((item) => ({ id: item.id, nome: item.nome }));
     if (tela === "pdv")
       return listas.pdvs.map((item) => ({
@@ -28,10 +39,23 @@ export function useCadastroView(params: {
         nome: item.nome,
         conta: listas.contas.find((conta) => conta.id === item.contaId)?.nome ?? "",
         contaId: item.contaId,
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "fornecedores")
       return listas.fornecedores.map((item) => ({ id: item.id, nome: item.nome, documento: item.documento }));
+    if (tela === "socios_gestores")
+      return listas.sociosGestores.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        ativo: item.ativo === false ? "Não" : "Sim"
+      }));
+    if (tela === "maquininhas")
+      return listas.maquininhas.map((item) => ({
+        id: item.id,
+        nome: item.apelido ?? item.nome,
+        numeroSerie: item.numeroSerie,
+        ativo: item.ativo === false ? "Não" : "Sim"
+      }));
     if (tela === "clientes")
       return listas.clientes.map((item) => ({
         id: item.id,
@@ -98,13 +122,38 @@ export function useCadastroView(params: {
       }));
     if (tela === "unidades")
       return listas.unidadesMedida.map((item) => ({ id: item.id, nome: item.nome, sigla: item.sigla }));
+    // Patrimonio (D2): uma tabela so com os GRUPOS (sigla) e os ITENS abaixo, cada linha sabendo o
+    // que e — a coluna Tipo. Grupo alimenta o campo Grupo da discriminacao de maquinario (§5).
+    if (tela === "patrimonio")
+      return [
+        ...listas.gruposPatrimonio.map((item) => ({
+          id: item.id,
+          tipo: "Grupo",
+          sig: item.sig ?? "",
+          nome: item.nome ?? "",
+          marca: "",
+          setor: "",
+          tipoPatrimonio: "grupo"
+        })),
+        ...listas.patrimonioItens.map((item) => ({
+          id: item.id,
+          tipo: "Item",
+          sig: item.sig ?? "",
+          nome: item.nome ?? "",
+          marca: item.marca ?? "",
+          setor: item.descricao ?? "",
+          grupoPatrimonioId: item.grupoPatrimonioId ?? "",
+          setorId: item.setorId ?? "",
+          tipoPatrimonio: "item"
+        }))
+      ];
     if (tela === "turnos")
       return listas.turnos.map((item) => ({
         id: item.id,
         nome: item.nome ?? "",
         inicio: (item.horaInicio ?? "").slice(0, 5),
         fim: (item.horaFim ?? "").slice(0, 5),
-        ativo: item.ativo === false ? "Nao" : "Sim"
+        ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "usuarios")
       return listas.usuarios.map((item) => ({
@@ -122,15 +171,6 @@ export function useCadastroView(params: {
       return toValue(params.permissoesPagina)
         .itens.map(removerPermissoesOcultasDaLinha)
         .filter((linha): linha is LinhaCadastro => Boolean(linha));
-    if (tela === "malotes")
-      // O malote E o lacre (D3): lista por lacre + valor + status (sem codigo, sem saco). O status
-      // cru vai para a celula; o CadastroTable pinta o chip (disponivel/em uso/devolvido).
-      return listas.malotes.map((item) => ({
-        id: item.id,
-        lacre: item.numeroLacre ?? "",
-        valor: dinheiro(item.valor ?? 0),
-        status: item.status ?? ""
-      }));
     if (tela === "grupos") {
       return [
         ...listas.gruposDespesas.map((item) => ({
@@ -165,7 +205,7 @@ export function useCadastroView(params: {
     }
     if (tela === "areas_setores") {
       return [
-        ...listas.areas.map((item) => ({ id: item.id, nome: item.nome, tipo: "Area", tipoAreaSetor: "area" })),
+        ...listas.areas.map((item) => ({ id: item.id, nome: item.nome, tipo: "Área", tipoAreaSetor: "area" })),
         ...listas.setores.map((item) => ({
           id: item.id,
           nome: item.nome,
@@ -181,18 +221,20 @@ export function useCadastroView(params: {
 
   function descricaoTela(tela: string) {
     const descricoes: Record<string, string> = {
-      empresas: "Empresas disponiveis no sistema.",
-      contas: "Contas usadas nos lancamentos financeiros.",
+      empresas: "Empresas disponíveis no sistema.",
+      contas: "Contas usadas nos lançamentos financeiros.",
       formas_pagamento: "Formas de pagamento usadas nas vendas.",
       grupos: "Hierarquia de grupos de despesas, mercadorias e retiradas.",
       unidades: "Unidades de medida usadas nos produtos.",
-      turnos: "Turnos de trabalho (ex.: Manha 06:00-14:00). Pre-selecionam o turno na abertura do caixa.",
-      areas_setores: "Areas e setores organizacionais.",
-      usuarios: "Usuarios e acessos do sistema.",
-      permissoes: "Permissoes por cargo, setor ou usuario.",
-      malotes: "Cada malote e o seu lacre.",
+      patrimonio: "Grupos (sigla) e itens de patrimônio. O grupo classifica maquinário na discriminação.",
+      turnos: "Turnos de trabalho (ex.: Manhã 06:00-14:00). Pré-selecionam o turno na abertura do caixa.",
+      areas_setores: "Áreas e setores organizacionais.",
+      usuarios: "Usuários e acessos do sistema.",
+      permissoes: "Permissões por cargo, setor ou usuário.",
       colaboradores: "Cadastro de colaboradores.",
       fornecedores: "Cadastro de fornecedores.",
+      socios_gestores: "Cadastro de sócios e gestores que podem ser credores de retiradas.",
+      maquininhas: "Equipamentos de cartão disponíveis para vínculo opcional na abertura do caixa.",
       clientes: "Cadastro de clientes.",
       produtos: "Cadastro de produtos.",
       pdv: "Pontos de venda vinculados a uma conta de caixa."
@@ -203,20 +245,23 @@ export function useCadastroView(params: {
   function colunasCadastro(tela: string) {
     const colunas: Record<string, string[]> = {
       empresas: ["Nome", "CNPJ"],
-      contas: ["Nome"],
+      // Fundo = ponto de partida declarado; Saldo atual = derivado dos movimentos (D8).
+      contas: ["Nome", "Fundo", "Saldo atual"],
       formas_pagamento: ["Nome"],
       pdv: ["Nome", "Conta", "Ativo"],
       grupos: ["Nome", "Tipo"],
       unidades: ["Nome", "Sigla"],
+      patrimonio: ["Tipo", "Sigla", "Nome", "Marca", "Setor"],
       turnos: ["Nome", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Role", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
-      malotes: ["Lacre", "Valor", "Status"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento"],
+      socios_gestores: ["Nome", "Ativo"],
+      maquininhas: ["Apelido", "Número de série", "Ativo"],
       clientes: ["Nome", "Documento"],
-      produtos: ["Codigo", "Nome", "Marca", "Unidade", "Preco atual"]
+      produtos: ["Código", "Nome", "Marca", "Unidade", "Preço atual"]
     };
     return colunas[tela] ?? ["Nome"];
   }
@@ -280,15 +325,10 @@ export function useCadastroView(params: {
     return { ...linha, permissao: permissoesVisiveis.join(",") };
   }
 
-  function permissoesDaSecao(secao: (typeof secoesPermissoes)[number]) {
+  function permissoesDaSecao(secao: SecaoPermissao) {
     const usadas = new Set(Object.keys(params.formCadastro.value.regras));
     return permissoes
-      .filter((permissao) => {
-        if (secao.prefixos.length) return secao.prefixos.some((prefixo) => permissao.startsWith(prefixo));
-        return !secoesPermissoes.some(
-          (outra) => outra.prefixos.length && outra.prefixos.some((prefixo) => permissao.startsWith(prefixo))
-        );
-      })
+      .filter((permissao) => permissaoPertenceASecao(permissao, secao))
       .sort((a, b) => {
         const pesoA = usadas.has(a) ? 0 : 1;
         const pesoB = usadas.has(b) ? 0 : 1;

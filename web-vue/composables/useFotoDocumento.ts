@@ -32,10 +32,10 @@ export function useFotoDocumento() {
 
   // Baixa a foto ja anexada (edicao/discriminacao) para preview. Se nao for imagem (ex.: PDF),
   // mantem apenas o marcador de "documento anexado".
-  async function carregarExistente(apiUrl: string, endpoint: string, id: string) {
+  async function carregarExistente(apiUrl: string, endpoint: string, id: string, rota = "foto") {
     existente.value = true;
     try {
-      const resposta = await fetch(`${apiUrl}/api/${endpoint}/${id}/foto`, { credentials: "include" });
+      const resposta = await fetch(`${apiUrl}/api/${endpoint}/${id}/${rota}`, { credentials: "include" });
       if (!resposta.ok) return;
       const blob = await resposta.blob();
       if (blob.type.startsWith("image/")) {
@@ -49,18 +49,24 @@ export function useFotoDocumento() {
 
   // Envia o arquivo selecionado apos o lancamento existir (precisa do id). Devolve o caminho
   // relativo salvo (ou null quando nada foi anexado).
-  async function enviar(apiUrl: string, endpoint: string, id: string): Promise<string | null> {
+  async function enviar(
+    apiUrl: string,
+    endpoint: string,
+    id: string,
+    rota = "foto",
+    chaveResposta = "fotoDocumentoUrl"
+  ): Promise<string | null> {
     if (!arquivo.value) return null;
     const formData = new FormData();
     formData.append("arquivo", arquivo.value);
-    const resposta = await fetch(`${apiUrl}/api/${endpoint}/${id}/foto`, {
+    const resposta = await fetch(`${apiUrl}/api/${endpoint}/${id}/${rota}`, {
       method: "POST",
       credentials: "include",
       body: formData
     });
-    if (!resposta.ok) throw new Error("Nao foi possivel enviar a foto do documento.");
-    const corpo = (await resposta.json()) as { data?: { fotoDocumentoUrl?: string } } | null;
-    return corpo?.data?.fotoDocumentoUrl ?? "anexada";
+    if (!resposta.ok) throw new Error("Não foi possível enviar a foto do documento.");
+    const corpo = (await resposta.json()) as { data?: Record<string, string | undefined> } | null;
+    return corpo?.data?.[chaveResposta] ?? "anexada";
   }
 
   return { arquivo, previewUrl, existente, limpar, selecionar, carregarExistente, enviar };

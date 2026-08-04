@@ -70,7 +70,7 @@ watch(
           <thead>
             <tr>
               <th>Vencimento</th>
-              <th>Descricao</th>
+              <th>Descrição</th>
               <th>Valor</th>
               <th>Status</th>
             </tr>

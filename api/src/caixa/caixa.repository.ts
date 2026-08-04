@@ -20,37 +20,38 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import {
   colaboradores,
-  contas,
+  colaboradoresCargos,
+  cargos,
   empresas,
-  gruposDespesas,
-  malotes,
+  maquininhas,
   pdvs,
   perfisUsuarios,
   turnos
 } from "@padaria/db/schema/cadastro";
-import { ajustesFechamentoCaixa, debitosColaboradores, edicoesCaixa, fechamentosCaixa } from "@padaria/db/schema/caixa";
-import { despesas, despesasItens } from "@padaria/db/schema/despesa";
+import {
+  alteracoesPosFechamentoCaixa,
+  ajustesFechamentoCaixa,
+  debitosColaboradores,
+  edicoesCaixa,
+  fechamentosCaixa,
+  quebrasCaixa
+} from "@padaria/db/schema/caixa";
+import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
-import { transferencias } from "@padaria/db/schema/transferencia";
+import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
 import { vendas } from "@padaria/db/schema/venda";
-import type { TotaisCaixaCentavos } from "@padaria/shared/caixa";
+import {
+  transferenciaContaComoEntrada,
+  transferenciaContaComoSaida,
+  type TotaisCaixaCentavos
+} from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
+import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
-export async function buscarGrupoQuebraCaixa(
-  empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<{ id: string } | null> {
-  const [grupo] = await db
-    .select({ id: gruposDespesas.id })
-    .from(gruposDespesas)
-    .where(and(eq(gruposDespesas.empresaId, empresaId), ilike(gruposDespesas.nome, "Quebra de caixa")))
-    .limit(1);
-
-  return grupo ?? null;
-}
+const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
 
 export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: string, db: ExecutorBanco = banco) {
   const [pdv] = await db
@@ -119,8 +120,12 @@ export async function buscarCaixaAbertoUsuarioRepository(
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      maquininhaId: fechamentosCaixa.maquininhaId,
+      maquininhaApelido: maquininhas.apelido,
+      maquininhaNumeroSerie: maquininhas.numeroSerie,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -128,6 +133,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
     .where(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
@@ -157,8 +163,12 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       abertoEm: fechamentosCaixa.abertoEm,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
       fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      maquininhaId: fechamentosCaixa.maquininhaId,
+      maquininhaApelido: maquininhas.apelido,
+      maquininhaNumeroSerie: maquininhas.numeroSerie,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -166,6 +176,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
     .where(eq(fechamentosCaixa.id, caixaId))
     .limit(1);
   return caixa ?? null;
@@ -209,6 +220,19 @@ export async function existePeriodoCaixaRepository(
   });
 }
 
+export async function buscarMaquininhaEmpresaRepository(
+  maquininhaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [item] = await db
+    .select({ id: maquininhas.id })
+    .from(maquininhas)
+    .where(and(eq(maquininhas.id, maquininhaId), eq(maquininhas.empresaId, empresaId), eq(maquininhas.ativo, true)))
+    .limit(1);
+  return item ?? null;
+}
+
 export async function criarCaixaRepository(
   input: {
     empresaId: string;
@@ -220,10 +244,10 @@ export async function criarCaixaRepository(
     tokenEdicao: string;
     turnoId: string | null;
     observacao: string | null;
-    // Abertura com malote (R8): vinculo do malote/lacre e a divida com o cofre (= valor do malote).
-    maloteAberturaId?: string | null;
+    // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. R-001: o
+    // fundo NAO e emprestimo, entao dividaCofre nasce zero (coluna legado, ver 18 D-08).
     lacreAbertura?: string | null;
-    dividaCofreCentavos?: number;
+    maquininhaId?: string | null;
   },
   db: ExecutorBanco = banco
 ) {
@@ -241,9 +265,9 @@ export async function criarCaixaRepository(
       abertoEm: new Date(),
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
-      maloteAberturaId: input.maloteAberturaId ?? null,
       lacreAbertura: input.lacreAbertura ?? null,
-      dividaCofre: centavosParaDecimalBanco(input.dividaCofreCentavos ?? 0),
+      maquininhaId: input.maquininhaId ?? null,
+      dividaCofre: centavosParaDecimalBanco(0),
       status: "aberto",
       criadoPor: input.usuarioId
     })
@@ -252,9 +276,49 @@ export async function criarCaixaRepository(
   return caixa;
 }
 
-// --- Abertura com malote (M1, R8) -------------------------------------------------------------
-// Conta contabil do cofre da empresa (origem da transferencia de abertura). Regra 5: mapeamento
-// explicito; null quando a empresa nao configurou (a abertura com malote falha com mensagem clara).
+export async function criarQuebraCaixaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    usuarioId: string;
+    valorCentavos: number;
+    observacao: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [quebra] = await db
+    .insert(quebrasCaixa)
+    .values({
+      empresaId: input.empresaId,
+      fechamentoCaixaId: input.fechamentoCaixaId,
+      usuarioId: input.usuarioId,
+      valor: centavosParaDecimalBanco(input.valorCentavos),
+      observacao: input.observacao
+    })
+    .returning({ id: quebrasCaixa.id });
+  if (!quebra) throw new Error("Quebra de caixa nao registrada");
+  return quebra;
+}
+
+export async function listarUsuariosTesourariaRepository(empresaId: string, db: ExecutorBanco = banco) {
+  return db
+    .selectDistinct({ usuarioId: colaboradores.usuarioId })
+    .from(colaboradoresCargos)
+    .innerJoin(colaboradores, eq(colaboradores.id, colaboradoresCargos.colaboradorId))
+    .innerJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
+    .where(
+      and(
+        eq(colaboradoresCargos.empresaId, empresaId),
+        eq(colaboradoresCargos.ativo, true),
+        ilike(cargos.nome, "%Tesouraria%"),
+        isNotNull(colaboradores.usuarioId)
+      )
+    );
+}
+
+// --- Abertura por LACRE (R-040) e retorno ao cofre ---------------------------------------------
+// Conta contabil do cofre da empresa: DESTINO do retorno/sangria do caixa (R-008b). Regra 5:
+// mapeamento explicito; null quando a empresa nao configurou (o retorno falha com mensagem clara).
 export async function buscarContaCofreEmpresaRepository(
   empresaId: string,
   db: ExecutorBanco = banco
@@ -267,69 +331,79 @@ export async function buscarContaCofreEmpresaRepository(
   return empresa?.contaCofreId ?? null;
 }
 
-export async function contaPertenceEmpresaRepository(
-  contaId: string,
+// R-040: a transferencia PENDENTE identificada pelo lacre digitado na abertura. O caixa que abre e
+// um dos destinos candidatos (R-030) — a disputa e resolvida no UPDATE atomico abaixo, nao aqui.
+// Retorna o suficiente para o servico distinguir os motivos de recusa (inexistente / rompido /
+// nao-pendente / caixa fora dos candidatos) em vez de um "lacre invalido" generico.
+export async function buscarTransferenciaPorLacreAberturaRepository(
   empresaId: string,
-  db: ExecutorBanco = banco
-): Promise<boolean> {
-  const [conta] = await db
-    .select({ id: contas.id })
-    .from(contas)
-    .where(and(eq(contas.id, contaId), eq(contas.empresaId, empresaId)))
-    .limit(1);
-  return Boolean(conta);
-}
-
-export async function buscarMaloteParaAberturaRepository(
-  maloteId: string,
-  empresaId: string,
+  numeroLacre: string,
+  contaCaixaId: string,
   db: ExecutorBanco = banco
 ) {
-  const [malote] = await db
-    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, valor: malotes.valor, status: malotes.status })
-    .from(malotes)
-    .where(and(eq(malotes.id, maloteId), eq(malotes.empresaId, empresaId)))
+  const [linha] = await db
+    .select({
+      lacreId: lacres.id,
+      lacreRompido: lacres.rompido,
+      transferenciaId: transferencias.id,
+      status: transferencias.status,
+      valorOriginal: transferencias.valorOriginal,
+      contaOrigemId: transferencias.contaOrigemId,
+      criadoPor: transferencias.criadoPor,
+      candidatoId: transferenciasDestinosCandidatos.id
+    })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaId))
+    .leftJoin(
+      transferenciasDestinosCandidatos,
+      and(
+        eq(transferenciasDestinosCandidatos.transferenciaId, transferencias.id),
+        eq(transferenciasDestinosCandidatos.contaId, contaCaixaId)
+      )
+    )
+    .where(and(eq(lacres.empresaId, empresaId), ilike(lacres.numero, numeroLacre), eq(lacres.origem, "saida")))
     .limit(1);
-  return malote ?? null;
+  return linha ?? null;
 }
 
-export async function marcarMaloteEmUsoRepository(maloteId: string, db: ExecutorBanco = banco): Promise<void> {
-  await db.update(malotes).set({ status: "em_uso" }).where(eq(malotes.id, maloteId));
-}
-
-// Transferencia automatica de abertura (cofre -> caixa), tipo 'abertura', criada pelo servidor na
-// mesma transacao da abertura. Nasce 'aprovado'/'computar=true' pelos defaults do schema.
-export async function criarTransferenciaAberturaRepository(
+// R-040: o ato unico de confirmar. Vence a disputa (R-030) e rompe o lacre (R-027) na MESMA
+// transacao da abertura do caixa. O `where status = 'pendente'` e a trava: sob concorrencia o
+// segundo caixa bloqueia na linha, reavalia e nao atualiza nada — devolve null e o servico recusa.
+// Meia confirmacao e impossivel: qualquer falha aqui derruba a transacao inteira, inclusive o caixa.
+export async function confirmarTransferenciaAberturaRepository(
   input: {
-    empresaId: string;
-    caixaId: string;
-    contaCofreId: string;
+    transferenciaId: string;
+    lacreId: string;
     contaCaixaId: string;
-    valorCentavos: number;
-    dataReferencia: string;
-    maloteId: string;
-    descricao: string;
-    criadoPor: string;
+    caixaId: string;
+    usuarioId: string;
+    agora: Date;
   },
   db: ExecutorBanco = banco
-): Promise<{ id: string }> {
-  const [transferencia] = await db
-    .insert(transferencias)
-    .values({
-      empresaId: input.empresaId,
-      caixaId: input.caixaId,
-      dataReferencia: input.dataReferencia,
-      descricao: input.descricao,
-      valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
-      contaOrigemId: input.contaCofreId,
+): Promise<{ id: string; valorOriginal: string } | null> {
+  const [vencedora] = await db
+    .update(transferencias)
+    .set({
       contaDestinoId: input.contaCaixaId,
-      maloteId: input.maloteId,
+      caixaId: input.caixaId,
+      // A transferencia so vira "abertura" no instante em que um caixa a reivindica: ate ali ela e
+      // uma saida do cofre que ainda nao sabe qual caixa vai abrir (R-030).
       tipo: "abertura",
-      criadoPor: input.criadoPor
+      status: "recebido",
+      confirmadoPor: input.usuarioId,
+      dataRecebimento: input.agora,
+      atualizadoEm: input.agora
     })
-    .returning({ id: transferencias.id });
-  if (!transferencia) throw new Error("Transferencia de abertura nao criada");
-  return transferencia;
+    .where(and(eq(transferencias.id, input.transferenciaId), eq(transferencias.status, "pendente")))
+    .returning({ id: transferencias.id, valorOriginal: transferencias.valorOriginal });
+  if (!vencedora) return null;
+
+  const [lacre] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(and(eq(lacres.id, input.lacreId), eq(lacres.rompido, false)))
+    .returning({ id: lacres.id });
+  return lacre ? vencedora : null;
 }
 
 // --- Retorno / sangria (M2, R3/R4/R6) ---------------------------------------------------------
@@ -346,19 +420,18 @@ export async function proximaOrdemTransferenciaRepository(
   return Number(linha?.total ?? 0) + 1;
 }
 
-// Malote-selo disponivel da empresa por numero de lacre — o retorno/sangria usa um malote como selo
-// da volta (D5 opcional; o malote E o lacre).
-export async function buscarMaloteDisponivelPorLacreRepository(
-  empresaId: string,
-  numero: string,
+// Lacre do RETORNO/sangria (R-026: opcional; R-027: numero novo a cada movimento). Nasce nao
+// rompido — a volta so e "recebida" quando a tesouraria confere o dinheiro no cofre.
+export async function criarLacreRetornoRepository(
+  input: { empresaId: string; numero: string; transferenciaId: string },
   db: ExecutorBanco = banco
-) {
-  const [malote] = await db
-    .select({ id: malotes.id, numeroLacre: malotes.numeroLacre, status: malotes.status })
-    .from(malotes)
-    .where(and(eq(malotes.empresaId, empresaId), ilike(malotes.numeroLacre, numero)))
-    .limit(1);
-  return malote ?? null;
+): Promise<void> {
+  await db.insert(lacres).values({
+    empresaId: input.empresaId,
+    numero: input.numero,
+    transferenciaId: input.transferenciaId,
+    origem: "retorno"
+  });
 }
 
 // Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
@@ -373,7 +446,7 @@ export async function criarTransferenciaCofreRepository(
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
-    maloteId: string | null;
+    nLacreDoc: string | null;
     descricao: string;
     observacao: string | null;
     criadoPor: string;
@@ -392,7 +465,7 @@ export async function criarTransferenciaCofreRepository(
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
-      maloteId: input.maloteId,
+      nLacreDoc: input.nLacreDoc,
       tipo: input.tipo,
       ordem: input.ordem,
       criadoPor: input.criadoPor
@@ -413,12 +486,11 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         valorOriginal: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
-        // O malote E o lacre: o "lacre" da linha e o numero de lacre do malote da transferencia.
-        lacreNumero: malotes.numeroLacre,
+        // O lacre da linha e o numero digitado na propria transferencia (R-021: fonte externa).
+        lacreNumero: transferencias.nLacreDoc,
         dataTransferencia: transferencias.dataTransferencia
       })
       .from(transferencias)
-      .leftJoin(malotes, eq(malotes.id, transferencias.maloteId))
       .where(
         and(
           eq(transferencias.caixaId, caixaId),
@@ -498,11 +570,28 @@ export async function listarEdicoesCaixaRepository(caixaId: string, db: Executor
     .orderBy(desc(edicoesCaixa.editadoEm));
 }
 
+export async function listarAlteracoesPosFechamentoRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: alteracoesPosFechamentoCaixa.id,
+      vendaId: alteracoesPosFechamentoCaixa.vendaId,
+      alteradoEm: alteracoesPosFechamentoCaixa.alteradoEm,
+      identificadorExterno: vendas.identificadorExterno,
+      descricao: vendas.descricao,
+      dataVenda: vendas.dataVenda,
+      valor: vendas.valorOriginal
+    })
+    .from(alteracoesPosFechamentoCaixa)
+    .innerJoin(vendas, eq(vendas.id, alteracoesPosFechamentoCaixa.vendaId))
+    .where(eq(alteracoesPosFechamentoCaixa.fechamentoCaixaId, caixaId))
+    .orderBy(desc(alteracoesPosFechamentoCaixa.alteradoEm));
+}
+
 // Lancamentos de UM caixa, por categoria. Mesmos criterios de calcularTotaisCaixaOperacionalRepository
 // (computar + nao cancelado), para o detalhe bater com os totais da linha.
 // Nao reusa /api/vendas e afins de proposito: aquelas rotas aplicam o escopo operacional
-// "somente caixa aberto" e, para um usuario_admin (que tem todos os flags), trocariam o caixaId
-// pedido pelo caixa aberto do proprio usuario — o detalhe mostraria o caixa errado.
+// "somente caixa aberto" e, para quem tem essa flag (cargo Caixa), trocariam o caixaId pedido pelo
+// caixa aberto do proprio usuario — o detalhe mostraria o caixa errado.
 export async function listarLancamentosCaixaRepository(caixaId: string, db: ExecutorBanco = banco) {
   const ativo = (tabela: typeof vendas | typeof despesas | typeof retiradas | typeof mercadorias) =>
     and(eq(tabela.caixaId, caixaId), eq(tabela.computar, true), ne(tabela.status, "cancelado"));
@@ -526,7 +615,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: transferencias.id,
-        descricao: transferencias.descricao,
+        descricao: textoDoMovimento(transferencias),
         data: transferencias.dataReferencia,
         valor: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
@@ -544,7 +633,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: despesas.id,
-        descricao: despesas.descricao,
+        descricao: textoDoMovimento(despesas),
         data: despesas.dataReferencia,
         valor: despesas.valorOriginal
       })
@@ -554,7 +643,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: retiradas.id,
-        descricao: retiradas.descricao,
+        descricao: textoDoMovimento(retiradas),
         data: retiradas.dataReferencia,
         valor: retiradas.valorOriginal
       })
@@ -564,7 +653,7 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
     db
       .select({
         id: mercadorias.id,
-        descricao: mercadorias.descricao,
+        descricao: textoDoMovimento(mercadorias),
         data: mercadorias.dataReferencia,
         valor: mercadorias.valorOriginal
       })
@@ -697,16 +786,11 @@ export async function calcularTotaisCaixaOperacionalRepository(
       .select({
         valorOriginal: transferencias.valorOriginal,
         contaOrigemId: transferencias.contaOrigemId,
-        contaDestinoId: transferencias.contaDestinoId
+        contaDestinoId: transferencias.contaDestinoId,
+        status: transferencias.status
       })
       .from(transferencias)
-      .where(
-        and(
-          eq(transferencias.caixaId, caixaId),
-          eq(transferencias.computar, true),
-          ne(transferencias.status, "cancelado")
-        )
-      ),
+      .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true))),
     db
       .select({ valorOriginal: despesas.valorOriginal })
       .from(despesas)
@@ -726,9 +810,14 @@ export async function calcularTotaisCaixaOperacionalRepository(
   }
   for (const movimento of linhasTransferencias) {
     const valor = paraCentavos(movimento.valorOriginal);
-    totais.transferencias += valor;
-    if (movimento.contaDestinoId === pdvContaId) totais.transferenciasEntrada += valor;
-    if (movimento.contaOrigemId === pdvContaId) totais.transferenciasSaida += valor;
+    if (transferenciaContaComoEntrada(movimento.status) && movimento.contaDestinoId === pdvContaId) {
+      totais.transferencias += valor;
+      totais.transferenciasEntrada += valor;
+    }
+    if (transferenciaContaComoSaida(movimento.status) && movimento.contaOrigemId === pdvContaId) {
+      totais.transferencias += valor;
+      totais.transferenciasSaida += valor;
+    }
   }
   for (const movimento of linhasDespesas) {
     totais.despesas += paraCentavos(movimento.valorOriginal);
@@ -743,77 +832,12 @@ export async function calcularTotaisCaixaOperacionalRepository(
   return totais;
 }
 
-export async function criarAcertoSaldoCaixaRepository(
-  input: {
-    caixaId: string;
-    empresaId: string;
-    colaboradorId: string;
-    contaOrigemId: string | null;
-    grupoDespesaId: string | null;
-    valorDiferencaCentavos: number;
-    observacao: string | null;
-    criadoPor: string;
-    data: string;
-  },
-  db?: ExecutorBanco
-) {
-  return executarComTransacaoOpcional(db, async (db) => {
-    const valor = centavosParaDecimalBanco(input.valorDiferencaCentavos);
-    const [despesa] = await db
-      .insert(despesas)
-      .values({
-        empresaId: input.empresaId,
-        dataReferencia: input.data,
-        dataVencimento: input.data,
-        descricao: "Diferenca de caixa",
-        observacao: input.observacao,
-        valorOriginal: valor,
-        contaOrigemId: input.contaOrigemId,
-        colaboradorId: input.colaboradorId,
-        grupoDespesaId: input.grupoDespesaId,
-        caixaId: input.caixaId,
-        criadoPor: input.criadoPor
-      })
-      .returning({ id: despesas.id });
-    if (!despesa) throw new Error("Despesa de diferenca nao criada");
-
-    await db.insert(despesasItens).values({
-      despesaId: despesa.id,
-      grupoDespesaId: input.grupoDespesaId,
-      descricao: "Diferenca de caixa",
-      valor
-    });
-
-    const [debito] = await db
-      .insert(debitosColaboradores)
-      .values({
-        empresaId: input.empresaId,
-        colaboradorId: input.colaboradorId,
-        tipo: "FECHAMENTO_CAIXA",
-        despesaId: despesa.id,
-        caixaId: input.caixaId,
-        valor,
-        observacao: input.observacao,
-        criadoPor: input.criadoPor
-      })
-      .returning({ id: debitosColaboradores.id });
-    if (!debito) throw new Error("Debito de colaborador nao criado");
-
-    await db.insert(ajustesFechamentoCaixa).values({
-      fechamentoCaixaId: input.caixaId,
-      despesaId: despesa.id,
-      valorDiferenca: valor
-    });
-
-    return { despesaId: despesa.id, debitoId: debito.id };
-  });
-}
-
 export async function atualizarFechamentoCaixaRepository(
   input: {
     caixaId: string;
     dataHoraFechamento: Date;
     observacao: string | null;
+    fechadoPor: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
   },
@@ -824,6 +848,7 @@ export async function atualizarFechamentoCaixaRepository(
     .set({
       dataHoraFechamento: input.dataHoraFechamento,
       fechadoEm: new Date(),
+      fechadoPor: input.fechadoPor,
       observacao: input.observacao,
       totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
       totalTransferencias: centavosParaDecimalBanco(
@@ -888,6 +913,8 @@ export async function listarHistoricoCaixaRepository(
       turnoNome: turnos.nome,
       dataHoraAbertura: fechamentosCaixa.dataHoraAbertura,
       dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechadoPor: fechamentosCaixa.fechadoPor,
+      fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
@@ -902,6 +929,7 @@ export async function listarHistoricoCaixaRepository(
     .from(fechamentosCaixa)
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(perfilFechador, eq(perfilFechador.usuarioId, fechamentosCaixa.fechadoPor))
     .leftJoin(colaboradores, eq(colaboradores.id, fechamentosCaixa.colaboradorId))
     .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(where)
@@ -940,4 +968,12 @@ export async function caixasComAjusteRepository(caixaIds: string[], db: Executor
     .selectDistinct({ caixaId: ajustesFechamentoCaixa.fechamentoCaixaId })
     .from(ajustesFechamentoCaixa)
     .where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
+}
+
+export async function caixasAlteradosPosFechamentoRepository(caixaIds: string[], db: ExecutorBanco = banco) {
+  if (!caixaIds.length) return [];
+  return db
+    .selectDistinct({ caixaId: alteracoesPosFechamentoCaixa.fechamentoCaixaId })
+    .from(alteracoesPosFechamentoCaixa)
+    .where(inArray(alteracoesPosFechamentoCaixa.fechamentoCaixaId, caixaIds));
 }

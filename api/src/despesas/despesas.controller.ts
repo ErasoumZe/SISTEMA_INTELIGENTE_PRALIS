@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { despesaPayloadSchema, despesasQuerySchema, discriminarDespesaSchema } from "@padaria/shared/despesas";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
-import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
+import { apiIdParamsSchema, criadoId, erro, extrasDaSerie, ok, paginadoDeArray } from "@padaria/shared/api";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarDespesa,
@@ -13,7 +13,9 @@ import {
   listarDespesas,
   obterDespesa,
   obterFotoDespesa,
-  salvarFotoDespesa
+  obterFotoNotaDespesa,
+  salvarFotoDespesa,
+  salvarFotoNotaDespesa
 } from "./despesas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
@@ -55,7 +57,7 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
     }
     try {
       const despesa = await criarDespesa(dados, perfil);
-      return criadoId(reply, despesa.id);
+      return criadoId(reply, despesa.id, extrasDaSerie(despesa));
     } catch (error) {
       if (error instanceof PermissaoLancamentoInsuficienteError) {
         return erro(reply, 403, error.message, "INSUFFICIENT_PERMISSION", { permissao: error.permissao });
@@ -121,6 +123,37 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
       return erro(reply, statusErroValidacao(mensagem), mensagem);
     }
   });
+
+  app.post(
+    "/api/despesas/:id/foto-nota",
+    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar"]) },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+        return reply.status(201).send(ok(await salvarFotoNotaDespesa(id, arquivo, request.perfilUsuario!)));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/despesas/:id/foto-nota",
+    { preHandler: exigirPermissao("despesas_visualizar") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        const { caminhoAbsoluto, mimeType } = await obterFotoNotaDespesa(id, request.perfilUsuario!);
+        reply.header("Content-Type", mimeType);
+        return reply.send(createReadStream(caminhoAbsoluto));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
 
   app.patch(
     "/api/despesas/:id/discriminar",

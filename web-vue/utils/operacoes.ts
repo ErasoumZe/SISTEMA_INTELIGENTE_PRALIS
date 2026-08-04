@@ -2,6 +2,7 @@
 // extraidos do AppWorkspace para serem testaveis: detalhe da API -> formulario, e
 // formulario -> payload da API. Dinheiro em centavos (mesma regra do servidor).
 import { deCentavos, paraCentavos } from "@padaria/shared";
+import type { FrequenciaRecorrencia, Recorrencia } from "@padaria/shared/recorrencia";
 import type { EntidadeOperacional, OperacaoForm } from "~/types/padaria";
 
 // Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
@@ -15,19 +16,33 @@ export type OperacaoDetalhe = {
   valorOriginal: number;
   valorAcrescimo: number;
   descricaoAcrescimo?: string | null;
+  jurosTipo?: "percentual" | "valor" | null;
+  jurosValorInformado?: number | null;
   valorDesconto: number;
   descricaoDesconto?: string | null;
+  descontoGeralTipo?: "percentual" | "valor" | null;
+  descontoGeralValor?: number | null;
   contaOrigemId?: string | null;
   contaDestinoId?: string | null;
   fornecedorId?: string | null;
   colaboradorId?: string | null;
+  socioGestorId?: string | null;
+  credorTipo?: "fornecedor" | "colaborador" | "socio_gestor" | null;
+  dataDocumentoFiscal?: string | null;
+  numeroDocumentoFiscal?: string | null;
   grupoDespesaId?: string | null;
   grupoMercadoriaId?: string | null;
   grupoRetiradaId?: string | null;
-  maloteId?: string | null;
+  nLacreDoc?: string | null;
+  agendadaPara?: string | null;
+  dataRecebimento?: string | null;
+  tempoConfirmacao?: OperacaoForm["tempoConfirmacao"];
+  contasDestinoIds?: string[];
+  recorrenciaId?: string | null;
   temNotaFiscal?: boolean;
   computar: boolean;
   fotoDocumentoUrl?: string | null;
+  fotoNotaUrl?: string | null;
   itensVenda?: {
     produtoId: string | null;
     descricaoProduto: string;
@@ -36,16 +51,30 @@ export type OperacaoDetalhe = {
     valorTotal: number;
   }[];
   tiposPagamento?: { formaPagamentoId: string | null; numeroVendas: number; totalPago: number }[];
-  itensDespesa?: { grupoDespesaId: string | null; descricao: string; valor: number }[];
+  itensDespesa?: {
+    grupoDespesaId: string | null;
+    grupoPatrimonioId?: string | null;
+    descricao: string;
+    valor: number;
+    quantidade?: number;
+    valorUnitario?: number;
+    descontoTipo?: "percentual" | "valor" | null;
+    descontoValor?: number | null;
+    descontoTotalTipo?: "percentual" | "valor" | null;
+    descontoTotalValor?: number | null;
+  }[];
   itensMercadoria?: {
     produtoId: string | null;
     grupoMercadoriaId: string | null;
+    grupoPatrimonioId?: string | null;
     unidadeMedidaId: string | null;
     descricao: string;
     quantidade: number;
     valorUnitario: number;
     descontoTipo?: "percentual" | "valor" | null;
     descontoValor?: number | null;
+    descontoTotalTipo?: "percentual" | "valor" | null;
+    descontoTotalValor?: number | null;
     valorTotal: number;
   }[];
 };
@@ -58,7 +87,20 @@ export type ItemVendaForm = {
   produtoId: string;
 };
 export type TipoPagamentoForm = { formaPagamentoId: string; totalPago: string; numeroVendas: string };
-export type ItemDespesaForm = { descricao: string; valor: string; grupoDespesaId: string };
+// grupoPatrimonioId: grupo do item vindo do cadastro de PATRIMONIO (§5, item 6). Exclusivo com o
+// grupo proprio — o select da tela escreve num OU no outro, nunca nos dois.
+export type ItemDespesaForm = {
+  descricao: string;
+  valor: string;
+  grupoDespesaId: string;
+  grupoPatrimonioId: string;
+  quantidade: string;
+  valorUnitario: string;
+  descontoTipo: string;
+  descontoValor: string;
+  descontoTotalTipo: string;
+  descontoTotalValor: string;
+};
 export type ItemMercadoriaForm = {
   descricao: string;
   quantidade: string;
@@ -66,20 +108,145 @@ export type ItemMercadoriaForm = {
   // Desconto por item (discriminacao). tipo vazio = sem desconto. valor e % ou R$ conforme o tipo.
   descontoTipo: string;
   descontoValor: string;
+  descontoTotalTipo: string;
+  descontoTotalValor: string;
   valorTotal: string;
   produtoId: string;
   grupoMercadoriaId: string;
+  grupoPatrimonioId: string;
   unidadeMedidaId: string;
 };
+
+// --- Recorrencia (D3) --------------------------------------------------------------------------
+// Os rotulos sao os do desenho do Rodrigo; os valores sao os que o contrato aceita. "3 em 3" =
+// trimestral e os DIAS so valem na frequencia semanal (decisoes do Jose, 30/07).
+//
+// DOMINGO (iso 7) e decisao do JOSE, nao do desenho: o rascunho tem seis dias (Sg..Sa), mas a
+// padaria abre domingo — costuma ser o dia mais forte. Registrado em PROJECT_BRAIN/17 §6.
+export const DIAS_RECORRENCIA = [
+  { rotulo: "Dom", iso: 7 },
+  { rotulo: "Sg", iso: 1 },
+  { rotulo: "Ter", iso: 2 },
+  { rotulo: "Qa", iso: 3 },
+  { rotulo: "Qi", iso: 4 },
+  { rotulo: "Sx", iso: 5 },
+  { rotulo: "Sa", iso: 6 }
+] as const;
+
+export const FREQUENCIAS_RECORRENCIA = [
+  { rotulo: "dia", valor: "dia" },
+  { rotulo: "semana", valor: "semana" },
+  { rotulo: "mês", valor: "mes" },
+  { rotulo: "quinzena", valor: "quinzena" },
+  { rotulo: "3 em 3", valor: "trimestre" },
+  { rotulo: "ano", valor: "ano" }
+] as const;
+
+export type EstadoRecorrencia = {
+  aberta: boolean;
+  numero: string;
+  frequencia: FrequenciaRecorrencia;
+  dias: boolean[];
+};
+
+export function estadoRecorrenciaVazio(): EstadoRecorrencia {
+  // O tamanho acompanha DIAS_RECORRENCIA: derivar evita o array de 6 posicoes sobrar quando um dia
+  // novo entra na lista (foi o que aconteceu ao incluir domingo).
+  return { aberta: false, numero: "1", frequencia: "mes", dias: DIAS_RECORRENCIA.map(() => false) };
+}
+
+/**
+ * Bloco `recorrencia` do payload — `undefined` quando nao ha serie a criar.
+ *
+ * "Repetir 1 vez" e o mesmo que nao repetir: mandar a recorrencia nesse caso faria o servidor
+ * exigir a permissao (403) de quem so queria um lancamento avulso.
+ */
+export function montarRecorrencia(estado: EstadoRecorrencia): Recorrencia | undefined {
+  const repeticoes = Number(estado.numero || 1);
+  if (!estado.aberta || !Number.isFinite(repeticoes) || repeticoes < 2) return undefined;
+  const diasSemana =
+    estado.frequencia === "semana"
+      ? DIAS_RECORRENCIA.filter((_, indice) => estado.dias[indice]).map((dia) => dia.iso)
+      : [];
+  return { frequencia: estado.frequencia, repeticoes, ...(diasSemana.length ? { diasSemana } : {}) };
+}
+
+// Linha em branco da discriminacao. Existe como FUNCAO (e nao como literal repetido em cada tela)
+// porque o literal estava copiado em quatro lugares: bastava um campo novo entrar em tres deles
+// para a quarta tela montar um item sem o campo. Foi assim que o "" de ID sobreviveu.
+export function itemDespesaVazio(): ItemDespesaForm {
+  return {
+    descricao: "",
+    valor: "",
+    grupoDespesaId: "",
+    grupoPatrimonioId: "",
+    quantidade: "1",
+    valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
+    descontoTotalTipo: "",
+    descontoTotalValor: ""
+  };
+}
+
+export function itemMercadoriaVazio(): ItemMercadoriaForm {
+  return {
+    descricao: "",
+    quantidade: "1",
+    valorUnitario: "",
+    descontoTipo: "",
+    descontoValor: "",
+    descontoTotalTipo: "",
+    descontoTotalValor: "",
+    valorTotal: "",
+    produtoId: "",
+    grupoMercadoriaId: "",
+    grupoPatrimonioId: "",
+    unidadeMedidaId: ""
+  };
+}
+
+// --- Campo Grupo do ITEM: duas origens, uma lista so (§5, item 6) ----------------------------
+// O item guarda DOIS campos exclusivos — o grupo do cadastro proprio (despesa/mercadoria) e o de
+// PATRIMONIO — mas a pessoa ve UM campo, com os dois blocos. O <option> carrega a origem no valor
+// porque o id sozinho nao diz de qual cadastro ele veio: dois uuid quaisquer sao indistinguiveis.
+//
+// A exclusividade sai de graca aqui: grupoItemEscolhido SEMPRE devolve um dos dois vazio, entao a
+// tela nao tem como montar um item com as duas origens (que o contrato e o CHECK recusariam).
+export const PREFIXO_GRUPO_PATRIMONIO = "pat:";
+
+export function opcaoGrupoItem(grupoProprioId: string, grupoPatrimonioId: string): string {
+  return grupoPatrimonioId ? PREFIXO_GRUPO_PATRIMONIO + grupoPatrimonioId : grupoProprioId;
+}
+
+export function grupoItemEscolhido(valor: string): { grupoProprioId: string; grupoPatrimonioId: string } {
+  if (valor.startsWith(PREFIXO_GRUPO_PATRIMONIO)) {
+    return { grupoProprioId: "", grupoPatrimonioId: valor.slice(PREFIXO_GRUPO_PATRIMONIO.length) };
+  }
+  return { grupoProprioId: valor, grupoPatrimonioId: "" };
+}
 
 // Total liquido de um item de mercadoria no cliente (espelha o recalculo do servidor). Sem desconto,
 // usa o valorTotal digitado (permite valor cheio). Com desconto, e qtd*unit menos o desconto, >= 0.
 export function totalItemMercadoriaForm(item: ItemMercadoriaForm): number {
-  if (!item.descontoTipo) return deCentavos(paraCentavos(item.valorTotal));
+  if (!item.descontoTipo && !item.descontoTotalTipo) return deCentavos(paraCentavos(item.valorTotal));
   const bruto = Number(item.quantidade || 0) * Number(item.valorUnitario || 0);
   const descNum = Number(item.descontoValor || 0);
-  const desconto = item.descontoTipo === "percentual" ? (bruto * descNum) / 100 : descNum;
-  const liquido = bruto - desconto;
+  const descontoUnitario =
+    item.descontoTipo === "percentual"
+      ? (bruto * descNum) / 100
+      : item.descontoTipo === "valor"
+        ? descNum * Number(item.quantidade || 0)
+        : 0;
+  const aposUnitario = Math.max(0, bruto - descontoUnitario);
+  const descontoTotalNumero = Number(item.descontoTotalValor || 0);
+  const descontoTotal =
+    item.descontoTotalTipo === "percentual"
+      ? (aposUnitario * descontoTotalNumero) / 100
+      : item.descontoTotalTipo === "valor"
+        ? descontoTotalNumero
+        : 0;
+  const liquido = aposUnitario - descontoTotal;
   return deCentavos(paraCentavos(liquido > 0 ? liquido : 0));
 }
 
@@ -100,20 +267,38 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     dataReferencia: detalhe.dataReferencia,
     dataPagamento: detalhe.dataPagamento ?? "",
     descricao: detalhe.descricao,
-    observacao: detalhe.observacao ?? "",
+    // R-127: o texto do movimento e a observacao. Registro antigo pode ter so `descricao` (o backfill
+    // da 0027 cobre o que existia, mas o detalhe ja chega com o coalesce do textoDoMovimento) — sem
+    // este fallback o modal reabriria com o campo Observacao VAZIO e salvar apagaria o texto.
+    observacao: detalhe.observacao ?? detalhe.descricao ?? "",
     valorOriginal: String(detalhe.valorOriginal),
     valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
     descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
+    jurosTipo: detalhe.jurosTipo ?? "",
+    jurosValorInformado: detalhe.jurosValorInformado != null ? String(detalhe.jurosValorInformado) : "",
     valorDesconto: detalhe.valorDesconto ? String(detalhe.valorDesconto) : "",
     descricaoDesconto: detalhe.descricaoDesconto ?? "",
+    descontoGeralTipo: detalhe.descontoGeralTipo ?? "",
+    descontoGeralValor: detalhe.descontoGeralValor != null ? String(detalhe.descontoGeralValor) : "",
     contaOrigemId: detalhe.contaOrigemId ?? "",
     contaDestinoId: detalhe.contaDestinoId ?? "",
     fornecedorId: detalhe.fornecedorId ?? "",
     colaboradorId: detalhe.colaboradorId ?? "",
+    socioGestorId: detalhe.socioGestorId ?? "",
+    credorTipo: detalhe.credorTipo ?? "",
+    dataDocumentoFiscal: detalhe.dataDocumentoFiscal ?? "",
+    numeroDocumentoFiscal: detalhe.numeroDocumentoFiscal ?? "",
+    fotoDocumentoUrl: detalhe.fotoDocumentoUrl ?? "",
+    fotoNotaUrl: detalhe.fotoNotaUrl ?? "",
     grupoDespesaId: detalhe.grupoDespesaId ?? "",
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
-    maloteId: detalhe.maloteId ?? "",
+    nLacreDoc: detalhe.nLacreDoc ?? "",
+    agendadaPara: detalhe.agendadaPara?.slice(0, 16) ?? "",
+    dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
+    tempoConfirmacao: detalhe.tempoConfirmacao ?? "1dia",
+    contasDestinoIds: detalhe.contasDestinoIds ?? [],
+    recorrenciaId: detalhe.recorrenciaId ?? "",
     temNotaFiscal: detalhe.temNotaFiscal ?? false,
     computar: detalhe.computar
   };
@@ -146,7 +331,14 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     preenchido.itensDespesa = detalhe.itensDespesa.map((item) => ({
       descricao: item.descricao,
       valor: String(item.valor),
-      grupoDespesaId: item.grupoDespesaId ?? ""
+      grupoDespesaId: item.grupoDespesaId ?? "",
+      grupoPatrimonioId: item.grupoPatrimonioId ?? "",
+      quantidade: String(item.quantidade ?? 1),
+      valorUnitario: String(item.valorUnitario ?? item.valor),
+      descontoTipo: item.descontoTipo ?? "",
+      descontoValor: item.descontoValor != null ? String(item.descontoValor) : "",
+      descontoTotalTipo: item.descontoTotalTipo ?? "",
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : ""
     }));
   }
   if (entidade === "mercadoria" && detalhe.itensMercadoria?.length) {
@@ -156,9 +348,12 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
       valorUnitario: String(item.valorUnitario),
       descontoTipo: item.descontoTipo ?? "",
       descontoValor: item.descontoValor != null ? String(item.descontoValor) : "",
+      descontoTotalTipo: item.descontoTotalTipo ?? "",
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : "",
       valorTotal: String(item.valorTotal),
       produtoId: item.produtoId ?? "",
       grupoMercadoriaId: item.grupoMercadoriaId ?? "",
+      grupoPatrimonioId: item.grupoPatrimonioId ?? "",
       unidadeMedidaId: item.unidadeMedidaId ?? ""
     }));
   }
@@ -175,27 +370,51 @@ export type DadosPayloadOperacao = {
   discriminandoDespesa: boolean;
   discriminandoMercadoria: boolean;
   produtos: Array<{ id: string; descricao?: string | null; nome?: string | null }>;
+  // Recorrencia (D3): so nas SAIDAS (despesa/mercadoria/retirada) e so na CRIACAO — ver o payload.
+  recorrencia?: Recorrencia | undefined;
 };
 
 export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: DadosPayloadOperacao) {
+  // Os IDs opcionais do ITEM seguem a MESMA regra dos do cabecalho (ver o comentario no return):
+  // "" vira null, porque o zod usa uuid().optional().nullable() e REJEITA "" com "Invalid UUID".
+  // Antes o item ia por spread e levava o "" junto — discriminar sem escolher Grupo (o padrao: o
+  // campo e opcional e a primeira opcao do select e vazia) respondia 400. Por isso os campos sao
+  // listados um a um aqui em vez de espalhados.
   const itensDespesa =
     entidade === "despesa" && dados.discriminandoDespesa
       ? dados.itensDespesa
           .filter((item) => item.descricao || item.valor)
-          .map((item) => ({ ...item, valor: deCentavos(paraCentavos(item.valor)) }))
+          .map((item) => ({
+            descricao: item.descricao,
+            valor: deCentavos(paraCentavos(item.valor)),
+            quantidade: Number(item.quantidade || 1),
+            valorUnitario: Number(item.valorUnitario || item.valor || 0),
+            descontoTipo: item.descontoTipo || null,
+            descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
+            descontoTotalTipo: item.descontoTotalTipo || null,
+            descontoTotalValor: item.descontoTotalValor ? Number(item.descontoTotalValor) : null,
+            grupoDespesaId: item.grupoDespesaId || null,
+            grupoPatrimonioId: item.grupoPatrimonioId || null
+          }))
       : [];
   const itensMercadoria =
     entidade === "mercadoria" && dados.discriminandoMercadoria
       ? dados.itensMercadoria
           .filter((item) => item.descricao || item.produtoId)
           .map((item) => ({
-            ...item,
+            descricao: item.descricao,
             quantidade: Number(item.quantidade || 0),
             valorUnitario: Number(item.valorUnitario || 0),
             descontoTipo: item.descontoTipo || null,
             descontoValor: item.descontoValor ? Number(item.descontoValor) : null,
+            descontoTotalTipo: item.descontoTotalTipo || null,
+            descontoTotalValor: item.descontoTotalValor ? Number(item.descontoTotalValor) : null,
             // Servidor recalcula, mas mandamos o total ja liquido para casar com a soma na hora.
-            valorTotal: totalItemMercadoriaForm(item)
+            valorTotal: totalItemMercadoriaForm(item),
+            produtoId: item.produtoId || null,
+            grupoMercadoriaId: item.grupoMercadoriaId || null,
+            grupoPatrimonioId: item.grupoPatrimonioId || null,
+            unidadeMedidaId: item.unidadeMedidaId || null
           }))
       : [];
   const itensVenda =
@@ -230,18 +449,48 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     dataPagamento: dados.form.dataPagamento || null,
     // IDs opcionais nao selecionados vao como null (nao ""). O schema zod usa uuid().optional()
     // .nullable(): aceita UUID, null ou undefined, mas REJEITA "" com "Invalid UUID". Sem isso,
-    // qualquer campo de ID em branco (conta/fornecedor/colaborador/grupo/malote) quebra o envio.
+    // qualquer campo de ID em branco (conta/fornecedor/colaborador/grupo) quebra o envio.
     contaOrigemId: dados.form.contaOrigemId || null,
     contaDestinoId: dados.form.contaDestinoId || null,
     fornecedorId: dados.form.fornecedorId || null,
     colaboradorId: dados.form.colaboradorId || null,
+    socioGestorId: dados.form.socioGestorId || null,
+    credorTipo: dados.form.credorTipo || null,
+    dataDocumentoFiscal: dados.form.dataDocumentoFiscal || null,
+    numeroDocumentoFiscal: dados.form.numeroDocumentoFiscal || null,
+    fotoDocumentoUrl: dados.form.fotoDocumentoUrl || null,
+    fotoNotaUrl: dados.form.fotoNotaUrl || null,
     grupoDespesaId: dados.form.grupoDespesaId || null,
     grupoMercadoriaId: dados.form.grupoMercadoriaId || null,
     grupoRetiradaId: dados.form.grupoRetiradaId || null,
-    maloteId: dados.form.maloteId || null,
+    ...(entidade === "transferencia"
+      ? {
+          nLacreDoc: dados.form.nLacreDoc || null,
+          agendadaPara: dados.form.agendadaPara ? new Date(dados.form.agendadaPara).toISOString() : null,
+          tempoConfirmacao: dados.form.tempoConfirmacao,
+          contasDestinoIds: dados.form.contasDestinoIds
+        }
+      : {}),
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
     valorAcrescimo: deCentavos(paraCentavos(dados.form.valorAcrescimo)),
+    // R-041: manda COMO foi informado. O servidor recalcula o valorAcrescimo a partir daqui e
+    // ignora o que mandamos acima — de proposito (valoresJuros em lancamentos.dominio).
+    jurosTipo: dados.form.jurosTipo || null,
+    jurosValorInformado: dados.form.jurosValorInformado
+      ? Number(String(dados.form.jurosValorInformado).replace(",", "."))
+      : null,
     valorDesconto: deCentavos(paraCentavos(dados.form.valorDesconto)),
+    ...(entidade === "despesa" || entidade === "mercadoria"
+      ? {
+          descontoGeralTipo: dados.form.descontoGeralTipo || null,
+          descontoGeralValor: dados.form.descontoGeralValor ? Number(dados.form.descontoGeralValor) : null
+        }
+      : {}),
+    // Recorrencia so existe em despesa/mercadoria/retirada. Venda vem da integracao e transferencia
+    // e movimento imediato — mandar o campo la seria rejeitado pelo contrato (schema .strict()).
+    ...(dados.recorrencia && entidade !== "venda" && entidade !== "transferencia"
+      ? { recorrencia: dados.recorrencia }
+      : {}),
     itensVenda,
     tiposPagamento,
     itensDespesa,
@@ -256,17 +505,24 @@ export function validarOperacaoParaEnvio(
   entidade: EntidadeOperacional,
   dados: {
     descricao: string;
+    observacao?: string | null;
     grupoDespesaId: string | null;
     grupoMercadoriaId: string | null;
     contaOrigemId: string | null;
     contaDestinoId: string | null;
     fornecedorId: string | null;
     colaboradorId: string | null;
+    socioGestorId?: string | null;
     qtdItensDespesa: number;
     qtdItensMercadoria: number;
   }
 ): string | null {
-  if (!dados.descricao.trim()) return "Informe a descricao do lancamento.";
+  // R-127: o texto do movimento e a OBSERVACAO — e o campo que o usuario preenche na tela. A venda
+  // ficou de fora da regra e continua com `descricao`, entao o texto exigido e "observacao ou
+  // descricao": sem isto o lancamento novo (que so preenche observacao) seria barrado AQUI, antes de
+  // chegar ao servidor, com uma mensagem falando de um campo que nao existe mais na tela.
+  const texto = (dados.observacao ?? "").trim() || dados.descricao.trim();
+  if (!texto) return entidade === "venda" ? "Informe a descricao da venda." : "Informe a observacao do lancamento.";
 
   if (entidade === "despesa" && !dados.grupoDespesaId && dados.qtdItensDespesa === 0)
     return "Selecione o grupo da despesa ou discrimine os itens da despesa.";
@@ -278,8 +534,10 @@ export function validarOperacaoParaEnvio(
       return "Selecione o grupo da mercadoria ou discrimine os itens da mercadoria.";
   }
 
-  // Schema: retirada exige colaboradorId.
-  if (entidade === "retirada" && !dados.colaboradorId) return "Selecione o colaborador da retirada.";
+  // R-128: a retirada exige UM credor, e ele pode ser fornecedor, socio/gestor ou (historico)
+  // colaborador. Sem o fornecedor aqui, a retirada nova para fornecedor era barrada na tela.
+  if (entidade === "retirada" && !dados.fornecedorId && !dados.colaboradorId && !dados.socioGestorId)
+    return "Selecione o credor da retirada.";
 
   if (entidade === "transferencia") {
     // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.

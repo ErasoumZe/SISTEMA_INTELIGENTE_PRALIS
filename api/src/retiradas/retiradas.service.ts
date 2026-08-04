@@ -1,3 +1,4 @@
+import type { MultipartFile } from "@fastify/multipart";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   RetiradaCriada,
@@ -15,17 +16,28 @@ import {
   obterCaixaParaLancamento,
   podeVerLancamentosPagos
 } from "../lancamentos/lancamentos.dominio.js";
+import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
+  exigirContaDoCaixaNoLancamento,
+  exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
-  validarEdicaoNoCaixaAberto,
+  validarEdicaoDeSaidaNoCaixa,
   validarReferenciasRetirada
 } from "../lancamentos/lancamentos.dominio.js";
 import {
+  caixaDaOcorrencia,
+  exigirPermissaoRecorrencia,
+  payloadDaOcorrencia,
+  planejarRecorrencia
+} from "../lancamentos/lancamentos.recorrencia.js";
+import {
+  atualizarFotoRetiradaRepository,
   atualizarRetiradaRepository,
   buscarRetiradaDetalheRepository,
   criarRetiradaRepository,
   listarRetiradasRepository
 } from "./retiradas.repository.js";
+import { caminhoAbsolutoDocumento, mimePorCaminho, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 export async function listarRetiradas(
   query: RetiradasQuery,
@@ -43,14 +55,52 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento);
-  const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+  // R-129: pagamento retroativo nao entra na CRIACAO (fuso do negocio, nao UTC).
+  exigirDataPagamentoNaoRetroativa(dados.dataPagamento);
+  // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
+  // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
+  exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
+  // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
+  exigirPermissaoRecorrencia(perfil, dados.recorrencia);
+  const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-    const retirada = await criarRetiradaRepository(normalizados, computar, perfil.usuarioId, caixa.id, tx);
-    return { id: retirada.id, computar };
+    // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
+    const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+
+    // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
+    const plano = await planejarRecorrencia(
+      {
+        empresaId: dados.empresaId,
+        dominio: "retirada",
+        dataReferencia: dados.dataReferencia,
+        dataVencimento: dados.dataVencimento,
+        recorrencia: dados.recorrencia,
+        perfil
+      },
+      tx
+    );
+    if (!plano) {
+      const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      return { id: retirada.id, computar };
+    }
+
+    let primeira = "";
+    for (const ocorrencia of plano.ocorrencias) {
+      const criada = await criarRetiradaRepository(
+        payloadDaOcorrencia(lancamento, ocorrencia),
+        computar,
+        perfil.usuarioId,
+        caixaDaOcorrencia(caixa.id, ocorrencia),
+        tx,
+        ocorrencia.vinculo
+      );
+      if (ocorrencia.ehPrimeira) primeira = criada.id;
+    }
+    return { id: primeira, computar, serie: plano.ocorrencias.length, serieLimitada: plano.limitadaPeloTeto };
   });
 }
 
@@ -58,6 +108,28 @@ export async function obterRetirada(retiradaId: string, perfil: PerfilUsuario): 
   const retirada = await buscarRetiradaDetalheRepository(retiradaId);
   if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
   return retirada;
+}
+
+export async function salvarFotoRetirada(
+  retiradaId: string,
+  campo: "documento" | "nota",
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+) {
+  const retirada = await buscarRetiradaDetalheRepository(retiradaId);
+  if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  const { caminhoRelativo } = await salvarFotoDocumento("retiradas", retiradaId, arquivo);
+  await atualizarFotoRetiradaRepository(retiradaId, retirada.empresaId, campo, caminhoRelativo);
+  return campo === "nota" ? { fotoNotaUrl: caminhoRelativo } : { fotoDocumentoUrl: caminhoRelativo };
+}
+
+export async function obterFotoRetirada(retiradaId: string, campo: "documento" | "nota", perfil: PerfilUsuario) {
+  const retirada = await buscarRetiradaDetalheRepository(retiradaId);
+  if (!retirada || !podeAcessarEmpresa(perfil, retirada.empresaId)) throw new Error("Registro nao encontrado");
+  const caminho = campo === "nota" ? retirada.fotoNotaUrl : retirada.fotoDocumentoUrl;
+  if (!caminho) throw new Error("Foto nao encontrada");
+  return { caminhoAbsoluto: caminhoAbsolutoDocumento(caminho), mimeType: mimePorCaminho(caminho) };
 }
 
 export async function atualizarRetirada(
@@ -69,13 +141,15 @@ export async function atualizarRetirada(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "retiradas", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);
+    // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
+    exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const normalizados = { ...dados, dataPagamento: dados.dataPagamento ?? null };
+    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     await atualizarRetiradaRepository(retiradaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: retiradaId, computar };
   });

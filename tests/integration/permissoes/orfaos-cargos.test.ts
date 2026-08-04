@@ -6,7 +6,7 @@ import { permissoesPorCargo } from "@padaria/db/referencia-permissoes";
 // seis orfaos corrigidos na referencia de PRODUCAO (db/src/referencia-permissoes.ts). O seed dev
 // (db/seed.ts) e mantido em paridade manual; se um mudar, o outro tem de acompanhar.
 describe("permissoes: matriz de orfaos por cargo (referencia de producao)", () => {
-  const cargo = (nome: string) => new Set(permissoesPorCargo[nome] ?? []);
+  const cargo = (nome: string) => new Set<string>(permissoesPorCargo[nome] ?? []);
 
   it("Gerencia concede as acoes de retaguarda que antes eram orfas", () => {
     const gerencia = cargo("Gerencia");
@@ -50,5 +50,21 @@ describe("permissoes: matriz de orfaos por cargo (referencia de producao)", () =
     const concedidas = new Set<string>(Object.values(permissoesPorCargo).flat());
     const orfas = acoesCriticas.filter((permissao) => !concedidas.has(permissao));
     expect(orfas, `Permissoes orfas (nenhum cargo concede): ${orfas.join(", ")}`).toEqual([]);
+  });
+
+  it("R-076/R-077 aplica efetuar=Gerencia, pagar=Financeiro e conferir=Fin/Ger/Tes", () => {
+    const dominios = ["despesas", "mercadorias", "retiradas", "transferencias"];
+    const gerencia = cargo("Gerencia");
+    const financeiro = cargo("Financeiro");
+    const tesouraria = cargo("Tesouraria");
+    for (const dominio of dominios) {
+      expect(gerencia.has(`${dominio}_efetuar`)).toBe(true);
+      expect(financeiro.has(`${dominio}_efetuar`)).toBe(false);
+      expect(financeiro.has(`${dominio}_pagar`)).toBe(true);
+      expect(gerencia.has(`${dominio}_pagar`)).toBe(false);
+      expect(financeiro.has(`${dominio}_conferir`)).toBe(true);
+      expect(gerencia.has(`${dominio}_conferir`)).toBe(true);
+      expect(tesouraria.has(`${dominio}_conferir`)).toBe(true);
+    }
   });
 });

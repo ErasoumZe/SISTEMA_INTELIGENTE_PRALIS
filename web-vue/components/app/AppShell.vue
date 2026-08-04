@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { AuthSession } from "@padaria/shared";
+import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import { itemPorTela, rotaTela } from "~/utils/domain";
+import AppMenuItem from "~/components/app/AppMenuItem.vue";
+import { dinheiro, itemPorTela } from "~/utils/domain";
 import { agruparTelasMenu } from "~/utils/menu";
 
 const props = defineProps<{
@@ -14,17 +16,39 @@ const props = defineProps<{
   telasDesabilitadas?: string[];
   motivosTelasDesabilitadas?: Record<string, string>;
   carregandoEmpresa: boolean;
-  saindo: boolean;
+  notificacoes?: Notificacao[];
 }>();
 
 const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
-  (event: "logout"): void;
+  (event: "verificarNotificacao", id: string): void;
 }>();
 
 const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
+const saindo = ref(false);
+const router = useRouter();
+
+async function sair() {
+  saindo.value = true;
+  try {
+    try {
+      await fetch(`${useRuntimeConfig().public.apiUrl || "http://localhost:4100"}/api/auth/sign-out`, {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch {
+      // A sessao local ainda precisa sair mesmo quando a API estiver indisponivel.
+    }
+    // O perfil do usuario que sai NAO pode sobreviver ao logout: sem isto, o proximo login na mesma
+    // aba reaproveita `sessao`/`workspaceCarregado` do anterior e o sistema avalia permissao errada.
+    limparEstadoWorkspace(useNuxtApp().payload.state);
+    await router.push("/login");
+  } finally {
+    saindo.value = false;
+  }
+}
 
 const { escuro, inicializar: inicializarModoEscuro, alternar: alternarModoEscuro } = useModoEscuro();
 
@@ -41,6 +65,41 @@ const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.v
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
 
 const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
+
+// Categorias do menu (hoje so "Lancamentos"): abrem/fecham no clique. Fica aberta enquanto uma das
+// telas de dentro dela e a tela atual — quem esta em /despesas ve onde esta.
+const categoriasAbertas = ref<Record<string, boolean>>({});
+
+function categoriaAberta(id: string) {
+  return categoriasAbertas.value[id] ?? false;
+}
+
+function alternarCategoria(id: string) {
+  categoriasAbertas.value[id] = !categoriaAberta(id);
+}
+
+watch(
+  [() => props.telaAtiva, telasAgrupadas],
+  ([telaAtiva, grupos]) => {
+    for (const grupo of grupos) {
+      for (const no of grupo.itens) {
+        if (no.tipo === "categoria" && no.itens.some((tela) => tela.id === telaAtiva)) {
+          categoriasAbertas.value[no.id] = true;
+        }
+      }
+    }
+  },
+  { immediate: true }
+);
+
+// Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
+const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuário");
+const emailUsuario = computed(() => props.sessao.user?.email ?? "");
+const iniciaisUsuario = computed(() => {
+  const partes = nomeUsuario.value.trim().split(/\s+/).filter(Boolean);
+  const iniciais = (partes[0]?.[0] ?? "") + (partes.length > 1 ? (partes[partes.length - 1]?.[0] ?? "") : "");
+  return iniciais.toUpperCase() || "U";
+});
 
 function textoTooltipTela(telaId: string) {
   return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
@@ -96,7 +155,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <v-layout class="padaria-shell">
+  <v-layout class="padaria-shell shell-mobills">
     <v-navigation-drawer
       :model-value="drawerAberto"
       :permanent="!viewportMobile"
@@ -117,102 +176,124 @@ onMounted(() => {
             :aria-label="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
             @click="alternarDrawer"
           >
-            <img :src="'/pralis/logo-pralis.svg'" alt="Padaria Pralis" class="sidebar-logo" />
+            <img
+              :src="
+                drawerRail
+                  ? '/cicluz/cicluz-simbolo.png'
+                  : escuro
+                    ? '/cicluz/logo-cicluz-branca.png'
+                    : '/cicluz/logo-cicluz.png'
+              "
+              alt="Cicluz Gestão Profissional"
+              class="sidebar-logo"
+              width="220"
+              height="72"
+            />
           </button>
-          <div class="sidebar-brand">
-            <div class="brand-copy">
-              <div class="sidebar-label">EMPRESA ATIVA</div>
-              <v-menu v-if="empresas.length > 1" location="bottom start">
-                <template #activator="{ props: menuProps }">
-                  <button v-bind="menuProps" type="button" class="company-trigger">
-                    <span>{{ nomeEmpresaCurto }}</span>
-                    <v-icon icon="mdi-chevron-down" size="18" />
-                  </button>
-                </template>
-                <v-list min-width="260" density="compact">
-                  <v-list-item
-                    v-for="empresa in empresas"
-                    :key="empresa.id"
-                    :active="empresa.id === empresaId"
-                    :title="empresa.nome"
-                    :disabled="carregandoEmpresa"
-                    @click="emit('selecionarEmpresa', empresa.id)"
-                  />
-                </v-list>
-              </v-menu>
-              <div v-else class="company-name">{{ nomeEmpresaCurto }}</div>
-            </div>
-          </div>
 
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
-
+          <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->
           <div class="sidebar-actions">
             <slot name="actions" />
           </div>
+
+          <slot name="caixa" :caixa-aberto="caixaAberto" />
         </div>
 
         <div class="sidebar-scroll-shell">
           <nav class="sidebar-nav" aria-label="Menu principal">
             <div v-for="grupo in telasAgrupadas" :key="grupo.titulo" class="sidebar-group">
               <div class="sidebar-group-label">{{ grupo.titulo }}</div>
-              <template v-for="tela in grupo.itens" :key="tela.id">
-                <v-tooltip v-if="telasDesabilitadasSet.has(tela.id)" :text="textoTooltipTela(tela.id)">
-                  <template #activator="{ props: tooltipProps }">
-                    <span
-                      v-bind="tooltipProps"
-                      class="sidebar-disabled-wrapper"
-                      tabindex="0"
-                      role="button"
-                      aria-disabled="true"
-                      :aria-label="`${tela.titulo} — ${textoTooltipTela(tela.id)}`"
-                    >
-                      <span class="sidebar-item disabled">
-                        <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                        <span :style="tela.cor ? { color: tela.cor } : undefined">{{ tela.titulo }}</span>
-                      </span>
-                    </span>
-                  </template>
-                </v-tooltip>
-                <NuxtLink
+              <template v-for="no in grupo.itens" :key="no.id">
+                <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->
+                <template v-if="no.tipo === 'categoria'">
+                  <button
+                    type="button"
+                    class="sidebar-item sidebar-categoria"
+                    :class="{ aberta: categoriaAberta(no.id) }"
+                    :aria-expanded="categoriaAberta(no.id)"
+                    :aria-controls="`sidebar-subitens-${no.id}`"
+                    @click="alternarCategoria(no.id)"
+                  >
+                    <v-icon :icon="no.icone" size="21" />
+                    <span>{{ no.titulo }}</span>
+                    <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
+                         movimento liga o estado fechado ao aberto em vez de cortar. -->
+                    <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
+                  </button>
+                  <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
+                       e por isso os filhos ficam SEMPRE montados: com v-if nao ha o que animar.
+                       Fechado, o CSS tira a visibilidade — some tambem da ordem do Tab. -->
+                  <div
+                    :id="`sidebar-subitens-${no.id}`"
+                    class="sidebar-subitens-wrap"
+                    :class="{ aberta: categoriaAberta(no.id) }"
+                  >
+                    <div class="sidebar-subitens">
+                      <AppMenuItem
+                        v-for="tela in no.itens"
+                        :key="tela.id"
+                        :tela="tela"
+                        :tela-ativa="telaAtiva"
+                        :desabilitada="telasDesabilitadasSet.has(tela.id)"
+                        :motivo="textoTooltipTela(tela.id)"
+                        @navegar="fecharDrawerMobile"
+                      />
+                    </div>
+                  </div>
+                </template>
+                <AppMenuItem
                   v-else
-                  :to="rotaTela(tela.id)"
-                  class="sidebar-item"
-                  :class="{ active: tela.id === telaAtiva }"
-                  @click="fecharDrawerMobile"
-                >
-                  <v-icon :icon="tela.icone" :color="tela.cor" size="21" />
-                  <span :style="tela.cor && tela.id !== telaAtiva ? { color: tela.cor } : undefined">{{
-                    tela.titulo
-                  }}</span>
-                </NuxtLink>
+                  :tela="no"
+                  :tela-ativa="telaAtiva"
+                  :desabilitada="telasDesabilitadasSet.has(no.id)"
+                  :motivo="textoTooltipTela(no.id)"
+                  @navegar="fecharDrawerMobile"
+                />
               </template>
             </div>
           </nav>
         </div>
-
-        <div class="sidebar-bottom">
-          <v-btn
-            v-if="drawerRecolhido"
-            icon="mdi-logout"
-            variant="tonal"
-            :loading="saindo"
-            :title="'Sair'"
-            @click="emit('logout')"
-          />
-          <v-btn v-else block prepend-icon="mdi-logout" variant="tonal" :loading="saindo" @click="emit('logout')">
-            Sair
-          </v-btn>
-        </div>
+        <!-- Logout unico: vive no menu do perfil do usuario (topbar). O botao "Sair" da sidebar foi
+             removido para nao existir dois caminhos para o mesmo ato (Definition of Done). -->
       </div>
     </v-navigation-drawer>
 
     <v-main class="padaria-main">
       <header class="padaria-topbar">
-        <!-- No desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay) ainda
-             e preciso um gatilho para abrir. -->
-        <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
-        <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
+        <!-- ESQUERDA: no desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay)
+             ainda e preciso um gatilho para abrir. -->
+        <div class="topbar-left">
+          <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
+          <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
+        </div>
+
+        <!-- DIREITA: empresa + tema + usuario. -->
         <div class="topbar-actions">
+          <v-menu v-if="empresas.length > 1" location="bottom end">
+            <template #activator="{ props: menuProps }">
+              <button v-bind="menuProps" type="button" class="topbar-empresa" aria-label="Trocar de empresa">
+                <v-icon icon="mdi-domain" size="18" />
+                <span>{{ nomeEmpresaCurto }}</span>
+                <v-icon icon="mdi-chevron-down" size="16" />
+              </button>
+            </template>
+            <v-list min-width="260" density="compact">
+              <v-list-subheader>Empresa ativa</v-list-subheader>
+              <v-list-item
+                v-for="empresa in empresas"
+                :key="empresa.id"
+                :active="empresa.id === empresaId"
+                :title="empresa.nome"
+                :disabled="carregandoEmpresa"
+                @click="emit('selecionarEmpresa', empresa.id)"
+              />
+            </v-list>
+          </v-menu>
+          <span v-else class="topbar-empresa estatica">
+            <v-icon icon="mdi-domain" size="18" />
+            <span>{{ nomeEmpresaCurto }}</span>
+          </span>
+
           <v-btn
             :icon="escuro ? 'mdi-weather-sunny' : 'mdi-weather-night'"
             variant="text"
@@ -220,6 +301,52 @@ onMounted(() => {
             :aria-label="escuro ? 'Ativar tema claro' : 'Ativar tema escuro'"
             @click="alternarModoEscuro"
           />
+
+          <v-menu location="bottom end" :close-on-content-click="false">
+            <template #activator="{ props: menuProps }">
+              <v-badge :content="notificacoes?.length ?? 0" :model-value="Boolean(notificacoes?.length)" color="error">
+                <v-btn v-bind="menuProps" icon="mdi-bell-outline" variant="text" aria-label="Notificações" />
+              </v-badge>
+            </template>
+            <v-card min-width="320" max-width="420">
+              <v-card-title class="text-subtitle-1">Pendências</v-card-title>
+              <v-list v-if="notificacoes?.length" lines="three">
+                <v-list-item v-for="item in notificacoes" :key="item.id" :title="item.titulo">
+                  <template #subtitle>
+                    <span v-if="item.valor != null">{{ dinheiro(item.valor) }} · </span>
+                    {{ new Date(item.criadoEm).toLocaleString("pt-BR") }}
+                  </template>
+                  <template #append>
+                    <v-btn
+                      icon="mdi-check"
+                      size="small"
+                      variant="text"
+                      title="Marcar como verificada"
+                      @click="emit('verificarNotificacao', item.id)"
+                    />
+                  </template>
+                </v-list-item>
+              </v-list>
+              <v-card-text v-else>Nenhuma pendência.</v-card-text>
+              <v-card-actions>
+                <v-btn to="/pendencias" variant="text">Ver todas</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-menu>
+
+          <v-menu location="bottom end">
+            <template #activator="{ props: menuProps }">
+              <button v-bind="menuProps" type="button" class="topbar-user" :title="nomeUsuario">
+                <span class="topbar-avatar">{{ iniciaisUsuario }}</span>
+              </button>
+            </template>
+            <v-list min-width="240" density="compact">
+              <v-list-item :title="nomeUsuario" :subtitle="emailUsuario" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-logout" title="Sair" :disabled="saindo" @click="sair" />
+            </v-list>
+          </v-menu>
+
           <slot name="heading-actions" />
         </div>
       </header>

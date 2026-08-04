@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
+import { processarTransferenciasTemporais } from "./transferencias/transferencias.service.js";
 
 const app = await buildApp();
 
@@ -13,6 +14,12 @@ try {
   console.info(`[api] Auth base: ${env.AUTH_BASE_URL}`);
   console.info(`[api] Web origin/CORS: ${env.WEB_ORIGIN}`);
   console.info(`[api] Listen address: ${address}`);
+  const executarAgendadorTransferencias = () => {
+    void processarTransferenciasTemporais().catch((error) => app.log.error(error));
+  };
+  executarAgendadorTransferencias();
+  const agendadorTransferencias = setInterval(executarAgendadorTransferencias, 60_000);
+  agendadorTransferencias.unref();
 } catch (error) {
   app.log.error(error);
   process.exit(1);

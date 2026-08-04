@@ -1,7 +1,10 @@
 export {
+  alteracoesPosFechamentoCaixa,
   ajustesFechamentoCaixa,
   caixaAutorizacoes,
   debitosColaboradores,
   edicoesCaixa,
-  fechamentosCaixa
+  fechamentosCaixa,
+  notificacoes,
+  quebrasCaixa
 } from "../app.schema.js";

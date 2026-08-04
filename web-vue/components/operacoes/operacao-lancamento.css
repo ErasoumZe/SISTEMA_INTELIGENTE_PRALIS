@@ -1,0 +1,417 @@
+/* Estilos do Lancamento (FOTO 2 do Rodrigo) — extraidos do <style scoped> do OperacaoLancamentoModal
+   para serem compartilhados pelos blocos coesos. Classes com prefixo unico .lc-* (sem colisao). Os
+   tokens --cat/--cat-soft trocam por categoria e sao herdados do .lc-modal (via :style="catVars"). */
+.lc-modal {
+  background: #fff;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 16px;
+  padding: 20px 22px;
+  /* Nunca ultrapassa a viewport: rola por dentro em qualquer largura (o rodape de acoes fica fixo,
+     abaixo). Sem isto, formularios altos cortavam o "Salvar" fora da tela. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+.lc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.lc-ic {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--cat-soft);
+  color: var(--cat);
+}
+.lc-titulo {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+  color: #1f2733;
+  text-transform: capitalize;
+}
+.lc-x {
+  color: #94a3b8;
+  cursor: pointer;
+}
+/* Alternador de categoria (3 botoes do topo). Cada botao carrega a SUA cor (--cat-btn), entao os
+   tres aparecem em vermelho/verde/azul; o ativo fica preenchido e o modal inteiro segue --cat. */
+.lc-cats {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.lc-cat {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid #e4e8ef;
+  border-radius: 10px;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.lc-cat:hover {
+  border-color: var(--cat-btn);
+  color: var(--cat-btn);
+}
+.lc-cat.ativa {
+  border-color: var(--cat-btn);
+  background: var(--cat-btn-soft);
+  color: var(--cat-btn);
+}
+.lc-cat:focus-visible {
+  outline: 2px solid var(--cat-btn);
+  outline-offset: 2px;
+}
+/* Celular: o rotulo some e ficam so os 3 icones coloridos (nao quebra a linha). */
+@media (max-width: 420px) {
+  .lc-cat span {
+    display: none;
+  }
+}
+.lc-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--cat);
+  padding-bottom: 6px;
+}
+.lc-cifra {
+  font-size: 16px;
+  color: var(--cat);
+}
+.lc-valor {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cat);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+}
+.lc-tres,
+.lc-dois {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 3 campos por linha no desktop; 2 no tablet (<=768) e 1 no celular (<=560) — os campos EMPILHAM. */
+.lc-tres > .lc-campo {
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: 0;
+}
+.lc-dois > .lc-campo,
+.lc-dois > .lc-foto {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+}
+.lc-campo {
+  display: block;
+  margin-bottom: 10px;
+}
+.lc-aviso-contas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fcd9a8;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #92600a;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.lc-mt {
+  margin-top: 4px;
+}
+.lc-campo-lbl {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+/* Explica um campo travado (ex.: Conta do operador de caixa, R-121). Campo cinza sem motivo vira
+   chamado de suporte. */
+.lc-campo-nota {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-style: italic;
+  color: #94a3b8;
+}
+.lc-input {
+  width: 100%;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  color: #1f2733;
+  background: #fff;
+  outline: none;
+}
+.lc-input:focus {
+  border-color: var(--cat);
+}
+.lc-input-ro {
+  background: #f4f6fa;
+  color: #64748b;
+}
+.lc-input:disabled {
+  background: #f4f6fa;
+  color: #cbd2dc;
+}
+/* Campo travado por REGRA (Conta do operador de caixa, R-121): cinza como o desabilitado, mas com
+   o texto legivel — a pessoa precisa LER de qual conta a saida vai sair. */
+.lc-input[readonly] {
+  background: #f4f6fa;
+  color: #64748b;
+  cursor: not-allowed;
+}
+.lc-data-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lc-data-row .lc-input {
+  flex: 1;
+}
+.lc-pill {
+  border: 0.5px solid #cbd2dc;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lc-pill.ativo {
+  background: var(--cat-soft);
+  border-color: transparent;
+  color: var(--cat);
+}
+.lc-credor-tipos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.lc-chip {
+  border: 0.5px solid #e4e8ef;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lc-chip.ativo {
+  border-color: transparent;
+  background: var(--cat-soft);
+  color: var(--cat);
+  font-weight: 500;
+}
+.lc-pagamento .lc-toggle {
+  flex: 0 0 96px;
+}
+.lc-sn {
+  width: 100%;
+  border: 0.5px solid #cbd2dc;
+  border-radius: 8px;
+  padding: 9px 0;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lc-sn.sim {
+  border-color: transparent;
+  background: var(--cat-soft);
+  color: var(--cat);
+  font-weight: 500;
+}
+.lc-foto {
+  display: block;
+  flex: 1;
+  margin-bottom: 10px;
+}
+.lc-file {
+  width: 100%;
+  font-size: 11px;
+  color: #64748b;
+}
+.lc-foto-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--cat);
+}
+.lc-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lc-linha-top {
+  border-top: 0.5px solid #e4e8ef;
+}
+.lc-flex {
+  flex: 1;
+}
+.lc-itens {
+  margin-bottom: 6px;
+}
+.lc-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.lc-item-valor {
+  max-width: 100px;
+}
+.lc-item-qtd {
+  max-width: 70px;
+}
+.lc-item-del {
+  color: #94a3b8;
+  cursor: pointer;
+}
+.lc-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: none;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lc-item-grupo {
+  max-width: 140px;
+}
+.lc-recorrencia {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid #e4e8ef;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+.lc-dias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.lc-dia {
+  min-width: 38px;
+  border: 0.5px solid #cbd2dc;
+  border-radius: 8px;
+  padding: 6px 0;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lc-dia.ativo {
+  border-color: transparent;
+  background: var(--cat-soft);
+  color: var(--cat);
+  font-weight: 500;
+}
+/* Nota do bloco: a recorrencia CRIA lancamentos, entao a tela diz o que vai acontecer antes de
+   acontecer — 12 despesas aparecendo sem aviso e o tipo de surpresa que derruba a confianca. */
+.lc-recorrencia-nota {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.lc-acoes {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  /* margens negativas = rodape "full-bleed" ate as bordas do modal (padding 20/22). */
+  margin: 12px -22px -20px;
+  padding: 12px 22px;
+  background: #fff;
+  border-top: 0.5px solid #e4e8ef;
+}
+.lc-salvar-nova {
+  border: 0;
+  background: none;
+  color: var(--cat);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lc-salvar {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 22px;
+  background: var(--cat);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lc-salvar:disabled,
+.lc-salvar-nova:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- Responsividade (1024/768/560) — so layout. Os campos EMPILHAM, nunca somem. --- */
+@media (width <= 768px) {
+  .lc-tres > .lc-campo {
+    flex-basis: calc(50% - 4px);
+  }
+}
+@media (width <= 560px) {
+  .lc-tres > .lc-campo,
+  .lc-dois > .lc-campo,
+  .lc-dois > .lc-foto,
+  .lc-pagamento > .lc-toggle {
+    flex-basis: 100%;
+  }
+  /* Modal fullscreen (a casca do overlay ja e 100dvh via main.css): ocupa a tela toda. O rodape
+     fixo ja vem da regra base; aqui so ampliamos a altura e respeitamos a safe-area do iOS. */
+  .lc-modal {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .lc-acoes {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}

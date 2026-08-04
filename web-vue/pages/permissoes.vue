@@ -12,7 +12,6 @@ import CadastroTablePage from "~/components/cadastros/CadastroTablePage.vue";
       :descricao="ctx.descricao"
       :colunas="ctx.colunasCadastro"
       :linhas="ctx.linhasCadastro"
-      :editar-carregando-id="ctx.maloteEditandoCarregandoId"
       modo-servidor
       :busca="ctx.permissoesFiltros.q"
       :tipo-permissao-filtro="ctx.permissoesFiltros.tipoPermissao"

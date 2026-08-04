@@ -13,7 +13,7 @@ import { registrarRotasColaboradores } from "./colaboradores/colaboradores.contr
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasIntegracoes } from "./integracoes/integracoes.controller.js";
 import { registrarRotasPedidos } from "./pedidos/pedidos.controller.js";
-import { registrarRotasMalotes } from "./malotes/malotes.controller.js";
+import { registrarRotasMaquininhas } from "./maquininhas/maquininhas.controller.js";
 import { registrarRotasMercadorias } from "./mercadorias/mercadorias.controller.js";
 import { registrarRotasNotasFiscais } from "./notas-fiscais/notas-fiscais.controller.js";
 import { registrarRotasRetiradas } from "./retiradas/retiradas.controller.js";
@@ -28,17 +28,24 @@ import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
 import { registrarRotasClientes } from "./clientes/clientes.controller.js";
 import { registrarRotasContas } from "./contas/contas.controller.js";
+import { registrarRotasContasUsuarios } from "./contas-usuarios/contas-usuarios.controller.js";
+import { registrarRotasLacres } from "./lacres/lacres.controller.js";
 import { registrarRotasEmpresas } from "./empresas/empresas.controller.js";
 import { registrarRotasFormasPagamento } from "./formas-pagamento/formas-pagamento.controller.js";
 import { registrarRotasFornecedores } from "./fornecedores/fornecedores.controller.js";
 import { registrarRotasGrupos } from "./grupos/grupos.controller.js";
+import { registrarRotasPatrimonio } from "./patrimonio/patrimonio.controller.js";
 import { registrarRotasPdvs } from "./pdvs/pdvs.controller.js";
 import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js";
 import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
+import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
+import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controller.js";
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
+import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
+import { usuarioEstaTravadoRepository } from "./transferencias/transferencias.repository.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
 // (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
@@ -101,6 +108,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       return erro(reply, 429, "Muitas requisicoes; aguarde e tente novamente", "RATE_LIMITED");
     }
 
+    // Erro de PROTOCOLO do proprio Fastify (corpo JSON vazio ou malformado, content-type nao
+    // suportado, payload grande demais). Ele ja traz o statusCode 4xx certo; sem este ramo virava
+    // 500 "Erro interno" — o cliente errou e a tela acusava falha do servidor, alem de sujar a
+    // captura de erros com o que nao e bug. Medido no fluxo do dia: PUT sem corpo devolvia 500.
+    const statusFastify = (error as { statusCode?: number }).statusCode;
+    const codigoFastify = (error as { code?: string }).code;
+    if (statusFastify && statusFastify >= 400 && statusFastify < 500 && codigoFastify?.startsWith("FST_")) {
+      return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
+    }
+
     request.log.error(error);
     capturarErro(error instanceof Error ? error : new Error(String(error)));
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");
@@ -140,6 +157,30 @@ export async function buildApp(): Promise<FastifyInstance> {
     await exigirAutenticacao(request, reply);
   });
 
+  // R-037: depois do prazo, origem e operadores dos destinos ficam impedidos de executar novas
+  // mutacoes. Confirmar a propria transferencia e a liberacao excepcional continuam acessiveis.
+  app.addHook("preHandler", async (request, reply) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method) || !request.perfilUsuario) return;
+    const rota = request.routeOptions.url ?? "";
+    if (
+      rota.endsWith("/confirmar") ||
+      rota.endsWith("/liberar-trava") ||
+      rota.startsWith("/api/notificacoes") ||
+      rota.startsWith("/api/auth")
+    ) {
+      return;
+    }
+    if (await usuarioEstaTravadoRepository(request.perfilUsuario.usuarioId)) {
+      return erro(
+        reply,
+        423,
+        "Existe transferencia com prazo de confirmacao estourado",
+        "TRANSFERENCIA_CONFIRMATION_OVERDUE"
+      );
+    }
+    return undefined;
+  });
+
   await registrarRotasSaude(app);
   await registrarRotasAuth(app);
   await registrarRotasTema(app);
@@ -149,11 +190,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasMercadorias(app);
   await registrarRotasNotasFiscais(app);
   await registrarRotasRetiradas(app);
+  await registrarRotasRecorrencias(app);
   await registrarRotasTransferencias(app);
   await registrarRotasCaixa(app);
   await registrarRotasEmpresas(app);
   await registrarRotasContas(app);
+  await registrarRotasContasUsuarios(app);
+  await registrarRotasLacres(app);
   await registrarRotasFormasPagamento(app);
+  await registrarRotasPatrimonio(app);
   await registrarRotasPdvs(app);
   await registrarRotasFornecedores(app);
   await registrarRotasClientes(app);
@@ -162,11 +207,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasUnidadesMedida(app);
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
+  await registrarRotasSociosGestores(app);
+  await registrarRotasMaquininhas(app);
+  await registrarRotasNotificacoes(app);
   await registrarRotasTurnos(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);
   await registrarRotasPermissoes(app);
-  await registrarRotasMalotes(app);
   await registrarRotasProdutosMaisVendidos(app);
   await registrarRotasIntegracoes(app);
   await registrarRotasPedidos(app);

@@ -10,33 +10,55 @@ import type {
   MercadoriasAprovacaoQuery,
   MercadoriasQuery
 } from "@padaria/shared/mercadorias";
+import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
+import type { TipoDesconto } from "@padaria/shared/discriminacao";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import {
-  calcularTotalItemMercadoria,
+  calcularDiscriminacaoMercadoria,
   filtrosEmpresa,
   numeroDecimal,
   valoresBase,
-  valoresBaseEdicao
+  valoresBaseEdicao,
+  valoresJuros
 } from "../lancamentos/lancamentos.dominio.js";
+import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
-// Valores de uma linha de item. O servidor recalcula o valorTotal (desconto) e persiste tipo/valor.
-function valoresItemMercadoria(
-  item: MercadoriaItemPayload,
-  mercadoriaId: string,
-  grupoMercadoriaIdHeader: string | null
+// Linhas de item de UMA mercadoria. O calculo e da LISTA inteira porque o desconto geral (nivel 3)
+// rateia entre os itens (§5/D4) — nao da para resolver item a item. O servidor decide todo o
+// dinheiro: valor_total (liquido dos niveis 1 e 2) e os dois campos *_com_desconto.
+function linhasItensMercadoria(
+  dados: {
+    itensMercadoria: MercadoriaItemPayload[];
+    descontoGeralTipo?: TipoDesconto | null | undefined;
+    descontoGeralValor?: number | null | undefined;
+    grupoMercadoriaId?: string | null | undefined;
+  },
+  mercadoriaId: string
 ) {
-  return {
-    mercadoriaId,
-    produtoId: item.produtoId ?? null,
-    grupoMercadoriaId: item.grupoMercadoriaId ?? grupoMercadoriaIdHeader ?? null,
-    unidadeMedidaId: item.unidadeMedidaId ?? null,
-    descricao: item.descricao,
-    quantidade: String(item.quantidade),
-    valorUnitario: String(item.valorUnitario),
-    descontoTipo: item.descontoTipo ?? null,
-    descontoValor: item.descontoValor != null ? String(item.descontoValor) : null,
-    valorTotal: String(calcularTotalItemMercadoria(item))
-  };
+  const calculo = calcularDiscriminacaoMercadoria(dados);
+  return dados.itensMercadoria.map((item, indice) => {
+    const calculado = calculo.itens[indice];
+    // Ver a nota em linhasItensDespesa: grupo de patrimonio no item DESLIGA a heranca do grupo do
+    // cabecalho, senao o item nasceria com duas origens e violaria o CHECK.
+    const grupoPatrimonioId = item.grupoPatrimonioId ?? null;
+    return {
+      mercadoriaId,
+      produtoId: item.produtoId ?? null,
+      grupoMercadoriaId: grupoPatrimonioId ? null : (item.grupoMercadoriaId ?? dados.grupoMercadoriaId ?? null),
+      grupoPatrimonioId,
+      unidadeMedidaId: item.unidadeMedidaId ?? null,
+      descricao: item.descricao,
+      quantidade: String(item.quantidade),
+      valorUnitario: String(item.valorUnitario),
+      descontoTipo: item.descontoTipo ?? null,
+      descontoValor: item.descontoValor != null ? String(item.descontoValor) : null,
+      descontoTotalTipo: item.descontoTotalTipo ?? null,
+      descontoTotalValor: item.descontoTotalValor != null ? String(item.descontoTotalValor) : null,
+      valorTotal: centavosParaDecimalBanco(calculado?.valorTotalCentavos ?? 0),
+      valorUnitarioComDesconto: centavosParaDecimalBanco(calculado?.valorUnitarioComDescontoCentavos ?? 0),
+      valorTotalComDesconto: centavosParaDecimalBanco(calculado?.valorTotalComDescontoCentavos ?? 0)
+    };
+  });
 }
 
 export async function listarMercadoriasRepository(
@@ -53,7 +75,7 @@ export async function listarMercadoriasRepository(
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
       dataReferencia: mercadorias.dataReferencia,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       status: mercadorias.status,
@@ -88,32 +110,49 @@ export async function atualizarFotoMercadoriaRepository(
     .where(and(eq(mercadorias.id, id), eq(mercadorias.empresaId, empresaId)));
 }
 
+export async function atualizarFotoNotaMercadoriaRepository(
+  id: string,
+  empresaId: string,
+  fotoNotaUrl: string,
+  db: ExecutorBanco = banco
+): Promise<void> {
+  await db
+    .update(mercadorias)
+    .set({ fotoNotaUrl })
+    .where(and(eq(mercadorias.id, id), eq(mercadorias.empresaId, empresaId)));
+}
+
 export async function criarMercadoriaRepository(
   dados: MercadoriaPayload,
   computar: boolean,
   criadoPor: string,
   caixaId?: string | null,
-  db?: ExecutorBanco
+  db?: ExecutorBanco,
+  recorrencia?: { id: string; ordem: number } | null
 ): Promise<{ id: string }> {
   return executarComTransacaoOpcional(db, async (tx) => {
     const [mercadoria] = await tx
       .insert(mercadorias)
       .values({
-        ...valoresBase(dados, computar, criadoPor, caixaId),
+        ...valoresBase(dados, computar, criadoPor, caixaId, recorrencia),
+        // R-041: DEPOIS do valoresBase de proposito — sobrescreve o valorAcrescimo do cliente.
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
+        credorTipo: dados.credorTipo ?? "fornecedor",
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
         notaFiscalId: dados.notaFiscalId ?? null,
         temNotaFiscal: dados.temNotaFiscal,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .returning({ id: mercadorias.id });
     if (!mercadoria) throw new Error("Mercadoria nao criada");
 
-    for (const item of dados.itensMercadoria) {
-      await tx
-        .insert(mercadoriasItens)
-        .values(valoresItemMercadoria(item, mercadoria.id, dados.grupoMercadoriaId ?? null));
+    for (const linha of linhasItensMercadoria(dados, mercadoria.id)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
 
     return mercadoria;
@@ -129,23 +168,32 @@ export async function buscarMercadoriaDetalheRepository(
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
       caixaId: mercadorias.caixaId,
+      recorrenciaId: mercadorias.recorrenciaId,
       status: mercadorias.status,
       dataReferencia: mercadorias.dataReferencia,
       dataVencimento: mercadorias.dataVencimento,
       dataPagamento: mercadorias.dataPagamento,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       observacao: mercadorias.observacao,
       valorOriginal: mercadorias.valorOriginal,
       valorAcrescimo: mercadorias.valorAcrescimo,
       descricaoAcrescimo: mercadorias.descricaoAcrescimo,
       valorDesconto: mercadorias.valorDesconto,
       descricaoDesconto: mercadorias.descricaoDesconto,
+      descontoGeralTipo: mercadorias.descontoGeralTipo,
+      descontoGeralValor: mercadorias.descontoGeralValor,
       contaOrigemId: mercadorias.contaOrigemId,
       fornecedorId: mercadorias.fornecedorId,
+      credorTipo: mercadorias.credorTipo,
+      dataDocumentoFiscal: mercadorias.dataDocumentoFiscal,
+      numeroDocumentoFiscal: mercadorias.numeroDocumentoFiscal,
       grupoMercadoriaId: mercadorias.grupoMercadoriaId,
       notaFiscalId: mercadorias.notaFiscalId,
       temNotaFiscal: mercadorias.temNotaFiscal,
       fotoDocumentoUrl: mercadorias.fotoDocumentoUrl,
+      fotoNotaUrl: mercadorias.fotoNotaUrl,
+      jurosTipo: mercadorias.jurosTipo,
+      jurosValorInformado: mercadorias.jurosValorInformado,
       computar: mercadorias.computar
     })
     .from(mercadorias)
@@ -158,12 +206,15 @@ export async function buscarMercadoriaDetalheRepository(
     .select({
       produtoId: mercadoriasItens.produtoId,
       grupoMercadoriaId: mercadoriasItens.grupoMercadoriaId,
+      grupoPatrimonioId: mercadoriasItens.grupoPatrimonioId,
       unidadeMedidaId: mercadoriasItens.unidadeMedidaId,
       descricao: mercadoriasItens.descricao,
       quantidade: mercadoriasItens.quantidade,
       valorUnitario: mercadoriasItens.valorUnitario,
       descontoTipo: mercadoriasItens.descontoTipo,
       descontoValor: mercadoriasItens.descontoValor,
+      descontoTotalTipo: mercadoriasItens.descontoTotalTipo,
+      descontoTotalValor: mercadoriasItens.descontoTotalValor,
       valorTotal: mercadoriasItens.valorTotal
     })
     .from(mercadoriasItens)
@@ -174,13 +225,18 @@ export async function buscarMercadoriaDetalheRepository(
     fornecedorId: mercadoria.fornecedorId,
     valorOriginal: numeroDecimal(mercadoria.valorOriginal),
     valorAcrescimo: numeroDecimal(mercadoria.valorAcrescimo),
+    jurosValorInformado: mercadoria.jurosValorInformado == null ? null : numeroDecimal(mercadoria.jurosValorInformado),
     valorDesconto: numeroDecimal(mercadoria.valorDesconto),
+    descontoGeralTipo: mercadoria.descontoGeralTipo as MercadoriaDetalheDto["descontoGeralTipo"],
+    descontoGeralValor: mercadoria.descontoGeralValor == null ? null : numeroDecimal(mercadoria.descontoGeralValor),
     itensMercadoria: itens.map((item) => ({
       ...item,
       quantidade: Number(item.quantidade),
       valorUnitario: Number(item.valorUnitario),
       descontoTipo: item.descontoTipo as MercadoriaItemPayload["descontoTipo"],
       descontoValor: item.descontoValor != null ? Number(item.descontoValor) : null,
+      descontoTotalTipo: item.descontoTotalTipo as MercadoriaItemPayload["descontoTotalTipo"],
+      descontoTotalValor: item.descontoTotalValor != null ? Number(item.descontoTotalValor) : null,
       valorTotal: numeroDecimal(item.valorTotal)
     }))
   };
@@ -197,20 +253,23 @@ export async function atualizarMercadoriaRepository(
       .update(mercadorias)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,
+        credorTipo: dados.credorTipo ?? "fornecedor",
+        dataDocumentoFiscal: dados.dataDocumentoFiscal ?? null,
+        numeroDocumentoFiscal: dados.numeroDocumentoFiscal ?? null,
         grupoMercadoriaId: dados.grupoMercadoriaId ?? null,
         notaFiscalId: dados.notaFiscalId ?? null,
         temNotaFiscal: dados.temNotaFiscal,
-        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null
+        fotoDocumentoUrl: dados.fotoDocumentoUrl ?? null,
+        fotoNotaUrl: dados.fotoNotaUrl ?? null
       })
       .where(eq(mercadorias.id, mercadoriaId));
 
     await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
-    for (const item of dados.itensMercadoria) {
-      await tx
-        .insert(mercadoriasItens)
-        .values(valoresItemMercadoria(item, mercadoriaId, dados.grupoMercadoriaId ?? null));
+    for (const linha of linhasItensMercadoria(dados, mercadoriaId)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
   });
 }
@@ -229,7 +288,7 @@ export async function listarMercadoriasAguardandoAprovacaoRepository(
       empresaId: mercadorias.empresaId,
       dataReferencia: mercadorias.dataReferencia,
       dataVencimento: mercadorias.dataVencimento,
-      descricao: mercadorias.descricao,
+      descricao: textoDoMovimento(mercadorias),
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       fornecedorId: mercadorias.fornecedorId,
@@ -306,17 +365,32 @@ export async function recusarMercadoriaRepository(mercadoriaId: string, empresaI
   return atualizadas.length;
 }
 
-// Discriminacao: substitui SO os itens (o cabecalho e valorOriginal ficam intactos).
+// Discriminacao: substitui SO os itens (valorOriginal do cabecalho fica intacto). O desconto geral
+// e do cabecalho: grava o R$ resolvido em valor_desconto (que alimenta os agregados) e o COMO em
+// desconto_geral_tipo/valor.
 export async function discriminarMercadoriaRepository(
   mercadoriaId: string,
-  itens: MercadoriaItemPayload[],
+  dados: {
+    itensMercadoria: MercadoriaItemPayload[];
+    descontoGeralTipo?: TipoDesconto | null | undefined;
+    descontoGeralValor?: number | null | undefined;
+  },
   grupoMercadoriaIdHeader: string | null,
   db?: ExecutorBanco
 ): Promise<void> {
   await executarComTransacaoOpcional(db, async (tx) => {
+    const calculo = calcularDiscriminacaoMercadoria(dados);
     await tx.delete(mercadoriasItens).where(eq(mercadoriasItens.mercadoriaId, mercadoriaId));
-    for (const item of itens) {
-      await tx.insert(mercadoriasItens).values(valoresItemMercadoria(item, mercadoriaId, grupoMercadoriaIdHeader));
+    for (const linha of linhasItensMercadoria({ ...dados, grupoMercadoriaId: grupoMercadoriaIdHeader }, mercadoriaId)) {
+      await tx.insert(mercadoriasItens).values(linha);
     }
+    await tx
+      .update(mercadorias)
+      .set({
+        descontoGeralTipo: dados.descontoGeralTipo ?? null,
+        descontoGeralValor: dados.descontoGeralValor != null ? String(dados.descontoGeralValor) : null,
+        valorDesconto: centavosParaDecimalBanco(calculo.descontoGeralCentavos)
+      })
+      .where(eq(mercadorias.id, mercadoriaId));
   });
 }

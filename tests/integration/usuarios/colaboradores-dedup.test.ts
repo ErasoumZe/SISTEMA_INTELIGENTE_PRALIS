@@ -116,7 +116,7 @@ describe("usuarios: dedup de colaborador por CPF na criacao", () => {
       }
     });
     expect(segundo.statusCode).toBe(400);
-    expect(JSON.stringify(segundo.json())).toContain("vinculado a outro usuario");
+    expect(JSON.stringify(segundo.json())).toContain("vinculado a outro usuário");
 
     // Continua havendo apenas UM colaborador com esse CPF.
     const total = await consultarUm<{ total: number }>(

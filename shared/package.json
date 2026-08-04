@@ -61,6 +61,16 @@
       "development": "./src/contas/index.ts",
       "default": "./dist/contas/index.js"
     },
+    "./contas-usuarios": {
+      "types": "./dist/contas-usuarios/index.d.ts",
+      "development": "./src/contas-usuarios/index.ts",
+      "default": "./dist/contas-usuarios/index.js"
+    },
+    "./lacres": {
+      "types": "./dist/lacres/index.d.ts",
+      "development": "./src/lacres/index.ts",
+      "default": "./dist/lacres/index.js"
+    },
     "./empresas": {
       "types": "./dist/empresas/index.d.ts",
       "development": "./src/empresas/index.ts",
@@ -70,6 +80,11 @@
       "types": "./dist/fornecedores/index.d.ts",
       "development": "./src/fornecedores/index.ts",
       "default": "./dist/fornecedores/index.js"
+    },
+    "./socios-gestores": {
+      "types": "./dist/socios-gestores/index.d.ts",
+      "development": "./src/socios-gestores/index.ts",
+      "default": "./dist/socios-gestores/index.js"
     },
     "./formas-pagamento": {
       "types": "./dist/formas-pagamento/index.d.ts",
@@ -101,15 +116,40 @@
       "development": "./src/dinheiro/index.ts",
       "default": "./dist/dinheiro/index.js"
     },
+    "./discriminacao": {
+      "types": "./dist/discriminacao/index.d.ts",
+      "development": "./src/discriminacao/index.ts",
+      "default": "./dist/discriminacao/index.js"
+    },
     "./malotes": {
       "types": "./dist/malotes/index.d.ts",
       "development": "./src/malotes/index.ts",
       "default": "./dist/malotes/index.js"
     },
+    "./maquininhas": {
+      "types": "./dist/maquininhas/index.d.ts",
+      "development": "./src/maquininhas/index.ts",
+      "default": "./dist/maquininhas/index.js"
+    },
+    "./notificacoes": {
+      "types": "./dist/notificacoes/index.d.ts",
+      "development": "./src/notificacoes/index.ts",
+      "default": "./dist/notificacoes/index.js"
+    },
+    "./patrimonio": {
+      "types": "./dist/patrimonio/index.d.ts",
+      "development": "./src/patrimonio/index.ts",
+      "default": "./dist/patrimonio/index.js"
+    },
     "./pdvs": {
       "types": "./dist/pdvs/index.d.ts",
       "development": "./src/pdvs/index.ts",
       "default": "./dist/pdvs/index.js"
+    },
+    "./recorrencia": {
+      "types": "./dist/recorrencia/index.d.ts",
+      "development": "./src/recorrencia/index.ts",
+      "default": "./dist/recorrencia/index.js"
     },
     "./permissoes": {
       "types": "./dist/permissoes/index.d.ts",

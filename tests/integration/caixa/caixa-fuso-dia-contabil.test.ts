@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
 // Fuso do DIA CONTABIL: um instante as 22:00 BRT ja e 01:00Z do dia SEGUINTE. O dia contabil
-// gravado tem de ser o dia LOCAL (America/Sao_Paulo), nao o de UTC. Cobre data_movimento do caixa,
-// a data_referencia da transferencia de abertura (malote) e a data do acerto de saldo.
+// gravado tem de ser o dia LOCAL (America/Sao_Paulo), nao o de UTC. Cobre data_movimento do caixa
+// e a data do retorno/acerto ao cofre — as duas datas que o SERVIDOR ainda deriva.
+// (Desde a R-040 a abertura nao cria transferencia: ela confirma uma ja criada pela tesouraria,
+// com data_referencia informada por quem enviou. Nao ha mais data derivada nesse caminho.)
 describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
@@ -67,31 +68,6 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
     expect(caixa?.data_movimento).toBe(DIA_LOCAL); // nao "2026-07-17" (UTC)
   });
 
-  it("Deve gravar data_referencia da transferencia de abertura no dia LOCAL (malote as 22:00 BRT)", async () => {
-    const malote = await criar("/api/malotes", {
-      empresaId: idsTeste.empresaA,
-      numeroLacre: "LAC-FUSO",
-      valor: 100
-    });
-    const maloteId = json<{ data: { id: string } }>(malote).data.id;
-    const { pdvId } = await criarContaEPdv("fuso-malote");
-    const abrir = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura: INSTANTE_22H_BRT,
-      maloteId
-    });
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-
-    const transferencia = await consultarUm<{ data_referencia: string }>(
-      `select to_char(data_referencia, 'YYYY-MM-DD') as data_referencia
-         from transferencias where caixa_id = $1 and tipo = 'abertura'`,
-      [caixaId]
-    );
-    expect(transferencia?.data_referencia).toBe(DIA_LOCAL);
-  });
-
   it("Deve usar o dia LOCAL de hoje (Sao Paulo) na data do acerto de saldo", async () => {
     const { contaId, pdvId } = await criarContaEPdv("fuso-acerto");
     const abrir = await criar("/api/caixa/abrir", {
@@ -117,14 +93,19 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
       ],
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 50 }]
     });
-    await criar(`/api/caixa/${caixaId}/acertar-saldo`, { observacao: "Acerto fuso" });
+    const respostaRetorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      tipo: "retorno",
+      valor: 50,
+      observacao: "Retorno fuso"
+    });
+    expect(respostaRetorno.statusCode, respostaRetorno.body).toBe(200);
 
-    const despesa = await consultarUm<{ data_referencia: string }>(
+    const retorno = await consultarUm<{ data_referencia: string }>(
       `select to_char(data_referencia, 'YYYY-MM-DD') as data_referencia
-         from despesas where caixa_id = $1 and descricao = 'Diferenca de caixa'`,
+         from transferencias where caixa_id = $1 and tipo = 'retorno'`,
       [caixaId]
     );
-    // A data do acerto e o dia LOCAL de "agora" em Sao Paulo (diaNegocio), nao o de UTC.
-    expect(despesa?.data_referencia).toBe(diaNegocio(new Date()));
+    // O retorno pertence ao mesmo dia contabil do caixa, inclusive quando o teste roda depois desse dia.
+    expect(retorno?.data_referencia).toBe(DIA_LOCAL);
   });
 });

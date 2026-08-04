@@ -20,10 +20,11 @@ export const abrirCaixaPayloadSchema = z.object({
   dataHoraAbertura: dataHoraSchema,
   // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
   turnoId: uuidSchema.optional().nullable(),
-  // Malote selecionado na abertura (R8): o servidor cria a transferencia cofre -> caixa pelo valor
-  // do malote e inicia o caixa em deficit. Opcional (abrir sem malote continua valido).
-  maloteId: uuidSchema.optional().nullable(),
-  // Lacre da IDA (D1/D5): preenchimento opcional por enquanto; o campo ja existe.
+  // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
+  maquininhaId: uuidSchema.optional().nullable(),
+  // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
+  // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
+  // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
   lacreAbertura: z.string().trim().min(1).optional().nullable(),
   observacao: z.string().optional().nullable()
 });
@@ -37,10 +38,6 @@ export const editarAberturaCaixaPayloadSchema = z.object({
   pdvId: uuidSchema,
   usuarioCaixaId: z.string().min(1),
   dataHoraAbertura: dataHoraSchema,
-  observacao: z.string().optional().nullable()
-});
-
-export const acertarSaldoCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable()
 });
 
@@ -95,6 +92,8 @@ export const linhaHistoricoCaixaSchema = z.object({
   turnoNome: z.string().nullable(),
   dataHoraAbertura: z.string().nullable(),
   dataHoraFechamento: z.string().nullable(),
+  fechadoPor: z.string().nullable(),
+  fechadoPorNome: z.string().nullable(),
   totalEntradas: z.number(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number(),
@@ -105,6 +104,7 @@ export const linhaHistoricoCaixaSchema = z.object({
   saldo: z.number(),
   status: statusCaixaSchema,
   temAjuste: z.boolean(),
+  alteradoAposFechamento: z.boolean(),
   observacao: z.string().nullable()
 });
 
@@ -158,8 +158,19 @@ export const categoriaLancamentosCaixaSchema = z.object({
   itens: z.array(lancamentoCaixaSchema)
 });
 
+export const alteracaoPosFechamentoCaixaSchema = z.object({
+  id: uuidSchema,
+  vendaId: uuidSchema,
+  identificadorExterno: z.string().nullable(),
+  descricao: z.string(),
+  valor: z.number(),
+  dataVenda: z.string().nullable(),
+  alteradoEm: z.string()
+});
+
 export const detalheCaixaResponseSchema = z.object({
   lancamentos: z.array(categoriaLancamentosCaixaSchema),
+  alteracoesPosFechamento: z.array(alteracaoPosFechamentoCaixaSchema),
   edicoes: z.array(edicaoHorarioCaixaSchema),
   ajuste: ajusteCaixaSchema.nullable()
 });
@@ -256,16 +267,25 @@ export const caixaOperacionalSchema = z.object({
   empresaId: uuidSchema,
   pdvId: uuidSchema,
   pdvNome: z.string(),
+  // R-121: a conta do PDV e a UNICA origem valida das saidas do operador. O front precisa dela para
+  // travar o campo Conta; sem isso a tela so descobriria a regra pelo 400 do servidor.
+  pdvContaId: uuidSchema.nullable(),
   usuarioId: z.string(),
   usuarioCaixaId: z.string(),
   usuarioCaixaNome: z.string(),
   colaboradorId: uuidSchema,
+  // Dia CONTABIL do caixa ("yyyy-MM-dd"), nao "hoje": num caixa que virou a meia-noite o dia do
+  // operador continua sendo o da abertura. A tela de Entradas mostra este dia (S6/D7).
+  dataMovimento: z.string(),
   dataHoraAbertura: z.string(),
   abertoEm: z.string(),
   dataHoraFechamento: z.string().nullable(),
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
+  maquininhaId: uuidSchema.nullable(),
+  maquininhaApelido: z.string().nullable(),
+  maquininhaNumeroSerie: z.string().nullable(),
   observacao: z.string().nullable(),
   status: z.string()
 });
@@ -273,12 +293,6 @@ export const caixaOperacionalSchema = z.object({
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable()
-});
-
-export const acertoSaldoCaixaResponseSchema = z.object({
-  despesaId: uuidSchema,
-  debitoId: uuidSchema,
-  valorDiferenca: z.number()
 });
 
 export const alterarHorarioCaixaResponseSchema = caixaStatusSchema.extend({
@@ -289,7 +303,6 @@ export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
 export type EditarAberturaCaixaPayload = z.infer<typeof editarAberturaCaixaPayloadSchema>;
-export type AcertarSaldoCaixaPayload = z.infer<typeof acertarSaldoCaixaPayloadSchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type StatusCaixa = z.infer<typeof statusCaixaSchema>;
@@ -300,6 +313,7 @@ export type EdicaoHorarioCaixa = z.infer<typeof edicaoHorarioCaixaSchema>;
 export type AjusteCaixa = z.infer<typeof ajusteCaixaSchema>;
 export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
 export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
+export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
@@ -325,7 +339,6 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
   };
 }
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
-export type AcertoSaldoCaixaResponse = z.infer<typeof acertoSaldoCaixaResponseSchema>;
 export type SolicitarAutorizacaoCaixaPayload = z.infer<typeof solicitarAutorizacaoCaixaPayloadSchema>;
 export type AlterarHorarioCaixaPayload = z.infer<typeof alterarHorarioCaixaPayloadSchema>;
 export type AlterarHorarioCaixaResponse = z.infer<typeof alterarHorarioCaixaResponseSchema>;

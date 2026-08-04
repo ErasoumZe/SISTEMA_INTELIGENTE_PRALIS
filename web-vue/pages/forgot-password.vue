@@ -22,9 +22,9 @@ async function requestReset() {
   });
 
   if (response.ok) {
-    message.value = "Se o email existir, enviamos um link de recuperacao. Verifique sua caixa de entrada.";
+    message.value = "Se o e-mail existir, enviamos um link de recuperação. Verifique sua caixa de entrada.";
   } else {
-    error.value = "Nao foi possivel solicitar a recuperacao agora.";
+    error.value = "Não foi possível solicitar a recuperação agora.";
   }
 
   loading.value = false;

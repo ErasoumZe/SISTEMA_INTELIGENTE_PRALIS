@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { gruposDespesas, gruposMercadorias, gruposRetiradas, gruposVendas } from "@padaria/db/schema/cadastro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 import {
@@ -11,7 +11,7 @@ import {
 
 type GrupoTipo = "despesa" | "mercadoria" | "retirada" | "vendas";
 type TabelaGrupo = typeof gruposDespesas | typeof gruposMercadorias | typeof gruposRetiradas | typeof gruposVendas;
-type GrupoLinhaBase = { id: string; empresaId: string; nome: string; grupoPaiId: string | null };
+type GrupoLinhaBase = { id: string; empresaId: string; nome: string; grupoPaiId: string | null; ativo: boolean };
 
 function tabelaGrupo(tipo: GrupoTipo): TabelaGrupo {
   if (tipo === "despesa") return gruposDespesas;
@@ -45,7 +45,8 @@ export async function listarGruposRepository() {
         id: gruposDespesas.id,
         empresaId: gruposDespesas.empresaId,
         nome: gruposDespesas.nome,
-        grupoPaiId: gruposDespesas.grupoPaiId
+        grupoPaiId: gruposDespesas.grupoPaiId,
+        ativo: gruposDespesas.ativa
       })
       .from(gruposDespesas),
     banco
@@ -53,7 +54,8 @@ export async function listarGruposRepository() {
         id: gruposMercadorias.id,
         empresaId: gruposMercadorias.empresaId,
         nome: gruposMercadorias.nome,
-        grupoPaiId: gruposMercadorias.grupoPaiId
+        grupoPaiId: gruposMercadorias.grupoPaiId,
+        ativo: gruposMercadorias.ativa
       })
       .from(gruposMercadorias),
     banco
@@ -61,7 +63,8 @@ export async function listarGruposRepository() {
         id: gruposRetiradas.id,
         empresaId: gruposRetiradas.empresaId,
         nome: gruposRetiradas.nome,
-        grupoPaiId: gruposRetiradas.grupoPaiId
+        grupoPaiId: gruposRetiradas.grupoPaiId,
+        ativo: gruposRetiradas.ativa
       })
       .from(gruposRetiradas),
     banco
@@ -69,7 +72,8 @@ export async function listarGruposRepository() {
         id: gruposVendas.id,
         empresaId: gruposVendas.empresaId,
         nome: gruposVendas.nome,
-        grupoPaiId: gruposVendas.grupoPaiId
+        grupoPaiId: gruposVendas.grupoPaiId,
+        ativo: sql<boolean>`true`.as("ativo")
       })
       .from(gruposVendas)
   ]);
@@ -82,20 +86,36 @@ export async function listarGruposRepository() {
 }
 
 export async function salvarGrupoRepository(
-  input: { id?: string; empresaId: string; tipoGrupo: GrupoTipo; nome: string; grupoPaiId: string | null },
+  input: {
+    id?: string;
+    empresaId: string;
+    tipoGrupo: GrupoTipo;
+    nome: string;
+    grupoPaiId: string | null;
+    ativa: boolean;
+  },
   db: ExecutorBanco = banco
 ) {
   const tabela = tabelaGrupo(input.tipoGrupo);
   if (input.id) {
     await db
       .update(tabela)
-      .set({ nome: input.nome, grupoPaiId: input.grupoPaiId })
+      .set({
+        nome: input.nome,
+        grupoPaiId: input.grupoPaiId,
+        ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {})
+      })
       .where(and(eq(tabela.id, input.id), eq(tabela.empresaId, input.empresaId)));
     return input;
   }
   const [criado] = await db
     .insert(tabela)
-    .values({ empresaId: input.empresaId, nome: input.nome, grupoPaiId: input.grupoPaiId })
+    .values({
+      empresaId: input.empresaId,
+      nome: input.nome,
+      grupoPaiId: input.grupoPaiId,
+      ...(input.tipoGrupo !== "vendas" ? { ativa: input.ativa } : {})
+    })
     .returning({ id: tabela.id });
   return criado;
 }
@@ -130,15 +150,14 @@ export async function copiarGruposRepository(
       const destinos = await db.select().from(tabela).where(eq(tabela.empresaId, empresaDestinoId));
       for (const grupo of origem) {
         if (jaImportado(destinos, grupo.empresaId, grupo.id)) continue;
-        await db
-          .insert(tabela)
-          .values({
-            empresaId: empresaDestinoId,
-            nome: grupo.nome,
-            grupoPaiId: null,
-            importadoDe: grupo.empresaId,
-            idImportado: grupo.id
-          });
+        await db.insert(tabela).values({
+          empresaId: empresaDestinoId,
+          nome: grupo.nome,
+          grupoPaiId: null,
+          ativa: grupo.ativa,
+          importadoDe: grupo.empresaId,
+          idImportado: grupo.id
+        });
         inseridos += 1;
       }
     }

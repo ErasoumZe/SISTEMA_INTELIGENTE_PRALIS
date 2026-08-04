@@ -34,6 +34,11 @@
       "development": "./src/schema/despesa/despesa.schema.ts",
       "default": "./dist/src/schema/despesa/despesa.schema.js"
     },
+    "./schema/lancamento": {
+      "types": "./dist/src/schema/lancamento/lancamento.schema.d.ts",
+      "development": "./src/schema/lancamento/lancamento.schema.ts",
+      "default": "./dist/src/schema/lancamento/lancamento.schema.js"
+    },
     "./schema/mercadoria": {
       "types": "./dist/src/schema/mercadoria/mercadoria.schema.d.ts",
       "development": "./src/schema/mercadoria/mercadoria.schema.ts",
@@ -77,8 +82,11 @@
     "db:push": "drizzle-kit push",
     "db:push:force": "drizzle-kit push --force",
     "db:migrate": "drizzle-kit migrate",
+    "db:baseline": "tsx baseline-migrations.ts",
     "bootstrap:prod": "tsx bootstrap-prod.ts",
+    "bootstrap:contas-usuarios": "tsx bootstrap-contas-usuarios.ts",
     "diagnostico:fuso": "tsx diagnostico-fuso.ts",
+    "planilha:inspecionar": "tsx planilha-inspecionar.ts",
     "seed:referencia:prod": "tsx seed-referencia-prod.ts",
     "seed:dev": "tsx --conditions=development seed.ts",
     "backfill:codigos": "tsx --conditions=development backfill-codigos.ts",

@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
+
+// R-129: data de pagamento nao pode ser retroativa. O teste e sobre CRIAR os cinco movimentos com
+// banco real; a data de pagamento so precisa ser aceitavel.
+const PAGO_EM = diaNegocio(new Date());
 
 describe("operacoes integration", () => {
   let contexto: ContextoApiTeste;
@@ -43,13 +48,21 @@ describe("operacoes integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Venda criada por integracao",
         valorOriginal: 12,
         contaOrigemId: idsTeste.contaCaixa,
         pdvId: idsTeste.pdvA,
         colaboradorId: idsTeste.colaboradorAdmin,
-        itensVenda: [{ produtoId: idsTeste.produto, descricaoProduto: "Produto Integracao", quantidade: 1, valorUnitario: 12, valorTotal: 12 }],
+        itensVenda: [
+          {
+            produtoId: idsTeste.produto,
+            descricaoProduto: "Produto Integracao",
+            quantidade: 1,
+            valorUnitario: 12,
+            valorTotal: 12
+          }
+        ],
         tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 12 }]
       }
     });
@@ -63,7 +76,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Despesa criada por integracao",
         valorOriginal: 3,
         contaOrigemId: idsTeste.contaCaixa,
@@ -80,7 +93,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Mercadoria criada por integracao",
         valorOriginal: 4,
         contaOrigemId: idsTeste.contaCaixa,
@@ -99,7 +112,7 @@ describe("operacoes integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
         dataVencimento: "2026-06-30",
-        dataPagamento: "2026-06-30",
+        dataPagamento: PAGO_EM,
         descricao: "Retirada criada por integracao",
         valorOriginal: 2,
         contaOrigemId: idsTeste.contaCaixa,
@@ -119,7 +132,8 @@ describe("operacoes integration", () => {
         descricao: "Transferencia criada por integracao",
         valorOriginal: 1,
         contaOrigemId: idsTeste.contaCaixa,
-        contaDestinoId: idsTeste.contaBanco
+        contaDestinoId: idsTeste.contaBanco,
+        nLacreDoc: "OPERACOES-CRIAR-001"
       }
     });
     expect(transferencia.statusCode).toBe(201);
@@ -132,11 +146,24 @@ describe("operacoes integration", () => {
       transferencia: json<{ data: { id: string } }>(transferencia).data.id
     };
 
-    await expect(consultarUm("select id from vendas where id = $1 and caixa_id = $2", [ids.venda, idsTeste.caixaAberto])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from despesas where id = $1 and caixa_id = $2", [ids.despesa, idsTeste.caixaAberto])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from mercadorias where id = $1 and caixa_id = $2", [ids.mercadoria, idsTeste.caixaAberto])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from retiradas where id = $1 and caixa_id = $2", [ids.retirada, idsTeste.caixaAberto])).resolves.toBeTruthy();
-    await expect(consultarUm("select id from transferencias where id = $1 and caixa_id = $2", [ids.transferencia, idsTeste.caixaAberto])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from vendas where id = $1 and caixa_id = $2", [ids.venda, idsTeste.caixaAberto])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from despesas where id = $1 and caixa_id = $2", [ids.despesa, idsTeste.caixaAberto])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from mercadorias where id = $1 and caixa_id = $2", [ids.mercadoria, idsTeste.caixaAberto])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from retiradas where id = $1 and caixa_id = $2", [ids.retirada, idsTeste.caixaAberto])
+    ).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from transferencias where id = $1 and caixa_id = $2", [
+        ids.transferencia,
+        idsTeste.caixaAberto
+      ])
+    ).resolves.toBeTruthy();
 
     for (const [url, texto] of [
       [`/api/despesas?empresaId=${idsTeste.empresaA}`, "Despesa criada por integracao"],
@@ -198,17 +225,18 @@ describe("operacoes integration", () => {
         descricao: "Transferencia invalida",
         valorOriginal: 1,
         contaOrigemId: idsTeste.contaCaixa,
-        contaDestinoId: idsTeste.contaCaixa
+        contaDestinoId: idsTeste.contaCaixa,
+        nLacreDoc: "OPERACOES-MESMA-CONTA"
       }
     });
-    const transferenciaSemContaPdv = await contexto.app.inject({
+    const transferenciaSemLacre = await contexto.app.inject({
       method: "POST",
       url: "/api/transferencias",
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
-        descricao: "Transferencia sem PDV",
+        descricao: "Transferencia sem lacre",
         valorOriginal: 1,
         contaOrigemId: idsTeste.contaBanco,
         contaDestinoId: idsTeste.contaLivre
@@ -220,7 +248,7 @@ describe("operacoes integration", () => {
       despesaSemGrupo,
       mercadoriaSemGrupo,
       transferenciaMesmaConta,
-      transferenciaSemContaPdv
+      transferenciaSemLacre
     ]) {
       assertProblem(resposta, 400);
     }
@@ -237,8 +265,9 @@ describe("operacoes integration", () => {
         descricao: "Transferencia referencia invalida",
         valorOriginal: 1,
         contaOrigemId: idsTeste.contaCaixa,
-        contaDestinoId: idsTeste.contaBanco,
-        maloteId: idsTeste.maloteB
+        // Referencia que NAO e conta da empresa A: a validacao de referencia tem de barrar.
+        contaDestinoId: idsTeste.grupoPatrimonioOutraEmpresa,
+        nLacreDoc: "OPERACOES-REFERENCIA-OUTRA-EMPRESA"
       }
     });
     const cookieCaixa = await cookieSessao(contexto.app, "caixa");
@@ -260,12 +289,15 @@ describe("operacoes integration", () => {
   });
 
   it("Deve_Retornar403_Quando_UsuarioNaoTemPermissaoDaOperacao", async () => {
-    const cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    // Desde a R-121 o operador de caixa LANCA despesa — quem prova o gate agora e o perfil que
+    // realmente nao tem `despesas_criar`. Antes o teste usava "caixa" e so passava porque o fixture
+    // divergia da producao (tinha 4 permissoes; o cargo real tem 13).
+    const cookieSemPermissao = await cookieSessao(contexto.app, "semPermissao");
 
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/despesas",
-      headers: { cookie: cookieCaixa },
+      headers: { cookie: cookieSemPermissao },
       payload: {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-06-30",
@@ -352,4 +384,3 @@ describe("operacoes integration", () => {
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 });
-

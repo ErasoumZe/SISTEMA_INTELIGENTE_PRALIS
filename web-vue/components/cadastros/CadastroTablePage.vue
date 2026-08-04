@@ -8,7 +8,7 @@ const props = defineProps<{
   descricao: string;
   colunas: string[];
   linhas: Array<Record<string, string | undefined>>;
-  editarCarregandoId: string;
+  editarCarregandoId?: string;
   modoServidor?: boolean;
   busca?: string;
   tipoPermissaoFiltro?: string;
@@ -41,20 +41,22 @@ const emit = defineEmits<{
   (event: "update:paginaServidor", pagina: number): void;
 }>();
 
-const acao = computed(() => (props.tela === "malotes" ? "Novo malote" : "Novo cadastro"));
+const acao = "Novo cadastro";
 const podeEditar = computed(() => true);
-const podeCopia = computed(() => !["permissoes", "malotes"].includes(props.tela));
+const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
-  // Malotes usa o botao Editar embutido (podeEditar); a acao extra "Editar" era uma duplicata, removida.
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
   if (props.tela === "permissoes")
     return [
       {
-        label: "Restaurar padrao",
+        label: "Restaurar padrão",
         event: "restaurarPadraoCargo",
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }
     ];
+  // O vinculo usuario <-> contas era editado tambem por aqui (botao "Contas" na linha do usuario).
+  // Removido: o D8 poe fundo e "quem opera" no cadastro da CONTA, num salvar so. Manter os dois
+  // lados seria a segunda rota para o mesmo ato (DoD item 2).
   return [];
 });
 </script>

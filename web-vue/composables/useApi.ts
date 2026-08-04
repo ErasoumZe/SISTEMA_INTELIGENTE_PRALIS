@@ -23,11 +23,13 @@ function isProblemDetails(valor: unknown): valor is ProblemDetails {
 export class ErroApiCliente extends Error {
   status: number;
   codigo?: string;
-  constructor(mensagem: string, status: number, codigo?: string) {
+  details?: unknown;
+  constructor(mensagem: string, status: number, codigo?: string, details?: unknown) {
     super(mensagem);
     this.name = "ErroApiCliente";
     this.status = status;
     this.codigo = codigo;
+    this.details = details;
   }
 }
 
@@ -82,7 +84,8 @@ async function rawRequest(apiUrl: string, method: HttpMethod, rota: string, body
   const payload = await lerJson(resposta);
   if (!resposta.ok) {
     const codigo = isProblemDetails(payload) ? payload.code : undefined;
-    throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo);
+    const details = isProblemDetails(payload) ? payload.details : undefined;
+    throw new ErroApiCliente(mensagemErroApi(payload), resposta.status, codigo, details);
   }
   return payload;
 }
@@ -174,19 +177,29 @@ export function useApi() {
       cores["surface"] = tema.corCartao;
     }
     // Texto (ink) que contrasta com o cartao personalizado — mantem menu/cards legiveis quando a
-    // empresa escolhe um cartao escuro (modo escuro segue protegido pelos !important em main.css).
+    // empresa escolhe um cartao escuro.
     const raiz = document.documentElement.style;
     const { ink, inkSoft } = inkParaSuperficie(tema.corCartao);
-    // Camada de identidade Pralis (--pralis-*, definida em :root) — sobreposta aqui inline para
-    // que fundo/cartao/texto do menu tambem sigam a aparencia da empresa.
-    raiz.setProperty("--pralis-canvas", tema.corFundo);
-    raiz.setProperty("--pralis-surface", tema.corCartao);
-    raiz.setProperty("--pralis-ink", ink);
-    raiz.setProperty("--pralis-ink-soft", inkSoft);
-    // Variaveis proprias (hex) usadas pelo CSS da aplicacao (sidebar, cards, resumo de caixa).
-    document.documentElement.style.setProperty("--padaria-background", tema.corFundo);
-    document.documentElement.style.setProperty("--padaria-card", tema.corCartao);
-    document.documentElement.style.setProperty("--padaria-foreground", ink);
+    // PONTE COM A CAMADA DE TOKENS (main.css, bloco --cx-*).
+    // As superficies/tintas da empresa passam a ser injetadas num namespace proprio,
+    // --empresa-*, que os --cx-* leem com fallback de fabrica:
+    //     --cx-canvas: var(--empresa-fundo, #f4f6fa);
+    // Duas coisas dependem disso:
+    // 1. os quatro vocabularios antigos (--marca-*, --padaria-*, neutros V1, --shell-*)
+    //    sao alias de --cx-*, entao continuam recebendo a cor da empresa sem que
+    //    precisemos escrever em cada um deles aqui;
+    // 2. o modo escuro redefine --cx-*, que ninguem injeta inline. Antes o escuro
+    //    disputava com ESTAS linhas e so vencia com !important em cada var — era
+    //    isso que sustentava a pilha de !important no main.css.
+    // Ao criar token novo de superficie/tinta, ele nasce lendo --empresa-*: nao ha
+    // um segundo lugar para lembrar de atualizar.
+    raiz.setProperty("--empresa-fundo", tema.corFundo);
+    raiz.setProperty("--empresa-superficie", tema.corCartao);
+    raiz.setProperty("--empresa-tinta", ink);
+    raiz.setProperty("--empresa-tinta-suave", inkSoft);
+    // Acento POR TELA (Entradas amarelo, Mercadorias verde...): e o unico valor aqui que
+    // muda a cada navegacao, entao segue direto em --padaria-brand/-accent e NAO alimenta
+    // a marca da casca (--cx-brand), que precisa ficar estavel entre as telas.
     document.documentElement.style.setProperty("--padaria-brand", tema.corPrimaria);
     document.documentElement.style.setProperty("--padaria-accent", tema.corSecundaria);
     document.documentElement.style.setProperty("--padaria-card-entrada", temaResumoCaixa.corAviso);

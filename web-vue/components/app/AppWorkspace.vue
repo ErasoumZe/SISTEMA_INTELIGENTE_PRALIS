@@ -4,10 +4,12 @@ import {
   deCentavos,
   paraCentavos,
   somarCentavos,
+  valorTotalCentavos,
   type AuthSession,
   type TemaAplicacao
 } from "@padaria/shared";
 import type {
+  AcaoNovo,
   CadastroForm,
   CaixaStatus,
   EntidadeOperacional,
@@ -19,7 +21,9 @@ import type {
   PermissoesPaginadas,
   ResumoCaixa
 } from "~/types/padaria";
+import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
+import ConfirmacaoDialog from "~/components/comum/ConfirmacaoDialog.vue";
 import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
@@ -48,23 +52,36 @@ import {
   mensagemErro,
   entidadePorTela,
   opcoesFiltradasPorEmpresa,
-  opcoesNovo,
+  acoesNovoPermitidas,
+  categoriaInicialSaida,
   opcoesVazias,
   rotaTela,
   temaPadrao,
   tipoEndpointCadastro
 } from "~/utils/domain";
 import {
+  estadoRecorrenciaVazio,
   formOperacaoDeDetalhe,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
   montarPayloadOperacao,
+  montarRecorrencia,
   totalItemMercadoriaForm,
   validarOperacaoParaEnvio,
   type OperacaoDetalhe
 } from "~/utils/operacoes";
+import {
+  TAMANHO_PAGINA_OPERACOES,
+  diaInicialEntradas,
+  paramsListagemOperacoes,
+  podeConsultarOutrosDias,
+  totalPaginasOperacoes as calcularTotalPaginasOperacoes
+} from "~/utils/entradas";
 import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
+import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
 
 type TipoPagina =
   | "inicio"
@@ -106,18 +123,33 @@ const empresas = useState<Opcao[]>("padaria.workspace.empresas", () => []);
 const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () => []);
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
+const notificacoes = ref<Notificacao[]>([]);
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
 const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
 const erro = ref("");
-const saindo = ref(false);
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
+const confirmacao = reactive({ aberto: false, titulo: "Confirmar ação", mensagem: "", textoConfirmar: "Confirmar" });
+let resolverConfirmacao: ((valor: boolean) => void) | null = null;
+
+function confirmarAcao(mensagem: string, titulo = "Confirmar ação", textoConfirmar = "Confirmar") {
+  if (resolverConfirmacao) resolverConfirmacao(false);
+  Object.assign(confirmacao, { aberto: true, titulo, mensagem, textoConfirmar });
+  return new Promise<boolean>((resolve) => {
+    resolverConfirmacao = resolve;
+  });
+}
+
+function responderConfirmacao(confirmou: boolean) {
+  confirmacao.aberto = false;
+  resolverConfirmacao?.(confirmou);
+  resolverConfirmacao = null;
+}
 
 const modalOperacaoAberto = ref(false);
-const modalMaloteAberto = ref(false);
 const modalCadastroAberto = ref(false);
 const modalTemaAberto = ref(false);
 const modalCopiaAberto = ref(false);
@@ -126,6 +158,7 @@ const entidadeNova = ref<EntidadeOperacional>("venda");
 const operacaoEditandoId = ref("");
 // Foto do documento (nota/cupom) de despesas e mercadorias: anexada no modal de lancamento.
 const fotoDocumento = useFotoDocumento();
+const fotoNota = useFotoDocumento();
 // Detalhe (somente leitura) da venda integrada (CREARE) — itens, pagamento e total. O cargo caixa
 // so visualiza; editar exige entradas_editar (na pratica, admin).
 const modalVendaDetalheAberto = ref(false);
@@ -143,35 +176,18 @@ const aprovacaoMercadoriaSalvandoId = ref("");
 const form = ref<OperacaoForm>(formOperacaoVazio());
 const discriminandoDespesa = ref(false);
 const discriminandoMercadoria = ref(false);
-const itensDespesa = ref([{ descricao: "", valor: "", grupoDespesaId: "" }]);
-const itensMercadoria = ref([
-  {
-    descricao: "",
-    quantidade: "1",
-    valorUnitario: "",
-    descontoTipo: "",
-    descontoValor: "",
-    valorTotal: "",
-    produtoId: "",
-    grupoMercadoriaId: "",
-    unidadeMedidaId: ""
-  }
-]);
+const itensDespesa = ref([itemDespesaVazio()]);
+const itensMercadoria = ref([itemMercadoriaVazio()]);
+const erroDiscriminacaoLinha = ref<number | null>(null);
+const erroDiscriminacaoCampo = ref<string | null>(null);
+// Recorrencia (D3): estado do bloco fica AQUI, junto dos demais campos que salvam, porque e daqui
+// que salvarOperacao monta o payload. O bloco da tela so le e escreve via provide/inject.
+const recorrencia = ref(estadoRecorrenciaVazio());
+const recorrenciaPayload = computed(() => montarRecorrencia(recorrencia.value));
 const itensVenda = ref([{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }]);
 const tiposPagamento = ref([{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }]);
 const salvandoOperacao = ref(false);
 const caixaSalvando = ref(false);
-const modalCaixaDrawerAberto = ref(false);
-const formCaixaDrawer = reactive({
-  pdvId: "",
-  turnoId: "",
-  dataHoraAbertura: ""
-});
-
-const formMalote = ref({ numeroLacre: "", valor: 0 });
-const maloteEditandoId = ref("");
-const maloteSalvando = ref(false);
-const maloteEditandoCarregandoId = ref("");
 
 const cadastroTela = ref("");
 const cadastroEditandoId = ref("");
@@ -211,6 +227,12 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
+const totalOperacoes = ref(0);
+// Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda — so Entradas manda.
+const totalLiquidoOperacoes = ref<number | null>(null);
+// Dia que a tela de Entradas esta listando (S6). Filtro de data: o operador confere o dia corrente
+// e a retaguarda navega para outros dias. Vazio ate a primeira carga (ver sincronizarDiaEntradas).
+const diaEntradas = ref("");
 
 const empresasDisponiveis = computed(() => empresas.value);
 const empresaId = computed(() => empresaSelecionadaId.value);
@@ -238,9 +260,22 @@ const {
   motivosTelasDesabilitadas
 } = usePermissoes(permissoesUsuario, () => Boolean(caixaAberto.value));
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
+// Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
 const perfilCaixaOperacional = computed(
   () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
 );
+// R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
+// nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
+const contaTravadaDoCaixa = computed(() => (perfilCaixaOperacional.value ? (caixaAberto.value?.pdvContaId ?? "") : ""));
+// O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador —
+// e ai ela nao existe na lista de opcoes e o campo apareceria cinza e VAZIO. A trava vem do caixa,
+// nao do vinculo: entao a tela sempre diz de qual conta a saida vai sair, com o PDV como reserva.
+const contaTravadaDoCaixaNome = computed(() => {
+  if (!contaTravadaDoCaixa.value) return "";
+  const conta = opcoesEmpresa.value.contas.find((item) => item.id === contaTravadaDoCaixa.value);
+  return conta?.nome ?? caixaAberto.value?.pdvNome ?? "Conta do caixa aberto";
+});
 const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
@@ -248,7 +283,7 @@ const telaBloqueadaPorCaixa = computed(() => {
 // Opcoes do seletor de aparencia com rotulo explicito: "padrao" (global) primeiro, o resumo do
 // caixa, e cada tela como "Somente a tela: X" — deixa claro se a cor vale para tudo ou uma so.
 const telasTemaPermitidas = computed(() => [
-  { id: "padrao", titulo: "Padrao (todas as telas)" },
+  { id: "padrao", titulo: "Padrão (todas as telas)" },
   { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
   ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
 ]);
@@ -279,14 +314,18 @@ const operacoesDaTela = computed(() =>
     ? operacoes.value.filter((operacao) => operacao.pendenteDiscriminacao)
     : operacoes.value
 );
-const totalPaginasOperacoes = computed(() => Math.max(1, Math.ceil(operacoesDaTela.value.length / 10)));
-const operacoesPaginadas = computed(() =>
-  operacoesDaTela.value.slice((paginaOperacoes.value - 1) * 10, paginaOperacoes.value * 10)
-);
-const acoesNovo = computed(() => {
-  if (!caixaAberto.value) return [];
-  return opcoesNovo.filter((item) => temPermissao(item.permissao));
-});
+// `operacoes` JA e a pagina vinda do servidor; o total tambem. O fatiamento em memoria saiu junto
+// com a paginacao falsa (ver carregarOperacoes).
+const totalPaginasOperacoes = computed(() => calcularTotalPaginasOperacoes(totalOperacoes.value));
+const operacoesPaginadas = computed(() => operacoesDaTela.value);
+// Filtro de data das Entradas: quem esta preso ao caixa aberto nao troca de dia (o servidor forca o
+// dia do caixa em resolverEscopoEntradasDoDia); a tela mostra o campo desabilitado em vez de fingir
+// que funciona.
+const podeConsultarOutrosDiasEntradas = computed(() => podeConsultarOutrosDias(permissoesUsuario.value));
+// "+ NOVO" = 3 eixos (Entradas / Transferencias / Saidas). Sem trava de caixa AQUI: quem nao opera
+// caixa (Tesouraria, Financeiro) precisa do botao mesmo assim; a trava de caixa aberto continua em
+// abrirOperacao, que avisa e leva para /caixa quando a entidade exige caixa.
+const acoesNovo = computed(() => acoesNovoPermitidas(permissoesUsuario.value));
 const {
   dadosCadastro,
   descricaoTela,
@@ -314,14 +353,18 @@ const totalItensVenda = computed(() => deCentavos(somarCentavos(...itensVenda.va
 const totalTiposPagamento = computed(() =>
   deCentavos(somarCentavos(...tiposPagamento.value.map((item) => item.totalPago)))
 );
+// R-042: a conta do Valor Total vive em @padaria/shared (valorTotalCentavos), testada. Aqui era
+// uma expressao inline sem funcao e sem teste — foi assim que a regra caiu em desuso sem nada
+// quebrar. O servidor recalcula a mesma coisa e nao confia neste numero (ver valoresJuros).
 const valorTotalOperacao = computed(() =>
   deCentavos(
-    Math.max(
-      0,
-      paraCentavos(form.value.valorOriginal) +
-        paraCentavos(form.value.valorAcrescimo) -
-        paraCentavos(form.value.valorDesconto)
-    )
+    valorTotalCentavos({
+      valorOriginal: form.value.valorOriginal,
+      // "" no form = sem juros; o contrato so conhece 'percentual' | 'valor' | null.
+      jurosTipo: form.value.jurosTipo || null,
+      jurosValorInformado: form.value.jurosValorInformado,
+      valorDesconto: form.value.valorDesconto
+    })
   )
 );
 const alvosFiltroPermissoes = computed(() => {
@@ -338,13 +381,18 @@ const alvosFiltroPermissoes = computed(() => {
     ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` })),
     ...opcoesEmpresa.value.usuarios.map((item) => ({
       id: item.usuarioId ?? item.id,
-      nome: `Usuario: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
+      nome: `Usuário: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
     }))
   ];
 });
 
+// Excluir o ultimo item de uma pagina pode deixar a pagina atual fora do total: volta e recarrega
+// (com paginacao no servidor, ficar numa pagina inexistente devolveria lista vazia).
 watch(totalPaginasOperacoes, (total) => {
-  if (paginaOperacoes.value > total) paginaOperacoes.value = total;
+  if (paginaOperacoes.value > total) {
+    paginaOperacoes.value = total;
+    void carregarOperacoes();
+  }
 });
 
 // Ao filtrar a fila de pendencias, volta para a primeira pagina e recarrega os lancamentos
@@ -419,7 +467,7 @@ watch(
     if (!workspaceCarregado.value || !sessao.value) return;
     erro.value = "";
     if (!telasDoUsuario().includes(novaTela)) {
-      erro.value = "Sem permissao para acessar esta pagina.";
+      erro.value = "Sem permissão para acessar esta página.";
       return;
     }
     await carregarDadosTela(novaTela, empresaId.value);
@@ -433,80 +481,10 @@ function notificar(text: string, color = "success") {
   snackbar.show = true;
 }
 
-function limparWorkspacePersistido() {
-  workspaceCarregado.value = false;
-  sessao.value = null;
-  opcoes.value = opcoesVazias();
-  empresas.value = [];
-  operacoes.value = [];
-  resumo.value = null;
-  caixaStatus.value = null;
-  empresaSelecionadaId.value = "";
-  tema.value = temaPadrao();
-  temaAtual.value = temaPadrao();
-  temaResumoCaixa.value = temaPadrao();
-  temaTelaAtual.value = "";
-  temaResumoCaixaAtual.value = "";
-}
-
 function atualizarDocumentoCadastro(valor: string) {
   const documento = mascararDocumento(valor);
   formCadastro.value.documento = documento;
   if (cadastroTela.value === "clientes" && !documentoEhCpf(documento)) formCadastro.value.dataNascimento = "";
-}
-
-// So abre caixa. Com caixa aberto o card leva para a tela /caixa, onde vive o fluxo novo de
-// alterar horario (token do autorizador) — o PUT /abertura com tokenEdicao legado nao tem mais
-// entrada na interface.
-async function abrirModalCaixaDrawer() {
-  // O botao "Abrir caixa" e global; a lista de PDVs pode nao ter sido carregada pela tela atual
-  // (ex.: Painel). Garante os PDVs da empresa ativa antes de montar o dropdown do dialogo.
-  // Turnos/colaboradores sao opcionais: se a permissao faltar (403), o modal ABRE mesmo assim com
-  // esses campos vazios e um aviso discreto — nunca falha em silencio (bug 2 do QA de 15/07).
-  if (empresaId.value) {
-    const faltas: string[] = [];
-    opcoes.value.pdvs = await carregarOpcaoOpcional(
-      faltas,
-      "PDVs",
-      () => apiGet<Opcao[]>(`/api/pdvs?empresaId=${empresaId.value}`),
-      opcoes.value.pdvs
-    );
-    opcoes.value.turnos = await carregarOpcaoOpcional(
-      faltas,
-      "Turnos",
-      () => apiGetPaginado<Opcao>(`/api/turnos?empresaId=${empresaId.value}`).then((r) => r.itens),
-      opcoes.value.turnos
-    );
-    if (!opcoes.value.colaboradores.length) {
-      opcoes.value.colaboradores = await carregarOpcaoOpcional(
-        faltas,
-        "Colaboradores",
-        () => apiGet<Opcao[]>(`/api/colaboradores?empresaId=${empresaId.value}`),
-        opcoes.value.colaboradores
-      );
-    }
-    const aviso = avisoOpcoesIndisponiveis(faltas);
-    if (aviso) notificar(aviso, "warning");
-  }
-  formCaixaDrawer.pdvId = opcoesEmpresa.value.pdvs[0]?.id || "";
-  // Pre-seleciona o turno pelo turno padrao do colaborador do usuario logado (server tambem aplica).
-  const colaboradorLogado = opcoesEmpresa.value.colaboradores.find(
-    (colaborador) => colaborador.id === sessao.value?.perfil?.colaboradorId
-  );
-  formCaixaDrawer.turnoId = colaboradorLogado?.turnoPadraoId || "";
-  formCaixaDrawer.dataHoraAbertura = dataHoraLocal();
-  modalCaixaDrawerAberto.value = true;
-}
-
-async function salvarCaixaDrawer() {
-  const ok = await abrirCaixaOperacional({
-    pdvId: formCaixaDrawer.pdvId,
-    usuarioCaixaId: sessao.value?.perfil?.usuarioId || "",
-    turnoId: formCaixaDrawer.turnoId || null,
-    dataHoraAbertura: formCaixaDrawer.dataHoraAbertura,
-    observacao: null
-  });
-  if (ok) modalCaixaDrawerAberto.value = false;
 }
 
 function telasDoUsuario() {
@@ -538,7 +516,7 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
   try {
-    await carregarStatusCaixa(idEmpresa);
+    await Promise.all([carregarStatusCaixa(idEmpresa), carregarNotificacoes(idEmpresa)]);
     if (telaBloqueadaPorCaixa.value) {
       const dados = opcoesVazias();
       dados.empresas = empresas.value;
@@ -554,6 +532,25 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
     await carregarOperacoes(idEmpresa);
   } finally {
     empresaCarregando.value = false;
+  }
+}
+
+async function carregarNotificacoes(idEmpresa = empresaId.value) {
+  if (!idEmpresa) {
+    notificacoes.value.splice(0);
+    return;
+  }
+  const itens = await apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${encodeURIComponent(idEmpresa)}`);
+  notificacoes.value.splice(0, notificacoes.value.length, ...itens);
+}
+
+async function verificarNotificacao(notificacaoId: string) {
+  try {
+    await apiPut(`/api/notificacoes/${notificacaoId}/verificar?empresaId=${encodeURIComponent(empresaId.value)}`, {});
+    await carregarNotificacoes();
+    notificar("Notificacao verificada.");
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
   }
 }
 
@@ -584,7 +581,16 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     gruposRetiradas: []
   };
 
-  if (tela === "entradas") {
+  if (tela === "contas") {
+    // Tela de Contas (D8): a listagem precisa do fundo, do saldo ATUAL derivado e de quem opera a
+    // conta — /api/contas/saldos. As demais telas seguem no GET /api/contas (id+nome), que e lista
+    // de opcao de formulario e nao paga as consultas de movimento.
+    // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
+    [dados.contas, dados.usuarios] = await Promise.all([
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
+      carregarOpcaoOpcional(faltas, "Usuários", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
+    ]);
+  } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
@@ -594,12 +600,18 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "fechamento") {
     dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
   } else if (tela === "caixa") {
-    [dados.pdvs, dados.turnos] = await Promise.all([
+    [dados.pdvs, dados.turnos, dados.maquininhas] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
       carregarOpcaoOpcional(
         faltas,
         "Turnos",
         () => apiGetPaginado<Opcao>(`/api/turnos${query}`).then((r) => r.itens),
+        []
+      ),
+      carregarOpcaoOpcional(
+        faltas,
+        "Maquininhas",
+        () => apiGetPaginado<Opcao>(`/api/maquininhas${query}`).then((r) => r.itens),
         []
       )
     ]);
@@ -622,10 +634,14 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), [])
     ]);
   } else if (tela === "transferencias") {
-    [dados.contas, dados.malotes] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Malotes", () => apiGet<Opcao[]>(`/api/malotes${query}`), [])
-    ]);
+    // Origem/Destino: SO as contas que o usuario opera (contas_usuarios; admin ve todas). Ver
+    // /api/contas-usuarios/minhas-contas. Sem vinculo => vazio (o modal mostra o aviso).
+    dados.contas = await carregarOpcaoOpcional(
+      faltas,
+      "Contas",
+      () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+      []
+    );
   } else if (tela === "despesas") {
     Object.assign(
       dados,
@@ -636,9 +652,18 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         gruposVazios
       )
     );
-    [dados.contas, dados.fornecedores] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), [])
+    // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6). Opcional —
+    // quem nao tem permissao de patrimonio segue lancando so com os grupos de despesa.
+    [dados.contas, dados.fornecedores, dados.gruposPatrimonio] = await Promise.all([
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Grupos de patrimonio",
+        async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
+        []
+      )
     ]);
   } else if (tela === "contas_pagar") {
     dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []);
@@ -653,12 +678,26 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
-    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
-      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), [])
-    ]);
+    // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6).
+    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos, dados.gruposPatrimonio] =
+      await Promise.all([
+        carregarOpcaoOpcional(
+          faltas,
+          "Contas",
+          () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
+          []
+        ),
+        carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
+        carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
+        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+        carregarOpcaoOpcional(
+          faltas,
+          "Grupos de patrimonio",
+          async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
+          []
+        )
+      ]);
   } else if (tela === "retiradas") {
     Object.assign(
       dados,
@@ -670,16 +709,26 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta origem e obrigatoria no form de retirada (sem ela o select fica "No data available").
-    [dados.contas, dados.fornecedores, dados.colaboradores] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+    // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
+    [dados.contas, dados.fornecedores, dados.colaboradores, dados.sociosGestores] = await Promise.all([
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
     ]);
   } else if (tela === "grupos") {
     Object.assign(
       dados,
       await apiGet<Pick<Opcoes, "gruposDespesas" | "gruposMercadorias" | "gruposRetiradas">>(`/api/grupos${query}`)
     );
+  } else if (tela === "patrimonio") {
+    // Uma chamada traz grupos + itens; os setores alimentam o select do item.
+    const [patrimonio, setores] = await Promise.all([
+      apiGet<Pick<Opcoes, "gruposPatrimonio" | "patrimonioItens">>(`/api/patrimonio${query}`),
+      carregarOpcaoOpcional(faltas, "Setores", () => apiGet<Opcao[]>(`/api/setores${query}`), [])
+    ]);
+    Object.assign(dados, patrimonio);
+    dados.setores = setores;
   } else if (tela === "unidades") {
     dados.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
   } else if (tela === "turnos") {
@@ -711,8 +760,6 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     permissoesBuscou.value = false;
     permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
-  } else if (tela === "malotes") {
-    dados.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
   } else if (tela === "colaboradores") {
     [dados.colaboradores, dados.cargos, dados.setores] = await Promise.all([
       apiGet<Opcao[]>(`/api/colaboradores${query}`),
@@ -722,6 +769,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "fornecedores") {
     dados.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
+  } else if (tela === "socios_gestores") {
+    dados.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
+  } else if (tela === "maquininhas") {
+    dados.maquininhas = (await apiGetPaginado<Opcao>(`/api/maquininhas${query}`)).itens;
   } else if (tela === "clientes") {
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
@@ -776,10 +827,10 @@ async function carregarTudo() {
     }
     const telas = telasDoUsuario();
     if (!paginaInicialNeutra.value && !telas.includes(telaAtiva.value)) {
-      erro.value = "Sem permissao para acessar esta pagina.";
+      erro.value = "Sem permissão para acessar esta página.";
       return;
     }
-    await carregarStatusCaixa(empresaId.value);
+    await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
     if (!paginaInicialNeutra.value) await carregarDadosTela(telaAtiva.value, empresaId.value);
     await carregarTemaTela(paginaInicialNeutra.value ? "padrao" : telaAtiva.value);
     await carregarTemaResumoCaixa();
@@ -791,11 +842,24 @@ async function carregarTudo() {
   }
 }
 
+// Mantem `diaEntradas` coerente com o perfil e com o caixa: quem pode navegar entre dias comeca em
+// hoje e depois manda no campo; quem esta preso ao caixa acompanha o dia CONTABIL do caixa aberto
+// (abrir ou fechar caixa troca o dia listado), que e o que o servidor forca de qualquer forma.
+function sincronizarDiaEntradas() {
+  if (podeConsultarOutrosDiasEntradas.value) {
+    if (!diaEntradas.value) diaEntradas.value = diaInicialEntradas({ podeConsultarOutrosDias: true });
+    return;
+  }
+  diaEntradas.value = diaInicialEntradas({
+    podeConsultarOutrosDias: false,
+    dataMovimentoCaixa: caixaAberto.value?.dataMovimento
+  });
+}
+
 async function carregarOperacoes(idEmpresa = empresaId.value) {
   if (!idEmpresa) return;
   const entidade = entidadePorTela[telaAtiva.value];
   if (!entidade) return;
-  const params = new URLSearchParams({ empresaId: idEmpresa });
   // Fila de pendentes: mostra lancamentos sem discriminacao de qualquer caixa (inclusive os
   // vindos de NF-e com caixa_id NULL), ignorando o filtro de caixa aberto.
   const pendentes = filtroPendentesDiscriminacao.value && telaSuportaDiscriminacao.value;
@@ -803,16 +867,25 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
   const item = itemPorTela[telaAtiva.value];
   if (!pendentes && item && dependeCaixaAberto(item) && !caixaId) {
     operacoes.value = [];
+    totalOperacoes.value = 0;
     return;
   }
-  if (pendentes) {
-    params.set("pendenteDiscriminacao", "true");
-  } else if (caixaId) {
-    params.set("caixaId", caixaId);
-  }
-  operacoes.value = await apiGet<OperacaoResumo[]>(
+  // So Entradas recorta por DIA (D7). As demais telas seguem com o escopo do caixa/periodo delas.
+  if (telaAtiva.value === "entradas") sincronizarDiaEntradas();
+  const params = paramsListagemOperacoes({
+    empresaId: idEmpresa,
+    pagina: paginaOperacoes.value,
+    pendenteDiscriminacao: pendentes,
+    caixaId,
+    dia: telaAtiva.value === "entradas" ? diaEntradas.value : ""
+  });
+  const pagina = await apiGetPaginado<OperacaoResumo, { totalLiquido?: number }>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
   );
+  operacoes.value = pagina.itens;
+  totalOperacoes.value = pagina.total;
+  // Totalizador do topo (S6): so a listagem de Entradas manda o total em dinheiro do filtro.
+  totalLiquidoOperacoes.value = pagina.meta?.totalLiquido ?? null;
 }
 
 // Fila de aprovacao (NF-e): visao de retaguarda, ignora o caixa. Carregada sob demanda ao ligar
@@ -914,11 +987,11 @@ type ChaveOpcaoOperacao =
   | "contas"
   | "fornecedores"
   | "colaboradores"
+  | "sociosGestores"
   | "produtos"
   | "formasPagamento"
   | "pdvs"
   | "unidadesMedida"
-  | "malotes"
   | "grupos";
 
 // Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
@@ -929,8 +1002,8 @@ const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
   despesa: ["contas", "fornecedores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  retirada: ["contas", "colaboradores", "grupos"],
-  transferencia: ["contas", "malotes"]
+  retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
+  transferencia: ["contas"]
 };
 
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
@@ -941,13 +1014,17 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
 
   const tarefas: Record<ChaveOpcaoOperacao, () => Promise<void>> = {
     contas: async () => {
-      alvo.contas = await apiGet<Opcao[]>(`/api/contas${query}`);
+      // Modal aberto pelo "+ NOVO" global: contas do usuario (contas_usuarios; admin ve todas).
+      alvo.contas = await apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`);
     },
     fornecedores: async () => {
       alvo.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
     },
     colaboradores: async () => {
       alvo.colaboradores = await apiGet<Opcao[]>(`/api/colaboradores${query}`);
+    },
+    sociosGestores: async () => {
+      alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
     },
     produtos: async () => {
       alvo.produtos = await apiGet<Opcao[]>(`/api/produtos${query}`);
@@ -961,9 +1038,6 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     unidadesMedida: async () => {
       alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
     },
-    malotes: async () => {
-      alvo.malotes = await apiGet<Opcao[]>(`/api/malotes${query}`);
-    },
     grupos: async () => {
       Object.assign(
         alvo,
@@ -976,11 +1050,11 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     contas: "Contas",
     fornecedores: "Fornecedores",
     colaboradores: "Colaboradores",
+    sociosGestores: "Sócios e Gestores",
     produtos: "Produtos",
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",
     unidadesMedida: "Unidades de medida",
-    malotes: "Malotes",
     grupos: "Grupos"
   };
   // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal
@@ -995,54 +1069,60 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
   if (aviso) notificar(aviso, "warning");
 }
 
+const abrirOperacaoUmaVez = criarGuardaAberturaOperacao();
+
 async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
-  if (!caixaAberto.value) {
-    notificar("Abra um caixa antes de registrar lancamentos.", "warning");
-    void router.push("/caixa");
-    return;
-  }
-  entidadeNova.value = entidade;
-  operacaoEditandoId.value = operacao?.id ?? "";
-  modoDiscriminacao.value = false;
-  fotoDocumento.limpar();
-  form.value = formOperacaoVazio();
-  discriminandoDespesa.value = false;
-  discriminandoMercadoria.value = false;
-  itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
-  tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-  itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
-  itensMercadoria.value = [
-    {
-      descricao: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      valorTotal: "",
-      produtoId: "",
-      grupoMercadoriaId: "",
-      unidadeMedidaId: ""
-    }
-  ];
-  // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
-  try {
-    await carregarOpcoesParaOperacao(entidade);
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  }
-  if (operacao?.id) {
-    try {
-      const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-      preencherFormOperacao(entidade, detalhe);
-      if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
-        void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+  return abrirOperacaoUmaVez(
+    () =>
+      modalOperacaoAberto.value && entidadeNova.value === entidade && operacaoEditandoId.value === (operacao?.id ?? ""),
+    async () => {
+      // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
+      // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
+      // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
+      if (!caixaAberto.value && entidade !== "transferencia") {
+        notificar("Abra um caixa antes de registrar lancamentos.", "warning");
+        void router.push("/caixa");
+        return;
       }
-    } catch (error) {
-      notificar(mensagemErro(error), "error");
-      return;
+      entidadeNova.value = entidade;
+      operacaoEditandoId.value = operacao?.id ?? "";
+      modoDiscriminacao.value = false;
+      fotoDocumento.limpar();
+      fotoNota.limpar();
+      form.value = formOperacaoVazio();
+      discriminandoDespesa.value = false;
+      discriminandoMercadoria.value = false;
+      itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
+      tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
+      itensDespesa.value = [itemDespesaVazio()];
+      itensMercadoria.value = [itemMercadoriaVazio()];
+      // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+      // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+      recorrencia.value = estadoRecorrenciaVazio();
+      // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
+      try {
+        await carregarOpcoesParaOperacao(entidade);
+      } catch (error) {
+        notificar(mensagemErro(error), "error");
+      }
+      if (operacao?.id) {
+        try {
+          const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
+          preencherFormOperacao(entidade, detalhe);
+          if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
+            void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+          }
+          if (detalhe.fotoNotaUrl) {
+            void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
+          }
+        } catch (error) {
+          notificar(mensagemErro(error), "error");
+          return;
+        }
+      }
+      modalOperacaoAberto.value = true;
     }
-  }
-  modalOperacaoAberto.value = true;
+  );
 }
 
 // Detalhe somente leitura da venda (integrada): itens + pagamento + total. Reusa o GET de detalhe.
@@ -1067,29 +1147,24 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   operacaoEditandoId.value = operacao.id;
   modoDiscriminacao.value = true;
   fotoDocumento.limpar();
+  fotoNota.limpar();
   form.value = formOperacaoVazio();
   discriminandoDespesa.value = entidade === "despesa";
   discriminandoMercadoria.value = entidade === "mercadoria";
-  itensDespesa.value = [{ descricao: "", valor: "", grupoDespesaId: "" }];
-  itensMercadoria.value = [
-    {
-      descricao: "",
-      quantidade: "1",
-      valorUnitario: "",
-      descontoTipo: "",
-      descontoValor: "",
-      valorTotal: "",
-      produtoId: "",
-      grupoMercadoriaId: "",
-      unidadeMedidaId: ""
-    }
-  ];
+  itensDespesa.value = [itemDespesaVazio()];
+  itensMercadoria.value = [itemMercadoriaVazio()];
+  // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+  // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+  recorrencia.value = estadoRecorrenciaVazio();
   try {
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
     preencherFormOperacao(entidade, detalhe);
     if (detalhe.fotoDocumentoUrl) {
       void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
+    }
+    if (detalhe.fotoNotaUrl) {
+      void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
     }
     // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
     discriminandoDespesa.value = entidade === "despesa";
@@ -1101,14 +1176,41 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   modalOperacaoAberto.value = true;
 }
 
-function executarAcaoNovo(acao: (typeof opcoesNovo)[number]) {
-  if (acao.entidade) void abrirOperacao(acao.entidade);
-  if (acao.tela === "malote") abrirMaloteNovo();
+function executarAcaoNovo(acao: AcaoNovo) {
+  if (acao.telaDestino) {
+    void router.push(rotaTela(acao.telaDestino));
+    return;
+  }
+  if (!acao.entidade) return;
+  // "Saidas" abre o modal unico de lancamento na categoria que o perfil pode criar; as tres
+  // continuam alternaveis nos botoes do topo, sem fechar.
+  void abrirOperacao(acao.id === "saidas" ? categoriaInicialSaida(permissoesUsuario.value) : acao.entidade);
+}
+
+// Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 §4).
+// Mantem o que ja foi digitado (valor, datas, descricao) e limpa so o que e proprio da categoria
+// anterior: o grupo (cada categoria tem o seu) e o credor que a nova categoria nao aceita. Recarrega
+// as opcoes porque cada entidade usa listas diferentes (mercadoria precisa de produtos/unidades).
+async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
+  if (entidade === entidadeNova.value) return;
+  entidadeNova.value = entidade;
+  form.value.grupoDespesaId = "";
+  form.value.grupoMercadoriaId = "";
+  form.value.grupoRetiradaId = "";
+  if (entidade === "retirada") form.value.fornecedorId = "";
+  if (entidade === "mercadoria") form.value.colaboradorId = "";
+  try {
+    await carregarOpcoesParaOperacao(entidade);
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
 }
 
 // Discriminacao: envia SO os itens via PATCH .../discriminar (sem trava de caixa). O servidor
 // valida a soma contra o valor do cabecalho e recalcula o total de cada item pelo desconto.
 async function salvarDiscriminacao() {
+  erroDiscriminacaoLinha.value = null;
+  erroDiscriminacaoCampo.value = null;
   const entidade = entidadeNova.value;
   const payload = montarPayloadOperacao(entidade, {
     empresaId: empresaId.value,
@@ -1123,8 +1225,18 @@ async function salvarDiscriminacao() {
   });
   const corpo =
     entidade === "mercadoria"
-      ? { empresaId: empresaId.value, itensMercadoria: payload.itensMercadoria }
-      : { empresaId: empresaId.value, itensDespesa: payload.itensDespesa };
+      ? {
+          empresaId: empresaId.value,
+          descontoGeralTipo: payload.descontoGeralTipo,
+          descontoGeralValor: payload.descontoGeralValor,
+          itensMercadoria: payload.itensMercadoria
+        }
+      : {
+          empresaId: empresaId.value,
+          descontoGeralTipo: payload.descontoGeralTipo,
+          descontoGeralValor: payload.descontoGeralValor,
+          itensDespesa: payload.itensDespesa
+        };
   const itens = entidade === "mercadoria" ? payload.itensMercadoria : payload.itensDespesa;
   if (!itens.length) {
     notificar("Informe ao menos um item para discriminar.", "error");
@@ -1146,6 +1258,14 @@ async function salvarDiscriminacao() {
   notificar("Discriminacao salva com sucesso.");
 }
 
+// Recorrencia (D3): a serie criada tem de aparecer na mensagem. Quando o teto de 12 meses corta a
+// serie, dizer so "salvo" deixaria a pessoa achar que os 24 lancamentos que pediu existem.
+function mensagemLancamentoSalvo(resultado: { serie?: number; serieLimitada?: boolean }) {
+  if (!resultado.serie) return "Lançamento salvo com sucesso.";
+  const base = `Serie criada: ${resultado.serie} lancamentos.`;
+  return resultado.serieLimitada ? `${base} A serie foi limitada a 12 meses.` : base;
+}
+
 async function salvarOperacao() {
   salvandoOperacao.value = true;
   try {
@@ -1162,17 +1282,22 @@ async function salvarOperacao() {
       itensMercadoria: itensMercadoria.value,
       discriminandoDespesa: discriminandoDespesa.value,
       discriminandoMercadoria: discriminandoMercadoria.value,
-      produtos: opcoesEmpresa.value.produtos
+      produtos: opcoesEmpresa.value.produtos,
+      // Recorrencia so na CRIACAO: editar um lancamento da serie mexe naquele, nao regenera a
+      // serie inteira (cancelar/editar em bloco e entrega propria — PROJECT_BRAIN/18 D-04).
+      ...(operacaoEditandoId.value ? {} : { recorrencia: recorrenciaPayload.value })
     });
     // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
     const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
       descricao: payload.descricao,
+      observacao: payload.observacao,
       grupoDespesaId: payload.grupoDespesaId,
       grupoMercadoriaId: payload.grupoMercadoriaId,
       contaOrigemId: payload.contaOrigemId,
       contaDestinoId: payload.contaDestinoId,
       fornecedorId: payload.fornecedorId,
       colaboradorId: payload.colaboradorId,
+      socioGestorId: payload.socioGestorId,
       qtdItensDespesa: payload.itensDespesa.length,
       qtdItensMercadoria: payload.itensMercadoria.length
     });
@@ -1182,14 +1307,12 @@ async function salvarOperacao() {
     }
     const editandoId = operacaoEditandoId.value;
     const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
+    type OperacaoSalva = { id: string; computar: boolean; serie?: number; serieLimitada?: boolean };
     const operacaoSalva = editandoId
-      ? await apiPut<{ id: string; computar: boolean }>(`/api/${endpoint}/${editandoId}`, payload)
-      : await apiPost<{ id: string; computar: boolean }>(`/api/${endpoint}`, payload);
-    // Anexa a foto do documento (nota/cupom) so em despesas/mercadorias, apos o registro existir.
-    const fotoUrl =
-      entidadeNova.value === "despesa" || entidadeNova.value === "mercadoria"
-        ? await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id)
-        : null;
+      ? await apiPut<OperacaoSalva>(`/api/${endpoint}/${editandoId}`, payload)
+      : await apiPost<OperacaoSalva>(`/api/${endpoint}`, payload);
+    const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
+    const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
     const linhaAtualizada = {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
@@ -1197,8 +1320,9 @@ async function salvarOperacao() {
       descricao: form.value.descricao,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
       computar: operacaoSalva.computar,
-      status: "aprovado",
-      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {})
+      status: entidadeNova.value === "transferencia" ? (form.value.agendadaPara ? "agendada" : "pendente") : "aprovado",
+      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {}),
+      ...(fotoNotaUrl ? { fotoNotaUrl } : {})
     };
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
@@ -1207,62 +1331,24 @@ async function salvarOperacao() {
       operacoes.value.unshift(linhaAtualizada);
     }
     modalOperacaoAberto.value = false;
-    notificar(editandoId ? "Lancamento atualizado com sucesso." : "Lancamento salvo com sucesso.");
+    notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
+    return { id: operacaoSalva.id };
   } catch (error) {
+    if (error instanceof ErroApiCliente && error.status === 422 && error.details && typeof error.details === "object") {
+      const detalhe = error.details as { linhaProvavel?: unknown; campoProvavel?: unknown };
+      erroDiscriminacaoLinha.value = Number(detalhe.linhaProvavel) || null;
+      erroDiscriminacaoCampo.value = typeof detalhe.campoProvavel === "string" ? detalhe.campoProvavel : null;
+      await nextTick();
+      document
+        .querySelector<HTMLElement>(
+          `[data-linha-discriminacao="${erroDiscriminacaoLinha.value}"] [data-campo-discriminacao="${erroDiscriminacaoCampo.value}"]`
+        )
+        ?.focus();
+    }
     notificar(mensagemErro(error), "error");
   } finally {
     salvandoOperacao.value = false;
-  }
-}
-
-function abrirMaloteNovo() {
-  maloteEditandoId.value = "";
-  formMalote.value = { numeroLacre: "", valor: 0 };
-  modalMaloteAberto.value = true;
-}
-
-// O malote E o lacre (D3): o item ja esta em opcoes.malotes (numero + valor), sem buscar lacres.
-function abrirMaloteEditar(linha: Record<string, string | undefined>) {
-  if (!linha.id) return;
-  const malote = opcoes.value.malotes.find((item) => item.id === linha.id);
-  maloteEditandoId.value = linha.id;
-  formMalote.value = {
-    numeroLacre: malote?.numeroLacre ?? linha.lacre ?? "",
-    valor: Number(malote?.valor ?? 0)
-  };
-  modalMaloteAberto.value = true;
-}
-
-async function salvarMalote() {
-  maloteSalvando.value = true;
-  try {
-    const payload = {
-      empresaId: empresaId.value,
-      numeroLacre: formMalote.value.numeroLacre.trim(),
-      valor: formMalote.value.valor
-    };
-    const resposta = maloteEditandoId.value
-      ? await apiPut<{ id?: string }>(`/api/malotes/${maloteEditandoId.value}`, payload)
-      : await apiPost<{ id?: string }>("/api/malotes", payload);
-    const id = resposta?.id ?? maloteEditandoId.value;
-    const indiceAtual = opcoes.value.malotes.findIndex((item) => item.id === id);
-    // Status: novo nasce "disponivel"; edicao mantem o status atual (ciclo e do caixa, nao do cadastro).
-    const item: Opcao = {
-      id,
-      empresaId: empresaId.value,
-      numeroLacre: payload.numeroLacre,
-      valor: payload.valor,
-      status: indiceAtual >= 0 ? (opcoes.value.malotes[indiceAtual]?.status ?? "disponivel") : "disponivel"
-    };
-    if (indiceAtual >= 0) opcoes.value.malotes.splice(indiceAtual, 1, item);
-    else opcoes.value.malotes.unshift(item);
-    modalMaloteAberto.value = false;
-    notificar(maloteEditandoId.value ? "Malote atualizado com sucesso." : "Malote cadastrado com sucesso.");
-  } catch (error) {
-    notificar(mensagemErro(error), "error");
-  } finally {
-    maloteSalvando.value = false;
   }
 }
 
@@ -1301,12 +1387,6 @@ function abrirCadastroFilho(linha: Record<string, string | undefined>) {
 }
 
 function abrirCadastroEditar(linha: Record<string, string | undefined>) {
-  // Malotes tem modal proprio (com lacres): o botao Editar embutido abre o editor de malote,
-  // e nao o cadastro generico. Isso substitui a acao "Editar" extra duplicada que existia.
-  if (telaAtiva.value === "malotes") {
-    void abrirMaloteEditar(linha);
-    return;
-  }
   cadastroTela.value = telaAtiva.value;
   cadastroEditandoId.value = linha.id ?? "";
   formCadastro.value = formCadastroDeLinha(linha, regrasDaLinha(linha));
@@ -1335,7 +1415,7 @@ async function salvarCadastro() {
     } catch (error) {
       // Produto duplicado (nome/codigo de barras na loja): oferece "cadastrar mesmo assim".
       if (error instanceof ErroApiCliente && error.codigo === "DUPLICATE_PRODUCT") {
-        if (!window.confirm(`${error.message} Cadastrar mesmo assim?`)) return;
+        if (!(await confirmarAcao(error.message, "Produto já cadastrado", "Cadastrar mesmo assim"))) return;
         resultado = await enviar({ ...(payload as Record<string, unknown>), forcar: true });
       } else {
         throw error;
@@ -1398,7 +1478,14 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
   const alvoId = linha.alvoId || linha.cargoId || linha.setorId || linha.usuarioId;
   const permissao = linha.permissao;
   if (!tipoPermissao || !alvoId || !permissao) return;
-  if (!window.confirm(`Excluir a permissao ${permissao} de ${linha.alvo || alvoId}?`)) return;
+  if (
+    !(await confirmarAcao(
+      `Excluir a permissão ${permissao} de ${linha.alvo || alvoId}?`,
+      "Excluir permissão",
+      "Excluir permissão"
+    ))
+  )
+    return;
   permissaoExcluindoId.value = linha.id ?? `${tipoPermissao}:${alvoId}:${permissao}`;
   try {
     const params = new URLSearchParams({
@@ -1408,7 +1495,7 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
       permissao
     });
     await apiDelete(`/api/permissoes/regras?${params.toString()}`);
-    notificar("Permissao excluida com sucesso.");
+    notificar("Permissão excluída com sucesso.");
     await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1464,11 +1551,10 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
+const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
   api: { post: apiPost },
   empresaId: () => empresaId.value,
   telaAtiva: () => telaAtiva.value,
-  resumoSaldo: () => resumo.value?.saldo ?? null,
   setSalvando: (valor) => {
     caixaSalvando.value = valor;
   },
@@ -1476,23 +1562,8 @@ const { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional }
   carregarDadosTela,
   notificar,
   mensagemErro,
-  confirmar: (mensagem) => window.confirm(mensagem)
+  confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
 });
-
-async function logout() {
-  saindo.value = true;
-  try {
-    try {
-      await fetch(`${apiUrl}/api/auth/sign-out`, { method: "POST", credentials: "include" });
-    } catch {
-      // Se a API estiver fora, o logout local ainda precisa liberar a tela.
-    }
-    limparWorkspacePersistido();
-    await router.push("/login");
-  } finally {
-    saindo.value = false;
-  }
-}
 
 function abrirImportacao(tela = telaAtiva.value) {
   copiaModo.value = "importar";
@@ -1519,6 +1590,8 @@ function tipoCopiaTela(tela = telaAtiva.value) {
     unidades: "unidades-medida",
     areas_setores: "areas-setores",
     fornecedores: "fornecedores",
+    socios_gestores: "socios-gestores",
+    maquininhas: "maquininhas",
     produtos: "produtos",
     colaboradores: "colaboradores"
   };
@@ -1559,15 +1632,17 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   if (!cargoId) return;
   const nome = linha.alvo ?? "cargo";
   if (
-    !window.confirm(
-      `Restaurar as permissoes do cargo "${nome}" para o padrao? Isso SUBSTITUI as regras atuais (inclusive as desligadas manualmente).`
-    )
+    !(await confirmarAcao(
+      `Restaurar as permissões do cargo "${nome}" para o padrão? Isso substitui as regras atuais, inclusive as desligadas manualmente.`,
+      "Restaurar permissões",
+      "Restaurar padrão"
+    ))
   ) {
     return;
   }
   try {
     await apiPost(`/api/permissoes/cargo/${cargoId}/restaurar-padrao`, {});
-    notificar(`Permissoes do cargo "${nome}" restauradas para o padrao.`);
+    notificar(`Permissões do cargo "${nome}" restauradas para o padrão.`);
     if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1579,13 +1654,11 @@ function lidarExtraCadastro(payload: { event: string; linha: Record<string, stri
 }
 
 provide(WORKSPACE_CONTEXT, {
-  modalCaixaDrawerAberto,
-  formCaixaDrawer,
   opcoesEmpresa,
-  caixaSalvando,
-  salvarCaixaDrawer,
+  empresaId,
   modalOperacaoAberto,
   entidadeNova,
+  trocarCategoriaLancamento,
   operacaoEditandoId,
   modoDiscriminacao,
   form,
@@ -1596,16 +1669,20 @@ provide(WORKSPACE_CONTEXT, {
   tiposPagamento,
   itensDespesa,
   itensMercadoria,
+  erroDiscriminacaoLinha,
+  erroDiscriminacaoCampo,
   salvandoOperacao,
   salvarOperacao,
+  contaTravadaDoCaixa,
+  contaTravadaDoCaixaNome,
+  podeUsarRecorrencia,
+  recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,
   fotoDocumentoExistente: fotoDocumento.existente,
   selecionarFotoDocumento: fotoDocumento.selecionar,
-  modalMaloteAberto,
-  maloteEditandoId,
-  formMalote,
-  maloteSalvando,
-  salvarMalote,
+  fotoNotaPreview: fotoNota.previewUrl,
+  fotoNotaExistente: fotoNota.existente,
+  selecionarFotoNota: fotoNota.selecionar,
   modalCadastroAberto,
   cadastroEditandoId,
   cadastroTela,
@@ -1643,6 +1720,17 @@ provide(WORKSPACE_CONTEXT, {
 
 function atualizarPaginaOperacoes(pagina: number) {
   paginaOperacoes.value = pagina;
+  // Com a paginacao no servidor, mudar de pagina e uma nova consulta — antes era so um slice.
+  void carregarOperacoes();
+}
+
+// Filtro de data das Entradas (S6). Trocar o dia recomeca na pagina 1: a pagina 4 do dia anterior
+// nao tem relacao com o dia novo e voltaria uma lista vazia.
+function atualizarDiaEntradas(dia: string) {
+  if (!dia || dia === diaEntradas.value || !podeConsultarOutrosDiasEntradas.value) return;
+  diaEntradas.value = dia;
+  paginaOperacoes.value = 1;
+  void carregarOperacoes();
 }
 
 const pageContext = computed(() => ({
@@ -1651,10 +1739,22 @@ const pageContext = computed(() => ({
   telaAtiva: telaAtiva.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
-  totalOperacoes: operacoesDaTela.value.length,
+  // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
+  operacoesTela: operacoesDaTela.value,
+  // Total do FILTRO INTEIRO (vem do servidor), nao o tamanho da pagina — e ele que o totalizador
+  // do topo e o controle de paginas usam. Antes era operacoesDaTela.length, que com a paginacao
+  // falsa dava sempre no maximo 10.
+  totalOperacoes: totalOperacoes.value,
+  totalLiquidoOperacoes: totalLiquidoOperacoes.value,
+  // Filtro de data das Entradas (S6): o dia listado e se o perfil pode trocar de dia.
+  diaEntradas: diaEntradas.value,
+  podeConsultarOutrosDiasEntradas: podeConsultarOutrosDiasEntradas.value,
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   descricao: descricaoTela(telaAtiva.value),
+  // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
+  podeCriarTransferencia: temPermissao("transferencias_criar"),
+  podeEditarTransferencia: temPermissao("transferencias_editar"),
   caixaStatus: caixaStatus.value,
   mostrarFiltroDiscriminacao: telaSuportaDiscriminacao.value,
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
@@ -1677,7 +1777,6 @@ const pageContext = computed(() => ({
   treeItens: telaAtiva.value === "areas_setores" ? treeAreasSetores() : treeGrupos(),
   colunasCadastro: colunasCadastro(telaAtiva.value),
   linhasCadastro: dadosCadastro(telaAtiva.value),
-  maloteEditandoCarregandoId: maloteEditandoCarregandoId.value,
   permissoesFiltros,
   alvosFiltroPermissoes: alvosFiltroPermissoes.value,
   permissoesCarregandoBusca: permissoesCarregandoBusca.value,
@@ -1699,14 +1798,18 @@ const pageContext = computed(() => ({
     modalVendaDetalheAberto.value = valor;
   },
   atualizarPaginaOperacoes,
+  recarregarOperacoes: carregarOperacoes,
+  atualizarDiaEntradas,
   abrirCaixaOperacional,
-  acertarSaldoOperacional,
+  retornarSaldoOperacional,
+  notificacoes: notificacoes.value,
+  verificarNotificacao,
   fecharCaixaOperacional,
   recarregarCaixa: async () => {
     await carregarStatusCaixa(empresaId.value);
     await carregarOperacoes(empresaId.value);
   },
-  abrirCadastroNovo: () => (telaAtiva.value === "malotes" ? abrirMaloteNovo() : abrirCadastroNovo(telaAtiva.value)),
+  abrirCadastroNovo: () => abrirCadastroNovo(telaAtiva.value),
   abrirImportacao: () => abrirImportacao(telaAtiva.value),
   abrirExportacao,
   abrirCadastroEditar,
@@ -1777,12 +1880,12 @@ onBeforeUnmount(() => {
     :empresas="empresasDisponiveis"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
+    :notificacoes="notificacoes"
     :telas-desabilitadas="telasDesabilitadasMenu"
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
-    :saindo="saindo"
     @selecionar-empresa="selecionarEmpresa"
-    @logout="logout"
+    @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>
       <div v-if="temPermissao('caixa_operar')" class="caixa-card">
@@ -1794,7 +1897,7 @@ onBeforeUnmount(() => {
           <span class="status-pill">Aberto</span>
         </div>
         <div v-else>
-          <div class="caixa-title">Nao ha caixa aberto</div>
+          <div class="caixa-title">Não há caixa aberto</div>
           <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
         </div>
         <v-btn
@@ -1808,6 +1911,8 @@ onBeforeUnmount(() => {
         >
           Gerenciar caixa
         </v-btn>
+        <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
+             so NAVEGA para la — nao existe mais modal de abertura. -->
         <v-btn
           v-else
           class="mt-4 caixa-edit"
@@ -1815,9 +1920,9 @@ onBeforeUnmount(() => {
           size="small"
           variant="tonal"
           prepend-icon="mdi-cash-plus"
-          @click="abrirModalCaixaDrawer()"
+          to="/caixa"
         >
-          Abrir caixa
+          Ir para o caixa
         </v-btn>
       </div>
     </template>
@@ -1827,15 +1932,20 @@ onBeforeUnmount(() => {
         <template #activator="{ props: menuProps }">
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
         </template>
-        <v-list min-width="280">
+        <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
+             abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
+        <v-list min-width="288" class="fab-novo-list">
           <v-list-item
             v-for="acao in acoesNovo"
-            :key="acao.titulo"
-            :prepend-icon="acao.icone"
+            :key="acao.id"
             :title="acao.titulo"
             :subtitle="acao.subtitulo"
             @click="executarAcaoNovo(acao)"
-          />
+          >
+            <template #prepend>
+              <v-icon :icon="acao.icone" class="fab-novo-icone" :style="{ color: acao.cor }" />
+            </template>
+          </v-list-item>
         </v-list>
       </v-menu>
     </template>
@@ -1848,6 +1958,13 @@ onBeforeUnmount(() => {
 
     <slot v-else v-bind="pageContext" />
     <WorkspaceDialogs />
+    <ConfirmacaoDialog
+      :aberto="confirmacao.aberto"
+      :titulo="confirmacao.titulo"
+      :mensagem="confirmacao.mensagem"
+      :texto-confirmar="confirmacao.textoConfirmar"
+      @responder="responderConfirmacao"
+    />
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
   </AppShell>

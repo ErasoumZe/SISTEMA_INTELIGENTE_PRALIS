@@ -2,6 +2,7 @@ import * as autenticacaoSchema from "./autenticacao/autenticacao.schema.js";
 import * as cadastroSchema from "./cadastro/cadastro.schema.js";
 import * as caixaSchema from "./caixa/caixa.schema.js";
 import * as despesaSchema from "./despesa/despesa.schema.js";
+import * as lancamentoSchema from "./lancamento/lancamento.schema.js";
 import * as mercadoriaSchema from "./mercadoria/mercadoria.schema.js";
 import * as notaFiscalSchema from "./nota-fiscal/nota-fiscal.schema.js";
 import * as retiradaSchema from "./retirada/retirada.schema.js";
@@ -14,6 +15,7 @@ export const schema = {
   ...cadastroSchema,
   ...caixaSchema,
   ...despesaSchema,
+  ...lancamentoSchema,
   ...mercadoriaSchema,
   ...notaFiscalSchema,
   ...retiradaSchema,

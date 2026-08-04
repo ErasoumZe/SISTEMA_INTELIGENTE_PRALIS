@@ -23,7 +23,7 @@ describe("grupos integration", () => {
       method: "POST",
       url: "/api/grupos-despesas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "despesa", nome: "Grupo despesa criado" }
+      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "despesa", nome: "Grupo despesa criado", ativa: false }
     });
     const grupoMercadoria = await contexto.app.inject({
       method: "POST",
@@ -44,18 +44,24 @@ describe("grupos integration", () => {
       payload: { empresaId: idsTeste.empresaA, tipoGrupo: "vendas", nome: "Grupo venda criado" }
     });
 
-    for (const resposta of [grupoDespesa, grupoMercadoria, grupoRetirada, grupoVenda]) expect(resposta.statusCode).toBe(201);
+    for (const resposta of [grupoDespesa, grupoMercadoria, grupoRetirada, grupoVenda])
+      expect(resposta.statusCode).toBe(201);
 
     const grupoId = json<{ data: { id: string } }>(grupoDespesa).data.id;
     const editado = await contexto.app.inject({
       method: "PUT",
       url: `/api/grupos-despesas/${grupoId}`,
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "despesa", nome: "Grupo despesa editado" }
+      payload: { empresaId: idsTeste.empresaA, tipoGrupo: "despesa", nome: "Grupo despesa editado", ativa: true }
     });
 
     expect(editado.statusCode).toBe(204);
-    await expect(consultarUm("select id from grupos_despesas where id = $1 and nome = $2", [grupoId, "Grupo despesa editado"])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from grupos_despesas where id = $1 and nome = $2 and ativa", [
+        grupoId,
+        "Grupo despesa editado"
+      ])
+    ).resolves.toBeTruthy();
   });
 });
 
@@ -73,7 +79,10 @@ describe("grupos importacao/exportacao integration", () => {
   });
 
   it("Deve_ImportarGruposEntreEmpresasPermitidas", async () => {
-    await executarSql("delete from grupos_despesas where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA]);
+    await executarSql("delete from grupos_despesas where empresa_id = $1 and importado_de = $2", [
+      idsTeste.empresaB,
+      idsTeste.empresaA
+    ]);
 
     const resposta = await contexto.app.inject({
       method: "POST",
@@ -84,7 +93,12 @@ describe("grupos importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBeGreaterThan(0);
-    await expect(consultarUm("select id from grupos_despesas where empresa_id = $1 and importado_de = $2", [idsTeste.empresaB, idsTeste.empresaA])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from grupos_despesas where empresa_id = $1 and importado_de = $2", [
+        idsTeste.empresaB,
+        idsTeste.empresaA
+      ])
+    ).resolves.toBeTruthy();
   });
 
   it("Deve_ExportarGrupoParaEmpresaPermitida", async () => {
@@ -103,7 +117,12 @@ describe("grupos importacao/exportacao integration", () => {
 
     assertOk(resposta);
     expect(json<{ data: { inseridos: number } }>(resposta).data.inseridos).toBe(1);
-    await expect(consultarUm("select id from grupos_despesas where empresa_id = $1 and importado_de = $2 and id_importado = $3", [idsTeste.empresaB, idsTeste.empresaA, idsTeste.grupoDespesaOperacional])).resolves.toBeTruthy();
+    await expect(
+      consultarUm("select id from grupos_despesas where empresa_id = $1 and importado_de = $2 and id_importado = $3", [
+        idsTeste.empresaB,
+        idsTeste.empresaA,
+        idsTeste.grupoDespesaOperacional
+      ])
+    ).resolves.toBeTruthy();
   });
 });
-

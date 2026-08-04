@@ -5,8 +5,8 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, type PerfilTeste } from "../../setup/contexto.js";
 
 // Matriz cargo x operacao de caixa (Fase 3). Prova os GATES DE PERMISSAO por rota, por perfil
-// do seed. Perfis: admin (todas), caixa (caixa_operar + entradas), gerente/tesouraria (sem
-// caixa), semPermissao (nenhuma). Complementa a prova generica de hierarquia (usuario>cargo>
+// do seed. Perfis: admin (todas), caixa (caixa_operar + entradas), gerente (opera e gerencia),
+// tesouraria (sem caixa) e semPermissao (nenhuma). Complementa a prova generica de hierarquia (usuario>cargo>
 // setor) com a cobertura especifica das rotas de caixa que faltava.
 describe("caixa permissoes por cargo integration", () => {
   let contexto: ContextoApiTeste;
@@ -27,7 +27,7 @@ describe("caixa permissoes por cargo integration", () => {
   it.each([
     ["admin", 200],
     ["caixa", 200],
-    ["gerente", 403],
+    ["gerente", 200],
     ["tesouraria", 403],
     ["semPermissao", 403]
   ] as const)("status do caixa: perfil %s espera %i", async (perfil, status) => {
@@ -44,7 +44,7 @@ describe("caixa permissoes por cargo integration", () => {
   it.each([
     ["admin", 200],
     ["caixa", 403],
-    ["gerente", 403],
+    ["gerente", 200],
     ["semPermissao", 403]
   ] as const)("historico do caixa: perfil %s espera %i", async (perfil, status) => {
     const resposta = await contexto.app.inject({
@@ -56,7 +56,7 @@ describe("caixa permissoes por cargo integration", () => {
     else assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 
-  it("Deve_Bloquear_Quando_GerenteTentaAbrirCaixaSemCaixaOperar", async () => {
+  it("Deve_PassarGateDePermissao_Quando_GerenteTentaAbrirCaixa", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -68,23 +68,25 @@ describe("caixa permissoes por cargo integration", () => {
         dataHoraAbertura: "2026-07-03T08:00"
       }
     });
-    assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
+    // Gerência tem caixa_operar na matriz vigente. O 400 vem da validação do usuário/PDV informado,
+    // depois do gate; um 403 indicaria regressão da permissão.
+    assertProblem(resposta, 400);
   });
 
-  it("Deve_Bloquear_Quando_SemPermissaoTentaAcertarSaldo", async () => {
+  it("Deve_Bloquear_Quando_SemPermissaoTentaRetornarSaldo", async () => {
     const resposta = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${idsTeste.caixaAberto}/acertar-saldo`,
+      url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
       headers: { cookie: cookies.get("semPermissao")! },
-      payload: {}
+      payload: { tipo: "retorno", valor: 1 }
     });
     assertProblem(resposta, 403, "INSUFFICIENT_PERMISSION");
   });
 
-  it("Deve_PermitirCriarVenda_Mas_BloquearDespesa_Quando_PerfilCaixa", async () => {
-    // O perfil caixa tem entradas_criar mas nao despesas_criar. A venda passa o gate de
-    // permissao (e para em "abra um caixa" 400, pois o caixa do operador esta fechado);
-    // a despesa e barrada no gate (403). Prova que a permissao e granular por tipo.
+  it("Deve_PassarOGateDePermissao_Quando_PerfilCaixaCriaVendaOuDespesa", async () => {
+    // R-121: o operador lanca ENTRADA e SAIDA. Sem caixa aberto os dois param em 400 ("abra um
+    // caixa") — o que importa aqui e que nenhum dos dois e barrado por PERMISSAO (403). O teste
+    // antigo esperava 403 na despesa, apoiado num fixture que nao espelhava a producao.
     const venda = await contexto.app.inject({
       method: "POST",
       url: "/api/vendas",
@@ -100,8 +102,7 @@ describe("caixa permissoes por cargo integration", () => {
         tiposPagamento: []
       }
     });
-    // passou o gate de permissao; barra por falta de caixa aberto do operador
-    expect(venda.statusCode).toBe(400);
+    expect(venda.statusCode, venda.body).toBe(400);
 
     const despesa = await contexto.app.inject({
       method: "POST",
@@ -111,12 +112,13 @@ describe("caixa permissoes por cargo integration", () => {
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-07-03",
         dataVencimento: "2026-07-03",
-        descricao: "Despesa proibida",
+        descricao: "Despesa do operador",
         valorOriginal: 10,
         contaOrigemId: idsTeste.contaCaixa,
         grupoDespesaId: idsTeste.grupoDespesaOperacional
       }
     });
-    assertProblem(despesa, 403, "INSUFFICIENT_PERMISSION");
+    expect(despesa.statusCode, despesa.body).toBe(400);
+    expect(despesa.body).not.toContain("INSUFFICIENT_PERMISSION");
   });
 });

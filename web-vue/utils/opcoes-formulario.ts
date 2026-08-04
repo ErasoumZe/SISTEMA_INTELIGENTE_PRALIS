@@ -23,5 +23,5 @@ export async function carregarOpcaoOpcional<T>(
 export function avisoOpcoesIndisponiveis(faltas: string[]): string {
   const listas = Array.from(new Set(faltas));
   if (!listas.length) return "";
-  return `Algumas listas nao carregaram por falta de permissao (${listas.join(", ")}). A tela continua utilizavel.`;
+  return `Algumas listas não carregaram por falta de permissão (${listas.join(", ")}). A tela continua utilizável.`;
 }

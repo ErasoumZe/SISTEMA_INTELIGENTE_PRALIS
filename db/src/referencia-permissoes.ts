@@ -2,7 +2,7 @@
 // (db/seed-referencia-prod.ts). Espelha o mesmo esquema de db/seed.ts (dev) — se um mudar o
 // conjunto de permissoes de um cargo, ajuste o outro. So define dados/funcoes puras (sem efeito
 // colateral / sem acesso a banco): seguro de importar.
-import { permissoes, type Permissao, type RegrasPermissoes } from "@padaria/shared";
+import { permissoesAcessoTotal, type Permissao, type RegrasPermissoes } from "@padaria/shared";
 
 const telasSomenteCaixaAberto = new Set<string>([
   "entradas",
@@ -27,7 +27,6 @@ const permissaoAcessoPorTela = {
   // Financeiro/Admin sao R9/D8 (doc 02) — Fase 1 NAO muda comportamento aqui.
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
-  malotes: "cadastro_malotes_visualizar",
   caixa: "caixa_operar",
   promocoes: "promocoes_visualizar",
   relatorio_faltas: "relatorio_faltas_visualizar",
@@ -86,7 +85,9 @@ function menuSomenteCaixaAberto(tela: TelaPermissao) {
 }
 
 export function permissoesDoCargo(config: ConfigPermissoesCargo): Permissao[] {
-  if (config.todas) return [...permissoes];
+  // "todas" NAO inclui as flags `_somente_caixa_aberto`: elas restringem (prendem menu e listagens
+  // ao caixa aberto) e quem tem acesso total nao herda restricao.
+  if (config.todas) return [...permissoesAcessoTotal];
   const resultado = new Set<Permissao>(config.extras ?? []);
   for (const tela of config.ativas ?? []) {
     resultado.add(permissaoAcessoPorTela[tela]);
@@ -145,13 +146,33 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "fechamento",
       "relatorio_produtos"
     ],
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
+    // R-121/R-122: o operador lanca TODAS as saidas e CORRIGE as proprias enquanto o caixa esta
+    // aberto. Sem `_excluir`: a R-015 depende do rastro — apagar lancamento apaga a explicacao da
+    // quebra. Sem `_pagar`/`_efetuar`/`_conferir`: ciclo de vida e da retaguarda (R-076/R-077).
+    extras: [
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "despesas_editar",
+      "mercadorias_criar",
+      "mercadorias_editar",
+      "retiradas_criar",
+      "retiradas_editar"
+    ]
   }),
   Tesouraria: permissoesDoCargo({
-    ativas: ["malotes", "transferencias"],
-    // Lanca transferencia + CONFERE (D7 — conferencia = Financeiro/Gerencia/Tesouraria). Confere no
-    // dominio que acessa (transferencias); os demais dominios ela nao ve.
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
+    // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
+    // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
+    // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
+    // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
+    extras: [
+      "transferencias_criar",
+      ...acoesLancamentoPorDominio("conferir"),
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar",
+      "cadastro_lacres_editar"
+    ]
   }),
   Gerencia: permissoesDoCargo({
     ativas: [
@@ -197,6 +218,13 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
       // (mercadorias_editar faltava; os demais editar ela ja tinha acima.)
       "mercadorias_editar",
+      // Gerencia configura o ESCOPO de conta por usuario (FOTO 4: quais contas cada um opera).
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_editar",
+      "cadastro_contas_usuarios_excluir",
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -250,17 +278,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
       "cadastro_formas_pagamento_criar",
-      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e as
-      // variantes *_dpago (mexer em lancamento ja pago). E o unico cargo com _dpago (fora o admin).
-      ...acoesLancamentoPorDominio(
-        "pagar",
-        "efetuar",
-        "conferir",
-        "editar_dpago",
-        "visualizar_dpago",
-        "excluir",
-        "excluir_dpago"
-      )
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
+      // R-076/R-077: Financeiro PAGA e CONFERE, mas nao efetua. Tambem e o unico cargo comum com
+      // as variantes *_dpago (mexer em lancamento ja pago).
+      ...acoesLancamentoPorDominio("pagar", "conferir", "editar_dpago", "visualizar_dpago", "excluir", "excluir_dpago")
     ]
   })
 };

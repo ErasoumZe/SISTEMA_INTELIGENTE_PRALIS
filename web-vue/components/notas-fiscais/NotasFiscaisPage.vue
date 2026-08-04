@@ -160,7 +160,7 @@ watch(filtroStatus, () => void buscar());
       <div class="d-flex ga-2">
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="carregando" @click="buscar">Atualizar</v-btn>
         <v-btn v-if="podeImportar" color="primary" prepend-icon="mdi-cloud-download" @click="abrirImport">
-          Importar por periodo
+          Importar por período
         </v-btn>
       </div>
     </v-card-title>
@@ -200,7 +200,7 @@ watch(filtroStatus, () => void buscar());
           <thead>
             <tr>
               <th>Emissao</th>
-              <th>Numero/Serie</th>
+              <th>Número/Série</th>
               <th>Fornecedor</th>
               <th>Chave</th>
               <th class="text-right">Valor</th>
@@ -239,7 +239,7 @@ watch(filtroStatus, () => void buscar());
   <!-- Dialog: importar por periodo -->
   <v-dialog v-model="importDialog" max-width="520">
     <v-card>
-      <v-card-title class="text-h6">Importar NF-e por periodo</v-card-title>
+      <v-card-title class="text-h6">Importar NF-e por período</v-card-title>
       <v-card-text>
         <p class="text-body-2 text-muted mb-4">
           Busca as NF-e da empresa no webhook da contabilidade e cria as mercadorias pre-preenchidas (aguardando
@@ -259,7 +259,7 @@ watch(filtroStatus, () => void buscar());
             <strong>{{ importResultado.importadas }}</strong> importada(s),
             <strong>{{ importResultado.puladas }}</strong> ja existente(s),
             <strong>{{ importResultado.erros }}</strong> com erro (de {{ importResultado.totalNotas }} nota(s) no
-            periodo).
+            período).
           </div>
           <ul v-if="importResultado.detalhesErros.length" class="mt-2 text-caption">
             <li v-for="(item, indice) in importResultado.detalhesErros" :key="indice">
@@ -296,7 +296,7 @@ watch(filtroStatus, () => void buscar());
               </div>
             </v-col>
             <v-col cols="6" md="3">
-              <div class="text-caption text-muted">Numero/Serie</div>
+              <div class="text-caption text-muted">Número/Série</div>
               <div>{{ detalhe.numero ?? "—" }} / {{ detalhe.serie ?? "—" }}</div>
             </v-col>
             <v-col cols="6" md="3">
@@ -350,7 +350,7 @@ watch(filtroStatus, () => void buscar());
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Descricao</th>
+                  <th>Descrição</th>
                   <th>EAN</th>
                   <th>NCM</th>
                   <th>CFOP</th>

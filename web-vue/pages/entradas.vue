@@ -12,6 +12,9 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       :empresa-ativa="ctx.empresaAtiva"
       :operacoes-paginadas="ctx.operacoesPaginadas"
       :total-operacoes="ctx.totalOperacoes"
+      :total-liquido-operacoes="ctx.totalLiquidoOperacoes"
+      :dia-entradas="ctx.diaEntradas"
+      :pode-consultar-outros-dias-entradas="ctx.podeConsultarOutrosDiasEntradas"
       :pagina="ctx.paginaOperacoes"
       :total-paginas="ctx.totalPaginasOperacoes"
       :descricao="ctx.descricao"
@@ -24,6 +27,7 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       @detalhes="ctx.abrirDetalheVenda"
       @update:venda-detalhe-aberto="ctx.fecharDetalheVenda"
       @update:pagina="ctx.atualizarPaginaOperacoes"
+      @update:dia="ctx.atualizarDiaEntradas"
     />
   </AppWorkspace>
 </template>

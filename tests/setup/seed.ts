@@ -1,7 +1,7 @@
 import pg from "pg";
 import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import { permissoes, type Permissao, type RegrasPermissoes } from "@padaria/shared";
+import { permissoes, permissoesAcessoTotal, type Permissao, type RegrasPermissoes } from "@padaria/shared";
 import {
   areas,
   cargos,
@@ -15,12 +15,12 @@ import {
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
   gruposVendas,
   integracoesCamposConfig,
   integracoesChaves,
   integracoesVinculos,
-  malotes,
   pdvs,
   perfisUsuarios,
   permissoesTabela,
@@ -53,7 +53,9 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorAdmin,
     colaboradorCargoId: idsTeste.colaboradorCargoAdmin,
     role: "usuario_admin",
-    permissoes: [...permissoes]
+    // Acesso TOTAL = catalogo sem as flags `_somente_caixa_aberto` (restricoes). O role
+    // usuario_admin ja resolve assim no perfil.service; o cargo espelha para nao mentir.
+    permissoes: [...permissoesAcessoTotal]
   },
   {
     perfil: "caixa",
@@ -61,7 +63,24 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorCaixa,
     colaboradorCargoId: idsTeste.colaboradorCargoCaixa,
     role: "usuario_comum",
-    permissoes: ["caixa_operar", "entradas_visualizar", "entradas_criar"]
+    // Espelha `db/src/referencia-permissoes.ts` (cargo Caixa). Antes so tinha 4 permissoes e a
+    // divergencia fazia o teste "provar" que o operador nao lanca despesa — que e o contrario da
+    // R-121. Fixture que nao espelha a producao testa um sistema que nao existe.
+    permissoes: [
+      "caixa_operar",
+      "entradas_visualizar",
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_visualizar",
+      "despesas_criar",
+      "despesas_editar",
+      "mercadorias_visualizar",
+      "mercadorias_criar",
+      "mercadorias_editar",
+      "retiradas_visualizar",
+      "retiradas_criar",
+      "retiradas_editar"
+    ]
   },
   {
     perfil: "gerente",
@@ -72,15 +91,20 @@ const usuarios: UsuarioSeed[] = [
     permissoes: [
       "aparencia_visualizar",
       "aparencia_editar",
-      "cadastro_malotes_visualizar",
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
       "transferencias_visualizar",
+      "transferencias_criar",
+      "transferencias_conferir",
       "cadastro_contas_visualizar",
       "cadastro_pdv_visualizar",
       "cadastro_empresas_visualizar",
       "cadastro_usuarios_visualizar",
-      "cadastro_permissoes_visualizar"
+      "cadastro_permissoes_visualizar",
+      "caixa_operar",
+      "caixas_gerenciar",
+      // Gerencia configura o vinculo usuario<->conta (FOTO 4) — paridade com a referencia de producao.
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_excluir"
     ]
   },
   {
@@ -90,10 +114,12 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoTesouraria,
     role: "usuario_comum",
     permissoes: [
-      "cadastro_malotes_visualizar",
-      "cadastro_malotes_criar",
-      "cadastro_malotes_editar",
-      "transferencias_visualizar"
+      "transferencias_visualizar",
+      "transferencias_criar",
+      "transferencias_conferir",
+      // Tesouraria opera os LACRES (selo do movimento) — paridade com a referencia de producao.
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar"
     ]
   },
   {
@@ -110,16 +136,25 @@ const usuarios: UsuarioSeed[] = [
     colaboradorId: idsTeste.colaboradorMultiempresa,
     colaboradorCargoId: idsTeste.colaboradorCargoMultiempresa,
     role: "usuario_admin",
-    permissoes: [...permissoes]
+    permissoes: [...permissoesAcessoTotal]
   },
   {
     // So visualiza e discrimina (sem criar/editar/caixa) — prova a permissao propria isolada.
+    // Carrega TAMBEM as flags `_somente_caixa_aberto` e NAO tem caixa aberto: e a fixture do
+    // escopo restrito por caixa (o admin deixou de servir para isso, ele nao herda restricao).
     perfil: "discriminador",
     cargoId: idsTeste.cargoDiscriminador,
     colaboradorId: idsTeste.colaboradorDiscriminador,
     colaboradorCargoId: idsTeste.colaboradorCargoDiscriminador,
     role: "usuario_comum",
-    permissoes: ["mercadorias_visualizar", "mercadorias_discriminar", "despesas_visualizar", "despesas_discriminar"]
+    permissoes: [
+      "mercadorias_visualizar",
+      "mercadorias_discriminar",
+      "despesas_visualizar",
+      "despesas_discriminar",
+      "menu_mercadorias_somente_caixa_aberto",
+      "menu_despesas_somente_caixa_aberto"
+    ]
   },
   {
     // Ciclo de vida R7 (Fase 1): opera caixa e lanca/edita despesa, mas NAO paga, NAO ve/edita pago.
@@ -155,6 +190,35 @@ const usuarios: UsuarioSeed[] = [
       "despesas_visualizar_dpago",
       "menu_despesas_mostrar"
     ]
+  },
+  {
+    // Recorrencia (D3): lanca despesa e retirada, NAO opera caixa e NAO tem
+    // lancamentos_recorrencia_criar. Sem caixa_operar de proposito: os perfis *Ciclo esbarrariam
+    // antes no "abra um caixa" e o teste provaria a regra errada.
+    perfil: "semRecorrencia",
+    cargoId: idsTeste.cargoSemRecorrencia,
+    colaboradorId: idsTeste.colaboradorSemRecorrencia,
+    colaboradorCargoId: idsTeste.colaboradorCargoSemRecorrencia,
+    role: "usuario_comum",
+    permissoes: [
+      "despesas_visualizar",
+      "despesas_criar",
+      "retiradas_visualizar",
+      "retiradas_criar",
+      "menu_despesas_mostrar",
+      "menu_retiradas_mostrar"
+    ]
+  },
+  {
+    // Entradas do dia (D7): a flag `menu_entradas_somente_caixa_aberto` E um caixa aberto proprio
+    // (caixaAbertoEntradas, no pdvLivre). E a unica combinacao que exercita o escopo da tela de
+    // Entradas — sem a flag o escopo nem se aplica, sem o caixa a listagem so bloqueia.
+    perfil: "operadorEntradas",
+    cargoId: idsTeste.cargoOperadorEntradas,
+    colaboradorId: idsTeste.colaboradorOperadorEntradas,
+    colaboradorCargoId: idsTeste.colaboradorCargoOperadorEntradas,
+    role: "usuario_comum",
+    permissoes: ["caixa_operar", "entradas_visualizar", "menu_entradas_mostrar", "menu_entradas_somente_caixa_aberto"]
   }
 ];
 
@@ -270,7 +334,8 @@ export async function aplicarSeedIntegracao() {
     { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
     { id: idsTeste.contaBanco, empresaId: idsTeste.empresaA, nome: "Banco Integracao", ativa: true },
     { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
-    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true }
+    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true },
+    { id: idsTeste.contaEntradas, empresaId: idsTeste.empresaA, nome: "Conta Entradas Integracao", ativa: true }
   ]);
   // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
   await banco.update(empresas).set({ contaCofreId: idsTeste.contaCofre }).where(eq(empresas.id, idsTeste.empresaA));
@@ -290,6 +355,16 @@ export async function aplicarSeedIntegracao() {
       codigo: "PDV-LIVRE",
       contaId: idsTeste.contaLivre,
       ativo: true
+    },
+    {
+      // PDV exclusivo do caixa aberto do operadorEntradas (D7). Existe para NAO ocupar o pdvLivre,
+      // que e onde turnos/caixa/alteracao-horario abrem caixa.
+      id: idsTeste.pdvEntradas,
+      empresaId: idsTeste.empresaA,
+      nome: "PDV Entradas Integracao",
+      codigo: "PDV-ENTRADAS",
+      contaId: idsTeste.contaEntradas,
+      ativo: true
     }
   ]);
   await banco
@@ -302,6 +377,13 @@ export async function aplicarSeedIntegracao() {
   await banco
     .insert(gruposMercadorias)
     .values({ id: idsTeste.grupoMercadoriaInsumos, empresaId: idsTeste.empresaA, nome: "Insumos" });
+  // Sigla UTS (utensilios) de proposito: grupos_patrimonio tem unique(empresa_id, sig) e o teste de
+  // cadastro (cadastros/patrimonio.test.ts) cria MAQ e MOB na empresa A. Um seed com MAQ faria
+  // aquele POST falhar por sigla duplicada — o seed nao pode ocupar as siglas que os testes criam.
+  await banco.insert(gruposPatrimonio).values([
+    { id: idsTeste.grupoPatrimonioMaquinas, empresaId: idsTeste.empresaA, sig: "UTS", nome: "Utensilios" },
+    { id: idsTeste.grupoPatrimonioOutraEmpresa, empresaId: idsTeste.empresaB, sig: "UTS", nome: "Utensilios" }
+  ]);
   await banco
     .insert(gruposRetiradas)
     .values({ id: idsTeste.grupoRetiradaSangria, empresaId: idsTeste.empresaA, nome: "Sangria" });
@@ -334,7 +416,8 @@ export async function aplicarSeedIntegracao() {
 
   const adminId = usuarioIds.get("admin");
   const caixaId = usuarioIds.get("caixa");
-  if (!adminId || !caixaId) throw new Error("Usuarios base de integracao nao foram criados");
+  const operadorEntradasId = usuarioIds.get("operadorEntradas");
+  if (!adminId || !caixaId || !operadorEntradasId) throw new Error("Usuarios base de integracao nao foram criados");
 
   await banco.insert(fechamentosCaixa).values([
     {
@@ -370,6 +453,27 @@ export async function aplicarSeedIntegracao() {
       saldo: "42.00",
       status: "fechado",
       criadoPor: caixaId
+    },
+    {
+      // Entradas do dia (D7): caixa ABERTO do operadorEntradas, no PDV EXCLUSIVO dele. Nao pode ser
+      // o pdvLivre: la os testes de turnos/caixa/alteracao-horario ABREM caixa, e um aberto no seed
+      // os faz falhar por caixa_aberto_unico_por_pdv (migration 0003).
+      id: idsTeste.caixaAbertoEntradas,
+      empresaId: idsTeste.empresaA,
+      pdvId: idsTeste.pdvEntradas,
+      usuarioId: operadorEntradasId,
+      usuarioCaixaId: operadorEntradasId,
+      colaboradorId: idsTeste.colaboradorOperadorEntradas,
+      // Dia PROPRIO (01/07), diferente do 30/06 do caixaAberto: o teste de historico do caixa
+      // filtra por 2026-06-30 e espera exatamente um caixa naquele dia. O teste de entradas cria
+      // as vendas que precisa neste dia, entao nao depende do seed de ninguem.
+      dataMovimento: "2026-07-01",
+      dataHoraAbertura: new Date("2026-07-01T08:00:00.000Z"),
+      abertoEm: new Date("2026-07-01T08:00:00.000Z"),
+      tokenEdicao: "TOKEN-ABERTO-ENTRADAS",
+      observacao: "Caixa aberto do operador de entradas",
+      status: "aberto",
+      criadoPor: operadorEntradasId
     }
   ]);
 
@@ -446,26 +550,6 @@ export async function aplicarSeedIntegracao() {
       descricaoExterna: "Dinheiro",
       registroSistemaId: idsTeste.formaPagamentoDinheiro,
       pendente: false
-    }
-  ]);
-
-  // Malote === lacre (D3): a identidade e o numero do lacre; valor > 0 para servir a abertura (R8).
-  await banco.insert(malotes).values([
-    {
-      id: idsTeste.maloteA,
-      empresaId: idsTeste.empresaA,
-      numeroLacre: "LACRE-A",
-      valor: "300.00",
-      status: "disponivel",
-      criadoPor: usuarioIds.get("tesouraria") ?? null
-    },
-    {
-      id: idsTeste.maloteB,
-      empresaId: idsTeste.empresaB,
-      numeroLacre: "LACRE-B",
-      valor: "300.00",
-      status: "disponivel",
-      criadoPor: null
     }
   ]);
 }

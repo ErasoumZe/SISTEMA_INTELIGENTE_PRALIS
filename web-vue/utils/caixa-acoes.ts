@@ -13,23 +13,24 @@ export type DepsAcoesCaixa = {
   api: PortApi;
   empresaId: () => string;
   telaAtiva: () => string;
-  resumoSaldo: () => number | null;
   setSalvando: (valor: boolean) => void;
   carregarStatusCaixa: (idEmpresa: string) => Promise<void>;
   carregarDadosTela: (tela: string, idEmpresa: string) => Promise<void>;
   notificar: (mensagem: string, tipo?: string) => void;
   mensagemErro: (error: DadosExternos) => string;
-  confirmar: (mensagem: string) => boolean;
+  confirmar: (mensagem: string) => Promise<boolean>;
 };
 
 export type AberturaCaixaPayload = {
   pdvId: string;
   usuarioCaixaId: string;
   turnoId?: string | null;
+  maquininhaId?: string | null;
   dataHoraAbertura: string;
   observacao: string | null;
 };
-export type AcertoFechamentoPayload = { caixaId: string; observacao: string | null };
+export type FechamentoPayload = { caixaId: string; observacao: string | null };
+export type RetornoSaldoPayload = FechamentoPayload & { valor: number };
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function recarregarTela() {
@@ -58,16 +59,18 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  async function acertarSaldoOperacional(payload: AcertoFechamentoPayload): Promise<void> {
-    const saldo = deps.resumoSaldo();
-    if (saldo === null || !deps.confirmar(`A diferenca de ${dinheiro(saldo)} sera atribuida ao usuario do caixa.`)) {
-      return;
-    }
+  async function retornarSaldoOperacional(payload: RetornoSaldoPayload): Promise<void> {
+    if (!(await deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`))) return;
     deps.setSalvando(true);
     try {
-      await deps.api.post(`/api/caixa/${payload.caixaId}/acertar-saldo`, { observacao: payload.observacao });
-      deps.notificar("Saldo ajustado com sucesso.");
+      await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {
+        tipo: "retorno",
+        valor: payload.valor,
+        observacao: payload.observacao
+      });
+      deps.notificar("Retorno ao cofre lançado com sucesso.");
       await deps.carregarStatusCaixa(deps.empresaId());
+      await recarregarTela();
     } catch (error) {
       deps.notificar(deps.mensagemErro(error), "error");
     } finally {
@@ -75,7 +78,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  async function fecharCaixaOperacional(payload: AcertoFechamentoPayload): Promise<void> {
+  async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<void> {
     deps.setSalvando(true);
     try {
       // /fechar responde 204; re-busca o status canonico (evita crash em .resumo).
@@ -90,5 +93,5 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  return { abrirCaixaOperacional, acertarSaldoOperacional, fecharCaixaOperacional };
+  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional };
 }

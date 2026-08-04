@@ -1,12 +1,14 @@
 import "dotenv/config";
 import pg from "pg";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import {
   TELA_TEMA_RESUMO_CAIXA,
+  gruposPatrimonioPadrao,
   permissoes,
+  permissoesAcessoTotal,
   type Permissao,
   type RegrasPermissoes,
   type RoleUsuario
@@ -33,6 +35,7 @@ import {
   fornecedores,
   gruposDespesas,
   gruposMercadorias,
+  gruposPatrimonio,
   gruposRetiradas,
   gruposVendas,
   integracoesCamposConfig,
@@ -41,9 +44,9 @@ import {
   integracoesRegistros,
   integracoesSemNovidade,
   integracoesVinculos,
-  malotes,
   mercadorias,
   mercadoriasItens,
+  notificacoes,
   pdvs,
   permissoesCargos,
   permissoesSetores,
@@ -160,7 +163,6 @@ const permissaoAcessoPorTelaSeed = {
   retiradas: "retiradas_visualizar",
   fechamento: "fechamento_com_diferenca_visualizar",
   relatorio_produtos: "relatorio_produtos_visualizar",
-  malotes: "cadastro_malotes_visualizar",
   caixa: "caixa_operar",
   promocoes: "promocoes_visualizar",
   relatorio_faltas: "relatorio_faltas_visualizar",
@@ -219,7 +221,9 @@ function menuSomenteCaixaAbertoSeed(tela: TelaPermissaoSeed) {
 }
 
 function permissoesDoCargoSeed(config: PermissoesCargoSeed): Permissao[] {
-  if (config.todas) return [...permissoes];
+  // "todas" NAO inclui as flags `_somente_caixa_aberto` (restricoes) — paridade com
+  // db/src/referencia-permissoes.ts e com o atalho de usuario_admin em api/src/auth/perfil.service.
+  if (config.todas) return [...permissoesAcessoTotal];
   const resultado = new Set<Permissao>(config.extras ?? []);
   for (const tela of config.ativas ?? []) {
     resultado.add(permissaoAcessoPorTelaSeed[tela]);
@@ -265,11 +269,32 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "fechamento",
       "relatorio_produtos"
     ],
-    extras: ["entradas_criar", "transferencias_criar", "despesas_criar", "mercadorias_criar", "retiradas_criar"]
+    // R-121/R-122: o operador lanca TODAS as saidas e CORRIGE as proprias enquanto o caixa esta
+    // aberto. Sem `_excluir`: a R-015 depende do rastro — apagar lancamento apaga a explicacao da
+    // quebra. Sem `_pagar`/`_efetuar`/`_conferir`: ciclo de vida e da retaguarda (R-076/R-077).
+    extras: [
+      "entradas_criar",
+      "transferencias_criar",
+      "despesas_criar",
+      "despesas_editar",
+      "mercadorias_criar",
+      "mercadorias_editar",
+      "retiradas_criar",
+      "retiradas_editar"
+    ]
   }),
   Tesouraria: permissoesDoCargoSeed({
-    ativas: ["malotes", "transferencias"],
-    extras: ["cadastro_malotes_criar", "cadastro_malotes_editar", "transferencias_criar", "transferencias_conferir"]
+    // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
+    // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
+    // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
+    extras: [
+      "transferencias_criar",
+      ...acoesLancamentoPorDominio("conferir"),
+      "cadastro_lacres_visualizar",
+      "cadastro_lacres_criar",
+      "cadastro_lacres_editar"
+    ]
   }),
   Gerencia: permissoesDoCargoSeed({
     ativas: [
@@ -314,6 +339,13 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "cadastro_turnos_excluir",
       // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
       "mercadorias_editar",
+      // Gerencia configura o ESCOPO de conta por usuario (FOTO 4). Paridade com referencia de producao.
+      "cadastro_contas_usuarios_visualizar",
+      "cadastro_contas_usuarios_criar",
+      "cadastro_contas_usuarios_editar",
+      "cadastro_contas_usuarios_excluir",
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -367,28 +399,24 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
       "cadastro_grupos_criar",
       "cadastro_pdv_criar",
       "cadastro_formas_pagamento_criar",
-      // Ciclo de vida R7/R10 (doc 09 §4): Financeiro tem o ciclo COMPLETO, incluindo pagar e *_dpago.
-      ...acoesLancamentoPorDominio(
-        "pagar",
-        "efetuar",
-        "conferir",
-        "editar_dpago",
-        "visualizar_dpago",
-        "excluir",
-        "excluir_dpago"
-      )
+      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
+      "lancamentos_recorrencia_criar",
+      // R-076/R-077: Financeiro paga e confere, sem efetuar; mantem as variantes *_dpago.
+      ...acoesLancamentoPorDominio("pagar", "conferir", "editar_dpago", "visualizar_dpago", "excluir", "excluir_dpago")
     ]
   })
 };
 
-const usuariosSeed: Array<{
+type UsuarioSeed = {
   nome: string;
   email: string;
   senha: string;
   cargo: string;
   cpf: string;
   role: RoleUsuario;
-}> = [
+};
+
+const usuariosSeed: UsuarioSeed[] = [
   {
     nome: "Diretor Geral",
     email: "diretor@email.com",
@@ -467,7 +495,7 @@ async function usuarioPorEmail(email: string) {
   return usuario ?? null;
 }
 
-async function criarUsuario(seed: (typeof usuariosSeed)[number], empresaId: string | null) {
+async function criarUsuario(seed: UsuarioSeed, empresaId: string | null) {
   let usuario = await usuarioPorEmail(seed.email);
   if (!usuario) {
     await auth.api.signUpEmail({
@@ -572,6 +600,11 @@ const setoresEmpresa = await banco
   .from(setores)
   .where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")));
 const setorIds = setoresEmpresa.map((setorLinha) => setorLinha.id);
+const perfisCargoTeste = await banco
+  .select({ usuarioId: perfisUsuarios.usuarioId })
+  .from(perfisUsuarios)
+  .where(and(eq(perfisUsuarios.empresaId, empresaId), ilike(perfisUsuarios.email, "cargo.%@email.com")));
+const idsUsuariosCargoTeste = perfisCargoTeste.map((perfil) => perfil.usuarioId);
 
 if (caixaIds.length) {
   await banco.delete(ajustesFechamentoCaixa).where(inArray(ajustesFechamentoCaixa.fechamentoCaixaId, caixaIds));
@@ -596,6 +629,15 @@ if (despesaIds.length) {
 if (mercadoriaIds.length) {
   await banco.delete(mercadoriasItens).where(inArray(mercadoriasItens.mercadoriaId, mercadoriaIds));
 }
+// `notificacoes` e dado OPERACIONAL (R-017/R-019/R-037) e sai junto com o resto do movimento.
+// Precisa morrer ANTES de `removerUsuariosSeed()`: `destinatario_usuario_id` tem ON DELETE CASCADE,
+// mas `verificado_por` NAO tem — entao bastava alguem clicar "Marcar como verificada" uma vez para
+// a linha sobreviver ao cascade e travar a exclusao do usuario com
+// `notificacoes_verificado_por_perfis_usuarios_usuario_id_fk`. Foi o que derrubou o seed em 01/08,
+// no primeiro dia em que a R-018 foi de fato exercida na tela.
+// A FK sem cascade esta CERTA: quem verificou e auditoria, nao pode sumir por efeito colateral de
+// apagar um usuario. Quem estava errado era o seed, que nunca soube desta tabela.
+await banco.delete(notificacoes).where(eq(notificacoes.empresaId, empresaId));
 await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId, empresaId));
 await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
 await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
@@ -615,9 +657,11 @@ await banco.delete(colaboradores).where(
     )
   )
 );
-await banco
-  .delete(malotes)
-  .where(and(eq(malotes.empresaId, empresaId), inArray(malotes.numeroLacre, ["LACRE-001", "LACRE-002", "LACRE-003"])));
+// Os logins dinamicos da R-079 sao preservados entre execucoes, mas seus colaboradores precisam
+// sair antes de recriar o setor "Loja". O onDelete cascade remove somente os vinculos de cargo.
+if (idsUsuariosCargoTeste.length) {
+  await banco.delete(colaboradores).where(inArray(colaboradores.usuarioId, idsUsuariosCargoTeste));
+}
 await banco
   .delete(formasPagamento)
   .where(
@@ -814,6 +858,13 @@ const grupoRetiradaPai = (
 if (!grupoRetiradaPai) throw new Error("Grupo de retirada pai nao foi criado");
 await banco.insert(gruposRetiradas).values({ empresaId, nome: "Sangria", grupoPaiId: grupoRetiradaPai.id });
 
+// Grupos de patrimonio (D2): as seis siglas da aba PATRIMONIO da planilha. Idempotente pela
+// unica (empresa_id, sig) — rodar o seed de novo nao duplica.
+await banco
+  .insert(gruposPatrimonio)
+  .values(gruposPatrimonioPadrao.map((grupo) => ({ empresaId, sig: grupo.sig, nome: grupo.nome })))
+  .onConflictDoNothing();
+
 const grupoVendaPai = (
   await banco.insert(gruposVendas).values({ empresaId, nome: "Vendas balcão" }).returning({ id: gruposVendas.id })
 )[0];
@@ -908,6 +959,89 @@ for (const usuario of usuariosSeed) {
 }
 console.info("[seed] OK Colaboradores seed vinculados aos usuarios e cargos");
 
+// R-079: os dez cargos da matriz fixa ja tem usuarios nomeados acima. A planilha, porem, pode
+// acrescentar cargos operacionais. Para a permissao EFETIVA de cada um ser testavel no dev, todo
+// cargo ainda sem usuario recebe um usuario comum, um colaborador e o vinculo ao proprio cargo.
+// Nenhuma permissao e gravada no usuario: ele herda exatamente permissoes_cargos (e setor Loja,
+// cuja matriz e vazia), inclusive quando o cargo da planilha ainda nao tem permissao configurada.
+function identificadorCargoTeste(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.|\.$/g, "")
+    .slice(0, 40);
+}
+
+const todosCargos = await banco
+  .select({ id: cargos.id, nome: cargos.nome })
+  .from(cargos)
+  .where(eq(cargos.empresaId, empresaId))
+  .orderBy(cargos.nome);
+const cargosComUsuario = await banco
+  .selectDistinct({ cargoId: colaboradoresCargos.cargoId })
+  .from(colaboradoresCargos)
+  .innerJoin(colaboradores, eq(colaboradores.id, colaboradoresCargos.colaboradorId))
+  .where(
+    and(
+      eq(colaboradoresCargos.empresaId, empresaId),
+      eq(colaboradoresCargos.ativo, true),
+      isNotNull(colaboradores.usuarioId)
+    )
+  );
+const idsCargosComUsuario = new Set(cargosComUsuario.map((item) => item.cargoId));
+const usuariosCargoCriados: Array<{ cargo: string; email: string }> = [];
+
+for (const cargo of todosCargos) {
+  if (idsCargosComUsuario.has(cargo.id)) continue;
+  const email = `cargo.${identificadorCargoTeste(cargo.nome)}.${cargo.id.slice(0, 8)}@email.com`;
+  const usuarioId = await criarUsuario(
+    {
+      nome: `Teste ${cargo.nome}`,
+      email,
+      senha: senhaPadraoSeed,
+      cargo: cargo.nome,
+      cpf: "",
+      role: "usuario_comum"
+    },
+    empresaId
+  );
+
+  let [colaborador] = await banco
+    .select({ id: colaboradores.id })
+    .from(colaboradores)
+    .where(eq(colaboradores.usuarioId, usuarioId))
+    .limit(1);
+  colaborador ??= (
+    await banco
+      .insert(colaboradores)
+      .values({ empresaId, nome: `Teste ${cargo.nome}`, setorId: setor.id, usuarioId })
+      .returning({ id: colaboradores.id })
+  )[0];
+  if (!colaborador) throw new Error(`Colaborador de teste nao criado para o cargo ${cargo.nome}`);
+
+  await banco
+    .insert(colaboradoresCargos)
+    .values({
+      empresaId,
+      colaboradorId: colaborador.id,
+      setorId: setor.id,
+      cargoId: cargo.id,
+      remuneracaoMinuto: "0.136364",
+      dataInicio: dataISO(-30),
+      ativo: true
+    })
+    .onConflictDoNothing();
+  usuariosCargoCriados.push({ cargo: cargo.nome, email });
+}
+console.info(
+  `[seed] OK Cobertura R-079: ${todosCargos.length} cargos com usuário; ${usuariosCargoCriados.length} vínculos adicionais garantidos`
+);
+for (const usuario of usuariosCargoCriados) {
+  console.info(`[seed] - ${usuario.email} / ${senhaPadraoSeed} / usuario_comum / ${usuario.cargo}`);
+}
+
 const colaboradorCaixaId = colaboradorIds.get("caixa@email.com");
 const colaboradorComprasId = colaboradorIds.get("compras@email.com");
 const colaboradorFinanceiroId = colaboradorIds.get("financeiro@email.com");
@@ -996,19 +1130,7 @@ await banco.insert(integracoesCamposConfig).values(
   }))
 );
 
-// Malote === lacre (D3): cada malote e um lacre com valor e status proprios. Um em_uso (usado numa
-// transferencia seed), um disponivel (pronto p/ abrir caixa) e um devolvido.
 const criadoPorTesouraria = usuarioIds.get("tesouraria@email.com") ?? null;
-const malotesSeed = await banco
-  .insert(malotes)
-  .values([
-    { empresaId, numeroLacre: "LACRE-001", valor: "200.00", status: "em_uso", criadoPor: criadoPorTesouraria },
-    { empresaId, numeroLacre: "LACRE-002", valor: "490.00", status: "disponivel", criadoPor: criadoPorTesouraria },
-    { empresaId, numeroLacre: "LACRE-003", valor: "0.00", status: "devolvido", criadoPor: criadoPorTesouraria }
-  ])
-  .returning({ id: malotes.id, numeroLacre: malotes.numeroLacre });
-const malote = malotesSeed.find((item) => item.numeroLacre === "LACRE-001");
-if (!malote) throw new Error("Malote nao foi criado");
 
 const caixaFechado = (
   await banco
@@ -1127,12 +1249,19 @@ const despesa = (
 )[0];
 if (!despesa) throw new Error("Despesa seed nao foi criada");
 
+// As colunas *_com_desconto entraram NOT NULL na migration 0016 (descontos em 3 niveis) e este
+// insert nunca foi atualizado — so nao quebrava porque o banco de dev jamais era recriado do zero
+// (divida D-01: dev sincroniza por push). Sem desconto, o "com desconto" e igual ao valor cheio.
 await banco.insert(despesasItens).values({
   despesaId: despesa.id,
   grupoDespesaId: grupoDespesaSub.id,
   colaboradorId: colaboradorFinanceiroId,
   descricao: "Troca de resistencia",
-  valor: "35.00"
+  quantidade: "1.000",
+  valorUnitario: "35.0000",
+  valor: "35.00",
+  valorUnitarioComDesconto: "35.0000",
+  valorTotalComDesconto: "35.00"
 });
 
 const mercadoria = (
@@ -1159,6 +1288,7 @@ const mercadoria = (
 )[0];
 if (!mercadoria) throw new Error("Mercadoria seed nao foi criada");
 
+// Mesmo caso do item de despesa acima: *_com_desconto sao NOT NULL desde a 0016.
 await banco.insert(mercadoriasItens).values({
   mercadoriaId: mercadoria.id,
   produtoId: produto.id,
@@ -1167,9 +1297,15 @@ await banco.insert(mercadoriasItens).values({
   descricao: "Farinha de trigo",
   quantidade: "10.000",
   valorUnitario: "4.4000",
-  valorTotal: "44.00"
+  valorTotal: "44.00",
+  valorUnitarioComDesconto: "4.4000",
+  valorTotalComDesconto: "44.00"
 });
 
+// R-128: esta retirada e o caso HISTORICO — credor colaborador, gravada antes de a regra mudar.
+// Fica de proposito: e ela que alimenta o debito de colaborador (R-047) e e o registro que a tela
+// precisa continuar reabrindo com o nome de quem recebeu. A retirada no formato NOVO (fornecedor)
+// vem logo abaixo.
 const retirada = (
   await banco
     .insert(retiradas)
@@ -1191,17 +1327,35 @@ const retirada = (
 )[0];
 if (!retirada) throw new Error("Retirada seed nao foi criada");
 
+// R-128: retirada no formato NOVO — credor fornecedor, com credor_tipo preenchido. Existe para o
+// banco recriado do zero ja ter a coluna nova em uso (e nao so a forma antiga, que passaria pelo
+// CHECK por credor_tipo nulo e esconderia um erro de coerencia).
+await banco.insert(retiradas).values({
+  empresaId,
+  caixaId: caixaFechado.id,
+  grupoRetiradaId: grupoRetiradaPai.id,
+  fornecedorId: fornecedor.id,
+  credorTipo: "fornecedor",
+  dataReferencia: dataISO(-1),
+  dataVencimento: dataISO(-1),
+  dataPagamento: dataISO(-1),
+  observacao: "Retirada para fornecedor seed",
+  valorOriginal: "18.00",
+  contaOrigemId: contaCaixa.id,
+  criadoPor: usuarioIds.get("caixa@email.com") ?? null
+});
+
 await banco.insert(transferencias).values({
   empresaId,
   caixaId: caixaFechado.id,
   dataReferencia: dataISO(-1),
   descricao: "Transferencia para banco seed",
-  observacao: "Transferencia fake com malote (lacre)",
+  observacao: "Transferencia seed com lacre digitado (R-021)",
   valorOriginal: "20.00",
   contaOrigemId: contaCaixa.id,
   contaDestinoId: contaBanco.id,
-  maloteId: malote.id,
-  criadoPor: usuarioIds.get("tesouraria@email.com") ?? null
+  nLacreDoc: "LACRE-001",
+  criadoPor: criadoPorTesouraria
 });
 
 await banco.insert(ajustesFechamentoCaixa).values({

@@ -6,15 +6,33 @@ import {
 } from "@padaria/shared/contas";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
 import { validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
-import { copiarContasRepository, listarContasRepository, salvarContaRepository } from "./contas.repository.js";
+import {
+  copiarContasRepository,
+  listarContasComSaldoRepository,
+  listarContasRepository,
+  salvarContaRepository
+} from "./contas.repository.js";
 
 export async function listarContas(escopoDados: string[]) {
   return filtrarPorEmpresas(await listarContasRepository(), escopoDados);
 }
 
+// Tela de Contas (D8): fundo + saldo ATUAL derivado + usuarios vinculados. Separada de listarContas
+// porque aquela e a lista de OPCAO de formulario (id/nome) e e chamada em quase toda tela — nao vale
+// pagar as cinco consultas de movimento so para preencher um <select>.
+export async function listarContasComSaldo(escopoDados: string[]) {
+  return listarContasComSaldoRepository(escopoDados);
+}
+
 export async function salvarConta(id: string | null, body: DadosExternos) {
   const dados = contaPayloadSchema.parse(body);
-  return salvarContaRepository({ ...(id ? { id } : {}), empresaId: dados.empresaId, nome: dados.nome.trim() });
+  return salvarContaRepository({
+    ...(id ? { id } : {}),
+    empresaId: dados.empresaId,
+    nome: dados.nome.trim(),
+    ...(dados.saldoInicial === undefined ? {} : { saldoInicial: dados.saldoInicial }),
+    ...(dados.usuariosIds === undefined ? {} : { usuariosIds: dados.usuariosIds })
+  });
 }
 
 export async function importarContas(body: ImportarPayload, perfil?: PerfilComEmpresa) {
