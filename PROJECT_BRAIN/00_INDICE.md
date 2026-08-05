@@ -11,7 +11,7 @@
 
 ## Como ler
 
-Se você está entrando agora, leia nesta ordem: **16 → 19 → 20 → 22 → 21**. Depois o resto, conforme
+Se você está entrando agora, leia nesta ordem: **16 → 19 → 20 → 22 → 21 → 25**. Depois o resto, conforme
 a necessidade.
 
 | #                                      | Documento                     | Responde                                                                       |
@@ -39,13 +39,14 @@ a necessidade.
 | [22](22_AUDITORIA_STACK_2026_08_05.md) | **Auditoria de stack (05/08)**| stack real, 20 riscos com arquivo:linha, ferramental e plano priorizado         |
 | [23](23_PERMISSOES_MODELO_E_AUDITORIA.md) | **Permissões (05/08)**    | modelo vigente, matriz cargo × ação, 10 achados abertos, testes que faltam      |
 | [24](24_CADASTRO_DE_PRODUTOS.md)       | **Cadastro de Produtos**      | o que já existe e está testado, o que falta, e o conflito de fontes de importação |
+| [25](25_BACKLOG_2026_08_05.md)          | **Backlog (05/08)**           | as 98 tarefas que fecham tudo o que as auditorias acharam, divididas entre os tres |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)    | Linguagem visual Cicluz       | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade** |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual | o que mudou por arquivo em 01/08 e o que ficou aberto                           |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a
 > 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **25**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **26**.
 
 ## Regra de ouro deste brain
 
