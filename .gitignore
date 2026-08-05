@@ -19,8 +19,9 @@ db/planilhas/*.xlsx
 
 # Referencia/documentacao — fora do git por decisao do Ze (NAO remover do disco; so tirar do source control)
 CADASTRO DE PRODUTOS/
-PROJECT_BRAIN - Copia/
-design-system/
+# Material de fases anteriores, arquivado em 05/08/2026 (ver _ARQUIVO_MORTO/LEIA-ME.md).
+# Nao e fonte de verdade e nao deve ser lido por agentes.
+_ARQUIVO_MORTO/
 docs/
 # PDFs de analise/reuniao gerados localmente
 *.pdf

@@ -427,3 +427,36 @@ pela R-015. Corrigir muda o saldo de todo caixa já fechado, então parou aqui.
 - **Reexecutado isolado: `unidades-medida` passa 3/3.** Efetivo: **323/323**.
 - Lição para a próxima: não rodar outras suítes em paralelo com a integração completa — o
   Testcontainers estoura o startup e a falha parece regressão.
+
+---
+
+# Atualização de 05/08/2026
+
+Este documento estava ~3 dias atrás do git. Registro do que aconteceu depois do último bloco:
+
+**Entregue entre 03 e 04/08** (PRs #26, #27, #28, regras R-127 a R-136): texto do movimento vira
+Observação; credor da retirada; data de pagamento não retroativa; fonte única da cor de categoria;
+grupo fora do modal de despesa e mercadoria; grupo e itens opcionais; discriminação numa tabela só
+com item vindo do cadastro, validado no servidor; dinheiro formatando a cada tecla; Prettier
+aplicado no repositório inteiro.
+
+**05/08 — ambiente de trabalho e auditoria.** Branch `chore/ambiente-time-senior`:
+
+- **11 agentes de cargo** criados em `.claude/agents/pralis-*.md`, calibrados para a stack real e
+  para as regras deste projeto (`.claude` está no `.gitignore` — eles vivem no disco, não no git).
+- **`21_DECISOES_04_08.md`** — a reunião com o Marco, com as regras R-137 a R-151, os 8 bugs vistos
+  ao vivo e as 11 perguntas em aberto.
+- **`22_AUDITORIA_STACK_2026_08_05.md`** — auditoria completa: stack real, 20 riscos com
+  `arquivo:linha`, comparação com o ferramental de time sênior e plano em 5 faixas.
+- **D-12 a D-23** registradas em `18_DIVIDAS_TECNICAS.md`.
+
+**O que continua travando a entrega, sem mudança:**
+
+- A branch inteira continua à frente da `main`. **Nada foi mergeado** (R-110) e o item 5 do DoD (diff
+  revisado pelo José) não foi feito para o conjunto.
+- R-102 (responsividade) e R-100 (acentuação) continuam ⚠️, pendentes de inspeção humana.
+- R-022 continua ⚠️: tela de malotes oculta, não removida — viola o item 1 do DoD.
+- R-124/R-125/R-126 continuam ⏳: `quebras_caixa` segue write-only, sem rota de leitura.
+- **Novo, e é o mais importante:** o módulo Caixa **não pode ser declarado terminado** enquanto a
+  transferência de retorno no fechamento não existir. A regra para caixa que fecha com déficit ou com
+  sobra maior que a prevista nunca foi definida (C-09).

@@ -12,7 +12,7 @@ Monorepo npm workspaces:
 | `shared`              | Zod contracts, regras puras, catálogo de 199+ permissões | contrato entre api e web                           |
 | `integracoes-scripts` | agente Node                                              | roda no PC da loja, lê CREARE (MySQL), envia à API |
 | `tests`               | Vitest + Testcontainers                                  | integração                                         |
-| `design-system`       | referência de UI                                         | playbook 66 + componentes-modelo                   |
+| `design-system`       | 🗄️ arquivado em 05/08                                     | regras migradas para `67` §13                      |
 
 CI (GitHub Actions): job `qualidade` (lint, typecheck, arch-linter, text-linter, unit, front,
 build) + job `integracao` (Testcontainers). Deploy em **Coolify** (migrate → api → web-vue).
@@ -146,7 +146,8 @@ Tokens `--pralis-*` em `web-vue/assets/main.css`. Fonte Montserrat.
 
 ## 9. Relação com o brain anterior
 
-`PROJECT_BRAIN - Copia` (64 arquivos) permanece como **referência técnica**, principalmente:
+`PROJECT_BRAIN - Copia` foi para `_ARQUIVO_MORTO/` em 05/08. O que valia está em
+`23_PERMISSOES_MODELO_E_AUDITORIA.md` e `24_CADASTRO_DE_PRODUTOS.md`. Referência histórica:
 `28–39` (auditoria profunda de permissões, matriz do caixa, validações), `41`/`61` (integração
 com o repo oficial), `50–51` (protocolo de QA). Nada ali é descartado — este brain v2 trata de
 **produto e modelo de negócio**, que era justamente o que faltava.

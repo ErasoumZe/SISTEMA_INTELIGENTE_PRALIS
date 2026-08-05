@@ -644,6 +644,83 @@ Notas de desenho:
 
 ---
 
+### REUNIÃO DE 04/08/2026 — Marco × José (contexto completo em `21_DECISOES_04_08.md`)
+
+Primeira reunião com o Marco. O Rodrigo não participou — nada aqui é decisão dele que já não
+existisse antes. Cada regra traz a página da transcrição.
+
+**Transferência e lacre**
+
+| Id    | Regra                                                                                                                                            | Origem   | Status | Teste |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ | ----- |
+| R-137 | **Transferência entre contas bancárias não exige lacre.** É a única exceção à R-025                                                              | José p.12-13 | ❓ | — |
+| R-138 | **Tempo de confirmação é obrigatório com múltiplos destinos** e opcional na transferência direta conta→conta. Motivo: pendência longa trava o caixa | José p.14-15 | ⚠️ | R-035 cobre o campo, não a obrigatoriedade condicional |
+| R-139 | **Divergência de valor no recebimento resolve-se fisicamente, fora do sistema.** O sistema registra observação e notifica os dois lados; não há acerto automático | José p.15 | ❓ | — |
+| R-140 | **Só a transferência de retorno é feita pelo operador de caixa.** Saída do cofre e demais movimentações entre contas são da tesouraria, algumas da gerência | José p.64 | ✅ | R-032 |
+
+**Caixa**
+
+| Id    | Regra                                                                                                                                              | Origem   | Status | Teste |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ | ----- |
+| R-141 | **A abertura registra data, hora, usuário, PDV, turno e lacre — e nada além.** O aprovador é gravado só em banco, invisível ao operador; aparece ao tesoureiro na aprovação, com data de recebimento e valor | José p.65-66 | ✅ | `caixa-abertura-lacre.test.ts` |
+| R-142 | **A abertura não exige aprovação de terceiro.** Exigem: diferença, edição e alteração de horário — por admin, gerência ou diretor geral              | José p.68-71 | ✅ | `alteracao-horario-revinculacao.test.ts` |
+| R-143 | **Todo dinheiro dentro do sistema precisa estar vinculado a alguma venda**, e não existe transferência sem fundo na conta de origem                  | José p.34-35 | ⚠️ | regra estrutural, sem teste que a expresse |
+
+**Produto, estoque e compras** — ⚠️ **correção de 05/08:** este bloco nasceu dizendo "módulo não
+iniciado" e marcando as quatro como ❌. Estava errado. A conferência contra o código mostrou que o
+Cadastro de Produtos **existe, está implementado e tem 20 testes**. Detalhe completo em
+`24_CADASTRO_DE_PRODUTOS.md`.
+
+| Id    | Regra                                                                                                                                              | Origem   | Status |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
+| R-145 | **A fonte do cadastro de produtos é a planilha do Rodrigo**, não o cadastro do CREARE. **Os dados fiscais da planilha NÃO serão importados** — estão errados e causam pagamento de imposto a maior | José p.42, 49-50 | ✅ cumprida no seed (`seed-planilha.ts` não grava campo fiscal). ⚠️ ver conflito de fontes em `24` §4 |
+| R-146 | Produto tem dois tipos: **revenda** e **transformação**. Preço de venda = custo × margem, com opção de digitar manual                                | José p.43-44 | ✅ implementada e testada (`shared/src/produtos/regras.ts`, 20 testes) |
+| R-147 | A **promoção** só se aplica com produto cadastrado, mesmo código e dentro da janela de vigência. Fora dela, volta o preço normal                     | José p.47 | ⚠️ janela de vigência pronta; falta o "mesmo código", que depende do PDV |
+| R-148 | **Pedido automático** dispara no estoque mínimo, na quantidade que falta para o máximo. **O comprador sempre aprova ou reprova**; pode deixar rascunho que se auto-aprova no mínimo | José p.36, 56 | ❌ só existem as colunas de estoque mín./máx.; nenhuma lógica de disparo |
+
+**Relatórios e IA**
+
+| Id    | Regra                                                                                                       | Origem   | Status |
+| ----- | ----------------------------------------------------------------------------------------------------------- | -------- | ------ |
+| R-149 | Relatório de vendas por **Curva ABC** nos cortes **setor, grupo, produto e hora** — pedido do Rodrigo         | José p.57-58 | ❌ |
+| R-150 | **Dados pessoais, documentos e informações financeiras não vão para APIs externas de IA**                    | ambos p.71 | ✅ (nada implementado) |
+
+**Processo**
+
+| Id    | Regra                                                                                                                              | Origem   |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| R-144 | Prioridade: **1º Caixa · 2º Compras** (engloba cadastro de produtos, estoque, pedidos e tela de venda) **· 3º Relatórios**. Máxima após o Caixa: cadastro de produto com estoque | Rodrigo, via José p.40-41, 48 |
+| R-151 | **Marco trabalha em branch separada**, não commita na `main` sem rodar local e sem o OK do José, e não cria padrão novo sem autorização | ambos p.58, 78 |
+
+> **R-144 corrige um erro que circulou:** não são 5 etapas. Compras é guarda-chuva — cadastro de
+> produtos e estoque são a *primeira parte* dela, não etapas independentes.
+
+> **Não foi acordado nesta reunião:** processo de PR, teste obrigatório antes de merge, code review
+> formal, divisão de arquivos, rebase — tudo isso era o bloco 6 do roteiro e foi **adiado**. E a
+> **primeira tarefa do Marco não foi definida.** Não trate nada disso como regra.
+
+---
+
+## §1-D · Contradições abertas em 05/08/2026
+
+**C-08 · Reabertura de caixa: existe ou não?**
+A reunião fala em *"reabrir e trocar o horário"* e no dado original que se perde (p. 69), e daí saiu
+a ideia de log de auditoria. Mas o código **não tem reabertura**: o status admite
+`aberto`/`fechado`/`ajustado` e nada escreve `ajustado`; `editarAberturaCaixa` e `alterarHorarioCaixa`
+recusam caixa fechado; não há rota de reabrir. O que existe é (a) alteração de horário **enquanto
+aberto**, já auditada em `edicoes_caixa` com `valores_antigos`/`valores_novos`, e (b) venda tardia
+entrando em caixa fechado, marcada em `alteracoes_pos_fechamento_caixa`.
+**Decisão necessária do José:** reabertura vai passar a existir (e então precisa de regra, permissão
+e trilha), ou o entendimento da reunião estava impreciso e o assunto se encerra?
+
+**C-09 · A transferência de retorno no fechamento não foi implementada.**
+José: *"por isso que eu não implementei... vamos supor que ele feche com déficit ou com um valor
+maior do que você definiu para transferência de retorno. Você vai precisar de mais uma
+transferência. Então a gente precisa rever"* (p. 29). Enquanto essa regra não existir, **o módulo
+Caixa não pode ser declarado terminado**, embora tudo o mais funcione.
+
+---
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
