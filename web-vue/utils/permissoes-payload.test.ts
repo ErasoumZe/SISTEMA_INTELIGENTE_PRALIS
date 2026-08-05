@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { permissoesOcultasNaTela } from "./domain";
+import { cadastroPayload } from "@padaria/shared";
+import { formCadastroVazio, permissoesOcultasNaTela } from "./domain";
 import { regrasComOcultasPreservadas, type ListasPermissoesPersistidas } from "./permissoes-payload";
 
 // S-06: a tela esconde 52 permissoes — as 13 telas de `telasOcultasNoDrawerEPermissoes` (uma
@@ -250,5 +251,136 @@ describe("regrasComOcultasPreservadas — guardas", () => {
     expect(regrasComOcultasPreservadas(formGerencia({ entradas_visualizar: true }), suja)).toEqual({
       entradas_visualizar: true
     });
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Payload FINAL da tela — o que de fato sai no PUT/POST
+// ------------------------------------------------------------------------------------------------
+// Os testes acima provam a funcao de merge isolada. Este bloco fecha a lacuna apontada na revisao:
+// monta o `formSnapshot` exatamente como `salvarCadastro` monta e passa por `cadastroPayload`, que e
+// quem produz o corpo enviado. Sem isto, trocar a chamada em `AppWorkspace.vue` de volta para
+// `{ ...form.regras }` deixaria a suite verde com o bug de volta.
+
+const EMPRESA = "99999999-9999-4999-8999-999999999999";
+
+/** Reproduz `salvarCadastro`: form -> preservacao -> snapshot -> `cadastroPayload`. */
+function payloadDaTela(form: ReturnType<typeof formCadastroVazio>, listas: ListasPermissoesPersistidas) {
+  const formSnapshot = {
+    ...form,
+    empresaIds: [...form.empresaIds],
+    produtoConversoes: form.produtoConversoes.map((conversao) => ({ ...conversao })),
+    regras: regrasComOcultasPreservadas(form, listas)
+  };
+  return cadastroPayload("permissoes", formSnapshot, EMPRESA) as {
+    tipoPermissao: string;
+    cargoId?: string;
+    setorId?: string;
+    usuarioId?: string;
+    regras: Record<string, boolean>;
+  };
+}
+
+/** Form como a tela o entrega ao abrir a Gerencia para edicao: so as visiveis chegam ao formulario. */
+function formDaGerenciaAberto(regrasNoBanco: Record<string, boolean>) {
+  return {
+    ...formCadastroVazio(),
+    tipoPermissao: "cargo" as const,
+    cargoId: CARGO_GERENCIA,
+    regras: comoATelaFiltra(regrasNoBanco)
+  };
+}
+
+describe("payload final da tela de Permissoes (S-06)", () => {
+  const listas: ListasPermissoesPersistidas = {
+    cargosPermissoes: [
+      { id: CARGO_GERENCIA, cargoId: CARGO_GERENCIA, regras: regrasDaGerenciaNoBanco() },
+      {
+        id: CARGO_CAIXA,
+        cargoId: CARGO_CAIXA,
+        // oculta EXCLUSIVA do Caixa — nao pode aparecer no payload da Gerencia
+        regras: { entradas_visualizar: true, menu_folha_ponto_mostrar: true, folha_ponto_visualizar: true }
+      }
+    ],
+    setoresPermissoes: [],
+    usuariosPermissoes: []
+  };
+
+  /** Edicao real: tira `entradas_criar`, nega `transferencias_visualizar`, liga uma nova. */
+  function formEditadoPeloUsuario() {
+    const form = formDaGerenciaAberto(regrasDaGerenciaNoBanco());
+    delete form.regras["entradas_criar"]; // "herdar"
+    form.regras["transferencias_visualizar"] = false; // "negar"
+    form.regras["cadastro_contas_visualizar"] = true; // "permitir" novo
+    return form;
+  }
+
+  it("identifica o alvo: tipo cargo e o cargoId correto, sem setor nem usuario", () => {
+    const payload = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    expect(payload.tipoPermissao).toBe("cargo");
+    expect(payload.cargoId).toBe(CARGO_GERENCIA);
+    expect(payload.setorId).toBeUndefined();
+    expect(payload.usuarioId).toBeUndefined();
+  });
+
+  it("carrega as 12 ocultas da Gerencia e as alteracoes do formulario", () => {
+    const payload = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    for (const oculta of OCULTAS_DA_GERENCIA) {
+      expect(payload.regras[oculta], oculta).toBe(true);
+    }
+    expect(payload.regras["cadastro_contas_visualizar"]).toBe(true); // adicionada
+    expect(payload.regras["entradas_visualizar"]).toBe(true); // intocada
+  });
+
+  it("nao concede oculta que a Gerencia nao tinha, nem chave de outro cargo", () => {
+    const payload = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    expect(payload.regras).not.toHaveProperty(OCULTA_AUSENTE);
+    // as do Caixa: `folha_ponto_visualizar` e `menu_folha_ponto_mostrar` existem na outra linha
+    expect(payload.regras).not.toHaveProperty("menu_folha_ponto_mostrar");
+  });
+
+  it("respeita a remocao de visivel e preserva o false da negacao", () => {
+    const payload = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    expect(payload.regras).not.toHaveProperty("entradas_criar"); // removida no form
+    expect(payload.regras["transferencias_visualizar"]).toBe(false); // negada no form
+    expect(payload.regras["cadastro_clientes_visualizar"]).toBe(false); // ja era negada no banco
+  });
+
+  it("o conjunto de chaves e exatamente 12 ocultas + o que o form tem", () => {
+    const form = formEditadoPeloUsuario();
+    const payload = payloadDaTela(form, listas);
+
+    expect(new Set(Object.keys(payload.regras))).toEqual(
+      new Set([...OCULTAS_DA_GERENCIA, ...Object.keys(form.regras)])
+    );
+  });
+
+  it("segundo salvamento com as opcoes AINDA NAO recarregadas produz o mesmo payload", () => {
+    // Apos salvar, a tela nao necessariamente recarrega `opcoes` — o segundo save reusa a MESMA
+    // lista. Se a preservacao dependesse de dado fresco, o segundo save perderia as ocultas.
+    const primeiro = payloadDaTela(formEditadoPeloUsuario(), listas);
+    const segundo = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    expect(segundo.regras).toEqual(primeiro.regras);
+    for (const oculta of OCULTAS_DA_GERENCIA) {
+      expect(segundo.regras[oculta], oculta).toBe(true);
+    }
+  });
+
+  it("reabrir a tela depois do save (banco ja completo) nao muda mais nada", () => {
+    const primeiro = payloadDaTela(formEditadoPeloUsuario(), listas);
+
+    // banco depois do save + tela reaberta a partir dele
+    const listasDepois: ListasPermissoesPersistidas = {
+      ...listas,
+      cargosPermissoes: [{ id: CARGO_GERENCIA, cargoId: CARGO_GERENCIA, regras: primeiro.regras }]
+    };
+    const segundo = payloadDaTela(formDaGerenciaAberto(primeiro.regras), listasDepois);
+
+    expect(segundo.regras).toEqual(primeiro.regras);
   });
 });
