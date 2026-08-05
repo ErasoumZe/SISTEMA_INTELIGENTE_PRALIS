@@ -108,6 +108,14 @@ sem migration correspondente, esse teste falha.
 > `meta/*_snapshot.json`: as tres contagens tem que bater. O `drizzle-kit check` **nao detecta**
 > snapshot faltando, e isso ja quebrou o deploy duas vezes.
 
+Essa paridade e verificada por `npm run check:migrations` (dentro de `npm run check`), que compara as
+tres contagens, casa cada entrada do journal com o seu `.sql` e o seu snapshot, aponta arquivo orfao
+que nunca seria aplicado e confere a corrente de `prevId` entre os snapshots.
+
+```powershell
+npm.cmd run check:migrations
+```
+
 ## Deploy — Coolify
 
 O arquivo de publicacao e `infra/docker-compose.coolify.yml`:
