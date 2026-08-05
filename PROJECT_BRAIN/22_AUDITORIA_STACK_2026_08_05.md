@@ -24,14 +24,14 @@ migration com baseline documentado.
 **O problema não é a qualidade média — é a distribuição dela.** Há zonas de excelência ao lado de
 zonas sem nenhuma rede:
 
-| Zona                                         | Estado                                                                 |
-| -------------------------------------------- | ---------------------------------------------------------------------- |
+| Zona                                         | Estado                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------- |
 | Domínio de caixa e transferência no servidor | **forte** — regras no `shared`, testes de concorrência, trilha em `edicoes_caixa` |
-| Ingestão de venda do CREARE                  | **frágil** — dois riscos críticos, sem UNIQUE, hash com defeito         |
-| `integracoes-scripts` (o robô)               | **sem rede nenhuma** — fora do ESLint, fora do `check`, fora do CI      |
-| Front `web-vue`                              | **frágil** — 1 teste de componente montado, god-component de 1.991 linhas |
-| Infra e deploy                               | **boa base**, observabilidade rasa                                     |
-| Documentação (PROJECT_BRAIN)                 | **excelente e desatualizada** — três cópias concorrentes no disco       |
+| Ingestão de venda do CREARE                  | **frágil** — dois riscos críticos, sem UNIQUE, hash com defeito                   |
+| `integracoes-scripts` (o robô)               | **sem rede nenhuma** — fora do ESLint, fora do `check`, fora do CI                |
+| Front `web-vue`                              | **frágil** — 1 teste de componente montado, god-component de 1.991 linhas         |
+| Infra e deploy                               | **boa base**, observabilidade rasa                                                |
+| Documentação (PROJECT_BRAIN)                 | **excelente e desatualizada** — três cópias concorrentes no disco                 |
 
 **Os três problemas mais caros, em ordem:**
 
@@ -49,20 +49,19 @@ zonas sem nenhuma rede:
 Monorepo npm workspaces `padariav2`. Node **22** (fixado só em Dockerfile e CI — **nenhum
 workspace declara `engines`**). TypeScript **5.9.3** uniforme.
 
-| Workspace             | Stack principal                                            | Tamanho              |
-| --------------------- | ---------------------------------------------------------- | -------------------- |
-| `api`                 | Fastify 5.8 · Drizzle 0.45 · Postgres 16 · better-auth 1.6 · Zod 4.4 | 127 arq. / 17.642 linhas |
-| `web-vue`             | Nuxt 4.4 · Vue 3.5 · Vuetify 3.12 · SPA (`ssr: false`)      | 78 `.vue` / 11.378 linhas |
-| `db`                  | Drizzle schema + 30 migrations + seeds                      | **70 tabelas**       |
-| `shared`              | Zod + regras puras (dinheiro, datas, saldo), só `zod` e `uuid` | 44 módulos / 4.109 linhas |
-| `integracoes-scripts` | JS puro + mysql2 — o agente do CREARE                       | 17 arquivos          |
-| `tests`               | Vitest 4 + Testcontainers                                   | 86 arq. / 462 casos  |
+| Workspace             | Stack principal                                                      | Tamanho                   |
+| --------------------- | -------------------------------------------------------------------- | ------------------------- |
+| `api`                 | Fastify 5.8 · Drizzle 0.45 · Postgres 16 · better-auth 1.6 · Zod 4.4 | 127 arq. / 17.642 linhas  |
+| `web-vue`             | Nuxt 4.4 · Vue 3.5 · Vuetify 3.12 · SPA (`ssr: false`)               | 78 `.vue` / 11.378 linhas |
+| `db`                  | Drizzle schema + 30 migrations + seeds                               | **70 tabelas**            |
+| `shared`              | Zod + regras puras (dinheiro, datas, saldo), só `zod` e `uuid`       | 44 módulos / 4.109 linhas |
+| `integracoes-scripts` | JS puro + mysql2 — o agente do CREARE                                | 17 arquivos               |
+| `tests`               | Vitest 4 + Testcontainers                                            | 86 arq. / 462 casos       |
 
 **API.** Tripla `controller` → `service` → `repository` por domínio, 36 domínios, registrados
 manualmente em `app.ts`. Default-deny por hook `onRequest` com allowlist de 6 entradas. Helmet, CORS
 com origem explícita, rate limit global 300/min, multipart limitado a 10 MB. Erro tipado por
-`ErroDominio` com 6 fábricas e handler global que mapeia `ZodError`, `ErroDominio`, 429 e fallback
-500. **176 chamadas `.parse(`** nos controllers.
+`ErroDominio` com 6 fábricas e handler global que mapeia `ZodError`, `ErroDominio`, 429 e fallback 500. **176 chamadas `.parse(`** nos controllers.
 
 **Os 10 maiores arquivos da API:** `caixa.repository.ts` 979 · `caixa.service.ts` 921 ·
 `integracoes.service.ts` 786 · `integracoes.repository.ts` 765 · `lancamentos.dominio.ts` 698 ·
@@ -218,10 +217,11 @@ aparece em caixa nenhum. Não há relatório de "vendas sem caixa" nem alerta.
 `criarPdvComContaRepository`, criando um PDV **e** uma conta contábil sem intervenção humana. **Não há
 no código nenhuma restrição a "4 PDVs" nem à unidade TNP.**
 
-**A-16 · `/health` não toca o banco**
-`saude.service.ts` retorna objeto estático. É o endpoint usado pelo healthcheck do Compose, do
-Coolify **e pelo agente CREARE antes de cada ciclo**. Com o Postgres fora do ar, o container continua
-"saudável".
+**A-16 · ~~`/health` não toca o banco~~ — CORRIGIDO em 05/08/2026 (issue #33 / G-04)**
+Era objeto estático; agora consulta o banco e responde **503** em 2s quando ele não responde. A
+verificação com `docker stop` no Postgres revelou algo que a auditoria não tinha visto: **a API
+morria junto com o banco** (`error` sem ouvinte no `pg.Pool` = `throw` no Node), então o 503 nunca
+chegaria a existir. Detalhes e números medidos na D-21.
 
 **A-17 · Sem request-id**
 `grep requestId|reqId|genReqId` em `api/src` = 0 ocorrências, embora `ProblemDetails` no `shared` já
@@ -264,24 +264,24 @@ formato, mas é um destruidor silencioso de valor.
 Comparação honesta com a lista clássica. O critério não é "o que times grandes usam", é **"o que um
 time de duas pessoas consegue operar sem virar plantonista"**.
 
-| Categoria       | Padrão de mercado              | Aqui                                                | Veredito                                            |
-| --------------- | ------------------------------ | --------------------------------------------------- | --------------------------------------------------- |
-| Versionamento   | Git + GitHub                   | **existe e bem usado** — PRs, branches, concurrency   | nada a fazer                                        |
-| CI              | GitHub Actions                 | **existe**, 2 jobs, integração com Postgres real     | **melhorar**: trazer 3 checagens que já existem     |
-| CD              | pipeline de deploy             | Coolify auto-deploy no push da `main`, sem workflow   | **aceitável**, mas exige disciplina de branch       |
-| Containers      | Docker                         | **existe e bem feito** (`cap_drop: ALL`, healthcheck) | nada a fazer                                        |
-| Orquestração    | Kubernetes                     | não existe                                            | **não fazer.** Um serviço, um banco, uma padaria    |
-| Erro            | Sentry                         | **existe**, `tracesSampleRate: 0`, sem request-id     | **melhorar** — barato e alto retorno                |
-| Métricas        | Prometheus + Grafana           | não existe                                            | **não agora.** `/health` real + alerta de silêncio da integração cobrem 90% |
-| Logs            | ELK / Loki                     | pino + log do Coolify                                 | **não agora** neste volume                          |
-| Testes          | unit + integração + E2E        | 462 casos, **zero E2E**                               | **fazer** — 3 fluxos de dinheiro em Playwright      |
-| Cobertura       | medida com limiar              | não medida                                            | **fazer** — medir primeiro, limiar depois           |
-| Segurança deps  | Dependabot / `npm audit` no CI | script existe, não roda                               | **fazer** — uma linha no CI                         |
-| Documentação    | Confluence / Notion            | PROJECT_BRAIN no git, 22 docs                         | **melhor que o padrão** — mas precisa consolidar as 3 cópias |
-| ADR             | pasta de ADRs                  | comando `.claude/commands/adr.md`, uso irregular      | **formalizar** — decisão estrutural vira ADR        |
-| Design          | Figma                          | fotos dos desenhos do Rodrigo + tokens em CSS/TS      | **talvez** — um arquivo só de tokens ajudaria       |
-| Gestão          | Jira / ClickUp                 | PROJECT_BRAIN + prompts em `docs/`                     | **não** — GitHub Issues bastam para 2 pessoas       |
-| Code review     | PR obrigatório                 | PRs existem; regra formal **não foi acordada**         | **decidir** — é o bloco 6 adiado da reunião         |
+| Categoria      | Padrão de mercado              | Aqui                                                  | Veredito                                                                    |
+| -------------- | ------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------- |
+| Versionamento  | Git + GitHub                   | **existe e bem usado** — PRs, branches, concurrency   | nada a fazer                                                                |
+| CI             | GitHub Actions                 | **existe**, 2 jobs, integração com Postgres real      | **melhorar**: trazer 3 checagens que já existem                             |
+| CD             | pipeline de deploy             | Coolify auto-deploy no push da `main`, sem workflow   | **aceitável**, mas exige disciplina de branch                               |
+| Containers     | Docker                         | **existe e bem feito** (`cap_drop: ALL`, healthcheck) | nada a fazer                                                                |
+| Orquestração   | Kubernetes                     | não existe                                            | **não fazer.** Um serviço, um banco, uma padaria                            |
+| Erro           | Sentry                         | **existe**, `tracesSampleRate: 0`, sem request-id     | **melhorar** — barato e alto retorno                                        |
+| Métricas       | Prometheus + Grafana           | não existe                                            | **não agora.** `/health` real + alerta de silêncio da integração cobrem 90% |
+| Logs           | ELK / Loki                     | pino + log do Coolify                                 | **não agora** neste volume                                                  |
+| Testes         | unit + integração + E2E        | 462 casos, **zero E2E**                               | **fazer** — 3 fluxos de dinheiro em Playwright                              |
+| Cobertura      | medida com limiar              | não medida                                            | **fazer** — medir primeiro, limiar depois                                   |
+| Segurança deps | Dependabot / `npm audit` no CI | script existe, não roda                               | **fazer** — uma linha no CI                                                 |
+| Documentação   | Confluence / Notion            | PROJECT_BRAIN no git, 22 docs                         | **melhor que o padrão** — mas precisa consolidar as 3 cópias                |
+| ADR            | pasta de ADRs                  | comando `.claude/commands/adr.md`, uso irregular      | **formalizar** — decisão estrutural vira ADR                                |
+| Design         | Figma                          | fotos dos desenhos do Rodrigo + tokens em CSS/TS      | **talvez** — um arquivo só de tokens ajudaria                               |
+| Gestão         | Jira / ClickUp                 | PROJECT_BRAIN + prompts em `docs/`                    | **não** — GitHub Issues bastam para 2 pessoas                               |
+| Code review    | PR obrigatório                 | PRs existem; regra formal **não foi acordada**        | **decidir** — é o bloco 6 adiado da reunião                                 |
 
 **Conclusão:** o gap real não é de ferramenta, é de **cobertura das ferramentas que já existem**.
 Cinco checagens já escritas e pagas não rodam em gate nenhum. Isso é o item de melhor retorno do
@@ -295,61 +295,61 @@ Ordenado por (risco × custo). Cada item cabe em uma entrega vertical.
 
 ### Faixa 0 — barato e imediato (uma tarde, tudo junto)
 
-| #   | Ação                                                                                     | Por quê                                              |
-| --- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 0.1 | Incluir `test --workspace @padaria/web-vue` no `npm test` da raiz                        | hoje `npm run quality` **não roda nenhum teste de front** |
-| 0.2 | Trazer `lint:deps`, `format:check` e `audit:deps` para o CI                              | 3 checagens já escritas que não protegem nada         |
-| 0.3 | Regra `max-lines` no ESLint para `web-vue`                                                | fecha a regra 4.5 do `AGENTS.md` automaticamente      |
-| 0.4 | `/health` executando `SELECT 1`                                                           | hoje o container fica verde com o banco morto (A-16)  |
-| 0.5 | `engines: { node: ">=22" }` nos 7 `package.json`                                          | Node só está fixado em Dockerfile e CI                |
-| 0.6 | Declarar `SYNC_FUSO_OFFSET` corretamente no `.env.producao.example` e no README do agente | a documentação hoje contradiz o código (A-10)         |
+| #   | Ação                                                                                      | Por quê                                                   |
+| --- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 0.1 | Incluir `test --workspace @padaria/web-vue` no `npm test` da raiz                         | hoje `npm run quality` **não roda nenhum teste de front** |
+| 0.2 | Trazer `lint:deps`, `format:check` e `audit:deps` para o CI                               | 3 checagens já escritas que não protegem nada             |
+| 0.3 | Regra `max-lines` no ESLint para `web-vue`                                                | fecha a regra 4.5 do `AGENTS.md` automaticamente          |
+| 0.4 | ~~`/health` executando `SELECT 1`~~ ✅ **feito em 05/08** (G-04, sem SQL cru — ver D-21)  | hoje o container fica verde com o banco morto (A-16)      |
+| 0.5 | `engines: { node: ">=22" }` nos 7 `package.json`                                          | Node só está fixado em Dockerfile e CI                    |
+| 0.6 | Declarar `SYNC_FUSO_OFFSET` corretamente no `.env.producao.example` e no README do agente | a documentação hoje contradiz o código (A-10)             |
 
 ### Faixa 1 — dinheiro (fazer antes de qualquer módulo novo)
 
-| #   | Ação                                                                                                 | Risco  |
-| --- | ---------------------------------------------------------------------------------------------------- | ------ |
-| 1.1 | **UNIQUE em `vendas(empresa_id, identificador_externo)`** + `ON CONFLICT` na ingestão. Antes: contar duplicatas existentes e decidir com o José o que fazer com elas | A-01   |
-| 1.2 | **Corrigir `jsonCanonico`** para serializar `Date` em ISO. Depois: reprocessar o período afetado      | A-02   |
-| 1.3 | **Escapar `%`, `_` e `\`** em toda busca `ilike` com entrada de usuário (5 pontos)                    | A-03   |
-| 1.4 | **Teste de ingestão concorrente** do mesmo `identificador_externo` — é o que prova o 1.1              | A-01   |
-| 1.5 | **Teste de pagamento dividido** (2 e 3 formas na mesma venda) — hoje não existe nenhum                | histórico |
-| 1.6 | **Recalcular os totais do fechamento** quando venda tardia entra em caixa fechado                     | A-04   |
-| 1.7 | **Bloquear edição de venda integrada** ou exigir permissão dedicada + trilha de auditoria             | A-08   |
-| 1.8 | **Unicidade de lacre case-insensitive** (índice sobre `lower(numero)`)                                | A-06   |
+| #   | Ação                                                                                                                                                                 | Risco     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 1.1 | **UNIQUE em `vendas(empresa_id, identificador_externo)`** + `ON CONFLICT` na ingestão. Antes: contar duplicatas existentes e decidir com o José o que fazer com elas | A-01      |
+| 1.2 | **Corrigir `jsonCanonico`** para serializar `Date` em ISO. Depois: reprocessar o período afetado                                                                     | A-02      |
+| 1.3 | **Escapar `%`, `_` e `\`** em toda busca `ilike` com entrada de usuário (5 pontos)                                                                                   | A-03      |
+| 1.4 | **Teste de ingestão concorrente** do mesmo `identificador_externo` — é o que prova o 1.1                                                                             | A-01      |
+| 1.5 | **Teste de pagamento dividido** (2 e 3 formas na mesma venda) — hoje não existe nenhum                                                                               | histórico |
+| 1.6 | **Recalcular os totais do fechamento** quando venda tardia entra em caixa fechado                                                                                    | A-04      |
+| 1.7 | **Bloquear edição de venda integrada** ou exigir permissão dedicada + trilha de auditoria                                                                            | A-08      |
+| 1.8 | **Unicidade de lacre case-insensitive** (índice sobre `lower(numero)`)                                                                                               | A-06      |
 
 ### Faixa 2 — continuidade e operação
 
-| #   | Ação                                                                              | Risco |
-| --- | --------------------------------------------------------------------------------- | ----- |
-| 2.1 | Agendar `db:backup` e padronizar o nome dos dumps existentes                       | A-18  |
-| 2.2 | Retenção e índice em `integracoes_historico` / `integracoes_sem_novidade`; `LIMIT` e filtro de data na listagem | A-05 |
-| 2.3 | Heartbeat do lock do agente a cada N vendas, não 1× por ciclo                       | A-11  |
-| 2.4 | Orçamento de rate limit compartilhado entre agente e reprocesso (ou recusar rodar em paralelo) | A-12 |
-| 2.5 | Request-id no Fastify, propagado para o log e para o Sentry                         | A-17  |
-| 2.6 | Alerta de "venda órfã" e relatório de vendas sem caixa                              | A-14  |
-| 2.7 | Desligar criação automática de PDV/conta, ou exigir aprovação                       | A-15  |
+| #   | Ação                                                                                                            | Risco |
+| --- | --------------------------------------------------------------------------------------------------------------- | ----- |
+| 2.1 | Agendar `db:backup` e padronizar o nome dos dumps existentes                                                    | A-18  |
+| 2.2 | Retenção e índice em `integracoes_historico` / `integracoes_sem_novidade`; `LIMIT` e filtro de data na listagem | A-05  |
+| 2.3 | Heartbeat do lock do agente a cada N vendas, não 1× por ciclo                                                   | A-11  |
+| 2.4 | Orçamento de rate limit compartilhado entre agente e reprocesso (ou recusar rodar em paralelo)                  | A-12  |
+| 2.5 | Request-id no Fastify, propagado para o log e para o Sentry                                                     | A-17  |
+| 2.6 | Alerta de "venda órfã" e relatório de vendas sem caixa                                                          | A-14  |
+| 2.7 | Desligar criação automática de PDV/conta, ou exigir aprovação                                                   | A-15  |
 
 ### Faixa 3 — poder mexer no front sem medo
 
-| #   | Ação                                                                                       |
-| --- | ------------------------------------------------------------------------------------------ |
-| 3.1 | Playwright com 3 fluxos que movem dinheiro: abrir caixa por lacre → lançar despesa → fechar |
-| 3.2 | Asserção automatizada de scroll horizontal em 1440/1024/768/390 (fecha a parte objetiva da R-102) |
-| 3.3 | `@vitest/coverage-v8` só para medir, sem limiar                                             |
-| 3.4 | Unificar as duas cascas: `/integracoes` e `/pedidos` passam a usar `AppWorkspace`           |
-| 3.5 | Extrair de `AppWorkspace.vue` (1.991 l.) pelo menos sessão/empresa e notificações           |
+| #   | Ação                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------- |
+| 3.1 | Playwright com 3 fluxos que movem dinheiro: abrir caixa por lacre → lançar despesa → fechar           |
+| 3.2 | Asserção automatizada de scroll horizontal em 1440/1024/768/390 (fecha a parte objetiva da R-102)     |
+| 3.3 | `@vitest/coverage-v8` só para medir, sem limiar                                                       |
+| 3.4 | Unificar as duas cascas: `/integracoes` e `/pedidos` passam a usar `AppWorkspace`                     |
+| 3.5 | Extrair de `AppWorkspace.vue` (1.991 l.) pelo menos sessão/empresa e notificações                     |
 | 3.6 | Resolver "aparência" (rota **ou** modal, não os dois) e decidir o destino das 12 telas em placeholder |
 
 ### Faixa 4 — higiene documental ✅ **FEITA em 05/08/2026** (ver D-23)
 
-| #   | Ação                                                                                                     |
-| --- | -------------------------------------------------------------------------------------------------------- |
-| 4.1 | ✅ arquivados em `_ARQUIVO_MORTO/`, com o conteúdo útil resgatado em `23`, `24` e `67` §13                  |
-| 4.2 | ✅ apagado                                                                                                  |
-| 4.3 | ✅ reescrito                                                                                                |
-| 4.4 | ⚠️ parcial — marcado como histórico no índice e as referências às pastas arquivadas foram corrigidas          |
-| 4.5 | Desambiguar os dois cabeçalhos **D-07** em `18_DIVIDAS_TECNICAS.md`                                       |
-| 4.6 | Resolver as colisões de id em `19`: R-021 e R-110 aparecem com dois significados                          |
+| #   | Ação                                                                                                 |
+| --- | ---------------------------------------------------------------------------------------------------- |
+| 4.1 | ✅ arquivados em `_ARQUIVO_MORTO/`, com o conteúdo útil resgatado em `23`, `24` e `67` §13           |
+| 4.2 | ✅ apagado                                                                                           |
+| 4.3 | ✅ reescrito                                                                                         |
+| 4.4 | ⚠️ parcial — marcado como histórico no índice e as referências às pastas arquivadas foram corrigidas |
+| 4.5 | Desambiguar os dois cabeçalhos **D-07** em `18_DIVIDAS_TECNICAS.md`                                  |
+| 4.6 | Resolver as colisões de id em `19`: R-021 e R-110 aparecem com dois significados                     |
 
 ---
 
