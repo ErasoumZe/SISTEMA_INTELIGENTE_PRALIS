@@ -82,7 +82,7 @@ import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
-import { regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
+import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
 type TipoPagina =
   | "inicio"
@@ -1448,6 +1448,13 @@ async function salvarCadastro() {
         throw error;
       }
     }
+    // S-06: `opcoes` e a fonte das ocultas no proximo save e nao e recarregada nesta tela. Sem
+    // sincronizar aqui, um segundo save da sessao parte de um retrato velho. Grava-se DEPOIS do
+    // 2xx e a partir do `formSnapshot` (o objeto que foi enviado), nao do `formCadastro`, cujos
+    // selects seguem editaveis. O servidor persiste o `regras` literal — o Zod e tudo-ou-nada.
+    if (cadastroTela.value === "permissoes") {
+      opcoes.value = aplicarRegrasDoAlvoNasListas(opcoes.value, formSnapshot, formSnapshot.regras) as Opcoes;
+    }
     modalCadastroAberto.value = false;
     notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     const idSalvo = idEditando || resultado?.id;
@@ -1668,7 +1675,19 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
     return;
   }
   try {
-    await apiPost(`/api/permissoes/cargo/${cargoId}/restaurar-padrao`, {});
+    // S-06: o endpoint devolve o que gravou. Sem consumir isso, `opcoes` fica com o retrato
+    // ANTERIOR a restauracao e o proximo save pela tela reinjeta as ocultas velhas, desfazendo a
+    // restauracao em silencio. Sincronizamos com a resposta do servidor — sem chamada extra.
+    const aplicado = await apiPost<{ cargoId: string; regras: Record<string, boolean> } | undefined>(
+      `/api/permissoes/cargo/${cargoId}/restaurar-padrao`,
+      {}
+    );
+    if (!aplicado?.regras) throw new Error("Restauracao sem as regras aplicadas na resposta");
+    opcoes.value = aplicarRegrasDoAlvoNasListas(
+      opcoes.value,
+      { tipoPermissao: "cargo", cargoId, setorId: "", usuarioId: "" },
+      aplicado.regras
+    ) as Opcoes;
     notificar(`Permissões do cargo "${nome}" restauradas para o padrão.`);
     if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {

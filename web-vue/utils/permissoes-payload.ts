@@ -20,6 +20,46 @@ export type AlvoPermissaoDoForm = Pick<CadastroForm, "tipoPermissao" | "cargoId"
  */
 export type ListasPermissoesPersistidas = Pick<Opcoes, "cargosPermissoes" | "setoresPermissoes" | "usuariosPermissoes">;
 
+/** Alvo de uma operacao de permissao — o mesmo discriminante que o payload usa. */
+export type AlvoPermissao = Pick<AlvoPermissaoDoForm, "tipoPermissao" | "cargoId" | "setorId" | "usuarioId">;
+
+/** Qual lista e qual chave de id correspondem ao tipo do alvo. */
+function listaDoAlvo(alvo: AlvoPermissao): { chave: keyof ListasPermissoesPersistidas; campo: string; id: string } {
+  if (alvo.tipoPermissao === "setor") return { chave: "setoresPermissoes", campo: "setorId", id: alvo.setorId };
+  if (alvo.tipoPermissao === "usuario") return { chave: "usuariosPermissoes", campo: "usuarioId", id: alvo.usuarioId };
+  return { chave: "cargosPermissoes", campo: "cargoId", id: alvo.cargoId };
+}
+
+/**
+ * Devolve as listas com as regras do alvo atualizadas — upsert por id, sem tocar nos vizinhos.
+ *
+ * Existe porque `opcoes` (fonte das ocultas no save) so e populado ao carregar a tela, e as
+ * permissoes mudam por caminhos que nao passam pelo formulario: o "Restaurar padrao" faz REPLACE
+ * incluindo as ocultas, e o proprio save grava um conjunto novo. Sem sincronizar, o save seguinte
+ * na mesma sessao reinjeta o retrato ANTIGO e desfaz a restauracao em silencio.
+ *
+ * Nao faz chamada de rede: o restaurar-padrao ja devolve `{ cargoId, regras }` no corpo, e o save
+ * ja conhece o payload que enviou. Nunca busca em `/api/permissoes/regras`, que e paginada,
+ * filtrada e nao serve de fonte.
+ */
+export function aplicarRegrasDoAlvoNasListas(
+  listas: ListasPermissoesPersistidas,
+  alvo: AlvoPermissao,
+  regras: Record<string, boolean>
+): ListasPermissoesPersistidas {
+  const { chave, campo, id } = listaDoAlvo(alvo);
+  // Alvo sem id: nao ha o que casar, e inventar uma entrada criaria alvo fantasma.
+  if (!id) return listas;
+
+  const atual = listas[chave];
+  const existe = atual.some((item) => item[campo as "cargoId"] === id);
+  const proxima = existe
+    ? atual.map((item) => (item[campo as "cargoId"] === id ? { ...item, regras } : item))
+    : [...atual, { id, [campo]: id, regras }];
+
+  return { ...listas, [chave]: proxima };
+}
+
 /** Regras hoje gravadas para o alvo escolhido NO FORM, ou `{}` se ele ainda nao tem nenhuma. */
 function regrasGravadasDoAlvo(form: AlvoPermissaoDoForm, listas: ListasPermissoesPersistidas): Record<string, boolean> {
   const encontrada =

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { cadastroPayload } from "@padaria/shared";
 import { formCadastroVazio, permissoesOcultasNaTela } from "./domain";
-import { regrasComOcultasPreservadas, type ListasPermissoesPersistidas } from "./permissoes-payload";
+import {
+  aplicarRegrasDoAlvoNasListas,
+  regrasComOcultasPreservadas,
+  type ListasPermissoesPersistidas
+} from "./permissoes-payload";
 
 // S-06: a tela esconde 52 permissoes — as 13 telas de `telasOcultasNoDrawerEPermissoes` (uma
 // `*_visualizar` cada) mais 39 flags de menu (13 x mostrar/desabilitado/somente_caixa_aberto). O
@@ -382,5 +386,179 @@ describe("payload final da tela de Permissoes (S-06)", () => {
     const segundo = payloadDaTela(formDaGerenciaAberto(primeiro.regras), listasDepois);
 
     expect(segundo.regras).toEqual(primeiro.regras);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------
+// Sincronizacao apos "Restaurar padrao" — S-06 (bloqueante da revisao)
+// ------------------------------------------------------------------------------------------------
+// `opcoes` e a fonte das ocultas no save e so e populado ao carregar a tela. O "Restaurar padrao"
+// faz REPLACE incluindo as ocultas, entao sem sincronizar o proximo save reinjeta o retrato ANTIGO
+// e desfaz a restauracao em silencio. O endpoint devolve `{ cargoId, regras }`, entao sincronizar
+// nao custa chamada nenhuma.
+//
+// O cenario tem 12 ocultas ANTES e 12 DEPOIS, de proposito: contagem igual dos dois lados faz um
+// teste que so conte chaves passar. So a igualdade de CONJUNTO denuncia a troca.
+
+const OCULTAS_QUE_ENTRAM = ["relatorio_dre_visualizar", "menu_relatorio_dre_mostrar"] as const;
+const OCULTAS_QUE_SAEM = [OCULTA_AUSENTE, "menu_folha_ponto_mostrar"] as const;
+
+/** Estado do cargo ANTES: alguem desligou o DRE e concedeu folha de ponto a mao. */
+function regrasDaGerenciaAntesDaRestauracao(): Record<string, boolean> {
+  const regras = regrasDaGerenciaNoBanco();
+  for (const saiu of OCULTAS_QUE_ENTRAM) delete regras[saiu];
+  for (const entrou of OCULTAS_QUE_SAEM) regras[entrou] = true;
+  return regras;
+}
+
+function soOcultas(regras: Record<string, boolean>): Set<string> {
+  return new Set(Object.keys(regras).filter((permissao) => permissoesOcultasNaTela.has(permissao as never)));
+}
+
+/** Corpo real do POST /api/permissoes/cargo/:id/restaurar-padrao. */
+const RESPOSTA_RESTAURACAO = { cargoId: CARGO_GERENCIA, regras: regrasDaGerenciaNoBanco() };
+
+function alvoCargo(cargoId: string) {
+  return { tipoPermissao: "cargo" as const, cargoId, setorId: "", usuarioId: "" };
+}
+
+describe("restaurar padrao do cargo sincroniza as opcoes (S-06)", () => {
+  it("a fixture descreve mesmo uma troca nos dois sentidos, com a mesma contagem", () => {
+    const antes = soOcultas(regrasDaGerenciaAntesDaRestauracao());
+    const depois = soOcultas(regrasDaGerenciaNoBanco());
+
+    expect(antes.size).toBe(depois.size); // 12 = 12 — a contagem nao denuncia
+    expect([...depois].filter((p) => !antes.has(p)).sort()).toEqual([...OCULTAS_QUE_ENTRAM].sort());
+    expect([...antes].filter((p) => !depois.has(p)).sort()).toEqual([...OCULTAS_QUE_SAEM].sort());
+    for (const permissao of [...OCULTAS_QUE_ENTRAM, ...OCULTAS_QUE_SAEM]) {
+      expect(permissoesOcultasNaTela.has(permissao as never), permissao).toBe(true);
+    }
+  });
+
+  it("depois de restaurar o padrao, o save seguinte NAO desfaz a restauracao", () => {
+    const listas = listasComCargo(CARGO_GERENCIA, regrasDaGerenciaAntesDaRestauracao());
+
+    const sincronizadas = aplicarRegrasDoAlvoNasListas(
+      listas,
+      alvoCargo(RESPOSTA_RESTAURACAO.cargoId),
+      RESPOSTA_RESTAURACAO.regras
+    );
+    const payload = payloadDaTela(formDaGerenciaAberto(regrasDaGerenciaNoBanco()), sincronizadas);
+
+    // Ancora: igualdade EXATA. Chave a mais = antiga ressuscitou; a menos = nova foi apagada.
+    expect(payload.regras).toEqual(regrasDaGerenciaNoBanco());
+    for (const saiu of OCULTAS_QUE_SAEM) expect(payload.regras, saiu).not.toHaveProperty(saiu);
+    for (const entrou of OCULTAS_QUE_ENTRAM) expect(payload.regras[entrou], entrou).toBe(true);
+    expect(soOcultas(payload.regras)).toEqual(new Set(OCULTAS_DA_GERENCIA));
+  });
+
+  it("a sincronizacao SUBSTITUI as regras do alvo, nao mescla com as antigas", () => {
+    const sincronizadas = aplicarRegrasDoAlvoNasListas(
+      listasComCargo(CARGO_GERENCIA, regrasDaGerenciaAntesDaRestauracao()),
+      alvoCargo(CARGO_GERENCIA),
+      RESPOSTA_RESTAURACAO.regras
+    );
+
+    const linha = sincronizadas.cargosPermissoes.find((item) => item.cargoId === CARGO_GERENCIA);
+    // um merge PROFUNDO de `regras` faria `folha_ponto_visualizar` sobreviver — este assert pega
+    expect(linha?.regras).toEqual(regrasDaGerenciaNoBanco());
+    expect(linha?.regras).not.toHaveProperty(OCULTA_AUSENTE);
+  });
+
+  it("sincroniza so o alvo restaurado, sem tocar nos outros", () => {
+    const regrasDoCaixa = { entradas_visualizar: true, menu_folha_ponto_mostrar: true };
+    const listas: ListasPermissoesPersistidas = {
+      cargosPermissoes: [
+        { id: CARGO_GERENCIA, cargoId: CARGO_GERENCIA, regras: regrasDaGerenciaAntesDaRestauracao() },
+        { id: CARGO_CAIXA, cargoId: CARGO_CAIXA, regras: regrasDoCaixa }
+      ],
+      setoresPermissoes: [{ id: "s1", setorId: "s1", regras: { relatorio_dre_visualizar: true } }],
+      usuariosPermissoes: [{ id: "u1", usuarioId: "u1", regras: { menu_promocoes_mostrar: true } }]
+    };
+
+    const depois = aplicarRegrasDoAlvoNasListas(listas, alvoCargo(CARGO_GERENCIA), RESPOSTA_RESTAURACAO.regras);
+
+    expect(depois.cargosPermissoes.find((c) => c.cargoId === CARGO_CAIXA)?.regras).toEqual(regrasDoCaixa);
+    expect(depois.setoresPermissoes).toEqual(listas.setoresPermissoes);
+    expect(depois.usuariosPermissoes).toEqual(listas.usuariosPermissoes);
+  });
+
+  it("cargo que ainda nao tinha linha de regras passa a ter", () => {
+    const depois = aplicarRegrasDoAlvoNasListas(listasVazias(), alvoCargo(CARGO_GERENCIA), RESPOSTA_RESTAURACAO.regras);
+    const payload = payloadDaTela(formDaGerenciaAberto(regrasDaGerenciaNoBanco()), depois);
+
+    expect(depois.cargosPermissoes).toHaveLength(1);
+    for (const oculta of OCULTAS_DA_GERENCIA) expect(payload.regras[oculta], oculta).toBe(true);
+  });
+
+  it("sincroniza SETOR e USUARIO na lista correta", () => {
+    const doSetor = aplicarRegrasDoAlvoNasListas(
+      listasVazias(),
+      { tipoPermissao: "setor", cargoId: "", setorId: "s9", usuarioId: "" },
+      { relatorio_dre_visualizar: true }
+    );
+    const doUsuario = aplicarRegrasDoAlvoNasListas(
+      listasVazias(),
+      { tipoPermissao: "usuario", cargoId: "", setorId: "", usuarioId: "u9" },
+      { menu_promocoes_mostrar: true }
+    );
+
+    expect(doSetor.setoresPermissoes[0]?.setorId).toBe("s9");
+    expect(doSetor.cargosPermissoes).toHaveLength(0);
+    expect(doUsuario.usuariosPermissoes[0]?.usuarioId).toBe("u9");
+    expect(doUsuario.setoresPermissoes).toHaveLength(0);
+  });
+
+  it("alvo sem id devolve as listas inalteradas, sem criar entrada fantasma", () => {
+    const listas = listasComCargo(CARGO_GERENCIA, regrasDaGerenciaAntesDaRestauracao());
+
+    const depois = aplicarRegrasDoAlvoNasListas(listas, alvoCargo(""), RESPOSTA_RESTAURACAO.regras);
+
+    expect(depois.cargosPermissoes).toHaveLength(1);
+    expect(depois.cargosPermissoes[0]?.regras).toEqual(regrasDaGerenciaAntesDaRestauracao());
+  });
+
+  it("sem sincronizar, o save DESFARIA a restauracao — prova que a sincronizacao e load-bearing", () => {
+    const obsoletas = listasComCargo(CARGO_GERENCIA, regrasDaGerenciaAntesDaRestauracao());
+
+    const payload = payloadDaTela(formDaGerenciaAberto(regrasDaGerenciaNoBanco()), obsoletas);
+
+    expect(payload.regras[OCULTA_AUSENTE]).toBe(true); // a apagada ressuscita
+    expect(payload.regras).not.toHaveProperty("relatorio_dre_visualizar"); // a concedida some
+  });
+});
+
+describe("sincronizacao nao depende de `id` (fidelidade ao payload real)", () => {
+  // O servidor manda apenas `{ cargoId, regras }` — sem `id` (permissoes.repository.ts). Uma
+  // sincronizacao que casasse por `id` sobrescreveria o primeiro item sem id da lista, ou seja,
+  // as regras de um cargo QUALQUER. As demais fixtures deste arquivo tem `id` e nao pegariam isso.
+  // Os dois itens tem o MESMO `id` de proposito: casamento por `id` (ou por posicao) sempre
+  // acertaria o primeiro. So casar por `cargoId` passa neste bloco.
+  const semId: ListasPermissoesPersistidas = {
+    cargosPermissoes: [
+      { id: "", cargoId: CARGO_GERENCIA, regras: { promocoes_visualizar: true } },
+      { id: "", cargoId: CARGO_CAIXA, regras: { menu_promocoes_mostrar: true } }
+    ],
+    setoresPermissoes: [],
+    usuariosPermissoes: []
+  };
+
+  it("casa pelo id do ALVO, nunca por posicao nem por `id` ausente", () => {
+    const depois = aplicarRegrasDoAlvoNasListas(semId, alvoCargo(CARGO_CAIXA), { relatorio_dre_visualizar: true });
+
+    expect(depois.cargosPermissoes.find((c) => c.cargoId === CARGO_CAIXA)?.regras).toEqual({
+      relatorio_dre_visualizar: true
+    });
+    // o primeiro da lista (Gerencia) fica intacto — seria ele o atingido por casamento errado
+    expect(depois.cargosPermissoes.find((c) => c.cargoId === CARGO_GERENCIA)?.regras).toEqual({
+      promocoes_visualizar: true
+    });
+  });
+
+  it("o merge le corretamente uma lista sem `id`", () => {
+    const depois = aplicarRegrasDoAlvoNasListas(semId, alvoCargo(CARGO_GERENCIA), { relatorio_dre_visualizar: true });
+
+    const payload = payloadDaTela(formDaGerenciaAberto({ entradas_visualizar: true }), depois);
+    expect(payload.regras["relatorio_dre_visualizar"]).toBe(true);
   });
 });
