@@ -37,13 +37,15 @@ a necessidade.
 | [20](20_ESTADO_DA_ENTREGA.md)          | **Estado da entrega**         | onde a entrega parou, o que trava, e os comandos de validação                   |
 | [21](21_DECISOES_04_08.md)             | **Reunião 04/08 (Marco)**     | escopo de Compras/Estoque/Relatórios, 8 bugs ao vivo, 11 perguntas em aberto    |
 | [22](22_AUDITORIA_STACK_2026_08_05.md) | **Auditoria de stack (05/08)**| stack real, 20 riscos com arquivo:linha, ferramental e plano priorizado         |
-| [67](67_LINGUAGEM_VISUAL_CICLUZ.md)    | Linguagem visual Cicluz       | tokens `--cx-*`, cor por empresa, espaço, raio, movimento, tipografia           |
+| [23](23_PERMISSOES_MODELO_E_AUDITORIA.md) | **Permissões (05/08)**    | modelo vigente, matriz cargo × ação, 10 achados abertos, testes que faltam      |
+| [24](24_CADASTRO_DE_PRODUTOS.md)       | **Cadastro de Produtos**      | o que já existe e está testado, o que falta, e o conflito de fontes de importação |
+| [67](67_LINGUAGEM_VISUAL_CICLUZ.md)    | Linguagem visual Cicluz       | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade** |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual | o que mudou por arquivo em 01/08 e o que ficou aberto                           |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a
 > 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **23**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **25**.
 
 ## Regra de ouro deste brain
 

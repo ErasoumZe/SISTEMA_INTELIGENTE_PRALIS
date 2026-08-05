@@ -666,14 +666,17 @@ existisse antes. Cada regra traz a página da transcrição.
 | R-142 | **A abertura não exige aprovação de terceiro.** Exigem: diferença, edição e alteração de horário — por admin, gerência ou diretor geral              | José p.68-71 | ✅ | `alteracao-horario-revinculacao.test.ts` |
 | R-143 | **Todo dinheiro dentro do sistema precisa estar vinculado a alguma venda**, e não existe transferência sem fundo na conta de origem                  | José p.34-35 | ⚠️ | regra estrutural, sem teste que a expresse |
 
-**Produto, estoque e compras** — módulo não iniciado; todas nascem ❌
+**Produto, estoque e compras** — ⚠️ **correção de 05/08:** este bloco nasceu dizendo "módulo não
+iniciado" e marcando as quatro como ❌. Estava errado. A conferência contra o código mostrou que o
+Cadastro de Produtos **existe, está implementado e tem 20 testes**. Detalhe completo em
+`24_CADASTRO_DE_PRODUTOS.md`.
 
 | Id    | Regra                                                                                                                                              | Origem   | Status |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
-| R-145 | **A fonte do cadastro de produtos é a planilha do Rodrigo**, não o cadastro do CREARE. **Os dados fiscais da planilha NÃO serão importados** — estão errados e causam pagamento de imposto a maior | José p.42, 49-50 | ❌ |
-| R-146 | Produto tem dois tipos: **revenda** e **transformação**. Preço de venda = custo × margem, com opção de digitar manual                                | José p.43-44 | ❌ |
-| R-147 | A **promoção** só se aplica com produto cadastrado, mesmo código e dentro da janela de vigência. Fora dela, volta o preço normal                     | José p.47 | ❌ |
-| R-148 | **Pedido automático** dispara no estoque mínimo, na quantidade que falta para o máximo. **O comprador sempre aprova ou reprova**; pode deixar rascunho que se auto-aprova no mínimo | José p.36, 56 | ❌ |
+| R-145 | **A fonte do cadastro de produtos é a planilha do Rodrigo**, não o cadastro do CREARE. **Os dados fiscais da planilha NÃO serão importados** — estão errados e causam pagamento de imposto a maior | José p.42, 49-50 | ✅ cumprida no seed (`seed-planilha.ts` não grava campo fiscal). ⚠️ ver conflito de fontes em `24` §4 |
+| R-146 | Produto tem dois tipos: **revenda** e **transformação**. Preço de venda = custo × margem, com opção de digitar manual                                | José p.43-44 | ✅ implementada e testada (`shared/src/produtos/regras.ts`, 20 testes) |
+| R-147 | A **promoção** só se aplica com produto cadastrado, mesmo código e dentro da janela de vigência. Fora dela, volta o preço normal                     | José p.47 | ⚠️ janela de vigência pronta; falta o "mesmo código", que depende do PDV |
+| R-148 | **Pedido automático** dispara no estoque mínimo, na quantidade que falta para o máximo. **O comprador sempre aprova ou reprova**; pode deixar rascunho que se auto-aprova no mínimo | José p.36, 56 | ❌ só existem as colunas de estoque mín./máx.; nenhuma lógica de disparo |
 
 **Relatórios e IA**
 

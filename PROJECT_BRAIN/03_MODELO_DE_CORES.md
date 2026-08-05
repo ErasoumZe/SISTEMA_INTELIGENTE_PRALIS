@@ -133,6 +133,7 @@ Decisão registrada do Rodrigo: a identidade "padaria artesanal" (creme/laranja/
 **sai do primeiro plano**. O logo Pralis permanece na sidebar e no login como marca, mas o
 sistema passa a ter cara de ferramenta financeira, não de padaria.
 
-O playbook `design-system/PROJECT_BRAIN/66_PRALIS_UI_PLAYBOOK.md` continua sendo a referência de
+As regras de rigor de UI que valiam no playbook 66 foram migradas para `67_LINGUAGEM_VISUAL_CICLUZ.md` §13
+(o playbook original está em `_ARQUIVO_MORTO/`). Elas continuam sendo a referência de
 **rigor** (responsividade, contraste, tokens, checklist) — trocamos a paleta e o conceito, não o
 método. Ver `07`.

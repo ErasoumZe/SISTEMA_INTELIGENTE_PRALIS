@@ -1,6 +1,14 @@
-# Padaria v2
+# Pralis — ERP Cicluz
 
-Monorepo inicial com API Fastify/TypeScript, Web Vue/Nuxt, pacote compartilhado, testes e Postgres efemero em containers.
+ERP para a rede de padarias Cicluz. **Opera em producao, todo dia, na unidade TNP.**
+
+Monorepo npm workspaces: `api` (Fastify + Drizzle + Postgres), `web-vue` (Nuxt 4 + Vuetify, SPA),
+`db` (schema + migrations + seeds), `shared` (Zod + regras puras), `integracoes-scripts` (agente do
+PDV CREARE) e `tests` (Vitest + Testcontainers).
+
+> **Antes de tocar em qualquer coisa, leia o `AGENTS.md`.** Ele e o manual de operacao do projeto e
+> define como se trabalha aqui. Regra de negocio vive em `PROJECT_BRAIN/` — o `00_INDICE.md` lista
+> tudo, e o `19_REGISTRO_DE_REGRAS.md` e a fonte unica das regras numeradas.
 
 ## Instalacao
 
@@ -9,9 +17,13 @@ cp .env.example .env
 npm install
 ```
 
-## Desenvolvimento rapido
+Node 22. O `npm install` instala o hook de pre-commit (husky + lint-staged).
 
-Use este comando no dia a dia. Ele sobe o Postgres em um Compose separado, prepara dependencias em volumes Docker, roda setup/seed pelo container da API, inicia a API em container e inicia o Web Vue no host com hot reload.
+## Desenvolvimento
+
+Comando do dia a dia. Sobe o Postgres em um Compose separado, prepara dependencias em volumes
+Docker, roda setup e seed pelo container da API, inicia a API em container e o Web Vue no host com
+hot reload.
 
 ```powershell
 npm.cmd run dev
@@ -20,185 +32,166 @@ npm.cmd run dev
 - Web: http://localhost:5174
 - API: http://localhost:4100
 
-O preparo de desenvolvimento executa `drizzle-kit push --force` em modo dev, aplica as triggers de `atualizado_em` (mesmo SQL da migration `0002`) e aplica o seed dentro do container da API. O script so imprime `Ambiente pronto` depois do healthcheck da API e de confirmar que o Web no host responde.
-
-Para rodar API e Web no host explicitamente, mantendo apenas o Postgres em container:
+Para rodar API e Web no host, mantendo apenas o Postgres em container:
 
 ```powershell
 npm.cmd run dev:local
 ```
 
-Para uma validacao automatizada que sobe, espera healthchecks e encerra API/Web:
+Para uma validacao automatizada que sobe, espera os healthchecks e encerra:
 
 ```powershell
 npm.cmd run dev -- --once
 ```
 
-O `npm run check` faz apenas validacoes/typecheck. Ele nao executa build nem gera `dist`.
+## Qualidade
 
-O `npm run lint` builda `shared` e `db` antes do ESLint (`npm run build:libs`): o typed-lint resolve os pacotes do workspace pelos `types` em `dist/`, entao sem build os tipos viram `any` e o lint explode em falsos positivos.
+| Comando                                     | O que faz                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `npm run check`                             | typecheck de todos os workspaces + os 3 verificadores de `scripts/` |
+| `npm run lint`                              | builda `shared` e `db` e roda o ESLint com informacao de tipo       |
+| `npm test`                                  | testes unitarios e depois a suite de integracao (Testcontainers)    |
+| `npm run test --workspace @padaria/web-vue` | testes do front — **nao sao cobertos pelo `npm test`**              |
+| `npm run lint:deps`                         | dependency-cruiser: ciclos e violacao de camada                     |
+| `npm run quality`                           | lint + lint:deps + format:check + check + test + audit              |
 
-## Qualidade continua
+**Atencao:** `npm test` e `npm run quality` **nao executam os testes do `web-vue`**. Rode-os
+separadamente antes de dizer que terminou. Registrado como divida D-19.
 
-- **CI (GitHub Actions):** `.github/workflows/ci.yml` roda em push na `main` e em pull requests — lint, typecheck, testes unitarios, build completo e a suite de integracao com Testcontainers.
-- **Pre-commit (husky + lint-staged):** instalado via `npm install` (script `prepare`); roda prettier + eslint nos arquivos staged.
-- **`npm test`** roda os testes unitarios e depois a suite de integracao (Testcontainers). Para rodar so os unitarios: `npm run test:unit --workspace @padaria/tests`.
+Tres verificadores proprios rodam dentro do `npm run check` e derrubam o build:
+
+- `scripts/verificar-arquitetura.mjs` — proibe SQL cru em `api/src`, `*.schema.ts` em `api/src`,
+  controller importando repository, repository importando service, e import de subpath de
+  `@padaria/shared` no `web-vue` (que viraria 404 em runtime com lint e typecheck verdes).
+- `scripts/verificar-texto.mjs` — mojibake e nome de dominio em ingles, tanto em nome de tabela
+  quanto em rota. O dominio deste sistema e escrito em portugues; migrations e testes sao isentos.
+  (Nao reproduza os exemplos proibidos aqui: o proprio verificador varre este arquivo.)
+- `scripts/verificar-data-pendente.mjs` — catraca em 0: a marca de "campo que aparece e nao salva"
+  nao pode voltar.
+
+**CI** (`.github/workflows/ci.yml`), em push na `main` e em todo PR: job `qualidade` (lint →
+check → testes unitarios → testes do web-vue → build) e job `integracao` (`npm test` completo, com
+Postgres real).
 
 ## Docker e Compose
 
 O ambiente dev e separado em dois projetos Compose:
 
-- `padaria-db-dev`: Postgres e volume persistente de desenvolvimento.
-- `padaria-dev`: API em desenvolvimento. O Web Vue roda no host no fluxo `npm run dev`.
-
-Subir apenas o banco dev:
+- `padaria-db-dev` — Postgres e volume persistente de desenvolvimento.
+- `padaria-dev` — API em desenvolvimento. No fluxo `npm run dev` o Web roda no host.
 
 ```powershell
-npm.cmd run db:dev:up
-```
-
-Parar o banco dev preservando dados:
-
-```powershell
-npm.cmd run db:dev:down
-```
-
-Parar API/Web e remover containers, redes e volumes locais de dev/prod:
-
-```powershell
-npm.cmd run dev:destroy
+npm.cmd run db:dev:up      # sobe so o banco dev
+npm.cmd run db:dev:down    # para o banco preservando dados
+npm.cmd run dev:destroy    # remove containers, redes e volumes locais de dev/prod
 ```
 
 ## Migrations
 
-O schema de producao e criado exclusivamente por migrations versionadas em `db/migrations/` (journal em `db/migrations/meta/_journal.json`):
+O schema de producao e criado exclusivamente por migrations versionadas em `db/migrations/`, com
+journal em `db/migrations/meta/_journal.json`. Hoje sao **30 migrations** (`0000_extensoes_uuid` ate
+`0029_item_de_despesa_vem_do_cadastro`).
 
-- `0000_extensoes_uuid.sql`: extensao `pgcrypto` e funcao `uuid_generate_v7()` (precisa existir antes das tabelas, que a usam como DEFAULT).
-- `0001_baseline.sql`: baseline completa do schema (todas as tabelas de negocio e de autenticacao, indices, checks e FKs).
-- `0002_hardening_atualizado_em.sql`: funcao e triggers de `atualizado_em` (SQL idempotente).
+- **Producao:** `npm run api:prod:migrate` executa `drizzle-kit migrate` e depois `better-auth
+migrate`. A ordem importa — o drizzle roda primeiro para nao colidir com tabelas criadas pelo
+  better-auth.
+- **Dev e testes:** usam `drizzle-kit push --force`, mais rapido e tolerante a iteracao de schema.
+  Por isso existe `db/baseline-migrations.ts`, que registra migrations sem reexecuta-las, e por isso
+  a divida D-01 (o caminho de migration nunca e exercitado em dev) continua aberta.
 
-Fluxos por ambiente:
+`tests/integration/migracoes/migracoes.test.ts` provisiona um Postgres vazio so com
+`drizzle-kit migrate` e compara a estrutura com o banco provisionado por `push`. Se o schema evoluir
+sem migration correspondente, esse teste falha.
 
-- **Producao**: `npm run api:prod:migrate` executa `drizzle-kit migrate` (aplica o journal) e depois `better-auth migrate` (no-op de seguranca; as tabelas de auth ja vem do baseline). A ordem importa: o drizzle precisa rodar primeiro para nao colidir com tabelas criadas pelo better-auth.
-- **Dev e testes**: continuam usando `drizzle-kit push --force` (rapido e tolerante a iteracao de schema) e aplicam o SQL da `0002` logo apos o push, mantendo paridade com producao.
+> **Duas regras.** Migration so com ordem explicita e com o SQL mostrado antes (R-111). E depois de
+> gerar, **confira a paridade** entre `db/migrations/*.sql`, `meta/_journal.json` e
+> `meta/*_snapshot.json`: as tres contagens tem que bater. O `drizzle-kit check` **nao detecta**
+> snapshot faltando, e isso ja quebrou o deploy duas vezes.
 
-Validacao automatica: `tests/integration/migracoes/migracoes.test.ts` provisiona um Postgres vazio somente com `drizzle-kit migrate` e compara a estrutura (colunas, indices e constraints) com o banco provisionado por `push`. Se o schema Drizzle evoluir sem migration correspondente, esse teste falha — gere a migration com `npm run db:generate --workspace @padaria/db` (respeitando a regra do projeto: migrations somente com ordem explicita).
+## Deploy — Coolify
 
-## Coolify
+O arquivo de publicacao e `infra/docker-compose.coolify.yml`:
 
-O arquivo recomendado para publicacao e `infra/docker-compose.coolify.yml`. Ele define:
+- `migrate` — roda migrations, bootstrap e seed de referencia antes da API.
+- `api` — Fastify em container, healthcheck em `/health`, volume nomeado `padaria_api_storage` em
+  `/app/storage` (uploads de comprovantes sobrevivem a redeploy).
+- `web-vue` — Nuxt gerado como SPA estatica, servido por Nginx unprivileged.
 
-- `migrate`: roda migrations antes da API.
-- `api`: Fastify em container Node, com healthcheck em `/health` e volume nomeado `padaria_api_storage` montado em `/app/storage` (uploads de comprovantes sobrevivem a redeploys).
-- `web-vue`: Nuxt gerado como SPA estatica e servido por Nginx unprivileged.
+**O deploy dispara sozinho no push da `main`.** Nao ha workflow de deploy no repositorio — o Coolify
+observa o repositorio. Isso torna a disciplina de branch critica: um merge errado vai para a padaria
+sem ninguem apertar nada.
 
-Diferente do desenvolvimento local, no Coolify o Web tambem e orquestrado pelo Docker Compose.
-
-Variaveis obrigatorias no Coolify:
-
-- `DATABASE_URL`
-- `BETTER_AUTH_SECRET`
-- `AUTH_BASE_URL`
-- `WEB_ORIGIN`
-- `NUXT_PUBLIC_API_URL`
-
-Validar o compose Coolify com valores ficticios seguros:
-
-```powershell
-npm.cmd run compose:coolify:check
-```
-
-Se quiser operar Postgres em Compose separado fora do Coolify:
+Variaveis obrigatorias: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `AUTH_BASE_URL`, `WEB_ORIGIN`,
+`NUXT_PUBLIC_API_URL`.
 
 ```powershell
-set POSTGRES_PASSWORD=troque-esta-senha
-npm.cmd run db:prod:up
+npm.cmd run compose:coolify:check   # valida o compose com valores ficticios
 ```
 
-Em Coolify, prefira usar o banco gerenciado/externo e apontar `DATABASE_URL` para ele.
-
-## Builds de producao
-
-Subir o compose produtivo generico localmente, com variaveis reais configuradas:
+## Backup
 
 ```powershell
-npm.cmd run compose:prod
+npm.cmd run db:backup     # pg_dump --format=custom, retencao de 14 dumps
+npm.cmd run db:restore    # pg_restore --clean, exige --confirmar
 ```
 
-Gerar a Web Vue estatica:
+**O backup nao e agendado** — nenhum cron, workflow ou servico chama `db:backup`. Registrado como
+divida D-18.
 
-```powershell
-npm.cmd run generate --workspace @padaria/web-vue
-```
+## Autenticacao e permissoes
 
-Build completo dos workspaces:
+**Default-deny de verdade:** um hook `onRequest` em `api/src/app.ts` exige sessao valida em toda
+rota, com allowlist de 6 entradas (`/health`, `/api/auth/*`, `/api/me`, `/api/sessao` e as duas de
+integracao, que autenticam por `x-api-key`). **Rota nova nasce 401.**
 
-```powershell
-npm.cmd run build
-```
+Catalogo de 240 permissoes em `shared/src/autenticacao/index.ts`, resolvidas em tres camadas —
+**usuario > cargos ativos > setor** — com deny-by-default. O role `usuario_admin` recebe o catalogo
+inteiro menos as flags `_somente_caixa_aberto`. O role `admin` nao tem efeito especial.
 
-## Credenciais seed
+O catalogo por cargo vive em `db/src/referencia-permissoes.ts` (codigo, nao documento). O modelo
+completo, a matriz cargo × acao e os achados abertos estao em
+`PROJECT_BRAIN/23_PERMISSOES_MODELO_E_AUDITORIA.md`.
 
-A senha padrao de todos os usuarios seedados e `123456`.
+O isolamento multiempresa e logico, por `empresa_id` e vinculos em `usuarios_empresas`.
+`usuario_admin` recebe todas as permissoes, mas **nao** recebe acesso global a empresas.
 
-- Diretor geral: `diretor@email.com`
-- Caixa: `caixa@email.com`
-- Gerencia: `gerencia@email.com`
-- Tesouraria: `tesouraria@email.com`
-- Compras: `compras@email.com`
-- DP: `dp@email.com`
-- RH: `rh@email.com`
-- Fiscal: `fiscal@email.com`
-- Diretor de operacoes: `operacoes@email.com`
-- Financeiro: `financeiro@email.com`
+## Caixa
 
-## Permissoes seed
+O caixa e aberto e fechado por usuario e PDV. Rotas principais em `api/src/caixa/caixa.controller.ts`:
 
-Cada conta tem um role tecnico: `usuario_comum`, `usuario_admin` ou `admin`. O `admin` existe no modelo, mas ainda nao tem efeito especial. O `usuario_comum` depende apenas das permissoes efetivas. O `usuario_admin` recebe todas as permissoes efetivas e serve para o usuario inicial gerenciar o sistema.
+| Rota                          | Permissao               | O que faz                                                 |
+| ----------------------------- | ----------------------- | --------------------------------------------------------- |
+| `GET /api/caixa/status`       | `caixa_operar`          | caixa aberto do usuario e resumo                          |
+| `POST /api/caixa/abrir`       | `caixa_operar`          | abre por PDV, turno e lacre                               |
+| `PUT /api/caixa/:id/abertura` | `caixa_operar`          | edita a abertura com token, auditando em `edicoes_caixa`  |
+| `POST /api/caixa/:id/fechar`  | `caixa_operar`          | fecha; recusa saldo positivo e exige observacao em quebra |
+| `GET /api/caixa/historico`    | `caixas_gerenciar`      | historico com token de edicao                             |
+| alteracao de horario          | `caixa_alterar_horario` | revincula as vendas do periodo, auditando                 |
 
-As permissoes efetivas sao a soma de permissoes diretas do usuario, permissoes dos cargos ativos do colaborador vinculado e permissoes do setor. Para `usuario_admin`, todas as permissoes tambem entram nessa soma. O menu do Web Vue e filtrado apenas por permissoes efetivas. O usuario `diretor@email.com` e seedado como `usuario_admin` e com o cargo **Diretor Geral**.
+**Abrir informando o lacre e confirmar o recebimento da transferencia** (R-040): numa unica
+transacao o sistema confirma, credita e rompe o lacre. Sem lacre, o caixa abre zerado (R-033).
 
-- Diretor Geral: todas as permissoes.
-- Caixa: entradas, transferencias, despesas, mercadorias, retiradas, operar caixa, fechamento com diferenca e relatorio de produtos mais vendidos.
-- Tesouraria: cadastro de malotes e transferencias.
-- Gerencia: movimentacoes, operar/gerenciar caixas, fechamento, relatorio de produtos, promocoes, faltas/atestados, advertencias/suspensoes, pedidos, perdas/sobras, estoque, DRE e clientes.
-- Compras: pedidos, mercadorias, fornecedores e produtos.
-- DP: despesas, colaboradores e folha ponto.
-- RH: avaliacao de qualidade e avaliacao de colaboradores.
-- Fiscal: relatorio fiscal e cadastro fiscal de produtos.
-- Diretor de Operacoes: DRE, patrimonio, ficha tecnica e ingredientes.
-- Financeiro: crediario, notas fiscais, contas a pagar, movimentacoes, DRE, grupos de vendas, PDV e formas de pagamento.
+**Nao existe reabertura de caixa.** O que existe e alteracao de horario enquanto aberto (auditada em
+`edicoes_caixa` com valores antigos e novos) e venda tardia entrando em caixa fechado (marcada em
+`alteracoes_pos_fechamento_caixa`).
 
-## Caixa operacional
+**Vocabulario:** o termo e **transferencia**, nunca "malote" — a tabela e o conceito morreram na
+migration `0026_malote_morre_lacre_unico.sql`. O lacre e identificador unico e de uso unico.
 
-O caixa agora e aberto e fechado por usuario e PDV. O seed cria o cadastro `PDV 01`, vinculado a conta `Caixa loja`.
+## Integracao CREARE
 
-- `/api/caixa/status?empresaId=...`: retorna o caixa aberto do usuario e o resumo por `caixaId`.
-- `/api/caixa/abrir`: exige `operar_caixa`, PDV ativo com conta vinculada e bloqueia periodo ja aberto/fechado para o mesmo PDV. Alem do pre-check, o indice unico parcial `fechamentos_caixa_pdv_aberto_unico_idx` garante no banco no maximo um caixa aberto por PDV, mesmo com aberturas concorrentes (migration `0003`).
-- `/api/caixa/:caixaId/abertura`: edita abertura com token, registra auditoria em `edicoes_caixa` e troca o token.
-- `/api/caixa/:caixaId/acertar-saldo`: quando o saldo do caixa e positivo, cria despesa `Diferenca de caixa`, item em `itens_despesas` e debito `FECHAMENTO_CAIXA` em `debitos_colaboradores`.
-- `/api/caixa/:caixaId/fechar`: fecha somente quando o saldo calculado nao exige acerto.
-- `/api/caixa/historico?empresaId=...`: exige `gerenciar_caixas` e retorna o historico com token de edicao.
+`integracoes-scripts/` e o agente que roda no servidor da padaria (via NSSM), le o MySQL do CREARE e
+envia para `POST /api/integracoes`. Ciclo padrao de 10 minutos, releitura do dia corrente inteiro,
+throttle de 4 req/s, lock em arquivo.
 
-Movimentacoes novas gravam `caixa_id`. Transferencias vinculadas ao caixa precisam envolver a conta do PDV aberto. As telas de transferencias, despesas, mercadorias, retiradas, fechamento e relatorio de produtos ficam bloqueadas no front sem caixa aberto; entradas continuam visiveis para consulta, mas criar entrada tambem exige caixa aberto.
+**Ativo somente na unidade TNP, 4 PDVs.**
 
-## Isolamento por empresa
+Este workspace e JS puro e esta **fora do ESLint, fora do `npm run check` e fora do CI**. Tem gate
+proprio (`node --check` + `node --test`) que precisa ser rodado a mao. Riscos abertos conhecidos
+estao em `PROJECT_BRAIN/22_AUDITORIA_STACK_2026_08_05.md` §4.
 
-O isolamento multiempresa e logico, por `empresa_id` e vinculos em `usuarios_empresas`. O role `usuario_admin` recebe todas as permissoes, mas nao recebe acesso global a empresas; ele continua limitado as empresas vinculadas ao usuario.
+## Credenciais de seed (dev)
 
-Rotas de listagem, criacao, edicao por ID, tema/aparencia, malotes, lacres, permissoes e movimentacoes validam o escopo de empresa na API. Tema/aparencia e salvo por empresa e tela.
-
-## MCP sugeridos
-
-Esta sessao nao tinha MCPs ativos. Para habilitar em uma proxima sessao do Codex, adicione ao `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.context7]
-url = "https://mcp.context7.com/mcp"
-
-[mcp_servers.postgres]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://padaria:padaria@localhost:5432/padaria"]
-```
-
-Para Fastify, a opcao mais util hoje e o Context7 com a documentacao do Fastify. MCPs de Fastify encontrados sao voltados a expor apps Fastify como MCP, nao a servir documentacao do framework.
+Senha padrao `123456`. Contas: `diretor@`, `caixa@`, `gerencia@`, `tesouraria@`, `compras@`, `dp@`,
+`rh@`, `fiscal@`, `operacoes@`, `financeiro@` — todas `@email.com`. `diretor@email.com` e seedado
+como `usuario_admin` com o cargo Diretor Geral.

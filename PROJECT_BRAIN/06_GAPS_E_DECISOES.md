@@ -87,9 +87,9 @@ então isso é operação, não desenvolvimento.
 
 | Risco                                                     | Mitigação                                                                                                                                         |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rework de UI quebra lógica de negócio                     | **Regra-mãe do playbook 66:** design é aditivo e reversível, **nunca** toca api, banco, permissões, auth, seed, cálculos, rotas ou dados. Manter. |
+| Rework de UI quebra lógica de negócio                     | **Regra-mãe de aparência (`67` §13.8):** design é aditivo e reversível, **nunca** toca api, banco, permissões, auth, seed, cálculos, rotas ou dados. Manter. |
 | Operação em produção durante o rework                     | fazer por módulo (D12), com feature flag por tela se necessário                                                                                   |
-| Perder o rigor de responsividade/contraste já conquistado | reaproveitar o checklist do playbook 66 e os padrões de `65_RESPONSIVE_UI_STANDARD.md`                                                            |
+| Perder o rigor de responsividade/contraste já conquistado | checklist e padrões de responsividade consolidados em `67_LINGUAGEM_VISUAL_CICLUZ.md` §13                                                            |
 | Cores puras da planilha reprovarem contraste              | já resolvido — `03` traduz para paleta AA-safe preservando o significado                                                                          |
 | Mexer em `transferencias` afetar dados existentes         | migration aditiva, com `tipo` default derivado do dado atual; nenhum backfill destrutivo                                                          |
 

@@ -42,10 +42,10 @@ Essa é a correção de rumo mais importante deste brain.
 Decisão do Rodrigo (22/07), registrada:
 
 - **A identidade visual "padaria artesanal"** (creme + laranja + Montserrat + logo Pralis,
-  descrita em `design-system/PROJECT_BRAIN/66_PRALIS_UI_PLAYBOOK.md`) **deixa de ser o alvo**.
+  descrita no playbook 66, hoje em `_ARQUIVO_MORTO/`) **deixa de ser o alvo**.
   O alvo passa a ser **"cara de Mobills"**: limpo, claro, denso em informação, com o **código de
   cores da planilha** aplicado por categoria de lançamento.
-- Isso é uma decisão de produto, não uma crítica ao trabalho anterior. O playbook 66 continua
+- Isso é uma decisão de produto, não uma crítica ao trabalho anterior. O rigor técnico do playbook 66 continua (as regras que sobreviveram estão em `67` §13, e o playbook em si foi para `_ARQUIVO_MORTO/`) e continua
   valendo como **referência de qualidade técnica de UI** (responsividade, contraste, tokens,
   checklist) — muda a paleta e o conceito, não o rigor.
 

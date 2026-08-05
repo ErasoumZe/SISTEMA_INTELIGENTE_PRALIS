@@ -340,14 +340,14 @@ Ordenado por (risco × custo). Cada item cabe em uma entrega vertical.
 | 3.5 | Extrair de `AppWorkspace.vue` (1.991 l.) pelo menos sessão/empresa e notificações           |
 | 3.6 | Resolver "aparência" (rota **ou** modal, não os dois) e decidir o destino das 12 telas em placeholder |
 
-### Faixa 4 — higiene documental
+### Faixa 4 — higiene documental ✅ **FEITA em 05/08/2026** (ver D-23)
 
 | #   | Ação                                                                                                     |
 | --- | -------------------------------------------------------------------------------------------------------- |
-| 4.1 | Decidir o destino de `PROJECT_BRAIN - Copia/` e `design-system/PROJECT_BRAIN/` — arquivar ou apagar        |
-| 4.2 | Apagar `design-system/web-vue/` (8 cópias divergentes com marca antiga)                                    |
-| 4.3 | Atualizar `README.md` da raiz — descreve migrations 0000-0002, permissões com nomes velhos, rota removida e "Tesouraria: cadastro de malotes" |
-| 4.4 | Atualizar `05_ESTADO_ATUAL_SISTEMA.md` (de 22/07, fala de 58 tabelas e da tabela `malotes`) ou marcá-lo como histórico |
+| 4.1 | ✅ arquivados em `_ARQUIVO_MORTO/`, com o conteúdo útil resgatado em `23`, `24` e `67` §13                  |
+| 4.2 | ✅ apagado                                                                                                  |
+| 4.3 | ✅ reescrito                                                                                                |
+| 4.4 | ⚠️ parcial — marcado como histórico no índice e as referências às pastas arquivadas foram corrigidas          |
 | 4.5 | Desambiguar os dois cabeçalhos **D-07** em `18_DIVIDAS_TECNICAS.md`                                       |
 | 4.6 | Resolver as colisões de id em `19`: R-021 e R-110 aparecem com dois significados                          |
 

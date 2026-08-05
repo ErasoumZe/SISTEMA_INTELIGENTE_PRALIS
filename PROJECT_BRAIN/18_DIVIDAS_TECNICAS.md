@@ -397,7 +397,26 @@ inalcançável o ramo alternativo. Se alguém "corrigir" seguindo a documentaç�
 deslocam 3 horas**. O offset também é fixo, não IANA — a volta do horário de verão quebra a
 conciliação.
 
-## D-23 · Três "fontes de verdade" documentais no disco
+## D-23 · ~~Três "fontes de verdade" documentais no disco~~ — **RESOLVIDA em 05/08/2026**
+
+Havia três pastas de documentação concorrentes, com numeração colidente, mais um front morto no
+disco. Fechado no mesmo dia em que foi aberto:
+
+- `PROJECT_BRAIN - Copia/` (64 docs) e `design-system/PROJECT_BRAIN/` (7 docs) foram para
+  `_ARQUIVO_MORTO/`, que entrou no `.gitignore` com aviso de "não é fonte de verdade".
+- `design-system/web-vue/` (8 cópias divergentes, marca Pralis) foi **apagado**.
+- O que valia foi resgatado antes: `23_PERMISSOES_MODELO_E_AUDITORIA.md`,
+  `24_CADASTRO_DE_PRODUTOS.md` e a seção §13 do `67_LINGUAGEM_VISUAL_CICLUZ.md`.
+- As referências ao playbook 66 em `01`, `03`, `06` e `05` foram redirecionadas.
+- O `README.md` da raiz foi reescrito (descrevia 3 migrations em vez de 30, permissões com nomes
+  antigos, uma rota removida e "Tesouraria: cadastro de malotes").
+
+**Achado do resgate, e o mais valioso:** o bloco de 04/08 no `19` dizia "Produto, estoque e compras
+— módulo não iniciado" e marcava R-145, R-146 e R-147 como ❌. **Estava errado** — o Cadastro de
+Produtos existe, está implementado e tem 20 testes. Status corrigidos. Este é exatamente o dano que
+documentação desatualizada causa: manda reimplementar o que já existe.
+
+### Registro do que era (para contexto histórico)
 
 **Prioridade: baixa, confusão alta.** `PROJECT_BRAIN/` (00-20, 67, 68), `PROJECT_BRAIN - Copia/` (63
 docs em inglês, 00-62) e `design-system/PROJECT_BRAIN/` (61-66), com numeração colidente. Mais
