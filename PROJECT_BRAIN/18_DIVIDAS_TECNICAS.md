@@ -348,7 +348,7 @@ marca e não verifica os totais.
 ## D-16 · Venda integrada é editável sem trilha
 
 **Prioridade: alta.** `PUT /api/vendas/:vendaId` não verifica `integracaoChaveId`. Contraria a regra
-de negócio dita na reunião (*"o usuário do caixa não consegue editar uma venda"*) — o front esconde,
+de negócio dita na reunião (_"o usuário do caixa não consegue editar uma venda"_) — o front esconde,
 o servidor permite. E como o hash não muda, a alteração **nunca é revertida** pelo ciclo seguinte.
 
 ## D-17 · Tabelas de log da integração crescem sem expurgo, e a listagem não tem `LIMIT`
@@ -383,11 +383,38 @@ Junto: `/integracoes` e `/pedidos` são uma **segunda casca de aplicação** (1.
 reimplementa sessão, empresas e permissões, e por isso ficam sem cor de menu, sem sino de
 notificações e sem "+ Novo".
 
-## D-21 · `/health` não toca o banco
+## D-21 · ~~`/health` não toca o banco~~ — **RESOLVIDA em 05/08/2026** (issue #33 / G-04)
 
-**Prioridade: média, custo trivial.** Retorna objeto estático. É o endpoint usado pelo healthcheck do
-Compose, do Coolify **e pelo agente CREARE antes de cada ciclo**. Com o Postgres fora do ar, o
-container continua "saudável" e o robô continua tentando enviar.
+O health agora consulta o banco e responde **503 `DATABASE_UNAVAILABLE`** quando ele não responde em
+**2s** — abaixo do `timeout: 5s` dos três healthchecks do Compose, para a resposta chegar antes de o
+Docker matar a sonda.
+
+**A consulta não é `SELECT 1`.** SQL cru é proibido em `api/src` pelo `verificar-arquitetura.mjs`, e
+abrir exceção numa trava dessas por uma linha não se paga. Ficou um `select ... limit 1` pelo
+construtor do Drizzle na tabela raiz (`saude.repository.ts`), que é um sinal **mais forte**:
+`SELECT 1` responde OK mesmo apontado para o banco errado ou para um banco vazio sem migration
+nenhuma — os dois casos em que a API não tem como servir e ficaria verde.
+
+**O que a verificação revelou, e que a dívida não previa: derrubar o Postgres derrubava a API.** O
+`pg.Pool` emite `error` quando um cliente **ocioso** cai, e `error` sem ouvinte, no EventEmitter do
+Node, não é aviso — é `throw`. Medido com `docker stop` no Postgres de desenvolvimento: o processo
+morria com `Emitted 'error' event on BoundPool instance` e o `/health` não chegava a responder
+coisa alguma. Sem o ouvinte em `banco/conexao.ts`, a G-04 teria sido entregue sem funcionar.
+
+Medido ponta a ponta em 05/08/2026, com o Postgres parado:
+
+| O quê                             | Resultado                                         |
+| --------------------------------- | ------------------------------------------------- |
+| API sobrevive à queda do banco    | sim (antes: morria)                               |
+| `/health`                         | **503** em ~2,0s (a conexão pendura, não recusa)  |
+| Container                         | **unhealthy** após 173s (30 falhas × 5s, dev)     |
+| `verificarApi()` do agente CREARE | **aborta o ciclo**: "Detalhe: HTTP 503"           |
+| Banco volta                       | `/health` 200 e container healthy **sem restart** |
+
+O tempo até `unhealthy` é longo (~3min em dev, ~5min em produção: `interval: 10s` × `retries: 30`),
+e isso é **aceitável de propósito**: com o ouvinte do pool a API se recupera sozinha quando o banco
+volta, então um reinício apressado só trocaria uma indisponibilidade curta por um ciclo de restart.
+Quem precisa reagir rápido — o agente CREARE — já reage no primeiro 503, sem esperar o Docker.
 
 ## D-22 · Documentação de fuso do agente contradiz o código
 
