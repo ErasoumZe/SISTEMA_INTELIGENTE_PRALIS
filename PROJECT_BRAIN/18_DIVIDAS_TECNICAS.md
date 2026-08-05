@@ -294,3 +294,116 @@ Hoje Gerência/Financeiro/Tesouraria **precisam de caixa aberto** para lançar d
 retirada (`obterCaixaAbertoParaLancamento`), o que **contradiz a R-032**, que os liberou justamente
 para transferência. Ou eles são retaguarda nas quatro saídas, ou em nenhuma. Do jeito que está, são
 retaguarda em uma só.
+
+---
+
+# Dívidas abertas em 05/08/2026 (auditoria de stack)
+
+> Origem: `22_AUDITORIA_STACK_2026_08_05.md`. Cada uma tem evidência com `arquivo:linha` lá.
+> **Nota de higiene:** este arquivo tem **dois cabeçalhos D-07** (um aberto, outro resolvido pela
+> R-040) e a ordem salta D-04 antes de D-03. Desambiguar numa próxima passagem.
+
+## D-12 · 🔴 `vendas` sem UNIQUE em `identificador_externo` — a venda pode duplicar
+
+**Prioridade: crítica.** A idempotência da ingestão depende de leitura-antes-de-escrita em READ
+COMMITTED, sem `FOR UPDATE` nem advisory lock, e `vendas` só tem UNIQUE `(id, empresa_id)`. Dois
+POSTs simultâneos do mesmo `CREARE:<id>` criam duas vendas com itens e pagamentos duplicados; o
+ledger aponta para uma só e a outra vira órfã permanente, contando em dobro no caixa e na
+conciliação. O `README.md` do agente **recomenda rodar o reprocesso junto com o robô**, o que é
+exatamente o caminho para isso acontecer.
+
+É a explicação mais provável do histórico de "venda duplicada ou triplicada" — mais provável do que
+o pagamento dividido, cujo desenho atual está correto.
+
+**Antes de criar o índice:** contar as duplicatas já existentes em produção e decidir com o José o
+que fazer com elas (R-112).
+
+## D-13 · 🔴 O hash de idempotência ignora todas as datas
+
+**Prioridade: crítica.** `jsonCanonico` trata `Date` pelo ramo de objeto e produz `{}`. Logo
+`dataHoraVenda` e `dataHoraItem` **não entram no hash**. Se o CREARE corrigir a hora de uma venda, o
+servidor responde `sem_novidade` e a venda **nunca migra para o caixa correto**. Nenhum reprocesso
+resolve — é o mecanismo que mantém viva a queixa de "venda na sessão errada" mesmo depois das
+correções de fuso.
+
+Depois do conserto, será preciso reprocessar o período afetado.
+
+## D-14 · 🔴 `ILIKE` sem escape com entrada do usuário
+
+**Prioridade: alta.** `caixa.repository.ts:364` faz `ilike(lacres.numero, numeroLacre)` com o número
+digitado pelo operador. `%` e `_` são curingas: abrir caixa com lacre `%` casa um lacre arbitrário
+(`LIMIT 1`, sem `ORDER BY`) e pode **levar o dinheiro para o caixa errado**. Mesmo padrão em 4
+resoluções de vínculo da integração.
+
+Junto: a unicidade de lacre é case-sensitive (`eq`) enquanto a busca é case-insensitive (`ilike`) —
+`AB123` e `ab123` coexistem e o desempate é indefinido.
+
+## D-15 · Venda tardia não recalcula os totais congelados do fechamento
+
+**Prioridade: alta.** A venda entra no caixa fechado e é marcada (R-013), mas
+`atualizarFechamentoCaixaRepository` só roda no fechamento. O **histórico** lê colunas congeladas e o
+**detalhe** recalcula ao vivo: duas telas, dois números para o mesmo caixa. O teste da R-013 prova a
+marca e não verifica os totais.
+
+## D-16 · Venda integrada é editável sem trilha
+
+**Prioridade: alta.** `PUT /api/vendas/:vendaId` não verifica `integracaoChaveId`. Contraria a regra
+de negócio dita na reunião (*"o usuário do caixa não consegue editar uma venda"*) — o front esconde,
+o servidor permite. E como o hash não muda, a alteração **nunca é revertida** pelo ciclo seguinte.
+
+## D-17 · Tabelas de log da integração crescem sem expurgo, e a listagem não tem `LIMIT`
+
+**Prioridade: média, virando alta com o tempo.** `integracoes_historico` e
+`integracoes_sem_novidade` gravam o payload jsonb completo a cada reenvio — ~72 × (vendas do dia)
+linhas por dia. Nenhuma das duas tem índice e não há expurgo. `listarHistoricoIntegracaoRepository`
+faz SELECT sem filtro de data e sem `LIMIT`, agregando em JS.
+
+## D-18 · Backup existe e não é agendado
+
+**Prioridade: média.** `scripts/backup-db.mjs` é bom e **nada o chama** — nenhum cron, workflow ou
+serviço. Os 3 dumps existentes têm nome fora do padrão do script e estão fora da retenção
+automática. O dado de uma padaria em produção depende de alguém lembrar.
+
+## D-19 · Cinco checagens já escritas não rodam em gate nenhum
+
+**Prioridade: média, custo baixíssimo.** `lint:deps` (dependency-cruiser, 9 regras),
+`format:check`, `audit:deps`, `knip` e `depcheck` existem no `package.json` e não estão no CI nem no
+pre-commit. Junto: `npm test` da raiz **não roda os testes do `web-vue`** — quem roda
+`npm run quality` antes de commitar acredita ter validado tudo e não executou um teste de front.
+
+## D-20 · O front não tem como ser refatorado com segurança
+
+**Prioridade: média-alta, custo alto.** `AppWorkspace.vue` tem **1.991 linhas** (o pico citado no
+`AGENTS.md` era 1.886 — já foi ultrapassado); 11 arquivos passam de 400 linhas; existe **1 único
+teste de componente montado** em toda a base; **zero E2E**; cobertura não é medida. Não há guardião
+automatizado nem para tamanho de arquivo nem para duplicidade — as duas regras mais importantes do
+projeto são verificadas só por leitura humana.
+
+Junto: `/integracoes` e `/pedidos` são uma **segunda casca de aplicação** (1.041 linhas) que
+reimplementa sessão, empresas e permissões, e por isso ficam sem cor de menu, sem sino de
+notificações e sem "+ Novo".
+
+## D-21 · `/health` não toca o banco
+
+**Prioridade: média, custo trivial.** Retorna objeto estático. É o endpoint usado pelo healthcheck do
+Compose, do Coolify **e pelo agente CREARE antes de cada ciclo**. Com o Postgres fora do ar, o
+container continua "saudável" e o robô continua tentando enviar.
+
+## D-22 · Documentação de fuso do agente contradiz o código
+
+**Prioridade: média.** `.env.producao.example` manda deixar `SYNC_FUSO_OFFSET=""` afirmando uma
+convenção; o `README.md` afirma outra; e o código faz string vazia virar `-03:00`, tornando
+inalcançável o ramo alternativo. Se alguém "corrigir" seguindo a documentação, **todas as vendas
+deslocam 3 horas**. O offset também é fixo, não IANA — a volta do horário de verão quebra a
+conciliação.
+
+## D-23 · Três "fontes de verdade" documentais no disco
+
+**Prioridade: baixa, confusão alta.** `PROJECT_BRAIN/` (00-20, 67, 68), `PROJECT_BRAIN - Copia/` (63
+docs em inglês, 00-62) e `design-system/PROJECT_BRAIN/` (61-66), com numeração colidente. Mais
+`design-system/web-vue/` com 8 cópias divergentes de arquivos vivos e uma segunda marca (Pralis vs
+Cicluz). Está fora do git, mas está no disco que os agentes leem — é literalmente "o caminho antigo
+que ainda existe".
+
+Junto: o `README.md` da raiz descreve migrations 0000-0002, permissões com nomes velhos, uma rota já
+removida e "Tesouraria: cadastro de malotes". É o documento mais desalinhado do repositório.
