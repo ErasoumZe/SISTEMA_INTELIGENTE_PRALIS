@@ -82,6 +82,22 @@ gh issue list --repo ErasoumZe/SISTEMA_CAIXA --label "dono: marco" --json number
   | ConvertFrom-Json | ForEach-Object { gh issue edit $_.number --repo ErasoumZe/SISTEMA_CAIXA --add-assignee USUARIO }
 ```
 
+## Se as issues foram criadas mas nao entraram no Project
+
+Aconteceu em 05/08: o `gh auth login` padrao nao pede o escopo de project, entao as 98 issues foram
+criadas e o passo do board falhou com
+`your authentication token is missing required scopes [read:project]`.
+
+Conserto, sem recriar nada:
+
+```powershell
+gh auth refresh -s project,read:project
+.\adicionar-ao-project.ps1 -Repo ErasoumZe/SISTEMA_CAIXA -ProjectOwner ErasoumZe -ProjectNumber 1
+```
+
+O `adicionar-ao-project.ps1` **nao cria issue nenhuma** — ele pega as que ja existem (reconhece pelo
+id no titulo) e adiciona ao board.
+
 ## Se algo der errado
 
 - **`gh: command not found`** — instale o GitHub CLI e reabra o terminal.
