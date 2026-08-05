@@ -1422,13 +1422,12 @@ async function salvarCadastro() {
       ...formCadastro.value,
       empresaIds: [...formCadastro.value.empresaIds],
       produtoConversoes: formCadastro.value.produtoConversoes.map((conversao) => ({ ...conversao })),
-      // S-06: a listagem esconde 39 permissoes do form (`useCadastroView.ts:305-317`) e o servidor faz
-      // REPLACE total (`permissoes.repository.ts:52-86`) — sem reinjetar aqui, salvar pela tela apaga
-      // o que ela mesma escondeu. A reinjecao le o alvo CORRENTE do form, entao trocar o cargo no
-      // modal nao carrega as ocultas do anterior, e o caminho "Novo" tambem fica coberto.
+      // S-06: a listagem esconde 52 permissoes do form e o servidor faz REPLACE total — sem
+      // reinjetar aqui, salvar pela tela apaga o que ela mesma escondeu. A fonte e `opcoes`
+      // (completa e sem paginacao), nao `permissoesPagina` (uma pagina, que nasce vazia).
       regras:
         cadastroTela.value === "permissoes"
-          ? regrasComOcultasPreservadas(formCadastro.value, permissoesPagina.value.itens)
+          ? regrasComOcultasPreservadas(formCadastro.value, opcoes.value)
           : { ...formCadastro.value.regras }
     };
     const idEditando = cadastroEditandoId.value;

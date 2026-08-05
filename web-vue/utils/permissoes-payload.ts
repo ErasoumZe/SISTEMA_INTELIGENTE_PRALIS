@@ -1,83 +1,56 @@
-// S-06 — a tela de Permissoes esconde 39 permissoes (as 13 telas de `telasOcultasNoDrawerEPermissoes`
-// e as flags `menu_*` delas). A listagem reescreve o `regrasJson` so com as visiveis
-// (`useCadastroView.ts:305-317`), o form nasce desse JSON (`AppWorkspace.vue:1412`) e o save manda o
-// form inteiro. Como o servidor faz REPLACE total (`api/src/permissoes/permissoes.repository.ts:52-86`),
-// tudo que a tela escondeu era APAGADO — o cargo Gerencia perdia 12 permissoes a cada gravacao.
+// S-06 — a tela de Permissoes esconde 52 permissoes do formulario (`permissoesOcultasNaTela`), o
+// servidor faz REPLACE total (`permissoes.repository.ts`) e o que a tela nao manda ele apaga.
 //
-// POR QUE A CORRECAO E AQUI E NAO NO SERVIDOR: o replace total e intencional e tem dois donos que
-// dependem dele. O `restaurarPadraoCargo` existe explicitamente para substituir
-// (`permissoes.service.ts:196-198`, "REPLACE, nao merge") e a lista de referencia so produz `true`
-// (`db/src/referencia-permissoes.ts:105-107`), entao sob merge ele nunca mais removeria nada. E o
-// terceiro estado da propria tela — "herdar" — e codificado como AUSENCIA de chave
-// (`useCadastroView.ts:350`), o mesmo encoding das ocultas: um merge no servidor tornaria "herdar"
-// inoperante. O contrato Zod nao distingue "remover" de "nao mencionado"
-// (`shared/src/permissoes/index.ts:10`, `partialRecord`), entao o servidor nao tem como desambiguar.
-//
-// A fonte da preservacao e o proprio `regrasJson` que o servidor mandou para AQUELE alvo
-// (`permissoes.service.ts:86`) — devolver ao banco o que o banco acabou de enviar. E idempotente e
-// nao concede nada novo: o que o alvo nao tinha continua nao tendo.
+// A correcao e no cliente porque o replace e intencional e tem dois donos: `restaurarPadraoCargo`
+// existe para substituir, e o estado "herdar" da propria tela e codificado como AUSENCIA de chave.
+// Um merge no servidor mataria os dois, e o contrato Zod nao distingue "remover" de "nao
+// mencionado". Ver `PROJECT_BRAIN/23_PERMISSOES_MODELO_E_AUDITORIA.md` (P-03).
 import { permissoesOcultasNaTela } from "./domain";
 import type { Permissao } from "@padaria/shared";
+import type { CadastroForm, Opcoes } from "~/types/padaria";
 
-/** Linha de permissao como a API entrega, ANTES de a listagem filtrar as ocultas. */
-export type LinhaPermissaoPersistida = {
-  id?: string | undefined;
-  regrasJson?: string | undefined;
-};
-
-/** So o que o merge precisa do formulario — mantem a funcao pura e testavel sem montar o modal. */
-export type AlvoPermissaoDoForm = {
-  tipoPermissao: "cargo" | "setor" | "usuario";
-  cargoId: string;
-  setorId: string;
-  usuarioId: string;
-  regras: Record<string, boolean>;
-};
+/** So o que o merge precisa do form — amarrado ao tipo real para o typecheck pegar renomeacao. */
+export type AlvoPermissaoDoForm = Pick<CadastroForm, "tipoPermissao" | "cargoId" | "setorId" | "usuarioId" | "regras">;
 
 /**
- * Chave do alvo no mesmo formato do `id` que a API devolve — `cargo:<uuid>` / `setor:<uuid>` /
- * `usuario:<id>` (`api/src/permissoes/permissoes.service.ts:98,115,132`).
- *
- * Deriva do ALVO CORRENTE DO FORM, nao da linha que foi aberta. Isso e o que impede a troca de alvo
- * no modal (os selects seguem editaveis em edicao, `WorkspaceDialogs.vue:779-810`) de carregar as
- * ocultas do cargo anterior para o novo. Tambem e o que faz o caminho "Novo"
- * (`AppWorkspace.vue:1387-1392`) preservar as ocultas do alvo escolhido.
+ * Listas COMPLETAS de regras ja gravadas, como `/api/permissoes` devolve. Sao a fonte certa por
+ * nao serem paginadas nem filtradas: `permissoesPagina` traz uma pagina de 10 e nasce vazia ate o
+ * usuario clicar em Buscar, entao o caminho "Novo" nao encontraria o alvo e cairia no payload
+ * mutilado — a S-06 de volta, em silencio.
  */
-export function chaveAlvoPermissao(form: AlvoPermissaoDoForm): string {
-  const alvoId =
-    form.tipoPermissao === "cargo" ? form.cargoId : form.tipoPermissao === "setor" ? form.setorId : form.usuarioId;
-  return alvoId ? `${form.tipoPermissao}:${alvoId}` : "";
-}
+export type ListasPermissoesPersistidas = Pick<Opcoes, "cargosPermissoes" | "setoresPermissoes" | "usuariosPermissoes">;
 
-/** Mesmo parse tolerante da listagem (`useCadastroView.ts:292-299`): so entradas booleanas entram. */
-function regrasBooleanasDoJson(regrasJson: string | undefined): Record<string, boolean> {
-  try {
-    const regras = JSON.parse(regrasJson ?? "{}") as Record<string, boolean>;
-    return Object.fromEntries(Object.entries(regras).filter(([, valor]) => typeof valor === "boolean"));
-  } catch {
-    return {};
-  }
+/** Regras hoje gravadas para o alvo escolhido NO FORM, ou `{}` se ele ainda nao tem nenhuma. */
+function regrasGravadasDoAlvo(form: AlvoPermissaoDoForm, listas: ListasPermissoesPersistidas): Record<string, boolean> {
+  const encontrada =
+    form.tipoPermissao === "cargo"
+      ? form.cargoId && listas.cargosPermissoes.find((item) => item.cargoId === form.cargoId)
+      : form.tipoPermissao === "setor"
+        ? form.setorId && listas.setoresPermissoes.find((item) => item.setorId === form.setorId)
+        : form.usuarioId && listas.usuariosPermissoes.find((item) => item.usuarioId === form.usuarioId);
+
+  if (!encontrada || typeof encontrada !== "object") return {};
+  return Object.fromEntries(Object.entries(encontrada.regras ?? {}).filter(([, valor]) => typeof valor === "boolean"));
 }
 
 /**
  * Regras a enviar no save da tela de Permissoes: as OCULTAS que o alvo ja tinha gravadas, mais tudo
- * o que esta no formulario. O form vence em caso de conflito — se um dia uma permissao hoje oculta
- * for revelada, quem manda passa a ser a tela, sem precisar mexer aqui.
+ * o que esta no formulario. O form vence no conflito — se uma tela hoje oculta for revelada, quem
+ * manda passa a ser a tela, sem mexer aqui.
  *
- * Preserva apenas o que EXISTE no banco para aquele alvo: permissao oculta ausente continua ausente
- * (nao e concessao automatica), e o valor gravado e respeitado inclusive quando e `false` (negar).
+ * Le o alvo CORRENTE do form, nao a linha que foi aberta: os selects de cargo/setor/usuario seguem
+ * editaveis em edicao, e sem isso trocar o alvo no modal levaria as ocultas do anterior para o novo.
+ *
+ * Preserva so o que EXISTE no banco — permissao oculta ausente continua ausente (nao ha concessao
+ * automatica) e o valor gravado e respeitado inclusive quando e `false` (negar). O filtro por
+ * `permissoesOcultasNaTela` tambem impede que uma chave legada do banco, fora do catalogo atual,
+ * vaze para o payload e seja recusada pelo enum do Zod.
  */
 export function regrasComOcultasPreservadas(
   form: AlvoPermissaoDoForm,
-  linhasPersistidas: readonly LinhaPermissaoPersistida[]
+  listas: ListasPermissoesPersistidas
 ): Record<string, boolean> {
-  const chave = chaveAlvoPermissao(form);
-  if (!chave) return { ...form.regras };
-
-  const persistidas = linhasPersistidas.find((linha) => linha.id === chave);
-  if (!persistidas) return { ...form.regras };
-
-  const ocultasDoAlvo = Object.entries(regrasBooleanasDoJson(persistidas.regrasJson)).filter(([permissao]) =>
+  const ocultasDoAlvo = Object.entries(regrasGravadasDoAlvo(form, listas)).filter(([permissao]) =>
     permissoesOcultasNaTela.has(permissao as Permissao)
   );
 

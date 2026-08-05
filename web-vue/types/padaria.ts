@@ -116,6 +116,10 @@ export type Opcao = {
   usuarioId?: string;
   colaboradorId?: string;
   cargoId?: string;
+  // Regras ja gravadas do alvo, como `/api/permissoes` devolve em cargos/setores/usuariosPermissoes
+  // (`permissoes.repository.ts`). O servidor sempre mandou; faltava declarar. Usado pela S-06 para
+  // preservar no save as permissoes que a tela esconde.
+  regras?: Record<string, boolean>;
   contaId?: string;
   cargoIds?: string[];
   cargos?: string[];
