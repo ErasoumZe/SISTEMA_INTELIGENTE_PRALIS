@@ -687,17 +687,25 @@ Cadastro de Produtos **existe, está implementado e tem 20 testes**. Detalhe com
 
 **Processo**
 
-| Id    | Regra                                                                                                                              | Origem   |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Id    | Regra                                                                                                                                                                            | Origem                        |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | R-144 | Prioridade: **1º Caixa · 2º Compras** (engloba cadastro de produtos, estoque, pedidos e tela de venda) **· 3º Relatórios**. Máxima após o Caixa: cadastro de produto com estoque | Rodrigo, via José p.40-41, 48 |
-| R-151 | **Marco trabalha em branch separada**, não commita na `main` sem rodar local e sem o OK do José, e não cria padrão novo sem autorização | ambos p.58, 78 |
+| R-151 | **Marco trabalha em branch separada**, não commita na `main` sem rodar local e sem o OK do José, e não cria padrão novo sem autorização                                          | ambos p.58, 78                |
+| R-152 | A fila atual de execução é somente de **Marco e José**; Kaylane não participa desta rodada                                                                                       | José, issue #104, 06/08       |
+| R-153 | Cada pessoa trabalha em **uma issue e uma branch por vez**, a partir da base confirmada e nunca diretamente na `main`                                                            | José, issue #104, 06/08       |
+| R-154 | Marco e José não alteram os mesmos arquivos na mesma janela sem coordenação prévia                                                                                               | José, issue #104, 06/08       |
+| R-155 | O Claude principal é o único escritor; agentes de revisão trabalham somente em leitura                                                                                           | José, issue #104, 06/08       |
+| R-156 | Migration, fórmula de dinheiro, dado histórico ou regra ausente interrompem a execução para decisão de José/Rodrigo                                                              | José, issue #104, 06/08       |
+| R-157 | Cada entrega termina com lint, check, testes proporcionais, relatório autônomo e revisão antes de publicação                                                                     | José, issue #104, 06/08       |
+| R-158 | **Push, PR, merge e deploy são autorizações separadas.** José decide merge e deploy                                                                                              | José, issue #104, 06/08       |
+| R-159 | A issue-mestra **#136** define a ordem de execução; milestones antigos permanecem apenas como áreas                                                                              | José, issue #104, 06/08       |
 
 > **R-144 corrige um erro que circulou:** não são 5 etapas. Compras é guarda-chuva — cadastro de
 > produtos e estoque são a *primeira parte* dela, não etapas independentes.
 
-> **Não foi acordado nesta reunião:** processo de PR, teste obrigatório antes de merge, code review
-> formal, divisão de arquivos, rebase — tudo isso era o bloco 6 do roteiro e foi **adiado**. E a
-> **primeira tarefa do Marco não foi definida.** Não trate nada disso como regra.
+> **Histórico:** esse processo não foi acordado na reunião de 04/08; o bloco 6 havia sido adiado.
+> Em 06/08, José confirmou a versão final na issue #104, registrada nas regras R-152–R-159. A ordem
+> corrente e o primeiro trabalho de cada pessoa passam a ser definidos pela issue-mestra #136.
 
 ---
 
