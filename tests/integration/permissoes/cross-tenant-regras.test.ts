@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, expectNaoConterJson } from "../../setup/integracao.js";
+import { consultarUm, executarSql, expectNaoConterJson, json } from "../../setup/integracao.js";
 
 // A empresa B do seed nasce praticamente vazia (so o vinculo do perfil multiempresa e dois itens de
 // patrimonio). Sem alvo proprio nela, um vazamento cross-tenant passaria despercebido: a resposta
@@ -152,8 +152,42 @@ describe("permissoes cross-tenant integration", () => {
     });
 
     assertOk(resposta);
-    expect(JSON.stringify(resposta.json())).toContain(usuariosTeste.gerente.nome);
+    // Ancora pelo id da linha, nao pelo nome: o seed usa o mesmo texto para o nome do usuario e o do
+    // cargo dele (seed.ts:312), entao "Gerente Integracao" nao distingue as duas linhas. O e-mail
+    // tambem nao serve — montarLinhasPermissoes so cai nele quando o nome e nulo.
+    const gerente = await consultarUm<{ usuario_id: string }>(
+      "select usuario_id from perfis_usuarios where email = $1",
+      [usuariosTeste.gerente.email]
+    );
+    expect(JSON.stringify(resposta.json())).toContain(`usuario:${gerente?.usuario_id}`);
+    // Sem esta ancora o teste passaria por paginacao: se o seed crescer alem do pageSize maximo do
+    // schema (100), os alvos da empresa B cairiam na pagina 2 e a ausencia deles nao provaria nada.
+    expect(json<{ meta: { pagination: { total: number } } }>(resposta).meta.pagination.total).toBeLessThan(100);
     esperarNenhumDadoDaEmpresaB(resposta);
+  });
+
+  // O ZodError da query tem de continuar virando 400 pelo handler global, e nao 403: a rota nao tem
+  // mais try/catch justamente para nao classificar erro por mensagem.
+  it("Deve_Retornar400_Quando_EmpresaIdNaoEUuid", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: "/api/permissoes/regras?empresaId=nao-e-uuid",
+      headers: { cookie: cookieGerente }
+    });
+
+    assertProblem(resposta, 400);
+  });
+
+  // empresaId sintaticamente valido mas inexistente nao pode virar 404 nem 500 — cai na mesma
+  // negacao de escopo, sem consultar o banco (api/src/auth/empresa.ts:24).
+  it("Deve_Retornar403_Quando_EmpresaIdNaoExiste", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: "/api/permissoes/regras?empresaId=44444444-4444-4444-8444-444444444444",
+      headers: { cookie: cookieGerente }
+    });
+
+    assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 
   // Contraprova: a correcao nao pode virar um 403 universal. Quem tem vinculo legitimo com a
@@ -172,9 +206,10 @@ describe("permissoes cross-tenant integration", () => {
     expect(corpo).toContain(nomeUsuarioB);
   });
 
-  // Ultimo do arquivo de proposito: revoga o vinculo do multiempresa com a empresa B e nao o repoe.
   // O perfil e relido a cada request (api/src/auth/guards.ts:31-39), entao o mesmo cookie ja vale
-  // menos na requisicao seguinte, sem novo login.
+  // menos na requisicao seguinte, sem novo login. O vinculo e reposto no finally: sem isso o teste
+  // so funcionaria como ultimo do arquivo, e a ordem intra-arquivo nao esta fixada em
+  // vitest.config.ts (nao ha chave `sequence`) — dependeria do default do vitest.
   it("Deve_Retornar403_Quando_AcessoAEmpresaBFoiRevogado", async () => {
     const perfil = await consultarUm<{ usuario_id: string }>(
       "select usuario_id from perfis_usuarios where email = $1",
@@ -187,13 +222,52 @@ describe("permissoes cross-tenant integration", () => {
       idsTeste.empresaB
     ]);
 
+    try {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/permissoes/regras?empresaId=${idsTeste.empresaB}&pageSize=100`,
+        headers: { cookie: cookieMultiempresa }
+      });
+
+      esperarNenhumDadoDaEmpresaB(resposta);
+      assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+    } finally {
+      await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+        perfil?.usuario_id,
+        idsTeste.empresaB
+      ]);
+    }
+  });
+
+  // A rota irma GET /api/permissoes entrega os mesmos cargos, setores e usuarios, e teve a chamada
+  // a listarPermissoes alterada nesta branch. Ela nao tinha NENHUM teste GET em toda a suite: trocar
+  // `escopo` por `empresasLiberadas` na linha 25 do controller compilaria e voltaria a vazar sem
+  // nenhum vermelho. Estes dois casos travam essa linha.
+  it("Deve_Retornar403_Quando_RotaIrmaRecebeEmpresaDeOutroTenant", async () => {
     const resposta = await contexto.app.inject({
       method: "GET",
-      url: `/api/permissoes/regras?empresaId=${idsTeste.empresaB}&pageSize=100`,
+      url: `/api/permissoes?empresaId=${idsTeste.empresaB}`,
+      headers: { cookie: cookieGerente }
+    });
+
+    assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+  });
+
+  // O ator precisa ser o multiempresa: para quem so tem a empresa A, `empresasLiberadas` e `escopo`
+  // sao a mesma lista e a troca passaria despercebida. Com vinculo em A e B, escopar em A e a unica
+  // forma de os dois valores divergirem.
+  it("Deve_NaoTrazerAlvosDaEmpresaB_Quando_RotaIrmaEscopaNaEmpresaA", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/permissoes?empresaId=${idsTeste.empresaA}`,
       headers: { cookie: cookieMultiempresa }
     });
 
-    esperarNenhumDadoDaEmpresaB(resposta);
-    assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+    assertOk(resposta);
+    expect(JSON.stringify(resposta.json())).toContain("Gerente Integracao");
+    expectNaoConterJson(resposta, nomeCargoB);
+    expectNaoConterJson(resposta, nomeSetorB);
+    expectNaoConterJson(resposta, nomeUsuarioB);
+    expectNaoConterJson(resposta, emailUsuarioB);
   });
 });
