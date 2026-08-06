@@ -20,26 +20,27 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopo: string[];
       try {
-        const escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-        return ok(await listarPermissoes(empresasLiberadas, escopo));
+        escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
+
+      // A consulta fica fora do catch de escopo: falhas tecnicas do banco precisam chegar ao handler
+      // global como 500 logado, nunca virar uma falsa negacao de empresa com mensagem interna no corpo.
+      return ok(await listarPermissoes(escopo));
     }
   );
 
+  // Sem try/catch de proposito: listarPermissoesPaginadas sinaliza empresa fora do escopo com
+  // ErroDominio, que o handler global ja traduz em 403 FORBIDDEN_COMPANY. Capturar aqui obrigaria a
+  // classificar o erro por mensagem e faria falha tecnica do driver (o `pg` lanca Error puro sem
+  // `code` quando a conexao cai) sair como negacao de empresa, sem log e sem Sentry.
   app.get(
     "/api/permissoes/regras",
     { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
-    async (request, reply) => {
-      try {
-        return paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario));
-      } catch (error) {
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, statusErroValidacao(mensagem), mensagem);
-      }
-    }
+    async (request) => paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario))
   );
 
   app.delete(

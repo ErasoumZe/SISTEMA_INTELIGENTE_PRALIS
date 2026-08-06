@@ -11,8 +11,15 @@ import {
   permissoesPadraoDoCargo,
   regrasPermissoes as regrasPermissoesReferencia
 } from "@padaria/db/referencia-permissoes";
-import { empresasPermitidas, filtrarPorEmpresas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
+import {
+  empresasPermitidas,
+  escopoEmpresaAtiva,
+  filtrarPorEmpresas,
+  podeAcessarEmpresa,
+  type PerfilComEmpresa
+} from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
+import { proibido } from "../erros.js";
 import { normalizarBusca, falharValidacao } from "../utils.js";
 import { buscarCargoEmpresaRepository, listarEmpresasUsuarioRepository } from "../usuarios/usuarios.repository.js";
 import { buscarSetorEmpresaRepository } from "../setores/setores.repository.js";
@@ -56,7 +63,10 @@ function todasEmpresasNoEscopo(perfil: PerfilComEmpresa | undefined, empresaIds:
   return empresaIds.every((empresaId) => permitidas.includes(empresaId));
 }
 
-export async function listarPermissoes(_empresasLiberadas: string[], escopoDados: string[]): Promise<DadosPermissoes> {
+// Recebe o escopo JA validado contra o perfil. O isolamento entre empresas depende inteiramente
+// deste parametro, porque listarPermissoesRepository le as tabelas sem WHERE por empresa e o recorte
+// acontece so aqui, em memoria.
+export async function listarPermissoes(escopoDados: string[]): Promise<DadosPermissoes> {
   const dados = await listarPermissoesRepository();
   const cargosVisiveis = filtrarPorEmpresas(dados.cargos, escopoDados);
   const setoresVisiveis = filtrarPorEmpresas(dados.setores, escopoDados);
@@ -145,8 +155,21 @@ function montarLinhasPermissoes(dados: DadosPermissoes) {
 export async function listarPermissoesPaginadas(body: DadosExternos, perfil?: PerfilComEmpresa) {
   const query: PermissoesPaginadasQuery = permissoesPaginadasQuerySchema.parse(body);
   const empresasLiberadas = perfil ? empresasPermitidas(perfil) : [];
-  const escopoDados = query.empresaId ? [query.empresaId] : empresasLiberadas;
-  const dados = await listarPermissoes(empresasLiberadas, escopoDados);
+  // O empresaId da query so RESTRINGE o escopo do perfil, nunca o amplia. Antes o valor do cliente
+  // virava escopo direto e, como listarPermissoesRepository le as tabelas inteiras, bastava informar
+  // o uuid de outra empresa para receber os cargos, setores, usuarios e regras dela.
+  //
+  // A negacao sai como ErroDominio (padrao dos services deste repo, ver contas-usuarios, patrimonio,
+  // pedidos e notas-fiscais), e nao como Error cru: o handler global responde 403 FORBIDDEN_COMPANY
+  // sozinho, o controller nao precisa de status fixo, e falha tecnica do driver continua virando 500
+  // logado em vez de ser confundida com negacao de empresa.
+  if (query.empresaId && !empresasLiberadas.includes(query.empresaId)) {
+    throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+  }
+  // Redundante de proposito: se alguem remover o guard acima, escopoEmpresaAtiva ainda lanca e a
+  // requisicao morre em 500, em vez de voltar a vazar.
+  const escopoDados = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
+  const dados = await listarPermissoes(escopoDados);
   const busca = normalizarBusca(query.q);
 
   const linhas = montarLinhasPermissoes(dados).filter((linha) => {
