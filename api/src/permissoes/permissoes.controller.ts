@@ -22,7 +22,7 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
       const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
       try {
         const escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-        return ok(await listarPermissoes(empresasLiberadas, escopo));
+        return ok(await listarPermissoes(escopo));
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
@@ -36,8 +36,10 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
       try {
         return paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario));
       } catch (error) {
-        const mensagem = mensagemDominioOuRelancar(error);
-        return erro(reply, statusErroValidacao(mensagem), mensagem);
+        // O unico erro de dominio que esta rota produz e "Empresa nao permitida", de
+        // escopoEmpresaAtiva; qualquer outra coisa (inclusive o ZodError da query) e relancada por
+        // mensagemDominioOuRelancar para o handler global. Mesmo contrato da rota irma acima.
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
     }
   );
