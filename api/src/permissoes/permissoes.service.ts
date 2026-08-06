@@ -21,7 +21,15 @@ import {
 import { executarEmTransacao } from "../banco/conexao.js";
 import { proibido } from "../erros.js";
 import { normalizarBusca, falharValidacao } from "../utils.js";
-import { buscarCargoEmpresaRepository, listarEmpresasUsuarioRepository } from "../usuarios/usuarios.repository.js";
+import {
+  buscarCargoEmpresaRepository,
+  listarEmpresasUsuarioRepository,
+  type UsuarioLinha
+} from "../usuarios/usuarios.repository.js";
+// Mesmo recorte da rota GET /api/usuarios, de proposito: as duas rotas servem a MESMA linha
+// (permissoes.repository.ts chama listarUsuariosRepository). Havia aqui uma copia literal do filtro
+// de empresa; dois filtros gemeos sao exatamente onde o proximo furo se esconde.
+import { recortarUsuariosPorEmpresas } from "../usuarios/usuarios.service.js";
 import { buscarSetorEmpresaRepository } from "../setores/setores.repository.js";
 import {
   excluirPermissaoCargoRepository,
@@ -34,24 +42,16 @@ import {
 } from "./permissoes.repository.js";
 
 type DadosPermissoesRepository = Awaited<ReturnType<typeof listarPermissoesRepository>>;
-type UsuarioPermissaoLinha = DadosPermissoesRepository["usuarios"][number];
 type DadosPermissoes = {
   permissoes: DadosPermissoesRepository["permissoes"];
   cargos: DadosPermissoesRepository["cargos"];
   cargosPermissoes: DadosPermissoesRepository["cargosPermissoes"];
   setores: DadosPermissoesRepository["setores"];
   setoresPermissoes: DadosPermissoesRepository["setoresPermissoes"];
-  usuarios: DadosPermissoesRepository["usuarios"];
+  // Ja recortado: UsuarioLinha, sem a procedencia por empresa que o repository carrega.
+  usuarios: UsuarioLinha[];
   usuariosPermissoes: DadosPermissoesRepository["usuariosPermissoes"];
 };
-
-function filtrarUsuariosPorEmpresas(usuarios: UsuarioPermissaoLinha[], escopoDados: string[]): UsuarioPermissaoLinha[] {
-  if (!escopoDados.length) return [];
-  return usuarios.filter((usuario) => {
-    const ids = Array.isArray(usuario.empresaIds) ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
-    return escopoDados.some((empresaId) => ids.includes(empresaId));
-  });
-}
 
 function empresaNoEscopo(perfil: PerfilComEmpresa | undefined, empresaId: string): boolean {
   return !perfil || podeAcessarEmpresa(perfil, empresaId);
@@ -70,7 +70,7 @@ export async function listarPermissoes(escopoDados: string[]): Promise<DadosPerm
   const dados = await listarPermissoesRepository();
   const cargosVisiveis = filtrarPorEmpresas(dados.cargos, escopoDados);
   const setoresVisiveis = filtrarPorEmpresas(dados.setores, escopoDados);
-  const usuariosVisiveis = filtrarUsuariosPorEmpresas(dados.usuarios, escopoDados);
+  const usuariosVisiveis = recortarUsuariosPorEmpresas(dados.usuarios, escopoDados);
   const cargosVisiveisIds = new Set(cargosVisiveis.map((cargo) => cargo.id));
   const setoresVisiveisIds = new Set(setoresVisiveis.map((setor) => setor.id));
   const usuariosVisiveisIds = new Set(usuariosVisiveis.map((usuario) => usuario.usuarioId));

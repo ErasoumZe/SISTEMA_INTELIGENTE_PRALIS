@@ -21,14 +21,52 @@ import {
   substituirEmpresasUsuarioRepository,
   upsertPerfilUsuarioRepository,
   vincularUsuarioColaboradorRepository,
-  type UsuarioLinha
+  type UsuarioLinha,
+  type UsuarioLinhaComEmpresas
 } from "./usuarios.repository.js";
 
-function filtrarUsuariosPorEmpresas(usuarios: UsuarioLinha[], escopoDados: string[] | null) {
-  if (!escopoDados) return usuarios;
-  return usuarios.filter((usuario) => {
-    const ids = Array.isArray(usuario.empresaIds) ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
-    return escopoDados.some((empresaId) => ids.includes(empresaId));
+// Recebe o escopo JA validado contra o perfil (escopoEmpresaAtiva, usuarios.controller.ts) e decide
+// DUAS coisas: quais usuarios aparecem e o que de cada usuario aparece. Antes so recortava a lista —
+// os metadados vinham do banco inteiro (listarUsuariosRepository le as quatro tabelas sem `where` de
+// empresa), entao um usuario com vinculo em A e B entregava, na consulta escopada em A, o uuid da B,
+// o colaborador e o setor da B e os ids e NOMES dos cargos da B. O PR #137 fechou QUAIS LINHAS;
+// faltava QUAIS CAMPOS.
+//
+// A linha e mantida, nunca omitida: o usuario compartilhado tem vinculo legitimo com a empresa
+// consultada. Some-lo apagaria as regras de permissao dele da tela (permissoes.service.ts filtra
+// usuariosPermissoes pelos usuarios visiveis), tiraria o alvo do formulario de permissao e deixaria
+// vinculo fantasma na grade "quem pode movimentar" da tela de contas. O front ja espera esta forma:
+// `itensDaEmpresa` (web-vue/utils/domain.ts:679-683) casa justamente por `empresaIds.includes`.
+//
+// O retorno e UsuarioLinha, sem a procedencia: ela e insumo do recorte e nao pode ir para o fio.
+export function recortarUsuariosPorEmpresas(
+  usuarios: UsuarioLinhaComEmpresas[],
+  escopoDados: string[]
+): UsuarioLinha[] {
+  const escopo = new Set(escopoDados);
+  return usuarios.flatMap(({ colaboradorEmpresaId, cargosEmpresaIds, ...usuario }) => {
+    const idsDoUsuario = usuario.empresaIds.length ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
+    const empresaIds = idsDoUsuario.filter((empresaId) => escopo.has(empresaId));
+    // Mesmo predicado de linha de antes: sobrevive quem tem ao menos uma empresa no escopo. Manter
+    // identico e o que garante que paginacao, `total` e ordenacao nao mudam.
+    if (!empresaIds.length) return [];
+    const cargosNoEscopo = cargosEmpresaIds.flatMap((empresaId, indice) => (escopo.has(empresaId) ? [indice] : []));
+    // Um usuario tem no maximo UM colaborador em todo o banco (colaboradores_usuario_id_unico), e ele
+    // pertence a exatamente uma empresa. Fora do escopo, o vinculo operacional inteiro sai da resposta.
+    const colaboradorVisivel = colaboradorEmpresaId !== null && escopo.has(colaboradorEmpresaId);
+    return [
+      {
+        ...usuario,
+        // `empresaId` e a empresa "principal" do perfil e pode apontar para fora do escopo. Cai para
+        // a primeira empresa visivel para nao virar um uuid alheio nem um null que o front nao espera.
+        empresaId: usuario.empresaId && escopo.has(usuario.empresaId) ? usuario.empresaId : (empresaIds[0] ?? null),
+        empresaIds,
+        colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
+        setorId: colaboradorVisivel ? usuario.setorId : null,
+        cargoIds: cargosNoEscopo.map((indice) => usuario.cargoIds[indice] ?? ""),
+        cargos: cargosNoEscopo.map((indice) => usuario.cargos[indice] ?? "")
+      }
+    ];
   });
 }
 
@@ -40,8 +78,11 @@ function empresaNoEscopo(perfil: PerfilComEmpresa | undefined, empresaId: string
   return !perfil || podeAcessarEmpresa(perfil, empresaId);
 }
 
-export async function listarUsuarios(escopoDados: string[] | null) {
-  return filtrarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
+// `escopoDados` e obrigatorio e nao aceita mais `null`. O ramo "null = devolve tudo sem filtro" nao
+// tinha chamador e era o mesmo tipo de armadilha do `_empresasLiberadas` removido no PR #137: um
+// parametro que parece checagem de seguranca e desliga o isolamento inteiro se alguem passar nulo.
+export async function listarUsuarios(escopoDados: string[]): Promise<UsuarioLinha[]> {
+  return recortarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
 }
 
 export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilComEmpresa) {

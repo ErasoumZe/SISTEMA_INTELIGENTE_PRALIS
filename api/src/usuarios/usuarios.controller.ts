@@ -17,12 +17,17 @@ export async function registrarRotasUsuarios(app: FastifyInstance): Promise<void
   app.get("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios_visualizar") }, async (request, reply) => {
     const query = empresaQuerySchema.parse(request.query);
     const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+    let escopo: string[];
     try {
-      const escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-      return paginadoDeArray(await listarUsuarios(escopo), query.page, query.pageSize);
+      escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
     } catch (error) {
       return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
     }
+
+    // A consulta fica fora do catch de escopo: falhas tecnicas do banco precisam chegar ao handler
+    // global como 500 logado, nunca virar uma falsa negacao de empresa com mensagem interna no corpo.
+    // Mesmo recorte aplicado na rota irma de permissoes (8ae8d22).
+    return paginadoDeArray(await listarUsuarios(escopo), query.page, query.pageSize);
   });
 
   app.post("/api/usuarios", { preHandler: exigirPermissao("cadastro_usuarios_criar") }, async (request, reply) => {
