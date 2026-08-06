@@ -44,27 +44,33 @@ export function recortarUsuariosPorEmpresas(
   escopoDados: string[]
 ): UsuarioLinha[] {
   const escopo = new Set(escopoDados);
-  return usuarios.flatMap(({ colaboradorEmpresaId, cargosEmpresaIds, ...usuario }) => {
+  return usuarios.flatMap((usuario) => {
     const idsDoUsuario = usuario.empresaIds.length ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
     const empresaIds = idsDoUsuario.filter((empresaId) => escopo.has(empresaId));
     // Mesmo predicado de linha de antes: sobrevive quem tem ao menos uma empresa no escopo. Manter
     // identico e o que garante que paginacao, `total` e ordenacao nao mudam.
     if (!empresaIds.length) return [];
-    const cargosNoEscopo = cargosEmpresaIds.flatMap((empresaId, indice) => (escopo.has(empresaId) ? [indice] : []));
+    const cargosVisiveis = usuario.cargosComEmpresa.filter((cargo) => escopo.has(cargo.empresaId));
     // Um usuario tem no maximo UM colaborador em todo o banco (colaboradores_usuario_id_unico), e ele
     // pertence a exatamente uma empresa. Fora do escopo, o vinculo operacional inteiro sai da resposta.
-    const colaboradorVisivel = colaboradorEmpresaId !== null && escopo.has(colaboradorEmpresaId);
+    const colaboradorVisivel = usuario.colaboradorEmpresaId !== null && escopo.has(usuario.colaboradorEmpresaId);
+    // Projecao campo a campo, e nao `...usuario`: com o spread, um campo novo em
+    // UsuarioLinhaComEmpresas chegaria ao corpo da resposta sem erro de compilacao. Assim o contrato
+    // do fio e garantido pelo tsc — falta um campo, quebra; sobra um campo, quebra.
     return [
       {
-        ...usuario,
+        usuarioId: usuario.usuarioId,
         // `empresaId` e a empresa "principal" do perfil e pode apontar para fora do escopo. Cai para
         // a primeira empresa visivel para nao virar um uuid alheio nem um null que o front nao espera.
         empresaId: usuario.empresaId && escopo.has(usuario.empresaId) ? usuario.empresaId : (empresaIds[0] ?? null),
         empresaIds,
+        nome: usuario.nome,
+        email: usuario.email,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
         setorId: colaboradorVisivel ? usuario.setorId : null,
-        cargoIds: cargosNoEscopo.map((indice) => usuario.cargoIds[indice] ?? ""),
-        cargos: cargosNoEscopo.map((indice) => usuario.cargos[indice] ?? "")
+        cargoIds: cargosVisiveis.map((cargo) => cargo.id),
+        cargos: cargosVisiveis.map((cargo) => cargo.nome),
+        role: usuario.role
       }
     ];
   });
@@ -214,7 +220,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       return {
         id,
         empresaId: empresaPrincipalId,
-        empresaIds,
+        empresaIds: [],
         nome,
         email,
         colaboradorId: colaborador.id,

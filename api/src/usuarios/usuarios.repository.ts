@@ -30,10 +30,13 @@ export type UsuarioLinha = {
 // poder decidir quais campos pertencem a empresa consultada. Sem ela o recorte e impossivel, porque
 // `colaboradores.empresa_id` e `cargos.empresa_id` nem eram selecionados aqui — era esse descarte
 // que fazia a linha de um usuario compartilhado carregar o colaborador, o setor e os cargos da
-// outra empresa. Arrays paralelos por indice com `cargoIds`/`cargos`.
-export type UsuarioLinhaComEmpresas = UsuarioLinha & {
+// outra empresa.
+//
+// Os cargos vem como UMA lista de objetos, e nao como arrays paralelos: `cargoIds` e `cargos` do fio
+// sao derivados dela ja recortada, entao id e nome nao tem como desalinhar por indice.
+export type UsuarioLinhaComEmpresas = Omit<UsuarioLinha, "cargoIds" | "cargos"> & {
   colaboradorEmpresaId: string | null;
-  cargosEmpresaIds: string[];
+  cargosComEmpresa: { id: string; nome: string; empresaId: string }[];
 };
 
 // Continua lendo as tabelas sem `where` de empresa: o recorte e do service, que recebe o escopo ja
@@ -88,9 +91,11 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
       colaboradorId: colaborador?.id ?? "",
       colaboradorEmpresaId: colaborador?.empresaId ?? null,
       setorId: colaborador?.setorId ?? null,
-      cargoIds: cargosDoUsuario.map((cargo) => cargo.cargoId),
-      cargos: cargosDoUsuario.map((cargo) => cargo.cargoNome),
-      cargosEmpresaIds: cargosDoUsuario.map((cargo) => cargo.empresaId),
+      cargosComEmpresa: cargosDoUsuario.map((cargo) => ({
+        id: cargo.cargoId,
+        nome: cargo.cargoNome,
+        empresaId: cargo.empresaId
+      })),
       role: perfil.role
     };
   });

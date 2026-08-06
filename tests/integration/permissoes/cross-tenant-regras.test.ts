@@ -269,5 +269,10 @@ describe("permissoes cross-tenant integration", () => {
     expectNaoConterJson(resposta, nomeSetorB);
     expectNaoConterJson(resposta, nomeUsuarioB);
     expectNaoConterJson(resposta, emailUsuarioB);
+    // O uuid da empresa B, e nao so os nomes dos alvos dela. O ator aqui e o multiempresa, cuja
+    // propria linha em `usuarios` carregava `empresaIds: [A, B]` — os nomes acima nunca pegariam
+    // isso. O recorte por campo vive em usuarios.service.ts; sem esta linha, reverte-lo deixaria
+    // este arquivo inteiro verde.
+    expectNaoConterJson(resposta, idsTeste.empresaB);
   });
 });
