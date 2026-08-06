@@ -220,7 +220,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       return {
         id,
         empresaId: empresaPrincipalId,
-        empresaIds: [],
+        empresaIds,
         nome,
         email,
         colaboradorId: colaborador.id,
