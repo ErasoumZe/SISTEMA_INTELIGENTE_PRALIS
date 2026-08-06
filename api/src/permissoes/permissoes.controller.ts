@@ -20,12 +20,16 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       const empresasLiberadas = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+      let escopo: string[];
       try {
-        const escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
-        return ok(await listarPermissoes(escopo));
+        escopo = escopoEmpresaAtiva(empresasLiberadas, query.empresaId);
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
+
+      // A consulta fica fora do catch de escopo: falhas tecnicas do banco precisam chegar ao handler
+      // global como 500 logado, nunca virar uma falsa negacao de empresa com mensagem interna no corpo.
+      return ok(await listarPermissoes(escopo));
     }
   );
 
