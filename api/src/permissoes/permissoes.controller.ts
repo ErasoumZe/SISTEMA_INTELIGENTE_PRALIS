@@ -29,19 +29,14 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
     }
   );
 
+  // Sem try/catch de proposito: listarPermissoesPaginadas sinaliza empresa fora do escopo com
+  // ErroDominio, que o handler global ja traduz em 403 FORBIDDEN_COMPANY. Capturar aqui obrigaria a
+  // classificar o erro por mensagem e faria falha tecnica do driver (o `pg` lanca Error puro sem
+  // `code` quando a conexao cai) sair como negacao de empresa, sem log e sem Sentry.
   app.get(
     "/api/permissoes/regras",
     { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
-    async (request, reply) => {
-      try {
-        return paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario));
-      } catch (error) {
-        // O unico erro de dominio que esta rota produz e "Empresa nao permitida", de
-        // escopoEmpresaAtiva; qualquer outra coisa (inclusive o ZodError da query) e relancada por
-        // mensagemDominioOuRelancar para o handler global. Mesmo contrato da rota irma acima.
-        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
-      }
-    }
+    async (request) => paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario))
   );
 
   app.delete(
