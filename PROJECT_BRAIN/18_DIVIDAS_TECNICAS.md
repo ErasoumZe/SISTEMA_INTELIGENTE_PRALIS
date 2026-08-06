@@ -453,3 +453,55 @@ que ainda existe".
 
 Junto: o `README.md` da raiz descreve migrations 0000-0002, permissões com nomes velhos, uma rota já
 removida e "Tesouraria: cadastro de malotes". É o documento mais desalinhado do repositório.
+
+---
+
+## D-24 · `nuxt build` quebra quando o caminho do checkout tem espaço
+
+**Status:** aberto (upstream) · **Prioridade:** média · **Investigado em:** 06/08/2026, após o merge da S-06.
+
+O `npm run build --workspace @padaria/web-vue` falha com `error TS5023: Unknown compiler option '-'`
+em máquina cujo diretório do projeto contenha espaço. No caso medido, `D:\Sistema Pralis - ago`.
+
+**Causa raiz, provada.** Com `typescript.typeCheck: true` (`web-vue/nuxt.config.ts`), o
+`@nuxt/vite-builder` entrega ao `vite-plugin-checker` o caminho ABSOLUTO do tsconfig. Em
+`node_modules/vite-plugin-checker/dist/main.js`, `spawnChecker` faz:
+
+```js
+spawn([command, ...args].join(" "), { cwd, stdio: "inherit", env, shell: true });
+```
+
+O `.join(" ")` descarta o quoting e o `shell: true` manda o `cmd.exe` re-tokenizar por espaço. O
+comando vira `vue-tsc --noEmit -p D:/Sistema Pralis - ago/web-vue/tsconfig.json`, que o shell quebra
+em `D:/Sistema`, `Pralis`, `-`, `ago/...`. O token solto `-` chega ao `tsc` como opção desconhecida.
+O hífen é o de "Pralis **-** ago".
+
+**Matriz de experimentos (06/08/2026):**
+
+| Caminho                               | Node    | Resultado                  |
+| ------------------------------------- | ------- | -------------------------- |
+| `D:\Sistema Pralis - ago`             | 24.18.0 | `TS5023`                   |
+| `D:\Sistema Pralis - ago`             | 22.23.2 | `TS5023` idêntico          |
+| `D:\pralis-copia` (cópia, sem espaço) | 22.23.2 | **exit 0, build completo** |
+
+Contraprova mínima, mesmo binário e mesmo tsconfig:
+`vue-tsc --noEmit -p D:/Sistema Pralis - ago/web-vue/tsconfig.json` → `TS5023`;
+o mesmo com o caminho entre aspas → exit 0.
+
+**Não é o Node.** Falha igual em 22 e em 24. E `engines` não pegaria: Node 24.18.0 satisfaz os
+`engines` de 100% da árvore, inclusive o do próprio `nuxt` (`^24.11.0`).
+
+**Não é o repositório.** `nuxt typecheck` passa no mesmo código, porque
+`@nuxt/cli/dist/typecheck-*.mjs` chama `x(vueTsc, ["--noEmit"], { cwd })` — array de argv, sem shell,
+sem o caminho nos argumentos. CI (`ubuntu-latest`, `/home/runner/work/...`) e Docker (`WORKDIR /app`)
+nunca reproduzem: nenhum tem espaço no caminho.
+
+**Sem correção upstream disponível.** A `vite-plugin-checker@0.14.5`, mais recente que a instalada
+(0.14.4, transitiva de `@nuxt/vite-builder`), traz o mesmo `spawn([...].join(" "), { shell: true })`.
+
+**O que fazer.** Nada no código deste repositório — não há defeito aqui, e desligar o `typeCheck`
+mascararia a verificação de tipos do build. As saídas reais são: (a) usar um diretório de trabalho
+sem espaço; (b) acompanhar o upstream e, quando houver versão corrigida, fixá-la por `overrides`.
+
+**Como saber que foi resolvido:** `npm run build --workspace @padaria/web-vue` termina com exit 0 em
+um caminho que contenha espaço.
