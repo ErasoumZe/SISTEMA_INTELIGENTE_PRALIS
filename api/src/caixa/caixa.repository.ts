@@ -22,6 +22,7 @@ import {
   colaboradores,
   colaboradoresCargos,
   cargos,
+  contasUsuarios,
   empresas,
   maquininhas,
   pdvs,
@@ -406,6 +407,23 @@ export async function confirmarTransferenciaAberturaRepository(
   return lacre ? vencedora : null;
 }
 
+// --- Concorrencia do caixa (B1/B2) ------------------------------------------------------------
+// Trava a LINHA do caixa ate o fim da transacao. Quem chegar depois espera aqui e, ao passar, ja
+// enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o
+// teto do retorno e a guarda do fechamento conseguem ser reavaliados sobre o saldo REAL.
+// Sem join de proposito: FOR UPDATE nao pode ser aplicado ao lado nulavel de um outer join.
+export async function travarCaixaRepository(
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string; status: string } | null> {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id, status: fechamentosCaixa.status })
+    .from(fechamentosCaixa)
+    .where(eq(fechamentosCaixa.id, caixaId))
+    .for("update");
+  return linha ?? null;
+}
+
 // --- Retorno / sangria (M2, R3/R4/R6) ---------------------------------------------------------
 // Proxima ordem (1a/2a/3a/4a) das transferencias de um caixa por tipo (R6). App-managed.
 export async function proximaOrdemTransferenciaRepository(
@@ -434,6 +452,46 @@ export async function criarLacreRetornoRepository(
   });
 }
 
+// B2: a INTENCAO por tras de uma chave de idempotencia. E o que se compara para decidir entre
+// "retry do mesmo ato" (devolve o vencedor) e "chave reaproveitada para outra coisa" (409).
+// Valor em centavos inteiros — comparar a string decimal do banco ("100.00" vs "100.0") daria
+// falso conflito.
+export type IntencaoEntregaCofre = {
+  id: string;
+  caixaId: string | null;
+  tipo: string;
+  valorCentavos: number;
+  lacre: string | null;
+  observacao: string | null;
+  status: string;
+};
+
+// B2: le a linha vencedora de uma chave, escopada por EMPRESA. O escopo nao e cosmetico: sem ele,
+// duas empresas que sorteiem o mesmo uuid (ou um cliente que reuse chave entre empresas) veriam
+// o movimento uma da outra.
+export async function buscarTransferenciaPorIdempotenciaRepository(
+  empresaId: string,
+  idempotenciaChave: string,
+  db: ExecutorBanco = banco
+): Promise<IntencaoEntregaCofre | null> {
+  const [linha] = await db
+    .select({
+      id: transferencias.id,
+      caixaId: transferencias.caixaId,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      lacre: transferencias.nLacreDoc,
+      observacao: transferencias.observacao,
+      status: transferencias.status
+    })
+    .from(transferencias)
+    .where(and(eq(transferencias.empresaId, empresaId), eq(transferencias.idempotenciaChave, idempotenciaChave)))
+    .limit(1);
+  if (!linha) return null;
+  const { valorOriginal, ...resto } = linha;
+  return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
+}
+
 // Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
 export async function criarTransferenciaCofreRepository(
   input: {
@@ -450,9 +508,20 @@ export async function criarTransferenciaCofreRepository(
     descricao: string;
     observacao: string | null;
     criadoPor: string;
+    // D2/D3: a entrega do operador nasce 'pendente' — quem opera a conta do cofre confere depois
+    // (R-028/R-036). D4: a solicitacao programada pela tesouraria nasce 'agendada', que NAO conta
+    // como saida (shared/caixa/regras.ts) — programar nao movimenta dinheiro.
+    status: "pendente" | "agendada";
+    // B2: null so no retorno final do fechamento, que e protegido pela trava + guarda de status.
+    idempotenciaChave: string | null;
+    // D4: carimbado SO quando a linha nasce de uma solicitacao programada. E o marcador que separa
+    // este fluxo do generico e da entrega avulsa — sem ele, uma transferencia generica `agendada`
+    // ligada ao caixa apareceria como solicitacao, bloquearia o fechamento e poderia ser executada
+    // pelo endpoint D4. Null em todo o resto.
+    solicitacaoCofreEm: Date | null;
   },
   db: ExecutorBanco = banco
-): Promise<{ id: string }> {
+): Promise<{ id: string; criada: boolean }> {
   const [transferencia] = await db
     .insert(transferencias)
     .values({
@@ -468,11 +537,234 @@ export async function criarTransferenciaCofreRepository(
       nLacreDoc: input.nLacreDoc,
       tipo: input.tipo,
       ordem: input.ordem,
+      status: input.status,
+      idempotenciaChave: input.idempotenciaChave,
+      solicitacaoCofreEm: input.solicitacaoCofreEm,
       criadoPor: input.criadoPor
     })
+    // B2: quem resolve a corrida e o BANCO, e resolve sem abortar a transacao. Com um INSERT cru,
+    // o perdedor levantaria 23505 e mataria tudo que ja foi feito na mesma transacao (inclusive o
+    // fechamento). Com DO NOTHING ele apenas nao insere, devolve zero linhas, e quem chama le a
+    // linha vencedora e responde 200. O `where` reproduz o predicado do indice PARCIAL — sem ele o
+    // Postgres nao consegue inferir qual indice usar e recusa o comando.
+    .onConflictDoNothing({
+      target: [transferencias.empresaId, transferencias.idempotenciaChave],
+      where: isNotNull(transferencias.idempotenciaChave)
+    })
     .returning({ id: transferencias.id });
-  if (!transferencia) throw new Error("Transferencia de cofre nao criada");
-  return transferencia;
+  // Perdeu a corrida (ou e retry): nada foi inserido. Nao e erro — quem chama busca o vencedor.
+  if (!transferencia) return { id: "", criada: false };
+  // Sem esta linha a confirmacao e impossivel: confirmarTransferenciaRepository so aceita quem
+  // opera uma conta candidata ao destino. O caixa->cofre tinha destino unico e nenhum candidato,
+  // por isso nascia 'recebido' — ninguem tinha como conferir.
+  await db.insert(transferenciasDestinosCandidatos).values({
+    empresaId: input.empresaId,
+    transferenciaId: transferencia.id,
+    contaId: input.contaCofreId
+  });
+  return { id: transferencia.id, criada: true };
+}
+
+// D4: os caixas ABERTOS da empresa, com o minimo para a retaguarda escolher um destino.
+//
+// Existe separado de `/api/caixa/historico` porque aquele e gated por `caixas_gerenciar`, que a
+// Tesouraria nao tem (e nao deve ter — ela nao opera caixa). Ampliar o gate do historico abriria
+// o historico inteiro para quem so precisa saber "quais caixas estao abertos agora".
+export async function listarCaixasAbertosRepository(empresaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: fechamentosCaixa.id,
+      pdvNome: pdvs.nome,
+      usuarioCaixaNome: perfisUsuarios.nome,
+      dataMovimento: fechamentosCaixa.dataMovimento,
+      dataHoraAbertura: fechamentosCaixa.dataHoraAbertura
+    })
+    .from(fechamentosCaixa)
+    .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .where(and(eq(fechamentosCaixa.empresaId, empresaId), eq(fechamentosCaixa.status, "aberto")))
+    .orderBy(asc(pdvs.nome));
+}
+
+// --- D4 · solicitacao programada -------------------------------------------------------------
+// TODA consulta D4 exige o marcador `solicitacao_cofre_em`. Filtrar so por caixa + status era um
+// vazamento entre fluxos: `criarTransferencia` (generica) grava `caixa_id` quando a transferencia
+// envolve a conta do PDV, e nasce 'agendada' se tiver `agendadaPara`. Sem o marcador, essa linha
+// aparecia como solicitacao, bloqueava o fechamento e podia ser executada pelo endpoint D4 —
+// corrompendo uma transferencia que nunca foi uma ordem de entrega ao cofre.
+//
+// Tipo e destino nao bastam: depois de executada, a solicitacao vira 'pendente'/'sangria' para o
+// mesmo cofre, indistinguivel de uma entrega avulsa. So um marcador de ORIGEM resolve.
+const daSolicitacaoCofre = isNotNull(transferencias.solicitacaoCofreEm);
+
+// As solicitacoes 'agendada' de um caixa. Nao movimentam saldo (regras.ts nao as conta como saida);
+// existem para o operador saber o que a Tesouraria pediu que ele entregasse.
+export async function listarSolicitacoesCofreRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: transferencias.id,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      observacao: transferencias.observacao,
+      criadoPor: transferencias.criadoPor,
+      criadoEm: transferencias.criadoEm
+    })
+    .from(transferencias)
+    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), daSolicitacaoCofre))
+    .orderBy(asc(transferencias.criadoEm));
+}
+
+// D4: uma solicitacao especifica, em QUALQUER status. Quem chama precisa distinguir "nao existe"
+// (404) de "existe e ja foi executada" (repeticao, responde sem duplicar).
+export async function buscarSolicitacaoCofreRepository(
+  solicitacaoId: string,
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<{
+  id: string;
+  tipo: string;
+  valorCentavos: number;
+  status: string;
+  observacao: string | null;
+  // Lacre gravado NA EXECUCAO. E o unico conteudo proprio do ato fisico, e por isso e ele que
+  // distingue "retry da mesma execucao" (200) de "execucao com outro envelope" (409).
+  lacre: string | null;
+  // Quem entregou o dinheiro. Null enquanto 'agendada'. Preservado apos a confirmacao.
+  executadoPor: string | null;
+} | null> {
+  const [linha] = await db
+    .select({
+      id: transferencias.id,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      status: transferencias.status,
+      observacao: transferencias.observacao,
+      lacre: transferencias.nLacreDoc,
+      executadoPor: transferencias.executadoPor
+    })
+    .from(transferencias)
+    .where(and(eq(transferencias.id, solicitacaoId), eq(transferencias.caixaId, caixaId), daSolicitacaoCofre))
+    .limit(1);
+  if (!linha) return null;
+  const { valorOriginal, ...resto } = linha;
+  return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
+}
+
+// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — e o mesmo caminho que o fluxo
+// generico ja usa (efetivarTransferenciasAgendadasRepository), nao um segundo mecanismo.
+//
+// `status = 'agendada'` no WHERE e a TRANSICAO ATOMICA que serve de idempotencia: duas execucoes
+// concorrentes disputam a mesma linha e so uma acerta uma linha. A perdedora recebe zero e
+// responde com o estado atual, sem criar movimento nem segundo lacre.
+//
+// D10 · o que este UPDATE NAO toca, e por que:
+//   - `valorOriginal` e `observacao`: sao da PROGRAMACAO e imutaveis. A retaguarda pediu R$ 100,
+//     entao a execucao movimenta R$ 100. Excedente vira movimento avulso proprio.
+//   - `idempotenciaChave`: e a ancora da CRIACAO. Sobrescreve-la aqui apagava a chave da
+//     programacao — e um retry da programacao, nao encontrando mais a linha, criava OUTRA
+//     solicitacao. Era esse o bug.
+// Sobra o que e do ato fisico: status, lacre do envelope, ordinal, a data real do movimento e a
+// IDENTIDADE de quem executou — `criado_por` responde quem PROGRAMOU, e quem executa costuma ser
+// outra pessoa (`podeOperarCaixa` aceita gerente, quem abriu o caixa ou o operador designado).
+// Como o WHERE exige 'agendada', so um chamador acerta a linha: retry e corrida jamais reescrevem
+// `executado_por`/`executado_em`.
+export async function executarSolicitacaoCofreRepository(
+  input: {
+    solicitacaoId: string;
+    caixaId: string;
+    lacre: string | null;
+    ordem: number;
+    dataTransferencia: string;
+    executadoPor: string;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string } | null> {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "pendente",
+      nLacreDoc: input.lacre,
+      ordem: input.ordem,
+      dataTransferencia: input.dataTransferencia,
+      executadoPor: input.executadoPor,
+      executadoEm: new Date(),
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.solicitacaoId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "agendada"),
+        daSolicitacaoCofre
+      )
+    )
+    .returning({ id: transferencias.id });
+  return linha ?? null;
+}
+
+// D4/decisao 2: cancela uma solicitacao ainda `agendada`. NAO apaga a linha — grava autoria, data e
+// motivo, e o CHECK do banco exige os tres. `WHERE status = 'agendada'` e a guarda: cancelar duas
+// vezes acerta zero linhas na segunda, entao o retry nao duplica auditoria; e `pendente`/`recebido`
+// (ja executadas) sao imutaveis por construcao.
+// K1, valor, observacao e o marcador da programacao ficam intactos.
+export async function cancelarSolicitacaoCofreRepository(
+  input: { solicitacaoId: string; caixaId: string; canceladoPor: string; motivo: string },
+  db: ExecutorBanco = banco
+): Promise<{ id: string } | null> {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "cancelada",
+      canceladoPor: input.canceladoPor,
+      canceladoEm: new Date(),
+      motivoCancelamento: input.motivo,
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.solicitacaoId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "agendada"),
+        daSolicitacaoCofre
+      )
+    )
+    .returning({ id: transferencias.id });
+  return linha ?? null;
+}
+
+// D4/decisao 5: existe solicitacao ainda `agendada` neste caixa? Enquanto existir, o caixa nao
+// fecha — a ordem da retaguarda precisa ser executada ou cancelada, nunca esquecida no fechamento.
+export async function existeSolicitacaoAgendadaRepository(
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), daSolicitacaoCofre))
+    .limit(1);
+  return Boolean(linha);
+}
+
+// Decisao 7 (revisada): quem esta VINCULADO a esta conta e poderia conferir?
+//
+// Devolve so os candidatos estruturais — vinculo com a conta, empresa certa e diferente do criador
+// (R-028: quem envia nao confirma o proprio envio). A ultima condicao, ter `transferencias_conferir`,
+// NAO e resolvida aqui de proposito: a permissao efetiva vem de setor + cargos + usuario e e
+// computada por `resolverPermissoesEfetivas`. Reproduzir isso em SQL criaria uma segunda regra de
+// permissao, que divergiria da do guard no primeiro ajuste. O servico fecha a conta.
+export async function listarCandidatosConfirmacaoRepository(
+  input: { contaId: string; empresaId: string; criadoPor: string | null },
+  db: ExecutorBanco = banco
+): Promise<string[]> {
+  const filtros = [eq(contasUsuarios.contaId, input.contaId), eq(contasUsuarios.empresaId, input.empresaId)];
+  if (input.criadoPor) filtros.push(ne(contasUsuarios.usuarioId, input.criadoPor));
+
+  const linhas = await db
+    .select({ usuarioId: contasUsuarios.usuarioId })
+    .from(contasUsuarios)
+    .where(and(...filtros));
+  return linhas.map((linha) => linha.usuarioId);
 }
 
 // Todas as transferencias de um caixa (aba TRANSFERENCIAS da planilha), com o lacre e a ordem.
@@ -495,7 +787,11 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         and(
           eq(transferencias.caixaId, caixaId),
           eq(transferencias.computar, true),
-          ne(transferencias.status, "cancelado")
+          // 'cancelada', no feminino: e o valor que `transferencias_status_check` aceita. O filtro
+          // usava 'cancelado' (masculino, que so existe em vendas/despesas/retiradas/mercadorias) e
+          // por isso nunca casava — inocuo enquanto nada era cancelado, e um vazamento assim que o
+          // cancelamento passou a existir de verdade.
+          ne(transferencias.status, "cancelada")
         )
       )
       // Cronologico: a "aba" numera 1a/2a/3a por ordem de acontecimento (abertura sem ordem entra 1a).
@@ -626,7 +922,8 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
         and(
           eq(transferencias.caixaId, caixaId),
           eq(transferencias.computar, true),
-          ne(transferencias.status, "cancelado")
+          // 'cancelada' (feminino) — ver a nota em listarTransferenciasCaixaRepository.
+          ne(transferencias.status, "cancelada")
         )
       )
       .orderBy(desc(transferencias.dataReferencia)),
@@ -842,8 +1139,8 @@ export async function atualizarFechamentoCaixaRepository(
     saldoCentavos: number;
   },
   db: ExecutorBanco = banco
-) {
-  await db
+): Promise<number> {
+  const linhas = await db
     .update(fechamentosCaixa)
     .set({
       dataHoraFechamento: input.dataHoraFechamento,
@@ -862,7 +1159,12 @@ export async function atualizarFechamentoCaixaRepository(
       saldo: centavosParaDecimalBanco(input.saldoCentavos),
       status: "fechado"
     })
-    .where(eq(fechamentosCaixa.id, input.caixaId));
+    // B1: a guarda `status = 'aberto'` no proprio UPDATE e o que impede o segundo fechamento
+    // concorrente de sobrescrever fechado_por, fechado_em e os sete totais do primeiro. Quem
+    // chama confere o retorno vazio e traduz para erro de dominio — nunca 500 cru.
+    .where(and(eq(fechamentosCaixa.id, input.caixaId), eq(fechamentosCaixa.status, "aberto")))
+    .returning({ id: fechamentosCaixa.id });
+  return linhas.length;
 }
 
 export type FiltrosHistoricoCaixa = {

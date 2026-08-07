@@ -50,16 +50,49 @@ export const transferenciaDtoSchema = z.object({
   nLacreDoc: z.string().nullable(),
   prazoConfirmacaoEm: z.string().nullable(),
   dataRecebimento: z.string().nullable(),
-  confirmadoPor: z.string().nullable()
+  confirmadoPor: z.string().nullable(),
+  // Esta linha esta sob as regras ESTRITAS do Caixa -> Cofre (valor obrigatorio na conferencia,
+  // divergencia vira recusa auditavel) ou sob o comportamento generico?
+  //
+  // Calculado pelo SERVIDOR, com o mesmo predicado canonico do `buscarContextoConferenciaRepository`
+  // (caixa_id + tipo + destino == conta de cofre da empresa). A tela nao tem como deduzir isso: ela
+  // nao conhece a conta de cofre nem o tipo. Sem este campo a tela tratava TODA transferencia como
+  // se fosse do Caixa — exigia valor sempre e oferecia "Nao bateu" numa generica, onde a rota de
+  // recusa responde 404.
+  ehCaixaParaCofre: z.boolean()
 });
 
+// Decisao 9 (R-026): lacre e OPCIONAL no movimento, entao tem de ser opcional na conferencia.
+// Antes era obrigatorio aqui, e o efeito pratico era grave: um movimento criado sem lacre nunca
+// podia ser confirmado — nao havia numero para informar, e o repositorio exigia romper um lacre
+// que nao existia. O dinheiro ficava `pendente` para sempre.
+//
+// Quando o movimento TEM lacre, informar o mesmo continua sendo obrigatorio: e ele que prova que
+// o envelope conferido e aquele. Essa exigencia agora vive no servidor, que conhece o movimento.
 export const confirmarTransferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
-  nLacreDoc: z.string().trim().min(1),
+  nLacreDoc: z.string().trim().min(1).optional().nullable(),
   valorRecebido: dinheiroSchema.optional()
 });
 
 export type ConfirmarTransferenciaPayload = z.infer<typeof confirmarTransferenciaPayloadSchema>;
+
+// Decisao 8 — RECUSA de conferencia, exclusiva do fluxo Caixa -> Cofre.
+//
+// Endpoint proprio, e nao um desfecho do `/confirmar`, por uma razao pratica: a recusa precisa ser
+// COMMITADA. Se ela vivesse dentro do confirmar e fosse sinalizada por excecao, o rollback apagaria
+// justamente o registro auditavel que ela existe para criar.
+//
+// `motivo` obrigatorio: recusar dinheiro sem dizer por que nao e conferencia, e sumico com laudo.
+// `valorRecebido`/`nLacreDoc` sao o que a pessoa CONTOU e LEU — guardados como divergiram.
+export const recusarConferenciaPayloadSchema = z.object({
+  contaDestinoId: uuidSchema,
+  motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500),
+  nLacreDoc: z.string().trim().min(1).optional().nullable(),
+  valorRecebido: dinheiroSchema.optional()
+});
+
+export type RecusarConferenciaPayload = z.infer<typeof recusarConferenciaPayloadSchema>;
 
 const minutosPorPrazo: Record<TempoConfirmacao, number> = {
   "5min": 5,

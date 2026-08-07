@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
@@ -512,15 +513,32 @@ describe("caixa integration", () => {
     expect(violacao?.constraint).toBe("fechamentos_caixa_pdv_aberto_unico_idx");
   });
 
-  it("Deve_Retornar400_Quando_FecharCaixaComSaldoPositivoSemAcerto", async () => {
+  // D6 substituiu a regra antiga ("fechar com saldo positivo e barrado, 400"): hoje o fechamento
+  // devolve a sobra no mesmo ato. O que continua sendo recusado, e e o que este teste prova, e a
+  // ENTREGA acima do que existe em especie (D1) — sem esse teto o excedente virava saldo negativo
+  // e o fechamento gravava quebra falsa no nome do operador.
+  // Nao fecha o caixa do seed de proposito: ele e compartilhado com os demais testes do arquivo.
+  it("Deve_Retornar400_Quando_RetornoMaiorQueOSaldoDoCaixa", async () => {
+    const antes = await consultarUm<{ total: string }>(
+      "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",
+      [idsTeste.caixaAberto]
+    );
+
     const resposta = await contexto.app.inject({
       method: "POST",
-      url: `/api/caixa/${idsTeste.caixaAberto}/fechar`,
+      url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Tentativa sem acerto" }
+      payload: { tipo: "retorno", valor: 999999, idempotenciaChave: randomUUID() }
     });
 
     assertProblem(resposta, 400);
+    expect(resposta.body).toMatch(/acima do saldo/i);
+
+    const depois = await consultarUm<{ total: string }>(
+      "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",
+      [idsTeste.caixaAberto]
+    );
+    expect(depois?.total).toBe(antes?.total);
   });
 
   it("Deve_Retornar404_ParaCaminhoAntigoDeAcertoRemovido", async () => {
@@ -704,7 +722,7 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { tipo: "retorno", valor: 75, observacao: "Retorno ciclo" }
+      payload: { tipo: "retorno", valor: 75, observacao: "Retorno ciclo", idempotenciaChave: randomUUID() }
     });
     expect(retorno.statusCode, retorno.body).toBe(200);
 

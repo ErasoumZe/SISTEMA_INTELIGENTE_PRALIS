@@ -9,6 +9,7 @@ import {
   colaboradores,
   colaboradoresCargos,
   contas,
+  contasUsuarios,
   empresas,
   fechamentosCaixa,
   formasPagamento,
@@ -340,6 +341,23 @@ export async function aplicarSeedIntegracao() {
   ]);
   // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
   await banco.update(empresas).set({ contaCofreId: idsTeste.contaCofre }).where(eq(empresas.id, idsTeste.empresaA));
+  // Decisao 7: em producao o Cofre tem responsaveis — sao eles que conferem o dinheiro entregue.
+  //
+  // Sao DOIS, e nao um, porque quem cria o movimento nunca pode confirma-lo (R-028). Com um unico
+  // responsavel, toda entrega criada por ele proprio ficaria bloqueada — e um Cofre assim nao
+  // consegue receber nada. Fixture que nao espelha a producao testa um sistema que nao existe.
+  //
+  // Os testes que provam o BLOQUEIO (sem responsavel, ou responsavel unico == criador) mexem
+  // nestes vinculos de proposito.
+  for (const perfil of ["tesouraria", "gerente"] as const) {
+    const usuarioId = usuarioIds.get(perfil);
+    if (!usuarioId) continue;
+    await banco.insert(contasUsuarios).values({
+      empresaId: idsTeste.empresaA,
+      contaId: idsTeste.contaCofre,
+      usuarioId
+    });
+  }
   await banco.insert(pdvs).values([
     {
       id: idsTeste.pdvA,

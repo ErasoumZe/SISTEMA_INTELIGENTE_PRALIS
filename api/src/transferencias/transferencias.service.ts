@@ -1,12 +1,14 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   ConfirmarTransferenciaPayload,
+  RecusarConferenciaPayload,
   TransferenciaCriada,
   TransferenciaDetalheDto,
   TransferenciaDto,
   TransferenciaPayload,
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
+import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
@@ -29,15 +31,18 @@ import { resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.j
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import {
   atualizarTransferenciaRepository,
+  buscarContextoConferenciaRepository,
   buscarTransferenciaDetalheRepository,
   confirmarTransferenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
   efetivarTransferenciasAgendadasRepository,
+  ehConfirmadorElegivelRepository,
   liberarTravaTransferenciaRepository,
   listarDestinatariosTransferenciaRepository,
   listarTransferenciasVencidasRepository,
-  listarTransferenciasRepository
+  listarTransferenciasRepository,
+  registrarRecusaConferenciaRepository
 } from "./transferencias.repository.js";
 
 export function validarTransferencia(dados: TransferenciaPayload): void {
@@ -125,9 +130,38 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // Decisao 5 · o fluxo Caixa -> Cofre e ESTRITO, e so ele. `/confirmar` passa a significar
+    // "conferi e bateu": exige o valor contado e recusa qualquer divergencia, sem confirmar nada.
+    // A divergencia tem endpoint proprio (`/recusar-conferencia`), porque precisa ser COMMITADA
+    // com motivo — e um erro aqui derrubaria a transacao junto com o registro.
+    //
+    // Transferencia generica NAO entra neste ramo: la o comportamento vigente e preservado
+    // (valor opcional, divergencia confirma e notifica).
+    const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
+    if (contexto?.ehCaixaParaCofre) {
+      if (dados.valorRecebido == null) {
+        throw erroValidacao(
+          "Informe o valor recebido para conferir uma entrega do Caixa",
+          "VALOR_RECEBIDO_OBRIGATORIO"
+        );
+      }
+      const divergeValor = paraCentavos(dados.valorRecebido) !== contexto.valorCentavos;
+      const divergeLacre = (contexto.lacre ?? null) !== (dados.nLacreDoc?.trim() || null);
+      if (divergeValor || divergeLacre) {
+        throw new ErroDominio(
+          "Conferencia divergente: registre a recusa com o motivo em /recusar-conferencia",
+          409,
+          "CONFERENCIA_DIVERGENTE"
+        );
+      }
+    }
+
     const confirmada = await confirmarTransferenciaRepository(transferenciaId, dados, perfil.usuarioId, tx);
     if (!confirmada) throw new Error("Somente operador de uma conta destino pode confirmar uma unica vez");
 
+    // Caminho GENERICO preservado: divergencia de valor confirma e notifica, como sempre foi.
+    // O ramo estrito acima ja saiu com 409, entao esta notificacao nunca dispara para Caixa -> Cofre.
     if (dados.valorRecebido != null && paraCentavos(dados.valorRecebido) !== paraCentavos(existente.valorOriginal)) {
       const tesouraria = await listarUsuariosTesourariaRepository(existente.empresaId, tx);
       await criarNotificacoesRepository(
@@ -148,6 +182,76 @@ export async function confirmarTransferencia(
       );
     }
     return { id: confirmada.id };
+  });
+}
+
+// Decisao 8 · RECUSA auditavel de conferencia — exclusiva do fluxo Caixa -> Cofre.
+//
+// O que este endpoint NAO faz, e por que:
+//   - nao confirma: o dinheiro conferido nao bateu;
+//   - nao cancela: cancelar e ato da retaguarda sobre solicitacao `agendada`, nao da conferencia;
+//   - nao lanca excecao depois de gravar: a excecao faria rollback do registro auditavel, que e
+//     exatamente o que precisa sobreviver. Por isso o desfecho e um 200 explicito de "divergencia
+//     registrada", nunca um sucesso de confirmacao.
+// A transferencia continua `pendente`, pronta para reconferencia depois que a divergencia for
+// resolvida no mundo real.
+export async function recusarConferencia(
+  transferenciaId: string,
+  dados: RecusarConferenciaPayload,
+  perfil: PerfilUsuario
+): Promise<{ registrada: true; transferenciaId: string; tentativas: number }> {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  return executarEmTransacao(async (tx) => {
+    const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
+    if (!contexto || !podeAcessarEmpresa(perfil, contexto.empresaId)) throw new Error("Registro nao encontrado");
+    // Generica nao tem recusa auditavel: para ela isto e 404, e nao "nao pode" — o caminho dela
+    // continua sendo o `/confirmar` com a regra vigente.
+    if (!contexto.ehCaixaParaCofre) throw new Error("Registro nao encontrado");
+    if (contexto.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // Mesma elegibilidade da confirmacao: vinculado a conta destino, e nunca quem criou o movimento
+    // (R-028). Sem isso, quem enviou o dinheiro poderia "recusar" a propria entrega.
+    const elegivel = await ehConfirmadorElegivelRepository(
+      { transferenciaId, contaId: dados.contaDestinoId, usuarioId: perfil.usuarioId },
+      tx
+    );
+    if (!elegivel) throw new Error("Somente operador de uma conta destino pode conferir esta transferencia");
+
+    const registro = await registrarRecusaConferenciaRepository(
+      {
+        transferenciaId,
+        recusadoPor: perfil.usuarioId,
+        motivo: dados.motivo.trim(),
+        lacreInformado: dados.nLacreDoc?.trim() || null,
+        valorInformadoCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido)
+      },
+      tx
+    );
+
+    // Quem precisa saber: quem ENTREGOU (o executor real da solicitacao D4, ou o criador quando a
+    // entrega foi avulsa/retorno final) mais a Tesouraria/Gestao. Usar so `criado_por` numa
+    // solicitacao programada avisaria quem programou e deixaria o operador no escuro.
+    const operador = contexto.executadoPor ?? contexto.criadoPor;
+    const tesouraria = await listarUsuariosTesourariaRepository(contexto.empresaId, tx);
+    const destinatarios = [
+      ...new Set([operador, ...tesouraria.map((item) => item.usuarioId)].filter((id): id is string => Boolean(id)))
+    ];
+    await criarNotificacoesRepository(
+      {
+        empresaId: contexto.empresaId,
+        tipo: "transferencia_divergencia",
+        destinatariosUsuarioIds: destinatarios,
+        referenciaId: transferenciaId,
+        titulo: `Conferencia recusada (${registro.tentativas}a tentativa) - ${contexto.lacre ?? transferenciaId}`,
+        valorCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido) - contexto.valorCentavos,
+        // Cada nova tentativa reabre a pendencia: sem isto, quem ja tinha marcado a primeira
+        // recusa como vista nunca seria avisado da segunda.
+        reabrir: true
+      },
+      tx
+    );
+
+    return { registrada: true, transferenciaId, tentativas: registro.tentativas };
   });
 }
 

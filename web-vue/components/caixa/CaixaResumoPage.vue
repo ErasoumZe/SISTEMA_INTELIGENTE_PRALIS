@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
+import type { CaixaStatus, Opcao, ResumoCaixa, SolicitacaoCofre } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
+import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -10,6 +11,8 @@ const props = defineProps<{
   pdvs: Opcao[];
   turnos?: Opcao[];
   maquininhas?: Opcao[];
+  // D4: o que a retaguarda programou para este caixa. Lista vazia = nada pendente.
+  solicitacoes?: SolicitacaoCofre[];
   empresaId: string;
   permissoes: string[];
   usuarioId: string;
@@ -30,8 +33,32 @@ const emit = defineEmits<{
       observacao: string | null;
     }
   ): void;
-  (event: "retornarSaldo", payload: { caixaId: string; valor: number; observacao: string | null }): void;
-  (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null }): void;
+  // D5: lacre por movimento (opcional, R-026). D6: `lacreRetorno` e o do retorno final que o
+  // proprio fechamento cria quando ainda ha sobra. B2: `idempotenciaChave` identifica a INTENCAO;
+  // `aoConcluir` traz o desfecho de volta, porque `emit` nao devolve o retorno do handler.
+  (
+    event: "retornarSaldo",
+    payload: {
+      caixaId: string;
+      valor: number;
+      lacre: string | null;
+      observacao: string | null;
+      idempotenciaChave: string;
+      aoConcluir: (sucesso: boolean) => void;
+    }
+  ): void;
+  // D10: a execucao entrega o valor PROGRAMADO. Nao vai valor nem observacao daqui, e nao vai
+  // chave: a chave e da programacao e nunca e sobrescrita. So o lacre do envelope e proprio do ato.
+  (
+    event: "executarSolicitacao",
+    payload: {
+      caixaId: string;
+      solicitacaoId: string;
+      lacre: string | null;
+      aoConcluir: (sucesso: boolean) => void;
+    }
+  ): void;
+  (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null; lacreRetorno: string | null }): void;
   (event: "recarregar"): void;
 }>();
 
@@ -42,11 +69,63 @@ const abertura = reactive({
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
-const fechamento = reactive({ observacao: "" });
+const fechamento = reactive({ observacao: "", lacreRetorno: "" });
+// D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
+// devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
+// `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
+// misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
+// correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
+const entrega = reactive({ valor: "", lacre: "", observacao: "" });
+
+// B2 · a chave de idempotencia da tela.
+// Regra: uma chave por INTENCAO. Ela nasce no primeiro envio, sobrevive a erro e a cancelamento
+// (o retry precisa da MESMA chave, senao o servidor trata como entrega nova e duplica o dinheiro),
+// e so e trocada quando o ato termina bem ou quando o operador muda de fato o que quer entregar.
+const chaveEntrega = ref("");
+const intencaoDaChave = ref("");
+
+// `crypto.randomUUID` exige contexto seguro. Em https e em localhost existe; num acesso por IP da
+// rede da loja (http://192.168.x.x) o navegador nao o expoe, e sem o fallback a tela quebraria
+// justamente onde ela roda todo dia.
+function novoUuid(): string {
+  const aleatorio = globalThis.crypto;
+  if (typeof aleatorio?.randomUUID === "function") return aleatorio.randomUUID();
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/gu, (caractere) => {
+    const digito = Number(caractere);
+    return (digito ^ (Math.floor(Math.random() * 256) & (15 >> (digito / 4)))).toString(16);
+  });
+}
+
+// A "intencao" e o conjunto que o servidor compara para decidir entre retry e ato novo. Se ele
+// mudar, a chave TEM de mudar — senao o servidor devolve 409 e o operador fica travado sem
+// entender por que. Se nao mudar, a chave TEM de ficar — e o que impede a entrega dupla.
+function chaveParaIntencao(assinatura: string): string {
+  if (chaveEntrega.value && intencaoDaChave.value === assinatura) return chaveEntrega.value;
+  chaveEntrega.value = novoUuid();
+  intencaoDaChave.value = assinatura;
+  return chaveEntrega.value;
+}
+
+function limparEntrega() {
+  entrega.valor = "";
+  entrega.lacre = "";
+  entrega.observacao = "";
+  chaveEntrega.value = "";
+  intencaoDaChave.value = "";
+}
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
-const precisaAcerto = computed(() => Number(resumoAtual.value?.saldo ?? 0) > 0);
+const saldoAtual = computed(() => Number(resumoAtual.value?.saldo ?? 0));
+// D7: sobra e deficit sao situacoes DIFERENTES e precisam de tratamento visual diferente.
+// A sobra nunca vira quebra positiva — ela volta ao cofre. O deficit vira quebra no nome do
+// operador, e ele tem que saber disso ANTES de confirmar, nao por snackbar vermelho depois.
+const temSobra = computed(() => saldoAtual.value > 0);
+const temDeficit = computed(() => saldoAtual.value < 0);
+const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
+// D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
+// para que o botao nao dispare um 400 previsivel.
+const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fechamento.observacao.trim());
 const maquininhasSelect = computed(() =>
   (props.maquininhas ?? []).map((item) => ({
     ...item,
@@ -114,19 +193,74 @@ function abrir() {
   });
 }
 
+// D1: entrega PARCIAL durante o turno. Sem valor digitado, envia a sobra inteira. O servidor
+// recalcula o teto sob trava — o numero que a tela viu nunca e prova de nada.
+const valorEntregaEfetivo = computed(() => {
+  const digitado = Number(entrega.valor || 0);
+  return digitado > 0 ? digitado : saldoAtual.value;
+});
+// D1 na TELA: o servidor continua sendo a autoridade (ele recalcula sob trava), mas deixar o
+// operador disparar um valor que ja se sabe impossivel so gera 400 e desconfianca. Aqui o aviso
+// e imediato e o botao nao dispara.
+const entregaAcimaDoSaldo = computed(() => valorEntregaEfetivo.value > saldoAtual.value);
+const entregaBloqueada = computed(
+  () => Boolean(props.salvando) || valorEntregaEfetivo.value <= 0 || entregaAcimaDoSaldo.value
+);
+
 function retornarSaldo() {
   const caixa = caixaAberto.value;
-  const valor = Number(resumoAtual.value?.saldo ?? 0);
-  if (!caixa || valor <= 0) return;
-  emit("retornarSaldo", { caixaId: caixa.id, valor, observacao: fechamento.observacao || null });
+  // Guarda de duplo clique: enquanto `salvando` estiver ligado o ato nao repete. O botao tambem
+  // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
+  if (!caixa || entregaBloqueada.value) return;
+  const valor = valorEntregaEfetivo.value;
+  const lacre = entrega.lacre || null;
+  const observacao = entrega.observacao || null;
+  emit("retornarSaldo", {
+    caixaId: caixa.id,
+    valor,
+    lacre,
+    observacao,
+    idempotenciaChave: chaveParaIntencao(`avulsa|${caixa.id}|${valor}|${lacre ?? ""}|${observacao ?? ""}`),
+    // Limpa SO no sucesso confirmado. Em erro (ou confirmacao negada) valor, lacre, observacao e
+    // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
+    // chave — que e o que impede a segunda entrega do mesmo envelope.
+    aoConcluir: (sucesso: boolean) => {
+      if (sucesso) limparEntrega();
+    }
+  });
 }
 
+// D4/D10: executa o que a retaguarda programou — pelo valor programado, sempre. O operador nao
+// escolhe valor aqui: se tiver menos, a solicitacao nao e executada; se tiver mais, o excedente
+// sai por uma entrega avulsa, com chave e lacre proprios. O unico campo dele e o lacre do envelope.
+//
+// Sem chave de idempotencia: a identidade do ato e o `solicitacaoId`, e o servidor resolve a
+// repeticao pela transicao atomica de `agendada` para `pendente`.
+function executarSolicitacao(solicitacao: SolicitacaoCofre) {
+  const caixa = caixaAberto.value;
+  if (!caixa || props.salvando) return;
+  emit("executarSolicitacao", {
+    caixaId: caixa.id,
+    solicitacaoId: solicitacao.id,
+    lacre: entrega.lacre || null,
+    // So o lacre e limpo no sucesso: o valor digitado, se houver, pertence a uma entrega avulsa
+    // que o operador pode ainda querer lancar.
+    aoConcluir: (sucesso: boolean) => {
+      if (sucesso) entrega.lacre = "";
+    }
+  });
+}
+
+// D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
+// transacao do fechamento; se o saldo ja e zero, apenas fecha. Nao existe segundo botao.
 function fechar() {
   const caixa = caixaAberto.value;
-  if (!caixa) return;
+  // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
+  if (!caixa || props.salvando || observacaoObrigatoriaPendente.value) return;
   emit("fecharCaixa", {
     caixaId: caixa.id,
-    observacao: fechamento.observacao || null
+    observacao: fechamento.observacao || null,
+    lacreRetorno: fechamento.lacreRetorno || null
   });
 }
 </script>
@@ -262,28 +396,114 @@ function fechar() {
 
         <v-divider class="my-5" />
 
-        <v-alert v-if="precisaAcerto" type="warning" variant="tonal" class="my-5">
-          Ainda há {{ dinheiro(resumoAtual?.saldo || 0) }} no caixa. Lance o retorno ao cofre antes de fechar.
+        <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
+           fecha e o servidor devolve o restante no mesmo ato. -->
+        <v-alert v-if="temSobra" type="info" variant="tonal" class="my-5">
+          Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode entregar parte agora ou fechar o caixa — ao
+          fechar, o restante volta ao cofre automaticamente, no mesmo ato.
         </v-alert>
 
+        <!-- D7: o deficit e o evento mais grave do modulo. O operador precisa saber ANTES de
+           confirmar que vai ficar com uma quebra no nome dele — nao descobrir por snackbar. -->
+        <v-alert v-if="temDeficit" type="error" variant="tonal" class="my-5" data-teste="alerta-quebra">
+          <div class="text-subtitle-2 mb-1">Falta {{ dinheiro(deficitAbsoluto) }} no caixa</div>
+          Ao fechar, será registrada uma <strong>quebra de caixa</strong> de {{ dinheiro(deficitAbsoluto) }}, atribuída
+          a <strong>{{ caixaAberto?.usuarioCaixaNome ?? "o operador do caixa" }}</strong
+          >, e a Tesouraria será notificada. A observação abaixo é obrigatória e será registrada junto com a quebra.
+        </v-alert>
+
+        <!-- D4/D10: o que a retaguarda PROGRAMOU. Ainda nao movimentou dinheiro — nasce 'agendada'.
+           O valor e IMUTAVEL: o operador entrega exatamente o programado, usando o campo de lacre
+           abaixo. Enquanto houver solicitacao aqui, o caixa nao fecha (decisao 5). -->
+        <template v-if="(solicitacoes ?? []).length">
+          <div class="text-subtitle-2 mb-2">Entregas solicitadas pela Tesouraria</div>
+          <v-alert
+            v-for="solicitacao in solicitacoes ?? []"
+            :key="solicitacao.id"
+            type="info"
+            variant="tonal"
+            class="mb-3"
+            data-teste="solicitacao-cofre"
+          >
+            <div class="d-flex flex-wrap align-center ga-3">
+              <div class="flex-grow-1">
+                <strong>{{ dinheiro(solicitacao.valor) }}</strong>
+                · {{ solicitacao.tipo === "sangria" ? "Sangria" : "Retorno" }}
+                <div v-if="solicitacao.observacao" class="text-caption">{{ solicitacao.observacao }}</div>
+                <div v-if="saldoAtual < solicitacao.valor" class="text-caption text-error">
+                  Saldo em espécie insuficiente ({{ dinheiro(saldoAtual) }}) — a entrega não pode ser executada
+                  parcialmente.
+                </div>
+              </div>
+              <v-btn
+                color="warning"
+                variant="flat"
+                prepend-icon="mdi-check-bold"
+                :disabled="salvando || saldoAtual < solicitacao.valor"
+                :loading="salvando"
+                data-teste="botao-executar-solicitacao"
+                @click="executarSolicitacao(solicitacao)"
+              >
+                Executar {{ dinheiro(solicitacao.valor) }}
+              </v-btn>
+            </div>
+          </v-alert>
+        </template>
+
         <v-row dense>
-          <v-col v-if="precisaAcerto" cols="12">
-            <v-btn color="warning" prepend-icon="mdi-bank-transfer-out" :loading="salvando" @click="retornarSaldo">
-              Lançar retorno de {{ dinheiro(resumoAtual?.saldo || 0) }}
+          <v-col v-if="temSobra" cols="12" md="4">
+            <CampoDinheiro
+              v-model="entrega.valor"
+              label="Valor a entregar (vazio = tudo)"
+              :error="entregaAcimaDoSaldo"
+              :messages="entregaAcimaDoSaldo ? `Máximo disponível: ${dinheiro(saldoAtual)}` : ''"
+              data-teste="valor-entrega"
+            />
+          </v-col>
+          <v-col v-if="temSobra" cols="12" md="4">
+            <v-text-field v-model="entrega.lacre" label="N° do lacre (opcional)" data-teste="lacre-entrega" />
+          </v-col>
+          <v-col v-if="temSobra" cols="12" md="4">
+            <v-btn
+              color="warning"
+              prepend-icon="mdi-bank-transfer-out"
+              :disabled="entregaBloqueada"
+              :loading="salvando"
+              data-teste="botao-entregar"
+              @click="retornarSaldo"
+            >
+              Entregar ao cofre
             </v-btn>
           </v-col>
+          <v-col v-if="temSobra" cols="12">
+            <v-text-field
+              v-model="entrega.observacao"
+              label="Observação da entrega (opcional)"
+              data-teste="observacao-entrega"
+            />
+          </v-col>
           <v-col cols="12" md="8">
-            <v-text-field v-model="fechamento.observacao" label="Observação do fechamento" />
+            <v-text-field
+              v-model="fechamento.observacao"
+              :label="temDeficit ? 'Observação da quebra (obrigatória)' : 'Observação do fechamento'"
+              :error="observacaoObrigatoriaPendente"
+              :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
+              data-teste="observacao-fechamento"
+            />
+          </v-col>
+          <v-col v-if="temSobra" cols="12" md="4">
+            <v-text-field v-model="fechamento.lacreRetorno" label="Lacre do retorno final (opcional)" />
           </v-col>
           <v-col cols="12">
             <v-btn
-              color="primary"
+              :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
-              :disabled="precisaAcerto"
+              :disabled="observacaoObrigatoriaPendente"
               :loading="salvando"
+              data-teste="botao-fechar"
               @click="fechar"
             >
-              Fechar caixa
+              {{ temDeficit ? "Fechar com quebra" : "Fechar caixa" }}
             </v-btn>
           </v-col>
         </v-row>
