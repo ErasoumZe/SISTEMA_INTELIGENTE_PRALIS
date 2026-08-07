@@ -13,14 +13,19 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 // Valores ASSIMETRICOS de proposito (7,31 + 4,27 + 3,42 = 15,00): se o total do caixa multiplicar
 // pela quantidade de formas, ou se um pagamento empilhar num reenvio, a conta nao fecha por acaso.
 //
-// Todos os casos usam UM caixa dedicado (PDV + conta proprios), aberto no beforeAll, para que
-// `totalEntradas` do caixa contenha SOMENTE as vendas deste arquivo.
+// INDEPENDENCIA: cada caso cria a PROPRIA venda, com identificador externo proprio, e mede o caixa
+// por DELTA (mede antes, age, mede depois). Nenhum caso le venda criada por outro nem depende de
+// total acumulado — os quatro rodam isolados, em qualquer ordem, sem reseed por teste.
 
 const PDV_EXTERNO = "PDV-D06-DIVIDIDO";
 const DATA_VENDA = "2026-06-30T12:00:00.000Z";
 
+// Um identificador externo por cenario: reusar o mesmo entre testes foi o que criou dependencia
+// de ordem (o caso de reenvio so via "sem_novidade" se outro teste ja tivesse criado a venda).
 const VENDA_2_FORMAS = "D06-DIVIDIDO-2FORMAS";
 const VENDA_3_FORMAS = "D06-DIVIDIDO-3FORMAS";
+const VENDA_REENVIO = "D06-DIVIDIDO-REENVIO";
+const VENDA_RATEIO = "D06-DIVIDIDO-RATEIO";
 
 interface FormaPagamento {
   id: string;
@@ -32,6 +37,11 @@ interface PagamentoGravado {
   tipo_pagamento_automacao_id: string;
   tipo_pagamento_automacao: string;
   total_pago: string;
+}
+
+interface TotaisCaixa {
+  entradas: number;
+  saldo: number;
 }
 
 const RATEIO_2_FORMAS: FormaPagamento[] = [
@@ -214,7 +224,7 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     return pagamentos.reduce((total, linha) => total + paraCentavos(linha.total_pago), 0);
   }
 
-  async function totaisDoCaixa() {
+  async function medirCaixa(): Promise<TotaisCaixa> {
     const resposta = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
@@ -234,83 +244,102 @@ describe("D-06 · venda integrada com pagamento dividido", () => {
     };
   }
 
-  it("venda com DUAS formas: uma venda, dois pagamentos, soma igual ao total e caixa conta uma vez", async () => {
-    const resultado = await enviarVenda(payloadDividido(VENDA_2_FORMAS, TOTAL_2_FORMAS, RATEIO_2_FORMAS));
-    expect(resultado.status).toBe("criado");
+  // Medir por DELTA e o que torna cada caso independente: o caixa e compartilhado pelo arquivo, mas
+  // cada teste so responde pelo que a PROPRIA venda mexeu.
+  function delta(depois: TotaisCaixa, antes: TotaisCaixa): TotaisCaixa {
+    return { entradas: depois.entradas - antes.entradas, saldo: depois.saldo - antes.saldo };
+  }
 
-    const vendas = await vendasGravadas(VENDA_2_FORMAS);
+  // Cria a venda do cenario e devolve o que ela gravou. Cada teste chama a sua.
+  async function criarVendaPropria(identificador: string, total: number, formas: FormaPagamento[]) {
+    const resultado = await enviarVenda(payloadDividido(identificador, total, formas));
+    expect(resultado.status, `${identificador} deveria nascer nesta execucao`).toBe("criado");
+
+    const vendas = await vendasGravadas(identificador);
     expect(vendas).toHaveLength(1);
-    expect(paraCentavos(vendas[0]!.valor_original)).toBe(TOTAL_2_FORMAS);
+    expect(paraCentavos(vendas[0]!.valor_original)).toBe(total);
     expect(vendas[0]!.caixa_id).toBe(caixaId);
 
-    const pagamentos = await pagamentosGravados(VENDA_2_FORMAS);
-    expect(pagamentos).toHaveLength(2);
-    expect(conferidos(pagamentos)).toEqual(esperado(RATEIO_2_FORMAS));
-    expect(somaEmCentavos(pagamentos)).toBe(TOTAL_2_FORMAS);
+    const pagamentos = await pagamentosGravados(identificador);
+    expect(pagamentos).toHaveLength(formas.length);
+    expect(conferidos(pagamentos)).toEqual(esperado(formas));
+    expect(somaEmCentavos(pagamentos)).toBe(total);
+    return pagamentos;
+  }
 
-    // Aceite do D-06: o total do caixa BATE COM A SOMA DOS PAGAMENTOS — a venda entra uma vez so,
-    // nao uma vez por forma de pagamento.
-    const totais = await totaisDoCaixa();
-    expect(totais.entradas).toBe(somaEmCentavos(pagamentos));
-    expect(totais.saldo).toBe(TOTAL_2_FORMAS);
+  it("venda com DUAS formas: uma venda, dois pagamentos, soma igual ao total e caixa conta uma vez", async () => {
+    const antes = await medirCaixa();
+
+    const pagamentos = await criarVendaPropria(VENDA_2_FORMAS, TOTAL_2_FORMAS, RATEIO_2_FORMAS);
+    expect(pagamentos).toHaveLength(2);
+
+    // Aceite do D-06: o que a venda acrescentou ao caixa BATE COM A SOMA DOS PAGAMENTOS — ela entra
+    // uma vez so, nao uma vez por forma de pagamento (que daria 11,58 x 2 = 23,16).
+    const movimento = delta(await medirCaixa(), antes);
+    expect(movimento.entradas).toBe(somaEmCentavos(pagamentos));
+    expect(movimento.entradas).toBe(TOTAL_2_FORMAS);
+    expect(movimento.saldo).toBe(TOTAL_2_FORMAS);
   });
 
   it("venda com TRES formas: tres pagamentos com valores e formas preservados, sem multiplicar o caixa", async () => {
-    const resultado = await enviarVenda(payloadDividido(VENDA_3_FORMAS, TOTAL_3_FORMAS, RATEIO_3_FORMAS));
-    expect(resultado.status).toBe("criado");
+    const antes = await medirCaixa();
 
-    const vendas = await vendasGravadas(VENDA_3_FORMAS);
-    expect(vendas).toHaveLength(1);
-    expect(paraCentavos(vendas[0]!.valor_original)).toBe(TOTAL_3_FORMAS);
-    expect(vendas[0]!.caixa_id).toBe(caixaId);
-
-    const pagamentos = await pagamentosGravados(VENDA_3_FORMAS);
+    const pagamentos = await criarVendaPropria(VENDA_3_FORMAS, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
     expect(pagamentos).toHaveLength(3);
-    expect(conferidos(pagamentos)).toEqual(esperado(RATEIO_3_FORMAS));
-    expect(somaEmCentavos(pagamentos)).toBe(TOTAL_3_FORMAS);
 
-    // 11,58 + 15,00 = 26,58. Multiplicando por forma daria 11,58*2 + 15,00*3 = 68,16.
-    const totais = await totaisDoCaixa();
-    const somaDasDuasVendas = somaEmCentavos(await pagamentosGravados(VENDA_2_FORMAS)) + somaEmCentavos(pagamentos);
-    expect(totais.entradas).toBe(somaDasDuasVendas);
-    expect(totais.saldo).toBe(TOTAL_2_FORMAS + TOTAL_3_FORMAS);
+    // 15,00 entrando uma vez. Multiplicando por forma daria 15,00 x 3 = 45,00.
+    const movimento = delta(await medirCaixa(), antes);
+    expect(movimento.entradas).toBe(somaEmCentavos(pagamentos));
+    expect(movimento.entradas).toBe(TOTAL_3_FORMAS);
+    expect(movimento.saldo).toBe(TOTAL_3_FORMAS);
   });
 
   it("reenvio IDENTICO da venda dividida: sem_novidade, sem venda nova, sem pagamento empilhado", async () => {
-    const antes = await totaisDoCaixa();
+    const antesDeCriar = await medirCaixa();
+    const payload = payloadDividido(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
 
-    const resultado = await enviarVenda(payloadDividido(VENDA_3_FORMAS, TOTAL_3_FORMAS, RATEIO_3_FORMAS));
-    expect(resultado.status).toBe("sem_novidade");
+    // O proprio teste cria a venda que vai reenviar — nao depende de nenhum caso anterior.
+    const pagamentosCriados = await criarVendaPropria(VENDA_REENVIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
+    const depoisDeCriar = await medirCaixa();
+    expect(delta(depoisDeCriar, antesDeCriar).entradas).toBe(somaEmCentavos(pagamentosCriados));
 
-    expect(await vendasGravadas(VENDA_3_FORMAS)).toHaveLength(1);
+    const reenvio = await enviarVenda(payload);
+    expect(reenvio.status).toBe("sem_novidade");
 
-    const pagamentos = await pagamentosGravados(VENDA_3_FORMAS);
+    expect(await vendasGravadas(VENDA_REENVIO), "reenvio nao pode criar uma segunda venda").toHaveLength(1);
+
+    const pagamentos = await pagamentosGravados(VENDA_REENVIO);
     expect(pagamentos, "reenvio nao pode empilhar linhas em vendas_pagamentos").toHaveLength(3);
     expect(conferidos(pagamentos), "reenvio nao pode redistribuir o rateio").toEqual(esperado(RATEIO_3_FORMAS));
     expect(somaEmCentavos(pagamentos)).toBe(TOTAL_3_FORMAS);
 
-    const depois = await totaisDoCaixa();
-    expect(depois.entradas).toBe(antes.entradas);
-    expect(depois.saldo).toBe(antes.saldo);
+    const movimento = delta(await medirCaixa(), depoisDeCriar);
+    expect(movimento.entradas, "reenvio nao pode mexer no total do caixa").toBe(0);
+    expect(movimento.saldo).toBe(0);
   });
 
   it("alteracao do RATEIO no mesmo identificador: substitui os pagamentos e mantem o total do caixa", async () => {
-    const antes = await totaisDoCaixa();
+    const antesDeCriar = await medirCaixa();
+
+    // Venda propria, com tres formas, para depois ter o rateio trocado.
+    const pagamentosCriados = await criarVendaPropria(VENDA_RATEIO, TOTAL_3_FORMAS, RATEIO_3_FORMAS);
+    const depoisDeCriar = await medirCaixa();
+    expect(delta(depoisDeCriar, antesDeCriar).entradas).toBe(somaEmCentavos(pagamentosCriados));
 
     // Mesmo idVenda e mesmo valor total; muda so a divisao (3 formas -> 2 formas, outros valores).
-    const resultado = await enviarVenda(payloadDividido(VENDA_3_FORMAS, TOTAL_3_FORMAS, RATEIO_ALTERADO));
-    expect(resultado.status).toBe("atualizado");
+    const atualizacao = await enviarVenda(payloadDividido(VENDA_RATEIO, TOTAL_3_FORMAS, RATEIO_ALTERADO));
+    expect(atualizacao.status).toBe("atualizado");
 
-    const vendas = await vendasGravadas(VENDA_3_FORMAS);
+    const vendas = await vendasGravadas(VENDA_RATEIO);
     expect(vendas, "atualizar rateio nao pode criar uma segunda venda").toHaveLength(1);
 
-    const pagamentos = await pagamentosGravados(VENDA_3_FORMAS);
+    const pagamentos = await pagamentosGravados(VENDA_RATEIO);
     expect(pagamentos, "o rateio antigo tem de sair inteiro").toHaveLength(2);
     expect(conferidos(pagamentos)).toEqual(esperado(RATEIO_ALTERADO));
     expect(somaEmCentavos(pagamentos)).toBe(TOTAL_3_FORMAS);
 
-    const depois = await totaisDoCaixa();
-    expect(depois.entradas).toBe(antes.entradas);
-    expect(depois.saldo).toBe(antes.saldo);
+    const movimento = delta(await medirCaixa(), depoisDeCriar);
+    expect(movimento.entradas, "trocar o rateio nao pode mexer no total do caixa").toBe(0);
+    expect(movimento.saldo).toBe(0);
   });
 });
