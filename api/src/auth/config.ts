@@ -8,6 +8,12 @@ import { enviarEmail, montarHtmlEmail } from "./email.js";
 
 const producao = env.NODE_ENV === "production";
 
+// Politica de senha do ambiente, exportada porque a criacao de usuario por admin precisa recusar a
+// senha curta ANTES de chamar o Better Auth, com mensagem verdadeira. O schema compartilhado aceita
+// 6 caracteres (ele nao conhece o ambiente); deixar a divergencia passar era metade do B-01: o
+// signUpEmail estourava PASSWORD_TOO_SHORT e o servico reportava "Email ja cadastrado".
+export const senhaMinimaAutenticacao = producao ? 10 : 8;
+
 export const auth = betterAuth({
   database: drizzleAdapter(banco, {
     provider: "pg",
@@ -30,7 +36,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: producao,
-    minPasswordLength: producao ? 10 : 8,
+    minPasswordLength: senhaMinimaAutenticacao,
     sendResetPassword: async ({ user, url, token }) => {
       await enviarEmail({
         para: user.email,

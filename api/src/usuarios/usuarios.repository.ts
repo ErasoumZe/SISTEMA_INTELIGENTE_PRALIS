@@ -146,6 +146,16 @@ export async function marcarEmailVerificadoRepository(id: string, db: ExecutorBa
     .where(eq(usuarioAutenticacao.id, id));
 }
 
+// Compensacao do estado parcial (B-01). O `signUpEmail` do Better Auth commita numa transacao
+// PROPRIA; a transacao de perfil/empresa/colaborador vem depois, separada. Se a segunda falhar, o
+// usuario de autenticacao fica orfao — sem perfil, sem empresa, sem colaborador — e, pior, o e-mail
+// passa a existir de verdade: toda nova tentativa do admin morre em "e-mail ja cadastrado". Desfazer
+// o que criamos e o que mantem a proxima tentativa possivel. `session` e `account` saem por cascade
+// (db/src/schema/autenticacao/autenticacao.schema.ts).
+export async function removerUsuarioAutenticacaoRepository(id: string, db: ExecutorBanco = banco) {
+  await db.delete(usuarioAutenticacao).where(eq(usuarioAutenticacao.id, id));
+}
+
 export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string, db: ExecutorBanco = banco) {
   const [usuario] = await db
     .select({ id: usuarioAutenticacao.id })
