@@ -1,7 +1,12 @@
-import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
-import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
+import { contas, contasUsuarios, empresas } from "@padaria/db/schema/cadastro";
+import {
+  lacres,
+  transferencias,
+  transferenciasConferenciasRecusadas,
+  transferenciasDestinosCandidatos
+} from "@padaria/db/schema/transferencia";
 import {
   calcularPrazoConfirmacao,
   type ConfirmarTransferenciaPayload,
@@ -11,9 +16,31 @@ import {
   type TransferenciaPayload,
   type TransferenciasQuery
 } from "@padaria/shared/transferencias";
+import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
+
+// Predicado CANONICO de "esta transferencia e uma entrega do Caixa para o Cofre".
+//
+// Fonte unica, usada pela listagem (para a tela saber qual regra aplicar) e pela conferencia (para
+// o servidor decidir entre o fluxo estrito e o generico). Duas copias divergiriam, e a tela
+// passaria a oferecer uma acao que a API recusa — que foi exatamente o defeito corrigido aqui.
+//
+// Os tres criterios sao necessarios juntos: nenhum sozinho distingue os fluxos.
+export function ehEntregaCaixaParaCofre(linha: {
+  caixaId: string | null;
+  tipo: string;
+  contaDestinoId: string;
+  contaCofreId: string | null;
+}): boolean {
+  return (
+    linha.caixaId !== null &&
+    (linha.tipo === "sangria" || linha.tipo === "retorno") &&
+    linha.contaCofreId !== null &&
+    linha.contaDestinoId === linha.contaCofreId
+  );
+}
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
@@ -39,17 +66,29 @@ export async function listarTransferenciasRepository(
       nLacreDoc: transferencias.nLacreDoc,
       prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
       dataRecebimento: transferencias.dataRecebimento,
-      confirmadoPor: transferencias.confirmadoPor
+      confirmadoPor: transferencias.confirmadoPor,
+      // Os tres ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
+      // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
+      caixaId: transferencias.caixaId,
+      tipo: transferencias.tipo,
+      contaCofreId: empresas.contaCofreId
     })
     .from(transferencias)
     .innerJoin(origem, eq(origem.id, transferencias.contaOrigemId))
     .innerJoin(destino, eq(destino.id, transferencias.contaDestinoId))
+    .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
     .where(filtros.length ? and(...filtros) : undefined);
-  return linhas.map((linha) => ({
+  return linhas.map(({ caixaId, tipo, contaCofreId, ...linha }) => ({
     ...linha,
     status: linha.status as TransferenciaDto["status"],
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
-    dataRecebimento: linha.dataRecebimento?.toISOString() ?? null
+    dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
+    ehCaixaParaCofre: ehEntregaCaixaParaCofre({
+      caixaId,
+      tipo,
+      contaDestinoId: linha.contaDestinoId,
+      contaCofreId
+    })
   }));
 }
 
@@ -139,6 +178,98 @@ export async function buscarTransferenciaDetalheRepository(
   };
 }
 
+// --- Conferencia Caixa -> Cofre -------------------------------------------------------------
+// O contexto que decide se esta transferencia esta sob as regras ESTRITAS do Caixa -> Cofre
+// (valor obrigatorio, divergencia vira recusa auditavel) ou sob o comportamento generico vigente.
+//
+// Os tres criterios sao os que o Jose fixou: ligada ao caixa, tipo de entrega, e destino igual a
+// conta de cofre configurada NA EMPRESA. Nenhum deles sozinho basta.
+export type ContextoConferencia = {
+  id: string;
+  empresaId: string;
+  status: string;
+  valorCentavos: number;
+  lacre: string | null;
+  criadoPor: string | null;
+  // Quem entregou fisicamente (solicitacao D4 executada). Null em avulsa e retorno final — nesses
+  // casos o operador e o `criadoPor`.
+  executadoPor: string | null;
+  ehCaixaParaCofre: boolean;
+};
+
+export async function buscarContextoConferenciaRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<ContextoConferencia | null> {
+  const [linha] = await db
+    .select({
+      id: transferencias.id,
+      empresaId: transferencias.empresaId,
+      status: transferencias.status,
+      valorOriginal: transferencias.valorOriginal,
+      lacre: transferencias.nLacreDoc,
+      criadoPor: transferencias.criadoPor,
+      executadoPor: transferencias.executadoPor,
+      caixaId: transferencias.caixaId,
+      tipo: transferencias.tipo,
+      contaDestinoId: transferencias.contaDestinoId,
+      contaCofreId: empresas.contaCofreId
+    })
+    .from(transferencias)
+    .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
+    .where(eq(transferencias.id, transferenciaId))
+    .limit(1);
+  if (!linha) return null;
+
+  const ehCaixaParaCofre = ehEntregaCaixaParaCofre(linha);
+
+  return {
+    id: linha.id,
+    empresaId: linha.empresaId,
+    status: linha.status,
+    valorCentavos: paraCentavos(linha.valorOriginal),
+    lacre: linha.lacre,
+    criadoPor: linha.criadoPor,
+    executadoPor: linha.executadoPor,
+    ehCaixaParaCofre
+  };
+}
+
+// Grava UMA tentativa de conferencia recusada e devolve o total acumulado.
+//
+// Nao toca na transferencia: ela continua `pendente`, exatamente como estava. Quem chama NAO pode
+// lancar excecao depois disto — a excecao derrubaria a transacao e apagaria o registro que acabou
+// de ser criado, que e justamente a trilha que precisa sobreviver.
+export async function registrarRecusaConferenciaRepository(
+  input: {
+    transferenciaId: string;
+    recusadoPor: string;
+    motivo: string;
+    lacreInformado: string | null;
+    valorInformadoCentavos: number | null;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string; tentativas: number }> {
+  const [recusa] = await db
+    .insert(transferenciasConferenciasRecusadas)
+    .values({
+      transferenciaId: input.transferenciaId,
+      recusadoPor: input.recusadoPor,
+      motivo: input.motivo,
+      lacreInformado: input.lacreInformado,
+      valorInformado:
+        input.valorInformadoCentavos === null ? null : centavosParaDecimalBanco(input.valorInformadoCentavos)
+    })
+    .returning({ id: transferenciasConferenciasRecusadas.id });
+  if (!recusa) throw new Error("Recusa de conferencia nao registrada");
+
+  const [total] = await db
+    .select({ total: count() })
+    .from(transferenciasConferenciasRecusadas)
+    .where(eq(transferenciasConferenciasRecusadas.transferenciaId, input.transferenciaId));
+  return { id: recusa.id, tentativas: Number(total?.total ?? 1) };
+}
+
 export async function contasPertencemEmpresaRepository(
   contaIds: string[],
   empresaId: string,
@@ -153,14 +284,19 @@ export async function contasPertencemEmpresaRepository(
   return linhas.length === unicos.length;
 }
 
-export async function confirmarTransferenciaRepository(
+// Quem pode conferir ESTA transferencia por ESTA conta: precisa operar uma conta candidata ao
+// destino e nao pode ser quem criou o movimento (R-028 — quem envia nao confirma o proprio envio).
+//
+// Extraida para ser a fonte unica de `confirmar` e `recusar-conferencia`: duas copias da mesma
+// pergunta divergiriam, e a recusa passaria a aceitar quem a confirmacao recusa.
+async function candidatoConfirmacao(
   transferenciaId: string,
-  dados: ConfirmarTransferenciaPayload,
+  contaDestinoId: string,
   usuarioId: string,
-  db: ExecutorBanco = banco
+  db: ExecutorBanco
 ) {
   const [permitida] = await db
-    .select({ id: transferencias.id, criadoPor: transferencias.criadoPor })
+    .select({ id: transferencias.id, criadoPor: transferencias.criadoPor, nLacreDoc: transferencias.nLacreDoc })
     .from(transferenciasDestinosCandidatos)
     .innerJoin(transferencias, eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId))
     .innerJoin(
@@ -170,11 +306,43 @@ export async function confirmarTransferenciaRepository(
     .where(
       and(
         eq(transferenciasDestinosCandidatos.transferenciaId, transferenciaId),
-        eq(transferenciasDestinosCandidatos.contaId, dados.contaDestinoId)
+        eq(transferenciasDestinosCandidatos.contaId, contaDestinoId)
       )
     )
     .limit(1);
   if (!permitida || permitida.criadoPor === usuarioId) return null;
+  return permitida;
+}
+
+export async function ehConfirmadorElegivelRepository(
+  input: { transferenciaId: string; contaId: string; usuarioId: string },
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  return Boolean(await candidatoConfirmacao(input.transferenciaId, input.contaId, input.usuarioId, db));
+}
+
+export async function confirmarTransferenciaRepository(
+  transferenciaId: string,
+  dados: ConfirmarTransferenciaPayload,
+  usuarioId: string,
+  db: ExecutorBanco = banco
+) {
+  const permitida = await candidatoConfirmacao(transferenciaId, dados.contaDestinoId, usuarioId, db);
+  if (!permitida) return null;
+
+  // Decisao 9 · o lacre so e exigido quando o MOVIMENTO tem um. A checagem vem antes do UPDATE de
+  // proposito: divergencia de lacre nao pode confirmar e depois reclamar — o `throw` derruba a
+  // transacao e a transferencia continua `pendente`, que e o estado correto para reconferencia.
+  const lacreDoMovimento = permitida.nLacreDoc?.trim() || null;
+  const lacreInformado = dados.nLacreDoc?.trim() || null;
+  if (lacreDoMovimento && lacreInformado !== lacreDoMovimento) {
+    throw new Error("Lacre divergente do movimento: confira o envelope antes de confirmar");
+  }
+  // Movimento sem lacre nao aceita lacre inventado na conferencia — nao ha envelope a que ele
+  // corresponda, e aceitar criaria um numero sem rastro.
+  if (!lacreDoMovimento && lacreInformado) {
+    throw new Error("Movimento sem lacre: nao informe numero de lacre na conferencia");
+  }
 
   const [vencedora] = await db
     .update(transferencias)
@@ -189,11 +357,16 @@ export async function confirmarTransferenciaRepository(
     .returning({ id: transferencias.id, empresaId: transferencias.empresaId, valor: transferencias.valorOriginal });
   if (!vencedora) return null;
 
+  // Decisao 9: so ha selo a romper quando o movimento tem lacre. Sem lacre, a conferencia termina
+  // aqui — antes isto era um `UPDATE` incondicional que nunca casava, e nenhum movimento sem lacre
+  // conseguia ser confirmado.
+  if (!lacreDoMovimento) return vencedora;
+
   const [lacre] = await db
     .update(lacres)
     .set({ rompido: true })
     .where(
-      and(eq(lacres.transferenciaId, transferenciaId), eq(lacres.numero, dados.nLacreDoc), eq(lacres.rompido, false))
+      and(eq(lacres.transferenciaId, transferenciaId), eq(lacres.numero, lacreDoMovimento), eq(lacres.rompido, false))
     )
     .returning({ id: lacres.id });
   if (!lacre) throw new Error("Lacre invalido, ja rompido ou pertencente a outra transferencia");

@@ -42,6 +42,7 @@ a necessidade.
 | [25](25_BACKLOG_2026_08_05.md)            | **Backlog (05/08)**            | as 98 tarefas que fecham tudo o que as auditorias acharam, divididas entre os tres       |
 | [26](26_PLANO_CAIXA_100.md)               | **Plano do Caixa (05/08)**     | causa raiz dos bugs de acesso, plano em 3 blocos, Resend+Cloudflare, 6 decisoes          |
 | [27](27_AVALIACAO_FINAL_CAIXA.md)         | **Avaliacao final (05/08)**    | reconciliacao das tres leituras, 2 correcoes minhas, plano em ondas com gate             |
+| [28](28_ENTREGA_AO_COFRE_D1_D10_B1_B5.md) | **Entrega ao cofre (06/08)**   | D1-D10 e B1-B5: parcial, atomico, idempotente, solicitacao programada (#101 reescrita)   |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 

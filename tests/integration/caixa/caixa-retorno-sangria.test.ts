@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
@@ -96,8 +97,14 @@ describe("caixa - retorno/sangria (M2)", () => {
     });
   }
 
+  // B2: chave nova a cada chamada — aqui cada uma e uma INTENCAO diferente de verdade. Repetir a
+  // chave e o que os testes de idempotencia fazem, de proposito, em caixa-idempotencia-cofre.
   function transferenciaCofre(caixaId: string, tipo: "sangria" | "retorno", valor: number) {
-    return post(`/api/caixa/${caixaId}/transferencia-cofre`, { tipo, valor });
+    return post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      tipo,
+      valor,
+      idempotenciaChave: randomUUID()
+    });
   }
 
   async function resumoAtual() {

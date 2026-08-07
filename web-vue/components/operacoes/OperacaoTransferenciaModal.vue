@@ -2,12 +2,6 @@
 // Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
-// IMPORT EXPLICITO OBRIGATORIO: o auto-import do Nuxt registra este arquivo como
-// `OperacoesTransferenciaRetornoCampos` (pathPrefix pela pasta operacoes/). Usar
-// <TransferenciaRetornoCampos> sem importar deixa o componente NAO RESOLVIDO — a caixa com
-// "Multiplo Destino", "Tempo de confirmacao" e "Transf. Retorno / Sangria" simplesmente nao
-// renderiza, sem erro de lint, vue-tsc nem teste. Ver FOTO 1 (PROJECT_BRAIN/14).
-import TransferenciaRetornoCampos from "~/components/operacoes/TransferenciaRetornoCampos.vue";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
 const {
@@ -20,7 +14,6 @@ const {
   salvandoOperacao,
   salvarOperacao
 } = useWorkspaceContext();
-const { apiPost } = useApi();
 
 const aberto = computed({
   get: () => modalOperacaoAberto.value && entidadeNova.value === "transferencia",
@@ -36,10 +29,12 @@ const agendamento = computed({
     form.value.agendadaPara = ativo ? new Date(Date.now() + 3_600_000).toISOString().slice(0, 16) : "";
   }
 });
-const dataRecebimento = ref("");
+// B5: `dataRecebimento` era estado morto — o template sempre leu `form.dataRecebimento`. Ele nunca
+// chegava a payload nenhum e sobrevivia entre aberturas do modal. Removido junto com o bloco de
+// retorno/sangria, que era a outra fonte de estado residual (linhas preenchidas em uma abertura
+// viravam transferencia nao pedida na proxima).
 const multiploDestino = ref(false);
 const tempoConfirmacaoAberto = ref(false);
-const retornoAberto = ref(false);
 
 // FOTO 1: o padrao da tela e "se ☑ abre esse campo" — as tres checkboxes ficam sempre visiveis e
 // cada uma REVELA o seu campo. Ao abrir, elas espelham o que ja esta no formulario: sem isto uma
@@ -100,21 +95,8 @@ const erroDestino = ref("");
 watch(destinosSelecionados, (ids) => {
   if (ids.length) erroDestino.value = "";
 });
-type LinhaRetorno = { sinal: "+" | "-"; valor: string; lacre: string };
-const retornos = ref<LinhaRetorno[]>([{ sinal: "+", valor: "", lacre: "" }]);
-function addRetorno() {
-  retornos.value.push({ sinal: "+", valor: "", lacre: "" });
-}
-function removerRetorno(i: number) {
-  if (retornos.value.length > 1) retornos.value.splice(i, 1);
-}
-
-// --- Resumo Saida/Entrada/Saldo: calculado no FRONT a partir dos campos visiveis (nao persistido). ---
+// --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
-const totalEntrada = computed(() =>
-  retornos.value.reduce((soma, l) => soma + (l.sinal === "-" ? -1 : 1) * Number(l.valor || 0), 0)
-);
-const saldo = computed(() => totalEntrada.value - totalSaida.value);
 function br(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -145,29 +127,19 @@ function destinoValido() {
   return false;
 }
 
+// D9: a criacao de retorno/sangria do Caixa NAO mora mais aqui. Ela tem um unico caminho — o fluxo
+// do proprio Caixa (POST /api/caixa/:id/transferencia-cofre), que resolve a conta do cofre, aplica
+// o teto do saldo (D1) e nasce pendente de conferencia (D3). Este modal cuida exclusivamente de
+// transferencias genericas entre contas, que continuam legitimas.
+//
+// O laco removido daqui gravava `tipo='suprimento'` com status pendente, mas reduzia o saldo do
+// caixa e liberava o fechamento igual ao caminho canonico — dois caminhos para o mesmo ato, o que a
+// regra-mae do 16_DEFINITION_OF_DONE.md proibe. Ele tambem era a origem do B4: os POSTs nao eram
+// tratados, entao a falha subia como Promise rejeitada sem handler DEPOIS de o modal ja ter fechado
+// e mostrado "salvo com sucesso" — movimento de dinheiro inexistente com snackbar verde.
 async function salvarTransferenciaCompleta() {
   if (!destinoValido()) return;
-  const edicao = Boolean(operacaoEditandoId.value);
-  const principal = await salvarOperacao();
-  if (!principal || edicao || !retornoAberto.value) return;
-  for (const [indice, linha] of retornos.value.entries()) {
-    const valor = Number(linha.valor || 0);
-    if (valor <= 0 || !linha.lacre.trim()) continue;
-    const retorno = linha.sinal === "+";
-    await apiPost("/api/transferencias", {
-      empresaId: empresaId.value,
-      dataReferencia: form.value.dataReferencia,
-      descricao: `${retorno ? "Retorno" : "Sangria"} vinculado a ${principal.id} (${indice + 1})`,
-      valorOriginal: valor,
-      contaOrigemId: retorno ? form.value.contaDestinoId : form.value.contaOrigemId,
-      contaDestinoId: retorno ? form.value.contaOrigemId : form.value.contaDestinoId,
-      contasDestinoIds: [],
-      nLacreDoc: linha.lacre,
-      tempoConfirmacao: form.value.tempoConfirmacao,
-      computar: true
-    });
-  }
-  retornos.value = [{ sinal: "+", valor: "", lacre: "" }];
+  await salvarOperacao();
 }
 
 function dataISO(offset: number) {
@@ -199,17 +171,12 @@ const hojeISO = computed(() => dataISO(0));
            usuario nao deveria ter que rolar ate o fim para ve-la. Valores sao os mesmos computed
            de sempre; nada e recalculado nem persistido. -->
         <div class="tr-cards">
+          <!-- D9: "Entrada (+)" e "Saldo (±)" so existiam por causa das linhas de retorno/sangria.
+             Sem elas, Entrada seria sempre 0 e Saldo o negativo da Saida — dois numeros que nao
+             informam nada. Restou o unico que responde "o que isto faz com o meu dinheiro". -->
           <div class="tr-card">
             <span class="tr-card-lbl">Saída (−)</span>
             <b class="tr-card-val">{{ valorResumo(totalSaida) }}</b>
-          </div>
-          <div class="tr-card">
-            <span class="tr-card-lbl">Entrada (+)</span>
-            <b class="tr-card-val">{{ valorResumo(totalEntrada) }}</b>
-          </div>
-          <div class="tr-card tr-card-saldo">
-            <span class="tr-card-lbl">Saldo (±)</span>
-            <b class="tr-card-val">{{ valorResumo(saldo) }}</b>
           </div>
           <button
             type="button"
@@ -305,57 +272,37 @@ const hojeISO = computed(() => dataISO(0));
           </div>
         </div>
 
-        <TransferenciaRetornoCampos v-model="retornoAberto">
-          <!-- FOTO 1: tres checkboxes de mesmo peso, uma embaixo da outra. A anotacao do Rodrigo ao
-             lado da terceira — "Se ☑ abre esse campo!" — vale para as tres: nenhum campo aparece
-             antes da checkbox ser marcada. A terceira vem do proprio TransferenciaRetornoCampos. -->
-          <template #controles>
-            <label class="tr-check">
-              <input v-model="multiploDestino" type="checkbox" />
-              <span>Múltiplo Destino</span>
-            </label>
-            <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
-               desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
+        <!-- D9: o bloco "Transf. Entrada (Retorno / Sangria)" saiu daqui junto com o componente
+           TransferenciaRetornoCampos, que existia apenas para hospeda-lo. Retorno e sangria do
+           Caixa tem um unico caminho: a tela do proprio Caixa. As duas checkboxes abaixo NAO faziam
+           parte daquele bloco — sao recursos legitimos da transferencia generica e continuam. -->
+        <div class="tr-opcoes">
+          <label class="tr-check">
+            <input v-model="multiploDestino" type="checkbox" />
+            <span>Múltiplo Destino</span>
+          </label>
+          <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
+             desenho: as checkboxes ficam AO LADO de Destino, e esta caixa nao aninha nada. -->
 
-            <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
-               FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
-            <label class="tr-check">
-              <input v-model="tempoConfirmacaoAberto" type="checkbox" />
-              <span>Tempo de confirmação</span>
-            </label>
-            <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
-              <span class="tr-campo-lbl">Tempo de confirmação</span>
-              <select v-model="form.tempoConfirmacao" class="tr-input">
-                <option value="5min">5 minutos</option>
-                <option value="10min">10 minutos</option>
-                <option value="30min">30 minutos</option>
-                <option value="1h">1 hora</option>
-                <option value="1dia">1 dia</option>
-                <option value="10dias">10 dias</option>
-                <option value="30dias">30 dias</option>
-              </select>
-            </label>
-          </template>
-
-          <!-- Bloco B · Transf. Entrada (Retorno / Sangria) — abre pela checkbox acima -->
-          <div class="tr-secao">Transf. Entrada (Retorno / Sangria)</div>
-          <div v-for="(l, i) in retornos" :key="i" class="tr-retorno-linha">
-            <button
-              type="button"
-              class="tr-sinal"
-              :class="{ neg: l.sinal === '-' }"
-              @click="l.sinal = l.sinal === '+' ? '-' : '+'"
-            >
-              {{ l.sinal }}
-            </button>
-            <CampoDinheiro v-model="l.valor" class="tr-input tr-retorno-valor" placeholder="Valor R$" />
-            <input v-model="l.lacre" class="tr-input" placeholder="N° Lacre / Doc" />
-            <v-icon size="18" class="tr-item-del" @click="removerRetorno(i)">mdi-close</v-icon>
-          </div>
-          <button type="button" class="tr-add" @click="addRetorno">
-            <v-icon size="15">mdi-plus</v-icon> Adicionar linha
-          </button>
-        </TransferenciaRetornoCampos>
+          <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
+             FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
+          <label class="tr-check">
+            <input v-model="tempoConfirmacaoAberto" type="checkbox" />
+            <span>Tempo de confirmação</span>
+          </label>
+          <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
+            <span class="tr-campo-lbl">Tempo de confirmação</span>
+            <select v-model="form.tempoConfirmacao" class="tr-input">
+              <option value="5min">5 minutos</option>
+              <option value="10min">10 minutos</option>
+              <option value="30min">30 minutos</option>
+              <option value="1h">1 hora</option>
+              <option value="1dia">1 dia</option>
+              <option value="10dias">10 dias</option>
+              <option value="30dias">30 dias</option>
+            </select>
+          </label>
+        </div>
 
         <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
         <label class="tr-campo">

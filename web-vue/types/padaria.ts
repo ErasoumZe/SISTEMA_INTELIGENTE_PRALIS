@@ -239,6 +239,10 @@ export type OperacaoResumo = {
   prazoConfirmacaoEm?: string | null;
   dataRecebimento?: string | null;
   confirmadoPor?: string | null;
+  // Transferência: esta linha está sob as regras ESTRITAS do Caixa → Cofre? Calculado pelo
+  // servidor (caixa_id + tipo + destino == conta de cofre da empresa) — a tela não conhece a conta
+  // de cofre nem o tipo, e sem este campo tratava toda transferência como se fosse do Caixa.
+  ehCaixaParaCofre?: boolean;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
@@ -296,6 +300,27 @@ export type CaixaOperacional = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+};
+
+// D4: a entrega ao cofre que a retaguarda PROGRAMOU para este caixa. Enquanto esta aqui ela e so
+// um pedido — nao movimentou dinheiro nenhum (nasce 'agendada', que o saldo nao conta). Vira
+// movimento de verdade quando o operador executa.
+export type SolicitacaoCofre = {
+  id: string;
+  tipo: "sangria" | "retorno";
+  valor: number;
+  observacao: string | null;
+  criadoPor: string | null;
+  criadoEm: string;
+};
+
+// D4: o minimo que a retaguarda precisa para escolher PARA QUAL caixa aberto vai programar.
+export type CaixaAbertoResumo = {
+  id: string;
+  pdvNome: string;
+  usuarioCaixaNome: string | null;
+  dataMovimento: string;
+  dataHoraAbertura: string | null;
 };
 
 export type ItemMenu = {

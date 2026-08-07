@@ -1512,12 +1512,71 @@ export const transferencias = pgTable(
     ordem: integer("ordem"),
     computar: boolean("computar").notNull().default(true),
     status: text("status").notNull().default("recebido"),
+    // B2: ancora de idempotencia do fluxo do Caixa, no mesmo padrao de notas_fiscais (empresa +
+    // chave). O cliente carimba a INTENCAO; um retry repete a chave e o UNIQUE parcial recusa a
+    // segunda linha. Nullable e sem default de proposito: todo o historico fica NULL, o indice
+    // parcial o ignora e nenhum backfill e necessario (D8). O retorno final do fechamento nao usa
+    // chave — ele nasce dentro da transacao ja protegida pela trava e pela guarda de status (B1).
+    idempotenciaChave: uuid("idempotencia_chave"),
+    // D4: marca que esta linha nasceu de uma SOLICITACAO Caixa -> Cofre. Nullable e sem default —
+    // historico, entrega avulsa e retorno final do fechamento ficam NULL, e e esse NULL que separa
+    // os dois fluxos. Preenchido SO na criacao D4; preservado na execucao e no cancelamento.
+    // Nao reusa `agendada_para` (que e QUANDO efetivar, do fluxo generico) nem descricao/observacao.
+    solicitacaoCofreEm: timestamp("solicitacao_cofre_em", { withTimezone: true }),
+    // Quem ENTREGOU o dinheiro, e quando. Nao da para deduzir de `criado_por`: aquele e quem
+    // PROGRAMOU (Tesouraria/Gestao), e a execucao pode ser feita pelo gerente, por quem abriu o
+    // caixa ou pelo operador designado (`podeOperarCaixa`). A recusa notifica esta pessoa.
+    // Gravados na transicao atomica 'agendada' -> 'pendente'; como so um chamador acerta a linha,
+    // retry e execucao concorrente nunca os sobrescrevem.
+    executadoPor: text("executado_por").references(() => perfisUsuarios.usuarioId),
+    executadoEm: timestamp("executado_em", { withTimezone: true }),
+    // Auditoria de cancelamento (decisao 2): os tres andam juntos — ver o CHECK.
+    canceladoPor: text("cancelado_por").references(() => perfisUsuarios.usuarioId),
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true }),
+    motivoCancelamento: text("motivo_cancelamento"),
     criadoPor: text("criado_por"),
     criadoEm,
     atualizadoEm
   },
   (table) => [
     check("transferencias_status_check", sql`${table.status} in ('pendente', 'recebido', 'agendada', 'cancelada')`),
+    // `motivoCancelamento is not null` e explicito: sem ele, length(btrim(null)) > 0 avalia para
+    // NULL, o OR inteiro vira NULL e o Postgres ACEITA a linha — a constraint existiria sem
+    // proteger o caso mais obvio, que e cancelar sem dizer por que.
+    check(
+      "transferencias_cancelamento_check",
+      sql`(${table.status} = 'cancelada'
+             and ${table.canceladoPor} is not null
+             and ${table.canceladoEm} is not null
+             and ${table.motivoCancelamento} is not null
+             and length(btrim(${table.motivoCancelamento})) > 0)
+        or (${table.status} <> 'cancelada'
+             and ${table.canceladoPor} is null
+             and ${table.canceladoEm} is null
+             and ${table.motivoCancelamento} is null)`
+    ),
+    // Ciclo de vida da solicitacao D4, garantido pelo BANCO e nao pela aplicacao:
+    //   sem marcador         -> nao ha executor (historico, genericas, avulsas, retorno final);
+    //   com marcador         -> e obrigatoriamente Caixa -> Cofre (caixa_id + tipo);
+    //   agendada / cancelada -> ainda nao foi executada, entao nao ha executor;
+    //   pendente / recebido  -> foi executada, entao executor e horario existem.
+    // Os quatro estados possiveis de `status` estao cobertos. Todo o historico satisfaz o primeiro
+    // ramo (as colunas nascem NULL), por isso valida sem backfill.
+    check(
+      "transferencias_solicitacao_cofre_check",
+      sql`(${table.solicitacaoCofreEm} is null
+             and ${table.executadoPor} is null
+             and ${table.executadoEm} is null)
+        or (${table.solicitacaoCofreEm} is not null
+             and ${table.caixaId} is not null
+             and ${table.tipo} in ('sangria', 'retorno')
+             and ((${table.status} in ('agendada', 'cancelada')
+                     and ${table.executadoPor} is null
+                     and ${table.executadoEm} is null)
+               or (${table.status} in ('pendente', 'recebido')
+                     and ${table.executadoPor} is not null
+                     and ${table.executadoEm} is not null)))`
+    ),
     check(
       "transferencias_prazo_check",
       sql`${table.tempoConfirmacao} is null or ${table.tempoConfirmacao} in ('5min', '10min', '30min', '1h', '1dia', '10dias', '30dias')`
@@ -1535,7 +1594,51 @@ export const transferencias = pgTable(
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
     index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
-    index("transferencias_caixa_idx").on(table.caixaId)
+    index("transferencias_caixa_idx").on(table.caixaId),
+    // Parcial: so indexa o fluxo novo, entao nao cresce com o historico (todo NULL). Escopado por
+    // empresa para que a chave de uma nunca colida com a de outra.
+    uniqueIndex("transferencias_idempotencia_unica")
+      .on(table.empresaId, table.idempotenciaChave)
+      .where(sql`${table.idempotenciaChave} is not null`),
+    // Parcial pelo mesmo motivo: so indexa o fluxo D4, entao nao cresce com o historico.
+    index("transferencias_solicitacao_cofre_idx")
+      .on(table.caixaId, table.status)
+      .where(sql`${table.solicitacaoCofreEm} is not null`)
+  ]
+);
+
+// Recusa de conferencia — a trilha do "conferi e nao bateu". Uma linha POR TENTATIVA: a segunda
+// recusa da mesma transferencia gera outro registro, senao a trilha mentiria. E o que permite
+// manter o movimento `pendente` sem perder o historico de quem tentou conferir e por que recusou.
+// Restrita ao fluxo Caixa -> Cofre por regra de servico; a tabela em si nao sabe disso.
+export const transferenciasConferenciasRecusadas = pgTable(
+  "transferencias_conferencias_recusadas",
+  {
+    id: idUuid,
+    // Sem `empresaId` de proposito: a empresa vem da transferencia. Sem a coluna, o par
+    // inconsistente (empresa A apontando para transferencia da empresa B) nao e representavel —
+    // integridade por construcao, sem precisar de UNIQUE(id, empresa_id) na tabela historica.
+    transferenciaId: uuid("transferencia_id")
+      .notNull()
+      // RESTRICT, nao CASCADE: auditoria financeira nao desaparece junto com o movimento.
+      .references(() => transferencias.id, { onDelete: "restrict" }),
+    recusadoPor: text("recusado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    motivo: text("motivo").notNull(),
+    // O que a pessoa DIGITOU na conferencia — nao o do movimento. E essa diferenca que torna a
+    // divergencia auditavel depois; guardar o valor do movimento seria guardar o que ja se sabe.
+    lacreInformado: text("lacre_informado"),
+    valorInformado: valorMonetario("valor_informado"),
+    criadoEm
+  },
+  (table) => [
+    check("transferencias_conferencias_recusadas_motivo_check", sql`length(btrim(${table.motivo})) > 0`),
+    check(
+      "transferencias_conferencias_recusadas_valor_check",
+      sql`${table.valorInformado} is null or ${table.valorInformado} >= 0`
+    ),
+    index("transferencias_conferencias_recusadas_transferencia_idx").on(table.transferenciaId, table.criadoEm)
   ]
 );
 

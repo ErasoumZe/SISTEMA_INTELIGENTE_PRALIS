@@ -15,6 +15,7 @@ import {
 } from "@padaria/shared/discriminacao";
 import { erroValidacao, naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
+import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
@@ -155,24 +156,14 @@ export function numeroDecimal(valor: string | number | null | undefined): number
   return deCentavos(paraCentavos(valor));
 }
 
-function normalizarCargo(nome: string) {
-  return nome
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/gu, "")
-    .trim()
-    .toLowerCase();
-}
-
-// Perfis de RETAGUARDA: lancam sem estar presos a um caixa e escolhem a conta livremente. Era
-// `podeTransferirSemCaixa`, exclusiva da transferencia (R-032); virou a fonte unica das QUATRO
-// saidas para que "quem e livre" nao tenha duas definicoes que divergem com o tempo.
-export function podeLancarSemCaixa(perfil: PerfilUsuario) {
-  if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
-  const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];
-  return perfil.cargos.some((cargo) =>
-    prefixosLiberados.some((prefixo) => normalizarCargo(cargo.nome).startsWith(prefixo))
-  );
-}
+// `podeLancarSemCaixa` mora em `@padaria/shared/autenticacao` e e reexportada aqui porque este
+// modulo e a porta historica dela: mover sem reexportar quebraria os importadores sem ganho nenhum.
+// A definicao continua UNICA; o que existe aqui e um apontamento, nao uma segunda copia.
+//
+// Foi para `shared` (e nao para um modulo da API) porque a TELA precisa da mesma resposta: o painel
+// de programar entrega ao cofre so existe para a retaguarda, e o servico so aceita a retaguarda.
+// Copiar a lista de cargos no front criaria duas verdades que divergem no primeiro ajuste.
+export { podeLancarSemCaixa };
 
 // R-121: o operador de Caixa lanca TODA saida (despesa, mercadoria, retirada) — desde que saia da
 // conta do caixa aberto. Sem esta amarracao o valor debita a conta escolhida no saldo de contas E

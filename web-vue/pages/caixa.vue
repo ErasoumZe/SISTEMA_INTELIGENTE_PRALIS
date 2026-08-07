@@ -11,6 +11,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :turnos="ctx.opcoesEmpresa.turnos"
       :maquininhas="ctx.opcoesEmpresa.maquininhas"
+      :solicitacoes="ctx.caixaSolicitacoes"
       :empresa-id="ctx.empresaId"
       :permissoes="ctx.sessao?.perfil?.permissoes ?? []"
       :usuario-id="ctx.sessao?.perfil?.usuarioId || ''"
@@ -18,6 +19,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :salvando="ctx.caixaSalvando"
       @abrir-caixa="ctx.abrirCaixaOperacional"
       @retornar-saldo="ctx.retornarSaldoOperacional"
+      @executar-solicitacao="ctx.executarSolicitacaoCofre"
       @fechar-caixa="ctx.fecharCaixaOperacional"
       @recarregar="ctx.recarregarCaixa"
     />

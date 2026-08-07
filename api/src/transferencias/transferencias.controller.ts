@@ -2,6 +2,7 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import {
   confirmarTransferenciaPayloadSchema,
+  recusarConferenciaPayloadSchema,
   transferenciaPayloadSchema,
   transferenciasQuerySchema
 } from "@padaria/shared/transferencias";
@@ -15,7 +16,8 @@ import {
   criarTransferencia,
   liberarTravaTransferencia,
   listarTransferencias,
-  obterTransferencia
+  obterTransferencia,
+  recusarConferencia
 } from "./transferencias.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoListagemPorCaixa } from "../caixa/caixa.service.js";
@@ -108,6 +110,25 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       const dados = confirmarTransferenciaPayloadSchema.parse(request.body);
       try {
         return ok(await confirmarTransferencia(id, dados, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  // Decisao 8 · recusa auditavel, exclusiva do fluxo Caixa -> Cofre. Rota SEPARADA do `/confirmar`
+  // de proposito: a recusa precisa ser commitada com motivo, e sinaliza-la por excecao dentro do
+  // confirmar faria o rollback apagar o proprio registro auditavel.
+  // Desfecho e 200 "divergencia registrada" — nunca sucesso de confirmacao.
+  app.post(
+    "/api/transferencias/:id/recusar-conferencia",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const dados = recusarConferenciaPayloadSchema.parse(request.body);
+      try {
+        return ok(await recusarConferencia(id, dados, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);
