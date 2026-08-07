@@ -37,6 +37,7 @@ detalhado, mas nao autorizam furar dependencias daqui.
 - `web-vue/pages/forgot-password.vue`;
 - `web-vue/pages/reset-password.vue`;
 - `web-vue/middleware/auth.global.ts`;
+- `infra/docker-compose.coolify.yml` durante a CX-M03A;
 - testes de autenticacao/reset.
 
 **Ze pode tocar:**
@@ -53,6 +54,8 @@ detalhado, mas nao autorizam furar dependencias daqui.
 - `shared/src/autenticacao/index.ts` pertence temporariamente a branch #101;
 - `tests/setup/seed.ts` pertence temporariamente a branch #101;
 - nenhuma outra branch cria migration enquanto #101 estiver aberta;
+- a branch #101 esta 18 commits atras da main e so pode abrir/atualizar PR depois de incorporar
+  `origin/main` e revalidar journal, snapshots e migrations 0030/0031;
 - Marco nao toca Caixa/transferencias; Ze nao toca reset de senha.
 
 As duas PRs podem andar em paralelo. A primeira que mergear obriga a outra a atualizar a base e

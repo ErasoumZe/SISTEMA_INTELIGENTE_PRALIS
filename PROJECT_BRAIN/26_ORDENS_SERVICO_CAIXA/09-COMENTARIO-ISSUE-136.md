@@ -17,10 +17,13 @@ ja existe e nao deve ser recriada.
 ### Trava de conflito atual
 
 - Marco e dono de auth/e-mail/paginas e testes de reset.
+- `infra/docker-compose.coolify.yml` fica com Marco enquanto a CX-M03A estiver aberta.
 - Ze e dono de Caixa, transferencias, cofre, migrations 0030/0031 e testes desses fluxos.
 - `shared/src/autenticacao/index.ts` e `tests/setup/seed.ts` ficam congelados para a branch
   #101.
 - Nenhuma segunda migration enquanto #101 estiver aberta.
+- A branch #101 esta 18 commits atras da main; antes da PR/merge, deve incorporar `origin/main` e
+  revalidar journal, snapshots e migrations 0030/0031.
 
 ### Proxima ordem
 
