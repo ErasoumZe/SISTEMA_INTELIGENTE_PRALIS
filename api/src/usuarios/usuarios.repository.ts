@@ -11,6 +11,8 @@ import {
 import type { RoleUsuario } from "@padaria/shared";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
 
+// Contrato de fio: e exatamente isto que sai em GET /api/usuarios e no campo `usuarios` de
+// GET /api/permissoes. Nao acrescente campo aqui sem olhar web-vue/utils/domain.ts:679-683.
 export type UsuarioLinha = {
   usuarioId: string;
   empresaId: string | null;
@@ -24,7 +26,25 @@ export type UsuarioLinha = {
   role: string;
 };
 
-export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
+// Procedencia por empresa dos metadados agregados. NAO vai para o fio: existe so para o service
+// poder decidir quais campos pertencem a empresa consultada. Sem ela o recorte e impossivel, porque
+// `colaboradores.empresa_id` e `cargos.empresa_id` nem eram selecionados aqui — era esse descarte
+// que fazia a linha de um usuario compartilhado carregar o colaborador, o setor e os cargos da
+// outra empresa.
+//
+// Os cargos vem como UMA lista de objetos, e nao como arrays paralelos: `cargoIds` e `cargos` do fio
+// sao derivados dela ja recortada, entao id e nome nao tem como desalinhar por indice.
+export type UsuarioLinhaComEmpresas = Omit<UsuarioLinha, "cargoIds" | "cargos"> & {
+  colaboradorEmpresaId: string | null;
+  // A empresa do proprio setor. Nao da para deduzir da empresa do colaborador: o banco nao garante
+  // que `colaboradores.setor_id` aponte para um setor da mesma empresa do colaborador.
+  setorEmpresaId: string | null;
+  cargosComEmpresa: { id: string; nome: string; empresaId: string }[];
+};
+
+// Continua lendo as tabelas sem `where` de empresa: o recorte e do service, que recebe o escopo ja
+// validado contra o perfil. Mesmo desenho de listarPermissoesRepository.
+export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresas[]> {
   const [perfis, empresasUsuarios, colaboradoresUsuarios, cargosUsuarios] = await Promise.all([
     banco
       .select({
@@ -40,13 +60,26 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
       .select({ usuarioId: usuariosEmpresas.usuarioId, empresaId: usuariosEmpresas.empresaId })
       .from(usuariosEmpresas),
     banco
-      .select({ id: colaboradores.id, usuarioId: colaboradores.usuarioId, setorId: colaboradores.setorId })
-      .from(colaboradores),
+      .select({
+        id: colaboradores.id,
+        usuarioId: colaboradores.usuarioId,
+        setorId: colaboradores.setorId,
+        empresaId: colaboradores.empresaId,
+        // A empresa do SETOR, e nao a do colaborador. `colaboradores.setor_id` e FK simples para
+        // `setores`, sem CHECK de mesma empresa, e a rota de colaboradores grava o setor sem validar
+        // — entao colaborador da empresa A com setor da empresa B e um estado alcancavel.
+        // leftJoin, e nao innerJoin: colaborador sem setor tem de continuar aparecendo.
+        setorEmpresaId: setores.empresaId
+      })
+      .from(colaboradores)
+      .leftJoin(setores, eq(setores.id, colaboradores.setorId)),
     banco
       .select({
         colaboradorId: colaboradoresCargos.colaboradorId,
         cargoId: colaboradoresCargos.cargoId,
-        cargoNome: cargos.nome
+        cargoNome: cargos.nome,
+        // A empresa do CARGO, e nao a do vinculo: o que vaza no corpo e o id e o nome do cargo.
+        empresaId: cargos.empresaId
       })
       .from(colaboradoresCargos)
       .innerJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
@@ -65,9 +98,14 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinha[]> {
       nome: perfil.nome,
       email: perfil.email,
       colaboradorId: colaborador?.id ?? "",
+      colaboradorEmpresaId: colaborador?.empresaId ?? null,
       setorId: colaborador?.setorId ?? null,
-      cargoIds: cargosDoUsuario.map((cargo) => cargo.cargoId),
-      cargos: cargosDoUsuario.map((cargo) => cargo.cargoNome),
+      setorEmpresaId: colaborador?.setorEmpresaId ?? null,
+      cargosComEmpresa: cargosDoUsuario.map((cargo) => ({
+        id: cargo.cargoId,
+        nome: cargo.cargoNome,
+        empresaId: cargo.empresaId
+      })),
       role: perfil.role
     };
   });

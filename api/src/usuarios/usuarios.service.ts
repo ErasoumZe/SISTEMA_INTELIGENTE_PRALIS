@@ -21,14 +21,66 @@ import {
   substituirEmpresasUsuarioRepository,
   upsertPerfilUsuarioRepository,
   vincularUsuarioColaboradorRepository,
-  type UsuarioLinha
+  type UsuarioLinha,
+  type UsuarioLinhaComEmpresas
 } from "./usuarios.repository.js";
 
-function filtrarUsuariosPorEmpresas(usuarios: UsuarioLinha[], escopoDados: string[] | null) {
-  if (!escopoDados) return usuarios;
-  return usuarios.filter((usuario) => {
-    const ids = Array.isArray(usuario.empresaIds) ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
-    return escopoDados.some((empresaId) => ids.includes(empresaId));
+// Recebe o escopo JA validado contra o perfil (escopoEmpresaAtiva, usuarios.controller.ts) e decide
+// DUAS coisas: quais usuarios aparecem e o que de cada usuario aparece. Antes so recortava a lista —
+// os metadados vinham do banco inteiro (listarUsuariosRepository le as quatro tabelas sem `where` de
+// empresa), entao um usuario com vinculo em A e B entregava, na consulta escopada em A, o uuid da B,
+// o colaborador e o setor da B e os ids e NOMES dos cargos da B. O PR #137 fechou QUAIS LINHAS;
+// faltava QUAIS CAMPOS.
+//
+// A linha e mantida, nunca omitida: o usuario compartilhado tem vinculo legitimo com a empresa
+// consultada. Some-lo apagaria as regras de permissao dele da tela (permissoes.service.ts filtra
+// usuariosPermissoes pelos usuarios visiveis), tiraria o alvo do formulario de permissao e deixaria
+// vinculo fantasma na grade "quem pode movimentar" da tela de contas. O front ja espera esta forma:
+// `itensDaEmpresa` (web-vue/utils/domain.ts:679-683) casa justamente por `empresaIds.includes`.
+//
+// O retorno e UsuarioLinha, sem a procedencia: ela e insumo do recorte e nao pode ir para o fio.
+export function recortarUsuariosPorEmpresas(
+  usuarios: UsuarioLinhaComEmpresas[],
+  escopoDados: string[]
+): UsuarioLinha[] {
+  const escopo = new Set(escopoDados);
+  // O retorno do callback e anotado de proposito: sem a anotacao, o "sobra um campo, quebra" abaixo
+  // dependeria da checagem de propriedade excedente atravessar a inferencia generica do flatMap.
+  // Com ela, o tsc valida o objeto contra UsuarioLinha diretamente.
+  return usuarios.flatMap((usuario): UsuarioLinha[] => {
+    const idsDoUsuario = usuario.empresaIds.length ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
+    const empresaIds = idsDoUsuario.filter((empresaId) => escopo.has(empresaId));
+    // Mesmo predicado de linha de antes: sobrevive quem tem ao menos uma empresa no escopo. Manter
+    // identico e o que garante que paginacao, `total` e ordenacao nao mudam.
+    if (!empresaIds.length) return [];
+    const cargosVisiveis = usuario.cargosComEmpresa.filter((cargo) => escopo.has(cargo.empresaId));
+    // Um usuario tem no maximo UM colaborador em todo o banco (colaboradores_usuario_id_unico), e ele
+    // pertence a exatamente uma empresa. Fora do escopo, o vinculo operacional inteiro sai da resposta.
+    const colaboradorVisivel = usuario.colaboradorEmpresaId !== null && escopo.has(usuario.colaboradorEmpresaId);
+    // O setor tem escopo PROPRIO, e nao herdado do colaborador: o banco nao garante que
+    // `colaboradores.setor_id` aponte para um setor da mesma empresa do colaborador, e a rota de
+    // colaboradores grava esse campo sem validar. Um colaborador legitimo da empresa A pode carregar
+    // o setor da empresa B, e ai so a empresa do proprio setor separa os dois casos.
+    const setorVisivel = colaboradorVisivel && usuario.setorEmpresaId !== null && escopo.has(usuario.setorEmpresaId);
+    // Projecao campo a campo, e nao `...usuario`: com o spread, um campo novo em
+    // UsuarioLinhaComEmpresas chegaria ao corpo da resposta sem erro de compilacao. Assim o contrato
+    // do fio e garantido pelo tsc — falta um campo, quebra; sobra um campo, quebra.
+    return [
+      {
+        usuarioId: usuario.usuarioId,
+        // `empresaId` e a empresa "principal" do perfil e pode apontar para fora do escopo. Cai para
+        // a primeira empresa visivel para nao virar um uuid alheio nem um null que o front nao espera.
+        empresaId: usuario.empresaId && escopo.has(usuario.empresaId) ? usuario.empresaId : (empresaIds[0] ?? null),
+        empresaIds,
+        nome: usuario.nome,
+        email: usuario.email,
+        colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
+        setorId: setorVisivel ? usuario.setorId : null,
+        cargoIds: cargosVisiveis.map((cargo) => cargo.id),
+        cargos: cargosVisiveis.map((cargo) => cargo.nome),
+        role: usuario.role
+      }
+    ];
   });
 }
 
@@ -40,8 +92,11 @@ function empresaNoEscopo(perfil: PerfilComEmpresa | undefined, empresaId: string
   return !perfil || podeAcessarEmpresa(perfil, empresaId);
 }
 
-export async function listarUsuarios(escopoDados: string[] | null) {
-  return filtrarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
+// `escopoDados` e obrigatorio e nao aceita mais `null`. O ramo "null = devolve tudo sem filtro" nao
+// tinha chamador e era o mesmo tipo de armadilha do `_empresasLiberadas` removido no PR #137: um
+// parametro que parece checagem de seguranca e desliga o isolamento inteiro se alguem passar nulo.
+export async function listarUsuarios(escopoDados: string[]): Promise<UsuarioLinha[]> {
+  return recortarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
 }
 
 export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilComEmpresa) {
