@@ -102,6 +102,20 @@ negócio. Sem informação → **pergunte**.
 6. **Reporte com honestidade**: o que ficou pronto, o que não ficou, o que você decidiu e por quê,
    e o que precisa de decisão do José.
 
+### 5.1 Execução paralela vigente (issue #104)
+
+- A fila atual é somente de **Marco e José**; Kaylane não participa desta rodada.
+- A issue-mestra **#136** define a ordem de execução. Cada pessoa trabalha em uma issue e uma
+  branch por vez, sempre a partir da base confirmada e nunca diretamente na `main`.
+- Marco e José não alteram os mesmos arquivos na mesma janela sem coordenação prévia.
+- O Claude principal é o único escritor da entrega; agentes de revisão trabalham somente em
+  leitura.
+- Cada entrega termina com `lint`, `check`, testes proporcionais ao risco, relatório autônomo e
+  revisão antes de qualquer publicação.
+- **Push, PR, merge e deploy são autorizações separadas.** José decide merge e deploy.
+- Migration, fórmula de dinheiro, alteração de dados históricos ou regra de negócio ausente
+  interrompem a execução para decisão de José/Rodrigo.
+
 ## 6. Preferências operacionais do José
 
 - Não altere/recrie/gere migrations sem pedido explícito.

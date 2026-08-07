@@ -374,6 +374,30 @@ export interface PerfilUsuario {
   permissoes: Permissao[];
 }
 
+function normalizarCargo(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+// Perfis de RETAGUARDA: lancam sem estar presos a um caixa e escolhem a conta livremente. Era
+// `podeTransferirSemCaixa`, exclusiva da transferencia (R-032); virou a fonte unica das QUATRO
+// saidas para que "quem e livre" nao tenha duas definicoes que divergem com o tempo.
+//
+// Mora em `shared` — e nao na API — porque a TELA precisa da mesma resposta: o painel de programar
+// entrega ao cofre so existe para a retaguarda, e o servico so aceita a retaguarda. Copiar a lista
+// de cargos no front criaria duas verdades, e a primeira mudanca de cargo deixaria a tela
+// oferecendo um botao que a API recusa. Foi exatamente esse o defeito corrigido.
+export function podeLancarSemCaixa(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
+  if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
+  const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];
+  return perfil.cargos.some((cargo) =>
+    prefixosLiberados.some((prefixo) => normalizarCargo(cargo.nome).startsWith(prefixo))
+  );
+}
+
 export interface AuthSession {
   user: PublicUser;
   session: {

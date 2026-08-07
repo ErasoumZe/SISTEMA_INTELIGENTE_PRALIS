@@ -120,22 +120,29 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect((await request(cookieCaixa, "POST", `/api/caixa/${caixaSemMaquininha}/fechar`, {})).statusCode).toBe(204);
   });
 
-  it("exige retorno da sobra com valor explicito e fecha depois do movimento ao cofre", async () => {
+  it("D6: o fechamento devolve a sobra ao cofre no mesmo ato, sem segundo botao", async () => {
     const { contaId, pdvId } = await criarContaEPdv("retorno");
     const caixaId = await abrirCaixa(pdvId);
     expect((await transferir(cookieCaixa, idsTeste.contaBanco, contaId, 20)).statusCode).toBe(201);
     await confirmarTransferenciaPorLacreDireto(`E2-${sequenciaLacre}`, usuarioCaixaId);
 
-    const bloqueado = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {});
-    assertProblem(bloqueado, 400);
-    expect(bloqueado.body).toMatch(/R\$ 20\.00/);
-
-    const retorno = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
-      valor: 20
+    // Uma unica chamada: o retorno final de 20 e o fechamento saem juntos, na mesma transacao.
+    const fechar = await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {
+      lacreRetorno: `E2-FINAL-${sequenciaLacre}`
     });
-    expect(retorno.statusCode, retorno.body).toBe(200);
-    expect((await request(cookieCaixa, "POST", `/api/caixa/${caixaId}/fechar`, {})).statusCode).toBe(204);
+    expect(fechar.statusCode, fechar.body).toBe(204);
+
+    const retorno = await consultarUm<{ valor_original: string; status: string }>(
+      "select valor_original, status from transferencias where caixa_id = $1 and tipo = 'retorno'",
+      [caixaId]
+    );
+    // D3: nasce pendente de conferencia, mas ja abateu o saldo fisico — por isso o caixa fechou.
+    expect(retorno).toMatchObject({ valor_original: "20.00", status: "pendente" });
+    const fechado = await consultarUm<{ status: string; saldo: string }>(
+      "select status, saldo from fechamentos_caixa where id = $1",
+      [caixaId]
+    );
+    expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
   });
 
   it("quebra sem observacao nao fecha; com observacao grava fato e notifica Tesouraria", async () => {

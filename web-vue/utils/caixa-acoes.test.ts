@@ -60,46 +60,164 @@ describe("abrirCaixaOperacional", () => {
 });
 
 describe("retornarSaldoOperacional", () => {
-  const payload = { caixaId: "cx-1", valor: 15, observacao: null };
+  // B2: a chave viaja da tela ate a API. Ela e da INTENCAO, nao da requisicao — e por isso que o
+  // retry precisa reenviar a MESMA, e por isso ela e obrigatoria no payload.
+  const payload = {
+    caixaId: "cx-1",
+    valor: 15,
+    lacre: "LAC-9",
+    observacao: null,
+    idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
+  };
 
-  it("com confirmacao posta retorno ao cofre, notifica e re-busca status", async () => {
+  it("com confirmacao posta retorno ao cofre com lacre e chave, notifica e re-busca status", async () => {
     const deps = montarDeps({ confirmar: vi.fn().mockResolvedValue(true) });
-    await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
+    const ok = await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
+    expect(ok).toBe(true);
     expect(deps.confirmar).toHaveBeenCalledOnce();
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/transferencia-cofre", {
       tipo: "retorno",
       valor: 15,
-      observacao: null
+      lacre: "LAC-9",
+      observacao: null,
+      idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
     });
     expect(deps.notificar).toHaveBeenCalledWith("Retorno ao cofre lançado com sucesso.");
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
   });
 
+  it("sem lacre manda null explicito (R-026: lacre e opcional)", async () => {
+    const deps = montarDeps();
+    await criarAcoesCaixa(deps).retornarSaldoOperacional({ ...payload, lacre: undefined });
+
+    expect(deps.api.post).toHaveBeenCalledWith(
+      "/api/caixa/cx-1/transferencia-cofre",
+      expect.objectContaining({ lacre: null })
+    );
+  });
+
   it("aborta sem chamar a API se a confirmacao for negada", async () => {
     const deps = montarDeps({ confirmar: async () => false });
-    await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
+    const ok = await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
+    expect(ok).toBe(false);
     expect(deps.api.post).not.toHaveBeenCalled();
     expect(deps.setSalvando).not.toHaveBeenCalled();
+  });
+
+  // O contrato que a tela usa para NAO limpar os campos: cancelamento e erro avisam `false`.
+  // Sem isso a tela apagava valor e lacre no otimismo, e o operador redigitava as cegas.
+  it("avisa aoConcluir(false) quando a confirmacao e negada", async () => {
+    const aoConcluir = vi.fn();
+    const deps = montarDeps({ confirmar: async () => false });
+    await criarAcoesCaixa(deps).retornarSaldoOperacional({ ...payload, aoConcluir });
+
+    expect(aoConcluir).toHaveBeenCalledWith(false);
+  });
+
+  it("avisa aoConcluir(false) quando a API falha, e aoConcluir(true) quando aceita", async () => {
+    const aoConcluirErro = vi.fn();
+    const depsErro = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("500")) } });
+    const falhou = await criarAcoesCaixa(depsErro).retornarSaldoOperacional({
+      ...payload,
+      aoConcluir: aoConcluirErro
+    });
+
+    expect(falhou).toBe(false);
+    expect(aoConcluirErro).toHaveBeenCalledWith(false);
+    expect(depsErro.notificar).toHaveBeenCalledWith("erro:500", "error");
+    expect(depsErro.setSalvando).toHaveBeenLastCalledWith(false);
+
+    const aoConcluirOk = vi.fn();
+    const depsOk = montarDeps();
+    await criarAcoesCaixa(depsOk).retornarSaldoOperacional({ ...payload, aoConcluir: aoConcluirOk });
+
+    expect(aoConcluirOk).toHaveBeenCalledWith(true);
+  });
+});
+
+// D4/D10: o operador executa o que a retaguarda programou, pelo valor programado. Endpoint
+// proprio, mesma entidade.
+describe("executarSolicitacaoCofre", () => {
+  const payload = { caixaId: "cx-1", solicitacaoId: "sol-7", lacre: "LAC-77" };
+
+  // O payload carrega SO o lacre. Este teste e a trava de contrato do bloqueador de idempotencia:
+  // se alguem reintroduzir `idempotenciaChave` (ou `valor`/`observacao`) na execucao, ele quebra.
+  // A chave pertence a programacao e sobrescreve-la apagava a ancora do retry dela.
+  it("posta apenas o lacre — sem valor, sem observacao e sem chave de idempotencia", async () => {
+    const deps = montarDeps();
+    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre(payload);
+
+    expect(ok).toBe(true);
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/solicitacoes-cofre/sol-7/executar", {
+      lacre: "LAC-77"
+    });
+    expect(deps.notificar).toHaveBeenCalledWith("Entrega ao cofre executada com sucesso.");
+  });
+
+  it("sem lacre manda null explicito (R-026: lacre e opcional)", async () => {
+    const deps = montarDeps();
+    await criarAcoesCaixa(deps).executarSolicitacaoCofre({ caixaId: "cx-1", solicitacaoId: "sol-7" });
+
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/solicitacoes-cofre/sol-7/executar", { lacre: null });
+  });
+
+  it("aborta sem chamar a API se a confirmacao for negada", async () => {
+    const deps = montarDeps({ confirmar: async () => false });
+    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre(payload);
+
+    expect(ok).toBe(false);
+    expect(deps.api.post).not.toHaveBeenCalled();
+  });
+
+  it("em erro avisa aoConcluir(false) e reseta salvando", async () => {
+    const aoConcluir = vi.fn();
+    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
+    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre({ ...payload, aoConcluir });
+
+    expect(ok).toBe(false);
+    expect(aoConcluir).toHaveBeenCalledWith(false);
+    expect(deps.setSalvando).toHaveBeenLastCalledWith(false);
   });
 });
 
 describe("fecharCaixaOperacional", () => {
-  it("posta em /:id/fechar, re-busca status, notifica e recarrega tela", async () => {
+  it("posta em /:id/fechar com o lacre do retorno final, re-busca status e recarrega tela", async () => {
     const deps = montarDeps();
-    await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: "fim" });
+    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
+      caixaId: "cx-2",
+      observacao: "fim",
+      lacreRetorno: "LAC-FIM"
+    });
 
-    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", { observacao: "fim" });
+    expect(ok).toBe(true);
+    // D6: o fechamento devolve a sobra no MESMO ato. O valor nao vai daqui — quem apura e o
+    // servidor, sob trava. Por isso o payload tem observacao e lacre, e nunca `valor`.
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
+      observacao: "fim",
+      lacreRetorno: "LAC-FIM"
+    });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.notificar).toHaveBeenCalledWith("Caixa fechado com sucesso.");
     expect(deps.carregarDadosTela).toHaveBeenCalledWith("caixa", "emp-1");
   });
 
-  it("em erro notifica e reseta salvando", async () => {
-    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
+  it("sem lacre informado manda null (R-026: opcional)", async () => {
+    const deps = montarDeps();
     await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
 
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
+      observacao: null,
+      lacreRetorno: null
+    });
+  });
+
+  it("em erro notifica, devolve false e reseta salvando", async () => {
+    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
+    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
+
+    expect(ok).toBe(false);
     expect(deps.notificar).toHaveBeenCalledWith("erro:boom", "error");
     expect(deps.setSalvando).toHaveBeenLastCalledWith(false);
   });

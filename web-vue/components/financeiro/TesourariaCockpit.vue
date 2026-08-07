@@ -9,6 +9,12 @@
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
+import {
+  camposConferenciaVazios,
+  montarPayloadConfirmacao,
+  montarPayloadRecusa,
+  valorConferenciaValido
+} from "~/utils/conferencia-transferencia";
 
 const props = withDefaults(
   defineProps<{
@@ -22,8 +28,10 @@ const props = withDefaults(
     totalPaginas: number;
     podeCriar?: boolean;
     podeEditar?: boolean;
+    // Sem isto a tela oferecia "Conferir" para quem a API recusaria com 403.
+    podeConferir?: boolean;
   }>(),
-  { podeCriar: false, podeEditar: false, operacoesTela: () => [] }
+  { podeCriar: false, podeEditar: false, podeConferir: false, operacoesTela: () => [] }
 );
 
 const emit = defineEmits<{
@@ -34,23 +42,62 @@ const emit = defineEmits<{
 }>();
 const { apiPost } = useApi();
 const confirmando = ref<OperacaoResumo | null>(null);
-const contaConfirmacaoId = ref("");
-const lacreConfirmacao = ref("");
-const valorRecebido = ref("");
-const erroConfirmacao = ref("");
-async function confirmarRecebimento() {
-  if (!confirmando.value) return;
-  erroConfirmacao.value = "";
+// Um unico objeto de campos, zerado a cada abertura: antes eram quatro refs soltas que
+// sobreviviam ao fechamento do dialogo, e a segunda conferencia comecava com o valor da primeira
+// ja preenchido — convite para confirmar sem contar.
+const campos = reactive(camposConferenciaVazios());
+const erroConferencia = ref("");
+const salvandoConferencia = ref(false);
+const modoRecusa = ref(false);
+
+function abrirConferencia(operacao: OperacaoResumo) {
+  Object.assign(campos, camposConferenciaVazios());
+  erroConferencia.value = "";
+  modoRecusa.value = false;
+  confirmando.value = operacao;
+}
+
+function fecharConferencia() {
+  confirmando.value = null;
+  modoRecusa.value = false;
+  Object.assign(campos, camposConferenciaVazios());
+  erroConferencia.value = "";
+}
+
+// O servidor e quem sabe se esta linha e uma entrega do Caixa: a tela nao conhece a conta de cofre
+// nem o tipo. Vem no DTO da listagem, calculado com o predicado canonico.
+const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === true);
+
+// Decisao 5: o valor so e OBRIGATORIO no Caixa -> Cofre (e la 0 e legitimo). Na generica ele
+// continua opcional — vazio significa "nao informei", e o payload omite o campo.
+const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
+const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
+const motivoValido = computed(() => Boolean(campos.motivo.trim()));
+// "Nao bateu" so existe onde a rota de recusa existe. Na generica ela responde 404.
+const podeRecusar = computed(() => ehCaixaParaCofre.value);
+
+async function enviarConferencia() {
+  const operacao = confirmando.value;
+  if (!operacao || salvandoConferencia.value) return;
+  if (valorPendente.value) return;
+  if (modoRecusa.value && (!podeRecusar.value || !motivoValido.value)) return;
+
+  erroConferencia.value = "";
+  salvandoConferencia.value = true;
   try {
-    await apiPost(`/api/transferencias/${confirmando.value.id}/confirmar`, {
-      contaDestinoId: contaConfirmacaoId.value || confirmando.value.contaDestinoId,
-      nLacreDoc: lacreConfirmacao.value,
-      ...(valorRecebido.value ? { valorRecebido: Number(valorRecebido.value) } : {})
-    });
-    confirmando.value = null;
+    // Duas rotas distintas de proposito: a recusa precisa ser COMMITADA com motivo, e por isso
+    // nao e um desfecho do `/confirmar`.
+    const rota = modoRecusa.value ? "recusar-conferencia" : "confirmar";
+    const corpo = modoRecusa.value
+      ? montarPayloadRecusa(campos, operacao.contaDestinoId ?? "")
+      : montarPayloadConfirmacao(campos, operacao.contaDestinoId ?? "", ehCaixaParaCofre.value);
+    await apiPost(`/api/transferencias/${operacao.id}/${rota}`, corpo);
+    fecharConferencia();
     emit("recarregar");
   } catch (error) {
-    erroConfirmacao.value = error instanceof Error ? error.message : "Falha ao confirmar";
+    erroConferencia.value = error instanceof Error ? error.message : "Falha ao conferir";
+  } finally {
+    salvandoConferencia.value = false;
   }
 }
 
@@ -151,8 +198,14 @@ const saldo = computed(() => entrada.value - saida.value);
             <v-btn v-if="podeEditar" size="small" variant="tonal" prepend-icon="mdi-pencil" @click="emit('editar', op)">
               Editar
             </v-btn>
-            <v-btn v-if="op.status === 'pendente'" size="small" variant="tonal" @click="confirmando = op">
-              Confirmar
+            <v-btn
+              v-if="op.status === 'pendente' && podeConferir"
+              size="small"
+              variant="tonal"
+              data-teste="botao-conferir"
+              @click="abrirConferencia(op)"
+            >
+              Conferir
             </v-btn>
           </span>
         </div>
@@ -189,18 +242,62 @@ const saldo = computed(() => entrada.value - saida.value);
 
     <v-dialog
       :model-value="Boolean(confirmando)"
-      max-width="430"
-      @update:model-value="(v) => !v && (confirmando = null)"
+      max-width="480"
+      @update:model-value="(v) => !v && fecharConferencia()"
     >
-      <v-card title="Confirmar recebimento" class="pa-4">
-        <v-text-field v-model="contaConfirmacaoId" label="ID da conta que recebeu" />
-        <v-text-field v-model="lacreConfirmacao" label="Nº do lacre/documento" />
-        <v-text-field v-model="valorRecebido" type="number" label="Valor recebido" />
-        <v-alert v-if="erroConfirmacao" type="error">{{ erroConfirmacao }}</v-alert>
-        <v-card-actions
-          ><v-spacer /><v-btn @click="confirmando = null">Cancelar</v-btn
-          ><v-btn color="primary" @click="confirmarRecebimento">Confirmar</v-btn></v-card-actions
-        >
+      <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
+        <v-text-field
+          v-model="campos.contaDestinoId"
+          label="ID da conta que recebeu (vazio = conta de destino)"
+          data-teste="conferencia-conta"
+        />
+        <!-- R-026: movimento pode nao ter lacre. Vazio vira `null` no payload — nunca string
+             vazia, que o schema recusaria e deixaria a conferencia impossivel. -->
+        <v-text-field v-model="campos.lacre" label="Nº do lacre (vazio se não houver)" data-teste="conferencia-lacre" />
+        <!-- Decisao 5: no Caixa -> Cofre o valor contado e obrigatorio (0 e valido). Na generica
+             ele continua opcional, e vazio significa "nao informei" — o payload omite o campo. -->
+        <v-text-field
+          v-model="campos.valorRecebido"
+          type="number"
+          min="0"
+          :label="ehCaixaParaCofre ? 'Valor recebido (obrigatório)' : 'Valor recebido (opcional)'"
+          :error="valorPendente"
+          :messages="
+            ehCaixaParaCofre
+              ? 'Informe o valor contado. Zero é um valor válido.'
+              : 'Deixe em branco se não for conferir o valor.'
+          "
+          data-teste="conferencia-valor"
+        />
+        <v-text-field
+          v-if="modoRecusa"
+          v-model="campos.motivo"
+          label="Motivo da divergência (obrigatório)"
+          :error="!motivoValido"
+          data-teste="conferencia-motivo"
+        />
+        <v-alert v-if="modoRecusa" type="warning" variant="tonal" density="compact" class="mb-2">
+          A transferência continua <strong>pendente</strong>. A divergência fica registrada e o operador e a Tesouraria
+          são notificados.
+        </v-alert>
+        <v-alert v-if="erroConferencia" type="error" variant="tonal" density="compact">{{ erroConferencia }}</v-alert>
+        <v-card-actions class="flex-wrap ga-2">
+          <!-- "Nao bateu" so aparece onde a rota de recusa existe: na generica ela responde 404. -->
+          <v-btn v-if="podeRecusar" variant="text" data-teste="conferencia-alternar" @click="modoRecusa = !modoRecusa">
+            {{ modoRecusa ? "Voltar a conferir" : "Não bateu" }}
+          </v-btn>
+          <v-spacer />
+          <v-btn :disabled="salvandoConferencia" @click="fecharConferencia()">Fechar</v-btn>
+          <v-btn
+            :color="modoRecusa ? 'warning' : 'primary'"
+            :disabled="valorPendente || (modoRecusa && !motivoValido) || salvandoConferencia"
+            :loading="salvandoConferencia"
+            data-teste="conferencia-enviar"
+            @click="enviarConferencia"
+          >
+            {{ modoRecusa ? "Registrar divergência" : "Confirmar" }}
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>

@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../setup/integracao.js";
+import { confirmarTransferenciaPorLacreDireto, consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
 // R-129: data de pagamento nao pode ser retroativa. O fluxo do caixa nao depende do DIA do
 // pagamento — os totais fecham por caixa_id — entao a data de referencia continua fixa e so o
@@ -196,29 +197,54 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     expect(antes.caixaAberto.id).toBe(caixaId);
     expect(antes.resumo).toMatchObject({ totalEntradas: 100, saldo: 100 });
 
-    // Fechar com saldo positivo sem acerto e barrado.
-    const fecharSemAcerto = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa sem acerto" });
-    assertProblem(fecharSemAcerto, 400);
-    expect(fecharSemAcerto.body).toMatch(/R\$ 100\.00/);
-
-    const retorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+    // D1: retorno PARCIAL durante o turno — o saldo cai, mas nao zera.
+    const parcial = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
       tipo: "retorno",
-      valor: 100,
-      observacao: "Retorno do fechamento"
+      valor: 40,
+      lacre: "RET-PARCIAL-1",
+      observacao: "Retorno parcial",
+      idempotenciaChave: randomUUID()
     });
-    expect(retorno.statusCode, retorno.body).toBe(200);
+    expect(parcial.statusCode, parcial.body).toBe(200);
+    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 60 });
 
-    const depois = await resumoDoCaixa();
-    expect(depois.resumo).toMatchObject({ saldo: 0 });
+    // D1: acima do saldo restante o servidor recusa — sem este teto, o excedente virava saldo
+    // negativo e o fechamento gravava quebra falsa no nome do operador.
+    const acimaDoSaldo = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+      tipo: "retorno",
+      valor: 61,
+      lacre: "RET-ACIMA",
+      idempotenciaChave: randomUUID()
+    });
+    assertProblem(acimaDoSaldo, 400);
+    expect(acimaDoSaldo.body).toMatch(/R\$ 60\.00/);
+    expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 60 });
 
-    // Agora o caixa fecha com saldo zero e o retorno registrado como transferencia.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos retorno" });
+    // D6: fechar com saldo positivo NAO e mais barrado. O retorno final do restante sai no MESMO
+    // ato e na mesma transacao do fechamento; nao existe segundo botao.
+    const fechar = await post(`/api/caixa/${caixaId}/fechar`, {
+      observacao: "Fechamento com retorno final",
+      lacreRetorno: "RET-FINAL-1"
+    });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(
       "select status, saldo from fechamentos_caixa where id = $1",
       [caixaId]
     );
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00" });
+
+    // D5: duas entregas fisicas, cada uma com seu valor e seu lacre. O parcial nao foi editado
+    // para absorver a diferenca — nasceu um segundo movimento.
+    // D3: ambas nascem PENDENTES (aguardam conferencia de quem opera o cofre) e mesmo assim ja
+    // abateram o saldo fisico, que e o que permitiu o caixa fechar zerado.
+    const movimentos = await consultarTodos<{ valor_original: string; status: string; n_lacre_doc: string }>(
+      "select valor_original, status, n_lacre_doc from transferencias where caixa_id = $1 and tipo = 'retorno' order by valor_original",
+      [caixaId]
+    );
+    expect(movimentos).toEqual([
+      { valor_original: "40.00", status: "pendente", n_lacre_doc: "RET-PARCIAL-1" },
+      { valor_original: "60.00", status: "pendente", n_lacre_doc: "RET-FINAL-1" }
+    ]);
   });
 
   it("contrato do payload do front: ID opcional em branco deve ir como null (nao ''), senao da 400 Invalid UUID", async () => {

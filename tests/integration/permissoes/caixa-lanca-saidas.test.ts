@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
@@ -220,7 +221,8 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
     if (proposta > 0) {
       const retorno = await post(cookieCaixa, `/api/caixa/${caixaId}/transferencia-cofre`, {
         tipo: "retorno",
-        valor: proposta
+        valor: proposta,
+        idempotenciaChave: randomUUID()
       });
       expect(retorno.statusCode, retorno.body).toBe(200);
     }

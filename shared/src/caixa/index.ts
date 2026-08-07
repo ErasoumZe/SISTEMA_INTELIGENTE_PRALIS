@@ -41,8 +41,13 @@ export const editarAberturaCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable()
 });
 
+// D6: o retorno final e o fechamento sao UM ato atomico. O cliente nao manda o VALOR do retorno —
+// o servidor usa a sobra que ele mesmo apurou sob trava, para que nao exista janela entre o que a
+// tela viu e o que o banco tem. O lacre e por movimento (D5) e continua opcional (R-026).
+// Se a sobra ja for zero, a mesma acao apenas fecha; nao existe segundo botao.
 export const fecharCaixaPayloadSchema = z.object({
-  observacao: z.string().optional().nullable()
+  observacao: z.string().optional().nullable(),
+  lacreRetorno: z.string().trim().min(1).optional().nullable()
 });
 
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
@@ -233,13 +238,83 @@ export const resumoCaixaSchema = z.object({
   saldo: z.number()
 });
 
+// B2: a chave de idempotencia da INTENCAO. Obrigatoria em toda criacao avulsa/programada porque e
+// a UNICA coisa que distingue "o operador quer entregar outros R$ 100" de "o POST anterior caiu na
+// rede e o navegador reenviou". Trava e teto NAO resolvem isso: com saldo 300, dois POSTs de 100
+// passam os dois, porque o segundo ainda encontra 200 disponiveis.
+//
+// Quem NAO usa chave: o retorno final do fechamento (D6). Ele nasce dentro da transacao ja
+// serializada pela trava da linha do caixa e pela guarda `status = 'aberto'` do UPDATE (B1), e o
+// valor e a sobra INTEIRA apurada no servidor — repetir o ato encontra saldo zero e nao cria nada.
+const idempotenciaChaveSchema = uuidSchema;
+
 // M2 — sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade (R4): transferencia
 // caixa -> cofre. O servidor resolve a conta do cofre, a ordem e (opcional, D5) consome o lacre.
 export const transferenciaCofrePayloadSchema = z.object({
   tipo: z.enum(["sangria", "retorno"]),
   valor: z.coerce.number().positive(),
   lacre: z.string().trim().min(1).optional().nullable(),
-  observacao: z.string().trim().max(500).optional().nullable()
+  observacao: z.string().trim().max(500).optional().nullable(),
+  idempotenciaChave: idempotenciaChaveSchema
+});
+
+// D4 — a Tesouraria/Gestao PROGRAMA a entrega ligada ao caixa aberto. Nasce 'agendada', que
+// `transferenciaContaComoSaida` NAO conta: programar nao movimenta dinheiro nenhum. Sem lacre aqui
+// de proposito — o lacre e do movimento fisico (D5), e o fisico so acontece quando o operador
+// executa. Reusa a mesma entidade transferencia caixa -> cofre; nao existe tabela paralela.
+export const programarSolicitacaoCofrePayloadSchema = z.object({
+  tipo: z.enum(["sangria", "retorno"]),
+  valor: z.coerce.number().positive(),
+  observacao: z.string().trim().max(500).optional().nullable(),
+  idempotenciaChave: idempotenciaChaveSchema
+});
+
+// D4/D10 — o operador EXECUTA a solicitacao programada, e executa EXATAMENTE o que foi programado.
+// O valor e a observacao NAO viajam neste payload: quem os definiu foi a retaguarda, e a execucao
+// nao os reescreve. Se o operador tem mais do que o programado, o excedente vira um movimento
+// avulso proprio (chave e lacre novos); se tem menos, a solicitacao simplesmente nao e executada.
+//
+// Tambem NAO ha `idempotenciaChave` aqui, e a ausencia e deliberada. A chave e da CRIACAO: ela
+// ancora a programacao e nunca pode ser sobrescrita. Gravar uma chave nova na execucao apagava a
+// ancora original — um retry da programacao deixava de encontrar a linha e criava outra
+// solicitacao. A execucao e idempotente pelo `solicitacaoId` mais a transicao atomica
+// `status = 'agendada'`, que so um chamador vence.
+//
+// Sobra o que e proprio do ato FISICO: o lacre do envelope (opcional, R-026).
+export const executarSolicitacaoCofrePayloadSchema = z.object({
+  lacre: z.string().trim().min(1).optional().nullable()
+});
+
+export const solicitacaoCofreParamsSchema = z.object({
+  caixaId: uuidSchema,
+  solicitacaoId: uuidSchema
+});
+
+// D4: o minimo para a retaguarda escolher para QUAL caixa aberto vai programar a entrega.
+export const caixaAbertoResumoSchema = z.object({
+  id: uuidSchema,
+  pdvNome: z.string(),
+  usuarioCaixaNome: z.string().nullable(),
+  dataMovimento: z.string(),
+  dataHoraAbertura: z.string().nullable()
+});
+
+// Uma solicitacao programada, como a tela do operador a enxerga. `valor` e o valor PROGRAMADO e
+// imutavel: e exatamente o que a execucao vai movimentar.
+export const solicitacaoCofreSchema = z.object({
+  id: uuidSchema,
+  tipo: z.enum(["sangria", "retorno"]),
+  valor: z.number(),
+  observacao: z.string().nullable(),
+  criadoPor: z.string().nullable(),
+  criadoEm: z.string()
+});
+
+// D4/decisao 2: cancelamento de solicitacao ainda `agendada`. Motivo obrigatorio — cancelar uma
+// ordem de dinheiro sem dizer por que nao e auditoria, e apagar rastro com outro nome. O banco
+// tambem exige (transferencias_cancelamento_check), entao a regra nao depende so desta validacao.
+export const cancelarSolicitacaoCofrePayloadSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500)
 });
 
 // M2 — visao "aba TRANSFERENCIAS" da planilha: por caixa+dia, os movimentos com ordem 1a/2a/3a/4a e
@@ -317,6 +392,12 @@ export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoC
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
+export type ProgramarSolicitacaoCofrePayload = z.infer<typeof programarSolicitacaoCofrePayloadSchema>;
+export type ExecutarSolicitacaoCofrePayload = z.infer<typeof executarSolicitacaoCofrePayloadSchema>;
+export type CancelarSolicitacaoCofrePayload = z.infer<typeof cancelarSolicitacaoCofrePayloadSchema>;
+export type SolicitacaoCofreParams = z.infer<typeof solicitacaoCofreParamsSchema>;
+export type SolicitacaoCofre = z.infer<typeof solicitacaoCofreSchema>;
+export type CaixaAbertoResumo = z.infer<typeof caixaAbertoResumoSchema>;
 export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;
 export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;

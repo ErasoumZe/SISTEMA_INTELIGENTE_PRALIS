@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
@@ -96,7 +97,8 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
     const respostaRetorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
       tipo: "retorno",
       valor: 50,
-      observacao: "Retorno fuso"
+      observacao: "Retorno fuso",
+      idempotenciaChave: randomUUID()
     });
     expect(respostaRetorno.statusCode, respostaRetorno.body).toBe(200);
 

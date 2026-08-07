@@ -29,8 +29,33 @@ export type AberturaCaixaPayload = {
   dataHoraAbertura: string;
   observacao: string | null;
 };
-export type FechamentoPayload = { caixaId: string; observacao: string | null };
-export type RetornoSaldoPayload = FechamentoPayload & { valor: number };
+// D6: `lacreRetorno` e o lacre do retorno FINAL, criado pelo proprio fechamento quando ainda ha
+// sobra. Opcional pela R-026. D5: cada entrega leva o seu, e nenhum movimento executado e editado.
+export type FechamentoPayload = { caixaId: string; observacao: string | null; lacreRetorno?: string | null };
+// B2: `idempotenciaChave` e da INTENCAO, nao da requisicao. Quem a gera e a tela (uma vez, e a
+// conserva no retry); aqui ela so trafega. Sem ela o servidor nao tem como distinguir "entregar
+// outros R$ 100" de "o POST anterior caiu e o navegador reenviou".
+// `aoConcluir` existe porque `emit` do Vue nao devolve o retorno do handler, e a TELA precisa saber
+// o desfecho para decidir se limpa os campos e se roda a chave. Sem ele so restaria limpar no
+// otimismo — que e exatamente o defeito que esta entrega corrige.
+export type RetornoSaldoPayload = {
+  caixaId: string;
+  valor: number;
+  lacre?: string | null;
+  observacao: string | null;
+  idempotenciaChave: string;
+  aoConcluir?: (sucesso: boolean) => void;
+};
+// D4/D10: a execucao entrega EXATAMENTE o valor programado. Nao ha `valor` nem `observacao` aqui —
+// eles sao da programacao e imutaveis — nem `idempotenciaChave`: a chave e da criacao e nunca e
+// sobrescrita. A identidade do ato e o proprio `solicitacaoId`; o unico dado proprio do ato fisico
+// e o lacre do envelope (opcional, R-026).
+export type ExecucaoSolicitacaoPayload = {
+  caixaId: string;
+  solicitacaoId: string;
+  lacre?: string | null;
+  aoConcluir?: (sucesso: boolean) => void;
+};
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function recarregarTela() {
@@ -59,39 +84,89 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  async function retornarSaldoOperacional(payload: RetornoSaldoPayload): Promise<void> {
-    if (!(await deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`))) return;
+  // Devolve `false` tanto em erro quanto em confirmacao negada. A tela usa isso para decidir se
+  // limpa os campos: limpar antes de saber o desfecho apagava o valor e o lacre que o operador
+  // acabou de digitar sempre que a API recusava — e ele tinha de digitar tudo de novo, no escuro.
+  async function retornarSaldoOperacional(payload: RetornoSaldoPayload): Promise<boolean> {
+    const sucesso = await postarRetorno(payload);
+    payload.aoConcluir?.(sucesso);
+    return sucesso;
+  }
+
+  async function postarRetorno(payload: RetornoSaldoPayload): Promise<boolean> {
+    if (!(await deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`))) {
+      return false;
+    }
     deps.setSalvando(true);
     try {
       await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {
         tipo: "retorno",
         valor: payload.valor,
-        observacao: payload.observacao
+        // D5: cada entrega fisica leva o proprio lacre. Opcional pela R-026.
+        lacre: payload.lacre ?? null,
+        observacao: payload.observacao,
+        idempotenciaChave: payload.idempotenciaChave
       });
       deps.notificar("Retorno ao cofre lançado com sucesso.");
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();
+      return true;
     } catch (error) {
       deps.notificar(deps.mensagemErro(error), "error");
+      return false;
     } finally {
       deps.setSalvando(false);
     }
   }
 
-  async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<void> {
+  // D4: o operador executa o que a retaguarda programou. O servidor e idempotente pela chave e
+  // pela guarda `status = 'agendada'`, entao um clique repetido nao cria um segundo movimento.
+  async function executarSolicitacaoCofre(payload: ExecucaoSolicitacaoPayload): Promise<boolean> {
+    const sucesso = await postarExecucao(payload);
+    payload.aoConcluir?.(sucesso);
+    return sucesso;
+  }
+
+  async function postarExecucao(payload: ExecucaoSolicitacaoPayload): Promise<boolean> {
+    if (!(await deps.confirmar("Confirmar a entrega do valor programado ao cofre principal?"))) return false;
+    deps.setSalvando(true);
+    try {
+      await deps.api.post(`/api/caixa/${payload.caixaId}/solicitacoes-cofre/${payload.solicitacaoId}/executar`, {
+        lacre: payload.lacre ?? null
+      });
+      deps.notificar("Entrega ao cofre executada com sucesso.");
+      await deps.carregarStatusCaixa(deps.empresaId());
+      await recarregarTela();
+      return true;
+    } catch (error) {
+      deps.notificar(deps.mensagemErro(error), "error");
+      return false;
+    } finally {
+      deps.setSalvando(false);
+    }
+  }
+
+  async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<boolean> {
     deps.setSalvando(true);
     try {
       // /fechar responde 204; re-busca o status canonico (evita crash em .resumo).
-      await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, { observacao: payload.observacao });
+      // D6: o mesmo POST devolve a sobra restante ao cofre e fecha, numa unica transacao. O VALOR
+      // do retorno nao vai daqui — o servidor usa a sobra que ele mesmo apurou sob trava.
+      await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, {
+        observacao: payload.observacao,
+        lacreRetorno: payload.lacreRetorno ?? null
+      });
       await deps.carregarStatusCaixa(deps.empresaId());
       deps.notificar("Caixa fechado com sucesso.");
       await recarregarTela();
+      return true;
     } catch (error) {
       deps.notificar(deps.mensagemErro(error), "error");
+      return false;
     } finally {
       deps.setSalvando(false);
     }
   }
 
-  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional };
+  return { abrirCaixaOperacional, retornarSaldoOperacional, executarSolicitacaoCofre, fecharCaixaOperacional };
 }
