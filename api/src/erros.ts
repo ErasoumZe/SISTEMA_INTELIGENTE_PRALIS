@@ -12,6 +12,15 @@ export function mensagemDominioOuRelancar(error: DadosExternos): string {
   throw error;
 }
 
+// Falha que NAO e regra de negocio. Existe para NAO cair no ramo de `mensagemDominioOuRelancar` que
+// devolve `error.message` ao cliente: por ser subclasse (`constructor !== Error`), e relancada e o
+// handler global a loga e responde 500 "Erro interno", sem detalhe interno no corpo.
+export class ErroTecnico extends Error {}
+
+export function falhaTecnica(message: string): ErroTecnico {
+  return new ErroTecnico(message);
+}
+
 export class ErroDominio extends Error {
   constructor(
     message: string,
