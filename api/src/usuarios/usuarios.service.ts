@@ -44,7 +44,10 @@ export function recortarUsuariosPorEmpresas(
   escopoDados: string[]
 ): UsuarioLinha[] {
   const escopo = new Set(escopoDados);
-  return usuarios.flatMap((usuario) => {
+  // O retorno do callback e anotado de proposito: sem a anotacao, o "sobra um campo, quebra" abaixo
+  // dependeria da checagem de propriedade excedente atravessar a inferencia generica do flatMap.
+  // Com ela, o tsc valida o objeto contra UsuarioLinha diretamente.
+  return usuarios.flatMap((usuario): UsuarioLinha[] => {
     const idsDoUsuario = usuario.empresaIds.length ? usuario.empresaIds : usuario.empresaId ? [usuario.empresaId] : [];
     const empresaIds = idsDoUsuario.filter((empresaId) => escopo.has(empresaId));
     // Mesmo predicado de linha de antes: sobrevive quem tem ao menos uma empresa no escopo. Manter
@@ -54,6 +57,11 @@ export function recortarUsuariosPorEmpresas(
     // Um usuario tem no maximo UM colaborador em todo o banco (colaboradores_usuario_id_unico), e ele
     // pertence a exatamente uma empresa. Fora do escopo, o vinculo operacional inteiro sai da resposta.
     const colaboradorVisivel = usuario.colaboradorEmpresaId !== null && escopo.has(usuario.colaboradorEmpresaId);
+    // O setor tem escopo PROPRIO, e nao herdado do colaborador: o banco nao garante que
+    // `colaboradores.setor_id` aponte para um setor da mesma empresa do colaborador, e a rota de
+    // colaboradores grava esse campo sem validar. Um colaborador legitimo da empresa A pode carregar
+    // o setor da empresa B, e ai so a empresa do proprio setor separa os dois casos.
+    const setorVisivel = colaboradorVisivel && usuario.setorEmpresaId !== null && escopo.has(usuario.setorEmpresaId);
     // Projecao campo a campo, e nao `...usuario`: com o spread, um campo novo em
     // UsuarioLinhaComEmpresas chegaria ao corpo da resposta sem erro de compilacao. Assim o contrato
     // do fio e garantido pelo tsc — falta um campo, quebra; sobra um campo, quebra.
@@ -67,7 +75,7 @@ export function recortarUsuariosPorEmpresas(
         nome: usuario.nome,
         email: usuario.email,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
-        setorId: colaboradorVisivel ? usuario.setorId : null,
+        setorId: setorVisivel ? usuario.setorId : null,
         cargoIds: cargosVisiveis.map((cargo) => cargo.id),
         cargos: cargosVisiveis.map((cargo) => cargo.nome),
         role: usuario.role

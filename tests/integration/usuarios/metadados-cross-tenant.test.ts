@@ -123,6 +123,115 @@ async function darAoMultiempresaUmSegundoCargoNaEmpresaB() {
   );
 }
 
+// Terceira fixture, para o furo que sobrou: o `setorId` da resposta vinha do colaborador, e o
+// colaborador ser da empresa A NAO garante que o setor dele seja. `colaboradores.setor_id` e uma FK
+// simples para `setores` (app.schema.ts:327), sem nenhum CHECK de mesma empresa, e
+// `POST/PUT /api/colaboradores` grava `setorId` sem validar contra a empresa do colaborador — ao
+// contrario de `usuarios.service.ts`, que valida. Ou seja, o estado abaixo e alcancavel pelo produto.
+//
+// Este usuario tem vinculo SO com a empresa A e colaborador SO na empresa A: nada nele e
+// compartilhado. A unica coisa que aponta para a empresa B e o setor. Sem isso o teste provaria de
+// novo o recorte do colaborador, e nao o do setor.
+const usuarioSetorCruzado = "usuario-setor-cruzado-empresa-a";
+const nomeUsuarioSetorCruzado = "USUARIO-SETOR-CRUZADO-A";
+const emailUsuarioSetorCruzado = "setor.cruzado.a@padaria.local";
+const colaboradorSetorCruzado = "11111111-1111-4111-8111-0000000000a1";
+const cargoSetorCruzado = "11111111-1111-4111-8111-0000000000a2";
+const colaboradorCargoSetorCruzado = "11111111-1111-4111-8111-0000000000a3";
+const nomeColaboradorSetorCruzado = "COLABORADOR-SETOR-CRUZADO-A";
+const nomeCargoSetorCruzado = "CARGO-SETOR-CRUZADO-A";
+
+async function criarUsuarioDaEmpresaAComSetorDaEmpresaB() {
+  await executarSql("insert into cargos (id, empresa_id, nome) values ($1, $2, $3)", [
+    cargoSetorCruzado,
+    idsTeste.empresaA,
+    nomeCargoSetorCruzado
+  ]);
+  await executarSql(
+    "insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role) values ($1, $2, $3, $4, $5)",
+    [usuarioSetorCruzado, idsTeste.empresaA, nomeUsuarioSetorCruzado, emailUsuarioSetorCruzado, "usuario_comum"]
+  );
+  await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+    usuarioSetorCruzado,
+    idsTeste.empresaA
+  ]);
+  // O colaborador e da empresa A, mas o setor dele e o da empresa B. E exatamente este cruzamento
+  // que o banco nao impede e que a resposta nao pode propagar.
+  await executarSql(
+    "insert into colaboradores (id, empresa_id, nome, setor_id, usuario_id) values ($1, $2, $3, $4, $5)",
+    [colaboradorSetorCruzado, idsTeste.empresaA, nomeColaboradorSetorCruzado, setorSegredoB, usuarioSetorCruzado]
+  );
+  await executarSql(
+    `insert into colaboradores_cargos
+       (id, empresa_id, colaborador_id, setor_id, cargo_id, remuneracao_minuto, data_inicio, ativo)
+     values ($1, $2, $3, $4, $5, $6, $7, true)`,
+    [
+      colaboradorCargoSetorCruzado,
+      idsTeste.empresaA,
+      colaboradorSetorCruzado,
+      idsTeste.setorA,
+      cargoSetorCruzado,
+      "1.000000",
+      "2026-01-01"
+    ]
+  );
+}
+
+// Quarta e quinta fixtures, para os dois ramos do recorte de setor que nenhuma das anteriores toca.
+//
+// (4) Colaborador na empresa B com setor na empresa A. E o inverso do caso do setor cruzado, e e o
+// unico jeito de exercitar o `colaboradorVisivel &&` de `setorVisivel`: o setor esta no escopo, mas o
+// colaborador nao. Sem este caso, apagar aquele operando deixaria a suite inteira verde.
+//
+// (5) Colaborador SEM setor. Nenhuma fixture do seed ou deste arquivo tem `setor_id` nulo — o seed
+// sempre grava setorA. Sem este caso, trocar o `leftJoin` por `innerJoin` derrubaria o vinculo inteiro
+// de quem nao tem setor (o `colaboradorId` viraria "") e a suite continuaria verde.
+const usuarioColaboradorNaB = "usuario-colaborador-na-b-setor-na-a";
+const nomeUsuarioColaboradorNaB = "USUARIO-COLABORADOR-B-SETOR-A";
+const colaboradorNaBSetorNaA = "33333333-3333-4333-8333-0000000000f6";
+const usuarioSemSetor = "usuario-sem-setor-empresa-a";
+const nomeUsuarioSemSetor = "USUARIO-SEM-SETOR-A";
+const colaboradorSemSetor = "11111111-1111-4111-8111-0000000000b1";
+
+async function criarUsuarioComColaboradorNaEmpresaBEStorNaEmpresaA() {
+  await executarSql(
+    "insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role) values ($1, $2, $3, $4, $5)",
+    [
+      usuarioColaboradorNaB,
+      idsTeste.empresaA,
+      nomeUsuarioColaboradorNaB,
+      "colab.b.setor.a@padaria.local",
+      "usuario_comum"
+    ]
+  );
+  await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2), ($1, $3)", [
+    usuarioColaboradorNaB,
+    idsTeste.empresaA,
+    idsTeste.empresaB
+  ]);
+  // Colaborador na B, setor na A: escopado em A o colaborador tem de sumir, e o setor tem de sumir
+  // JUNTO — ainda que o setor, sozinho, esteja no escopo.
+  await executarSql(
+    "insert into colaboradores (id, empresa_id, nome, setor_id, usuario_id) values ($1, $2, $3, $4, $5)",
+    [colaboradorNaBSetorNaA, idsTeste.empresaB, "COLABORADOR-NA-B-SETOR-NA-A", idsTeste.setorA, usuarioColaboradorNaB]
+  );
+}
+
+async function criarUsuarioDaEmpresaASemSetor() {
+  await executarSql(
+    "insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role) values ($1, $2, $3, $4, $5)",
+    [usuarioSemSetor, idsTeste.empresaA, nomeUsuarioSemSetor, "sem.setor.a@padaria.local", "usuario_comum"]
+  );
+  await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+    usuarioSemSetor,
+    idsTeste.empresaA
+  ]);
+  await executarSql(
+    "insert into colaboradores (id, empresa_id, nome, setor_id, usuario_id) values ($1, $2, $3, null, $4)",
+    [colaboradorSemSetor, idsTeste.empresaA, "COLABORADOR-SEM-SETOR-A", usuarioSemSetor]
+  );
+}
+
 // Identificadores que pertencem exclusivamente a empresa B. Nenhum pode aparecer numa resposta
 // escopada na empresa A — nem como uuid (util para mirar outras rotas) nem como nome legivel
 // (estrutura organizacional alheia).
@@ -153,6 +262,9 @@ describe("metadados de usuario cross-tenant integration", () => {
     contexto = await criarContextoApiTeste();
     await criarUsuarioCompartilhadoComMetadadosDaEmpresaB();
     await darAoMultiempresaUmSegundoCargoNaEmpresaB();
+    await criarUsuarioDaEmpresaAComSetorDaEmpresaB();
+    await criarUsuarioComColaboradorNaEmpresaBEStorNaEmpresaA();
+    await criarUsuarioDaEmpresaASemSetor();
     cookieGerente = await cookieSessao(contexto.app, "gerente");
     cookieAdmin = await cookieSessao(contexto.app, "admin");
     cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
@@ -233,6 +345,86 @@ describe("metadados de usuario cross-tenant integration", () => {
     assertOk(resposta);
     expect(JSON.stringify(resposta.json())).toContain(nomeUsuarioCompartilhado);
     esperarNenhumMetadadoDaEmpresaB(resposta);
+  });
+
+  // O `setorId` vinha do colaborador, e o colaborador ser da empresa A nao garante que o setor dele
+  // seja: `colaboradores.setor_id` e FK simples, sem CHECK de mesma empresa, e a rota de colaboradores
+  // grava o setor sem validar a empresa. Aqui NADA do usuario e compartilhado — vinculo e colaborador
+  // sao so da empresa A — entao o unico jeito de o uuid da empresa B aparecer e pelo setor.
+  it("Deve_NaoDevolverSetorDeOutraEmpresa_Quando_ColaboradorDaEmpresaAApontaParaSetorDaEmpresaB", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/usuarios?empresaId=${idsTeste.empresaA}&pageSize=100`,
+      headers: { cookie: cookieGerente }
+    });
+
+    assertOk(resposta);
+    // O colaborador e legitimo na empresa A e PRECISA sobreviver: o recorte e do setor, nao do
+    // colaborador. Zerar os dois seria sobrecorrecao e quebraria a edicao do usuario.
+    expect(linhaDoUsuario(resposta, nomeUsuarioSetorCruzado)).toMatchObject({
+      empresaId: idsTeste.empresaA,
+      empresaIds: [idsTeste.empresaA],
+      colaboradorId: colaboradorSetorCruzado,
+      setorId: null,
+      cargoIds: [cargoSetorCruzado],
+      cargos: [nomeCargoSetorCruzado]
+    });
+    esperarNenhumMetadadoDaEmpresaB(resposta);
+  });
+
+  // Contraprova legitima: quando setor e colaborador sao os dois da empresa consultada, o `setorId`
+  // continua saindo — zerar o campo para todo mundo nao passa. A mesma garantia ja existe embutida no
+  // caso de pareamento de cargos acima, que asserta `setorId: idsTeste.setorA` para o multiempresa;
+  // este caso a torna explicita e local, ao lado do caso que ela contrapoe.
+  it("Deve_PreservarSetorId_Quando_SetorEColaboradorSaoDaEmpresaConsultada", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/usuarios?empresaId=${idsTeste.empresaA}&pageSize=100`,
+      headers: { cookie: cookieGerente }
+    });
+
+    assertOk(resposta);
+    expect(linhaDoUsuario(resposta, usuariosTeste.gerente.nome)).toMatchObject({
+      colaboradorId: idsTeste.colaboradorGerente,
+      setorId: idsTeste.setorA
+    });
+  });
+
+  // O inverso do caso anterior, e o unico que exercita o `colaboradorVisivel &&` de `setorVisivel`:
+  // o setor esta na empresa consultada, mas o colaborador nao. Esconder o colaborador e devolver o
+  // setor dele seria incoerente — o vinculo operacional sai inteiro ou nao sai.
+  it("Deve_OmitirSetorId_Quando_ColaboradorEDeOutraEmpresaAindaQueOSetorSejaDaEmpresaConsultada", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/usuarios?empresaId=${idsTeste.empresaA}&pageSize=100`,
+      headers: { cookie: cookieGerente }
+    });
+
+    assertOk(resposta);
+    expect(linhaDoUsuario(resposta, nomeUsuarioColaboradorNaB)).toMatchObject({
+      empresaIds: [idsTeste.empresaA],
+      colaboradorId: "",
+      setorId: null
+    });
+    esperarNenhumMetadadoDaEmpresaB(resposta);
+  });
+
+  // Colaborador sem setor. Trava o `leftJoin`: com `innerJoin` a linha do colaborador sumiria do
+  // agregado e o usuario voltaria sem `colaboradorId`, quebrando a edicao dele — sem nenhum outro
+  // teste da suite ficar vermelho.
+  it("Deve_ManterOColaborador_Quando_ColaboradorNaoTemSetor", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/usuarios?empresaId=${idsTeste.empresaA}&pageSize=100`,
+      headers: { cookie: cookieGerente }
+    });
+
+    assertOk(resposta);
+    expect(linhaDoUsuario(resposta, nomeUsuarioSemSetor)).toMatchObject({
+      empresaIds: [idsTeste.empresaA],
+      colaboradorId: colaboradorSemSetor,
+      setorId: null
+    });
   });
 
   // `usuario_admin` concede o catalogo inteiro de permissoes, mas NAO alarga o escopo de empresas

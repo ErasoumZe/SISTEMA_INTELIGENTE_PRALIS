@@ -36,6 +36,9 @@ export type UsuarioLinha = {
 // sao derivados dela ja recortada, entao id e nome nao tem como desalinhar por indice.
 export type UsuarioLinhaComEmpresas = Omit<UsuarioLinha, "cargoIds" | "cargos"> & {
   colaboradorEmpresaId: string | null;
+  // A empresa do proprio setor. Nao da para deduzir da empresa do colaborador: o banco nao garante
+  // que `colaboradores.setor_id` aponte para um setor da mesma empresa do colaborador.
+  setorEmpresaId: string | null;
   cargosComEmpresa: { id: string; nome: string; empresaId: string }[];
 };
 
@@ -61,9 +64,15 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         id: colaboradores.id,
         usuarioId: colaboradores.usuarioId,
         setorId: colaboradores.setorId,
-        empresaId: colaboradores.empresaId
+        empresaId: colaboradores.empresaId,
+        // A empresa do SETOR, e nao a do colaborador. `colaboradores.setor_id` e FK simples para
+        // `setores`, sem CHECK de mesma empresa, e a rota de colaboradores grava o setor sem validar
+        // — entao colaborador da empresa A com setor da empresa B e um estado alcancavel.
+        // leftJoin, e nao innerJoin: colaborador sem setor tem de continuar aparecendo.
+        setorEmpresaId: setores.empresaId
       })
-      .from(colaboradores),
+      .from(colaboradores)
+      .leftJoin(setores, eq(setores.id, colaboradores.setorId)),
     banco
       .select({
         colaboradorId: colaboradoresCargos.colaboradorId,
@@ -91,6 +100,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
       colaboradorId: colaborador?.id ?? "",
       colaboradorEmpresaId: colaborador?.empresaId ?? null,
       setorId: colaborador?.setorId ?? null,
+      setorEmpresaId: colaborador?.setorEmpresaId ?? null,
       cargosComEmpresa: cargosDoUsuario.map((cargo) => ({
         id: cargo.cargoId,
         nome: cargo.cargoNome,
