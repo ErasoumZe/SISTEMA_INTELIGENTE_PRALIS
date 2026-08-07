@@ -1,9 +1,11 @@
+import { APIError } from "better-auth";
 import type { DadosExternos } from "@padaria/shared/api";
 import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
 import { diaNegocio } from "@padaria/shared/datas";
-import { auth } from "../auth/config.js";
+import { auth, senhaMinimaAutenticacao } from "../auth/config.js";
 import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
+import { conflito, erroValidacao, falhaTecnica } from "../erros.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
@@ -16,6 +18,7 @@ import {
   existeEmailUsuarioRepository,
   listarUsuariosRepository,
   marcarEmailVerificadoRepository,
+  removerUsuarioAutenticacaoRepository,
   salvarCargoColaboradorUsuarioRepository,
   salvarColaboradorUsuarioRepository,
   substituirEmpresasUsuarioRepository,
@@ -82,6 +85,44 @@ export function recortarUsuariosPorEmpresas(
       }
     ];
   });
+}
+
+// --- Fronteira com o Better Auth (B-01) -------------------------------------------------------
+//
+// O que existia aqui era `catch { falharValidacao("Email ja cadastrado") }`: QUALQUER falha do
+// signUpEmail — senha curta, banco fora do ar, bug interno — virava "e-mail ja cadastrado". Foi o
+// que apareceu na reuniao de 04/08 com e-mail inedito, e o que impediu criar os usuarios de
+// tesouraria, financeiro e comprador. A fronteira agora separa tres classes:
+//
+//   duplicado real  -> 409, para o admin entender que o e-mail e de outra pessoa;
+//   pedido invalido -> 400 com a razao VERDADEIRA (senha curta, e-mail malformado);
+//   falha tecnica   -> sobe intacta para o handler global virar 500 logado, sem detalhe no corpo.
+//
+// A leitura e por `body.code`: `status` nao serve, porque USER_ALREADY_EXISTS e FAILED_TO_CREATE_USER
+// compartilham 422 no better-auth 1.6.20.
+const EMAIL_DUPLICADO_BETTER_AUTH = "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL";
+
+const MENSAGEM_PEDIDO_INVALIDO: Record<string, string> = {
+  INVALID_EMAIL: "E-mail invalido",
+  INVALID_PASSWORD: "Senha invalida",
+  PASSWORD_TOO_SHORT: `Senha deve ter ao menos ${senhaMinimaAutenticacao} caracteres`,
+  PASSWORD_TOO_LONG: "Senha longa demais"
+};
+
+function emailJaCadastrado() {
+  return conflito("Email ja cadastrado para outro usuario", "EMAIL_ALREADY_REGISTERED");
+}
+
+function traduzirFalhaCadastroAutenticacao(erro: DadosExternos): never {
+  if (erro instanceof APIError) {
+    const codigo = (erro.body as { code?: string } | undefined)?.code;
+    if (codigo === EMAIL_DUPLICADO_BETTER_AUTH) throw emailJaCadastrado();
+    const mensagem = codigo ? MENSAGEM_PEDIDO_INVALIDO[codigo] : undefined;
+    if (mensagem) throw erroValidacao(mensagem, "USER_SIGNUP_REJECTED");
+  }
+  // Nao reconhecido = tecnico. Relancar preserva a causa para o log e o Sentry; traduzir aqui era
+  // exatamente o defeito.
+  throw erro;
 }
 
 function empresasUsuario(empresaId: string | undefined, empresaIds: string[] | undefined): string[] {
@@ -238,14 +279,26 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   }
 
   if (!dados.senha) falharValidacao("Senha obrigatoria");
-  try {
-    await auth.api.signUpEmail({ body: { name: nome, email, password: dados.senha } });
-  } catch {
-    falharValidacao("Email ja cadastrado");
+  // A politica do Better Auth e por ambiente (8 em dev/teste, 10 em producao) e mais exigente que o
+  // schema compartilhado, que aceita 6 por nao conhecer o ambiente. Recusar aqui responde a razao
+  // certa; deixar chegar no signUpEmail era o caminho mais comum para o falso "e-mail ja cadastrado".
+  if (dados.senha.length < senhaMinimaAutenticacao) {
+    throw erroValidacao(`Senha deve ter ao menos ${senhaMinimaAutenticacao} caracteres`, "WEAK_PASSWORD");
   }
 
+  const cadastro = await auth.api
+    .signUpEmail({ body: { name: nome, email, password: dados.senha } })
+    .catch(traduzirFalhaCadastroAutenticacao);
+
   const usuario = await buscarUsuarioAutenticacaoPorEmailRepository(email);
-  if (!usuario) falharValidacao("Usuario nao encontrado apos cadastro");
+  // Impossivel em condicao normal (o signUpEmail acabou de gravar). Se acontecer e falha tecnica,
+  // nao regra de negocio: `falhaTecnica` garante 500 logado em vez de 400 com a mensagem crua.
+  if (!usuario) throw falhaTecnica("Usuario de autenticacao nao encontrado apos o cadastro");
+  // Em producao `requireEmailVerification` e true, e com ela o better-auth NAO lanca para e-mail
+  // repetido: devolve 200 com um usuario SINTETICO, de id que nunca foi gravado (anti-enumeracao,
+  // sign-up.mjs:161-207). Sem esta comparacao o fluxo seguia, encontrava o usuario REAL pelo e-mail
+  // e sobrescrevia perfil, empresas e colaborador dele — troca de dono silenciosa, so em producao.
+  if (cadastro.user.id !== usuario.id) throw emailJaCadastrado();
 
   const colaboradorVinculado = await executarEmTransacao(async (tx) => {
     const colaboradorTransacao = await obterColaboradorParaVinculo(tx);
@@ -258,6 +311,17 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     await substituirEmpresasUsuarioRepository(usuario.id, empresaIds, tx);
     await vincularUsuarioColaboradorRepository(usuario.id, colaboradorTransacao.id, tx);
     return colaboradorTransacao;
+  }).catch(async (erro: DadosExternos) => {
+    // O signUpEmail ja commitou na transacao dele. Sem desfazer, sobra um usuario de autenticacao
+    // sem perfil/empresa/colaborador que nao serve para nada E bloqueia toda nova tentativa com o
+    // mesmo e-mail. Removemos o que ESTA requisicao criou e propagamos a causa original.
+    try {
+      await removerUsuarioAutenticacaoRepository(usuario.id);
+    } catch {
+      // Falha ao limpar nao pode mascarar o erro de verdade: o orfao vira dado para limpeza, mas o
+      // admin precisa ver por que o cadastro falhou.
+    }
+    throw erro;
   });
 
   return {
