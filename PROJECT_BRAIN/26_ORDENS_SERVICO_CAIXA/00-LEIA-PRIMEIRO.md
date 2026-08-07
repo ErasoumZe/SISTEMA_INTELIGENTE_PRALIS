@@ -1,8 +1,12 @@
 # Finalização do módulo Caixa — painel mestre
 
-Data-base: 06/08/2026
-Código auditado: `origin/main` em `27e8a01` (PR #139 incorporada)
+Data-base: 07/08/2026
+Código auditado: `origin/main` em `bd4909c` (PR #141 incorporada)
 Prioridade de produto: **1º Caixa, 2º Compras, 3º Relatórios** (`R-144`)
+
+> **Fila vigente:** `08-FILA-GITHUB-ATUAL.md`. Ela prevalece sobre os estados antigos dos
+> arquivos `01` e `02` quando houver divergencia. O arquivo `09` contem o comentario
+> pronto para a issue-mestra #136.
 
 ## Objetivo
 
@@ -46,14 +50,15 @@ O Caixa só pode ser declarado terminado quando todos os itens abaixo forem verd
 
 ## Estado atual
 
-| OS       | Dono          | Estado                 | Trabalho                                     |
-| -------- | ------------- | ---------------------- | -------------------------------------------- |
-| `CX-M01` | Marco         | **EM EXECUÇÃO**        | D-06 — pagamentos divididos em 2/3 formas    |
-| `CX-Z01` | José          | **PRONTA AGORA**       | pré-voo somente-leitura em produção          |
-| `CX-Z02` | José          | **PRONTA AGORA**       | pacote de decisões que bloqueia o fechamento |
-| demais   | conforme fila | aguardando dependência | ver arquivos `01`, `02`, `03` e `07`         |
+| OS        | Dono          | Estado                 | Trabalho                                            |
+| --------- | ------------- | ---------------------- | --------------------------------------------------- |
+| `CX-M03A` | Marco         | **EM EXECUÇÃO**        | B-02 — recuperar senha sem recriar o trabalho do Ze |
+| `CX-Z101` | José          | **EM REVISAO/ENTREGA** | issue #101 — fechamento, retorno, sangria e cofre   |
+| demais    | conforme fila | aguardando dependencia | seguir exclusivamente o arquivo `08`                |
 
 ## Ordem por ondas
+
+Esta tabela e o catalogo amplo. A ordem executavel e as travas de conflito estao no arquivo `08`.
 
 | Onda                    | Marco               | José                | Saída obrigatória                                       |
 | ----------------------- | ------------------- | ------------------- | ------------------------------------------------------- |
@@ -72,6 +77,9 @@ O Caixa só pode ser declarado terminado quando todos os itens abaixo forem verd
 - S-06: permissões ocultas preservadas.
 - PR #137: escopo da listagem de regras de permissões.
 - PR #139: projeção cross-tenant de metadados em `GET /api/usuarios` e `GET /api/permissoes`.
+- PR #140: D-06 de pagamento dividido provada com casos independentes.
+- PR #141: B-01 de criacao de usuario corrigida, incluindo takeover e estado parcial.
+- Commit `467f081`: base de reset de senha, Resend e paginas publicas ja existe; nao recriar.
 - G-04: `/health` toca o banco.
 - G-10: paridade journal/snapshot das migrations.
 
