@@ -1,14 +1,16 @@
 import { APIError } from "better-auth";
 import type { DadosExternos } from "@padaria/shared/api";
+import type { RoleUsuario } from "@padaria/shared";
 import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
 import { diaNegocio } from "@padaria/shared/datas";
 import { auth, senhaMinimaAutenticacao } from "../auth/config.js";
 import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
-import { conflito, erroValidacao, falhaTecnica } from "../erros.js";
+import { conflito, erroValidacao, falhaTecnica, naoEncontrado, proibido } from "../erros.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
+  buscarAlvoUsuarioRepository,
   buscarCargoEmpresaRepository,
   buscarColaboradorPorCpfRepository,
   buscarColaboradorUsuarioRepository,
@@ -16,6 +18,7 @@ import {
   buscarUsuarioAutenticacaoPorEmailRepository,
   colaboradorTemCargoAtivoRepository,
   existeEmailUsuarioRepository,
+  listarEmpresasUsuarioRepository,
   listarUsuariosRepository,
   marcarEmailVerificadoRepository,
   removerUsuarioAutenticacaoRepository,
@@ -125,6 +128,76 @@ function traduzirFalhaCadastroAutenticacao(erro: DadosExternos): never {
   throw erro;
 }
 
+// --- Autorizacao do alvo (P-01 / S-01) --------------------------------------------------------
+//
+// O ator chega do controller como `PerfilUsuario` completo (guards.ts:38-39); aqui so interessam o
+// escopo de empresa e o papel. `undefined` continua significando "chamada interna sem ator" — mesma
+// convencao ja usada por `empresaNoEscopo` e pelo `empresasLiberadas` de `salvarUsuario`.
+export type PerfilAtor = PerfilComEmpresa & { role?: RoleUsuario };
+
+const ROLE_ACESSO_TOTAL = "usuario_admin";
+
+// UM codigo para as tres negacoes de privilegio (criar admin, alterar role, editar um admin). Manter
+// um so e o que impede a resposta de virar oraculo: quem tenta nao aprende, pela diferenca entre os
+// codigos, se o alvo e ou nao administrador. O role legado `admin` nao entra: ele nao concede acesso
+// especial na resolucao de permissoes (auth/perfil.service.ts:8).
+const CODIGO_PRIVILEGIO = "FORBIDDEN_PRIVILEGE";
+
+function empresaNaoPermitida() {
+  return proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+}
+
+function privilegioInsuficiente() {
+  return proibido("Acao restrita a usuario administrador", CODIGO_PRIVILEGIO);
+}
+
+function temAcessoTotal(perfil: PerfilAtor | undefined): boolean {
+  return !perfil || perfil.role === ROLE_ACESSO_TOTAL;
+}
+
+// A trava do takeover. Roda ANTES de qualquer leitura guiada pelo corpo e antes de qualquer escrita:
+// o `:id` decide se o pedido pode existir.
+//
+// `usuario_admin` NAO alarga escopo de empresa (auth/perfil.service.ts:7), entao a regra de empresa
+// vale para todo ator; o que o papel decide e outra coisa (role e alvo privilegiado).
+async function autorizarEdicaoUsuario(id: string, roleSolicitado: RoleUsuario | undefined, perfil?: PerfilAtor) {
+  const alvo = await buscarAlvoUsuarioRepository(id);
+  // Sem perfil o alvo nao existe. Antes o upsert INSERIA um perfil com o id inventado
+  // (`perfis_usuarios.usuario_id` e text PK sem FK), criando um usuario fantasma e roubando o
+  // colaborador informado. 404 antes da transacao: nada parcial fica para tras.
+  if (!alvo) throw naoEncontrado("Usuario nao encontrado", "USER_NOT_FOUND");
+
+  const empresasLiberadas = perfil ? empresasPermitidas(perfil) : null;
+  if (empresasLiberadas) {
+    const empresasAlvo = new Set((await listarEmpresasUsuarioRepository(id)).map((empresa) => empresa.empresaId));
+    if (alvo.empresaId) empresasAlvo.add(alvo.empresaId);
+    if (alvo.colaboradorEmpresaId) empresasAlvo.add(alvo.colaboradorEmpresaId);
+    // `every`, e nao `some`: `substituirEmpresasUsuarioRepository` apaga TODAS as linhas do alvo, e
+    // `vincularUsuarioColaboradorRepository` desfaz o vinculo operacional onde quer que ele esteja.
+    // Quem alcanca so parte das empresas do alvo destruiria em silencio a parte que nao alcanca.
+    // Alvo sem empresa nenhuma tambem e recusado — e dado quebrado, nao alvo livre. Mesmo desenho de
+    // permissoes.service.ts:210-213.
+    if (!empresasAlvo.size || [...empresasAlvo].some((empresaId) => !empresasLiberadas.includes(empresaId))) {
+      throw empresaNaoPermitida();
+    }
+  }
+
+  if (!temAcessoTotal(perfil)) {
+    // Editar um `usuario_admin` e tomar a conta dele: trocar o e-mail ja basta, pela recuperacao de
+    // senha. A trava e sobre o ALVO, nao sobre o campo.
+    if (alvo.role === ROLE_ACESSO_TOTAL) throw privilegioInsuficiente();
+    // Role AUSENTE ou IGUAL ao gravado e edicao legitima. A tela reenvia sempre o papel atual
+    // (shared/src/cadastros/index.ts:332), entao recusar "role presente" quebraria toda edicao.
+    if (roleSolicitado && roleSolicitado !== alvo.role) throw privilegioInsuficiente();
+  }
+}
+
+// Criar ja nasce admin fecha o mesmo buraco por outro caminho: sem isto, quem tem
+// `cadastro_usuarios_criar` fabrica um `usuario_admin` e loga com ele.
+function autorizarCriacaoUsuario(roleSolicitado: RoleUsuario | undefined, perfil?: PerfilAtor) {
+  if (roleSolicitado === ROLE_ACESSO_TOTAL && !temAcessoTotal(perfil)) throw privilegioInsuficiente();
+}
+
 function empresasUsuario(empresaId: string | undefined, empresaIds: string[] | undefined): string[] {
   return [...new Set([...(empresaIds ?? []), ...(empresaId ? [empresaId] : [])])];
 }
@@ -140,8 +213,13 @@ export async function listarUsuarios(escopoDados: string[]): Promise<UsuarioLinh
   return recortarUsuariosPorEmpresas(await listarUsuariosRepository(), escopoDados);
 }
 
-export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilComEmpresa) {
+export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilAtor) {
   const dados = usuarioPayloadSchema.parse(body);
+  // O corpo nunca define o escopo do alvo: primeiro o banco diz quem ele e, depois o pedido diz o que
+  // muda. Fora da transacao, no mesmo ponto onde as demais autorizacoes desta rota ja moravam — as
+  // ESCRITAS continuam atomicas, e uma falha aqui e falha tecnica que sobe para 500, nao negacao.
+  if (id) await autorizarEdicaoUsuario(id, dados.role, perfil);
+  else autorizarCriacaoUsuario(dados.role, perfil);
   const novoColaborador = dados.novoColaborador
     ? {
         ...dados.novoColaborador,
@@ -154,7 +232,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
 
   let colaborador = dados.colaboradorId ? await buscarColaboradorUsuarioRepository(dados.colaboradorId) : null;
   if (novoColaborador) {
-    if (!empresaNoEscopo(perfil, novoColaborador.empresaId)) falharValidacao("Empresa nao permitida");
+    if (!empresaNoEscopo(perfil, novoColaborador.empresaId)) throw empresaNaoPermitida();
     const cargo = await buscarCargoEmpresaRepository(novoColaborador.cargoId);
     if (!cargo || cargo.empresaId !== novoColaborador.empresaId) falharValidacao("Cargo nao pertence a empresa");
     if (novoColaborador.setorId) {
@@ -163,7 +241,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     }
   } else {
     if (!colaborador) falharValidacao("Colaborador nao encontrado");
-    if (!empresaNoEscopo(perfil, colaborador.empresaId)) falharValidacao("Empresa nao permitida");
+    if (!empresaNoEscopo(perfil, colaborador.empresaId)) throw empresaNaoPermitida();
     if (colaborador.usuarioId && colaborador.usuarioId !== id)
       falharValidacao("Colaborador ja vinculado a outro usuario");
     if (!(await colaboradorTemCargoAtivoRepository(colaborador.id)))
@@ -177,7 +255,10 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   if (!empresaIds.length) falharValidacao("Informe ao menos uma empresa");
   const empresasLiberadas = perfil ? empresasPermitidas(perfil) : null;
   if (empresasLiberadas !== null && empresaIds.some((empresaId) => !empresasLiberadas.includes(empresaId))) {
-    falharValidacao("Empresa nao permitida");
+    // 403 COM `code`: pelo caminho do `falharValidacao` o controller respondia 403 sem codigo nenhum
+    // (utils.ts:24-28 + shared/src/api/index.ts:274), entao a mesma rota tinha duas formas de negar
+    // empresa. Uma so.
+    throw empresaNaoPermitida();
   }
   const empresaPrincipalId = empresaIds[0];
   if (!empresaPrincipalId) falharValidacao("Informe ao menos uma empresa");

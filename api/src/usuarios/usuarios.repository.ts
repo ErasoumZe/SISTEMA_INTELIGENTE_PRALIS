@@ -111,6 +111,40 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
   });
 }
 
+// Estado REAL do alvo de uma edicao. Existe porque o `PUT /api/usuarios/:id` decidia tudo pelo
+// CORPO — que e escolhido por quem edita — e nunca lia o alvo: nem para saber se ele existe, nem para
+// saber a que empresas ele pertence, nem para saber se ele ja e `usuario_admin`.
+//
+// As tres empresas vem juntas de proposito, porque nada no banco as amarra e o PUT reescreve as tres:
+// `perfis_usuarios.empresa_id` (a principal), `usuarios_empresas` (o vinculo) e
+// `colaboradores.empresa_id` (o vinculo operacional, trocado por `vincularUsuarioColaboradorRepository`).
+export type AlvoUsuario = {
+  usuarioId: string;
+  empresaId: string | null;
+  role: RoleUsuario;
+  colaboradorEmpresaId: string | null;
+};
+
+export async function buscarAlvoUsuarioRepository(
+  usuarioId: string,
+  db: ExecutorBanco = banco
+): Promise<AlvoUsuario | null> {
+  const [alvo] = await db
+    .select({
+      usuarioId: perfisUsuarios.usuarioId,
+      empresaId: perfisUsuarios.empresaId,
+      role: perfisUsuarios.role,
+      colaboradorEmpresaId: colaboradores.empresaId
+    })
+    .from(perfisUsuarios)
+    // leftJoin: perfil sem colaborador vinculado e um estado alcancavel (e o que o guard responde como
+    // PROFILE_NOT_CONFIGURED) e continua sendo um alvo real — nao pode virar 404.
+    .leftJoin(colaboradores, eq(colaboradores.usuarioId, perfisUsuarios.usuarioId))
+    .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    .limit(1);
+  return alvo ?? null;
+}
+
 export async function existeEmailUsuarioRepository(
   email: string,
   usuarioIdIgnorado?: string,
