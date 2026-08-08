@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { cadastroPayload } from "@padaria/shared";
+import { bloqueioCadastroUsuario, cadastroPayload } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes } from "~/types/padaria";
 import { useCadastroView } from "~/composables/useCadastroView";
 import { formCadastroDeLinha, formCadastroVazio, opcoesVazias } from "./domain";
@@ -31,14 +31,14 @@ const EMPRESA_B = "empresa-b";
 // nao tem `id` — so `usuarioId`. O tipo mente, e e essa mentira que fazia `upsertOpcao` (que casa por
 // `id`) nunca encontrar a linha do usuario e inserir uma duplicata sem papel. Montar o objeto "certo
 // pelo tipo" esconderia justamente o defeito.
-function usuarioDaApi(over: { empresaIds?: string[]; role?: string } = {}): Opcao {
+function usuarioDaApi(over: { empresaIds?: string[]; role?: string; colaboradorId?: string } = {}): Opcao {
   return {
     usuarioId: "u1",
     empresaId: EMPRESA_A,
     empresaIds: over.empresaIds ?? [EMPRESA_A, EMPRESA_B],
     nome: "Usuario A+B",
     email: "ab@padaria.local",
-    colaboradorId: "col-1",
+    colaboradorId: over.colaboradorId ?? "col-1",
     setorId: "setor-1",
     cargos: ["Gerente"],
     role: over.role ?? "usuario_admin"
@@ -78,24 +78,66 @@ function montarFio(usuario: Opcao) {
 }
 
 describe("fio real da edicao de usuario", () => {
-  // ATENCAO — a perda de empresa (achado 1) NAO esta corrigida, e este arquivo nao finge que esta.
+  // O caso central do achado 1. O `GET /api/usuarios` recorta `empresaIds` ao escopo da TELA
+  // (`recortarUsuariosPorEmpresas`), e isso e contrato de isolamento travado por
+  // metadados-cross-tenant.test.ts: para um usuario A+B visto na empresa A, a API responde `["A"]`.
+  // A tela NUNCA conhece a lista completa.
   //
-  // O `GET /api/usuarios` recorta `empresaIds` ao escopo da TELA (`recortarUsuariosPorEmpresas`, em
-  // api/src/usuarios/usuarios.service.ts), e isso e contrato de isolamento travado por
-  // tests/integration/usuarios/metadados-cross-tenant.test.ts. Para um usuario A+B visto na empresa A,
-  // a API responde `empresaIds: ["A"]` — a lista completa nunca chega a esta tela.
-  //
-  // Portanto o formulario nao tem como "continuar enviando A+B" sem uma decisao de contrato que nao e
-  // minha (ver o relatorio). O teste abaixo documenta o estado REAL, para ninguem confundir a
-  // ausencia de correcao com correcao.
-  it("documenta que a linha da grade nao traz as empresas do usuario", () => {
+  // Por isso o contrato e por AUSENCIA: editar so o nome nao envia `empresaIds`, e o servidor preserva
+  // os vinculos gravados. A alternativa — reenviar o que a tela enxerga — apagaria a empresa B.
+  it("omite empresaIds quando o operador nao mexeu nos chips", () => {
     const { abrirEdicao } = montarFio(usuarioDaApi());
     const { linha, form } = abrirEdicao();
 
-    // A grade nao projeta `empresaIds` de proposito: projetar o valor RECORTADO faria o salvar
-    // reenviar so a empresa ativa, com a tela mostrando "empresa A marcada" e nenhum sinal da perda.
+    // A grade nao projeta `empresaIds` de proposito, e o formulario nasce INTOCADO.
     expect(linha.empresaIds).toBeUndefined();
-    expect(form.empresaIds).toEqual([]);
+    expect(form.empresaIdsTocado).toBe(false);
+
+    form.nome = "Nome novo";
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).not.toHaveProperty("empresaIds");
+  });
+
+  // A outra metade do contrato: opt-in explicito + chips marcados = substituicao.
+  it("envia empresaIds quando o operador pede substituicao e marca empresas", () => {
+    const { abrirEdicao } = montarFio(usuarioDaApi());
+    const { form } = abrirEdicao();
+
+    // E o que a tela faz: primeiro a caixa "Substituir as empresas deste usuario" (que so entao
+    // habilita os chips), depois as marcacoes.
+    form.empresaIdsTocado = true;
+    form.empresaIds = [EMPRESA_A, EMPRESA_B];
+
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).toMatchObject({ empresaIds: [EMPRESA_A, EMPRESA_B] });
+    expect(bloqueioCadastroUsuario("usuarios", form, true)).toBeNull();
+  });
+
+  // Marcar e desmarcar volta a tela ao estado inicial, mas nao volta o opt-in. Sem trava, o payload
+  // cairia no fallback `[empresaAtiva]` e apagaria os demais vinculos.
+  it("bloqueia o salvamento quando pede substituicao e nao marca nenhuma empresa", () => {
+    const { abrirEdicao } = montarFio(usuarioDaApi());
+    const { form } = abrirEdicao();
+
+    form.empresaIdsTocado = true;
+    form.empresaIds = [];
+
+    expect(bloqueioCadastroUsuario("usuarios", form, true)).toContain("Marque ao menos uma empresa");
+  });
+
+  // O colaborador tambem some da linha quando vive em outra empresa (`recortarUsuariosPorEmpresas`
+  // devolve ""). Mandar string vazia fazia o Zod responder 400 e travava a edicao inteira.
+  it("omite colaboradorId quando a linha nao traz o colaborador", () => {
+    const { abrirEdicao } = montarFio(usuarioDaApi({ colaboradorId: "" }));
+    const { form } = abrirEdicao();
+
+    expect(form.colaboradorId).toBe("");
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).not.toHaveProperty("colaboradorId");
+  });
+
+  // Criacao nao tem o que preservar: nasce tocado e sempre envia.
+  it("envia empresaIds na criacao de usuario novo", () => {
+    const form = formCadastroVazio();
+    expect(form.empresaIdsTocado).toBe(true);
+    expect(cadastroPayload("usuarios", form, EMPRESA_A)).toMatchObject({ empresaIds: [EMPRESA_A] });
   });
 
   // Segunda abertura SEM reload: e o cache local que alimenta a grade. Se ele perder o papel, a tela

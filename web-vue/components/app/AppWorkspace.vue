@@ -1441,7 +1441,9 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
 // Trava do rebaixamento silencioso: a linha da listagem pode chegar sem `role`, e ai o formulario de
 // edicao fica com o papel DESCONHECIDO. Salvar assim mandava "usuario_comum" e rebaixava o alvo. A
 // mensagem pede recarregar porque e exatamente isso que repovoa a linha.
-const bloqueioCadastro = computed(() => bloqueioCadastroUsuario(cadastroTela.value, formCadastro.value));
+const bloqueioCadastro = computed(() =>
+  bloqueioCadastroUsuario(cadastroTela.value, formCadastro.value, Boolean(cadastroEditandoId.value))
+);
 
 async function salvarCadastro() {
   // Segunda tranca do lado do cliente (a primeira e o botao desabilitado): o dialogo tambem salva

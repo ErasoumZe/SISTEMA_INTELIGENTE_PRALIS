@@ -215,7 +215,10 @@ async function autorizarEdicaoUsuario(
   if (!alvo) throw naoEncontrado("Usuario nao encontrado", "USER_NOT_FOUND");
 
   const empresasLiberadas = empresasPermitidas(perfil);
-  const empresasAlvo = new Set((await listarEmpresasUsuarioRepository(id, tx)).map((empresa) => empresa.empresaId));
+  // Os VINCULOS reais, exatamente como estao gravados. Sao eles que a preservacao devolve quando o
+  // corpo omite `empresaIds` — nao a uniao abaixo, que existe so para decidir alcance do ator.
+  const vinculosAtuais = (await listarEmpresasUsuarioRepository(id, tx)).map((empresa) => empresa.empresaId);
+  const empresasAlvo = new Set(vinculosAtuais);
   if (alvo.empresaId) empresasAlvo.add(alvo.empresaId);
   if (alvo.colaboradorEmpresaId) empresasAlvo.add(alvo.colaboradorEmpresaId);
   // `every`, e nao `some`: `substituirEmpresasUsuarioRepository` apaga TODAS as linhas do alvo, e
@@ -235,6 +238,8 @@ async function autorizarEdicaoUsuario(
     // (shared/src/cadastros/index.ts:332), entao recusar "role presente" quebraria toda edicao.
     if (roleSolicitado && roleSolicitado !== alvo.role) throw privilegioInsuficiente();
   }
+
+  return { alvo, vinculosAtuais };
 }
 
 // Criar ja nasce privilegiado fecha o mesmo buraco por outro caminho: sem isto, quem tem
@@ -291,7 +296,13 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
         setorId: dados.novoColaborador.setorId ?? null
       }
     : null;
-  if (!dados.colaboradorId && !novoColaborador) falharValidacao("Colaborador obrigatorio");
+  // MESMA logica de `empresaIds`: na EDICAO, ausencia = preservar o vinculo gravado. Sem isto a
+  // preservacao de empresas era inalcancavel justamente para quem ela protege — o usuario multiempresa
+  // cujo colaborador vive na OUTRA empresa. Nesse caso a listagem recorta `colaboradorId` para `""`
+  // (`recortarUsuariosPorEmpresas`), a tela reenviava a string vazia e o Zod respondia 400
+  // "Requisicao invalida". Na CRIACAO continua obrigatorio: nao ha vinculo previo.
+  const preservarColaborador = Boolean(id) && !dados.colaboradorId && !novoColaborador;
+  if (!id && !dados.colaboradorId && !novoColaborador) falharValidacao("Colaborador obrigatorio");
 
   // PRE-VALIDACAO, e so isso. Serve para responder rapido o caso obvio (colaborador inexistente, de
   // outra empresa, ja vinculado, sem cargo ativo) sem abrir transacao. NAO e fonte de autorizacao: o
@@ -306,27 +317,49 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       const setor = await buscarSetorEmpresaRepository(novoColaborador.setorId);
       if (!setor || setor.empresaId !== novoColaborador.empresaId) falharValidacao("Setor nao pertence a empresa");
     }
-  } else {
+  } else if (!preservarColaborador) {
     if (!colaboradorPreLido) falharValidacao("Colaborador nao encontrado");
     validarColaboradorParaVinculo(colaboradorPreLido, id, ator);
     if (!(await colaboradorTemCargoAtivoRepository(colaboradorPreLido.id)))
       falharValidacao("Colaborador precisa ter ao menos um cargo ativo");
   }
 
+  // Preservando o colaborador nao ha empresa nova para validar — o vinculo atual ja passou pelo gate
+  // de escopo em `autorizarEdicaoUsuario`, que inclui `alvo.colaboradorEmpresaId`.
   const empresaColaboradorId = novoColaborador?.empresaId ?? colaboradorPreLido?.empresaId;
-  if (!empresaColaboradorId) falharValidacao("Empresa nao permitida");
-  const empresaIds = empresasUsuario(dados.empresaId, dados.empresaIds);
-  if (!empresaIds.includes(empresaColaboradorId)) empresaIds.unshift(empresaColaboradorId);
-  if (!empresaIds.length) falharValidacao("Informe ao menos uma empresa");
+  if (!preservarColaborador && !empresaColaboradorId) falharValidacao("Empresa nao permitida");
+
+  // AUSENCIA DE `empresaIds` E UM COMANDO, NAO UM VAZIO.
+  //
+  // A tela de edicao nao conhece as empresas reais do alvo — a listagem recorta `empresaIds` ao escopo
+  // da TELA, por isolamento (`recortarUsuariosPorEmpresas`). Quando o corpo nao traz o campo, tratar
+  // como "lista vazia" e cair no antigo `[empresaAtiva]` apagava, em silencio, todo vinculo que a tela
+  // nao enxergava — `substituirEmpresasUsuarioRepository` faz substituicao TOTAL.
+  //
+  // Contrato: ausente = PRESERVAR exatamente os vinculos gravados; presente = substituicao explicita,
+  // sujeita a todas as autorizacoes. Mesma convencao que `role` ja usa.
+  const substituicaoExplicita = dados.empresaIds !== undefined || dados.empresaId !== undefined;
+  const empresaIdsDoCorpo = empresasUsuario(dados.empresaId, dados.empresaIds);
+  if (empresaColaboradorId && !empresaIdsDoCorpo.includes(empresaColaboradorId)) {
+    empresaIdsDoCorpo.unshift(empresaColaboradorId);
+  }
   const empresasLiberadas = empresasPermitidas(ator);
-  if (empresaIds.some((empresaId) => !empresasLiberadas.includes(empresaId))) {
+  // Vale para o conjunto do corpo E para a empresa do colaborador NOVO (quando ha um): nenhum dos
+  // dois pode sair do alcance do ator. Preservando os dois, nao ha nada novo a validar aqui — o que
+  // ja esta gravado passou pelo gate de `autorizarEdicaoUsuario`.
+  const empresasAValidar = substituicaoExplicita
+    ? empresaIdsDoCorpo
+    : empresaColaboradorId
+      ? [empresaColaboradorId]
+      : [];
+  if (empresasAValidar.some((empresaId) => !empresasLiberadas.includes(empresaId))) {
     // 403 COM `code`: pelo caminho do `falharValidacao` o controller respondia 403 sem codigo nenhum
     // (utils.ts:24-28 + shared/src/api/index.ts:274), entao a mesma rota tinha duas formas de negar
     // empresa. Uma so.
     throw empresaNaoPermitida();
   }
-  const empresaPrincipalId = empresaIds[0];
-  if (!empresaPrincipalId) falharValidacao("Informe ao menos uma empresa");
+  // Na CRIACAO nao ha o que preservar: o conjunto do corpo e sempre o conjunto final.
+  if (!id && !empresaIdsDoCorpo.length) falharValidacao("Informe ao menos uma empresa");
   const nome = dados.nome.trim();
   const email = dados.email.trim().toLowerCase();
   const role = dados.role ?? (id ? undefined : "usuario_comum");
@@ -352,7 +385,10 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
   // transacao mover o colaborador de empresa, vincula-lo a outro usuario ou desativar o cargo dele.
   //
   // O retorno desta funcao e a UNICA fonte usada pelas escritas.
-  async function resolverColaboradorParaVinculo(tx: TransacaoBanco) {
+  async function resolverColaboradorParaVinculo(tx: TransacaoBanco, empresaIdsFinais: string[]) {
+    // Preservar = nao mexer no vinculo. Devolver `null` e o sinal para o chamador PULAR
+    // `vincularUsuarioColaboradorRepository`, que e destrutivo dos dois lados.
+    if (preservarColaborador) return null;
     if (!novoColaborador) {
       const relido = await bloquearColaboradorUsuarioRepository(dados.colaboradorId!, tx);
       if (!relido) falharValidacao("Colaborador nao encontrado");
@@ -362,9 +398,17 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       // `empresaIds` e `empresaPrincipalId` foram calculados com a empresa PRE-LIDA. Se ela mudou sob
       // o lock, o conjunto que estamos prestes a gravar nao corresponde mais ao colaborador — e o
       // usuario ficaria vinculado a uma empresa que ele nao tem.
-      if (!empresaIds.includes(relido.empresaId)) throw empresaNaoPermitida();
+      // A empresa do colaborador precisa estar no conjunto FINAL — o do corpo, quando ha substituicao
+      // explicita, ou o preservado. Senao o usuario ficaria vinculado a uma empresa que ele nao tem.
+      if (!empresaIdsFinais.includes(relido.empresaId)) throw empresaNaoPermitida();
       return relido;
     }
+
+    // MESMA regra do ramo acima, e nao so por simetria: sem ela, um PUT que omite `empresaIds` e manda
+    // `novoColaborador` de outra empresa criava o colaborador la, vinculava, e pulava a escrita de
+    // `usuarios_empresas` — deixando o usuario com colaborador na empresa A e vinculo so na B. O perfil
+    // resolvido passaria a herdar cargo e setor de A aplicados aos dados de B.
+    if (!empresaIdsFinais.includes(novoColaborador.empresaId)) throw empresaNaoPermitida();
 
     // Dedup por CPF: se ja existe um colaborador com esse CPF na empresa, reutiliza em vez de criar
     // uma copia (a causa dos colaboradores duplicados no QA de 15/07). Sem CPF, cria normalmente.
@@ -420,26 +464,46 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     return executarEmTransacao(async (tx) => {
       // Primeira coisa da transacao: trava a linha raiz do alvo e decide sobre o estado REAL dele.
       // Tudo o que vem depois escreve sob esse lock, entao o veredito nao envelhece antes do commit.
-      await autorizarEdicaoUsuario(id, dados.role, ator, tx);
+      const { alvo, vinculosAtuais } = await autorizarEdicaoUsuario(id, dados.role, ator, tx);
       const emailExistente = await existeEmailUsuarioRepository(email, id, tx);
       if (emailExistente) falharValidacao("Email ja cadastrado");
+
+      // O conjunto final so agora e conhecido: preservar exige ler o alvo sob lock. Preservando,
+      // a empresa principal tambem fica como esta — trocar `perfis_usuarios.empresa_id` pela empresa
+      // da tela seria a mesma perda silenciosa por outro campo.
+      // Alvo legado sem linha em `usuarios_empresas` (dado criado fora deste modulo) ainda aparece na
+      // grade, porque o recorte cai para `perfis_usuarios.empresa_id`. Preservar "nada" ali travaria a
+      // edicao com um 400 que contradiz o aviso da tela ("as empresas sao mantidas"). Cai para a
+      // empresa principal, que ja passou pelo gate de escopo em `autorizarEdicaoUsuario`.
+      const vinculosPreservados = vinculosAtuais.length ? vinculosAtuais : alvo.empresaId ? [alvo.empresaId] : [];
+      const empresaIdsFinais = substituicaoExplicita ? empresaIdsDoCorpo : vinculosPreservados;
+      const empresaPrincipalFinal = substituicaoExplicita
+        ? empresaIdsDoCorpo[0]
+        : (alvo.empresaId ?? vinculosPreservados[0]);
+      if (!empresaIdsFinais.length || !empresaPrincipalFinal) falharValidacao("Informe ao menos uma empresa");
+
       // `const` local, e nao a variavel pre-lida: e o retrato travado que manda nas escritas abaixo.
-      const colaborador = await resolverColaboradorParaVinculo(tx);
+      const colaborador = await resolverColaboradorParaVinculo(tx, empresaIdsFinais);
       await atualizarUsuarioAutenticacaoRepository({ id, nome, email }, tx);
       await upsertPerfilUsuarioRepository(
-        { usuarioId: id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
+        { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, ...(role ? { role } : {}) },
         tx
       );
-      await substituirEmpresasUsuarioRepository(id, empresaIds, tx);
-      await vincularUsuarioColaboradorRepository(id, colaborador.id, tx);
+      // Sem substituicao explicita nao se toca em `usuarios_empresas`. Um DELETE+INSERT com a mesma
+      // lista seria equivalente no papel, mas mexeria em `criado_em` e transformaria "nao pedi nada"
+      // numa escrita — que e exatamente o que se quer evitar.
+      if (substituicaoExplicita) await substituirEmpresasUsuarioRepository(id, empresaIdsFinais, tx);
+      // `null` = preservar. `vincularUsuarioColaboradorRepository` desfaz o vinculo antigo antes de
+      // criar o novo, entao chama-lo "sem mudanca" seria escrever destrutivamente a toa.
+      if (colaborador) await vincularUsuarioColaboradorRepository(id, colaborador.id, tx);
       return {
         id,
-        empresaId: empresaPrincipalId,
-        empresaIds,
+        empresaId: empresaPrincipalFinal,
+        empresaIds: empresaIdsFinais,
         nome,
         email,
-        colaboradorId: colaborador.id,
-        setorId: colaborador.setorId
+        colaboradorId: colaborador?.id ?? alvo.colaboradorId ?? "",
+        setorId: colaborador?.setorId ?? null
       };
     });
   }
@@ -484,22 +548,24 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       // chave primaria. O que isto garante e que nenhuma escrita de escopo deste modulo corre por fora
       // da serializacao, inclusive se o perfil ja existir por reaproveitamento de conta.
       await bloquearAlvoUsuarioRepository(usuario.id, tx);
-      const colaboradorTransacao = await resolverColaboradorParaVinculo(tx);
+      // Criacao: nao ha o que preservar, o conjunto do corpo e o final.
+      // Nunca nulo na criacao: `preservarColaborador` exige `id`, e aqui `id` e null.
+      const colaboradorTransacao = (await resolverColaboradorParaVinculo(tx, empresaIdsDoCorpo))!;
       // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
       await marcarEmailVerificadoRepository(usuario.id, tx);
       await upsertPerfilUsuarioRepository(
-        { usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
+        { usuarioId: usuario.id, empresaId: empresaIdsDoCorpo[0]!, nome, email, ...(role ? { role } : {}) },
         tx
       );
-      await substituirEmpresasUsuarioRepository(usuario.id, empresaIds, tx);
+      await substituirEmpresasUsuarioRepository(usuario.id, empresaIdsDoCorpo, tx);
       await vincularUsuarioColaboradorRepository(usuario.id, colaboradorTransacao.id, tx);
       return colaboradorTransacao;
     });
 
     return {
       id: usuario.id,
-      empresaId: empresaPrincipalId,
-      empresaIds,
+      empresaId: empresaIdsDoCorpo[0]!,
+      empresaIds: empresaIdsDoCorpo,
       nome,
       email,
       colaboradorId: colaboradorVinculado.id,

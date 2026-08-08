@@ -122,6 +122,7 @@ export type AlvoUsuario = {
   usuarioId: string;
   empresaId: string | null;
   role: RoleUsuario;
+  colaboradorId: string | null;
   colaboradorEmpresaId: string | null;
 };
 
@@ -158,12 +159,16 @@ export async function bloquearAlvoUsuarioRepository(
   // Perfil sem colaborador vinculado e estado alcancavel (e o que o guard responde como
   // PROFILE_NOT_CONFIGURED) e continua sendo um alvo real — nao pode virar 404.
   const [colaborador] = await db
-    .select({ empresaId: colaboradores.empresaId })
+    .select({ id: colaboradores.id, empresaId: colaboradores.empresaId })
     .from(colaboradores)
     .where(eq(colaboradores.usuarioId, usuarioId))
     .limit(1);
 
-  return { ...perfil, colaboradorEmpresaId: colaborador?.empresaId ?? null };
+  return {
+    ...perfil,
+    colaboradorId: colaborador?.id ?? null,
+    colaboradorEmpresaId: colaborador?.empresaId ?? null
+  };
 }
 
 // `_` e `%` sao curingas do LIKE e sao caracteres LEGAIS no local part de um e-mail — `z.string()

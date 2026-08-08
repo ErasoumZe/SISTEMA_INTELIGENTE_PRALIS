@@ -251,6 +251,11 @@ const alvoOperadoPorLegado = alvoDaCorridaDoColaborador("operadolegado", "0113")
 const alvoTrocaUm = alvoDaCorridaDoColaborador("trocaum", "0120");
 const alvoTrocaDois = alvoDaCorridaDoColaborador("trocadois", "0121");
 
+// Alvo da corrida do CARGO. O colaborador dele e o que tem o cargo desativado — e ele precisa estar
+// REALMENTE vinculado a um usuario, senao o guard "colaborador com usuario precisa ter ao menos um
+// cargo ativo" nunca dispara e a invariante final fica inatingivel por construcao.
+const alvoColabCargo = alvoDaCorridaDoColaborador("cargo", "0130");
+
 // Quem "ganha" o colaborador livre durante a corrida. Nascem SEM colaborador de proposito:
 // `colaboradores_usuario_id_unico` (app.schema.ts:336-338) da no maximo um colaborador por usuario.
 //
@@ -287,7 +292,8 @@ const alvos = [
   alvoPromocaoLegado,
   alvoOperadoPorLegado,
   alvoTrocaUm,
-  alvoTrocaDois
+  alvoTrocaDois,
+  alvoColabCargo
 ];
 
 // Os dois alvos do papel legado nascem `usuario_comum` (o tipo `Alvo` so aceita os dois papeis do
@@ -313,16 +319,12 @@ const colaboradorCorridaRoubado = "11111111-1111-4111-8111-0000000000c6";
 const colaboradorCorridaCriacao = "11111111-1111-4111-8111-0000000000c7";
 const colaboradorCorridaBloqueio = "11111111-1111-4111-8111-0000000000c8";
 const colaboradorCorridaLegitimo = "11111111-1111-4111-8111-0000000000c9";
-// Colaborador da corrida do CARGO: e dele que o ultimo cargo ativo sera desativado.
-const colaboradorCorridaCargo = "11111111-1111-4111-8111-0000000000ca";
-const cargoColaboradorCorridaCargo = "11111111-1111-4111-8111-0000000000ea";
 const colaboradoresLivresDaCorrida = [
   { id: colaboradorCorridaMovido, cargo: "11111111-1111-4111-8111-0000000000e5", nome: "COLAB-CORRIDA-MOVIDO" },
   { id: colaboradorCorridaRoubado, cargo: "11111111-1111-4111-8111-0000000000e6", nome: "COLAB-CORRIDA-ROUBADO" },
   { id: colaboradorCorridaCriacao, cargo: "11111111-1111-4111-8111-0000000000e7", nome: "COLAB-CORRIDA-CRIACAO" },
   { id: colaboradorCorridaBloqueio, cargo: "11111111-1111-4111-8111-0000000000e8", nome: "COLAB-CORRIDA-BLOQUEIO" },
-  { id: colaboradorCorridaLegitimo, cargo: "11111111-1111-4111-8111-0000000000e9", nome: "COLAB-CORRIDA-LEGITIMO" },
-  { id: colaboradorCorridaCargo, cargo: cargoColaboradorCorridaCargo, nome: "COLAB-CORRIDA-CARGO" }
+  { id: colaboradorCorridaLegitimo, cargo: "11111111-1111-4111-8111-0000000000e9", nome: "COLAB-CORRIDA-LEGITIMO" }
 ];
 
 // Id que nao existe em `perfis_usuarios`. `perfis_usuarios.usuario_id` e um `text` primary key SEM
@@ -525,9 +527,12 @@ async function aindaPendente(promessa: Promise<unknown>) {
   );
 }
 
-// Higiene de teste concorrente: mesmo que uma assercao estoure no meio, a requisicao em voo tem de
-// terminar ANTES do proximo teste — senao ela acorda no meio dele e contamina o estado. Sempre depois
+// Higiene de teste concorrente: mesmo que uma assercao estoure no meio, a requisicao em voo precisa
+// terminar antes do proximo teste — senao ela acorda no meio dele e contamina o estado. Sempre depois
 // de soltar o lock, e com teto, para um bug nao virar suite pendurada.
+//
+// O teto torna isto BEST-EFFORT, nao garantia: se ele estourar, a requisicao abandonada ainda pode
+// acordar depois. Na pratica o lock ja foi solto antes, entao a drenagem e imediata.
 async function encerrarRequisicao(promessa: Promise<unknown> | null, limiteMs = 30_000) {
   if (!promessa) return;
   // O timer e limpo no fim: sem isso cada chamada deixava um `setTimeout` de 30s armado segurando o
@@ -1753,6 +1758,83 @@ describe("edicao segura de usuarios integration", () => {
     });
   });
 
+  // --- Preservacao de empresas: `empresaIds` ausente = preservar --------------------------------
+  //
+  // A tela de edicao NAO conhece as empresas reais do alvo: a listagem recorta `empresaIds` ao escopo
+  // da tela, por isolamento. Tratar a ausencia do campo como "lista vazia" e cair na empresa ativa
+  // apagava, em silencio, todo vinculo que a tela nao enxergava — a substituicao e TOTAL.
+  describe("preservacao de empresas do alvo", () => {
+    it("Deve_PreservarVinculosEEmpresaPrincipal_Quando_OPutOmiteEmpresaIds", async () => {
+      const antes = await perfilDe(alvoABLegitimo.usuarioId);
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoABLegitimo.usuarioId}`,
+        headers: { cookie: cookieMultiempresa },
+        // Corpo de "editei so o nome": sem `empresaIds` e sem `empresaId`.
+        payload: {
+          nome: "NOME EDITADO SEM MEXER EM EMPRESAS",
+          email: alvoABLegitimo.email,
+          colaboradorId: alvoABLegitimo.colaboradorId
+        }
+      });
+
+      expect(resposta.statusCode, resposta.body).toBe(204);
+      // A empresa B continua vinculada, e a principal nao foi trocada pela empresa da tela.
+      expect(await empresasDe(alvoABLegitimo.usuarioId)).toEqual([idsTeste.empresaA, idsTeste.empresaB]);
+      expect(await perfilDe(alvoABLegitimo.usuarioId)).toMatchObject({
+        nome: "NOME EDITADO SEM MEXER EM EMPRESAS",
+        empresa_id: antes?.empresa_id ?? idsTeste.empresaA
+      });
+    });
+
+    it("Deve_SubstituirVinculos_Quando_OPutEnviaEmpresaIdsExplicitamente", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoColabLegitimo.usuarioId}`,
+        headers: { cookie: cookieMultiempresa },
+        payload: {
+          empresaIds: [idsTeste.empresaA, idsTeste.empresaB],
+          nome: alvoColabLegitimo.nome,
+          email: alvoColabLegitimo.email,
+          colaboradorId: alvoColabLegitimo.colaboradorId
+        }
+      });
+
+      expect(resposta.statusCode, resposta.body).toBe(204);
+      expect(await empresasDe(alvoColabLegitimo.usuarioId)).toEqual([idsTeste.empresaA, idsTeste.empresaB]);
+    });
+
+    // A preservacao NAO e uma porta lateral: o ator continua precisando alcancar todo o escopo real
+    // do alvo, mesmo sem mandar `empresaIds`.
+    it("Deve_Retornar403_Quando_AtorSoDaEmpresaAOmiteEmpresaIdsEmAlvoAB", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoAB.usuarioId}`,
+        headers: { cookie: cookieGerente },
+        payload: {
+          nome: "TENTATIVA SEM EMPRESAS",
+          email: alvoAB.email,
+          colaboradorId: alvoAB.colaboradorId
+        }
+      });
+
+      assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+      expect(await empresasDe(alvoAB.usuarioId)).toEqual([idsTeste.empresaA, idsTeste.empresaB]);
+    });
+
+    // E a listagem continua sem expor empresa fora do escopo da tela.
+    it("Deve_NaoExporEmpresaForaDoEscopo_Quando_ListaUsuariosEscopadoNaEmpresaA", async () => {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/usuarios?empresaId=${idsTeste.empresaA}&pageSize=100`,
+        headers: { cookie: cookieMultiempresa }
+      });
+
+      expect(resposta.statusCode).toBe(200);
+      expect(JSON.stringify(resposta.json())).not.toContain(idsTeste.empresaB);
+    });
+  });
+
   // --- Corrida no CARGO ATIVO -------------------------------------------------------------------
   //
   // A linha do colaborador passou a ser travada, mas `colaboradores_cargos` continuava fora da
@@ -1763,33 +1845,113 @@ describe("edicao segura de usuarios integration", () => {
   //
   // Resultado possivel: usuario vinculado a colaborador com zero cargos ativos.
   describe("corrida no cargo ativo do colaborador", () => {
-    it("Deve_EsperarOMesmoLockRaiz_Quando_ADesativacaoDeCargoCorreComAVinculacao", async () => {
+    // O colaborador destes testes esta REALMENTE vinculado a um usuario e tem UM cargo ativo. Sem o
+    // vinculo, o guard "colaborador com usuario precisa ter ao menos um cargo ativo" nunca dispara e a
+    // invariante final fica inatingivel por construcao — foi o defeito da versao anterior deste teste.
+    const alvoDoCargo = alvoColabCargo;
+    const colaboradorDoAlvo = alvoColabCargo.colaboradorId;
+    const cargoDoAlvo = alvoColabCargo.colaboradorCargoId;
+
+    // Sentido 1 — a desativacao vence primeiro. A vinculacao acorda, rele os cargos e recusa.
+    it("Deve_RecusarVinculo_Quando_OUltimoCargoEDesativadoAntesDaValidacaoTransacional", async () => {
       const bloqueador = await abrirBloqueador();
       const { cliente } = bloqueador;
       let emVoo: Promise<unknown> | null = null;
       try {
-        // A transacao do teste segura a RAIZ: a linha de `colaboradores`.
         await cliente.query("begin");
-        await cliente.query("select id from colaboradores where id = $1 for update", [colaboradorCorridaCargo]);
+        await cliente.query("select id from colaboradores where id = $1 for update", [colaboradorDoAlvo]);
+        await cliente.query("update colaboradores_cargos set ativo = false where colaborador_id = $1", [
+          colaboradorDoAlvo
+        ]);
 
         const promessa = contexto.app.inject({
           method: "PUT",
-          url: `/api/colaboradores/${colaboradorCorridaCargo}/cargos/${cargoColaboradorCorridaCargo}`,
+          url: `/api/usuarios/${alvoDoCargo.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            nome: "REVINCULO COM CARGO DESATIVADO",
+            email: alvoDoCargo.email,
+            colaboradorId: colaboradorDoAlvo
+          }
+        });
+
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        // A releitura sob lock enxerga o cargo desativado e recusa. O motivo e fixado: um 400 de Zod
+        // ou de "colaborador nao encontrado" passaria por este assert sem provar nada.
+        assertProblem(resposta, 400);
+        expect(JSON.stringify(resposta.json())).toContain("cargo ativo");
+        expect(await perfilDe(alvoDoCargo.usuarioId)).toMatchObject({ nome: alvoDoCargo.nome });
+      } finally {
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
+        // DENTRO do finally, e depois de drenar a requisicao. Fora dele, um assert que estourasse
+        // depois do `commit` deixaria o cargo desativado e cascatearia falso vermelho nos dois testes
+        // seguintes — inclusive na invariante, que e a assercao de maior sinal do bloco.
+        await executarSql("update colaboradores_cargos set ativo = true where id = $1", [cargoDoAlvo]);
+      }
+    });
+
+    // Sentido 2 — a desativacao espera o lock raiz, acorda e recusa, porque o colaborador tem usuario
+    // vinculado e um unico cargo ativo. E o teste que faz o guard DISPARAR de verdade.
+    //
+    // Honestidade sobre o alcance: o vinculo ja existe antes da transacao concorrente, entao o 409
+    // seria alcancado mesmo sem a corrida. O que a corrida acrescenta e a prova de que a desativacao
+    // passou a esperar o MESMO lock de `colaboradores` que a vinculacao segura — sem isso ela corria
+    // por fora e derrubava o ultimo cargo no meio de uma vinculacao em andamento.
+    it("Deve_RecusarDesativacao_Quando_EsperaOLockEOColaboradorTemUsuarioVinculado", async () => {
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
+      try {
+        await cliente.query("begin");
+        await cliente.query("select id from colaboradores where id = $1 for update", [colaboradorDoAlvo]);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/colaboradores/${colaboradorDoAlvo}/cargos/${cargoDoAlvo}`,
           headers: { cookie: cookieAdmin },
           payload: { empresaId: idsTeste.empresaA, ativo: false }
         });
 
         emVoo = promessa;
-        // A desativacao tem de ficar bloqueada POR ESTA transacao. Sem a correcao ela passa direto,
-        // porque nao toca em `colaboradores`.
+        // Bloqueada POR ESTA transacao — nao por "algum lock" do banco.
         expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        // 409, e nao 500: e regra de negocio, nao queda.
+        assertProblem(resposta, 409, "ULTIMO_CARGO_ATIVO");
       } finally {
         await liberarBloqueador(bloqueador);
         await encerrarRequisicao(emVoo);
       }
 
-      // Invariante final: nenhum usuario vinculado a colaborador sem cargo ativo.
+      // O cargo continua ativo e o vinculo continua de pe.
+      expect(
+        await consultarUm<{ ativo: boolean }>("select ativo from colaboradores_cargos where id = $1", [cargoDoAlvo])
+      ).toMatchObject({ ativo: true });
+      expect(await usuarioDoColaborador(colaboradorDoAlvo)).toBe(alvoDoCargo.usuarioId);
+    });
+
+    // A invariante, agora alcancavel: existe pelo menos um colaborador COM usuario neste banco, e
+    // nenhum deles pode estar sem cargo ativo.
+    it("Deve_NuncaTerUsuarioVinculadoAColaboradorSemCargoAtivo", async () => {
+      // Guarda de NAO-VACUIDADE. `expect.any(Number)` aceitaria zero, e ai a consulta abaixo passaria
+      // por ausencia de dado em vez de por invariante respeitada — que e exatamente o que esta guarda
+      // existe para impedir.
+      const comUsuario = await consultarUm<{ total: number }>(
+        "select count(*)::int as total from colaboradores where usuario_id is not null"
+      );
+      expect(comUsuario?.total ?? 0).toBeGreaterThan(0);
+
       expect(
         await consultarUm<{ id: string }>(
           `select c.id from colaboradores c
