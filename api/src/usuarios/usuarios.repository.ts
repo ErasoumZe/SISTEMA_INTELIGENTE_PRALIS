@@ -125,24 +125,38 @@ export type AlvoUsuario = {
   colaboradorEmpresaId: string | null;
 };
 
-export async function buscarAlvoUsuarioRepository(
-  usuarioId: string,
-  db: ExecutorBanco = banco
-): Promise<AlvoUsuario | null> {
-  const [alvo] = await db
+// `db` e OBRIGATORIO e tem de ser a transacao DAS ESCRITAS: `FOR UPDATE` fora de transacao libera o
+// lock na hora seguinte e nao serializa coisa alguma. Sem o parametro default, o compilador nao deixa
+// alguem reintroduzir a leitura solta que criou o TOCTOU.
+//
+// A linha de `perfis_usuarios` e a raiz da serializacao porque as duas escritas que mudam escopo —
+// `substituirEmpresasUsuarioRepository` e `vincularUsuarioColaboradorRepository` — so tem chamador em
+// `usuarios.service.ts`, nos dois ramos, e ambos passam por aqui antes de escrever.
+export async function bloquearAlvoUsuarioRepository(usuarioId: string, db: ExecutorBanco): Promise<AlvoUsuario | null> {
+  // Duas consultas em vez de um `leftJoin`: o Postgres recusa `FOR UPDATE` no lado anulavel de um
+  // outer join ("cannot be applied to the nullable side"). Travar a raiz basta — o colaborador so e
+  // alterado por quem ja segurou a raiz.
+  const [perfil] = await db
     .select({
       usuarioId: perfisUsuarios.usuarioId,
       empresaId: perfisUsuarios.empresaId,
-      role: perfisUsuarios.role,
-      colaboradorEmpresaId: colaboradores.empresaId
+      role: perfisUsuarios.role
     })
     .from(perfisUsuarios)
-    // leftJoin: perfil sem colaborador vinculado e um estado alcancavel (e o que o guard responde como
-    // PROFILE_NOT_CONFIGURED) e continua sendo um alvo real — nao pode virar 404.
-    .leftJoin(colaboradores, eq(colaboradores.usuarioId, perfisUsuarios.usuarioId))
     .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    .limit(1)
+    .for("update");
+  if (!perfil) return null;
+
+  // Perfil sem colaborador vinculado e estado alcancavel (e o que o guard responde como
+  // PROFILE_NOT_CONFIGURED) e continua sendo um alvo real — nao pode virar 404.
+  const [colaborador] = await db
+    .select({ empresaId: colaboradores.empresaId })
+    .from(colaboradores)
+    .where(eq(colaboradores.usuarioId, usuarioId))
     .limit(1);
-  return alvo ?? null;
+
+  return { ...perfil, colaboradorEmpresaId: colaborador?.empresaId ?? null };
 }
 
 export async function existeEmailUsuarioRepository(

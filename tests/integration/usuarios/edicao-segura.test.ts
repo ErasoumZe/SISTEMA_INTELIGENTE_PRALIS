@@ -1,3 +1,4 @@
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
@@ -5,6 +6,7 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
 import { pool } from "../../../api/src/banco/conexao.js";
+import { salvarUsuario } from "../../../api/src/usuarios/usuarios.service.js";
 
 // P-01 / S-01. `PUT /api/usuarios/:id` decidia TUDO pelo corpo: quem e o alvo, em que empresas ele
 // esta e que papel ele passa a ter. O `:id` so era usado como chave de escrita.
@@ -160,7 +162,72 @@ const alvoOperacaoA: Alvo = {
   colaboradorCargoId: "11111111-1111-4111-8111-0000000000de"
 };
 
-const alvos = [alvoB, alvoAB, alvoABLegitimo, alvoComumA, alvoPromocaoA, alvoAdminA, alvoAdminOperacao, alvoOperacaoA];
+// Alvos da prova de fail-closed sem ator. Separados dos demais porque, no RED, a chamada sem ator
+// EXECUTA a escrita — e corromperia o alvo de outro teste.
+const alvoSemAtorAdmin: Alvo = {
+  usuarioId: "alvo-sem-ator-admin",
+  nome: "ALVO-SEM-ATOR-ADMIN",
+  email: "alvo.sem.ator.admin@padaria.local",
+  role: "usuario_admin",
+  empresaPrincipal: idsTeste.empresaA,
+  empresas: [idsTeste.empresaA],
+  colaboradorId: "11111111-1111-4111-8111-0000000000f1",
+  colaboradorEmpresaId: idsTeste.empresaA,
+  colaboradorCargoId: "11111111-1111-4111-8111-0000000000f2"
+};
+
+const alvoSemAtorComum: Alvo = {
+  usuarioId: "alvo-sem-ator-comum",
+  nome: "ALVO-SEM-ATOR-COMUM",
+  email: "alvo.sem.ator.comum@padaria.local",
+  role: "usuario_comum",
+  empresaPrincipal: idsTeste.empresaA,
+  empresas: [idsTeste.empresaA],
+  colaboradorId: "11111111-1111-4111-8111-0000000000f3",
+  colaboradorEmpresaId: idsTeste.empresaA,
+  colaboradorCargoId: "11111111-1111-4111-8111-0000000000f4"
+};
+
+// Alvos das corridas. Um por sentido do lock, porque o teste do sentido 1 COMMITA a mudanca de
+// escopo e deixa o alvo na empresa B para sempre.
+const alvoCorridaPerdida: Alvo = {
+  usuarioId: "alvo-corrida-perdida",
+  nome: "ALVO-CORRIDA-PERDIDA",
+  email: "alvo.corrida.perdida@padaria.local",
+  role: "usuario_comum",
+  empresaPrincipal: idsTeste.empresaA,
+  empresas: [idsTeste.empresaA],
+  colaboradorId: "11111111-1111-4111-8111-0000000000f5",
+  colaboradorEmpresaId: idsTeste.empresaA,
+  colaboradorCargoId: "11111111-1111-4111-8111-0000000000f6"
+};
+
+const alvoCorridaGanha: Alvo = {
+  usuarioId: "alvo-corrida-ganha",
+  nome: "ALVO-CORRIDA-GANHA",
+  email: "alvo.corrida.ganha@padaria.local",
+  role: "usuario_comum",
+  empresaPrincipal: idsTeste.empresaA,
+  empresas: [idsTeste.empresaA],
+  colaboradorId: "11111111-1111-4111-8111-0000000000f7",
+  colaboradorEmpresaId: idsTeste.empresaA,
+  colaboradorCargoId: "11111111-1111-4111-8111-0000000000f8"
+};
+
+const alvos = [
+  alvoB,
+  alvoAB,
+  alvoABLegitimo,
+  alvoComumA,
+  alvoPromocaoA,
+  alvoAdminA,
+  alvoAdminOperacao,
+  alvoOperacaoA,
+  alvoSemAtorAdmin,
+  alvoSemAtorComum,
+  alvoCorridaPerdida,
+  alvoCorridaGanha
+];
 
 // Colaborador da empresa A, com cargo ativo e SEM usuario vinculado. E a peca que torna o payload do
 // takeover 100% "empresa A": sem ele o atacante teria de citar o colaborador da empresa B e esbarraria
@@ -617,23 +684,40 @@ describe("edicao segura de usuarios integration", () => {
     assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
   });
 
-  // Falha tecnica na carga do alvo nao pode virar negacao. Hoje o teste fica vermelho por um motivo
-  // honesto e diferente do futuro: a consulta que o mock derruba NAO EXISTE — o service nunca le o
-  // alvo — entao o PUT responde 204. Depois da correcao ele responde 500, logado e sem detalhe.
+  // Falha tecnica na carga do alvo nao pode virar negacao.
   //
-  // O `pool.query` e substituido de forma seletiva (molde de saude.test.ts e metadados-cross-tenant):
-  // filtrar por parametro, e nao so pelo texto do SQL, e o que impede derrubar junto a consulta de
-  // perfil do proprio ator no preHandler de autenticacao — que tambem le `perfis_usuarios`.
+  // A carga do alvo passou a rodar DENTRO da transacao, e o Drizzle abre transacao com
+  // `pool.connect()` — as consultas de dentro nao passam por `pool.query`. Por isso a substituicao
+  // aqui e no `connect`, embrulhando o `query` do cliente entregue. O filtro continua por PARAMETRO,
+  // e nao so pelo texto do SQL: e o que impede derrubar junto a consulta de perfil do proprio ator no
+  // preHandler de autenticacao, que tambem le `perfis_usuarios`.
+  //
+  // Cada cliente embrulhado e restaurado no `finally`, um a um: o pool reusa clientes, e deixar o
+  // embrulho ligado envenenaria os proximos testes do processo.
   it("Deve_Retornar500_Quando_OBancoFalhaAoCarregarOAlvoDaEdicao", async () => {
-    const consultaOriginal = pool.query.bind(pool);
-    pool.query = ((texto: unknown, ...resto: unknown[]) => {
-      const sql = typeof texto === "string" ? texto : String((texto as { text?: string })?.text ?? "");
-      const parametros = Array.isArray(resto[0]) ? (resto[0] as unknown[]) : [];
-      if (sql.includes('from "perfis_usuarios"') && parametros.includes(alvoComumA.usuarioId)) {
-        return Promise.reject(new Error("banco fora do ar (simulado)"));
-      }
-      return (consultaOriginal as (...args: unknown[]) => unknown)(texto, ...resto);
-    }) as typeof pool.query;
+    const conectarOriginal = pool.connect.bind(pool);
+    const embrulhados: { cliente: pg.PoolClient; original: pg.PoolClient["query"] }[] = [];
+    pool.connect = ((...args: unknown[]) => {
+      // `connect` tem duas formas. Com callback e a que o PROPRIO `pool.query` usa por dentro, e ela
+      // nao devolve promessa — embrulhar essa forma quebrava toda consulta fora de transacao. So a
+      // forma sem argumento interessa aqui: e a que o Drizzle usa para abrir transacao.
+      if (args.length) return (conectarOriginal as (...a: unknown[]) => unknown)(...args);
+      return (conectarOriginal as () => Promise<pg.PoolClient>)().then((cliente) => {
+        // Guarda a versao JA LIGADA ao cliente: e o que se devolve no `finally`, e restaurar uma
+        // referencia ligada mantem o `this` certo sem depender do metodo solto do prototipo.
+        const queryOriginal = cliente.query.bind(cliente);
+        embrulhados.push({ cliente, original: queryOriginal });
+        cliente.query = ((texto: unknown, ...resto: unknown[]) => {
+          const sql = typeof texto === "string" ? texto : String((texto as { text?: string })?.text ?? "");
+          const parametros = Array.isArray(resto[0]) ? (resto[0] as unknown[]) : [];
+          if (sql.includes('from "perfis_usuarios"') && parametros.includes(alvoComumA.usuarioId)) {
+            return Promise.reject(new Error("banco fora do ar (simulado)"));
+          }
+          return (queryOriginal as (...a: unknown[]) => unknown)(texto, ...resto);
+        }) as typeof cliente.query;
+        return cliente;
+      });
+    }) as typeof pool.connect;
 
     try {
       const resposta = await contexto.app.inject({
@@ -655,7 +739,8 @@ describe("edicao segura de usuarios integration", () => {
       expect(corpo).not.toContain(CODIGO_PRIVILEGIO);
       expect(corpo).not.toContain("banco fora do ar (simulado)");
     } finally {
-      pool.query = consultaOriginal;
+      pool.connect = conectarOriginal;
+      for (const { cliente, original } of embrulhados) cliente.query = original;
     }
   });
 
@@ -676,5 +761,232 @@ describe("edicao segura de usuarios integration", () => {
 
     expect(resposta.statusCode).toBe(204);
     expect(await perfilDe(alvoComumA.usuarioId)).toMatchObject({ nome: "ALVO COMUM DEPOIS DA FALHA" });
+  });
+
+  // --- Fail-closed sem ator ---------------------------------------------------------------------
+  //
+  // `temAcessoTotal` devolvia `true` quando o perfil era `undefined`, e o escopo de empresa tambem
+  // liberava tudo nesse caso. Hoje o controller autenticado sempre passa um perfil, entao nada
+  // explode — mas a rota confia num invariante que o TIPO nao garante (`perfil?: PerfilAtor`), e
+  // qualquer chamador interno futuro herdaria acesso total sem pedir. Ausencia de ator nao pode ser
+  // sinonimo de administrador; tem de ser sinonimo de nenhuma autorizacao.
+  //
+  // A prova e por chamada DIRETA ao service, porque pela rota o perfil nunca falta — e e exatamente
+  // o caminho que um chamador interno usaria.
+  describe("sem ator autenticado", () => {
+    it("Deve_Recusar_Quando_ChamadaSemAtorTentaEditarAlvoQueJaEUsuarioAdmin", async () => {
+      await expect(
+        salvarUsuario(alvoSemAtorAdmin.usuarioId, {
+          empresaIds: [idsTeste.empresaA],
+          nome: "ADMIN EDITADO SEM ATOR",
+          email: "admin.sem.ator@padaria.local",
+          colaboradorId: alvoSemAtorAdmin.colaboradorId
+        })
+      ).rejects.toMatchObject({ status: 403, code: "PROFILE_NOT_CONFIGURED" });
+
+      expect(await perfilDe(alvoSemAtorAdmin.usuarioId)).toMatchObject({
+        nome: alvoSemAtorAdmin.nome,
+        email: alvoSemAtorAdmin.email,
+        role: "usuario_admin"
+      });
+    });
+
+    it("Deve_Recusar_Quando_ChamadaSemAtorAlteraRole", async () => {
+      await expect(
+        salvarUsuario(alvoSemAtorComum.usuarioId, {
+          empresaIds: [idsTeste.empresaA],
+          nome: alvoSemAtorComum.nome,
+          email: alvoSemAtorComum.email,
+          role: "usuario_admin",
+          colaboradorId: alvoSemAtorComum.colaboradorId
+        })
+      ).rejects.toMatchObject({ status: 403, code: "PROFILE_NOT_CONFIGURED" });
+
+      expect(await perfilDe(alvoSemAtorComum.usuarioId)).toMatchObject({ role: "usuario_comum" });
+    });
+
+    it("Deve_Recusar_Quando_ChamadaSemAtorCriaUsuarioAdmin", async () => {
+      const email = "criado.sem.ator@padaria.local";
+      await expect(
+        salvarUsuario(null, {
+          empresaIds: [idsTeste.empresaA],
+          nome: "CRIADO SEM ATOR",
+          email,
+          role: "usuario_admin",
+          senha: "Teste#2026!semator",
+          novoColaborador: {
+            empresaId: idsTeste.empresaA,
+            nome: "COLABORADOR CRIADO SEM ATOR",
+            setorId: idsTeste.setorA,
+            cargoId: idsTeste.cargoGerente
+          }
+        })
+      ).rejects.toMatchObject({ status: 403, code: "PROFILE_NOT_CONFIGURED" });
+
+      // Recusa antes de qualquer escrita, inclusive a do Better Auth.
+      expect(
+        await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [email])
+      ).toBeNull();
+      expect(
+        await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email])
+      ).toBeNull();
+    });
+  });
+
+  // --- Corrida entre a autorizacao e a escrita (TOCTOU) -----------------------------------------
+  //
+  // A autorizacao lia o alvo FORA da transacao e sem travar nada. Entre "o alvo esta na empresa A,
+  // pode editar" e o `UPDATE`, outra transacao move o alvo para a empresa B: a edicao antiga escreve
+  // assim mesmo, com um veredito que ja nao vale — e ainda por cima devolve o alvo para a empresa A,
+  // porque a substituicao de empresas e total.
+  //
+  // A serializacao e por lock de linha em `perfis_usuarios`, dentro da MESMA transacao das escritas.
+  // A linha do perfil e a raiz certa porque as duas escritas que mudam escopo —
+  // `substituirEmpresasUsuarioRepository` e `vincularUsuarioColaboradorRepository` — so tem chamador
+  // em `usuarios.service.ts`, nos dois ramos, e ambos passam por ela.
+  //
+  // Os dois testes sao deterministicos: quem manda na ordem e o `FOR UPDATE` que o PROPRIO teste
+  // segura, nao o relogio.
+  describe("corrida com mudanca de escopo do alvo", () => {
+    async function clienteDireto() {
+      const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+      await cliente.connect();
+      return cliente;
+    }
+
+    // Espera ate existir uma sessao BLOQUEADA em lock no banco — o sinal observavel de que a
+    // requisicao da API chegou na linha travada. Sem isto o teste dependeria de `sleep`.
+    async function esperarSessaoBloqueadaEmLock(cliente: pg.Client, limiteMs = 20_000) {
+      const inicio = Date.now();
+      while (Date.now() - inicio < limiteMs) {
+        const { rows } = await cliente.query<{ total: number }>(
+          `select count(*)::int as total
+             from pg_stat_activity
+            where datname = current_database()
+              and pid <> pg_backend_pid()
+              and wait_event_type = 'Lock'`
+        );
+        if ((rows[0]?.total ?? 0) > 0) return true;
+        await new Promise((resolver) => setTimeout(resolver, 25));
+      }
+      return false;
+    }
+
+    async function aindaPendente(promessa: Promise<unknown>) {
+      const marcador = Symbol("pendente");
+      return (await Promise.race([promessa.then(() => "resolvida"), Promise.resolve(marcador)])) === marcador;
+    }
+
+    async function moverAlvoParaEmpresaB(cliente: pg.Client, usuarioId: string) {
+      await cliente.query("delete from usuarios_empresas where usuario_id = $1", [usuarioId]);
+      await cliente.query("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+        usuarioId,
+        idsTeste.empresaB
+      ]);
+      await cliente.query("update perfis_usuarios set empresa_id = $2 where usuario_id = $1", [
+        usuarioId,
+        idsTeste.empresaB
+      ]);
+    }
+
+    // Sentido 1 — a concorrente ganha o lock. A edicao tem de acordar, reler o alvo JA movido e
+    // recusar, sem escrever nada.
+    it("Deve_Retornar403SemEscrever_Quando_OutraTransacaoMoveOAlvoParaForaDoEscopoPrimeiro", async () => {
+      const cliente = await clienteDireto();
+      try {
+        await cliente.query("begin");
+        await cliente.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update", [
+          alvoCorridaPerdida.usuarioId
+        ]);
+        await moverAlvoParaEmpresaB(cliente, alvoCorridaPerdida.usuarioId);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoCorridaPerdida.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDITADO COM ESTADO VELHO",
+            email: "editado.com.estado.velho@padaria.local",
+            colaboradorId: alvoCorridaPerdida.colaboradorId
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        // Prova que a requisicao NAO passou por cima do lock.
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+        // O alvo continua exatamente como a transacao concorrente o deixou. Se a edicao tivesse
+        // escrito com o veredito velho, `nome`/`email` seriam os do atacante e `usuarios_empresas`
+        // voltaria para a empresa A — que e o dano real da corrida.
+        expect(await perfilDe(alvoCorridaPerdida.usuarioId)).toMatchObject({
+          nome: alvoCorridaPerdida.nome,
+          email: alvoCorridaPerdida.email,
+          empresa_id: idsTeste.empresaB
+        });
+        expect(await empresasDe(alvoCorridaPerdida.usuarioId)).toEqual([idsTeste.empresaB]);
+        expect(await colaboradorVinculadoA(alvoCorridaPerdida.usuarioId)).toBe(alvoCorridaPerdida.colaboradorId);
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
+
+    // Sentido 2 — a edicao ganha o lock. Contraprova: sob contencao ela nao pode falhar nem ficar
+    // presa; tem de esperar, executar inteira sobre o estado que leu, e so entao liberar a proxima.
+    it("Deve_EditarInteiro_Quando_AEdicaoAdquireOLockEAMudancaConcorrenteVemDepois", async () => {
+      const cliente = await clienteDireto();
+      try {
+        await cliente.query("begin");
+        await cliente.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update", [
+          alvoCorridaGanha.usuarioId
+        ]);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoCorridaGanha.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDITADO SOB CONTENCAO",
+            email: alvoCorridaGanha.email,
+            role: "usuario_comum",
+            colaboradorId: alvoCorridaGanha.colaboradorId
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        // A concorrente solta o lock SEM mudar nada: a edicao acorda, le o estado original e vale.
+        await cliente.query("rollback");
+        const resposta = await promessa;
+        expect(resposta.statusCode).toBe(204);
+        expect(await perfilDe(alvoCorridaGanha.usuarioId)).toMatchObject({ nome: "EDITADO SOB CONTENCAO" });
+        expect(await empresasDe(alvoCorridaGanha.usuarioId)).toEqual([idsTeste.empresaA]);
+
+        // Agora a mudanca concorrente roda DEPOIS. A ordem serial e edicao -> movimentacao: o nome
+        // editado sobrevive e a empresa nova vale. Nada de estado misturado.
+        await cliente.query("begin");
+        await cliente.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update", [
+          alvoCorridaGanha.usuarioId
+        ]);
+        await moverAlvoParaEmpresaB(cliente, alvoCorridaGanha.usuarioId);
+        await cliente.query("commit");
+
+        expect(await perfilDe(alvoCorridaGanha.usuarioId)).toMatchObject({
+          nome: "EDITADO SOB CONTENCAO",
+          empresa_id: idsTeste.empresaB
+        });
+        expect(await empresasDe(alvoCorridaGanha.usuarioId)).toEqual([idsTeste.empresaB]);
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
   });
 });
