@@ -12,7 +12,8 @@ import {
   atualizarUsuarioAutenticacaoRepository,
   bloquearAlvoUsuarioRepository,
   buscarCargoEmpresaRepository,
-  buscarColaboradorPorCpfRepository,
+  bloquearColaboradorPorCpfRepository,
+  bloquearColaboradorUsuarioRepository,
   buscarColaboradorUsuarioRepository,
   buscarSetorEmpresaRepository,
   buscarUsuarioAutenticacaoPorEmailRepository,
@@ -225,6 +226,20 @@ function empresaNoEscopo(perfil: PerfilComEmpresa, empresaId: string): boolean {
   return podeAcessarEmpresa(perfil, empresaId);
 }
 
+// As checagens do colaborador informado no corpo, em UM lugar so. Elas rodam DUAS vezes — na
+// pre-validacao sem lock, que existe para responder rapido, e na releitura travada dentro da
+// transacao, que e a que autoriza. Duplicar o corpo delas seria pior que nao ter a primeira: bastaria
+// as duas divergirem para a rapida virar a permissiva.
+function validarColaboradorParaVinculo(
+  colaborador: { empresaId: string; usuarioId: string | null },
+  alvoId: string | null,
+  ator: PerfilAtor
+) {
+  if (!empresaNoEscopo(ator, colaborador.empresaId)) throw empresaNaoPermitida();
+  if (colaborador.usuarioId && colaborador.usuarioId !== alvoId)
+    falharValidacao("Colaborador ja vinculado a outro usuario");
+}
+
 // `escopoDados` e obrigatorio e nao aceita mais `null`. O ramo "null = devolve tudo sem filtro" nao
 // tinha chamador e era o mesmo tipo de armadilha do `_empresasLiberadas` removido no PR #137: um
 // parametro que parece checagem de seguranca e desliga o isolamento inteiro se alguem passar nulo.
@@ -249,7 +264,11 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     : null;
   if (!dados.colaboradorId && !novoColaborador) falharValidacao("Colaborador obrigatorio");
 
-  let colaborador = dados.colaboradorId ? await buscarColaboradorUsuarioRepository(dados.colaboradorId) : null;
+  // PRE-VALIDACAO, e so isso. Serve para responder rapido o caso obvio (colaborador inexistente, de
+  // outra empresa, ja vinculado, sem cargo ativo) sem abrir transacao. NAO e fonte de autorizacao: o
+  // retrato lido aqui envelhece, e quem decide e a releitura travada dentro da transacao
+  // (`resolverColaboradorParaVinculo`). Nenhuma escrita usa este objeto.
+  const colaboradorPreLido = dados.colaboradorId ? await buscarColaboradorUsuarioRepository(dados.colaboradorId) : null;
   if (novoColaborador) {
     if (!empresaNoEscopo(ator, novoColaborador.empresaId)) throw empresaNaoPermitida();
     const cargo = await buscarCargoEmpresaRepository(novoColaborador.cargoId);
@@ -259,15 +278,13 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       if (!setor || setor.empresaId !== novoColaborador.empresaId) falharValidacao("Setor nao pertence a empresa");
     }
   } else {
-    if (!colaborador) falharValidacao("Colaborador nao encontrado");
-    if (!empresaNoEscopo(ator, colaborador.empresaId)) throw empresaNaoPermitida();
-    if (colaborador.usuarioId && colaborador.usuarioId !== id)
-      falharValidacao("Colaborador ja vinculado a outro usuario");
-    if (!(await colaboradorTemCargoAtivoRepository(colaborador.id)))
+    if (!colaboradorPreLido) falharValidacao("Colaborador nao encontrado");
+    validarColaboradorParaVinculo(colaboradorPreLido, id, ator);
+    if (!(await colaboradorTemCargoAtivoRepository(colaboradorPreLido.id)))
       falharValidacao("Colaborador precisa ter ao menos um cargo ativo");
   }
 
-  const empresaColaboradorId = novoColaborador?.empresaId ?? colaborador?.empresaId;
+  const empresaColaboradorId = novoColaborador?.empresaId ?? colaboradorPreLido?.empresaId;
   if (!empresaColaboradorId) falharValidacao("Empresa nao permitida");
   const empresaIds = empresasUsuario(dados.empresaId, dados.empresaIds);
   if (!empresaIds.includes(empresaColaboradorId)) empresaIds.unshift(empresaColaboradorId);
@@ -301,13 +318,29 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     );
   }
 
-  async function obterColaboradorParaVinculo(tx: TransacaoBanco) {
-    if (!novoColaborador) return colaborador!;
+  // A releitura que AUTORIZA. Roda com a linha do colaborador travada, ja dentro da transacao das
+  // escritas, e refaz as mesmas checagens da pre-validacao — porque entre uma e outra cabe outra
+  // transacao mover o colaborador de empresa, vincula-lo a outro usuario ou desativar o cargo dele.
+  //
+  // O retorno desta funcao e a UNICA fonte usada pelas escritas.
+  async function resolverColaboradorParaVinculo(tx: TransacaoBanco) {
+    if (!novoColaborador) {
+      const relido = await bloquearColaboradorUsuarioRepository(dados.colaboradorId!, tx);
+      if (!relido) falharValidacao("Colaborador nao encontrado");
+      validarColaboradorParaVinculo(relido, id, ator);
+      if (!(await colaboradorTemCargoAtivoRepository(relido.id, tx)))
+        falharValidacao("Colaborador precisa ter ao menos um cargo ativo");
+      // `empresaIds` e `empresaPrincipalId` foram calculados com a empresa PRE-LIDA. Se ela mudou sob
+      // o lock, o conjunto que estamos prestes a gravar nao corresponde mais ao colaborador — e o
+      // usuario ficaria vinculado a uma empresa que ele nao tem.
+      if (!empresaIds.includes(relido.empresaId)) throw empresaNaoPermitida();
+      return relido;
+    }
 
     // Dedup por CPF: se ja existe um colaborador com esse CPF na empresa, reutiliza em vez de criar
     // uma copia (a causa dos colaboradores duplicados no QA de 15/07). Sem CPF, cria normalmente.
     if (novoColaborador.cpf) {
-      const existente = await buscarColaboradorPorCpfRepository(novoColaborador.empresaId, novoColaborador.cpf, tx);
+      const existente = await bloquearColaboradorPorCpfRepository(novoColaborador.empresaId, novoColaborador.cpf, tx);
       if (existente) {
         if (existente.usuarioId && existente.usuarioId !== id) {
           falharValidacao("Ja existe um colaborador com esse CPF vinculado a outro usuario");
@@ -361,7 +394,8 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       await autorizarEdicaoUsuario(id, dados.role, ator, tx);
       const emailExistente = await existeEmailUsuarioRepository(email, id, tx);
       if (emailExistente) falharValidacao("Email ja cadastrado");
-      colaborador = await obterColaboradorParaVinculo(tx);
+      // `const` local, e nao a variavel pre-lida: e o retrato travado que manda nas escritas abaixo.
+      const colaborador = await resolverColaboradorParaVinculo(tx);
       await atualizarUsuarioAutenticacaoRepository({ id, nome, email }, tx);
       await upsertPerfilUsuarioRepository(
         { usuarioId: id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
@@ -410,7 +444,7 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     // chave primaria. O que isto garante e que nenhuma escrita de escopo deste modulo corre por fora
     // da serializacao, inclusive se o perfil ja existir por reaproveitamento de conta.
     await bloquearAlvoUsuarioRepository(usuario.id, tx);
-    const colaboradorTransacao = await obterColaboradorParaVinculo(tx);
+    const colaboradorTransacao = await resolverColaboradorParaVinculo(tx);
     // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
     await marcarEmailVerificadoRepository(usuario.id, tx);
     await upsertPerfilUsuarioRepository(

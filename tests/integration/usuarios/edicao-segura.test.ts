@@ -214,6 +214,41 @@ const alvoCorridaGanha: Alvo = {
   colaboradorCargoId: "11111111-1111-4111-8111-0000000000f8"
 };
 
+// Alvos das corridas do COLABORADOR informado no corpo (um por caso, para nenhum depender da ordem).
+function alvoDaCorridaDoColaborador(sufixo: string, indice: string): Alvo {
+  return {
+    usuarioId: `alvo-corrida-colab-${sufixo}`,
+    nome: `ALVO-CORRIDA-COLAB-${sufixo.toUpperCase()}`,
+    email: `alvo.corrida.colab.${sufixo}@padaria.local`,
+    role: "usuario_comum",
+    empresaPrincipal: idsTeste.empresaA,
+    empresas: [idsTeste.empresaA],
+    // O ultimo grupo do uuid tem 12 hex: 7 zeros + 4 do indice + 1 do papel.
+    colaboradorId: `11111111-1111-4111-8111-0000000${indice}1`,
+    colaboradorEmpresaId: idsTeste.empresaA,
+    colaboradorCargoId: `11111111-1111-4111-8111-0000000${indice}2`
+  };
+}
+
+const alvoColabMovido = alvoDaCorridaDoColaborador("movido", "0100");
+const alvoColabRoubado = alvoDaCorridaDoColaborador("roubado", "0101");
+const alvoColabBloqueio = alvoDaCorridaDoColaborador("bloqueio", "0102");
+const alvoColabLegitimo = alvoDaCorridaDoColaborador("legitimo", "0103");
+
+// Quem "ganha" o colaborador livre durante a corrida. Nascem SEM colaborador de proposito:
+// `colaboradores_usuario_id_unico` (app.schema.ts:336-338) da no maximo um colaborador por usuario.
+//
+// Um dono por teste, e nao um compartilhado: com a correcao a recusa PRESERVA o vinculo que a
+// concorrente criou, entao o segundo teste nao conseguiria dar um segundo colaborador ao mesmo dono.
+// (No RED o vinculo era roubado de volta e o dono ficava livre — fixture que so funcionava enquanto o
+// defeito existisse.)
+const donoDoColaboradorRoubado = "usuario-dono-colab-roubado";
+const donoDoColaboradorCriacao = "usuario-dono-colab-criacao";
+const donosSemColaborador = [
+  { id: donoDoColaboradorRoubado, nome: "DONO-COLAB-ROUBADO", email: "dono.colab.roubado@padaria.local" },
+  { id: donoDoColaboradorCriacao, nome: "DONO-COLAB-CRIACAO", email: "dono.colab.criacao@padaria.local" }
+];
+
 const alvos = [
   alvoB,
   alvoAB,
@@ -226,7 +261,11 @@ const alvos = [
   alvoSemAtorAdmin,
   alvoSemAtorComum,
   alvoCorridaPerdida,
-  alvoCorridaGanha
+  alvoCorridaGanha,
+  alvoColabMovido,
+  alvoColabRoubado,
+  alvoColabBloqueio,
+  alvoColabLegitimo
 ];
 
 // Colaborador da empresa A, com cargo ativo e SEM usuario vinculado. E a peca que torna o payload do
@@ -241,6 +280,20 @@ const colaboradorCargoLivreA = "11111111-1111-4111-8111-0000000000c2";
 // o defeito real, que e o perfil fantasma.
 const colaboradorLivreFantasmaA = "11111111-1111-4111-8111-0000000000c3";
 const colaboradorCargoLivreFantasmaA = "11111111-1111-4111-8111-0000000000c4";
+
+// Colaboradores livres das corridas: um por caso, porque cada teste muda o estado do seu.
+const colaboradorCorridaMovido = "11111111-1111-4111-8111-0000000000c5";
+const colaboradorCorridaRoubado = "11111111-1111-4111-8111-0000000000c6";
+const colaboradorCorridaCriacao = "11111111-1111-4111-8111-0000000000c7";
+const colaboradorCorridaBloqueio = "11111111-1111-4111-8111-0000000000c8";
+const colaboradorCorridaLegitimo = "11111111-1111-4111-8111-0000000000c9";
+const colaboradoresLivresDaCorrida = [
+  { id: colaboradorCorridaMovido, cargo: "11111111-1111-4111-8111-0000000000e5", nome: "COLAB-CORRIDA-MOVIDO" },
+  { id: colaboradorCorridaRoubado, cargo: "11111111-1111-4111-8111-0000000000e6", nome: "COLAB-CORRIDA-ROUBADO" },
+  { id: colaboradorCorridaCriacao, cargo: "11111111-1111-4111-8111-0000000000e7", nome: "COLAB-CORRIDA-CRIACAO" },
+  { id: colaboradorCorridaBloqueio, cargo: "11111111-1111-4111-8111-0000000000e8", nome: "COLAB-CORRIDA-BLOQUEIO" },
+  { id: colaboradorCorridaLegitimo, cargo: "11111111-1111-4111-8111-0000000000e9", nome: "COLAB-CORRIDA-LEGITIMO" }
+];
 
 // Id que nao existe em `perfis_usuarios`. `perfis_usuarios.usuario_id` e um `text` primary key SEM
 // FK para a tabela de autenticacao (db/src/schema/app.schema.ts:120-132), entao o upsert de
@@ -391,6 +444,19 @@ describe("edicao segura de usuarios integration", () => {
       colaboradorCargoLivreFantasmaA,
       "COLABORADOR-LIVRE-FANTASMA-EMPRESA-A"
     );
+    for (const livre of colaboradoresLivresDaCorrida) {
+      await criarColaboradorLivreDaEmpresaA(livre.id, livre.cargo, livre.nome);
+    }
+    for (const dono of donosSemColaborador) {
+      await executarSql(
+        "insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role) values ($1, $2, $3, $4, 'usuario_comum')",
+        [dono.id, idsTeste.empresaA, dono.nome, dono.email]
+      );
+      await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+        dono.id,
+        idsTeste.empresaA
+      ]);
+    }
     gerenteId = await usuarioIdPorEmail(usuariosTeste.gerente.email);
     await darAoGerenteAPermissaoDeEscreverUsuarios(gerenteId);
     cookieGerente = await cookieSessao(contexto.app, "gerente");
@@ -936,9 +1002,15 @@ describe("edicao segura de usuarios integration", () => {
       }
     });
 
-    // Sentido 2 — a edicao ganha o lock. Contraprova: sob contencao ela nao pode falhar nem ficar
-    // presa; tem de esperar, executar inteira sobre o estado que leu, e so entao liberar a proxima.
-    it("Deve_EditarInteiro_Quando_AEdicaoAdquireOLockEAMudancaConcorrenteVemDepois", async () => {
+    // Sentido 2 — contraprova de que a contencao nao quebra a edicao: ela espera o lock, acorda e
+    // executa INTEIRA sobre o estado que leu; a movimentacao seguinte se aplica por cima sem perder o
+    // que foi editado.
+    //
+    // O que este teste NAO prova, e antes o nome dizia que provava: que uma transacao concorrente
+    // ficou bloqueada ATRAS da edicao. Aqui a concorrente solta o lock e so DEPOIS a movimentacao
+    // roda — isso e ordem sequencial, nao bloqueio. Quem prova o bloqueio e o teste seguinte, com
+    // `FOR UPDATE NOWAIT`.
+    it("Deve_EditarInteiro_Quando_EsperaOLockDoAlvoEAMovimentacaoRodaEmSeguida", async () => {
       const cliente = await clienteDireto();
       try {
         await cliente.query("begin");
@@ -983,6 +1055,281 @@ describe("edicao segura de usuarios integration", () => {
           empresa_id: idsTeste.empresaB
         });
         expect(await empresasDe(alvoCorridaGanha.usuarioId)).toEqual([idsTeste.empresaB]);
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
+  });
+
+  // --- Corrida no COLABORADOR informado pelo corpo ----------------------------------------------
+  //
+  // O lock do alvo fechou a corrida do lado do usuario editado. Sobrava a outra ponta: o colaborador
+  // vinha de `buscarColaboradorUsuarioRepository`, lido ANTES da transacao, e o objeto guardado era
+  // reusado la dentro como se ainda valesse. Entre a leitura e o vinculo cabe outra transacao mover o
+  // colaborador de empresa ou vincula-lo a outro usuario — e a requisicao antiga gravava assim mesmo,
+  // com a autorizacao vencida.
+  //
+  // Agora a pre-leitura serve so para responder rapido, e quem autoriza e a releitura com
+  // `FOR UPDATE` dentro da transacao. A ordem dos locks e sempre perfil -> colaborador, para duas
+  // edicoes simultaneas nao se travarem em cruz.
+  describe("corrida no colaborador informado pelo corpo", () => {
+    async function clienteDireto() {
+      const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+      await cliente.connect();
+      return cliente;
+    }
+
+    async function esperarSessaoBloqueadaEmLock(cliente: pg.Client, limiteMs = 20_000) {
+      const inicio = Date.now();
+      while (Date.now() - inicio < limiteMs) {
+        const { rows } = await cliente.query<{ total: number }>(
+          `select count(*)::int as total
+             from pg_stat_activity
+            where datname = current_database()
+              and pid <> pg_backend_pid()
+              and wait_event_type = 'Lock'`
+        );
+        if ((rows[0]?.total ?? 0) > 0) return true;
+        await new Promise((resolver) => setTimeout(resolver, 25));
+      }
+      return false;
+    }
+
+    async function aindaPendente(promessa: Promise<unknown>) {
+      const marcador = Symbol("pendente");
+      return (await Promise.race([promessa.then(() => "resolvida"), Promise.resolve(marcador)])) === marcador;
+    }
+
+    // Segura a linha do colaborador e devolve o cliente com a transacao ABERTA.
+    async function travarColaborador(cliente: pg.Client, colaboradorId: string) {
+      await cliente.query("begin");
+      await cliente.query("select id from colaboradores where id = $1 for update", [colaboradorId]);
+    }
+
+    // Sentido 1 do enunciado: o colaborador estava na empresa A na pre-leitura e vai para a B antes da
+    // validacao transacional.
+    it("Deve_Retornar403SemEscrever_Quando_OColaboradorEMovidoParaOutraEmpresaAntesDaValidacaoTransacional", async () => {
+      const cliente = await clienteDireto();
+      try {
+        await travarColaborador(cliente, colaboradorCorridaMovido);
+        await cliente.query("update colaboradores set empresa_id = $2 where id = $1", [
+          colaboradorCorridaMovido,
+          idsTeste.empresaB
+        ]);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoColabMovido.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDITADO COM COLABORADOR VELHO",
+            email: alvoColabMovido.email,
+            colaboradorId: colaboradorCorridaMovido
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        assertProblem(resposta, 403, "FORBIDDEN_COMPANY");
+        // Nada foi escrito: nem no alvo, nem no colaborador.
+        expect(await perfilDe(alvoColabMovido.usuarioId)).toMatchObject({ nome: alvoColabMovido.nome });
+        expect(await colaboradorVinculadoA(alvoColabMovido.usuarioId)).toBe(alvoColabMovido.colaboradorId);
+        expect(await usuarioDoColaborador(colaboradorCorridaMovido)).toBeNull();
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
+
+    // Sentido 2 do enunciado: o colaborador estava livre na pre-leitura e ganha dono antes da
+    // validacao transacional. A requisicao antiga nao pode ROUBAR o vinculo.
+    it("Deve_RecusarSemRoubarVinculo_Quando_OColaboradorEVinculadoAOutroUsuarioAntesDaValidacaoTransacional", async () => {
+      const cliente = await clienteDireto();
+      try {
+        await travarColaborador(cliente, colaboradorCorridaRoubado);
+        await cliente.query("update colaboradores set usuario_id = $2 where id = $1", [
+          colaboradorCorridaRoubado,
+          donoDoColaboradorRoubado
+        ]);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoColabRoubado.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDITADO ROUBANDO COLABORADOR",
+            email: alvoColabRoubado.email,
+            colaboradorId: colaboradorCorridaRoubado
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        assertProblem(resposta, 400);
+        // O vinculo continua com quem o ganhou na corrida.
+        expect(await usuarioDoColaborador(colaboradorCorridaRoubado)).toBe(donoDoColaboradorRoubado);
+        expect(await perfilDe(alvoColabRoubado.usuarioId)).toMatchObject({ nome: alvoColabRoubado.nome });
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
+
+    // Criacao que perde a corrida. Aqui o `signUpEmail` ja commitou numa transacao PROPRIA antes de a
+    // nossa abrir, entao recusar depois exige compensacao — senao sobra um usuario de autenticacao
+    // orfao que ainda por cima bloqueia toda nova tentativa com o mesmo e-mail.
+    it("Deve_NaoDeixarOrfao_Quando_ACriacaoPerdeACorridaDoColaborador", async () => {
+      const email = "criacao.perde.corrida@padaria.local";
+      const cliente = await clienteDireto();
+      try {
+        await travarColaborador(cliente, colaboradorCorridaCriacao);
+        await cliente.query("update colaboradores set usuario_id = $2 where id = $1", [
+          colaboradorCorridaCriacao,
+          donoDoColaboradorCriacao
+        ]);
+
+        const promessa = contexto.app.inject({
+          method: "POST",
+          url: "/api/usuarios",
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "USUARIO QUE PERDE A CORRIDA",
+            email,
+            senha: "Teste#2026!corrida",
+            colaboradorId: colaboradorCorridaCriacao
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        await cliente.query("commit");
+        const resposta = await promessa;
+
+        assertProblem(resposta, 400);
+        // Compensacao completa: nem autenticacao, nem credencial, nem perfil, nem vinculo de empresa.
+        expect(
+          await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email])
+        ).toBeNull();
+        expect(
+          await consultarUm<{ id: string }>(
+            'select a.id from account a join "user" u on u.id = a."userId" where lower(u.email) = lower($1)',
+            [email]
+          )
+        ).toBeNull();
+        expect(
+          await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [email])
+        ).toBeNull();
+        expect(
+          await consultarUm<{ usuario_id: string }>(
+            "select ue.usuario_id from usuarios_empresas ue join perfis_usuarios p on p.usuario_id = ue.usuario_id where p.email = $1",
+            [email]
+          )
+        ).toBeNull();
+        // E o colaborador continua com o dono que ganhou a corrida.
+        expect(await usuarioDoColaborador(colaboradorCorridaCriacao)).toBe(donoDoColaboradorCriacao);
+      } finally {
+        await cliente.query("rollback").catch(() => undefined);
+        await cliente.end();
+      }
+    });
+
+    // O teste que prova BLOQUEIO, e nao apenas ordem: enquanto a edicao espera o lock do colaborador,
+    // ela JA SEGURA o lock do alvo. Uma terceira transacao pedindo esse mesmo lock com `NOWAIT` tem de
+    // ser recusada na hora, com o codigo 55P03 (`lock_not_available`) do Postgres.
+    it("Deve_BloquearOutraTransacao_Quando_AEdicaoJaSeguraOLockDoAlvo", async () => {
+      const seguraColaborador = await clienteDireto();
+      const tentaAlvo = await clienteDireto();
+
+      async function pedirLockDoAlvoSemEsperar() {
+        try {
+          await tentaAlvo.query("begin");
+          await tentaAlvo.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update nowait", [
+            alvoColabBloqueio.usuarioId
+          ]);
+          await tentaAlvo.query("rollback");
+          return null;
+        } catch (erro) {
+          await tentaAlvo.query("rollback").catch(() => undefined);
+          return (erro as { code?: string }).code ?? "erro-sem-codigo";
+        }
+      }
+
+      try {
+        await travarColaborador(seguraColaborador, colaboradorCorridaBloqueio);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoColabBloqueio.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDICAO SEGURANDO O LOCK",
+            email: alvoColabBloqueio.email,
+            colaboradorId: colaboradorCorridaBloqueio
+          }
+        });
+
+        // A edicao ja pegou o lock do alvo e agora espera o do colaborador.
+        expect(await esperarSessaoBloqueadaEmLock(seguraColaborador)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+
+        // 55P03 = lock_not_available. E a prova direta de que a linha do alvo esta travada POR ela.
+        expect(await pedirLockDoAlvoSemEsperar()).toBe("55P03");
+
+        await seguraColaborador.query("rollback");
+        expect((await promessa).statusCode).toBe(204);
+
+        // Solto o lock e concluida a edicao, a mesma transacao concorrente passa.
+        expect(await pedirLockDoAlvoSemEsperar()).toBeNull();
+        expect(await perfilDe(alvoColabBloqueio.usuarioId)).toMatchObject({ nome: "EDICAO SEGURANDO O LOCK" });
+      } finally {
+        await seguraColaborador.query("rollback").catch(() => undefined);
+        await seguraColaborador.end();
+        await tentaAlvo.end();
+      }
+    });
+
+    // Contraprova: contencao no colaborador nao pode quebrar a edicao legitima. A concorrente solta o
+    // lock sem mudar nada e a edicao segue normalmente.
+    it("Deve_Editar_Quando_OLockDoColaboradorELiberadoSemMudanca", async () => {
+      const cliente = await clienteDireto();
+      try {
+        await travarColaborador(cliente, colaboradorCorridaLegitimo);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoColabLegitimo.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "EDICAO LEGITIMA SOB CONTENCAO",
+            email: alvoColabLegitimo.email,
+            role: "usuario_comum",
+            colaboradorId: colaboradorCorridaLegitimo
+          }
+        });
+
+        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        await cliente.query("rollback");
+
+        expect((await promessa).statusCode).toBe(204);
+        expect(await perfilDe(alvoColabLegitimo.usuarioId)).toMatchObject({ nome: "EDICAO LEGITIMA SOB CONTENCAO" });
+        // O vinculo trocou para o colaborador informado, e o antigo ficou livre.
+        expect(await usuarioDoColaborador(colaboradorCorridaLegitimo)).toBe(alvoColabLegitimo.usuarioId);
+        expect(await usuarioDoColaborador(alvoColabLegitimo.colaboradorId)).toBeNull();
       } finally {
         await cliente.query("rollback").catch(() => undefined);
         await cliente.end();

@@ -9,7 +9,7 @@ import {
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 // Contrato de fio: e exatamente isto que sai em GET /api/usuarios e no campo `usuarios` de
 // GET /api/permissoes. Nao acrescente campo aqui sem olhar web-vue/utils/domain.ts:679-683.
@@ -125,17 +125,24 @@ export type AlvoUsuario = {
   colaboradorEmpresaId: string | null;
 };
 
-// `db` e OBRIGATORIO e tem de ser a transacao DAS ESCRITAS: `FOR UPDATE` fora de transacao libera o
-// lock na hora seguinte e nao serializa coisa alguma. Sem o parametro default, o compilador nao deixa
-// alguem reintroduzir a leitura solta que criou o TOCTOU.
+// `db` e `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` na conexao base libera o lock na
+// instrucao seguinte e nao serializa coisa alguma. Com este tipo o compilador RECUSA o `banco` — o
+// `NodePgDatabase` nao tem o `rollback` que o `PgTransaction` declara.
+//
+// O que o tipo garante e exatamente isto, e nada alem: que EXISTE uma transacao. Ele nao prova que e
+// a MESMA transacao das escritas — isso continua sendo responsabilidade de quem chama, e hoje o unico
+// chamador passa o `tx` que abriu as escritas (`usuarios.service.ts`, nos dois ramos).
 //
 // A linha de `perfis_usuarios` e a raiz da serializacao porque as duas escritas que mudam escopo —
 // `substituirEmpresasUsuarioRepository` e `vincularUsuarioColaboradorRepository` — so tem chamador em
 // `usuarios.service.ts`, nos dois ramos, e ambos passam por aqui antes de escrever.
-export async function bloquearAlvoUsuarioRepository(usuarioId: string, db: ExecutorBanco): Promise<AlvoUsuario | null> {
+export async function bloquearAlvoUsuarioRepository(
+  usuarioId: string,
+  db: TransacaoBanco
+): Promise<AlvoUsuario | null> {
   // Duas consultas em vez de um `leftJoin`: o Postgres recusa `FOR UPDATE` no lado anulavel de um
-  // outer join ("cannot be applied to the nullable side"). Travar a raiz basta — o colaborador so e
-  // alterado por quem ja segurou a raiz.
+  // outer join ("cannot be applied to the nullable side"). Aqui trava-se so a raiz; o colaborador
+  // informado no corpo tem lock proprio, em `bloquearColaboradorUsuarioRepository`.
   const [perfil] = await db
     .select({
       usuarioId: perfisUsuarios.usuarioId,
@@ -243,35 +250,54 @@ export async function substituirEmpresasUsuarioRepository(usuarioId: string, emp
   });
 }
 
+const colunasColaboradorUsuario = {
+  id: colaboradores.id,
+  empresaId: colaboradores.empresaId,
+  nome: colaboradores.nome,
+  usuarioId: colaboradores.usuarioId,
+  setorId: colaboradores.setorId
+};
+
+// Leitura SEM lock, para a pre-validacao que responde rapido (colaborador inexistente, de outra
+// empresa, ja vinculado). NAO serve como fonte de autorizacao: o retrato envelhece antes das
+// escritas. Quem autoriza e `bloquearColaboradorUsuarioRepository`, dentro da transacao.
 export async function buscarColaboradorUsuarioRepository(colaboradorId: string, db: ExecutorBanco = banco) {
   const [colaborador] = await db
-    .select({
-      id: colaboradores.id,
-      empresaId: colaboradores.empresaId,
-      nome: colaboradores.nome,
-      usuarioId: colaboradores.usuarioId,
-      setorId: colaboradores.setorId
-    })
+    .select(colunasColaboradorUsuario)
     .from(colaboradores)
     .where(eq(colaboradores.id, colaboradorId))
     .limit(1);
   return colaborador ?? null;
 }
 
+// A releitura que vale. `TransacaoBanco` pelo mesmo motivo do lock do alvo: sem transacao o
+// `FOR UPDATE` nao segura nada.
+//
+// A ordem dos locks e sempre a mesma — perfil do alvo primeiro, colaborador depois — para que duas
+// edicoes simultaneas nao se travem em cruz.
+export async function bloquearColaboradorUsuarioRepository(colaboradorId: string, db: TransacaoBanco) {
+  const [colaborador] = await db
+    .select(colunasColaboradorUsuario)
+    .from(colaboradores)
+    .where(eq(colaboradores.id, colaboradorId))
+    .limit(1)
+    .for("update");
+  return colaborador ?? null;
+}
+
 // Dedup por CPF: um colaborador ja existente com o mesmo CPF na empresa deve ser reutilizado no
 // cadastro de usuario, em vez de criar uma copia. CPF e sempre gravado so com digitos.
-export async function buscarColaboradorPorCpfRepository(empresaId: string, cpf: string, db: ExecutorBanco = banco) {
+//
+// Trava a linha encontrada pelo mesmo motivo do colaborador informado pelo corpo: entre "achei este
+// CPF" e "vinculei ele" cabe outra transacao vincular o mesmo colaborador a outro usuario. Unico
+// chamador: `usuarios.service.ts`, ja dentro da transacao.
+export async function bloquearColaboradorPorCpfRepository(empresaId: string, cpf: string, db: TransacaoBanco) {
   const [colaborador] = await db
-    .select({
-      id: colaboradores.id,
-      empresaId: colaboradores.empresaId,
-      nome: colaboradores.nome,
-      usuarioId: colaboradores.usuarioId,
-      setorId: colaboradores.setorId
-    })
+    .select(colunasColaboradorUsuario)
     .from(colaboradores)
     .where(and(eq(colaboradores.empresaId, empresaId), eq(colaboradores.cpf, cpf)))
-    .limit(1);
+    .limit(1)
+    .for("update");
   return colaborador ?? null;
 }
 
