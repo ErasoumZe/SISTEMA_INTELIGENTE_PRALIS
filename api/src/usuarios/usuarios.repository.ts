@@ -9,7 +9,7 @@ import {
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 // Contrato de fio: e exatamente isto que sai em GET /api/usuarios e no campo `usuarios` de
 // GET /api/permissoes. Nao acrescente campo aqui sem olhar web-vue/utils/domain.ts:679-683.
@@ -111,12 +111,85 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
   });
 }
 
+// Estado REAL do alvo de uma edicao. Existe porque o `PUT /api/usuarios/:id` decidia tudo pelo
+// CORPO — que e escolhido por quem edita — e nunca lia o alvo: nem para saber se ele existe, nem para
+// saber a que empresas ele pertence, nem para saber se ele ja e `usuario_admin`.
+//
+// As tres empresas vem juntas de proposito, porque nada no banco as amarra e o PUT reescreve as tres:
+// `perfis_usuarios.empresa_id` (a principal), `usuarios_empresas` (o vinculo) e
+// `colaboradores.empresa_id` (o vinculo operacional, trocado por `vincularUsuarioColaboradorRepository`).
+export type AlvoUsuario = {
+  usuarioId: string;
+  empresaId: string | null;
+  role: RoleUsuario;
+  colaboradorId: string | null;
+  colaboradorEmpresaId: string | null;
+};
+
+// `db` e `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` na conexao base libera o lock na
+// instrucao seguinte e nao serializa coisa alguma. Com este tipo o compilador RECUSA o `banco` — o
+// `NodePgDatabase` nao tem o `rollback` que o `PgTransaction` declara.
+//
+// O que o tipo garante e exatamente isto, e nada alem: que EXISTE uma transacao. Ele nao prova que e
+// a MESMA transacao das escritas — isso continua sendo responsabilidade de quem chama, e hoje o unico
+// chamador passa o `tx` que abriu as escritas (`usuarios.service.ts`, nos dois ramos).
+//
+// A linha de `perfis_usuarios` e a raiz da serializacao porque as duas escritas que mudam escopo —
+// `substituirEmpresasUsuarioRepository` e `vincularUsuarioColaboradorRepository` — so tem chamador em
+// `usuarios.service.ts`, nos dois ramos, e ambos passam por aqui antes de escrever.
+export async function bloquearAlvoUsuarioRepository(
+  usuarioId: string,
+  db: TransacaoBanco
+): Promise<AlvoUsuario | null> {
+  // Duas consultas em vez de um `leftJoin`: o Postgres recusa `FOR UPDATE` no lado anulavel de um
+  // outer join ("cannot be applied to the nullable side"). Aqui trava-se so a raiz; o colaborador
+  // informado no corpo tem lock proprio, em `bloquearColaboradorUsuarioRepository`.
+  const [perfil] = await db
+    .select({
+      usuarioId: perfisUsuarios.usuarioId,
+      empresaId: perfisUsuarios.empresaId,
+      role: perfisUsuarios.role
+    })
+    .from(perfisUsuarios)
+    .where(eq(perfisUsuarios.usuarioId, usuarioId))
+    .limit(1)
+    .for("update");
+  if (!perfil) return null;
+
+  // Perfil sem colaborador vinculado e estado alcancavel (e o que o guard responde como
+  // PROFILE_NOT_CONFIGURED) e continua sendo um alvo real — nao pode virar 404.
+  const [colaborador] = await db
+    .select({ id: colaboradores.id, empresaId: colaboradores.empresaId })
+    .from(colaboradores)
+    .where(eq(colaboradores.usuarioId, usuarioId))
+    .limit(1);
+
+  return {
+    ...perfil,
+    colaboradorId: colaborador?.id ?? null,
+    colaboradorEmpresaId: colaborador?.empresaId ?? null
+  };
+}
+
+// `_` e `%` sao curingas do LIKE e sao caracteres LEGAIS no local part de um e-mail — `z.string()
+// .email()` aceita os dois. Sem escapar, `ilike(email, "a_b@x.com")` casa `axb@x.com`, e o `.limit(1)`
+// nao tem `ORDER BY` para desempatar.
+//
+// Isso deixou de ser so ruido quando a compensacao passou a cobrir todo o pos-signUp: o falso
+// casamento faz `idDoSignUp !== usuario.id`, a rota responde um 409 mentiroso e a compensacao APAGA a
+// conta que acabou de ser criada corretamente. O e-mail vira inutilizavel.
+//
+// Escapa-se com a barra invertida, que e o caractere de escape padrao do LIKE no Postgres.
+function escaparCuringasLike(valor: string) {
+  return valor.replace(/[\\%_]/g, (caractere) => `\\${caractere}`);
+}
+
 export async function existeEmailUsuarioRepository(
   email: string,
   usuarioIdIgnorado?: string,
   db: ExecutorBanco = banco
 ) {
-  const filtros = [ilike(usuarioAutenticacao.email, email)];
+  const filtros = [ilike(usuarioAutenticacao.email, escaparCuringasLike(email))];
   if (usuarioIdIgnorado) filtros.push(ne(usuarioAutenticacao.id, usuarioIdIgnorado));
   const [existente] = await db
     .select({ id: usuarioAutenticacao.id })
@@ -160,7 +233,7 @@ export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string,
   const [usuario] = await db
     .select({ id: usuarioAutenticacao.id })
     .from(usuarioAutenticacao)
-    .where(ilike(usuarioAutenticacao.email, email))
+    .where(ilike(usuarioAutenticacao.email, escaparCuringasLike(email)))
     .limit(1);
   return usuario ?? null;
 }
@@ -195,35 +268,67 @@ export async function substituirEmpresasUsuarioRepository(usuarioId: string, emp
   });
 }
 
+const colunasColaboradorUsuario = {
+  id: colaboradores.id,
+  empresaId: colaboradores.empresaId,
+  nome: colaboradores.nome,
+  usuarioId: colaboradores.usuarioId,
+  setorId: colaboradores.setorId
+};
+
+// Leitura SEM lock, para a pre-validacao que responde rapido (colaborador inexistente, de outra
+// empresa, ja vinculado). NAO serve como fonte de autorizacao: o retrato envelhece antes das
+// escritas. Quem autoriza e `bloquearColaboradorUsuarioRepository`, dentro da transacao.
 export async function buscarColaboradorUsuarioRepository(colaboradorId: string, db: ExecutorBanco = banco) {
   const [colaborador] = await db
-    .select({
-      id: colaboradores.id,
-      empresaId: colaboradores.empresaId,
-      nome: colaboradores.nome,
-      usuarioId: colaboradores.usuarioId,
-      setorId: colaboradores.setorId
-    })
+    .select(colunasColaboradorUsuario)
     .from(colaboradores)
     .where(eq(colaboradores.id, colaboradorId))
     .limit(1);
   return colaborador ?? null;
 }
 
+// A releitura que vale. `TransacaoBanco` pelo mesmo motivo do lock do alvo: sem transacao o
+// `FOR UPDATE` nao segura nada.
+//
+// A ordem e perfil do alvo primeiro, colaborador depois. O que isso garante, e so isso: que a
+// autorizacao do alvo acontece sob lock antes de qualquer decisao sobre o colaborador. **Nao** e uma
+// prova de ausencia de deadlock — a ordem entre os DOIS colaboradores de uma edicao (o novo, do corpo,
+// e o antigo, tocado por `vincularUsuarioColaboradorRepository`) continua vindo do pedido, nao de um
+// criterio global.
+//
+// O que de fato impede a corrida cruzada e outra coisa, verificada por teste
+// (`tests/integration/usuarios/edicao-segura.test.ts`, "troca simultanea de colaboradores"): um
+// colaborador que ja pertence a OUTRO usuario e recusado aqui mesmo, sob lock, por
+// `validarColaboradorParaVinculo`. Como a unica edicao que trava dois colaboradores e a do par
+// {livre, proprio}, e "livre" exclui o colaborador alheio, nao ha edicao alcancavel que os trave em
+// ordem cruzada. Se essa regra afrouxar, o deadlock volta a ser possivel.
+//
+// O outro lado da serializacao mora em `colaboradores.service.ts`: a ativacao/desativacao de cargo
+// trava esta MESMA linha antes de olhar `colaboradores_cargos`.
+export async function bloquearColaboradorUsuarioRepository(colaboradorId: string, db: TransacaoBanco) {
+  const [colaborador] = await db
+    .select(colunasColaboradorUsuario)
+    .from(colaboradores)
+    .where(eq(colaboradores.id, colaboradorId))
+    .limit(1)
+    .for("update");
+  return colaborador ?? null;
+}
+
 // Dedup por CPF: um colaborador ja existente com o mesmo CPF na empresa deve ser reutilizado no
 // cadastro de usuario, em vez de criar uma copia. CPF e sempre gravado so com digitos.
-export async function buscarColaboradorPorCpfRepository(empresaId: string, cpf: string, db: ExecutorBanco = banco) {
+//
+// Trava a linha encontrada pelo mesmo motivo do colaborador informado pelo corpo: entre "achei este
+// CPF" e "vinculei ele" cabe outra transacao vincular o mesmo colaborador a outro usuario. Unico
+// chamador: `usuarios.service.ts`, ja dentro da transacao.
+export async function bloquearColaboradorPorCpfRepository(empresaId: string, cpf: string, db: TransacaoBanco) {
   const [colaborador] = await db
-    .select({
-      id: colaboradores.id,
-      empresaId: colaboradores.empresaId,
-      nome: colaboradores.nome,
-      usuarioId: colaboradores.usuarioId,
-      setorId: colaboradores.setorId
-    })
+    .select(colunasColaboradorUsuario)
     .from(colaboradores)
     .where(and(eq(colaboradores.empresaId, empresaId), eq(colaboradores.cpf, cpf)))
-    .limit(1);
+    .limit(1)
+    .for("update");
   return colaborador ?? null;
 }
 

@@ -77,6 +77,9 @@ export type WorkspaceContext = {
   estadoRegraPermissao: (permissao: string) => string;
   definirRegraPermissao: (permissao: string, estado: string) => void;
   cadastroSalvando: Ref<boolean>;
+  // Motivo pelo qual o cadastro atual nao pode ser salvo, ou null. Hoje so o papel de acesso
+  // desconhecido do usuario em edicao — o caso que rebaixava o alvo em silencio.
+  bloqueioCadastro: ComputedRef<string | null>;
   salvarCadastro: () => Promise<void>;
   modalTemaAberto: Ref<boolean>;
   temaTelaEdicao: Ref<string>;

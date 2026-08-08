@@ -38,6 +38,7 @@ const {
   estadoRegraPermissao,
   definirRegraPermissao,
   cadastroSalvando,
+  bloqueioCadastro,
   salvarCadastro,
   modalTemaAberto,
   temaTelaEdicao,
@@ -770,7 +771,37 @@ const validacaoQtdPreview = computed(() =>
           </v-col>
           <v-col v-if="cadastroTela === 'usuarios'" cols="12">
             <div class="text-body-2 font-weight-bold mb-2">Empresas</div>
-            <v-chip-group v-model="formCadastro.empresaIds" multiple column>
+            <!-- Na EDICAO os chips nascem DESLIGADOS e vazios, e isso e proposital: esta tela nao
+                 conhece as empresas reais do usuario (a listagem e recortada ao escopo da tela). Um
+                 clique aqui SUBSTITUI a lista inteira, inclusive vinculos que a tela nunca mostrou —
+                 entao ele exige opt-in explicito. Sem opt-in, o payload omite `empresaIds` e o
+                 servidor preserva o que esta gravado. -->
+            <v-checkbox
+              v-if="cadastroEditandoId"
+              v-model="formCadastro.empresaIdsTocado"
+              density="compact"
+              hide-details
+              label="Substituir as empresas deste usuário"
+            />
+            <v-alert
+              v-if="cadastroEditandoId && formCadastro.empresaIdsTocado"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-2"
+            >
+              As empresas marcadas abaixo passam a ser as ÚNICAS deste usuário. Vínculos com empresas que não aparecem
+              aqui serão removidos.
+            </v-alert>
+            <div v-else-if="cadastroEditandoId" class="text-caption text-medium-emphasis mb-2">
+              As empresas deste usuário serão mantidas exatamente como estão.
+            </div>
+            <v-chip-group
+              v-model="formCadastro.empresaIds"
+              multiple
+              column
+              :disabled="Boolean(cadastroEditandoId) && !formCadastro.empresaIdsTocado"
+            >
               <v-chip v-for="empresa in empresasDisponiveis" :key="empresa.id" :value="empresa.id" filter>{{
                 empresa.nome
               }}</v-chip>
@@ -844,9 +875,21 @@ const validacaoQtdPreview = computed(() =>
         </v-row>
       </v-card-text>
       <v-card-actions>
-        <v-spacer />
+        <!-- Papel do usuario desconhecido: salvar aqui rebaixaria o alvo em silencio. Recarregar e o
+             que repovoa a linha da listagem, entao a mensagem pede exatamente isso. -->
+        <v-alert v-if="bloqueioCadastro" type="warning" variant="tonal" density="compact" class="flex-grow-1 mr-2">
+          {{ bloqueioCadastro }}
+        </v-alert>
+        <v-spacer v-else />
         <v-btn variant="outlined" :disabled="cadastroSalvando" @click="modalCadastroAberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="cadastroSalvando" @click="salvarCadastro">Salvar</v-btn>
+        <v-btn
+          color="primary"
+          :loading="cadastroSalvando"
+          :disabled="Boolean(bloqueioCadastro)"
+          @click="salvarCadastro"
+        >
+          Salvar
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

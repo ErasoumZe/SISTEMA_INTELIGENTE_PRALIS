@@ -52,7 +52,15 @@ export type CadastroForm = {
   cnpj: string;
   email: string;
   senha: string;
-  role: RoleUsuario;
+  // `""` = papel DESCONHECIDO, e nao "papel padrao". O formulario de edicao e montado da linha da
+  // listagem, e a linha pode chegar sem `role` (recorte cross-tenant, pagina de outra fonte, campo
+  // que a API pare de devolver). Assumir "usuario_comum" nesse caso REBAIXA o alvo no salvar. O
+  // default de criacao continua existindo, mas so em `formCadastroVazio`.
+  role: RoleUsuario | "";
+  // O operador mexeu nos chips de empresa? Estado EXPLICITO, e nao deduzido: nasce `true` na criacao
+  // (`formCadastroVazio`) e `false` ao abrir uma edicao (`formCadastroDeLinha`). Decide se o payload
+  // envia `empresaIds` — e portanto se o servidor substitui ou preserva os vinculos.
+  empresaIdsTocado: boolean;
   cpf: string;
   sigla: string;
   horaInicio: string;
@@ -224,6 +232,30 @@ export function promocoesDoFormProduto(form: CadastroForm) {
   ];
 }
 
+export const MENSAGEM_PERFIL_ACESSO_INDISPONIVEL =
+  "Perfil de acesso deste usuario nao foi carregado. Recarregue a tela antes de editar.";
+
+// Trava de tela para o rebaixamento silencioso: sem papel conhecido nao se salva usuario. Fica no
+// `shared`, e nao no componente, porque e a mesma regra que decide o payload — e assim ela e testavel
+// sem montar Vue.
+export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
+  "Marque ao menos uma empresa ou desmarque a substituicao para manter os vinculos atuais.";
+
+export function bloqueioCadastroUsuario(
+  tela: string,
+  form: Pick<CadastroForm, "role" | "empresaIds" | "empresaIdsTocado">,
+  edicao = false
+): string | null {
+  if (tela !== "usuarios") return null;
+  if (!form.role) return MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
+  // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
+  // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
+  // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
+  // inicial, mas nao volta o `empresaIdsTocado`). Na CRIACAO o fallback e legitimo.
+  if (edicao && form.empresaIdsTocado && !form.empresaIds.length) return MENSAGEM_SUBSTITUICAO_SEM_EMPRESA;
+  return null;
+}
+
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
   // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
@@ -329,8 +361,20 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       email: form.email,
       senha: form.senha || undefined,
-      role: form.role,
-      empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean)
+      // Papel desconhecido NAO vira payload. A tela ja recusa salvar nesse estado
+      // (bloqueioCadastroUsuario); aqui e a segunda tranca: omitir o campo faz o servidor manter o
+      // papel gravado (usuarios.service.ts: `dados.role ?? undefined`), enquanto mandar
+      // "usuario_comum" rebaixaria o alvo.
+      ...(form.role ? { role: form.role } : {}),
+      // `empresaIds` so viaja quando o operador REALMENTE mexeu nos chips (ou quando e criacao, em
+      // que `empresaIdsTocado` nasce true). Omitir faz o servidor PRESERVAR os vinculos gravados.
+      //
+      // O sinal e explicito, nunca inferido comparando com a lista da API: a listagem e recortada ao
+      // escopo da tela, entao "form igual ao que veio" nao significa "nada mudou" — significa apenas
+      // "nada mudou naquilo que a tela enxerga". Foi essa inferencia que apagava a empresa B.
+      ...(form.empresaIdsTocado
+        ? { empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean) }
+        : {})
     };
     if (form.novoColaborador) {
       payload["novoColaborador"] = {
@@ -341,7 +385,11 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
         cargoId: form.novoColaboradorCargoId
       };
     } else {
-      payload["colaboradorId"] = form.colaboradorId;
+      // Mesma regra de `empresaIds`: colaborador vazio NAO viaja. A listagem recorta `colaboradorId`
+      // para `""` quando o colaborador do alvo vive em outra empresa — mandar isso fazia o Zod
+      // responder 400 "Requisicao invalida" e tornava a edicao IMPOSSIVEL justamente para o usuario
+      // multiempresa. Omitindo, o servidor preserva o vinculo gravado.
+      if (form.colaboradorId) payload["colaboradorId"] = form.colaboradorId;
     }
     return payload;
   }

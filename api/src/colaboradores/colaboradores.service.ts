@@ -27,7 +27,7 @@ import { copiarAreasSetoresRepository } from "../areas/areas.repository.js";
 import {
   atualizarCargoRepository,
   atualizarStatusCargoColaboradorRepository,
-  colaboradorTemUsuarioRepository,
+  bloquearColaboradorRepository,
   contarCargosAtivosColaboradorRepository,
   copiarCargosRepository,
   copiarColaboradoresRepository,
@@ -48,6 +48,7 @@ import {
   salvarColaboradorRepository
 } from "./colaboradores.repository.js";
 import { executarEmTransacao } from "../banco/conexao.js";
+import { conflito } from "../erros.js";
 
 type FaixaJornada = {
   diaDaSemana: string;
@@ -227,9 +228,20 @@ export async function atualizarStatusCargoColaborador(
   payload: ColaboradorCargoStatusPayload
 ) {
   return executarEmTransacao(async (tx) => {
-    if (!payload.ativo && (await colaboradorTemUsuarioRepository(colaboradorId, tx))) {
+    // Trava a linha RAIZ do colaborador antes de olhar o vinculo e os cargos. E a mesma linha que a
+    // vinculacao de usuario trava (`bloquearColaboradorUsuarioRepository`), entao os dois fluxos ficam
+    // serializados: sem isto, o guard abaixo lia `usuario_id` ainda nulo enquanto uma vinculacao em
+    // andamento nao commitara, nao disparava, e o ultimo cargo ativo caia debaixo dela.
+    const colaborador = await bloquearColaboradorRepository(colaboradorId, tx);
+    if (!payload.ativo && Boolean(colaborador?.usuarioId)) {
       const cargosAtivos = await contarCargosAtivosColaboradorRepository(colaboradorId, tx);
-      if (cargosAtivos <= 1) throw new Error("Colaborador com usuario precisa ter ao menos um cargo ativo");
+      // `conflito` (409), e nao `new Error`: a rota nao tem try/catch (colaboradores.controller.ts),
+      // entao um Error cru cai no handler global e vira 500 INTERNAL_ERROR com alerta no Sentry. Com o
+      // lock recem-adicionado esta recusa deixou de ser teorica — ela dispara sempre que a desativacao
+      // perde a corrida para uma vinculacao — e um 500 faria a regra de negocio parecer queda.
+      if (cargosAtivos <= 1) {
+        throw conflito("Colaborador com usuario precisa ter ao menos um cargo ativo", "ULTIMO_CARGO_ATIVO");
+      }
     }
 
     return atualizarStatusCargoColaboradorRepository(

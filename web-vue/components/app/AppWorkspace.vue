@@ -45,6 +45,7 @@ import {
   mascararWhatsapp
 } from "~/utils/formatacao";
 import {
+  bloqueioCadastroUsuario,
   cadastroPayload,
   dinheiro,
   endpointOperacaoPorEntidade,
@@ -1437,7 +1438,20 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
   modalCadastroAberto.value = true;
 }
 
+// Trava do rebaixamento silencioso: a linha da listagem pode chegar sem `role`, e ai o formulario de
+// edicao fica com o papel DESCONHECIDO. Salvar assim mandava "usuario_comum" e rebaixava o alvo. A
+// mensagem pede recarregar porque e exatamente isso que repovoa a linha.
+const bloqueioCadastro = computed(() =>
+  bloqueioCadastroUsuario(cadastroTela.value, formCadastro.value, Boolean(cadastroEditandoId.value))
+);
+
 async function salvarCadastro() {
+  // Segunda tranca do lado do cliente (a primeira e o botao desabilitado): o dialogo tambem salva
+  // por Enter, e o `cadastroPayload` omite o campo de qualquer forma.
+  if (bloqueioCadastro.value) {
+    notificar(bloqueioCadastro.value, "error");
+    return;
+  }
   cadastroSalvando.value = true;
   try {
     const endpoint = tipoEndpointCadastro(cadastroTela.value, formCadastro.value);
@@ -1841,6 +1855,7 @@ provide(WORKSPACE_CONTEXT, {
   estadoRegraPermissao,
   definirRegraPermissao,
   cadastroSalvando,
+  bloqueioCadastro,
   salvarCadastro,
   modalTemaAberto,
   temaTelaEdicao,

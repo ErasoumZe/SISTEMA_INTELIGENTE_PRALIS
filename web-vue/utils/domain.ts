@@ -2,13 +2,16 @@ import {
   acentuarMensagemExibida,
   TELA_TEMA_RESUMO_CAIXA,
   permissoes as permissoesCompartilhadas,
+  rolesUsuario,
   temAlgumaPermissao,
   temPermissao,
   type Permissao,
+  type RoleUsuario,
   type TemaAplicacao
 } from "@padaria/shared";
 // M3/ADR-002: serializacao formulario -> payload agora mora no shared; fachada para o front.
 export {
+  bloqueioCadastroUsuario,
   cadastroPayload,
   fiscalDoFormProduto,
   margemFracaoDoForm,
@@ -573,6 +576,8 @@ export function formCadastroVazio(): CadastroForm {
     email: "",
     senha: "",
     role: "usuario_comum",
+    // Criacao: as empresas selecionadas SEMPRE vao no payload — nao ha vinculo previo a preservar.
+    empresaIdsTocado: true,
     cpf: "",
     sigla: "",
     horaInicio: "",
@@ -867,7 +872,15 @@ export function formCadastroDeLinha(
     estado: linha.estado ?? "",
     cnpj: linha.cnpj ?? "",
     email: linha.email ?? "",
-    role: (linha.role as CadastroForm["role"]) || "usuario_comum",
+    // SEM default. Este e o formulario de EDICAO: `|| "usuario_comum"` transformava "a linha chegou
+    // sem papel" em "o papel dele e comum", e o salvar seguinte REBAIXAVA um usuario_admin sem
+    // ninguem pedir. Papel desconhecido vira "" e a tela recusa salvar (bloqueioCadastroUsuario).
+    // Valor fora do catalogo tambem cai em "": e desconhecido do mesmo jeito.
+    role: rolesUsuario.includes(linha.role as RoleUsuario) ? (linha.role as RoleUsuario) : "",
+    // Edicao: comeca INTOCADO. A grade nao conhece as empresas reais do alvo (a listagem e recortada
+    // ao escopo da tela), entao enviar `empresaIds` sem o operador ter pedido apagaria os vinculos que
+    // a tela nao enxerga. So o clique nos chips liga isto.
+    empresaIdsTocado: false,
     cpf: linha.cpf ?? "",
     sigla: linha.sigla ?? "",
     horaInicio: (linha.inicio ?? "").slice(0, 5),
