@@ -1,12 +1,19 @@
 // Envio de e-mail transacional (reset de senha + verificacao) via Resend (API HTTP, sem SDK).
-// Sem RESEND_API_KEY/EMAIL_FROM configurados (dev/teste), o e-mail nao e enviado: cai no log do
-// console e num outbox em memoria (emailsCapturados) para inspecao em desenvolvimento e nos testes.
+// Sem RESEND_API_KEY/EMAIL_FROM configurados, o e-mail nao e enviado: fora de producao ele cai num
+// outbox em memoria (emailsCapturados) para inspecao em desenvolvimento e nos testes.
 import { env } from "../env.js";
 
 // token e opcional e serve so para inspecao/teste (o envio real usa apenas html/assunto).
 export type EmailMensagem = { para: string; assunto: string; html: string; url?: string; token?: string };
 
-// Outbox em memoria. So recebe itens quando NAO ha envio real (dev/teste) — nao acumula em producao.
+// A url do reset carrega o token NO PROPRIO CAMINHO (`/api/auth/reset-password/<token>`), entao
+// guardar ou logar a url equivale a guardar ou logar o token. Por isso o outbox so existe fora de
+// producao: em producao ele viraria uma lista, em memoria e sem expiracao, de tokens validos de
+// troca de senha de qualquer usuario que pedisse recuperacao — e enche justamente no cenario em que
+// o Resend nao esta configurado, que e o que acontece hoje (ver o bloqueio de deploy no relatorio).
+const guardarEmMemoria = env.NODE_ENV !== "production";
+
+// Outbox em memoria. So recebe itens quando NAO ha envio real e o ambiente nao e producao.
 export const emailsCapturados: Array<{
   para: string;
   assunto: string;
@@ -31,16 +38,22 @@ export function montarHtmlEmail(titulo: string, texto: string, rotuloAcao: strin
 export async function enviarEmail(mensagem: EmailMensagem): Promise<void> {
   const remetente = env.EMAIL_FROM;
   if (!env.RESEND_API_KEY || !remetente) {
+    // A url NAO entra no log: ela contem o token de troca de senha. Em desenvolvimento o link e
+    // impresso porque e assim que se testa o fluxo na maquina local, e la nao ha usuario real —
+    // em teste e em producao, nunca.
+    const linkParaDev = env.NODE_ENV === "development" ? ` url=${mensagem.url ?? "-"}` : "";
     console.info(
-      `[email] nao enviado (sem RESEND_API_KEY/EMAIL_FROM) para=${mensagem.para} assunto="${mensagem.assunto}" url=${mensagem.url ?? "-"}`
+      `[email] nao enviado (sem RESEND_API_KEY/EMAIL_FROM) para=${mensagem.para} assunto="${mensagem.assunto}"${linkParaDev}`
     );
-    emailsCapturados.push({
-      para: mensagem.para,
-      assunto: mensagem.assunto,
-      html: mensagem.html,
-      url: mensagem.url,
-      token: mensagem.token
-    });
+    if (guardarEmMemoria) {
+      emailsCapturados.push({
+        para: mensagem.para,
+        assunto: mensagem.assunto,
+        html: mensagem.html,
+        url: mensagem.url,
+        token: mensagem.token
+      });
+    }
     return;
   }
 
