@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cadastroPayload } from "@padaria/shared";
-import { formCadastroDeLinha, permissaoPertenceASecao, permissoes, secoesPermissoes } from "./domain";
+import { bloqueioCadastroUsuario, cadastroPayload } from "@padaria/shared";
+import {
+  formCadastroDeLinha,
+  formCadastroVazio,
+  permissaoPertenceASecao,
+  permissoes,
+  secoesPermissoes
+} from "./domain";
 
 describe("formCadastroDeLinha", () => {
   it("reconstroi o formulario de produto (booleanos, conversoes JSON, precos)", () => {
@@ -47,7 +53,10 @@ describe("formCadastroDeLinha", () => {
     expect(form.tipo).toBe("revenda");
     expect(form.quantidadeCaixa).toBe("1");
     expect(form.ativo).toBe(true);
-    expect(form.role).toBe("usuario_comum");
+    // `role` NAO tem default aqui. `formCadastroDeLinha` monta o form de EDICAO, e assumir
+    // "usuario_comum" para uma linha que chegou sem papel rebaixa o alvo no salvar seguinte. O
+    // default de criacao continua existindo, mas em `formCadastroVazio`.
+    expect(form.role).toBe("");
     expect(form.empresaIds).toEqual(["e1", "e2"]);
   });
 
@@ -55,6 +64,47 @@ describe("formCadastroDeLinha", () => {
     const form = formCadastroDeLinha({ nome: "Jose", email: "jose@example.com", role: "usuario_admin" }, {});
     expect(form.role).toBe("usuario_admin");
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_admin" });
+    expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+  });
+
+  it("preserva usuario_comum ao editar usuario comum", () => {
+    const form = formCadastroDeLinha({ nome: "Ana", email: "ana@example.com", role: "usuario_comum" }, {});
+    expect(form.role).toBe("usuario_comum");
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_comum" });
+    expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+  });
+
+  // O achado: `role: linha.role || "usuario_comum"`. A listagem pode entregar a linha sem `role` —
+  // por recorte cross-tenant, por pagina montada de outra fonte, ou por um campo que a API pare de
+  // devolver. Abrir essa linha para edicao e salvar REBAIXAVA um usuario_admin para usuario_comum,
+  // sem ninguem pedir e sem aviso nenhum.
+  it("nao rebaixa o perfil de acesso quando a linha de edicao chega sem role", () => {
+    const form = formCadastroDeLinha({ id: "u1", nome: "Sem Papel", email: "sem.papel@example.com" }, {});
+    expect(form.role).toBe("");
+
+    const payload = cadastroPayload("usuarios", form, "empresa-1");
+    expect(payload).not.toHaveProperty("role");
+    expect(payload).not.toMatchObject({ role: "usuario_comum" });
+  });
+
+  it("bloqueia o salvamento do usuario quando o perfil de acesso nao esta disponivel", () => {
+    const form = formCadastroDeLinha({ id: "u1", nome: "Sem Papel", email: "sem.papel@example.com" }, {});
+    const motivo = bloqueioCadastroUsuario("usuarios", form);
+    expect(motivo).toBeTruthy();
+    expect(motivo).toContain("Recarregue");
+  });
+
+  // Contraprova: o default de criacao continua existindo e continua sendo enviado. Sem isto,
+  // "nunca assumir usuario_comum" viraria "usuario novo nasce sem papel".
+  it("mantem usuario_comum como padrao na criacao de usuario novo", () => {
+    const form = formCadastroVazio();
+    expect(form.role).toBe("usuario_comum");
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_comum" });
+    expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+  });
+
+  it("nao bloqueia telas que nao sao de usuario", () => {
+    expect(bloqueioCadastroUsuario("produtos", formCadastroDeLinha({ nome: "Pao" }, {}))).toBeNull();
   });
 
   it("deriva tipoAreaSetor=setor quando ha areaId/setorPaiId e repassa regras", () => {

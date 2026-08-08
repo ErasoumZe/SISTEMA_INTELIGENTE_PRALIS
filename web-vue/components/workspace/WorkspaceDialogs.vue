@@ -38,6 +38,7 @@ const {
   estadoRegraPermissao,
   definirRegraPermissao,
   cadastroSalvando,
+  bloqueioCadastro,
   salvarCadastro,
   modalTemaAberto,
   temaTelaEdicao,
@@ -844,9 +845,21 @@ const validacaoQtdPreview = computed(() =>
         </v-row>
       </v-card-text>
       <v-card-actions>
-        <v-spacer />
+        <!-- Papel do usuario desconhecido: salvar aqui rebaixaria o alvo em silencio. Recarregar e o
+             que repovoa a linha da listagem, entao a mensagem pede exatamente isso. -->
+        <v-alert v-if="bloqueioCadastro" type="warning" variant="tonal" density="compact" class="flex-grow-1 mr-2">
+          {{ bloqueioCadastro }}
+        </v-alert>
+        <v-spacer v-else />
         <v-btn variant="outlined" :disabled="cadastroSalvando" @click="modalCadastroAberto = false">Cancelar</v-btn>
-        <v-btn color="primary" :loading="cadastroSalvando" @click="salvarCadastro">Salvar</v-btn>
+        <v-btn
+          color="primary"
+          :loading="cadastroSalvando"
+          :disabled="Boolean(bloqueioCadastro)"
+          @click="salvarCadastro"
+        >
+          Salvar
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

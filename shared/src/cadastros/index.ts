@@ -52,7 +52,11 @@ export type CadastroForm = {
   cnpj: string;
   email: string;
   senha: string;
-  role: RoleUsuario;
+  // `""` = papel DESCONHECIDO, e nao "papel padrao". O formulario de edicao e montado da linha da
+  // listagem, e a linha pode chegar sem `role` (recorte cross-tenant, pagina de outra fonte, campo
+  // que a API pare de devolver). Assumir "usuario_comum" nesse caso REBAIXA o alvo no salvar. O
+  // default de criacao continua existindo, mas so em `formCadastroVazio`.
+  role: RoleUsuario | "";
   cpf: string;
   sigla: string;
   horaInicio: string;
@@ -224,6 +228,17 @@ export function promocoesDoFormProduto(form: CadastroForm) {
   ];
 }
 
+export const MENSAGEM_PERFIL_ACESSO_INDISPONIVEL =
+  "Perfil de acesso deste usuario nao foi carregado. Recarregue a tela antes de editar.";
+
+// Trava de tela para o rebaixamento silencioso: sem papel conhecido nao se salva usuario. Fica no
+// `shared`, e nao no componente, porque e a mesma regra que decide o payload — e assim ela e testavel
+// sem montar Vue.
+export function bloqueioCadastroUsuario(tela: string, form: Pick<CadastroForm, "role">): string | null {
+  if (tela !== "usuarios") return null;
+  return form.role ? null : MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
+}
+
 export function cadastroPayload(tela: string, form: CadastroForm, empresaId: string) {
   if (tela === "empresas") return { nome: form.nome, cnpj: form.cnpj || null };
   // Conta com FUNDO + quem opera (D8). saldoInicial vazio vira 0 (nao undefined): no formulario o
@@ -329,7 +344,11 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
       nome: form.nome,
       email: form.email,
       senha: form.senha || undefined,
-      role: form.role,
+      // Papel desconhecido NAO vira payload. A tela ja recusa salvar nesse estado
+      // (bloqueioCadastroUsuario); aqui e a segunda tranca: omitir o campo faz o servidor manter o
+      // papel gravado (usuarios.service.ts: `dados.role ?? undefined`), enquanto mandar
+      // "usuario_comum" rebaixaria o alvo.
+      ...(form.role ? { role: form.role } : {}),
       empresaIds: form.empresaIds.length ? form.empresaIds : [empresaId].filter(Boolean)
     };
     if (form.novoColaborador) {
