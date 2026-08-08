@@ -7,7 +7,7 @@ import {
   colaboradoresJornadas,
   setores
 } from "@padaria/db/schema/cadastro";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   filtrarOrigemEntidade,
   jaImportado,
@@ -223,13 +223,24 @@ export async function criarCargoColaboradorRepository(
   return criado;
 }
 
-export async function colaboradorTemUsuarioRepository(colaboradorId: string, db: ExecutorBanco = banco) {
+// Trava a linha RAIZ do colaborador e devolve o vinculo de usuario dela.
+//
+// Existe porque `colaboradores_cargos` nao tem lock proprio, e o guard "colaborador com usuario
+// precisa ter ao menos um cargo ativo" lia `colaboradores.usuario_id` sem travar nada: enquanto uma
+// vinculacao em `usuarios.service.ts` ainda nao commitou, esse campo e nulo, o guard nem dispara, e o
+// ultimo cargo ativo cai. Resultado alcancavel: usuario vinculado a colaborador sem cargo ativo.
+//
+// A raiz e a MESMA linha que `bloquearColaboradorUsuarioRepository` trava do outro lado, entao os dois
+// fluxos passam a se serializar. `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` fora de
+// transacao solta o lock na instrucao seguinte e nao serializa nada.
+export async function bloquearColaboradorRepository(colaboradorId: string, db: TransacaoBanco) {
   const [colaborador] = await db
-    .select({ usuarioId: colaboradores.usuarioId })
+    .select({ id: colaboradores.id, usuarioId: colaboradores.usuarioId })
     .from(colaboradores)
     .where(eq(colaboradores.id, colaboradorId))
-    .limit(1);
-  return Boolean(colaborador?.usuarioId);
+    .limit(1)
+    .for("update");
+  return colaborador ?? null;
 }
 
 export async function contarCargosAtivosColaboradorRepository(colaboradorId: string, db: ExecutorBanco = banco) {

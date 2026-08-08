@@ -166,12 +166,25 @@ export async function bloquearAlvoUsuarioRepository(
   return { ...perfil, colaboradorEmpresaId: colaborador?.empresaId ?? null };
 }
 
+// `_` e `%` sao curingas do LIKE e sao caracteres LEGAIS no local part de um e-mail — `z.string()
+// .email()` aceita os dois. Sem escapar, `ilike(email, "a_b@x.com")` casa `axb@x.com`, e o `.limit(1)`
+// nao tem `ORDER BY` para desempatar.
+//
+// Isso deixou de ser so ruido quando a compensacao passou a cobrir todo o pos-signUp: o falso
+// casamento faz `idDoSignUp !== usuario.id`, a rota responde um 409 mentiroso e a compensacao APAGA a
+// conta que acabou de ser criada corretamente. O e-mail vira inutilizavel.
+//
+// Escapa-se com a barra invertida, que e o caractere de escape padrao do LIKE no Postgres.
+function escaparCuringasLike(valor: string) {
+  return valor.replace(/[\\%_]/g, (caractere) => `\\${caractere}`);
+}
+
 export async function existeEmailUsuarioRepository(
   email: string,
   usuarioIdIgnorado?: string,
   db: ExecutorBanco = banco
 ) {
-  const filtros = [ilike(usuarioAutenticacao.email, email)];
+  const filtros = [ilike(usuarioAutenticacao.email, escaparCuringasLike(email))];
   if (usuarioIdIgnorado) filtros.push(ne(usuarioAutenticacao.id, usuarioIdIgnorado));
   const [existente] = await db
     .select({ id: usuarioAutenticacao.id })
@@ -215,7 +228,7 @@ export async function buscarUsuarioAutenticacaoPorEmailRepository(email: string,
   const [usuario] = await db
     .select({ id: usuarioAutenticacao.id })
     .from(usuarioAutenticacao)
-    .where(ilike(usuarioAutenticacao.email, email))
+    .where(ilike(usuarioAutenticacao.email, escaparCuringasLike(email)))
     .limit(1);
   return usuario ?? null;
 }
@@ -273,8 +286,21 @@ export async function buscarColaboradorUsuarioRepository(colaboradorId: string, 
 // A releitura que vale. `TransacaoBanco` pelo mesmo motivo do lock do alvo: sem transacao o
 // `FOR UPDATE` nao segura nada.
 //
-// A ordem dos locks e sempre a mesma — perfil do alvo primeiro, colaborador depois — para que duas
-// edicoes simultaneas nao se travem em cruz.
+// A ordem e perfil do alvo primeiro, colaborador depois. O que isso garante, e so isso: que a
+// autorizacao do alvo acontece sob lock antes de qualquer decisao sobre o colaborador. **Nao** e uma
+// prova de ausencia de deadlock — a ordem entre os DOIS colaboradores de uma edicao (o novo, do corpo,
+// e o antigo, tocado por `vincularUsuarioColaboradorRepository`) continua vindo do pedido, nao de um
+// criterio global.
+//
+// O que de fato impede a corrida cruzada e outra coisa, verificada por teste
+// (`tests/integration/usuarios/edicao-segura.test.ts`, "troca simultanea de colaboradores"): um
+// colaborador que ja pertence a OUTRO usuario e recusado aqui mesmo, sob lock, por
+// `validarColaboradorParaVinculo`. Como a unica edicao que trava dois colaboradores e a do par
+// {livre, proprio}, e "livre" exclui o colaborador alheio, nao ha edicao alcancavel que os trave em
+// ordem cruzada. Se essa regra afrouxar, o deadlock volta a ser possivel.
+//
+// O outro lado da serializacao mora em `colaboradores.service.ts`: a ativacao/desativacao de cargo
+// trava esta MESMA linha antes de olhar `colaboradores_cargos`.
 export async function bloquearColaboradorUsuarioRepository(colaboradorId: string, db: TransacaoBanco) {
   const [colaborador] = await db
     .select(colunasColaboradorUsuario)

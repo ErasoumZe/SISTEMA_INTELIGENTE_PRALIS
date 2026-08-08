@@ -162,6 +162,15 @@ export function useCadastroView(params: {
         nome: item.nome,
         email: item.email,
         role: item.role,
+        // `empresaIds` NAO e projetado de proposito. O `GET /api/usuarios` recorta esse campo ao
+        // escopo da TELA (usuarios.service.ts, `recortarUsuariosPorEmpresas`), entao para um usuario
+        // A+B visto na empresa A ele vale `["A"]` — e o contrato de isolamento exige que seja assim
+        // (tests/integration/usuarios/metadados-cross-tenant.test.ts). Trazer esse valor truncado para
+        // o formulario faria o salvar reenviar `["A"]` e a substituicao total apagaria a empresa B,
+        // agora com a tela mostrando "empresa A marcada" e nenhum sinal de que algo se perdeu.
+        //
+        // Sem o campo, o formulario fica com a lista VAZIA e o payload OMITE `empresaIds`
+        // (shared/src/cadastros/index.ts) — o servidor entao PRESERVA os vinculos gravados.
         colaboradorId: item.colaboradorId,
         cargos: item.cargos?.join(", ") ?? "",
         setor: item.descricao,

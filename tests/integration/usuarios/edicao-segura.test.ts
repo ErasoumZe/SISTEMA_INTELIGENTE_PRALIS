@@ -1,11 +1,12 @@
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
 import { pool } from "../../../api/src/banco/conexao.js";
+import { auth } from "../../../api/src/auth/config.js";
 import { salvarUsuario } from "../../../api/src/usuarios/usuarios.service.js";
 
 // P-01 / S-01. `PUT /api/usuarios/:id` decidia TUDO pelo corpo: quem e o alvo, em que empresas ele
@@ -235,6 +236,21 @@ const alvoColabRoubado = alvoDaCorridaDoColaborador("roubado", "0101");
 const alvoColabBloqueio = alvoDaCorridaDoColaborador("bloqueio", "0102");
 const alvoColabLegitimo = alvoDaCorridaDoColaborador("legitimo", "0103");
 
+// --- Papel legado `admin` ----------------------------------------------------------------------
+//
+// Ele NAO concede permissoes (auth/perfil.service.ts), mas concede poder de verdade em dois lugares:
+// `podeLancarSemCaixa` (shared/src/autenticacao/index.ts) e `podeLiberarTravaTransferencia`
+// (api/src/transferencias/transferencias.service.ts). Enquanto isso for verdade, ele e um papel
+// PRIVILEGIADO para a seguranca de usuarios — tanto como alvo quanto como papel concedivel.
+const alvoAdminLegado = alvoDaCorridaDoColaborador("adminlegado", "0110");
+const alvoAdminLegadoOperacao = alvoDaCorridaDoColaborador("adminlegadoop", "0111");
+const alvoPromocaoLegado = alvoDaCorridaDoColaborador("promolegado", "0112");
+const alvoOperadoPorLegado = alvoDaCorridaDoColaborador("operadolegado", "0113");
+
+// --- Troca simultanea de colaboradores (deadlock) ----------------------------------------------
+const alvoTrocaUm = alvoDaCorridaDoColaborador("trocaum", "0120");
+const alvoTrocaDois = alvoDaCorridaDoColaborador("trocadois", "0121");
+
 // Quem "ganha" o colaborador livre durante a corrida. Nascem SEM colaborador de proposito:
 // `colaboradores_usuario_id_unico` (app.schema.ts:336-338) da no maximo um colaborador por usuario.
 //
@@ -265,8 +281,18 @@ const alvos = [
   alvoColabMovido,
   alvoColabRoubado,
   alvoColabBloqueio,
-  alvoColabLegitimo
+  alvoColabLegitimo,
+  alvoAdminLegado,
+  alvoAdminLegadoOperacao,
+  alvoPromocaoLegado,
+  alvoOperadoPorLegado,
+  alvoTrocaUm,
+  alvoTrocaDois
 ];
+
+// Os dois alvos do papel legado nascem `usuario_comum` (o tipo `Alvo` so aceita os dois papeis do
+// seed) e sao promovidos a `admin` por SQL no beforeAll — o papel legado nao existe em fixture nenhuma.
+const alvosPromovidosAAdminLegado = [alvoAdminLegado.usuarioId, alvoAdminLegadoOperacao.usuarioId];
 
 // Colaborador da empresa A, com cargo ativo e SEM usuario vinculado. E a peca que torna o payload do
 // takeover 100% "empresa A": sem ele o atacante teria de citar o colaborador da empresa B e esbarraria
@@ -287,12 +313,16 @@ const colaboradorCorridaRoubado = "11111111-1111-4111-8111-0000000000c6";
 const colaboradorCorridaCriacao = "11111111-1111-4111-8111-0000000000c7";
 const colaboradorCorridaBloqueio = "11111111-1111-4111-8111-0000000000c8";
 const colaboradorCorridaLegitimo = "11111111-1111-4111-8111-0000000000c9";
+// Colaborador da corrida do CARGO: e dele que o ultimo cargo ativo sera desativado.
+const colaboradorCorridaCargo = "11111111-1111-4111-8111-0000000000ca";
+const cargoColaboradorCorridaCargo = "11111111-1111-4111-8111-0000000000ea";
 const colaboradoresLivresDaCorrida = [
   { id: colaboradorCorridaMovido, cargo: "11111111-1111-4111-8111-0000000000e5", nome: "COLAB-CORRIDA-MOVIDO" },
   { id: colaboradorCorridaRoubado, cargo: "11111111-1111-4111-8111-0000000000e6", nome: "COLAB-CORRIDA-ROUBADO" },
   { id: colaboradorCorridaCriacao, cargo: "11111111-1111-4111-8111-0000000000e7", nome: "COLAB-CORRIDA-CRIACAO" },
   { id: colaboradorCorridaBloqueio, cargo: "11111111-1111-4111-8111-0000000000e8", nome: "COLAB-CORRIDA-BLOQUEIO" },
-  { id: colaboradorCorridaLegitimo, cargo: "11111111-1111-4111-8111-0000000000e9", nome: "COLAB-CORRIDA-LEGITIMO" }
+  { id: colaboradorCorridaLegitimo, cargo: "11111111-1111-4111-8111-0000000000e9", nome: "COLAB-CORRIDA-LEGITIMO" },
+  { id: colaboradorCorridaCargo, cargo: cargoColaboradorCorridaCargo, nome: "COLAB-CORRIDA-CARGO" }
 ];
 
 // Id que nao existe em `perfis_usuarios`. `perfis_usuarios.usuario_id` e um `text` primary key SEM
@@ -427,12 +457,107 @@ async function colaboradorVinculadoA(usuarioId: string) {
   return linha?.id ?? null;
 }
 
+// --- Ferramental das corridas -----------------------------------------------------------------
+//
+// Antes havia duas copias deste bloco, e o detector era `wait_event_type = 'Lock'` — "existe ALGUM
+// waiter no banco". Isso e falso positivo esperando para acontecer: qualquer outra sessao travada,
+// inclusive de outro teste, satisfazia a condicao e o teste passava sem provar nada.
+//
+// Agora a transacao bloqueadora informa o proprio `pg_backend_pid()` e o teste exige que a sessao
+// esperando esteja bloqueada ESPECIFICAMENTE por ela, via `pg_blocking_pids(pid)` (core do Postgres
+// desde a 9.6; nao precisa de extensao nem de superusuario).
+type ClienteBloqueador = { cliente: pg.Client; pid: number };
+
+async function abrirBloqueador(): Promise<ClienteBloqueador> {
+  const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+  await cliente.connect();
+  try {
+    // Teto de espera por lock NESTA conexao: se um teste for interrompido (timeout do vitest) o
+    // `finally` dele nao roda, e sem teto a transacao ficaria segurando a linha e cada teste seguinte
+    // queimaria os 60s do `testTimeout`. Um erro limpo e melhor que uma cascata.
+    await cliente.query("set lock_timeout = '15s'");
+    const { rows } = await cliente.query<{ pid: number }>("select pg_backend_pid() as pid");
+    const pid = rows[0]?.pid;
+    if (pid === undefined) throw new Error("nao foi possivel obter o pid da conexao bloqueadora");
+    return { cliente, pid };
+  } catch (erro) {
+    // Sem isto a conexao vazava para o resto do processo quando a preparacao falhava.
+    await cliente.end().catch(() => undefined);
+    throw erro;
+  }
+}
+
+async function sessoesBloqueadasPor({ cliente, pid }: ClienteBloqueador) {
+  const { rows } = await cliente.query<{ total: number }>(
+    `select count(*)::int as total
+       from pg_stat_activity
+      where datname = current_database()
+        and pid <> pg_backend_pid()
+        and $1 = any(pg_blocking_pids(pid))`,
+    [pid]
+  );
+  return rows[0]?.total ?? 0;
+}
+
+async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 20_000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < limiteMs) {
+    if ((await sessoesBloqueadasPor(bloqueador)) >= minimo) return true;
+    await new Promise((resolver) => setTimeout(resolver, 25));
+  }
+  return false;
+}
+
+// O sentinela precisa de um TICK de macrotask, nao de uma microtask. Com `Promise.resolve(marcador)`
+// a corrida era decidida antes de `promessa.then(...)` sequer executar o callback — a funcao devolvia
+// `true` inclusive para uma promessa JA RESOLVIDA, e as sete assercoes que dependiam dela nao provavam
+// nada. `setTimeout(0)` deixa toda a fila de microtasks drenar primeiro.
+async function aindaPendente(promessa: Promise<unknown>) {
+  const marcador = Symbol("pendente");
+  return (
+    (await Promise.race([
+      promessa.then(
+        () => "resolvida",
+        () => "rejeitada"
+      ),
+      new Promise((resolver) => setTimeout(() => resolver(marcador), 0))
+    ])) === marcador
+  );
+}
+
+// Higiene de teste concorrente: mesmo que uma assercao estoure no meio, a requisicao em voo tem de
+// terminar ANTES do proximo teste — senao ela acorda no meio dele e contamina o estado. Sempre depois
+// de soltar o lock, e com teto, para um bug nao virar suite pendurada.
+async function encerrarRequisicao(promessa: Promise<unknown> | null, limiteMs = 30_000) {
+  if (!promessa) return;
+  // O timer e limpo no fim: sem isso cada chamada deixava um `setTimeout` de 30s armado segurando o
+  // event loop depois que a suite ja terminou.
+  let temporizador: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      Promise.allSettled([promessa]),
+      new Promise((resolver) => {
+        temporizador = setTimeout(resolver, limiteMs);
+      })
+    ]);
+  } finally {
+    if (temporizador) clearTimeout(temporizador);
+  }
+}
+
+async function liberarBloqueador({ cliente }: ClienteBloqueador) {
+  await cliente.query("rollback").catch(() => undefined);
+  await cliente.end().catch(() => undefined);
+}
+
 describe("edicao segura de usuarios integration", () => {
   let contexto: ContextoApiTeste;
   let cookieGerente: string;
   let cookieAdmin: string;
   let cookieMultiempresa: string;
+  let cookieAdminLegado: string;
   let gerenteId: string;
+  let atorLegadoId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -459,9 +584,22 @@ describe("edicao segura de usuarios integration", () => {
     }
     gerenteId = await usuarioIdPorEmail(usuariosTeste.gerente.email);
     await darAoGerenteAPermissaoDeEscreverUsuarios(gerenteId);
+
+    // Alvos com o papel LEGADO. Nenhuma fixture do seed tem `admin` — o tipo do seed nem aceita —
+    // entao a promocao e por SQL.
+    for (const usuarioId of alvosPromovidosAAdminLegado) {
+      await executarSql("update perfis_usuarios set role = 'admin' where usuario_id = $1", [usuarioId]);
+    }
+    // ATOR com o papel legado: a `tesouraria` do seed vira `admin` e ganha as permissoes de escrita.
+    // Ela nao e usada por nenhum outro teste deste arquivo, e o banco e recriado por arquivo.
+    atorLegadoId = await usuarioIdPorEmail(usuariosTeste.tesouraria.email);
+    await executarSql("update perfis_usuarios set role = 'admin' where usuario_id = $1", [atorLegadoId]);
+    await darAoGerenteAPermissaoDeEscreverUsuarios(atorLegadoId);
+
     cookieGerente = await cookieSessao(contexto.app, "gerente");
     cookieAdmin = await cookieSessao(contexto.app, "admin");
     cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
+    cookieAdminLegado = await cookieSessao(contexto.app, "tesouraria");
   }, 120_000);
 
   afterAll(async () => {
@@ -914,35 +1052,6 @@ describe("edicao segura de usuarios integration", () => {
   // Os dois testes sao deterministicos: quem manda na ordem e o `FOR UPDATE` que o PROPRIO teste
   // segura, nao o relogio.
   describe("corrida com mudanca de escopo do alvo", () => {
-    async function clienteDireto() {
-      const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
-      await cliente.connect();
-      return cliente;
-    }
-
-    // Espera ate existir uma sessao BLOQUEADA em lock no banco — o sinal observavel de que a
-    // requisicao da API chegou na linha travada. Sem isto o teste dependeria de `sleep`.
-    async function esperarSessaoBloqueadaEmLock(cliente: pg.Client, limiteMs = 20_000) {
-      const inicio = Date.now();
-      while (Date.now() - inicio < limiteMs) {
-        const { rows } = await cliente.query<{ total: number }>(
-          `select count(*)::int as total
-             from pg_stat_activity
-            where datname = current_database()
-              and pid <> pg_backend_pid()
-              and wait_event_type = 'Lock'`
-        );
-        if ((rows[0]?.total ?? 0) > 0) return true;
-        await new Promise((resolver) => setTimeout(resolver, 25));
-      }
-      return false;
-    }
-
-    async function aindaPendente(promessa: Promise<unknown>) {
-      const marcador = Symbol("pendente");
-      return (await Promise.race([promessa.then(() => "resolvida"), Promise.resolve(marcador)])) === marcador;
-    }
-
     async function moverAlvoParaEmpresaB(cliente: pg.Client, usuarioId: string) {
       await cliente.query("delete from usuarios_empresas where usuario_id = $1", [usuarioId]);
       await cliente.query("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
@@ -958,7 +1067,9 @@ describe("edicao segura de usuarios integration", () => {
     // Sentido 1 — a concorrente ganha o lock. A edicao tem de acordar, reler o alvo JA movido e
     // recusar, sem escrever nada.
     it("Deve_Retornar403SemEscrever_Quando_OutraTransacaoMoveOAlvoParaForaDoEscopoPrimeiro", async () => {
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await cliente.query("begin");
         await cliente.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update", [
@@ -978,7 +1089,8 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         // Prova que a requisicao NAO passou por cima do lock.
         expect(await aindaPendente(promessa)).toBe(true);
 
@@ -997,8 +1109,9 @@ describe("edicao segura de usuarios integration", () => {
         expect(await empresasDe(alvoCorridaPerdida.usuarioId)).toEqual([idsTeste.empresaB]);
         expect(await colaboradorVinculadoA(alvoCorridaPerdida.usuarioId)).toBe(alvoCorridaPerdida.colaboradorId);
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
       }
     });
 
@@ -1011,7 +1124,9 @@ describe("edicao segura de usuarios integration", () => {
     // roda — isso e ordem sequencial, nao bloqueio. Quem prova o bloqueio e o teste seguinte, com
     // `FOR UPDATE NOWAIT`.
     it("Deve_EditarInteiro_Quando_EsperaOLockDoAlvoEAMovimentacaoRodaEmSeguida", async () => {
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await cliente.query("begin");
         await cliente.query("select usuario_id from perfis_usuarios where usuario_id = $1 for update", [
@@ -1031,7 +1146,8 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
 
         // A concorrente solta o lock SEM mudar nada: a edicao acorda, le o estado original e vale.
@@ -1056,8 +1172,9 @@ describe("edicao segura de usuarios integration", () => {
         });
         expect(await empresasDe(alvoCorridaGanha.usuarioId)).toEqual([idsTeste.empresaB]);
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
       }
     });
   });
@@ -1074,33 +1191,6 @@ describe("edicao segura de usuarios integration", () => {
   // `FOR UPDATE` dentro da transacao. A ordem dos locks e sempre perfil -> colaborador, para duas
   // edicoes simultaneas nao se travarem em cruz.
   describe("corrida no colaborador informado pelo corpo", () => {
-    async function clienteDireto() {
-      const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
-      await cliente.connect();
-      return cliente;
-    }
-
-    async function esperarSessaoBloqueadaEmLock(cliente: pg.Client, limiteMs = 20_000) {
-      const inicio = Date.now();
-      while (Date.now() - inicio < limiteMs) {
-        const { rows } = await cliente.query<{ total: number }>(
-          `select count(*)::int as total
-             from pg_stat_activity
-            where datname = current_database()
-              and pid <> pg_backend_pid()
-              and wait_event_type = 'Lock'`
-        );
-        if ((rows[0]?.total ?? 0) > 0) return true;
-        await new Promise((resolver) => setTimeout(resolver, 25));
-      }
-      return false;
-    }
-
-    async function aindaPendente(promessa: Promise<unknown>) {
-      const marcador = Symbol("pendente");
-      return (await Promise.race([promessa.then(() => "resolvida"), Promise.resolve(marcador)])) === marcador;
-    }
-
     // Segura a linha do colaborador e devolve o cliente com a transacao ABERTA.
     async function travarColaborador(cliente: pg.Client, colaboradorId: string) {
       await cliente.query("begin");
@@ -1110,7 +1200,9 @@ describe("edicao segura de usuarios integration", () => {
     // Sentido 1 do enunciado: o colaborador estava na empresa A na pre-leitura e vai para a B antes da
     // validacao transacional.
     it("Deve_Retornar403SemEscrever_Quando_OColaboradorEMovidoParaOutraEmpresaAntesDaValidacaoTransacional", async () => {
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await travarColaborador(cliente, colaboradorCorridaMovido);
         await cliente.query("update colaboradores set empresa_id = $2 where id = $1", [
@@ -1130,7 +1222,8 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
 
         await cliente.query("commit");
@@ -1142,15 +1235,18 @@ describe("edicao segura de usuarios integration", () => {
         expect(await colaboradorVinculadoA(alvoColabMovido.usuarioId)).toBe(alvoColabMovido.colaboradorId);
         expect(await usuarioDoColaborador(colaboradorCorridaMovido)).toBeNull();
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
       }
     });
 
     // Sentido 2 do enunciado: o colaborador estava livre na pre-leitura e ganha dono antes da
     // validacao transacional. A requisicao antiga nao pode ROUBAR o vinculo.
     it("Deve_RecusarSemRoubarVinculo_Quando_OColaboradorEVinculadoAOutroUsuarioAntesDaValidacaoTransacional", async () => {
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await travarColaborador(cliente, colaboradorCorridaRoubado);
         await cliente.query("update colaboradores set usuario_id = $2 where id = $1", [
@@ -1170,7 +1266,8 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
 
         await cliente.query("commit");
@@ -1181,8 +1278,9 @@ describe("edicao segura de usuarios integration", () => {
         expect(await usuarioDoColaborador(colaboradorCorridaRoubado)).toBe(donoDoColaboradorRoubado);
         expect(await perfilDe(alvoColabRoubado.usuarioId)).toMatchObject({ nome: alvoColabRoubado.nome });
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
       }
     });
 
@@ -1191,7 +1289,9 @@ describe("edicao segura de usuarios integration", () => {
     // orfao que ainda por cima bloqueia toda nova tentativa com o mesmo e-mail.
     it("Deve_NaoDeixarOrfao_Quando_ACriacaoPerdeACorridaDoColaborador", async () => {
       const email = "criacao.perde.corrida@padaria.local";
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await travarColaborador(cliente, colaboradorCorridaCriacao);
         await cliente.query("update colaboradores set usuario_id = $2 where id = $1", [
@@ -1212,37 +1312,47 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
+
+        // ANTES de soltar o lock: o `signUpEmail` ja commitou na transacao dele, entao `user` e
+        // `account` desta requisicao TEM de existir agora. Sem esta prova, os `toBeNull` do final
+        // seriam satisfeitos por um cadastro que nunca chegou a acontecer — o teste passaria sem
+        // exercitar compensacao nenhuma. O id capturado aqui e o alvo das verificacoes finais.
+        const criado = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+          email
+        ]);
+        expect(criado?.id).toBeTruthy();
+        const idCriado = criado!.id;
+        expect(
+          await consultarUm<{ id: string }>('select id from account where "userId" = $1', [idCriado])
+        ).not.toBeNull();
 
         await cliente.query("commit");
         const resposta = await promessa;
 
         assertProblem(resposta, 400);
-        // Compensacao completa: nem autenticacao, nem credencial, nem perfil, nem vinculo de empresa.
+        // Compensacao completa, verificada POR ID. As consultas por e-mail ou com join em
+        // `perfis_usuarios` escondem exatamente a linha orfa que interessa.
+        expect(await consultarUm<{ id: string }>('select id from "user" where id = $1', [idCriado])).toBeNull();
+        expect(await consultarUm<{ id: string }>('select id from account where "userId" = $1', [idCriado])).toBeNull();
         expect(
-          await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email])
+          await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where usuario_id = $1", [
+            idCriado
+          ])
         ).toBeNull();
         expect(
-          await consultarUm<{ id: string }>(
-            'select a.id from account a join "user" u on u.id = a."userId" where lower(u.email) = lower($1)',
-            [email]
-          )
-        ).toBeNull();
-        expect(
-          await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [email])
-        ).toBeNull();
-        expect(
-          await consultarUm<{ usuario_id: string }>(
-            "select ue.usuario_id from usuarios_empresas ue join perfis_usuarios p on p.usuario_id = ue.usuario_id where p.email = $1",
-            [email]
-          )
+          await consultarUm<{ usuario_id: string }>("select usuario_id from usuarios_empresas where usuario_id = $1", [
+            idCriado
+          ])
         ).toBeNull();
         // E o colaborador continua com o dono que ganhou a corrida.
         expect(await usuarioDoColaborador(colaboradorCorridaCriacao)).toBe(donoDoColaboradorCriacao);
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
       }
     });
 
@@ -1250,8 +1360,10 @@ describe("edicao segura de usuarios integration", () => {
     // ela JA SEGURA o lock do alvo. Uma terceira transacao pedindo esse mesmo lock com `NOWAIT` tem de
     // ser recusada na hora, com o codigo 55P03 (`lock_not_available`) do Postgres.
     it("Deve_BloquearOutraTransacao_Quando_AEdicaoJaSeguraOLockDoAlvo", async () => {
-      const seguraColaborador = await clienteDireto();
-      const tentaAlvo = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const seguraColaborador = bloqueador.cliente;
+      const { cliente: tentaAlvo } = await abrirBloqueador();
+      let emVoo: Promise<unknown> | null = null;
 
       async function pedirLockDoAlvoSemEsperar() {
         try {
@@ -1282,8 +1394,10 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        // A edicao ja pegou o lock do alvo e agora espera o do colaborador.
-        expect(await esperarSessaoBloqueadaEmLock(seguraColaborador)).toBe(true);
+        // A edicao ja pegou o lock do alvo e agora espera o do colaborador — bloqueada POR esta
+        // transacao, e nao por qualquer waiter do banco.
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         expect(await aindaPendente(promessa)).toBe(true);
 
         // 55P03 = lock_not_available. E a prova direta de que a linha do alvo esta travada POR ela.
@@ -1296,16 +1410,18 @@ describe("edicao segura de usuarios integration", () => {
         expect(await pedirLockDoAlvoSemEsperar()).toBeNull();
         expect(await perfilDe(alvoColabBloqueio.usuarioId)).toMatchObject({ nome: "EDICAO SEGURANDO O LOCK" });
       } finally {
-        await seguraColaborador.query("rollback").catch(() => undefined);
-        await seguraColaborador.end();
-        await tentaAlvo.end();
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
+        await tentaAlvo.end().catch(() => undefined);
       }
     });
 
     // Contraprova: contencao no colaborador nao pode quebrar a edicao legitima. A concorrente solta o
     // lock sem mudar nada e a edicao segue normalmente.
     it("Deve_Editar_Quando_OLockDoColaboradorELiberadoSemMudanca", async () => {
-      const cliente = await clienteDireto();
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
       try {
         await travarColaborador(cliente, colaboradorCorridaLegitimo);
 
@@ -1322,7 +1438,8 @@ describe("edicao segura de usuarios integration", () => {
           }
         });
 
-        expect(await esperarSessaoBloqueadaEmLock(cliente)).toBe(true);
+        emVoo = promessa;
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
         await cliente.query("rollback");
 
         expect((await promessa).statusCode).toBe(204);
@@ -1331,8 +1448,431 @@ describe("edicao segura de usuarios integration", () => {
         expect(await usuarioDoColaborador(colaboradorCorridaLegitimo)).toBe(alvoColabLegitimo.usuarioId);
         expect(await usuarioDoColaborador(alvoColabLegitimo.colaboradorId)).toBeNull();
       } finally {
-        await cliente.query("rollback").catch(() => undefined);
-        await cliente.end();
+        // Solta o lock ANTES de esperar a requisicao: na ordem inversa a suite penduraria.
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
+      }
+    });
+  });
+
+  // --- Papel legado `admin` como papel PRIVILEGIADO ---------------------------------------------
+  //
+  // A rodada anterior tratou so `usuario_admin` como privilegiado, com o argumento de que `admin`
+  // "nao tem efeito especial". Isso vale para a RESOLUCAO DE PERMISSOES e so para ela. Na pratica o
+  // papel legado concede dois poderes reais:
+  //
+  //   - `podeLancarSemCaixa` (shared/src/autenticacao/index.ts) -> status de retaguarda nas quatro
+  //     saidas e no fluxo do cofre;
+  //   - `podeLiberarTravaTransferencia` (api/src/transferencias/transferencias.service.ts).
+  //
+  // Enquanto isso for verdade, quem cria ou vira `admin` ganha acesso que nao tinha. Esta entrega NAO
+  // remove o papel nem mexe nesses poderes — apenas para de tratar `admin` como se fosse inofensivo
+  // dentro da seguranca de usuarios.
+  describe("papel legado admin", () => {
+    it("Deve_Retornar403_Quando_AtorNaoPrivilegiadoCriaAdminLegado", async () => {
+      const email = "admin.legado.indevido@padaria.local";
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/usuarios",
+        headers: { cookie: cookieGerente },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: "ADMIN LEGADO INDEVIDO",
+          email,
+          role: "admin",
+          senha: "Teste#2026!legado",
+          novoColaborador: {
+            empresaId: idsTeste.empresaA,
+            nome: "COLABORADOR ADMIN LEGADO",
+            setorId: idsTeste.setorA,
+            cargoId: idsTeste.cargoGerente
+          }
+        }
+      });
+
+      assertProblem(resposta, 403, CODIGO_PRIVILEGIO);
+      expect(
+        await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [email])
+      ).toBeNull();
+      expect(
+        await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email])
+      ).toBeNull();
+    });
+
+    it("Deve_Retornar403_Quando_AtorNaoPrivilegiadoPromoveParaAdminLegado", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoPromocaoLegado.usuarioId}`,
+        headers: { cookie: cookieGerente },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: alvoPromocaoLegado.nome,
+          email: alvoPromocaoLegado.email,
+          role: "admin",
+          colaboradorId: alvoPromocaoLegado.colaboradorId
+        }
+      });
+
+      assertProblem(resposta, 403, CODIGO_PRIVILEGIO);
+      expect(await perfilDe(alvoPromocaoLegado.usuarioId)).toMatchObject({ role: "usuario_comum" });
+    });
+
+    // Alvo privilegiado e alvo privilegiado, seja qual for o papel: trocar o e-mail dele ja toma a
+    // conta pelo fluxo de recuperacao de senha.
+    it("Deve_Retornar403_Quando_AtorNaoPrivilegiadoEditaAlvoAdminLegado", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoAdminLegado.usuarioId}`,
+        headers: { cookie: cookieGerente },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: "ADMIN LEGADO COM E-MAIL TROCADO",
+          email: "admin.legado.roubado@padaria.local",
+          colaboradorId: alvoAdminLegado.colaboradorId
+        }
+      });
+
+      assertProblem(resposta, 403, CODIGO_PRIVILEGIO);
+      expect(await perfilDe(alvoAdminLegado.usuarioId)).toMatchObject({
+        nome: alvoAdminLegado.nome,
+        email: alvoAdminLegado.email,
+        role: "admin"
+      });
+    });
+
+    // A assimetria que importa: `admin` e papel PROTEGIDO (como alvo e como papel concedivel), mas
+    // NAO e papel que AUTORIZA. Se ele autorizasse, poderia cunhar `usuario_admin` — inclusive para si
+    // — e `usuario_admin` da acesso total. Como ate esta branch qualquer um com
+    // `cadastro_usuarios_criar` conseguia criar uma conta `admin` com a senha que quisesse, isso
+    // reabriria exatamente a escalada que a entrega veio fechar.
+    it("Deve_Retornar403_Quando_AtorAdminLegadoTentaPromoverAlguemParaUsuarioAdmin", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoOperadoPorLegado.usuarioId}`,
+        headers: { cookie: cookieAdminLegado },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: alvoOperadoPorLegado.nome,
+          email: alvoOperadoPorLegado.email,
+          role: "usuario_admin",
+          colaboradorId: alvoOperadoPorLegado.colaboradorId
+        }
+      });
+
+      assertProblem(resposta, 403, CODIGO_PRIVILEGIO);
+      expect(await perfilDe(alvoOperadoPorLegado.usuarioId)).toMatchObject({ role: "usuario_comum" });
+    });
+
+    it("Deve_Retornar403_Quando_AtorAdminLegadoEditaOutroAlvoPrivilegiado", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoAdminLegadoOperacao.usuarioId}`,
+        headers: { cookie: cookieAdminLegado },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: "ALVO LEGADO EDITADO PELO LEGADO",
+          email: alvoAdminLegadoOperacao.email,
+          colaboradorId: alvoAdminLegadoOperacao.colaboradorId
+        }
+      });
+
+      assertProblem(resposta, 403, CODIGO_PRIVILEGIO);
+      expect(await perfilDe(alvoAdminLegadoOperacao.usuarioId)).toMatchObject({
+        nome: alvoAdminLegadoOperacao.nome,
+        role: "admin"
+      });
+    });
+
+    // Contraprova: o endurecimento nao pode paralisar o ator legado no trabalho normal dele. Editar
+    // usuario COMUM da propria empresa continua funcionando.
+    it("Deve_Editar_Quando_AtorAdminLegadoEditaUsuarioComumDaPropriaEmpresa", async () => {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/usuarios/${alvoPromocaoLegado.usuarioId}`,
+        headers: { cookie: cookieAdminLegado },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: "COMUM EDITADO PELO LEGADO",
+          email: alvoPromocaoLegado.email,
+          role: "usuario_comum",
+          colaboradorId: alvoPromocaoLegado.colaboradorId
+        }
+      });
+
+      expect(resposta.statusCode, resposta.body).toBe(204);
+      expect(await perfilDe(alvoPromocaoLegado.usuarioId)).toMatchObject({
+        nome: "COMUM EDITADO PELO LEGADO",
+        role: "usuario_comum"
+      });
+    });
+
+    // E o `usuario_admin` continua sendo o unico que cunha papel privilegiado.
+    it("Deve_CriarAdminLegado_Quando_OAtorEUsuarioAdmin", async () => {
+      const email = "admin.legado.legitimo@padaria.local";
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/usuarios",
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaIds: [idsTeste.empresaA],
+          nome: "ADMIN LEGADO LEGITIMO",
+          email,
+          role: "admin",
+          senha: "Teste#2026!legitimo",
+          novoColaborador: {
+            empresaId: idsTeste.empresaA,
+            nome: "COLABORADOR ADMIN LEGADO LEGITIMO",
+            setorId: idsTeste.setorA,
+            cargoId: idsTeste.cargoGerente
+          }
+        }
+      });
+
+      expect(resposta.statusCode, resposta.body).toBe(201);
+      expect(
+        await consultarUm<{ role: string }>("select role from perfis_usuarios where email = $1", [email])
+      ).toMatchObject({ role: "admin" });
+    });
+  });
+
+  // --- Fail-closed ANTES do Zod -----------------------------------------------------------------
+  //
+  // O comentario dizia "antes de tudo, inclusive do Zod ter qualquer efeito", mas o codigo fazia o
+  // `parse` primeiro. Com corpo invalido a resposta virava 400 de validacao — ou seja, a validacao
+  // respondia ANTES da autorizacao e virava oraculo para quem chama sem ator.
+  it("Deve_Retornar403_Quando_ChamadaSemAtorTemCorpoInvalido", async () => {
+    await expect(salvarUsuario(alvoSemAtorComum.usuarioId, { nome: 123, email: "nao-e-email" })).rejects.toMatchObject({
+      status: 403,
+      code: "PROFILE_NOT_CONFIGURED"
+    });
+  });
+
+  // --- Compensacao cobrindo TUDO depois do signUp -----------------------------------------------
+  describe("compensacao do cadastro", () => {
+    // A consulta que busca o usuario recem-criado ficava FORA do bloco compensado: se ela falhasse, o
+    // `signUpEmail` ja tinha commitado e o usuario de autenticacao ficava orfao — bloqueando toda nova
+    // tentativa com o mesmo e-mail, que e exatamente o B-01 que esta branch veio fechar.
+    it("Deve_RemoverUsuarioDeAutenticacao_Quando_FalhaTecnicaAposOSignUp", async () => {
+      const email = "falha.pos.signup@padaria.local";
+      const consultaOriginal = pool.query.bind(pool);
+      let jaCriou = false;
+      pool.query = ((texto: unknown, ...resto: unknown[]) => {
+        const sql = typeof texto === "string" ? texto : String((texto as { text?: string })?.text ?? "");
+        if (sql.includes('insert into "user"')) jaCriou = true;
+        // `ilike` isola a consulta do NOSSO repositorio: o Better Auth procura o usuario por igualdade.
+        if (jaCriou && sql.includes('from "user"') && sql.includes("ilike")) {
+          return Promise.reject(new Error("banco fora do ar (simulado)"));
+        }
+        return (consultaOriginal as (...args: unknown[]) => unknown)(texto, ...resto);
+      }) as typeof pool.query;
+
+      try {
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: "/api/usuarios",
+          headers: { cookie: cookieAdmin },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "USUARIO COM FALHA POS SIGNUP",
+            email,
+            senha: "Teste#2026!posSignup",
+            novoColaborador: {
+              empresaId: idsTeste.empresaA,
+              nome: "COLABORADOR FALHA POS SIGNUP",
+              setorId: idsTeste.setorA,
+              cargoId: idsTeste.cargoGerente
+            }
+          }
+        });
+
+        expect(resposta.statusCode).toBe(500);
+        expect(JSON.stringify(resposta.json())).not.toContain("banco fora do ar (simulado)");
+      } finally {
+        pool.query = consultaOriginal;
+      }
+
+      // O usuario de autenticacao criado pelo signUp nao pode ter sobrado.
+      expect(
+        await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [email])
+      ).toBeNull();
+    });
+
+    // Em producao `requireEmailVerification` e true e o Better Auth NAO lanca para e-mail repetido:
+    // devolve 200 com um usuario SINTETICO, de id que nunca foi gravado. A compensacao passou a cobrir
+    // este trecho, entao ela precisa mirar o id DESTA requisicao — nunca a conta real ja existente.
+    it("Deve_PreservarAContaReal_Quando_OSignUpDevolveUsuarioSintetico", async () => {
+      const emailReal = usuariosTeste.discriminador.email;
+      const antes = await consultarUm<{ id: string; email: string }>(
+        'select id, email from "user" where lower(email) = lower($1)',
+        [emailReal]
+      );
+      expect(antes?.id).toBeTruthy();
+
+      // Id sintetico: no formato do gerador do projeto, e que NAO existe no banco. E o que o Better
+      // Auth devolve em producao para e-mail repetido, com `requireEmailVerification: true`
+      // (api/src/auth/config.ts) — combinacao que o harness de teste nao consegue montar, porque o
+      // `NODE_ENV` e fixado em "test" no setup.
+      const idSintetico = "01930000-0000-7000-8000-000000000001";
+      const espiao = vi
+        .spyOn(auth.api, "signUpEmail")
+        .mockResolvedValue({ token: null, user: { id: idSintetico } } as never);
+
+      try {
+        const resposta = await contexto.app.inject({
+          method: "POST",
+          url: "/api/usuarios",
+          headers: { cookie: cookieAdmin },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: "TENTATIVA COM E-MAIL REPETIDO",
+            email: emailReal,
+            senha: "Teste#2026!repetido",
+            novoColaborador: {
+              empresaId: idsTeste.empresaA,
+              nome: "COLABORADOR REPETIDO",
+              setorId: idsTeste.setorA,
+              cargoId: idsTeste.cargoGerente
+            }
+          }
+        });
+
+        assertProblem(resposta, 409, "EMAIL_ALREADY_REGISTERED");
+      } finally {
+        espiao.mockRestore();
+      }
+
+      // A conta real continua exatamente onde estava — e o perfil dela tambem.
+      expect(
+        await consultarUm<{ id: string; email: string }>('select id, email from "user" where id = $1', [antes!.id])
+      ).toMatchObject({ id: antes!.id, email: antes!.email });
+      expect(
+        await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where usuario_id = $1", [
+          antes!.id
+        ])
+      ).not.toBeNull();
+    });
+  });
+
+  // --- Corrida no CARGO ATIVO -------------------------------------------------------------------
+  //
+  // A linha do colaborador passou a ser travada, mas `colaboradores_cargos` continuava fora da
+  // serializacao: `atualizarStatusCargoColaborador` (api/src/colaboradores/colaboradores.service.ts)
+  // abre transacao e NAO trava `colaboradores`, entao ela desativa o ultimo cargo no meio da
+  // vinculacao. O guard dela le `colaboradores.usuario_id` sem lock — e enquanto a vinculacao nao
+  // commitou, esse campo ainda e nulo, entao o guard nem dispara.
+  //
+  // Resultado possivel: usuario vinculado a colaborador com zero cargos ativos.
+  describe("corrida no cargo ativo do colaborador", () => {
+    it("Deve_EsperarOMesmoLockRaiz_Quando_ADesativacaoDeCargoCorreComAVinculacao", async () => {
+      const bloqueador = await abrirBloqueador();
+      const { cliente } = bloqueador;
+      let emVoo: Promise<unknown> | null = null;
+      try {
+        // A transacao do teste segura a RAIZ: a linha de `colaboradores`.
+        await cliente.query("begin");
+        await cliente.query("select id from colaboradores where id = $1 for update", [colaboradorCorridaCargo]);
+
+        const promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/colaboradores/${colaboradorCorridaCargo}/cargos/${cargoColaboradorCorridaCargo}`,
+          headers: { cookie: cookieAdmin },
+          payload: { empresaId: idsTeste.empresaA, ativo: false }
+        });
+
+        emVoo = promessa;
+        // A desativacao tem de ficar bloqueada POR ESTA transacao. Sem a correcao ela passa direto,
+        // porque nao toca em `colaboradores`.
+        expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+        expect(await aindaPendente(promessa)).toBe(true);
+      } finally {
+        await liberarBloqueador(bloqueador);
+        await encerrarRequisicao(emVoo);
+      }
+
+      // Invariante final: nenhum usuario vinculado a colaborador sem cargo ativo.
+      expect(
+        await consultarUm<{ id: string }>(
+          `select c.id from colaboradores c
+            where c.usuario_id is not null
+              and not exists (
+                select 1 from colaboradores_cargos cc where cc.colaborador_id = c.id and cc.ativo = true
+              )`
+        )
+      ).toBeNull();
+    });
+  });
+
+  // --- Troca simultanea de colaboradores -------------------------------------------------------
+  //
+  // A hipotese investigada era um deadlock em cruz: cada edicao trava o perfil proprio, depois o
+  // colaborador NOVO (do corpo) e so no fim toca o ANTIGO, pelo `update ... where usuario_id = $1` de
+  // `vincularUsuarioColaboradorRepository`. Como a ordem dos dois colaboradores vem do CORPO, e nao de
+  // um criterio global, duas edicoes trocando C1 por C2 formariam ciclo.
+  //
+  // **A hipotese NAO se confirmou, e o motivo importa.** O par cruzado nem chega a disputar lock: um
+  // colaborador que ja pertence a OUTRO usuario e recusado — na pre-validacao e de novo sob lock, em
+  // `validarColaboradorParaVinculo`. E a unica edicao que trava DOIS colaboradores e a do par
+  // {colaborador livre, colaborador proprio}, e "livre" exclui, por definicao, o colaborador do outro.
+  // Nao existe, hoje, edicao alcancavel que trave dois colaboradores em ordem cruzada.
+  //
+  // Este teste prova exatamente isso — e nada alem. Ele NAO prova que a ordem de locks impede
+  // deadlock; prova que a regra de vinculo impede a corrida que produziria um. Se um dia a regra
+  // afrouxar (permitir roubar colaborador de outro usuario), ele fica vermelho e o deadlock volta a
+  // ser possivel — que e o alarme que interessa.
+  describe("troca simultanea de colaboradores", () => {
+    it("Deve_RecusarSemDeadlockNem500_Quando_DuasEdicoesTentamTrocarColaboradoresEmCruz", async () => {
+      let vooUm: Promise<unknown> | null = null;
+      let vooDois: Promise<unknown> | null = null;
+      try {
+        // U1 quer o colaborador de U2, e vice-versa, ao mesmo tempo.
+        const pedidoUm = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoTrocaUm.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: alvoTrocaUm.nome,
+            email: alvoTrocaUm.email,
+            colaboradorId: alvoTrocaDois.colaboradorId
+          }
+        });
+        vooUm = pedidoUm;
+
+        const pedidoDois = contexto.app.inject({
+          method: "PUT",
+          url: `/api/usuarios/${alvoTrocaDois.usuarioId}`,
+          headers: { cookie: cookieGerente },
+          payload: {
+            empresaIds: [idsTeste.empresaA],
+            nome: alvoTrocaDois.nome,
+            email: alvoTrocaDois.email,
+            colaboradorId: alvoTrocaUm.colaboradorId
+          }
+        });
+        vooDois = pedidoDois;
+
+        const [respostaUm, respostaDois] = await Promise.all([pedidoUm, pedidoDois]);
+
+        // Nenhuma resposta 500: sem deadlock (40P01) e sem erro interno de nenhuma outra especie.
+        expect([respostaUm.statusCode, respostaDois.statusCode]).not.toContain(500);
+        // As duas sao recusadas pela regra de vinculo, que e o que de fato impede a corrida.
+        assertProblem(respostaUm, 400);
+        assertProblem(respostaDois, 400);
+
+        // Estado final intacto: cada um continua com o seu.
+        expect(await colaboradorVinculadoA(alvoTrocaUm.usuarioId)).toBe(alvoTrocaUm.colaboradorId);
+        expect(await colaboradorVinculadoA(alvoTrocaDois.usuarioId)).toBe(alvoTrocaDois.colaboradorId);
+        // E nenhum usuario ficou com dois colaboradores.
+        expect(
+          await consultarUm<{ usuario_id: string }>(
+            `select usuario_id from colaboradores
+              where usuario_id is not null
+              group by usuario_id having count(*) > 1`
+          )
+        ).toBeNull();
+      } finally {
+        await encerrarRequisicao(vooUm);
+        await encerrarRequisicao(vooDois);
       }
     });
   });

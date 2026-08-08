@@ -7,6 +7,7 @@ import { auth, senhaMinimaAutenticacao } from "../auth/config.js";
 import { empresasPermitidas, podeAcessarEmpresa, type PerfilComEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { conflito, erroValidacao, falhaTecnica, naoEncontrado, proibido } from "../erros.js";
+import { capturarErro } from "../observabilidade.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
@@ -135,7 +136,34 @@ function traduzirFalhaCadastroAutenticacao(erro: DadosExternos): never {
 // escopo de empresa e o papel.
 export type PerfilAtor = PerfilComEmpresa & { role?: RoleUsuario };
 
-const ROLE_ACESSO_TOTAL = "usuario_admin";
+// Papeis PRIVILEGIADOS para a seguranca de usuarios. `admin` entra apesar de nao conceder permissao
+// nenhuma na resolucao (auth/perfil.service.ts) porque, enquanto ele existir, concede poder real em
+// dois pontos: `podeLancarSemCaixa` (shared/src/autenticacao/index.ts) — status de retaguarda nas
+// quatro saidas e no fluxo do cofre — e `podeLiberarTravaTransferencia`
+// (api/src/transferencias/transferencias.service.ts).
+//
+// Ou seja: quem cria ou vira `admin` ganha acesso que nao tinha. Tratar so `usuario_admin` como
+// privilegiado deixava a porta aberta pelo papel legado. Esta entrega NAO remove o papel nem mexe nos
+// poderes dele — apenas para de considera-lo inofensivo aqui.
+const ROLES_PRIVILEGIADOS: readonly RoleUsuario[] = ["usuario_admin", "admin"];
+
+// Papel PROTEGIDO / CONCEDIVEL: vale para o ALVO e para o role pedido. Os dois entram.
+function papelPrivilegiado(role: RoleUsuario | null | undefined): boolean {
+  return Boolean(role && ROLES_PRIVILEGIADOS.includes(role));
+}
+
+// Papel do ATOR que autoriza. Aqui SO `usuario_admin`, e a assimetria e deliberada.
+//
+// Incluir `admin` deste lado seria ALARGAR, nao endurecer: ele passaria a poder cunhar
+// `usuario_admin` — inclusive promovendo a si mesmo — e `usuario_admin` faz short-circuit para
+// `permissoesAcessoTotal` (auth/perfil.service.ts). Pior: ate esta branch, `autorizarCriacaoUsuario`
+// so barrava `usuario_admin`, entao qualquer um com `cadastro_usuarios_criar` podia criar uma conta
+// `admin` com a senha que quisesse. Dar a essas contas o poder de cunhar acesso total seria entregar
+// a escalada que esta entrega veio fechar.
+//
+// O resultado e uma trava estritamente maior que a de antes, em toda direcao: `admin` continua sem
+// autorizar nada, e agora tambem nao pode ser criado nem editado por quem nao e `usuario_admin`.
+const ROLE_ATOR_AUTORIZADO: RoleUsuario = "usuario_admin";
 
 // Fail-closed. `undefined` significava "chamada interna confiavel" e valia acesso total E escopo de
 // empresa irrestrito — um bypass esperando o primeiro chamador interno. Hoje o guard sempre entrega
@@ -147,10 +175,9 @@ function exigirAtor(perfil: PerfilAtor | undefined): PerfilAtor {
   return perfil;
 }
 
-// UM codigo para as tres negacoes de privilegio (criar admin, alterar role, editar um admin). Manter
-// um so e o que impede a resposta de virar oraculo: quem tenta nao aprende, pela diferenca entre os
-// codigos, se o alvo e ou nao administrador. O role legado `admin` nao entra: ele nao concede acesso
-// especial na resolucao de permissoes (auth/perfil.service.ts:8).
+// UM codigo para as tres negacoes de privilegio (criar papel privilegiado, alterar role, editar um
+// alvo privilegiado). Manter um so e o que impede a resposta de virar oraculo: quem tenta nao aprende,
+// pela diferenca entre os codigos, se o alvo e ou nao administrador.
 const CODIGO_PRIVILEGIO = "FORBIDDEN_PRIVILEGE";
 
 function empresaNaoPermitida() {
@@ -161,10 +188,9 @@ function privilegioInsuficiente() {
   return proibido("Acao restrita a usuario administrador", CODIGO_PRIVILEGIO);
 }
 
-// So o papel de acesso total autoriza. O role legado `admin` nao entra, e a ausencia de ator ja foi
-// barrada por `exigirAtor` antes de chegar aqui.
-function temAcessoTotal(perfil: PerfilAtor): boolean {
-  return perfil.role === ROLE_ACESSO_TOTAL;
+// A ausencia de ator ja foi barrada por `exigirAtor` antes de chegar aqui.
+function atorPrivilegiado(perfil: PerfilAtor): boolean {
+  return perfil.role === ROLE_ATOR_AUTORIZADO;
 }
 
 // A trava do takeover, DENTRO da transacao das escritas.
@@ -201,20 +227,21 @@ async function autorizarEdicaoUsuario(
     throw empresaNaoPermitida();
   }
 
-  if (!temAcessoTotal(perfil)) {
-    // Editar um `usuario_admin` e tomar a conta dele: trocar o e-mail ja basta, pela recuperacao de
+  if (!atorPrivilegiado(perfil)) {
+    // Editar um alvo privilegiado e tomar a conta dele: trocar o e-mail ja basta, pela recuperacao de
     // senha. A trava e sobre o ALVO, nao sobre o campo.
-    if (alvo.role === ROLE_ACESSO_TOTAL) throw privilegioInsuficiente();
+    if (papelPrivilegiado(alvo.role)) throw privilegioInsuficiente();
     // Role AUSENTE ou IGUAL ao gravado e edicao legitima. A tela reenvia sempre o papel atual
     // (shared/src/cadastros/index.ts:332), entao recusar "role presente" quebraria toda edicao.
     if (roleSolicitado && roleSolicitado !== alvo.role) throw privilegioInsuficiente();
   }
 }
 
-// Criar ja nasce admin fecha o mesmo buraco por outro caminho: sem isto, quem tem
-// `cadastro_usuarios_criar` fabrica um `usuario_admin` e loga com ele.
+// Criar ja nasce privilegiado fecha o mesmo buraco por outro caminho: sem isto, quem tem
+// `cadastro_usuarios_criar` fabrica o papel e loga com ele. Vale para os DOIS papeis privilegiados —
+// antes so `usuario_admin` era barrado, e `admin` passava concedendo retaguarda e liberar trava.
 function autorizarCriacaoUsuario(roleSolicitado: RoleUsuario | undefined, perfil: PerfilAtor) {
-  if (roleSolicitado === ROLE_ACESSO_TOTAL && !temAcessoTotal(perfil)) throw privilegioInsuficiente();
+  if (papelPrivilegiado(roleSolicitado) && !atorPrivilegiado(perfil)) throw privilegioInsuficiente();
 }
 
 function empresasUsuario(empresaId: string | undefined, empresaIds: string[] | undefined): string[] {
@@ -248,9 +275,11 @@ export async function listarUsuarios(escopoDados: string[]): Promise<UsuarioLinh
 }
 
 export async function salvarUsuario(id: string | null, body: DadosExternos, perfil?: PerfilAtor) {
-  const dados = usuarioPayloadSchema.parse(body);
-  // Antes de tudo, inclusive do Zod ter qualquer efeito: sem ator nao ha autorizacao possivel.
+  // ANTES do Zod, de verdade — o comentario dizia isso e o codigo fazia o contrario. Com o parse
+  // primeiro, um corpo invalido respondia 400 de validacao para quem chama sem ator: a validacao
+  // passava na frente da autorizacao e virava oraculo.
   const ator = exigirAtor(perfil);
+  const dados = usuarioPayloadSchema.parse(body);
   // A autorizacao do ALVO nao mora aqui — ela precisa da transacao das escritas para travar a linha
   // raiz (ver `autorizarEdicaoUsuario`). Na criacao nao ha alvo previo, so o papel pedido.
   if (!id) autorizarCriacaoUsuario(dados.role, ator);
@@ -427,53 +456,76 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
     .signUpEmail({ body: { name: nome, email, password: dados.senha } })
     .catch(traduzirFalhaCadastroAutenticacao);
 
-  const usuario = await buscarUsuarioAutenticacaoPorEmailRepository(email);
-  // Impossivel em condicao normal (o signUpEmail acabou de gravar). Se acontecer e falha tecnica,
-  // nao regra de negocio: `falhaTecnica` garante 500 logado em vez de 400 com a mensagem crua.
-  if (!usuario) throw falhaTecnica("Usuario de autenticacao nao encontrado apos o cadastro");
-  // Em producao `requireEmailVerification` e true, e com ela o better-auth NAO lanca para e-mail
-  // repetido: devolve 200 com um usuario SINTETICO, de id que nunca foi gravado (anti-enumeracao,
-  // sign-up.mjs:161-207). Sem esta comparacao o fluxo seguia, encontrava o usuario REAL pelo e-mail
-  // e sobrescrevia perfil, empresas e colaborador dele — troca de dono silenciosa, so em producao.
-  if (cadastro.user.id !== usuario.id) throw emailJaCadastrado();
+  // A PARTIR DAQUI tudo roda sob compensacao. Antes, a busca do usuario e a deteccao do usuario
+  // sintetico ficavam FORA do bloco compensado: se a consulta falhasse, o `signUpEmail` ja tinha
+  // commitado e sobrava um usuario de autenticacao orfao — que, por causa do UNIQUE de `user.email`,
+  // bloqueia toda nova tentativa com o mesmo e-mail. Era o B-01 voltando pela porta dos fundos.
+  //
+  // O alvo da limpeza e SEMPRE o id devolvido pelo signUp DESTA requisicao, nunca o encontrado por
+  // e-mail. E o que garante que a resposta sintetica de e-mail repetido (producao,
+  // `requireEmailVerification: true`) nao apague a conta real: ali o id e um uuid que nunca foi
+  // gravado, entao a limpeza nao encontra linha nenhuma.
+  const idDoSignUp = cadastro.user.id;
+  try {
+    const usuario = await buscarUsuarioAutenticacaoPorEmailRepository(email);
+    // Impossivel em condicao normal (o signUpEmail acabou de gravar). Se acontecer e falha tecnica,
+    // nao regra de negocio: `falhaTecnica` garante 500 logado em vez de 400 com a mensagem crua.
+    if (!usuario) throw falhaTecnica("Usuario de autenticacao nao encontrado apos o cadastro");
+    // Em producao `requireEmailVerification` e true, e com ela o better-auth NAO lanca para e-mail
+    // repetido: devolve 200 com um usuario SINTETICO, de id que nunca foi gravado (anti-enumeracao,
+    // sign-up.mjs:161-207). Sem esta comparacao o fluxo seguia, encontrava o usuario REAL pelo e-mail
+    // e sobrescrevia perfil, empresas e colaborador dele — troca de dono silenciosa, so em producao.
+    if (idDoSignUp !== usuario.id) throw emailJaCadastrado();
 
-  const colaboradorVinculado = await executarEmTransacao(async (tx) => {
-    // A criacao escreve nas MESMAS tabelas que a edicao (`substituirEmpresasUsuario` e
-    // `vincularUsuarioColaborador`), entao ela toma o MESMO lock de raiz. Para um usuario realmente
-    // novo nao ha linha e o retorno e nulo — o `onConflictDoUpdate` do upsert serializa o resto pela
-    // chave primaria. O que isto garante e que nenhuma escrita de escopo deste modulo corre por fora
-    // da serializacao, inclusive se o perfil ja existir por reaproveitamento de conta.
-    await bloquearAlvoUsuarioRepository(usuario.id, tx);
-    const colaboradorTransacao = await resolverColaboradorParaVinculo(tx);
-    // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
-    await marcarEmailVerificadoRepository(usuario.id, tx);
-    await upsertPerfilUsuarioRepository(
-      { usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
-      tx
-    );
-    await substituirEmpresasUsuarioRepository(usuario.id, empresaIds, tx);
-    await vincularUsuarioColaboradorRepository(usuario.id, colaboradorTransacao.id, tx);
-    return colaboradorTransacao;
-  }).catch(async (erro: DadosExternos) => {
-    // O signUpEmail ja commitou na transacao dele. Sem desfazer, sobra um usuario de autenticacao
-    // sem perfil/empresa/colaborador que nao serve para nada E bloqueia toda nova tentativa com o
-    // mesmo e-mail. Removemos o que ESTA requisicao criou e propagamos a causa original.
-    try {
-      await removerUsuarioAutenticacaoRepository(usuario.id);
-    } catch {
-      // Falha ao limpar nao pode mascarar o erro de verdade: o orfao vira dado para limpeza, mas o
-      // admin precisa ver por que o cadastro falhou.
-    }
+    const colaboradorVinculado = await executarEmTransacao(async (tx) => {
+      // A criacao escreve nas MESMAS tabelas que a edicao (`substituirEmpresasUsuario` e
+      // `vincularUsuarioColaborador`), entao ela toma o MESMO lock de raiz. Para um usuario realmente
+      // novo nao ha linha e o retorno e nulo — o `onConflictDoUpdate` do upsert serializa o resto pela
+      // chave primaria. O que isto garante e que nenhuma escrita de escopo deste modulo corre por fora
+      // da serializacao, inclusive se o perfil ja existir por reaproveitamento de conta.
+      await bloquearAlvoUsuarioRepository(usuario.id, tx);
+      const colaboradorTransacao = await resolverColaboradorParaVinculo(tx);
+      // Usuario criado por admin ja nasce verificado (senao nao logaria em producao — ver R1).
+      await marcarEmailVerificadoRepository(usuario.id, tx);
+      await upsertPerfilUsuarioRepository(
+        { usuarioId: usuario.id, empresaId: empresaPrincipalId, nome, email, ...(role ? { role } : {}) },
+        tx
+      );
+      await substituirEmpresasUsuarioRepository(usuario.id, empresaIds, tx);
+      await vincularUsuarioColaboradorRepository(usuario.id, colaboradorTransacao.id, tx);
+      return colaboradorTransacao;
+    });
+
+    return {
+      id: usuario.id,
+      empresaId: empresaPrincipalId,
+      empresaIds,
+      nome,
+      email,
+      colaboradorId: colaboradorVinculado.id,
+      setorId: colaboradorVinculado.setorId
+    };
+  } catch (erro) {
+    await compensarCadastroAutenticacao(idDoSignUp);
     throw erro;
-  });
+  }
+}
 
-  return {
-    id: usuario.id,
-    empresaId: empresaPrincipalId,
-    empresaIds,
-    nome,
-    email,
-    colaboradorId: colaboradorVinculado.id,
-    setorId: colaboradorVinculado.setorId
-  };
+// O `signUpEmail` commita numa transacao PROPRIA, antes da nossa. Sem desfazer, sobra um usuario de
+// autenticacao sem perfil/empresa/colaborador que nao serve para nada E bloqueia toda nova tentativa
+// com o mesmo e-mail. `session` e `account` saem por cascade.
+async function compensarCadastroAutenticacao(usuarioId: string) {
+  try {
+    await removerUsuarioAutenticacaoRepository(usuarioId);
+  } catch (erro) {
+    // A causa ORIGINAL continua subindo para o cliente — a limpeza nao pode mascara-la. Mas ela
+    // tambem nao pode sumir: sem esta linha o orfao existe e ninguem sabe qual id limpar. So o id e a
+    // mensagem, nunca o corpo do pedido (senha, token). Mesmo formato de
+    // `api/src/integracoes/integracoes.service.ts`.
+    console.error(
+      `[usuarios] falha ao remover usuario de autenticacao ${usuarioId} apos cadastro malsucedido:`,
+      erro instanceof Error ? erro.message : erro
+    );
+    capturarErro(erro instanceof Error ? erro : new Error(String(erro)));
+  }
 }

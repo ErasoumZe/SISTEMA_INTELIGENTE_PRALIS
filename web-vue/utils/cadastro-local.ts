@@ -5,10 +5,16 @@
 import type { CadastroForm, Opcao, Opcoes } from "~/types/padaria";
 import { documentoEhCpf } from "~/utils/formatacao";
 
-// Upsert por id: substitui mesclando se existir, senao insere no topo (mesmo comportamento do
+// Upsert por chave: substitui mesclando se existir, senao insere no topo (mesmo comportamento do
 // componente original — item recem-salvo aparece primeiro na lista).
-export function upsertOpcao(lista: Opcao[], item: Opcao) {
-  const indice = lista.findIndex((opcao) => opcao.id === item.id);
+//
+// A chave e parametrizavel porque nem toda lista casa por `id`. A de usuarios, por exemplo, vem da API
+// com `usuarioId` e SEM `id` (`UsuarioLinha`, api/src/usuarios/usuarios.repository.ts) — casar por
+// `id` nunca encontrava a linha, inseria uma DUPLICATA e a duplicata nao tinha o papel. A segunda
+// abertura pegava a duplicata, ficava com papel desconhecido e a tela travava a edicao.
+export function upsertOpcao(lista: Opcao[], item: Opcao, chave: (opcao: Opcao) => string | undefined = (o) => o.id) {
+  const alvo = chave(item);
+  const indice = lista.findIndex((opcao) => chave(opcao) === alvo);
   if (indice >= 0) lista.splice(indice, 1, { ...lista[indice], ...item });
   else lista.unshift(item);
 }
@@ -156,17 +162,28 @@ export function criarAtualizadorCadastroLocal(deps: DepsCadastroLocal) {
       const colaboradorAnterior = opcoes.colaboradores.find((opcao) => opcao.id === usuarioAtual?.colaboradorId);
       const colaborador = opcoes.colaboradores.find((opcao) => opcao.id === form.colaboradorId);
       if (colaboradorAnterior && colaboradorAnterior.id !== colaborador?.id) colaboradorAnterior.usuarioId = undefined;
-      upsertOpcao(opcoes.usuarios, {
-        ...itemBase,
-        usuarioId: id,
-        empresaIds,
-        empresaId: empresaIds[0] ?? empresaAtual,
-        nome: form.nome,
-        email: form.email,
-        colaboradorId: form.colaboradorId,
-        setorId: colaborador?.setorId ?? null,
-        cargos: colaborador?.cargos ?? (colaborador?.cargoNome ? [colaborador.cargoNome] : [])
-      });
+      // O papel PRECISA ser reposto. O cache local alimenta a proxima abertura sem passar pela API, e
+      // um item sem `role` faz `formCadastroDeLinha` devolver papel desconhecido — a tela entao trava
+      // a edicao seguinte (bloqueioCadastroUsuario). `form.role` e a fonte, porque foi o que acabou de
+      // ser gravado; o valor anterior so entra se o form nao souber (papel omitido no payload, caso em
+      // que o servidor manteve o que ja estava).
+      upsertOpcao(
+        opcoes.usuarios,
+        {
+          ...itemBase,
+          usuarioId: id,
+          empresaIds,
+          empresaId: empresaIds[0] ?? empresaAtual,
+          nome: form.nome,
+          email: form.email,
+          role: form.role || usuarioAtual?.role,
+          colaboradorId: form.colaboradorId,
+          setorId: colaborador?.setorId ?? null,
+          cargos: colaborador?.cargos ?? (colaborador?.cargoNome ? [colaborador.cargoNome] : [])
+        },
+        // A lista de usuarios vem da API com `usuarioId` e sem `id`: casar por `id` inseria duplicata.
+        (opcao) => opcao.usuarioId ?? opcao.id
+      );
       if (colaborador) colaborador.usuarioId = id;
       return true;
     }
