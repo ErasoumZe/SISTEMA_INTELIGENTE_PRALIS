@@ -67,8 +67,16 @@ const {
            importadas sem vinculo da D-10) via "nenhuma conta vinculada" — aviso falso, porque a
            conta existe e ja estava em form.contaOrigemId — e nunca via o campo travado. -->
       <template v-if="contaTravadaDoCaixa">
-        <input :value="contaTravadaDoCaixaNome" class="lc-input" readonly aria-label="Conta" />
-        <span class="lc-campo-nota">Saída do caixa aberto</span>
+        <input
+          :value="contaTravadaDoCaixaNome"
+          class="lc-input"
+          readonly
+          aria-label="Conta"
+          aria-describedby="lc-conta-travada-nota"
+        />
+        <!-- A nota e o UNICO motivo visivel do campo cinza; sem o describedby o leitor de tela
+             anunciava "Conta, somente leitura" e nunca dizia por que. -->
+        <span id="lc-conta-travada-nota" class="lc-campo-nota">Saída do caixa aberto</span>
       </template>
       <!-- Sem contas vinculadas (contas_usuarios): aviso no lugar de um select vazio. So alcanca
            quem ESCOLHE a conta, isto e, a retaguarda. -->

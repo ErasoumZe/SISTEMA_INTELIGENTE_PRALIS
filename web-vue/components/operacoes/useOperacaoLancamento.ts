@@ -95,10 +95,15 @@ export function useOperacaoLancamento() {
   // formOperacaoVazio()`) quando o "+ NOVO" reabre o modal ja aberto em outra categoria. Sem
   // observar essa troca, `aberto` seguia true, a conta travada nao mudava, o watch nao disparava e
   // o lancamento saia sem conta.
+  //
+  // So vale para lancamento NOVO. Num registro ABERTO para edicao a conta e a que foi gravada: o
+  // PDV pode ter sido reapontado para outra conta depois do lancamento, e sobrescrever aqui movia
+  // o registro de conta em silencio — o servidor aprovaria, porque a conta nova E a do PDV atual.
+  // Quem decide a edicao e a trava do servidor (403), nao a tela.
   watch(
     [aberto, contaTravadaDoCaixa, form],
     ([estaAberto, conta]) => {
-      if (estaAberto && conta) form.value.contaOrigemId = conta;
+      if (estaAberto && conta && !operacaoEditandoId.value) form.value.contaOrigemId = conta;
     },
     { immediate: true }
   );
@@ -212,11 +217,18 @@ export function useOperacaoLancamento() {
   watch(
     cat,
     (c) => {
-      // O id do credor que a nova categoria nao aceita sai do ESTADO aqui, e nao so da tela: o
-      // payload emite os tres ids em qualquer entidade, entao um campo apenas escondido continuava
-      // viajando. Era assim que uma despesa com colaborador virava retirada com colaborador —
-      // gravada, contra a R-128. Nao vale para registro em edicao, que nao troca de categoria.
-      if (!operacaoEditandoId.value) limparCredorIncompativel(form.value, c);
+      // Limpeza da troca de categoria, num lugar so. O id do credor que a nova categoria nao aceita
+      // sai do ESTADO, e nao apenas da tela: o payload emite os tres ids em qualquer entidade,
+      // entao um campo so escondido continuava viajando — era assim que uma despesa com colaborador
+      // virava retirada com colaborador, gravada, contra a R-128. O grupo tambem e proprio da
+      // categoria anterior. Nada disso vale para registro em EDICAO, que nem troca de categoria e
+      // cujo credor historico a R-128 manda preservar.
+      if (!operacaoEditandoId.value) {
+        form.value.grupoDespesaId = "";
+        form.value.grupoMercadoriaId = "";
+        form.value.grupoRetiradaId = "";
+        limparCredorIncompativel(form.value, c);
+      }
       const primeiro = CREDORES[c][0];
       if (primeiro && !credoresOferecidos.value.includes(tipoCredor.value)) tipoCredor.value = primeiro;
     },

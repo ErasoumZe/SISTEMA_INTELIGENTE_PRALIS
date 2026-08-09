@@ -31,10 +31,6 @@ export function categoriaTemCredor(entidade: EntidadeOperacional): entidade is C
   return entidade === "despesa" || entidade === "mercadoria" || entidade === "retirada";
 }
 
-export function credoresDaCategoria(entidade: EntidadeOperacional): TipoCredor[] {
-  return categoriaTemCredor(entidade) ? CREDORES_POR_CATEGORIA[entidade] : [];
-}
-
 /**
  * Zera do formulario o credor que a categoria de destino nao aceita.
  *

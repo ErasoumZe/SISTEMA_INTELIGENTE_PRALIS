@@ -1045,12 +1045,9 @@ type ChaveOpcaoOperacao =
 // fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
 const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
-  // Cada categoria carrega a lista de TODOS os tipos de credor que oferece (CREDORES_POR_CATEGORIA)
-  // — senao o chip abre um select vazio. A despesa oferece Colaborador (e a discriminacao dela
-  // tambem usa a lista); a retirada oferece Fornecedor desde a R-128.
-  despesa: ["contas", "fornecedores", "colaboradores", "grupos"],
+  despesa: ["contas", "fornecedores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  retirada: ["contas", "fornecedores", "colaboradores", "sociosGestores", "grupos"],
+  retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
   transferencia: ["contas"]
 };
 
@@ -1242,12 +1239,11 @@ function executarAcaoNovo(acao: AcaoNovo) {
 async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
   if (entidade === entidadeNova.value) return;
   entidadeNova.value = entidade;
-  form.value.grupoDespesaId = "";
-  form.value.grupoMercadoriaId = "";
-  form.value.grupoRetiradaId = "";
-  // O credor incompativel e limpado pelo `useOperacaoLancamento`, que observa a categoria e e dono
-  // do mapa de credores. As duas linhas que ficavam aqui limpavam um id por vez, nunca o
-  // `credorTipo`, e apagavam o fornecedor da retirada — que a R-128 tornou valido.
+  // Limpar o formulario e do `useOperacaoLancamento`, que observa a categoria e e dono do mapa de
+  // credores. Aqui ficavam grupos e credor: o credor era limpado um id por vez, nunca o
+  // `credorTipo`, e o fornecedor da retirada era apagado — que a R-128 tornou valido. Com a
+  // limpeza fora daqui, esta funcao nao tem mais regra que possa divergir do mapa, e a que existe
+  // roda dentro do componente, onde o teste alcanca.
   try {
     await carregarOpcoesParaOperacao(entidade);
   } catch (error) {

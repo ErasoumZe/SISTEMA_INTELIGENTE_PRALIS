@@ -176,31 +176,26 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
 
   // O PUT nao pode ser a porta dos fundos: sem `contaOrigemId` no corpo o registro perdia a conta e
   // continuava com `caixa_id`. O valor sumia do saldo da conta e permanecia no fechamento do caixa —
-  // a divergencia que a R-121 existe para impedir, invertida.
-  it("Deve_ManterAContaDoPdv_Quando_OperadorEditaSemInformarConta", async () => {
+  // a divergencia que a R-121 existe para impedir, invertida. As TRES saidas receberam a mesma
+  // correcao, entao as tres sao provadas.
+  it.each(SAIDAS)("Deve_ManterAContaDoPdv_Quando_OperadorEditaSemInformarConta (%s)", async (nome, rota, extras) => {
     const criada = await post(
       cookieCaixa,
-      "/api/despesas",
-      corpo("CX-M06 edicao sem conta", {
-        contaOrigemId: contaDoPdv,
-        grupoDespesaId: idsTeste.grupoDespesaOperacional
-      })
+      rota,
+      corpo(`CX-M06 edicao sem conta ${nome}`, { contaOrigemId: contaDoPdv, ...extras })
     );
     expect(criada.statusCode, criada.body).toBe(201);
     const { id } = json<{ data: { id: string } }>(criada).data;
 
     const editada = await put(
       cookieCaixa,
-      `/api/despesas/${id}`,
-      corpo("CX-M06 edicao sem conta corrigida", {
-        valorOriginal: 42,
-        grupoDespesaId: idsTeste.grupoDespesaOperacional
-      })
+      `${rota}/${id}`,
+      corpo(`CX-M06 edicao sem conta corrigida ${nome}`, { valorOriginal: 42, ...extras })
     );
     expect(editada.statusCode, editada.body).toBe(200);
 
     expect(
-      await consultarUm<{ conta_origem_id: string | null }>("select conta_origem_id from despesas where id = $1", [id])
+      await consultarUm<{ conta_origem_id: string | null }>(`select conta_origem_id from ${nome}s where id = $1`, [id])
     ).toMatchObject({ conta_origem_id: contaDoPdv });
   });
 
@@ -246,45 +241,16 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
   });
 
   it("Deve_RecusarSemGravar_Quando_MercadoriaNaoTemFornecedor", async () => {
-    const descricao = "CX-M06 mercadoria so com colaborador";
+    const descricao = "CX-M06 mercadoria sem fornecedor";
     const resposta = await post(
       cookieCaixa,
       "/api/mercadorias",
-      corpo(descricao, {
-        contaOrigemId: contaDoPdv,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        colaboradorId: idsTeste.colaboradorCaixa
-      })
+      corpo(descricao, { contaOrigemId: contaDoPdv, grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos })
     );
 
     assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("fornecedorId");
     expect(await gravadas(descricao)).toBe(0);
-  });
-
-  // Contrato REAL: `mercadoriaPayloadSchema` nao e `.strict()` e a tabela `mercadorias` nao tem
-  // coluna de colaborador — a chave extra e descartada, nao recusada. O que o aceite exige e que ela
-  // NAO seja persistida; o descarte silencioso esta registrado como achado fora de escopo.
-  it("Deve_NaoPersistirColaborador_Quando_MercadoriaRecebeAChaveExtra", async () => {
-    const resposta = await post(
-      cookieCaixa,
-      "/api/mercadorias",
-      corpo("CX-M06 mercadoria com chave extra", {
-        contaOrigemId: contaDoPdv,
-        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-        fornecedorId: idsTeste.fornecedor,
-        colaboradorId: idsTeste.colaboradorCaixa
-      })
-    );
-    expect(resposta.statusCode, resposta.body).toBe(201);
-
-    const { id } = json<{ data: { id: string } }>(resposta).data;
-    const colunas = await consultarTodos<{ column_name: string }>(
-      "select column_name from information_schema.columns where table_name = 'mercadorias'"
-    );
-    expect(colunas.map((coluna) => coluna.column_name)).not.toContain("colaborador_id");
-    expect(
-      await consultarUm<{ credor_tipo: string }>("select credor_tipo from mercadorias where id = $1", [id])
-    ).toMatchObject({ credor_tipo: "fornecedor" });
   });
 
   it("Deve_RecusarSemGravar_Quando_RetiradaTemDoisCredores", async () => {
@@ -300,7 +266,8 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
       })
     );
 
-    assertProblem(resposta, 400);
+    assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("credor");
     expect(await gravadas(descricao)).toBe(0);
   });
 

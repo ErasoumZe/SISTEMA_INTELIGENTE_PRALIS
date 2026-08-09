@@ -13,7 +13,7 @@ import { OPERACAO_LANCAMENTO_KEY, useOperacaoLancamento } from "~/components/ope
 import OperacaoLancamentoCredor from "~/components/operacoes/OperacaoLancamentoCredor.vue";
 import { formOperacaoVazio, opcoesVazias } from "~/utils/domain";
 import { estadoRecorrenciaVazio, itemDespesaVazio, itemMercadoriaVazio } from "~/utils/operacoes";
-import type { EntidadeOperacional, Opcao } from "~/types/padaria";
+import type { EntidadeOperacional, Opcao, OperacaoForm } from "~/types/padaria";
 
 const CONTA_PDV = "conta-do-pdv";
 const CONTA_BANCO = "conta-banco";
@@ -26,6 +26,9 @@ type Cenario = {
   /** Nome do PDV, reserva quando a conta do caixa nao esta entre as contas vinculadas. */
   pdvNome?: string;
   categoria?: EntidadeOperacional;
+  /** Preenchido = registro ABERTO para edicao. Muda o ramo do credor legado e o da conta. */
+  editandoId?: string;
+  form?: Partial<OperacaoForm>;
 };
 
 function conta(id: string, nome: string): Opcao {
@@ -33,10 +36,10 @@ function conta(id: string, nome: string): Opcao {
 }
 
 function montarBloco(cenario: Cenario = {}) {
-  const form = ref(formOperacaoVazio());
+  const form = ref({ ...formOperacaoVazio(), ...cenario.form });
   const entidadeNova = ref<EntidadeOperacional>(cenario.categoria ?? "despesa");
   const modalOperacaoAberto = ref(true);
-  const operacaoEditandoId = ref("");
+  const operacaoEditandoId = ref(cenario.editandoId ?? "");
   const contas = ref<Opcao[]>(cenario.contas ?? []);
   const pdvContaId = ref(cenario.pdvContaId ?? "");
   const pdvNome = ref(cenario.pdvNome ?? "PDV 01");
@@ -52,14 +55,14 @@ function montarBloco(cenario: Cenario = {}) {
     return encontrada?.nome ?? pdvNome.value ?? "Conta do caixa aberto";
   });
 
-  // Espelha AppWorkspace.vue:1239-1252 — SEM a limpeza de credor, que e do composable. Se o
-  // harness limpasse aqui, o teste provaria o proprio harness em vez do codigo de producao.
+  // Espelha AppWorkspace.vue:1239-1249 na INTEGRA: depois da entrega, a funcao de producao so troca
+  // a entidade e recarrega as opcoes (fronteira de rede, fora do teste). TODA a limpeza do
+  // formulario — grupos e credor — vive no composable e e exercitada de verdade aqui. Enquanto o
+  // harness repetia as limpezas, ele provava a si mesmo: reintroduzir a limpeza no AppWorkspace
+  // deixava o teste verde.
   const trocarCategoriaLancamento = async (entidade: EntidadeOperacional) => {
     if (entidade === entidadeNova.value) return;
     entidadeNova.value = entidade;
-    form.value.grupoDespesaId = "";
-    form.value.grupoMercadoriaId = "";
-    form.value.grupoRetiradaId = "";
   };
 
   const contexto = {
@@ -114,7 +117,7 @@ function montarBloco(cenario: Cenario = {}) {
   });
 
   const wrapper = mount(Workspace, { global: { stubs: { "v-icon": true } } });
-  return { wrapper, form, entidadeNova, contas, pdvContaId, trocarCategoriaLancamento };
+  return { wrapper, form, entidadeNova, contas, pdvContaId, operacaoEditandoId, trocarCategoriaLancamento };
 }
 
 /** O bloco do campo "Conta" — isola das demais `.lc-campo` (Credor, Grupo, Observacao). */
@@ -166,7 +169,7 @@ describe("B-04 - trocar a categoria nao deixa credor incompativel para tras", ()
     // mercadoria nao pode ganhar Colaborador de volta.
     expect(chips(wrapper)).toEqual(["Fornecedor"]);
     expect(form.value.colaboradorId).toBe("");
-    expect(form.value.credorTipo).not.toBe("colaborador");
+    expect(form.value.credorTipo).toBe("");
   });
 
   it("Deve_LimparColaborador_Quando_DespesaComColaboradorVaiParaRetirada", async () => {
@@ -182,7 +185,7 @@ describe("B-04 - trocar a categoria nao deixa credor incompativel para tras", ()
     // Sem isto o front salva uma retirada NOVA com colaborador — o servidor aceita (o superRefine
     // conta um credor so) e a R-128 e violada no banco.
     expect(form.value.colaboradorId).toBe("");
-    expect(form.value.credorTipo).not.toBe("colaborador");
+    expect(form.value.credorTipo).toBe("");
     expect(chips(wrapper)).toEqual(["Fornecedor", "Sócio ou Gestor"]);
   });
 
@@ -212,6 +215,38 @@ describe("B-04 - trocar a categoria nao deixa credor incompativel para tras", ()
 
     expect(form.value.fornecedorId).toBe("fornecedor-1");
     expect(form.value.credorTipo).toBe("fornecedor");
+  });
+});
+
+// R-128: o colaborador saiu da retirada NOVA, mas o registro ja GRAVADO com ele tem de reabrir
+// inteiro — "a tela nao pode apagar o historico na cara do usuario". E o unico caminho em que a
+// limpeza de credor pode destruir dado, entao ele e provado, e nao deduzido.
+describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", () => {
+  const RETIRADA_LEGADA = {
+    editandoId: "retirada-antiga",
+    categoria: "retirada" as const,
+    form: { colaboradorId: "colaborador-1", credorTipo: "colaborador" as const }
+  };
+
+  it("Deve_OferecerOChipColaborador_Quando_RetiradaGravadaUsaColaborador", () => {
+    const { wrapper } = montarBloco(RETIRADA_LEGADA);
+    expect(chips(wrapper)).toEqual(["Fornecedor", "Sócio ou Gestor", "Colaborador"]);
+  });
+
+  it("Deve_ManterOColaboradorGravado_Quando_ORegistroAntigoEAberto", () => {
+    const { form } = montarBloco(RETIRADA_LEGADA);
+    expect(form.value.colaboradorId).toBe("colaborador-1");
+    expect(form.value.credorTipo).toBe("colaborador");
+  });
+
+  // Lancamento NOVO nao ganha o chip de volta — e a diferenca entre o legado e o vazamento que a
+  // troca de categoria causava.
+  it("Deve_NaoOferecerOChipColaborador_Quando_ARetiradaENova", () => {
+    const { wrapper } = montarBloco({
+      categoria: "retirada",
+      form: { colaboradorId: "colaborador-1", credorTipo: "colaborador" }
+    });
+    expect(chips(wrapper)).toEqual(["Fornecedor", "Sócio ou Gestor"]);
   });
 });
 
@@ -306,7 +341,23 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
     expect(form.value.contaOrigemId).toBe(CONTA_PDV);
   });
 
-  it("Deve_ManterOSeletorDeContas_Quando_PerfilEDeRetaguarda", async () => {
+  // O PDV pode ter sido reapontado para outra conta DEPOIS do lancamento. Sobrescrever aqui movia o
+  // registro de conta em silencio, e o servidor aprovaria — a conta nova E a do PDV atual. Quem
+  // decide a edicao e a trava do servidor (403), nao a tela.
+  it("Deve_PreservarAContaGravada_Quando_ORegistroEAbertoParaEdicao", async () => {
+    const { form } = montarBloco({
+      contas: [conta(CONTA_PDV, "Caixa PDV 01"), conta(CONTA_BANCO, "Banco")],
+      pdvContaId: CONTA_PDV,
+      editandoId: "despesa-antiga",
+      form: { contaOrigemId: CONTA_BANCO }
+    });
+    await nextTick();
+    expect(form.value.contaOrigemId).toBe(CONTA_BANCO);
+  });
+
+  // O nome diz o que o teste PROVA: `contaTravadaDoCaixa` vazia. Quem decide se ela e vazia e o
+  // `perfilCaixaOperacional` do AppWorkspace, que este harness nao monta.
+  it("Deve_ManterOSeletorDeContas_Quando_NaoHaContaTravada", async () => {
     const { wrapper, form } = montarBloco({
       contas: [conta(CONTA_BANCO, "Banco"), conta(CONTA_COFRE, "Cofre")],
       pdvContaId: ""
@@ -323,8 +374,9 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
     expect(form.value.contaOrigemId).toBe(CONTA_COFRE);
   });
 
-  // Retaguarda REALMENTE sem conta vinculada continua recebendo o aviso — ele nao pode sumir.
-  it("Deve_AvisarSemContaVinculada_Quando_RetaguardaNaoTemContas", () => {
+  // Quem ESCOLHE a conta e realmente nao tem nenhuma vinculada continua recebendo o aviso — ele nao
+  // pode sumir junto com o falso.
+  it("Deve_AvisarSemContaVinculada_Quando_NaoHaContaTravadaNemContas", () => {
     const { wrapper } = montarBloco({ contas: [], pdvContaId: "" });
 
     const campo = campoConta(wrapper);
