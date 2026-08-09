@@ -49,13 +49,18 @@ export async function listarColaboradoresRepository(escopoEmpresas: string[]) {
     .orderBy(asc(colaboradores.nome));
 }
 
-export async function bloquearCargoRepository(cargoId: string, db: TransacaoBanco) {
+// Escopo no `where` e `NO KEY UPDATE` pelos mesmos dois motivos de `bloquearColaboradorRepository`:
+// sem o escopo o lock cai numa linha de outro tenant e a latencia denuncia se o cargo existe; e
+// `cargos.id` e referenciado por `colaboradores_cargos.cargo_id` (0001_baseline.sql:828), entao
+// `FOR UPDATE` faria toda atribuicao de cargo esperar por um simples rename.
+export async function bloquearCargoRepository(cargoId: string, escopoEmpresas: string[], db: TransacaoBanco) {
+  if (!escopoEmpresas.length) return null;
   const [cargo] = await db
     .select({ id: cargos.id, empresaId: cargos.empresaId })
     .from(cargos)
-    .where(eq(cargos.id, cargoId))
+    .where(and(eq(cargos.id, cargoId), inArray(cargos.empresaId, escopoEmpresas)))
     .limit(1)
-    .for("update");
+    .for("no key update");
   return cargo ?? null;
 }
 
@@ -80,7 +85,10 @@ export async function bloquearVinculoCargoRepository(
       )
     )
     .limit(1)
-    .for("update");
+    // `NO KEY UPDATE`: `colaboradores_cargos.id` e referenciado por
+    // `colaboradores_jornadas.colaborador_cargo_id` (0001_baseline.sql:836), e ativar/desativar um
+    // vinculo nao muda coluna-chave. Nao ha por que fazer o cadastro de jornada esperar.
+    .for("no key update");
   return vinculo ?? null;
 }
 
@@ -168,7 +176,11 @@ export async function salvarCargoColaboradorRepository(
         colaboradoresCargos.cargoId,
         colaboradoresCargos.dataInicio
       ],
-      set: { ativo: input.ativo, setorId: input.setorId, atualizadoEm: new Date() }
+      // So `ativo`. NAO reescreve `setor_id` nem `remuneracao_minuto`: no conflito a linha ja existe
+      // e e um registro de vinculo historico — sobrepor o setor com o que o formulario tem agora
+      // (frequentemente `null`) apagaria dado que ninguem pediu para mudar. O objetivo do ramo e um
+      // so: o colaborador voltar a ter cargo ativo.
+      set: { ativo: input.ativo, atualizadoEm: new Date() }
     })
     .returning({ id: colaboradoresCargos.id });
   return criado;
@@ -242,19 +254,10 @@ export async function listarCargosColaboradorRepository(colaboradorId: string, e
     .orderBy(desc(colaboradoresCargos.ativo), desc(colaboradoresCargos.dataInicio), asc(cargos.nome));
 }
 
-export async function existeColaboradorNaEmpresaRepository(
-  colaboradorId: string,
-  empresaId: string,
-  db: ExecutorBanco = banco
-) {
-  const [colaborador] = await db
-    .select({ id: colaboradores.id })
-    .from(colaboradores)
-    .where(and(eq(colaboradores.id, colaboradorId), eq(colaboradores.empresaId, empresaId)))
-    .limit(1);
-  return Boolean(colaborador);
-}
-
+// `existeColaboradorNaEmpresaRepository` foi REMOVIDA aqui. Era a funcao que perguntava "este
+// colaborador esta na empresa que o CORPO informou" — o caminho antigo, sem lock e decidido pelo
+// pedido. Todo chamador passou a usar `bloquearColaboradorRepository`, que trava a linha e devolve a
+// empresa REAL. Manter as duas deixaria a versao permissiva ao alcance do proximo refactor.
 export async function existeCargoNaEmpresaRepository(cargoId: string, empresaId: string, db: ExecutorBanco = banco) {
   const [cargo] = await db
     .select({ id: cargos.id })
@@ -304,6 +307,10 @@ export async function criarCargoColaboradorRepository(
   },
   db: ExecutorBanco = banco
 ) {
+  // `onConflictDoNothing` + `returning`: repetir a mesma tupla da unica
+  // `(empresa, colaborador, cargo, data_inicio)` levantava 23505, que `mensagemDominioOuRelancar`
+  // relanca por ter `code` (api/src/erros.ts:9) e virava 500 INTERNAL_ERROR + Sentry num pedido
+  // legitimo — dois cliques no botao bastavam. Sem linha devolvida, o service responde 409.
   const [criado] = await db
     .insert(colaboradoresCargos)
     .values({
@@ -315,8 +322,16 @@ export async function criarCargoColaboradorRepository(
       dataInicio: input.dataInicio,
       ativo: input.ativo
     })
+    .onConflictDoNothing({
+      target: [
+        colaboradoresCargos.empresaId,
+        colaboradoresCargos.colaboradorId,
+        colaboradoresCargos.cargoId,
+        colaboradoresCargos.dataInicio
+      ]
+    })
     .returning({ id: colaboradoresCargos.id });
-  return criado;
+  return criado ?? null;
 }
 
 // Trava a linha RAIZ do colaborador e devolve a empresa REAL dela e o vinculo de usuario.
@@ -334,13 +349,40 @@ export async function criarCargoColaboradorRepository(
 // A raiz e a MESMA linha que `bloquearColaboradorUsuarioRepository` trava do outro lado, entao os dois
 // fluxos passam a se serializar. `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` fora de
 // transacao solta o lock na instrucao seguinte e nao serializa nada.
-export async function bloquearColaboradorRepository(colaboradorId: string, db: TransacaoBanco) {
+//
+// O ESCOPO entra no proprio `where`, e nao so na decisao do service. Com `FOR ...` isso deixa de ser
+// estilo: travar primeiro e recusar depois faz o request ESPERAR quando o id e de outro tenant e
+// esta travado por uma escrita legitima daquele tenant, e responder na hora quando o id nao existe —
+// um oraculo de existencia por latencia, que os 404 iguais nao cobrem. E encosta um lock numa linha
+// alheia. Com o filtro, "nao existe" e "e de outra empresa" ficam indistinguiveis ja no banco.
+//
+// `NO KEY UPDATE`, e NAO `UPDATE`. A diferenca decide se o cadastro trava a OPERACAO.
+// `colaboradores.id` e referenciado por 9 FKs (db/migrations/0001_baseline.sql:826-941), entre elas
+// `fechamentos_caixa.colaborador_id` (:860) e `debitos_colaboradores.colaborador_id` (:840). Todo
+// INSERT nessas tabelas — abrir caixa, lancar despesa/retirada com credor colaborador — pega
+// `FOR KEY SHARE` na linha do colaborador para checar a FK. Pela matriz de conflito do Postgres:
+//
+//   NO KEY UPDATE x KEY SHARE     -> NAO conflita  (a abertura de caixa nao espera o cadastro)
+//   NO KEY UPDATE x NO KEY UPDATE -> conflita      (as escritas deste modulo seguem exclusivas)
+//   NO KEY UPDATE x UPDATE        -> conflita      (segue serializado com o fluxo de usuarios)
+//
+// Preserva inteira a serializacao pretendida e para de cobrar latencia de quem so referencia a
+// linha. Com `FOR UPDATE`, uma edicao de cadastro presa seguraria a abertura de caixa daquele
+// colaborador por tempo indefinido — o pool nao tem `lock_timeout` (api/src/banco/conexao.ts:8-10).
+// Nenhuma escrita daqui altera coluna-chave (`id` e `usuario_id` nao sao tocados: quem vincula
+// usuario e `usuarios.repository.ts`, com o lock forte correto).
+export async function bloquearColaboradorRepository(
+  colaboradorId: string,
+  escopoEmpresas: string[],
+  db: TransacaoBanco
+) {
+  if (!escopoEmpresas.length) return null;
   const [colaborador] = await db
     .select({ id: colaboradores.id, empresaId: colaboradores.empresaId, usuarioId: colaboradores.usuarioId })
     .from(colaboradores)
-    .where(eq(colaboradores.id, colaboradorId))
+    .where(and(eq(colaboradores.id, colaboradorId), inArray(colaboradores.empresaId, escopoEmpresas)))
     .limit(1)
-    .for("update");
+    .for("no key update");
   return colaborador ?? null;
 }
 
@@ -449,9 +491,13 @@ export async function criarJornadasColaboradorRepository(
       await tx
         .update(colaboradoresJornadas)
         .set({ ativo: false, atualizadoEm: new Date() })
+        // `empresa_id` no `where`: era a UNICA escrita do modulo cujo conjunto afetado nao era
+        // escopado. Inalcancavel hoje (a empresa vem da linha travada do colaborador), mas deixar a
+        // excecao de pe convida a proxima regressao.
         .where(
           and(
             eq(colaboradoresJornadas.colaboradorId, colaboradorId),
+            eq(colaboradoresJornadas.empresaId, input.empresaId),
             inArray(colaboradoresJornadas.diaDaSemana, diasAfetados)
           )
         );
@@ -532,18 +578,34 @@ function escopoOrigem(coluna: PgColumn, empresasPermitidasIds: string[] | null) 
   return empresasPermitidasIds === null ? undefined : inArray(coluna, empresasPermitidasIds);
 }
 
-async function completarColaboradores(empresaDestinoId: string, db: ExecutorBanco) {
+async function completarColaboradores(
+  empresaDestinoId: string,
+  empresasPermitidasIds: string[] | null,
+  db: ExecutorBanco
+) {
   const colaboradoresDestino = await db
     .select()
     .from(colaboradores)
-    .where(eq(colaboradores.empresaId, empresaDestinoId));
+    .where(eq(colaboradores.empresaId, empresaDestinoId))
+    // `ORDER BY id`: o laco abaixo faz UPDATE linha a linha. Duas importacoes simultaneas em
+    // sentidos opostos (A->B e B->A) fechariam ciclo se cada uma tocasse as linhas numa ordem.
+    .orderBy(asc(colaboradores.id));
   const setoresDestino = await db.select().from(setores).where(eq(setores.empresaId, empresaDestinoId));
-  // So as origens que estas linhas de destino declaram ter importado. Antes era a tabela inteira.
+  // So as origens que estas linhas de destino declaram ter importado, e so dentro do escopo do ator.
+  // Antes era `select().from(colaboradores)` — a tabela inteira do banco, todos os tenants.
   const origensDeclaradas = [
     ...new Set(colaboradoresDestino.map((destino) => destino.idImportado).filter((id): id is string => Boolean(id)))
   ];
   const colaboradoresOrigem = origensDeclaradas.length
-    ? await db.select().from(colaboradores).where(inArray(colaboradores.id, origensDeclaradas))
+    ? await db
+        .select()
+        .from(colaboradores)
+        .where(
+          and(
+            inArray(colaboradores.id, origensDeclaradas),
+            escopoOrigem(colaboradores.empresaId, empresasPermitidasIds)
+          )
+        )
     : [];
   for (const destino of colaboradoresDestino) {
     if (!destino.importadoDe || !destino.idImportado) continue;
@@ -589,7 +651,7 @@ export async function copiarColaboradoresRepository(
       });
       inseridos += 1;
     }
-    if (modo === "completo") await completarColaboradores(empresaDestinoId, db);
+    if (modo === "completo") await completarColaboradores(empresaDestinoId, empresasPermitidasIds, db);
     return { tipo: "colaboradores", inseridos };
   });
 }

@@ -81,8 +81,8 @@ async function bloquearColaboradorDoAtor(
   perfil: PerfilComEmpresa,
   tx: TransacaoBanco
 ) {
-  const colaborador = await bloquearColaboradorRepository(colaboradorId, tx);
-  if (!colaborador || !podeAcessarEmpresa(perfil, colaborador.empresaId)) colaboradorNaoEncontrado();
+  const colaborador = await bloquearColaboradorRepository(colaboradorId, empresasPermitidas(perfil), tx);
+  if (!colaborador) colaboradorNaoEncontrado();
   // O corpo afirmou uma empresa que nao e a do alvo. Aqui o ator TEM as duas (o controller ja
   // barrou o que esta fora do escopo dele), entao 403 nao vaza nada — e recusar e mais honesto que
   // ignorar o campo e gravar em silencio na empresa certa.
@@ -189,8 +189,16 @@ export async function salvarColaborador(id: string | null, body: DadosExternos, 
       },
       tx
     );
-    // Com o alvo travado acima, zero linha afetada aqui e impossivel por concorrencia — sobra a
-    // hipotese de inconsistencia interna. Recusar e melhor que devolver 204 sobre nada gravado.
+    // NAO E CODIGO MORTO, e tambem nao e um guard provado por teste — as duas coisas precisam estar
+    // escritas aqui, senao o proximo leitor apaga.
+    //
+    // Hoje ele e INALCANCAVEL, e de proposito: o alvo esta travado e `empresaReal` saiu da propria
+    // linha travada, entao o `where id AND empresa_id` do UPDATE sempre casa. Uma mutacao que faca o
+    // repositorio voltar a fabricar o retorno nao derruba teste nenhum — foi medido.
+    //
+    // Ele existe como DETECTOR DE REGRESSAO: no minuto em que alguem trocar `empresaReal` por
+    // `dados.empresaId` no `where`, ou remover o lock, este `if` volta a ser o que impede o falso
+    // 204 que a CX-M05 corrigiu.
     if (!colaborador?.id) colaboradorNaoEncontrado();
 
     if (!id || !(await contarCargosAtivosColaboradorRepository(colaborador.id, empresaReal, tx))) {
@@ -256,8 +264,8 @@ export async function exportarColaborador(id: string, body: ExportarColaboradorP
   // A ORIGEM tambem precisa de veredito explicito. Antes um id de outra empresa era recortado em
   // silencio pelo repositorio e a rota respondia 200 `inseridos: 0` — indistinguivel de sucesso.
   return executarEmTransacao(async (tx) => {
-    const origem = await bloquearColaboradorRepository(id, tx);
-    if (!origem || !podeAcessarEmpresa(ator, origem.empresaId)) colaboradorNaoEncontrado();
+    const origem = await bloquearColaboradorRepository(id, empresasPermitidas(ator), tx);
+    if (!origem) colaboradorNaoEncontrado();
     if (origem.empresaId === body.empresaDestinoId) falharValidacao("Escolha empresas diferentes");
     return copiarColaboradoresRepository({ id }, body.empresaDestinoId, empresasPermitidas(ator), body.modo, tx);
   });
@@ -278,10 +286,8 @@ export async function exportarCargo(id: string, body: ExportarCargoPayload, perf
   const ator = exigirAtor(perfil);
   if (!podeAcessarEmpresa(ator, body.empresaDestinoId)) empresaNaoPermitida();
   return executarEmTransacao(async (tx) => {
-    const origem = await bloquearCargoRepository(id, tx);
-    if (!origem || !podeAcessarEmpresa(ator, origem.empresaId)) {
-      throw naoEncontrado("Cargo nao encontrado", "CARGO_NOT_FOUND");
-    }
+    const origem = await bloquearCargoRepository(id, empresasPermitidas(ator), tx);
+    if (!origem) throw naoEncontrado("Cargo nao encontrado", "CARGO_NOT_FOUND");
     if (origem.empresaId === body.empresaDestinoId) falharValidacao("Escolha empresas diferentes");
     return copiarCargosRepository({ id }, body.empresaDestinoId, empresasPermitidas(ator), body.modo, tx);
   });
@@ -297,11 +303,10 @@ export async function atualizarCargo(id: string, payload: CargoPayload, perfil?:
   const ator = exigirAtor(perfil);
   if (!podeAcessarEmpresa(ator, payload.empresaId)) empresaNaoPermitida();
   return executarEmTransacao(async (tx) => {
-    const alvo = await bloquearCargoRepository(id, tx);
-    // 404 unico para inexistente e para cargo de outra empresa, pelo mesmo motivo do colaborador.
-    if (!alvo || !podeAcessarEmpresa(ator, alvo.empresaId)) {
-      throw naoEncontrado("Cargo nao encontrado", "CARGO_NOT_FOUND");
-    }
+    // 404 unico para inexistente e para cargo de outra empresa, pelo mesmo motivo do colaborador:
+    // o escopo entra no proprio `where`, entao os dois casos sao indistinguiveis ja no banco.
+    const alvo = await bloquearCargoRepository(id, empresasPermitidas(ator), tx);
+    if (!alvo) throw naoEncontrado("Cargo nao encontrado", "CARGO_NOT_FOUND");
     if (alvo.empresaId !== payload.empresaId) empresaNaoPermitida();
     const atualizado = await atualizarCargoRepository({ id, empresaId: alvo.empresaId, nome: payload.nome.trim() }, tx);
     if (!atualizado) throw naoEncontrado("Cargo nao encontrado", "CARGO_NOT_FOUND");
@@ -330,7 +335,7 @@ export async function criarCargoColaborador(
     if (!cargoExiste) throw new Error("Cargo inexistente");
     if (!setorExiste) throw new Error("Setor inexistente");
 
-    return criarCargoColaboradorRepository(
+    const criado = await criarCargoColaboradorRepository(
       {
         empresaId: alvo.empresaId,
         colaboradorId,
@@ -342,6 +347,11 @@ export async function criarCargoColaborador(
       },
       tx
     );
+    // 409, e nao o 500 de antes: repetir a mesma tupla e erro do pedido, nao queda do servidor.
+    if (!criado) {
+      throw conflito("Colaborador ja tem esse cargo nessa data de inicio", "CARGO_COLABORADOR_DUPLICADO");
+    }
+    return criado;
   });
 }
 

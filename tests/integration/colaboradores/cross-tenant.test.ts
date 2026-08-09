@@ -399,10 +399,32 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     });
 
     expect(resposta.statusCode).toBe(200);
+    const itens = json<{ data: Array<{ id: string; cargoId: string | null; cargoNome: string | null }> }>(
+      resposta
+    ).data;
+
+    // A LINHA precisa continuar vindo — so o ponteiro sai nulo. Sem esta assercao o teste passaria
+    // com lista VAZIA, e uma regressao de `leftJoin` para `innerJoin` (que faz a linha sumir em vez
+    // de vazar) nao seria detectada: o "nao contem" abaixo e verdadeiro para o conjunto vazio.
+    expect(itens).toHaveLength(1);
+    expect(itens[0]?.id).toBe(vinculoAComCargoB);
+    expect(itens[0]?.cargoId).toBeNull();
+    expect(itens[0]?.cargoNome).toBeNull();
+
     const corpo = JSON.stringify(resposta.json());
     expect(corpo).not.toContain(cargoB);
     expect(corpo).not.toContain("CARGO-EMPRESA-B");
     expect(corpo).not.toContain(setorB);
+  });
+
+  it("Deve_Retornar403_Quando_ACargosPedeAEmpresaBEOAtorSoTemAEmpresaA", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/cargos?empresaId=${idsTeste.empresaB}`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    assertProblem(resposta, 403, CODIGO_EMPRESA);
   });
 
   it("Deve_EntregarSomenteOContratoOperacional_Quando_OAtorSoTemCaixaOperar", async () => {
@@ -767,6 +789,74 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     ).resolves.toBeNull();
   });
 
+  // A divergencia `empresa real do alvo != empresa do corpo` so tinha prova no PUT do colaborador.
+  // Os outros quatro portoes passam `payload.empresaId` para o mesmo `bloquearColaboradorDoAtor`,
+  // mas isso era verdade so por leitura de codigo — e foi exatamente esse tipo de buraco que a
+  // mutacao achou da primeira vez. O ator multiempresa passa no escopo; so a divergencia recusa.
+  it("Deve_Retornar403_Quando_AsSubRotasDeEscritaAfirmamEmpresaDivergente", async () => {
+    const corpoDaEmpresaErrada = { empresaId: idsTeste.empresaA };
+
+    const cargo = await contexto.app.inject({
+      method: "POST",
+      url: `/api/colaboradores/${colaboradorBSemCargo}/cargos`,
+      headers: { cookie: cookieMultiempresa },
+      payload: {
+        ...corpoDaEmpresaErrada,
+        cargoId: idsTeste.cargoGerente,
+        remuneracaoMinuto: 1,
+        dataInicio: "2026-05-01",
+        ativo: true
+      }
+    });
+    const status = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/colaboradores/${colaboradorBComCargo}/cargos/${vinculoBComCargo}`,
+      headers: { cookie: cookieMultiempresa },
+      payload: { ...corpoDaEmpresaErrada, ativo: false }
+    });
+    const jornada = await contexto.app.inject({
+      method: "POST",
+      url: `/api/colaboradores/${colaboradorBComCargo}/jornadas`,
+      headers: { cookie: cookieMultiempresa },
+      payload: {
+        ...corpoDaEmpresaErrada,
+        dataInicio: "2026-05-01",
+        dias: [
+          {
+            diaDaSemana: "QUINTA",
+            faixas: [
+              {
+                horaEntrada: "08:00",
+                cargaHorariaDiariaEmMinutos: 480,
+                intervaloMinutos: 60,
+                colaboradorCargoId: vinculoBComCargo
+              }
+            ]
+          }
+        ]
+      }
+    });
+    const falta = await contexto.app.inject({
+      method: "POST",
+      url: `/api/colaboradores/${colaboradorBComCargo}/faltas-justificadas`,
+      headers: { cookie: cookieMultiempresa },
+      payload: {
+        ...corpoDaEmpresaErrada,
+        inicio: "2026-05-02T08:00:00.000Z",
+        fim: "2026-05-02T12:00:00.000Z",
+        motivo: "Falta com empresa divergente"
+      }
+    });
+
+    assertProblem(cargo, 403, CODIGO_EMPRESA);
+    assertProblem(status, 403, CODIGO_EMPRESA);
+    assertProblem(jornada, 403, CODIGO_EMPRESA);
+    assertProblem(falta, 403, CODIGO_EMPRESA);
+    // O vinculo da B continua ativo e nenhuma linha nova nasceu nele.
+    expect(await vinculosDoColaborador(colaboradorBComCargo)).toHaveLength(1);
+    expect(await vinculosDoColaborador(colaboradorBSemCargo)).toEqual([]);
+  });
+
   // === 6. IMPORTACAO / EXPORTACAO ==============================================================
 
   it("Deve_NaoAtravessarEmpresa_Quando_ImportarOuExportarForaDoEscopo", async () => {
@@ -860,6 +950,67 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     await expect(
       consultarUm("select id from colaboradores where nome = $1", ["COLABORADOR SEM ATOR"])
     ).resolves.toBeNull();
+  });
+
+  // === 8b. NIVEL DO LOCK DA RAIZ ===============================================================
+  //
+  // A CX-M05 transformou o lock da linha de `colaboradores` no portao de CINCO escritas que antes
+  // nao travavam nada. Com `FOR UPDATE` isso teria custado a operacao: `colaboradores.id` e
+  // referenciado por 9 FKs (db/migrations/0001_baseline.sql:826-941), entre elas
+  // `fechamentos_caixa.colaborador_id` (:860) e `debitos_colaboradores.colaborador_id` (:840), e
+  // todo INSERT nessas tabelas pega `FOR KEY SHARE` na linha do colaborador para checar a FK.
+  // `FOR UPDATE` conflita com `KEY SHARE`; `NO KEY UPDATE` nao.
+  //
+  // Sem `sleep`: quem decide a ordem e o `NOWAIT`, que falha na hora com 55P03 (`lock_not_available`)
+  // em vez de esperar. E o mesmo instrumento da PR #145 (edicao-segura.test.ts).
+  describe("nivel do lock da raiz de colaboradores", () => {
+    let cliente: pg.Client;
+
+    beforeAll(async () => {
+      cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+      await cliente.connect();
+      await cliente.query("begin");
+      // Exatamente o que `bloquearColaboradorRepository` passou a fazer.
+      await cliente.query("select id from colaboradores where id = $1 for no key update", [colaboradorALegitimo]);
+    });
+
+    afterAll(async () => {
+      await cliente.query("rollback");
+      await cliente.end();
+    });
+
+    it("Deve_DeixarAFkPassar_Quando_OCadastroSeguraOLockDaRaiz", async () => {
+      const outro = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+      await outro.connect();
+      try {
+        // `FOR KEY SHARE` e o lock que o Postgres toma sozinho ao validar a FK de um INSERT em
+        // `fechamentos_caixa` (abrir caixa) ou `debitos_colaboradores` (despesa/retirada com credor).
+        // `NOWAIT` prova que ele NAO espera: se esperasse, isto levantaria 55P03.
+        await expect(
+          outro.query("select id from colaboradores where id = $1 for key share nowait", [colaboradorALegitimo])
+        ).resolves.toBeDefined();
+      } finally {
+        await outro.end();
+      }
+    });
+
+    it("Deve_SerializarOutraEscritaDoModulo_Quando_OCadastroSeguraOLockDaRaiz", async () => {
+      const outro = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+      await outro.connect();
+      try {
+        // Outra escrita do modulo pede o MESMO nivel: tem de esperar (55P03 com NOWAIT).
+        await expect(
+          outro.query("select id from colaboradores where id = $1 for no key update nowait", [colaboradorALegitimo])
+        ).rejects.toMatchObject({ code: "55P03" });
+        // E o fluxo de usuarios, que pede `FOR UPDATE` para trocar `usuario_id`, tambem espera —
+        // e essa serializacao que a PR #145 depende e que a CX-M05 nao pode afrouxar.
+        await expect(
+          outro.query("select id from colaboradores where id = $1 for update nowait", [colaboradorALegitimo])
+        ).rejects.toMatchObject({ code: "55P03" });
+      } finally {
+        await outro.end();
+      }
+    });
   });
 
   // === 9. CONTRAPROVAS: o que NAO pode quebrar =================================================
@@ -1016,6 +1167,56 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     await expect(
       consultarUm("select id from colaboradores_cargos where id = $1 and ativo = false", [extraId])
     ).resolves.toBeTruthy();
+  });
+
+  // Ramo do `onConflictDoUpdate` de `salvarCargoColaboradorRepository`. Antes da CX-M05 este roteiro
+  // — desativar o unico vinculo e depois editar o colaborador no MESMO dia — batia na unica
+  // `(empresa, colaborador, cargo, data_inicio)` e virava 500 + alerta no Sentry, num fluxo
+  // inteiramente legitimo. O efeito (colaborador volta a ter cargo ativo) ja era o pretendido pelo
+  // bloco: ele so roda quando a contagem de cargos ativos e zero.
+  it("Deve_ReativarOVinculoEmVezDeQuebrar_Quando_OColaboradorFicouSemCargoAtivoNoMesmoDia", async () => {
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/colaboradores",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "COLABORADOR-REATIVACAO",
+        cargoId: cargoAExtra,
+        setorId: idsTeste.setorA
+      }
+    });
+    expect(criado.statusCode).toBe(201);
+    const colaboradorId = json<{ data: { id: string } }>(criado).data.id;
+    const vinculo = (await vinculosDoColaborador(colaboradorId))[0];
+    expect(vinculo?.ativo).toBe(true);
+
+    const desativou = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/colaboradores/${colaboradorId}/cargos/${vinculo?.id}`,
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, ativo: false }
+    });
+    expect(desativou.statusCode).toBe(204);
+
+    const reeditou = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/colaboradores/${colaboradorId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "COLABORADOR-REATIVACAO-EDITADO",
+        cargoId: cargoAExtra,
+        setorId: idsTeste.setorA
+      }
+    });
+
+    expect(reeditou.statusCode).toBe(204);
+    const depois = await vinculosDoColaborador(colaboradorId);
+    // Reativa a MESMA linha, nao cria uma segunda.
+    expect(depois).toHaveLength(1);
+    expect(depois[0]?.id).toBe(vinculo?.id);
+    expect(depois[0]?.ativo).toBe(true);
   });
 
   it("Deve_PreservarOColaboradorVinculado_Quando_AEdicaoDeUsuarioOmiteColaboradorId", async () => {

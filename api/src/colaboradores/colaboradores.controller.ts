@@ -92,7 +92,9 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     "/api/colaboradores",
     { preHandler: exigirPermissao("cadastro_colaboradores_criar") },
     async (request, reply) => {
-      const body = request.body as { empresaId?: string };
+      // `?? {}`: corpo JSON `null` fazia o acesso a `.empresaId` estourar TypeError -> 500 +
+      // Sentry. Com o objeto vazio a requisicao segue e o Zod do service responde 400.
+      const body = (request.body ?? {}) as { empresaId?: string };
       if (body.empresaId && !empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
@@ -110,7 +112,9 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
     async (request, reply) => {
       const { id } = cargoParamsSchema.parse(request.params);
-      const body = request.body as { empresaId?: string };
+      // `?? {}`: corpo JSON `null` fazia o acesso a `.empresaId` estourar TypeError -> 500 +
+      // Sentry. Com o objeto vazio a requisicao segue e o Zod do service responde 400.
+      const body = (request.body ?? {}) as { empresaId?: string };
       if (body.empresaId && !empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
