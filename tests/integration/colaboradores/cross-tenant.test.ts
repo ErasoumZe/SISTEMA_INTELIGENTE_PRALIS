@@ -166,14 +166,20 @@ async function semearFronteira() {
     idsTeste.empresaA,
     "CARGO-EMPRESA-A-EXTRA"
   ]);
-  await executarSql(
-    "insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim) values ($1, $2, $3, $4, $5)",
-    [turnoB, idsTeste.empresaB, "TURNO-EMPRESA-B", "06:00", "14:00"]
-  );
-  await executarSql(
-    "insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim) values ($1, $2, $3, $4, $5)",
-    [turnoA, idsTeste.empresaA, "TURNO-EMPRESA-A", "06:00", "14:00"]
-  );
+  await executarSql("insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim) values ($1, $2, $3, $4, $5)", [
+    turnoB,
+    idsTeste.empresaB,
+    "TURNO-EMPRESA-B",
+    "06:00",
+    "14:00"
+  ]);
+  await executarSql("insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim) values ($1, $2, $3, $4, $5)", [
+    turnoA,
+    idsTeste.empresaA,
+    "TURNO-EMPRESA-A",
+    "06:00",
+    "14:00"
+  ]);
 
   await criarColaborador({
     id: colaboradorBComCargo,
@@ -757,9 +763,7 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
       consultarUm("select id from colaboradores_jornadas where colaborador_id = $1", [colaboradorBComCargo])
     ).resolves.toBeNull();
     await expect(
-      consultarUm("select id from colaboradores_faltas_justificadas where colaborador_id = $1", [
-        colaboradorBComCargo
-      ])
+      consultarUm("select id from colaboradores_faltas_justificadas where colaborador_id = $1", [colaboradorBComCargo])
     ).resolves.toBeNull();
   });
 

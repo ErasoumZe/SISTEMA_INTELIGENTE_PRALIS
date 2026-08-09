@@ -228,16 +228,16 @@ export async function listarCargosColaboradorRepository(colaboradorId: string, e
       ativo: colaboradoresCargos.ativo
     })
     .from(colaboradoresCargos)
-    .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId)))
+    .leftJoin(
+      cargos,
+      and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
+    )
     .leftJoin(
       setores,
       and(eq(setores.id, colaboradoresCargos.setorId), eq(setores.empresaId, colaboradoresCargos.empresaId))
     )
     .where(
-      and(
-        eq(colaboradoresCargos.colaboradorId, colaboradorId),
-        inArray(colaboradoresCargos.empresaId, escopoEmpresas)
-      )
+      and(eq(colaboradoresCargos.colaboradorId, colaboradorId), inArray(colaboradoresCargos.empresaId, escopoEmpresas))
     )
     .orderBy(desc(colaboradoresCargos.ativo), desc(colaboradoresCargos.dataInicio), asc(cargos.nome));
 }
@@ -411,7 +411,10 @@ export async function listarJornadasColaboradorRepository(colaboradorId: string,
         eq(colaboradoresCargos.empresaId, colaboradoresJornadas.empresaId)
       )
     )
-    .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId)))
+    .leftJoin(
+      cargos,
+      and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
+    )
     .where(
       and(
         eq(colaboradoresJornadas.colaboradorId, colaboradorId),
