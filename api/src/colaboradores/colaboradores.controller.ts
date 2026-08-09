@@ -53,8 +53,13 @@ async function escopoDaQuery(request: FastifyRequest, reply: FastifyReply) {
   }
 }
 
+// Fail-closed: a versao anterior era `!request.perfilUsuario || podeAcessarEmpresa(...)`, ou seja,
+// SEM perfil liberava qualquer empresa do corpo. O hook default-deny de app.ts:153-159 responde
+// antes e nenhuma rota deste modulo esta na allowlist, entao nao havia caminho HTTP para isso — mas
+// bastava alguem entrar na allowlist para virar buraco. O service tambem exige o ator por conta
+// propria (`exigirAtor`), e esta e a defesa em profundidade da borda.
 function empresaPermitida(request: FastifyRequest, empresaId: string) {
-  return !request.perfilUsuario || podeAcessarEmpresa(request.perfilUsuario, empresaId);
+  return Boolean(request.perfilUsuario) && podeAcessarEmpresa(request.perfilUsuario!, empresaId);
 }
 
 function erro400(reply: FastifyReply, error: Error, fallback: string) {
@@ -62,8 +67,11 @@ function erro400(reply: FastifyReply, error: Error, fallback: string) {
 }
 
 export async function registrarRotasColaboradores(app: FastifyInstance) {
-  // Lista consumida como OPCAO de formulario (modal de abrir/editar caixa escolhe o colaborador;
-  // retiradas selecionam o responsavel). Aceita caixa_operar alem do cadastro de colaboradores.
+  // Lista consumida como OPCAO de formulario: credor de despesa/retirada e item da discriminacao
+  // (web-vue/components/operacoes/OperacaoLancamentoCredor.vue:42 e
+  // OperacaoLancamentoDiscriminacao.vue:89-90), alem da grade do cadastro e do select de colaborador
+  // da tela de usuarios. Aceita caixa_operar alem do cadastro de colaboradores; QUEM entra so por
+  // caixa_operar recebe a projecao reduzida, decidida em `listarColaboradores`.
   // As sub-rotas (cargos/jornadas/faltas) seguem restritas ao cadastro.
   app.get(
     "/api/colaboradores",
@@ -71,7 +79,11 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     async (request, reply) => {
       const escopo = await escopoDaQuery(request, reply);
       return escopo
-        ? paginadoDeArray(await listarColaboradores(escopo.escopoDados), escopo.query.page, escopo.query.pageSize)
+        ? paginadoDeArray(
+            await listarColaboradores(escopo.escopoDados, request.perfilUsuario),
+            escopo.query.page,
+            escopo.query.pageSize
+          )
         : undefined;
     }
   );
@@ -80,11 +92,13 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     "/api/colaboradores",
     { preHandler: exigirPermissao("cadastro_colaboradores_criar") },
     async (request, reply) => {
-      const body = request.body as { empresaId?: string };
+      // `?? {}`: corpo JSON `null` fazia o acesso a `.empresaId` estourar TypeError -> 500 +
+      // Sentry. Com o objeto vazio a requisicao segue e o Zod do service responde 400.
+      const body = (request.body ?? {}) as { empresaId?: string };
       if (body.empresaId && !empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        const criado = await salvarColaborador(null, request.body);
+        const criado = await salvarColaborador(null, request.body, request.perfilUsuario);
         return criadoId(reply, criado?.id ?? "colaboradores");
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
@@ -98,11 +112,13 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
     async (request, reply) => {
       const { id } = cargoParamsSchema.parse(request.params);
-      const body = request.body as { empresaId?: string };
+      // `?? {}`: corpo JSON `null` fazia o acesso a `.empresaId` estourar TypeError -> 500 +
+      // Sentry. Com o objeto vazio a requisicao segue e o Zod do service responde 400.
+      const body = (request.body ?? {}) as { empresaId?: string };
       if (body.empresaId && !empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        await salvarColaborador(id, request.body);
+        await salvarColaborador(id, request.body, request.perfilUsuario);
         return semConteudo(reply);
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
@@ -154,7 +170,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     if (!empresaPermitida(request, body.empresaId))
       return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
     try {
-      const criado = await criarCargo(body);
+      const criado = await criarCargo(body, request.perfilUsuario);
       if (!criado) return erro(reply, 400, "Cargo invalido", "INVALID_CARGO");
       return criadoId(reply, criado.id);
     } catch (error) {
@@ -162,6 +178,8 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     }
   });
 
+  // Sem try/catch de proposito: `atualizarCargo` sinaliza com `ErroDominio`, que o handler global
+  // (app.ts:100-102) traduz com status e code proprios. Um `new Error` cru aqui viraria 500.
   app.put(
     "/api/cargos/:id",
     { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
@@ -170,7 +188,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       const body = cargoPayloadSchema.parse(request.body);
       if (!empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
-      await atualizarCargo(id, body);
+      await atualizarCargo(id, body, request.perfilUsuario);
       return semConteudo(reply);
     }
   );
@@ -202,20 +220,22 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     }
   );
 
+  // As tres sub-rotas de leitura passaram a usar `escopoDaQuery` como a listagem principal. Antes
+  // usavam `empresasPermitidas` direto e IGNORAVAM o `?empresaId=`: pedir uma empresa fora do
+  // escopo devolvia 200 em vez do 403 que a rota irma devolve. Duas respostas para a mesma negacao.
   app.get(
     "/api/colaboradores/:colaboradorId/cargos",
     { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
-    async (request) => {
+    async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      const query = empresaQuerySchema.parse(request.query);
-      return paginadoDeArray(
-        await listarCargosColaborador(
-          colaboradorId,
-          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
-        ),
-        query.page,
-        query.pageSize
-      );
+      const escopo = await escopoDaQuery(request, reply);
+      return escopo
+        ? paginadoDeArray(
+            await listarCargosColaborador(colaboradorId, escopo.escopoDados),
+            escopo.query.page,
+            escopo.query.pageSize
+          )
+        : undefined;
     }
   );
 
@@ -228,7 +248,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       if (!empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        const criado = await criarCargoColaborador(colaboradorId, body);
+        const criado = await criarCargoColaborador(colaboradorId, body, request.perfilUsuario);
         if (!criado) return erro(reply, 400, "Cargo do colaborador invalido", "INVALID_COLLABORATOR_ROLE");
         return criadoId(reply, criado.id);
       } catch (error) {
@@ -237,6 +257,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
     }
   );
 
+  // Sem try/catch: ver o comentario de `PUT /api/cargos/:id`.
   app.put(
     "/api/colaboradores/:colaboradorId/cargos/:cargoColaboradorId",
     { preHandler: exigirPermissao("cadastro_colaboradores_editar") },
@@ -245,7 +266,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       const body = colaboradorCargoStatusPayloadSchema.parse(request.body);
       if (!empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
-      await atualizarStatusCargoColaborador(colaboradorId, cargoColaboradorId, body);
+      await atualizarStatusCargoColaborador(colaboradorId, cargoColaboradorId, body, request.perfilUsuario);
       return semConteudo(reply);
     }
   );
@@ -253,17 +274,16 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
   app.get(
     "/api/colaboradores/:colaboradorId/jornadas",
     { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
-    async (request) => {
+    async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      const query = empresaQuerySchema.parse(request.query);
-      return paginadoDeArray(
-        await listarJornadasColaborador(
-          colaboradorId,
-          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
-        ),
-        query.page,
-        query.pageSize
-      );
+      const escopo = await escopoDaQuery(request, reply);
+      return escopo
+        ? paginadoDeArray(
+            await listarJornadasColaborador(colaboradorId, escopo.escopoDados),
+            escopo.query.page,
+            escopo.query.pageSize
+          )
+        : undefined;
     }
   );
 
@@ -276,7 +296,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       if (!empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        const criado = await criarJornadasColaborador(colaboradorId, body);
+        const criado = await criarJornadasColaborador(colaboradorId, body, request.perfilUsuario);
         return criadoId(reply, (criado as { ids?: string[] }).ids?.[0] ?? colaboradorId);
       } catch (error) {
         return erro400(reply, new Error(mensagemDominioOuRelancar(error)), "Jornada invalida");
@@ -287,17 +307,16 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
   app.get(
     "/api/colaboradores/:colaboradorId/faltas-justificadas",
     { preHandler: exigirPermissao("cadastro_colaboradores_visualizar") },
-    async (request) => {
+    async (request, reply) => {
       const { colaboradorId } = colaboradorParamsSchema.parse(request.params);
-      const query = empresaQuerySchema.parse(request.query);
-      return paginadoDeArray(
-        await listarFaltasJustificadas(
-          colaboradorId,
-          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : []
-        ),
-        query.page,
-        query.pageSize
-      );
+      const escopo = await escopoDaQuery(request, reply);
+      return escopo
+        ? paginadoDeArray(
+            await listarFaltasJustificadas(colaboradorId, escopo.escopoDados),
+            escopo.query.page,
+            escopo.query.pageSize
+          )
+        : undefined;
     }
   );
 
@@ -310,7 +329,7 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
       if (!empresaPermitida(request, body.empresaId))
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       try {
-        const criado = await criarFaltaJustificada(colaboradorId, body);
+        const criado = await criarFaltaJustificada(colaboradorId, body, request.perfilUsuario);
         if (!criado) return erro(reply, 400, "Falta justificada invalida", "INVALID_ABSENCE");
         return criadoId(reply, criado.id);
       } catch (error) {
