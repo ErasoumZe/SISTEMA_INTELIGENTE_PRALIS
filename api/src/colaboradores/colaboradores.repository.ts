@@ -1,11 +1,13 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   cargos,
   colaboradores,
   colaboradoresCargos,
   colaboradoresFaltasJustificadas,
   colaboradoresJornadas,
-  setores
+  setores,
+  turnos
 } from "@padaria/db/schema/cadastro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
@@ -16,19 +18,79 @@ import {
   type ResultadoImportacaoEntidade
 } from "../utils.js";
 
-export async function listarColaboradoresRepository() {
+// O escopo virou WHERE em vez de `filtrarPorEmpresas` em memoria: antes esta consulta trazia a
+// tabela INTEIRA do banco e o recorte era do service. Com `inArray` o banco devolve so o permitido,
+// e escopo vazio vira `where false` em drizzle 0.45.2 (sql/expressions/conditions.js:75-77) — o
+// mesmo fail-closed de `filtrarPorEmpresas` (api/src/auth/empresa.ts:16-20). O guard explicito fica
+// porque versoes antigas do drizzle LANCAVAM com lista vazia; e o idioma defensivo do repo
+// (clientes.repository.ts:27, lacres.repository.ts:20).
+//
+// `setores.id` e `turnos.id` em vez de `colaboradores.setorId`/`turnoPadraoId`: as FKs
+// (db/src/schema/app.schema.ts:327,330) NAO compoem `empresa_id`, entao um colaborador pode
+// carregar ponteiro para setor/turno de outra empresa. O join casa a empresa LINHA A LINHA
+// (`setores.empresa_id = colaboradores.empresa_id`), entao um ponteiro estrangeiro sai NULO em vez
+// de vazar o UUID do outro tenant — e a linha do colaborador continua aparecendo.
+export async function listarColaboradoresRepository(escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
   return banco
     .select({
       id: colaboradores.id,
       empresaId: colaboradores.empresaId,
       nome: colaboradores.nome,
       cpf: colaboradores.cpf,
-      setorId: colaboradores.setorId,
-      turnoPadraoId: colaboradores.turnoPadraoId,
+      setorId: setores.id,
+      turnoPadraoId: turnos.id,
       usuarioId: colaboradores.usuarioId
     })
     .from(colaboradores)
+    .leftJoin(setores, and(eq(setores.id, colaboradores.setorId), eq(setores.empresaId, colaboradores.empresaId)))
+    .leftJoin(turnos, and(eq(turnos.id, colaboradores.turnoPadraoId), eq(turnos.empresaId, colaboradores.empresaId)))
+    .where(inArray(colaboradores.empresaId, escopoEmpresas))
     .orderBy(asc(colaboradores.nome));
+}
+
+export async function bloquearCargoRepository(cargoId: string, db: TransacaoBanco) {
+  const [cargo] = await db
+    .select({ id: cargos.id, empresaId: cargos.empresaId })
+    .from(cargos)
+    .where(eq(cargos.id, cargoId))
+    .limit(1)
+    .for("update");
+  return cargo ?? null;
+}
+
+// O vinculo e o alvo REAL do `PUT /colaboradores/:cid/cargos/:ccid`, e ate aqui ele nunca era lido:
+// a unica verificacao era o `where` do UPDATE, cujo resultado era descartado (falso 204).
+export async function bloquearVinculoCargoRepository(
+  input: { colaboradorId: string; cargoColaboradorId: string },
+  db: TransacaoBanco
+) {
+  const [vinculo] = await db
+    .select({
+      id: colaboradoresCargos.id,
+      empresaId: colaboradoresCargos.empresaId,
+      colaboradorId: colaboradoresCargos.colaboradorId,
+      ativo: colaboradoresCargos.ativo
+    })
+    .from(colaboradoresCargos)
+    .where(
+      and(
+        eq(colaboradoresCargos.id, input.cargoColaboradorId),
+        eq(colaboradoresCargos.colaboradorId, input.colaboradorId)
+      )
+    )
+    .limit(1)
+    .for("update");
+  return vinculo ?? null;
+}
+
+export async function existeTurnoNaEmpresaRepository(turnoId: string, empresaId: string, db: ExecutorBanco = banco) {
+  const [turno] = await db
+    .select({ id: turnos.id })
+    .from(turnos)
+    .where(and(eq(turnos.id, turnoId), eq(turnos.empresaId, empresaId)))
+    .limit(1);
+  return Boolean(turno);
 }
 
 export async function salvarColaboradorRepository(
@@ -43,7 +105,10 @@ export async function salvarColaboradorRepository(
   db: ExecutorBanco = banco
 ) {
   if (input.id) {
-    await db
+    // `.returning()` e nao retorno fabricado: a versao anterior devolvia um objeto montado a partir
+    // do INPUT mesmo com zero linhas afetadas, e por isso a rota respondia 204 para uma escrita que
+    // nunca aconteceu. Agora `undefined` significa "nao gravei", e o service decide o status.
+    const [atualizado] = await db
       .update(colaboradores)
       .set({
         nome: input.nome,
@@ -51,14 +116,9 @@ export async function salvarColaboradorRepository(
         setorId: input.setorId ?? null,
         turnoPadraoId: input.turnoPadraoId ?? null
       })
-      .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)));
-    return {
-      id: input.id,
-      empresaId: input.empresaId,
-      nome: input.nome,
-      cpf: input.cpf,
-      setorId: input.setorId ?? null
-    };
+      .where(and(eq(colaboradores.id, input.id), eq(colaboradores.empresaId, input.empresaId)))
+      .returning({ id: colaboradores.id });
+    return atualizado;
   }
   const [criado] = await db
     .insert(colaboradores)
@@ -85,6 +145,11 @@ export async function salvarCargoColaboradorRepository(
   },
   db: ExecutorBanco = banco
 ) {
+  // `onConflictDoUpdate` no alvo da unica `(empresa, colaborador, cargo, data_inicio)`
+  // (db/src/schema/app.schema.ts:501-506): este INSERT roda quando o colaborador ficou SEM cargo
+  // ativo, e se a mesma tupla ja existisse inativa o INSERT cru estourava 23505 -> 500 + Sentry num
+  // fluxo legitimo (desativar o unico cargo e depois editar o colaborador no mesmo dia). Reativar e
+  // exatamente o efeito pretendido pelo bloco que chama isto.
   const [criado] = await db
     .insert(colaboradoresCargos)
     .values({
@@ -96,14 +161,25 @@ export async function salvarCargoColaboradorRepository(
       dataInicio: input.dataInicio,
       ativo: input.ativo
     })
+    .onConflictDoUpdate({
+      target: [
+        colaboradoresCargos.empresaId,
+        colaboradoresCargos.colaboradorId,
+        colaboradoresCargos.cargoId,
+        colaboradoresCargos.dataInicio
+      ],
+      set: { ativo: input.ativo, setorId: input.setorId, atualizadoEm: new Date() }
+    })
     .returning({ id: colaboradoresCargos.id });
   return criado;
 }
 
-export async function listarCargosRepository() {
+export async function listarCargosRepository(escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
   return banco
     .select({ id: cargos.id, empresaId: cargos.empresaId, nome: cargos.nome })
     .from(cargos)
+    .where(inArray(cargos.empresaId, escopoEmpresas))
     .orderBy(asc(cargos.nome));
 }
 
@@ -119,30 +195,50 @@ export async function criarCargoRepository(input: { empresaId: string; nome: str
   return cargo;
 }
 
-export async function atualizarCargoRepository(input: { id: string; empresaId: string; nome: string }) {
-  await banco
+export async function atualizarCargoRepository(
+  input: { id: string; empresaId: string; nome: string },
+  db: ExecutorBanco = banco
+) {
+  const [atualizado] = await db
     .update(cargos)
     .set({ nome: input.nome, atualizadoEm: new Date() })
-    .where(and(eq(cargos.id, input.id), eq(cargos.empresaId, input.empresaId)));
-  return { id: input.id, empresaId: input.empresaId, nome: input.nome };
+    .where(and(eq(cargos.id, input.id), eq(cargos.empresaId, input.empresaId)))
+    .returning({ id: cargos.id });
+  return atualizado;
 }
 
-export async function listarCargosColaboradorRepository(colaboradorId: string) {
+// `leftJoin` escopado no lugar do `innerJoin` cru: o recorte por empresa olhava
+// `colaboradores_cargos.empresa_id`, mas o NOME e o id do cargo vinham de `cargos` sem nenhuma
+// checagem — um vinculo da empresa A apontando para cargo da B devolvia o cargo da B. Agora o join
+// exige `cargos.empresa_id = colaboradores_cargos.empresa_id`, e `cargoId`/`cargoNome` saem NULOS
+// quando o ponteiro atravessa a fronteira, em vez de sumirem com a linha (que e o que o `innerJoin`
+// faria) ou vazarem. Mesma regra para o setor.
+export async function listarCargosColaboradorRepository(colaboradorId: string, escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
   return banco
     .select({
       id: colaboradoresCargos.id,
       empresaId: colaboradoresCargos.empresaId,
       colaboradorId: colaboradoresCargos.colaboradorId,
-      setorId: colaboradoresCargos.setorId,
-      cargoId: colaboradoresCargos.cargoId,
+      setorId: setores.id,
+      cargoId: cargos.id,
       cargoNome: cargos.nome,
       remuneracaoMinuto: colaboradoresCargos.remuneracaoMinuto,
       dataInicio: colaboradoresCargos.dataInicio,
       ativo: colaboradoresCargos.ativo
     })
     .from(colaboradoresCargos)
-    .innerJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
-    .where(eq(colaboradoresCargos.colaboradorId, colaboradorId))
+    .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId)))
+    .leftJoin(
+      setores,
+      and(eq(setores.id, colaboradoresCargos.setorId), eq(setores.empresaId, colaboradoresCargos.empresaId))
+    )
+    .where(
+      and(
+        eq(colaboradoresCargos.colaboradorId, colaboradorId),
+        inArray(colaboradoresCargos.empresaId, escopoEmpresas)
+      )
+    )
     .orderBy(desc(colaboradoresCargos.ativo), desc(colaboradoresCargos.dataInicio), asc(cargos.nome));
 }
 
@@ -223,19 +319,24 @@ export async function criarCargoColaboradorRepository(
   return criado;
 }
 
-// Trava a linha RAIZ do colaborador e devolve o vinculo de usuario dela.
+// Trava a linha RAIZ do colaborador e devolve a empresa REAL dela e o vinculo de usuario.
 //
 // Existe porque `colaboradores_cargos` nao tem lock proprio, e o guard "colaborador com usuario
 // precisa ter ao menos um cargo ativo" lia `colaboradores.usuario_id` sem travar nada: enquanto uma
 // vinculacao em `usuarios.service.ts` ainda nao commitou, esse campo e nulo, o guard nem dispara, e o
 // ultimo cargo ativo cai. Resultado alcancavel: usuario vinculado a colaborador sem cargo ativo.
 //
+// A CX-M05 acrescentou `empresaId` a projecao e transformou esta funcao no unico portao de entrada
+// de TODA escrita do modulo: e daqui que sai a empresa real do alvo, que ate entao vinha do corpo.
+// O `where` continua so por `id`, de proposito — quem distingue "nao existe" de "e de outra
+// empresa" e o service, e ele responde 404 nos dois casos para nao virar oraculo.
+//
 // A raiz e a MESMA linha que `bloquearColaboradorUsuarioRepository` trava do outro lado, entao os dois
 // fluxos passam a se serializar. `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` fora de
 // transacao solta o lock na instrucao seguinte e nao serializa nada.
 export async function bloquearColaboradorRepository(colaboradorId: string, db: TransacaoBanco) {
   const [colaborador] = await db
-    .select({ id: colaboradores.id, usuarioId: colaboradores.usuarioId })
+    .select({ id: colaboradores.id, empresaId: colaboradores.empresaId, usuarioId: colaboradores.usuarioId })
     .from(colaboradores)
     .where(eq(colaboradores.id, colaboradorId))
     .limit(1)
@@ -243,11 +344,23 @@ export async function bloquearColaboradorRepository(colaboradorId: string, db: T
   return colaborador ?? null;
 }
 
-export async function contarCargosAtivosColaboradorRepository(colaboradorId: string, db: ExecutorBanco = banco) {
+// `empresaId` obrigatorio: sem ele a contagem cruzava a fronteira e uma linha injetada por outro
+// tenant valia como "cargo ativo" na regra de negocio da vitima — e vice-versa.
+export async function contarCargosAtivosColaboradorRepository(
+  colaboradorId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
   const cargosAtivos = await db
     .select({ id: colaboradoresCargos.id })
     .from(colaboradoresCargos)
-    .where(and(eq(colaboradoresCargos.colaboradorId, colaboradorId), eq(colaboradoresCargos.ativo, true)));
+    .where(
+      and(
+        eq(colaboradoresCargos.colaboradorId, colaboradorId),
+        eq(colaboradoresCargos.empresaId, empresaId),
+        eq(colaboradoresCargos.ativo, true)
+      )
+    );
   return cargosAtivos.length;
 }
 
@@ -260,7 +373,7 @@ export async function atualizarStatusCargoColaboradorRepository(
   },
   db: ExecutorBanco = banco
 ) {
-  await db
+  const [atualizado] = await db
     .update(colaboradoresCargos)
     .set({ ativo: input.ativo, atualizadoEm: new Date() })
     .where(
@@ -269,11 +382,13 @@ export async function atualizarStatusCargoColaboradorRepository(
         eq(colaboradoresCargos.colaboradorId, input.colaboradorId),
         eq(colaboradoresCargos.empresaId, input.empresaId)
       )
-    );
-  return { id: input.cargoColaboradorId, ativo: input.ativo };
+    )
+    .returning({ id: colaboradoresCargos.id });
+  return atualizado;
 }
 
-export async function listarJornadasColaboradorRepository(colaboradorId: string) {
+export async function listarJornadasColaboradorRepository(colaboradorId: string, escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
   return banco
     .select({
       id: colaboradoresJornadas.id,
@@ -282,16 +397,27 @@ export async function listarJornadasColaboradorRepository(colaboradorId: string)
       diaDaSemana: colaboradoresJornadas.diaDaSemana,
       cargaHorariaDiariaEmMinutos: colaboradoresJornadas.cargaHorariaDiariaEmMinutos,
       intervaloMinutos: colaboradoresJornadas.intervaloMinutos,
-      colaboradorCargoId: colaboradoresJornadas.colaboradorCargoId,
+      colaboradorCargoId: colaboradoresCargos.id,
       horaEntrada: colaboradoresJornadas.horaEntrada,
       dataInicio: colaboradoresJornadas.dataInicio,
       ativo: colaboradoresJornadas.ativo,
       cargoNome: cargos.nome
     })
     .from(colaboradoresJornadas)
-    .leftJoin(colaboradoresCargos, eq(colaboradoresCargos.id, colaboradoresJornadas.colaboradorCargoId))
-    .leftJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
-    .where(eq(colaboradoresJornadas.colaboradorId, colaboradorId))
+    .leftJoin(
+      colaboradoresCargos,
+      and(
+        eq(colaboradoresCargos.id, colaboradoresJornadas.colaboradorCargoId),
+        eq(colaboradoresCargos.empresaId, colaboradoresJornadas.empresaId)
+      )
+    )
+    .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId)))
+    .where(
+      and(
+        eq(colaboradoresJornadas.colaboradorId, colaboradorId),
+        inArray(colaboradoresJornadas.empresaId, escopoEmpresas)
+      )
+    )
     .orderBy(
       desc(colaboradoresJornadas.dataInicio),
       asc(colaboradoresJornadas.diaDaSemana),
@@ -350,7 +476,8 @@ export async function criarJornadasColaboradorRepository(
   });
 }
 
-export async function listarFaltasJustificadasRepository(colaboradorId: string) {
+export async function listarFaltasJustificadasRepository(colaboradorId: string, escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return [];
   const faltas = await banco
     .select({
       id: colaboradoresFaltasJustificadas.id,
@@ -361,7 +488,12 @@ export async function listarFaltasJustificadasRepository(colaboradorId: string) 
       motivo: colaboradoresFaltasJustificadas.motivo
     })
     .from(colaboradoresFaltasJustificadas)
-    .where(eq(colaboradoresFaltasJustificadas.colaboradorId, colaboradorId))
+    .where(
+      and(
+        eq(colaboradoresFaltasJustificadas.colaboradorId, colaboradorId),
+        inArray(colaboradoresFaltasJustificadas.empresaId, escopoEmpresas)
+      )
+    )
     .orderBy(desc(colaboradoresFaltasJustificadas.inicio));
   return faltas.map((falta) => ({ ...falta, inicio: falta.inicio.toISOString(), fim: falta.fim.toISOString() }));
 }
@@ -389,13 +521,27 @@ export async function criarFaltaJustificadaRepository(
   return criada;
 }
 
+// `null` = sem recorte (contrato herdado de `permitidoNoEscopoEmpresa`, api/src/utils.ts:30-32);
+// lista vazia = nada permitido, e `inArray` com lista vazia vira `false` no drizzle 0.45.2. Os
+// chamadores deste modulo sempre passam lista concreta — o `null` so existe para nao mudar o tipo
+// compartilhado.
+function escopoOrigem(coluna: PgColumn, empresasPermitidasIds: string[] | null) {
+  return empresasPermitidasIds === null ? undefined : inArray(coluna, empresasPermitidasIds);
+}
+
 async function completarColaboradores(empresaDestinoId: string, db: ExecutorBanco) {
   const colaboradoresDestino = await db
     .select()
     .from(colaboradores)
     .where(eq(colaboradores.empresaId, empresaDestinoId));
   const setoresDestino = await db.select().from(setores).where(eq(setores.empresaId, empresaDestinoId));
-  const colaboradoresOrigem = await db.select().from(colaboradores);
+  // So as origens que estas linhas de destino declaram ter importado. Antes era a tabela inteira.
+  const origensDeclaradas = [
+    ...new Set(colaboradoresDestino.map((destino) => destino.idImportado).filter((id): id is string => Boolean(id)))
+  ];
+  const colaboradoresOrigem = origensDeclaradas.length
+    ? await db.select().from(colaboradores).where(inArray(colaboradores.id, origensDeclaradas))
+    : [];
   for (const destino of colaboradoresDestino) {
     if (!destino.importadoDe || !destino.idImportado) continue;
     const origem = colaboradoresOrigem.find((item) => item.id === destino.idImportado);
@@ -416,7 +562,15 @@ export async function copiarColaboradoresRepository(
   db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
   return executarComTransacaoOpcional(db, async (db) => {
-    const origem = filtrarOrigemEntidade(await db.select().from(colaboradores), filtro, empresasPermitidasIds);
+    // O escopo virou WHERE: antes esta consulta varria `colaboradores` inteira (todas as empresas do
+    // banco) e o recorte era so o `filtrarOrigemEntidade` em memoria. `filtrarOrigemEntidade`
+    // continua — ele aplica o filtro por id/empresa de origem —, mas ja sobre um conjunto que o
+    // banco recortou.
+    const origem = filtrarOrigemEntidade(
+      await db.select().from(colaboradores).where(escopoOrigem(colaboradores.empresaId, empresasPermitidasIds)),
+      filtro,
+      empresasPermitidasIds
+    );
     const destinos = await db.select().from(colaboradores).where(eq(colaboradores.empresaId, empresaDestinoId));
     let inseridos = 0;
     for (const colaborador of origem) {
@@ -445,16 +599,24 @@ export async function copiarCargosRepository(
   db?: ExecutorBanco
 ): Promise<ResultadoImportacaoEntidade> {
   return executarComTransacaoOpcional(db, async (db) => {
-    const origem = filtrarOrigemEntidade(await db.select().from(cargos), filtro, empresasPermitidasIds);
+    const origem = filtrarOrigemEntidade(
+      await db.select().from(cargos).where(escopoOrigem(cargos.empresaId, empresasPermitidasIds)),
+      filtro,
+      empresasPermitidasIds
+    );
     const destinos = await db.select().from(cargos).where(eq(cargos.empresaId, empresaDestinoId));
     let inseridos = 0;
     for (const cargo of origem) {
       if (jaImportado(destinos, cargo.empresaId, cargo.id)) continue;
-      await db
+      // Conta o que o banco REALMENTE inseriu: com `onConflictDoNothing` o contador cego somava
+      // mesmo quando o INSERT era descartado por `cargos_empresa_nome_unica`, e a tela dizia
+      // "importados N" com N maior que a verdade.
+      const criados = await db
         .insert(cargos)
         .values({ empresaId: empresaDestinoId, nome: cargo.nome, importadoDe: cargo.empresaId, idImportado: cargo.id })
-        .onConflictDoNothing();
-      inseridos += 1;
+        .onConflictDoNothing()
+        .returning({ id: cargos.id });
+      inseridos += criados.length;
     }
     return { tipo: "cargos", inseridos };
   });

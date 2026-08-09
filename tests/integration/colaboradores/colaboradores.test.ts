@@ -313,7 +313,27 @@ describe("colaboradores integration", () => {
         motivo: "Periodo invalido"
       }
     });
-    const colaboradorNaoEncontrado = await contexto.app.inject({
+    assertProblem(cargoInexistente, 400);
+    assertProblem(faltaPeriodoInvalido, 400);
+  });
+
+  // CX-M05 — MUDANCA DELIBERADA DE CONTRATO, nao teste virado para ficar verde.
+  //
+  // Este caso vivia dentro de `Deve_Retornar400_Quando_ReferenciasOuPeriodoForemInvalidos` e
+  // esperava 400. Agora e 404 `COLLABORATOR_NOT_FOUND`, e a regra do modulo passou a ser:
+  //
+  //   - alvo do PATH inalcancavel (nao existe OU e de outra empresa) -> 404, o MESMO codigo nos
+  //     dois casos, para a rota nao virar oraculo de existencia sobre pessoa de outro tenant;
+  //   - referencia do CORPO (cargoId/setorId/turnoPadraoId) fora da empresa -> 400, como antes;
+  //   - `empresaId` do corpo fora do escopo do ator -> 403 FORBIDDEN_COMPANY, como antes.
+  //
+  // Nenhuma tela consome esta rota (varredura em web-vue/: zero chamadas a
+  // `/:colaboradorId/faltas-justificadas`, `/jornadas` e `/cargos`), entao a troca nao quebra
+  // consumidor real. Ela existe para que "colaborador inexistente" e "colaborador da empresa B"
+  // deem exatamente a mesma resposta — que era o buraco da CX-M05.
+  it("Deve_Retornar404_Quando_OColaboradorDoPathNaoEAlcancavel", async () => {
+    const colaboradorInexistente = "99999999-9999-4999-8999-999999999999";
+    const resposta = await contexto.app.inject({
       method: "POST",
       url: `/api/colaboradores/${colaboradorInexistente}/faltas-justificadas`,
       headers: { cookie: cookieAdmin },
@@ -325,9 +345,7 @@ describe("colaboradores integration", () => {
       }
     });
 
-    assertProblem(cargoInexistente, 400);
-    assertProblem(faltaPeriodoInvalido, 400);
-    assertProblem(colaboradorNaoEncontrado, 400);
+    assertProblem(resposta, 404, "COLLABORATOR_NOT_FOUND");
   });
 });
 
