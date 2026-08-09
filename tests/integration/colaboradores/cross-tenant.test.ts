@@ -963,52 +963,106 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
   //
   // Sem `sleep`: quem decide a ordem e o `NOWAIT`, que falha na hora com 55P03 (`lock_not_available`)
   // em vez de esperar. E o mesmo instrumento da PR #145 (edicao-segura.test.ts).
+  // Os dois casos abaixo passam pela ROTA REAL, de proposito. Uma primeira versao deles travava a
+  // linha com SQL proprio e conferia a matriz de conflito do Postgres — e nao servia para nada:
+  // trocar `no key update` por `update` no repositorio NAO derrubava o teste, porque ele nunca
+  // exercitava o codigo de producao. Provava o Postgres, nao a entrega.
   describe("nivel do lock da raiz de colaboradores", () => {
-    let cliente: pg.Client;
-
-    beforeAll(async () => {
-      cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
+    async function abrirBloqueador(modo: "key share" | "update") {
+      const cliente = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
       await cliente.connect();
-      await cliente.query("begin");
-      // Exatamente o que `bloquearColaboradorRepository` passou a fazer.
-      await cliente.query("select id from colaboradores where id = $1 for no key update", [colaboradorALegitimo]);
-    });
-
-    afterAll(async () => {
-      await cliente.query("rollback");
-      await cliente.end();
-    });
-
-    it("Deve_DeixarAFkPassar_Quando_OCadastroSeguraOLockDaRaiz", async () => {
-      const outro = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
-      await outro.connect();
       try {
-        // `FOR KEY SHARE` e o lock que o Postgres toma sozinho ao validar a FK de um INSERT em
-        // `fechamentos_caixa` (abrir caixa) ou `debitos_colaboradores` (despesa/retirada com credor).
-        // `NOWAIT` prova que ele NAO espera: se esperasse, isto levantaria 55P03.
-        await expect(
-          outro.query("select id from colaboradores where id = $1 for key share nowait", [colaboradorALegitimo])
-        ).resolves.toBeDefined();
+        // Teto de espera nesta conexao: se o teste for interrompido, a transacao nao fica segurando
+        // a linha e queimando o timeout de todos os testes seguintes.
+        await cliente.query("set lock_timeout = '15s'");
+        const { rows } = await cliente.query<{ pid: number }>("select pg_backend_pid() as pid");
+        await cliente.query("begin");
+        await cliente.query(`select id from colaboradores where id = $1 for ${modo}`, [colaboradorALegitimo]);
+        return { cliente, pid: rows[0]?.pid ?? 0 };
+      } catch (erro) {
+        await cliente.end().catch(() => undefined);
+        throw erro;
+      }
+    }
+
+    async function fechar(bloqueador: { cliente: pg.Client }) {
+      await bloqueador.cliente.query("rollback").catch(() => undefined);
+      await bloqueador.cliente.end().catch(() => undefined);
+    }
+
+    it("Deve_EditarSemEsperar_Quando_UmaFkDeCaixaSeguraKeyShareNoColaborador", async () => {
+      // `FOR KEY SHARE` e exatamente o lock que o Postgres toma sozinho ao validar a FK de um INSERT
+      // em `fechamentos_caixa` (abrir caixa) ou `debitos_colaboradores` (despesa/retirada com credor
+      // colaborador). Com `NO KEY UPDATE` no repositorio, o PUT nao conflita e responde COM O
+      // BLOQUEADOR AINDA ABERTO. Se alguem devolver `FOR UPDATE`, este `await` nao resolve ate o
+      // rollback la embaixo e o teste morre no timeout — que e o kill que se quer.
+      const bloqueador = await abrirBloqueador("key share");
+      try {
+        const resposta = await contexto.app.inject({
+          method: "PUT",
+          url: `/api/colaboradores/${colaboradorALegitimo}`,
+          headers: { cookie: cookieAdmin },
+          payload: {
+            empresaId: idsTeste.empresaA,
+            nome: "COLABORADOR-EMPRESA-A-LEGITIMO",
+            cpf: "11144477735",
+            cargoId: idsTeste.cargoGerente,
+            setorId: idsTeste.setorA,
+            turnoPadraoId: turnoA
+          }
+        });
+
+        expect(resposta.statusCode).toBe(204);
       } finally {
-        await outro.end();
+        await fechar(bloqueador);
       }
     });
 
-    it("Deve_SerializarOutraEscritaDoModulo_Quando_OCadastroSeguraOLockDaRaiz", async () => {
-      const outro = new pg.Client({ connectionString: process.env["DATABASE_URL"] });
-      await outro.connect();
+    it("Deve_EsperarOFluxoDeUsuarios_Quando_EleSeguraForUpdateNoColaborador", async () => {
+      // O outro lado: `usuarios.repository.ts` pede `FOR UPDATE` para trocar `usuario_id`. Essa
+      // serializacao e a garantia da PR #145 e a CX-M05 nao pode afrouxa-la — `NO KEY UPDATE`
+      // continua conflitando com `UPDATE`. O bloqueio e observado em `pg_blocking_pids`,
+      // especificamente pelo pid do bloqueador; nao ha `sleep` decidindo ordem.
+      const bloqueador = await abrirBloqueador("update");
+      let promessa: Promise<unknown> | null = null;
       try {
-        // Outra escrita do modulo pede o MESMO nivel: tem de esperar (55P03 com NOWAIT).
-        await expect(
-          outro.query("select id from colaboradores where id = $1 for no key update nowait", [colaboradorALegitimo])
-        ).rejects.toMatchObject({ code: "55P03" });
-        // E o fluxo de usuarios, que pede `FOR UPDATE` para trocar `usuario_id`, tambem espera —
-        // e essa serializacao que a PR #145 depende e que a CX-M05 nao pode afrouxar.
-        await expect(
-          outro.query("select id from colaboradores where id = $1 for update nowait", [colaboradorALegitimo])
-        ).rejects.toMatchObject({ code: "55P03" });
+        // Payload COMPLETO e igual ao estado gravado: este teste e sobre esperar o lock, nao sobre
+        // mudar dado. O PUT e substituicao total, entao omitir `cpf`/`turnoPadraoId` aqui apagaria
+        // os dois e quebraria a contraprova do contrato completo mais adiante no arquivo.
+        promessa = contexto.app.inject({
+          method: "PUT",
+          url: `/api/colaboradores/${colaboradorALegitimo}`,
+          headers: { cookie: cookieAdmin },
+          payload: {
+            empresaId: idsTeste.empresaA,
+            nome: "COLABORADOR-EMPRESA-A-LEGITIMO",
+            cpf: "11144477735",
+            cargoId: idsTeste.cargoGerente,
+            setorId: idsTeste.setorA,
+            turnoPadraoId: turnoA
+          }
+        });
+
+        const inicio = Date.now();
+        let bloqueadas = 0;
+        while (Date.now() - inicio < 20_000 && bloqueadas < 1) {
+          const { rows } = await bloqueador.cliente.query<{ total: number }>(
+            `select count(*)::int as total
+               from pg_stat_activity
+              where datname = current_database()
+                and pid <> pg_backend_pid()
+                and $1 = any(pg_blocking_pids(pid))`,
+            [bloqueador.pid]
+          );
+          bloqueadas = rows[0]?.total ?? 0;
+          if (!bloqueadas) await new Promise((resolver) => setTimeout(resolver, 25));
+        }
+
+        expect(bloqueadas).toBeGreaterThanOrEqual(1);
       } finally {
-        await outro.end();
+        await fechar(bloqueador);
+        // Solto o bloqueador, a edicao conclui normalmente.
+        if (promessa) expect(((await promessa) as { statusCode: number }).statusCode).toBe(204);
       }
     });
   });
