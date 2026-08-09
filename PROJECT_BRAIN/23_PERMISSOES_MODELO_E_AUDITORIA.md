@@ -66,27 +66,27 @@ produção, consumida pelo bootstrap em modo **merge** (banco vence) e pelo endp
 
 Mapa alvo confirmado pelo Rodrigo em 22/07 (`09` §4), com o veredito do código:
 
-| Cargo        | Lançar | Efetuar | Pagar | Conferir | Editar | Editar D/Pago | Excluir | Excluir D/Pago |
-| ------------ | :----: | :-----: | :---: | :------: | :----: | :-----------: | :-----: | :------------: |
-| Caixa        | ✔ (no caixa) | — | — | — | ✔ (saídas, próprio caixa) | — | — | — |
-| Tesouraria   | ✔ (transf.) | — | — | ✔ | — | — | — | — |
-| Gerência     | ✔ | ✔ | — | ✔ | ✔ | — | ✔ | — |
-| Financeiro   | ✔ | — | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Admin        | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Cargo      |    Lançar    | Efetuar | Pagar | Conferir |          Editar           | Editar D/Pago | Excluir | Excluir D/Pago |
+| ---------- | :----------: | :-----: | :---: | :------: | :-----------------------: | :-----------: | :-----: | :------------: |
+| Caixa      | ✔ (no caixa) |    —    |   —   |    —     | ✔ (saídas, próprio caixa) |       —       |    —    |       —        |
+| Tesouraria | ✔ (transf.)  |    —    |   —   |    ✔     |             —             |       —       |    —    |       —        |
+| Gerência   |      ✔       |    ✔    |   —   |    ✔     |             ✔             |       —       |    ✔    |       —        |
+| Financeiro |      ✔       |    —    |   ✔   |    ✔     |             ✔             |       ✔       |    ✔    |       ✔        |
+| Admin      |      ✔       |    ✔    |   ✔   |    ✔     |             ✔             |       ✔       |    ✔    |       ✔        |
 
 Confirmado no código: Gerência **não** tem `_pagar`; Financeiro **não** tem `_efetuar`. Ambos travados
 por `tests/integration/permissoes/orfaos-cargos.test.ts:55-69`.
 
 **Divergências reais entre mapa e código:**
 
-| #  | Divergência                                                                                          |
-| -- | ---------------------------------------------------------------------------------------------------- |
-| M1 | O mapa diz que o Caixa "nunca edita"; o código dá `despesas_editar`/`mercadorias_editar`/`retiradas_editar`, limitados ao próprio caixa aberto e à conta do PDV. **O código venceu** — R-121/R-122 é posterior. Atualizar o mapa, não o código |
-| M2 | O mapa dá "editar transferência" à Tesouraria; o código **não** dá `transferencias_editar`. Divergência aberta |
-| M3 | `*_excluir` e `*_excluir_dpago` estão distribuídos mas **não têm rota** — não existe DELETE de lançamento |
-| M4 | `*_efetuar` está distribuído e **não é enforçado em lugar nenhum** |
-| M5 | Só `transferencias_conferir` é enforçada. `despesas_conferir`, `mercadorias_conferir` e `retiradas_conferir` são **inertes** |
-| M6 | `fechamento_com_diferenca_visualizar` é só gate de menu; a tela roda sob `caixa_operar` |
+| #   | Divergência                                                                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | O mapa diz que o Caixa "nunca edita"; o código dá `despesas_editar`/`mercadorias_editar`/`retiradas_editar`, limitados ao próprio caixa aberto e à conta do PDV. **O código venceu** — R-121/R-122 é posterior. Atualizar o mapa, não o código |
+| M2  | O mapa dá "editar transferência" à Tesouraria; o código **não** dá `transferencias_editar`. Divergência aberta                                                                                                                                 |
+| M3  | `*_excluir` e `*_excluir_dpago` estão distribuídos mas **não têm rota** — não existe DELETE de lançamento                                                                                                                                      |
+| M4  | `*_efetuar` está distribuído e **não é enforçado em lugar nenhum**                                                                                                                                                                             |
+| M5  | Só `transferencias_conferir` é enforçada. `despesas_conferir`, `mercadorias_conferir` e `retiradas_conferir` são **inertes**                                                                                                                   |
+| M6  | `fechamento_com_diferenca_visualizar` é só gate de menu; a tela roda sob `caixa_operar`                                                                                                                                                        |
 
 ---
 
@@ -131,8 +131,29 @@ Nunca citadas no backend. Ciclo de vida sem rota (`*_efetuar`, `*_excluir_dpago`
 `cadastro_contas_usuarios_editar`, `integracoes_excluir` e 12 `*_visualizar` de módulos placeholder.
 Não é falha de segurança — é ruído que faz a tela de permissões prometer o que não existe.
 
-**P-07 · Permissão de cargo/setor vale cross-empresa** — `perfil.repository.ts:76-93` busca regras
-sem filtrar por empresa; o escopo limita só os dados. **Homologado como decisão**, não é bug.
+**P-07 · Permissão de cargo/setor vale cross-empresa** — `perfil.repository.ts` busca regras sem
+filtrar pela empresa **ativa/de escopo**; o escopo limita só os dados. **Homologado como decisão**,
+não é bug. Um colaborador da empresa A com cargo Gerência (de A) mantém as permissões de Gerência ao
+operar sobre a empresa B do escopo dele.
+
+> ⚠️ **Atualizado em 09/08/2026 (CX-M05).** A redação anterior dizia que a busca era feita "sem
+> filtrar por empresa", e isso **deixou de ser verdade**: o resolvedor passou a exigir que cargo e
+> setor pertençam à **empresa real do colaborador** (`colaboradores.empresa_id`).
+>
+> **A decisão homologada continua intacta** — as duas coisas são distintas:
+>
+> - o que a P-07 homologa é o **conjunto de permissões de um vínculo legítimo** valendo em todo o
+>   escopo do usuário. Isso não mudou;
+> - o que passou a ser recusado é o **link corrompido**: vínculo cujo `empresa_id` diverge do
+>   colaborador, ou que aponta para cargo/setor de outra empresa. Nunca foi decisão de negócio — é
+>   estado que o banco permite representar porque as FKs não compõem `empresa_id`, e que a rota de
+>   colaboradores conseguia gravar antes da CX-M05.
+>
+> Foi medido: com uma linha dessas, um usuário de **zero permissões** recebia `200` numa rota
+> protegida, e o nome de um cargo de outra empresa chegava ao browser. Provado e travado em
+> `tests/integration/permissoes/perfil-fronteira-empresa.test.ts`.
+>
+> **Não "restaure" o comportamento antigo achando que respeita esta decisão.**
 
 **P-08 · `permitir` do usuário anula `negar` de cargo/setor** — não existe "deny global".
 **Homologado como decisão.**
