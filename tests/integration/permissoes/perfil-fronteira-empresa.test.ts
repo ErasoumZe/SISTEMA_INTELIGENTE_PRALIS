@@ -34,14 +34,24 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 // possui pelo seed. Se ela aparecer, so pode ter vindo da linha corrompida.
 const MARCADOR = "cadastro_clientes_visualizar";
 
+// SEGUNDO marcador, para um caso que o primeiro nao consegue isolar (ver CORRUPCAO 4). Protege
+// `GET /api/lacres` (lacres.controller.ts:11) e nenhum dos dois perfis usados nele o tem no seed —
+// `tesouraria` tem, por isso ela NAO pode aparecer neste par.
+const MARCADOR_VINCULO = "cadastro_lacres_visualizar";
+
 const setorBMarcado = "33333333-3333-4333-8333-00000000f001";
 const cargoBMarcado = "33333333-3333-4333-8333-00000000f002";
 const setorAMarcado = "11111111-1111-4111-8111-00000000f003";
 const cargoAMarcado = "11111111-1111-4111-8111-00000000f004";
+// Cargo da PROPRIA empresa A. E o que permite testar a igualdade de empresa do VINCULO isolada da
+// igualdade de empresa do CARGO.
+const cargoALacre = "11111111-1111-4111-8111-00000000f008";
 
 const vinculoCargoBMarcadoComoA = "11111111-1111-4111-8111-00000000f005";
 const vinculoCargoBMarcadoComoB = "11111111-1111-4111-8111-00000000f006";
 const vinculoCargoALegitimo = "11111111-1111-4111-8111-00000000f007";
+const vinculoMarcadoComoBComCargoDaA = "11111111-1111-4111-8111-00000000f009";
+const vinculoLacreLegitimo = "11111111-1111-4111-8111-00000000f00a";
 
 type PerfilSessao = {
   setorId: string | null;
@@ -126,6 +136,35 @@ async function semear() {
      values ($1, $2, $3, null, $4, '1.000000', '2026-03-01', true)`,
     [vinculoCargoALegitimo, idsTeste.empresaA, idsTeste.colaboradorGerente, cargoAMarcado]
   );
+
+  // --- CORRUPCAO 4: vinculo marcado como B, colaborador da A, CARGO DA PROPRIA A ---------------
+  // Esta fixture nasceu de uma mutacao que nao matou nada. As corrupcoes 2 e 3 usam cargo da B,
+  // entao a igualdade de empresa do CARGO ja as barra — e a igualdade de empresa do VINCULO ficava
+  // sem prova nenhuma. Aqui o cargo e legitimamente da A: a UNICA coisa que recusa a linha e o
+  // `colaboradores_cargos.empresa_id = colaboradores.empresa_id`.
+  await executarSql("insert into cargos (id, empresa_id, nome) values ($1, $2, $3)", [
+    cargoALacre,
+    idsTeste.empresaA,
+    "CARGO-A-LACRE"
+  ]);
+  await executarSql("insert into permissoes_cargos (cargo_id, regras) values ($1, $2::jsonb)", [
+    cargoALacre,
+    JSON.stringify({ [MARCADOR_VINCULO]: true })
+  ]);
+  await executarSql(
+    `insert into colaboradores_cargos
+       (id, empresa_id, colaborador_id, setor_id, cargo_id, remuneracao_minuto, data_inicio, ativo)
+     values ($1, $2, $3, null, $4, '1.000000', '2026-03-01', true)`,
+    [vinculoMarcadoComoBComCargoDaA, idsTeste.empresaB, idsTeste.colaboradorSemRecorrencia, cargoALacre]
+  );
+
+  // --- LEGITIMO 3: o MESMO cargo, com vinculo integro, precisa continuar concedendo ------------
+  await executarSql(
+    `insert into colaboradores_cargos
+       (id, empresa_id, colaborador_id, setor_id, cargo_id, remuneracao_minuto, data_inicio, ativo)
+     values ($1, $2, $3, null, $4, '1.000000', '2026-03-01', true)`,
+    [vinculoLacreLegitimo, idsTeste.empresaA, idsTeste.colaboradorOperadorEntradas, cargoALacre]
+  );
 }
 
 describe("perfil da sessao — fronteira de empresa (P1-A)", () => {
@@ -195,6 +234,26 @@ describe("perfil da sessao — fronteira de empresa (P1-A)", () => {
     expect(corpo).not.toContain("CARGO-B-MARCADO");
     expect(perfil.permissoes).not.toContain(MARCADOR);
     assertProblem(await clientes(cookie), 403, "INSUFFICIENT_PERMISSION");
+  });
+
+  // === CORRUPCAO 4 — vinculo marcado como B, cargo da propria empresa do colaborador ===========
+
+  it("Deve_IgnorarOVinculo_Quando_ELeMenteAEmpresaAindaQueOCargoSejaDaEmpresaCerta", async () => {
+    const { perfil, cookie } = await perfilDaSessao("semRecorrencia");
+    const lacres = await contexto.app.inject({ method: "GET", url: "/api/lacres", headers: { cookie } });
+
+    expect(perfil.cargoIds).not.toContain(cargoALacre);
+    expect(perfil.permissoes).not.toContain(MARCADOR_VINCULO);
+    assertProblem(lacres, 403, "INSUFFICIENT_PERMISSION");
+  });
+
+  it("Deve_ContinuarConcedendo_Quando_OMesmoCargoVemPorVinculoIntegro", async () => {
+    const { perfil, cookie } = await perfilDaSessao("operadorEntradas");
+    const lacres = await contexto.app.inject({ method: "GET", url: "/api/lacres", headers: { cookie } });
+
+    expect(perfil.cargoIds).toContain(cargoALacre);
+    expect(perfil.permissoes).toContain(MARCADOR_VINCULO);
+    expect(lacres.statusCode).toBe(200);
   });
 
   // === CONTRAPROVAS: o legitimo nao pode ser sobrecorrigido =====================================
