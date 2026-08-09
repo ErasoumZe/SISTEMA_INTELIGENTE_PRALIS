@@ -60,7 +60,10 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
 
   if (!colaborador) return null;
 
-  const [empresas, permissoesDoUsuario, cargosAtivos] = await Promise.all([
+  // `setorProprio` entra AQUI, e nao depois: ele depende so de `colaborador`, e este arquivo roda em
+  // TODA requisicao autenticada (api/src/auth/guards.ts:29-32). Deixa-lo sequencial somaria um
+  // round-trip ao caminho quente so por causa do join novo.
+  const [empresas, permissoesDoUsuario, cargosAtivos, setorProprio] = await Promise.all([
     banco
       .select({ empresaId: usuariosEmpresas.empresaId })
       .from(usuariosEmpresas)
@@ -91,7 +94,27 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
           eq(colaboradoresCargos.empresaId, colaborador.empresaId),
           eq(colaboradoresCargos.ativo, true)
         )
-      )
+      ),
+    // Mesmo conserto do lado do setor, e numa consulta so: a partida e `setores` (nao
+    // `permissoes_setores`), exigindo que o setor seja da empresa REAL do colaborador. Um ponteiro
+    // estrangeiro nao devolve linha — entao nao resolve permissao E nao volta no perfil.
+    //
+    // `colaboradores.setor_id` tem FK para `setores.id` sem compor `empresa_id`
+    // (db/src/schema/app.schema.ts:327), entao apontar para setor de outra empresa e um estado
+    // representavel no banco. A CX-M05 fechou a escrita desse ponteiro; aqui fecha a leitura, para o
+    // que ja esta gravado parar de conceder.
+    //
+    // `leftJoin` e NAO `innerJoin` em `permissoes_setores`: setor legitimo SEM regras cadastradas
+    // (o caso comum — o seed inteiro e assim) precisa continuar devolvendo `setor_id`. Com
+    // `innerJoin` o campo sumiria para quase todo usuario real.
+    colaborador.setorId
+      ? banco
+          .select({ id: setores.id, regras: permissoesSetores.regras })
+          .from(setores)
+          .leftJoin(permissoesSetores, eq(permissoesSetores.setorId, setores.id))
+          .where(and(eq(setores.id, colaborador.setorId), eq(setores.empresaId, colaborador.empresaId)))
+          .limit(1)
+      : Promise.resolve([])
   ]);
 
   const cargosPerfil = cargosAtivos.map((cargo) => ({ id: cargo.cargoId, nome: cargo.cargoNome }));
@@ -105,23 +128,6 @@ export async function obterPerfilPorUsuarioId(usuarioId: string): Promise<Perfil
             cargosPerfil.map((cargo) => cargo.id)
           )
         )
-    : [];
-
-  // Mesmo conserto do lado do setor, e numa consulta so: a partida e `setores` (nao
-  // `permissoes_setores`), exigindo que o setor seja da empresa REAL do colaborador. Um ponteiro
-  // estrangeiro nao devolve linha — entao nao resolve permissao E nao volta no perfil.
-  //
-  // `colaboradores.setor_id` tem FK para `setores.id` sem compor `empresa_id`
-  // (db/src/schema/app.schema.ts:327), entao apontar para setor de outra empresa e um estado
-  // representavel no banco. A CX-M05 fechou a escrita desse ponteiro; aqui fecha a leitura, para o
-  // que ja esta gravado parar de conceder.
-  const setorProprio = colaborador.setorId
-    ? await banco
-        .select({ id: setores.id, regras: permissoesSetores.regras })
-        .from(setores)
-        .leftJoin(permissoesSetores, eq(permissoesSetores.setorId, setores.id))
-        .where(and(eq(setores.id, colaborador.setorId), eq(setores.empresaId, colaborador.empresaId)))
-        .limit(1)
     : [];
 
   const setorId = setorProprio[0]?.id ?? null;

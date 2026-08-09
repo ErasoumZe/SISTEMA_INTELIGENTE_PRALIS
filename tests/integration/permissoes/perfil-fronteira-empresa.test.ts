@@ -52,6 +52,9 @@ const vinculoCargoBMarcadoComoB = "11111111-1111-4111-8111-00000000f006";
 const vinculoCargoALegitimo = "11111111-1111-4111-8111-00000000f007";
 const vinculoMarcadoComoBComCargoDaA = "11111111-1111-4111-8111-00000000f009";
 const vinculoLacreLegitimo = "11111111-1111-4111-8111-00000000f00a";
+const vinculoInativoDaA = "11111111-1111-4111-8111-00000000f00b";
+const cargoBNomeRetaguarda = "33333333-3333-4333-8333-00000000f00c";
+const vinculoNomeRetaguarda = "11111111-1111-4111-8111-00000000f00d";
 
 type PerfilSessao = {
   setorId: string | null;
@@ -165,6 +168,51 @@ async function semear() {
      values ($1, $2, $3, null, $4, '1.000000', '2026-03-01', true)`,
     [vinculoLacreLegitimo, idsTeste.empresaA, idsTeste.colaboradorOperadorEntradas, cargoALacre]
   );
+
+  // --- CORRUPCAO 5: vinculo estrangeiro INATIVO -----------------------------------------------
+  // Cobre o `ativo = true` do resolvedor, que nenhuma fixture exercitava: todas nasciam ativas.
+  await executarSql(
+    `insert into colaboradores_cargos
+       (id, empresa_id, colaborador_id, setor_id, cargo_id, remuneracao_minuto, data_inicio, ativo)
+     values ($1, $2, $3, null, $4, '1.000000', '2026-03-02', false)`,
+    [vinculoInativoDaA, idsTeste.empresaA, idsTeste.colaboradorCaixa, cargoALacre]
+  );
+
+  // --- CORRUPCAO 6: cargo estrangeiro com NOME de retaguarda ----------------------------------
+  // A autorizacao por NOME de cargo (`podeLancarSemCaixa`, shared/src/autenticacao/index.ts, e
+  // `podeLiberarTravaTransferencia`) casa por prefixo — "tesouraria", "gerencia", "financeiro"...
+  // Um vinculo corrompido apontando para um cargo da B CHAMADO "Tesouraria" dava status de
+  // retaguarda sem conceder permissao nenhuma, entao nenhum marcador de PERMISSAO detectaria.
+  await executarSql("insert into cargos (id, empresa_id, nome) values ($1, $2, $3)", [
+    cargoBNomeRetaguarda,
+    idsTeste.empresaB,
+    "Tesouraria Fantasma"
+  ]);
+  await executarSql(
+    `insert into colaboradores_cargos
+       (id, empresa_id, colaborador_id, setor_id, cargo_id, remuneracao_minuto, data_inicio, ativo)
+     values ($1, $2, $3, null, $4, '1.000000', '2026-03-03', true)`,
+    [vinculoNomeRetaguarda, idsTeste.empresaA, idsTeste.colaboradorCaixaCiclo, cargoBNomeRetaguarda]
+  );
+
+  // --- LEGITIMO 4: multiempresa USUARIO_COMUM — a prova executavel da P-07 --------------------
+  // `multiempresa` do seed e `usuario_admin` e faz short-circuit em perfil.service.ts, entao nao
+  // serve: passaria mesmo que a correcao zerasse cargo e setor de todo mundo. Aqui `gerente` (que e
+  // `usuario_comum` e tem o cargo legitimo `cargoAMarcado`) ganha a empresa B no escopo. Se ele
+  // mantem o marcador operando com duas empresas, o CONJUNTO de permissoes de um cargo legitimo
+  // continua valendo em todo o escopo — que e exatamente o que a P-07 homologou.
+  await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+    await usuarioIdPorEmail("gerente.integracao@padaria.local"),
+    idsTeste.empresaB
+  ]);
+}
+
+async function usuarioIdPorEmail(email: string) {
+  const linha = await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
+    email
+  ]);
+  if (!linha) throw new Error(`Perfil de teste nao encontrado: ${email}`);
+  return linha.usuario_id;
 }
 
 describe("perfil da sessao — fronteira de empresa (P1-A)", () => {
@@ -243,6 +291,9 @@ describe("perfil da sessao — fronteira de empresa (P1-A)", () => {
     const lacres = await contexto.app.inject({ method: "GET", url: "/api/lacres", headers: { cookie } });
 
     expect(perfil.cargoIds).not.toContain(cargoALacre);
+    // Complemento positivo: o cargo do proprio seed CONTINUA no perfil. Sem isto, uma correcao que
+    // zerasse todos os cargos passaria neste caso.
+    expect(perfil.cargoIds).toContain(idsTeste.cargoSemRecorrencia);
     expect(perfil.permissoes).not.toContain(MARCADOR_VINCULO);
     assertProblem(lacres, 403, "INSUFFICIENT_PERMISSION");
   });
@@ -275,14 +326,58 @@ describe("perfil da sessao — fronteira de empresa (P1-A)", () => {
     expect((await clientes(cookie)).statusCode).toBe(200);
   });
 
-  it("Deve_ContinuarFuncionando_Quando_OUsuarioEMultiempresaLegitimo", async () => {
-    const { perfil, cookie } = await perfilDaSessao("multiempresa");
+  // ESTA e a prova executavel da P-07, e a razao de ela nao usar o perfil `multiempresa` do seed:
+  // aquele e `usuario_admin` e faz short-circuit em perfil.service.ts:11-13, entao passaria mesmo
+  // que a correcao zerasse cargo e setor de todo mundo — nao prova nada sobre este diff.
+  //
+  // `gerente` e `usuario_comum`, tem o cargo legitimo `cargoAMarcado` (empresa A) e ganhou a empresa
+  // B no escopo. Se ele mantem o marcador com DUAS empresas, entao o conjunto de permissoes de um
+  // cargo legitimo continua valendo em todo o escopo do usuario — que e exatamente o que a P-07
+  // homologou, e o que esta correcao nao pode ter quebrado.
+  it("Deve_ManterAsPermissoesDoCargo_Quando_OUsuarioComumTemDuasEmpresas", async () => {
+    const { perfil, cookie } = await perfilDaSessao("gerente");
 
     expect(perfil.empresaIds.sort()).toEqual([idsTeste.empresaA, idsTeste.empresaB].sort());
-    // `usuario_admin` resolve por short-circuit (perfil.service.ts:11-13) — segue com acesso total.
+    expect(perfil.cargoIds).toContain(cargoAMarcado);
     expect(perfil.permissoes).toContain(MARCADOR);
     expect((await clientes(cookie)).statusCode).toBe(200);
   });
+
+  it("Deve_ContinuarDevolvendoOSetor_Quando_ELeELegitimoESemRegrasCadastradas", async () => {
+    // `operadorEntradas` esta no `setorA` do seed, que NAO tem linha em `permissoes_setores`.
+    // Se o `leftJoin` virasse `innerJoin`, `setorId` sumiria para praticamente todo usuario real —
+    // e nenhum outro teste pegaria isso.
+    const { perfil } = await perfilDaSessao("operadorEntradas");
+
+    expect(perfil.setorId).toBe(idsTeste.setorA);
+  });
+
+  it("Deve_IgnorarOVinculoInativo_Quando_ELeCarregaPermissao", async () => {
+    // `caixa` tem um vinculo INATIVO para `cargoALacre`. Cobre o `ativo = true` do resolvedor, que
+    // nenhuma outra fixture exercitava — todas nasciam ativas.
+    const { perfil, cookie } = await perfilDaSessao("caixa");
+    const lacres = await contexto.app.inject({ method: "GET", url: "/api/lacres", headers: { cookie } });
+
+    expect(perfil.cargoIds).not.toContain(cargoALacre);
+    expect(perfil.permissoes).not.toContain(MARCADOR_VINCULO);
+    assertProblem(lacres, 403, "INSUFFICIENT_PERMISSION");
+  });
+
+  // A correcao fecha um caminho que NENHUM marcador de permissao detectaria: `perfil.cargos[].nome`
+  // decide autorizacao por PREFIXO em `podeLancarSemCaixa` (shared/src/autenticacao/index.ts) e em
+  // `podeLiberarTravaTransferencia` (api/src/transferencias/transferencias.service.ts). Um vinculo
+  // corrompido apontando para um cargo da B chamado "Tesouraria" dava status de RETAGUARDA — sem
+  // conceder permissao alguma.
+  it("Deve_NaoDarStatusDeRetaguarda_Quando_OCargoEstrangeiroTemNomeDeRetaguarda", async () => {
+    const { perfil, corpo } = await perfilDaSessao("caixaCiclo");
+
+    expect(perfil.cargoIds).not.toContain(cargoBNomeRetaguarda);
+    expect(perfil.cargos.map((cargo) => cargo.nome)).not.toContain("Tesouraria Fantasma");
+    expect(corpo).not.toContain("Tesouraria Fantasma");
+    expect(corpo).not.toContain(cargoBNomeRetaguarda);
+  });
+
+  // === CONTRAPROVAS (continuacao) ==============================================================
 
   it("Deve_ManterOCargoDoProprioSeed_Quando_NadaFoiCorrompido", async () => {
     // Contraprova estreita: o vinculo do seed continua no perfil. Sem ela, uma correcao que zerasse

@@ -252,14 +252,8 @@ export async function listarCargosColaboradorRepository(colaboradorId: string, e
         eq(colaboradores.empresaId, colaboradoresCargos.empresaId)
       )
     )
-    .leftJoin(
-      cargos,
-      and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
-    )
-    .leftJoin(
-      setores,
-      and(eq(setores.id, colaboradoresCargos.setorId), eq(setores.empresaId, colaboradoresCargos.empresaId))
-    )
+    .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradores.empresaId)))
+    .leftJoin(setores, and(eq(setores.id, colaboradoresCargos.setorId), eq(setores.empresaId, colaboradores.empresaId)))
     .where(
       // `colaboradores.empresaId`, e nao `colaboradoresCargos.empresaId`: o escopo do ator e
       // aplicado sobre a empresa do COLABORADOR. Com o `innerJoin` acima as duas ja sao iguais, e
@@ -361,12 +355,10 @@ export async function criarCargoColaboradorRepository(
 // O `where` filtra por `id` E pelo escopo de empresas do ator (ver abaixo o porque); quem separa
 // "nao existe" de "e de outra empresa" NAO e este repositorio — os dois casos devolvem zero linha, e
 // o service responde o mesmo 404 para nao virar oraculo.
-// O `where` continua so por `id`, de proposito — quem distingue "nao existe" de "e de outra
-// empresa" e o service, e ele responde 404 nos dois casos para nao virar oraculo.
 //
 // A raiz e a MESMA linha que `bloquearColaboradorUsuarioRepository` trava do outro lado, entao os dois
-// fluxos passam a se serializar. `TransacaoBanco`, e nao `ExecutorBanco`: `FOR UPDATE` fora de
-// transacao solta o lock na instrucao seguinte e nao serializa nada.
+// fluxos passam a se serializar. `TransacaoBanco`, e nao `ExecutorBanco`: um lock de linha fora de
+// transacao e solto na instrucao seguinte e nao serializa nada.
 //
 // O ESCOPO entra no proprio `where`, e nao so na decisao do service. Com `FOR ...` isso deixa de ser
 // estilo: travar primeiro e recusar depois faz o request ESPERAR quando o id e de outro tenant e
@@ -477,13 +469,10 @@ export async function listarJornadasColaboradorRepository(colaboradorId: string,
         colaboradoresCargos,
         and(
           eq(colaboradoresCargos.id, colaboradoresJornadas.colaboradorCargoId),
-          eq(colaboradoresCargos.empresaId, colaboradoresJornadas.empresaId)
+          eq(colaboradoresCargos.empresaId, colaboradores.empresaId)
         )
       )
-      .leftJoin(
-        cargos,
-        and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
-      )
+      .leftJoin(cargos, and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradores.empresaId)))
       .where(
         and(eq(colaboradoresJornadas.colaboradorId, colaboradorId), inArray(colaboradores.empresaId, escopoEmpresas))
       )

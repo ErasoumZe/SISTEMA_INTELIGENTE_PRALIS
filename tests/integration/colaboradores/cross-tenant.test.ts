@@ -530,17 +530,30 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
   // mente a empresa, porque para o ator multiempresa a empresa REAL do colaborador (B) esta no
   // escopo. O que a correcao exige e igualdade entre filho e pai, e a linha plantada tem
   // `empresa_id` = A com pai em B: ela nao aparece para NINGUEM, nem para quem tem as duas empresas.
+  // Este e o teste que ISOLA a igualdade filho<->pai. O ator multiempresa tem a empresa REAL do
+  // colaborador (B) no escopo, entao o recorte por escopo deixa passar — a unica coisa que recusa a
+  // linha plantada e o `colaboradores.empresa_id = <filho>.empresa_id` do innerJoin.
+  //
+  // Sem ele, uma mutacao que apagasse SO a igualdade (mantendo o join e o `where` pelo pai) passaria
+  // batida: o teste do ator da A ja rejeita por escopo, porque o pai e da B.
   it("Deve_ContinuarListandoOsFilhosLegitimos_Quando_OAtorTemAEmpresaRealDoColaborador", async () => {
-    const cargos = await contexto.app.inject({
-      method: "GET",
-      url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/cargos?pageSize=100`,
-      headers: { cookie: cookieMultiempresa }
-    });
+    async function subRota(caminho: "cargos" | "jornadas" | "faltas-justificadas") {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/${caminho}?pageSize=100`,
+        headers: { cookie: cookieMultiempresa }
+      });
+      expect(resposta.statusCode).toBe(200);
+      return json<{ data: Array<{ id: string }> }>(resposta).data;
+    }
 
-    expect(cargos.statusCode).toBe(200);
-    const itens = json<{ data: Array<{ id: string }> }>(cargos).data;
-    // So o vinculo legitimo da B; o que mente a empresa fica de fora dos dois lados.
-    expect(itens.map((item) => item.id)).toEqual([vinculoLegitimoDaB]);
+    // CARGOS: o legitimo da B aparece; o que mente a empresa fica de fora dos dois lados.
+    expect((await subRota("cargos")).map((item) => item.id)).toEqual([vinculoLegitimoDaB]);
+    // JORNADAS e FALTAS: o colaborador da B so tem as linhas mentirosas, entao a lista fica vazia
+    // MESMO para quem tem as duas empresas. E a prova de que a recusa vem da igualdade, e nao do
+    // escopo (que aqui esta satisfeito).
+    expect(await subRota("jornadas")).toEqual([]);
+    expect(await subRota("faltas-justificadas")).toEqual([]);
   });
 
   it("Deve_Retornar403_Quando_ACargosPedeAEmpresaBEOAtorSoTemAEmpresaA", async () => {
