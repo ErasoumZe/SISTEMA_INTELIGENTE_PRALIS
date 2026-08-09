@@ -99,6 +99,22 @@ const colaboradorInexistente = "99999999-9999-4999-8999-00000000c999";
 const vinculoInexistente = "99999999-9999-4999-8999-00000000c998";
 const cargoInexistente = "99999999-9999-4999-8999-00000000c997";
 
+// P1-B da revisao do Codex. As sub-rotas GET recortavam por `empresa_id` da TABELA FILHA e nunca
+// confrontavam com a empresa real do colaborador do path. Uma linha historica corrompida —
+// colaborador da B, registro filho marcado como A — passava pelo filtro e aparecia para o ator da A.
+// Estas fixtures sao exatamente esse estado, plantado por SQL (a CX-M05 impede CRIAR isso hoje; o
+// que ela nao faz e apagar o que ja esta gravado).
+//
+// Colaborador DEDICADO: os filhos mentirosos nao podem pendurar em `colaboradorBComCargo`, que ja e
+// alvo de contagens exatas em outros testes deste arquivo ("nenhum vinculo novo nasceu",
+// "continua com exatamente um"). Fixture que perturba a contagem de outro teste transforma o
+// arquivo num campo minado de ordem.
+const colaboradorBComFilhosMentirosos = "33333333-3333-4333-8333-00000000c200";
+const vinculoMentindoEmpresa = "33333333-3333-4333-8333-00000000c201";
+const jornadaMentindoEmpresa = "33333333-3333-4333-8333-00000000c202";
+const faltaMentindoEmpresa = "33333333-3333-4333-8333-00000000c203";
+const vinculoLegitimoDaB = "33333333-3333-4333-8333-00000000c204";
+
 type ColaboradorLista = {
   id: string;
   empresaId?: string;
@@ -287,6 +303,60 @@ async function semearFronteira() {
   });
 }
 
+// Linhas filhas de um colaborador da empresa B, marcadas como se fossem da empresa A. E o estado
+// que a CX-M05 impede de nascer, mas que pode ja existir no banco — e que o recorte por
+// `empresa_id` do filho, sozinho, nao pega.
+async function semearFilhosQueMentemAEmpresa() {
+  await criarColaborador({
+    id: colaboradorBComFilhosMentirosos,
+    empresaId: idsTeste.empresaB,
+    nome: "COLABORADOR-EMPRESA-B-COM-FILHOS-MENTIROSOS",
+    cpf: null,
+    setorId: setorB,
+    turnoPadraoId: null
+  });
+  // Um filho LEGITIMO (empresa B, igual a do pai): serve de contraprova — ele tem de continuar
+  // aparecendo para quem tem a empresa B, senao a correcao teria simplesmente escondido tudo.
+  await criarVinculoCargo({
+    id: vinculoLegitimoDaB,
+    empresaId: idsTeste.empresaB,
+    colaboradorId: colaboradorBComFilhosMentirosos,
+    setorId: setorB,
+    cargoId: cargoB,
+    dataInicio: "2026-02-01"
+  });
+
+  // Os tres filhos CORROMPIDOS: dizem-se da empresa A, penduram num colaborador da B.
+  await criarVinculoCargo({
+    id: vinculoMentindoEmpresa,
+    empresaId: idsTeste.empresaA,
+    colaboradorId: colaboradorBComFilhosMentirosos,
+    setorId: null,
+    cargoId: idsTeste.cargoGerente,
+    dataInicio: "2026-02-02"
+  });
+  await executarSql(
+    `insert into colaboradores_jornadas
+       (id, empresa_id, colaborador_id, dia_da_semana, carga_horaria_diaria_em_minutos, intervalo_minutos,
+        hora_entrada, data_inicio, ativo)
+     values ($1, $2, $3, 'SEXTA', 480, 60, '08:00', '2026-02-02', true)`,
+    [jornadaMentindoEmpresa, idsTeste.empresaA, colaboradorBComFilhosMentirosos]
+  );
+  await executarSql(
+    `insert into colaboradores_faltas_justificadas
+       (id, empresa_id, colaborador_id, inicio, fim, motivo)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [
+      faltaMentindoEmpresa,
+      idsTeste.empresaA,
+      colaboradorBComFilhosMentirosos,
+      "2026-02-02T08:00:00.000Z",
+      "2026-02-02T12:00:00.000Z",
+      "FALTA-QUE-MENTE-A-EMPRESA"
+    ]
+  );
+}
+
 // --- Consultas de apoio ------------------------------------------------------------------------
 
 async function colaboradorGravado(id: string) {
@@ -351,6 +421,7 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     cookieCaixa = await cookieSessao(contexto.app, "caixa");
     cookieGerente = await cookieSessao(contexto.app, "gerente");
     await semearFronteira();
+    await semearFilhosQueMentemAEmpresa();
   }, 180_000);
 
   afterAll(async () => {
@@ -415,6 +486,61 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     expect(corpo).not.toContain(cargoB);
     expect(corpo).not.toContain("CARGO-EMPRESA-B");
     expect(corpo).not.toContain(setorB);
+  });
+
+  // P1-B. As tres sub-rotas recortavam pelo `empresa_id` da linha FILHA. Um registro filho marcado
+  // como empresa A, pendurado num colaborador da empresa B, satisfazia o filtro e aparecia para o
+  // ator da A — junto com tudo o que a linha carrega. A empresa que manda tem de ser a do
+  // COLABORADOR do path, confrontada com a do filho.
+  it("Deve_NaoDevolverFilhoDeColaboradorDaB_Quando_ALinhaFilhaSeDizDaEmpresaA", async () => {
+    const cargos = await contexto.app.inject({
+      method: "GET",
+      url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/cargos?pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+    const jornadas = await contexto.app.inject({
+      method: "GET",
+      url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/jornadas?pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+    const faltas = await contexto.app.inject({
+      method: "GET",
+      url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/faltas-justificadas?pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    expect(cargos.statusCode).toBe(200);
+    expect(jornadas.statusCode).toBe(200);
+    expect(faltas.statusCode).toBe(200);
+
+    expect(json<{ data: unknown[] }>(cargos).data).toEqual([]);
+    expect(json<{ data: unknown[] }>(jornadas).data).toEqual([]);
+    expect(json<{ data: unknown[] }>(faltas).data).toEqual([]);
+
+    // Nem o id da linha filha, nem nada do colaborador da B.
+    const corpo = JSON.stringify([cargos.json(), jornadas.json(), faltas.json()]);
+    expect(corpo).not.toContain(vinculoMentindoEmpresa);
+    expect(corpo).not.toContain(jornadaMentindoEmpresa);
+    expect(corpo).not.toContain(faltaMentindoEmpresa);
+    expect(corpo).not.toContain("FALTA-QUE-MENTE-A-EMPRESA");
+    expect(corpo).not.toContain(colaboradorBComFilhosMentirosos);
+  });
+
+  // Contraprova do P1-B: o dono legitimo continua vendo as proprias linhas filhas — inclusive a que
+  // mente a empresa, porque para o ator multiempresa a empresa REAL do colaborador (B) esta no
+  // escopo. O que a correcao exige e igualdade entre filho e pai, e a linha plantada tem
+  // `empresa_id` = A com pai em B: ela nao aparece para NINGUEM, nem para quem tem as duas empresas.
+  it("Deve_ContinuarListandoOsFilhosLegitimos_Quando_OAtorTemAEmpresaRealDoColaborador", async () => {
+    const cargos = await contexto.app.inject({
+      method: "GET",
+      url: `/api/colaboradores/${colaboradorBComFilhosMentirosos}/cargos?pageSize=100`,
+      headers: { cookie: cookieMultiempresa }
+    });
+
+    expect(cargos.statusCode).toBe(200);
+    const itens = json<{ data: Array<{ id: string }> }>(cargos).data;
+    // So o vinculo legitimo da B; o que mente a empresa fica de fora dos dois lados.
+    expect(itens.map((item) => item.id)).toEqual([vinculoLegitimoDaB]);
   });
 
   it("Deve_Retornar403_Quando_ACargosPedeAEmpresaBEOAtorSoTemAEmpresaA", async () => {

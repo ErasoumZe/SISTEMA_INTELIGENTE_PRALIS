@@ -219,12 +219,17 @@ export async function atualizarCargoRepository(
   return atualizado;
 }
 
-// `leftJoin` escopado no lugar do `innerJoin` cru: o recorte por empresa olhava
-// `colaboradores_cargos.empresa_id`, mas o NOME e o id do cargo vinham de `cargos` sem nenhuma
-// checagem — um vinculo da empresa A apontando para cargo da B devolvia o cargo da B. Agora o join
-// exige `cargos.empresa_id = colaboradores_cargos.empresa_id`, e `cargoId`/`cargoNome` saem NULOS
-// quando o ponteiro atravessa a fronteira, em vez de sumirem com a linha (que e o que o `innerJoin`
-// faria) ou vazarem. Mesma regra para o setor.
+// Duas defesas distintas, que e facil confundir:
+//
+//   1. QUE LINHA APARECE — decidido pelo COLABORADOR do path. O `innerJoin` com `colaboradores`
+//      exige `colaboradores.empresa_id = colaboradores_cargos.empresa_id` e o `where` recorta pelo
+//      escopo do ator sobre a empresa do COLABORADOR, nao a da linha filha. Era o P1-B: filtrar so
+//      pelo `empresa_id` do filho deixava passar linha historica corrompida — filho marcado como A
+//      pendurado num colaborador da B — para o ator da A. O filho nao pode se auto-declarar.
+//
+//   2. QUE CAMPO SAI — decidido pelo `leftJoin` escopado de `cargos`/`setores`: um vinculo legitimo
+//      da A que aponte para cargo da B devolve `cargoId`/`cargoNome` NULOS, e a linha continua
+//      aparecendo. `innerJoin` aqui faria a linha sumir, que e outra forma de mentir.
 export async function listarCargosColaboradorRepository(colaboradorId: string, escopoEmpresas: string[]) {
   if (!escopoEmpresas.length) return [];
   return banco
@@ -240,6 +245,13 @@ export async function listarCargosColaboradorRepository(colaboradorId: string, e
       ativo: colaboradoresCargos.ativo
     })
     .from(colaboradoresCargos)
+    .innerJoin(
+      colaboradores,
+      and(
+        eq(colaboradores.id, colaboradoresCargos.colaboradorId),
+        eq(colaboradores.empresaId, colaboradoresCargos.empresaId)
+      )
+    )
     .leftJoin(
       cargos,
       and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
@@ -249,7 +261,10 @@ export async function listarCargosColaboradorRepository(colaboradorId: string, e
       and(eq(setores.id, colaboradoresCargos.setorId), eq(setores.empresaId, colaboradoresCargos.empresaId))
     )
     .where(
-      and(eq(colaboradoresCargos.colaboradorId, colaboradorId), inArray(colaboradoresCargos.empresaId, escopoEmpresas))
+      // `colaboradores.empresaId`, e nao `colaboradoresCargos.empresaId`: o escopo do ator e
+      // aplicado sobre a empresa do COLABORADOR. Com o `innerJoin` acima as duas ja sao iguais, e
+      // escrever assim deixa explicito quem manda.
+      and(eq(colaboradoresCargos.colaboradorId, colaboradorId), inArray(colaboradores.empresaId, escopoEmpresas))
     )
     .orderBy(desc(colaboradoresCargos.ativo), desc(colaboradoresCargos.dataInicio), asc(cargos.nome));
 }
@@ -343,6 +358,9 @@ export async function criarCargoColaboradorRepository(
 //
 // A CX-M05 acrescentou `empresaId` a projecao e transformou esta funcao no unico portao de entrada
 // de TODA escrita do modulo: e daqui que sai a empresa real do alvo, que ate entao vinha do corpo.
+// O `where` filtra por `id` E pelo escopo de empresas do ator (ver abaixo o porque); quem separa
+// "nao existe" de "e de outra empresa" NAO e este repositorio — os dois casos devolvem zero linha, e
+// o service responde o mesmo 404 para nao virar oraculo.
 // O `where` continua so por `id`, de proposito — quem distingue "nao existe" de "e de outra
 // empresa" e o service, e ele responde 404 nos dois casos para nao virar oraculo.
 //
@@ -431,43 +449,50 @@ export async function atualizarStatusCargoColaboradorRepository(
 
 export async function listarJornadasColaboradorRepository(colaboradorId: string, escopoEmpresas: string[]) {
   if (!escopoEmpresas.length) return [];
-  return banco
-    .select({
-      id: colaboradoresJornadas.id,
-      empresaId: colaboradoresJornadas.empresaId,
-      colaboradorId: colaboradoresJornadas.colaboradorId,
-      diaDaSemana: colaboradoresJornadas.diaDaSemana,
-      cargaHorariaDiariaEmMinutos: colaboradoresJornadas.cargaHorariaDiariaEmMinutos,
-      intervaloMinutos: colaboradoresJornadas.intervaloMinutos,
-      colaboradorCargoId: colaboradoresCargos.id,
-      horaEntrada: colaboradoresJornadas.horaEntrada,
-      dataInicio: colaboradoresJornadas.dataInicio,
-      ativo: colaboradoresJornadas.ativo,
-      cargoNome: cargos.nome
-    })
-    .from(colaboradoresJornadas)
-    .leftJoin(
-      colaboradoresCargos,
-      and(
-        eq(colaboradoresCargos.id, colaboradoresJornadas.colaboradorCargoId),
-        eq(colaboradoresCargos.empresaId, colaboradoresJornadas.empresaId)
+  return (
+    banco
+      .select({
+        id: colaboradoresJornadas.id,
+        empresaId: colaboradoresJornadas.empresaId,
+        colaboradorId: colaboradoresJornadas.colaboradorId,
+        diaDaSemana: colaboradoresJornadas.diaDaSemana,
+        cargaHorariaDiariaEmMinutos: colaboradoresJornadas.cargaHorariaDiariaEmMinutos,
+        intervaloMinutos: colaboradoresJornadas.intervaloMinutos,
+        colaboradorCargoId: colaboradoresCargos.id,
+        horaEntrada: colaboradoresJornadas.horaEntrada,
+        dataInicio: colaboradoresJornadas.dataInicio,
+        ativo: colaboradoresJornadas.ativo,
+        cargoNome: cargos.nome
+      })
+      .from(colaboradoresJornadas)
+      // P1-B: quem decide se a linha aparece e o COLABORADOR do path, nao o `empresa_id` da jornada.
+      .innerJoin(
+        colaboradores,
+        and(
+          eq(colaboradores.id, colaboradoresJornadas.colaboradorId),
+          eq(colaboradores.empresaId, colaboradoresJornadas.empresaId)
+        )
       )
-    )
-    .leftJoin(
-      cargos,
-      and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
-    )
-    .where(
-      and(
-        eq(colaboradoresJornadas.colaboradorId, colaboradorId),
-        inArray(colaboradoresJornadas.empresaId, escopoEmpresas)
+      .leftJoin(
+        colaboradoresCargos,
+        and(
+          eq(colaboradoresCargos.id, colaboradoresJornadas.colaboradorCargoId),
+          eq(colaboradoresCargos.empresaId, colaboradoresJornadas.empresaId)
+        )
       )
-    )
-    .orderBy(
-      desc(colaboradoresJornadas.dataInicio),
-      asc(colaboradoresJornadas.diaDaSemana),
-      asc(colaboradoresJornadas.horaEntrada)
-    );
+      .leftJoin(
+        cargos,
+        and(eq(cargos.id, colaboradoresCargos.cargoId), eq(cargos.empresaId, colaboradoresCargos.empresaId))
+      )
+      .where(
+        and(eq(colaboradoresJornadas.colaboradorId, colaboradorId), inArray(colaboradores.empresaId, escopoEmpresas))
+      )
+      .orderBy(
+        desc(colaboradoresJornadas.dataInicio),
+        asc(colaboradoresJornadas.diaDaSemana),
+        asc(colaboradoresJornadas.horaEntrada)
+      )
+  );
 }
 
 export async function criarJornadasColaboradorRepository(
@@ -537,10 +562,18 @@ export async function listarFaltasJustificadasRepository(colaboradorId: string, 
       motivo: colaboradoresFaltasJustificadas.motivo
     })
     .from(colaboradoresFaltasJustificadas)
+    // P1-B: quem decide se a linha aparece e o COLABORADOR do path, nao o `empresa_id` da falta.
+    .innerJoin(
+      colaboradores,
+      and(
+        eq(colaboradores.id, colaboradoresFaltasJustificadas.colaboradorId),
+        eq(colaboradores.empresaId, colaboradoresFaltasJustificadas.empresaId)
+      )
+    )
     .where(
       and(
         eq(colaboradoresFaltasJustificadas.colaboradorId, colaboradorId),
-        inArray(colaboradoresFaltasJustificadas.empresaId, escopoEmpresas)
+        inArray(colaboradores.empresaId, escopoEmpresas)
       )
     )
     .orderBy(desc(colaboradoresFaltasJustificadas.inicio));
