@@ -146,11 +146,16 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     expect(await gravadas(descricao)).toBe(0);
   });
 
+  // O cross-tenant tem de ser provado pela RETAGUARDA, e nao pelo operador: para o operador a trava
+  // da R-121 recusa qualquer conta que nao seja a do PDV, e a conta da outra empresa morreria ali
+  // sem nunca exercitar `validarConta`. Achado por mutacao — desligar a checagem de empresa deixava
+  // a versao anterior deste teste, feita com o operador, passar do mesmo jeito.
   it.each(SAIDAS)("Deve_RecusarSemGravar_Quando_ContaEDeOutraEmpresa (%s)", async (nome, rota, extras) => {
     const descricao = `CX-M06 cross-tenant ${nome}`;
-    const resposta = await post(cookieCaixa, rota, corpo(descricao, { contaOrigemId: CONTA_OUTRA_EMPRESA, ...extras }));
+    const resposta = await post(cookieAdmin, rota, corpo(descricao, { contaOrigemId: CONTA_OUTRA_EMPRESA, ...extras }));
 
     assertProblem(resposta, 400);
+    expect(resposta.body).toContain("Conta de origem");
     expect(await gravadas(descricao)).toBe(0);
   });
 
