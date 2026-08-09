@@ -595,6 +595,33 @@ describe("colaboradores cross-tenant (CX-M05)", () => {
     expect(await colaboradorGravado(colaboradorALegitimo)).toEqual(antes);
   });
 
+  // Este caso nasceu de uma MUTACAO que nao matou nenhum teste. Todos os ataques acima usam um ator
+  // que so tem a empresa A, entao quem os barrava era a checagem de ESCOPO — a checagem de
+  // DIVERGENCIA (`empresa real do alvo != empresa do corpo`) nao tinha prova nenhuma.
+  //
+  // O ator multiempresa tem A e B: o escopo deixa passar, e so a divergencia recusa. Sem ela o PUT
+  // gravaria o vinculo de cargo do colaborador da B com `empresa_id` = A — a mesma corrupcao
+  // cross-tenant do ataque principal, por um ator legitimo e por um caminho que o escopo nao ve.
+  it("Deve_Retornar403_Quando_OCorpoAfirmaUmaEmpresaQueNaoEADoAlvo", async () => {
+    const antes = await colaboradorGravado(colaboradorBSemCargo);
+
+    const resposta = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/colaboradores/${colaboradorBSemCargo}`,
+      headers: { cookie: cookieMultiempresa },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "MOVIDO PARA A EMPRESA A",
+        cargoId: idsTeste.cargoGerente,
+        setorId: idsTeste.setorA
+      }
+    });
+
+    assertProblem(resposta, 403, CODIGO_EMPRESA);
+    expect(await colaboradorGravado(colaboradorBSemCargo)).toEqual(antes);
+    expect(await vinculosDoColaborador(colaboradorBSemCargo)).toEqual([]);
+  });
+
   it("Deve_Retornar404ENaoCriarNada_Quando_OIdDoAlvoNaoExiste", async () => {
     const resposta = await contexto.app.inject({
       method: "PUT",
