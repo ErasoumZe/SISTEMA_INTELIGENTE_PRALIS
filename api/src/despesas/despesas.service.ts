@@ -201,7 +201,7 @@ export async function atualizarDespesa(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
-    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
     // exige *_pagar. Ambos comparam com o estado atual do registro.
     exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);
@@ -215,7 +215,15 @@ export async function atualizarDespesa(
     exigirVinculoDosItensDespesa(dados.itensDespesa, existente!.itensDespesa);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
+    // R-121 tambem na EDICAO: `validarEdicaoDeSaidaNoCaixa` recusa uma conta DIFERENTE, mas corpo
+    // SEM conta passava direto e gravava `conta_origem_id = NULL` mantendo o `caixa_id` — o valor
+    // saia do saldo da conta e continuava no fechamento do caixa. A mesma funcao da criacao repoe a
+    // conta do PDV; para a retaguarda ela devolve os dados intactos.
+    const normalizados = exigirContaDoCaixaNoLancamento(
+      resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null }),
+      caixa,
+      perfil
+    );
     await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: despesaId, computar };
   });

@@ -199,7 +199,7 @@ export async function atualizarMercadoria(
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -211,7 +211,13 @@ export async function atualizarMercadoria(
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
+    // R-121 tambem na EDICAO — ver a nota em `atualizarDespesa`: corpo sem conta zerava a conta
+    // travada e mantinha o `caixa_id`.
+    const normalizados = exigirContaDoCaixaNoLancamento(
+      resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null }),
+      caixa,
+      perfil
+    );
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
     return { id: mercadoriaId, computar };
   });

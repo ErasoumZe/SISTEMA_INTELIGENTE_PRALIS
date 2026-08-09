@@ -1045,9 +1045,12 @@ type ChaveOpcaoOperacao =
 // fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
 const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
-  despesa: ["contas", "fornecedores", "grupos"],
+  // Cada categoria carrega a lista de TODOS os tipos de credor que oferece (CREDORES_POR_CATEGORIA)
+  // — senao o chip abre um select vazio. A despesa oferece Colaborador (e a discriminacao dela
+  // tambem usa a lista); a retirada oferece Fornecedor desde a R-128.
+  despesa: ["contas", "fornecedores", "colaboradores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
+  retirada: ["contas", "fornecedores", "colaboradores", "sociosGestores", "grupos"],
   transferencia: ["contas"]
 };
 
@@ -1242,8 +1245,9 @@ async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
   form.value.grupoDespesaId = "";
   form.value.grupoMercadoriaId = "";
   form.value.grupoRetiradaId = "";
-  if (entidade === "retirada") form.value.fornecedorId = "";
-  if (entidade === "mercadoria") form.value.colaboradorId = "";
+  // O credor incompativel e limpado pelo `useOperacaoLancamento`, que observa a categoria e e dono
+  // do mapa de credores. As duas linhas que ficavam aqui limpavam um id por vez, nunca o
+  // `credorTipo`, e apagavam o fornecedor da retirada — que a R-128 tornou valido.
   try {
     await carregarOpcoesParaOperacao(entidade);
   } catch (error) {

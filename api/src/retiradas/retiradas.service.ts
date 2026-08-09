@@ -141,7 +141,7 @@ export async function atualizarRetirada(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
-    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "retiradas", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -149,7 +149,13 @@ export async function atualizarRetirada(
     exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
+    // R-121 tambem na EDICAO — ver a nota em `atualizarDespesa`: corpo sem conta zerava a conta
+    // travada e mantinha o `caixa_id`.
+    const normalizados = exigirContaDoCaixaNoLancamento(
+      resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null }),
+      caixa,
+      perfil
+    );
     await atualizarRetiradaRepository(retiradaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
     return { id: retiradaId, computar };
   });

@@ -21,8 +21,14 @@ import {
   type ItemDespesaForm,
   type ItemMercadoriaForm
 } from "~/utils/operacoes";
+import {
+  CREDORES_POR_CATEGORIA,
+  limparCredorIncompativel,
+  type CategoriaComCredor,
+  type TipoCredor
+} from "~/utils/credor-categoria";
 
-export type Cat = "despesa" | "mercadoria" | "retirada";
+export type Cat = CategoriaComCredor;
 
 // O que a tabela de discriminacao precisa saber de um item, seja de despesa ou de mercadoria. As
 // duas formas ja tem estes campos — tipar pela FORMA e o que permite uma tabela so, sem ramo por
@@ -37,7 +43,6 @@ type ItemDiscriminado = {
   descontoTotalValor: string;
   grupoPatrimonioId: string;
 };
-type TipoCredor = "fornecedor" | "colaborador" | "socio_gestor";
 
 export function useOperacaoLancamento() {
   const {
@@ -85,8 +90,13 @@ export function useOperacaoLancamento() {
   // R-121: com a conta travada, o campo nao e escolha — entao o formulario ja nasce com ela. Sem
   // isto o select desabilitado apareceria em "—" e o payload sairia sem conta, deixando a correcao
   // por conta do servidor em vez da tela. `immediate` cobre o caso do status do caixa chegar depois.
+  //
+  // `form` entra nas fontes porque o workspace TROCA o objeto do formulario (`form.value =
+  // formOperacaoVazio()`) quando o "+ NOVO" reabre o modal ja aberto em outra categoria. Sem
+  // observar essa troca, `aberto` seguia true, a conta travada nao mudava, o watch nao disparava e
+  // o lancamento saia sem conta.
   watch(
-    [aberto, contaTravadaDoCaixa],
+    [aberto, contaTravadaDoCaixa, form],
     ([estaAberto, conta]) => {
       if (estaAberto && conta) form.value.contaOrigemId = conta;
     },
@@ -151,12 +161,9 @@ export function useOperacaoLancamento() {
   // --- Tipo de credor (define a fonte de busca do campo Credor) ---
   // R-128: a Retirada oferece FORNECEDOR e SOCIO/GESTOR, fiel a FOTO 2 ("Fornecedor — Despesas /
   // Mercadorias / Retiradas" e "Socios — Retiradas"). Colaborador nunca esteve na Retirada no
-  // desenho; era o codigo que divergia.
-  const CREDORES: Record<Cat, TipoCredor[]> = {
-    despesa: ["fornecedor", "colaborador"],
-    mercadoria: ["fornecedor"],
-    retirada: ["fornecedor", "socio_gestor"]
-  };
+  // desenho; era o codigo que divergia. O mapa vive em `utils/credor-categoria` porque a troca de
+  // categoria precisa da MESMA resposta para limpar o credor que a nova categoria nao aceita.
+  const CREDORES = CREDORES_POR_CATEGORIA;
   const rotuloCredor: Record<TipoCredor, string> = {
     fornecedor: "Fornecedor",
     colaborador: "Colaborador",
@@ -190,7 +197,10 @@ export function useOperacaoLancamento() {
         registroDoLegado = id;
         credorLegado.value = null;
       }
-      if (tipo && !CREDORES[categoria].includes(tipo)) credorLegado.value = tipo;
+      // So um REGISTRO ABERTO reabre o tipo legado. Sem o `id`, trocar de despesa para mercadoria
+      // com um colaborador escolhido devolvia o chip "Colaborador" a mercadoria — o oposto do que o
+      // comentario acima promete e do que a FOTO 2 permite.
+      if (id && tipo && !CREDORES[categoria].includes(tipo)) credorLegado.value = tipo;
     },
     { immediate: true }
   );
@@ -202,6 +212,11 @@ export function useOperacaoLancamento() {
   watch(
     cat,
     (c) => {
+      // O id do credor que a nova categoria nao aceita sai do ESTADO aqui, e nao so da tela: o
+      // payload emite os tres ids em qualquer entidade, entao um campo apenas escondido continuava
+      // viajando. Era assim que uma despesa com colaborador virava retirada com colaborador —
+      // gravada, contra a R-128. Nao vale para registro em edicao, que nao troca de categoria.
+      if (!operacaoEditandoId.value) limparCredorIncompativel(form.value, c);
       const primeiro = CREDORES[c][0];
       if (primeiro && !credoresOferecidos.value.includes(tipoCredor.value)) tipoCredor.value = primeiro;
     },
