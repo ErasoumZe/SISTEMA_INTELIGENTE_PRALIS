@@ -110,6 +110,22 @@ describe("CX-M06 - contrato de credorTipo da retirada", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   });
 
+  // CARDINALIDADE — e so ela. O outro par de dois credores (colaborador + fornecedor), usado em
+  // `caixa-campos-operacao`, e recusado pela R-128 mesmo sem o refine de "mais de um": aquele caso
+  // credita a cardinalidade por engano. Fornecedor + socio/gestor sao os DOIS credores que a
+  // retirada aceita, entao nenhuma outra regra os barra — tirar o refine faz este caso virar 201.
+  it("Deve_RecusarSemGravar_Quando_PostTemFornecedorESocioGestor", async () => {
+    const universoAntes = await universoDeLancamentos();
+
+    const resposta = await post(
+      corpo("CX-M06 contrato dois credores validos", { fornecedorId: idsTeste.fornecedor, socioGestorId })
+    );
+
+    assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("um credor so");
+    expect(await universoDeLancamentos()).toEqual(universoAntes);
+  });
+
   // ===== PUT — a mesma regra, e sem tocar no registro =========================================
 
   it.each([

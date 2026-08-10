@@ -297,7 +297,8 @@ const contaTravadaDoCaixaNome = computed(() =>
     contaTravada: contaTravadaDoCaixa.value,
     contaDoFormulario: form.value.contaOrigemId,
     contas: opcoesEmpresa.value.contas,
-    pdvNome: caixaAberto.value?.pdvNome
+    pdvNome: caixaAberto.value?.pdvNome,
+    editando: Boolean(operacaoEditandoId.value)
   })
 );
 // A nota acompanha QUAL conta esta sendo exibida: dizer "saida do caixa aberto" sobre a conta
@@ -306,7 +307,8 @@ const contaTravadaDoCaixaNome = computed(() =>
 const contaTravadaDoCaixaNota = computed(() =>
   notaDaContaDoLancamento({
     contaTravada: contaTravadaDoCaixa.value,
-    contaDoFormulario: form.value.contaOrigemId
+    contaDoFormulario: form.value.contaOrigemId,
+    editando: Boolean(operacaoEditandoId.value)
   })
 );
 const telaBloqueadaPorCaixa = computed(() => {
@@ -1139,6 +1141,7 @@ const acoesLancamento = criarAcoesLancamento({
   },
   rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
   empresaId: () => empresaId.value,
+  contaTravadaDoCaixa: () => contaTravadaDoCaixa.value,
   produtos: () => opcoesEmpresa.value.produtos,
   recorrencia: () => recorrenciaPayload.value,
   // Falha ao carregar OPCOES nao impede abrir: a tela continua utilizavel e o que faltou vira aviso

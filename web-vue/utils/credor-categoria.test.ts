@@ -137,4 +137,23 @@ describe("limparCredorIncompativel - payload que sai para a API", () => {
     expect(payload.colaboradorId).toBeNull();
     expect(payload.credorTipo).toBeNull();
   });
+
+  // Os dois casos acima NAO cobrem o `credorTipo` sem credor: `limparCredorIncompativel` ja zerou o
+  // tipo antes do payload, entao `"" || null` daria `null` do mesmo jeito e a assercao passa com ou
+  // sem a guarda. O estado que importa vem de OUTRO caminho — `escolherTipoCredor`, que grava o tipo
+  // e zera os tres ids de proposito — e ali o tipo esta PREENCHIDO com todos os ids vazios.
+  it("Deve_OmitirOCredorTipo_Quando_OChipFoiClicadoESemCredorEscolhido", () => {
+    // Exatamente o que `escolherTipoCredor("fornecedor")` deixa no formulario.
+    const form = formCom({ fornecedorId: "", colaboradorId: "", socioGestorId: "", credorTipo: "fornecedor" });
+
+    // Na despesa o credor e OPCIONAL, entao clicar no chip e salvar sem escolher e caminho normal —
+    // e `exigirCredorCoerenteDaDespesa` recusa `credorTipo` sem id com 400.
+    expect(payloadDe("despesa", form).credorTipo).toBeNull();
+  });
+
+  it("Deve_ManterOCredorTipo_Quando_HaCredorEscolhido", () => {
+    const form = formCom({ colaboradorId: "colaborador-1", credorTipo: "colaborador" });
+
+    expect(payloadDe("despesa", form).credorTipo).toBe("colaborador");
+  });
 });

@@ -119,6 +119,20 @@ describe("nomeDaContaDoLancamento", () => {
     ).toBe("Caixa PDV 01");
   });
 
+  // Mesmo caso do aviso: em EDICAO, campo vazio significa "gravado sem conta", nao "ainda vou
+  // preencher". Exibir o nome do PDV ali seria afirmar uma conta que o registro nao tem.
+  it("Deve_DizerQueNaoHaContaGravada_Quando_ORegistroAbertoNaoTemConta", () => {
+    expect(
+      nomeDaContaDoLancamento({
+        contaTravada: CONTA_PDV,
+        contaDoFormulario: "",
+        contas,
+        pdvNome: "PDV 01",
+        editando: true
+      })
+    ).toBe("Lançamento sem conta gravada");
+  });
+
   // A trava nasce do CAIXA, nao do vinculo: a conta do PDV pode nao estar em `contas_usuarios`.
   it("Deve_CairNoNomeDoPdv_Quando_AContaDoCaixaNaoEstaNaLista", () => {
     expect(
@@ -149,6 +163,15 @@ describe("notaDaContaDoLancamento", () => {
 
   it("Deve_DizerSaidaDoCaixaAberto_Quando_OFormularioAindaNaoTemConta", () => {
     expect(notaDaContaDoLancamento({ contaTravada: CONTA_PDV, contaDoFormulario: "" })).toBe("Saída do caixa aberto");
+  });
+
+  // Vazio quer dizer coisas OPOSTAS nos dois modos, e o servidor so conhece um deles: ele compara a
+  // conta GRAVADA com a do PDV, e nulo nunca casa. Registro antigo salvo sem conta (o PUT nao
+  // normalizava a conta antes desta entrega) reabre condenado ao 403 — a tela precisa dizer isso.
+  it("Deve_AvisarQueACorrecaoEDaTesouraria_Quando_ORegistroFoiGravadoSemConta", () => {
+    expect(notaDaContaDoLancamento({ contaTravada: CONTA_PDV, contaDoFormulario: "", editando: true })).toContain(
+      "Tesouraria"
+    );
   });
 
   // A legenda nao pode afirmar "saida do caixa aberto" sobre a conta gravada de outro PDV — e o

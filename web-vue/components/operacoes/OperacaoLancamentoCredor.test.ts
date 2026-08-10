@@ -311,6 +311,33 @@ describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", 
     expect(form.value.credorTipo).toBe("colaborador");
   });
 
+  // O caso que o teste acima NAO cobre: ele so olha o estado INICIAL. Clicar em "Fornecedor" so para
+  // olhar a lista zera os tres ids — inclusive o colaborador gravado, que na tela era o unico
+  // registro de quem recebeu o dinheiro. Voltando ao chip legado, o filtro comparava com "" e a
+  // lista abria VAZIA: um chip oferecido pela propria tela, sem nenhuma opcao e sem como recuperar o
+  // credor original a nao ser cancelar a edicao inteira e perder o que ja foi digitado.
+  it("Deve_ReoferecerOColaboradorGravado_Quando_OUsuarioVaiAoOutroChipEVolta", async () => {
+    const { wrapper } = montarBloco({
+      ...RETIRADA_LEGADA,
+      colaboradores: [
+        { id: "colaborador-1", nome: "Quem recebeu" },
+        { id: "colaborador-2", nome: "Outro qualquer" }
+      ]
+    });
+    await nextTick();
+
+    const clicarChip = async (rotulo: string) => {
+      const chip = wrapper.findAll(".lc-chip").find((item) => item.text() === rotulo);
+      await chip!.trigger("click");
+      await nextTick();
+    };
+    await clicarChip("Fornecedor");
+    await clicarChip("Colaborador");
+
+    const campoCredor = wrapper.findAll(".lc-campo").find((item) => item.find(".lc-campo-lbl").text() === "Credor");
+    expect(campoCredor!.findAll("option").map((o) => o.text())).toEqual(["—", "Quem recebeu"]);
+  });
+
   // A ORDEM REAL de `abrirOperacao` (AppWorkspace.vue): modal FECHADO e form vazio → define
   // entidade e id → `await` do GET do detalhe → preenche o form → so entao abre o modal. Montar o
   // formulario ja pronto escondia o que importa: com o form vazio no mount, o `immediate` dos

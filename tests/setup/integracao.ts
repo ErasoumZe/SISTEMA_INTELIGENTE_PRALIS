@@ -116,6 +116,12 @@ export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo =
   return false;
 }
 
+// NOTA, para quem for escrever corrida com DUAS chamadas de rota reais: `sessoesBloqueadasPor` conta
+// so o nivel DIRETO, e isso nao basta ali. Com duas sessoes disputando a mesma linha, a primeira
+// espera o `transactionid` de quem segura, e a segunda espera o `tuple` lock da PRIMEIRA — entao
+// `pg_blocking_pids` da segunda traz a primeira, nao o dono, e a contagem para em 1 para sempre.
+// Medido no grafo de `pg_stat_activity`: dono=1206, primeira=1207 ([1206]), segunda=1209 ([1207]).
+
 // Precisa de um TICK de macrotask, nao de microtask: com `Promise.resolve(marcador)` a corrida seria
 // decidida antes de `promessa.then(...)` rodar, e a funcao devolveria `true` ate para uma promessa JA
 // RESOLVIDA. `setTimeout(0)` deixa a fila de microtasks drenar primeiro.

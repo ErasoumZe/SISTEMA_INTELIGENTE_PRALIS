@@ -98,6 +98,7 @@ function montarFio(over: Partial<DepsLancamento> = {}) {
     refs,
     rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
     empresaId: () => "empresa-a",
+    contaTravadaDoCaixa: () => "",
     produtos: () => [],
     // Uma serie de verdade: com `undefined` os dois ramos (novo e edicao) produziam payload sem
     // `recorrencia`, e a assercao de que a edicao NAO regenera a serie nao provava nada.
@@ -203,6 +204,30 @@ describe("enviarLancamento - a requisicao que sai", () => {
     // Recorrencia NAO vai na edicao: editar um lancamento da serie nao regenera a serie.
     expect(chamada.corpo.recorrencia).toBeUndefined();
     expect(enviada?.editandoId).toBe("retirada-antiga");
+  });
+
+  // R-122: a conta GRAVADA nao e mais a do PDV aberto → o servidor devolve 403 com certeza. A tela
+  // ja exibia o aviso sob o campo travado, mas deixava preencher tudo para tomar a recusa no fim.
+  it("Deve_BarrarAntesDeEnviar_Quando_AContaGravadaNaoEADoCaixa", async () => {
+    const { acoes, refs, api, deps } = montarFio({ contaTravadaDoCaixa: () => "conta-do-pdv" });
+    await acoes.abrirLancamento("retirada", "retirada-antiga"); // detalhe traz `conta-banco`
+    refs.form.value.observacao = "Corrigindo o valor";
+
+    expect(await acoes.enviarLancamento()).toBeNull();
+
+    expect(api.put).not.toHaveBeenCalled();
+    expect(deps.notificar).toHaveBeenCalledWith(expect.stringContaining("Tesouraria"), "error");
+  });
+
+  // ...e o contraste: mesma conta, o envio segue normal. Sem ele, a guarda acima poderia barrar TUDO.
+  it("Deve_Enviar_Quando_AContaGravadaEADoCaixa", async () => {
+    const { acoes, refs, puts } = montarFio({ contaTravadaDoCaixa: () => "conta-banco" });
+    await acoes.abrirLancamento("retirada", "retirada-antiga");
+    refs.form.value.observacao = "Corrigindo o valor";
+
+    await acoes.enviarLancamento();
+
+    expect(puts).toHaveLength(1);
   });
 
   it("Deve_MandarPostSemId_Quando_OLancamentoENovo", async () => {

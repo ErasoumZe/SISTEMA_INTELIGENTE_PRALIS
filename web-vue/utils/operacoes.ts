@@ -536,6 +536,10 @@ export function validarOperacaoParaEnvio(
     socioGestorId?: string | null;
     qtdItensDespesa: number;
     qtdItensMercadoria: number;
+    /** Conta do PDV do caixa aberto quando quem lanca e operador; "" para retaguarda. */
+    contaTravada?: string;
+    /** Registro ABERTO para edicao. Em lancamento novo a conta ainda vai ser preenchida. */
+    editando?: boolean;
   }
 ): string | null {
   // R-127: o texto do movimento e a OBSERVACAO — e o campo que o usuario preenche na tela. A venda
@@ -558,6 +562,17 @@ export function validarOperacaoParaEnvio(
   // colaborador. Sem o fornecedor aqui, a retirada nova para fornecedor era barrada na tela.
   if (entidade === "retirada" && !dados.fornecedorId && !dados.colaboradorId && !dados.socioGestorId)
     return "Selecione o credor da retirada.";
+
+  // R-122: editando um registro cuja conta GRAVADA nao e a do PDV aberto, o servidor devolve 403 —
+  // com certeza, nao por acaso. A tela ja exibia o aviso "correcao e da Tesouraria" sob o campo
+  // travado, mas deixava preencher o formulario inteiro para tomar a recusa no fim. Barrar aqui e o
+  // que faz o aviso valer alguma coisa. Nao vale para lancamento novo: ali a conta ainda vai ser
+  // preenchida pelo watcher do caixa, e o campo vazio nao significa divergencia.
+  if (dados.editando && dados.contaTravada && dados.contaOrigemId !== dados.contaTravada) {
+    return dados.contaOrigemId
+      ? "Este lançamento saiu de outra conta e a correção passa a ser da Tesouraria."
+      : "Este lançamento foi gravado sem conta e a correção passa a ser da Tesouraria.";
+  }
 
   if (entidade === "transferencia") {
     // Schema: contaOrigemId e contaDestinoId sao obrigatorios e devem diferir.

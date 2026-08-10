@@ -5,7 +5,6 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
-  aindaPendente,
   consultarUm,
   esperarBloqueioPor,
   executarSql,
@@ -138,8 +137,10 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       );
 
       // A rota TEM de estar esperando pelo lock — provado pelo banco, e nao por tempo.
+      // `aindaPendente` NAO entra aqui: ela mede um tick de macrotask, entao qualquer requisicao em
+      // voo a satisfaz, e `esperarBloqueioPor` ja provou o fato mais forte (a sessao esta bloqueada
+      // POR este bloqueador, via `pg_blocking_pids`). Somada, ela so parecia prova.
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
-      expect(await aindaPendente(edicao)).toBe(true);
 
       // T1 moderniza e commita: a retirada deixa de ser de colaborador.
       await bloqueador.cliente.query(
@@ -205,7 +206,6 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       );
 
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
-      expect(await aindaPendente(edicao)).toBe(true);
 
       // T1 resolve o par: fica so o fornecedor.
       await bloqueador.cliente.query(
@@ -459,7 +459,10 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
   // O NIVEL do lock, que ate aqui era so afirmacao no docstring: `NO KEY UPDATE` nao pode bloquear
   // quem escreve apenas nas FILHAS. Um INSERT em `debitos_colaboradores` referenciando a despesa
   // pega `FOR KEY SHARE` na raiz — que convive com `NO KEY UPDATE` e conflitaria com `FOR UPDATE`.
-  // Trocar o nivel do lock em producao faz este teste travar ate o `lock_timeout`.
+  // Trocar para `for update` em producao NAO da vermelho limpo: o `set lock_timeout` de
+  // `tests/setup/integracao.ts` vale so para a conexao BLOQUEADORA, e o pool da API nao tem teto —
+  // entao o `put` abaixo nunca resolve, o caso morre no `testTimeout` e o `finally` nem roda. A
+  // mutacao e detectada, mas por travamento; conte com isso ao exercita-la.
   it("Deve_NaoBloquearEscritaDeFilha_Quando_ARaizEstaTravadaPelaEdicao", async () => {
     const criada = await post(
       "/api/despesas",
@@ -495,6 +498,36 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     }
   });
 
+  // LACUNA CONHECIDA — `FOR SHARE` em producao sobrevive a este arquivo inteiro. Nao e descuido:
+  // tentei fechar e nao consegui sem cair num teste pior. Fica registrado para quem vier depois.
+  //
+  //   | producao        | contra bloqueador `no key update` | contra bloqueador `key share` |
+  //   | `no key update` | espera (correto)                  | passa (correto)               |
+  //   | `key share`     | NAO espera -> morto pelos outros  | passa                         |
+  //   | `for update`    | espera                            | trava -> morto pelo caso acima|
+  //   | `for share`     | espera                            | passa  -> SOBREVIVE A TUDO    |
+  //
+  // Por que importa: `FOR SHARE` e COMPARTILHADO. Duas edicoes reais o adquirem AS DUAS, leem AS
+  // DUAS o retrato legado, e so colidem no upgrade do `UPDATE` — deadlock e 500, em vez de
+  // serializacao. Seria uma regressao silenciosa para esta suite.
+  //
+  // As duas tentativas, e por que foram descartadas:
+  //
+  // 1. DUAS ROTAS REAIS uma contra a outra, com porta de largada. Funciona, mas fica INTERMITENTE —
+  //    e teste de concorrencia que oscila e pior do que teste nenhum. (Detalhe que vale guardar: a
+  //    segunda requisicao NAO aparece bloqueada pelo dono da linha e sim pela PRIMEIRA, porque
+  //    espera o `tuple` lock dela. `pg_blocking_pids` da segunda traz a primeira, nao o dono, entao
+  //    contar so o nivel direto para em 1 para sempre.)
+  //
+  // 2. BLOQUEADOR SEGURANDO `FOR SHARE` e assercao de que a rota espera. Passa com `for share` em
+  //    producao — verificado com a mutacao, nao suposto. O bloqueador `SHARE` trava QUALQUER
+  //    escritor no `UPDATE` final da rota, entao "a rota esperou" nao distingue lock nenhum. E a
+  //    mesma armadilha que ja derrubou o teste da discriminacao: provar o Postgres, nao o codigo.
+  //
+  // O que separaria os dois e a ORDEM (ler antes ou depois do lock), e observa-la exige mudar a
+  // linha sob um lock exclusivo enquanto a rota segura o compartilhado — o que produz deadlock com
+  // vitima arbitraria. Sem caminho deterministico obvio; nao inventei um verde para fechar o item.
+
   // A recusa da corrida nao pode deixar rastro: o registro tem de sair EXATAMENTE como T1 o deixou.
   it("Deve_PreservarOSnapshotIntegral_Quando_ACorridaERecusada", async () => {
     const criada = await post(
@@ -526,8 +559,14 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       );
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
+      // T1 assina a linha. Sem isso nao da para provar NADA sobre a corrida: capturar o snapshot
+      // depois dela e compara-lo consigo mesmo passa mesmo que T2 tenha escrito, porque a unica
+      // referencia seria justamente o estado ja contaminado.
       await bloqueador.cliente.query(
-        "update retiradas set colaborador_id = null, fornecedor_id = $2, credor_tipo = 'fornecedor' where id = $1",
+        `update retiradas
+            set colaborador_id = null, fornecedor_id = $2, credor_tipo = 'fornecedor',
+                descricao = 'CX-M06 corrida snapshot T1'
+          where id = $1`,
         [id, idsTeste.fornecedor]
       );
       await bloqueador.cliente.query("commit");
@@ -536,7 +575,18 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       await fecharBloqueador(bloqueador);
     }
 
+    // A recusa da CORRIDA nao pode ter escrito: a linha tem de estar como T1 a deixou, com a
+    // descricao dele. Se o service gravasse antes de recusar, aqui apareceria a descricao "T2".
     const antes = await snapshotDoLancamento("retirada", id);
+    expect(antes).toMatchObject({
+      raiz: {
+        descricao: "CX-M06 corrida snapshot T1",
+        fornecedor_id: idsTeste.fornecedor,
+        colaborador_id: null,
+        credor_tipo: "fornecedor"
+      }
+    });
+
     // Uma segunda tentativa recusada nao pode mover nem `atualizado_em` nem as derivadas.
     const segunda = await put(
       `/api/retiradas/${id}`,

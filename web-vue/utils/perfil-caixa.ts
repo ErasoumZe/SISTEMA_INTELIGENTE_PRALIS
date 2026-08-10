@@ -56,8 +56,16 @@ export function nomeDaContaDoLancamento(entrada: {
   contaDoFormulario: string;
   contas: readonly { id: string; nome?: string | undefined }[];
   pdvNome?: string | null;
+  /** Registro ABERTO para edicao. Em lancamento novo o campo vazio e so "ainda nao preenchido". */
+  editando?: boolean;
 }): string {
   if (!entrada.contaTravada) return "";
+  // Vazio quer dizer coisas OPOSTAS nos dois modos. Em lancamento novo, o watcher ainda vai
+  // preencher com a conta do PDV. Num registro ABERTO, quer dizer que ele foi gravado SEM conta —
+  // e `validarEdicaoDeSaidaNoCaixa` compara a conta GRAVADA com a do PDV, entao nulo nunca casa e
+  // a edicao ja esta condenada ao 403. Chamar isso de "conta do caixa aberto" seria a mesma mentira
+  // que esta funcao existe para eliminar.
+  if (entrada.editando && !entrada.contaDoFormulario) return "Lançamento sem conta gravada";
   const exibida = entrada.contaDoFormulario || entrada.contaTravada;
   const conta = entrada.contas.find((item) => item.id === exibida);
   if (conta?.nome) return conta.nome;
@@ -73,10 +81,18 @@ export function nomeDaContaDoLancamento(entrada: {
  * servidor passou a recusar com 403. Aqui a tela avisa ANTES, em vez de deixar a pessoa editar tudo
  * e descobrir no salvar.
  */
-export function notaDaContaDoLancamento(entrada: { contaTravada: string; contaDoFormulario: string }): string {
+export function notaDaContaDoLancamento(entrada: {
+  contaTravada: string;
+  contaDoFormulario: string;
+  /** Registro ABERTO para edicao. Em lancamento novo o campo vazio e so "ainda nao preenchido". */
+  editando?: boolean;
+}): string {
   if (!entrada.contaTravada) return "";
-  if (!entrada.contaDoFormulario || entrada.contaDoFormulario === entrada.contaTravada) {
-    return "Saída do caixa aberto";
+  if (entrada.contaDoFormulario === entrada.contaTravada) return "Saída do caixa aberto";
+  // Registro gravado SEM conta: o servidor compara a conta gravada com a do PDV, nulo nao casa, e a
+  // edicao volta 403. Avisar aqui e o unico jeito de a pessoa saber antes de digitar tudo.
+  if (!entrada.contaDoFormulario) {
+    return entrada.editando ? "Lançamento sem conta gravada — correção é da Tesouraria" : "Saída do caixa aberto";
   }
   return "Conta gravada no lançamento — correção é da Tesouraria";
 }

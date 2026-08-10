@@ -252,7 +252,10 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     try {
       const editada = await put(cookieCaixa, `${rota}/${id}`, corpo(`CX-M06 pdv reapontado alterada ${nome}`, extras));
       assertProblem(editada, 403);
-      expect(editada.body).toContain("Tesouraria");
+      // "Tesouraria" sozinho NAO serve: `validarEdicaoDeSaidaNoCaixa` tem DUAS recusas 403 com essa
+      // palavra, e a outra e "Caixa fechado". Foi exatamente assim que um teste irmao passou verde
+      // com a guarda sob teste morta. O prefixo sem acento sobrevive a reacentuacao da API.
+      expect(editada.body).toContain("Conta do lan");
 
       expect(
         await consultarUm<{ conta_origem_id: string; descricao: string }>(
@@ -658,6 +661,11 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     expect(resposta.body).toContain("credor");
     expect(await gravadas(descricao)).toBe(0);
   });
+
+  // Nota: este caso NAO prova a cardinalidade sozinho — sem o refine de "mais de um credor", o
+  // colaborador ainda seria recusado pela R-128, com outra mensagem que tambem contem "credor" e
+  // tambem da 400. O par que SO a cardinalidade pega (fornecedor + socio/gestor) esta em
+  // `retirada-credor-contrato.test.ts`, que e onde existe um socio/gestor criado.
 
   // ===== B-04 — a despesa tem UM tipo de credor por vez ======================================
 

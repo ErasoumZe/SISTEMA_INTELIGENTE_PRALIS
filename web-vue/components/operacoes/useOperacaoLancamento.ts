@@ -195,6 +195,10 @@ export function useOperacaoLancamento() {
   // "Colaborador" sumia no instante em que o usuario clicava em "Fornecedor" para olhar, e ele nao
   // tinha como voltar — so cancelando a edicao inteira. Zera quando o modal troca de registro.
   const credorLegado = ref<TipoCredor | null>(null);
+  // O ID gravado no registro, capturado JUNTO com o tipo. Tem de ser uma copia: `escolherTipoCredor`
+  // zera os tres ids do formulario, entao ler o form depois disso perde justamente o dado que este
+  // chip existe para preservar — quem recebeu o dinheiro.
+  const credorLegadoId = ref("");
   let registroDoLegado: string | null | undefined;
   watch(
     [() => operacaoEditandoId.value, credorTipoGravado, cat],
@@ -202,11 +206,16 @@ export function useOperacaoLancamento() {
       if (id !== registroDoLegado) {
         registroDoLegado = id;
         credorLegado.value = null;
+        credorLegadoId.value = "";
       }
       // So um REGISTRO ABERTO reabre o tipo legado. Sem o `id`, trocar de despesa para mercadoria
       // com um colaborador escolhido devolvia o chip "Colaborador" a mercadoria — o oposto do que o
       // comentario acima promete e do que a FOTO 2 permite.
-      if (id && tipo && !CREDORES[categoria].includes(tipo)) credorLegado.value = tipo;
+      if (id && tipo && !CREDORES[categoria].includes(tipo)) {
+        credorLegado.value = tipo;
+        // So na PRIMEIRA vez: depois que o usuario mexe nos chips, o formulario nao e mais fonte.
+        if (!credorLegadoId.value) credorLegadoId.value = idDoTipoNoFormulario(tipo);
+      }
     },
     { immediate: true }
   );
@@ -235,8 +244,7 @@ export function useOperacaoLancamento() {
     },
     { immediate: true }
   );
-  /** O id que o REGISTRO tem gravado para aquele tipo — nao o que o formulario tem agora. */
-  function credorGravadoDoTipo(tipo: TipoCredor) {
+  function idDoTipoNoFormulario(tipo: TipoCredor) {
     if (tipo === "fornecedor") return form.value.fornecedorId;
     if (tipo === "colaborador") return form.value.colaboradorId;
     return form.value.socioGestorId;
@@ -252,9 +260,13 @@ export function useOperacaoLancamento() {
     // (`exigirCredorDaRetirada`): oferecer a lista inteira convidava a trocar quem recebeu o
     // dinheiro e devolvia um 400 dizendo "use fornecedor ou socio/gestor" — instrucao que contradiz
     // o chip que a propria tela estava exibindo como valido. Preservar nao e poder trocar.
+    //
+    // O id vem do REGISTRO (`credorLegadoId`), nunca do formulario: ir ao chip "Fornecedor" so para
+    // olhar a lista e voltar zerava `colaboradorId`, e o filtro passava a comparar com "" — o chip
+    // legado reabria com a lista VAZIA e sem nenhuma forma de recuperar o credor original a nao ser
+    // cancelar a edicao inteira. Era metade do defeito que este chip existe para corrigir.
     if (credorLegado.value && tipoCredor.value === credorLegado.value) {
-      const gravado = credorGravadoDoTipo(credorLegado.value);
-      return lista.filter((opcao) => opcao.id === gravado);
+      return lista.filter((opcao) => opcao.id === credorLegadoId.value);
     }
     return lista;
   });

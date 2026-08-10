@@ -56,6 +56,8 @@ export type DepsLancamento = {
   /** `despesas` | `mercadorias` | ... — o mapa vive em `utils/domain`. */
   rotaDaEntidade: (entidade: EntidadeOperacional) => string;
   empresaId: () => string;
+  /** R-121: conta do PDV do caixa aberto quando quem lanca e operador; "" para retaguarda. */
+  contaTravadaDoCaixa: () => string;
   produtos: () => Opcao[];
   /** Ja no formato do payload (`montarRecorrencia`), nao o estado da tela. */
   recorrencia: () => Recorrencia | undefined;
@@ -158,7 +160,9 @@ export function criarAcoesLancamento(deps: DepsLancamento) {
       colaboradorId: payload.colaboradorId,
       socioGestorId: payload.socioGestorId,
       qtdItensDespesa: payload.itensDespesa.length,
-      qtdItensMercadoria: payload.itensMercadoria.length
+      qtdItensMercadoria: payload.itensMercadoria.length,
+      contaTravada: deps.contaTravadaDoCaixa(),
+      editando: Boolean(refs.operacaoEditandoId.value)
     });
     if (impedimento) {
       deps.notificar(impedimento, "error");
