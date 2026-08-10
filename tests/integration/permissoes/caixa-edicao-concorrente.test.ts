@@ -27,11 +27,15 @@ import {
 describe("CX-M06 - a excecao de legado e atomica", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
+  let cookieMultiempresa = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieMultiempresa] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "multiempresa")
+    ]);
   }, 180_000);
 
   afterAll(async () => contexto.fechar());
@@ -186,10 +190,16 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     expect(Number(debitos?.total ?? "0")).toBe(0);
   });
 
-  // O lock e escopado por EMPRESA. Sem isso, um PUT de outra empresa trava a linha alheia e, quando
-  // ela esta em edicao, FICA ESPERANDO — os 404 sao iguais, mas a latencia vira oraculo de
-  // existencia cross-tenant. Aqui a resposta tem de vir NA HORA, com o bloqueador ainda aberto.
-  it("Deve_Recusar404NaHora_Quando_OutraEmpresaTentaEditarLinhaTravada", async () => {
+  // O lock e escopado por EMPRESA. Sem isso, um PUT que aponta outra empresa trava a linha alheia e
+  // FICA ESPERANDO quando ela esta em edicao — os 404 sao iguais, mas a LATENCIA vira oraculo de
+  // existencia cross-tenant.
+  //
+  // O ator e o `multiempresa`, ligado as DUAS empresas no seed: com o `admin` (so empresa A) o
+  // controller responde 403 `FORBIDDEN_COMPANY` em `despesas.controller.ts` e a requisicao **nunca
+  // chega ao repositorio** — foi assim que a primeira versao deste teste passou verde ate com o
+  // escopo removido do lock. Aqui o controller libera, o service roda, e quem recusa e o proprio
+  // lock escopado.
+  it("Deve_Recusar404SemEsperarOLock_Quando_OPutApontaOutraEmpresa", async () => {
     const criada = await post(
       "/api/despesas",
       corpo("CX-M06 lock cross-tenant", {
@@ -205,23 +215,41 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       await bloqueador.cliente.query("begin");
       await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
 
-      // A despesa e da empresa A; o corpo diz empresa B. O lock nao pode nem encostar nela.
-      const invasao = put(
-        `/api/despesas/${id}`,
-        corpo("CX-M06 invasao", { empresaId: idsTeste.empresaB, grupoDespesaId: idsTeste.grupoDespesaOperacional })
-      );
-      // Sem escopo no `where`, esta promessa ficaria pendente ate o bloqueador soltar.
+      // A despesa e da empresa A; o corpo diz empresa B. O lock escopado nao acha linha nenhuma.
+      const invasao = contexto.app.inject({
+        method: "PUT",
+        url: `/api/despesas/${id}`,
+        headers: { cookie: cookieMultiempresa },
+        payload: corpo("CX-M06 invasao", {
+          empresaId: idsTeste.empresaB,
+          grupoDespesaId: idsTeste.grupoDespesaOperacional
+        })
+      });
+
+      // A PROVA: ninguem chega a esperar por este bloqueador, e a resposta chega COM ele ainda
+      // segurando a linha. Sem o escopo no `where`, o lock acharia a linha da empresa A, a sessao
+      // apareceria em `pg_blocking_pids` e o `await` abaixo so voltaria depois do `commit`.
+      //
+      // `aindaPendente` NAO serve aqui: ela mede um unico tick de macrotask, e qualquer requisicao
+      // com ida ao banco atravessa varios — daria "pendente" mesmo sem contencao nenhuma.
+      expect(await esperarBloqueioPor(bloqueador, 1, 3_000)).toBe(false);
       const resposta = await invasao;
-      expect([403, 404]).toContain(resposta.statusCode);
+      expect(resposta.statusCode, resposta.body).toBe(404);
       expect(await sessoesBloqueadasPor(bloqueador)).toBe(0);
     } finally {
       await fecharBloqueador(bloqueador);
     }
   });
 
-  // A DISCRIMINACAO escreve as mesmas tabelas e decide contra o registro gravado (soma conferida e
-  // R-135). Sem lock, ela desfazia por tras o que uma edicao concorrente tinha acabado de sanear.
-  it("Deve_EsperarOLock_Quando_ADiscriminacaoConcorreComAEdicao", async () => {
+  // A DISCRIMINACAO escreve as mesmas tabelas e decide contra o registro gravado (a soma conferida e
+  // a R-135). Sem lock, ela lia ANTES e desfazia por tras o que uma edicao concorrente saneou.
+  //
+  // "Esperar o lock" NAO prova nada aqui: sem o lock explicito a discriminacao espera do mesmo
+  // jeito, porque termina com `UPDATE despesas`, que trava sozinho. O que distingue os dois casos e
+  // QUANDO ela le o `valorOriginal` — antes ou depois da trava. Por isso a prova e a CONFERENCIA DA
+  // SOMA: T1 sobe o valor para 500, e itens que somam 100 so podem ser recusados se a leitura tiver
+  // acontecido sob o lock.
+  it("Deve_ConferirASomaContraOValorPosLock_Quando_ADiscriminacaoConcorreComAEdicao", async () => {
     const criada = await post(
       "/api/despesas",
       corpo("CX-M06 discriminacao concorrente", {
@@ -256,15 +284,26 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
         }
       });
 
-      // Tem de ESPERAR o lock — e o que prova que a discriminacao passou a ler sob trava.
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
-      expect(await aindaPendente(discriminacao)).toBe(true);
 
+      // T1 sobe o valor do cabecalho e commita.
+      await bloqueador.cliente.query("update despesas set valor_original = 500 where id = $1", [id]);
       await bloqueador.cliente.query("commit");
-      await discriminacao;
+
+      // Sob o lock, a discriminacao le 500 e recusa a soma de 100. Sem o lock, ela ja tinha lido 100,
+      // aprova, e grava itens que nao batem com o cabecalho — o D5 furado em silencio.
+      const resposta = await discriminacao;
+      expect([400, 422], resposta.body).toContain(resposta.statusCode);
     } finally {
       await fecharBloqueador(bloqueador);
     }
+
+    // E nada de item gravado.
+    const itens = await consultarUm<{ total: string }>(
+      "select count(*) as total from despesas_itens where despesa_id = $1",
+      [id]
+    );
+    expect(Number(itens?.total ?? "0")).toBe(0);
   });
 
   // A recusa da corrida nao pode deixar rastro: o registro tem de sair EXATAMENTE como T1 o deixou.
