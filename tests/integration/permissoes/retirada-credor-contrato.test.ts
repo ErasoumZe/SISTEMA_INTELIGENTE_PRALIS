@@ -74,10 +74,19 @@ describe("CX-M06 - contrato de credorTipo da retirada", () => {
     ["fornecedor + tipo colaborador", "fornecedor", "colaborador"],
     ["fornecedor + tipo socio_gestor", "fornecedor", "socio_gestor"],
     ["socio + tipo fornecedor", "socio", "fornecedor"],
-    ["socio + tipo colaborador", "socio", "colaborador"]
+    ["socio + tipo colaborador", "socio", "colaborador"],
+    // As duas que faltavam: o colaborador e barrado pela R-128 de qualquer forma, mas a MENSAGEM
+    // tem de ser a da incoerencia — senao a regra de tipo estaria sendo creditada por engano.
+    ["colaborador + tipo fornecedor", "colaborador", "fornecedor"],
+    ["colaborador + tipo socio_gestor", "colaborador", "socio_gestor"]
   ] as const)("Deve_RecusarSemGravar_Quando_PostTemCredorTipoContraditorio (%s)", async (_nome, credor, tipo) => {
     const universoAntes = await universoDeLancamentos();
-    const id = credor === "fornecedor" ? { fornecedorId: idsTeste.fornecedor } : { socioGestorId };
+    const id =
+      credor === "fornecedor"
+        ? { fornecedorId: idsTeste.fornecedor }
+        : credor === "socio"
+          ? { socioGestorId }
+          : { colaboradorId: idsTeste.colaboradorCaixa };
 
     const resposta = await post(corpo("CX-M06 contrato post", { ...id, credorTipo: tipo }));
 
@@ -157,6 +166,8 @@ describe("CX-M06 - contrato de credorTipo da retirada", () => {
     );
 
     assertProblem(editada, 400, "VALIDATION_ERROR");
+    // Sem afirmar a MENSAGEM, um 400 de qualquer outra regra satisfaria este teste.
+    expect(editada.body).toContain("Credor incoerente");
     expect(await snapshotDoLancamento("retirada", id)).toEqual(antes);
   });
 });

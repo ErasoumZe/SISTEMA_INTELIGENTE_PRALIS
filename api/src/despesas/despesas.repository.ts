@@ -202,9 +202,14 @@ export async function criarDespesaRepository(
  *
  * `NO KEY UPDATE`, e nao `UPDATE`: o `UPDATE` desta rota nao toca a chave primaria, e `FOR UPDATE`
  * conflitaria com o `FOR KEY SHARE` que o Postgres toma sozinho ao validar as FKs de
- * `despesas_itens`, `debitos_colaboradores` e `ajustes_fechamento_caixa` — a discriminacao e o
- * fechamento passariam a esperar por uma edicao em curso, sem necessidade. Mesma matriz do lock da
- * raiz de colaboradores (commit 3ccb268).
+ * `despesas_itens` e `debitos_colaboradores`. Mesma matriz do lock da raiz de colaboradores
+ * (commit 3ccb268).
+ *
+ * O ganho e sobre quem escreve SO nas filhas — por exemplo o INSERT de `debitos_colaboradores` de
+ * outro lancamento do mesmo colaborador. NAO vale para a discriminacao: ela termina com `UPDATE`
+ * nesta mesma raiz e portanto espera de qualquer forma. E `ajustes_fechamento_caixa` nao tem INSERT
+ * nenhum em `api/src` hoje, entao aquela FK nao entra na conta. (As duas afirmacoes estavam erradas
+ * na primeira versao deste comentario.)
  *
  * Fica numa consulta propria em vez de `.for(...)` no detalhe porque o mesmo repositorio de detalhe
  * serve o GET, e leitura pura nao pode travar linha.

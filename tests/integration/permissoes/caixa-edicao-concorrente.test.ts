@@ -24,17 +24,24 @@ import {
 //
 // Aqui a corrida e deterministica: um cliente proprio segura a linha com o MESMO lock que a rota
 // pega, e o bloqueio da rota e observado pelo banco (`pg_blocking_pids`), nao por sleep.
+
+// Espelha o nivel usado por `travar*Repository`. Para exercitar a mutacao do NIVEL do lock, troque
+// aqui e em producao ao mesmo tempo: com `update` dos dois lados, o teste do nivel fica vermelho.
+const NIVEL_DO_LOCK = "no key update";
+
 describe("CX-M06 - a excecao de legado e atomica", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
   let cookieMultiempresa = "";
+  let cookieCaixa = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieMultiempresa] = await Promise.all([
+    [cookieAdmin, cookieMultiempresa, cookieCaixa] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "multiempresa")
+      cookieSessao(contexto.app, "multiempresa"),
+      cookieSessao(contexto.app, "caixa")
     ]);
   }, 180_000);
 
@@ -304,6 +311,93 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       [id]
     );
     expect(Number(itens?.total ?? "0")).toBe(0);
+  });
+
+  // A MERCADORIA nao tem excecao de credor legado, mas tem a mesma janela: a edicao valida
+  // `dataPagamento` e a conta contra o registro gravado. Sem o lock, a linha continuaria sem teste
+  // nenhum — remover a chamada deixava a suite inteira verde.
+  it("Deve_ConferirAContaPosLock_Quando_AMercadoriaConcorreComOReapontamentoDoPdv", async () => {
+    const criada = await post(
+      "/api/mercadorias",
+      corpo("CX-M06 mercadoria concorrente", {
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from mercadorias where id = $1 for no key update", [id]);
+
+      // O operador tenta editar sem informar conta; a conta gravada e a contaBanco (retaguarda).
+      const edicao = contexto.app.inject({
+        method: "PUT",
+        url: `/api/mercadorias/${id}`,
+        headers: { cookie: cookieCaixa },
+        payload: corpo("CX-M06 mercadoria concorrente alterada", {
+          grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+          fornecedorId: idsTeste.fornecedor
+        })
+      });
+
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+
+      // T1 troca a conta gravada. Sob o lock, a edicao le a conta NOVA e a R-122 recusa.
+      await bloqueador.cliente.query("update mercadorias set conta_origem_id = $2 where id = $1", [
+        id,
+        idsTeste.contaLivre
+      ]);
+      await bloqueador.cliente.query("commit");
+
+      const resposta = await edicao;
+      expect(resposta.statusCode, resposta.body).toBe(403);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    // A conta que T1 gravou continua de pe.
+    expect(
+      await consultarUm<{ conta_origem_id: string }>("select conta_origem_id from mercadorias where id = $1", [id])
+    ).toMatchObject({ conta_origem_id: idsTeste.contaLivre });
+  });
+
+  // O NIVEL do lock, que ate aqui era so afirmacao no docstring: `NO KEY UPDATE` nao pode bloquear
+  // quem escreve apenas nas FILHAS. Um INSERT em `debitos_colaboradores` referenciando a despesa
+  // pega `FOR KEY SHARE` na raiz — que convive com `NO KEY UPDATE` e conflitaria com `FOR UPDATE`.
+  // Trocar o nivel do lock em producao faz este teste travar ate o `lock_timeout`.
+  it("Deve_NaoBloquearEscritaDeFilha_Quando_ARaizEstaTravadaPelaEdicao", async () => {
+    const criada = await post(
+      "/api/despesas",
+      corpo("CX-M06 nivel do lock", {
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        colaboradorId: idsTeste.colaboradorCaixa,
+        credorTipo: "colaborador"
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    // Segura a raiz com o MESMO nivel que a edicao usa.
+    const bloqueador = await abrirBloqueador();
+    // Sessao separada, no papel de "quem so escreve na filha".
+    const filha = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query(`select id from despesas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
+
+      await filha.cliente.query("begin");
+      // Com `NO KEY UPDATE` na raiz isto passa; com `FOR UPDATE` estouraria o lock_timeout (55P03).
+      await filha.cliente.query("select id from despesas where id = $1 for key share", [id]);
+      await filha.cliente.query("rollback");
+
+      expect(await sessoesBloqueadasPor(bloqueador)).toBe(0);
+    } finally {
+      await fecharBloqueador(filha);
+      await fecharBloqueador(bloqueador);
+    }
   });
 
   // A recusa da corrida nao pode deixar rastro: o registro tem de sair EXATAMENTE como T1 o deixou.
