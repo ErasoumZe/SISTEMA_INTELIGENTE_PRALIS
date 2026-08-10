@@ -37,7 +37,6 @@ type ChamadaApi = { rota: string; corpo: CorpoLancamento };
 function detalheDeRetiradaLegada(): OperacaoDetalhe {
   return {
     id: "retirada-antiga",
-    empresaId: "empresa-a",
     dataReferencia: "2026-08-01",
     dataVencimento: "2026-08-01",
     dataPagamento: null,
@@ -75,16 +74,18 @@ function montarFio(over: Partial<DepsLancamento> = {}) {
   // justamente o que estes testes precisam afirmar campo a campo.
   const puts: ChamadaApi[] = [];
   const posts: ChamadaApi[] = [];
+  // `vi.fn()` sem implementacao tipada e o que casa com o port generico do fio — mesmo padrao de
+  // `caixa-acoes.test.ts`. A captura tipada fica nos arrays acima.
   const api = {
-    get: vi.fn(async () => {
+    get: vi.fn().mockImplementation(async () => {
       ordem.push("get");
       return detalheDeRetiradaLegada();
     }),
-    post: vi.fn(async (rota: string, corpo: CorpoLancamento) => {
+    post: vi.fn().mockImplementation(async (rota: string, corpo: CorpoLancamento) => {
       posts.push({ rota, corpo });
       return { id: "novo", computar: true };
     }),
-    put: vi.fn(async (rota: string, corpo: CorpoLancamento) => {
+    put: vi.fn().mockImplementation(async (rota: string, corpo: CorpoLancamento) => {
       puts.push({ rota, corpo });
       return { id: "retirada-antiga", computar: true };
     })
