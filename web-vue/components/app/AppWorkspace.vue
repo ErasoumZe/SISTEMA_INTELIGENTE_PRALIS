@@ -89,6 +89,7 @@ import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
 import { contaTravadaDeCaixa, nomeDaContaDoLancamento } from "~/utils/perfil-caixa";
+import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
 type TipoPagina =
@@ -1124,6 +1125,47 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
   if (aviso) notificar(aviso, "warning");
 }
 
+const acoesLancamento = criarAcoesLancamento({
+  api: { get: apiGet, post: apiPost, put: apiPut },
+  refs: {
+    form,
+    entidadeNova,
+    operacaoEditandoId,
+    modalOperacaoAberto,
+    discriminandoDespesa,
+    discriminandoMercadoria,
+    itensVenda,
+    tiposPagamento,
+    itensDespesa,
+    itensMercadoria
+  },
+  rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
+  empresaId: () => empresaId.value,
+  produtos: () => opcoesEmpresa.value.produtos,
+  recorrencia: () => recorrenciaPayload.value,
+  // Falha ao carregar OPCOES nao impede abrir: a tela continua utilizavel e o que faltou vira aviso
+  // discreto. Diferente do GET do detalhe, que propaga e mantem o modal fechado.
+  carregarOpcoes: async (entidade) => {
+    try {
+      await carregarOpcoesParaOperacao(entidade);
+    } catch (error) {
+      notificar(mensagemErro(error), "error");
+    }
+  },
+  limparAuxiliares: () => {
+    fotoDocumento.limpar();
+    fotoNota.limpar();
+    itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
+    tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
+    itensDespesa.value = [itemDespesaVazio()];
+    itensMercadoria.value = [itemMercadoriaVazio()];
+    // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+    // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
+    recorrencia.value = estadoRecorrenciaVazio();
+  },
+  notificar
+});
+
 const abrirOperacaoUmaVez = criarGuardaAberturaOperacao();
 
 async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: string }) {
@@ -1139,43 +1181,24 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
         void router.push("/caixa");
         return;
       }
-      entidadeNova.value = entidade;
-      operacaoEditandoId.value = operacao?.id ?? "";
       modoDiscriminacao.value = false;
-      fotoDocumento.limpar();
-      fotoNota.limpar();
-      form.value = formOperacaoVazio();
-      discriminandoDespesa.value = false;
-      discriminandoMercadoria.value = false;
-      itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
-      tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-      itensDespesa.value = [itemDespesaVazio()];
-      itensMercadoria.value = [itemMercadoriaVazio()];
-      // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
-      // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
-      recorrencia.value = estadoRecorrenciaVazio();
-      // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
+      // A ORDEM (reset → opcoes → GET → preenchimento → abrir) vive em `utils/lancamento-acoes`,
+      // onde o teste alcanca. Abrir antes do preenchimento faz a tela piscar com o formulario vazio
+      // e, no operador, renderizar o campo Conta antes de a conta gravada chegar.
       try {
-        await carregarOpcoesParaOperacao(entidade);
-      } catch (error) {
-        notificar(mensagemErro(error), "error");
-      }
-      if (operacao?.id) {
-        try {
-          const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-          preencherFormOperacao(entidade, detalhe);
+        const detalhe = await acoesLancamento.abrirLancamento(entidade, operacao?.id);
+        if (detalhe && operacao?.id) {
           if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
             void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
           }
           if (detalhe.fotoNotaUrl) {
             void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
           }
-        } catch (error) {
-          notificar(mensagemErro(error), "error");
-          return;
         }
+      } catch (error) {
+        // Erro no detalhe NAO abre o modal — melhor nao abrir do que abrir mentindo.
+        notificar(mensagemErro(error), "error");
       }
-      modalOperacaoAberto.value = true;
     }
   );
 }
@@ -1328,44 +1351,12 @@ async function salvarOperacao() {
       await salvarDiscriminacao();
       return;
     }
-    const payload = montarPayloadOperacao(entidadeNova.value, {
-      empresaId: empresaId.value,
-      form: form.value,
-      itensVenda: itensVenda.value,
-      tiposPagamento: tiposPagamento.value,
-      itensDespesa: itensDespesa.value,
-      itensMercadoria: itensMercadoria.value,
-      discriminandoDespesa: discriminandoDespesa.value,
-      discriminandoMercadoria: discriminandoMercadoria.value,
-      produtos: opcoesEmpresa.value.produtos,
-      // Recorrencia so na CRIACAO: editar um lancamento da serie mexe naquele, nao regenera a
-      // serie inteira (cancelar/editar em bloco e entrega propria — PROJECT_BRAIN/18 D-04).
-      ...(operacaoEditandoId.value ? {} : { recorrencia: recorrenciaPayload.value })
-    });
-    // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
-    const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
-      descricao: payload.descricao,
-      observacao: payload.observacao,
-      grupoDespesaId: payload.grupoDespesaId,
-      grupoMercadoriaId: payload.grupoMercadoriaId,
-      contaOrigemId: payload.contaOrigemId,
-      contaDestinoId: payload.contaDestinoId,
-      fornecedorId: payload.fornecedorId,
-      colaboradorId: payload.colaboradorId,
-      socioGestorId: payload.socioGestorId,
-      qtdItensDespesa: payload.itensDespesa.length,
-      qtdItensMercadoria: payload.itensMercadoria.length
-    });
-    if (erroValidacao) {
-      notificar(erroValidacao, "error");
-      return;
-    }
-    const editandoId = operacaoEditandoId.value;
-    const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
-    type OperacaoSalva = { id: string; computar: boolean; serie?: number; serieLimitada?: boolean };
-    const operacaoSalva = editandoId
-      ? await apiPut<OperacaoSalva>(`/api/${endpoint}/${editandoId}`, payload)
-      : await apiPost<OperacaoSalva>(`/api/${endpoint}`, payload);
+    // Montagem do corpo, pre-validacao e a decisao POST vs PUT vivem em `utils/lancamento-acoes`,
+    // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
+    // discriminacao, que dependem do DOM e do estado da tela.
+    const enviada = await acoesLancamento.enviarLancamento();
+    if (!enviada) return;
+    const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
     const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
     const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
     const linhaAtualizada = {

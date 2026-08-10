@@ -285,9 +285,11 @@ describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", 
   // entidade e id → `await` do GET do detalhe → preenche o form → so entao abre o modal. Montar o
   // formulario ja pronto escondia o que importa: com o form vazio no mount, o `immediate` dos
   // watchers ja rodou, e o chip legado depende de eles dispararem de novo quando o detalhe chega.
-  it("Deve_OferecerOChipColaborador_Quando_ORegistroChegaPelaOrdemAssincronaReal", async () => {
-    // O bloco e montado no boot da aplicacao (o `v-dialog` e que esconde), entao os watchers
-    // `immediate` ja rodaram aqui, com o form VAZIO e sem registro.
+  // A ORDEM assincrona real (reset → opcoes → GET → transformacao → preenchimento → abrir) e a
+  // montagem do PUT sao provadas em `utils/lancamento-acoes.test.ts`, contra o fio de PRODUCAO que o
+  // AppWorkspace usa. Aqui o que se prova e a REACAO do componente ao estado que aquele fio produz —
+  // um teste que dirigisse refs a mao e chamasse isso de "ordem real" estaria provando a si mesmo.
+  it("Deve_OferecerOChipColaborador_Quando_ORegistroAbertoTemCredorLegado", async () => {
     const bloco = montarBloco({ aberto: false, categoria: "despesa" });
     expect(chips(bloco.wrapper)).toEqual(["Fornecedor", "Colaborador"]);
 
@@ -295,7 +297,6 @@ describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", 
     bloco.operacaoEditandoId.value = "retirada-antiga";
     await nextTick();
 
-    // Chegada do detalhe: o workspace TROCA o objeto do formulario.
     bloco.form.value = {
       ...formOperacaoVazio(),
       colaboradorId: "colaborador-1",
