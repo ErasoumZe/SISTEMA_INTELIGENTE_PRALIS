@@ -9,24 +9,14 @@
 // Seguro para rodar em todo deploy: usa upsert/onConflict e nao apaga nada existente.
 import "dotenv/config";
 import pg from "pg";
-import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { permissoes } from "@padaria/shared";
 import { gerarUuidV7 } from "@padaria/shared/ids";
+import { garantirAdminInicial, SENHA_MINIMA_ADMIN_INICIAL } from "./src/bootstrap-admin.js";
 import { schema } from "./src/schema/schema.js";
-import {
-  cargos,
-  colaboradores,
-  contaAutenticacao,
-  empresas,
-  permissoesCargos,
-  perfisUsuarios,
-  permissoesTabela,
-  usuarioAutenticacao,
-  usuariosEmpresas
-} from "./src/schema/index.js";
+import { cargos, empresas, permissoesCargos, permissoesTabela } from "./src/schema/index.js";
 import { permissoesPadraoDoCargo, regrasPermissoes } from "./src/referencia-permissoes.js";
 
 // Le uma env obrigatoria por valor literal (sem process.env[dinamico], que dispara regra de seguranca).
@@ -41,11 +31,11 @@ const authSecret = exigir("BETTER_AUTH_SECRET", process.env["BETTER_AUTH_SECRET"
 const authBaseUrl = exigir("AUTH_BASE_URL", process.env["AUTH_BASE_URL"]);
 const webOrigin = exigir("WEB_ORIGIN", process.env["WEB_ORIGIN"]);
 const adminEmail = exigir("ADMIN_EMAIL", process.env["ADMIN_EMAIL"]).toLowerCase();
-const adminSenha = exigir("ADMIN_SENHA", process.env["ADMIN_SENHA"]);
+// So o provisionamento inicial usa esta variavel. Para uma identidade existente, ela nao e fonte
+// da verdade e pode ter sido removida do ambiente depois da instalacao.
+const adminSenha = process.env["ADMIN_SENHA"];
 const adminNome = process.env["ADMIN_NOME"]?.trim() || "Administrador";
 const empresaNome = process.env["EMPRESA_NOME"]?.trim() || "Padaria Principal";
-
-if (adminSenha.length < 6) throw new Error("[bootstrap] ADMIN_SENHA precisa ter no minimo 6 caracteres");
 
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const banco = drizzle(pool, { schema });
@@ -64,7 +54,11 @@ const auth = betterAuth({
   baseURL: authBaseUrl,
   trustedOrigins: [webOrigin],
   advanced: { database: { generateId: () => gerarUuidV7() } },
-  emailAndPassword: { enabled: true, requireEmailVerification: false, minPasswordLength: 6 }
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+    minPasswordLength: SENHA_MINIMA_ADMIN_INICIAL
+  }
 });
 
 console.info("[bootstrap] Iniciando bootstrap de producao (idempotente)");
@@ -111,60 +105,23 @@ const empresaId =
 if (!empresaId) throw new Error("[bootstrap] Falha ao garantir a empresa");
 console.info(`[bootstrap] OK empresa (${empresaId})`);
 
-// 4) Primeiro admin — cria o usuario de auth (better-auth) se faltar e garante perfil + vinculo.
-async function usuarioPorEmail(email: string) {
-  const [usuario] = await banco
-    .select({ id: usuarioAutenticacao.id })
-    .from(usuarioAutenticacao)
-    .where(eq(usuarioAutenticacao.email, email))
-    .limit(1);
-  return usuario ?? null;
-}
-
-let usuario = await usuarioPorEmail(adminEmail);
-if (!usuario) {
-  await auth.api.signUpEmail({ body: { name: adminNome, email: adminEmail, password: adminSenha } });
-  usuario = await usuarioPorEmail(adminEmail);
-}
-if (!usuario?.id) throw new Error(`[bootstrap] Falha ao criar/obter o usuario admin: ${adminEmail}`);
-
-// Producao exige e-mail verificado (requireEmailVerification em api/src/auth/config.ts). O admin do
-// bootstrap e confiavel (criado no servidor), entao marcamos como verificado para permitir o login.
-await banco
-  .update(usuarioAutenticacao)
-  .set({ emailVerified: true, updatedAt: new Date() })
-  .where(eq(usuarioAutenticacao.id, usuario.id));
-
-// Garante (idempotente) que a senha do admin = ADMIN_SENHA em TODA execucao: reescreve o hash na
-// conta 'credential' usando o proprio hasher do better-auth. Assim ADMIN_SENHA e a fonte da verdade
-// e um simples redeploy sempre reseta a senha do admin (resolve senha divergente de deploys antigos).
-const contextoAuth = await auth.$context;
-const senhaHash = await contextoAuth.password.hash(adminSenha);
-await banco
-  .update(contaAutenticacao)
-  .set({ password: senhaHash, updatedAt: new Date() })
-  .where(and(eq(contaAutenticacao.userId, usuario.id), eq(contaAutenticacao.providerId, "credential")));
-
-await banco
-  .insert(perfisUsuarios)
-  .values({ usuarioId: usuario.id, empresaId, nome: adminNome, email: adminEmail, role: "usuario_admin" })
-  .onConflictDoUpdate({
-    target: perfisUsuarios.usuarioId,
-    set: { empresaId, nome: adminNome, email: adminEmail, role: "usuario_admin", atualizadoEm: new Date() }
-  });
-await banco.insert(usuariosEmpresas).values({ usuarioId: usuario.id, empresaId }).onConflictDoNothing();
-
-// O app exige um colaborador vinculado ao usuario para montar o perfil (obterPerfilPorUsuarioId
-// retorna null sem colaborador). Cria um colaborador minimo para o admin, de forma idempotente.
-const [colaboradorExistente] = await banco
-  .select({ id: colaboradores.id })
-  .from(colaboradores)
-  .where(eq(colaboradores.usuarioId, usuario.id))
-  .limit(1);
-if (!colaboradorExistente) {
-  await banco.insert(colaboradores).values({ empresaId, nome: adminNome, usuarioId: usuario.id });
-}
-console.info(`[bootstrap] OK admin ${adminEmail} (usuario_admin, email verificado, senha = ADMIN_SENHA, colaborador)`);
+// 4) Primeiro admin — provisiona tudo somente se a identidade ainda nao existir. Uma conta
+// existente pertence a operacao: redeploy nao redefine senha, verificacao, role nem vinculos.
+const resultadoAdmin = await garantirAdminInicial({
+  banco,
+  empresaId,
+  adminEmail,
+  adminNome,
+  adminSenha,
+  criarUsuarioAutenticacao: async ({ nome, email, senha }) => {
+    await auth.api.signUpEmail({ body: { name: nome, email, password: senha } });
+  }
+});
+console.info(
+  resultadoAdmin.estado === "criado"
+    ? `[bootstrap] OK admin inicial criado: ${adminEmail} (usuario_admin, e-mail verificado)`
+    : `[bootstrap] OK admin existente preservado: ${adminEmail} (credencial, role e vinculos inalterados)`
+);
 
 await pool.end();
 console.info("[bootstrap] OK bootstrap concluido");

@@ -26,7 +26,9 @@ services:
       AUTH_BASE_URL: ${AUTH_BASE_URL:?AUTH_BASE_URL obrigatorio}
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN obrigatorio}
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL obrigatorio}
-      ADMIN_SENHA: ${ADMIN_SENHA:?ADMIN_SENHA obrigatorio}
+      # Necessaria somente na primeira instalacao. Depois que ADMIN_EMAIL ja existe, o bootstrap
+      # preserva a credencial e a variavel pode ficar vazia sem transformar deploy em rotacao.
+      ADMIN_SENHA: ${ADMIN_SENHA:-}
       ADMIN_NOME: ${ADMIN_NOME:-Administrador}
       EMPRESA_NOME: ${EMPRESA_NOME:-Padaria Principal}
       # Ligue para popular a producao uma vez (dados de referencia + exemplos); depois remova.
