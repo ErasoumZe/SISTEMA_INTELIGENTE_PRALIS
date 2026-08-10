@@ -18,7 +18,7 @@ import {
   itemMercadoriaVazio,
   montarPayloadOperacao
 } from "~/utils/operacoes";
-import { contaTravadaDeCaixa, nomeDaContaDoLancamento } from "~/utils/perfil-caixa";
+import { contaTravadaDeCaixa, nomeDaContaDoLancamento, notaDaContaDoLancamento } from "~/utils/perfil-caixa";
 import type { PerfilUsuario } from "@padaria/shared";
 import type { EntidadeOperacional, Opcao, OperacaoForm } from "~/types/padaria";
 
@@ -36,6 +36,7 @@ type Cenario = {
   cargo?: string;
   permissoes?: PerfilUsuario["permissoes"];
   categoria?: EntidadeOperacional;
+  colaboradores?: Opcao[];
   /** Preenchido = registro ABERTO para edicao. Muda o ramo do credor legado e o da conta. */
   editandoId?: string;
   form?: Partial<OperacaoForm>;
@@ -69,7 +70,12 @@ function montarBloco(cenario: Cenario = {}) {
   const pdvContaId = ref(cenario.pdvContaId ?? "");
   const pdvNome = ref(cenario.pdvNome ?? "PDV 01");
 
-  const opcoesEmpresa = computed(() => ({ ...opcoesVazias(), contas: contas.value }));
+  const colaboradores = ref<Opcao[]>(cenario.colaboradores ?? []);
+  const opcoesEmpresa = computed(() => ({
+    ...opcoesVazias(),
+    contas: contas.value,
+    colaboradores: colaboradores.value
+  }));
 
   // A decisao "e operador?" vem da FUNCAO DE PRODUCAO que o AppWorkspace usa. O harness so escolhe o
   // perfil e o caixa; antes ele injetava `contaTravadaDoCaixa` pronta, e por isso um erro na regra
@@ -85,6 +91,12 @@ function montarBloco(cenario: Cenario = {}) {
       contaDoFormulario: form.value.contaOrigemId,
       contas: opcoesEmpresa.value.contas,
       pdvNome: pdvNome.value
+    })
+  );
+  const contaTravadaDoCaixaNota = computed(() =>
+    notaDaContaDoLancamento({
+      contaTravada: contaTravadaDoCaixa.value,
+      contaDoFormulario: form.value.contaOrigemId
     })
   );
 
@@ -120,6 +132,7 @@ function montarBloco(cenario: Cenario = {}) {
     salvarOperacao: async () => undefined,
     contaTravadaDoCaixa,
     contaTravadaDoCaixaNome,
+    contaTravadaDoCaixaNota,
     podeUsarRecorrencia: computed(() => false),
     recorrencia: ref(estadoRecorrenciaVazio()),
     fotoDocumentoPreview: ref(""),
@@ -273,6 +286,23 @@ describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", 
   it("Deve_OferecerOChipColaborador_Quando_RetiradaGravadaUsaColaborador", () => {
     const { wrapper } = montarBloco(RETIRADA_LEGADA);
     expect(chips(wrapper)).toEqual(["Fornecedor", "Sócio ou Gestor", "Colaborador"]);
+  });
+
+  // O servidor exige o MESMO colaborador (`exigirCredorDaRetirada`). Oferecer a lista inteira
+  // convidava a trocar quem recebeu o dinheiro e devolvia um 400 contradizendo o chip exibido.
+  it("Deve_OferecerSomenteOColaboradorGravado_Quando_OChipLegadoEstaAtivo", async () => {
+    const { wrapper } = montarBloco({
+      ...RETIRADA_LEGADA,
+      colaboradores: [
+        { id: "colaborador-1", nome: "Quem recebeu" },
+        { id: "colaborador-2", nome: "Outro qualquer" }
+      ]
+    });
+    await nextTick();
+
+    const campoCredor = wrapper.findAll(".lc-campo").find((item) => item.find(".lc-campo-lbl").text() === "Credor");
+    const opcoes = campoCredor!.findAll("option").map((o) => o.text());
+    expect(opcoes).toEqual(["—", "Quem recebeu"]);
   });
 
   it("Deve_ManterOColaboradorGravado_Quando_ORegistroAntigoEAberto", () => {
@@ -458,8 +488,10 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
 
     // E o campo tem de DIZER a conta gravada. Exibir a conta do PDV atual aqui e a tela mentindo
     // sobre de onde o dinheiro saiu — o registro so revelaria a divergencia no 403 do salvar.
-    const travado = campoConta(wrapper).find('input[aria-label="Conta"]');
-    expect((travado.element as HTMLInputElement).value).toBe("Banco");
+    const campo = campoConta(wrapper);
+    expect((campo.find('input[aria-label="Conta"]').element as HTMLInputElement).value).toBe("Banco");
+    // E a NOTA acompanha: nao pode afirmar "saida do caixa aberto" sobre a conta de outro PDV.
+    expect(campo.find(".lc-campo-nota").text()).toContain("Tesouraria");
   });
 
   // Retaguarda de verdade: cargo Financeiro, COM `caixa_operar` e COM caixa aberto. A regra antiga

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste } from "../../setup/contexto.js";
+import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
   aindaPendente,
@@ -34,6 +35,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
   let cookieAdmin = "";
   let cookieMultiempresa = "";
   let cookieCaixa = "";
+  let contaDoPdv = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
@@ -43,6 +45,44 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       cookieSessao(contexto.app, "multiempresa"),
       cookieSessao(contexto.app, "caixa")
     ]);
+
+    // O operador PRECISA de caixa aberto proprio. Sem isto, `obterCaixaParaLancamento` estoura antes
+    // de qualquer regra e todo 403 vira "Caixa fechado" — foi assim que o teste da mercadoria
+    // passou verde sem nunca alcancar a checagem da conta gravada.
+    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+      usuariosTeste.caixa.email
+    ]);
+    if (!usuario) throw new Error("Usuario caixa nao encontrado");
+
+    const conta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV concorrencia" }
+    });
+    expect(conta.statusCode, conta.body).toBe(201);
+    contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
+
+    const pdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "PDV concorrencia", contaId: contaDoPdv, ativo: true }
+    });
+    expect(pdv.statusCode, pdv.body).toBe(201);
+
+    const abertura = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieCaixa },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId: json<{ data: { id: string } }>(pdv).data.id,
+        usuarioCaixaId: usuario.id,
+        dataHoraAbertura: "2026-07-31T08:00"
+      }
+    });
+    expect(abertura.statusCode, abertura.body).toBe(201);
   }, 180_000);
 
   afterAll(async () => contexto.fechar());
@@ -85,7 +125,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     try {
       // T1 segura a linha com o MESMO lock da rota e ainda NAO commitou.
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from retiradas where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from retiradas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
       // T2 chega pela rota real, mandando o colaborador que ainda esta gravado. Se a rota validasse
       // com um retrato lido antes do lock, isto passaria.
@@ -151,7 +191,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     const bloqueador = await abrirBloqueador();
     try {
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from despesas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
       // T2 devolve o par intacto — o que a excecao de legado permite, contra o retrato VELHO.
       const edicao = put(
@@ -220,7 +260,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     const bloqueador = await abrirBloqueador();
     try {
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from despesas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
       // A despesa e da empresa A; o corpo diz empresa B. O lock escopado nao acha linha nenhuma.
       const invasao = contexto.app.inject({
@@ -271,7 +311,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     const bloqueador = await abrirBloqueador();
     try {
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from despesas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
       const discriminacao = contexto.app.inject({
         method: "PATCH",
@@ -299,8 +339,12 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
 
       // Sob o lock, a discriminacao le 500 e recusa a soma de 100. Sem o lock, ela ja tinha lido 100,
       // aprova, e grava itens que nao batem com o cabecalho — o D5 furado em silencio.
+      // Nao basta "algum 4xx": tem de ser a CONFERENCIA DA SOMA, e contra o valor que so existe
+      // depois do commit de T1. Sem afirmar o codigo e o `valorLancamento`, um 400 da R-135 ou de
+      // referencia invalida satisfaria o teste sem provar leitura sob o lock.
       const resposta = await discriminacao;
-      expect([400, 422], resposta.body).toContain(resposta.statusCode);
+      assertProblem(resposta, 422, "DISCRIMINACAO_DIVERGENTE");
+      expect(json<{ details: { valorLancamento: number } }>(resposta).details.valorLancamento).toBe(500);
     } finally {
       await fecharBloqueador(bloqueador);
     }
@@ -316,36 +360,52 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
   // A MERCADORIA nao tem excecao de credor legado, mas tem a mesma janela: a edicao valida
   // `dataPagamento` e a conta contra o registro gravado. Sem o lock, a linha continuaria sem teste
   // nenhum — remover a chamada deixava a suite inteira verde.
-  it("Deve_ConferirAContaPosLock_Quando_AMercadoriaConcorreComOReapontamentoDoPdv", async () => {
-    const criada = await post(
-      "/api/mercadorias",
-      corpo("CX-M06 mercadoria concorrente", {
+  /** Cria uma mercadoria do OPERADOR, na conta do PDV do caixa que ele tem aberto. */
+  async function mercadoriaDoOperador(descricao: string) {
+    const criada = await contexto.app.inject({
+      method: "POST",
+      url: "/api/mercadorias",
+      headers: { cookie: cookieCaixa },
+      payload: corpo(descricao, {
+        contaOrigemId: contaDoPdv,
         grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
         fornecedorId: idsTeste.fornecedor
       })
-    );
+    });
     expect(criada.statusCode, criada.body).toBe(201);
-    const { id } = json<{ data: { id: string } }>(criada).data;
+    return json<{ data: { id: string } }>(criada).data.id;
+  }
+
+  /** Sem `contaOrigemId` DE VERDADE: o helper `corpo` injeta uma conta por padrao. */
+  function editarMercadoriaSemConta(id: string, descricao: string) {
+    return contexto.app.inject({
+      method: "PUT",
+      url: `/api/mercadorias/${id}`,
+      headers: { cookie: cookieCaixa },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: hoje,
+        dataVencimento: hoje,
+        descricao,
+        valorOriginal: 10,
+        grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
+        fornecedorId: idsTeste.fornecedor
+      }
+    });
+  }
+
+  it("Deve_ConferirAContaPosLock_Quando_AMercadoriaConcorreComOReapontamentoDoPdv", async () => {
+    const id = await mercadoriaDoOperador("CX-M06 mercadoria concorrente");
 
     const bloqueador = await abrirBloqueador();
     try {
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from mercadorias where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from mercadorias where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
-      // O operador tenta editar sem informar conta; a conta gravada e a contaBanco (retaguarda).
-      const edicao = contexto.app.inject({
-        method: "PUT",
-        url: `/api/mercadorias/${id}`,
-        headers: { cookie: cookieCaixa },
-        payload: corpo("CX-M06 mercadoria concorrente alterada", {
-          grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos,
-          fornecedorId: idsTeste.fornecedor
-        })
-      });
-
+      const edicao = editarMercadoriaSemConta(id, "CX-M06 mercadoria concorrente alterada");
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
-      // T1 troca a conta gravada. Sob o lock, a edicao le a conta NOVA e a R-122 recusa.
+      // T1 tira a conta gravada de baixo do registro. Sob o lock, a edicao le a conta NOVA.
       await bloqueador.cliente.query("update mercadorias set conta_origem_id = $2 where id = $1", [
         id,
         idsTeste.contaLivre
@@ -354,14 +414,46 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
 
       const resposta = await edicao;
       expect(resposta.statusCode, resposta.body).toBe(403);
+      // A MENSAGEM importa: sem ela, o 403 de "Caixa fechado" satisfazia este teste — e foi o que
+      // aconteceu enquanto o operador nao tinha caixa aberto neste arquivo. O prefixo vai ate antes
+      // do primeiro acento porque a API reacentua o `title` da resposta.
+      expect(resposta.body).toContain("Conta do lan");
     } finally {
       await fecharBloqueador(bloqueador);
     }
 
-    // A conta que T1 gravou continua de pe.
     expect(
       await consultarUm<{ conta_origem_id: string }>("select conta_origem_id from mercadorias where id = $1", [id])
     ).toMatchObject({ conta_origem_id: idsTeste.contaLivre });
+  });
+
+  // O CONTRASTE, que e o que torna o caso acima uma medida: mesmo fluxo, mesma espera pelo lock, e
+  // T1 NAO mexe na conta. Se o 403 viesse de outra regra, este aqui tambem falharia.
+  it("Deve_Aceitar_Quando_AMercadoriaEsperaOLockEAContaSegueSendoADoPdv", async () => {
+    const id = await mercadoriaDoOperador("CX-M06 mercadoria sem reapontar");
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query(`select id from mercadorias where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
+
+      const edicao = editarMercadoriaSemConta(id, "CX-M06 mercadoria sem reapontar corrigida");
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+
+      await bloqueador.cliente.query("commit");
+
+      const resposta = await edicao;
+      expect(resposta.statusCode, resposta.body).toBe(200);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    expect(
+      await consultarUm<{ conta_origem_id: string; descricao: string }>(
+        "select conta_origem_id, descricao from mercadorias where id = $1",
+        [id]
+      )
+    ).toMatchObject({ conta_origem_id: contaDoPdv, descricao: "CX-M06 mercadoria sem reapontar corrigida" });
   });
 
   // O NIVEL do lock, que ate aqui era so afirmacao no docstring: `NO KEY UPDATE` nao pode bloquear
@@ -373,30 +465,33 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       "/api/despesas",
       corpo("CX-M06 nivel do lock", {
         grupoDespesaId: idsTeste.grupoDespesaOperacional,
-        colaboradorId: idsTeste.colaboradorCaixa,
-        credorTipo: "colaborador"
+        fornecedorId: idsTeste.fornecedor
       })
     );
     expect(criada.statusCode, criada.body).toBe(201);
     const { id } = json<{ data: { id: string } }>(criada).data;
 
-    // Segura a raiz com o MESMO nivel que a edicao usa.
-    const bloqueador = await abrirBloqueador();
-    // Sessao separada, no papel de "quem so escreve na filha".
+    // A sessao segura `FOR KEY SHARE` — exatamente o lock que o Postgres toma ao inserir uma FILHA
+    // (`debitos_colaboradores`) apontando esta despesa.
     const filha = await abrirBloqueador();
     try {
-      await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query(`select id from despesas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
-
       await filha.cliente.query("begin");
-      // Com `NO KEY UPDATE` na raiz isto passa; com `FOR UPDATE` estouraria o lock_timeout (55P03).
       await filha.cliente.query("select id from despesas where id = $1 for key share", [id]);
-      await filha.cliente.query("rollback");
 
-      expect(await sessoesBloqueadasPor(bloqueador)).toBe(0);
+      // A EDICAO REAL tem de passar por cima disso. `NO KEY UPDATE` convive com `KEY SHARE`;
+      // `FOR UPDATE` conflitaria e a rota ficaria presa ate o commit da filha.
+      const edicao = await put(
+        `/api/despesas/${id}`,
+        corpo("CX-M06 nivel do lock corrigido", {
+          valorOriginal: 21,
+          grupoDespesaId: idsTeste.grupoDespesaOperacional,
+          fornecedorId: idsTeste.fornecedor
+        })
+      );
+      expect(edicao.statusCode, edicao.body).toBe(200);
+      expect(await sessoesBloqueadasPor(filha)).toBe(0);
     } finally {
       await fecharBloqueador(filha);
-      await fecharBloqueador(bloqueador);
     }
   });
 
@@ -420,7 +515,7 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
     const bloqueador = await abrirBloqueador();
     try {
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from retiradas where id = $1 for no key update", [id]);
+      await bloqueador.cliente.query(`select id from retiradas where id = $1 for ${NIVEL_DO_LOCK}`, [id]);
 
       const edicao = put(
         `/api/retiradas/${id}`,

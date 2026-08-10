@@ -9,12 +9,24 @@
 //
 // `podeLancarSemCaixa` ja mora em `shared` exatamente para isto — o comentario dela diz que copiar a
 // lista de cargos no front criaria duas verdades. Era o que estava acontecendo.
-import { podeLancarSemCaixa, temPermissao, type PerfilUsuario } from "@padaria/shared";
+import { podeLancarSemCaixa, type PerfilUsuario } from "@padaria/shared";
 
-/** Operador operacional: opera caixa E nao e retaguarda. Nao ha lista de cargos duplicada aqui. */
+/**
+ * Operador operacional: quem NAO e retaguarda. A regra e exatamente a do servidor.
+ *
+ * A primeira versao disto exigia tambem `caixa_operar` — condicao que o servidor nao consulta
+ * (`exigirContaDoCaixaNoLancamento` so pergunta `podeLancarSemCaixa`). Um cargo que nao casa os
+ * prefixos de retaguarda e nao tem `caixa_operar` era tratado como LIVRE pela tela e como OPERADOR
+ * pela API: escolhia outra conta no seletor e levava 400 no salvar. Era a mesma divergencia que esta
+ * funcao existe para eliminar, sobrando num dos sentidos.
+ *
+ * Na pratica nada muda para quem nao tem caixa aberto: sem caixa, `contaTravadaDeCaixa` devolve ""
+ * de qualquer forma. O que muda e o caso em que um terceiro abriu caixa designando esse usuario —
+ * ali a tela passa a travar a conta, como a API ja exigia.
+ */
 export function ehOperadorDeCaixa(perfil: PerfilUsuario | null | undefined): boolean {
   if (!perfil) return false;
-  return temPermissao(perfil.permissoes, "caixa_operar") && !podeLancarSemCaixa(perfil);
+  return !podeLancarSemCaixa(perfil);
 }
 
 /**
@@ -51,4 +63,20 @@ export function nomeDaContaDoLancamento(entrada: {
   if (conta?.nome) return conta.nome;
   if (exibida === entrada.contaTravada) return entrada.pdvNome || "Conta do caixa aberto";
   return "Conta original do lançamento";
+}
+
+/**
+ * A nota sob o campo travado. Tem de acompanhar QUAL conta esta sendo exibida.
+ *
+ * Dizer "Saída do caixa aberto" sobre a conta gravada de um registro cujo PDV foi reapontado e a
+ * mesma mentira que `nomeDaContaDoLancamento` corrigiu — e justamente o cenario que a regra do
+ * servidor passou a recusar com 403. Aqui a tela avisa ANTES, em vez de deixar a pessoa editar tudo
+ * e descobrir no salvar.
+ */
+export function notaDaContaDoLancamento(entrada: { contaTravada: string; contaDoFormulario: string }): string {
+  if (!entrada.contaTravada) return "";
+  if (!entrada.contaDoFormulario || entrada.contaDoFormulario === entrada.contaTravada) {
+    return "Saída do caixa aberto";
+  }
+  return "Conta gravada no lançamento — correção é da Tesouraria";
 }

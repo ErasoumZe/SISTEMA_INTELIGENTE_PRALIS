@@ -70,6 +70,7 @@ export function useOperacaoLancamento() {
     salvarOperacao,
     contaTravadaDoCaixa,
     contaTravadaDoCaixaNome,
+    contaTravadaDoCaixaNota,
     podeUsarRecorrencia,
     recorrencia
   } = useWorkspaceContext();
@@ -234,13 +235,29 @@ export function useOperacaoLancamento() {
     },
     { immediate: true }
   );
-  const credorOpcoes = computed(() =>
-    tipoCredor.value === "fornecedor"
-      ? opcoesEmpresa.value.fornecedores
-      : tipoCredor.value === "colaborador"
-        ? opcoesEmpresa.value.colaboradores
-        : opcoesEmpresa.value.sociosGestores
-  );
+  /** O id que o REGISTRO tem gravado para aquele tipo — nao o que o formulario tem agora. */
+  function credorGravadoDoTipo(tipo: TipoCredor) {
+    if (tipo === "fornecedor") return form.value.fornecedorId;
+    if (tipo === "colaborador") return form.value.colaboradorId;
+    return form.value.socioGestorId;
+  }
+  const credorOpcoes = computed(() => {
+    const lista =
+      tipoCredor.value === "fornecedor"
+        ? opcoesEmpresa.value.fornecedores
+        : tipoCredor.value === "colaborador"
+          ? opcoesEmpresa.value.colaboradores
+          : opcoesEmpresa.value.sociosGestores;
+    // No tipo LEGADO, a unica opcao e quem ja esta gravado. O servidor exige o MESMO credor
+    // (`exigirCredorDaRetirada`): oferecer a lista inteira convidava a trocar quem recebeu o
+    // dinheiro e devolvia um 400 dizendo "use fornecedor ou socio/gestor" — instrucao que contradiz
+    // o chip que a propria tela estava exibindo como valido. Preservar nao e poder trocar.
+    if (credorLegado.value && tipoCredor.value === credorLegado.value) {
+      const gravado = credorGravadoDoTipo(credorLegado.value);
+      return lista.filter((opcao) => opcao.id === gravado);
+    }
+    return lista;
+  });
   const credorId = computed({
     get: () =>
       tipoCredor.value === "fornecedor"
@@ -600,6 +617,7 @@ export function useOperacaoLancamento() {
     definirGrupoItemMercadoria,
     contaTravadaDoCaixa,
     contaTravadaDoCaixaNome,
+    contaTravadaDoCaixaNota,
     // recorrencia (D3) — suportada
     recorrenciaAberta,
     recorrenciaNumero,

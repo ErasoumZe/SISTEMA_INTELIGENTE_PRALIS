@@ -16,7 +16,8 @@ const {
   opcoesEmpresa,
   form,
   contaTravadaDoCaixa,
-  contaTravadaDoCaixaNome
+  contaTravadaDoCaixaNome,
+  contaTravadaDoCaixaNota
 } = useOperacaoLancamentoBloco();
 </script>
 
@@ -75,8 +76,9 @@ const {
           aria-describedby="lc-conta-travada-nota"
         />
         <!-- A nota e o UNICO motivo visivel do campo cinza; sem o describedby o leitor de tela
-             anunciava "Conta, somente leitura" e nunca dizia por que. -->
-        <span id="lc-conta-travada-nota" class="lc-campo-nota">Saída do caixa aberto</span>
+             anunciava "Conta, somente leitura" e nunca dizia por que. O texto acompanha QUAL conta
+             esta sendo exibida — ver `notaDaContaDoLancamento`. -->
+        <span id="lc-conta-travada-nota" class="lc-campo-nota">{{ contaTravadaDoCaixaNota }}</span>
       </template>
       <!-- Sem contas vinculadas (contas_usuarios): aviso no lugar de um select vazio. So alcanca
            quem ESCOLHE a conta, isto e, a retaguarda. -->

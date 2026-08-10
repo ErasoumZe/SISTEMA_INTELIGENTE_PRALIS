@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   TELA_TEMA_RESUMO_CAIXA,
   deCentavos,
@@ -88,7 +88,7 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
-import { contaTravadaDeCaixa, nomeDaContaDoLancamento } from "~/utils/perfil-caixa";
+import { contaTravadaDeCaixa, nomeDaContaDoLancamento, notaDaContaDoLancamento } from "~/utils/perfil-caixa";
 import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
@@ -152,10 +152,10 @@ const atualizandoOperacoesAutomaticamente = ref(false);
 const erro = ref("");
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
-const confirmacao = reactive({ aberto: false, titulo: "Confirmar ação", mensagem: "", textoConfirmar: "Confirmar" });
+const confirmacao = reactive({ aberto: false, titulo: "Confirmar aÃ§Ã£o", mensagem: "", textoConfirmar: "Confirmar" });
 let resolverConfirmacao: ((valor: boolean) => void) | null = null;
 
-function confirmarAcao(mensagem: string, titulo = "Confirmar ação", textoConfirmar = "Confirmar") {
+function confirmarAcao(mensagem: string, titulo = "Confirmar aÃ§Ã£o", textoConfirmar = "Confirmar") {
   if (resolverConfirmacao) resolverConfirmacao(false);
   Object.assign(confirmacao, { aberto: true, titulo, mensagem, textoConfirmar });
   return new Promise<boolean>((resolve) => {
@@ -179,7 +179,7 @@ const operacaoEditandoId = ref("");
 // Foto do documento (nota/cupom) de despesas e mercadorias: anexada no modal de lancamento.
 const fotoDocumento = useFotoDocumento();
 const fotoNota = useFotoDocumento();
-// Detalhe (somente leitura) da venda integrada (CREARE) — itens, pagamento e total. O cargo caixa
+// Detalhe (somente leitura) da venda integrada (CREARE) â€” itens, pagamento e total. O cargo caixa
 // so visualiza; editar exige entradas_editar (na pratica, admin).
 const modalVendaDetalheAberto = ref(false);
 const vendaDetalhe = ref<OperacaoDetalhe | null>(null);
@@ -248,7 +248,7 @@ const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
 const totalOperacoes = ref(0);
-// Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda — so Entradas manda.
+// Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda â€” so Entradas manda.
 const totalLiquidoOperacoes = ref<number | null>(null);
 // Dia que a tela de Entradas esta listando (S6). Filtro de data: o operador confere o dia corrente
 // e a retaguarda navega para outros dias. Vazio ate a primeira carga (ver sincronizarDiaEntradas).
@@ -286,10 +286,10 @@ const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
 //
 // Quem responde "e operador?" e `utils/perfil-caixa`, que usa a MESMA `podeLancarSemCaixa` do
-// servidor. Antes a tela decidia por `caixa_operar && !caixas_gerenciar` — outra regra, que
+// servidor. Antes a tela decidia por `caixa_operar && !caixas_gerenciar` â€” outra regra, que
 // divergia da API nos dois sentidos.
 const contaTravadaDoCaixa = computed(() => contaTravadaDeCaixa(sessao.value?.perfil, caixaAberto.value));
-// O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador —
+// O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador â€”
 // e ai ela nao existe na lista de opcoes e o campo apareceria cinza e VAZIO. A trava vem do caixa,
 // nao do vinculo: entao a tela sempre diz de qual conta a saida vai sair, com o PDV como reserva.
 const contaTravadaDoCaixaNome = computed(() =>
@@ -300,14 +300,23 @@ const contaTravadaDoCaixaNome = computed(() =>
     pdvNome: caixaAberto.value?.pdvNome
   })
 );
+// A nota acompanha QUAL conta esta sendo exibida: dizer "saida do caixa aberto" sobre a conta
+// gravada de um registro cujo PDV foi reapontado repete a mentira que o nome acabou de corrigir â€”
+// e e justamente o caso que o servidor recusa com 403 no salvar.
+const contaTravadaDoCaixaNota = computed(() =>
+  notaDaContaDoLancamento({
+    contaTravada: contaTravadaDoCaixa.value,
+    contaDoFormulario: form.value.contaOrigemId
+  })
+);
 const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
 });
 // Opcoes do seletor de aparencia com rotulo explicito: "padrao" (global) primeiro, o resumo do
-// caixa, e cada tela como "Somente a tela: X" — deixa claro se a cor vale para tudo ou uma so.
+// caixa, e cada tela como "Somente a tela: X" â€” deixa claro se a cor vale para tudo ou uma so.
 const telasTemaPermitidas = computed(() => [
-  { id: "padrao", titulo: "Padrão (todas as telas)" },
+  { id: "padrao", titulo: "PadrÃ£o (todas as telas)" },
   { id: itemTemaResumoCaixa.id, titulo: itemTemaResumoCaixa.titulo },
   ...telasPermitidas.value.map((tela) => ({ id: tela.id, titulo: `Somente a tela: ${tela.titulo}` }))
 ]);
@@ -378,7 +387,7 @@ const totalTiposPagamento = computed(() =>
   deCentavos(somarCentavos(...tiposPagamento.value.map((item) => item.totalPago)))
 );
 // R-042: a conta do Valor Total vive em @padaria/shared (valorTotalCentavos), testada. Aqui era
-// uma expressao inline sem funcao e sem teste — foi assim que a regra caiu em desuso sem nada
+// uma expressao inline sem funcao e sem teste â€” foi assim que a regra caiu em desuso sem nada
 // quebrar. O servidor recalcula a mesma coisa e nao confia neste numero (ver valoresJuros).
 const valorTotalOperacao = computed(() =>
   deCentavos(
@@ -405,7 +414,7 @@ const alvosFiltroPermissoes = computed(() => {
     ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` })),
     ...opcoesEmpresa.value.usuarios.map((item) => ({
       id: item.usuarioId ?? item.id,
-      nome: `Usuário: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
+      nome: `UsuÃ¡rio: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
     }))
   ];
 });
@@ -491,7 +500,7 @@ watch(
     if (!workspaceCarregado.value || !sessao.value) return;
     erro.value = "";
     if (!telasDoUsuario().includes(novaTela)) {
-      erro.value = "Sem permissão para acessar esta página.";
+      erro.value = "Sem permissÃ£o para acessar esta pÃ¡gina.";
       return;
     }
     await carregarDadosTela(novaTela, empresaId.value);
@@ -609,12 +618,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
 
   if (tela === "contas") {
     // Tela de Contas (D8): a listagem precisa do fundo, do saldo ATUAL derivado e de quem opera a
-    // conta — /api/contas/saldos. As demais telas seguem no GET /api/contas (id+nome), que e lista
+    // conta â€” /api/contas/saldos. As demais telas seguem no GET /api/contas (id+nome), que e lista
     // de opcao de formulario e nao paga as consultas de movimento.
     // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
     [dados.contas, dados.usuarios] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
-      carregarOpcaoOpcional(faltas, "Usuários", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
+      carregarOpcaoOpcional(faltas, "UsuÃ¡rios", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
     ]);
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
@@ -679,7 +688,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       )
     );
     // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
-    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6). Opcional —
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (Â§5, item 6). Opcional â€”
     // quem nao tem permissao de patrimonio segue lancando so com os grupos de despesa.
     [dados.contas, dados.fornecedores, dados.colaboradores, dados.gruposPatrimonio, dados.patrimonioItens] =
       await Promise.all([
@@ -691,7 +700,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         ),
         carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
         // E6: colaboradores sao a SEGUNDA origem do item na discriminacao de despesa (a primeira e
-        // patrimonio). A tela de despesas nao os carregava — o select ficava so com "—" e nao havia
+        // patrimonio). A tela de despesas nao os carregava â€” o select ficava so com "â€”" e nao havia
         // como discriminar, ja que a descricao livre saiu.
         carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
         carregarOpcaoOpcional(
@@ -701,7 +710,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
           []
         ),
         // E6: os ITENS de patrimonio sao a origem do item na discriminacao de despesa. Rota ENXUTA
-        // (so id/nome/grupo) que aceita tambem quem apenas LANCA despesa — sem ela, quem nao tem
+        // (so id/nome/grupo) que aceita tambem quem apenas LANCA despesa â€” sem ela, quem nao tem
         // `cadastro_patrimonio_visualizar` ficaria sem como discriminar, agora que a descricao livre
         // saiu da tela.
         carregarOpcaoOpcional(
@@ -725,7 +734,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
     // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
-    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6).
+    // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (Â§5, item 6).
     [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos, dados.gruposPatrimonio] =
       await Promise.all([
         carregarOpcaoOpcional(
@@ -760,7 +769,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
       carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
+      carregarOpcaoOpcional(faltas, "SÃ³cios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
     ]);
   } else if (tela === "grupos") {
     Object.assign(
@@ -873,7 +882,7 @@ async function carregarTudo() {
     }
     const telas = telasDoUsuario();
     if (!paginaInicialNeutra.value && !telas.includes(telaAtiva.value)) {
-      erro.value = "Sem permissão para acessar esta página.";
+      erro.value = "Sem permissÃ£o para acessar esta pÃ¡gina.";
       return;
     }
     await Promise.all([carregarStatusCaixa(empresaId.value), carregarNotificacoes(empresaId.value)]);
@@ -993,7 +1002,7 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${idEmpresa}`);
   resumo.value = caixaStatus.value?.resumo ?? null;
   // D4: as solicitacoes da retaguarda viajam junto com o status porque e o mesmo instante de
-  // decisao do operador — ele olha o saldo e o que pediram dele na mesma tela, nao em duas.
+  // decisao do operador â€” ele olha o saldo e o que pediram dele na mesma tela, nao em duas.
   const caixaId = caixaStatus.value?.caixaAberto?.id;
   caixaSolicitacoes.value = caixaId ? await apiGet<SolicitacaoCofre[]>(`/api/caixa/${caixaId}/solicitacoes-cofre`) : [];
 }
@@ -1034,14 +1043,14 @@ type ChaveOpcaoOperacao =
   | "grupos";
 
 // Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
-// qualquer tela), entao carregamos as opcoes por ENTIDADE ao abrir o modal — senao os selects
+// qualquer tela), entao carregamos as opcoes por ENTIDADE ao abrir o modal â€” senao os selects
 // (fornecedor, grupo, conta, colaborador...) ficam "No data available" quando a operacao e aberta
 // fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
 const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
   despesa: ["contas", "fornecedores", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  // R-128 fez do FORNECEDOR o credor padrao da retirada — e o chip que ja vem ativo ao abrir. Sem
+  // R-128 fez do FORNECEDOR o credor padrao da retirada â€” e o chip que ja vem ativo ao abrir. Sem
   // carregar a lista, o caminho normal da retirada abria um select vazio. Nao precisa de decisao de
   // permissao: `GET /api/fornecedores` aceita `despesas_visualizar`/`mercadorias_visualizar`, e todo
   // cargo padrao com `retiradas` tem os dois. `colaboradores` fica para o credor LEGADO reabrir com
@@ -1094,7 +1103,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     contas: "Contas",
     fornecedores: "Fornecedores",
     colaboradores: "Colaboradores",
-    sociosGestores: "Sócios e Gestores",
+    sociosGestores: "SÃ³cios e Gestores",
     produtos: "Produtos",
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",
@@ -1156,7 +1165,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
     () =>
       modalOperacaoAberto.value && entidadeNova.value === entidade && operacaoEditandoId.value === (operacao?.id ?? ""),
     async () => {
-      // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
+      // Tesouraria: a transferencia NAO depende de caixa aberto â€” o tesoureiro move dinheiro entre
       // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
       // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
       if (!caixaAberto.value && entidade !== "transferencia") {
@@ -1165,7 +1174,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
         return;
       }
       modoDiscriminacao.value = false;
-      // A ORDEM (reset → opcoes → GET → preenchimento → abrir) vive em `utils/lancamento-acoes`,
+      // A ORDEM (reset â†’ opcoes â†’ GET â†’ preenchimento â†’ abrir) vive em `utils/lancamento-acoes`,
       // onde o teste alcanca. Abrir antes do preenchimento faz a tela piscar com o formulario vazio
       // e, no operador, renderizar o campo Conta antes de a conta gravada chegar.
       try {
@@ -1179,7 +1188,7 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
           }
         }
       } catch (error) {
-        // Erro no detalhe NAO abre o modal — melhor nao abrir do que abrir mentindo.
+        // Erro no detalhe NAO abre o modal â€” melhor nao abrir do que abrir mentindo.
         notificar(mensagemErro(error), "error");
       }
     }
@@ -1250,7 +1259,7 @@ function executarAcaoNovo(acao: AcaoNovo) {
   void abrirOperacao(acao.id === "saidas" ? categoriaInicialSaida(permissoesUsuario.value) : acao.entidade);
 }
 
-// Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 §4).
+// Alterna a categoria do lancamento SEM fechar o modal (3 botoes do topo, PROJECT_BRAIN/17 Â§4).
 // Mantem o que ja foi digitado (valor, datas, descricao) e limpa so o que e proprio da categoria
 // anterior: o grupo (cada categoria tem o seu) e o credor que a nova categoria nao aceita. Recarrega
 // as opcoes porque cada entidade usa listas diferentes (mercadoria precisa de produtos/unidades).
@@ -1259,7 +1268,7 @@ async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
   entidadeNova.value = entidade;
   // Limpar o formulario e do `useOperacaoLancamento`, que observa a categoria e e dono do mapa de
   // credores. Aqui ficavam grupos e credor: o credor era limpado um id por vez, nunca o
-  // `credorTipo`, e o fornecedor da retirada era apagado — que a R-128 tornou valido. Com a
+  // `credorTipo`, e o fornecedor da retirada era apagado â€” que a R-128 tornou valido. Com a
   // limpeza fora daqui, esta funcao nao tem mais regra que possa divergir do mapa, e a que existe
   // roda dentro do componente, onde o teste alcanca.
   try {
@@ -1324,7 +1333,7 @@ async function salvarDiscriminacao() {
 // Recorrencia (D3): a serie criada tem de aparecer na mensagem. Quando o teto de 12 meses corta a
 // serie, dizer so "salvo" deixaria a pessoa achar que os 24 lancamentos que pediu existem.
 function mensagemLancamentoSalvo(resultado: { serie?: number; serieLimitada?: boolean }) {
-  if (!resultado.serie) return "Lançamento salvo com sucesso.";
+  if (!resultado.serie) return "LanÃ§amento salvo com sucesso.";
   const base = `Serie criada: ${resultado.serie} lancamentos.`;
   return resultado.serieLimitada ? `${base} A serie foi limitada a 12 meses.` : base;
 }
@@ -1362,7 +1371,7 @@ async function salvarOperacao() {
       operacoes.value.unshift(linhaAtualizada);
     }
     modalOperacaoAberto.value = false;
-    notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
+    notificar(editandoId ? "LanÃ§amento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
     return { id: operacaoSalva.id };
   } catch (error) {
@@ -1445,7 +1454,7 @@ async function salvarCadastro() {
       ...formCadastro.value,
       empresaIds: [...formCadastro.value.empresaIds],
       produtoConversoes: formCadastro.value.produtoConversoes.map((conversao) => ({ ...conversao })),
-      // S-06: a listagem esconde 52 permissoes do form e o servidor faz REPLACE total — sem
+      // S-06: a listagem esconde 52 permissoes do form e o servidor faz REPLACE total â€” sem
       // reinjetar aqui, salvar pela tela apaga o que ela mesma escondeu. A fonte e `opcoes`
       // (completa e sem paginacao), nao `permissoesPagina` (uma pagina, que nasce vazia).
       regras:
@@ -1465,7 +1474,7 @@ async function salvarCadastro() {
     } catch (error) {
       // Produto duplicado (nome/codigo de barras na loja): oferece "cadastrar mesmo assim".
       if (error instanceof ErroApiCliente && error.codigo === "DUPLICATE_PRODUCT") {
-        if (!(await confirmarAcao(error.message, "Produto já cadastrado", "Cadastrar mesmo assim"))) return;
+        if (!(await confirmarAcao(error.message, "Produto jÃ¡ cadastrado", "Cadastrar mesmo assim"))) return;
         resultado = await enviar({ ...(payload as Record<string, unknown>), forcar: true });
       } else {
         throw error;
@@ -1474,7 +1483,7 @@ async function salvarCadastro() {
     // S-06: `opcoes` e a fonte das ocultas no proximo save e nao e recarregada nesta tela. Sem
     // sincronizar aqui, um segundo save da sessao parte de um retrato velho. Grava-se DEPOIS do
     // 2xx e a partir do `formSnapshot` (o objeto que foi enviado), nao do `formCadastro`, cujos
-    // selects seguem editaveis. O servidor persiste o `regras` literal — o Zod e tudo-ou-nada.
+    // selects seguem editaveis. O servidor persiste o `regras` literal â€” o Zod e tudo-ou-nada.
     if (cadastroTela.value === "permissoes") {
       opcoes.value = aplicarRegrasDoAlvoNasListas(opcoes.value, formSnapshot, formSnapshot.regras) as Opcoes;
     }
@@ -1537,9 +1546,9 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
   if (!tipoPermissao || !alvoId || !permissao) return;
   if (
     !(await confirmarAcao(
-      `Excluir a permissão ${permissao} de ${linha.alvo || alvoId}?`,
-      "Excluir permissão",
-      "Excluir permissão"
+      `Excluir a permissÃ£o ${permissao} de ${linha.alvo || alvoId}?`,
+      "Excluir permissÃ£o",
+      "Excluir permissÃ£o"
     ))
   )
     return;
@@ -1552,7 +1561,7 @@ async function excluirPermissao(linha: Record<string, string | undefined>) {
       permissao
     });
     await apiDelete(`/api/permissoes/regras?${params.toString()}`);
-    notificar("Permissão excluída com sucesso.");
+    notificar("PermissÃ£o excluÃ­da com sucesso.");
     await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1620,10 +1629,10 @@ const { abrirCaixaOperacional, retornarSaldoOperacional, executarSolicitacaoCofr
     carregarDadosTela,
     notificar,
     mensagemErro,
-    confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
+    confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "LanÃ§ar retorno")
   });
 
-// D4 · lado da RETAGUARDA. Usa a factory testavel de `utils/solicitacoes-cofre.ts`; aqui so entram
+// D4 Â· lado da RETAGUARDA. Usa a factory testavel de `utils/solicitacoes-cofre.ts`; aqui so entram
 // as dependencias reais (API, notificacao, confirmacao).
 const acoesSolicitacoes = criarAcoesSolicitacoesCofre({
   api: { get: apiGet, post: apiPost },
@@ -1633,7 +1642,7 @@ const acoesSolicitacoes = criarAcoesSolicitacoesCofre({
 
 // Programar entrega ao cofre exige DUAS coisas, e a tela precisa das duas para nao oferecer um
 // painel que a API recusa: a permissao tecnica e o PAPEL de retaguarda. A regra do papel vem de
-// `@padaria/shared` — a mesma funcao que o servico usa, nao uma copia da lista de cargos.
+// `@padaria/shared` â€” a mesma funcao que o servico usa, nao uma copia da lista de cargos.
 const podeProgramarEntregaCofre = computed(() => {
   const perfil = sessao.value?.perfil;
   return Boolean(perfil) && temPermissao("transferencias_criar") && podeLancarSemCaixa(perfil!);
@@ -1685,7 +1694,7 @@ async function cancelarSolicitacaoCofre(payload: {
   caixaSalvando.value = true;
   try {
     const lista = await acoesSolicitacoes.cancelar(payload.caixaId, payload.solicitacaoId, payload.motivo);
-    // Só o sucesso fecha o diálogo e limpa o motivo — em erro o operador reenvia com um clique.
+    // SÃ³ o sucesso fecha o diÃ¡logo e limpa o motivo â€” em erro o operador reenvia com um clique.
     payload.aoConcluir?.(lista !== null);
     if (lista) solicitacoesCofreRetaguarda.value = lista;
   } finally {
@@ -1761,9 +1770,9 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   const nome = linha.alvo ?? "cargo";
   if (
     !(await confirmarAcao(
-      `Restaurar as permissões do cargo "${nome}" para o padrão? Isso substitui as regras atuais, inclusive as desligadas manualmente.`,
-      "Restaurar permissões",
-      "Restaurar padrão"
+      `Restaurar as permissÃµes do cargo "${nome}" para o padrÃ£o? Isso substitui as regras atuais, inclusive as desligadas manualmente.`,
+      "Restaurar permissÃµes",
+      "Restaurar padrÃ£o"
     ))
   ) {
     return;
@@ -1771,7 +1780,7 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   try {
     // S-06: o endpoint devolve o que gravou. Sem consumir isso, `opcoes` fica com o retrato
     // ANTERIOR a restauracao e o proximo save pela tela reinjeta as ocultas velhas, desfazendo a
-    // restauracao em silencio. Sincronizamos com a resposta do servidor — sem chamada extra.
+    // restauracao em silencio. Sincronizamos com a resposta do servidor â€” sem chamada extra.
     const aplicado = await apiPost<{ cargoId: string; regras: Record<string, boolean> } | undefined>(
       `/api/permissoes/cargo/${cargoId}/restaurar-padrao`,
       {}
@@ -1782,7 +1791,7 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
       { tipoPermissao: "cargo", cargoId, setorId: "", usuarioId: "" },
       aplicado.regras
     ) as Opcoes;
-    notificar(`Permissões do cargo "${nome}" restauradas para o padrão.`);
+    notificar(`PermissÃµes do cargo "${nome}" restauradas para o padrÃ£o.`);
     if (permissoesBuscou.value) await buscarPermissoes(permissoesPagina.value.page || 1);
   } catch (error) {
     notificar(mensagemErro(error), "error");
@@ -1815,6 +1824,7 @@ provide(WORKSPACE_CONTEXT, {
   salvarOperacao,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
+  contaTravadaDoCaixaNota,
   podeUsarRecorrencia,
   recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,
@@ -1861,7 +1871,7 @@ provide(WORKSPACE_CONTEXT, {
 
 function atualizarPaginaOperacoes(pagina: number) {
   paginaOperacoes.value = pagina;
-  // Com a paginacao no servidor, mudar de pagina e uma nova consulta — antes era so um slice.
+  // Com a paginacao no servidor, mudar de pagina e uma nova consulta â€” antes era so um slice.
   void carregarOperacoes();
 }
 
@@ -1880,9 +1890,9 @@ const pageContext = computed(() => ({
   telaAtiva: telaAtiva.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
-  // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
+  // Lista COMPLETA da tela (sem paginar) â€” usada pela Tesouraria para somar o total do periodo.
   operacoesTela: operacoesDaTela.value,
-  // Total do FILTRO INTEIRO (vem do servidor), nao o tamanho da pagina — e ele que o totalizador
+  // Total do FILTRO INTEIRO (vem do servidor), nao o tamanho da pagina â€” e ele que o totalizador
   // do topo e o controle de paginas usam. Antes era operacoesDaTela.length, que com a paginacao
   // falsa dava sempre no maximo 10.
   totalOperacoes: totalOperacoes.value,
@@ -1945,7 +1955,7 @@ const pageContext = computed(() => ({
   retornarSaldoOperacional,
   caixaSolicitacoes: caixaSolicitacoes.value,
   executarSolicitacaoCofre,
-  // D4 · lado da retaguarda (tela de Transferencias).
+  // D4 Â· lado da retaguarda (tela de Transferencias).
   podeProgramarEntregaCofre: podeProgramarEntregaCofre.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
   caixasAbertos: caixasAbertos.value,
@@ -2049,7 +2059,7 @@ onBeforeUnmount(() => {
           <span class="status-pill">Aberto</span>
         </div>
         <div v-else>
-          <div class="caixa-title">Não há caixa aberto</div>
+          <div class="caixa-title">NÃ£o hÃ¡ caixa aberto</div>
           <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
         </div>
         <v-btn
@@ -2064,7 +2074,7 @@ onBeforeUnmount(() => {
           Gerenciar caixa
         </v-btn>
         <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
-             so NAVEGA para la — nao existe mais modal de abertura. -->
+             so NAVEGA para la â€” nao existe mais modal de abertura. -->
         <v-btn
           v-else
           class="mt-4 caixa-edit"
@@ -2085,7 +2095,7 @@ onBeforeUnmount(() => {
           <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
         </template>
         <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
-             abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
+             abrem o modal do eixo â€” Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
         <v-list min-width="288" class="fab-novo-list">
           <v-list-item
             v-for="acao in acoesNovo"

@@ -468,7 +468,15 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     fornecedorId: dados.form.fornecedorId || null,
     colaboradorId: dados.form.colaboradorId || null,
     socioGestorId: dados.form.socioGestorId || null,
-    credorTipo: dados.form.credorTipo || null,
+    // `credorTipo` sem credor nenhum nao vai. O chip e o SELETOR do tipo: clicar nele (ou escolher
+    // um credor e voltar o select para "—") deixa o tipo preenchido com os tres ids vazios. Na
+    // despesa o credor e OPCIONAL, entao esse estado e um caminho normal — e o servidor passou a
+    // recusa-lo como credor incoerente, com uma mensagem que cita nomes de campo que nao existem na
+    // tela. Sem credor, nao ha tipo a declarar.
+    credorTipo:
+      dados.form.fornecedorId || dados.form.colaboradorId || dados.form.socioGestorId
+        ? dados.form.credorTipo || null
+        : null,
     dataDocumentoFiscal: dados.form.dataDocumentoFiscal || null,
     numeroDocumentoFiscal: dados.form.numeroDocumentoFiscal || null,
     fotoDocumentoUrl: dados.form.fotoDocumentoUrl || null,
