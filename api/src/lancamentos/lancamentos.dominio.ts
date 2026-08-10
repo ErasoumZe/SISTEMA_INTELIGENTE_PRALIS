@@ -297,19 +297,43 @@ export function exigirRecorrenciaDeRetaguarda(perfil: PerfilUsuario, recorrencia
  * retaguarda passaria a editar lancamento de caixa alheio, que nao e o que foi decidido.
  *
  * O que muda: lancamento sem `caixa_id` — o que a propria retaguarda cria desde a A-1 — nao tem
- * caixa a conferir e fica editavel.
+ * caixa a conferir e fica editavel, com qualquer conta da empresa.
+ *
+ * O que NAO muda quando o lancamento esta preso a um caixa: as duas condicoes de conta do ramo do
+ * operador valem igual, porque a invariante da A-4 (`caixa_id` preenchido <=> a conta e a do PDV
+ * daquele caixa) tem de sobreviver ao PUT, e o PUT preserva o `caixa_id` gravado.
  */
 async function validarEdicaoDeSaidaDaRetaguarda(
-  existente: { empresaId: string; caixaId: string | null } | null,
-  dados: { empresaId: string },
+  existente: { empresaId: string; caixaId: string | null; contaOrigemId?: string | null | undefined } | null,
+  dados: { empresaId: string; contaOrigemId?: string | null | undefined },
   perfil: PerfilUsuario,
   tx?: ExecutorBanco
 ) {
   if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
   const caixa = await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx);
-  if (existente.caixaId && existente.caixaId !== caixa?.id) {
-    throw new Error("Lancamento nao pertence ao seu caixa aberto");
+  if (!existente.caixaId) return caixa;
+
+  if (existente.caixaId !== caixa?.id) throw proibido("Lancamento nao pertence ao seu caixa aberto");
+  // A-4, a INVARIANTE: `caixa_id` preenchido quer dizer "o dinheiro saiu da conta do PDV daquele
+  // caixa" — e o criterio que `caixaIdDaSaida` aplica na criacao. Os tres repositorios recebem
+  // `existente.caixaId` no UPDATE (o PUT nunca move lancamento de caixa), entao sem estas duas
+  // condicoes a invariante quebrava pelo OUTRO lado: bastava editar a conta para o lancamento
+  // continuar somando no fechamento com o dinheiro tendo saido de outra conta — a quebra falsa da
+  // R-015, que e exatamente o que a A-4 mandou evitar.
+  //
+  // Corpo SEM conta cai aqui de proposito: para a retaguarda `exigirContaDoCaixaNoLancamento`
+  // devolve os dados intactos (nao ha conta de PDV a repor), entao `null` chegaria ao UPDATE
+  // mantendo o `caixa_id` — o mesmo defeito B-05(c) que a rodada anterior fechou para o operador.
+  //
+  // As mesmas duas condicoes do ramo do operador, logo abaixo: quando o lancamento PERTENCE a um
+  // caixa, as regras do caixa valem para os dois perfis. O que a A-1 dispensou foi EXIGIR caixa
+  // aberto, nao a amarracao de quem ja esta amarrado.
+  if (idOuNulo(existente.contaOrigemId) !== caixa.pdvContaId) {
+    throw proibido("Conta do lancamento nao e mais a conta do PDV aberto: correcao passa a ser da Tesouraria");
+  }
+  if (idOuNulo(dados.contaOrigemId) !== caixa.pdvContaId) {
+    throw proibido("Lancamento preso ao caixa aberto precisa continuar na conta do PDV");
   }
   return caixa;
 }
