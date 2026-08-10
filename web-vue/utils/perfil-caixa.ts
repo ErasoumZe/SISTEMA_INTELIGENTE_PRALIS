@@ -10,6 +10,7 @@
 // `podeLancarSemCaixa` ja mora em `shared` exatamente para isto — o comentario dela diz que copiar a
 // lista de cargos no front criaria duas verdades. Era o que estava acontecendo.
 import { podeLancarSemCaixa, type PerfilUsuario } from "@padaria/shared";
+import type { EntidadeOperacional } from "~/types/padaria";
 
 /**
  * Operador operacional: quem NAO e retaguarda. A regra e exatamente a do servidor.
@@ -27,6 +28,32 @@ import { podeLancarSemCaixa, type PerfilUsuario } from "@padaria/shared";
 export function ehOperadorDeCaixa(perfil: PerfilUsuario | null | undefined): boolean {
   if (!perfil) return false;
   return !podeLancarSemCaixa(perfil);
+}
+
+/**
+ * A-1: o modal desta operacao exige caixa aberto para ESTE perfil?
+ *
+ * A tela pedia caixa aberto para tudo que nao fosse transferencia. Depois da A-1 isso barrava
+ * justamente quem a decisao liberou: a retaguarda sem caixa clicava "+ NOVO -> Saidas", levava
+ * "Abra um caixa" e era mandada para /caixa — onde, sem `caixa_operar`, ela nem consegue abrir um.
+ * A API aceitaria o lancamento; so a tela recusava.
+ *
+ * Os tres casos, e por que sao diferentes:
+ * - **transferencia**: nunca exigiu — `criarTransferencia` ja ramificava por `podeLancarSemCaixa` e
+ *   grava `caixa_id` nulo quando nao ha caixa;
+ * - **venda**: continua exigindo de TODO MUNDO. `criarVenda` chama `obterCaixaParaLancamento`
+ *   incondicionalmente e a A-1 nao a incluiu — liberar aqui abriria o modal para um 400 no salvar;
+ * - **despesa/mercadoria/retirada**: desde a A-1 so o OPERADOR precisa, pela mesma funcao que o
+ *   servidor consulta. Um cargo customizado nao pode divergir entre as duas pontas porque a
+ *   pergunta e literalmente a mesma.
+ */
+export function operacaoExigeCaixaAberto(
+  entidade: EntidadeOperacional,
+  perfil: PerfilUsuario | null | undefined
+): boolean {
+  if (entidade === "transferencia") return false;
+  if (entidade === "venda") return true;
+  return ehOperadorDeCaixa(perfil);
 }
 
 /**

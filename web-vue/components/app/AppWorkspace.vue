@@ -88,7 +88,13 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
-import { contaTravadaDeCaixa, nomeDaContaDoLancamento, notaDaContaDoLancamento } from "~/utils/perfil-caixa";
+import {
+  contaTravadaDeCaixa,
+  nomeDaContaDoLancamento,
+  notaDaContaDoLancamento,
+  operacaoExigeCaixaAberto
+} from "~/utils/perfil-caixa";
+import { opcoesPorEntidade, rotuloOpcao, type ChaveOpcaoOperacao } from "~/utils/opcoes-operacao";
 import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
@@ -1033,37 +1039,6 @@ async function atualizarOperacoesAutomaticamente() {
   }
 }
 
-type ChaveOpcaoOperacao =
-  | "contas"
-  | "fornecedores"
-  | "colaboradores"
-  | "sociosGestores"
-  | "produtos"
-  | "formasPagamento"
-  | "pdvs"
-  | "unidadesMedida"
-  | "patrimonioItens"
-  | "grupos";
-
-// Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
-// qualquer tela), entao carregamos as opcoes por ENTIDADE ao abrir o modal — senao os selects
-// (fornecedor, grupo, conta, colaborador...) ficam "No data available" quando a operacao e aberta
-// fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
-const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
-  venda: ["contas", "produtos", "pdvs", "formasPagamento"],
-  // B-1: `colaboradores` entrou porque a despesa oferece Colaborador como credor e a lista nao era
-  // pedida por este caminho — pelo "+ NOVO" o chip abria um select vazio, enquanto pela tela
-  // Despesas funcionava. `patrimonioItens` e `colaboradores` tambem sao as origens do item da
-  // DISCRIMINACAO (R-135), que pelo "+ NOVO" era impossivel de preencher.
-  despesa: ["contas", "fornecedores", "colaboradores", "patrimonioItens", "grupos"],
-  mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  // R-128 fez do FORNECEDOR o credor padrao da retirada — e o chip que ja vem ativo ao abrir. Sem
-  // carregar a lista, o caminho normal da retirada abria um select vazio. `colaboradores` fica para
-  // o credor LEGADO reabrir com nome, nao para lancamento novo.
-  retirada: ["contas", "fornecedores", "colaboradores", "sociosGestores", "grupos"],
-  transferencia: ["contas"]
-};
-
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
   const params = new URLSearchParams({ t: String(Date.now()) });
   if (idEmpresa) params.set("empresaId", idEmpresa);
@@ -1107,18 +1082,6 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     }
   };
 
-  const rotuloOpcao: Record<ChaveOpcaoOperacao, string> = {
-    contas: "Contas",
-    fornecedores: "Fornecedores",
-    colaboradores: "Colaboradores",
-    sociosGestores: "Sócios e Gestores",
-    produtos: "Produtos",
-    formasPagamento: "Formas de pagamento",
-    pdvs: "PDVs",
-    unidadesMedida: "Unidades de medida",
-    patrimonioItens: "Itens de patrimônio",
-    grupos: "Grupos"
-  };
   // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal
   // (+NOVO global). O que faltar vira aviso discreto.
   const faltas: string[] = [];
@@ -1175,10 +1138,11 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
     () =>
       modalOperacaoAberto.value && entidadeNova.value === entidade && operacaoEditandoId.value === (operacao?.id ?? ""),
     async () => {
-      // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
-      // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
-      // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
-      if (!caixaAberto.value && entidade !== "transferencia") {
+      // A-1: quem exige caixa aberto sai de `operacaoExigeCaixaAberto`, a mesma leitura de perfil que
+      // o servidor faz. Antes a tela pedia caixa para tudo que nao fosse transferencia e barrava a
+      // retaguarda que a decisao acabou de liberar — mandando-a para /caixa, onde sem `caixa_operar`
+      // ela nem abre um. A venda continua exigindo de todos: ela nao entrou na A-1.
+      if (!caixaAberto.value && operacaoExigeCaixaAberto(entidade, sessao.value?.perfil)) {
         notificar("Abra um caixa antes de registrar lancamentos.", "warning");
         void router.push("/caixa");
         return;
