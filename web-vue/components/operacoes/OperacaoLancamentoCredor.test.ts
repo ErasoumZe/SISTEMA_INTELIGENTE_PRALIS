@@ -12,8 +12,13 @@ import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { OPERACAO_LANCAMENTO_KEY, useOperacaoLancamento } from "~/components/operacoes/useOperacaoLancamento";
 import OperacaoLancamentoCredor from "~/components/operacoes/OperacaoLancamentoCredor.vue";
 import { formOperacaoVazio, opcoesVazias } from "~/utils/domain";
-import { estadoRecorrenciaVazio, itemDespesaVazio, itemMercadoriaVazio } from "~/utils/operacoes";
-import { contaTravadaDeCaixa } from "~/utils/perfil-caixa";
+import {
+  estadoRecorrenciaVazio,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
+  montarPayloadOperacao
+} from "~/utils/operacoes";
+import { contaTravadaDeCaixa, nomeDaContaDoLancamento } from "~/utils/perfil-caixa";
 import type { PerfilUsuario } from "@padaria/shared";
 import type { EntidadeOperacional, Opcao, OperacaoForm } from "~/types/padaria";
 
@@ -34,6 +39,8 @@ type Cenario = {
   /** Preenchido = registro ABERTO para edicao. Muda o ramo do credor legado e o da conta. */
   editandoId?: string;
   form?: Partial<OperacaoForm>;
+  /** `false` monta com o modal FECHADO, para reproduzir a ordem real de abertura. */
+  aberto?: boolean;
 };
 
 function conta(id: string, nome: string): Opcao {
@@ -56,7 +63,7 @@ function perfilDe(cargo: string, permissoes: PerfilUsuario["permissoes"]): Perfi
 function montarBloco(cenario: Cenario = {}) {
   const form = ref({ ...formOperacaoVazio(), ...cenario.form });
   const entidadeNova = ref<EntidadeOperacional>(cenario.categoria ?? "despesa");
-  const modalOperacaoAberto = ref(true);
+  const modalOperacaoAberto = ref(cenario.aberto ?? true);
   const operacaoEditandoId = ref(cenario.editandoId ?? "");
   const contas = ref<Opcao[]>(cenario.contas ?? []);
   const pdvContaId = ref(cenario.pdvContaId ?? "");
@@ -70,13 +77,16 @@ function montarBloco(cenario: Cenario = {}) {
   const perfil = ref(perfilDe(cenario.cargo ?? "Caixa", cenario.permissoes ?? ["caixa_operar"]));
   const caixaAberto = computed(() => (pdvContaId.value ? { pdvContaId: pdvContaId.value } : null));
   const contaTravadaDoCaixa = computed(() => contaTravadaDeCaixa(perfil.value, caixaAberto.value));
-  // Espelha AppWorkspace.vue:292-296 — inclusive a reserva pelo nome do PDV, que existe porque a
-  // conta do caixa pode nao estar em `contas_usuarios` do operador.
-  const contaTravadaDoCaixaNome = computed(() => {
-    if (!contaTravadaDoCaixa.value) return "";
-    const encontrada = opcoesEmpresa.value.contas.find((item) => item.id === contaTravadaDoCaixa.value);
-    return encontrada?.nome ?? pdvNome.value ?? "Conta do caixa aberto";
-  });
+  // Funcao de PRODUCAO, a mesma do AppWorkspace. Enquanto o harness reimplementava a cadeia de
+  // reserva, tres mutacoes passavam verdes — inclusive a que fazia o campo travado renderizar vazio.
+  const contaTravadaDoCaixaNome = computed(() =>
+    nomeDaContaDoLancamento({
+      contaTravada: contaTravadaDoCaixa.value,
+      contaDoFormulario: form.value.contaOrigemId,
+      contas: opcoesEmpresa.value.contas,
+      pdvNome: pdvNome.value
+    })
+  );
 
   // Espelha AppWorkspace.vue:1239-1249 na INTEGRA: depois da entrega, a funcao de producao so troca
   // a entidade e recarrega as opcoes (fronteira de rede, fora do teste). TODA a limpeza do
@@ -140,7 +150,16 @@ function montarBloco(cenario: Cenario = {}) {
   });
 
   const wrapper = mount(Workspace, { global: { stubs: { "v-icon": true } } });
-  return { wrapper, form, entidadeNova, contas, pdvContaId, operacaoEditandoId, trocarCategoriaLancamento };
+  return {
+    wrapper,
+    form,
+    entidadeNova,
+    contas,
+    pdvContaId,
+    operacaoEditandoId,
+    modalOperacaoAberto,
+    trocarCategoriaLancamento
+  };
 }
 
 /** O bloco do campo "Conta" — isola das demais `.lc-campo` (Credor, Grupo, Observacao). */
@@ -262,6 +281,65 @@ describe("B-04 - registro aberto para edicao preserva o credor legado (R-128)", 
     expect(form.value.credorTipo).toBe("colaborador");
   });
 
+  // A ORDEM REAL de `abrirOperacao` (AppWorkspace.vue): modal FECHADO e form vazio → define
+  // entidade e id → `await` do GET do detalhe → preenche o form → so entao abre o modal. Montar o
+  // formulario ja pronto escondia o que importa: com o form vazio no mount, o `immediate` dos
+  // watchers ja rodou, e o chip legado depende de eles dispararem de novo quando o detalhe chega.
+  it("Deve_OferecerOChipColaborador_Quando_ORegistroChegaPelaOrdemAssincronaReal", async () => {
+    // O bloco e montado no boot da aplicacao (o `v-dialog` e que esconde), entao os watchers
+    // `immediate` ja rodaram aqui, com o form VAZIO e sem registro.
+    const bloco = montarBloco({ aberto: false, categoria: "despesa" });
+    expect(chips(bloco.wrapper)).toEqual(["Fornecedor", "Colaborador"]);
+
+    bloco.entidadeNova.value = "retirada";
+    bloco.operacaoEditandoId.value = "retirada-antiga";
+    await nextTick();
+
+    // Chegada do detalhe: o workspace TROCA o objeto do formulario.
+    bloco.form.value = {
+      ...formOperacaoVazio(),
+      colaboradorId: "colaborador-1",
+      credorTipo: "colaborador",
+      contaOrigemId: CONTA_BANCO
+    };
+    await nextTick();
+
+    bloco.modalOperacaoAberto.value = true;
+    await nextTick();
+
+    expect(chips(bloco.wrapper)).toEqual(["Fornecedor", "Sócio ou Gestor", "Colaborador"]);
+    expect(bloco.form.value.colaboradorId).toBe("colaborador-1");
+    // A conta gravada sobrevive a abertura — o watch nao pode sobrescrever registro em edicao.
+    expect(bloco.form.value.contaOrigemId).toBe(CONTA_BANCO);
+  });
+
+  // O que sai para a API, e nao so o chip: e o payload que o servidor aceita ou recusa.
+  it("Deve_EnviarSomenteOColaboradorGravado_Quando_OPayloadDoLegadoEMontado", async () => {
+    const { form } = montarBloco({
+      editandoId: "retirada-antiga",
+      categoria: "retirada",
+      form: { colaboradorId: "colaborador-1", credorTipo: "colaborador" }
+    });
+    await nextTick();
+
+    const payload = montarPayloadOperacao("retirada", {
+      empresaId: "empresa-a",
+      form: form.value,
+      itensVenda: [],
+      tiposPagamento: [],
+      itensDespesa: [],
+      itensMercadoria: [],
+      discriminandoDespesa: false,
+      discriminandoMercadoria: false,
+      produtos: []
+    });
+
+    expect(payload.colaboradorId).toBe("colaborador-1");
+    expect(payload.fornecedorId).toBeNull();
+    expect(payload.socioGestorId).toBeNull();
+    expect(payload.credorTipo).toBe("colaborador");
+  });
+
   // Lancamento NOVO nao ganha o chip de volta — e a diferenca entre o legado e o vazamento que a
   // troca de categoria causava.
   it("Deve_NaoOferecerOChipColaborador_Quando_ARetiradaENova", () => {
@@ -368,7 +446,7 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
   // registro de conta em silencio, e o servidor aprovaria — a conta nova E a do PDV atual. Quem
   // decide a edicao e a trava do servidor (403), nao a tela.
   it("Deve_PreservarAContaGravada_Quando_ORegistroEAbertoParaEdicao", async () => {
-    const { form } = montarBloco({
+    const { wrapper, form } = montarBloco({
       contas: [conta(CONTA_PDV, "Caixa PDV 01"), conta(CONTA_BANCO, "Banco")],
       pdvContaId: CONTA_PDV,
       editandoId: "despesa-antiga",
@@ -376,6 +454,11 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
     });
     await nextTick();
     expect(form.value.contaOrigemId).toBe(CONTA_BANCO);
+
+    // E o campo tem de DIZER a conta gravada. Exibir a conta do PDV atual aqui e a tela mentindo
+    // sobre de onde o dinheiro saiu — o registro so revelaria a divergencia no 403 do salvar.
+    const travado = campoConta(wrapper).find('input[aria-label="Conta"]');
+    expect((travado.element as HTMLInputElement).value).toBe("Banco");
   });
 
   // Retaguarda de verdade: cargo Financeiro, COM `caixa_operar` e COM caixa aberto. A regra antiga

@@ -189,15 +189,17 @@ export function exigirContaDoCaixaNoLancamento<T extends { contaOrigemId?: strin
   return dados;
 }
 
-/** `""`, `null` e `undefined` sao o mesmo "vazio" — o front manda os tres. */
+/**
+ * `null` e `undefined` sao o mesmo "vazio" ao comparar com o que esta gravado: o payload pode OMITIR
+ * o campo e o banco devolve `null`. (`""` nunca chega aqui — `uuidSchema` recusa string vazia no
+ * controller —, mas a coalescencia cobre os tres sem depender disso.)
+ */
 function idOuNulo(id: string | null | undefined): string | null {
   return id ? id : null;
 }
 
 type CredoresRetirada = {
-  fornecedorId?: string | null | undefined;
   colaboradorId?: string | null | undefined;
-  socioGestorId?: string | null | undefined;
 };
 
 /**
@@ -244,21 +246,26 @@ export function exigirCredorCoerenteDaDespesa(dados: CredoresDespesa, existente?
   const fornecedor = idOuNulo(dados.fornecedorId);
   const colaborador = idOuNulo(dados.colaboradorId);
 
+  // O atalho do historico vale SO para a cardinalidade — nao para a coerencia do tipo. Enquanto ele
+  // saia da funcao inteira, dois furos passavam: `PUT` com `credorTipo` e nenhum id gravava
+  // `credor_tipo` sem credor (o CHECK do banco nao pega esse ramo), e o par legado somado a um
+  // `credorTipo` violava o CHECK no UPDATE, virando 500 de driver — o mesmo 500 que esta regra
+  // existe para eliminar.
   const parIntacto =
     existente !== undefined &&
     existente !== null &&
     idOuNulo(existente.fornecedorId) === fornecedor &&
     idOuNulo(existente.colaboradorId) === colaborador;
-  if (parIntacto) return;
 
-  if (fornecedor && colaborador) {
+  if (fornecedor && colaborador && !parIntacto) {
     throw erroValidacao("A despesa tem um credor so: fornecedor OU colaborador");
   }
-  if (dados.credorTipo === "fornecedor" && !fornecedor) {
-    throw erroValidacao("Credor incoerente: credorTipo 'fornecedor' exige fornecedorId");
+  // Vale sempre, inclusive no historico: `credorTipo` tem de apontar para o unico id preenchido.
+  if (dados.credorTipo === "fornecedor" && (!fornecedor || colaborador)) {
+    throw erroValidacao("Credor incoerente: credorTipo 'fornecedor' exige fornecedorId e nenhum colaborador");
   }
-  if (dados.credorTipo === "colaborador" && !colaborador) {
-    throw erroValidacao("Credor incoerente: credorTipo 'colaborador' exige colaboradorId");
+  if (dados.credorTipo === "colaborador" && (!colaborador || fornecedor)) {
+    throw erroValidacao("Credor incoerente: credorTipo 'colaborador' exige colaboradorId e nenhum fornecedor");
   }
 }
 
@@ -301,6 +308,11 @@ export async function validarEdicaoNoCaixaAberto(
 // Perfil de retaguarda cai no caminho de sempre, sem mudanca: unificar o comportamento dos outros
 // cargos e outra decisao, fora deste escopo.
 export async function validarEdicaoDeSaidaNoCaixa(
+  // `contaOrigemId` fica opcional porque os DTOs de detalhe (shared) o declaram assim. Tentar
+  // exigi-lo aqui quebra a compilacao nos tres services — e mudar o contrato do DTO e outra entrega.
+  // Consequencia registrada no relatorio: se um refactor tirar a coluna da projecao, o campo chega
+  // `undefined` e toda edicao de operador vira 403 em silencio, sem o compilador avisar. Quem segura
+  // isso hoje sao os testes das tres saidas, nao o tipo.
   existente: { empresaId: string; caixaId: string | null; contaOrigemId?: string | null | undefined } | null,
   dados: { empresaId: string; contaOrigemId?: string | null | undefined },
   perfil: PerfilUsuario,

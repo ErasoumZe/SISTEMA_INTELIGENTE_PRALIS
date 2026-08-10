@@ -265,27 +265,30 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     }
   });
 
-  it.each(SAIDAS)("Deve_ManterAConta_Quando_RetaguardaEditaSemInformarConta (%s)", async (nome, rota, extras) => {
-    const criada = await post(
-      cookieAdmin,
-      rota,
-      corpo(`CX-M06 put retaguarda ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
-    );
-    expect(criada.statusCode, criada.body).toBe(201);
-    const { id } = json<{ data: { id: string } }>(criada).data;
+  // A retaguarda NAO tem conta travada: o corpo sem conta nao pode ser normalizado para a conta de
+  // PDV nenhum — tem de gravar o que veio (nulo), e nao herdar a conta de um caixa alheio. E o caso
+  // simetrico do bug que a rodada anterior fechou para o operador.
+  it.each(SAIDAS)(
+    "Deve_NaoHerdarContaDePdv_Quando_RetaguardaEditaSemInformarConta (%s)",
+    async (nome, rota, extras) => {
+      const criada = await post(
+        cookieAdmin,
+        rota,
+        corpo(`CX-M06 put retaguarda ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
+      );
+      expect(criada.statusCode, criada.body).toBe(201);
+      const { id } = json<{ data: { id: string } }>(criada).data;
 
-    // Retaguarda escolhe a conta: o corpo sem conta NAO e normalizado para a conta de PDV nenhum.
-    const editada = await put(
-      cookieAdmin,
-      `${rota}/${id}`,
-      corpo(`CX-M06 put retaguarda corrigida ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
-    );
-    expect(editada.statusCode, editada.body).toBe(200);
+      const editada = await put(cookieAdmin, `${rota}/${id}`, corpo(`CX-M06 put retaguarda corrigida ${nome}`, extras));
+      expect(editada.statusCode, editada.body).toBe(200);
 
-    expect(
-      await consultarUm<{ conta_origem_id: string }>(`select conta_origem_id from ${nome}s where id = $1`, [id])
-    ).toMatchObject({ conta_origem_id: idsTeste.contaBanco });
-  });
+      expect(
+        await consultarUm<{ conta_origem_id: string | null }>(`select conta_origem_id from ${nome}s where id = $1`, [
+          id
+        ])
+      ).toMatchObject({ conta_origem_id: null });
+    }
+  );
 
   // ===== B-04 — credor conforme a categoria ==================================================
 
@@ -477,11 +480,165 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     expect(editada.statusCode, editada.body).toBe(200);
 
     expect(
+      await consultarUm<{
+        colaborador_id: string;
+        fornecedor_id: string | null;
+        credor_tipo: string;
+        descricao: string;
+        valor_original: string;
+      }>("select colaborador_id, fornecedor_id, credor_tipo, descricao, valor_original from retiradas where id = $1", [
+        id
+      ])
+    ).toMatchObject({
+      colaborador_id: idsTeste.colaboradorCaixa,
+      fornecedor_id: null,
+      credor_tipo: "colaborador",
+      descricao: "CX-M06 retirada legada corrigida",
+      valor_original: "77.00"
+    });
+  });
+
+  // "Preservar" nao e "poder trocar". Sem esta prova, afrouxar a regra para "o existente tem ALGUM
+  // colaborador" passaria na suite inteira — e um registro antigo viraria veiculo para reatribuir
+  // quem recebeu o dinheiro.
+  it("Deve_RecusarSemAlterar_Quando_PutTrocaOColaboradorDaRetiradaLegada", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo("CX-M06 legada troca de colaborador", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    await executarSql(
+      "update retiradas set fornecedor_id = null, colaborador_id = $2, credor_tipo = 'colaborador' where id = $1",
+      [id, idsTeste.colaboradorCaixa]
+    );
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/retiradas/${id}`,
+      corpo("CX-M06 legada com outro colaborador", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        colaboradorId: idsTeste.colaboradorAdmin
+      })
+    );
+    assertProblem(editada, 400, "VALIDATION_ERROR");
+
+    expect(
       await consultarUm<{ colaborador_id: string; descricao: string }>(
         "select colaborador_id, descricao from retiradas where id = $1",
         [id]
       )
-    ).toMatchObject({ colaborador_id: idsTeste.colaboradorCaixa, descricao: "CX-M06 retirada legada corrigida" });
+    ).toMatchObject({
+      colaborador_id: idsTeste.colaboradorCaixa,
+      descricao: "CX-M06 legada troca de colaborador"
+    });
+  });
+
+  it("Deve_RecusarSemAlterar_Quando_PutDaDespesaIntroduzDoisCredores", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo("CX-M06 despesa put dois credores", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 despesa put dois credores alterada", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+    assertProblem(editada, 400, "VALIDATION_ERROR");
+
+    expect(
+      await consultarUm<{ colaborador_id: string | null; descricao: string }>(
+        "select colaborador_id, descricao from despesas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ colaborador_id: null, descricao: "CX-M06 despesa put dois credores" });
+  });
+
+  // O atalho do historico vale para a CARDINALIDADE, nunca para a coerencia do tipo: sem isto o PUT
+  // gravava `credor_tipo` sem credor nenhum, e o par legado somado a um `credorTipo` estourava o
+  // CHECK no UPDATE, virando 500 de driver.
+  it("Deve_RecusarSemAlterar_Quando_PutDaDespesaDeclaraCredorTipoSemOId", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo("CX-M06 despesa sem credor", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 despesa sem credor alterada", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        credorTipo: "fornecedor"
+      })
+    );
+    assertProblem(editada, 400, "VALIDATION_ERROR");
+
+    expect(
+      await consultarUm<{ credor_tipo: string | null; descricao: string }>(
+        "select credor_tipo, descricao from despesas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ credor_tipo: null, descricao: "CX-M06 despesa sem credor" });
+  });
+
+  it("Deve_RecusarComQuatrocentos_Quando_DespesaHistoricaRecebeCredorTipoIncoerente", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo("CX-M06 historica com tipo incoerente", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    await executarSql("update despesas set colaborador_id = $2, credor_tipo = null where id = $1", [
+      id,
+      idsTeste.colaboradorCaixa
+    ]);
+
+    // Par legado intacto + `credorTipo`: antes passava pelo atalho e violava o CHECK no UPDATE (500).
+    const editada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 historica com tipo incoerente alterada", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor,
+        colaboradorId: idsTeste.colaboradorCaixa,
+        credorTipo: "fornecedor"
+      })
+    );
+    assertProblem(editada, 400, "VALIDATION_ERROR");
   });
 
   it("Deve_RecusarSemGravar_Quando_RetiradaTemDoisCredores", async () => {
@@ -520,10 +677,14 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     assertProblem(resposta, 400, "VALIDATION_ERROR");
     expect(resposta.body).toContain("um credor so");
     expect(await gravadas(descricao)).toBe(0);
-    // Sem a regra, o repositorio ainda criava divida para um colaborador que nao era o credor.
+    // Sem a regra, o repositorio ainda criava divida para um colaborador que nao era o credor. A
+    // contagem e escopada pela DESPESA (join pela descricao): global, ela dependeria da ordem dos
+    // testes e ficaria vermelha por motivo errado assim que outro caso gravasse divida.
     const divida = await consultarUm<{ total: string }>(
-      "select count(*) as total from debitos_colaboradores where colaborador_id = $1 and tipo = 'DESPESA'",
-      [idsTeste.colaboradorCaixa]
+      `select count(*) as total from debitos_colaboradores d
+         join despesas e on e.id = d.despesa_id
+        where e.descricao = $1`,
+      [descricao]
     );
     expect(Number(divida?.total ?? "0")).toBe(0);
   });
@@ -582,8 +743,31 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     );
     expect(editada.statusCode, editada.body).toBe(200);
     expect(
-      await consultarUm<{ descricao: string }>("select descricao from despesas where id = $1", [id])
-    ).toMatchObject({ descricao: "CX-M06 despesa historica corrigida" });
+      await consultarUm<{
+        descricao: string;
+        valor_original: string;
+        fornecedor_id: string;
+        colaborador_id: string;
+      }>("select descricao, valor_original, fornecedor_id, colaborador_id from despesas where id = $1", [id])
+    ).toMatchObject({
+      descricao: "CX-M06 despesa historica corrigida",
+      valor_original: "99.00",
+      fornecedor_id: idsTeste.fornecedor,
+      colaborador_id: idsTeste.colaboradorCaixa
+    });
+
+    // CONSEQUENCIA CONHECIDA, fixada aqui para nao ficar invisivel: o repositorio apaga e recria
+    // `debitos_colaboradores` a cada PUT, entao editar o VALOR de uma despesa historica incoerente
+    // REVALORA a divida de um colaborador que talvez nao seja o credor. E comportamento anterior a
+    // esta entrega, preservado de proposito porque a OS manda o historico continuar editavel.
+    // Corrigir exige saber quem e o credor de cada linha legada — decisao com migration, no relatorio.
+    const divida = await consultarUm<{ valor: string }>(
+      `select d.valor from debitos_colaboradores d
+         join despesas e on e.id = d.despesa_id
+        where e.id = $1`,
+      [id]
+    );
+    expect(divida).toMatchObject({ valor: "99.00" });
   });
 
   // ===== Retaguarda e contrato de erro =======================================================

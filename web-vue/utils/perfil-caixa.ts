@@ -27,3 +27,28 @@ export function contaTravadaDeCaixa(
 ): string {
   return ehOperadorDeCaixa(perfil) ? (caixaAberto?.pdvContaId ?? "") : "";
 }
+
+/**
+ * Nome que o campo travado EXIBE. Tem de ser o da conta que o lancamento vai usar de verdade — que
+ * e a do formulario, e nao a do PDV de agora.
+ *
+ * O campo mostrava sempre a conta do PDV atual. Num registro ABERTO para edicao cuja conta gravada e
+ * outra (PDV reapontado depois do lancamento), a tela dizia "sai da conta B" enquanto o registro e o
+ * payload carregavam a conta A — e so o 403 do servidor, no salvar, revelava a mentira.
+ *
+ * A reserva pelo nome do PDV so vale quando a conta exibida E a do caixa: para a conta gravada de um
+ * registro antigo, chamar de "conta do caixa aberto" seria repetir a mesma mentira.
+ */
+export function nomeDaContaDoLancamento(entrada: {
+  contaTravada: string;
+  contaDoFormulario: string;
+  contas: readonly { id: string; nome?: string | undefined }[];
+  pdvNome?: string | null;
+}): string {
+  if (!entrada.contaTravada) return "";
+  const exibida = entrada.contaDoFormulario || entrada.contaTravada;
+  const conta = entrada.contas.find((item) => item.id === exibida);
+  if (conta?.nome) return conta.nome;
+  if (exibida === entrada.contaTravada) return entrada.pdvNome || "Conta do caixa aberto";
+  return "Conta original do lançamento";
+}
