@@ -12,7 +12,7 @@ import type {
 } from "@padaria/shared/mercadorias";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import type { TipoDesconto } from "@padaria/shared/discriminacao";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   calcularDiscriminacaoMercadoria,
   filtrosEmpresa,
@@ -166,12 +166,13 @@ export async function criarMercadoriaRepository(
  * `dataPagamento` e para a conta do caixa: le sem lock, valida contra o retrato e escreve depois.
  * Fica travada junto para as tres saidas terem o mesmo contrato de edicao — deixar uma fora e como o
  * caminho antigo continuar existindo.
+ * Escopo de empresa no `where` e `TransacaoBanco` no tipo — ver a nota em `travarDespesaRepository`.
  */
-export async function travarMercadoriaRepository(mercadoriaId: string, db: ExecutorBanco = banco) {
+export async function travarMercadoriaRepository(mercadoriaId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
     .select({ id: mercadorias.id })
     .from(mercadorias)
-    .where(eq(mercadorias.id, mercadoriaId))
+    .where(and(eq(mercadorias.id, mercadoriaId), eq(mercadorias.empresaId, empresaId)))
     .for("no key update");
   return linha ?? null;
 }

@@ -11,17 +11,18 @@ import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { criarAcoesLancamento, type DepsLancamento } from "~/utils/lancamento-acoes";
 import { formOperacaoVazio } from "~/utils/domain";
-import { itemDespesaVazio, itemMercadoriaVazio, type OperacaoDetalhe } from "~/utils/operacoes";
+import {
+  estadoRecorrenciaVazio,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
+  type ItemVendaForm,
+  type OperacaoDetalhe,
+  type TipoPagamentoForm
+} from "~/utils/operacoes";
+// Mapa REAL de rotas: reimplementa-lo aqui faria o teste provar a propria copia.
+import { endpointOperacaoPorEntidade } from "~/utils/domain";
 import type { Recorrencia } from "@padaria/shared/recorrencia";
 import type { EntidadeOperacional } from "~/types/padaria";
-
-const ROTA_POR_ENTIDADE: Record<string, string> = {
-  despesa: "despesas",
-  mercadoria: "mercadorias",
-  retirada: "retiradas",
-  venda: "vendas",
-  transferencia: "transferencias"
-};
 
 /** Corpo que sai para a API — so os campos que estes casos afirmam. */
 type CorpoLancamento = {
@@ -62,10 +63,11 @@ function montarFio(over: Partial<DepsLancamento> = {}) {
     modalOperacaoAberto: ref(false),
     discriminandoDespesa: ref(false),
     discriminandoMercadoria: ref(false),
-    itensVenda: ref([]),
-    tiposPagamento: ref([]),
+    itensVenda: ref<ItemVendaForm[]>([]),
+    tiposPagamento: ref<TipoPagamentoForm[]>([]),
     itensDespesa: ref([itemDespesaVazio()]),
-    itensMercadoria: ref([itemMercadoriaVazio()])
+    itensMercadoria: ref([itemMercadoriaVazio()]),
+    recorrencia: ref(estadoRecorrenciaVazio())
   };
 
   // Registra a ordem real dos efeitos: e o que prova que o modal abre DEPOIS do preenchimento.
@@ -94,14 +96,16 @@ function montarFio(over: Partial<DepsLancamento> = {}) {
   const deps: DepsLancamento = {
     api,
     refs,
-    rotaDaEntidade: (entidade) => ROTA_POR_ENTIDADE[entidade] ?? entidade,
+    rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
     empresaId: () => "empresa-a",
     produtos: () => [],
-    recorrencia: () => undefined,
+    // Uma serie de verdade: com `undefined` os dois ramos (novo e edicao) produziam payload sem
+    // `recorrencia`, e a assercao de que a edicao NAO regenera a serie nao provava nada.
+    recorrencia: () => ({ frequencia: "mes", repeticoes: 12 }),
     carregarOpcoes: vi.fn(async () => {
       ordem.push("opcoes");
     }),
-    limparAuxiliares: vi.fn(() => {
+    limparFotos: vi.fn(() => {
       ordem.push("limpar");
     }),
     notificar: vi.fn(),
@@ -214,6 +218,27 @@ describe("enviarLancamento - a requisicao que sai", () => {
     expect(api.put).not.toHaveBeenCalled();
     expect(posts).toHaveLength(1);
     expect(posts[0]!.rota).toBe("/api/retiradas");
+    // Na CRIACAO a serie VAI junto — e o contraste que torna a assercao do PUT significativa.
+    expect(posts[0]!.corpo.recorrencia).toEqual({ frequencia: "mes", repeticoes: 12 });
+  });
+
+  // O reset dos auxiliares mora no fio justamente para ter esta prova: enquanto era closure do
+  // AppWorkspace, apagar o reset da recorrencia deixava a suite inteira verde — e o efeito e criar
+  // uma segunda serie de 12 sem o usuario perceber.
+  it("Deve_ZerarRecorrenciaEItens_Quando_OModalEReaberto", async () => {
+    const { acoes, refs } = montarFio();
+    refs.recorrencia.value = { aberta: true, numero: "12", frequencia: "mes", dias: [true, false] };
+    refs.itensDespesa.value = [itemDespesaVazio(), itemDespesaVazio(), itemDespesaVazio()];
+    refs.itensVenda.value = [
+      { descricaoProduto: "sujeira", quantidade: "3", valorUnitario: "9", valorTotal: "27", produtoId: "p1" }
+    ];
+
+    await acoes.abrirLancamento("despesa");
+
+    expect(refs.recorrencia.value).toEqual(estadoRecorrenciaVazio());
+    expect(refs.itensDespesa.value).toHaveLength(1);
+    expect(refs.itensVenda.value).toHaveLength(1);
+    expect(refs.itensVenda.value[0]!.descricaoProduto).toBe("");
   });
 
   it("Deve_NaoEnviar_Quando_APreValidacaoBarra", async () => {

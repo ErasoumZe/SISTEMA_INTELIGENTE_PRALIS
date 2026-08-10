@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDetalheDto, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   filtrosEmpresa,
   numeroDecimal,
@@ -109,12 +109,13 @@ export async function criarRetiradaRepository(
  * divida de funcionario ja quitada.
  *
  * `NO KEY UPDATE` pelo mesmo motivo: `debitos_colaboradores.retirada_id` referencia esta linha.
+ * Escopo de empresa no `where` e `TransacaoBanco` no tipo — ver a nota em `travarDespesaRepository`.
  */
-export async function travarRetiradaRepository(retiradaId: string, db: ExecutorBanco = banco) {
+export async function travarRetiradaRepository(retiradaId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
     .select({ id: retiradas.id })
     .from(retiradas)
-    .where(eq(retiradas.id, retiradaId))
+    .where(and(eq(retiradas.id, retiradaId), eq(retiradas.empresaId, empresaId)))
     .for("no key update");
   return linha ?? null;
 }

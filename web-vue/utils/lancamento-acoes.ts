@@ -11,9 +11,13 @@ import type { Recorrencia } from "@padaria/shared/recorrencia";
 import type { Ref } from "vue";
 import type { EntidadeOperacional, Opcao, OperacaoForm } from "~/types/padaria";
 import {
+  estadoRecorrenciaVazio,
   formOperacaoDeDetalhe,
+  itemDespesaVazio,
+  itemMercadoriaVazio,
   montarPayloadOperacao,
   validarOperacaoParaEnvio,
+  type EstadoRecorrencia,
   type ItemDespesaForm,
   type ItemMercadoriaForm,
   type ItemVendaForm,
@@ -43,6 +47,7 @@ export type RefsLancamento = {
   tiposPagamento: Ref<TipoPagamentoForm[]>;
   itensDespesa: Ref<ItemDespesaForm[]>;
   itensMercadoria: Ref<ItemMercadoriaForm[]>;
+  recorrencia: Ref<EstadoRecorrencia>;
 };
 
 export type DepsLancamento = {
@@ -56,8 +61,8 @@ export type DepsLancamento = {
   recorrencia: () => Recorrencia | undefined;
   /** Carga das listas do formulario. Fica fora do fio: e outra fronteira de rede, ja testada. */
   carregarOpcoes: (entidade: EntidadeOperacional) => Promise<void>;
-  /** Reset do que NAO e formulario (fotos, recorrencia). Fica no componente. */
-  limparAuxiliares: () => void;
+  /** So as FOTOS, que sao composables e nao refs. Todo o resto do reset vive no fio, e e testado. */
+  limparFotos: () => void;
   notificar: (mensagem: string, tipo?: string) => void;
 };
 
@@ -95,7 +100,17 @@ export function criarAcoesLancamento(deps: DepsLancamento) {
     // `aplicarDetalhe`, e sem zerar aqui ele herdaria a discriminacao do registro anterior.
     refs.discriminandoDespesa.value = false;
     refs.discriminandoMercadoria.value = false;
-    deps.limparAuxiliares();
+    refs.itensVenda.value = [
+      { descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }
+    ];
+    refs.tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
+    refs.itensDespesa.value = [itemDespesaVazio()];
+    refs.itensMercadoria.value = [itemMercadoriaVazio()];
+    // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
+    // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber. Fica AQUI, e nao numa
+    // closure do componente, justamente para ter teste.
+    refs.recorrencia.value = estadoRecorrenciaVazio();
+    deps.limparFotos();
 
     await deps.carregarOpcoes(entidade);
 

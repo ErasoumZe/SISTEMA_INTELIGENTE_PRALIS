@@ -200,7 +200,9 @@ export async function atualizarMercadoria(
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
-    if (!(await travarMercadoriaRepository(mercadoriaId, tx))) throw new Error("Registro nao encontrado");
+    if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
@@ -235,6 +237,11 @@ export async function discriminarMercadoria(
 ): Promise<MercadoriaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_discriminar");
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler — ver a nota em `discriminarDespesa`: a conferencia da soma compara com o
+    // `valorOriginal` GRAVADO, e a discriminacao reescreve os itens.
+    if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");

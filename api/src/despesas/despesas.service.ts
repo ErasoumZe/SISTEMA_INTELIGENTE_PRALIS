@@ -207,7 +207,7 @@ export async function atualizarDespesa(
     // TRAVA antes de ler: daqui para baixo, `existente` e o retrato sob lock, e nenhuma outra
     // transacao altera a linha ate esta terminar. Toda validacao que compara com o estado anterior
     // — a excecao de credor legado, a conta gravada, a data de pagamento — usa ESTE retrato.
-    if (!(await travarDespesaRepository(despesaId, tx))) throw new Error("Registro nao encontrado");
+    if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
@@ -249,6 +249,13 @@ export async function discriminarDespesa(
 ): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_discriminar");
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler, como na edicao: a discriminacao decide contra o registro GRAVADO
+    // (`valorOriginal` para a conferencia da soma, e os itens para a R-135) e escreve nas MESMAS
+    // tabelas. Sem o lock, uma edicao concorrente que sanea o registro era desfeita por uma
+    // discriminacao validada contra o retrato velho — o mesmo defeito da edicao, pela porta de tras.
+    if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");

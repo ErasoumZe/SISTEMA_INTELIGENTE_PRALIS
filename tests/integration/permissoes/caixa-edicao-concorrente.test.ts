@@ -10,6 +10,7 @@ import {
   executarSql,
   fecharBloqueador,
   json,
+  sessoesBloqueadasPor,
   snapshotDoLancamento
 } from "../../setup/integracao.js";
 
@@ -183,6 +184,87 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       [id]
     );
     expect(Number(debitos?.total ?? "0")).toBe(0);
+  });
+
+  // O lock e escopado por EMPRESA. Sem isso, um PUT de outra empresa trava a linha alheia e, quando
+  // ela esta em edicao, FICA ESPERANDO — os 404 sao iguais, mas a latencia vira oraculo de
+  // existencia cross-tenant. Aqui a resposta tem de vir NA HORA, com o bloqueador ainda aberto.
+  it("Deve_Recusar404NaHora_Quando_OutraEmpresaTentaEditarLinhaTravada", async () => {
+    const criada = await post(
+      "/api/despesas",
+      corpo("CX-M06 lock cross-tenant", {
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
+
+      // A despesa e da empresa A; o corpo diz empresa B. O lock nao pode nem encostar nela.
+      const invasao = put(
+        `/api/despesas/${id}`,
+        corpo("CX-M06 invasao", { empresaId: idsTeste.empresaB, grupoDespesaId: idsTeste.grupoDespesaOperacional })
+      );
+      // Sem escopo no `where`, esta promessa ficaria pendente ate o bloqueador soltar.
+      const resposta = await invasao;
+      expect([403, 404]).toContain(resposta.statusCode);
+      expect(await sessoesBloqueadasPor(bloqueador)).toBe(0);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+  });
+
+  // A DISCRIMINACAO escreve as mesmas tabelas e decide contra o registro gravado (soma conferida e
+  // R-135). Sem lock, ela desfazia por tras o que uma edicao concorrente tinha acabado de sanear.
+  it("Deve_EsperarOLock_Quando_ADiscriminacaoConcorreComAEdicao", async () => {
+    const criada = await post(
+      "/api/despesas",
+      corpo("CX-M06 discriminacao concorrente", {
+        valorOriginal: 100,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [id]);
+
+      const discriminacao = contexto.app.inject({
+        method: "PATCH",
+        url: `/api/despesas/${id}/discriminar`,
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          itensDespesa: [
+            {
+              descricao: "Item",
+              valor: 100,
+              quantidade: 1,
+              valorUnitario: 100,
+              patrimonioItemId: idsTeste.patrimonioItemForno
+            }
+          ]
+        }
+      });
+
+      // Tem de ESPERAR o lock — e o que prova que a discriminacao passou a ler sob trava.
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+      expect(await aindaPendente(discriminacao)).toBe(true);
+
+      await bloqueador.cliente.query("commit");
+      await discriminacao;
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
   });
 
   // A recusa da corrida nao pode deixar rastro: o registro tem de sair EXATAMENTE como T1 o deixou.

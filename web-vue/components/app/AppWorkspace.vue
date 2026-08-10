@@ -1022,18 +1022,6 @@ async function atualizarOperacoesAutomaticamente() {
   }
 }
 
-// Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
-function preencherFormOperacao(entidade: EntidadeOperacional, detalhe: OperacaoDetalhe) {
-  const preenchido = formOperacaoDeDetalhe(entidade, detalhe);
-  form.value = { ...form.value, ...preenchido.form };
-  discriminandoDespesa.value = preenchido.discriminandoDespesa;
-  discriminandoMercadoria.value = preenchido.discriminandoMercadoria;
-  if (preenchido.itensVenda) itensVenda.value = preenchido.itensVenda;
-  if (preenchido.tiposPagamento) tiposPagamento.value = preenchido.tiposPagamento;
-  if (preenchido.itensDespesa) itensDespesa.value = preenchido.itensDespesa;
-  if (preenchido.itensMercadoria) itensMercadoria.value = preenchido.itensMercadoria;
-}
-
 type ChaveOpcaoOperacao =
   | "contas"
   | "fornecedores"
@@ -1137,7 +1125,8 @@ const acoesLancamento = criarAcoesLancamento({
     itensVenda,
     tiposPagamento,
     itensDespesa,
-    itensMercadoria
+    itensMercadoria,
+    recorrencia
   },
   rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
   empresaId: () => empresaId.value,
@@ -1152,16 +1141,10 @@ const acoesLancamento = criarAcoesLancamento({
       notificar(mensagemErro(error), "error");
     }
   },
-  limparAuxiliares: () => {
+  // So as fotos: sao composables, nao refs. O resto do reset vive no fio, onde o teste alcanca.
+  limparFotos: () => {
     fotoDocumento.limpar();
     fotoNota.limpar();
-    itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
-    tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-    itensDespesa.value = [itemDespesaVazio()];
-    itensMercadoria.value = [itemMercadoriaVazio()];
-    // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
-    // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
-    recorrencia.value = estadoRecorrenciaVazio();
   },
   notificar
 });
@@ -1237,14 +1220,16 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   try {
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-    preencherFormOperacao(entidade, detalhe);
+    // A MESMA funcao que o fio usa para abrir em edicao: enquanto havia uma copia aqui, um campo
+    // novo em `FormOperacaoPreenchido` precisava ser espelhado nos dois lugares e so um tinha teste.
+    acoesLancamento.aplicarDetalhe(entidade, detalhe);
     if (detalhe.fotoDocumentoUrl) {
       void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
     }
     if (detalhe.fotoNotaUrl) {
       void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
     }
-    // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
+    // O cabecalho pendente nao tem itens: `aplicarDetalhe` desligaria o modo de itens.
     discriminandoDespesa.value = entidade === "despesa";
     discriminandoMercadoria.value = entidade === "mercadoria";
   } catch (error) {

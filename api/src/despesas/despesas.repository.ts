@@ -10,7 +10,7 @@ import type {
 } from "@padaria/shared/despesas";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import type { TipoDesconto } from "@padaria/shared/discriminacao";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   calcularDiscriminacaoDespesa,
   filtrosEmpresa,
@@ -208,12 +208,21 @@ export async function criarDespesaRepository(
  *
  * Fica numa consulta propria em vez de `.for(...)` no detalhe porque o mesmo repositorio de detalhe
  * serve o GET, e leitura pura nao pode travar linha.
+ *
+ * O ESCOPO DE EMPRESA entra no proprio `where`, e nao so na decisao do service. Com `FOR ...` isso
+ * deixa de ser estilo: travar primeiro e recusar depois faz o request de outro tenant ESPERAR
+ * quando o id existe e esta em edicao — um oraculo de existencia por LATENCIA, que os 404 iguais
+ * nao cobrem — e ainda encosta um lock numa linha alheia. Mesma regra do lock da raiz de
+ * colaboradores (`colaboradores.repository.ts`).
+ *
+ * `db` e `TransacaoBanco`, e nao `ExecutorBanco`: `FOR ...` na conexao base libera o lock na
+ * instrucao seguinte e nao serializa coisa nenhuma. Com este tipo o compilador RECUSA o `banco`.
  */
-export async function travarDespesaRepository(despesaId: string, db: ExecutorBanco = banco) {
+export async function travarDespesaRepository(despesaId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
     .select({ id: despesas.id })
     .from(despesas)
-    .where(eq(despesas.id, despesaId))
+    .where(and(eq(despesas.id, despesaId), eq(despesas.empresaId, empresaId)))
     .for("no key update");
   return linha ?? null;
 }
