@@ -270,7 +270,8 @@ describe("recorrencia de lancamento (D3) integration", () => {
         descricao: "Pro labore mensal",
         valorOriginal: 500,
         contaOrigemId: idsTeste.contaCaixa,
-        colaboradorId: idsTeste.colaboradorCaixa,
+        // R-128: retirada NOVA e de fornecedor ou socio/gestor.
+        fornecedorId: idsTeste.fornecedor,
         grupoRetiradaId: idsTeste.grupoRetiradaSangria,
         recorrencia: { frequencia: "mes", repeticoes: 3 }
       }

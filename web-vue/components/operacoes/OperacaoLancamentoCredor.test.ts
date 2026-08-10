@@ -13,6 +13,8 @@ import { OPERACAO_LANCAMENTO_KEY, useOperacaoLancamento } from "~/components/ope
 import OperacaoLancamentoCredor from "~/components/operacoes/OperacaoLancamentoCredor.vue";
 import { formOperacaoVazio, opcoesVazias } from "~/utils/domain";
 import { estadoRecorrenciaVazio, itemDespesaVazio, itemMercadoriaVazio } from "~/utils/operacoes";
+import { contaTravadaDeCaixa } from "~/utils/perfil-caixa";
+import type { PerfilUsuario } from "@padaria/shared";
 import type { EntidadeOperacional, Opcao, OperacaoForm } from "~/types/padaria";
 
 const CONTA_PDV = "conta-do-pdv";
@@ -21,10 +23,13 @@ const CONTA_COFRE = "conta-cofre";
 
 type Cenario = {
   contas?: Opcao[];
-  /** "" = perfil de retaguarda (escolhe a conta); preenchido = operador com caixa aberto. */
+  /** Conta do PDV do caixa ABERTO. So vira trava se o PERFIL for operacional. */
   pdvContaId?: string;
   /** Nome do PDV, reserva quando a conta do caixa nao esta entre as contas vinculadas. */
   pdvNome?: string;
+  /** Cargo real. "Caixa" = operador; "Financeiro"/"Tesouraria"/"Gerencia" = retaguarda. */
+  cargo?: string;
+  permissoes?: PerfilUsuario["permissoes"];
   categoria?: EntidadeOperacional;
   /** Preenchido = registro ABERTO para edicao. Muda o ramo do credor legado e o da conta. */
   editandoId?: string;
@@ -33,6 +38,19 @@ type Cenario = {
 
 function conta(id: string, nome: string): Opcao {
   return { id, nome };
+}
+
+function perfilDe(cargo: string, permissoes: PerfilUsuario["permissoes"]): PerfilUsuario {
+  return {
+    usuarioId: "u",
+    colaboradorId: "c",
+    cargoIds: ["cargo"],
+    cargos: [{ id: "cargo", nome: cargo }],
+    role: "usuario_comum",
+    nome: cargo,
+    email: `${cargo}@teste.local`,
+    permissoes
+  };
 }
 
 function montarBloco(cenario: Cenario = {}) {
@@ -46,9 +64,14 @@ function montarBloco(cenario: Cenario = {}) {
 
   const opcoesEmpresa = computed(() => ({ ...opcoesVazias(), contas: contas.value }));
 
-  // Espelha AppWorkspace.vue:288 e :292-296 — inclusive a reserva pelo nome do PDV, que existe
-  // porque a conta do caixa pode nao estar em `contas_usuarios` do operador.
-  const contaTravadaDoCaixa = computed(() => pdvContaId.value);
+  // A decisao "e operador?" vem da FUNCAO DE PRODUCAO que o AppWorkspace usa. O harness so escolhe o
+  // perfil e o caixa; antes ele injetava `contaTravadaDoCaixa` pronta, e por isso um erro na regra
+  // de perfil era invisivel para esta suite.
+  const perfil = ref(perfilDe(cenario.cargo ?? "Caixa", cenario.permissoes ?? ["caixa_operar"]));
+  const caixaAberto = computed(() => (pdvContaId.value ? { pdvContaId: pdvContaId.value } : null));
+  const contaTravadaDoCaixa = computed(() => contaTravadaDeCaixa(perfil.value, caixaAberto.value));
+  // Espelha AppWorkspace.vue:292-296 — inclusive a reserva pelo nome do PDV, que existe porque a
+  // conta do caixa pode nao estar em `contas_usuarios` do operador.
   const contaTravadaDoCaixaNome = computed(() => {
     if (!contaTravadaDoCaixa.value) return "";
     const encontrada = opcoesEmpresa.value.contas.find((item) => item.id === contaTravadaDoCaixa.value);
@@ -355,12 +378,15 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
     expect(form.value.contaOrigemId).toBe(CONTA_BANCO);
   });
 
-  // O nome diz o que o teste PROVA: `contaTravadaDoCaixa` vazia. Quem decide se ela e vazia e o
-  // `perfilCaixaOperacional` do AppWorkspace, que este harness nao monta.
-  it("Deve_ManterOSeletorDeContas_Quando_NaoHaContaTravada", async () => {
+  // Retaguarda de verdade: cargo Financeiro, COM `caixa_operar` e COM caixa aberto. A regra antiga
+  // da tela (`caixa_operar && !caixas_gerenciar`) travaria o campo para ele; a do servidor nao. Quem
+  // responde aqui e a funcao de producao compartilhada.
+  it("Deve_ManterOSeletorDeContas_Quando_PerfilEDeRetaguarda", async () => {
     const { wrapper, form } = montarBloco({
       contas: [conta(CONTA_BANCO, "Banco"), conta(CONTA_COFRE, "Cofre")],
-      pdvContaId: ""
+      cargo: "Financeiro",
+      permissoes: ["caixa_operar"],
+      pdvContaId: CONTA_PDV
     });
 
     const campo = campoConta(wrapper);
@@ -376,8 +402,13 @@ describe("B-05 - a conta do operador vem do PDV, travada", () => {
 
   // Quem ESCOLHE a conta e realmente nao tem nenhuma vinculada continua recebendo o aviso — ele nao
   // pode sumir junto com o falso.
-  it("Deve_AvisarSemContaVinculada_Quando_NaoHaContaTravadaNemContas", () => {
-    const { wrapper } = montarBloco({ contas: [], pdvContaId: "" });
+  it("Deve_AvisarSemContaVinculada_Quando_RetaguardaNaoTemContas", () => {
+    const { wrapper } = montarBloco({
+      contas: [],
+      cargo: "Tesouraria",
+      permissoes: ["caixa_operar"],
+      pdvContaId: CONTA_PDV
+    });
 
     const campo = campoConta(wrapper);
     expect(campo.find(".lc-aviso-contas").exists()).toBe(true);

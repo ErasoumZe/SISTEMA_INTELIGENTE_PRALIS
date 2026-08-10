@@ -23,6 +23,7 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
+  exigirCredorCoerenteDaDespesa,
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
@@ -88,6 +89,8 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
+  // Um tipo de credor por vez. Sem `existente`, e criacao: nao existe historico para preservar.
+  exigirCredorCoerenteDaDespesa(dados);
   const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
@@ -213,6 +216,9 @@ export async function atualizarDespesa(
     // sem vinculo, nao. Se viesse antes, um id inexistente responderia "falta vinculo" em vez de
     // "registro nao encontrado".
     exigirVinculoDosItensDespesa(dados.itensDespesa, existente!.itensDespesa);
+    // Um tipo de credor por vez, sem punir o historico: se o par de credores chega igual ao que
+    // esta gravado, o operador esta mexendo em outro campo.
+    exigirCredorCoerenteDaDespesa(dados, existente);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     // R-121 tambem na EDICAO: `validarEdicaoDeSaidaNoCaixa` recusa uma conta DIFERENTE, mas corpo

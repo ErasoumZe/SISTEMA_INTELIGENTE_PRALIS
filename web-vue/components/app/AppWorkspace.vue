@@ -88,6 +88,7 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
+import { contaTravadaDeCaixa } from "~/utils/perfil-caixa";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
 type TipoPagina =
@@ -280,12 +281,13 @@ const {
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
 const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
-const perfilCaixaOperacional = computed(
-  () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
-);
 // R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
-const contaTravadaDoCaixa = computed(() => (perfilCaixaOperacional.value ? (caixaAberto.value?.pdvContaId ?? "") : ""));
+//
+// Quem responde "e operador?" e `utils/perfil-caixa`, que usa a MESMA `podeLancarSemCaixa` do
+// servidor. Antes a tela decidia por `caixa_operar && !caixas_gerenciar` — outra regra, que
+// divergia da API nos dois sentidos.
+const contaTravadaDoCaixa = computed(() => contaTravadaDeCaixa(sessao.value?.perfil, caixaAberto.value));
 // O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador —
 // e ai ela nao existe na lista de opcoes e o campo apareceria cinza e VAZIO. A trava vem do caixa,
 // nao do vinculo: entao a tela sempre diz de qual conta a saida vai sair, com o PDV como reserva.

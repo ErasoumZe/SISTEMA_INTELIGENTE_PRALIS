@@ -189,6 +189,79 @@ export function exigirContaDoCaixaNoLancamento<T extends { contaOrigemId?: strin
   return dados;
 }
 
+/** `""`, `null` e `undefined` sao o mesmo "vazio" — o front manda os tres. */
+function idOuNulo(id: string | null | undefined): string | null {
+  return id ? id : null;
+}
+
+type CredoresRetirada = {
+  fornecedorId?: string | null | undefined;
+  colaboradorId?: string | null | undefined;
+  socioGestorId?: string | null | undefined;
+};
+
+/**
+ * R-128 NO SERVIDOR: a retirada NOVA e de fornecedor ou socio/gestor. Colaborador so sobrevive no
+ * registro que JA foi gravado com ele.
+ *
+ * Ate aqui a R-128 vivia so na tela — o contrato aceitava `colaboradorId` de propósito, para o
+ * historico reabrir. Só que "aceitar sempre" deixava qualquer cliente que nao fosse a tela gravar
+ * retirada NOVA com colaborador, e deixava o PUT transformar uma retirada moderna em retirada de
+ * colaborador. O que distingue os dois casos e o registro EXISTENTE, e nao o payload — por isso a
+ * regra mora aqui, e nao num `superRefine` do zod, que nao enxerga o que ja esta gravado e
+ * tornaria o legado impossivel de salvar.
+ *
+ * Exige o MESMO colaborador: preservar e diferente de poder trocar quem recebeu o dinheiro usando
+ * um registro antigo como veiculo.
+ */
+export function exigirCredorDaRetirada(dados: CredoresRetirada, existente?: CredoresRetirada | null): void {
+  const colaborador = idOuNulo(dados.colaboradorId);
+  if (!colaborador) return;
+  if (existente && idOuNulo(existente.colaboradorId) === colaborador) return;
+  throw erroValidacao("Retirada nao aceita colaborador como credor: use fornecedor ou socio/gestor (R-128)");
+}
+
+type CredoresDespesa = {
+  fornecedorId?: string | null | undefined;
+  colaboradorId?: string | null | undefined;
+  credorTipo?: string | null | undefined;
+};
+
+/**
+ * A despesa tem UM tipo de credor por vez (FOTO 2: Fornecedor OU Colaborador).
+ *
+ * O CHECK do banco so morde quando `credor_tipo` esta preenchido, entao um payload com os dois ids
+ * e SEM `credorTipo` gravava os dois — e ainda criava divida em `debitos_colaboradores` para um
+ * colaborador que nao era o credor. Com `credorTipo` incoerente, o CHECK estourava no INSERT e
+ * virava 500, porque erro de driver e relancado; agora a recusa e 400 antes de qualquer escrita.
+ *
+ * O registro HISTORICO com os dois ids e `credor_tipo` nulo continua editavel: se o par de credores
+ * chega igual ao que esta gravado, o operador esta mexendo em outro campo e nao e ele quem tem de
+ * pagar por um dado que o sistema deixou entrar. Corrigir o historico e outra decisao, com migration
+ * e contagem — nao um 400 na cara de quem so queria arrumar o valor.
+ */
+export function exigirCredorCoerenteDaDespesa(dados: CredoresDespesa, existente?: CredoresDespesa | null): void {
+  const fornecedor = idOuNulo(dados.fornecedorId);
+  const colaborador = idOuNulo(dados.colaboradorId);
+
+  const parIntacto =
+    existente !== undefined &&
+    existente !== null &&
+    idOuNulo(existente.fornecedorId) === fornecedor &&
+    idOuNulo(existente.colaboradorId) === colaborador;
+  if (parIntacto) return;
+
+  if (fornecedor && colaborador) {
+    throw erroValidacao("A despesa tem um credor so: fornecedor OU colaborador");
+  }
+  if (dados.credorTipo === "fornecedor" && !fornecedor) {
+    throw erroValidacao("Credor incoerente: credorTipo 'fornecedor' exige fornecedorId");
+  }
+  if (dados.credorTipo === "colaborador" && !colaborador) {
+    throw erroValidacao("Credor incoerente: credorTipo 'colaborador' exige colaboradorId");
+  }
+}
+
 // R-123: as ocorrencias FUTURAS de uma serie nascem fora de qualquer caixa aberto
 // (lancamentos.recorrencia.ts: so a 1a recebe caixaId). Amarrar essas ocorrencias a conta de um PDV
 // que talvez nem exista em tres meses cria lancamento orfao por construcao — entao recorrencia e
@@ -228,7 +301,7 @@ export async function validarEdicaoNoCaixaAberto(
 // Perfil de retaguarda cai no caminho de sempre, sem mudanca: unificar o comportamento dos outros
 // cargos e outra decisao, fora deste escopo.
 export async function validarEdicaoDeSaidaNoCaixa(
-  existente: { empresaId: string; caixaId: string | null } | null,
+  existente: { empresaId: string; caixaId: string | null; contaOrigemId?: string | null | undefined } | null,
   dados: { empresaId: string; contaOrigemId?: string | null | undefined },
   perfil: PerfilUsuario,
   tx?: ExecutorBanco
@@ -247,6 +320,14 @@ export async function validarEdicaoDeSaidaNoCaixa(
     throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
   }
   if (existente.caixaId !== caixa.id) throw proibido("Lancamento nao pertence ao seu caixa aberto");
+  // A conta JA GRAVADA tem de ser a do PDV do caixa aberto. Sem esta condicao, um PDV reapontado
+  // para outra conta depois do lancamento abria a porta dos fundos: o corpo vinha sem conta, a
+  // normalizacao preenchia com a conta NOVA e o registro historico MUDAVA de conta em silencio —
+  // saindo do saldo de uma conta e entrando no de outra. R-122: o operador so corrige o que ainda
+  // pertence ao caixa que ele tem aberto; PDV reapontado vira ato de tesouraria.
+  if (idOuNulo(existente.contaOrigemId) !== caixa.pdvContaId) {
+    throw proibido("Conta do lancamento nao e mais a conta do PDV aberto: correcao passa a ser da Tesouraria");
+  }
   if (dados.contaOrigemId && dados.contaOrigemId !== caixa.pdvContaId) {
     throw proibido("Lancamento do operador Caixa precisa sair da conta do PDV aberto");
   }
@@ -368,8 +449,17 @@ export async function validarReferenciasRetirada(
 ): Promise<string | null> {
   const conta = await validarConta(dados, db);
   if (conta) return conta;
-  // R-047: o credor da retirada e colaborador OU socio/gestor — o zod ja garante que e exatamente
-  // um dos dois; aqui so confirmamos que o escolhido existe NA EMPRESA.
+  // R-047 + R-128: o credor da retirada e fornecedor, socio/gestor ou (historico) colaborador — o
+  // zod garante que e exatamente UM; aqui confirmamos que o escolhido existe NA EMPRESA.
+  //
+  // O fornecedor ficou de fora desta lista ate 09/08/2026: o comentario antigo so falava de
+  // colaborador e socio porque e anterior a R-128, que passou a ofertar fornecedor na retirada. A
+  // FK `retiradas.fornecedor_id` e global, nao por empresa — sem esta linha uma retirada da empresa
+  // A aceitava credor da empresa B e o nome dele vazava no detalhe. Despesa e mercadoria ja
+  // validavam; a retirada era a unica fora.
+  if (dados.fornecedorId && !(await existeNaEmpresa(fornecedores, dados.fornecedorId, dados.empresaId, db))) {
+    return "Fornecedor";
+  }
   if (dados.colaboradorId && !(await existeNaEmpresa(colaboradores, dados.colaboradorId, dados.empresaId, db))) {
     return "Colaborador";
   }

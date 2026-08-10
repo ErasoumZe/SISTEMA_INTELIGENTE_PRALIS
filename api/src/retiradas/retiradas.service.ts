@@ -18,6 +18,7 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
+  exigirCredorDaRetirada,
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
@@ -62,6 +63,8 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
+  // R-128 no servidor: retirada NOVA nao aceita colaborador. Sem `existente`, e criacao.
+  exigirCredorDaRetirada(dados);
   const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
@@ -147,6 +150,9 @@ export async function atualizarRetirada(
     exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);
     // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
     exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
+    // R-128 na EDICAO: o colaborador so continua no registro que JA era dele. Retirada moderna nao
+    // vira retirada de colaborador pela porta do PUT.
+    exigirCredorDaRetirada(dados, existente);
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     // R-121 tambem na EDICAO — ver a nota em `atualizarDespesa`: corpo sem conta zerava a conta

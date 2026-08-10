@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 async function usuarioAdminId() {
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
@@ -104,7 +104,8 @@ describe("operacoes edicao integration", () => {
       descricao: "Retirada edicao",
       valorOriginal: 2,
       contaOrigemId: contaPdvId,
-      colaboradorId: idsTeste.colaboradorAdmin,
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor.
+      fornecedorId: idsTeste.fornecedor,
       grupoRetiradaId: idsTeste.grupoRetiradaSangria
     });
     const transferenciaId = await criar("/api/transferencias", {
@@ -196,6 +197,13 @@ describe("operacoes edicao integration", () => {
     );
     expect(debitoDespesa).toMatchObject({ total: 1, valor: "5.00" });
 
+    // O debito de colaborador so existe na retirada de COLABORADOR, que desde a R-128 no servidor e
+    // caminho de historico: a retirada nasce com fornecedor e e convertida no banco, como estao os
+    // registros antigos. Editar uma retirada legada tem de continuar recriando o debito.
+    await executarSql(
+      "update retiradas set fornecedor_id = null, colaborador_id = $2, credor_tipo = 'colaborador' where id = $1",
+      [retiradaId, idsTeste.colaboradorAdmin]
+    );
     await atualizar(`/api/retiradas/${retiradaId}`, {
       empresaId: idsTeste.empresaA,
       dataReferencia: dataRef,

@@ -123,7 +123,8 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       descricao: "Vale funcionario",
       valorOriginal: 30,
       contaOrigemId: contaId,
-      colaboradorId: idsTeste.colaboradorAdmin,
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor.
+      fornecedorId: idsTeste.fornecedor,
       grupoRetiradaId: idsTeste.grupoRetiradaSangria
     });
     // MERCADORIA -15

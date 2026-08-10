@@ -190,8 +190,10 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
   // O historico e o ponto sensivel da R-128: retirada gravada com colaborador nao pode virar linha
   // sem credor na tela so porque o leque de opcoes mudou.
   it("retirada ANTIGA com colaborador continua legivel e ainda salva", async () => {
-    // Criada pelo MESMO caminho que um cliente antigo usaria (payload com colaboradorId): o servidor
-    // continua aceitando, senao a retirada historica nao teria como ser salva de novo.
+    // O registro HISTORICO e montado no banco, e nao pelo POST: desde que a R-128 passou a valer no
+    // servidor, retirada NOVA com colaborador e recusada, e criar a fixture pelo caminho proibido
+    // transformaria justamente o caminho antigo em contrato de teste. O que precisa continuar
+    // funcionando e reabrir e salvar o que JA estava gravado.
     const criada = await contexto.app.inject({
       method: "POST",
       url: "/api/retiradas",
@@ -202,13 +204,19 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
         dataVencimento: HOJE,
         descricao: "Retirada historica",
         valorOriginal: 25,
-        colaboradorId: idsTeste.colaboradorCaixa,
+        fornecedorId: idsTeste.fornecedor,
         contaOrigemId: idsTeste.contaCaixa,
         grupoRetiradaId: idsTeste.grupoRetiradaSangria
       }
     });
     expect(criada.statusCode, criada.body).toBe(201);
     const id = json<{ data: { id: string } }>(criada).data.id;
+
+    // Vira o que o historico tem: credor colaborador, como a 0020 permitia.
+    await executarSql(
+      `update retiradas set fornecedor_id = null, colaborador_id = $2, credor_tipo = 'colaborador' where id = $1`,
+      [id, idsTeste.colaboradorCaixa]
+    );
 
     const detalhe = await contexto.app.inject({
       method: "GET",
@@ -222,7 +230,8 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
     expect(dados.descricao).toBe("Retirada historica");
 
     // Reabrir e salvar sem trocar o credor tem de continuar valendo: o CHECK do banco aceita o tipo
-    // legado e o servidor nao converte o registro por conta propria.
+    // legado, o servidor nao converte o registro por conta propria e a R-128 do servidor deixa o
+    // MESMO colaborador passar justamente porque ele ja estava gravado.
     const salva = await contexto.app.inject({
       method: "PUT",
       url: `/api/retiradas/${id}`,

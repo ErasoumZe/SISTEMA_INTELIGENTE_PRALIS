@@ -16,6 +16,7 @@ import { consultarTodos, consultarUm, executarSql, json } from "../../setup/inte
 //  - a mensagem OFICIAL de "sem caixa aberto";
 //  - o PUT que zerava a conta travada quando o corpo vinha sem `contaOrigemId`.
 const CONTA_OUTRA_EMPRESA = "33333333-3333-4333-8333-333333333202";
+const FORNECEDOR_OUTRA_EMPRESA = "33333333-3333-4333-8333-333333333203";
 
 describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
   let contexto: ContextoApiTeste;
@@ -23,6 +24,7 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
   let cookieCaixa = "";
   let caixaId = "";
   let contaDoPdv = "";
+  let pdvId = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
@@ -54,6 +56,7 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
       payload: { empresaId: idsTeste.empresaA, nome: "PDV CX-M06", contaId: contaDoPdv, ativo: true }
     });
     expect(pdv.statusCode, pdv.body).toBe(201);
+    pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
     const abertura = await contexto.app.inject({
       method: "POST",
@@ -61,7 +64,7 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
       headers: { cookie: cookieCaixa },
       payload: {
         empresaId: idsTeste.empresaA,
-        pdvId: json<{ data: { id: string } }>(pdv).data.id,
+        pdvId,
         usuarioCaixaId: usuario.id,
         dataHoraAbertura: "2026-07-31T08:00"
       }
@@ -75,6 +78,13 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
       CONTA_OUTRA_EMPRESA,
       idsTeste.empresaB,
       "Conta da empresa B"
+    ]);
+    // Fornecedor da empresa B: a FK de `retiradas.fornecedor_id` e global, entao o id e valido e so
+    // a checagem de empresa separa as duas padarias.
+    await executarSql("insert into fornecedores (id, empresa_id, nome) values ($1, $2, $3)", [
+      FORNECEDOR_OUTRA_EMPRESA,
+      idsTeste.empresaB,
+      "Fornecedor da empresa B"
     ]);
   }, 180_000);
 
@@ -108,7 +118,9 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     [
       "retirada",
       "/api/retiradas",
-      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, colaboradorId: idsTeste.colaboradorCaixa }
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor. Criar as fixtures felizes com
+      // colaborador transformava o caminho proibido em contrato de teste.
+      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, fornecedorId: idsTeste.fornecedor }
     ]
   ] as const;
 
@@ -199,6 +211,82 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     ).toMatchObject({ conta_origem_id: contaDoPdv });
   });
 
+  it.each(SAIDAS)("Deve_RecusarSemAlterar_Quando_OperadorEditaApontandoOutraConta (%s)", async (nome, rota, extras) => {
+    const criada = await post(
+      cookieCaixa,
+      rota,
+      corpo(`CX-M06 put conta errada ${nome}`, { contaOrigemId: contaDoPdv, ...extras })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieCaixa,
+      `${rota}/${id}`,
+      corpo(`CX-M06 put conta errada alterada ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
+    );
+    assertProblem(editada, 403);
+
+    // Registro anterior INTEIRO, nao so a contagem.
+    expect(
+      await consultarUm<{ conta_origem_id: string; descricao: string }>(
+        `select conta_origem_id, descricao from ${nome}s where id = $1`,
+        [id]
+      )
+    ).toMatchObject({ conta_origem_id: contaDoPdv, descricao: `CX-M06 put conta errada ${nome}` });
+  });
+
+  // R-122 — o caso perigoso: o lancamento nasceu na conta A, o admin reaponta o PDV para a conta B e
+  // o PUT vem sem conta. Antes, a normalizacao trocava A por B em silencio e o registro historico
+  // mudava de conta. Agora a edicao para em 403 e nada muda.
+  it.each(SAIDAS)("Deve_RecusarSemAlterar_Quando_OPdvFoiReapontado (%s)", async (nome, rota, extras) => {
+    const criada = await post(
+      cookieCaixa,
+      rota,
+      corpo(`CX-M06 pdv reapontado ${nome}`, { contaOrigemId: contaDoPdv, ...extras })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    await executarSql("update pdvs set conta_id = $2 where id = $1", [pdvId, idsTeste.contaLivre]);
+    try {
+      const editada = await put(cookieCaixa, `${rota}/${id}`, corpo(`CX-M06 pdv reapontado alterada ${nome}`, extras));
+      assertProblem(editada, 403);
+      expect(editada.body).toContain("Tesouraria");
+
+      expect(
+        await consultarUm<{ conta_origem_id: string; descricao: string }>(
+          `select conta_origem_id, descricao from ${nome}s where id = $1`,
+          [id]
+        )
+      ).toMatchObject({ conta_origem_id: contaDoPdv, descricao: `CX-M06 pdv reapontado ${nome}` });
+    } finally {
+      await executarSql("update pdvs set conta_id = $2 where id = $1", [pdvId, contaDoPdv]);
+    }
+  });
+
+  it.each(SAIDAS)("Deve_ManterAConta_Quando_RetaguardaEditaSemInformarConta (%s)", async (nome, rota, extras) => {
+    const criada = await post(
+      cookieAdmin,
+      rota,
+      corpo(`CX-M06 put retaguarda ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    // Retaguarda escolhe a conta: o corpo sem conta NAO e normalizado para a conta de PDV nenhum.
+    const editada = await put(
+      cookieAdmin,
+      `${rota}/${id}`,
+      corpo(`CX-M06 put retaguarda corrigida ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
+    );
+    expect(editada.statusCode, editada.body).toBe(200);
+
+    expect(
+      await consultarUm<{ conta_origem_id: string }>(`select conta_origem_id from ${nome}s where id = $1`, [id])
+    ).toMatchObject({ conta_origem_id: idsTeste.contaBanco });
+  });
+
   // ===== B-04 — credor conforme a categoria ==================================================
 
   it("Deve_Criar_Quando_MercadoriaTemFornecedor", async () => {
@@ -253,6 +341,149 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     expect(await gravadas(descricao)).toBe(0);
   });
 
+  // P0 — a FK `retiradas.fornecedor_id` e global, nao por empresa. Despesa e mercadoria ja
+  // validavam; a retirada era a unica fora. Provado pela RETAGUARDA, que escolhe a conta livremente:
+  // com o operador a trava da R-121 recusaria antes, sem exercitar o validador.
+  it("Deve_RecusarSemGravar_Quando_RetiradaTemFornecedorDeOutraEmpresa", async () => {
+    const descricao = "CX-M06 retirada fornecedor cross-tenant";
+    const resposta = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo(descricao, {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: FORNECEDOR_OUTRA_EMPRESA
+      })
+    );
+
+    assertProblem(resposta, 400);
+    expect(resposta.body).toContain("Fornecedor");
+    expect(await gravadas(descricao)).toBe(0);
+  });
+
+  it("Deve_RecusarSemAlterar_Quando_PutDaRetiradaUsaFornecedorDeOutraEmpresa", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo("CX-M06 retirada para editar credor", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/retiradas/${id}`,
+      corpo("CX-M06 retirada credor invadido", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: FORNECEDOR_OUTRA_EMPRESA
+      })
+    );
+    assertProblem(editada, 400);
+
+    // O registro anterior fica INTEIRO, nao so a contagem.
+    expect(
+      await consultarUm<{ fornecedor_id: string; descricao: string }>(
+        "select fornecedor_id, descricao from retiradas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ fornecedor_id: idsTeste.fornecedor, descricao: "CX-M06 retirada para editar credor" });
+  });
+
+  // R-128 no SERVIDOR: a tela ja nao oferece, mas qualquer outro cliente gravava.
+  it("Deve_RecusarSemGravar_Quando_RetiradaNovaUsaColaborador", async () => {
+    const descricao = "CX-M06 retirada nova com colaborador";
+    const resposta = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo(descricao, {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+
+    assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("R-128");
+    expect(await gravadas(descricao)).toBe(0);
+  });
+
+  it("Deve_RecusarSemAlterar_Quando_PutTransformaRetiradaModernaEmColaborador", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo("CX-M06 retirada moderna", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/retiradas/${id}`,
+      corpo("CX-M06 retirada virando colaborador", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+    assertProblem(editada, 400, "VALIDATION_ERROR");
+
+    expect(
+      await consultarUm<{ fornecedor_id: string; colaborador_id: string | null; credor_tipo: string }>(
+        "select fornecedor_id, colaborador_id, credor_tipo from retiradas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ fornecedor_id: idsTeste.fornecedor, colaborador_id: null, credor_tipo: "fornecedor" });
+  });
+
+  // O legado tem de continuar editavel — a regra distingue "preservar" de "introduzir".
+  it("Deve_PermitirEditarOutroCampo_Quando_RetiradaLegadaJaTemColaborador", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/retiradas",
+      corpo("CX-M06 retirada legada", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    // Vira o que o historico tem: credor colaborador, como a migration 0020 permitia.
+    await executarSql(
+      "update retiradas set fornecedor_id = null, colaborador_id = $2, credor_tipo = 'colaborador' where id = $1",
+      [id, idsTeste.colaboradorCaixa]
+    );
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/retiradas/${id}`,
+      corpo("CX-M06 retirada legada corrigida", {
+        valorOriginal: 77,
+        contaOrigemId: idsTeste.contaBanco,
+        grupoRetiradaId: idsTeste.grupoRetiradaSangria,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+    expect(editada.statusCode, editada.body).toBe(200);
+
+    expect(
+      await consultarUm<{ colaborador_id: string; descricao: string }>(
+        "select colaborador_id, descricao from retiradas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ colaborador_id: idsTeste.colaboradorCaixa, descricao: "CX-M06 retirada legada corrigida" });
+  });
+
   it("Deve_RecusarSemGravar_Quando_RetiradaTemDoisCredores", async () => {
     const descricao = "CX-M06 retirada com dois credores";
     const resposta = await post(
@@ -269,6 +500,90 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
     assertProblem(resposta, 400, "VALIDATION_ERROR");
     expect(resposta.body).toContain("credor");
     expect(await gravadas(descricao)).toBe(0);
+  });
+
+  // ===== B-04 — a despesa tem UM tipo de credor por vez ======================================
+
+  it("Deve_RecusarSemGravar_Quando_DespesaTemDoisCredores", async () => {
+    const descricao = "CX-M06 despesa com dois credores";
+    const resposta = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo(descricao, {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+
+    assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("um credor so");
+    expect(await gravadas(descricao)).toBe(0);
+    // Sem a regra, o repositorio ainda criava divida para um colaborador que nao era o credor.
+    const divida = await consultarUm<{ total: string }>(
+      "select count(*) as total from debitos_colaboradores where colaborador_id = $1 and tipo = 'DESPESA'",
+      [idsTeste.colaboradorCaixa]
+    );
+    expect(Number(divida?.total ?? "0")).toBe(0);
+  });
+
+  it.each([
+    ["fornecedor", { credorTipo: "fornecedor", colaboradorId: idsTeste.colaboradorCaixa }],
+    ["colaborador", { credorTipo: "colaborador", fornecedorId: idsTeste.fornecedor }]
+  ] as const)("Deve_RecusarSemGravar_Quando_CredorTipoEIncoerente (%s)", async (tipo, credor) => {
+    const descricao = `CX-M06 despesa credorTipo incoerente ${tipo}`;
+    const resposta = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo(descricao, {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        ...credor
+      })
+    );
+
+    // Antes disto o CHECK do banco estourava no INSERT e o erro de driver virava 500.
+    assertProblem(resposta, 400, "VALIDATION_ERROR");
+    expect(resposta.body).toContain("incoerente");
+    expect(await gravadas(descricao)).toBe(0);
+  });
+
+  // O historico com os dois ids e `credor_tipo` nulo nao pode virar refem da regra nova.
+  it("Deve_PermitirEditarOutroCampo_Quando_DespesaHistoricaTemOsDoisCredores", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo("CX-M06 despesa historica", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    await executarSql("update despesas set colaborador_id = $2, credor_tipo = null where id = $1", [
+      id,
+      idsTeste.colaboradorCaixa
+    ]);
+
+    // O operador mexe no VALOR e devolve o par de credores como estava: tem de passar.
+    const editada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 despesa historica corrigida", {
+        valorOriginal: 99,
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor,
+        colaboradorId: idsTeste.colaboradorCaixa
+      })
+    );
+    expect(editada.statusCode, editada.body).toBe(200);
+    expect(
+      await consultarUm<{ descricao: string }>("select descricao from despesas where id = $1", [id])
+    ).toMatchObject({ descricao: "CX-M06 despesa historica corrigida" });
   });
 
   // ===== Retaguarda e contrato de erro =======================================================
