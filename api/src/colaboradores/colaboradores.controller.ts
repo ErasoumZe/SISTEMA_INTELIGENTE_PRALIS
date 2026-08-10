@@ -75,7 +75,12 @@ export async function registrarRotasColaboradores(app: FastifyInstance) {
   // As sub-rotas (cargos/jornadas/faltas) seguem restritas ao cadastro.
   app.get(
     "/api/colaboradores",
-    { preHandler: exigirAlgumaPermissao(["cadastro_colaboradores_visualizar", "caixa_operar"]) },
+    // B-1: `despesas_visualizar` entrou porque a despesa oferece Colaborador como credor e a lista
+    // nao era carregada por quem so lanca — o chip abria um select vazio. Continua na projecao
+    // reduzida: quem entra por permissao operacional nao ve salario, documento nem jornada.
+    {
+      preHandler: exigirAlgumaPermissao(["cadastro_colaboradores_visualizar", "caixa_operar", "despesas_visualizar"])
+    },
     async (request, reply) => {
       const escopo = await escopoDaQuery(request, reply);
       return escopo

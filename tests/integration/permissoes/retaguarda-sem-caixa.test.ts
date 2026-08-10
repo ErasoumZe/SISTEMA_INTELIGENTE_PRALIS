@@ -1,0 +1,273 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { assertProblem } from "../../setup/asserts.js";
+import { cookieSessao } from "../../setup/auth.js";
+import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
+import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+
+// DECISAO A-1 (Jose, 10/08/2026) — perfil reconhecido por `podeLancarSemCaixa` cria e edita as TRES
+// saidas sem caixa aberto proprio, como a transferencia ja fazia. O operador de Caixa nao muda.
+//
+// Ate aqui as tres saidas chamavam `obterCaixaParaLancamento` INCONDICIONALMENTE. O comentario de
+// `podeLancarSemCaixa` dizia que a retaguarda "lanca sem estar presa a um caixa" e o codigo nao fazia
+// isso: o Financeiro, que e quem mais lanca despesa, dependia de um terceiro com `caixa_operar` abrir
+// um caixa em NOME dele — e `abrirCaixa` nao verifica permissao nenhuma do designado.
+//
+// O ator aqui e `gerente`: retaguarda pelo nome do cargo (o que `podeLancarSemCaixa` consulta) e SEM
+// caixa aberto neste arquivo. E o ponto do teste — se alguem abrir um caixa para ele no `beforeAll`,
+// os casos passam a provar outra coisa.
+describe("CX-M06 A-1 - retaguarda lanca sem caixa aberto proprio", () => {
+  let contexto: ContextoApiTeste;
+  let cookieGerente = "";
+  let cookieCaixa = "";
+  let cookieAdmin = "";
+  let contaDoPdv = "";
+  let caixaDoOperador = "";
+  const hoje = "2026-08-01";
+
+  const rotas = [
+    [
+      "despesa",
+      "/api/despesas",
+      { grupoDespesaId: idsTeste.grupoDespesaOperacional, fornecedorId: idsTeste.fornecedor }
+    ],
+    [
+      "mercadoria",
+      "/api/mercadorias",
+      { grupoMercadoriaId: idsTeste.grupoMercadoriaInsumos, fornecedorId: idsTeste.fornecedor }
+    ],
+    [
+      "retirada",
+      "/api/retiradas",
+      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, fornecedorId: idsTeste.fornecedor }
+    ]
+  ] as const;
+
+  beforeAll(async () => {
+    contexto = await criarContextoApiTeste();
+    [cookieAdmin, cookieGerente, cookieCaixa] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "gerente"),
+      cookieSessao(contexto.app, "caixa")
+    ]);
+
+    // Um caixa aberto para o OPERADOR, para provar que a regra dele nao mudou. O gerente segue sem.
+    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+      usuariosTeste.caixa.email
+    ]);
+    if (!usuario) throw new Error("Usuario caixa nao encontrado");
+
+    const conta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV A-1" }
+    });
+    expect(conta.statusCode, conta.body).toBe(201);
+    contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
+
+    const pdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId: idsTeste.empresaA, nome: "PDV A-1", contaId: contaDoPdv, ativo: true }
+    });
+    expect(pdv.statusCode, pdv.body).toBe(201);
+
+    const abertura = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieCaixa },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId: json<{ data: { id: string } }>(pdv).data.id,
+        usuarioCaixaId: usuario.id,
+        dataHoraAbertura: "2026-07-31T08:00"
+      }
+    });
+    expect(abertura.statusCode, abertura.body).toBe(201);
+    caixaDoOperador = json<{ data: { id: string } }>(abertura).data.id;
+  }, 180_000);
+
+  afterAll(async () => contexto.fechar());
+
+  const corpo = (descricao: string, extras: Record<string, unknown> = {}) => ({
+    empresaId: idsTeste.empresaA,
+    dataReferencia: hoje,
+    dataVencimento: hoje,
+    descricao,
+    valorOriginal: 10,
+    ...extras
+  });
+
+  function post(cookie: string, url: string, payload: object) {
+    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
+  }
+  function put(cookie: string, url: string, payload: object) {
+    return contexto.app.inject({ method: "PUT", url, headers: { cookie }, payload });
+  }
+
+  // A PRE-CONDICAO do arquivo inteiro. Se o gerente tiver caixa aberto, tudo abaixo passa a provar
+  // outra coisa — e passaria verde do mesmo jeito, que e exatamente o falso-verde a evitar.
+  it("Deve_NaoTerCaixaAberto_Quando_OAtorEARetaguardaDesteArquivo", async () => {
+    const status = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieGerente }
+    });
+    expect(status.statusCode, status.body).toBe(200);
+    expect(json<{ data: { caixaAberto: unknown } }>(status).data.caixaAberto).toBeNull();
+  });
+
+  // PROVA 1 e 2: a retaguarda lanca sem caixa, e o lancamento nasce SEM `caixa_id`.
+  it.each(rotas)("Deve_CriarSemCaixaAberto_Quando_ERetaguarda (%s)", async (nome, rota, extras) => {
+    const descricao = `CX-M06 A-1 cria ${nome}`;
+    const criada = await post(cookieGerente, rota, corpo(descricao, { contaOrigemId: idsTeste.contaBanco, ...extras }));
+
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    // PROVA 3: sem `caixa_id`, ele nao entra no total de caixa nenhum — o total soma por `caixa_id`.
+    expect(
+      await consultarUm<{ caixa_id: string | null; conta_origem_id: string }>(
+        `select caixa_id, conta_origem_id from ${nome}s where id = $1`,
+        [id]
+      )
+    ).toEqual({ caixa_id: null, conta_origem_id: idsTeste.contaBanco });
+  });
+
+  // PROVA 3, pelo outro lado: o total do caixa do OPERADOR nao se mexe com o lancamento da
+  // retaguarda. Compara o resumo antes e depois — a assercao de coluna acima nao veria um total
+  // calculado por outro criterio.
+  it("Deve_NaoEntrarNoTotalDeCaixaNenhum_Quando_ARetaguardaLanca", async () => {
+    const resumo = async () => {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie: cookieCaixa }
+      });
+      expect(resposta.statusCode, resposta.body).toBe(200);
+      return json<{ data: { resumo: Record<string, number> } }>(resposta).data.resumo;
+    };
+
+    const antes = await resumo();
+    const criada = await post(
+      cookieGerente,
+      "/api/despesas",
+      corpo("CX-M06 A-1 fora do total", {
+        contaOrigemId: idsTeste.contaBanco,
+        valorOriginal: 777,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+
+    expect(await resumo()).toEqual(antes);
+  });
+
+  // PROVA 6: PUT segue a MESMA regra do POST. Sem isto a decisao ficaria pela metade — a retaguarda
+  // criaria com `caixa_id` nulo e nao conseguiria corrigir um numero depois.
+  it.each(rotas)("Deve_EditarSemCaixaAberto_Quando_ERetaguarda (%s)", async (nome, rota, extras) => {
+    const criada = await post(
+      cookieGerente,
+      rota,
+      corpo(`CX-M06 A-1 edita ${nome}`, { contaOrigemId: idsTeste.contaBanco, ...extras })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    const editada = await put(
+      cookieGerente,
+      `${rota}/${id}`,
+      corpo(`CX-M06 A-1 edita ${nome} corrigida`, {
+        contaOrigemId: idsTeste.contaBanco,
+        valorOriginal: 55,
+        ...extras
+      })
+    );
+
+    expect(editada.statusCode, editada.body).toBe(200);
+    expect(
+      await consultarUm<{ valor_original: string; caixa_id: string | null }>(
+        `select valor_original, caixa_id from ${nome}s where id = $1`,
+        [id]
+      )
+    ).toEqual({ valor_original: "55.00", caixa_id: null });
+  });
+
+  // PROVA 2 (segunda metade): "conta autorizada" continua valendo. A retaguarda escolhe livremente
+  // ENTRE AS CONTAS DA EMPRESA — nao entre todas as contas do banco.
+  it("Deve_RecusarSemGravar_Quando_ARetaguardaUsaContaDeOutraEmpresa", async () => {
+    const contaOutraEmpresa = await consultarUm<{ id: string }>("select id from contas where empresa_id = $1 limit 1", [
+      idsTeste.empresaB
+    ]);
+    if (!contaOutraEmpresa) throw new Error("Empresa B sem conta no seed");
+
+    const descricao = "CX-M06 A-1 conta de outra empresa";
+    const criada = await post(
+      cookieGerente,
+      "/api/despesas",
+      corpo(descricao, {
+        contaOrigemId: contaOutraEmpresa.id,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+
+    assertProblem(criada, 400, "VALIDATION_ERROR");
+    expect(criada.body).toContain("nao pertence a empresa");
+    expect(
+      await consultarUm<{ total: string }>("select count(*) as total from despesas where descricao = $1", [descricao])
+    ).toMatchObject({ total: "0" });
+  });
+
+  // PROVA 4: o OPERADOR nao mudou — segue preso a conta do PDV do caixa aberto dele.
+  it.each(rotas)("Deve_ContinuarPresoAoPdv_Quando_EOperadorDeCaixa (%s)", async (nome, rota, extras) => {
+    const descricao = `CX-M06 A-1 operador ${nome}`;
+    const recusada = await post(cookieCaixa, rota, corpo(descricao, { contaOrigemId: idsTeste.contaBanco, ...extras }));
+
+    assertProblem(recusada, 400, "VALIDATION_ERROR");
+    expect(recusada.body).toContain("conta do PDV");
+    expect(
+      await consultarUm<{ total: string }>(`select count(*) as total from ${nome}s where descricao = $1`, [descricao])
+    ).toMatchObject({ total: "0" });
+
+    // E o caminho feliz dele grava o `caixa_id` do proprio caixa: o dinheiro SAIU daquela gaveta,
+    // entao ele TEM de entrar no total. E o contraste que impede "caixa_id sempre nulo" de passar.
+    const aceita = await post(cookieCaixa, rota, corpo(`${descricao} ok`, { contaOrigemId: contaDoPdv, ...extras }));
+    expect(aceita.statusCode, aceita.body).toBe(201);
+    expect(
+      await consultarUm<{ caixa_id: string | null }>(`select caixa_id from ${nome}s where id = $1`, [
+        json<{ data: { id: string } }>(aceita).data.id
+      ])
+    ).toEqual({ caixa_id: caixaDoOperador });
+  });
+
+  // PROVA 4 (segunda metade): sem caixa aberto o operador continua BARRADO. E a metade da regra que
+  // a A-1 nao afrouxou, e que distingue "retaguarda" de "qualquer um".
+  it("Deve_RecusarSemGravar_Quando_OOperadorNaoTemCaixaAberto", async () => {
+    // Fecha a porta so para este caso e devolve como estava — os demais dependem do caixa aberto.
+    await executarSql("update fechamentos_caixa set status = 'fechado' where id = $1", [caixaDoOperador]);
+    try {
+      const descricao = "CX-M06 A-1 operador sem caixa";
+      const recusada = await post(
+        cookieCaixa,
+        "/api/despesas",
+        corpo(descricao, {
+          contaOrigemId: contaDoPdv,
+          grupoDespesaId: idsTeste.grupoDespesaOperacional,
+          fornecedorId: idsTeste.fornecedor
+        })
+      );
+
+      assertProblem(recusada, 400, "VALIDATION_ERROR");
+      expect(recusada.body).toContain("Abra um caixa");
+      expect(
+        await consultarUm<{ total: string }>("select count(*) as total from despesas where descricao = $1", [descricao])
+      ).toMatchObject({ total: "0" });
+    } finally {
+      await executarSql("update fechamentos_caixa set status = 'aberto' where id = $1", [caixaDoOperador]);
+    }
+  });
+});

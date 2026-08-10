@@ -13,7 +13,8 @@ import {
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
-  obterCaixaParaLancamento,
+  caixaIdDaSaida,
+  obterCaixaDaSaida,
   podeVerLancamentosPagos
 } from "../lancamentos/lancamentos.dominio.js";
 import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
@@ -71,9 +72,13 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
     const referenciaInvalida = await validarReferenciasRetirada(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
+    // exigindo o dele.
+    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // So conta para o caixa o que saiu da conta do PDV dele.
+    const caixaId = caixaIdDaSaida(caixa, lancamento);
 
     // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
     const plano = await planejarRecorrencia(
@@ -88,7 +93,7 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
       tx
     );
     if (!plano) {
-      const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: retirada.id, computar };
     }
 
@@ -98,7 +103,7 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
         payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
-        caixaDaOcorrencia(caixa.id, ocorrencia),
+        caixaDaOcorrencia(caixaId, ocorrencia),
         tx,
         ocorrencia.vinculo
       );

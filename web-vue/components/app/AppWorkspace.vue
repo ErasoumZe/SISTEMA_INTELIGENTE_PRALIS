@@ -1042,6 +1042,7 @@ type ChaveOpcaoOperacao =
   | "formasPagamento"
   | "pdvs"
   | "unidadesMedida"
+  | "patrimonioItens"
   | "grupos";
 
 // Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
@@ -1050,13 +1051,15 @@ type ChaveOpcaoOperacao =
 // fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
 const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
   venda: ["contas", "produtos", "pdvs", "formasPagamento"],
-  despesa: ["contas", "fornecedores", "grupos"],
+  // B-1: `colaboradores` entrou porque a despesa oferece Colaborador como credor e a lista nao era
+  // pedida por este caminho — pelo "+ NOVO" o chip abria um select vazio, enquanto pela tela
+  // Despesas funcionava. `patrimonioItens` e `colaboradores` tambem sao as origens do item da
+  // DISCRIMINACAO (R-135), que pelo "+ NOVO" era impossivel de preencher.
+  despesa: ["contas", "fornecedores", "colaboradores", "patrimonioItens", "grupos"],
   mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
   // R-128 fez do FORNECEDOR o credor padrao da retirada — e o chip que ja vem ativo ao abrir. Sem
-  // carregar a lista, o caminho normal da retirada abria um select vazio. Nao precisa de decisao de
-  // permissao: `GET /api/fornecedores` aceita `despesas_visualizar`/`mercadorias_visualizar`, e todo
-  // cargo padrao com `retiradas` tem os dois. `colaboradores` fica para o credor LEGADO reabrir com
-  // nome, nao para lancamento novo.
+  // carregar a lista, o caminho normal da retirada abria um select vazio. `colaboradores` fica para
+  // o credor LEGADO reabrir com nome, nao para lancamento novo.
   retirada: ["contas", "fornecedores", "colaboradores", "sociosGestores", "grupos"],
   transferencia: ["contas"]
 };
@@ -1093,6 +1096,9 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     unidadesMedida: async () => {
       alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
     },
+    patrimonioItens: async () => {
+      alvo.patrimonioItens = await apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`);
+    },
     grupos: async () => {
       Object.assign(
         alvo,
@@ -1110,6 +1116,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     formasPagamento: "Formas de pagamento",
     pdvs: "PDVs",
     unidadesMedida: "Unidades de medida",
+    patrimonioItens: "Itens de patrimônio",
     grupos: "Grupos"
   };
   // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal

@@ -14,7 +14,8 @@ import {
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
-  obterCaixaParaLancamento,
+  caixaIdDaSaida,
+  obterCaixaDaSaida,
   podeVerLancamentosPagos,
   exigirDiscriminacaoConferida,
   exigirVinculoDosItensDespesa,
@@ -97,9 +98,13 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
+    // exigindo o dele.
+    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // So conta para o caixa o que saiu da conta do PDV dele.
+    const caixaId = caixaIdDaSaida(caixa, lancamento);
 
     // Recorrencia (D3): a serie inteira nasce aqui, na MESMA transacao. Ou entram todos os 12
     // lancamentos, ou nenhum — meia serie gravada seria pior que erro nenhum.
@@ -115,7 +120,7 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
       tx
     );
     if (!plano) {
-      const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: despesa.id, computar };
     }
 
@@ -125,7 +130,7 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
         payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
-        caixaDaOcorrencia(caixa.id, ocorrencia),
+        caixaDaOcorrencia(caixaId, ocorrencia),
         tx,
         ocorrencia.vinculo
       );

@@ -20,7 +20,8 @@ import {
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
-  obterCaixaParaLancamento,
+  caixaIdDaSaida,
+  obterCaixaDaSaida,
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
@@ -95,9 +96,13 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
     const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
-    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
+    // exigindo o dele.
+    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // So conta para o caixa o que saiu da conta do PDV dele.
+    const caixaId = caixaIdDaSaida(caixa, lancamento);
 
     // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
     const plano = await planejarRecorrencia(
@@ -112,7 +117,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       tx
     );
     if (!plano) {
-      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: mercadoria.id, computar };
     }
 
@@ -122,7 +127,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
         payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
-        caixaDaOcorrencia(caixa.id, ocorrencia),
+        caixaDaOcorrencia(caixaId, ocorrencia),
         tx,
         ocorrencia.vinculo
       );

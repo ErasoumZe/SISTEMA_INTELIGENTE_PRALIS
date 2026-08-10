@@ -17,6 +17,7 @@ import { erroValidacao, naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
 import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
+import { buscarCaixaAbertoUsuarioRepository } from "../caixa/caixa.repository.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
   colaboradores,
@@ -177,10 +178,13 @@ export { podeLancarSemCaixa };
 // entra e sai); aqui e saida, entao so ORIGEM.
 export function exigirContaDoCaixaNoLancamento<T extends { contaOrigemId?: string | null | undefined }>(
   dados: T,
-  caixa: { pdvContaId: string | null },
+  // `null` desde a A-1: a retaguarda pode nao ter caixa aberto. Ela sai na primeira linha, entao o
+  // nulo nunca e desreferenciado — mas o tipo tem de dizer isso, senao o compilador para de vigiar.
+  caixa: { pdvContaId: string | null } | null,
   perfil: PerfilUsuario
 ): T {
   if (podeLancarSemCaixa(perfil)) return dados;
+  if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   if (!dados.contaOrigemId) return { ...dados, contaOrigemId: caixa.pdvContaId };
   if (dados.contaOrigemId !== caixa.pdvContaId) {
@@ -284,6 +288,32 @@ export function exigirRecorrenciaDeRetaguarda(perfil: PerfilUsuario, recorrencia
   throw new Error("Lancamento recorrente e ato de Tesouraria/Financeiro");
 }
 
+/**
+ * A-1: edicao de SAIDA por perfil de retaguarda. Nao exige caixa aberto proprio.
+ *
+ * O que continua valendo: registro tem de existir numa empresa acessivel e nao pode trocar de
+ * empresa. E, quando o lancamento PERTENCE a um caixa (`caixa_id` preenchido, porque saiu da conta
+ * do PDV), a regra antiga vale inteira — tem de ser o caixa aberto DELE. Sem essa parte, a
+ * retaguarda passaria a editar lancamento de caixa alheio, que nao e o que foi decidido.
+ *
+ * O que muda: lancamento sem `caixa_id` — o que a propria retaguarda cria desde a A-1 — nao tem
+ * caixa a conferir e fica editavel.
+ */
+async function validarEdicaoDeSaidaDaRetaguarda(
+  existente: { empresaId: string; caixaId: string | null } | null,
+  dados: { empresaId: string },
+  perfil: PerfilUsuario,
+  tx?: ExecutorBanco
+) {
+  if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
+  if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  const caixa = await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx);
+  if (existente.caixaId && existente.caixaId !== caixa?.id) {
+    throw new Error("Lancamento nao pertence ao seu caixa aberto");
+  }
+  return caixa;
+}
+
 // Regras de edicao de lancamento: o registro precisa existir na empresa acessivel,
 // nao pode trocar de empresa e precisa pertencer ao caixa aberto do usuario.
 // Serve venda, transferencia e as tres saidas — nao mexer no status daqui sem olhar os quatro.
@@ -305,8 +335,12 @@ export async function validarEdicaoNoCaixaAberto(
 // proprio, lancamento daquele caixa e conta ainda a do PDV. Recusa e 403 (e uma questao de
 // autorizacao, nao de payload malformado) e a mensagem diz QUAL condicao falhou.
 //
-// Perfil de retaguarda cai no caminho de sempre, sem mudanca: unificar o comportamento dos outros
-// cargos e outra decisao, fora deste escopo.
+// A-1 (Jose, 10/08/2026): o ramo da RETAGUARDA passou a nao exigir caixa aberto proprio. Sem isso a
+// decisao ficaria pela metade — ela cria o lancamento com `caixa_id` nulo e, na hora de corrigir um
+// numero, `existente.caixaId (null) !== caixa.id` recusava. Quem cria tem de conseguir corrigir.
+//
+// A mudanca fica AQUI, e nao em `validarEdicaoNoCaixaAberto`: aquela funcao tambem serve venda e
+// transferencia, que nao entraram na decisao.
 export async function validarEdicaoDeSaidaNoCaixa(
   // `contaOrigemId` fica opcional porque os DTOs de detalhe (shared) o declaram assim. Tentar
   // exigi-lo aqui quebra a compilacao nos tres services — e mudar o contrato do DTO e outra entrega.
@@ -318,7 +352,7 @@ export async function validarEdicaoDeSaidaNoCaixa(
   perfil: PerfilUsuario,
   tx?: ExecutorBanco
 ) {
-  if (podeLancarSemCaixa(perfil)) return validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+  if (podeLancarSemCaixa(perfil)) return validarEdicaoDeSaidaDaRetaguarda(existente, dados, perfil, tx);
 
   if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
@@ -788,4 +822,48 @@ export function exigirVinculoDosItensDespesa(
 
 export async function obterCaixaParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {
   return obterCaixaAbertoParaLancamento(empresaId, usuarioId, db);
+}
+
+/**
+ * A-1 (decisao do Jose, 10/08/2026): quem `podeLancarSemCaixa` reconhece lanca as TRES saidas sem
+ * caixa aberto proprio, seguindo o precedente da transferencia. O operador de Caixa continua
+ * exigindo caixa aberto.
+ *
+ * Ate aqui as tres saidas chamavam `obterCaixaParaLancamento` INCONDICIONALMENTE, e so a
+ * transferencia ramificava. O comentario de `podeLancarSemCaixa` dizia que a retaguarda "lanca sem
+ * estar presa a um caixa" — e as saidas nao implementavam isso. Na pratica o Financeiro, que e quem
+ * mais lanca despesa, dependia de um terceiro com `caixa_operar` abrir um caixa em nome dele.
+ *
+ * Devolve `null` quando e retaguarda e nao ha caixa aberto. Uma funcao so para as tres saidas: e o
+ * que impede a regra de voltar a divergir entre elas.
+ */
+type CaixaDoLancamento = Awaited<ReturnType<typeof obterCaixaAbertoParaLancamento>>;
+
+export async function obterCaixaDaSaida(
+  empresaId: string,
+  perfil: PerfilUsuario,
+  db?: ExecutorBanco
+): Promise<CaixaDoLancamento | null> {
+  if (podeLancarSemCaixa(perfil)) return buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, db);
+  return obterCaixaAbertoParaLancamento(empresaId, perfil.usuarioId, db);
+}
+
+/**
+ * O `caixa_id` que a saida GRAVA. So conta para o caixa o que de fato saiu da conta do PDV dele.
+ *
+ * Para o operador isso e sempre o caixa aberto — `exigirContaDoCaixaNoLancamento` ja garantiu que a
+ * conta e a do PDV. Para a retaguarda, e `null` sempre que a conta escolhida nao for a do PDV, mesmo
+ * que ela tenha um caixa aberto: gravar o `caixa_id` ali faria o lancamento entrar no total do
+ * fechamento SEM o dinheiro ter saido daquele caixa — quebra falsa no colo do operador (R-015), que
+ * e o oposto do que a R-121 existe para evitar.
+ *
+ * E o mesmo criterio da transferencia (`envolveContaPdv ? caixa.id : null`), reduzido a origem
+ * porque saida so tem origem.
+ */
+export function caixaIdDaSaida(
+  caixa: CaixaDoLancamento | null,
+  dados: { contaOrigemId?: string | null | undefined }
+): string | null {
+  if (!caixa) return null;
+  return idOuNulo(dados.contaOrigemId) === caixa.pdvContaId ? caixa.id : null;
 }
