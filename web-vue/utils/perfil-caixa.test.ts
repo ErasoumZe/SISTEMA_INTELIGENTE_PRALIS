@@ -117,18 +117,26 @@ describe("operacaoExigeCaixaAberto", () => {
     expect(operacaoExigeCaixaAberto(entidade, OPERADOR)).toBe(true);
   });
 
-  // ACEITE 12: cargo customizado nao pode divergir entre a tela e a API. A pergunta e uma so —
-  // `podeLancarSemCaixa` —, entao a resposta aqui e a negacao exata de `ehOperadorDeCaixa`.
+  // ACEITE 12: cargo customizado nao pode divergir entre a tela e a API.
+  //
+  // A tabela e LITERAL de proposito. A primeira versao deste caso afirmava
+  // `operacaoExigeCaixaAberto(e, ator) === ehOperadorDeCaixa(ator)`, e como a implementacao das
+  // saidas e literalmente `return ehOperadorDeCaixa(perfil)`, a assercao era tautologica: passava
+  // sob qualquer mutacao. O valor esperado agora vem da matriz de `podeLancarSemCaixa` — role
+  // `usuario_admin` ou nome de cargo com prefixo `tesouraria|gerencia|gerente|financeiro|
+  // diretor geral` —, que e a mesma tabela que o servidor consulta.
   it.each([
-    perfil("Conferente de loja", ["despesas_criar"]),
-    perfil("DP", ["despesas_criar"]),
-    perfil("Compras", ["mercadorias_criar"]),
-    perfil("Gerencia de loja", ["caixa_operar"]),
-    perfil("Diretor Geral", []),
-    perfil("Caixa", ["caixa_operar"], "usuario_admin")
-  ])("Deve_SeguirExatamenteEhOperadorDeCaixa_Quando_OCargoE_$nome", (ator) => {
+    { ator: perfil("Conferente de loja", ["despesas_criar"]), exige: true },
+    { ator: perfil("DP", ["despesas_criar"]), exige: true },
+    { ator: perfil("Compras", ["mercadorias_criar"]), exige: true },
+    { ator: perfil("Caixa", ["caixa_operar", "caixas_gerenciar"]), exige: true },
+    { ator: perfil("Gerencia de loja", ["caixa_operar"]), exige: false },
+    { ator: perfil("Diretor Geral", []), exige: false },
+    { ator: perfil("Tesouraria", []), exige: false },
+    { ator: perfil("Caixa", ["caixa_operar"], "usuario_admin"), exige: false }
+  ])("Deve_ExigirCaixa_$exige_Quando_OCargoE_$ator.nome", ({ ator, exige }) => {
     for (const entidade of SAIDAS) {
-      expect(operacaoExigeCaixaAberto(entidade, ator)).toBe(ehOperadorDeCaixa(ator));
+      expect(operacaoExigeCaixaAberto(entidade, ator)).toBe(exige);
     }
   });
 
@@ -140,10 +148,15 @@ describe("operacaoExigeCaixaAberto", () => {
     expect(operacaoExigeCaixaAberto("venda", OPERADOR)).toBe(true);
   });
 
-  // A transferencia nunca exigiu — e o precedente que a A-1 seguiu.
-  it("Deve_NaoExigirCaixaDeNinguem_Quando_AOperacaoETransferencia", () => {
+  // A transferencia segue a MESMA regra das saidas, e nao "nunca exige".
+  //
+  // `criarTransferencia` ramifica em `transferenciaLivre ? buscar : obterCaixaParaLancamento`: a
+  // retaguarda cria sem caixa, o OPERADOR nao. A versao anterior deste caso afirmava `false` para os
+  // dois e congelava o defeito — o operador sem caixa abria o modal pelo "+ NOVO" e levava 400 no
+  // salvar, porque o FAB nao e travado por caixa aberto.
+  it("Deve_SeguirAMesmaRegraDasSaidas_Quando_AOperacaoETransferencia", () => {
     expect(operacaoExigeCaixaAberto("transferencia", FINANCEIRO)).toBe(false);
-    expect(operacaoExigeCaixaAberto("transferencia", OPERADOR)).toBe(false);
+    expect(operacaoExigeCaixaAberto("transferencia", OPERADOR)).toBe(true);
   });
 
   // Sessao ainda carregando: sem perfil, `ehOperadorDeCaixa` e `false`, entao a saida nao exige

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste } from "../../setup/contexto.js";
+import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // DECISAO B-1 (Jose, 10/08/2026):
@@ -14,9 +14,14 @@ import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 //
 // O ator central e `semRecorrencia` (setup/seed.ts): tem `despesas_visualizar` e
 // `retiradas_visualizar` e NAO tem `cadastro_colaboradores_visualizar`, `cadastro_usuarios_visualizar`,
-// `cadastro_fornecedores_visualizar`, `mercadorias_visualizar` nem `caixa_operar`. E o unico perfil do
-// seed que chega as duas rotas EXCLUSIVAMENTE pelas permissoes novas — com qualquer outro, um 200 nao
-// provaria que o gate mudou, e um contrato reduzido nao provaria por qual porta ele entrou.
+// `cadastro_fornecedores_visualizar`, `mercadorias_visualizar` nem `caixa_operar`. Ele prova o gate de
+// COLABORADORES pelas permissoes novas e a projecao reduzida das duas rotas.
+//
+// Ele NAO serve para provar o gate de FORNECEDORES: `despesas_visualizar` ja estava naquele gate
+// antes desta entrega, entao um 200 dele viria pela porta velha e apagar `retiradas_visualizar` do
+// controller deixaria a suite verde. Foi o falso-verde que a revisao pegou. O gate de fornecedores e
+// provado a parte, com a Tesouraria — o unico perfil do seed sem nenhuma das permissoes antigas —,
+// medindo 403 ANTES e 200 DEPOIS da concessao de `retiradas_visualizar`.
 //
 // O oraculo e o CONJUNTO DE CHAVES, nao os valores: um campo que chega nulo por acaso no seed passaria
 // despercebido numa comparacao de valores, e e justamente o campo que nao pode existir.
@@ -35,17 +40,27 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
   let cookieCadastro = "";
   let cookieSemPermissao = "";
   let cookieMultiempresa = "";
+  let cookieSoCaixaOperar = "";
+  let cookieSoRetiradas = "";
   let fornecedorDaEmpresaB = "";
   let colaboradorDaEmpresaB = "";
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieOperacional, cookieCadastro, cookieSemPermissao, cookieMultiempresa] = await Promise.all([
-      cookieSessao(contexto.app, "semRecorrencia"),
-      cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "semPermissao"),
-      cookieSessao(contexto.app, "multiempresa")
-    ]);
+    [cookieOperacional, cookieCadastro, cookieSemPermissao, cookieMultiempresa, cookieSoCaixaOperar] =
+      await Promise.all([
+        cookieSessao(contexto.app, "semRecorrencia"),
+        cookieSessao(contexto.app, "admin"),
+        cookieSessao(contexto.app, "semPermissao"),
+        cookieSessao(contexto.app, "multiempresa"),
+        // `operadorEntradas` tem `caixa_operar` e NAO tem `despesas_visualizar`. Depois da B-1 ele e o
+        // unico perfil do seed que ainda isola a permissao ANTIGA do gate de colaboradores: o `caixa`
+        // passou a entrar por `despesas_visualizar`, entao sem este ator apagar `caixa_operar` do
+        // controller deixaria a suite verde.
+        cookieSessao(contexto.app, "operadorEntradas")
+      ]);
+    // Ainda SEM `retiradas_visualizar` — o caso do aceite 3 mede o 403 antes da concessao.
+    cookieSoRetiradas = await cookieSessao(contexto.app, "tesouraria");
 
     // O colaborador do seed nasce com `cpf` NULO. Sem um CPF de verdade gravado, "a resposta nao tem
     // CPF" seria verdade por acidente e a projecao poderia ser removida sem nenhum teste cair.
@@ -68,6 +83,35 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
     fornecedorDaEmpresaB = fornecedorB.id;
     colaboradorDaEmpresaB = colaboradorB.id;
   }, 180_000);
+
+  // O ator que isola `retiradas_visualizar` no gate de fornecedores. A Tesouraria do seed nao tem
+  // NENHUMA das tres permissoes que ja passavam ali (`cadastro_fornecedores_visualizar`,
+  // `despesas_visualizar`, `mercadorias_visualizar`), entao a porta dela e exclusivamente a nova.
+  // A concessao ACRESCENTA a regra existente: o seed grava as permissoes na mesma camada de usuario e
+  // `substituirPermissoesUsuarioRepository` apaga a linha antes de gravar.
+  async function concederRetiradasVisualizarATesouraria() {
+    const alvo = await consultarUm<{ usuario_id: string }>(
+      "select usuario_id from perfis_usuarios where lower(email) = lower($1)",
+      [usuariosTeste.tesouraria.email]
+    );
+    if (!alvo) throw new Error("Usuario tesouraria nao encontrado");
+    const atuais = await consultarUm<{ regras: Record<string, boolean> }>(
+      "select regras from permissoes_usuarios where usuario_id = $1",
+      [alvo.usuario_id]
+    );
+    const concessao = await contexto.app.inject({
+      method: "POST",
+      url: "/api/permissoes",
+      headers: { cookie: cookieCadastro },
+      payload: {
+        tipoPermissao: "usuario",
+        usuarioId: alvo.usuario_id,
+        regras: { ...(atuais?.regras ?? {}), retiradas_visualizar: true }
+      }
+    });
+    expect([200, 201]).toContain(concessao.statusCode);
+    cookieSoRetiradas = await cookieSessao(contexto.app, "tesouraria");
+  }
 
   afterAll(async () => contexto.fechar());
 
@@ -103,23 +147,52 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
     expect(permissoes).not.toContain("caixa_operar");
   });
 
-  // ACEITE 1 e 3: as duas rotas passaram a aceitar as permissoes operacionais.
+  // ACEITE 1: `despesas_visualizar` e permissao NOVA no gate de colaboradores, entao o 200 do
+  // `semRecorrencia` so pode vir por ela — ele nao tem `cadastro_colaboradores_visualizar` nem
+  // `caixa_operar`, as duas que ja passavam.
   it("Deve_Responder200_Quando_DespesasVisualizarConsultaColaboradores", async () => {
     const resposta = await listar(cookieOperacional, "/api/colaboradores");
     expect(resposta.statusCode, resposta.body).toBe(200);
     expect(itens(resposta).length).toBeGreaterThan(0);
   });
 
-  it("Deve_Responder200_Quando_RetiradasVisualizarConsultaFornecedores", async () => {
-    const resposta = await listar(cookieOperacional, "/api/fornecedores");
+  // ACEITE 3, provado pela transicao 403 -> 200 sobre o MESMO ator. E a unica forma de amarrar o
+  // resultado a permissao nova: `semRecorrencia` entraria por `despesas_visualizar`, que ja estava no
+  // gate, e apagar `retiradas_visualizar` do controller nao derrubaria nada.
+  it("Deve_AbrirFornecedores_Quando_ORetiradasVisualizarEConcedido", async () => {
+    assertProblem(await listar(cookieSoRetiradas, "/api/fornecedores"), 403, "INSUFFICIENT_PERMISSION");
+
+    await concederRetiradasVisualizarATesouraria();
+
+    const depois = await listar(cookieSoRetiradas, "/api/fornecedores");
+    expect(depois.statusCode, depois.body).toBe(200);
+    expect(itens(depois).length).toBeGreaterThan(0);
+    // E entra na projecao reduzida, como toda permissao operacional.
+    for (const item of itens(depois)) {
+      expect(Object.keys(item).sort()).toEqual([...CONTRATO_REDUZIDO].sort());
+    }
+    expect(depois.body).not.toContain(CNPJ_DO_FORNECEDOR);
+  });
+
+  // A permissao ANTIGA do gate de colaboradores continua valendo — e, depois da B-1, `operadorEntradas`
+  // e o unico perfil do seed que a isola. Sem este caso, remover `caixa_operar` do controller passaria
+  // despercebido.
+  it("Deve_Responder200ComContratoReduzido_Quando_OAtorSoTemCaixaOperar", async () => {
+    const resposta = await listar(cookieSoCaixaOperar, "/api/colaboradores");
     expect(resposta.statusCode, resposta.body).toBe(200);
     expect(itens(resposta).length).toBeGreaterThan(0);
+    for (const item of itens(resposta)) {
+      expect(Object.keys(item).sort()).toEqual([...CONTRATO_REDUZIDO].sort());
+    }
+    expect(resposta.body).not.toContain(CPF_DO_COLABORADOR);
   });
 
   // ACEITE 2 e 5: o contrato operacional e exatamente tres campos — e o CPF nao esta no corpo, nem
   // escondido num campo com outro nome.
   it("Deve_DevolverSoIdEmpresaNome_Quando_ColaboradoresSaiPorPermissaoOperacional", async () => {
     const resposta = await listar(cookieOperacional, "/api/colaboradores");
+    // Nao-vacuidade: um `for` sobre lista vazia passa. A lista tem de existir para o contrato valer.
+    expect(itens(resposta).length).toBeGreaterThan(0);
     for (const item of itens(resposta)) {
       expect(Object.keys(item).sort()).toEqual([...CONTRATO_REDUZIDO].sort());
     }
@@ -130,6 +203,7 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
   // projecao nenhuma, e `despesas_visualizar`/`mercadorias_visualizar` ja recebiam o CNPJ inteiro.
   it("Deve_DevolverSoIdEmpresaNome_Quando_FornecedoresSaiPorPermissaoOperacional", async () => {
     const resposta = await listar(cookieOperacional, "/api/fornecedores");
+    expect(itens(resposta).length).toBeGreaterThan(0);
     for (const item of itens(resposta)) {
       expect(Object.keys(item).sort()).toEqual([...CONTRATO_REDUZIDO].sort());
     }
@@ -141,6 +215,7 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
   it("Deve_ManterOContratoCompleto_Quando_OAtorTemAPermissaoDeCadastro", async () => {
     const colaboradores = await listar(cookieCadastro, "/api/colaboradores");
     expect(colaboradores.statusCode, colaboradores.body).toBe(200);
+    expect(itens(colaboradores).length).toBeGreaterThan(0);
     for (const item of itens(colaboradores)) {
       expect(Object.keys(item).sort()).toEqual([...CONTRATO_COMPLETO_COLABORADOR].sort());
     }
@@ -148,6 +223,7 @@ describe("CX-M06 B-1 - credores por permissao operacional, em projecao reduzida"
 
     const fornecedores = await listar(cookieCadastro, "/api/fornecedores");
     expect(fornecedores.statusCode, fornecedores.body).toBe(200);
+    expect(itens(fornecedores).length).toBeGreaterThan(0);
     for (const item of itens(fornecedores)) {
       expect(Object.keys(item).sort()).toEqual([...CONTRATO_COMPLETO_FORNECEDOR].sort());
     }

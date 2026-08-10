@@ -238,11 +238,14 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
     expect(criada.statusCode, criada.body).toBe(201);
     const { id } = json<{ data: { id: string } }>(criada).data;
 
+    // Troca a CONTA junto com o valor: sem caixa aberto a retaguarda escolhe livremente entre as
+    // contas da empresa, e e essa metade que o comentario de producao promete. Repetir a mesma conta
+    // deixaria passar uma regra "conta imutavel na edicao" sem ninguem notar.
     const editada = await put(
       cookieGerente,
       `${rota}/${id}`,
       corpo(`CX-M06 A-1 edita ${nome} corrigida`, {
-        contaOrigemId: idsTeste.contaBanco,
+        contaOrigemId: idsTeste.contaLivre,
         valorOriginal: 55,
         ...extras
       })
@@ -250,11 +253,11 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
 
     expect(editada.statusCode, editada.body).toBe(200);
     expect(
-      await consultarUm<{ valor_original: string; caixa_id: string | null }>(
-        `select valor_original, caixa_id from ${nome}s where id = $1`,
+      await consultarUm<{ valor_original: string; caixa_id: string | null; conta_origem_id: string | null }>(
+        `select valor_original, caixa_id, conta_origem_id from ${nome}s where id = $1`,
         [id]
       )
-    ).toEqual({ valor_original: "55.00", caixa_id: null });
+    ).toEqual({ valor_original: "55.00", caixa_id: null, conta_origem_id: idsTeste.contaLivre });
   });
 
   // PROVA 2 (segunda metade): "conta autorizada" continua valendo. A retaguarda escolhe livremente
@@ -277,7 +280,9 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
     );
 
     assertProblem(criada, 400);
-    expect(criada.body).toContain("pertence a empresa informada");
+    // Prende em "Conta de origem": `validarReferenciasDespesa` usa a MESMA frase final para
+    // fornecedor, colaborador, grupo e item de patrimonio, entao so o sufixo nao diz o que falhou.
+    expect(criada.body).toContain("Conta de origem");
     expect(
       await consultarUm<{ total: string }>("select count(*) as total from despesas where descricao = $1", [descricao])
     ).toMatchObject({ total: "0" });
@@ -314,14 +319,18 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
   // A PRE-CONDICAO desta secao. Sem ela, tudo abaixo passaria verde provando outra coisa: se o admin
   // nao tivesse caixa aberto, "caixa_id nulo" seria o resultado trivial de nao haver caixa.
   it("Deve_TerCaixaAbertoNaContaDoPdv_Quando_OAtorEARetaguardaDaSecaoA4", async () => {
+    // `usuario_caixa_id` entra na assercao porque `buscarCaixaAbertoUsuarioRepository` filtra por ELE:
+    // se o seed trocar o dono do caixa, `obterCaixaDaSaida` passa a devolver `null` para o admin e
+    // "caixa_id nulo" volta a ser o resultado trivial de nao haver caixa.
     expect(
-      await consultarUm<{ id: string; conta_id: string }>(
-        `select f.id, p.conta_id from fechamentos_caixa f
+      await consultarUm<{ id: string; conta_id: string; usuario_caixa_id: string }>(
+        `select f.id, p.conta_id, f.usuario_caixa_id from fechamentos_caixa f
            join pdvs p on p.id = f.pdv_id
-          where f.id = $1 and f.status = 'aberto'`,
-        [idsTeste.caixaAberto]
+           join perfis_usuarios pu on pu.usuario_id = f.usuario_caixa_id
+          where f.id = $1 and f.status = 'aberto' and lower(pu.email) = lower($2)`,
+        [idsTeste.caixaAberto, usuariosTeste.admin.email]
       )
-    ).toEqual({ id: idsTeste.caixaAberto, conta_id: idsTeste.contaCaixa });
+    ).toMatchObject({ id: idsTeste.caixaAberto, conta_id: idsTeste.contaCaixa });
   });
 
   // A-4, os DOIS lados no mesmo teste. O contraste e o teste: "caixa_id sempre nulo" e "caixa_id
@@ -379,54 +388,72 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
     ).toEqual({ caixa_id: null });
   });
 
-  // A INVARIANTE, pelo PUT. `caixa_id` preenchido quer dizer "saiu da conta do PDV daquele caixa" — e
-  // o UPDATE preserva o `caixa_id` gravado. Sem esta regra bastava editar a conta para o lancamento
-  // seguir somando no fechamento com o dinheiro tendo saido de outro lugar.
+  // A INVARIANTE, pelo PUT, nas DUAS direcoes. `caixa_id` preenchido quer dizer "saiu da conta do PDV
+  // daquele caixa" — e o PUT tem de manter isso verdadeiro depois de a conta mudar. A regra e a MESMA
+  // do POST (`caixaIdDaSaida`), aplicada tambem no UPDATE; e o aceite 13 literal.
+  //
+  // A primeira versao desta entrega mantinha a invariante RECUSANDO a troca de conta. Estava errado
+  // por dois motivos que os revisores acharam: a tela apresenta a lista inteira de contas para a
+  // retaguarda (`contaTravadaDeCaixa` devolve ""), entao era 403 sobre um campo oferecido livre; e o
+  // codigo anterior a A-4 gravava `caixa.id` incondicionalmente, entao a recusa tornava ineditavel
+  // todo o historico que a propria retaguarda ja tinha criado.
   it.each(rotas)(
-    "Deve_RecusarSemGravar_Quando_ARetaguardaTiraDoPdvUmLancamentoPresoAoCaixa (%s)",
+    "Deve_SeguirAContaNasDuasDirecoes_Quando_ARetaguardaEditaOCaixaId (%s)",
     async (nome, rota, extras) => {
       const descricao = `CX-M06 A-4 invariante ${nome}`;
       const criada = await post(cookieAdmin, rota, corpo(descricao, { contaOrigemId: idsTeste.contaCaixa, ...extras }));
       expect(criada.statusCode, criada.body).toBe(201);
       const { id } = json<{ data: { id: string } }>(criada).data;
+      const linha = () =>
+        consultarUm<{ conta_origem_id: string | null; caixa_id: string | null; valor_original: string }>(
+          `select conta_origem_id, caixa_id, valor_original from ${nome}s where id = $1`,
+          [id]
+        );
+      expect(await linha()).toEqual({
+        conta_origem_id: idsTeste.contaCaixa,
+        caixa_id: idsTeste.caixaAberto,
+        valor_original: "10.00"
+      });
 
-      const antes = await consultarUm(`select conta_origem_id, caixa_id, valor_original from ${nome}s where id = $1`, [
-        id
-      ]);
-
-      // (a) trocando a conta explicitamente.
-      const trocandoAConta = await put(
+      // SAINDO do PDV: o dinheiro deixou de sair daquela gaveta, entao o lancamento deixa o fechamento.
+      const paraFora = await put(
         cookieAdmin,
         `${rota}/${id}`,
-        corpo(`${descricao} trocada`, { contaOrigemId: idsTeste.contaBanco, valorOriginal: 99, ...extras })
+        corpo(`${descricao} fora`, { contaOrigemId: idsTeste.contaBanco, valorOriginal: 99, ...extras })
       );
-      assertProblem(trocandoAConta, 403);
+      expect(paraFora.statusCode, paraFora.body).toBe(200);
+      expect(await linha()).toEqual({
+        conta_origem_id: idsTeste.contaBanco,
+        caixa_id: null,
+        valor_original: "99.00"
+      });
 
-      // (b) omitindo a conta — para a retaguarda nao ha conta de PDV a repor, entao o UPDATE gravaria
-      // NULL mantendo o `caixa_id`. E o mesmo defeito B-05(c) que a rodada anterior fechou para o
-      // operador, pela porta da retaguarda.
-      const semAConta = await put(
+      // VOLTANDO para o PDV: e a direcao que a versao anterior deixava passar sem corrigir o
+      // `caixa_id`. O valor saia do saldo da conta do PDV e nunca aparecia no fechamento.
+      const paraDentro = await put(
         cookieAdmin,
         `${rota}/${id}`,
-        corpo(`${descricao} sem conta`, { valorOriginal: 99, ...extras })
+        corpo(`${descricao} dentro`, { contaOrigemId: idsTeste.contaCaixa, valorOriginal: 77, ...extras })
       );
-      assertProblem(semAConta, 403);
-
-      // Nenhuma das duas escreveu: o registro INTEIRO continua como estava.
-      expect(
-        await consultarUm(`select conta_origem_id, caixa_id, valor_original from ${nome}s where id = $1`, [id])
-      ).toEqual(antes);
+      expect(paraDentro.statusCode, paraDentro.body).toBe(200);
+      expect(await linha()).toEqual({
+        conta_origem_id: idsTeste.contaCaixa,
+        caixa_id: idsTeste.caixaAberto,
+        valor_original: "77.00"
+      });
     }
   );
 
-  // O outro lado da invariante: preso ao caixa, mas continuando na conta do PDV, a retaguarda corrige
-  // normalmente. Sem este caso a regra acima poderia ser "retaguarda nao edita nada preso a caixa" e
-  // ninguem notaria.
-  it("Deve_EditarNaContaDoPdv_Quando_OLancamentoEstaPresoAoCaixaDaPropriaRetaguarda", async () => {
+  // O corpo SEM conta: para a retaguarda nao ha conta de PDV a repor, entao a conta fica nula — e o
+  // `caixa_id` tem de acompanhar. Antes o UPDATE preservava o `caixa_id` gravado e nascia o par
+  // (conta NULA, caixa preenchido): o valor sumia do saldo de qualquer conta e continuava somando no
+  // fechamento. E o defeito B-05(c) que a rodada anterior fechou para o operador, pela porta da
+  // retaguarda.
+  it("Deve_ZerarOCaixaIdJuntoComAConta_Quando_ARetaguardaSalvaSemInformarConta", async () => {
     const criada = await post(
       cookieAdmin,
       "/api/despesas",
-      corpo("CX-M06 A-4 corrige no pdv", {
+      corpo("CX-M06 A-4 sem conta", {
         contaOrigemId: idsTeste.contaCaixa,
         grupoDespesaId: idsTeste.grupoDespesaOperacional,
         fornecedorId: idsTeste.fornecedor
@@ -438,20 +465,113 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
     const editada = await put(
       cookieAdmin,
       `/api/despesas/${id}`,
-      corpo("CX-M06 A-4 corrige no pdv corrigida", {
-        contaOrigemId: idsTeste.contaCaixa,
-        valorOriginal: 88,
+      corpo("CX-M06 A-4 sem conta corrigida", {
+        valorOriginal: 66,
         grupoDespesaId: idsTeste.grupoDespesaOperacional,
         fornecedorId: idsTeste.fornecedor
       })
     );
     expect(editada.statusCode, editada.body).toBe(200);
     expect(
-      await consultarUm<{ valor_original: string; caixa_id: string | null; conta_origem_id: string }>(
-        "select valor_original, caixa_id, conta_origem_id from despesas where id = $1",
+      await consultarUm<{ conta_origem_id: string | null; caixa_id: string | null }>(
+        "select conta_origem_id, caixa_id from despesas where id = $1",
         [id]
       )
-    ).toEqual({ valor_original: "88.00", caixa_id: idsTeste.caixaAberto, conta_origem_id: idsTeste.contaCaixa });
+    ).toEqual({ conta_origem_id: null, caixa_id: null });
+  });
+
+  // HISTORICO INCOERENTE: antes da A-4 o `caixa_id` era gravado incondicionalmente, entao existem
+  // linhas com `caixa_id` preenchido e uma conta que nao e a do PDV. Elas TEM de continuar editaveis
+  // — e o salvar corrige o par. A fixture e montada no banco porque a API atual nao consegue mais
+  // produzir esse estado, que e exatamente o motivo de ele precisar de teste.
+  it("Deve_CorrigirOParEDeixarEditar_Quando_OHistoricoTemCaixaIdComContaDeFora", async () => {
+    const criada = await post(
+      cookieAdmin,
+      "/api/despesas",
+      corpo("CX-M06 A-4 historico incoerente", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(criada).data;
+
+    // O estado que a regra ANTIGA produzia: conta "Banco" e o caixa aberto da retaguarda.
+    await executarSql("update despesas set caixa_id = $2 where id = $1", [id, idsTeste.caixaAberto]);
+
+    const editada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 A-4 historico corrigido", {
+        contaOrigemId: idsTeste.contaBanco,
+        valorOriginal: 44,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(editada.statusCode, editada.body).toBe(200);
+    expect(
+      await consultarUm<{ conta_origem_id: string | null; caixa_id: string | null; valor_original: string }>(
+        "select conta_origem_id, caixa_id, valor_original from despesas where id = $1",
+        [id]
+      )
+    ).toEqual({ conta_origem_id: idsTeste.contaBanco, caixa_id: null, valor_original: "44.00" });
+  });
+
+  // A metade que NAO afrouxou: lancamento preso ao caixa de OUTRA pessoa continua recusado, e a
+  // recusa nao escreve. Sem este caso, "retaguarda edita qualquer coisa" passaria verde.
+  it("Deve_RecusarSemGravar_Quando_ARetaguardaEditaLancamentoDeCaixaAlheio", async () => {
+    const descricao = "CX-M06 A-4 caixa alheio";
+    const doOperador = await post(
+      cookieCaixa,
+      "/api/despesas",
+      corpo(descricao, {
+        contaOrigemId: contaDoPdv,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(doOperador.statusCode, doOperador.body).toBe(201);
+    const { id } = json<{ data: { id: string } }>(doOperador).data;
+    const antes = await consultarUm(`select descricao, conta_origem_id, caixa_id from despesas where id = $1`, [id]);
+    expect(antes).toMatchObject({ caixa_id: caixaDoOperador });
+
+    const recusada = await put(
+      cookieAdmin,
+      `/api/despesas/${id}`,
+      corpo("CX-M06 A-4 caixa alheio invadido", {
+        contaOrigemId: idsTeste.contaBanco,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    assertProblem(recusada, 403);
+    expect(await consultarUm(`select descricao, conta_origem_id, caixa_id from despesas where id = $1`, [id])).toEqual(
+      antes
+    );
+  });
+
+  // A conta do PDV de um caixa ALHEIO nao puxa o lancamento para aquele caixa: `caixaIdDaSaida` olha
+  // o caixa do PROPRIO ator. E o trade-off que a decisao assumiu ao seguir a transferencia — o valor
+  // sai do saldo daquela conta e nao entra em fechamento nenhum. Fixado aqui para ser escolha, e nao
+  // acidente.
+  it("Deve_GravarCaixaIdNulo_Quando_ARetaguardaUsaAContaDoPdvDeOutroOperador", async () => {
+    const criada = await post(
+      cookieGerente,
+      "/api/despesas",
+      corpo("CX-M06 A-4 conta de pdv alheio", {
+        contaOrigemId: contaDoPdv,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        fornecedorId: idsTeste.fornecedor
+      })
+    );
+    expect(criada.statusCode, criada.body).toBe(201);
+    expect(
+      await consultarUm<{ caixa_id: string | null }>("select caixa_id from despesas where id = $1", [
+        json<{ data: { id: string } }>(criada).data.id
+      ])
+    ).toEqual({ caixa_id: null });
   });
 
   // PROVA 4 (segunda metade): sem caixa aberto o operador continua BARRADO. E a metade da regra que
