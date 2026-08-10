@@ -327,6 +327,12 @@ export async function atualizarDespesaRepository(
       .update(despesas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        // A-4: a coluna passou a ser ESCRITA na edicao. Ate aqui o `caixaId` chegava so para o
+        // debito do colaborador e o `UPDATE` nunca tocava `despesas.caixa_id` — o que equivalia a
+        // preservar o valor gravado. Preservar deixou de ser correto quando a conta passou a decidir
+        // a quem o lancamento pertence: trocar a conta sem trocar o `caixa_id` deixa o valor somando
+        // no fechamento com o dinheiro tendo saido de outro lugar (e o contrario, tambem).
+        caixaId,
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,

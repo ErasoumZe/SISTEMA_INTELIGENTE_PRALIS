@@ -182,6 +182,8 @@ export async function atualizarRetiradaRepository(
       .update(retiradas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        // A-4: a coluna passou a ser ESCRITA na edicao — ver a nota em `atualizarDespesaRepository`.
+        caixaId,
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,

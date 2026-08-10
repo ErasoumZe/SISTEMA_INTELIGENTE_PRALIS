@@ -240,7 +240,18 @@ export async function atualizarDespesa(
       caixa,
       perfil
     );
-    await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
+    // A-4: o `caixa_id` sai da MESMA funcao do POST. Antes o UPDATE preservava `existente.caixaId`,
+    // e bastava a retaguarda editar a conta para o lancamento seguir somando no fechamento com o
+    // dinheiro tendo saido de outro lugar (ou o contrario: entrar na conta do PDV e nunca aparecer no
+    // fechamento). Para o operador o valor e identico ao gravado — a conta dele e sempre a do PDV.
+    await atualizarDespesaRepository(
+      despesaId,
+      normalizados,
+      computar,
+      caixaIdDaSaida(caixa, normalizados),
+      perfil.usuarioId,
+      tx
+    );
     return { id: despesaId, computar };
   });
 }

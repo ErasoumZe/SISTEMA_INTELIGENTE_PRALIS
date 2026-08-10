@@ -228,7 +228,8 @@ export async function atualizarMercadoria(
       caixa,
       perfil
     );
-    await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
+    // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
+    await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, caixaIdDaSaida(caixa, normalizados), tx);
     return { id: mercadoriaId, computar };
   });
 }

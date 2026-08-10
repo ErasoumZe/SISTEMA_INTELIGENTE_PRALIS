@@ -171,7 +171,15 @@ export async function atualizarRetirada(
       caixa,
       perfil
     );
-    await atualizarRetiradaRepository(retiradaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
+    // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
+    await atualizarRetiradaRepository(
+      retiradaId,
+      normalizados,
+      computar,
+      caixaIdDaSaida(caixa, normalizados),
+      perfil.usuarioId,
+      tx
+    );
     return { id: retiradaId, computar };
   });
 }
