@@ -99,6 +99,24 @@ export async function criarRetiradaRepository(
   });
 }
 
+/**
+ * Trava a linha da retirada para a EDICAO — ver a nota em `travarDespesaRepository`.
+ *
+ * Aqui a corrida e pior que a da despesa: sem lock, a segunda edicao nao so reintroduz o credor
+ * legado como RECRIA o `debitos_colaboradores` que a primeira tinha apagado — ou seja, ressuscita
+ * divida de funcionario ja quitada.
+ *
+ * `NO KEY UPDATE` pelo mesmo motivo: `debitos_colaboradores.retirada_id` referencia esta linha.
+ */
+export async function travarRetiradaRepository(retiradaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: retiradas.id })
+    .from(retiradas)
+    .where(eq(retiradas.id, retiradaId))
+    .for("no key update");
+  return linha ?? null;
+}
+
 export async function buscarRetiradaDetalheRepository(
   retiradaId: string,
   db: ExecutorBanco = banco

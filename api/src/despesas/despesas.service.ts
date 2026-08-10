@@ -35,6 +35,7 @@ import {
   atualizarFotoDespesaRepository,
   atualizarFotoNotaDespesaRepository,
   buscarDespesaDetalheRepository,
+  travarDespesaRepository,
   criarDespesaRepository,
   discriminarDespesaRepository,
   listarDespesasRepository
@@ -203,6 +204,10 @@ export async function atualizarDespesa(
   validarDespesa(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler: daqui para baixo, `existente` e o retrato sob lock, e nenhuma outra
+    // transacao altera a linha ate esta terminar. Toda validacao que compara com o estado anterior
+    // — a excecao de credor legado, a conta gravada, a data de pagamento — usa ESTE retrato.
+    if (!(await travarDespesaRepository(despesaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento

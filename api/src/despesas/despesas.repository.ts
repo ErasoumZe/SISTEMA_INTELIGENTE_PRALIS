@@ -192,6 +192,32 @@ export async function criarDespesaRepository(
   });
 }
 
+/**
+ * Trava a linha da despesa para a EDICAO, dentro da transacao de quem chama.
+ *
+ * A excecao de legado (par de credores intacto) e decidida comparando o payload com o registro
+ * GRAVADO. Sem lock, duas edicoes liam o mesmo retrato: a primeira modernizava e commitava, e a
+ * segunda validava contra o retrato velho e reintroduzia o par incoerente por cima do registro ja
+ * saneado — com `debitos_colaboradores` recriado junto.
+ *
+ * `NO KEY UPDATE`, e nao `UPDATE`: o `UPDATE` desta rota nao toca a chave primaria, e `FOR UPDATE`
+ * conflitaria com o `FOR KEY SHARE` que o Postgres toma sozinho ao validar as FKs de
+ * `despesas_itens`, `debitos_colaboradores` e `ajustes_fechamento_caixa` — a discriminacao e o
+ * fechamento passariam a esperar por uma edicao em curso, sem necessidade. Mesma matriz do lock da
+ * raiz de colaboradores (commit 3ccb268).
+ *
+ * Fica numa consulta propria em vez de `.for(...)` no detalhe porque o mesmo repositorio de detalhe
+ * serve o GET, e leitura pura nao pode travar linha.
+ */
+export async function travarDespesaRepository(despesaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: despesas.id })
+    .from(despesas)
+    .where(eq(despesas.id, despesaId))
+    .for("no key update");
+  return linha ?? null;
+}
+
 export async function buscarDespesaDetalheRepository(
   despesaId: string,
   db: ExecutorBanco = banco

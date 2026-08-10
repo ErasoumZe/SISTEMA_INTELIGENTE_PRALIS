@@ -45,6 +45,7 @@ import {
   atualizarFotoNotaMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
+  travarMercadoriaRepository,
   criarMercadoriaRepository,
   discriminarMercadoriaRepository,
   listarMercadoriasAguardandoAprovacaoRepository,
@@ -198,6 +199,8 @@ export async function atualizarMercadoria(
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_editar");
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
+    if (!(await travarMercadoriaRepository(mercadoriaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.

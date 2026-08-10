@@ -159,6 +159,23 @@ export async function criarMercadoriaRepository(
   });
 }
 
+/**
+ * Trava a linha da mercadoria para a EDICAO — ver a nota em `travarDespesaRepository`.
+ *
+ * A mercadoria nao tem excecao de credor legado (so oferta fornecedor), mas tem a MESMA janela para
+ * `dataPagamento` e para a conta do caixa: le sem lock, valida contra o retrato e escreve depois.
+ * Fica travada junto para as tres saidas terem o mesmo contrato de edicao — deixar uma fora e como o
+ * caminho antigo continuar existindo.
+ */
+export async function travarMercadoriaRepository(mercadoriaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: mercadorias.id })
+    .from(mercadorias)
+    .where(eq(mercadorias.id, mercadoriaId))
+    .for("no key update");
+  return linha ?? null;
+}
+
 export async function buscarMercadoriaDetalheRepository(
   mercadoriaId: string,
   db: ExecutorBanco = banco

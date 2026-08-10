@@ -35,6 +35,7 @@ import {
   atualizarFotoRetiradaRepository,
   atualizarRetiradaRepository,
   buscarRetiradaDetalheRepository,
+  travarRetiradaRepository,
   criarRetiradaRepository,
   listarRetiradasRepository
 } from "./retiradas.repository.js";
@@ -143,6 +144,9 @@ export async function atualizarRetirada(
   exigirPermissaoLancamento(perfil.permissoes, "retiradas_editar");
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler — ver a nota em `atualizarDespesa`. Sem isto, duas edicoes concorrentes
+    // liam o mesmo retrato e a segunda ressuscitava o credor legado E a divida do colaborador.
+    if (!(await travarRetiradaRepository(retiradaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
     const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
