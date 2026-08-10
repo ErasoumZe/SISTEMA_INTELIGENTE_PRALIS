@@ -38,20 +38,27 @@ export function ehOperadorDeCaixa(perfil: PerfilUsuario | null | undefined): boo
  * "Abra um caixa" e era mandada para /caixa — onde, sem `caixa_operar`, ela nem consegue abrir um.
  * A API aceitaria o lancamento; so a tela recusava.
  *
- * Os tres casos, e por que sao diferentes:
- * - **transferencia**: nunca exigiu — `criarTransferencia` ja ramificava por `podeLancarSemCaixa` e
- *   grava `caixa_id` nulo quando nao ha caixa;
- * - **venda**: continua exigindo de TODO MUNDO. `criarVenda` chama `obterCaixaParaLancamento`
+ * Duas regras, nao cinco:
+ * - **venda** exige de TODO MUNDO. `criarVenda` chama `obterCaixaParaLancamento`
  *   incondicionalmente e a A-1 nao a incluiu — liberar aqui abriria o modal para um 400 no salvar;
- * - **despesa/mercadoria/retirada**: desde a A-1 so o OPERADOR precisa, pela mesma funcao que o
+ * - **despesa/mercadoria/retirada/transferencia**: so o OPERADOR precisa, pela mesma funcao que o
  *   servidor consulta. Um cargo customizado nao pode divergir entre as duas pontas porque a
  *   pergunta e literalmente a mesma.
+ *
+ * A transferencia entrou nesse segundo grupo em vez de "nunca exige". A versao anterior dizia que
+ * ela nunca exigiu caixa, e isso e verdade so para a RETAGUARDA: `criarTransferencia` ramifica em
+ * `transferenciaLivre ? buscar : obterCaixaParaLancamento`, entao o operador de Caixa sem caixa
+ * aberto abria o modal e levava 400 no salvar. Dizer "nunca exige" congelava esse defeito.
+ *
+ * Limitacao conhecida, registrada e NAO corrigida aqui: `atualizarTransferencia` nao ramifica —
+ * exige caixa aberto de todos, inclusive da retaguarda. A tela nao modela isso, entao a retaguarda
+ * ainda abre o modal de EDICAO de transferencia e leva 400. E defeito de servidor anterior a esta
+ * entrega, na quarta operacao, e a decisao A-1 cobre so as tres saidas.
  */
 export function operacaoExigeCaixaAberto(
   entidade: EntidadeOperacional,
   perfil: PerfilUsuario | null | undefined
 ): boolean {
-  if (entidade === "transferencia") return false;
   if (entidade === "venda") return true;
   return ehOperadorDeCaixa(perfil);
 }

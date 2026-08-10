@@ -94,7 +94,7 @@ import {
   notaDaContaDoLancamento,
   operacaoExigeCaixaAberto
 } from "~/utils/perfil-caixa";
-import { opcoesPorEntidade, rotuloOpcao, type ChaveOpcaoOperacao } from "~/utils/opcoes-operacao";
+import { carregarOpcoesDaOperacao, type ChaveOpcaoOperacao } from "~/utils/opcoes-operacao";
 import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
@@ -713,7 +713,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
         carregarOpcaoOpcional(
           faltas,
-          "Grupos de patrimonio",
+          "Grupos de patrimônio",
           async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
           []
         ),
@@ -723,7 +723,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         // saiu da tela.
         carregarOpcaoOpcional(
           faltas,
-          "Itens de patrimonio",
+          "Itens de patrimônio",
           () => apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`),
           []
         )
@@ -756,7 +756,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
         carregarOpcaoOpcional(
           faltas,
-          "Grupos de patrimonio",
+          "Grupos de patrimônio",
           async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
           []
         )
@@ -1074,6 +1074,11 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     patrimonioItens: async () => {
       alvo.patrimonioItens = await apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`);
     },
+    gruposPatrimonio: async () => {
+      alvo.gruposPatrimonio = (
+        await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)
+      ).gruposPatrimonio;
+    },
     grupos: async () => {
       Object.assign(
         alvo,
@@ -1082,15 +1087,10 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     }
   };
 
-  // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal
-  // (+NOVO global). O que faltar vira aviso discreto.
-  const faltas: string[] = [];
-  await Promise.all(
-    opcoesPorEntidade[entidade].map((chave) =>
-      carregarOpcaoOpcional(faltas, rotuloOpcao[chave], tarefas[chave], undefined)
-    )
-  );
-  const aviso = avisoOpcoesIndisponiveis(faltas);
+  // A ORDEM e a tolerancia a falha vivem em `utils/opcoes-operacao`, onde o teste alcanca: um 403
+  // numa opcao secundaria nao impede as demais nem trava o modal (+NOVO global). O que faltar vira
+  // aviso discreto — falha silenciosa e proibida.
+  const aviso = avisoOpcoesIndisponiveis(await carregarOpcoesDaOperacao(entidade, tarefas));
   if (aviso) notificar(aviso, "warning");
 }
 
