@@ -9,7 +9,8 @@ import {
   contaTravadaDeCaixa,
   ehOperadorDeCaixa,
   nomeDaContaDoLancamento,
-  notaDaContaDoLancamento
+  notaDaContaDoLancamento,
+  operacaoExigeCaixaAberto
 } from "~/utils/perfil-caixa";
 
 const CONTA_PDV = "conta-do-pdv";
@@ -95,6 +96,61 @@ describe("contaTravadaDeCaixa", () => {
 
   it("Deve_DevolverVazio_Quando_OPdvNaoTemConta", () => {
     expect(contaTravadaDeCaixa(perfil("Caixa", ["caixa_operar"]), { pdvContaId: null })).toBe("");
+  });
+});
+
+// A-1 (Jose, 10/08/2026). O guard de `abrirOperacao` pedia caixa aberto para tudo que nao fosse
+// transferencia — e mandava quem nao tinha para /caixa. Depois da A-1 isso barrava exatamente quem a
+// decisao liberou: a retaguarda sem `caixa_operar` nem consegue abrir um caixa para si.
+describe("operacaoExigeCaixaAberto", () => {
+  const SAIDAS = ["despesa", "mercadoria", "retirada"] as const;
+  const FINANCEIRO = perfil("Financeiro", ["despesas_criar", "retiradas_criar"]);
+  const OPERADOR = perfil("Caixa", ["caixa_operar", "despesas_criar"]);
+
+  // ACEITE 10: a tela nao bloqueia mais a retaguarda por ausencia de caixa.
+  it.each(SAIDAS)("Deve_NaoExigirCaixa_Quando_ERetaguarda (%s)", (entidade) => {
+    expect(operacaoExigeCaixaAberto(entidade, FINANCEIRO)).toBe(false);
+  });
+
+  // ACEITE 11: e continua exigindo do operador, que e quem a API tambem barra.
+  it.each(SAIDAS)("Deve_ExigirCaixa_Quando_EOperadorDeCaixa (%s)", (entidade) => {
+    expect(operacaoExigeCaixaAberto(entidade, OPERADOR)).toBe(true);
+  });
+
+  // ACEITE 12: cargo customizado nao pode divergir entre a tela e a API. A pergunta e uma so —
+  // `podeLancarSemCaixa` —, entao a resposta aqui e a negacao exata de `ehOperadorDeCaixa`.
+  it.each([
+    perfil("Conferente de loja", ["despesas_criar"]),
+    perfil("DP", ["despesas_criar"]),
+    perfil("Compras", ["mercadorias_criar"]),
+    perfil("Gerencia de loja", ["caixa_operar"]),
+    perfil("Diretor Geral", []),
+    perfil("Caixa", ["caixa_operar"], "usuario_admin")
+  ])("Deve_SeguirExatamenteEhOperadorDeCaixa_Quando_OCargoE_$nome", (ator) => {
+    for (const entidade of SAIDAS) {
+      expect(operacaoExigeCaixaAberto(entidade, ator)).toBe(ehOperadorDeCaixa(ator));
+    }
+  });
+
+  // A venda NAO entrou na A-1: `criarVenda` chama `obterCaixaParaLancamento` incondicionalmente.
+  // Liberar aqui abriria o modal para um 400 no salvar — e este caso e o que impede alguem de
+  // "simplificar" o guard para `ehOperadorDeCaixa` puro.
+  it("Deve_ExigirCaixaDeTodos_Quando_AOperacaoEVenda", () => {
+    expect(operacaoExigeCaixaAberto("venda", FINANCEIRO)).toBe(true);
+    expect(operacaoExigeCaixaAberto("venda", OPERADOR)).toBe(true);
+  });
+
+  // A transferencia nunca exigiu — e o precedente que a A-1 seguiu.
+  it("Deve_NaoExigirCaixaDeNinguem_Quando_AOperacaoETransferencia", () => {
+    expect(operacaoExigeCaixaAberto("transferencia", FINANCEIRO)).toBe(false);
+    expect(operacaoExigeCaixaAberto("transferencia", OPERADOR)).toBe(false);
+  });
+
+  // Sessao ainda carregando: sem perfil, `ehOperadorDeCaixa` e `false`, entao a saida nao exige
+  // caixa. E o mesmo default de `contaTravadaDeCaixa` — nao inventar trava sobre perfil desconhecido.
+  it("Deve_NaoExigirCaixaNasSaidas_Quando_NaoHaPerfil", () => {
+    expect(operacaoExigeCaixaAberto("despesa", null)).toBe(false);
+    expect(operacaoExigeCaixaAberto("venda", null)).toBe(true);
   });
 });
 
