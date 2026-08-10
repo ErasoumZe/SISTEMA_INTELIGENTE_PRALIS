@@ -11,23 +11,29 @@ async function requestReset() {
   message.value = "";
   error.value = "";
 
-  const response = await fetch(`${apiUrl}/api/auth/request-password-reset`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: email.value,
-      redirectTo: `${window.location.origin}/reset-password`
-    })
-  });
+  // Mesmo motivo do reset-password: sem try/finally, uma falha de rede deixava o botao girando
+  // para sempre. As duas telas do fluxo de recuperacao tinham o mesmo defeito.
+  try {
+    const response = await fetch(`${apiUrl}/api/auth/request-password-reset`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.value,
+        redirectTo: `${window.location.origin}/reset-password`
+      })
+    });
 
-  if (response.ok) {
-    message.value = "Se o e-mail existir, enviamos um link de recuperação. Verifique sua caixa de entrada.";
-  } else {
-    error.value = "Não foi possível solicitar a recuperação agora.";
+    if (response.ok) {
+      message.value = "Se o e-mail existir, enviamos um link de recuperação. Verifique sua caixa de entrada.";
+    } else {
+      error.value = "Não foi possível solicitar a recuperação agora.";
+    }
+  } catch {
+    error.value = "Não foi possível falar com o servidor. Tente novamente.";
+  } finally {
+    loading.value = false;
   }
-
-  loading.value = false;
 }
 </script>
 

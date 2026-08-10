@@ -5,12 +5,18 @@
 //
 // Sem cache de sessao de proposito: le /api/me a cada navegacao (cookie sempre fresco),
 // desacoplado do logout — evita sessao stale. Custo desprezivel num ERP interno.
-const ROTAS_PUBLICAS = new Set(["/login", "/forgot-password", "/reset-password"]);
+//
+// A allowlist e a normalizacao do caminho vivem em `utils/rotas-publicas.ts` para serem testaveis
+// sem runtime Nuxt: a comparacao exata contra `to.path` reprovava `/reset-password/` (com a barra
+// final que o Nginx acrescenta) e mandava o visitante para /login, com o token do e-mail na mao.
+import { ehRotaPublica } from "~/utils/rotas-publicas";
 
 export default defineNuxtRouteMiddleware(async (to) => {
   // SPA (ssr:false): so faz sentido no cliente.
   if (import.meta.server) return;
-  if (ROTAS_PUBLICAS.has(to.path)) return;
+  // So o pathname entra na comparacao — `to.path` ja vem sem query nem hash, entao o `?token=...`
+  // do link de recuperacao segue intacto para a pagina.
+  if (ehRotaPublica(to.path)) return;
 
   try {
     const { carregarSessao } = useApi();
