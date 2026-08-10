@@ -70,6 +70,29 @@ export const retiradaPayloadSchema = z
         message: "A retirada tem um credor so: fornecedor OU socio/gestor"
       });
     }
+    // `credorTipo` tem de concordar com o id enviado. Ate aqui ele era ACEITO e descartado em
+    // silencio — o repositorio deriva o tipo pelos ids —, entao seis combinacoes contraditorias
+    // (ex.: `fornecedorId` + `credorTipo: "colaborador"`) respondiam 2xx e gravavam outra coisa. O
+    // cliente pedia A, o servidor gravava B, e o detalhe devolvia B, mascarando a divergencia.
+    //
+    // A checagem e de PAYLOAD (nao olha o registro gravado), por isso mora no schema: ela nao
+    // atrapalha o legado, que reabre com `colaboradorId` + `credorTipo: "colaborador"` — coerente —
+    // ou com `credorTipo` nulo, que segue aceito. Quem decide se o colaborador PODE continuar e a
+    // R-128 no servico, que precisa do registro existente.
+    const tipoDoCredorInformado = retirada.fornecedorId
+      ? "fornecedor"
+      : retirada.socioGestorId
+        ? "socio_gestor"
+        : retirada.colaboradorId
+          ? "colaborador"
+          : null;
+    if (retirada.credorTipo && tipoDoCredorInformado && retirada.credorTipo !== tipoDoCredorInformado) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["credorTipo"],
+        message: `Credor incoerente: credorTipo '${retirada.credorTipo}' nao corresponde ao credor informado`
+      });
+    }
   });
 
 export const retiradaDtoSchema = z.object({

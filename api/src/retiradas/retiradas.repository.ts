@@ -67,6 +67,8 @@ export async function criarRetiradaRepository(
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
         // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        // O `credorTipo` do payload nao e lido aqui porque o schema ja garante que ele CONCORDA com
+        // o id — derivar e o caminho unico, e nao ha mais como o cliente pedir A e o banco gravar B.
         credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
@@ -184,6 +186,8 @@ export async function atualizarRetiradaRepository(
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
         // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        // O `credorTipo` do payload nao e lido aqui porque o schema ja garante que ele CONCORDA com
+        // o id — derivar e o caminho unico, e nao ha mais como o cliente pedir A e o banco gravar B.
         credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
