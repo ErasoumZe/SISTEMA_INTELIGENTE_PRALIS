@@ -17,7 +17,7 @@ import {
   type TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
@@ -126,6 +126,19 @@ export async function criarTransferenciaRepository(
     });
   }
   return transferencia;
+}
+
+// P0 (CX-M06 estendida): a linha da transferencia sob `FOR NO KEY UPDATE` durante a edicao — ela
+// nao tinha trava nenhuma e o PUT reescreve valor, computar e as DUAS contas (o sinal do total).
+// Espelho de `travarDespesaRepository`: escopo de empresa no where e `TransacaoBanco` obrigatorio.
+// Ordem unica do P0: o chamador ja segurou o caixa (FOR SHARE) ANTES desta trava.
+export async function travarTransferenciaRepository(transferenciaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
 }
 
 export async function buscarTransferenciaDetalheRepository(

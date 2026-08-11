@@ -35,6 +35,7 @@ import {
   atualizarTransferenciaRepository,
   buscarContextoConferenciaRepository,
   buscarTransferenciaDetalheRepository,
+  travarTransferenciaRepository,
   confirmarTransferenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
@@ -324,8 +325,17 @@ export async function atualizarTransferencia(
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
+    const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da transferencia.
+    const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
+    if (!(await travarTransferenciaRepository(transferenciaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
+    // Retrato SOB a trava: confirmacao/abertura podem ter mudado status ou caixa entre a leitura e
+    // o lock — revalida contra o que esta gravado agora, sem retomar o lock do caixa.
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
-    const caixa = await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {

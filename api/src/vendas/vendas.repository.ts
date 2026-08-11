@@ -9,7 +9,7 @@ import {
   liquidoCentavos,
   liquidoDeSomasCentavos
 } from "@padaria/shared/dinheiro";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
 // Vendas nao tem turno proprio: o turno vive no caixa. Filtrar por turno = restringir aos caixas
@@ -256,6 +256,20 @@ export async function criarVendaRepository(
 
     return venda;
   });
+}
+
+// P0 (CX-M06 estendida): a linha da venda sob `FOR NO KEY UPDATE` durante a edicao — a venda era a
+// unica saida sem trava nenhuma, e o PUT concorria ate consigo mesmo. Espelho de
+// `travarDespesaRepository`: escopo de empresa DENTRO do where (nao travar linha alheia; sem
+// oraculo de existencia por latencia) e `TransacaoBanco` para o lock nao evaporar fora de
+// transacao. Ordem unica do P0: o chamador ja segurou o caixa (FOR SHARE) ANTES desta trava.
+export async function travarVendaRepository(vendaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: vendas.id })
+    .from(vendas)
+    .where(and(eq(vendas.id, vendaId), eq(vendas.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
 }
 
 export async function buscarVendaDetalheRepository(
