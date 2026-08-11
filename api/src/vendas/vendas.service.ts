@@ -96,8 +96,9 @@ export async function atualizarVenda(
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da venda.
     const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
     if (!(await travarVendaRepository(vendaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
-    // Retrato SOB a trava: a venda integrada pode ter mudado de caixa entre a leitura e o lock
-    // (revinculacao/CREARE) — revalida contra o que esta gravado agora, sem retomar o lock do caixa.
+    // Retrato SOB a trava: a venda integrada pode ter mudado de CAIXA entre a leitura e o lock
+    // (revinculacao/CREARE) — a revalidacao compara empresa e caixa_id do retrato atual, sem
+    // retomar o lock do caixa.
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);

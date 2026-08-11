@@ -378,7 +378,9 @@ export async function criarCargoColaboradorRepository(
 //
 // Preserva inteira a serializacao pretendida e para de cobrar latencia de quem so referencia a
 // linha. Com `FOR UPDATE`, uma edicao de cadastro presa seguraria a abertura de caixa daquele
-// colaborador por tempo indefinido — o pool nao tem `lock_timeout` (api/src/banco/conexao.ts:8-10).
+// colaborador — desde o P0 do caixa ha um `lock_timeout` de 10s POR TRANSACAO da API
+// (`executarEmTransacao`, api/src/banco/conexao.ts), entao a espera hoje tem teto, mas a escolha
+// do nivel mais fraco continua valendo: nao cobrar latencia nenhuma e melhor que cobrar 10s.
 // Nenhuma escrita daqui altera coluna-chave (`id` e `usuario_id` nao sao tocados: quem vincula
 // usuario e `usuarios.repository.ts`, com o lock forte correto).
 export async function bloquearColaboradorRepository(

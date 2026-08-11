@@ -1,4 +1,5 @@
 import pg from "pg";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { schema, type Schema } from "@padaria/db/schema";
@@ -6,13 +7,7 @@ import { env } from "../env.js";
 import { capturarErro } from "../observabilidade.js";
 
 export const pool = new pg.Pool({
-  connectionString: env.DATABASE_URL,
-  // P0 lancamento x fechamento: com o FOR SHARE em toda rota de escrita, uma transacao pendurada
-  // passaria a segurar o FECHAMENTO indefinidamente — antes ela so travava o proprio caixa via FK.
-  // `lock_timeout` da teto a espera por lock (o fechamento tipico segura a linha por sub-segundo);
-  // `idle_in_transaction_session_timeout` mata conexao zumbi que ficou dentro de transacao.
-  // Config de pool, nao migration; remover e um ato isolado se aparecer 503 inesperado (plano §16).
-  options: "-c lock_timeout=10s -c idle_in_transaction_session_timeout=60s"
+  connectionString: env.DATABASE_URL
 });
 
 // Sem este listener, DERRUBAR O POSTGRES DERRUBA A API (medido em 05/08/2026, ao verificar a G-04).
@@ -37,7 +32,18 @@ export type ExecutorBanco = Banco | TransacaoBanco;
 export const banco = bancoBase;
 
 export async function executarEmTransacao<T>(callback: (tx: TransacaoBanco) => Promise<T> | T) {
-  return banco.transaction((tx) => Promise.resolve(callback(tx)));
+  return banco.transaction(async (tx) => {
+    // P0 lancamento x fechamento: com o FOR SHARE em toda escrita do caixa, uma transacao
+    // pendurada passaria a segurar o FECHAMENTO indefinidamente — antes ela so travava o proprio
+    // caixa via FK. Os tetos valem POR TRANSACAO (`set_config(..., true)` = LOCAL), de proposito:
+    // a revisao final derrubou a versao anterior (`options` no pool), que alcancava as migrations
+    // do better-auth (DDL abortada em 10s no deploy) e morreria no startup packet de um pooler.
+    // Aqui so as transacoes da API pagam o teto; quem estourar recebe 55P03 -> 503 (app.ts).
+    await tx.execute(
+      sql`select set_config('lock_timeout', '10s', true), set_config('idle_in_transaction_session_timeout', '60s', true)`
+    );
+    return callback(tx);
+  });
 }
 
 export async function executarComTransacaoOpcional<T>(

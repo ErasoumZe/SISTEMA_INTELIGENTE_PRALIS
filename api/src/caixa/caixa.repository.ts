@@ -425,11 +425,13 @@ export async function travarCaixaRepository(
 }
 
 // P0 lancamento x fechamento: o lock COMPARTILHADO do lado do lancamento. `FOR SHARE` nao
-// serializa lancamentos entre si, mas conflita com o `FOR UPDATE` do fechamento/cofre e com o
-// `NO KEY UPDATE` de horario/abertura — quem chegar depois espera, e o status devolvido aqui e o
-// da versao commitada MAIS RECENTE (READ COMMITTED reavalia no locked-read). E a primeira barreira
-// de toda escrita que possa alterar os sete totais; a revalidacao do status pos-lock e de quem
-// chama.
+// serializa lancamentos entre si, mas conflita com o `FOR UPDATE` de fechamento/cofre/horario/
+// abertura (e conflitaria tambem com um futuro `NO KEY UPDATE`) — quem chegar depois espera, e o
+// status devolvido aqui e o da versao commitada MAIS RECENTE (READ COMMITTED reavalia no
+// locked-read). E a primeira barreira das escritas de lancamento que alteram os sete totais.
+// EXCECOES CONHECIDAS, catalogadas SEM decisao do Jose (perguntas S1/S2 do relatorio da OS):
+// o job de agendadas (`efetivarTransferenciasAgendadasRepository`) e o DELETE do cancelamento de
+// serie de recorrencia continuam fora da porta. A revalidacao do status pos-lock e de quem chama.
 //
 // INVARIANTES (a prova de deadlock depende delas — ver o grafo no relatorio da OS):
 //  1. ordem unica: linha do caixa PRIMEIRO, linha do lancamento depois, filhas por ultimo;

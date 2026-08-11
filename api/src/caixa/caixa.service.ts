@@ -399,15 +399,18 @@ async function editarAberturaCaixaEmTransacao(
   perfil: PerfilUsuario
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
-    // P0 — invariante "caixa primeiro, sempre": o lock exclusivo sobe para a PRIMEIRA instrucao.
-    // Antes ele so chegava no UPDATE, no meio da transacao — com os lancamentos segurando
-    // FOR SHARE, esta rota passaria a esperar tarde demais, ja com trabalho feito.
-    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
     if (caixa.tokenEdicao !== dados.tokenEdicao) throw new Error("Token de edicao invalido");
+    // P0 — invariante "caixa primeiro": o lock exclusivo vem ANTES de qualquer escrita da rota
+    // (com os lancamentos segurando FOR SHARE, travar tarde seguraria trabalho ja feito) — mas
+    // DEPOIS das checagens de empresa/permissao, para perfil sem acesso nao encostar lock em
+    // caixa alheio (revisao final). O status decisivo e o do locked-read, nunca o retrato acima.
+    const trava = await travarCaixaRepository(caixaId, tx);
+    if (!trava) throw new Error("Caixa nao encontrado");
+    if (trava.status !== "aberto") throw new Error("Caixa ja fechado");
 
     const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
     const pdv = await buscarPdvEmpresaRepository(dados.pdvId, caixa.empresaId, tx);
@@ -503,12 +506,15 @@ export async function alterarHorarioCaixa(
 
   try {
     return await executarEmTransacao(async (tx) => {
-      // P0 — invariante "caixa primeiro, sempre": mesmo motivo do lock em editarAberturaCaixa.
-      if (!(await travarCaixaRepository(caixaId, tx))) throw naoEncontrado("Caixa nao encontrado");
       const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
       if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
       if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
       if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
+      // P0 — mesmo contrato de editarAberturaCaixa: lock exclusivo antes de qualquer escrita
+      // (inclusive o consumo do token), depois das checagens de empresa; status do locked-read.
+      const trava = await travarCaixaRepository(caixaId, tx);
+      if (!trava) throw naoEncontrado("Caixa nao encontrado");
+      if (trava.status !== "aberto") throw erroValidacao("Caixa ja fechado");
 
       const aberturaFinal = novaAbertura ?? (caixa.dataHoraAbertura ? new Date(caixa.dataHoraAbertura) : undefined);
       const fechamentoFinal = novoFechamento ?? (caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : null);

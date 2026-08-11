@@ -356,8 +356,9 @@ export async function atualizarTransferencia(
     if (!(await travarTransferenciaRepository(transferenciaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
-    // Retrato SOB a trava: confirmacao/abertura podem ter mudado status ou caixa entre a leitura e
-    // o lock — revalida contra o que esta gravado agora, sem retomar o lock do caixa.
+    // Retrato SOB a trava: confirmacao/abertura podem ter mudado o CAIXA da linha entre a leitura
+    // e o lock — a revalidacao compara empresa e caixa_id do retrato atual (status nao entra: o
+    // PUT sempre aceitou editar transferencia recebida/agendada, e mudar isso e outra decisao).
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);

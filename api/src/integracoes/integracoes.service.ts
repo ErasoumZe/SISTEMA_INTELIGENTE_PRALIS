@@ -25,7 +25,7 @@ import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/share
 import { diaNegocio, somarDias } from "@padaria/shared/datas";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
-import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
 import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
@@ -359,7 +359,9 @@ async function resolverVinculosVenda(
   let caixaFechado = false;
   if (caixa) {
     const trava = await travarCaixaCompartilhadoRepository(caixa.id, db);
-    caixaFechado = trava ? trava.status !== "aberto" : caixa.status !== "aberto";
+    // Linha ausente sob o lock e impossivel (a FK impede sumir); se acontecer, o lado SEGURO e
+    // tratar como fechado e registrar a trilha — nunca reusar o retrato pre-lock.
+    caixaFechado = trava ? trava.status !== "aberto" : true;
   }
 
   return {
@@ -732,7 +734,9 @@ export async function receberVendaIntegracao(
   const hashConteudo = hashPayload(payload);
 
   try {
-    return await banco.transaction(async (tx) => {
+    // `executarEmTransacao` e a mesma porta de transacao das rotas do caixa — a ingestao ganha os
+    // MESMOS tetos por transacao (lock_timeout/idle) que protegem o fechamento.
+    return await executarEmTransacao(async (tx) => {
       const registro = await buscarRegistroIntegracaoRepository(chave, "venda", identificadorExterno, tx);
       if (registro?.hashConteudo === hashConteudo) {
         await registrarSemNovidadeRepository(chave, identificadorExterno, hashConteudo, payload, tx);
@@ -795,6 +799,11 @@ export async function receberVendaIntegracao(
       // Nem gravar o erro foi possivel (ex.: banco fora): propaga o original -> 500 -> agente re-tenta.
       throw error instanceof Error ? error : new Error(mensagemErro);
     }
+    // Contencao transitoria (teto de lock 55P03; deadlock 40P01) NAO vira 422: 4xx faz o agente
+    // DESCARTAR a venda, e a R-013 proibe recusar venda integrada. O erro sobe intacto e o
+    // handler global responde 503 — que o agente re-tenta no proximo ciclo.
+    const codigoPostgres = (error as { code?: string }).code;
+    if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
     throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
   }
 }

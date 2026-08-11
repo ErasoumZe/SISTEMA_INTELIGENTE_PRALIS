@@ -894,10 +894,19 @@ export async function obterCaixaDaSaidaParaEdicao(
   if (podeLancarSemCaixa(perfil)) return travarCaixaAbertoDoAtor(empresaId, perfil.usuarioId, tx);
   try {
     return await obterCaixaDaSaida(empresaId, perfil, tx);
-  } catch {
-    // Fechado o caixa, acabou: corrigir vira ato de tesouraria. E o que protege os totais ja
-    // congelados em `fechamentos_caixa` (R-122/R-163).
-    throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
+  } catch (erro) {
+    // SO a ausencia/fechamento do caixa vira o 403 oficial da R-122 — e o que protege os totais
+    // ja congelados (R-163). O catch e FILTRADO de proposito: timeout de lock (55P03), deadlock e
+    // qualquer erro com `code` sobem intactos, senao o teto de espera viraria a afirmacao falsa
+    // de que o caixa fechou (a revisao pegou; o C-6 nasceu de um catch cego assim).
+    if (
+      erro instanceof Error &&
+      !("code" in erro) &&
+      erro.message === "Abra um caixa antes de registrar este lancamento"
+    ) {
+      throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
+    }
+    throw erro;
   }
 }
 
