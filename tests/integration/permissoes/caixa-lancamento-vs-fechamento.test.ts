@@ -520,7 +520,8 @@ describe("P0 - lancamento x fechamento do caixa", () => {
 
         const resposta = await edicao;
         expect(resposta.statusCode, resposta.body).toBe(caso.statusEsperado);
-        expect(resposta.body).toContain(caso.mensagemEsperada);
+        // `toMatch` cobre os dois formatos: substring (string) e regex (casos com acento).
+        expect(resposta.body).toMatch(caso.mensagemEsperada);
       } finally {
         await fecharBloqueador(bloqueador);
       }
