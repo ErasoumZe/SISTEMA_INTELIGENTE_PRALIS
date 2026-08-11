@@ -1,6 +1,6 @@
 import pg from "pg";
-import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sqlTetosDaTransacaoApi } from "@padaria/db/sessao";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { schema, type Schema } from "@padaria/db/schema";
 import { env } from "../env.js";
@@ -35,13 +35,10 @@ export async function executarEmTransacao<T>(callback: (tx: TransacaoBanco) => P
   return banco.transaction(async (tx) => {
     // P0 lancamento x fechamento: com o FOR SHARE em toda escrita do caixa, uma transacao
     // pendurada passaria a segurar o FECHAMENTO indefinidamente — antes ela so travava o proprio
-    // caixa via FK. Os tetos valem POR TRANSACAO (`set_config(..., true)` = LOCAL), de proposito:
-    // a revisao final derrubou a versao anterior (`options` no pool), que alcancava as migrations
-    // do better-auth (DDL abortada em 10s no deploy) e morreria no startup packet de um pooler.
-    // Aqui so as transacoes da API pagam o teto; quem estourar recebe 55P03 -> 503 (app.ts).
-    await tx.execute(
-      sql`select set_config('lock_timeout', '10s', true), set_config('idle_in_transaction_session_timeout', '60s', true)`
-    );
+    // caixa via FK. Os tetos valem POR TRANSACAO (set_config LOCAL, definido em @padaria/db —
+    // SQL cru nao vive em api/src): migrations, better-auth e pooler ficam de fora, de proposito.
+    // Quem estourar o teto recebe 55P03 -> 503 (app.ts).
+    await tx.execute(sqlTetosDaTransacaoApi);
     return callback(tx);
   });
 }

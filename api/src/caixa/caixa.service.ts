@@ -399,18 +399,23 @@ async function editarAberturaCaixaEmTransacao(
   perfil: PerfilUsuario
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
-    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    if (caixa.tokenEdicao !== dados.tokenEdicao) throw new Error("Token de edicao invalido");
+    const previa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, previa)) throw new Error("Caixa nao permitido");
+    if (previa.status !== "aberto") throw new Error("Caixa ja fechado");
     // P0 — invariante "caixa primeiro": o lock exclusivo vem ANTES de qualquer escrita da rota
     // (com os lancamentos segurando FOR SHARE, travar tarde seguraria trabalho ja feito) — mas
     // DEPOIS das checagens de empresa/permissao, para perfil sem acesso nao encostar lock em
-    // caixa alheio (revisao final). O status decisivo e o do locked-read, nunca o retrato acima.
+    // caixa alheio (revisao final).
     const trava = await travarCaixaRepository(caixaId, tx);
     if (!trava) throw new Error("Caixa nao encontrado");
     if (trava.status !== "aberto") throw new Error("Caixa ja fechado");
+    // Retrato SOB a trava decide toda ESCRITA: o token e de USO UNICO (rotacionado a cada edicao)
+    // e valida-lo no retrato previo deixava dois PUTs concorrentes passarem com o mesmo token —
+    // TOCTOU apontado pela revisao. `valoresAntigos` da auditoria tambem sai deste retrato.
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa) throw new Error("Caixa nao encontrado");
+    if (caixa.tokenEdicao !== dados.tokenEdicao) throw new Error("Token de edicao invalido");
 
     const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
     const pdv = await buscarPdvEmpresaRepository(dados.pdvId, caixa.empresaId, tx);
@@ -506,15 +511,18 @@ export async function alterarHorarioCaixa(
 
   try {
     return await executarEmTransacao(async (tx) => {
-      const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-      if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
-      if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
-      if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
+      const previa = await buscarCaixaPorIdRepository(caixaId, tx);
+      if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
+      if (previa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
       // P0 — mesmo contrato de editarAberturaCaixa: lock exclusivo antes de qualquer escrita
-      // (inclusive o consumo do token), depois das checagens de empresa; status do locked-read.
+      // (inclusive o consumo do token), depois das checagens de empresa; e o retrato SOB a trava
+      // e quem alimenta validacoes e auditoria (`valoresAntigos`), nunca o previo.
       const trava = await travarCaixaRepository(caixaId, tx);
       if (!trava) throw naoEncontrado("Caixa nao encontrado");
       if (trava.status !== "aberto") throw erroValidacao("Caixa ja fechado");
+      const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+      if (!caixa) throw naoEncontrado("Caixa nao encontrado");
+      if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
 
       const aberturaFinal = novaAbertura ?? (caixa.dataHoraAbertura ? new Date(caixa.dataHoraAbertura) : undefined);
       const fechamentoFinal = novoFechamento ?? (caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : null);

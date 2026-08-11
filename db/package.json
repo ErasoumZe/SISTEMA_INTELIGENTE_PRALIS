@@ -73,6 +73,11 @@
       "types": "./dist/src/schema/*.d.ts",
       "development": "./src/schema/*.ts",
       "default": "./dist/src/schema/*.js"
+    },
+    "./sessao": {
+      "types": "./dist/src/sessao.d.ts",
+      "development": "./src/sessao.ts",
+      "default": "./dist/src/sessao.js"
     }
   },
   "scripts": {

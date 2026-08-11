@@ -116,8 +116,12 @@ export async function sessoesBloqueadasPor({ cliente, pid }: ClienteBloqueador) 
   return rows[0]?.total ?? 0;
 }
 
-/** Espera ate que `minimo` sessoes estejam bloqueadas POR este bloqueador. Condicao, nao sleep. */
-export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 20_000) {
+/**
+ * Espera ate que `minimo` sessoes estejam bloqueadas POR este bloqueador. Condicao, nao sleep.
+ * Teto padrao ABAIXO do `lock_timeout` de 10s das transacoes da API — passar disso, a rota presa
+ * morre por 55P03 e o caso falharia pelo motivo errado.
+ */
+export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 8_000) {
   const inicio = Date.now();
   while (Date.now() - inicio < limiteMs) {
     if ((await sessoesBloqueadasPor(bloqueador)) >= minimo) return true;
