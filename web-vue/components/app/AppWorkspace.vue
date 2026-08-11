@@ -88,6 +88,14 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
+import {
+  contaTravadaDeCaixa,
+  nomeDaContaDoLancamento,
+  notaDaContaDoLancamento,
+  operacaoExigeCaixaAberto
+} from "~/utils/perfil-caixa";
+import { carregarOpcoesDaOperacao, type ChaveOpcaoOperacao } from "~/utils/opcoes-operacao";
+import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 
 type TipoPagina =
@@ -280,20 +288,35 @@ const {
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
 const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
-const perfilCaixaOperacional = computed(
-  () => Boolean(sessao.value?.perfil) && temPermissao("caixa_operar") && !temPermissao("caixas_gerenciar")
-);
 // R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
-const contaTravadaDoCaixa = computed(() => (perfilCaixaOperacional.value ? (caixaAberto.value?.pdvContaId ?? "") : ""));
+//
+// Quem responde "e operador?" e `utils/perfil-caixa`, que usa a MESMA `podeLancarSemCaixa` do
+// servidor. Antes a tela decidia por `caixa_operar && !caixas_gerenciar` — outra regra, que
+// divergia da API nos dois sentidos.
+const contaTravadaDoCaixa = computed(() => contaTravadaDeCaixa(sessao.value?.perfil, caixaAberto.value));
 // O NOME e exibido a parte porque a conta do PDV pode nao estar em `contas_usuarios` do operador —
 // e ai ela nao existe na lista de opcoes e o campo apareceria cinza e VAZIO. A trava vem do caixa,
 // nao do vinculo: entao a tela sempre diz de qual conta a saida vai sair, com o PDV como reserva.
-const contaTravadaDoCaixaNome = computed(() => {
-  if (!contaTravadaDoCaixa.value) return "";
-  const conta = opcoesEmpresa.value.contas.find((item) => item.id === contaTravadaDoCaixa.value);
-  return conta?.nome ?? caixaAberto.value?.pdvNome ?? "Conta do caixa aberto";
-});
+const contaTravadaDoCaixaNome = computed(() =>
+  nomeDaContaDoLancamento({
+    contaTravada: contaTravadaDoCaixa.value,
+    contaDoFormulario: form.value.contaOrigemId,
+    contas: opcoesEmpresa.value.contas,
+    pdvNome: caixaAberto.value?.pdvNome,
+    editando: Boolean(operacaoEditandoId.value)
+  })
+);
+// A nota acompanha QUAL conta esta sendo exibida: dizer "saida do caixa aberto" sobre a conta
+// gravada de um registro cujo PDV foi reapontado repete a mentira que o nome acabou de corrigir —
+// e e justamente o caso que o servidor recusa com 403 no salvar.
+const contaTravadaDoCaixaNota = computed(() =>
+  notaDaContaDoLancamento({
+    contaTravada: contaTravadaDoCaixa.value,
+    contaDoFormulario: form.value.contaOrigemId,
+    editando: Boolean(operacaoEditandoId.value)
+  })
+);
 const telaBloqueadaPorCaixa = computed(() => {
   const item = itemPorTela[telaAtiva.value];
   return item ? dependeCaixaAberto(item) && !caixaAberto.value : false;
@@ -690,7 +713,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
         carregarOpcaoOpcional(
           faltas,
-          "Grupos de patrimonio",
+          "Grupos de patrimônio",
           async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
           []
         ),
@@ -700,7 +723,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         // saiu da tela.
         carregarOpcaoOpcional(
           faltas,
-          "Itens de patrimonio",
+          "Itens de patrimônio",
           () => apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`),
           []
         )
@@ -733,7 +756,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
         carregarOpcaoOpcional(
           faltas,
-          "Grupos de patrimonio",
+          "Grupos de patrimônio",
           async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
           []
         )
@@ -1016,41 +1039,6 @@ async function atualizarOperacoesAutomaticamente() {
   }
 }
 
-// Formato do GET de detalhe (/api/<tipo>/:id) usado para preencher o formulario de edicao.
-function preencherFormOperacao(entidade: EntidadeOperacional, detalhe: OperacaoDetalhe) {
-  const preenchido = formOperacaoDeDetalhe(entidade, detalhe);
-  form.value = { ...form.value, ...preenchido.form };
-  discriminandoDespesa.value = preenchido.discriminandoDespesa;
-  discriminandoMercadoria.value = preenchido.discriminandoMercadoria;
-  if (preenchido.itensVenda) itensVenda.value = preenchido.itensVenda;
-  if (preenchido.tiposPagamento) tiposPagamento.value = preenchido.tiposPagamento;
-  if (preenchido.itensDespesa) itensDespesa.value = preenchido.itensDespesa;
-  if (preenchido.itensMercadoria) itensMercadoria.value = preenchido.itensMercadoria;
-}
-
-type ChaveOpcaoOperacao =
-  | "contas"
-  | "fornecedores"
-  | "colaboradores"
-  | "sociosGestores"
-  | "produtos"
-  | "formasPagamento"
-  | "pdvs"
-  | "unidadesMedida"
-  | "grupos";
-
-// Opcoes que o modal de cada operacao precisa. O +NOVO e global (abre qualquer operacao de
-// qualquer tela), entao carregamos as opcoes por ENTIDADE ao abrir o modal — senao os selects
-// (fornecedor, grupo, conta, colaborador...) ficam "No data available" quando a operacao e aberta
-// fora da sua propria tela (ex.: abrir "Nova Despesa" estando na tela Entradas).
-const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]> = {
-  venda: ["contas", "produtos", "pdvs", "formasPagamento"],
-  despesa: ["contas", "fornecedores", "grupos"],
-  mercadoria: ["contas", "fornecedores", "produtos", "unidadesMedida", "grupos"],
-  retirada: ["contas", "colaboradores", "sociosGestores", "grupos"],
-  transferencia: ["contas"]
-};
-
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
   const params = new URLSearchParams({ t: String(Date.now()) });
   if (idEmpresa) params.set("empresaId", idEmpresa);
@@ -1083,6 +1071,14 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     unidadesMedida: async () => {
       alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);
     },
+    patrimonioItens: async () => {
+      alvo.patrimonioItens = await apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`);
+    },
+    gruposPatrimonio: async () => {
+      alvo.gruposPatrimonio = (
+        await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)
+      ).gruposPatrimonio;
+    },
     grupos: async () => {
       Object.assign(
         alvo,
@@ -1091,28 +1087,49 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
     }
   };
 
-  const rotuloOpcao: Record<ChaveOpcaoOperacao, string> = {
-    contas: "Contas",
-    fornecedores: "Fornecedores",
-    colaboradores: "Colaboradores",
-    sociosGestores: "Sócios e Gestores",
-    produtos: "Produtos",
-    formasPagamento: "Formas de pagamento",
-    pdvs: "PDVs",
-    unidadesMedida: "Unidades de medida",
-    grupos: "Grupos"
-  };
-  // Cada lista carrega isolada: um 403 numa opcao secundaria nao impede as demais nem trava o modal
-  // (+NOVO global). O que faltar vira aviso discreto.
-  const faltas: string[] = [];
-  await Promise.all(
-    opcoesPorEntidade[entidade].map((chave) =>
-      carregarOpcaoOpcional(faltas, rotuloOpcao[chave], tarefas[chave], undefined)
-    )
-  );
-  const aviso = avisoOpcoesIndisponiveis(faltas);
+  // A ORDEM e a tolerancia a falha vivem em `utils/opcoes-operacao`, onde o teste alcanca: um 403
+  // numa opcao secundaria nao impede as demais nem trava o modal (+NOVO global). O que faltar vira
+  // aviso discreto — falha silenciosa e proibida.
+  const aviso = avisoOpcoesIndisponiveis(await carregarOpcoesDaOperacao(entidade, tarefas));
   if (aviso) notificar(aviso, "warning");
 }
+
+const acoesLancamento = criarAcoesLancamento({
+  api: { get: apiGet, post: apiPost, put: apiPut },
+  refs: {
+    form,
+    entidadeNova,
+    operacaoEditandoId,
+    modalOperacaoAberto,
+    discriminandoDespesa,
+    discriminandoMercadoria,
+    itensVenda,
+    tiposPagamento,
+    itensDespesa,
+    itensMercadoria,
+    recorrencia
+  },
+  rotaDaEntidade: (entidade) => endpointOperacaoPorEntidade[entidade],
+  empresaId: () => empresaId.value,
+  contaTravadaDoCaixa: () => contaTravadaDoCaixa.value,
+  produtos: () => opcoesEmpresa.value.produtos,
+  recorrencia: () => recorrenciaPayload.value,
+  // Falha ao carregar OPCOES nao impede abrir: a tela continua utilizavel e o que faltou vira aviso
+  // discreto. Diferente do GET do detalhe, que propaga e mantem o modal fechado.
+  carregarOpcoes: async (entidade) => {
+    try {
+      await carregarOpcoesParaOperacao(entidade);
+    } catch (error) {
+      notificar(mensagemErro(error), "error");
+    }
+  },
+  // So as fotos: sao composables, nao refs. O resto do reset vive no fio, onde o teste alcanca.
+  limparFotos: () => {
+    fotoDocumento.limpar();
+    fotoNota.limpar();
+  },
+  notificar
+});
 
 const abrirOperacaoUmaVez = criarGuardaAberturaOperacao();
 
@@ -1121,51 +1138,33 @@ async function abrirOperacao(entidade: EntidadeOperacional, operacao?: { id: str
     () =>
       modalOperacaoAberto.value && entidadeNova.value === entidade && operacaoEditandoId.value === (operacao?.id ?? ""),
     async () => {
-      // Tesouraria: a transferencia NAO depende de caixa aberto — o tesoureiro move dinheiro entre
-      // contas (cofre -> caixas -> banco) e nao opera caixa. O caixaId e opcional no backend da
-      // transferencia, entao so as demais entidades (venda/despesa/mercadoria/retirada) exigem caixa.
-      if (!caixaAberto.value && entidade !== "transferencia") {
+      // A-1: quem exige caixa aberto sai de `operacaoExigeCaixaAberto`, a mesma leitura de perfil que
+      // o servidor faz. Antes a tela pedia caixa para tudo que nao fosse transferencia e barrava a
+      // retaguarda que a decisao acabou de liberar — mandando-a para /caixa, onde sem `caixa_operar`
+      // ela nem abre um. A venda continua exigindo de todos: ela nao entrou na A-1.
+      if (!caixaAberto.value && operacaoExigeCaixaAberto(entidade, sessao.value?.perfil)) {
         notificar("Abra um caixa antes de registrar lancamentos.", "warning");
         void router.push("/caixa");
         return;
       }
-      entidadeNova.value = entidade;
-      operacaoEditandoId.value = operacao?.id ?? "";
       modoDiscriminacao.value = false;
-      fotoDocumento.limpar();
-      fotoNota.limpar();
-      form.value = formOperacaoVazio();
-      discriminandoDespesa.value = false;
-      discriminandoMercadoria.value = false;
-      itensVenda.value = [{ descricaoProduto: "", quantidade: "1", valorUnitario: "", valorTotal: "", produtoId: "" }];
-      tiposPagamento.value = [{ formaPagamentoId: "", totalPago: "", numeroVendas: "1" }];
-      itensDespesa.value = [itemDespesaVazio()];
-      itensMercadoria.value = [itemMercadoriaVazio()];
-      // Recorrencia nunca "vaza" de um lancamento para o proximo: sem este reset, quem criou uma serie
-      // de 12 e abriu o modal de novo criaria outra serie de 12 sem perceber.
-      recorrencia.value = estadoRecorrenciaVazio();
-      // Garante que os selects do modal tenham dados mesmo quando aberto por fora da sua tela (+NOVO global).
+      // A ORDEM (reset → opcoes → GET → preenchimento → abrir) vive em `utils/lancamento-acoes`,
+      // onde o teste alcanca. Abrir antes do preenchimento faz a tela piscar com o formulario vazio
+      // e, no operador, renderizar o campo Conta antes de a conta gravada chegar.
       try {
-        await carregarOpcoesParaOperacao(entidade);
-      } catch (error) {
-        notificar(mensagemErro(error), "error");
-      }
-      if (operacao?.id) {
-        try {
-          const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-          preencherFormOperacao(entidade, detalhe);
+        const detalhe = await acoesLancamento.abrirLancamento(entidade, operacao?.id);
+        if (detalhe && operacao?.id) {
           if ((entidade === "despesa" || entidade === "mercadoria") && detalhe.fotoDocumentoUrl) {
             void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
           }
           if (detalhe.fotoNotaUrl) {
             void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
           }
-        } catch (error) {
-          notificar(mensagemErro(error), "error");
-          return;
         }
+      } catch (error) {
+        // Erro no detalhe NAO abre o modal — melhor nao abrir do que abrir mentindo.
+        notificar(mensagemErro(error), "error");
       }
-      modalOperacaoAberto.value = true;
     }
   );
 }
@@ -1204,14 +1203,16 @@ async function abrirDiscriminacao(entidade: EntidadeOperacional, operacao: { id:
   try {
     await carregarOpcoesParaOperacao(entidade);
     const detalhe = await apiGet<OperacaoDetalhe>(`/api/${endpointOperacaoPorEntidade[entidade]}/${operacao.id}`);
-    preencherFormOperacao(entidade, detalhe);
+    // A MESMA funcao que o fio usa para abrir em edicao: enquanto havia uma copia aqui, um campo
+    // novo em `FormOperacaoPreenchido` precisava ser espelhado nos dois lugares e so um tinha teste.
+    acoesLancamento.aplicarDetalhe(entidade, detalhe);
     if (detalhe.fotoDocumentoUrl) {
       void fotoDocumento.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id);
     }
     if (detalhe.fotoNotaUrl) {
       void fotoNota.carregarExistente(apiUrl, endpointOperacaoPorEntidade[entidade], operacao.id, "foto-nota");
     }
-    // O cabecalho pendente nao tem itens: preencherFormOperacao desligaria o modo de itens.
+    // O cabecalho pendente nao tem itens: `aplicarDetalhe` desligaria o modo de itens.
     discriminandoDespesa.value = entidade === "despesa";
     discriminandoMercadoria.value = entidade === "mercadoria";
   } catch (error) {
@@ -1239,11 +1240,11 @@ function executarAcaoNovo(acao: AcaoNovo) {
 async function trocarCategoriaLancamento(entidade: EntidadeOperacional) {
   if (entidade === entidadeNova.value) return;
   entidadeNova.value = entidade;
-  form.value.grupoDespesaId = "";
-  form.value.grupoMercadoriaId = "";
-  form.value.grupoRetiradaId = "";
-  if (entidade === "retirada") form.value.fornecedorId = "";
-  if (entidade === "mercadoria") form.value.colaboradorId = "";
+  // Limpar o formulario e do `useOperacaoLancamento`, que observa a categoria e e dono do mapa de
+  // credores. Aqui ficavam grupos e credor: o credor era limpado um id por vez, nunca o
+  // `credorTipo`, e o fornecedor da retirada era apagado — que a R-128 tornou valido. Com a
+  // limpeza fora daqui, esta funcao nao tem mais regra que possa divergir do mapa, e a que existe
+  // roda dentro do componente, onde o teste alcanca.
   try {
     await carregarOpcoesParaOperacao(entidade);
   } catch (error) {
@@ -1318,44 +1319,12 @@ async function salvarOperacao() {
       await salvarDiscriminacao();
       return;
     }
-    const payload = montarPayloadOperacao(entidadeNova.value, {
-      empresaId: empresaId.value,
-      form: form.value,
-      itensVenda: itensVenda.value,
-      tiposPagamento: tiposPagamento.value,
-      itensDespesa: itensDespesa.value,
-      itensMercadoria: itensMercadoria.value,
-      discriminandoDespesa: discriminandoDespesa.value,
-      discriminandoMercadoria: discriminandoMercadoria.value,
-      produtos: opcoesEmpresa.value.produtos,
-      // Recorrencia so na CRIACAO: editar um lancamento da serie mexe naquele, nao regenera a
-      // serie inteira (cancelar/editar em bloco e entrega propria — PROJECT_BRAIN/18 D-04).
-      ...(operacaoEditandoId.value ? {} : { recorrencia: recorrenciaPayload.value })
-    });
-    // Pre-validacao no cliente: mensagem clara em PT antes do 400 do servidor (ex.: despesa sem grupo).
-    const erroValidacao = validarOperacaoParaEnvio(entidadeNova.value, {
-      descricao: payload.descricao,
-      observacao: payload.observacao,
-      grupoDespesaId: payload.grupoDespesaId,
-      grupoMercadoriaId: payload.grupoMercadoriaId,
-      contaOrigemId: payload.contaOrigemId,
-      contaDestinoId: payload.contaDestinoId,
-      fornecedorId: payload.fornecedorId,
-      colaboradorId: payload.colaboradorId,
-      socioGestorId: payload.socioGestorId,
-      qtdItensDespesa: payload.itensDespesa.length,
-      qtdItensMercadoria: payload.itensMercadoria.length
-    });
-    if (erroValidacao) {
-      notificar(erroValidacao, "error");
-      return;
-    }
-    const editandoId = operacaoEditandoId.value;
-    const endpoint = endpointOperacaoPorEntidade[entidadeNova.value];
-    type OperacaoSalva = { id: string; computar: boolean; serie?: number; serieLimitada?: boolean };
-    const operacaoSalva = editandoId
-      ? await apiPut<OperacaoSalva>(`/api/${endpoint}/${editandoId}`, payload)
-      : await apiPost<OperacaoSalva>(`/api/${endpoint}`, payload);
+    // Montagem do corpo, pre-validacao e a decisao POST vs PUT vivem em `utils/lancamento-acoes`,
+    // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
+    // discriminacao, que dependem do DOM e do estado da tela.
+    const enviada = await acoesLancamento.enviarLancamento();
+    if (!enviada) return;
+    const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
     const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoSalva.id);
     const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoSalva.id, "foto-nota", "fotoNotaUrl");
     const linhaAtualizada = {
@@ -1829,6 +1798,7 @@ provide(WORKSPACE_CONTEXT, {
   salvarOperacao,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
+  contaTravadaDoCaixaNota,
   podeUsarRecorrencia,
   recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,

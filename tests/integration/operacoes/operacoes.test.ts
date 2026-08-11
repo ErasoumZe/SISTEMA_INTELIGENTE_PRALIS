@@ -116,7 +116,8 @@ describe("operacoes integration", () => {
         descricao: "Retirada criada por integracao",
         valorOriginal: 2,
         contaOrigemId: idsTeste.contaCaixa,
-        colaboradorId: idsTeste.colaboradorAdmin,
+        // R-128: retirada NOVA e de fornecedor ou socio/gestor — colaborador so no historico.
+        fornecedorId: idsTeste.fornecedor,
         grupoRetiradaId: idsTeste.grupoRetiradaSangria
       }
     });
@@ -330,7 +331,7 @@ describe("operacoes integration", () => {
         dataVencimento: "2026-06-30",
         descricao: "Retirada proibida",
         valorOriginal: 1,
-        colaboradorId: idsTeste.colaboradorAdmin
+        fornecedorId: idsTeste.fornecedor
       }
     ],
     [

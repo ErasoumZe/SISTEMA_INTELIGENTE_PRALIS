@@ -20,7 +20,8 @@ import {
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
-  obterCaixaParaLancamento,
+  caixaIdDaSaida,
+  obterCaixaDaSaida,
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
@@ -45,6 +46,7 @@ import {
   atualizarFotoNotaMercadoriaRepository,
   atualizarMercadoriaRepository,
   buscarMercadoriaDetalheRepository,
+  travarMercadoriaRepository,
   criarMercadoriaRepository,
   discriminarMercadoriaRepository,
   listarMercadoriasAguardandoAprovacaoRepository,
@@ -94,9 +96,13 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
     const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
-    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
+    // exigindo o dele.
+    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // So conta para o caixa o que saiu da conta do PDV dele.
+    const caixaId = caixaIdDaSaida(caixa, lancamento);
 
     // Recorrencia (D3): a serie inteira nasce na MESMA transacao (ver a nota em criarDespesa).
     const plano = await planejarRecorrencia(
@@ -111,7 +117,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       tx
     );
     if (!plano) {
-      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: mercadoria.id, computar };
     }
 
@@ -121,7 +127,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
         payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
-        caixaDaOcorrencia(caixa.id, ocorrencia),
+        caixaDaOcorrencia(caixaId, ocorrencia),
         tx,
         ocorrencia.vinculo
       );
@@ -198,8 +204,12 @@ export async function atualizarMercadoria(
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_editar");
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
+    if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -211,8 +221,15 @@ export async function atualizarMercadoria(
       dados.temNotaFiscal,
       resolverComputarLancamento(dados.computar, perfil.permissoes)
     );
-    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
-    await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, tx);
+    // R-121 tambem na EDICAO — ver a nota em `atualizarDespesa`: corpo sem conta zerava a conta
+    // travada e mantinha o `caixa_id`.
+    const normalizados = exigirContaDoCaixaNoLancamento(
+      resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null }),
+      caixa,
+      perfil
+    );
+    // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
+    await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, caixaIdDaSaida(caixa, normalizados), tx);
     return { id: mercadoriaId, computar };
   });
 }
@@ -226,6 +243,11 @@ export async function discriminarMercadoria(
 ): Promise<MercadoriaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_discriminar");
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler — ver a nota em `discriminarDespesa`: a conferencia da soma compara com o
+    // `valorOriginal` GRAVADO, e a discriminacao reescreve os itens.
+    if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");

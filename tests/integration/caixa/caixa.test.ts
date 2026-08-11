@@ -663,7 +663,8 @@ describe("caixa integration", () => {
           descricao: "Retirada ciclo",
           valorOriginal: 10,
           contaOrigemId: contaPdvId,
-          colaboradorId: idsTeste.colaboradorAdmin,
+          // R-128: retirada NOVA e de fornecedor ou socio/gestor.
+          fornecedorId: idsTeste.fornecedor,
           grupoRetiradaId: idsTeste.grupoRetiradaSangria
         }
       },

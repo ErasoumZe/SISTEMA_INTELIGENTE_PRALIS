@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { debitosColaboradores } from "@padaria/db/schema/caixa";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDetalheDto, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   filtrosEmpresa,
   numeroDecimal,
@@ -67,6 +67,8 @@ export async function criarRetiradaRepository(
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
         // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        // O `credorTipo` do payload nao e lido aqui porque o schema ja garante que ele CONCORDA com
+        // o id — derivar e o caminho unico, e nao ha mais como o cliente pedir A e o banco gravar B.
         credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,
@@ -97,6 +99,25 @@ export async function criarRetiradaRepository(
 
     return retirada;
   });
+}
+
+/**
+ * Trava a linha da retirada para a EDICAO — ver a nota em `travarDespesaRepository`.
+ *
+ * Aqui a corrida e pior que a da despesa: sem lock, a segunda edicao nao so reintroduz o credor
+ * legado como RECRIA o `debitos_colaboradores` que a primeira tinha apagado — ou seja, ressuscita
+ * divida de funcionario ja quitada.
+ *
+ * `NO KEY UPDATE` pelo mesmo motivo: `debitos_colaboradores.retirada_id` referencia esta linha.
+ * Escopo de empresa no `where` e `TransacaoBanco` no tipo — ver a nota em `travarDespesaRepository`.
+ */
+export async function travarRetiradaRepository(retiradaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: retiradas.id })
+    .from(retiradas)
+    .where(and(eq(retiradas.id, retiradaId), eq(retiradas.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
 }
 
 export async function buscarRetiradaDetalheRepository(
@@ -161,11 +182,15 @@ export async function atualizarRetiradaRepository(
       .update(retiradas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        // A-4: a coluna passou a ser ESCRITA na edicao — ver a nota em `atualizarDespesaRepository`.
+        caixaId,
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         grupoRetiradaId: dados.grupoRetiradaId ?? null,
         // R-128: o tipo e DERIVADO de qual credor veio. `colaborador` continua no leque porque o
         // historico tem retirada gravada assim e ela precisa reabrir e salvar sem virar invalida.
+        // O `credorTipo` do payload nao e lido aqui porque o schema ja garante que ele CONCORDA com
+        // o id — derivar e o caminho unico, e nao ha mais como o cliente pedir A e o banco gravar B.
         credorTipo: dados.socioGestorId ? "socio_gestor" : dados.fornecedorId ? "fornecedor" : "colaborador",
         fornecedorId: dados.fornecedorId ?? null,
         colaboradorId: dados.colaboradorId ?? null,

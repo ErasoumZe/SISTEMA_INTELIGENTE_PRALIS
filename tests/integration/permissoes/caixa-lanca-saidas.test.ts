@@ -17,17 +17,15 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieCaixa: string;
-  let cookieTesouraria: string;
   let caixaId = "";
   let contaDoPdv = "";
   const hoje = "2026-08-01";
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieCaixa, cookieTesouraria] = await Promise.all([
+    [cookieAdmin, cookieCaixa] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "caixa"),
-      cookieSessao(contexto.app, "tesouraria")
+      cookieSessao(contexto.app, "caixa")
     ]);
     const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
       usuariosTeste.caixa.email
@@ -96,7 +94,9 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
     [
       "retirada",
       "/api/retiradas",
-      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, colaboradorId: idsTeste.colaboradorCaixa }
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor. Usar colaborador aqui transformaria o
+      // caminho que a regra proibe em contrato de teste.
+      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, fornecedorId: idsTeste.fornecedor }
     ]
   ] as const)("Deve_Criar_Quando_OperadorUsaAContaDoPdv (%s)", async (_nome, rota, grupo) => {
     const resposta = await post(cookieCaixa, rota, {
@@ -121,7 +121,9 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
     [
       "retirada",
       "/api/retiradas",
-      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, colaboradorId: idsTeste.colaboradorCaixa }
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor. Usar colaborador aqui transformaria o
+      // caminho que a regra proibe em contrato de teste.
+      { grupoRetiradaId: idsTeste.grupoRetiradaSangria, fornecedorId: idsTeste.fornecedor }
     ]
   ] as const)("Deve_Retornar400_Quando_OperadorUsaOutraConta (%s)", async (_nome, rota, grupo) => {
     const resposta = await post(cookieCaixa, rota, {
@@ -181,14 +183,37 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
     expect(editada.body).toContain("conta do PDV aberto");
   });
 
+  // O `admin` faz o papel da retaguarda aqui: ele tem caixa aberto proprio no seed (pdvA, conta
+  // `contaCaixa`), entao a despesa nasce presa a um caixa que NAO e o do operador. A tesouraria nao
+  // serve — hoje ela tambem depende de caixa aberto (D-11) e o POST dela nao passa de 400, o que
+  // antes fazia este teste sair pela porta dos fundos com um `if (...) return` e nao asserir nada.
+  //
+  // A conta e informada EXPLICITAMENTE desde a A-4. Sem ela o payload ia sem conta, `caixaIdDaSaida`
+  // gravava `caixa_id` NULO e o 403 passava a vir de "lancamento sem caixa" — o teste continuava
+  // verde provando outra regra, e o cenario "lancamento de OUTRO caixa" sumia da suite.
   it("Deve_Retornar403_Quando_OperadorEditaLancamentoDeOutroCaixa", async () => {
-    // Despesa da TESOURARIA (fora do caixa do operador): nao e dele para corrigir.
-    const deOutro = await post(cookieTesouraria, "/api/despesas", despesaBase({ descricao: "Despesa da retaguarda" }));
-    if (deOutro.statusCode !== 201) return; // tesouraria tambem depende de caixa hoje; ver relatorio
+    const deOutro = await post(
+      cookieAdmin,
+      "/api/despesas",
+      despesaBase({ descricao: "Despesa da retaguarda", contaOrigemId: idsTeste.contaCaixa })
+    );
+    expect(deOutro.statusCode, deOutro.body).toBe(201);
     const { id } = json<{ data: { id: string } }>(deOutro).data;
+    // A pre-condicao do caso: o registro pertence mesmo a um caixa, e nao e o do operador.
+    const gravado = await consultarUm<{ caixa_id: string | null }>("select caixa_id from despesas where id = $1", [id]);
+    expect(gravado).toMatchObject({ caixa_id: idsTeste.caixaAberto });
+    expect(gravado?.caixa_id).not.toBe(caixaId);
 
     const editada = await put(cookieCaixa, `/api/despesas/${id}`, despesaBase({ descricao: "Tentativa" }));
     assertProblem(editada, 403);
+
+    // A recusa preserva o registro INTEIRO, nao so a contagem.
+    expect(
+      await consultarUm<{ descricao: string; caixa_id: string | null }>(
+        "select descricao, caixa_id from despesas where id = $1",
+        [id]
+      )
+    ).toMatchObject({ descricao: "Despesa da retaguarda", caixa_id: idsTeste.caixaAberto });
   });
 
   // --- R-123: recorrencia e ato de retaguarda --------------------------------------------------

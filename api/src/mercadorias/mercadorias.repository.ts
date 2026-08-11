@@ -12,7 +12,7 @@ import type {
 } from "@padaria/shared/mercadorias";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import type { TipoDesconto } from "@padaria/shared/discriminacao";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   calcularDiscriminacaoMercadoria,
   filtrosEmpresa,
@@ -159,6 +159,24 @@ export async function criarMercadoriaRepository(
   });
 }
 
+/**
+ * Trava a linha da mercadoria para a EDICAO — ver a nota em `travarDespesaRepository`.
+ *
+ * A mercadoria nao tem excecao de credor legado (so oferta fornecedor), mas tem a MESMA janela para
+ * `dataPagamento` e para a conta do caixa: le sem lock, valida contra o retrato e escreve depois.
+ * Fica travada junto para as tres saidas terem o mesmo contrato de edicao — deixar uma fora e como o
+ * caminho antigo continuar existindo.
+ * Escopo de empresa no `where` e `TransacaoBanco` no tipo — ver a nota em `travarDespesaRepository`.
+ */
+export async function travarMercadoriaRepository(mercadoriaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: mercadorias.id })
+    .from(mercadorias)
+    .where(and(eq(mercadorias.id, mercadoriaId), eq(mercadorias.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
+}
+
 export async function buscarMercadoriaDetalheRepository(
   mercadoriaId: string,
   db: ExecutorBanco = banco
@@ -242,10 +260,15 @@ export async function buscarMercadoriaDetalheRepository(
   };
 }
 
+// `caixaId` entrou na A-4: ate aqui o UPDATE de mercadoria simplesmente nao tocava a coluna, o que
+// era equivalente a preservar o valor gravado — e preservar deixou de ser correto quando a conta
+// passou a decidir a quem o lancamento pertence. Despesa e retirada ja recebiam o parametro; agora
+// as tres saidas escrevem a coluna pelo mesmo criterio, em vez de duas escreverem e uma omitir.
 export async function atualizarMercadoriaRepository(
   mercadoriaId: string,
   dados: MercadoriaPayload,
   computar: boolean,
+  caixaId: string | null,
   db?: ExecutorBanco
 ): Promise<void> {
   await executarComTransacaoOpcional(db, async (tx) => {
@@ -253,6 +276,7 @@ export async function atualizarMercadoriaRepository(
       .update(mercadorias)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        caixaId,
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId,

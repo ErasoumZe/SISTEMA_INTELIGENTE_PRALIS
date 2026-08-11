@@ -14,7 +14,8 @@ import {
   exigirPermissaoEditarPago,
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
-  obterCaixaParaLancamento,
+  caixaIdDaSaida,
+  obterCaixaDaSaida,
   podeVerLancamentosPagos,
   exigirDiscriminacaoConferida,
   exigirVinculoDosItensDespesa,
@@ -23,6 +24,7 @@ import {
 } from "../lancamentos/lancamentos.dominio.js";
 import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import {
+  exigirCredorCoerenteDaDespesa,
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
   resolverComputarLancamento,
@@ -34,6 +36,7 @@ import {
   atualizarFotoDespesaRepository,
   atualizarFotoNotaDespesaRepository,
   buscarDespesaDetalheRepository,
+  travarDespesaRepository,
   criarDespesaRepository,
   discriminarDespesaRepository,
   listarDespesasRepository
@@ -88,14 +91,20 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
   // Recorrencia (D3): junto das demais permissoes, antes de qualquer trabalho.
   exigirPermissaoRecorrencia(perfil, dados.recorrencia);
+  // Um tipo de credor por vez. Sem `existente`, e criacao: nao existe historico para preservar.
+  exigirCredorCoerenteDaDespesa(dados);
   const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
   return executarEmTransacao(async (tx) => {
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
-    const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+    // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
+    // exigindo o dele.
+    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // So conta para o caixa o que saiu da conta do PDV dele.
+    const caixaId = caixaIdDaSaida(caixa, lancamento);
 
     // Recorrencia (D3): a serie inteira nasce aqui, na MESMA transacao. Ou entram todos os 12
     // lancamentos, ou nenhum — meia serie gravada seria pior que erro nenhum.
@@ -111,7 +120,7 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
       tx
     );
     if (!plano) {
-      const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixa.id, tx);
+      const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: despesa.id, computar };
     }
 
@@ -121,7 +130,7 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
         payloadDaOcorrencia(lancamento, ocorrencia),
         computar,
         perfil.usuarioId,
-        caixaDaOcorrencia(caixa.id, ocorrencia),
+        caixaDaOcorrencia(caixaId, ocorrencia),
         tx,
         ocorrencia.vinculo
       );
@@ -200,8 +209,12 @@ export async function atualizarDespesa(
   validarDespesa(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler: daqui para baixo, `existente` e o retrato sob lock, e nenhuma outra
+    // transacao altera a linha ate esta terminar. Toda validacao que compara com o estado anterior
+    // — a excecao de credor legado, a conta gravada, a data de pagamento — usa ESTE retrato.
+    if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
-    await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
     // exige *_pagar. Ambos comparam com o estado atual do registro.
     exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);
@@ -213,10 +226,32 @@ export async function atualizarDespesa(
     // sem vinculo, nao. Se viesse antes, um id inexistente responderia "falta vinculo" em vez de
     // "registro nao encontrado".
     exigirVinculoDosItensDespesa(dados.itensDespesa, existente!.itensDespesa);
+    // Um tipo de credor por vez, sem punir o historico: se o par de credores chega igual ao que
+    // esta gravado, o operador esta mexendo em outro campo.
+    exigirCredorCoerenteDaDespesa(dados, existente);
     const referenciaInvalida = await validarReferenciasDespesa(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
-    await atualizarDespesaRepository(despesaId, normalizados, computar, existente!.caixaId, perfil.usuarioId, tx);
+    // R-121 tambem na EDICAO: `validarEdicaoDeSaidaNoCaixa` recusa uma conta DIFERENTE, mas corpo
+    // SEM conta passava direto e gravava `conta_origem_id = NULL` mantendo o `caixa_id` — o valor
+    // saia do saldo da conta e continuava no fechamento do caixa. A mesma funcao da criacao repoe a
+    // conta do PDV; para a retaguarda ela devolve os dados intactos.
+    const normalizados = exigirContaDoCaixaNoLancamento(
+      resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null }),
+      caixa,
+      perfil
+    );
+    // A-4: o `caixa_id` sai da MESMA funcao do POST. Antes o UPDATE preservava `existente.caixaId`,
+    // e bastava a retaguarda editar a conta para o lancamento seguir somando no fechamento com o
+    // dinheiro tendo saido de outro lugar (ou o contrario: entrar na conta do PDV e nunca aparecer no
+    // fechamento). Para o operador o valor e identico ao gravado — a conta dele e sempre a do PDV.
+    await atualizarDespesaRepository(
+      despesaId,
+      normalizados,
+      computar,
+      caixaIdDaSaida(caixa, normalizados),
+      perfil.usuarioId,
+      tx
+    );
     return { id: despesaId, computar };
   });
 }
@@ -230,6 +265,13 @@ export async function discriminarDespesa(
 ): Promise<DespesaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "despesas_discriminar");
   return executarEmTransacao(async (tx) => {
+    // TRAVA antes de ler, como na edicao: a discriminacao decide contra o registro GRAVADO
+    // (`valorOriginal` para a conferencia da soma, e os itens para a R-135) e escreve nas MESMAS
+    // tabelas. Sem o lock, uma edicao concorrente que sanea o registro era desfeita por uma
+    // discriminacao validada contra o retrato velho — o mesmo defeito da edicao, pela porta de tras.
+    if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");

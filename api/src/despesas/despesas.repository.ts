@@ -10,7 +10,7 @@ import type {
 } from "@padaria/shared/despesas";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import type { TipoDesconto } from "@padaria/shared/discriminacao";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   calcularDiscriminacaoDespesa,
   filtrosEmpresa,
@@ -192,6 +192,46 @@ export async function criarDespesaRepository(
   });
 }
 
+/**
+ * Trava a linha da despesa para a EDICAO, dentro da transacao de quem chama.
+ *
+ * A excecao de legado (par de credores intacto) e decidida comparando o payload com o registro
+ * GRAVADO. Sem lock, duas edicoes liam o mesmo retrato: a primeira modernizava e commitava, e a
+ * segunda validava contra o retrato velho e reintroduzia o par incoerente por cima do registro ja
+ * saneado — com `debitos_colaboradores` recriado junto.
+ *
+ * `NO KEY UPDATE`, e nao `UPDATE`: o `UPDATE` desta rota nao toca a chave primaria, e `FOR UPDATE`
+ * conflitaria com o `FOR KEY SHARE` que o Postgres toma sozinho ao validar as FKs de
+ * `despesas_itens` e `debitos_colaboradores`. Mesma matriz do lock da raiz de colaboradores
+ * (commit 3ccb268).
+ *
+ * O ganho e sobre quem escreve SO nas filhas — por exemplo o INSERT de `debitos_colaboradores` de
+ * outro lancamento do mesmo colaborador. NAO vale para a discriminacao: ela termina com `UPDATE`
+ * nesta mesma raiz e portanto espera de qualquer forma. E `ajustes_fechamento_caixa` nao tem INSERT
+ * nenhum em `api/src` hoje, entao aquela FK nao entra na conta. (As duas afirmacoes estavam erradas
+ * na primeira versao deste comentario.)
+ *
+ * Fica numa consulta propria em vez de `.for(...)` no detalhe porque o mesmo repositorio de detalhe
+ * serve o GET, e leitura pura nao pode travar linha.
+ *
+ * O ESCOPO DE EMPRESA entra no proprio `where`, e nao so na decisao do service. Com `FOR ...` isso
+ * deixa de ser estilo: travar primeiro e recusar depois faz o request de outro tenant ESPERAR
+ * quando o id existe e esta em edicao — um oraculo de existencia por LATENCIA, que os 404 iguais
+ * nao cobrem — e ainda encosta um lock numa linha alheia. Mesma regra do lock da raiz de
+ * colaboradores (`colaboradores.repository.ts`).
+ *
+ * `db` e `TransacaoBanco`, e nao `ExecutorBanco`: `FOR ...` na conexao base libera o lock na
+ * instrucao seguinte e nao serializa coisa nenhuma. Com este tipo o compilador RECUSA o `banco`.
+ */
+export async function travarDespesaRepository(despesaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: despesas.id })
+    .from(despesas)
+    .where(and(eq(despesas.id, despesaId), eq(despesas.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
+}
+
 export async function buscarDespesaDetalheRepository(
   despesaId: string,
   db: ExecutorBanco = banco
@@ -287,6 +327,12 @@ export async function atualizarDespesaRepository(
       .update(despesas)
       .set({
         ...valoresBaseEdicao(dados, computar),
+        // A-4: a coluna passou a ser ESCRITA na edicao. Ate aqui o `caixaId` chegava so para o
+        // debito do colaborador e o `UPDATE` nunca tocava `despesas.caixa_id` — o que equivalia a
+        // preservar o valor gravado. Preservar deixou de ser correto quando a conta passou a decidir
+        // a quem o lancamento pertence: trocar a conta sem trocar o `caixa_id` deixa o valor somando
+        // no fechamento com o dinheiro tendo saido de outro lugar (e o contrario, tambem).
+        caixaId,
         ...valoresJuros(dados),
         dataVencimento: dados.dataVencimento,
         fornecedorId: dados.fornecedorId ?? null,

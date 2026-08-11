@@ -49,6 +49,8 @@ export type WorkspaceContext = {
   // escolhem a conta livremente.
   contaTravadaDoCaixa: ComputedRef<string>;
   contaTravadaDoCaixaNome: ComputedRef<string>;
+  /** Texto sob o campo travado. Muda quando a conta exibida NAO e a do caixa aberto. */
+  contaTravadaDoCaixaNota: ComputedRef<string>;
   // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
   // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
   podeUsarRecorrencia: ComputedRef<boolean>;

@@ -140,7 +140,8 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       descricao: "Vale funcionario",
       valorOriginal: 20,
       contaOrigemId: contaId,
-      colaboradorId: idsTeste.colaboradorAdmin,
+      // R-128: retirada NOVA e de fornecedor ou socio/gestor.
+      fornecedorId: idsTeste.fornecedor,
       grupoRetiradaId: idsTeste.grupoRetiradaSangria
     });
     await criar("/api/transferencias", {

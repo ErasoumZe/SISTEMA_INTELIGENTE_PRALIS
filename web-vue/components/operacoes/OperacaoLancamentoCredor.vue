@@ -16,7 +16,8 @@ const {
   opcoesEmpresa,
   form,
   contaTravadaDoCaixa,
-  contaTravadaDoCaixaNome
+  contaTravadaDoCaixaNome,
+  contaTravadaDoCaixaNota
 } = useOperacaoLancamentoBloco();
 </script>
 
@@ -57,19 +58,34 @@ const {
     </label>
     <label class="lc-campo">
       <span class="lc-campo-lbl">Conta</span>
-      <!-- Sem contas vinculadas (contas_usuarios): aviso no lugar de um select vazio. -->
-      <div v-if="!opcoesEmpresa.contas.length" class="lc-aviso-contas" role="alert">
-        <v-icon icon="mdi-alert-circle-outline" size="16" />
-        <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
-      </div>
       <!-- R-121: operador de caixa nao ESCOLHE a conta — a saida sai da conta do caixa aberto.
            Campo de leitura, e nao um <select> desabilitado, porque a conta do PDV pode nao estar
            entre as contas vinculadas ao operador: como <option> ela nao existiria e o campo
-           apareceria cinza e VAZIO. O valor persistido vive em form.contaOrigemId. -->
-      <template v-else-if="contaTravadaDoCaixa">
-        <input :value="contaTravadaDoCaixaNome" class="lc-input" readonly aria-label="Conta" />
-        <span class="lc-campo-nota">Saída do caixa aberto</span>
+           apareceria cinza e VAZIO. O valor persistido vive em form.contaOrigemId.
+
+           VEM PRIMEIRO, antes do aviso de lista vazia: a trava nasce do CAIXA, nao do vinculo em
+           `contas_usuarios`. Na ordem anterior o operador sem vinculo (R-071, e as contas
+           importadas sem vinculo da D-10) via "nenhuma conta vinculada" — aviso falso, porque a
+           conta existe e ja estava em form.contaOrigemId — e nunca via o campo travado. -->
+      <template v-if="contaTravadaDoCaixa">
+        <input
+          :value="contaTravadaDoCaixaNome"
+          class="lc-input"
+          readonly
+          aria-label="Conta"
+          aria-describedby="lc-conta-travada-nota"
+        />
+        <!-- A nota e o UNICO motivo visivel do campo cinza; sem o describedby o leitor de tela
+             anunciava "Conta, somente leitura" e nunca dizia por que. O texto acompanha QUAL conta
+             esta sendo exibida — ver `notaDaContaDoLancamento`. -->
+        <span id="lc-conta-travada-nota" class="lc-campo-nota">{{ contaTravadaDoCaixaNota }}</span>
       </template>
+      <!-- Sem contas vinculadas (contas_usuarios): aviso no lugar de um select vazio. So alcanca
+           quem ESCOLHE a conta, isto e, a retaguarda. -->
+      <div v-else-if="!opcoesEmpresa.contas.length" class="lc-aviso-contas" role="alert">
+        <v-icon icon="mdi-alert-circle-outline" size="16" />
+        <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
+      </div>
       <select v-else v-model="form.contaOrigemId" class="lc-input">
         <option value="">—</option>
         <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>

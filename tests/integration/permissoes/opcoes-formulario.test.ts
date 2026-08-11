@@ -23,6 +23,13 @@ import { consultarUm } from "../../setup/integracao.js";
 // permissoes) e fazia o teste "provar" que o operador nao ve as opcoes do proprio formulario. Sem
 // elas, o modal de despesa do operador abre com Grupo e Fornecedor vazios. `semPermissao` continua
 // sendo o negativo de verdade.
+//
+// ATUALIZADO em 10/08/2026 (B-1, decisao do Jose): `/api/colaboradores` passou a aceitar tambem
+// `despesas_visualizar`, porque a despesa oferece Colaborador como credor e o chip abria um select
+// vazio para quem so lanca. O `discriminador` (que tem `despesas_visualizar`) saiu de `nega` e entrou
+// em `permite` — a mudanca e da DECISAO, nao do teste cedendo. O que ele passa a receber e a projecao
+// reduzida `{id, empresaId, nome}`, provada em `credores-projecao-reduzida.test.ts`; aqui so o gate.
+// `semPermissao` continua sendo o negativo de verdade nas duas rotas.
 
 const query = `?empresaId=${idsTeste.empresaA}`;
 
@@ -30,7 +37,7 @@ const query = `?empresaId=${idsTeste.empresaA}`;
 const rotas: Array<{ rota: string; permite: PerfilTeste[]; nega: PerfilTeste[] }> = [
   { rota: "/api/turnos", permite: ["caixa"], nega: ["discriminador", "semPermissao"] },
   { rota: "/api/contas", permite: ["caixa", "discriminador", "tesouraria"], nega: ["semPermissao"] },
-  { rota: "/api/colaboradores", permite: ["caixa"], nega: ["discriminador", "semPermissao"] },
+  { rota: "/api/colaboradores", permite: ["caixa", "discriminador"], nega: ["semPermissao"] },
   { rota: "/api/grupos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
   { rota: "/api/fornecedores", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
   { rota: "/api/produtos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] }

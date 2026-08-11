@@ -18,15 +18,21 @@ import {
 } from "./fornecedores.service.js";
 
 export async function registrarRotasFornecedores(app: FastifyInstance): Promise<void> {
-  // Lista consumida como OPCAO de formulario (fornecedor em despesas/mercadorias). Aceita quem
+  // Lista consumida como OPCAO de formulario (credor de despesa/mercadoria/retirada). Aceita quem
   // opera esses lancamentos, alem do cadastro de fornecedores.
+  //
+  // B-1: `retiradas_visualizar` entrou porque a R-128 fez do fornecedor o credor PADRAO da retirada
+  // — o chip que ja vem ativo ao abrir. Um cargo com permissao so de retirada levava 403 aqui e o
+  // caminho normal abria um select vazio. Quem entra apenas por permissao operacional recebe a
+  // projecao reduzida, decidida em `listarFornecedores`.
   app.get(
     "/api/fornecedores",
     {
       preHandler: exigirAlgumaPermissao([
         "cadastro_fornecedores_visualizar",
         "despesas_visualizar",
-        "mercadorias_visualizar"
+        "mercadorias_visualizar",
+        "retiradas_visualizar"
       ])
     },
     async (request, reply) => {
@@ -36,7 +42,7 @@ export async function registrarRotasFornecedores(app: FastifyInstance): Promise<
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        return paginadoDeArray(await listarFornecedores(escopo), query.page, query.pageSize);
+        return paginadoDeArray(await listarFornecedores(escopo, request.perfilUsuario), query.page, query.pageSize);
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
