@@ -708,6 +708,23 @@ Cadastro de Produtos **existe, está implementado e tem 20 testes**. Detalhe com
 > Em 06/08, José confirmou a versão final na issue #104, registrada nas regras R-152–R-159. A ordem
 > corrente e o primeiro trabalho de cada pessoa passam a ser definidos pela issue-mestra #136.
 
+### Caixa — `caixa_id` na edição e caixa fechado (11/08/2026, CX-M06)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Origem      | Status | Teste                                                                                            |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------ |
+| **R-163** 🆕 | **A edição de saída RECALCULA o `caixa_id` conforme a conta escolhida** (mesma `caixaIdDaSaida` do POST): conta do PDV do caixa aberto do próprio ator ⇒ `caixa_id` daquele caixa; qualquer outra conta ⇒ nulo. **Caixa fechado e os sete totais congelados nunca são alterados** — edição de lançamento preso a caixa fechado ou alheio é 403 sem escrita. Sem `UPDATE`/backfill histórico automático: o par incoerente do histórico só se corrige quando alguém salva o registro. Correção pós-fechamento **não existe**; quando existir, será OS própria, com trilha auditável | José, 11/08 | ✅     | `retaguarda-sem-caixa` (aberto e sem caixa) · `retaguarda-pos-fechamento` (fechado, com mutação) |
+
+Notas de desenho:
+
+- O recálculo (e não a recusa) na troca de conta foi a correção dos P1 da revisão da CX-M06: a
+  recusa valia só numa direção, contradizia a tela (o campo Conta é livre para a retaguarda) e
+  tornava ineditável o histórico que a regra antiga criou. Detalhe em
+  `validarEdicaoDeSaidaDaRetaguarda` (`api/src/lancamentos/lancamentos.dominio.ts`).
+- A ressalva do José pede cobertura nos **três estados**: caixa **aberto** e **sem caixa** vivem em
+  `retaguarda-sem-caixa.test.ts`; caixa **fechado** vive em `retaguarda-pos-fechamento.test.ts`,
+  com fechamento pela rota real (nunca `UPDATE` de status) e prova por mutação de que remover o
+  bloqueio derruba o teste.
+
 ---
 
 ## §1-D · Contradições abertas em 05/08/2026
