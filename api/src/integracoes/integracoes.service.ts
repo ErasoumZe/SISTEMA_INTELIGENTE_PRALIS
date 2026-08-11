@@ -25,7 +25,8 @@ import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/share
 import { diaNegocio, somarDias } from "@padaria/shared/datas";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
 import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
 import {
@@ -271,7 +272,9 @@ async function resolverColaborador(
 async function resolverVinculosVenda(
   chave: IntegracaoChaveLinha,
   payload: VendaIntegracaoAgregadaPayload,
-  db: ExecutorBanco
+  // P0: `TransacaoBanco` porque o caixa do periodo e TRAVADO (FOR SHARE) antes da decisao da
+  // trilha — fora de transacao o lock nao serializa nada.
+  db: TransacaoBanco
 ) {
   const configs = await obterConfigs(chave, db);
   const venda = payload.Venda;
@@ -343,17 +346,28 @@ async function resolverVinculosVenda(
 
   const colaboradorId = await resolverColaborador(chave, venda, db);
 
-  // Liga a venda ao caixa do mesmo PDV cujo periodo aberto contem a dataVenda (null se nao houver).
+  // Liga a venda ao caixa do mesmo PDV cujo periodo contem a dataVenda (null se nao houver).
   const caixa =
     pdvId !== null ? await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db) : null;
   const caixaId = caixa?.id ?? null;
+
+  // P0 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, mas SEM
+  // guarda de status — venda integrada nunca e recusada; anexar a caixa fechado + trilha e
+  // comportamento por regra. O que o lock fecha e a corrida em voo: decidir `caixaFechado` com o
+  // retrato pre-lock deixava a venda escapar do congelamento SEM a marca de pos-fechamento.
+  // Sob o lock, o status e o da versao commitada mais recente — a decisao da trilha fica exata.
+  let caixaFechado = false;
+  if (caixa) {
+    const trava = await travarCaixaCompartilhadoRepository(caixa.id, db);
+    caixaFechado = trava ? trava.status !== "aberto" : caixa.status !== "aberto";
+  }
 
   return {
     pdvId,
     clienteId,
     colaboradorId,
     caixaId,
-    caixaFechado: caixa?.status !== "aberto" && caixa !== null,
+    caixaFechado,
     produtosPorIdentificador,
     formasPagamentoPorIdentificador
   };
