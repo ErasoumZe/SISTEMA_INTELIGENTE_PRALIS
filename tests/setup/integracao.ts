@@ -160,8 +160,12 @@ export async function sessoesNaCadeiaDe({ cliente, pid }: ClienteBloqueador): Pr
   return [...alcancados];
 }
 
-/** Espera ate a cadeia transitiva do bloqueador ter `minimo` sessoes. Condicao, nao sleep. */
-export async function esperarCadeiaDeBloqueio(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 20_000) {
+/**
+ * Espera ate a cadeia transitiva do bloqueador ter `minimo` sessoes. Condicao, nao sleep.
+ * Teto padrao ABAIXO do `lock_timeout` de 10s das transacoes da API: se a cadeia nao formou em
+ * 8s, esperar mais so faria a rota presa morrer por 55P03 e o caso falhar pelo motivo errado.
+ */
+export async function esperarCadeiaDeBloqueio(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 8_000) {
   const inicio = Date.now();
   while (Date.now() - inicio < limiteMs) {
     if ((await sessoesNaCadeiaDe(bloqueador)).length >= minimo) return true;

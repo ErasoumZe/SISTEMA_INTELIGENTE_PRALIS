@@ -4,6 +4,8 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { abrirCaixaDoOperador, universoDoCaixa } from "../../setup/caixa.js";
+import { sql } from "drizzle-orm";
+import { executarEmTransacao } from "../../../api/src/banco/conexao.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -421,6 +423,53 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
     });
   });
 
+  // T4 — a NAO-REGRESSAO que a guarda Q4 promete: o retorno final ao cofre NASCE pendente dentro
+  // da propria transacao do fechamento, entao TODA conferencia de retorno acontece com o caixa ja
+  // fechado. Confirmar nao altera total nenhum (a saida conta em pendente E em recebido; o destino
+  // e o cofre, nao a conta do PDV) — tem de continuar passando. Sem este caso, endurecer a guarda
+  // para "qualquer caixa fechado bloqueia" quebraria a operacao diaria com a suite toda verde.
+  it("Deve_ConfirmarORetornoAoCofre_Quando_OCaixaJaFechou", async () => {
+    const fx = await novaFixture("T4 retorno");
+    const lacre = `P0-T4-${sequencia}`;
+    await vendaManual(cookieCaixa, 100, `${lacre}-venda-fixture`);
+    const fechamento = await fecharCaixaInject(fx.caixaId, cookieCaixa, { lacreRetorno: lacre });
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
+    const congelado = await universoDoCaixa(fx.caixaId);
+
+    const retorno = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno'",
+      [fx.caixaId]
+    );
+    expect(retorno).not.toBeNull();
+
+    // Conferencia fisica da entrega (fluxo estrito Caixa -> Cofre): valor contado + lacre identico.
+    const resposta = await inject("POST", `/api/transferencias/${retorno!.id}/confirmar`, cookieGerente, {
+      contaDestinoId: idsTeste.contaCofre,
+      nLacreDoc: lacre,
+      valorRecebido: 100
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    expect(
+      await consultarUm<{ status: string }>("select status from transferencias where id = $1", [retorno!.id])
+    ).toMatchObject({ status: "recebido" });
+    // Os sete totais congelados nao mexem: confirmar o retorno nao altera o caixa fechado.
+    expect(await universoDoCaixa(fx.caixaId)).toEqual(congelado);
+  });
+
+  // O teto de espera por lock e parte da entrega (revisao final: sem este caso, remover a config
+  // deixaria a suite verde). Vale POR TRANSACAO da API — nunca em migration ou pooler.
+  it("Deve_TerTetoDeLockPorTransacao_Quando_AApiAbreTransacao", async () => {
+    const valores = await executarEmTransacao(async (tx) => {
+      const resultado = (await tx.execute(
+        sql`select current_setting('lock_timeout') as lock, current_setting('idle_in_transaction_session_timeout') as idle`
+      )) as unknown as { rows: Array<{ lock: string; idle: string }> };
+      return resultado.rows[0];
+    });
+    expect(valores?.lock).toBe("10s");
+    // Postgres normaliza GUC de tempo para a maior unidade inteira: 60s pode exibir como 1min.
+    expect(["60s", "1min"]).toContain(valores?.idle);
+  });
+
   // ------------------------------------------------------------------------------------------
   // Q2 — retaguarda (admin) usando a conta do PDV do PROPRIO caixa que fecha durante a operacao:
   // RECUSA, nunca `caixa_id = null` silencioso. O contraste (Q2b) preserva a A-1/R-032: com outra
@@ -469,7 +518,11 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
   });
 
   it("Deve_GravarComCaixaNulo_Quando_ARetaguardaUsaOutraContaComOCaixaFechado", async () => {
-    // O caixa do admin criado no caso anterior ja fechou; aqui nao ha corrida nenhuma.
+    // Contraste da A-1, DE PROPOSITO acoplado ao caso Q2a: reusa o caixa do admin ja fechado la.
+    // O que este caso prova e que a recusa da Q2 nao virou "retaguarda nunca lanca" — com outra
+    // conta o lancamento segue 201 com caixa_id nulo. (Com caixa aberto o resultado seria o
+    // mesmo; o acoplamento existe so para nao pagar mais uma fixture.)
+    sequencia += 1;
     const marcador = `P0-Q2b-${sequencia}`;
     const resposta = await inject("POST", "/api/despesas", cookieAdmin, {
       empresaId: idsTeste.empresaA,
@@ -581,12 +634,12 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
         const congelado = await universoDoCaixa(fx.caixaId);
         expect(congelado).toMatchObject({
           status: "fechado",
-          total_entradas: recomputo?.entradas,
-          total_despesas: recomputo?.despesas,
-          total_retiradas: recomputo?.retiradas,
-          total_mercadorias: recomputo?.mercadorias,
-          total_transferencias_entrada: recomputo?.transferencias_entrada,
-          total_transferencias_saida: recomputo?.transferencias_saida
+          total_entradas: recomputo?.["entradas"],
+          total_despesas: recomputo?.["despesas"],
+          total_retiradas: recomputo?.["retiradas"],
+          total_mercadorias: recomputo?.["mercadorias"],
+          total_transferencias_entrada: recomputo?.["transferencias_entrada"],
+          total_transferencias_saida: recomputo?.["transferencias_saida"]
         });
       }
     }, 240_000);
