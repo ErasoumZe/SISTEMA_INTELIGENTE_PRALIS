@@ -29,7 +29,7 @@ import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio, erroValidacao, naoEncontrado } from "../erros.js";
 import { hashTokenAutorizacao } from "./autorizacoes.service.js";
 import {
@@ -70,6 +70,7 @@ import {
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
+  travarCaixaCompartilhadoRepository,
   travarCaixaRepository,
   buscarSolicitacaoCofreRepository,
   buscarTransferenciaPorIdempotenciaRepository,
@@ -1437,8 +1438,38 @@ function horariosAuditados(valores: DadosExternos) {
   };
 }
 
-export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {
-  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId, db);
+// P0 lancamento x fechamento — a PORTA UNICA do caixa do ator, agora com o contrato de lock:
+// resolver -> travar FOR SHARE -> revalidar o status POS-lock. O SELECT resolve o id sem lock
+// (tem joins); a trava e por PK; e o status decisivo e o do locked-read, nunca o do retrato
+// anterior. Se o caixa fechou no meio da corrida, o chamador recebe o MESMO desfecho de sempre —
+// nada de comportamento novo fora da janela.
+//
+// `TransacaoBanco` obrigatorio: todo caminho de escrita ja roda em `executarEmTransacao`; um
+// FOR SHARE fora de transacao evaporaria na instrucao seguinte.
+
+/** Retaguarda (caixa opcional): devolve o caixa aberto TRAVADO, ou quem fechou durante a corrida. */
+export async function travarCaixaAbertoDoAtor(
+  empresaId: string,
+  usuarioId: string,
+  tx: TransacaoBanco
+): Promise<{
+  caixa: Awaited<ReturnType<typeof buscarCaixaAbertoUsuarioRepository>>;
+  caixaFechadoNaCorrida: Awaited<ReturnType<typeof buscarCaixaAbertoUsuarioRepository>>;
+}> {
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId, tx);
+  if (!caixa) return { caixa: null, caixaFechadoNaCorrida: null };
+  const trava = await travarCaixaCompartilhadoRepository(caixa.id, tx);
+  if (trava?.status === "aberto") return { caixa, caixaFechadoNaCorrida: null };
+  // Fechou entre o SELECT e o lock (ou a linha sumiu, o que a FK impede): quem decide o desfecho e
+  // o chamador — Q2 recusa se a conta em uso for a do PDV deste caixa; qualquer outra conta segue
+  // como se nao houvesse caixa (A-1/R-032).
+  return { caixa: null, caixaFechadoNaCorrida: caixa };
+}
+
+export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, tx: TransacaoBanco) {
+  const { caixa } = await travarCaixaAbertoDoAtor(empresaId, usuarioId, tx);
+  // Caixa que fechou na corrida = caixa que nao existe mais para o operador: o erro oficial e o
+  // MESMO que ele receberia fora da janela (matriz P0, linha "fechamento antes").
   if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;

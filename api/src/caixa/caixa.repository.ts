@@ -50,7 +50,7 @@ import {
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
 
@@ -421,6 +421,32 @@ export async function travarCaixaRepository(
     .from(fechamentosCaixa)
     .where(eq(fechamentosCaixa.id, caixaId))
     .for("update");
+  return linha ?? null;
+}
+
+// P0 lancamento x fechamento: o lock COMPARTILHADO do lado do lancamento. `FOR SHARE` nao
+// serializa lancamentos entre si, mas conflita com o `FOR UPDATE` do fechamento/cofre e com o
+// `NO KEY UPDATE` de horario/abertura — quem chegar depois espera, e o status devolvido aqui e o
+// da versao commitada MAIS RECENTE (READ COMMITTED reavalia no locked-read). E a primeira barreira
+// de toda escrita que possa alterar os sete totais; a revalidacao do status pos-lock e de quem
+// chama.
+//
+// INVARIANTES (a prova de deadlock depende delas — ver o grafo no relatorio da OS):
+//  1. ordem unica: linha do caixa PRIMEIRO, linha do lancamento depois, filhas por ultimo;
+//  2. nenhum caminho de lancamento faz UPDATE em `fechamentos_caixa` — o SHARE nunca vira
+//     exclusivo dentro da mesma transacao;
+//  3. `TransacaoBanco` de proposito (sem default `banco`): FOR SHARE fora de transacao nao
+//     serializa nada, e `executarComTransacaoOpcional` tornaria o erro silencioso;
+//  4. sem joins — FOR SHARE nao pode ser aplicado ao lado nulavel de um outer join.
+export async function travarCaixaCompartilhadoRepository(
+  caixaId: string,
+  db: TransacaoBanco
+): Promise<{ id: string; status: string } | null> {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id, status: fechamentosCaixa.status })
+    .from(fechamentosCaixa)
+    .where(eq(fechamentosCaixa.id, caixaId))
+    .for("share");
   return linha ?? null;
 }
 

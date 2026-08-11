@@ -16,8 +16,7 @@ import {
 import { erroValidacao, naoProcessavel, proibido } from "../erros.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
-import { obterCaixaAbertoParaLancamento } from "../caixa/caixa.service.js";
-import { buscarCaixaAbertoUsuarioRepository } from "../caixa/caixa.repository.js";
+import { obterCaixaAbertoParaLancamento, travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
   colaboradores,
@@ -40,7 +39,7 @@ import type { RetiradaPayload } from "@padaria/shared/retiradas";
 import type { Recorrencia } from "@padaria/shared/recorrencia";
 import type { TransferenciaPayload } from "@padaria/shared/transferencias";
 import type { VendaPayload } from "@padaria/shared/vendas";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 export type QueryEmpresa = { empresaId?: string | undefined };
 type BasePayload = {
@@ -318,15 +317,18 @@ export function exigirRecorrenciaDeRetaguarda(perfil: PerfilUsuario, recorrencia
  * outro caixa, ou a um caixa ja fechado, a condicao abaixo recusa antes. Totais ja congelados em
  * `fechamentos_caixa` continuam intocaveis.
  */
-async function validarEdicaoDeSaidaDaRetaguarda(
+function validarEdicaoDeSaidaDaRetaguarda(
   existente: { empresaId: string; caixaId: string | null } | null,
   dados: { empresaId: string },
   perfil: PerfilUsuario,
-  tx?: ExecutorBanco
+  caixaTravado: CaixaDaSaidaTravado
 ) {
   if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  const caixa = await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx);
+  // P0: o caixa chega RESOLVIDO E TRAVADO pela porta unica (FOR SHARE + revalidacao) — se ele
+  // fechou na corrida, `caixa` vem nulo e um lancamento preso a ele cai na recusa abaixo, o mesmo
+  // 403 de fora da janela. A guarda da conta (Q2) e do service, depois da normalizacao.
+  const caixa = caixaTravado.caixa;
   if (existente.caixaId && existente.caixaId !== caixa?.id) {
     throw proibido("Lancamento nao pertence ao seu caixa aberto");
   }
@@ -340,11 +342,16 @@ export async function validarEdicaoNoCaixaAberto(
   existente: { empresaId: string; caixaId: string | null } | null,
   dados: { empresaId: string },
   perfil: PerfilUsuario,
-  tx?: ExecutorBanco
+  // P0: `TransacaoBanco` porque a resolucao do caixa agora TRAVA (FOR SHARE) e revalida — venda e
+  // transferencia entram na mesma porta unica das tres saidas.
+  tx: TransacaoBanco,
+  // Retrato ja resolvido para a REVALIDACAO sob a trava da linha (segunda chamada do service):
+  // evita retomar o lock e manter duas resolucoes que podem divergir.
+  caixaResolvido?: CaixaDoLancamento
 ) {
   if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  const caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+  const caixa = caixaResolvido ?? (await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx));
   if (existente.caixaId !== caixa.id) throw new Error("Lancamento nao pertence ao seu caixa aberto");
   return caixa;
 }
@@ -360,7 +367,7 @@ export async function validarEdicaoNoCaixaAberto(
 //
 // A mudanca fica AQUI, e nao em `validarEdicaoNoCaixaAberto`: aquela funcao tambem serve venda e
 // transferencia, que nao entraram na decisao.
-export async function validarEdicaoDeSaidaNoCaixa(
+export function validarEdicaoDeSaidaNoCaixa(
   // `contaOrigemId` fica opcional porque os DTOs de detalhe (shared) o declaram assim. Tentar
   // exigi-lo aqui quebra a compilacao nos tres services — e mudar o contrato do DTO e outra entrega.
   // Consequencia registrada no relatorio: se um refactor tirar a coluna da projecao, o campo chega
@@ -369,21 +376,19 @@ export async function validarEdicaoDeSaidaNoCaixa(
   existente: { empresaId: string; caixaId: string | null; contaOrigemId?: string | null | undefined } | null,
   dados: { empresaId: string; contaOrigemId?: string | null | undefined },
   perfil: PerfilUsuario,
-  tx?: ExecutorBanco
+  // P0: o caixa chega TRAVADO (FOR SHARE) por `obterCaixaDaSaidaParaEdicao`, chamado pelo service
+  // ANTES da trava da linha do lancamento — e a ordem unica caixa -> lancamento -> filhas. Para o
+  // operador sem caixa (ou que perdeu a corrida), a resolucao ja lancou o 403 oficial; aqui o
+  // `caixa` de um operador e sempre nao-nulo.
+  caixaTravado: CaixaDaSaidaTravado
 ) {
-  if (podeLancarSemCaixa(perfil)) return validarEdicaoDeSaidaDaRetaguarda(existente, dados, perfil, tx);
+  if (podeLancarSemCaixa(perfil)) return validarEdicaoDeSaidaDaRetaguarda(existente, dados, perfil, caixaTravado);
 
   if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
   if (existente.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
 
-  let caixa;
-  try {
-    caixa = await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
-  } catch {
-    // Fechado o caixa, acabou: corrigir vira ato de tesouraria. E o que protege os totais ja
-    // congelados em `fechamentos_caixa`.
-    throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
-  }
+  const caixa = caixaTravado.caixa;
+  if (!caixa) throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
   if (existente.caixaId !== caixa.id) throw proibido("Lancamento nao pertence ao seu caixa aberto");
   // A conta JA GRAVADA tem de ser a do PDV do caixa aberto. Sem esta condicao, um PDV reapontado
   // para outra conta depois do lancamento abria a porta dos fundos: o corpo vinha sem conta, a
@@ -839,8 +844,8 @@ export function exigirVinculoDosItensDespesa(
   });
 }
 
-export async function obterCaixaParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {
-  return obterCaixaAbertoParaLancamento(empresaId, usuarioId, db);
+export async function obterCaixaParaLancamento(empresaId: string, usuarioId: string, tx: TransacaoBanco) {
+  return obterCaixaAbertoParaLancamento(empresaId, usuarioId, tx);
 }
 
 /**
@@ -858,13 +863,56 @@ export async function obterCaixaParaLancamento(empresaId: string, usuarioId: str
  */
 type CaixaDoLancamento = Awaited<ReturnType<typeof obterCaixaAbertoParaLancamento>>;
 
+// P0: o resultado da porta unica para as tres saidas. `caixa` e o caixa aberto JA TRAVADO
+// (FOR SHARE) e revalidado; `caixaFechadoNaCorrida` so vem preenchido no ramo da retaguarda,
+// quando o caixa dela fechou entre o SELECT e o lock — e quem alimenta a guarda da Q2.
+export type CaixaDaSaidaTravado = {
+  caixa: CaixaDoLancamento | null;
+  caixaFechadoNaCorrida: CaixaDoLancamento | null;
+};
+
 export async function obterCaixaDaSaida(
   empresaId: string,
   perfil: PerfilUsuario,
-  db?: ExecutorBanco
-): Promise<CaixaDoLancamento | null> {
-  if (podeLancarSemCaixa(perfil)) return buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, db);
-  return obterCaixaAbertoParaLancamento(empresaId, perfil.usuarioId, db);
+  tx: TransacaoBanco
+): Promise<CaixaDaSaidaTravado> {
+  if (podeLancarSemCaixa(perfil)) return travarCaixaAbertoDoAtor(empresaId, perfil.usuarioId, tx);
+  return {
+    caixa: await obterCaixaAbertoParaLancamento(empresaId, perfil.usuarioId, tx),
+    caixaFechadoNaCorrida: null
+  };
+}
+
+// Mesmo contrato, para a EDICAO: o operador sem caixa aberto (inclusive o que perdeu a corrida do
+// fechamento) recebe o 403 oficial da R-122 — nunca o 400 de criacao. Uma funcao so, para os tres
+// services nao divergirem no erro (C-6 ja nasceu de um catch cego parecido).
+export async function obterCaixaDaSaidaParaEdicao(
+  empresaId: string,
+  perfil: PerfilUsuario,
+  tx: TransacaoBanco
+): Promise<CaixaDaSaidaTravado> {
+  if (podeLancarSemCaixa(perfil)) return travarCaixaAbertoDoAtor(empresaId, perfil.usuarioId, tx);
+  try {
+    return await obterCaixaDaSaida(empresaId, perfil, tx);
+  } catch {
+    // Fechado o caixa, acabou: corrigir vira ato de tesouraria. E o que protege os totais ja
+    // congelados em `fechamentos_caixa` (R-122/R-163).
+    throw proibido("Caixa fechado: correcao de lancamento passa a ser da Tesouraria");
+  }
+}
+
+// Q2 (Jose, 11/08/2026): a retaguarda usando a conta do PDV de um caixa que FECHOU DURANTE a
+// operacao e recusada — nunca cair para `caixa_id = null` em silencio, porque isso tira dinheiro
+// da gaveta de um turno ja conferido sem aparecer no caixa. Com qualquer OUTRA conta, o caixa
+// fechado e irrelevante e o lancamento segue como retaguarda comum (A-1/R-032).
+export function exigirContaForaDoCaixaFechadoNaCorrida(
+  caixaFechadoNaCorrida: CaixaDoLancamento | null,
+  ...contasEnvolvidas: (string | null | undefined)[]
+): void {
+  if (!caixaFechadoNaCorrida?.pdvContaId) return;
+  if (contasEnvolvidas.some((conta) => idOuNulo(conta) === caixaFechadoNaCorrida.pdvContaId)) {
+    throw new Error("Caixa ja fechado");
+  }
 }
 
 /**

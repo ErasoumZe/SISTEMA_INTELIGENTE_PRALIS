@@ -10,11 +10,13 @@ import type {
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
+import { listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
+import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import {
+  exigirContaForaDoCaixaFechadoNaCorrida,
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   podeLancarSemCaixa
@@ -93,9 +95,12 @@ export async function criarTransferencia(
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
-      const caixa = transferenciaLivre
-        ? await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx)
-        : await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+      // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
+      const { caixa, caixaFechadoNaCorrida } = transferenciaLivre
+        ? await travarCaixaAbertoDoAtor(dados.empresaId, perfil.usuarioId, tx)
+        : { caixa: await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx), caixaFechadoNaCorrida: null };
+      // Q2: na transferencia a conta do PDV vale como origem OU destino (dinheiro entra e sai).
+      exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, dados.contaOrigemId, dados.contaDestinoId);
       const envolveContaPdv =
         caixa && (dados.contaOrigemId === caixa.pdvContaId || dados.contaDestinoId === caixa.pdvContaId);
       if (!transferenciaLivre && !envolveContaPdv) {

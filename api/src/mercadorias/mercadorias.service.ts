@@ -21,7 +21,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
+  obterCaixaDaSaidaParaEdicao,
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
@@ -98,9 +100,11 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
     // exigindo o dele.
-    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
+    const { caixa, caixaFechadoNaCorrida } = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // Q2: retaguarda com a conta do PDV de um caixa que fechou na corrida e recusada.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, lancamento.contaOrigemId);
     // So conta para o caixa o que saiu da conta do PDV dele.
     const caixaId = caixaIdDaSaida(caixa, lancamento);
 
@@ -204,12 +208,14 @@ export async function atualizarMercadoria(
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_editar");
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
+    // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
+    const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
     if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -228,6 +234,8 @@ export async function atualizarMercadoria(
       caixa,
       perfil
     );
+    // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, caixaIdDaSaida(caixa, normalizados), tx);
     return { id: mercadoriaId, computar };
