@@ -94,7 +94,17 @@ export async function fecharBloqueador(bloqueador: ClienteBloqueador) {
   await bloqueador.cliente.end().catch(() => undefined);
 }
 
+// pg_stat_activity e CONGELADA por transacao, e todo poll daqui roda NA conexao do bloqueador —
+// que esta dentro de `begin`. Sem descartar o snapshot, uma sessao que nasceu DEPOIS do primeiro
+// poll (conexao nova do pool da API) fica invisivel para sempre: `pg_blocking_pids` e vivo, mas a
+// LISTA de linhas nao e. Medido no P0: a despesa em espera (pg_locks granted=false) nao aparecia e
+// a cadeia parava em 1; o proprio retrato congelado ainda mostrava a query ANTERIOR da sessao.
+async function descartarSnapshotDeAtividade(cliente: pg.Client) {
+  await cliente.query("select pg_stat_clear_snapshot()");
+}
+
 export async function sessoesBloqueadasPor({ cliente, pid }: ClienteBloqueador) {
+  await descartarSnapshotDeAtividade(cliente);
   const { rows } = await cliente.query<{ total: number }>(
     `select count(*)::int as total
        from pg_stat_activity
@@ -129,6 +139,7 @@ export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo =
  * `pg_blocking_pids`; mais legivel que CTE recursiva e imune a ciclo.
  */
 export async function sessoesNaCadeiaDe({ cliente, pid }: ClienteBloqueador): Promise<number[]> {
+  await descartarSnapshotDeAtividade(cliente);
   const { rows } = await cliente.query<{ pid: number; bloqueadores: number[] }>(
     `select pid, pg_blocking_pids(pid) as bloqueadores
        from pg_stat_activity
@@ -167,6 +178,7 @@ export async function esperarCadeiaDeBloqueio(bloqueador: ClienteBloqueador, min
  * proprio INSERT/UPDATE e ja segura o RowExclusiveLock da tabela.
  */
 export async function travasDeEscritaDaSessaoBloqueada({ cliente, pid }: ClienteBloqueador): Promise<string[]> {
+  await descartarSnapshotDeAtividade(cliente);
   const { rows } = await cliente.query<{ tabela: string }>(
     `select distinct l.relation::regclass::text as tabela
        from pg_locks l
