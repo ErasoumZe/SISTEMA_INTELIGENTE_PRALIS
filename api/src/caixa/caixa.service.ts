@@ -399,6 +399,10 @@ async function editarAberturaCaixaEmTransacao(
   perfil: PerfilUsuario
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
+    // P0 — invariante "caixa primeiro, sempre": o lock exclusivo sobe para a PRIMEIRA instrucao.
+    // Antes ele so chegava no UPDATE, no meio da transacao — com os lancamentos segurando
+    // FOR SHARE, esta rota passaria a esperar tarde demais, ja com trabalho feito.
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
@@ -499,6 +503,8 @@ export async function alterarHorarioCaixa(
 
   try {
     return await executarEmTransacao(async (tx) => {
+      // P0 — invariante "caixa primeiro, sempre": mesmo motivo do lock em editarAberturaCaixa.
+      if (!(await travarCaixaRepository(caixaId, tx))) throw naoEncontrado("Caixa nao encontrado");
       const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
       if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
       if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");

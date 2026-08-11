@@ -6,7 +6,13 @@ import { env } from "../env.js";
 import { capturarErro } from "../observabilidade.js";
 
 export const pool = new pg.Pool({
-  connectionString: env.DATABASE_URL
+  connectionString: env.DATABASE_URL,
+  // P0 lancamento x fechamento: com o FOR SHARE em toda rota de escrita, uma transacao pendurada
+  // passaria a segurar o FECHAMENTO indefinidamente — antes ela so travava o proprio caixa via FK.
+  // `lock_timeout` da teto a espera por lock (o fechamento tipico segura a linha por sub-segundo);
+  // `idle_in_transaction_session_timeout` mata conexao zumbi que ficou dentro de transacao.
+  // Config de pool, nao migration; remover e um ato isolado se aparecer 503 inesperado (plano §16).
+  options: "-c lock_timeout=10s -c idle_in_transaction_session_timeout=60s"
 });
 
 // Sem este listener, DERRUBAR O POSTGRES DERRUBA A API (medido em 05/08/2026, ao verificar a G-04).
