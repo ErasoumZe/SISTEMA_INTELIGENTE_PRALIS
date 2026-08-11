@@ -10,7 +10,11 @@ import type {
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
+import {
+  buscarCaixaPorIdRepository,
+  listarUsuariosTesourariaRepository,
+  travarCaixaCompartilhadoRepository
+} from "../caixa/caixa.repository.js";
 import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
@@ -136,6 +140,26 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // Q4 (Jose, 11/08/2026): confirmacao que ALTERARIA entrada ou saida de caixa ja fechado e
+    // bloqueada imediatamente; fluxo auditado futuro e outra OS. Mecanica: confirmar muda
+    // `pendente -> recebido` e grava a conta destino vencedora — a ENTRADA do caixa do
+    // `caixa_id` passa a contar se essa conta for a do PDV dele (shared/caixa/regras). A SAIDA
+    // nunca muda aqui (pendente e recebido contam igual) — por isso o retorno/sangria ao cofre,
+    // confirmado depois do fechamento, continua passando: ele nao altera total nenhum.
+    //
+    // Ordem unica do P0: o caixa (FOR SHARE) vem ANTES do UPDATE na transferencia. Com o caixa
+    // ABERTO, o lock tambem serializa com o fechamento em voo — quem confirmar primeiro entra nos
+    // totais; quem perder a corrida cai na recusa abaixo.
+    if (existente.caixaId) {
+      const trava = await travarCaixaCompartilhadoRepository(existente.caixaId, tx);
+      if (trava?.status !== "aberto") {
+        const caixa = await buscarCaixaPorIdRepository(existente.caixaId, tx);
+        if (caixa?.pdvContaId && dados.contaDestinoId === caixa.pdvContaId) {
+          throw new Error("Caixa ja fechado");
+        }
+      }
+    }
 
     // Decisao 5 · o fluxo Caixa -> Cofre e ESTRITO, e so ele. `/confirmar` passa a significar
     // "conferi e bateu": exige o valor contado e recusa qualquer divergencia, sem confirmar nada.
