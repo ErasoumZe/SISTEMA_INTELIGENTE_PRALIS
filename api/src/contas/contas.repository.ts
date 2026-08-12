@@ -152,62 +152,73 @@ export async function saldosDasContasRepository(
   // O filtro "computar = true AND status <> 'cancelado'" e escrito tabela a tabela (e nao num
   // helper generico) porque as colunas do Drizzle sao tipadas pela tabela de origem — e porque e
   // exatamente assim que o saldo do caixa faz, o que deixa a comparacao entre os dois obvia.
-  const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias] = await Promise.all([
-    db
-      .select({
-        contaOrigemId: vendas.contaOrigemId,
-        valorOriginal: vendas.valorOriginal,
-        valorDesconto: vendas.valorDesconto,
-        valorAcrescimo: vendas.valorAcrescimo
-      })
-      .from(vendas)
-      .where(and(inArray(vendas.contaOrigemId, contaIds), eq(vendas.computar, true), ne(vendas.status, "cancelado"))),
-    // Transferencia nao filtra por contaIds: ela toca DUAS contas e a origem pode estar fora do
-    // escopo (cofre de outra empresa mandando para esta). O acumulador ignora conta desconhecida.
-    db
-      .select({
-        contaOrigemId: transferencias.contaOrigemId,
-        contaDestinoId: transferencias.contaDestinoId,
-        valorOriginal: transferencias.valorOriginal,
-        status: transferencias.status
-      })
-      .from(transferencias)
-      .where(
-        and(
-          eq(transferencias.computar, true),
-          // Com filtro de contas, a transferencia entra se QUALQUER das duas pontas estiver na
-          // lista — nunca so pela origem, senao a entrada confirmada no destino sumiria do saldo.
-          contasFiltroIds
-            ? or(
-                inArray(transferencias.contaOrigemId, contasFiltroIds),
-                inArray(transferencias.contaDestinoId, contasFiltroIds)
-              )
-            : undefined
-        )
-      ),
-    db
-      .select({ contaOrigemId: despesas.contaOrigemId, valorOriginal: despesas.valorOriginal })
-      .from(despesas)
-      .where(
-        and(inArray(despesas.contaOrigemId, contaIds), eq(despesas.computar, true), ne(despesas.status, "cancelado"))
-      ),
-    db
-      .select({ contaOrigemId: retiradas.contaOrigemId, valorOriginal: retiradas.valorOriginal })
-      .from(retiradas)
-      .where(
-        and(inArray(retiradas.contaOrigemId, contaIds), eq(retiradas.computar, true), ne(retiradas.status, "cancelado"))
-      ),
-    db
-      .select({ contaOrigemId: mercadorias.contaOrigemId, valorOriginal: mercadorias.valorOriginal })
-      .from(mercadorias)
-      .where(
-        and(
-          inArray(mercadorias.contaOrigemId, contaIds),
-          eq(mercadorias.computar, true),
-          ne(mercadorias.status, "cancelado")
-        )
+  //
+  // SEQUENCIAL, e nao `Promise.all`. O `Promise.all` foi escrito para o caminho de LEITURA, onde
+  // `db` e o pool e as cinco consultas de fato correm juntas. A porta de saldo (R-165) passou a
+  // chamar esta funcao com `db` = TRANSACAO, e transacao do Drizzle vive em UM cliente `pg`: as
+  // cinco eram enfileiradas assim mesmo, so que disparadas de uma vez no mesmo cliente — que e
+  // exatamente o que o driver denuncia com "Calling client.query() when the client is already
+  // executing a query is deprecated and will be removed in pg@9.0", warning que aparecia em todas
+  // as rodadas de teste. Nao havia paralelismo a perder: o custo sempre foi a SOMA, nunca o maximo.
+  //
+  // A agregacao unica (um `UNION ALL` com `SUM` por conta, devolvendo uma linha em vez de milhares)
+  // e o passo seguinte e esta desenhada junto dos INDICES, no documento da migration: sem os
+  // indices parciais/covering ela continua varrendo as cinco tabelas, e implementa-la aqui agora
+  // misturaria uma mudanca de codigo com uma mudanca que depende de migration ainda nao autorizada.
+  const linhasVendas = await db
+    .select({
+      contaOrigemId: vendas.contaOrigemId,
+      valorOriginal: vendas.valorOriginal,
+      valorDesconto: vendas.valorDesconto,
+      valorAcrescimo: vendas.valorAcrescimo
+    })
+    .from(vendas)
+    .where(and(inArray(vendas.contaOrigemId, contaIds), eq(vendas.computar, true), ne(vendas.status, "cancelado")));
+  // Transferencia nao filtra por contaIds: ela toca DUAS contas e a origem pode estar fora do
+  // escopo (cofre de outra empresa mandando para esta). O acumulador ignora conta desconhecida.
+  const linhasTransferencias = await db
+    .select({
+      contaOrigemId: transferencias.contaOrigemId,
+      contaDestinoId: transferencias.contaDestinoId,
+      valorOriginal: transferencias.valorOriginal,
+      status: transferencias.status
+    })
+    .from(transferencias)
+    .where(
+      and(
+        eq(transferencias.computar, true),
+        // Com filtro de contas, a transferencia entra se QUALQUER das duas pontas estiver na
+        // lista — nunca so pela origem, senao a entrada confirmada no destino sumiria do saldo.
+        contasFiltroIds
+          ? or(
+              inArray(transferencias.contaOrigemId, contasFiltroIds),
+              inArray(transferencias.contaDestinoId, contasFiltroIds)
+            )
+          : undefined
       )
-  ]);
+    );
+  const linhasDespesas = await db
+    .select({ contaOrigemId: despesas.contaOrigemId, valorOriginal: despesas.valorOriginal })
+    .from(despesas)
+    .where(
+      and(inArray(despesas.contaOrigemId, contaIds), eq(despesas.computar, true), ne(despesas.status, "cancelado"))
+    );
+  const linhasRetiradas = await db
+    .select({ contaOrigemId: retiradas.contaOrigemId, valorOriginal: retiradas.valorOriginal })
+    .from(retiradas)
+    .where(
+      and(inArray(retiradas.contaOrigemId, contaIds), eq(retiradas.computar, true), ne(retiradas.status, "cancelado"))
+    );
+  const linhasMercadorias = await db
+    .select({ contaOrigemId: mercadorias.contaOrigemId, valorOriginal: mercadorias.valorOriginal })
+    .from(mercadorias)
+    .where(
+      and(
+        inArray(mercadorias.contaOrigemId, contaIds),
+        eq(mercadorias.computar, true),
+        ne(mercadorias.status, "cancelado")
+      )
+    );
 
   const totaisPorConta = new Map<string, TotaisContaCentavos>(
     contaIds.map((id) => [
