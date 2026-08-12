@@ -32,12 +32,12 @@
 
 **Regras confirmadas no código:**
 
-| Regra | Estado real |
-| ----- | ----------- |
-| **R-146** — dois tipos (revenda/transformação); preço = custo × margem com opção manual | ✅ CHECK `('revenda','transformacao')` em `app.schema.ts:619`; `calcularPrecoVenda` com flag `auto` |
-| **R-147** — promoção só dentro da janela de vigência | ✅ **parcial.** `produtos_promocoes` tem tipo (valor\|desconto), `horaInicio`/`horaFim`, sete booleanos de dia e `validaAte`; `calcularPrecoVendaComPromocao` aplica dia + janela. **Falta o "mesmo código"**, que depende da integração com o PDV |
-| **R-145** — dados fiscais da planilha NÃO entram | ✅ `scripts/seed-planilha.ts` não escreve nenhum campo fiscal (zero ocorrências de `fiscal`/`ncm`/`icms`). Ver a ressalva no §4 |
-| **R-148** — pedido automático no estoque mínimo | ❌ correto. Só existem as colunas `estoqueMin`/`estoqueMax`/`quantidadeEstoque`; nenhuma lógica de disparo |
+| Regra                                                                                   | Estado real                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R-146** — dois tipos (revenda/transformação); preço = custo × margem com opção manual | ✅ CHECK `('revenda','transformacao')` em `app.schema.ts:619`; `calcularPrecoVenda` com flag `auto`                                                                                                                                                                                                                                                                                    |
+| **R-147** — promoção só dentro da janela de vigência                                    | ✅ **parcial.** `produtos_promocoes` tem tipo (valor\|desconto), `horaInicio`/`horaFim`, sete booleanos de dia e `validaAte`; `calcularPrecoVendaComPromocao` aplica dia + janela. **Falta o "mesmo código"**, que depende da integração com o PDV                                                                                                                                     |
+| **R-145** — dados fiscais da planilha NÃO entram                                        | ✅ `scripts/seed-planilha.ts` não escreve nenhum campo fiscal (zero ocorrências de `fiscal`/`ncm`/`icms`). Ver a ressalva no §4                                                                                                                                                                                                                                                        |
+| **R-148** — pedido automático no estoque mínimo                                         | ⚠️ **parcial — corrigido em 12/08.** A afirmação "nenhuma lógica de disparo" estava errada: existem `POST /api/pedidos/gerar-automatico` (`pedidos.controller.ts:34`), a regra pura `gerarItensReposicao` (`shared/src/pedidos/index.ts:104`, sugere `max - atual` quando `atual <= min`) e o ciclo `rascunho → aprovado`. **Falta** o rascunho que se auto-aprova ao atingir o mínimo |
 
 Também já implementados: código interno sequencial por empresa (com `uniqueIndex` e preservação na
 importação entre empresas), "como se compra" (`embalagem` + `cDe` + `quantidadeCaixa` +
@@ -101,18 +101,22 @@ menu próprio: **o esqueleto já foi decidido, só está oculto.**
 
 ---
 
-## §4 · Ressalva a levantar com o José — conflito de fontes
+## §4 · ~~Ressalva a levantar com o José — conflito de fontes~~ · RESOLVIDO pela R-165 (12/08/2026)
 
-Existem **dois importadores ativos gravando na mesma tabela, com fontes diferentes**:
+> 🕰️ **Histórico.** Esta seção descrevia um conflito que **não existe mais**. Mantida porque explica
+> por que o importador do Pralis existiu e por que ele foi removido.
 
-- `api/src/scripts/importar-pralis.ts` — decisão de 03/07: *"Pralis é a fonte de verdade"*. Traz o
-  bloco `fiscal` completo (`:67`, `:248`).
+O que existia até 12/08: **dois importadores ativos gravando na mesma tabela, com fontes diferentes**.
+
+- ~~`api/src/scripts/importar-pralis.ts`~~ — decisão de 03/07 (_"Pralis é a fonte de verdade"_), que
+  trazia o bloco `fiscal` completo. **Decisão REVOGADA e arquivo REMOVIDO pela R-165.**
 - `scripts/seed-planilha.ts` — R-145, de 04/08: a fonte é a **planilha do Rodrigo**, e **dado fiscal
-  não entra** porque está errado e causa pagamento de imposto a maior.
+  não entra** porque está errado e causa pagamento de imposto a maior. **É a única porta que cria
+  produto em massa hoje.**
 
-Formalmente não colidem (uma fala do Pralis, outra da planilha), mas **o documento mais novo declara
-que dado fiscal herdado é a origem de um prejuízo fiscal real**. Antes de rodar `importar-pralis` de
-novo, é preciso decidir qual das duas é a fonte oficial hoje. **Não há resposta registrada.**
+**Decisão vigente (R-165, José, 12/08):** somente a planilha do Rodrigo cria produto. O Pralis é
+referência visual/histórica, não fonte executável. Enriquecimento futuro dos campos comerciais só
+poderá agir sobre produto já conciliado, nunca criar, e depende de nova autorização.
 
 ---
 
@@ -120,7 +124,7 @@ novo, é preciso decidir qual das duas é a fonte oficial hoje. **Não há respo
 
 **Produto duplicado bloqueia, com escape consciente.** `produtos.service.ts:62-68` recusa salvar
 produto com a mesma descrição ou o mesmo código de barras na mesma empresa, e a mensagem diz **quem
-cadastrou o original** (*"Já existe o produto X nesta loja (cadastrado por Fulano)"*). O bypass é o
+cadastrou o original** (_"Já existe o produto X nesta loja (cadastrado por Fulano)"_). O bypass é o
 flag `forcar` no payload — o "cadastrar mesmo assim".
 
 ---

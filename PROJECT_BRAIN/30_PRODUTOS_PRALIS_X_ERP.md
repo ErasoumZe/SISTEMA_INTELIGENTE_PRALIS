@@ -1,4 +1,4 @@
-# 28 · Cadastro de Produtos — o app Pralis × o ERP, e como fundir
+# 30 · Cadastro de Produtos — o app Pralis × o ERP, e como fundir
 
 > 05/08/2026. Comparação campo a campo entre a aplicação **Pralis standalone**
 > (`CADASTRO DE PRODUTOS/pralis/`) e o módulo de produtos que já existe no ERP.
@@ -8,12 +8,24 @@
 
 ---
 
+> ⚠️ **Errata de 12/08/2026 (P-04).** Este documento foi escrito em 05/08 e seis afirmações dele
+> envelheceram ou nasceram imprecisas. Todas estão corrigidas **no corpo do texto**, e a lista
+> completa está na **§6 · Errata**. As mais importantes: o importador do Pralis **não existe mais**
+> (R-165), a listagem do ERP **entrega apenas os 10 primeiros produtos** (não "sem busca" apenas),
+> e **pedido automático tem implementação parcial**, não ausência total.
+
+---
+
 ## §0 · A conclusão, antes de tudo
 
 **A migração já aconteceu — e foi bem feita.** O ERP não tem um esboço de cadastro de produtos: tem o
-modelo do Pralis portado com fidelidade, mais melhorias que o original não tem. Existe até um
-importador dedicado (`api/src/scripts/importar-pralis.ts`, 322 linhas) que lê o
-`base-products.json` do app antigo e entra **pela mesma porta do cadastro manual**.
+modelo do Pralis portado com fidelidade, mais melhorias que o original não tem.
+
+> ~~Existe até um importador dedicado (`api/src/scripts/importar-pralis.ts`, 322 linhas) que lê o
+> `base-products.json` do app antigo e entra pela mesma porta do cadastro manual.~~
+> **REVOGADO pela R-165 (12/08).** O importador foi **removido** — arquivo e script `importar:pralis`.
+> Somente a planilha do Rodrigo cria produto. O Pralis é **referência visual e histórica**, nunca
+> fonte executável.
 
 O que **não** foi portado não é modelo nem regra — é **experiência de uso**. E é justamente o que faz
 diferença para quem cadastra 150 produtos.
@@ -28,7 +40,7 @@ diferença para quem cadastra 150 produtos.
 | **Scanner de código de barras** | **✅ `@zxing/browser`, câmera traseira**       | ❌ campo de texto                                                              |
 | **Upload de foto**              | **✅ Cloudinary, dropzone com drag&drop**      | ❌ campo "URL da foto"                                                         |
 | **Ajuda contextual**            | **✅ 31 dicas, switch por produto**            | ❌                                                                             |
-| **Listagem**                    | **✅ galeria, busca, 4 filtros, 6 ordenações** | ❌ tabela de 5 colunas, **sem busca**                                          |
+| **Listagem**                    | **✅ galeria, busca, 4 filtros, 6 ordenações** | ❌ tabela de 5 colunas, sem busca, e **só os 10 primeiros produtos** (§3.1)    |
 | **Dashboard**                   | **✅ 3 gráficos ApexCharts**                   | ❌ nenhum gráfico no sistema inteiro                                           |
 
 **As duas pontas usam Vuetify 3.12.8 e Nuxt 4.** A migração de tela é quase 1:1 — com uma ressalva
@@ -109,14 +121,30 @@ Resultado prático nos dois: **a margem é digitada produto a produto.** É a ta
 
 Em ordem de valor para quem vai cadastrar produto de verdade.
 
-### 3.1 · Busca e filtros na listagem 🔴
+### 3.1 · Busca, filtros e o teto de 10 produtos 🔴
+
+> ⚠️ **Corrigido em 12/08.** A versão de 05/08 desta seção dizia que havia "paginação client-side
+> sobre a lista inteira já carregada". **Não é isso que acontece — é pior.**
 
 Hoje o ERP não tem **busca** na tela de produtos. O campo de busca do `CadastroTable.vue:147-184` só
-renderiza com `modoServidor=true`, e `pages/produtos.vue` não passa essa prop. Só há paginação
-client-side sobre a lista inteira já carregada — e a listagem carrega **todos os satélites de todas as
-empresas sem WHERE** (`produtos.repository.ts:71-165`).
+renderiza com `modoServidor=true`, e `pages/produtos.vue` não passa essa prop.
 
-Com 150 produtos passa. Com o mix real de uma rede de padarias, não.
+**E a tela recebe somente os 10 primeiros produtos.** A cadeia é esta:
+
+1. `GET /api/produtos` responde `paginadoDeArray(..., query.page, query.pageSize)`
+   (`produtos.controller.ts:34`), e `paginationQuerySchema` tem **`pageSize` default 10**
+   (`shared/src/api/index.ts:66-67`).
+2. Os **seis consumidores** chamam `apiGet<Opcao[]>('/api/produtos' + query)` sem passar `pageSize`
+   e **descartam `meta.pagination`** — `apiGet` devolve só o `data`. São eles:
+   `AppWorkspace.vue:639`, `:756`, `:845`, `:1063`, `pages/integracoes.vue:174` e
+   `pages/pedidos.vue:79`.
+3. Resultado: **a listagem e todos os seletores de produto do sistema ficam presos à primeira
+   página de 10.** Não é degradação de escala — acontece com 11 produtos.
+
+E, no banco, `listarProdutosRepository` carrega **todos os satélites de todas as empresas sem
+`WHERE`** (`produtos.repository.ts:106-157`) antes de paginar em memória.
+
+Com 150 produtos **não** passa. Com 11, já não passa.
 
 O Pralis tem: busca server-side, painel de filtros retrátil com badge de contagem (Status, Tipo,
 Setor, Grupo) e 6 ordenações — inclusive por código interno crescente e decrescente
@@ -214,36 +242,72 @@ visual Cicluz (`67`).
 próprio, Cloudinary e deploy próprio. Depois de extrair o que interessa, ela vira referência
 histórica — mesmo destino do `_ARQUIVO_MORTO/`.
 
+> ✅ **Confirmado em 12/08 (R-165).** `CADASTRO DE PRODUTOS/` **permanece no disco, ignorada pelo
+> Git, como referência somente visual e funcional**. Nada dela foi copiado ou incorporado como
+> aplicação; nenhuma auth, banco, Cloudinary ou servidor antigo foi reaproveitado; e os ícones
+> Material Symbols foram **traduzidos** para os MDI do ERP (§4.1), nunca copiados como estão.
+
 ⚠️ Antes disso: `stack/api/.env` tem **credenciais reais** (JWT, cookie, Cloudinary, Resend, banco).
 Não está no git (o `.gitignore` cobre), mas está no disco e agora está numa pasta conectada. Se aquele
 Cloudinary e aquele Resend ainda estiverem ativos, **rotacione as chaves**.
 
 ---
 
-## §5 · A pergunta que trava a decisão
+## §5 · ~~A pergunta que trava a decisão~~ · RESPONDIDA pela R-165 (12/08/2026)
 
-`24` §4 já tinha registrado, e agora está mais nítida: existem **dois importadores ativos** gravando
-na mesma tabela, com fontes diferentes.
+Existiam **dois importadores ativos** gravando na mesma tabela, com fontes diferentes. **Só um
+sobreviveu.**
 
-| Importador                           | Fonte                                                                    | Traz fiscal?                    |
-| ------------------------------------ | ------------------------------------------------------------------------ | ------------------------------- |
-| `api/src/scripts/importar-pralis.ts` | `base-products.json` do app Pralis — **150 produtos**                    | **sim**, o bloco inteiro        |
-| `scripts/seed-planilha.ts`           | planilha do Rodrigo, aba `(BASE) CADASTRO PRODUTOS`, só linhas com "TNP" | **não** — descarta de propósito |
+| Importador                               | Fonte                                                                    | Traz fiscal?                    | Hoje                                |
+| ---------------------------------------- | ------------------------------------------------------------------------ | ------------------------------- | ----------------------------------- |
+| ~~`api/src/scripts/importar-pralis.ts`~~ | `base-products.json` do app Pralis — 150 produtos                        | sim, o bloco inteiro            | **REMOVIDO** (R-165)                |
+| `scripts/seed-planilha.ts`               | planilha do Rodrigo, aba `(BASE) CADASTRO PRODUTOS`, só linhas com "TNP" | **não** — descarta de propósito | **única porta de criação em massa** |
 
-A **R-145** (04/08) diz que a fonte é a planilha do Rodrigo e que **dado fiscal não entra**, porque
-está errado e causa pagamento de imposto a maior.
+**Decisão vigente (R-165, José, 12/08):**
 
-Mas note: o `base-products.json` **não tem nenhum bloco fiscal preenchido** — a planilha de origem
-estava vazia nesse ponto. Então, na prática, os dois caminhos hoje produzem o mesmo resultado quanto
-ao fiscal. O conflito é **potencial**, não atual.
+- **Somente a planilha do Rodrigo cria produto.** O Pralis **deixou de ser fonte executável** e é
+  agora apenas **referência visual e histórica** — as telas, os ícones e os 31 textos de ajuda.
+- Dado antigo **não cria produto e não importa dado fiscal** (mantém a R-145).
+- O **enriquecimento** dos campos comerciais (custo, margem, preço, estoque, locais, foto) que o
+  `seed-planilha` não grava continua sendo uma peça real que falta — mas, quando existir, só poderá
+  agir sobre produto **previamente conciliado**, **nunca criar produto**, e **depende de nova
+  autorização** do José. Não foi implementado nesta rodada.
+- Registro honesto do que se perde: o `seed-planilha` grava o catálogo (descrição, tipo, status,
+  embalagem, marca, grupo, EAN, estoque min/max, setor…) e não grava custo/preço/foto. Isso é
+  **aceito**, não esquecido.
 
-**A decisão que falta é outra, e é de escopo:** o `seed-planilha` grava só 12 campos por produto
-(descrição, tipo, status, embalagem, marca, grupo, EAN…) e **não grava custo, margem, preço, estoque,
-locais nem foto**. O `importar-pralis` grava tudo isso. Ou seja: **a planilha do Rodrigo dá o
-catálogo; o Pralis dá os dados comerciais.**
+### 5.1 · As duas planilhas — qual delas é a fonte
 
-Se o objetivo é ter produto com preço funcionando, provavelmente o certo é **os dois**, nesta ordem:
-planilha primeiro (catálogo canônico, com os critérios de linha do Rodrigo), Pralis depois
-**enriquecendo** apenas os campos comerciais dos produtos que casarem — e nunca criando produto novo.
+Existem **duas planilhas** em `CADASTRO DE PRODUTOS/tabela/`, com **conteúdo diferente** (SHA-256
+distintos, medidos em 12/08/2026):
 
-Isso **não existe hoje** e é a peça que falta desenhar. É decisão sua e do Rodrigo, não minha.
+| Arquivo                                                                   | SHA-256 (12 primeiros) | Papel                                    |
+| ------------------------------------------------------------------------- | ---------------------- | ---------------------------------------- |
+| `Cópia de CENTRAL PRODUTOS (BASE) - CICLUZ GESTÃO PROFISSIONAL  (1).xlsx` | `37cc200f9728`         | **é a que o seed usa hoje**              |
+| `Cópia de CENTRAL PRODUTOS (BASE) - CICLUZ GESTÃO PROFISSIONAL .xlsx`     | `d810e2dee3a2`         | versão anterior, mantida apenas no disco |
+
+O critério **não é data nem inspeção de conteúdo**: `scripts/seed-planilha.ts:43-51` procura, no
+diretório, o arquivo cujo nome contém `CENTRAL PRODUTOS (BASE)` **e termina em `(1).xlsx`**, e falha
+se não achar. Ou seja, **a versão "(1)" é a apontada pelo seed por regra de nome**. O relatório do
+dry-run (§ETAPA 5) passou a registrar nome e hash da fonte escolhida, para que isso nunca seja
+suposição.
+
+---
+
+## §6 · Errata — o que este documento afirmava errado (12/08/2026, P-04)
+
+Seis afirmações da versão de 05/08 foram corrigidas no corpo do texto. A lista, para quem leu a
+versão antiga:
+
+| #   | Dizia (05/08)                                                                                             | É (12/08)                                                                                                                                                                                                         | Onde       |
+| --- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | "Existe um importador dedicado `importar-pralis.ts` que entra pela mesma porta do cadastro manual"        | **Foi removido** — arquivo e script `importar:pralis`. Somente a planilha cria produto (R-165)                                                                                                                    | §0, §5     |
+| 2   | Listagem: "❌ tabela de 5 colunas, sem busca"; "paginação client-side sobre a lista inteira já carregada" | Além de não ter busca, **a tela recebe apenas os 10 primeiros produtos** — `pageSize` default 10 + `apiGet` que descarta `meta.pagination`                                                                        | §0, §3.1   |
+| 3   | (não mencionava)                                                                                          | **Os seis seletores de produto do sistema também estão presos à primeira página de 10** — `AppWorkspace.vue:639/756/845/1063`, `integracoes.vue:174`, `pedidos.vue:79`                                            | §3.1       |
+| 4   | (o `24` dizia, na R-148: "❌ nenhuma lógica de disparo")                                                  | **Pedido automático tem implementação PARCIAL**: `POST /api/pedidos/gerar-automatico`, a regra pura `gerarItensReposicao` e o status `rascunho → aprovado`. O que falta é o rascunho que se auto-aprova no mínimo | `24` R-148 |
+| 5   | "a planilha do Rodrigo" (no singular)                                                                     | **Existem duas planilhas, com SHA-256 diferentes.** A versão **"(1)"** é a apontada pelo seed, por regra de nome de arquivo                                                                                       | §5.1       |
+| 6   | "Depois de extrair o que interessa, ela vira referência histórica"                                        | Confirmado e já vigente: `CADASTRO DE PRODUTOS/` é **referência visual e funcional**, ignorada pelo Git, nunca aplicação — e os Material Symbols foram **traduzidos** para MDI                                    | §4.3       |
+
+**O que continua verdadeiro e não mudou:** o mapa de campos da §1, as regras da §2 (inclusive os dois
+defeitos herdados — "como se compra" com duas implementações e a margem por grupo letra morta), a
+ressalva do icon set na §4.1 e a lista do que **não** trazer na §3.6.
