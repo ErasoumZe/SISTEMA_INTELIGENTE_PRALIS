@@ -126,19 +126,57 @@ export function montarValidacaoQtd(descricao: string, precisao: string, qtd: num
   return `DENTRO DA EMB (${desc}) TEM ${maiusculo(precisao)} ${qtd ?? ""} ${maiusculo(unidade)}`;
 }
 
-/** Texto "como se compra" (informativo): "1 SACO DE25 (descricao)" ou "1 LT C/ (descricao)". */
-export function montarComoSeCompra(
-  embalagem: string,
-  cDe: "C/" | "DE" | null,
-  quantidadeCaixa: number,
-  descricao: string
-): string {
-  const emb = maiusculo(embalagem);
-  const desc = String(descricao ?? "");
-  if (emb === "" && desc === "") return "";
-  if (cDe === "C/") return `1 ${emb} C/ (${desc})`;
-  if (cDe === "DE") return `1 ${emb} DE${quantidadeCaixa ?? ""} (${desc})`;
-  return "";
+/**
+ * Rotulo legivel da sigla de embalagem. Sigla desconhecida devolve a propria sigla — o cadastro de
+ * Unidades e livre, entao inventar rotulo para o que nao esta aqui produziria texto errado.
+ */
+const ROTULO_DA_EMBALAGEM: Record<string, string> = {
+  SACO: "Saco",
+  PCT: "Pacote",
+  CX: "Caixa",
+  UN: "Unidade",
+  FD: "Fardo",
+  POTE: "Pote",
+  BAND: "Bandeja",
+  EMB: "Embalagem",
+  MIL: "Milheiro",
+  KG: "Kg",
+  LT: "Litro"
+};
+
+export interface ComoSeCompraEntrada {
+  /** Sigla da embalagem de compra (vem do cadastro de Unidades). */
+  embalagem: string | null;
+  /** Preposicao: "C/" = com (caixa COM 12), "DE" = de (saco DE 25 kg). */
+  cDe: "C/" | "DE" | null;
+  /** Unidades/medidas que vem na embalagem de compra. */
+  quantidadeCaixa: number | null;
+  /** Sigla da medida de compra. */
+  medidaCompra: string | null;
+  /** Descricao do produto (a mesma que `montarDescricao` monta). */
+  descricao: string;
+}
+
+/**
+ * Texto "como se compra" (informativo). **Formato oficial, decidido em 12/08/2026:**
+ *
+ *     Saco de 25 KG — FARINHA DE TRIGO 25 KG
+ *
+ * Esta e a UNICA implementacao. Antes existiam duas divergentes — a regra compartilhada produzia
+ * `"1 SACO DE25 (…)"` e a tela produzia o formato acima, sem teste. O ERP tinha herdado o defeito
+ * do Pralis, que tambem tinha as duas. A da tela venceu porque e a que o Rodrigo le; a que morreu
+ * era a que tinha teste, e o teste veio junto para ca.
+ */
+export function montarComoSeCompra(entrada: ComoSeCompraEntrada): string {
+  const sigla = maiusculo(entrada.embalagem);
+  if (!sigla) return "";
+  const rotulo = ROTULO_DA_EMBALAGEM[sigla] ?? sigla;
+  const preposicao = entrada.cDe === "C/" ? "com" : "de";
+  const quantidade = Number(entrada.quantidadeCaixa) || 0;
+  const medida = maiusculo(entrada.medidaCompra);
+  const quantidadeTexto = quantidade ? [String(quantidade), medida].filter(Boolean).join(" ") : "";
+  const descricao = String(entrada.descricao ?? "").trim();
+  return [rotulo, preposicao, quantidadeTexto, descricao ? `— ${descricao}` : ""].filter(Boolean).join(" ");
 }
 
 /** Retorna a margem (fracao) do grupo de mercadoria pelo nome, ou 0 se nao encontrado. */

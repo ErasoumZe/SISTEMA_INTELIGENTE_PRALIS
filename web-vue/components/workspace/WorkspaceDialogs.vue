@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { TELA_TEMA_RESUMO_CAIXA, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
+import { TELA_TEMA_RESUMO_CAIXA, montarComoSeCompra, montarDescricao, montarValidacaoQtd } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela, precoVendaDoFormProduto } from "~/utils/domain";
 import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
@@ -83,30 +83,17 @@ const descricaoAutoPreview = computed(() =>
   montarDescricao(formCadastro.value.descricao, formCadastro.value.quantidadeIndividual, unidadeSiglaProduto.value)
 );
 
-// "Como se compra" — versao amigavel do formulario ("Saco de 25 KG — descricao").
-const EMB_LABEL: Record<string, string> = {
-  SACO: "Saco",
-  PCT: "Pacote",
-  CX: "Caixa",
-  UN: "Unidade",
-  FD: "Fardo",
-  POTE: "Pote",
-  BAND: "Bandeja",
-  EMB: "Embalagem",
-  MIL: "Milheiro",
-  KG: "Kg",
-  LT: "Litro"
-};
-const comoSeCompraPreview = computed(() => {
-  const emb = formCadastro.value.embalagem;
-  if (!emb) return "";
-  const rotulo = EMB_LABEL[emb] ?? emb;
-  const cde = formCadastro.value.cDe === "C/" ? "com" : "de";
-  const qtCad = Number(formCadastro.value.quantidadeCaixa || 0);
-  const qtd = qtCad ? `${qtCad}${formCadastro.value.medidaCompra ? " " + formCadastro.value.medidaCompra : ""}` : "";
-  const desc = descricaoAutoPreview.value;
-  return [rotulo, cde, qtd, desc ? "— " + desc : ""].filter(Boolean).join(" ");
-});
+// "Como se compra": UMA funcao de dominio, a do shared. A copia que existia aqui (com o proprio
+// dicionario de rotulos e sem teste) era a segunda implementacao divergente — morreu em 12/08.
+const comoSeCompraPreview = computed(() =>
+  montarComoSeCompra({
+    embalagem: formCadastro.value.embalagem,
+    cDe: formCadastro.value.cDe === "C/" ? "C/" : "DE",
+    quantidadeCaixa: Number(formCadastro.value.quantidadeCaixa || 0),
+    medidaCompra: formCadastro.value.medidaCompra,
+    descricao: descricaoAutoPreview.value
+  })
+);
 
 // Validacao de quantidade (transformacao): texto automatico da regra operacional.
 const diasSemana = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];

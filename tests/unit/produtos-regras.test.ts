@@ -109,12 +109,54 @@ describe("produtos/regras — texto e lookups", () => {
     expect(montarDescricao("Farinha de Trigo", 25, "KG")).toBe("FARINHA DE TRIGO 25 KG");
   });
 
-  it("montarComoSeCompra: embalagem DE", () => {
-    expect(montarComoSeCompra("saco", "DE", 25, "FARINHA 25 KG")).toBe("1 SACO DE25 (FARINHA 25 KG)");
+  // Formato OFICIAL (12/08/2026). Havia duas implementacoes divergentes — a compartilhada
+  // (`"1 SACO DE25 (…)"`) e a da tela; sobrou uma so, e este e o caso canonico do enunciado.
+  it("montarComoSeCompra: formato oficial com DE", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "SACO",
+        cDe: "DE",
+        quantidadeCaixa: 25,
+        medidaCompra: "KG",
+        descricao: "FARINHA DE TRIGO 25 KG"
+      })
+    ).toBe("Saco de 25 KG — FARINHA DE TRIGO 25 KG");
   });
 
-  it("montarComoSeCompra: embalagem C/", () => {
-    expect(montarComoSeCompra("lt", "C/", 10, "TESTE")).toBe("1 LT C/ (TESTE)");
+  it("montarComoSeCompra: formato oficial com C/", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "CX",
+        cDe: "C/",
+        quantidadeCaixa: 12,
+        medidaCompra: "UN",
+        descricao: "REFRIGERANTE 350 ML"
+      })
+    ).toBe("Caixa com 12 UN — REFRIGERANTE 350 ML");
+  });
+
+  it("montarComoSeCompra: sigla fora do dicionario vira ela mesma", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "BALDE",
+        cDe: "DE",
+        quantidadeCaixa: 5,
+        medidaCompra: "LT",
+        descricao: "OLEO 5 LT"
+      })
+    ).toBe("BALDE de 5 LT — OLEO 5 LT");
+  });
+
+  it("montarComoSeCompra: sem embalagem nao inventa texto", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: null,
+        cDe: "DE",
+        quantidadeCaixa: 25,
+        medidaCompra: "KG",
+        descricao: "FARINHA DE TRIGO 25 KG"
+      })
+    ).toBe("");
   });
 
   it("resolverMargemGrupo: acha pelo nome, ou 0", () => {

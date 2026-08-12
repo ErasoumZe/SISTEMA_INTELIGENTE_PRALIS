@@ -311,3 +311,85 @@ versão antiga:
 **O que continua verdadeiro e não mudou:** o mapa de campos da §1, as regras da §2 (inclusive os dois
 defeitos herdados — "como se compra" com duas implementações e a margem por grupo letra morta), a
 ressalva do icon set na §4.1 e a lista do que **não** trazer na §3.6.
+
+---
+
+## §7 · A migration de Produtos — autorizada, escrita e BLOQUEADA (12/08/2026)
+
+> Esta seção existe para que a migration seja gerada **em cinco minutos** quando o bloqueio cair, sem
+> ninguém precisar redescobrir nada.
+
+### 7.1 · Por que está bloqueada
+
+José autorizou criar a migration de Produtos, com uma condição explícita: **`0032` está reservada
+para a atribuição segura de cargos**, e Produtos só pode usar a numeração seguinte **depois que
+`0032` existir na base**.
+
+Estado medido em 12/08/2026, com `git fetch origin --prune` (duas vezes, com meia hora de intervalo):
+
+| Fato                              | Valor                                            |
+| --------------------------------- | ------------------------------------------------ |
+| `origin/main`                     | `5127525`                                        |
+| Última migration em `origin/main` | `0031_solicitacao_cofre_cancelamento_recusa.sql` |
+| `0032` existe?                    | **Não**                                          |
+| `npm run check:migrations`        | `OK 32 migration(s)` — ou seja, `0000`…`0031`    |
+
+Portanto: **não tomamos o número `0032`, não geramos migration e não renomeamos artefato Drizzle
+à mão.** Este é o **único bloqueio explícito** da entrega P-04.
+
+### 7.2 · O SQL autorizado — exatamente este, nada além
+
+```sql
+ALTER TABLE "produtos"
+  ADD COLUMN "nome" text,
+  ADD COLUMN "descricao_automatica" boolean;
+
+ALTER TABLE "grupos_mercadorias"
+  ADD COLUMN "margem" numeric(6,4);
+
+ALTER TABLE "grupos_mercadorias"
+  ADD CONSTRAINT "grupos_mercadorias_margem_check"
+  CHECK ("margem" IS NULL OR "margem" >= 0);
+```
+
+Aditivo puro: três colunas anuláveis e um CHECK. **Sem `UPDATE`, sem backfill, sem `DEFAULT`** — o
+produto histórico fica com `nome = null` e `descricao_automatica = null`, e a `descricao` que ele já
+tem não é tocada.
+
+### 7.3 · O que fazer quando `0032` estiver em `origin/main`
+
+1. `git fetch origin --prune` e confirmar que `db/migrations/0032_*.sql` existe.
+2. Rebasear/atualizar a branch de Produtos sobre essa base.
+3. Acrescentar ao `db/src/schema/app.schema.ts`, **e só isto**:
+   - em `produtos`: `nome: text("nome")` e `descricaoAutomatica: boolean("descricao_automatica")`;
+   - em `gruposMercadorias`: `margem: numeric("margem", { precision: 6, scale: 4 })` mais
+     `check("grupos_mercadorias_margem_check", sql\`${table.margem} is null or ${table.margem} >= 0\`)`.
+4. Gerar **pelo fluxo Drizzle**: `npm run db:generate --workspace @padaria/db`. Nunca escrever o
+   `.sql` à mão, nunca renomear o arquivo, nunca editar o `_journal.json` ou o snapshot.
+5. Conferir os três artefatos (SQL, entrada no journal, snapshot) e rodar `npm run check:migrations`.
+6. **Não aplicar em produção.** Testcontainers aplica sozinho via `db:push:force`.
+
+### 7.4 · O que o bloqueio arrasta junto
+
+Nada disto foi implementado, **de propósito** — seriam campos que aparecem e não salvam, exatamente
+o defeito que o `16_DEFINITION_OF_DONE` proíbe:
+
+| Item                                                     | Depende de                      |
+| -------------------------------------------------------- | ------------------------------- |
+| Campo **Nome** no formulário e no payload                | `produtos.nome`                 |
+| Alternância **descrição automática / personalizada**     | `produtos.descricao_automatica` |
+| Normalizar produto legado (informar nome, escolher modo) | as duas acima                   |
+| **Margem padrão por grupo** no cadastro de grupos        | `grupos_mercadorias.margem`     |
+| `resolverMargemGrupo` deixar de ser letra morta          | `grupos_mercadorias.margem`     |
+| Seed aproveitar `MARGEM %` do `GRUPOSREF` (col. L)       | `grupos_mercadorias.margem`     |
+
+O que **já está pronto e testado** no nível de regra pura, esperando só a fiação:
+
+- `calcularPrecoVenda` já aplica **margem do produto → margem do grupo** (`regras.ts:44`), com teste
+  para cada ramo, para margem zero e para o preço canônico **84,90 ÷ 30 × 1,70 = 4,81**;
+- `montarDescricao` já produz **NOME + QUANTIDADE + UNIDADE**;
+- `resolverMargemGrupo` já existe e tem teste — falta ser **chamada**, o que hoje é impossível
+  porque `produtos.service.ts` só tem `margemGrupo: 0` para passar.
+
+O único ponto de fiação no servidor está marcado no código com
+`TODO(P-04/ETAPA 4)` em `api/src/produtos/produtos.service.ts`.
