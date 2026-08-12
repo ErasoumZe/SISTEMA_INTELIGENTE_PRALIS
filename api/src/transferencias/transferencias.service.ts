@@ -24,6 +24,7 @@ import {
   exigirContaForaDoCaixaFechadoNaCorrida,
   exigirPermissaoLancamento,
   exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
   saldoJaReservadoNaMesmaConta,
   obterCaixaParaLancamento,
   podeLancarSemCaixa
@@ -326,35 +327,36 @@ async function contaTemSaldoParaAgendada(
 }
 
 export async function processarTransferenciasTemporais(agora = new Date()) {
-  await executarEmTransacao(async (tx) => {
-    // S1 (R-164, Jose 11/08): efetivar `agendada -> pendente` altera a SAIDA do caixa da linha,
-    // entao cada agendada com caixa entra na porta — FOR SHARE + revalidacao. Caixa aberto:
-    // efetiva; caixa FECHADO: nao altera status nem totais (a linha permanece agendada e sera
-    // reavaliada nos proximos ciclos). A lista vem em ordem deterministica (caixa_id, id) para os
-    // locks de varios caixas sairem sempre na mesma ordem — sem ciclo com o fechamento, que trava
-    // um unico caixa.
-    const agendadasVencidas = await listarAgendadasVencidasRepository(agora, tx);
-    // Cada caixa e travado/revalidado UMA vez (mesmo desenho do cancelamento de serie): o veredito
-    // vale para a transacao inteira porque o FOR SHARE impede o caixa de fechar ate o commit.
-    const caixaAbertoPorId = new Map<string, boolean>();
-    for (const agendada of agendadasVencidas) {
+  // S1 (R-164, Jose 11/08): efetivar `agendada -> pendente` altera a SAIDA do caixa da linha,
+  // entao cada agendada com caixa entra na porta — FOR SHARE + revalidacao. Caixa aberto: efetiva;
+  // caixa FECHADO: nao altera status nem totais (a linha permanece agendada e sera reavaliada nos
+  // proximos ciclos).
+  //
+  // UMA TRANSACAO POR LINHA, e nao uma para o lote inteiro. Tres motivos, todos medidos:
+  //  1. o lote inteiro numa transacao acumulava `FOR NO KEY UPDATE` de TODAS as contas do lote ate
+  //     o commit — enquanto ele rodava, qualquer escrita do operador nessas contas ficava na fila e
+  //     estourava o `lock_timeout` de 10s (55P03 -> 503);
+  //  2. uma falha no fim desfazia as agendadas ja efetivadas no comeco, o que anula o proprio
+  //     `continue` que existe para nao derrubar as outras do lote;
+  //  3. o ABBA com o PUT: o cron segurava conta + linha por todo o lote, aumentando a janela.
+  //
+  // A leitura da lista fica FORA de transacao de escrita: ela e so o roteiro. Cada linha revalida
+  // tudo sob os proprios locks, entao uma agendada que mudou de estado no meio do caminho e
+  // simplesmente descartada pelo predicado atomico do UPDATE.
+  const agendadasVencidas = await listarAgendadasVencidasRepository(agora);
+  for (const agendada of agendadasVencidas) {
+    await executarEmTransacao(async (tx) => {
       if (agendada.caixaId) {
-        let aberto = caixaAbertoPorId.get(agendada.caixaId);
-        if (aberto === undefined) {
-          const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
-          aberto = trava?.status === "aberto";
-          caixaAbertoPorId.set(agendada.caixaId, aberto);
-        }
-        if (!aberto) continue;
+        const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
+        if (trava?.status !== "aberto") return;
       }
       // R-165: `agendada` NAO conta como saida; `pendente` conta. Logo esta efetivacao E o debito,
       // e o saldo pode ter mudado entre o agendamento e hoje. Sem fundo, a linha permanece
       // `agendada` e volta a ser avaliada no proximo ciclo — espelho exato do que a S1 ja faz com
-      // caixa fechado. Recusar aqui derrubaria a transacao e travaria as OUTRAS agendadas do lote,
-      // por isso a checagem e um `continue`, nao um throw.
+      // caixa fechado.
       if (agendada.computar) {
         const cabe = await contaTemSaldoParaAgendada(agendada, tx);
-        if (!cabe) continue;
+        if (!cabe) return;
       }
       await efetivarTransferenciaAgendadaRepository(
         agendada.id,
@@ -362,7 +364,10 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
         agora,
         tx
       );
-    }
+    });
+  }
+
+  await executarEmTransacao(async (tx) => {
     const vencidas = await listarTransferenciasVencidasRepository(agora, tx);
     for (const transferencia of vencidas) {
       const destinatarios = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
@@ -428,6 +433,16 @@ export async function atualizarTransferencia(
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da transferencia.
     const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` antes da linha. Aqui entram as QUATRO pontas possiveis —
+    // origem/destino gravados e origem/destino do payload — porque o PUT reescreve as duas
+    // (`atualizarTransferenciaRepository`), e trocar o destino tambem move dinheiro de conta.
+    // `travarContasRepository` ordena por id, entao dois PUTs sobre o mesmo par pegam as linhas na
+    // mesma sequencia. A pre-leitura (`previa`) so escolhe o que travar; nao autoriza.
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [previa?.contaOrigemId, previa?.contaDestinoId, dados.contaOrigemId, dados.contaDestinoId],
+      tx
+    );
     if (!(await travarTransferenciaRepository(transferenciaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
