@@ -812,4 +812,82 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       vendas: 0
     });
   });
+
+  /**
+   * A outra metade da janela S8 (revisao r4): a ORIGEM e lida sem trava. Se a venda mudar de caixa
+   * entre essa leitura e a escrita (outro re-envio em voo, ou a revinculacao da abertura
+   * retroativa), o conjunto travado fica ERRADO — o caixa real perde a venda sem nunca ter sido
+   * travado e, fechado, sem trilha. A porta tem de reler a venda SOB a trava da linha e, na
+   * divergencia, abortar com erro RETRIABLE (5xx): a R-013 proibe recusar venda integrada, entao o
+   * agente re-tenta e o ciclo seguinte faz a coisa certa — inclusive a trilha do perdedor.
+   */
+  it("Deve_RecusarRetriavelSemPerderVendaNemTrilha_Quando_AOrigemRealMudaDuranteOReenvio", async () => {
+    const fxA = await novaFixture("S8d origem");
+    const idExterno = `P0-S8D-${sequencia}`;
+    await vincularPdvExterno(`PDV-S8-${sequencia}`, fxA.pdvId);
+    const criada = await enviarVendaIntegrada(
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+    );
+    expect(criada.statusCode, criada.body).toBe(200);
+    const vendaId = (
+      await consultarUm<{ id: string }>("select id from vendas where identificador_externo = $1", [idExterno])
+    )?.id;
+
+    // Caixa B: FECHADO e vazio. E ele que vai receber a venda no meio da corrida — se o re-envio
+    // decidir pela origem velha (A), B perde a venda sem trilha e sem nunca ter sido travado.
+    const fxB = await novaFixture("S8d destino real", "admin");
+    const fechamentoB = await fecharCaixaInject(fxB.caixaId, cookieAdmin);
+    expect(fechamentoB.statusCode, fechamentoB.body).toBe(204);
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      // A revinculacao concorrente (mesma escrita da abertura retroativa) segura a linha da venda.
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("update vendas set caixa_id = $2 where id = $1", [vendaId, fxB.caixaId]);
+
+      // O re-envio move a venda para fora de qualquer caixa: le a origem A (retrato pre-lock) e
+      // espera na linha da venda.
+      const reenvio = enviarVendaIntegrada(
+        payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
+      );
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+
+      await bloqueador.cliente.query("commit");
+
+      // Sob a trava a venda ja esta em B: a origem prevista (A) nao vale mais -> 503 retriable.
+      const resposta = await reenvio;
+      expect(resposta.statusCode, resposta.body).toBe(503);
+      expect(resposta.body).toContain("LOCK_OCUPADO");
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    // Nada foi escrito pelo re-envio recusado: a venda continua em B com a data original.
+    expect(
+      await consultarUm<{ caixa_id: string | null; data_venda: string }>(
+        "select caixa_id, data_venda::text as data_venda from vendas where id = $1",
+        [vendaId]
+      )
+    ).toMatchObject({ caixa_id: fxB.caixaId });
+    expect(await universoDoCaixa(fxB.caixaId)).toMatchObject({ status: "fechado", trilha_pos_fechamento: 0 });
+
+    // O agente re-tenta (mesmo payload): agora a origem real e B — a venda sai e B, fechado, ganha
+    // a trilha imutavel. O rollback preservou o hash antigo, entao o retry NAO cai em sem_novidade.
+    const retry = await enviarVendaIntegrada(
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
+    );
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.body).toContain("atualizado");
+    expect(
+      await consultarUm<{ caixa_id: string | null; data_venda: string }>(
+        "select caixa_id, data_venda::text as data_venda from vendas where id = $1",
+        [vendaId]
+      )
+    ).toMatchObject({ caixa_id: null });
+    expect(await universoDoCaixa(fxB.caixaId)).toMatchObject({
+      status: "fechado",
+      trilha_pos_fechamento: 1,
+      vendas: 0
+    });
+  });
 });
