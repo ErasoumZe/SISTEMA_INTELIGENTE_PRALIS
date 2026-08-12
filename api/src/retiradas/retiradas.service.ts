@@ -16,6 +16,7 @@ import {
   exigirPermissaoPagar,
   caixaIdDaSaida,
   exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
   saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
@@ -169,9 +170,18 @@ export async function atualizarRetirada(
   return executarEmTransacao(async (tx) => {
     // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
     const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` antes da linha — ver a nota em `atualizarDespesa`. A
+    // pre-leitura so escolhe as linhas a travar; ela nao autoriza.
+    const preLeitura = await buscarRetiradaDetalheRepository(retiradaId, tx);
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [preLeitura?.contaOrigemId, dados.contaOrigemId, caixaTravado.caixa?.pdvContaId],
+      tx
+    );
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. Sem isto, duas edicoes concorrentes
     // liam o mesmo retrato e a segunda ressuscitava o credor legado E a divida do colaborador.
     if (!(await travarRetiradaRepository(retiradaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
+    // RELEITURA sob os locks: e este retrato que decide.
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
     const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.

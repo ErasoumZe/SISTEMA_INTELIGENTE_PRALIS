@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import { env } from "./env.js";
-import { ErroDominio } from "./erros.js";
+import { codigoPostgresDoErro, ErroDominio, type ErroEncadeado } from "./erros.js";
 import { capturarErro, iniciarObservabilidade } from "./observabilidade.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
@@ -123,7 +123,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // existir, vira 40P01. Sem este ramo os dois viravam 500 "Erro interno": o operador nao sabia
     // que era so tentar de novo e o agente CREARE nao distinguia bug de fila. 503 e transitorio
     // por contrato (o agente re-tenta 5xx; 4xx ele descarta — R-013 proibe descartar venda).
-    const codigoPostgres = (error as { code?: string }).code;
+    // `codigoPostgresDoErro` e nao `error.code`: o Drizzle EMBRULHA o erro do pg, e ler so a raiz
+    // deixava 40P01 (deadlock) escapar como 500 opaco — medido na rota real das transferencias.
+    const codigoPostgres = codigoPostgresDoErro(error as ErroEncadeado);
     if (codigoPostgres === "55P03" || codigoPostgres === "40P01") {
       request.log.warn(error, "contencao de lock acima do teto");
       return erro(reply, 503, "Sistema ocupado com outra operacao do caixa; tente novamente", "LOCK_OCUPADO");

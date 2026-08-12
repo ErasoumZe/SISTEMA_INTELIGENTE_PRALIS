@@ -27,23 +27,43 @@ import {
 // enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o
 // saldo relido DEPOIS desta chamada e o saldo REAL, e nao o retrato de antes da fila.
 //
-// `FOR UPDATE`, e nao o `FOR SHARE` do caixa, porque aqui o objetivo e o OPOSTO: duas saidas da
-// MESMA conta precisam serializar entre si. Com SHARE as duas leriam o mesmo saldo e as duas
-// passariam — e exatamente o TOCTOU que o RED mede.
+// `FOR NO KEY UPDATE`, e a escolha e MEDIDA, nao herdada. A matriz de conflito de linha do
+// Postgres, levantada contra o proprio banco:
 //
-// UMA conta por transacao, de proposito: todo lancamento tem exatamente uma `conta_origem_id`, e
-// travar uma unica linha torna a ausencia de ciclo TRIVIAL — nao existe ordem entre contas para
-// divergir entre chamadores. A transferencia tambem trava so a ORIGEM: o destino apenas RECEBE, e
-// creditar jamais torna um saldo insuficiente.
+//   segurado \ pedido   key share   share      no key update   update
+//   key share           convive     convive    convive         CONFLITA
+//   share               convive     convive    CONFLITA        CONFLITA
+//   no key update       convive     CONFLITA   CONFLITA        CONFLITA
+//   update              CONFLITA    CONFLITA   CONFLITA        CONFLITA
+//
+// Le-se dai, exatamente, por que as outras duas forcas nao servem:
+//  * `FOR SHARE` convive consigo mesmo -> duas saidas da mesma conta leriam o mesmo saldo e as duas
+//    passariam. E o TOCTOU que a mutacao ja derrubou; nao pode voltar.
+//  * `FOR UPDATE` CONFLITA com `FOR KEY SHARE` -> e o `KEY SHARE` e justamente o lock que o
+//    Postgres tira na linha REFERENCIADA ao inserir quem a referencia. Como `transferencias` tem FK
+//    para `contas` nas DUAS pontas (baseline 928-929), a transferencia A->B segura a origem A e
+//    pede KEY SHARE em B, enquanto B->A faz o simetrico: ciclo ABBA, 40P01 medido na rota real.
+//  * `FOR NO KEY UPDATE` e a unica que atende os dois lados: CONFLITA consigo mesma (as saidas
+//    continuam serializando) e CONVIVE com `KEY SHARE` (a FK deixa de fechar ciclo).
+//
+// Ele tambem continua barrando quem altera o FUNDO da conta (`UPDATE contas SET saldo_inicial`
+// pega NO KEY UPDATE implicito), que e o outro jeito de mudar o saldo por baixo da porta.
+//
+// CORRECAO DE PREMISSA: a nota original da R-165 dizia que a ausencia de ciclo era "trivial, porque
+// e uma conta por transacao". Era falso. A porta trava so a origem, mas a FK tira `KEY SHARE` no
+// destino de qualquer jeito — sempre existiram DUAS linhas de `contas` na transacao. O que torna a
+// prova valida hoje e a FORCA do lock, nao a contagem de contas.
 //
 // INVARIANTES (a prova de deadlock depende delas — emenda da R-164):
-//  1. ordem unica `pdvs -> fechamentos_caixa -> contas -> linha do lancamento -> filhas`; o caixa
-//     ja esta travado quando esta funcao e chamada, nunca o contrario;
+//  1. ordem unica `pdvs -> fechamentos_caixa -> contas (id ASC) -> linha do lancamento -> filhas`;
+//     o caixa ja esta travado quando esta funcao e chamada, nunca o contrario;
 //  2. nenhuma rota trava `contas` ANTES de `fechamentos_caixa` (`salvarContaRepository` nao trava
 //     nada) — se um dia travar, tem de ser depois do caixa;
-//  3. `TransacaoBanco` de proposito, sem default `banco`: FOR UPDATE fora de transacao nao
-//     serializa nada e o erro seria silencioso;
-//  4. sem joins — FOR UPDATE nao pode ser aplicado ao lado nulavel de um outer join.
+//  3. `TransacaoBanco` de proposito, sem default `banco`: lock fora de transacao nao serializa nada
+//     e o erro seria silencioso;
+//  4. sem joins — lock de linha nao pode ser aplicado ao lado nulavel de um outer join;
+//  5. mais de uma conta na mesma transacao entra SEMPRE por `travarContasRepository`, em ordem
+//     canonica de id — nunca na ordem que o cliente mandou.
 //
 // O filtro por empresa vive aqui: conta de outro tenant nao e travada nem devolvida, entao a porta
 // de saldo recusa antes de ler qualquer valor.
@@ -56,8 +76,38 @@ export async function travarContaRepository(
     .select({ id: contas.id, saldoInicial: contas.saldoInicial })
     .from(contas)
     .where(and(eq(contas.id, contaId), eq(contas.empresaId, empresaId)))
-    .for("update");
+    .for("no key update");
   return linha ?? null;
+}
+
+/**
+ * Trava VARIAS contas na mesma transacao, em ordem canonica de `id` (ASC).
+ *
+ * Existe para o PUT que TROCA a conta de origem: as duas — a antiga e a nova — precisam estar
+ * travadas antes de qualquer decisao, senao uma corrida pode mover dinheiro na que ficou de fora
+ * entre a autorizacao e a escrita.
+ *
+ * A ordem e a do `id`, e nao a que o cliente mandou, porque e exatamente isso que impede o ciclo:
+ * dois chamadores pedindo o mesmo par pegam as linhas na MESMA sequencia, entao um espera o outro
+ * em vez de cruzarem. Ordenar por payload seria ordenar pelo atacante.
+ *
+ * Uma consulta so, com `inArray` + `order by id`: o Postgres trava as linhas na ordem em que as
+ * devolve, e o `ORDER BY` fixa essa ordem. Duas consultas separadas dariam a mesma garantia, mas ao
+ * custo de um round trip a mais dentro do lock.
+ */
+export async function travarContasRepository(
+  contaIds: string[],
+  empresaId: string,
+  db: TransacaoBanco
+): Promise<Array<{ id: string; saldoInicial: string }>> {
+  const unicas = [...new Set(contaIds.filter(Boolean))];
+  if (!unicas.length) return [];
+  return db
+    .select({ id: contas.id, saldoInicial: contas.saldoInicial })
+    .from(contas)
+    .where(and(inArray(contas.id, unicas), eq(contas.empresaId, empresaId)))
+    .orderBy(asc(contas.id))
+    .for("no key update");
 }
 
 export async function listarContasRepository() {

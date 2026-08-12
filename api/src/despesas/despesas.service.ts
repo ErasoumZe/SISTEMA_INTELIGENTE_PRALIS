@@ -17,6 +17,7 @@ import {
   exigirPermissaoPagar,
   caixaIdDaSaida,
   exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
   saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
@@ -233,10 +234,21 @@ export async function atualizarDespesa(
     // P0 — ordem unica de locks: o CAIXA vem primeiro (FOR SHARE + revalidacao), a linha do
     // lancamento depois. Antes desta OS os tres PUTs travavam o lancamento antes de ler o caixa.
     const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` ANTES da linha do lancamento. A pre-leitura abaixo NAO
+    // autoriza nada — serve so para descobrir QUAIS contas travar (a gravada, a do payload e a do
+    // PDV). O retrato que vale e o relido depois dos locks.
+    const preLeitura = await buscarDespesaDetalheRepository(despesaId, tx);
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [preLeitura?.contaOrigemId, dados.contaOrigemId, caixaTravado.caixa?.pdvContaId],
+      tx
+    );
     // TRAVA antes de ler: daqui para baixo, `existente` e o retrato sob lock, e nenhuma outra
     // transacao altera a linha ate esta terminar. Toda validacao que compara com o estado anterior
     // — a excecao de credor legado, a conta gravada, a data de pagamento — usa ESTE retrato.
     if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
+    // RELEITURA sob os locks: e este retrato, e nao o da pre-leitura, que decide tudo daqui para
+    // baixo. Se uma corrida mudou a conta entre uma coisa e outra, ela aparece AQUI.
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
     const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento

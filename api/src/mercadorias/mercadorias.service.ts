@@ -24,6 +24,7 @@ import {
   exigirPermissaoPagar,
   caixaIdDaSaida,
   exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
   saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
@@ -225,10 +226,19 @@ export async function atualizarMercadoria(
   return executarEmTransacao(async (tx) => {
     // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
     const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` antes da linha — ver a nota em `atualizarDespesa`. A
+    // pre-leitura so escolhe as linhas a travar; ela nao autoriza.
+    const preLeitura = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [preLeitura?.contaOrigemId, dados.contaOrigemId, caixaTravado.caixa?.pdvContaId],
+      tx
+    );
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
     if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
+    // RELEITURA sob os locks: e este retrato que decide.
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
@@ -324,6 +334,10 @@ async function prepararAtoDeAprovacao(
     const trava = await travarCaixaCompartilhadoRepository(previa.caixaId, tx);
     if (trava?.status !== "aberto") throw new Error("Caixa ja fechado");
   }
+  // R-165 · ORDEM GLOBAL: `contas` antes da linha, tambem na aprovacao — ligar `computar` e debito
+  // novo, entao este caminho toca conta e precisa da mesma ordem dos PUTs. A previa so escolhe a
+  // linha a travar; quem decide e o retrato relido sob a trava.
+  await travarContasDaEdicao(empresaId, [previa.contaOrigemId], tx);
   if (!(await travarMercadoriaRepository(mercadoriaId, empresaId, tx))) throw new Error("Registro nao encontrado");
   const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
   if (!existente || existente.status !== "aguardando_aprovacao") {

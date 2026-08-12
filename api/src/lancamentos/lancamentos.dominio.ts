@@ -14,7 +14,11 @@ import {
   type TipoDesconto
 } from "@padaria/shared/discriminacao";
 import { conflito, erroValidacao, naoProcessavel, proibido } from "../erros.js";
-import { saldosDasContasRepository, travarContaRepository } from "../contas/contas.repository.js";
+import {
+  saldosDasContasRepository,
+  travarContaRepository,
+  travarContasRepository
+} from "../contas/contas.repository.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
 import { obterCaixaAbertoParaLancamento, travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
@@ -1010,6 +1014,35 @@ export function saldoJaReservadoNaMesmaConta(
   if (!contaGravada || contaGravada !== idOuNulo(contaOrigemIdNova)) return 0;
   if (existente.computar !== true || existente.status === "cancelado" || existente.status === "cancelada") return 0;
   return paraCentavos(existente.valorOriginal ?? 0);
+}
+
+/**
+ * Trava, em ORDEM CANONICA de id, TODA conta que a edicao pode acabar tocando — antes de travar a
+ * linha do lancamento.
+ *
+ * Por que existe: a ordem global e `pdvs -> fechamentos_caixa -> contas -> linha do lancamento ->
+ * filhas`, mas os quatro PUTs faziam o inverso (linha primeiro, conta depois, dentro da porta de
+ * saldo) enquanto o cron fazia conta primeiro e linha depois. Dois caminhos, duas ordens, mesma
+ * dupla de linhas: ABBA. Esta funcao existe para que o degrau `contas` aconteca ANTES do degrau
+ * `linha do lancamento` em todo mundo.
+ *
+ * Trava um SUPERCONJUNTO de proposito — a conta ja gravada, a conta que veio no payload e a conta
+ * do PDV do caixa aberto. A conta final so e conhecida depois de `exigirContaDoCaixaNoLancamento`
+ * (que repoe a do PDV quando o corpo vem sem conta), e esperar por ela seria voltar a travar a
+ * conta depois da linha. Travar a mais custa uma linha de lock; travar a menos custa a corrida que
+ * esta OS existe para fechar.
+ *
+ * A PRE-LEITURA QUE ALIMENTA ISTO NAO AUTORIZA NADA. Ela so descobre quais linhas travar; o retrato
+ * que vale e o relido DEPOIS dos locks, e e ele que a porta de saldo usa para decidir.
+ */
+export async function travarContasDaEdicao(
+  empresaId: string,
+  candidatas: Array<string | null | undefined>,
+  tx: TransacaoBanco
+): Promise<void> {
+  const ids = candidatas.map(idOuNulo).filter((id): id is string => Boolean(id));
+  if (!ids.length) return;
+  await travarContasRepository(ids, empresaId, tx);
 }
 
 export async function exigirSaldoSuficienteNaConta(demanda: DemandaDeSaldo, tx: TransacaoBanco): Promise<void> {
