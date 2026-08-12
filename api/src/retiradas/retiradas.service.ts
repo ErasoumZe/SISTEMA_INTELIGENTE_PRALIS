@@ -7,6 +7,7 @@ import type {
   RetiradaPayload,
   RetiradasQuery
 } from "@padaria/shared/retiradas";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
@@ -14,6 +15,8 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirSaldoSuficienteNaConta,
+  saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
   obterCaixaDaSaidaParaEdicao,
@@ -96,6 +99,17 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
       },
       tx
     );
+    // R-165: porta de saldo depois do caixa e depois do plano — a serie inteira sai da MESMA conta
+    // de uma vez (ver a nota em criarDespesa).
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        contaOrigemId: lancamento.contaOrigemId,
+        valorCentavos: paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1)
+      },
+      tx
+    );
+
     if (!plano) {
       const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: retirada.id, computar };
@@ -179,6 +193,16 @@ export async function atualizarRetirada(
     );
     // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
     exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
+    // R-165 na EDICAO: delta real — ver a nota em `atualizarDespesa`.
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        contaOrigemId: normalizados.contaOrigemId,
+        valorCentavos: paraCentavos(normalizados.valorOriginal),
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
+      },
+      tx
+    );
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarRetiradaRepository(
       retiradaId,

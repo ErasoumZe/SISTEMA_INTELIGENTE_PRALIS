@@ -8,6 +8,7 @@ import type {
   DespesasQuery,
   DiscriminarDespesaPayload
 } from "@padaria/shared/despesas";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
@@ -15,6 +16,8 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirSaldoSuficienteNaConta,
+  saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
   obterCaixaDaSaidaParaEdicao,
@@ -124,6 +127,19 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
       },
       tx
     );
+    // R-165: a porta de saldo entra DEPOIS do caixa (ordem unica de locks) e DEPOIS do plano,
+    // porque a serie inteira sai da MESMA conta de uma vez — reservar so a 1a ocorrencia deixaria
+    // 11 lancamentos passarem sem lastro. Ou cabe a serie toda, ou nao entra nenhuma.
+    const ocorrenciasDaSerie = plano ? plano.ocorrencias.length : 1;
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        contaOrigemId: lancamento.contaOrigemId,
+        valorCentavos: paraCentavos(lancamento.valorOriginal) * ocorrenciasDaSerie
+      },
+      tx
+    );
+
     if (!plano) {
       const despesa = await criarDespesaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: despesa.id, computar };
@@ -250,6 +266,18 @@ export async function atualizarDespesa(
     );
     // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
     exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
+    // R-165 na EDICAO: o delta REAL. `jaReservado` so devolve o valor gravado quando a conta NAO
+    // muda — se mudou, a conta nova nunca reservou nada e o dinheiro volta sozinho para a antiga
+    // quando o UPDATE gravar (saldo derivado, sem reserva materializada para estornar).
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        contaOrigemId: normalizados.contaOrigemId,
+        valorCentavos: paraCentavos(normalizados.valorOriginal),
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
+      },
+      tx
+    );
     // A-4: o `caixa_id` sai da MESMA funcao do POST. Antes o UPDATE preservava `existente.caixaId`,
     // e bastava a retaguarda editar a conta para o lancamento seguir somando no fechamento com o
     // dinheiro tendo saido de outro lugar (ou o contrario: entrar na conta do PDV e nunca aparecer no

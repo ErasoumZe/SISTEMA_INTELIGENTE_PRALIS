@@ -49,7 +49,13 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
 
   // Abre um caixa novo (conta + pdv proprios) e o deixa como o caixa aberto mais recente do usuario.
   async function abrirCaixa(nome: string, dataHoraAbertura: string) {
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: `Conta ${nome}` });
+    // R-165: a conta do PDV nasce com fundo para as saidas deste arquivo. Nao interfere no que ele
+    // prova — o saldo do CAIXA (ADR-001) nao olha o fundo da conta.
+    const conta = await criar("/api/contas", {
+      empresaId: idsTeste.empresaA,
+      nome: `Conta ${nome}`,
+      saldoInicial: 100_000
+    });
     const contaId = json<{ data: { id: string } }>(conta).data.id;
     const pdv = await criar("/api/pdvs", { empresaId: idsTeste.empresaA, nome: `PDV ${nome}`, contaId, ativo: true });
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;

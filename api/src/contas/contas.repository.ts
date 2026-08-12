@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
 import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -13,7 +13,7 @@ import {
   type TotaisContaCentavos
 } from "@padaria/shared";
 import { centavosParaDecimalBanco, deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
-import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import {
   filtrarOrigemEntidade,
   jaImportado,
@@ -21,6 +21,44 @@ import {
   type ModoImportacaoEntidade,
   type ResultadoImportacaoEntidade
 } from "../utils.js";
+
+// --- Concorrencia da CONTA (P0 do saldo, R-143/R-165) ------------------------------------------
+// Trava a LINHA da conta ate o fim da transacao. Quem chegar depois espera aqui e, ao passar, ja
+// enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o
+// saldo relido DEPOIS desta chamada e o saldo REAL, e nao o retrato de antes da fila.
+//
+// `FOR UPDATE`, e nao o `FOR SHARE` do caixa, porque aqui o objetivo e o OPOSTO: duas saidas da
+// MESMA conta precisam serializar entre si. Com SHARE as duas leriam o mesmo saldo e as duas
+// passariam — e exatamente o TOCTOU que o RED mede.
+//
+// UMA conta por transacao, de proposito: todo lancamento tem exatamente uma `conta_origem_id`, e
+// travar uma unica linha torna a ausencia de ciclo TRIVIAL — nao existe ordem entre contas para
+// divergir entre chamadores. A transferencia tambem trava so a ORIGEM: o destino apenas RECEBE, e
+// creditar jamais torna um saldo insuficiente.
+//
+// INVARIANTES (a prova de deadlock depende delas — emenda da R-164):
+//  1. ordem unica `pdvs -> fechamentos_caixa -> contas -> linha do lancamento -> filhas`; o caixa
+//     ja esta travado quando esta funcao e chamada, nunca o contrario;
+//  2. nenhuma rota trava `contas` ANTES de `fechamentos_caixa` (`salvarContaRepository` nao trava
+//     nada) — se um dia travar, tem de ser depois do caixa;
+//  3. `TransacaoBanco` de proposito, sem default `banco`: FOR UPDATE fora de transacao nao
+//     serializa nada e o erro seria silencioso;
+//  4. sem joins — FOR UPDATE nao pode ser aplicado ao lado nulavel de um outer join.
+//
+// O filtro por empresa vive aqui: conta de outro tenant nao e travada nem devolvida, entao a porta
+// de saldo recusa antes de ler qualquer valor.
+export async function travarContaRepository(
+  contaId: string,
+  empresaId: string,
+  db: TransacaoBanco
+): Promise<{ id: string; saldoInicial: string } | null> {
+  const [linha] = await db
+    .select({ id: contas.id, saldoInicial: contas.saldoInicial })
+    .from(contas)
+    .where(and(eq(contas.id, contaId), eq(contas.empresaId, empresaId)))
+    .for("update");
+  return linha ?? null;
+}
 
 export async function listarContasRepository() {
   return banco
@@ -38,14 +76,25 @@ export async function listarContasRepository() {
 // Uma consulta por tabela (5 no total) e a soma em memoria, no mesmo formato do caixa: o volume
 // aqui e o de lancamentos da empresa, e o agrupamento em JS evita cinco SUB-SELECTs correlacionados
 // por conta (que seria N+1 disfarcado de uma query so).
+// `contasFiltroIds` NAO muda a formula — muda o UNIVERSO lido. O acumulador sempre ignorou conta
+// fora da lista (`acumular` so soma quando o id esta no mapa), entao restringir devolve exatamente
+// os mesmos numeros para as contas pedidas. Existe porque a porta de saldo (R-165) chama esta
+// funcao A CADA ESCRITA: sem o filtro, cada despesa varreria as 5 tabelas da empresa inteira —
+// e nao ha indice em `conta_origem_id`/`conta_destino_id` (D-XX, registrado no relatorio da OS).
 export async function saldosDasContasRepository(
   empresasPermitidasIds: string[] | null,
-  db: ExecutorBanco = banco
+  db: ExecutorBanco = banco,
+  contasFiltroIds?: string[]
 ): Promise<Map<string, number>> {
   const linhasContas = await db
     .select({ id: contas.id, empresaId: contas.empresaId, saldoInicial: contas.saldoInicial })
     .from(contas)
-    .where(empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined);
+    .where(
+      and(
+        empresasPermitidasIds ? inArray(contas.empresaId, empresasPermitidasIds) : undefined,
+        contasFiltroIds ? inArray(contas.id, contasFiltroIds) : undefined
+      )
+    );
   if (!linhasContas.length) return new Map();
 
   const contaIds = linhasContas.map((conta) => conta.id);
@@ -73,7 +122,19 @@ export async function saldosDasContasRepository(
         status: transferencias.status
       })
       .from(transferencias)
-      .where(eq(transferencias.computar, true)),
+      .where(
+        and(
+          eq(transferencias.computar, true),
+          // Com filtro de contas, a transferencia entra se QUALQUER das duas pontas estiver na
+          // lista — nunca so pela origem, senao a entrada confirmada no destino sumiria do saldo.
+          contasFiltroIds
+            ? or(
+                inArray(transferencias.contaOrigemId, contasFiltroIds),
+                inArray(transferencias.contaDestinoId, contasFiltroIds)
+              )
+            : undefined
+        )
+      ),
     db
       .select({ contaOrigemId: despesas.contaOrigemId, valorOriginal: despesas.valorOriginal })
       .from(despesas)

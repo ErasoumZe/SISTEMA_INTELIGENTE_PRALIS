@@ -13,7 +13,8 @@ import {
   type ItemDiscriminacao,
   type TipoDesconto
 } from "@padaria/shared/discriminacao";
-import { erroValidacao, naoProcessavel, proibido } from "../erros.js";
+import { conflito, erroValidacao, naoProcessavel, proibido } from "../erros.js";
+import { saldosDasContasRepository, travarContaRepository } from "../contas/contas.repository.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
 import { obterCaixaAbertoParaLancamento, travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
@@ -951,4 +952,85 @@ export function caixaIdDaSaida(
 ): string | null {
   if (!caixa) return null;
   return idOuNulo(dados.contaOrigemId) === caixa.pdvContaId ? caixa.id : null;
+}
+
+/**
+ * A PORTA DE SALDO da conta de origem — R-143 ("nao existe transferencia sem fundo na conta de
+ * origem", Jose p.34-35), generalizada para as quatro saidas pela R-165.
+ *
+ * Irma de `obterCaixaDaSaida`, e mora colada nela de proposito: sao os dois degraus da MESMA ordem
+ * de locks, e ninguem deve conseguir usar um sem enxergar o outro.
+ *
+ *     pdvs -> fechamentos_caixa -> contas -> linha do lancamento -> filhas
+ *
+ * Protocolo identico ao da R-164: TRAVA primeiro (`travarContaRepository`, FOR UPDATE), so DEPOIS
+ * le o saldo. A ordem importa mais do que parece — ler antes de travar e o TOCTOU que o RED mede:
+ * duas saidas concorrentes leem R$ 10, as duas se acham cabiveis, e a conta termina negativa.
+ *
+ * O valor comparado e `valor_original` PURO, exatamente o que `saldosDasContasRepository` subtrai
+ * (`contas.repository.ts`). Juros/acrescimo ficam de fora aqui porque tambem ficam de fora la —
+ * mudar isso mudaria a formula do dinheiro em silencio, o que a D-09 ja registra como divida a
+ * decidir com o Jose, nao como efeito colateral desta porta.
+ *
+ * `jaReservadoCentavos` e o que torna o PUT honesto: o saldo derivado JA desconta o valor gravado
+ * deste mesmo lancamento, entao sem devolve-lo o reenvio identico seria cobrado duas vezes e uma
+ * reducao legitima poderia ser recusada. Vale zero no POST e zero quando a conta MUDA — nesse caso
+ * o dinheiro volta sozinho para a conta antiga assim que o UPDATE gravar, porque o saldo e
+ * derivado e nao ha reserva materializada para estornar.
+ */
+export type DemandaDeSaldo = {
+  empresaId: string;
+  contaOrigemId?: string | null | undefined;
+  valorCentavos: number;
+  jaReservadoCentavos?: number;
+};
+
+/**
+ * Quanto do saldo da conta JA esta comprometido por ESTE lancamento — o que o PUT devolve antes de
+ * cobrar o valor novo.
+ *
+ * So devolve algo quando a conta e a MESMA e quando o registro gravado de fato PESA no saldo. O
+ * filtro e o mesmo ADR-001 de `saldosDasContasRepository` (`computar = true AND status <>
+ * 'cancelado'`) — precisa ser, senao um lancamento cancelado (que nao desconta nada) devolveria
+ * credito inexistente e abriria exatamente o buraco que esta porta fecha.
+ */
+export type LancamentoJaGravado = {
+  contaOrigemId?: string | null | undefined;
+  valorOriginal?: string | number | null | undefined;
+  computar?: boolean | null | undefined;
+  status?: string | null | undefined;
+};
+
+export function saldoJaReservadoNaMesmaConta(
+  existente: LancamentoJaGravado | null | undefined,
+  contaOrigemIdNova: string | null | undefined
+): number {
+  if (!existente) return 0;
+  const contaGravada = idOuNulo(existente.contaOrigemId);
+  if (!contaGravada || contaGravada !== idOuNulo(contaOrigemIdNova)) return 0;
+  if (existente.computar !== true || existente.status === "cancelado" || existente.status === "cancelada") return 0;
+  return paraCentavos(existente.valorOriginal ?? 0);
+}
+
+export async function exigirSaldoSuficienteNaConta(demanda: DemandaDeSaldo, tx: TransacaoBanco): Promise<void> {
+  const contaId = idOuNulo(demanda.contaOrigemId);
+  // Sem conta de origem nao ha de onde reservar (retaguarda pode lancar sem conta); valor nao
+  // positivo nao compromete dinheiro nenhum. Nos dois casos a porta e transparente.
+  if (!contaId || demanda.valorCentavos <= 0) return;
+
+  const conta = await travarContaRepository(contaId, demanda.empresaId, tx);
+  // Trava e escopo de tenant na MESMA consulta: conta de outra empresa nao e travada nem lida.
+  if (!conta) throw erroValidacao("Conta de origem nao pertence a empresa informada");
+
+  // Releitura DEPOIS do lock: este e o saldo pos-fila, nao o retrato de antes dela.
+  const saldos = await saldosDasContasRepository([demanda.empresaId], tx, [contaId]);
+  const disponivelCentavos = paraCentavos(saldos.get(contaId) ?? 0) + (demanda.jaReservadoCentavos ?? 0);
+  if (demanda.valorCentavos <= disponivelCentavos) return;
+
+  throw conflito("Saldo insuficiente na conta de origem", "SALDO_INSUFICIENTE", {
+    contaId,
+    disponivel: deCentavos(disponivelCentavos),
+    solicitado: deCentavos(demanda.valorCentavos),
+    faltam: deCentavos(demanda.valorCentavos - disponivelCentavos)
+  });
 }

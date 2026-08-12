@@ -10,7 +10,7 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
   listarUsuariosTesourariaRepository,
@@ -23,6 +23,8 @@ import { paraCentavos } from "@padaria/shared/dinheiro";
 import {
   exigirContaForaDoCaixaFechadoNaCorrida,
   exigirPermissaoLancamento,
+  exigirSaldoSuficienteNaConta,
+  saldoJaReservadoNaMesmaConta,
   obterCaixaParaLancamento,
   podeLancarSemCaixa
 } from "../lancamentos/lancamentos.dominio.js";
@@ -113,6 +115,18 @@ export async function criarTransferencia(
       if (!transferenciaLivre && !envolveContaPdv) {
         throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
       }
+
+      // R-143 literal ("nao existe transferencia sem fundo na conta de origem"), agora com teste.
+      // Vale na CRIACAO porque e nela que o dinheiro sai (R-036): pendente ja conta como saida da
+      // origem. So a ORIGEM e travada — o destino apenas recebe, e creditar nunca falta dinheiro.
+      await exigirSaldoSuficienteNaConta(
+        {
+          empresaId: dados.empresaId,
+          contaOrigemId: dados.contaOrigemId,
+          valorCentavos: computar ? paraCentavos(dados.valorOriginal) : 0
+        },
+        tx
+      );
 
       const transferencia = await criarTransferenciaRepository(
         resolverObservacaoDoLancamento(dados),
@@ -287,6 +301,30 @@ export async function recusarConferencia(
   });
 }
 
+// Variante NAO-LANCADORA da porta de saldo, so para o cron: aqui "sem fundo" nao e erro do usuario,
+// e motivo para adiar. Reusa a MESMA porta (nada de segunda formula) e traduz o 409 em boolean.
+async function contaTemSaldoParaAgendada(
+  agendada: { empresaId: string; contaOrigemId: string; valorOriginal: string | number },
+  tx: TransacaoBanco
+): Promise<boolean> {
+  try {
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: agendada.empresaId,
+        contaOrigemId: agendada.contaOrigemId,
+        valorCentavos: paraCentavos(agendada.valorOriginal)
+      },
+      tx
+    );
+    return true;
+  } catch (erro) {
+    // SO a falta de saldo adia. Timeout de lock (55P03), deadlock e qualquer outro erro sobem —
+    // engolir tudo aqui transformaria uma falha de infraestrutura em "adiado" silencioso.
+    if (erro instanceof ErroDominio && erro.code === "SALDO_INSUFICIENTE") return false;
+    throw erro;
+  }
+}
+
 export async function processarTransferenciasTemporais(agora = new Date()) {
   await executarEmTransacao(async (tx) => {
     // S1 (R-164, Jose 11/08): efetivar `agendada -> pendente` altera a SAIDA do caixa da linha,
@@ -308,6 +346,15 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
           caixaAbertoPorId.set(agendada.caixaId, aberto);
         }
         if (!aberto) continue;
+      }
+      // R-165: `agendada` NAO conta como saida; `pendente` conta. Logo esta efetivacao E o debito,
+      // e o saldo pode ter mudado entre o agendamento e hoje. Sem fundo, a linha permanece
+      // `agendada` e volta a ser avaliada no proximo ciclo — espelho exato do que a S1 ja faz com
+      // caixa fechado. Recusar aqui derrubaria a transacao e travaria as OUTRAS agendadas do lote,
+      // por isso a checagem e um `continue`, nao um throw.
+      if (agendada.computar) {
+        const cabe = await contaTemSaldoParaAgendada(agendada, tx);
+        if (!cabe) continue;
       }
       await efetivarTransferenciaAgendadaRepository(
         agendada.id,
@@ -394,6 +441,17 @@ export async function atualizarTransferencia(
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
+    // R-165 na EDICAO: delta real sobre a conta de ORIGEM. `jaReservado` so devolve o valor gravado
+    // quando a origem NAO muda — senao o reenvio identico cobraria o valor duas vezes.
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        contaOrigemId: dados.contaOrigemId,
+        valorCentavos: computar ? paraCentavos(dados.valorOriginal) : 0,
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, dados.contaOrigemId)
+      },
+      tx
+    );
     await atualizarTransferenciaRepository(transferenciaId, resolverObservacaoDoLancamento(dados), computar, tx);
     return { id: transferenciaId, computar };
   });

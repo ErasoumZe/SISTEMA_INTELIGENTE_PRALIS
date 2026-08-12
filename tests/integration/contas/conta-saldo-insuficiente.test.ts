@@ -24,7 +24,7 @@ import { idsTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
   consultarTodos,
-  esperarBloqueioPor,
+  esperarCadeiaDeBloqueio,
   fecharBloqueador,
   json,
   universoDeLancamentos
@@ -94,8 +94,11 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
     }
     if (rota === "despesas")
       return { ...comum, observacao: "R-165 despesa", grupoDespesaId: idsTeste.grupoDespesaOperacional };
-    if (rota === "mercadorias") return { ...comum, observacao: "R-165 mercadoria", temNotaFiscal: false };
-    return { ...comum, observacao: "R-165 retirada" };
+    // Mercadoria e retirada exigem credor tipado (R-046/R-128) — sem ele o 400 de validacao
+    // chegaria ANTES da porta de saldo e o teste ficaria verde pelo motivo errado.
+    const comCredor = { ...comum, fornecedorId: idsTeste.fornecedor, credorTipo: "fornecedor" as const };
+    if (rota === "mercadorias") return { ...comCredor, observacao: "R-165 mercadoria", temNotaFiscal: false };
+    return { ...comCredor, observacao: "R-165 retirada" };
   }
 
   async function postar(rota: string, contaOrigemId: string, valor: number, destinoId: string) {
@@ -268,10 +271,12 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
       primeira = postar("despesas", origem, 8, destino);
       segunda = postar("retiradas", origem, 8, destino);
 
-      // As duas precisam estar presas NA CONTA, por esta conexao. Condicao, nunca sleep.
+      // CADEIA, e nao bloqueio direto: com duas sessoes disputando a MESMA linha, a segunda espera
+      // o `tuple` lock da primeira e `pg_blocking_pids` devolve a primeira, nunca o bloqueador — a
+      // armadilha esta documentada em `tests/setup/integracao.ts`. Condicao, nunca sleep.
       expect(
-        await esperarBloqueioPor(bloqueador, 2),
-        "as duas escritas deveriam estar bloqueadas pela linha de contas"
+        await esperarCadeiaDeBloqueio(bloqueador, 2),
+        "as duas escritas deveriam estar na fila da linha de contas"
       ).toBe(true);
     } finally {
       await fecharBloqueador(bloqueador);

@@ -332,11 +332,37 @@ export async function aplicarSeedIntegracao() {
     await banco.insert(permissoesUsuarios).values({ usuarioId, regras: regrasPermissoes(usuario.permissoes) });
   }
 
+  // R-020 ("as contas nascem com o saldo da planilha como fundo") + R-165: as contas que ORIGINAM
+  // dinheiro precisam ter dinheiro. Antes desta OS as cinco nasciam em zero, e a suite so passava
+  // porque nada validava saldo — um cofre zerado despachando malote de R$ 490 e um estado
+  // fisicamente impossivel que os testes codificavam como normal (17 deles quebraram quando a
+  // porta de saldo entrou, todos apontando para o Cofre).
+  //
+  // Fundo alto de proposito: e teto, nao cenario. Nenhuma suite deve esbarrar na R-165 por
+  // acidente ao somar operacoes de arquivos diferentes no mesmo banco. A prova da regra NAO
+  // depende daqui — ela vive em `contas/conta-saldo-insuficiente.test.ts`, que cria contas
+  // proprias com fundo baixo e declarado.
+  //
+  // `contaCaixa`, `contaLivre` e `contaEntradas` seguem em ZERO de proposito: o caixa recebe o
+  // fundo de troco pelo malote do cofre (R-001), e `conta-fundo-saldo.test.ts` afirma que conta
+  // existente permanece com fundo 0 (migration aditiva, sem backfill).
   await banco.insert(contas).values([
     { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
-    { id: idsTeste.contaBanco, empresaId: idsTeste.empresaA, nome: "Banco Integracao", ativa: true },
+    {
+      id: idsTeste.contaBanco,
+      empresaId: idsTeste.empresaA,
+      nome: "Banco Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
     { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
-    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true },
+    {
+      id: idsTeste.contaCofre,
+      empresaId: idsTeste.empresaA,
+      nome: "Cofre Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
     { id: idsTeste.contaEntradas, empresaId: idsTeste.empresaA, nome: "Conta Entradas Integracao", ativa: true }
   ]);
   // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
