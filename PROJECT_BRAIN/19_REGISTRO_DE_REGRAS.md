@@ -725,6 +725,38 @@ Notas de desenho:
   com fechamento pela rota real (nunca `UPDATE` de status) e prova por mutação de que remover o
   bloqueio derruba o teste.
 
+### Caixa — concorrência lançamento × fechamento (11/08/2026, P0)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Origem      | Status | Teste                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| **R-164** 🆕 | **Toda escrita que possa alterar os sete totais toma `FOR SHARE` na linha de `fechamentos_caixa` como PRIMEIRO lock e revalida o status PÓS-lock** — inclusive o cron de agendadas (S1: caixa aberto efetiva `agendada→pendente`; fechado não altera status nem totais) e o cancelamento de série da R-063 (S2: parcela presa a caixa fechado não é apagada; caixas distintos travados em ordem determinística). Fechamento/cofre/horário/abertura seguem com `FOR UPDATE`. Ordem única: caixa → linha do lançamento → filhas. Se o lançamento segura o lock primeiro, o fechamento **espera e o inclui** nos totais congelados; se o fechamento vence, o lançamento comum **espera, revalida e é recusado sem escrita** — nunca cai para `caixa_id = null` em silêncio, inclusive a retaguarda usando a conta do PDV (Q2). Venda CREARE é a única exceção: o mesmo lock, **sem** guarda de status — vincula a caixa fechado com a trilha da R-013 decidida sob o lock. Confirmação de transferência que alteraria entrada de caixa já fechado é **bloqueada imediatamente** (Q4, aceite expresso do José); fluxo auditado é outra OS. Zero migration | José, 11/08 | ✅     | `caixa-lancamento-vs-fechamento` (15) · `caixa-fechamento-bordas` (11) · `caixa-cron-recorrencia-vs-fechamento` (6) + mutações |
+
+Notas de desenho:
+
+- Contrato central: `travarCaixaCompartilhadoRepository` (por PK, sem join, `TransacaoBanco`
+  obrigatório) + `travarCaixaAbertoDoAtor`/`obterCaixaDaSaida` como porta única das cinco classes
+  (despesa, mercadoria, retirada, venda, transferência — POST e PUT). Venda e transferência
+  ganharam trava de linha (`FOR NO KEY UPDATE`) que faltava. Erros oficiais reutilizados: 400
+  "Abra um caixa..." na criação, 403 da Tesouraria na edição, 400 "Caixa ja fechado" em Q2/Q4.
+- Espera com teto **por transação da API** (`set_config` LOCAL de `lock_timeout` 10s e
+  `idle_in_transaction_session_timeout` 60s, em `@padaria/db/sessao`): migrations, better-auth e
+  pooler ficam de fora. Estouro vira **503 `LOCK_OCUPADO`** (transitório — o agente CREARE
+  re-tenta 5xx; um 4xx descartaria venda, o que a R-013 proíbe).
+- Grafo para o futuro P0 de saldo insuficiente, registrado e NÃO implementado: o lock de conta
+  entra **depois** do caixa (caixa → conta em ordem determinística de id → lançamento →
+  lacres/filhas). Antecipar a conta é impossível no ramo do operador, que deriva a conta do caixa.
+- Consequência operacional da Q4, **com aceite expresso do José (11/08)**: transferência genérica
+  cofre→caixa com destino na conta do PDV, criada e **não confirmada antes do fechamento**, fica
+  presa em `pendente` sem caminho de resolução até existir o fluxo auditado próprio. O
+  retorno/sangria ao cofre confirmado após o fechamento **continua passando** (não altera os
+  totais; teste T4). Espelho da S1: agendada vencida presa a caixa fechado permanece `agendada`
+  (reavaliada por ciclo) até o mesmo fluxo futuro.
+- Caminhos que alteram totais e seguem **fora da porta por falta de regra** (não inventar):
+  reapontamento de conta do PDV com caixa aberto, sobrescrita de `caixa_id` na abertura por
+  lacre, NF-e aprovar/recusar sem transação, re-envio CREARE que muda o `caixa_id` da venda
+  (S3-S8). Detalhe e perguntas no relatório
+  `RELATORIO-P0-CONCORRENCIA-LANCAMENTO-FECHAMENTO-2026-08-11.md` (D:\Conteudo Sistema Pralis -ago).
+
 ---
 
 ## §1-D · Contradições abertas em 05/08/2026
