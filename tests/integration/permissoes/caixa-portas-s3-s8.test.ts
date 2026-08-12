@@ -247,10 +247,11 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
 
     const bloqueador = await abrirBloqueador();
     try {
-      // O PUT do S3 em voo: FOR UPDATE no PDV + troca da conta, ainda sem commit (mesmos passos
-      // de travarPdvRepository + salvarPdvRepository).
+      // Troca de conta em voo, ainda sem commit. De proposito SEM o `for update` que o
+      // `salvarPdv` toma: o UPDATE cru e o escritor mais FRACO possivel (NO KEY UPDATE). Se a
+      // abertura espera ate por ele, espera por qualquer um — e a garantia deixa de depender da
+      // convencao de outro modulo travar antes de escrever. `key share` aqui nao seguraria.
       await bloqueador.cliente.query("begin");
-      await bloqueador.cliente.query("select id from pdvs where id = $1 for update", [pdvId]);
       await bloqueador.cliente.query("update pdvs set conta_id = $2 where id = $1", [pdvId, contaNId]);
 
       const abertura = inject("POST", "/api/caixa/abrir", cookieCaixa, {

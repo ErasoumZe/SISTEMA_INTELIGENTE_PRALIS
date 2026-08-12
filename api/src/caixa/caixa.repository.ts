@@ -71,11 +71,14 @@ export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: strin
 }
 
 // S3 (R-164), outra metade da janela: a ABERTURA decide o destino do fundo pela conta do PDV, e o
-// `PUT /api/pdvs/:id` pode trocar essa conta no meio. `FOR KEY SHARE` e o minimo que conflita com o
-// `FOR UPDATE` daquele PUT — e e exatamente o lock que a FK `fechamentos_caixa.pdv_id` tomaria no
-// INSERT do caixa alguns passos depois: nao acrescenta aresta nenhuma ao grafo de locks, so ANTECIPA
-// a que ja existia, mantendo a ordem pdv -> caixa dos dois lados. Aberturas concorrentes (tambem
-// KEY SHARE) nao se bloqueiam; quem espera aqui rele a conta ATUAL ao passar.
+// `PUT /api/pdvs/:id` pode trocar essa conta no meio. `FOR SHARE` (e nao `KEY SHARE`) DE PROPOSITO:
+// KEY SHARE so conflita com `FOR UPDATE`, entao a garantia dependeria da convencao de `salvarPdv`
+// travar antes de escrever — um UPDATE direto em `pdvs` (job, script, rota futura) toma apenas
+// NO KEY UPDATE e reabriria a janela EM SILENCIO. Com SHARE a protecao e do dado, nao do costume.
+// Custo real: nenhum hoje (o unico escritor ja toma FOR UPDATE). O que continua livre: aberturas
+// concorrentes (SHARE ∥ SHARE) e os RI checks de FK que INSERTs de venda/caixa tomam (KEY SHARE).
+// Ordem preservada: pdv -> caixa dos dois lados, a mesma que a FK `fechamentos_caixa.pdv_id` ja
+// impunha no INSERT alguns passos adiante.
 export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: string, db: TransacaoBanco) {
   const [pdv] = await db
     .select({
@@ -89,7 +92,7 @@ export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: st
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
     .limit(1)
-    .for("key share");
+    .for("share");
   return pdv ?? null;
 }
 

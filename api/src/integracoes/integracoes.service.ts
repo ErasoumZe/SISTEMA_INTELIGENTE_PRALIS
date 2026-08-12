@@ -783,9 +783,13 @@ export async function receberVendaIntegracao(
       // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
       // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
       if (registro?.registroSistemaId) {
-        await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
-        const origemSobTrava = await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx);
-        if (origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
+        // Linha ausente (sumiu, ou nao e desta empresa) = trava NAO adquirida: a comparacao abaixo
+        // seria duas leituras sem trava se passasse batido. Falha FECHADO — o 503 se repete ate
+        // alguem olhar, o que e melhor que mover dinheiro sem garantia (e continua 5xx: a venda
+        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave.
+        const travada = await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
+        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx) : null;
+        if (!travada || origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
       }
 
       const venda = await criarOuAtualizarVendaIntegradaRepository(
