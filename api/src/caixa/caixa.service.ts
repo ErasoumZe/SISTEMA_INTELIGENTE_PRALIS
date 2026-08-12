@@ -47,6 +47,7 @@ import {
   buscarMaquininhaEmpresaRepository,
   buscarTransferenciaPorLacreAberturaRepository,
   buscarPdvEmpresaRepository,
+  travarPdvDaAberturaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
   caixaTemLancamentosRepository,
@@ -319,7 +320,11 @@ async function abrirCaixaEmTransacao(
   dataHoraAbertura: Date
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
-    const pdv = await buscarPdvEmpresaRepository(dados.pdvId, dados.empresaId, tx);
+    // S3 (R-164): PRIMEIRO lock da abertura. Sem ele a conta do PDV era um retrato pre-lock — um
+    // `PUT /api/pdvs/:id` que commitasse durante a abertura deixava o fundo do lacre confirmado na
+    // conta ANTIGA de um PDV que ja apontava para outra (dinheiro fora dos sete totais). Travado,
+    // quem chega durante a troca espera e decide pela conta ATUAL.
+    const pdv = await travarPdvDaAberturaRepository(dados.pdvId, dados.empresaId, tx);
     if (!pdv || !pdv.ativo) throw new Error("PDV nao encontrado");
     if (!pdv.contaId) throw new Error("PDV sem conta vinculada");
     const usuarioCaixa = await buscarPerfilUsuarioCaixaRepository(dados.usuarioCaixaId, tx);

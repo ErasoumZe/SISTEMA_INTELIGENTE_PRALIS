@@ -65,6 +65,7 @@ import {
   upsertVinculoRepository,
   type IntegracaoChaveLinha
 } from "./integracoes.repository.js";
+import { travarVendaRepository } from "../vendas/vendas.repository.js";
 
 export const integracoesDisponiveis: Array<{ tipo: TipoIntegracao; nome: string }> = [
   { tipo: "vendas", nome: "Vendas do PDV" }
@@ -119,6 +120,16 @@ function jsonCanonico(valor: DadosExternos): string {
 
 function hashPayload(payload: VendaIntegracaoAgregadaPayload): string {
   return createHash("sha256").update(jsonCanonico(payload)).digest("hex");
+}
+
+// S8: corrida detectada sob a trava da venda. Viaja como `code` (e nao como ErroDominio) para
+// passar pelo mesmo caminho do teto de lock no catch de `receberVendaIntegracao`: grava o historico
+// da tentativa e só entao vira 503 — transitorio e re-tentavel, nunca 4xx (R-013).
+const CODIGO_VENDA_MUDOU_DE_CAIXA = "P0_VENDA_MUDOU_DE_CAIXA";
+
+function erroVendaMudouDeCaixa(): Error {
+  const erro = new Error("Venda mudou de caixa durante o processamento; tente novamente");
+  return Object.assign(erro, { code: CODIGO_VENDA_MUDOU_DE_CAIXA });
 }
 
 function hashChaveIntegracao(chave: string): string {
@@ -765,6 +776,18 @@ export async function receberVendaIntegracao(
         statusPorCaixa.set(caixaId, trava?.status ?? "fechado");
       }
 
+      // A ORIGEM acima veio de um SELECT sem trava. Se a venda mudou de caixa nesse meio-tempo
+      // (outro re-envio em voo, revinculacao da abertura retroativa), o conjunto travado esta
+      // errado: o caixa REAL perderia a venda sem nunca ter sido travado e, fechado, sem trilha.
+      // Travamos a LINHA da venda (ordem caixa -> linha, a mesma da porta) e relemos: divergiu,
+      // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
+      // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
+      if (registro?.registroSistemaId) {
+        await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
+        const origemSobTrava = await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx);
+        if (origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
+      }
+
       const venda = await criarOuAtualizarVendaIntegradaRepository(
         {
           chave,
@@ -827,6 +850,10 @@ export async function receberVendaIntegracao(
     // handler global responde 503 — que o agente re-tenta no proximo ciclo.
     const codigoPostgres = (error as { code?: string }).code;
     if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
+    // S8: mesma familia — contencao transitoria, resposta 503 que o agente re-tenta.
+    if (codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA) {
+      throw new ErroDominio(mensagemErro, 503, "LOCK_OCUPADO");
+    }
     throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
   }
 }

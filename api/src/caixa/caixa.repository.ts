@@ -70,6 +70,29 @@ export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: strin
   return pdv ?? null;
 }
 
+// S3 (R-164), outra metade da janela: a ABERTURA decide o destino do fundo pela conta do PDV, e o
+// `PUT /api/pdvs/:id` pode trocar essa conta no meio. `FOR KEY SHARE` e o minimo que conflita com o
+// `FOR UPDATE` daquele PUT — e e exatamente o lock que a FK `fechamentos_caixa.pdv_id` tomaria no
+// INSERT do caixa alguns passos depois: nao acrescenta aresta nenhuma ao grafo de locks, so ANTECIPA
+// a que ja existia, mantendo a ordem pdv -> caixa dos dois lados. Aberturas concorrentes (tambem
+// KEY SHARE) nao se bloqueiam; quem espera aqui rele a conta ATUAL ao passar.
+export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: string, db: TransacaoBanco) {
+  const [pdv] = await db
+    .select({
+      id: pdvs.id,
+      empresaId: pdvs.empresaId,
+      nome: pdvs.nome,
+      codigo: pdvs.codigo,
+      contaId: pdvs.contaId,
+      ativo: pdvs.ativo
+    })
+    .from(pdvs)
+    .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
+    .limit(1)
+    .for("key share");
+  return pdv ?? null;
+}
+
 export async function buscarColaboradorPorUsuarioRepository(
   usuarioId: string,
   empresaId?: string,
