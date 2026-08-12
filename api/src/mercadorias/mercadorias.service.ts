@@ -13,7 +13,8 @@ import type {
   RecusarMercadoriaPayload
 } from "@padaria/shared/mercadorias";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
+import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import {
   exigirDiscriminacaoConferida,
   itemMercadoriaParaDiscriminacao,
@@ -279,6 +280,35 @@ export async function listarMercadoriasAguardandoAprovacao(
   return listarMercadoriasAguardandoAprovacaoRepository(query, empresasPermitidasIds);
 }
 
+// S5 (R-164): aprovar/recusar NF-e muda status e computar — altera os sete totais quando a
+// mercadoria carrega `caixa_id` (o PUT da retaguarda pode carimbar o caixa antes da aprovacao).
+// As duas rotas entram na porta: transacao, caixa PRIMEIRO (FOR SHARE + revalidacao; fechado
+// recusa — totais congelados nao ganham vida nova), linha da mercadoria depois, decisao sobre o
+// retrato SOB a trava. Se um PUT concorrente carimbou OUTRO caixa entre as duas leituras,
+// recomecar e mais barato (e sem risco de ciclo) que travar fora da ordem unica.
+async function prepararAtoDeAprovacao(
+  mercadoriaId: string,
+  empresaId: string,
+  perfil: PerfilUsuario,
+  tx: TransacaoBanco
+) {
+  const previa = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+  if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw new Error("Registro nao encontrado");
+  if (previa.empresaId !== empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  if (previa.caixaId) {
+    const trava = await travarCaixaCompartilhadoRepository(previa.caixaId, tx);
+    if (trava?.status !== "aberto") throw new Error("Caixa ja fechado");
+  }
+  if (!(await travarMercadoriaRepository(mercadoriaId, empresaId, tx))) throw new Error("Registro nao encontrado");
+  const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+  if (!existente || existente.status !== "aguardando_aprovacao") {
+    throw new Error("Mercadoria nao esta aguardando aprovacao");
+  }
+  if ((existente.caixaId ?? null) !== (previa.caixaId ?? null)) {
+    throw new Error("Lancamento mudou de caixa durante a aprovacao: tente novamente");
+  }
+}
+
 // Aprova a mercadoria da NF-e definindo se computa (decisao da reuniao: nota so fiscal nao computa).
 export async function aprovarMercadoria(
   mercadoriaId: string,
@@ -286,13 +316,12 @@ export async function aprovarMercadoria(
   perfil: PerfilUsuario
 ): Promise<{ id: string; computar: boolean }> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
-  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
-  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
-  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
-  const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar);
-  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
-  return { id: mercadoriaId, computar: dados.computar };
+  return executarEmTransacao(async (tx) => {
+    await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar, tx);
+    if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+    return { id: mercadoriaId, computar: dados.computar };
+  });
 }
 
 // Recusa a mercadoria da NF-e (aguardando_aprovacao -> recusado).
@@ -302,11 +331,10 @@ export async function recusarMercadoria(
   perfil: PerfilUsuario
 ): Promise<{ id: string }> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
-  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
-  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
-  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
-  const afetadas = await recusarMercadoriaRepository(mercadoriaId, dados.empresaId);
-  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
-  return { id: mercadoriaId };
+  return executarEmTransacao(async (tx) => {
+    await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    const afetadas = await recusarMercadoriaRepository(mercadoriaId, dados.empresaId, tx);
+    if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+    return { id: mercadoriaId };
+  });
 }

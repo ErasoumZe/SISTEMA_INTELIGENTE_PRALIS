@@ -295,6 +295,9 @@ async function prepararAberturaPorLacre(
   if (achado.lacreRompido) throw new Error("Lacre já rompido — não pode ser reutilizado");
   if (achado.status === "agendada") throw new Error("Transferência agendada ainda não foi liberada");
   if (achado.status !== "pendente") throw new Error("Transferência deste lacre não está pendente de recebimento");
+  // S4 (R-164): transferencia ja vinculada a um caixa tem a saida CONTADA la — reivindica-la de
+  // outro caixa migraria o movimento em silencio e tiraria a saida dos totais do primeiro.
+  if (achado.caixaId) throw new Error("Transferência deste lacre já pertence a outro caixa");
   // R-030: so um dos destinos CANDIDATOS pode reivindicar. Caixa fora da lista nao disputa.
   if (!achado.candidatoId) throw new Error("A conta deste caixa não é destino desta transferência");
   // R-028: quem envia nao confirma o proprio envio.

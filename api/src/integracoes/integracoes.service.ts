@@ -46,6 +46,7 @@ import {
   criarPdvComContaRepository,
   criarProdutoRepository,
   inativarChaveIntegracaoRepository,
+  buscarCaixaDaVendaRepository,
   registrarAlteracaoPosFechamentoRepository,
   listarCamposConfigRepository,
   listarChavesIntegracaoRepository,
@@ -347,29 +348,18 @@ async function resolverVinculosVenda(
   const colaboradorId = await resolverColaborador(chave, venda, db);
 
   // Liga a venda ao caixa do mesmo PDV cujo periodo contem a dataVenda (null se nao houver).
+  // S8: o LOCK nao mora mais aqui — quem trava e `receberVendaIntegracao`, que conhece tambem o
+  // caixa de ORIGEM (re-envio pode mover a venda) e precisa adquirir os dois em ordem
+  // deterministica.
   const caixa =
     pdvId !== null ? await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db) : null;
   const caixaId = caixa?.id ?? null;
-
-  // P0 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, mas SEM
-  // guarda de status — venda integrada nunca e recusada; anexar a caixa fechado + trilha e
-  // comportamento por regra. O que o lock fecha e a corrida em voo: decidir `caixaFechado` com o
-  // retrato pre-lock deixava a venda escapar do congelamento SEM a marca de pos-fechamento.
-  // Sob o lock, o status e o da versao commitada mais recente — a decisao da trilha fica exata.
-  let caixaFechado = false;
-  if (caixa) {
-    const trava = await travarCaixaCompartilhadoRepository(caixa.id, db);
-    // Linha ausente sob o lock e impossivel (a FK impede sumir); se acontecer, o lado SEGURO e
-    // tratar como fechado e registrar a trilha — nunca reusar o retrato pre-lock.
-    caixaFechado = trava ? trava.status !== "aberto" : true;
-  }
 
   return {
     pdvId,
     clienteId,
     colaboradorId,
     caixaId,
-    caixaFechado,
     produtosPorIdentificador,
     formasPagamentoPorIdentificador
   };
@@ -748,6 +738,27 @@ export async function receberVendaIntegracao(
       }
 
       const vinculos = await resolverVinculosVenda(chave, payload, tx);
+
+      // P0/S8 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, SEM
+      // guarda de status — venda integrada nunca e recusada. O re-envio pode MOVER a venda entre
+      // caixas (antigo -> novo -> nulo): ORIGEM e DESTINO entram na porta em ordem deterministica
+      // de id, e a decisao de trilha de cada lado sai do status sob o lock. Caixa FECHADO
+      // envolvido ganha a marca imutavel de pos-fechamento — inclusive o que PERDEU a venda.
+      const caixaOrigemId = registro?.registroSistemaId
+        ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx)
+        : null;
+      const caixaDestinoId = vinculos.caixaId;
+      const statusPorCaixa = new Map<string, string>();
+      const caixasEnvolvidos = [...new Set([caixaOrigemId, caixaDestinoId])]
+        .filter((caixaId): caixaId is string => Boolean(caixaId))
+        .sort();
+      for (const caixaId of caixasEnvolvidos) {
+        const trava = await travarCaixaCompartilhadoRepository(caixaId, tx);
+        // Linha ausente sob o lock e impossivel (a FK impede sumir); o lado SEGURO e tratar como
+        // fechado e registrar a trilha — nunca reusar retrato pre-lock.
+        statusPorCaixa.set(caixaId, trava?.status ?? "fechado");
+      }
+
       const venda = await criarOuAtualizarVendaIntegradaRepository(
         {
           chave,
@@ -759,9 +770,15 @@ export async function receberVendaIntegracao(
         tx
       );
 
-      if (vinculos.caixaFechado && vinculos.caixaId) {
+      if (caixaDestinoId && statusPorCaixa.get(caixaDestinoId) !== "aberto") {
         await registrarAlteracaoPosFechamentoRepository(
-          { empresaId: chave.empresaId, fechamentoCaixaId: vinculos.caixaId, vendaId: venda.id },
+          { empresaId: chave.empresaId, fechamentoCaixaId: caixaDestinoId, vendaId: venda.id },
+          tx
+        );
+      }
+      if (caixaOrigemId && caixaOrigemId !== caixaDestinoId && statusPorCaixa.get(caixaOrigemId) !== "aberto") {
+        await registrarAlteracaoPosFechamentoRepository(
+          { empresaId: chave.empresaId, fechamentoCaixaId: caixaOrigemId, vendaId: venda.id },
           tx
         );
       }

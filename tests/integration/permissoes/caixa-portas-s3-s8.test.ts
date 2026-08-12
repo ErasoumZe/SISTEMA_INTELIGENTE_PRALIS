@@ -51,6 +51,30 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     );
     if (!gerente) throw new Error("Usuario gerente nao encontrado");
     gerenteId = gerente.usuario_id;
+
+    // O operador do seed nao tem `transferencias_editar` (prova S6-a). ACRESCENTA as regras atuais
+    // e reloga — mesma receita das suites irmas.
+    const operador = await consultarUm<{ usuario_id: string }>(
+      "select usuario_id from perfis_usuarios where lower(email) = lower($1)",
+      [usuariosTeste.caixa.email]
+    );
+    if (!operador) throw new Error("Usuario caixa nao encontrado");
+    const regrasAtuais = await consultarUm<{ regras: Record<string, boolean> }>(
+      "select regras from permissoes_usuarios where usuario_id = $1",
+      [operador.usuario_id]
+    );
+    const concessao = await contexto.app.inject({
+      method: "POST",
+      url: "/api/permissoes",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        tipoPermissao: "usuario",
+        usuarioId: operador.usuario_id,
+        regras: { ...(regrasAtuais?.regras ?? {}), transferencias_editar: true }
+      }
+    });
+    expect([200, 201]).toContain(concessao.statusCode);
+    cookieCaixa = await cookieSessao(contexto.app, "caixa");
   }, 180_000);
 
   afterAll(async () => contexto.fechar());
@@ -594,7 +618,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
 
     // Re-envio com a venda MOVIDA para fora do periodo (antes da abertura): destino null.
     const reenvio = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-07-30T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
     );
     expect(reenvio.statusCode, reenvio.body).toBe(200);
 
@@ -633,7 +657,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       await bloqueador.cliente.query("select id from vendas where id = $1 for update", [vendaId]);
 
       const reenvio = enviarVendaIntegrada(
-        payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-07-30T12:00:00.000Z")
+        payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
       );
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
@@ -674,7 +698,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       // O re-envio que move a venda chega DURANTE o fechamento: espera no FOR SHARE da origem,
       // e ao passar encontra o caixa fechado — move a venda E registra a trilha do perdedor.
       const reenvio = enviarVendaIntegrada(
-        payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-07-30T12:00:00.000Z")
+        payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
       );
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 

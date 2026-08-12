@@ -350,6 +350,7 @@ export async function buscarTransferenciaPorLacreAberturaRepository(
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
       contaOrigemId: transferencias.contaOrigemId,
+      caixaId: transferencias.caixaId,
       criadoPor: transferencias.criadoPor,
       candidatoId: transferenciasDestinosCandidatos.id
     })
@@ -395,7 +396,16 @@ export async function confirmarTransferenciaAberturaRepository(
       dataRecebimento: input.agora,
       atualizadoEm: input.agora
     })
-    .where(and(eq(transferencias.id, input.transferenciaId), eq(transferencias.status, "pendente")))
+    .where(
+      and(
+        eq(transferencias.id, input.transferenciaId),
+        eq(transferencias.status, "pendente"),
+        // S4 (R-164): imposicao ATOMICA — transferencia ja vinculada a um caixa (saida ja contada
+        // la) nunca e migrada pelo claim de outro caixa. O servico recusa antes com mensagem
+        // clara; este predicado e a rede que vale mesmo sob corrida.
+        isNull(transferencias.caixaId)
+      )
+    )
     .returning({ id: transferencias.id, valorOriginal: transferencias.valorOriginal });
   if (!vencedora) return null;
 
@@ -440,6 +450,17 @@ export async function travarCaixaRepository(
 //  3. `TransacaoBanco` de proposito (sem default `banco`): FOR SHARE fora de transacao nao
 //     serializa nada, e `executarComTransacaoOpcional` tornaria o erro silencioso;
 //  4. sem joins — FOR SHARE nao pode ser aplicado ao lado nulavel de um outer join.
+// S3: o caixa ABERTO de um PDV, com id (o booleano de `existeCaixaAbertoPdvRepository` nao basta
+// para travar). Uma linha no maximo, garantida pelo indice unico parcial de caixa aberto por PDV.
+export async function buscarCaixaAbertoDoPdvRepository(pdvId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .where(and(eq(fechamentosCaixa.pdvId, pdvId), eq(fechamentosCaixa.status, "aberto")))
+    .limit(1);
+  return linha ?? null;
+}
+
 export async function travarCaixaCompartilhadoRepository(
   caixaId: string,
   db: TransacaoBanco
