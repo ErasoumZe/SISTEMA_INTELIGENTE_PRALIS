@@ -179,6 +179,54 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
     expect(antesDeConfirmar.statusCode, antesDeConfirmar.body).toBe(409);
   });
 
+  // --- Recorrencia: a serie inteira e reservada de uma vez -------------------------------------
+  // Um POST de recorrencia cria ate 12 lancamentos da MESMA conta na MESMA transacao. Validar so a
+  // 1a ocorrencia deixaria as outras 11 entrarem sem lastro — e o saldo so ficaria negativo depois,
+  // com a serie ja gravada. Estes dois casos existem porque a mutacao "cobrar so a 1a ocorrencia"
+  // (`ocorrenciasDaSerie = 1` em despesas.service.ts) SOBREVIVEU a suite: nenhum teste a matava.
+  it("a recorrencia reserva a SERIE INTEIRA: 3 x R$ 10 nao cabe em R$ 20 e nada e gravado", async () => {
+    const origem = await criarConta("R165 serie nao cabe", 20);
+    const universoAntes = await universoDeLancamentos();
+
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/despesas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        ...payloadDe("despesas", origem, 10, origem),
+        recorrencia: { frequencia: "mes", repeticoes: 3 }
+      }
+    });
+
+    // A 1a ocorrencia sozinha (R$ 10) CABERIA em R$ 20 — o 409 so aparece porque a serie inteira
+    // (R$ 30) e cobrada de uma vez. E exatamente esta assercao que mata a mutacao.
+    expect(resposta.statusCode, resposta.body).toBe(409);
+    expect(json<{ code?: string }>(resposta).code).toBe("SALDO_INSUFICIENTE");
+    expect(json<{ details?: { solicitado: number } }>(resposta).details?.solicitado).toBe(30);
+    // Nem a serie, nem a 1a ocorrencia, nem a definicao da recorrencia.
+    expect(await universoDeLancamentos()).toEqual(universoAntes);
+    expect(await saldoDe(origem)).toMatchObject({ saldoAtual: 20 });
+  });
+
+  it("a serie que CABE passa inteira e debita as tres ocorrencias", async () => {
+    const origem = await criarConta("R165 serie cabe", 30);
+
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/despesas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        ...payloadDe("despesas", origem, 10, origem),
+        recorrencia: { frequencia: "mes", repeticoes: 3 }
+      }
+    });
+
+    expect(resposta.statusCode, resposta.body).toBe(201);
+    expect(json<{ data: { serie: number } }>(resposta).data.serie).toBe(3);
+    // As TRES pesam no saldo, e nao so a primeira: 30 - (3 x 10) = 0.
+    expect(await saldoDe(origem)).toMatchObject({ saldoAtual: 0 });
+  });
+
   // --- PUT: delta real, reducao legitima e reenvio identico ------------------------------------
   it("PUT respeita o DELTA: aumentar alem do saldo recusa, reduzir passa, reenvio identico passa", async () => {
     const origem = await criarConta("R165 edicao", 100);
