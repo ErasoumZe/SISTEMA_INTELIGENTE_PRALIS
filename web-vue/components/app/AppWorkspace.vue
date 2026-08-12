@@ -840,15 +840,6 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
-  } else if (tela === "produtos") {
-    const [produtos, grupos, unidades] = await Promise.all([
-      apiGet<Opcao[]>(`/api/produtos/opcoes${query}`),
-      apiGet<Pick<Opcoes, "gruposMercadorias">>(`/api/grupos${query}`),
-      apiGet<Opcao[]>(`/api/unidades_medida${query}`)
-    ]);
-    dados.produtos = produtos;
-    dados.gruposMercadorias = grupos.gruposMercadorias;
-    dados.unidadesMedida = unidades;
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),

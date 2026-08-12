@@ -195,6 +195,85 @@ export interface FiltrosDeProduto {
   grupos: Array<{ id: string; nome: string }>;
 }
 
+/**
+ * Detalhe completo de `GET /api/produtos/:id`. Numeros vem como STRING porque `numeric` do Postgres
+ * atravessa o Drizzle assim — converter no meio do caminho perderia casas decimais.
+ */
+export interface ProdutoDetalhe {
+  id: string;
+  empresaId: string;
+  grupoMercadoriaId: string | null;
+  grupoNome: string | null;
+  unidadeMedidaId: string | null;
+  unidadeIndividualId: string | null;
+  unidadeIndividualSigla: string | null;
+  codigo: string | null;
+  codigoInterno: string | null;
+  codigoBarras: string | null;
+  descricao: string;
+  marca: string | null;
+  quantidadeIndividual: string;
+  embalagem: string | null;
+  cDe: string | null;
+  quantidadeCaixa: number;
+  medidaCompra: string | null;
+  custo: string | null;
+  margem: string | null;
+  precoVenda: string | null;
+  precoVendaAtual: number | null;
+  auto: boolean;
+  status: string;
+  tipo: string;
+  quantidadeEstoque: string;
+  estoqueMin: string | null;
+  estoqueMax: string | null;
+  setorEstoque: string | null;
+  localVenda1: string | null;
+  localVenda2: string | null;
+  fotoUrl: string | null;
+  criadoPorNome: string | null;
+  conversoes: Array<{
+    id: string;
+    unidadeMedidaId: string;
+    quantidade: string;
+    unidadesIndividuais: string;
+  }>;
+  fiscal: {
+    ncm: string | null;
+    cest: string | null;
+    categoriaFiscal: string | null;
+    cstPisCofins: string | null;
+    aliquotaCheia: string | null;
+    aliquotaFcp: string | null;
+    aliquotaPis: string | null;
+    aliquotaCofins: string | null;
+    reducaoIcms: string | null;
+    icms: string | null;
+  } | null;
+  transformacao: {
+    precisao: string | null;
+    quantidade: string | null;
+    unidade: string | null;
+    produtoReceituario: string | null;
+  } | null;
+  promocoes: Array<{
+    id: string;
+    tipo: string;
+    valor: string | null;
+    descontoFracao: string | null;
+    horaInicio: string | null;
+    horaFim: string | null;
+    seg: boolean;
+    ter: boolean;
+    qua: boolean;
+    qui: boolean;
+    sex: boolean;
+    sab: boolean;
+    dom: boolean;
+    validaAte: string | null;
+  }>;
+}
+
 export type ProdutoPayload = z.infer<typeof produtoPayloadSchema>;
 export type ProdutoConversaoPayload = z.infer<typeof produtoConversaoPayloadSchema>;
 export type ImportarProdutosPayload = ImportarEmpresaPayload;
