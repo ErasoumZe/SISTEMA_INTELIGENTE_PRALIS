@@ -137,7 +137,10 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
         empresaId: dados.empresaId,
         podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: lancamento.contaOrigemId,
-        valorCentavos: paraCentavos(lancamento.valorOriginal) * ocorrenciasDaSerie
+        // `computar = false` nao debita a conta (o saldo so soma linhas computaveis), entao a porta
+        // e neutra a ele — cobrar de quem nao debita seria recusa indevida. A cobranca acontece
+        // quando `computar` LIGA, na edicao/aprovacao, onde `jaReservado` ja e neutro do outro lado.
+        valorCentavos: computar ? paraCentavos(lancamento.valorOriginal) * ocorrenciasDaSerie : 0
       },
       tx
     );
@@ -287,7 +290,9 @@ export async function atualizarDespesa(
         empresaId: dados.empresaId,
         podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: normalizados.contaOrigemId,
-        valorCentavos: paraCentavos(normalizados.valorOriginal),
+        // Neutra a `computar = false`: desligar o computar nao debita nada, e LIGAR cobra o valor
+        // inteiro (o `jaReservado` abaixo devolve 0 quando o gravado nao computava).
+        valorCentavos: computar ? paraCentavos(normalizados.valorOriginal) : 0,
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
       },
       tx

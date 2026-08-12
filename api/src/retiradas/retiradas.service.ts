@@ -107,7 +107,8 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
         empresaId: dados.empresaId,
         podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: lancamento.contaOrigemId,
-        valorCentavos: paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1)
+        // Neutra a `computar = false` — ver a nota em criarDespesa.
+        valorCentavos: computar ? paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1) : 0
       },
       tx
     );
@@ -210,7 +211,8 @@ export async function atualizarRetirada(
         empresaId: dados.empresaId,
         podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: normalizados.contaOrigemId,
-        valorCentavos: paraCentavos(normalizados.valorOriginal),
+        // Neutra a `computar = false` — ver a nota em atualizarDespesa.
+        valorCentavos: computar ? paraCentavos(normalizados.valorOriginal) : 0,
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
       },
       tx

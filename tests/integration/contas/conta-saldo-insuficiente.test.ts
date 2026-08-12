@@ -356,6 +356,59 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
     expect(resposta.statusCode).not.toBe(201);
   });
 
+  // --- NEUTRALIDADE DE `computar = false` ------------------------------------------------------
+  // O saldo (`saldosDasContasRepository`) conta SOMENTE linhas com `computar = true`: um lancamento
+  // nao-computavel nao tira um centavo da conta. Entao a porta tem de ser neutra a ele — cobrar
+  // saldo de quem nao debita e recusa indevida, e o `jaReservado` ja e neutro do outro lado
+  // (`saldoJaReservadoNaMesmaConta` devolve 0 quando o gravado nao computava).
+  //
+  // Transferencia e mercadoria ja faziam `computar ? valor : 0`; despesa e retirada cobravam
+  // sempre. Estes casos existem para que as quatro concordem — e para que a cobranca aconteca no
+  // momento CERTO: quando `computar` LIGA (o que `aprovarMercadoria` ja provava para NF-e).
+  it.each(["despesas", "retiradas", "mercadorias", "transferencias"] as const)(
+    "%s com computar=false nao consome saldo: passa acima do fundo e nao move a conta",
+    async (rota) => {
+      const origem = await criarConta(`R165 neutro ${rota}`, 10);
+      const destino = await criarConta(`R165 neutro ${rota} destino`, 0);
+
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: `/api/${rota}`,
+        headers: { cookie: cookieAdmin },
+        payload: { ...payloadDe(rota, origem, 15, destino), computar: false }
+      });
+
+      expect(resposta.statusCode, `${rota}: ${resposta.body}`).toBe(201);
+      // E a conta continua intacta: o lancamento existe, mas nao debita.
+      expect(await saldoDe(origem)).toMatchObject({ saldoAtual: 10 });
+    }
+  );
+
+  it("ligar computar depois e que cobra: PUT de computar=false para true recusa sem fundo", async () => {
+    const origem = await criarConta("R165 liga computar", 10);
+    const destino = await criarConta("R165 liga computar destino", 0);
+
+    const criada = await contexto.app.inject({
+      method: "POST",
+      url: "/api/despesas",
+      headers: { cookie: cookieAdmin },
+      payload: { ...payloadDe("despesas", origem, 15, destino), computar: false }
+    });
+    expect(criada.statusCode, criada.body).toBe(201);
+    const despesaId = json<{ data: { id: string } }>(criada).data.id;
+
+    const ligada = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/despesas/${despesaId}`,
+      headers: { cookie: cookieAdmin },
+      payload: { ...payloadDe("despesas", origem, 15, destino), computar: true }
+    });
+
+    expect(ligada.statusCode, ligada.body).toBe(409);
+    expect(json<{ code?: string }>(ligada).code).toBe("SALDO_INSUFICIENTE");
+    expect(await saldoDe(origem)).toMatchObject({ saldoAtual: 10 });
+  });
+
   // --- DETALHE DO 409 E INFORMACAO DE SALDO ----------------------------------------------------
   // O corpo do 409 carregava `disponivel`/`faltam` para QUALQUER um capaz de lancar uma saida — e
   // esse conjunto e maior que o de quem pode abrir a tela de saldos (`cadastro_contas_visualizar`).

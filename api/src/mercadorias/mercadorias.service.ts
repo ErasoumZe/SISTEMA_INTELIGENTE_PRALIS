@@ -132,7 +132,9 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
         empresaId: dados.empresaId,
         podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: lancamento.contaOrigemId,
-        valorCentavos: paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1)
+        // Neutra a `computar = false` — ver a nota em criarDespesa. Na mercadoria o `computar` ja
+        // vem resolvido por `deveComputarMercadoria` (nota fiscal tambem manda no valor).
+        valorCentavos: computar ? paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1) : 0
       },
       tx
     );
