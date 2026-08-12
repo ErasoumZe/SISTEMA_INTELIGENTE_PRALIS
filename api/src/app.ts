@@ -118,6 +118,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       return erro(reply, statusFastify, "Requisição inválida", codigoFastify);
     }
 
+    // P0 lancamento x fechamento: com o FOR SHARE em toda escrita do caixa e o teto de espera por
+    // transacao, contencao acima do teto vira 55P03 (lock_not_available) — e deadlock, se um dia
+    // existir, vira 40P01. Sem este ramo os dois viravam 500 "Erro interno": o operador nao sabia
+    // que era so tentar de novo e o agente CREARE nao distinguia bug de fila. 503 e transitorio
+    // por contrato (o agente re-tenta 5xx; 4xx ele descarta — R-013 proibe descartar venda).
+    const codigoPostgres = (error as { code?: string }).code;
+    if (codigoPostgres === "55P03" || codigoPostgres === "40P01") {
+      request.log.warn(error, "contencao de lock acima do teto");
+      return erro(reply, 503, "Sistema ocupado com outra operacao do caixa; tente novamente", "LOCK_OCUPADO");
+    }
+
     request.log.error(error);
     capturarErro(error instanceof Error ? error : new Error(String(error)));
     return erro(reply, 500, "Erro interno", "INTERNAL_ERROR");

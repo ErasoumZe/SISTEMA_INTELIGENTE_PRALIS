@@ -15,7 +15,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
+  obterCaixaDaSaidaParaEdicao,
   podeVerLancamentosPagos,
   exigirDiscriminacaoConferida,
   exigirVinculoDosItensDespesa,
@@ -99,10 +101,13 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
-    // exigindo o dele.
-    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
+    // exigindo o dele. P0: o caixa chega TRAVADO (FOR SHARE) e revalidado — primeiro lock da
+    // transacao, antes de qualquer escrita.
+    const { caixa, caixaFechadoNaCorrida } = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // Q2: retaguarda com a conta do PDV de um caixa que fechou na corrida e recusada.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, lancamento.contaOrigemId);
     // So conta para o caixa o que saiu da conta do PDV dele.
     const caixaId = caixaIdDaSaida(caixa, lancamento);
 
@@ -209,12 +214,15 @@ export async function atualizarDespesa(
   validarDespesa(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // P0 — ordem unica de locks: o CAIXA vem primeiro (FOR SHARE + revalidacao), a linha do
+    // lancamento depois. Antes desta OS os tres PUTs travavam o lancamento antes de ler o caixa.
+    const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
     // TRAVA antes de ler: daqui para baixo, `existente` e o retrato sob lock, e nenhuma outra
     // transacao altera a linha ate esta terminar. Toda validacao que compara com o estado anterior
     // — a excecao de credor legado, a conta gravada, a data de pagamento — usa ESTE retrato.
     if (!(await travarDespesaRepository(despesaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarDespesaDetalheRepository(despesaId, tx);
-    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar um lancamento JA PAGO exige *_editar_dpago; alterar a dataPagamento
     // exige *_pagar. Ambos comparam com o estado atual do registro.
     exigirPermissaoEditarPago(perfil.permissoes, "despesas", existente!.dataPagamento);
@@ -240,6 +248,8 @@ export async function atualizarDespesa(
       caixa,
       perfil
     );
+    // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
     // A-4: o `caixa_id` sai da MESMA funcao do POST. Antes o UPDATE preservava `existente.caixaId`,
     // e bastava a retaguarda editar a conta para o lancamento seguir somando no fechamento com o
     // dinheiro tendo saido de outro lugar (ou o contrario: entrar na conta do PDV e nunca aparecer no

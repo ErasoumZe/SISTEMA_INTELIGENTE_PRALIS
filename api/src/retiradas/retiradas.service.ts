@@ -14,7 +14,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
+  obterCaixaDaSaidaParaEdicao,
   podeVerLancamentosPagos
 } from "../lancamentos/lancamentos.dominio.js";
 import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
@@ -73,10 +75,12 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
 
     // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
-    // exigindo o dele.
-    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
+    // exigindo o dele. P0: o caixa chega TRAVADO (FOR SHARE) e revalidado.
+    const { caixa, caixaFechadoNaCorrida } = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // Q2: retaguarda com a conta do PDV de um caixa que fechou na corrida e recusada.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, lancamento.contaOrigemId);
     // So conta para o caixa o que saiu da conta do PDV dele.
     const caixaId = caixaIdDaSaida(caixa, lancamento);
 
@@ -149,11 +153,13 @@ export async function atualizarRetirada(
   exigirPermissaoLancamento(perfil.permissoes, "retiradas_editar");
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
+    const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. Sem isto, duas edicoes concorrentes
     // liam o mesmo retrato e a segunda ressuscitava o credor legado E a divida do colaborador.
     if (!(await travarRetiradaRepository(retiradaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
-    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "retiradas", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "retiradas", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -171,6 +177,8 @@ export async function atualizarRetirada(
       caixa,
       perfil
     );
+    // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarRetiradaRepository(
       retiradaId,

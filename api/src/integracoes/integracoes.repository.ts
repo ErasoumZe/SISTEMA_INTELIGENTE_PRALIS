@@ -620,6 +620,12 @@ export async function buscarCaixaParaVendaRepository(
   return caixa ?? null;
 }
 
+// S8: o caixa ATUAL de uma venda ja ingerida — a ORIGEM de um re-envio que pode move-la.
+export async function buscarCaixaDaVendaRepository(vendaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db.select({ caixaId: vendas.caixaId }).from(vendas).where(eq(vendas.id, vendaId)).limit(1);
+  return linha?.caixaId ?? null;
+}
+
 export async function registrarAlteracaoPosFechamentoRepository(
   input: { empresaId: string; fechamentoCaixaId: string; vendaId: string },
   db: ExecutorBanco = banco

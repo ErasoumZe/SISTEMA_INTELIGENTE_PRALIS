@@ -50,7 +50,7 @@ import {
 import { diaNegocio } from "@padaria/shared/datas";
 import { centavosParaDecimalBanco, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 const perfilFechador = alias(perfisUsuarios, "perfil_fechador");
 
@@ -67,6 +67,32 @@ export async function buscarPdvEmpresaRepository(pdvId: string, empresaId: strin
     .from(pdvs)
     .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
     .limit(1);
+  return pdv ?? null;
+}
+
+// S3 (R-164), outra metade da janela: a ABERTURA decide o destino do fundo pela conta do PDV, e o
+// `PUT /api/pdvs/:id` pode trocar essa conta no meio. `FOR SHARE` (e nao `KEY SHARE`) DE PROPOSITO:
+// KEY SHARE so conflita com `FOR UPDATE`, entao a garantia dependeria da convencao de `salvarPdv`
+// travar antes de escrever — um UPDATE direto em `pdvs` (job, script, rota futura) toma apenas
+// NO KEY UPDATE e reabriria a janela EM SILENCIO. Com SHARE a protecao e do dado, nao do costume.
+// Custo real: nenhum hoje (o unico escritor ja toma FOR UPDATE). O que continua livre: aberturas
+// concorrentes (SHARE ∥ SHARE) e os RI checks de FK que INSERTs de venda/caixa tomam (KEY SHARE).
+// Ordem preservada: pdv -> caixa dos dois lados, a mesma que a FK `fechamentos_caixa.pdv_id` ja
+// impunha no INSERT alguns passos adiante.
+export async function travarPdvDaAberturaRepository(pdvId: string, empresaId: string, db: TransacaoBanco) {
+  const [pdv] = await db
+    .select({
+      id: pdvs.id,
+      empresaId: pdvs.empresaId,
+      nome: pdvs.nome,
+      codigo: pdvs.codigo,
+      contaId: pdvs.contaId,
+      ativo: pdvs.ativo
+    })
+    .from(pdvs)
+    .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
+    .limit(1)
+    .for("share");
   return pdv ?? null;
 }
 
@@ -350,6 +376,7 @@ export async function buscarTransferenciaPorLacreAberturaRepository(
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
       contaOrigemId: transferencias.contaOrigemId,
+      caixaId: transferencias.caixaId,
       criadoPor: transferencias.criadoPor,
       candidatoId: transferenciasDestinosCandidatos.id
     })
@@ -395,7 +422,16 @@ export async function confirmarTransferenciaAberturaRepository(
       dataRecebimento: input.agora,
       atualizadoEm: input.agora
     })
-    .where(and(eq(transferencias.id, input.transferenciaId), eq(transferencias.status, "pendente")))
+    .where(
+      and(
+        eq(transferencias.id, input.transferenciaId),
+        eq(transferencias.status, "pendente"),
+        // S4 (R-164): imposicao ATOMICA — transferencia ja vinculada a um caixa (saida ja contada
+        // la) nunca e migrada pelo claim de outro caixa. O servico recusa antes com mensagem
+        // clara; este predicado e a rede que vale mesmo sob corrida.
+        isNull(transferencias.caixaId)
+      )
+    )
     .returning({ id: transferencias.id, valorOriginal: transferencias.valorOriginal });
   if (!vencedora) return null;
 
@@ -421,6 +457,45 @@ export async function travarCaixaRepository(
     .from(fechamentosCaixa)
     .where(eq(fechamentosCaixa.id, caixaId))
     .for("update");
+  return linha ?? null;
+}
+
+// P0 lancamento x fechamento: o lock COMPARTILHADO do lado do lancamento. `FOR SHARE` nao
+// serializa lancamentos entre si, mas conflita com o `FOR UPDATE` de fechamento/cofre/horario/
+// abertura (e conflitaria tambem com um futuro `NO KEY UPDATE`) — quem chegar depois espera, e o
+// status devolvido aqui e o da versao commitada MAIS RECENTE (READ COMMITTED reavalia no
+// locked-read). E a primeira barreira de TODA escrita que altera os sete totais — inclusive o
+// cron de agendadas e o cancelamento de serie de recorrencia (S1/S2, decididos pelo Jose em
+// 11/08: caixa fechado nao e alterado por nenhum dos dois). Bordas que seguem SEM regra estao
+// no relatorio da OS (S3-S8). A revalidacao do status pos-lock e de quem chama.
+//
+// INVARIANTES (a prova de deadlock depende delas — ver o grafo no relatorio da OS):
+//  1. ordem unica: linha do caixa PRIMEIRO, linha do lancamento depois, filhas por ultimo;
+//  2. nenhum caminho de lancamento faz UPDATE em `fechamentos_caixa` — o SHARE nunca vira
+//     exclusivo dentro da mesma transacao;
+//  3. `TransacaoBanco` de proposito (sem default `banco`): FOR SHARE fora de transacao nao
+//     serializa nada, e `executarComTransacaoOpcional` tornaria o erro silencioso;
+//  4. sem joins — FOR SHARE nao pode ser aplicado ao lado nulavel de um outer join.
+// S3: o caixa ABERTO de um PDV, com id (o booleano de `existeCaixaAbertoPdvRepository` nao basta
+// para travar). Uma linha no maximo, garantida pelo indice unico parcial de caixa aberto por PDV.
+export async function buscarCaixaAbertoDoPdvRepository(pdvId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .where(and(eq(fechamentosCaixa.pdvId, pdvId), eq(fechamentosCaixa.status, "aberto")))
+    .limit(1);
+  return linha ?? null;
+}
+
+export async function travarCaixaCompartilhadoRepository(
+  caixaId: string,
+  db: TransacaoBanco
+): Promise<{ id: string; status: string } | null> {
+  const [linha] = await db
+    .select({ id: fechamentosCaixa.id, status: fechamentosCaixa.status })
+    .from(fechamentosCaixa)
+    .where(eq(fechamentosCaixa.id, caixaId))
+    .for("share");
   return linha ?? null;
 }
 
@@ -650,8 +725,8 @@ export async function buscarSolicitacaoCofreRepository(
   return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
 }
 
-// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — e o mesmo caminho que o fluxo
-// generico ja usa (efetivarTransferenciasAgendadasRepository), nao um segundo mecanismo.
+// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — a mesma transicao que o cron
+// generico aplica (efetivarTransferenciaAgendadaRepository), nao um segundo mecanismo.
 //
 // `status = 'agendada'` no WHERE e a TRANSICAO ATOMICA que serve de idempotencia: duas execucoes
 // concorrentes disputam a mesma linha e so uma acerta uma linha. A perdedora recebe zero e

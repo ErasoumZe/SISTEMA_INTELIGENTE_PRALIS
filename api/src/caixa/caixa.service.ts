@@ -29,7 +29,7 @@ import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao, type ExecutorBanco } from "../banco/conexao.js";
+import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio, erroValidacao, naoEncontrado } from "../erros.js";
 import { hashTokenAutorizacao } from "./autorizacoes.service.js";
 import {
@@ -47,6 +47,7 @@ import {
   buscarMaquininhaEmpresaRepository,
   buscarTransferenciaPorLacreAberturaRepository,
   buscarPdvEmpresaRepository,
+  travarPdvDaAberturaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
   caixaTemLancamentosRepository,
@@ -70,6 +71,7 @@ import {
   registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
+  travarCaixaCompartilhadoRepository,
   travarCaixaRepository,
   buscarSolicitacaoCofreRepository,
   buscarTransferenciaPorIdempotenciaRepository,
@@ -294,6 +296,9 @@ async function prepararAberturaPorLacre(
   if (achado.lacreRompido) throw new Error("Lacre já rompido — não pode ser reutilizado");
   if (achado.status === "agendada") throw new Error("Transferência agendada ainda não foi liberada");
   if (achado.status !== "pendente") throw new Error("Transferência deste lacre não está pendente de recebimento");
+  // S4 (R-164): transferencia ja vinculada a um caixa tem a saida CONTADA la — reivindica-la de
+  // outro caixa migraria o movimento em silencio e tiraria a saida dos totais do primeiro.
+  if (achado.caixaId) throw new Error("Transferência deste lacre já pertence a outro caixa");
   // R-030: so um dos destinos CANDIDATOS pode reivindicar. Caixa fora da lista nao disputa.
   if (!achado.candidatoId) throw new Error("A conta deste caixa não é destino desta transferência");
   // R-028: quem envia nao confirma o proprio envio.
@@ -315,7 +320,11 @@ async function abrirCaixaEmTransacao(
   dataHoraAbertura: Date
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
-    const pdv = await buscarPdvEmpresaRepository(dados.pdvId, dados.empresaId, tx);
+    // S3 (R-164): PRIMEIRO lock da abertura. Sem ele a conta do PDV era um retrato pre-lock — um
+    // `PUT /api/pdvs/:id` que commitasse durante a abertura deixava o fundo do lacre confirmado na
+    // conta ANTIGA de um PDV que ja apontava para outra (dinheiro fora dos sete totais). Travado,
+    // quem chega durante a troca espera e decide pela conta ATUAL.
+    const pdv = await travarPdvDaAberturaRepository(dados.pdvId, dados.empresaId, tx);
     if (!pdv || !pdv.ativo) throw new Error("PDV nao encontrado");
     if (!pdv.contaId) throw new Error("PDV sem conta vinculada");
     const usuarioCaixa = await buscarPerfilUsuarioCaixaRepository(dados.usuarioCaixaId, tx);
@@ -398,10 +407,22 @@ async function editarAberturaCaixaEmTransacao(
   perfil: PerfilUsuario
 ): Promise<CaixaStatus> {
   return executarEmTransacao(async (tx) => {
+    const previa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, previa)) throw new Error("Caixa nao permitido");
+    if (previa.status !== "aberto") throw new Error("Caixa ja fechado");
+    // P0 — invariante "caixa primeiro": o lock exclusivo vem ANTES de qualquer escrita da rota
+    // (com os lancamentos segurando FOR SHARE, travar tarde seguraria trabalho ja feito) — mas
+    // DEPOIS das checagens de empresa/permissao, para perfil sem acesso nao encostar lock em
+    // caixa alheio (revisao final).
+    const trava = await travarCaixaRepository(caixaId, tx);
+    if (!trava) throw new Error("Caixa nao encontrado");
+    if (trava.status !== "aberto") throw new Error("Caixa ja fechado");
+    // Retrato SOB a trava decide toda ESCRITA: o token e de USO UNICO (rotacionado a cada edicao)
+    // e valida-lo no retrato previo deixava dois PUTs concorrentes passarem com o mesmo token —
+    // TOCTOU apontado pela revisao. `valoresAntigos` da auditoria tambem sai deste retrato.
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (!caixa) throw new Error("Caixa nao encontrado");
     if (caixa.tokenEdicao !== dados.tokenEdicao) throw new Error("Token de edicao invalido");
 
     const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
@@ -498,9 +519,17 @@ export async function alterarHorarioCaixa(
 
   try {
     return await executarEmTransacao(async (tx) => {
+      const previa = await buscarCaixaPorIdRepository(caixaId, tx);
+      if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
+      if (previa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
+      // P0 — mesmo contrato de editarAberturaCaixa: lock exclusivo antes de qualquer escrita
+      // (inclusive o consumo do token), depois das checagens de empresa; e o retrato SOB a trava
+      // e quem alimenta validacoes e auditoria (`valoresAntigos`), nunca o previo.
+      const trava = await travarCaixaRepository(caixaId, tx);
+      if (!trava) throw naoEncontrado("Caixa nao encontrado");
+      if (trava.status !== "aberto") throw erroValidacao("Caixa ja fechado");
       const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-      if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
-      if (caixa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
+      if (!caixa) throw naoEncontrado("Caixa nao encontrado");
       if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
 
       const aberturaFinal = novaAbertura ?? (caixa.dataHoraAbertura ? new Date(caixa.dataHoraAbertura) : undefined);
@@ -1437,8 +1466,38 @@ function horariosAuditados(valores: DadosExternos) {
   };
 }
 
-export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, db?: ExecutorBanco) {
-  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId, db);
+// P0 lancamento x fechamento — a PORTA UNICA do caixa do ator, agora com o contrato de lock:
+// resolver -> travar FOR SHARE -> revalidar o status POS-lock. O SELECT resolve o id sem lock
+// (tem joins); a trava e por PK; e o status decisivo e o do locked-read, nunca o do retrato
+// anterior. Se o caixa fechou no meio da corrida, o chamador recebe o MESMO desfecho de sempre —
+// nada de comportamento novo fora da janela.
+//
+// `TransacaoBanco` obrigatorio: todo caminho de escrita ja roda em `executarEmTransacao`; um
+// FOR SHARE fora de transacao evaporaria na instrucao seguinte.
+
+/** Retaguarda (caixa opcional): devolve o caixa aberto TRAVADO, ou quem fechou durante a corrida. */
+export async function travarCaixaAbertoDoAtor(
+  empresaId: string,
+  usuarioId: string,
+  tx: TransacaoBanco
+): Promise<{
+  caixa: Awaited<ReturnType<typeof buscarCaixaAbertoUsuarioRepository>>;
+  caixaFechadoNaCorrida: Awaited<ReturnType<typeof buscarCaixaAbertoUsuarioRepository>>;
+}> {
+  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, usuarioId, tx);
+  if (!caixa) return { caixa: null, caixaFechadoNaCorrida: null };
+  const trava = await travarCaixaCompartilhadoRepository(caixa.id, tx);
+  if (trava?.status === "aberto") return { caixa, caixaFechadoNaCorrida: null };
+  // Fechou entre o SELECT e o lock (ou a linha sumiu, o que a FK impede): quem decide o desfecho e
+  // o chamador — Q2 recusa se a conta em uso for a do PDV deste caixa; qualquer outra conta segue
+  // como se nao houvesse caixa (A-1/R-032).
+  return { caixa: null, caixaFechadoNaCorrida: caixa };
+}
+
+export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, tx: TransacaoBanco) {
+  const { caixa } = await travarCaixaAbertoDoAtor(empresaId, usuarioId, tx);
+  // Caixa que fechou na corrida = caixa que nao existe mais para o operador: o erro oficial e o
+  // MESMO que ele receberia fora da janela (matriz P0, linha "fechamento antes").
   if (!caixa) throw new Error("Abra um caixa antes de registrar este lancamento");
   if (!caixa.pdvId || !caixa.pdvContaId) throw new Error("Caixa operacional invalido");
   return caixa;

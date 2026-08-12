@@ -2,6 +2,7 @@ import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   ConfirmarTransferenciaPayload,
   RecusarConferenciaPayload,
+  TempoConfirmacao,
   TransferenciaCriada,
   TransferenciaDetalheDto,
   TransferenciaDto,
@@ -10,11 +11,17 @@ import type {
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { buscarCaixaAbertoUsuarioRepository, listarUsuariosTesourariaRepository } from "../caixa/caixa.repository.js";
+import {
+  buscarCaixaPorIdRepository,
+  listarUsuariosTesourariaRepository,
+  travarCaixaCompartilhadoRepository
+} from "../caixa/caixa.repository.js";
+import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import {
+  exigirContaForaDoCaixaFechadoNaCorrida,
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
   podeLancarSemCaixa
@@ -33,10 +40,12 @@ import {
   atualizarTransferenciaRepository,
   buscarContextoConferenciaRepository,
   buscarTransferenciaDetalheRepository,
+  travarTransferenciaRepository,
   confirmarTransferenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
-  efetivarTransferenciasAgendadasRepository,
+  efetivarTransferenciaAgendadaRepository,
+  listarAgendadasVencidasRepository,
   ehConfirmadorElegivelRepository,
   liberarTravaTransferenciaRepository,
   listarDestinatariosTransferenciaRepository,
@@ -93,9 +102,12 @@ export async function criarTransferencia(
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
-      const caixa = transferenciaLivre
-        ? await buscarCaixaAbertoUsuarioRepository(dados.empresaId, perfil.usuarioId, tx)
-        : await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx);
+      // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
+      const { caixa, caixaFechadoNaCorrida } = transferenciaLivre
+        ? await travarCaixaAbertoDoAtor(dados.empresaId, perfil.usuarioId, tx)
+        : { caixa: await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx), caixaFechadoNaCorrida: null };
+      // Q2: na transferencia a conta do PDV vale como origem OU destino (dinheiro entra e sai).
+      exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, dados.contaOrigemId, dados.contaDestinoId);
       const envolveContaPdv =
         caixa && (dados.contaOrigemId === caixa.pdvContaId || dados.contaDestinoId === caixa.pdvContaId);
       if (!transferenciaLivre && !envolveContaPdv) {
@@ -130,6 +142,26 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // Q4 (Jose, 11/08/2026): confirmacao que ALTERARIA entrada ou saida de caixa ja fechado e
+    // bloqueada imediatamente; fluxo auditado futuro e outra OS. Mecanica: confirmar muda
+    // `pendente -> recebido` e grava a conta destino vencedora — a ENTRADA do caixa do
+    // `caixa_id` passa a contar se essa conta for a do PDV dele (shared/caixa/regras). A SAIDA
+    // nunca muda aqui (pendente e recebido contam igual) — por isso o retorno/sangria ao cofre,
+    // confirmado depois do fechamento, continua passando: ele nao altera total nenhum.
+    //
+    // Ordem unica do P0: o caixa (FOR SHARE) vem ANTES do UPDATE na transferencia. Com o caixa
+    // ABERTO, o lock tambem serializa com o fechamento em voo — quem confirmar primeiro entra nos
+    // totais; quem perder a corrida cai na recusa abaixo.
+    if (existente.caixaId) {
+      const trava = await travarCaixaCompartilhadoRepository(existente.caixaId, tx);
+      if (trava?.status !== "aberto") {
+        const caixa = await buscarCaixaPorIdRepository(existente.caixaId, tx);
+        if (caixa?.pdvContaId && dados.contaDestinoId === caixa.pdvContaId) {
+          throw new Error("Caixa ja fechado");
+        }
+      }
+    }
 
     // Decisao 5 · o fluxo Caixa -> Cofre e ESTRITO, e so ele. `/confirmar` passa a significar
     // "conferi e bateu": exige o valor contado e recusa qualquer divergencia, sem confirmar nada.
@@ -257,7 +289,33 @@ export async function recusarConferencia(
 
 export async function processarTransferenciasTemporais(agora = new Date()) {
   await executarEmTransacao(async (tx) => {
-    await efetivarTransferenciasAgendadasRepository(agora, tx);
+    // S1 (R-164, Jose 11/08): efetivar `agendada -> pendente` altera a SAIDA do caixa da linha,
+    // entao cada agendada com caixa entra na porta — FOR SHARE + revalidacao. Caixa aberto:
+    // efetiva; caixa FECHADO: nao altera status nem totais (a linha permanece agendada e sera
+    // reavaliada nos proximos ciclos). A lista vem em ordem deterministica (caixa_id, id) para os
+    // locks de varios caixas sairem sempre na mesma ordem — sem ciclo com o fechamento, que trava
+    // um unico caixa.
+    const agendadasVencidas = await listarAgendadasVencidasRepository(agora, tx);
+    // Cada caixa e travado/revalidado UMA vez (mesmo desenho do cancelamento de serie): o veredito
+    // vale para a transacao inteira porque o FOR SHARE impede o caixa de fechar ate o commit.
+    const caixaAbertoPorId = new Map<string, boolean>();
+    for (const agendada of agendadasVencidas) {
+      if (agendada.caixaId) {
+        let aberto = caixaAbertoPorId.get(agendada.caixaId);
+        if (aberto === undefined) {
+          const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
+          aberto = trava?.status === "aberto";
+          caixaAbertoPorId.set(agendada.caixaId, aberto);
+        }
+        if (!aberto) continue;
+      }
+      await efetivarTransferenciaAgendadaRepository(
+        agendada.id,
+        (agendada.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
+        agora,
+        tx
+      );
+    }
     const vencidas = await listarTransferenciasVencidasRepository(agora, tx);
     for (const transferencia of vencidas) {
       const destinatarios = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
@@ -319,8 +377,18 @@ export async function atualizarTransferencia(
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
+    const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
+    // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da transferencia.
+    const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
+    if (!(await travarTransferenciaRepository(transferenciaId, dados.empresaId, tx))) {
+      throw new Error("Registro nao encontrado");
+    }
+    // Retrato SOB a trava: confirmacao/abertura podem ter mudado o CAIXA da linha entre a leitura
+    // e o lock — a revalidacao compara empresa e caixa_id do retrato atual (status nao entra: o
+    // PUT sempre aceitou editar transferencia recebida/agendada, e mudar isso e outra decisao).
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
-    const caixa = await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {

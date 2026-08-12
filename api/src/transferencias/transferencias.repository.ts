@@ -17,7 +17,7 @@ import {
   type TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
@@ -126,6 +126,19 @@ export async function criarTransferenciaRepository(
     });
   }
   return transferencia;
+}
+
+// P0 (CX-M06 estendida): a linha da transferencia sob `FOR NO KEY UPDATE` durante a edicao — ela
+// nao tinha trava nenhuma e o PUT reescreve valor, computar e as DUAS contas (o sinal do total).
+// Espelho de `travarDespesaRepository`: escopo de empresa no where e `TransacaoBanco` obrigatorio.
+// Ordem unica do P0: o chamador ja segurou o caixa (FOR SHARE) ANTES desta trava.
+export async function travarTransferenciaRepository(transferenciaId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.empresaId, empresaId)))
+    .for("no key update");
+  return linha ?? null;
 }
 
 export async function buscarTransferenciaDetalheRepository(
@@ -373,28 +386,46 @@ export async function confirmarTransferenciaRepository(
   return vencedora;
 }
 
-export async function efetivarTransferenciasAgendadasRepository(agora = new Date(), db: ExecutorBanco = banco) {
-  const prazos: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
-  const efetivadas: Array<{ id: string }> = [];
-  for (const prazo of prazos) {
-    const linhas = await db
-      .update(transferencias)
-      .set({
-        status: "pendente",
-        prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
-        atualizadoEm: agora
-      })
-      .where(
-        and(
-          eq(transferencias.status, "agendada"),
-          eq(transferencias.tempoConfirmacao, prazo),
-          lt(transferencias.agendadaPara, agora)
-        )
+// S1 (R-164): `agendada -> pendente` MUDA a saida do caixa (`pendente` conta; `agendada` nao),
+// entao o cron deixou de efetivar em massa e passou a decidir POR LINHA, sob a porta do caixa.
+// A lista sai em ordem deterministica (caixa_id, id): quem trava varios caixas na mesma transacao
+// adquire os FOR SHARE sempre na mesma ordem, e o fechamento so trava UM caixa — sem ciclo.
+const PRAZOS_CONFIRMACAO: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
+
+export async function listarAgendadasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: transferencias.id,
+      caixaId: transferencias.caixaId,
+      tempoConfirmacao: transferencias.tempoConfirmacao
+    })
+    .from(transferencias)
+    .where(
+      and(
+        eq(transferencias.status, "agendada"),
+        inArray(transferencias.tempoConfirmacao, PRAZOS_CONFIRMACAO),
+        lt(transferencias.agendadaPara, agora)
       )
-      .returning({ id: transferencias.id });
-    efetivadas.push(...linhas);
-  }
-  return efetivadas;
+    )
+    .orderBy(transferencias.caixaId, transferencias.id);
+}
+
+export async function efetivarTransferenciaAgendadaRepository(
+  transferenciaId: string,
+  prazo: TempoConfirmacao,
+  agora: Date,
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "pendente",
+      prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
+      atualizadoEm: agora
+    })
+    .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.status, "agendada")))
+    .returning({ id: transferencias.id });
+  return linha ?? null;
 }
 
 export async function listarTransferenciasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {

@@ -1,5 +1,6 @@
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sqlTetosDaTransacaoApi } from "@padaria/db/sessao";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { schema, type Schema } from "@padaria/db/schema";
 import { env } from "../env.js";
@@ -31,7 +32,15 @@ export type ExecutorBanco = Banco | TransacaoBanco;
 export const banco = bancoBase;
 
 export async function executarEmTransacao<T>(callback: (tx: TransacaoBanco) => Promise<T> | T) {
-  return banco.transaction((tx) => Promise.resolve(callback(tx)));
+  return banco.transaction(async (tx) => {
+    // P0 lancamento x fechamento: com o FOR SHARE em toda escrita do caixa, uma transacao
+    // pendurada passaria a segurar o FECHAMENTO indefinidamente — antes ela so travava o proprio
+    // caixa via FK. Os tetos valem POR TRANSACAO (set_config LOCAL, definido em @padaria/db —
+    // SQL cru nao vive em api/src): migrations, better-auth e pooler ficam de fora, de proposito.
+    // Quem estourar o teto recebe 55P03 -> 503 (app.ts).
+    await tx.execute(sqlTetosDaTransacaoApi);
+    return callback(tx);
+  });
 }
 
 export async function executarComTransacaoOpcional<T>(

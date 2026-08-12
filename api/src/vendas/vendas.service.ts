@@ -17,6 +17,7 @@ import {
 import {
   atualizarVendaRepository,
   buscarVendaDetalheRepository,
+  travarVendaRepository,
   criarVendaRepository,
   listarVendasRepository,
   totaisVendasRepository
@@ -90,8 +91,16 @@ export async function atualizarVenda(
     dataPagamento: resolverDataPagamentoLancamento(dados.dataPagamento, perfil.permissoes)
   };
   return executarEmTransacao(async (tx) => {
+    // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
+    const previa = await buscarVendaDetalheRepository(vendaId, tx);
+    // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da venda.
+    const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
+    if (!(await travarVendaRepository(vendaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
+    // Retrato SOB a trava: a venda integrada pode ter mudado de CAIXA entre a leitura e o lock
+    // (revinculacao/CREARE) — a revalidacao compara empresa e caixa_id do retrato atual, sem
+    // retomar o lock do caixa.
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
-    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx);
+    await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     await atualizarVendaRepository(vendaId, normalizados, computar, tx);

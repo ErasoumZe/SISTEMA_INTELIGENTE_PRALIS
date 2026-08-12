@@ -25,7 +25,8 @@ import { deCentavos, liquidoDeSomasCentavos, paraCentavos } from "@padaria/share
 import { diaNegocio, somarDias } from "@padaria/shared/datas";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
-import { banco, type ExecutorBanco } from "../banco/conexao.js";
+import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
 import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
 import {
@@ -45,6 +46,7 @@ import {
   criarPdvComContaRepository,
   criarProdutoRepository,
   inativarChaveIntegracaoRepository,
+  buscarCaixaDaVendaRepository,
   registrarAlteracaoPosFechamentoRepository,
   listarCamposConfigRepository,
   listarChavesIntegracaoRepository,
@@ -63,6 +65,7 @@ import {
   upsertVinculoRepository,
   type IntegracaoChaveLinha
 } from "./integracoes.repository.js";
+import { travarVendaRepository } from "../vendas/vendas.repository.js";
 
 export const integracoesDisponiveis: Array<{ tipo: TipoIntegracao; nome: string }> = [
   { tipo: "vendas", nome: "Vendas do PDV" }
@@ -101,6 +104,12 @@ function gerarUlid(): string {
 
 function jsonCanonico(valor: DadosExternos): string {
   if (valor === null || typeof valor !== "object") return JSON.stringify(valor);
+  // S8: o hash roda sobre o payload JA parseado pelo zod, onde as datas viraram `Date` — e um
+  // `Date` serializado por `Object.keys` colapsa em `{}`. Sem esta linha, um re-envio que so muda
+  // a data/hora da venda era deduplicado como "sem novidade" e a venda NUNCA migrava de caixa.
+  // Efeito colateral aceito (registrado no relatorio): hashes armazenados antes desta correcao
+  // divergem no proximo re-envio identico — um "atualizado" idempotente unico, sem duplicar nada.
+  if (valor instanceof Date) return JSON.stringify(valor.toISOString());
   if (Array.isArray(valor)) return `[${valor.map((item) => jsonCanonico(item)).join(",")}]`;
   const objeto = valor as Record<string, DadosExternos>;
   return `{${Object.keys(objeto)
@@ -111,6 +120,16 @@ function jsonCanonico(valor: DadosExternos): string {
 
 function hashPayload(payload: VendaIntegracaoAgregadaPayload): string {
   return createHash("sha256").update(jsonCanonico(payload)).digest("hex");
+}
+
+// S8: corrida detectada sob a trava da venda. Viaja como `code` (e nao como ErroDominio) para
+// passar pelo mesmo caminho do teto de lock no catch de `receberVendaIntegracao`: grava o historico
+// da tentativa e só entao vira 503 — transitorio e re-tentavel, nunca 4xx (R-013).
+const CODIGO_VENDA_MUDOU_DE_CAIXA = "P0_VENDA_MUDOU_DE_CAIXA";
+
+function erroVendaMudouDeCaixa(): Error {
+  const erro = new Error("Venda mudou de caixa durante o processamento; tente novamente");
+  return Object.assign(erro, { code: CODIGO_VENDA_MUDOU_DE_CAIXA });
 }
 
 function hashChaveIntegracao(chave: string): string {
@@ -271,7 +290,9 @@ async function resolverColaborador(
 async function resolverVinculosVenda(
   chave: IntegracaoChaveLinha,
   payload: VendaIntegracaoAgregadaPayload,
-  db: ExecutorBanco
+  // P0: `TransacaoBanco` porque o caixa do periodo e TRAVADO (FOR SHARE) antes da decisao da
+  // trilha — fora de transacao o lock nao serializa nada.
+  db: TransacaoBanco
 ) {
   const configs = await obterConfigs(chave, db);
   const venda = payload.Venda;
@@ -343,7 +364,10 @@ async function resolverVinculosVenda(
 
   const colaboradorId = await resolverColaborador(chave, venda, db);
 
-  // Liga a venda ao caixa do mesmo PDV cujo periodo aberto contem a dataVenda (null se nao houver).
+  // Liga a venda ao caixa do mesmo PDV cujo periodo contem a dataVenda (null se nao houver).
+  // S8: o LOCK nao mora mais aqui — quem trava e `receberVendaIntegracao`, que conhece tambem o
+  // caixa de ORIGEM (re-envio pode mover a venda) e precisa adquirir os dois em ordem
+  // deterministica.
   const caixa =
     pdvId !== null ? await buscarCaixaParaVendaRepository(chave.empresaId, pdvId, venda.dataHoraVenda, db) : null;
   const caixaId = caixa?.id ?? null;
@@ -353,7 +377,6 @@ async function resolverVinculosVenda(
     clienteId,
     colaboradorId,
     caixaId,
-    caixaFechado: caixa?.status !== "aberto" && caixa !== null,
     produtosPorIdentificador,
     formasPagamentoPorIdentificador
   };
@@ -718,7 +741,9 @@ export async function receberVendaIntegracao(
   const hashConteudo = hashPayload(payload);
 
   try {
-    return await banco.transaction(async (tx) => {
+    // `executarEmTransacao` e a mesma porta de transacao das rotas do caixa — a ingestao ganha os
+    // MESMOS tetos por transacao (lock_timeout/idle) que protegem o fechamento.
+    return await executarEmTransacao(async (tx) => {
       const registro = await buscarRegistroIntegracaoRepository(chave, "venda", identificadorExterno, tx);
       if (registro?.hashConteudo === hashConteudo) {
         await registrarSemNovidadeRepository(chave, identificadorExterno, hashConteudo, payload, tx);
@@ -730,6 +755,43 @@ export async function receberVendaIntegracao(
       }
 
       const vinculos = await resolverVinculosVenda(chave, payload, tx);
+
+      // P0/S8 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, SEM
+      // guarda de status — venda integrada nunca e recusada. O re-envio pode MOVER a venda entre
+      // caixas (antigo -> novo -> nulo): ORIGEM e DESTINO entram na porta em ordem deterministica
+      // de id, e a decisao de trilha de cada lado sai do status sob o lock. Caixa FECHADO
+      // envolvido ganha a marca imutavel de pos-fechamento — inclusive o que PERDEU a venda.
+      const caixaOrigemId = registro?.registroSistemaId
+        ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx)
+        : null;
+      const caixaDestinoId = vinculos.caixaId;
+      const statusPorCaixa = new Map<string, string>();
+      const caixasEnvolvidos = [...new Set([caixaOrigemId, caixaDestinoId])]
+        .filter((caixaId): caixaId is string => Boolean(caixaId))
+        .sort();
+      for (const caixaId of caixasEnvolvidos) {
+        const trava = await travarCaixaCompartilhadoRepository(caixaId, tx);
+        // Linha ausente sob o lock e impossivel (a FK impede sumir); o lado SEGURO e tratar como
+        // fechado e registrar a trilha — nunca reusar retrato pre-lock.
+        statusPorCaixa.set(caixaId, trava?.status ?? "fechado");
+      }
+
+      // A ORIGEM acima veio de um SELECT sem trava. Se a venda mudou de caixa nesse meio-tempo
+      // (outro re-envio em voo, revinculacao da abertura retroativa), o conjunto travado esta
+      // errado: o caixa REAL perderia a venda sem nunca ter sido travado e, fechado, sem trilha.
+      // Travamos a LINHA da venda (ordem caixa -> linha, a mesma da porta) e relemos: divergiu,
+      // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
+      // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
+      if (registro?.registroSistemaId) {
+        // Linha ausente (sumiu, ou nao e desta empresa) = trava NAO adquirida: a comparacao abaixo
+        // seria duas leituras sem trava se passasse batido. Falha FECHADO — o 503 se repete ate
+        // alguem olhar, o que e melhor que mover dinheiro sem garantia (e continua 5xx: a venda
+        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave.
+        const travada = await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
+        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx) : null;
+        if (!travada || origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
+      }
+
       const venda = await criarOuAtualizarVendaIntegradaRepository(
         {
           chave,
@@ -741,9 +803,15 @@ export async function receberVendaIntegracao(
         tx
       );
 
-      if (vinculos.caixaFechado && vinculos.caixaId) {
+      if (caixaDestinoId && statusPorCaixa.get(caixaDestinoId) !== "aberto") {
         await registrarAlteracaoPosFechamentoRepository(
-          { empresaId: chave.empresaId, fechamentoCaixaId: vinculos.caixaId, vendaId: venda.id },
+          { empresaId: chave.empresaId, fechamentoCaixaId: caixaDestinoId, vendaId: venda.id },
+          tx
+        );
+      }
+      if (caixaOrigemId && caixaOrigemId !== caixaDestinoId && statusPorCaixa.get(caixaOrigemId) !== "aberto") {
+        await registrarAlteracaoPosFechamentoRepository(
+          { empresaId: chave.empresaId, fechamentoCaixaId: caixaOrigemId, vendaId: venda.id },
           tx
         );
       }
@@ -780,6 +848,15 @@ export async function receberVendaIntegracao(
     } catch {
       // Nem gravar o erro foi possivel (ex.: banco fora): propaga o original -> 500 -> agente re-tenta.
       throw error instanceof Error ? error : new Error(mensagemErro);
+    }
+    // Contencao transitoria (teto de lock 55P03; deadlock 40P01) NAO vira 422: 4xx faz o agente
+    // DESCARTAR a venda, e a R-013 proibe recusar venda integrada. O erro sobe intacto e o
+    // handler global responde 503 — que o agente re-tenta no proximo ciclo.
+    const codigoPostgres = (error as { code?: string }).code;
+    if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
+    // S8: mesma familia — contencao transitoria, resposta 503 que o agente re-tenta.
+    if (codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA) {
+      throw new ErroDominio(mensagemErro, 503, "LOCK_OCUPADO");
     }
     throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
   }

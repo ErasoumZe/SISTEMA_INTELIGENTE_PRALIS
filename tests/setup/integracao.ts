@@ -94,7 +94,17 @@ export async function fecharBloqueador(bloqueador: ClienteBloqueador) {
   await bloqueador.cliente.end().catch(() => undefined);
 }
 
+// pg_stat_activity e CONGELADA por transacao, e todo poll daqui roda NA conexao do bloqueador —
+// que esta dentro de `begin`. Sem descartar o snapshot, uma sessao que nasceu DEPOIS do primeiro
+// poll (conexao nova do pool da API) fica invisivel para sempre: `pg_blocking_pids` e vivo, mas a
+// LISTA de linhas nao e. Medido no P0: a despesa em espera (pg_locks granted=false) nao aparecia e
+// a cadeia parava em 1; o proprio retrato congelado ainda mostrava a query ANTERIOR da sessao.
+async function descartarSnapshotDeAtividade(cliente: pg.Client) {
+  await cliente.query("select pg_stat_clear_snapshot()");
+}
+
 export async function sessoesBloqueadasPor({ cliente, pid }: ClienteBloqueador) {
+  await descartarSnapshotDeAtividade(cliente);
   const { rows } = await cliente.query<{ total: number }>(
     `select count(*)::int as total
        from pg_stat_activity
@@ -106,8 +116,12 @@ export async function sessoesBloqueadasPor({ cliente, pid }: ClienteBloqueador) 
   return rows[0]?.total ?? 0;
 }
 
-/** Espera ate que `minimo` sessoes estejam bloqueadas POR este bloqueador. Condicao, nao sleep. */
-export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 20_000) {
+/**
+ * Espera ate que `minimo` sessoes estejam bloqueadas POR este bloqueador. Condicao, nao sleep.
+ * Teto padrao ABAIXO do `lock_timeout` de 10s das transacoes da API — passar disso, a rota presa
+ * morre por 55P03 e o caso falharia pelo motivo errado.
+ */
+export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 8_000) {
   const inicio = Date.now();
   while (Date.now() - inicio < limiteMs) {
     if ((await sessoesBloqueadasPor(bloqueador)) >= minimo) return true;
@@ -121,6 +135,75 @@ export async function esperarBloqueioPor(bloqueador: ClienteBloqueador, minimo =
 // espera o `transactionid` de quem segura, e a segunda espera o `tuple` lock da PRIMEIRA — entao
 // `pg_blocking_pids` da segunda traz a primeira, nao o dono, e a contagem para em 1 para sempre.
 // Medido no grafo de `pg_stat_activity`: dono=1206, primeira=1207 ([1206]), segunda=1209 ([1207]).
+
+/**
+ * CADEIA transitiva de espera a partir do bloqueador. Fecha o furo da NOTA acima: com duas rotas
+ * reais em fila (fechamento atras do gate, lancamento atras do fechamento), a segunda aparece
+ * bloqueada pela PRIMEIRA — nao pelo bloqueador. BFS em JS sobre um retrato unico do grafo de
+ * `pg_blocking_pids`; mais legivel que CTE recursiva e imune a ciclo.
+ */
+export async function sessoesNaCadeiaDe({ cliente, pid }: ClienteBloqueador): Promise<number[]> {
+  await descartarSnapshotDeAtividade(cliente);
+  const { rows } = await cliente.query<{ pid: number; bloqueadores: number[] }>(
+    `select pid, pg_blocking_pids(pid) as bloqueadores
+       from pg_stat_activity
+      where datname = current_database() and pid <> pg_backend_pid()`
+  );
+  const alcancados = new Set<number>();
+  const fila = [pid];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    for (const linha of rows) {
+      if (alcancados.has(linha.pid)) continue;
+      if (linha.bloqueadores.includes(atual)) {
+        alcancados.add(linha.pid);
+        fila.push(linha.pid);
+      }
+    }
+  }
+  return [...alcancados];
+}
+
+/**
+ * Espera ate a cadeia transitiva do bloqueador ter `minimo` sessoes. Condicao, nao sleep.
+ * Teto padrao ABAIXO do `lock_timeout` de 10s das transacoes da API: se a cadeia nao formou em
+ * 8s, esperar mais so faria a rota presa morrer por 55P03 e o caso falhar pelo motivo errado.
+ */
+export async function esperarCadeiaDeBloqueio(bloqueador: ClienteBloqueador, minimo = 1, limiteMs = 8_000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < limiteMs) {
+    if ((await sessoesNaCadeiaDe(bloqueador)).length >= minimo) return true;
+    await new Promise((resolver) => setTimeout(resolver, 25));
+  }
+  return false;
+}
+
+/**
+ * SONDA DE ORDEM dos locks (mata a mutacao "travar o caixa DEPOIS de inserir"). Devolve as tabelas
+ * em que as sessoes bloqueadas DIRETAMENTE por este bloqueador ja detem lock de ESCRITA enquanto
+ * esperam. Uma rota que trava o caixa ANTES de escrever esta parada no `FOR SHARE` e nao segura
+ * RowExclusiveLock em tabela de lancamento nenhuma; uma rota que escreveu primeiro esta parada no
+ * proprio INSERT/UPDATE e ja segura o RowExclusiveLock da tabela.
+ */
+export async function travasDeEscritaDaSessaoBloqueada({ cliente, pid }: ClienteBloqueador): Promise<string[]> {
+  await descartarSnapshotDeAtividade(cliente);
+  const { rows } = await cliente.query<{ tabela: string }>(
+    `select distinct l.relation::regclass::text as tabela
+       from pg_locks l
+      where l.locktype = 'relation'
+        and l.mode in ('RowExclusiveLock', 'ShareRowExclusiveLock', 'ExclusiveLock', 'AccessExclusiveLock')
+        and l.granted
+        and l.pid in (
+          select a.pid
+            from pg_stat_activity a
+           where a.datname = current_database()
+             and a.pid <> pg_backend_pid()
+             and $1 = any(pg_blocking_pids(a.pid))
+        )`,
+    [pid]
+  );
+  return rows.map((linha) => linha.tabela);
+}
 
 // Precisa de um TICK de macrotask, nao de microtask: com `Promise.resolve(marcador)` a corrida seria
 // decidida antes de `promessa.then(...)` rodar, e a funcao devolveria `true` ate para uma promessa JA
@@ -162,10 +245,24 @@ const SNAPSHOT_POR_TABELA: Record<string, string> = {
   retirada: `select jsonb_build_object(
       'raiz',    (select to_jsonb(t) from retiradas t where t.id = $1),
       'debitos', coalesce((select jsonb_agg(to_jsonb(d) order by d.id) from debitos_colaboradores d where d.retirada_id = $1), '[]'::jsonb)
+    ) as snapshot`,
+  venda: `select jsonb_build_object(
+      'raiz',       (select to_jsonb(t) from vendas t where t.id = $1),
+      'produtos',   coalesce((select jsonb_agg(to_jsonb(p) order by p.id) from vendas_produtos p where p.venda_id = $1), '[]'::jsonb),
+      'pagamentos', coalesce((select jsonb_agg(to_jsonb(g) order by g.id) from vendas_pagamentos g where g.venda_id = $1), '[]'::jsonb),
+      'trilha',     coalesce((select jsonb_agg(to_jsonb(a) order by a.id) from alteracoes_pos_fechamento_caixa a where a.venda_id = $1), '[]'::jsonb)
+    ) as snapshot`,
+  transferencia: `select jsonb_build_object(
+      'raiz',       (select to_jsonb(t) from transferencias t where t.id = $1),
+      'candidatos', coalesce((select jsonb_agg(to_jsonb(c) order by c.id) from transferencias_destinos_candidatos c where c.transferencia_id = $1), '[]'::jsonb),
+      'lacres',     coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from lacres l where l.transferencia_id = $1), '[]'::jsonb)
     ) as snapshot`
 };
 
-export async function snapshotDoLancamento(tabela: "despesa" | "mercadoria" | "retirada", id: string) {
+export async function snapshotDoLancamento(
+  tabela: "despesa" | "mercadoria" | "retirada" | "venda" | "transferencia",
+  id: string
+) {
   const sql = SNAPSHOT_POR_TABELA[tabela];
   if (!sql) throw new Error(`snapshot nao definido para ${tabela}`);
   const linha = await consultarUm<{ snapshot: unknown }>(sql, [id]);

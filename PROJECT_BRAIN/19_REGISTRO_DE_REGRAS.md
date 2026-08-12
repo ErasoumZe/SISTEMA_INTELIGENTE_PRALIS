@@ -725,6 +725,57 @@ Notas de desenho:
   com fechamento pela rota real (nunca `UPDATE` de status) e prova por mutação de que remover o
   bloqueio derruba o teste.
 
+### Caixa — concorrência lançamento × fechamento (11/08/2026, P0)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Origem      | Status | Teste                                                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **R-164** 🆕 | **Toda escrita que possa alterar os sete totais toma `FOR SHARE` na linha de `fechamentos_caixa` como PRIMEIRO lock e revalida o status PÓS-lock** — inclusive o cron de agendadas (S1: caixa aberto efetiva `agendada→pendente`; fechado não altera status nem totais) e o cancelamento de série da R-063 (S2: parcela presa a caixa fechado não é apagada; caixas distintos travados em ordem determinística). Fechamento/cofre/horário/abertura seguem com `FOR UPDATE`. Ordem única: caixa → linha do lançamento → filhas. Se o lançamento segura o lock primeiro, o fechamento **espera e o inclui** nos totais congelados; se o fechamento vence, o lançamento comum **espera, revalida e é recusado sem escrita** — nunca cai para `caixa_id = null` em silêncio, inclusive a retaguarda usando a conta do PDV (Q2). Venda CREARE é a única exceção: o mesmo lock, **sem** guarda de status — vincula a caixa fechado com a trilha da R-013 decidida sob o lock. Confirmação de transferência que alteraria entrada de caixa já fechado é **bloqueada imediatamente** (Q4, aceite expresso do José); fluxo auditado é outra OS. A mesma decisão cobre TODA mudança de status/conta/valor/computar que altere os sete totais: troca de conta do PDV com caixa aberto é **recusada sob a porta** (S3 — PDV `FOR UPDATE` + caixa `FOR SHARE`; renomear segue livre); abertura por lacre **só reivindica transferência com `caixa_id` nulo** — nunca migra em silêncio a de outro caixa (S4 — recusa no serviço + predicado atômico no UPDATE); **aprovar/recusar NF-e entram na porta em transação** — caixa fechado recusa, retrato decidido sob a trava (S5); re-envio CREARE que MOVE a venda **trava ORIGEM e DESTINO em ordem determinística** e deixa a trilha imutável também no caixa que **perdeu** a venda (S8 — venda integrada continua nunca sendo recusada); reescrever contas no PUT/confirmar **nunca altera um segundo caixa** — provado por teste, nenhum lock novo era necessário (S6). S7 (`liberar-trava` sem preHandler) **não altera os sete totais** — issue de segurança separada, sem código nesta branch. Zero migration | José, 11/08 | ✅     | `caixa-lancamento-vs-fechamento` (15) · `caixa-fechamento-bordas` (11+1 estresse) · `caixa-cron-recorrencia-vs-fechamento` (7) · `caixa-portas-s3-s8` (14) + 25 mutações |
+
+Notas de desenho:
+
+- Contrato central: `travarCaixaCompartilhadoRepository` (por PK, sem join, `TransacaoBanco`
+  obrigatório) + `travarCaixaAbertoDoAtor`/`obterCaixaDaSaida` como porta única das cinco classes
+  (despesa, mercadoria, retirada, venda, transferência — POST e PUT). Venda e transferência
+  ganharam trava de linha (`FOR NO KEY UPDATE`) que faltava. Erros oficiais reutilizados: 400
+  "Abra um caixa..." na criação, 403 da Tesouraria na edição, 400 "Caixa ja fechado" em Q2/Q4.
+- Espera com teto **por transação da API** (`set_config` LOCAL de `lock_timeout` 10s e
+  `idle_in_transaction_session_timeout` 60s, em `@padaria/db/sessao`): migrations, better-auth e
+  pooler ficam de fora. Estouro vira **503 `LOCK_OCUPADO`** (transitório — o agente CREARE
+  re-tenta 5xx; um 4xx descartaria venda, o que a R-013 proíbe).
+- Grafo para o futuro P0 de saldo insuficiente, registrado e NÃO implementado: o lock de conta
+  entra **depois** do caixa (caixa → conta em ordem determinística de id → lançamento →
+  lacres/filhas). Antecipar a conta é impossível no ramo do operador, que deriva a conta do caixa.
+- Consequência operacional da Q4, **com aceite expresso do José (11/08)**: transferência genérica
+  cofre→caixa com destino na conta do PDV, criada e **não confirmada antes do fechamento**, fica
+  presa em `pendente` sem caminho de resolução até existir o fluxo auditado próprio. O
+  retorno/sangria ao cofre confirmado após o fechamento **continua passando** (não altera os
+  totais; teste T4). Espelho da S1: agendada vencida presa a caixa fechado permanece `agendada`
+  (reavaliada por ciclo) até o mesmo fluxo futuro.
+- **Não restou caminho financeiro fora da porta.** S3/S4/S5/S8 entraram por decisão expressa do
+  José (11/08); S6 está **provado por teste** (reescrever contas no PUT/confirmar não altera um
+  segundo caixa — nenhum lock novo era necessário); S7 (`liberar-trava` sem preHandler) **não
+  altera os sete totais** e vive como issue de segurança separada
+  (`ISSUE-SEGURANCA-LIBERAR-TRAVA-SEM-PREHANDLER.md`, D:\Conteudo Sistema Pralis -ago), sem
+  código nesta branch. Bônus do RED de S8: bug pré-existente de dedup — o hash canônico
+  serializava `Date` como `{}` (datas fora do hash; re-envio que só mudava data/hora virava
+  `sem_novidade` e a venda nunca migrava) — corrigido no próprio hash. Detalhe no relatório
+  `RELATORIO-P0-CONCORRENCIA-LANCAMENTO-FECHAMENTO-2026-08-11.md` (D:\Conteudo Sistema Pralis -ago).
+- **A porta vale também para o que ALIMENTA a decisão, não só para a escrita** (revisão
+  independente, 12/08). Duas janelas fechadas depois: (1) a **abertura de caixa** decidia o destino
+  do fundo do lacre pelo retrato do PDV lido sem trava — hoje `travarPdvDaAberturaRepository`
+  (**`FOR SHARE`**, primeiro lock da abertura) estabiliza o PDV e a conta é relida ATUAL;
+  (2) o **re-envio CREARE** lia a origem da venda sem trava e nunca revalidava — hoje trava a linha
+  da venda (`FOR NO KEY UPDATE`, ordem caixa → linha) e, se a origem real mudou, aborta com
+  **503 `LOCK_OCUPADO`** sem escrever (a R-013 proíbe 4xx: o agente re-tenta e o ciclo seguinte
+  registra a trilha do caixa que perdeu a venda).
+- **Por que `FOR SHARE` e não `FOR KEY SHARE` no PDV**: `KEY SHARE` só conflita com `FOR UPDATE`,
+  então a garantia dependeria da convenção de `salvarPdv` travar antes de escrever — e como o
+  Postgres decide key-vs-no-key pelos valores modificados, uma troca só de conta produz
+  `NO KEY UPDATE`. Qualquer UPDATE cru em `pdvs` (script, job, rota futura) reabriria a janela em
+  silêncio. Provado por mutação: rebaixar para `key share` derruba o teste `S3-c`. **Consequência
+  operacional**: alteração em LOTE de `pdvs` passa a serializar com aberturas em voo (teto de 10s
+  → 503) — fazer em blocos pequenos ou fora do horário de caixa.
+
 ---
 
 ## §1-D · Contradições abertas em 05/08/2026

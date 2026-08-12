@@ -13,7 +13,8 @@ import type {
   RecusarMercadoriaPayload
 } from "@padaria/shared/mercadorias";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
+import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import {
   exigirDiscriminacaoConferida,
   itemMercadoriaParaDiscriminacao,
@@ -21,7 +22,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
+  obterCaixaDaSaidaParaEdicao,
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
@@ -98,9 +101,11 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     const normalizados = resolverObservacaoDoLancamento({ ...dados, dataPagamento: dados.dataPagamento ?? null });
     // A-1: a retaguarda lanca sem caixa aberto proprio (`caixa` vem `null`); o operador continua
     // exigindo o dele.
-    const caixa = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
+    const { caixa, caixaFechadoNaCorrida } = await obterCaixaDaSaida(dados.empresaId, perfil, tx);
     // R-121: para o operador de Caixa a saida tem de sair da conta do PDV aberto.
     const lancamento = exigirContaDoCaixaNoLancamento(normalizados, caixa, perfil);
+    // Q2: retaguarda com a conta do PDV de um caixa que fechou na corrida e recusada.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, lancamento.contaOrigemId);
     // So conta para o caixa o que saiu da conta do PDV dele.
     const caixaId = caixaIdDaSaida(caixa, lancamento);
 
@@ -204,12 +209,14 @@ export async function atualizarMercadoria(
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_editar");
   validarMercadoria(dados);
   return executarEmTransacao(async (tx) => {
+    // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
+    const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
     if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
-    const caixa = await validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, tx);
+    const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
@@ -228,6 +235,8 @@ export async function atualizarMercadoria(
       caixa,
       perfil
     );
+    // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
+    exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, caixaIdDaSaida(caixa, normalizados), tx);
     return { id: mercadoriaId, computar };
@@ -271,6 +280,35 @@ export async function listarMercadoriasAguardandoAprovacao(
   return listarMercadoriasAguardandoAprovacaoRepository(query, empresasPermitidasIds);
 }
 
+// S5 (R-164): aprovar/recusar NF-e muda status e computar — altera os sete totais quando a
+// mercadoria carrega `caixa_id` (o PUT da retaguarda pode carimbar o caixa antes da aprovacao).
+// As duas rotas entram na porta: transacao, caixa PRIMEIRO (FOR SHARE + revalidacao; fechado
+// recusa — totais congelados nao ganham vida nova), linha da mercadoria depois, decisao sobre o
+// retrato SOB a trava. Se um PUT concorrente carimbou OUTRO caixa entre as duas leituras,
+// recomecar e mais barato (e sem risco de ciclo) que travar fora da ordem unica.
+async function prepararAtoDeAprovacao(
+  mercadoriaId: string,
+  empresaId: string,
+  perfil: PerfilUsuario,
+  tx: TransacaoBanco
+) {
+  const previa = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+  if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw new Error("Registro nao encontrado");
+  if (previa.empresaId !== empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
+  if (previa.caixaId) {
+    const trava = await travarCaixaCompartilhadoRepository(previa.caixaId, tx);
+    if (trava?.status !== "aberto") throw new Error("Caixa ja fechado");
+  }
+  if (!(await travarMercadoriaRepository(mercadoriaId, empresaId, tx))) throw new Error("Registro nao encontrado");
+  const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+  if (!existente || existente.status !== "aguardando_aprovacao") {
+    throw new Error("Mercadoria nao esta aguardando aprovacao");
+  }
+  if ((existente.caixaId ?? null) !== (previa.caixaId ?? null)) {
+    throw new Error("Lancamento mudou de caixa durante a aprovacao: tente novamente");
+  }
+}
+
 // Aprova a mercadoria da NF-e definindo se computa (decisao da reuniao: nota so fiscal nao computa).
 export async function aprovarMercadoria(
   mercadoriaId: string,
@@ -278,13 +316,12 @@ export async function aprovarMercadoria(
   perfil: PerfilUsuario
 ): Promise<{ id: string; computar: boolean }> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
-  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
-  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
-  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
-  const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar);
-  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
-  return { id: mercadoriaId, computar: dados.computar };
+  return executarEmTransacao(async (tx) => {
+    await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar, tx);
+    if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+    return { id: mercadoriaId, computar: dados.computar };
+  });
 }
 
 // Recusa a mercadoria da NF-e (aguardando_aprovacao -> recusado).
@@ -294,11 +331,10 @@ export async function recusarMercadoria(
   perfil: PerfilUsuario
 ): Promise<{ id: string }> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
-  const mercadoria = await buscarMercadoriaDetalheRepository(mercadoriaId);
-  if (!mercadoria || !podeAcessarEmpresa(perfil, mercadoria.empresaId)) throw new Error("Registro nao encontrado");
-  if (mercadoria.empresaId !== dados.empresaId) throw new Error("Nao e possivel mover o lancamento de empresa");
-  if (mercadoria.status !== "aguardando_aprovacao") throw new Error("Mercadoria nao esta aguardando aprovacao");
-  const afetadas = await recusarMercadoriaRepository(mercadoriaId, dados.empresaId);
-  if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
-  return { id: mercadoriaId };
+  return executarEmTransacao(async (tx) => {
+    await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    const afetadas = await recusarMercadoriaRepository(mercadoriaId, dados.empresaId, tx);
+    if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
+    return { id: mercadoriaId };
+  });
 }

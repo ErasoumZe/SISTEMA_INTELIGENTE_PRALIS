@@ -356,9 +356,11 @@ export async function listarMercadoriasAguardandoAprovacaoRepository(
 export async function aprovarMercadoriaRepository(
   mercadoriaId: string,
   empresaId: string,
-  computar: boolean
+  computar: boolean,
+  // S5 (R-164): a aprovacao roda em transacao, sob a porta do caixa — TransacaoBanco obrigatorio.
+  db: TransacaoBanco
 ): Promise<number> {
-  const atualizadas = await banco
+  const atualizadas = await db
     .update(mercadorias)
     .set({ status: "aprovado", computar })
     .where(
@@ -374,8 +376,12 @@ export async function aprovarMercadoriaRepository(
 
 // Recusa (aguardando_aprovacao -> cancelado; "cancelado" e o status ja permitido pelo CHECK da
 // tabela para lancamentos descartados). Mesma trava por status.
-export async function recusarMercadoriaRepository(mercadoriaId: string, empresaId: string): Promise<number> {
-  const atualizadas = await banco
+export async function recusarMercadoriaRepository(
+  mercadoriaId: string,
+  empresaId: string,
+  db: TransacaoBanco
+): Promise<number> {
+  const atualizadas = await db
     .update(mercadorias)
     .set({ status: "cancelado" })
     .where(
