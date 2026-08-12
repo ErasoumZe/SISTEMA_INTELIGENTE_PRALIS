@@ -197,6 +197,100 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
     ).toMatchObject({ conta_id: idsTeste.contaBanco });
   });
 
+  /**
+   * A outra metade da janela S3 (revisao r4): o PUT que troca a conta pode VENCER uma abertura em
+   * voo — se a abertura decide com o retrato PRE-lock do PDV, o fundo do lacre confirma na conta
+   * ANTIGA de um PDV que ja aponta para outra. A abertura tem de estabilizar o PDV sob lock: quem
+   * chega durante a troca espera, rele a conta NOVA e o lacre destinado a conta antiga e recusado
+   * sem nenhuma escrita.
+   */
+  it("Deve_RecusarOLacreDaContaAntiga_Quando_ATrocaDeContaVenceAAberturaEmVoo", async () => {
+    sequencia += 1;
+    const lacre = `P0-S3C-${sequencia}`;
+    const contaC = await inject("POST", "/api/contas", cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      nome: `Conta S3c destino ${sequencia}`
+    });
+    expect(contaC.statusCode, contaC.body).toBe(201);
+    const contaCId = json<{ data: { id: string } }>(contaC).data.id;
+    const contaN = await inject("POST", "/api/contas", cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      nome: `Conta S3c nova ${sequencia}`
+    });
+    expect(contaN.statusCode, contaN.body).toBe(201);
+    const contaNId = json<{ data: { id: string } }>(contaN).data.id;
+    const pdv = await inject("POST", "/api/pdvs", cookieAdmin, {
+      empresaId: idsTeste.empresaA,
+      nome: `PDV S3c ${sequencia}`,
+      contaId: contaCId,
+      ativo: true
+    });
+    expect(pdv.statusCode, pdv.body).toBe(201);
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+
+    const criada = await inject("POST", "/api/transferencias", cookieGerente, {
+      empresaId: idsTeste.empresaA,
+      dataReferencia: hoje,
+      descricao: lacre,
+      valorOriginal: 35,
+      contaOrigemId: idsTeste.contaBanco,
+      contaDestinoId: contaCId,
+      contasDestinoIds: [contaCId],
+      nLacreDoc: lacre
+    });
+    expect(criada.statusCode, criada.body).toBe(201);
+    const transferenciaId = json<{ data: { id: string } }>(criada).data.id;
+
+    const usuarioCaixa = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+      usuariosTeste.caixa.email
+    ]);
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      // O PUT do S3 em voo: FOR UPDATE no PDV + troca da conta, ainda sem commit (mesmos passos
+      // de travarPdvRepository + salvarPdvRepository).
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from pdvs where id = $1 for update", [pdvId]);
+      await bloqueador.cliente.query("update pdvs set conta_id = $2 where id = $1", [pdvId, contaNId]);
+
+      const abertura = inject("POST", "/api/caixa/abrir", cookieCaixa, {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: usuarioCaixa!.id,
+        dataHoraAbertura: "2026-07-31T08:30",
+        lacreAbertura: lacre
+      });
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+      await bloqueador.cliente.query("commit");
+
+      // A abertura rele o PDV POS-troca: o lacre e destinado a conta antiga -> recusa integral.
+      const resposta = await abertura;
+      expect(resposta.statusCode, resposta.body).toBe(400);
+      expect(resposta.body).toMatch(/destino desta transfer/i);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    // Nada foi escrito: sem caixa no PDV, lacre integro, transferencia pendente e sem caixa.
+    const caixasNoPdv = await consultarUm<{ total: string }>(
+      "select count(*) as total from fechamentos_caixa where pdv_id = $1",
+      [pdvId]
+    );
+    expect(Number(caixasNoPdv?.total ?? "0")).toBe(0);
+    expect(
+      await consultarUm<{ rompido: boolean }>("select rompido from lacres where numero = $1", [lacre])
+    ).toMatchObject({ rompido: false });
+    expect(
+      await consultarUm<{ caixa_id: string | null; status: string; conta_destino_id: string }>(
+        "select caixa_id, status, conta_destino_id from transferencias where id = $1",
+        [transferenciaId]
+      )
+    ).toMatchObject({ caixa_id: null, status: "pendente", conta_destino_id: contaCId });
+    expect(await consultarUm<{ conta_id: string }>("select conta_id from pdvs where id = $1", [pdvId])).toMatchObject({
+      conta_id: contaNId
+    });
+  });
+
   // ------------------------------------------------------------------------------------------
   // S4 — abertura por lacre nao migra transferencia ja vinculada a outro caixa.
   // ------------------------------------------------------------------------------------------
