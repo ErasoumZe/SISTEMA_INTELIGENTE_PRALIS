@@ -19,13 +19,20 @@
  * "divergencias" no fim da execucao). A linha 5 de cada aba tem o cabecalho real; o dado comeca na 11.
  */
 import "dotenv/config";
-import { readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import pg from "pg";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { abrirPlanilha, type Planilha } from "../db/planilha-xlsx.js";
-import { ehTotalizadorPlanilha, normalizarTextoPlanilha } from "./seed-planilha-regras.js";
+import {
+  chavesRepetidas,
+  ehTotalizadorPlanilha,
+  estoqueDaPlanilha,
+  normalizarTextoPlanilha,
+  siglaDeUnidade
+} from "./seed-planilha-regras.js";
 import { schema } from "../db/src/schema/schema.js";
 import {
   areas,
@@ -37,17 +44,35 @@ import {
   gruposPatrimonio,
   gruposRetiradas,
   produtos,
-  setores
+  setores,
+  unidadesMedida
 } from "../db/src/schema/index.js";
 
 const ARQUIVO_PADRAO = "db/planilhas/CICLUZ GP - LANÇAMENTO (VND_MER_DES_RET).xlsx";
+const DIRETORIO_DAS_PLANILHAS = "CADASTRO DE PRODUTOS/tabela";
+
+/**
+ * TODAS as planilhas de produto que existem no disco, com hash. Existe mais de uma, com conteudo
+ * diferente — e sem isto ninguem sabe qual foi lida. O relatorio imprime a lista e marca a
+ * escolhida, para que a fonte nunca seja suposicao.
+ */
+function planilhasDeProdutoNoDisco(): Array<{ nome: string; caminho: string; sha256: string }> {
+  return readdirSync(DIRETORIO_DAS_PLANILHAS)
+    .filter((item) => item.includes("CENTRAL PRODUTOS (BASE)") && item.endsWith(".xlsx"))
+    .sort()
+    .map((nome) => {
+      const caminho = join(DIRETORIO_DAS_PLANILHAS, nome);
+      return { nome, caminho, sha256: createHash("sha256").update(readFileSync(caminho)).digest("hex") };
+    });
+}
+
+// CRITERIO DE ESCOLHA (nao e data, nao e tamanho): o nome termina em "(1).xlsx". Foi a decisao
+// tomada quando o seed nasceu e continua valendo — mas agora fica IMPRESSA no relatorio.
+const CRITERIO_DA_FONTE = 'nome contem "CENTRAL PRODUTOS (BASE)" e termina em "(1).xlsx"';
 const ARQUIVO_PRODUTOS_PADRAO = (() => {
-  const diretorio = "CADASTRO DE PRODUTOS/tabela";
-  const nome = readdirSync(diretorio).find(
-    (item) => item.includes("CENTRAL PRODUTOS (BASE)") && item.endsWith("(1).xlsx")
-  );
-  if (!nome) throw new Error(`Planilha de produtos esperada em ${diretorio}/*CENTRAL PRODUTOS (BASE)*(1).xlsx`);
-  return join(diretorio, nome);
+  const escolhida = planilhasDeProdutoNoDisco().find((item) => item.nome.endsWith("(1).xlsx"));
+  if (!escolhida) throw new Error(`Planilha de produtos esperada em ${DIRETORIO_DAS_PLANILHAS}/*(1).xlsx`);
+  return escolhida.caminho;
 })();
 
 /** O dado util comeca na linha 11 em todas as abas de configuracao (1-10 sao cabecalho/rotulos). */
@@ -111,6 +136,13 @@ function distintos(valores: string[]): string[] {
   return [...new Set(valores)];
 }
 
+/** Amostra curta entre parenteses, para o relatorio nao virar uma parede de texto. */
+function amostra(valores: readonly string[], quantos = 3): string {
+  if (!valores.length) return "";
+  const primeiros = valores.slice(0, quantos).join(" | ");
+  return ` (${primeiros}${valores.length > quantos ? ` ... +${valores.length - quantos}` : ""})`;
+}
+
 // --------------------------------------------------------------------------------------------
 // Leitura da planilha
 // --------------------------------------------------------------------------------------------
@@ -126,10 +158,17 @@ type ProdutoLido = {
   cDe: string;
   quantidadeCaixa: number;
   quantidadeIndividual: string;
+  /** Sigla da MEDIDA BASE (col. G) — vira `unidade_individual_id` casando com o cadastro de Unidades. */
+  unidadeIndividual: string;
   medidaCompra: string;
   grupoMercadoria: string;
   tipo: "revenda" | "transformacao";
   status: "ativo" | "inativo";
+  estoqueMin: number | null;
+  estoqueMax: number | null;
+  /** `true` quando a planilha traz maximo MENOR que minimo — nao e corrigido, e relatado. */
+  estoqueInvertido: boolean;
+  setorEstoque: string;
 };
 
 type Extracao = {
@@ -253,6 +292,8 @@ function lerPlanilha(planilha: Planilha, planilhaProdutos: Planilha): Extracao {
     const quantidadeCaixa = Number(celula(linha, "N").replace(",", "."));
     const quantidadeIndividual = Number(celula(linha, "F").replace(/\./g, "").replace(",", "."));
     const statusTnp = celula(linha, "AB") || celula(linha, "C");
+    // AE = ESTOQUE MIN · AG = ESTOQUE MAX · AI = SETOR ESTOQUE (cabecalho real na linha 5).
+    const estoque = estoqueDaPlanilha(celula(linha, "AE"), celula(linha, "AG"));
     produtosLidos.push({
       descricao: celula(linha, "H") || nome,
       codigoBarras: normalizarCodigoBarras(celula(linha, "J")),
@@ -262,10 +303,15 @@ function lerPlanilha(planilha: Planilha, planilhaProdutos: Planilha): Extracao {
       quantidadeCaixa: Number.isFinite(quantidadeCaixa) && quantidadeCaixa > 0 ? Math.round(quantidadeCaixa) : 1,
       quantidadeIndividual:
         Number.isFinite(quantidadeIndividual) && quantidadeIndividual > 0 ? String(quantidadeIndividual) : "1",
+      unidadeIndividual: siglaDeUnidade(celula(linha, "G")),
       medidaCompra: celula(linha, "O"),
       grupoMercadoria: ehTransformacao ? celula(linha, "T") : celula(linha, "R"),
       tipo: ehTransformacao ? "transformacao" : "revenda",
-      status: statusTnp === "ATIVO" ? "ativo" : "inativo"
+      status: statusTnp === "ATIVO" ? "ativo" : "inativo",
+      estoqueMin: estoque.minimo,
+      estoqueMax: estoque.maximo,
+      estoqueInvertido: estoque.invertido,
+      setorEstoque: celula(linha, "AI")
     });
   }
 
@@ -321,10 +367,53 @@ function areaDoSetor(nomeDoSetor: string): string | undefined {
 const caminho = argumento("arquivo") ?? ARQUIVO_PADRAO;
 const caminhoProdutos = argumento("produtos") ?? ARQUIVO_PRODUTOS_PADRAO;
 console.info(`Planilha: ${caminho}`);
-console.info(`Cadastro de produtos: ${caminhoProdutos}`);
 console.info(APLICAR ? "MODO: APLICAR (grava no banco)" : "MODO: DRY-RUN (nao grava nada)");
 
+// --- Fonte do cadastro de produtos: QUAL arquivo, com que hash, e por que este.
+const candidatasDeProduto = planilhasDeProdutoNoDisco();
+console.info(`\n=== FONTE DO CADASTRO DE PRODUTOS ===`);
+console.info(`  criterio: ${CRITERIO_DA_FONTE}`);
+for (const candidata of candidatasDeProduto) {
+  const marca = candidata.caminho === caminhoProdutos ? ">> ESCOLHIDA" : "   (nao usada)";
+  console.info(`  ${marca}  ${candidata.nome}`);
+  console.info(`                sha256 ${candidata.sha256}`);
+}
+if (!candidatasDeProduto.some((item) => item.caminho === caminhoProdutos)) {
+  console.info(`  >> ESCOLHIDA (via --produtos)  ${caminhoProdutos}`);
+}
+
 const extracao = lerPlanilha(abrirPlanilha(caminho), abrirPlanilha(caminhoProdutos));
+
+// --- Diferencas entre as duas planilhas: o que muda no CATALOGO, nao no arquivo inteiro.
+// Comparar hash so diz "sao diferentes"; o que interessa e quais produtos entram, saem ou mudam.
+if (candidatasDeProduto.length > 1) {
+  const chaveDoProduto = (item: ProdutoLido) => item.codigoBarras || item.descricao;
+  const daEscolhida = new Map(extracao.produtos.map((item) => [chaveDoProduto(item), item]));
+  console.info(`\n=== DIFERENCAS ENTRE AS PLANILHAS (linhas TNP do catalogo) ===`);
+  for (const outra of candidatasDeProduto.filter((item) => item.caminho !== caminhoProdutos)) {
+    try {
+      const daOutra = new Map(
+        lerPlanilha(abrirPlanilha(caminho), abrirPlanilha(outra.caminho)).produtos.map((item) => [
+          chaveDoProduto(item),
+          item
+        ])
+      );
+      const soNaEscolhida = [...daEscolhida.keys()].filter((chave) => !daOutra.has(chave));
+      const soNaOutra = [...daOutra.keys()].filter((chave) => !daEscolhida.has(chave));
+      const mudaram = [...daEscolhida.entries()].filter(([chave, item]) => {
+        const par = daOutra.get(chave);
+        return par && JSON.stringify(par) !== JSON.stringify(item);
+      });
+      console.info(`  ${outra.nome}:`);
+      console.info(`    ${daOutra.size} produto(s) TNP contra ${daEscolhida.size} na escolhida`);
+      console.info(`    so na ESCOLHIDA: ${soNaEscolhida.length}${amostra(soNaEscolhida)}`);
+      console.info(`    so na OUTRA:     ${soNaOutra.length}${amostra(soNaOutra)}`);
+      console.info(`    mesmo produto com dado diferente: ${mudaram.length}${amostra(mudaram.map(([c]) => c))}`);
+    } catch (erro) {
+      console.info(`  ${outra.nome}: NAO FOI POSSIVEL COMPARAR (${(erro as Error).message})`);
+    }
+  }
+}
 
 const databaseUrl = process.env["DATABASE_URL"]?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL obrigatoria (mesmo no dry-run: ele confere o que ja existe)");
@@ -525,6 +614,62 @@ if (contasComMovimento.length) {
   );
 }
 
+// --------------------------------------------------------------------------------------------
+// Qualidade do dado de produto. Nada aqui "conserta" a planilha — tudo aparece, para o Rodrigo
+// decidir. Corrigir em silencio produz cadastro errado, que e pior que cadastro faltando.
+// --------------------------------------------------------------------------------------------
+const unidadesNoBanco = await banco
+  .select({ id: unidadesMedida.id, sigla: unidadesMedida.sigla })
+  .from(unidadesMedida)
+  .where(eq(unidadesMedida.empresaId, empresaId));
+const unidadePorSigla = new Map(unidadesNoBanco.map((linha) => [siglaDeUnidade(linha.sigla), linha.id]));
+
+const siglasCitadas = distintos(extracao.produtos.map((item) => item.unidadeIndividual).filter(Boolean));
+const siglasSemCadastro = siglasCitadas.filter((sigla) => !unidadePorSigla.has(sigla));
+const produtosSemUnidade = extracao.produtos.filter(
+  (item) => !item.unidadeIndividual || !unidadePorSigla.has(item.unidadeIndividual)
+);
+const eansRepetidos = chavesRepetidas(extracao.produtos, (item) => item.codigoBarras);
+const descricoesRepetidas = chavesRepetidas(extracao.produtos, (item) => item.descricao);
+const estoqueIncoerente = extracao.produtos.filter((item) => item.estoqueInvertido);
+const setoresCitados = distintos(extracao.produtos.map((item) => item.setorEstoque).filter(Boolean));
+
+console.info(`\n=== QUALIDADE DO CADASTRO DE PRODUTOS (planilha) ===`);
+console.info(
+  `  linhas lidas na aba BASE ................ ${extracao.produtos.length + extracao.produtosIgnorados.length}`
+);
+console.info(`  produtos elegiveis (LOJAS contem TNP) ... ${extracao.produtos.length}`);
+console.info(`  ignorados .............................. ${extracao.produtosIgnorados.length}`);
+for (const motivo of distintos(extracao.produtosIgnorados.map((item) => item.motivo)).slice(0, 5)) {
+  const quantos = extracao.produtosIgnorados.filter((item) => item.motivo === motivo).length;
+  console.info(`      ${String(quantos).padStart(4)} x ${motivo}`);
+}
+console.info(`  duplicados por EAN ..................... ${eansRepetidos.size}${amostra([...eansRepetidos.keys()])}`);
+console.info(
+  `  duplicados por descricao ............... ${descricoesRepetidas.size}${amostra([...descricoesRepetidas.keys()])}`
+);
+console.info(
+  `  estoque MAXIMO menor que o MINIMO ...... ${estoqueIncoerente.length}${amostra(estoqueIncoerente.map((item) => `${item.descricao}: ${item.estoqueMin} > ${item.estoqueMax}`))}`
+);
+console.info(
+  `  sem unidade que case com o cadastro .... ${produtosSemUnidade.length}${amostra(produtosSemUnidade.map((item) => item.descricao))}`
+);
+console.info(
+  `  siglas de unidade SEM cadastro ......... ${siglasSemCadastro.length}${amostra(siglasSemCadastro)}` +
+    (siglasSemCadastro.length ? "  <- NAO serao criadas; o produto entra sem unidade" : "")
+);
+console.info(
+  `  grupos citados SEM cadastro ............ ${gruposCitadosSemCadastro.length}${amostra(gruposCitadosSemCadastro)}` +
+    (gruposCitadosSemCadastro.length ? "  <- NAO serao criados; o produto entra sem grupo" : "")
+);
+console.info(`  setores de estoque citados ............. ${setoresCitados.length}${amostra(setoresCitados)}`);
+console.info(
+  `  ATENCAO: o seed NAO atribui codigo interno. Produto semeado nasce com codigo_interno nulo\n` +
+    `  (o unique por empresa aceita nulos), e so ganha codigo quando alguem salvar o cadastro pela\n` +
+    `  tela. A planilha tem a coluna AC "CODIGO INT.", mas usa-la exigiria decidir o que fazer com\n` +
+    `  colisao contra o sequencial da API — decisao do Jose, nao deste script.`
+);
+
 if (produtosSemGrupoCasado.length) {
   console.info(`\n=== PRODUTOS SEM GRUPO DE MERCADORIA (${produtosSemGrupoCasado.length}) ===`);
   console.info(
@@ -714,6 +859,9 @@ try {
             const grupoMercadoriaId = item.grupoMercadoria
               ? grupoMercadoriaPorNome.get(item.grupoMercadoria)
               : undefined;
+            // Unidade individual: casa a MEDIDA BASE (col. G) com o cadastro de Unidades. Sigla sem
+            // cadastro NAO cria unidade — o produto entra sem, e a sigla foi listada no relatorio.
+            const unidadeIndividualId = unidadePorSigla.get(item.unidadeIndividual);
             return {
               empresaId,
               descricao: item.descricao,
@@ -726,7 +874,13 @@ try {
               ...(item.embalagem ? { embalagem: item.embalagem } : {}),
               ...(item.cDe ? { cDe: item.cDe } : {}),
               ...(item.medidaCompra ? { medidaCompra: item.medidaCompra } : {}),
-              ...(grupoMercadoriaId ? { grupoMercadoriaId } : {})
+              ...(grupoMercadoriaId ? { grupoMercadoriaId } : {}),
+              ...(unidadeIndividualId ? { unidadeIndividualId, unidadeMedidaId: unidadeIndividualId } : {}),
+              ...(item.estoqueMin != null ? { estoqueMin: String(item.estoqueMin) } : {}),
+              ...(item.estoqueMax != null ? { estoqueMax: String(item.estoqueMax) } : {}),
+              ...(item.setorEstoque ? { setorEstoque: item.setorEstoque } : {})
+              // NAO entram, de proposito: fiscal (R-145), custo, margem e preco (nao confirmados),
+              // e foto (sem conciliacao). Margem do GRUPO aguarda a migration (§7 do brain 30).
             };
           })
         );
