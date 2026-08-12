@@ -1,5 +1,5 @@
 import type { MultipartFile } from "@fastify/multipart";
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   AprovarMercadoriaPayload,
   DiscriminarMercadoriaPayload,
@@ -130,6 +130,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: lancamento.contaOrigemId,
         valorCentavos: paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1)
       },
@@ -266,6 +267,7 @@ export async function atualizarMercadoria(
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: normalizados.contaOrigemId,
         valorCentavos: computar ? paraCentavos(normalizados.valorOriginal) : 0,
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
@@ -364,6 +366,7 @@ export async function aprovarMercadoria(
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: existente.contaOrigemId,
         valorCentavos: dados.computar ? paraCentavos(existente.valorOriginal) : 0,
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, existente.contaOrigemId)

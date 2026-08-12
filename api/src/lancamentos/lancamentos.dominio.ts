@@ -987,6 +987,19 @@ export type DemandaDeSaldo = {
   contaOrigemId?: string | null | undefined;
   valorCentavos: number;
   jaReservadoCentavos?: number;
+  /**
+   * Se o ator pode VER saldo de conta (`cadastro_contas_visualizar`).
+   *
+   * O 409 devolvia `disponivel`/`faltam` para qualquer um que conseguisse lancar uma saida — e esse
+   * conjunto e MAIOR que o de quem pode abrir a tela de saldos, que e protegida por
+   * `cadastro_contas_visualizar` ("e informacao de gestao, nao lista de opcao de formulario",
+   * `contas.controller.ts`). Com `GET /api/contas` entregando os ids, bastava mandar uma saida de
+   * valor absurdo por conta para ler o saldo de todas pelo corpo do erro, sem gravar nada.
+   *
+   * Omitido = `false`, de proposito: quem esquecer de passar vaza menos, nao mais. O cron usa o
+   * caminho nao-lancador e nem chega aqui.
+   */
+  podeVerSaldo?: boolean;
 };
 
 /**
@@ -1060,6 +1073,15 @@ export async function exigirSaldoSuficienteNaConta(demanda: DemandaDeSaldo, tx: 
   const disponivelCentavos = paraCentavos(saldos.get(contaId) ?? 0) + (demanda.jaReservadoCentavos ?? 0);
   if (demanda.valorCentavos <= disponivelCentavos) return;
 
+  // O CODIGO e estavel para todo mundo (`SALDO_INSUFICIENTE`) — a tela precisa dele para dizer o
+  // que aconteceu, e escondê-lo do operador so trocaria um 409 claro por um erro mudo. O que varia
+  // e o NUMERO: `disponivel`/`faltam` sao saldo, e saldo tem dono. `solicitado` fica de fora do
+  // ramo restrito tambem, porque somado a uma busca binaria ele reconstroi o saldo em poucas
+  // tentativas — e o valor ja e conhecido de quem enviou o payload, entao devolve-lo nao ajuda
+  // ninguem e ainda serve de oraculo.
+  if (!demanda.podeVerSaldo) {
+    throw conflito("Saldo insuficiente na conta de origem", "SALDO_INSUFICIENTE", { contaId });
+  }
   throw conflito("Saldo insuficiente na conta de origem", "SALDO_INSUFICIENTE", {
     contaId,
     disponivel: deCentavos(disponivelCentavos),

@@ -355,4 +355,64 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
     expect([400, 403, 404, 409]).toContain(resposta.statusCode);
     expect(resposta.statusCode).not.toBe(201);
   });
+
+  // --- DETALHE DO 409 E INFORMACAO DE SALDO ----------------------------------------------------
+  // O corpo do 409 carregava `disponivel`/`faltam` para QUALQUER um capaz de lancar uma saida — e
+  // esse conjunto e maior que o de quem pode abrir a tela de saldos (`cadastro_contas_visualizar`).
+  // Com `GET /api/contas` entregando os ids, bastava mandar uma saida absurda por conta para ler o
+  // saldo de todas pelo corpo do erro, sem gravar nada. O codigo continua igual para todos (a tela
+  // precisa dele); o que passa a depender da permissao e o NUMERO.
+  //
+  // Tesouraria e a fixture certa do lado restrito: tem `transferencias_criar` (consegue chegar na
+  // porta), NAO tem `cadastro_contas_visualizar` e NAO tem `caixa_operar` — entao escolhe a conta
+  // livremente e nao esbarra na R-121 antes da porta.
+  it("quem PODE ver contas recebe os detalhes do saldo no 409", async () => {
+    const origem = await criarConta("R165 detalhe autorizado", 10);
+    const destino = await criarConta("R165 detalhe autorizado destino", 0);
+
+    const resposta = await postar("transferencias", origem, 15, destino);
+
+    expect(resposta.statusCode, resposta.body).toBe(409);
+    const corpo = json<{ code?: string; details?: Record<string, unknown> }>(resposta);
+    expect(corpo.code).toBe("SALDO_INSUFICIENTE");
+    expect(corpo.details).toMatchObject({ contaId: origem, disponivel: 10, faltam: 5 });
+  });
+
+  it("quem NAO pode ver contas recebe codigo e mensagem, e nenhum numero de saldo", async () => {
+    const origem = await criarConta("R165 detalhe restrito", 10);
+    const destino = await criarConta("R165 detalhe restrito destino", 0);
+    const cookieTesouraria = await cookieSessao(contexto.app, "tesouraria");
+
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/transferencias",
+      headers: { cookie: cookieTesouraria },
+      payload: payloadDe("transferencias", origem, 15, destino)
+    });
+
+    // Mesma recusa, mesmo codigo: esconder o codigo trocaria um 409 claro por um erro mudo.
+    expect(resposta.statusCode, resposta.body).toBe(409);
+    const corpo = json<{ code?: string; details?: Record<string, unknown> }>(resposta);
+    expect(corpo.code).toBe("SALDO_INSUFICIENTE");
+
+    // O details carrega o ALVO (para a tela destacar o campo) e nada alem dele.
+    expect(Object.keys(corpo.details ?? {})).toEqual(["contaId"]);
+    expect(corpo.details).toMatchObject({ contaId: origem });
+
+    // Prova forte do item: tirando os UUIDs (identificadores, nao valores), o UNICO numero que
+    // sobra no corpo inteiro e o `409` do envelope problem+json — que e o proprio status HTTP,
+    // publico por definicao. Nao ha nenhum outro digito a partir do qual inferir saldo, falta ou
+    // pendencia, nem por leitura direta nem por busca binaria com valores escolhidos.
+    const corpoSemIds = resposta.body.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "");
+    expect(corpoSemIds.match(/\d+/g) ?? [], `corpo=${resposta.body}`).toEqual(["409"]);
+    // Os NOMES dos campos que carregam valor tambem ficam fora — "saldo" nao entra nesta lista de
+    // proposito: ele aparece no titulo ("Saldo insuficiente na conta de origem"), que e justamente
+    // a mensagem que o perfil restrito TEM de receber para saber o que aconteceu.
+    for (const vazamento of ["disponivel", "faltam", "solicitado", "pendente", "reservado"]) {
+      expect(resposta.body.toLowerCase()).not.toContain(vazamento);
+    }
+
+    // E a recusa continua sendo recusa: nada gravado.
+    expect(await saldoDe(origem)).toMatchObject({ saldoAtual: 10, saldoPendente: 0 });
+  });
 });

@@ -1,4 +1,4 @@
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   ConfirmarTransferenciaPayload,
   RecusarConferenciaPayload,
@@ -123,6 +123,7 @@ export async function criarTransferencia(
       await exigirSaldoSuficienteNaConta(
         {
           empresaId: dados.empresaId,
+          podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
           contaOrigemId: dados.contaOrigemId,
           valorCentavos: computar ? paraCentavos(dados.valorOriginal) : 0
         },
@@ -461,6 +462,7 @@ export async function atualizarTransferencia(
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: dados.contaOrigemId,
         valorCentavos: computar ? paraCentavos(dados.valorOriginal) : 0,
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, dados.contaOrigemId)

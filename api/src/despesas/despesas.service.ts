@@ -1,5 +1,5 @@
 import type { MultipartFile } from "@fastify/multipart";
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   DespesaCriada,
   DespesaDetalheDto,
@@ -135,6 +135,7 @@ export async function criarDespesa(dados: DespesaPayload, perfil: PerfilUsuario)
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: lancamento.contaOrigemId,
         valorCentavos: paraCentavos(lancamento.valorOriginal) * ocorrenciasDaSerie
       },
@@ -284,6 +285,7 @@ export async function atualizarDespesa(
     await exigirSaldoSuficienteNaConta(
       {
         empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
         contaOrigemId: normalizados.contaOrigemId,
         valorCentavos: paraCentavos(normalizados.valorOriginal),
         jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
