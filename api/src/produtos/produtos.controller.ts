@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
@@ -20,6 +21,7 @@ import {
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
+import { FotoInvalidaError, TAMANHO_MAXIMO_DA_FOTO } from "./produtos-foto.js";
 import {
   CodigoBarrasDuplicadoError,
   detalharProduto,
@@ -28,9 +30,12 @@ import {
   listarFiltrosDeProduto,
   listarOpcoesDeProduto,
   listarProdutos,
+  obterFotoDeProdutoNoEscopo,
   ProdutoDuplicadoError,
   ProdutoNaoEncontradoError,
   ReferenciaDeOutraEmpresaError,
+  removerFotoDeProdutoNoEscopo,
+  salvarFotoDeProdutoNoEscopo,
   salvarProduto
 } from "./produtos.service.js";
 
@@ -48,6 +53,18 @@ function registrarEscrita(
     { evento: "produto.escrita", acao, usuarioId: request.usuarioId, ...dados },
     "cadastro de produto gravado"
   );
+}
+
+/**
+ * Foto: 404 para produto inexistente/alheio (indistinguiveis) e 400 para arquivo recusado. O
+ * upload NUNCA responde 2xx quando so a foto falhou — o front precisa poder repetir sem duplicar
+ * o produto.
+ */
+function responderErroDeFoto(reply: ReplyHttp, error: DadosExternos) {
+  if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
+  if (error instanceof FotoInvalidaError) return erro(reply, 400, error.message, "INVALID_PHOTO");
+  const mensagem = mensagemDominioOuRelancar(error);
+  return erro(reply, statusErroValidacao(mensagem), mensagem);
 }
 
 function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
@@ -180,6 +197,59 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
       return responderErroDeEscrita(reply, error);
     }
   });
+
+  /**
+   * FOTO do produto: multipart -> `/app/storage` (sem Cloudinary). Quem pode criar OU editar
+   * produto pode enviar; quem pode visualizar pode ver.
+   */
+  app.post(
+    "/api/produtos/:id/foto",
+    { preHandler: exigirAlgumaPermissao(["cadastro_produtos_criar", "cadastro_produtos_editar"]) },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      try {
+        const arquivo = await request.file({ limits: { fileSize: TAMANHO_MAXIMO_DA_FOTO, files: 1 } });
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        return reply.status(201).send(ok(await salvarFotoDeProdutoNoEscopo(id, arquivo, escopo)));
+      } catch (error) {
+        return responderErroDeFoto(reply, error);
+      }
+    }
+  );
+
+  app.delete(
+    "/api/produtos/:id/foto",
+    { preHandler: exigirPermissao("cadastro_produtos_editar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      try {
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        await removerFotoDeProdutoNoEscopo(id, escopo);
+        return semConteudo(reply);
+      } catch (error) {
+        return responderErroDeFoto(reply, error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/produtos/:id/foto",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      try {
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        const foto = await obterFotoDeProdutoNoEscopo(id, escopo);
+        // Foto legada continua sendo URL externa: redireciona em vez de fingir que veio do storage.
+        if (foto.tipo === "externa") return reply.redirect(foto.url, 302);
+        reply.header("Content-Type", foto.mimeType);
+        reply.header("Cache-Control", "private, max-age=300");
+        return reply.send(createReadStream(foto.caminhoAbsoluto));
+      } catch (error) {
+        return responderErroDeFoto(reply, error);
+      }
+    }
+  );
 
   app.post(
     "/api/produtos/importar",

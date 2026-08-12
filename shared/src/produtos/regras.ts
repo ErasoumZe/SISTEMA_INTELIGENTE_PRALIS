@@ -57,6 +57,8 @@ export interface PromocaoRegra {
   horaFim?: string | null;
   /** Dias marcados na ordem [seg, ter, qua, qui, sex, sab, dom]; ausente = todos os dias. */
   dias?: boolean[] | null;
+  /** "YYYY-MM-DD"; vencida NAO aplica. Ausente = sem prazo. */
+  validaAte?: string | null;
 }
 
 export interface CalcularPrecoFinalEntrada {
@@ -72,33 +74,49 @@ function paraMinutos(hhmm: string | null | undefined): number | null {
   return (Number.parseInt(horas ?? "0", 10) || 0) * 60 + (Number.parseInt(minutos ?? "0", 10) || 0);
 }
 
-/** Aplica a primeira promocao ativa (dia + janela de horario) sobre o preco de venda. */
+/** A promocao esta valendo AGORA: dentro do prazo, no dia marcado e na janela de horario. */
+function promocaoAtiva(promo: PromocaoRegra, agora: Date): boolean {
+  if (!promocaoDentroDaValidade(promo.validaAte, agora)) return false;
+  const indiceDia = (agora.getDay() + 6) % 7; // seg = 0 ... dom = 6
+  if (promo.dias && promo.dias[indiceDia] !== true) return false;
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  const inicio = paraMinutos(promo.horaInicio);
+  const fim = paraMinutos(promo.horaFim);
+  if (inicio == null && fim == null) return true;
+  return minutosAgora >= (inicio ?? Number.NEGATIVE_INFINITY) && minutosAgora <= (fim ?? Number.POSITIVE_INFINITY);
+}
+
+/** Preco que a promocao produz; `null` quando ela nao tem valor utilizavel. */
+function precoDaPromocao(promo: PromocaoRegra, precoVenda: number): number | null {
+  if (promo.tipo === "desconto" && promo.descontoFracao != null) {
+    return arredondar(precoVenda * (1 - Number(promo.descontoFracao)));
+  }
+  if (promo.tipo === "valor" && promo.valor != null) return arredondar(Number(promo.valor));
+  return null;
+}
+
+/**
+ * Preco de venda com a promocao vigente. **A ordem em que o banco devolveu as promocoes NUNCA
+ * decide o resultado.**
+ *
+ * A versao anterior aplicava a PRIMEIRA ativa do array — com duas promocoes validas ao mesmo tempo
+ * (uma das 10h-12h e uma de "segunda o dia todo"), o preco dependia da ordem de insercao. Hoje o
+ * cadastro impede sobreposicao (`validarPromocoesDoProduto`), mas o dado historico pode ter, e a
+ * leitura precisa ser deterministica de qualquer jeito.
+ *
+ * Criterio de desempate: **vence o MENOR preco** — o cliente nunca paga mais por causa de um empate.
+ * `validaAte` vencida nao entra.
+ */
 export function calcularPrecoVendaComPromocao(entrada: CalcularPrecoFinalEntrada): number {
   const precoVenda = Number(entrada.precoVenda) || 0;
-  const promocoes = entrada.promocoes ?? [];
   const agora = entrada.agora ?? new Date();
 
-  const indiceDia = (agora.getDay() + 6) % 7; // seg = 0 ... dom = 6
-  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  const precos = (entrada.promocoes ?? [])
+    .filter((promo) => promocaoAtiva(promo, agora))
+    .map((promo) => precoDaPromocao(promo, precoVenda))
+    .filter((preco): preco is number => preco != null);
 
-  for (const promo of promocoes) {
-    const diaOk = !promo.dias || promo.dias[indiceDia] === true;
-    const inicio = paraMinutos(promo.horaInicio);
-    const fim = paraMinutos(promo.horaFim);
-    const horaOk =
-      (inicio == null && fim == null) ||
-      (minutosAgora >= (inicio ?? Number.NEGATIVE_INFINITY) && minutosAgora <= (fim ?? Number.POSITIVE_INFINITY));
-
-    if (diaOk && horaOk) {
-      if (promo.tipo === "desconto" && promo.descontoFracao != null) {
-        return arredondar(precoVenda * (1 - Number(promo.descontoFracao)));
-      }
-      if (promo.tipo === "valor" && promo.valor != null) {
-        return arredondar(Number(promo.valor));
-      }
-    }
-  }
-  return arredondar(precoVenda);
+  return precos.length ? Math.min(...precos) : arredondar(precoVenda);
 }
 
 function maiusculo(texto: string | null | undefined): string {
@@ -183,4 +201,97 @@ export function montarComoSeCompra(entrada: ComoSeCompraEntrada): string {
 export function resolverMargemGrupo(nomeGrupo: string, grupos: readonly { nome: string; margem: number }[]): number {
   const grupo = grupos.find((item) => item.nome === nomeGrupo);
   return grupo ? Number(grupo.margem) || 0 : 0;
+}
+
+// --------------------------------------------------------------------------------------------
+// Promocao: validacao de cadastro e desempate deterministico (P-04, ETAPA 7)
+// --------------------------------------------------------------------------------------------
+
+export interface PromocaoParaValidar {
+  tipo: "valor" | "desconto";
+  valor?: number | null;
+  descontoFracao?: number | null;
+  /** "HH:MM" ou vazio (o dia inteiro). */
+  horaInicio?: string | null;
+  horaFim?: string | null;
+  /** [seg..dom]; ausente = todos os dias. */
+  dias?: boolean[] | null;
+  /** "YYYY-MM-DD" ou vazio (sem prazo). */
+  validaAte?: string | null;
+}
+
+function minutosDe(hhmm: string | null | undefined): number | null {
+  if (!hhmm) return null;
+  const [horas, minutos] = String(hhmm).split(":");
+  const total = (Number.parseInt(horas ?? "", 10) || 0) * 60 + (Number.parseInt(minutos ?? "", 10) || 0);
+  return Number.isFinite(total) ? total : null;
+}
+
+function diasDe(promo: PromocaoParaValidar): boolean[] {
+  return promo.dias && promo.dias.length === 7 ? promo.dias : [true, true, true, true, true, true, true];
+}
+
+/** Janela em minutos [inicio, fim] de uma promocao; o dia inteiro quando nao ha horario. */
+function janelaDe(promo: PromocaoParaValidar): { inicio: number; fim: number } {
+  return { inicio: minutosDe(promo.horaInicio) ?? 0, fim: minutosDe(promo.horaFim) ?? 24 * 60 - 1 };
+}
+
+/**
+ * Valida a LISTA de promocoes de um produto. Devolve as mensagens; lista vazia = tudo certo.
+ *
+ * As regras, e o porque de cada uma:
+ * - **valor exigido conforme o tipo**: promocao "valor" sem valor, ou "desconto" sem percentual,
+ *   e um campo que aparece e nao vale nada;
+ * - **desconto entre 0% e 100%**: acima de 100% o preco fica negativo;
+ * - **fim anterior ao inicio e RECUSADO**, e a promocao que atravessa a meia-noite tem de ser
+ *   dividida em duas (ex.: 22:00–23:59 e 00:00–02:00). Aceitar "22:00 as 02:00" como um intervalo
+ *   so obrigaria toda leitura a saber que aquela janela e circular;
+ * - **duas promocoes do mesmo produto nao podem se sobrepor** no mesmo dia da semana.
+ */
+export function validarPromocoesDoProduto(promocoes: readonly PromocaoParaValidar[]): string[] {
+  const erros: string[] = [];
+
+  promocoes.forEach((promo, indice) => {
+    const posicao = `Promoção ${indice + 1}`;
+    if (promo.tipo === "valor" && (promo.valor == null || promo.valor <= 0)) {
+      erros.push(`${posicao}: informe o valor promocional.`);
+    }
+    if (promo.tipo === "desconto") {
+      const fracao = promo.descontoFracao;
+      if (fracao == null) erros.push(`${posicao}: informe o percentual de desconto.`);
+      else if (fracao <= 0 || fracao > 1) erros.push(`${posicao}: o desconto precisa ficar entre 0% e 100%.`);
+    }
+    const inicio = minutosDe(promo.horaInicio);
+    const fim = minutosDe(promo.horaFim);
+    if (inicio != null && fim != null && fim < inicio) {
+      erros.push(`${posicao}: o término é anterior ao início. Promoção que vira o dia precisa ser dividida em duas.`);
+    }
+    if (!diasDe(promo).some(Boolean)) erros.push(`${posicao}: marque ao menos um dia da semana.`);
+  });
+
+  for (let a = 0; a < promocoes.length; a += 1) {
+    for (let b = a + 1; b < promocoes.length; b += 1) {
+      if (promocoesSeSobrepoem(promocoes[a]!, promocoes[b]!)) {
+        erros.push(`Promoções ${a + 1} e ${b + 1} se sobrepõem no mesmo dia e horário.`);
+      }
+    }
+  }
+  return erros;
+}
+
+/** Duas promocoes colidem quando dividem ao menos um dia da semana E as janelas se cruzam. */
+export function promocoesSeSobrepoem(uma: PromocaoParaValidar, outra: PromocaoParaValidar): boolean {
+  const diasA = diasDe(uma);
+  const diasB = diasDe(outra);
+  if (!diasA.some((marcado, indice) => marcado && diasB[indice])) return false;
+  const janelaA = janelaDe(uma);
+  const janelaB = janelaDe(outra);
+  return janelaA.inicio <= janelaB.fim && janelaB.inicio <= janelaA.fim;
+}
+
+/** `validaAte` no passado NAO aplica. Comparacao por data local, no formato "YYYY-MM-DD". */
+export function promocaoDentroDaValidade(validaAte: string | null | undefined, agora: Date): boolean {
+  if (!validaAte) return true;
+  const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+  return validaAte >= hoje;
 }

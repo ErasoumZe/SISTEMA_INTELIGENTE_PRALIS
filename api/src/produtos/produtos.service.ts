@@ -3,6 +3,7 @@ import {
   calcularPrecoVenda,
   calcularPrecoVendaComPromocao,
   produtoPayloadSchema,
+  validarPromocoesDoProduto,
   type ExportarProdutoPayload as ExportarPayload,
   type ImportarProdutosPayload as ImportarPayload,
   type PromocaoRegra
@@ -12,7 +13,9 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { apenasDigitos, validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 import { copiarGruposRepository } from "../grupos/grupos.repository.js";
 import { copiarUnidadesMedidaRepository } from "../unidades-medida/unidades-medida.repository.js";
+import type { MultipartFile } from "@fastify/multipart";
 import {
+  atualizarFotoDoProdutoRepository,
   buscarProdutoPorCodigoBarrasRepository,
   buscarProdutoPorDescricaoRepository,
   carregarProdutoParaEscritaRepository,
@@ -21,6 +24,13 @@ import {
   travarCadastroDeProdutosDaEmpresa,
   type ProdutoParaGravar
 } from "./produtos-escrita.repository.js";
+import {
+  caminhoAbsolutoDaFoto,
+  ehFotoExternaLegada,
+  FotoInvalidaError,
+  mimeDaFoto,
+  salvarFotoDeProduto
+} from "./produtos-foto.js";
 import { copiarProdutosRepository } from "./produtos-importacao.repository.js";
 import {
   filtrosDeProdutoRepository,
@@ -85,6 +95,7 @@ type PromocaoDoBanco = {
   sex: boolean;
   sab: boolean;
   dom: boolean;
+  validaAte: string | null;
 };
 
 function paraRegraDePromocao(promo: PromocaoDoBanco): PromocaoRegra {
@@ -94,7 +105,9 @@ function paraRegraDePromocao(promo: PromocaoDoBanco): PromocaoRegra {
     descontoFracao: promo.descontoFracao == null ? null : Number(promo.descontoFracao),
     horaInicio: promo.horaInicio,
     horaFim: promo.horaFim,
-    dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom]
+    dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom],
+    // `valida_ate` era GRAVADA e nunca lida. Agora vale: promocao vencida nao aplica.
+    validaAte: promo.validaAte
   };
 }
 
@@ -191,6 +204,7 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
   const codigoBarras = apenasDigitos(dados.codigoBarras) ?? dados.codigoBarras?.trim() ?? null;
 
   if (!ator.empresasPermitidas.includes(dados.empresaId)) throw new Error("Empresa nao permitida");
+  validarCoerenciaDoProduto(dados);
 
   return executarEmTransacao(async (tx) => {
     await travarCadastroDeProdutosDaEmpresa(tx, dados.empresaId);
@@ -224,6 +238,50 @@ export async function salvarProduto(id: string | null, body: DadosExternos, ator
       })
     );
   });
+}
+
+type DadosDoProduto = ReturnType<typeof produtoPayloadSchema.parse>;
+
+/**
+ * Coerencia do payload — o que o Zod nao consegue dizer sozinho porque depende de dois campos.
+ *
+ * O servidor RECUSA payload incompativel com o tipo: ficha de transformacao em produto de revenda
+ * e promocao em produto de transformacao entrariam no banco e ficariam invisiveis na tela,
+ * ressuscitando na proxima edicao.
+ */
+function validarCoerenciaDoProduto(dados: DadosDoProduto): void {
+  const problemas: string[] = [];
+
+  if (dados.tipo === "revenda" && dados.transformacao) {
+    problemas.push("Produto de revenda nao tem ficha de transformacao.");
+  }
+  if (dados.tipo === "transformacao" && dados.promocoes.length) {
+    problemas.push("Promocao existe apenas para produto de revenda.");
+  }
+  if (dados.estoqueMin != null && dados.estoqueMax != null && dados.estoqueMax < dados.estoqueMin) {
+    problemas.push("O estoque maximo nao pode ser menor que o minimo.");
+  }
+
+  const unidadesDasConversoes = dados.conversoes.map((conversao) => conversao.unidadeMedidaId);
+  if (new Set(unidadesDasConversoes).size !== unidadesDasConversoes.length) {
+    problemas.push("A mesma unidade aparece em duas conversoes do produto.");
+  }
+
+  problemas.push(
+    ...validarPromocoesDoProduto(
+      dados.promocoes.map((promo) => ({
+        tipo: promo.tipo,
+        valor: promo.valor ?? null,
+        descontoFracao: promo.descontoFracao ?? null,
+        horaInicio: promo.horaInicio ?? null,
+        horaFim: promo.horaFim ?? null,
+        dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom],
+        validaAte: promo.validaAte ?? null
+      }))
+    )
+  );
+
+  if (problemas.length) throw new Error(problemas.join(" "));
 }
 
 async function carregarProdutoAlvoValidado(
@@ -300,10 +358,8 @@ function precoDeVendaDoServidor(dados: {
   });
 }
 
-type DadosDoPayload = ReturnType<typeof produtoPayloadSchema.parse>;
-
 function montarProdutoParaGravar(
-  dados: DadosDoPayload,
+  dados: DadosDoProduto,
   extra: {
     id: string | undefined;
     descricao: string;
@@ -431,4 +487,56 @@ export async function exportarProduto(id: string, body: ExportarPayload, perfil?
   // a diferenca entre os dois casos permitiria enumerar o cadastro de outra loja.
   if (!resultado.encontradosNaOrigem) throw new ProdutoNaoEncontradoError();
   return { tipo: resultado.tipo, inseridos: resultado.inseridos };
+}
+
+// --------------------------------------------------------------------------------------------
+// Foto do produto (ETAPA 8): multipart -> /app/storage, sem Cloudinary.
+// --------------------------------------------------------------------------------------------
+
+/**
+ * Grava a foto e aponta `foto_url` para o caminho relativo.
+ *
+ * O produto e carregado e conferido ANTES de qualquer escrita em disco: sem isso, um id de outra
+ * empresa criaria pasta e arquivo antes de a autorizacao ser negada.
+ */
+export async function salvarFotoDeProdutoNoEscopo(
+  produtoId: string,
+  arquivo: MultipartFile | undefined,
+  escopoEmpresas: string[]
+): Promise<{ fotoUrl: string }> {
+  const produto = await detalheProdutoRepository(produtoId, escopoEmpresas);
+  if (!produto) throw new ProdutoNaoEncontradoError();
+  if (!arquivo) throw new FotoInvalidaError("Envie um arquivo de imagem.");
+
+  const { caminhoRelativo } = await salvarFotoDeProduto(produtoId, arquivo);
+  const gravou = await atualizarFotoDoProdutoRepository(produtoId, produto.empresaId, caminhoRelativo);
+  if (!gravou) throw new ProdutoNaoEncontradoError();
+  return { fotoUrl: caminhoRelativo };
+}
+
+/** Remove o vinculo da foto. O arquivo fica no storage — apagar bem seria outra OS (retencao). */
+export async function removerFotoDeProdutoNoEscopo(produtoId: string, escopoEmpresas: string[]): Promise<void> {
+  const produto = await detalheProdutoRepository(produtoId, escopoEmpresas);
+  if (!produto) throw new ProdutoNaoEncontradoError();
+  const gravou = await atualizarFotoDoProdutoRepository(produtoId, produto.empresaId, null);
+  if (!gravou) throw new ProdutoNaoEncontradoError();
+}
+
+/**
+ * Resolve a foto para leitura. Devolve `externa` quando o produto guarda uma URL legada — ela
+ * continua sendo LIDA (o front aponta a `<img>` direto), mas nunca passa pelo storage.
+ */
+export async function obterFotoDeProdutoNoEscopo(
+  produtoId: string,
+  escopoEmpresas: string[]
+): Promise<{ tipo: "arquivo"; caminhoAbsoluto: string; mimeType: string } | { tipo: "externa"; url: string }> {
+  const produto = await detalheProdutoRepository(produtoId, escopoEmpresas);
+  if (!produto) throw new ProdutoNaoEncontradoError();
+  if (!produto.fotoUrl) throw new FotoInvalidaError("Produto sem foto.");
+  if (ehFotoExternaLegada(produto.fotoUrl)) return { tipo: "externa", url: produto.fotoUrl };
+  return {
+    tipo: "arquivo",
+    caminhoAbsoluto: caminhoAbsolutoDaFoto(produto.fotoUrl),
+    mimeType: mimeDaFoto(produto.fotoUrl)
+  };
 }

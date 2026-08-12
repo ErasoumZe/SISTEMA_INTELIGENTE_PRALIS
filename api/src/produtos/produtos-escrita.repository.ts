@@ -10,6 +10,7 @@ import {
   produtosTransformacao,
   unidadesMedida
 } from "@padaria/db/schema/cadastro";
+import { banco } from "../banco/conexao.js";
 import type { ExecutorBanco, TransacaoBanco } from "../banco/conexao.js";
 
 // Codigo externo: PR-XXXX-XXXX (alfabeto sem caracteres ambiguos I/O/0/1). Unico global — tenta ate achar livre.
@@ -352,4 +353,21 @@ async function gravarSatelites(tx: TransacaoBanco, produtoId: string, input: Pro
       }))
     );
   }
+}
+
+/**
+ * Grava SO a `foto_url`, dentro do escopo da empresa. Separado de `salvarProdutoRepository` porque
+ * o upload e um ato proprio: falhar a foto nao pode desfazer o produto que ja foi salvo.
+ */
+export async function atualizarFotoDoProdutoRepository(
+  id: string,
+  empresaId: string,
+  fotoUrl: string | null
+): Promise<boolean> {
+  const atualizados = await banco
+    .update(produtos)
+    .set({ fotoUrl })
+    .where(and(eq(produtos.id, id), eq(produtos.empresaId, empresaId)))
+    .returning({ id: produtos.id });
+  return atualizados.length > 0;
 }
