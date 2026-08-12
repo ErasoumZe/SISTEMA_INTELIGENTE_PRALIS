@@ -428,10 +428,10 @@ export async function travarCaixaRepository(
 // serializa lancamentos entre si, mas conflita com o `FOR UPDATE` de fechamento/cofre/horario/
 // abertura (e conflitaria tambem com um futuro `NO KEY UPDATE`) — quem chegar depois espera, e o
 // status devolvido aqui e o da versao commitada MAIS RECENTE (READ COMMITTED reavalia no
-// locked-read). E a primeira barreira das escritas de lancamento que alteram os sete totais.
-// EXCECOES CONHECIDAS, catalogadas SEM decisao do Jose (perguntas S1/S2 do relatorio da OS):
-// o job de agendadas (`efetivarTransferenciasAgendadasRepository`) e o DELETE do cancelamento de
-// serie de recorrencia continuam fora da porta. A revalidacao do status pos-lock e de quem chama.
+// locked-read). E a primeira barreira de TODA escrita que altera os sete totais — inclusive o
+// cron de agendadas e o cancelamento de serie de recorrencia (S1/S2, decididos pelo Jose em
+// 11/08: caixa fechado nao e alterado por nenhum dos dois). Bordas que seguem SEM regra estao
+// no relatorio da OS (S3-S8). A revalidacao do status pos-lock e de quem chama.
 //
 // INVARIANTES (a prova de deadlock depende delas — ver o grafo no relatorio da OS):
 //  1. ordem unica: linha do caixa PRIMEIRO, linha do lancamento depois, filhas por ultimo;
@@ -678,8 +678,8 @@ export async function buscarSolicitacaoCofreRepository(
   return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
 }
 
-// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — e o mesmo caminho que o fluxo
-// generico ja usa (efetivarTransferenciasAgendadasRepository), nao um segundo mecanismo.
+// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — a mesma transicao que o cron
+// generico aplica (efetivarTransferenciaAgendadaRepository), nao um segundo mecanismo.
 //
 // `status = 'agendada'` no WHERE e a TRANSICAO ATOMICA que serve de idempotencia: duas execucoes
 // concorrentes disputam a mesma linha e so uma acerta uma linha. A perdedora recebe zero e

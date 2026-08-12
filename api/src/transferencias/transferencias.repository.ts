@@ -386,28 +386,46 @@ export async function confirmarTransferenciaRepository(
   return vencedora;
 }
 
-export async function efetivarTransferenciasAgendadasRepository(agora = new Date(), db: ExecutorBanco = banco) {
-  const prazos: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
-  const efetivadas: Array<{ id: string }> = [];
-  for (const prazo of prazos) {
-    const linhas = await db
-      .update(transferencias)
-      .set({
-        status: "pendente",
-        prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
-        atualizadoEm: agora
-      })
-      .where(
-        and(
-          eq(transferencias.status, "agendada"),
-          eq(transferencias.tempoConfirmacao, prazo),
-          lt(transferencias.agendadaPara, agora)
-        )
+// S1 (R-164): `agendada -> pendente` MUDA a saida do caixa (`pendente` conta; `agendada` nao),
+// entao o cron deixou de efetivar em massa e passou a decidir POR LINHA, sob a porta do caixa.
+// A lista sai em ordem deterministica (caixa_id, id): quem trava varios caixas na mesma transacao
+// adquire os FOR SHARE sempre na mesma ordem, e o fechamento so trava UM caixa — sem ciclo.
+const PRAZOS_CONFIRMACAO: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
+
+export async function listarAgendadasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: transferencias.id,
+      caixaId: transferencias.caixaId,
+      tempoConfirmacao: transferencias.tempoConfirmacao
+    })
+    .from(transferencias)
+    .where(
+      and(
+        eq(transferencias.status, "agendada"),
+        inArray(transferencias.tempoConfirmacao, PRAZOS_CONFIRMACAO),
+        lt(transferencias.agendadaPara, agora)
       )
-      .returning({ id: transferencias.id });
-    efetivadas.push(...linhas);
-  }
-  return efetivadas;
+    )
+    .orderBy(transferencias.caixaId, transferencias.id);
+}
+
+export async function efetivarTransferenciaAgendadaRepository(
+  transferenciaId: string,
+  prazo: TempoConfirmacao,
+  agora: Date,
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "pendente",
+      prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
+      atualizadoEm: agora
+    })
+    .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.status, "agendada")))
+    .returning({ id: transferencias.id });
+  return linha ?? null;
 }
 
 export async function listarTransferenciasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {

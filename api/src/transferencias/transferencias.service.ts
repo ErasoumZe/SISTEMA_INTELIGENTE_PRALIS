@@ -2,6 +2,7 @@ import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   ConfirmarTransferenciaPayload,
   RecusarConferenciaPayload,
+  TempoConfirmacao,
   TransferenciaCriada,
   TransferenciaDetalheDto,
   TransferenciaDto,
@@ -43,7 +44,8 @@ import {
   confirmarTransferenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
-  efetivarTransferenciasAgendadasRepository,
+  efetivarTransferenciaAgendadaRepository,
+  listarAgendadasVencidasRepository,
   ehConfirmadorElegivelRepository,
   liberarTravaTransferenciaRepository,
   listarDestinatariosTransferenciaRepository,
@@ -287,7 +289,25 @@ export async function recusarConferencia(
 
 export async function processarTransferenciasTemporais(agora = new Date()) {
   await executarEmTransacao(async (tx) => {
-    await efetivarTransferenciasAgendadasRepository(agora, tx);
+    // S1 (R-164, Jose 11/08): efetivar `agendada -> pendente` altera a SAIDA do caixa da linha,
+    // entao cada agendada com caixa entra na porta — FOR SHARE + revalidacao. Caixa aberto:
+    // efetiva; caixa FECHADO: nao altera status nem totais (a linha permanece agendada e sera
+    // reavaliada nos proximos ciclos). A lista vem em ordem deterministica (caixa_id, id) para os
+    // locks de varios caixas sairem sempre na mesma ordem — sem ciclo com o fechamento, que trava
+    // um unico caixa.
+    const agendadasVencidas = await listarAgendadasVencidasRepository(agora, tx);
+    for (const agendada of agendadasVencidas) {
+      if (agendada.caixaId) {
+        const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
+        if (trava?.status !== "aberto") continue;
+      }
+      await efetivarTransferenciaAgendadaRepository(
+        agendada.id,
+        (agendada.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
+        agora,
+        tx
+      );
+    }
     const vencidas = await listarTransferenciasVencidasRepository(agora, tx);
     for (const transferencia of vencidas) {
       const destinatarios = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
