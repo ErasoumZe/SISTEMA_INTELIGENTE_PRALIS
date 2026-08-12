@@ -636,7 +636,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), [])
     ]);
@@ -753,7 +753,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         ),
         carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
         carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
-        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
         carregarOpcaoOpcional(
           faltas,
           "Grupos de patrimônio",
@@ -842,7 +842,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
   } else if (tela === "produtos") {
     const [produtos, grupos, unidades] = await Promise.all([
-      apiGet<Opcao[]>(`/api/produtos${query}`),
+      apiGet<Opcao[]>(`/api/produtos/opcoes${query}`),
       apiGet<Pick<Opcoes, "gruposMercadorias">>(`/api/grupos${query}`),
       apiGet<Opcao[]>(`/api/unidades_medida${query}`)
     ]);
@@ -1060,7 +1060,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
     },
     produtos: async () => {
-      alvo.produtos = await apiGet<Opcao[]>(`/api/produtos${query}`);
+      alvo.produtos = await apiGet<Opcao[]>(`/api/produtos/opcoes${query}`);
     },
     formasPagamento: async () => {
       alvo.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);

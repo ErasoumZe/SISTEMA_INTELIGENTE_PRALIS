@@ -4,13 +4,15 @@ import {
   exportarProdutoSchema as exportarPayloadSchema,
   importarProdutosSchema as importarPayloadSchema,
   produtoParamsSchema as idParamsSchema,
+  produtosListaQuerySchema,
+  produtosOpcoesQuerySchema,
   produtosQuerySchema as empresaQuerySchema
 } from "@padaria/shared/produtos";
 import {
   criadoId,
   erro,
   ok,
-  paginadoDeArray,
+  paginadoDeResultado,
   semConteudo,
   type DadosExternos,
   type ReplyHttp
@@ -20,8 +22,11 @@ import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../a
 import { statusErroValidacao } from "../utils.js";
 import {
   CodigoBarrasDuplicadoError,
+  detalharProduto,
   exportarProduto,
   importarProdutos,
+  listarFiltrosDeProduto,
+  listarOpcoesDeProduto,
   listarProdutos,
   ProdutoDuplicadoError,
   ProdutoNaoEncontradoError,
@@ -55,11 +60,61 @@ function responderErroDeEscrita(reply: ReplyHttp, error: DadosExternos) {
 }
 
 export async function registrarRotasProdutos(app: FastifyInstance): Promise<void> {
-  // Lista consumida como OPCAO de formulario (itens de mercadoria). Aceita quem opera mercadorias,
-  // alem do cadastro de produtos.
+  /**
+   * Listagem COMPLETA da tela de Produtos: busca, quatro filtros, seis ordenacoes e paginacao —
+   * tudo no banco. Exige `cadastro_produtos_visualizar`; quem so opera mercadorias usa `/opcoes`.
+   */
+  app.get("/api/produtos", { preHandler: exigirPermissao("cadastro_produtos_visualizar") }, async (request, reply) => {
+    const query = produtosListaQuerySchema.parse(request.query);
+    try {
+      const escopoEmpresas = escopoEmpresaAtiva(
+        request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+        query.empresaId
+      );
+      const { itens, total } = await listarProdutos({
+        escopoEmpresas,
+        busca: query.busca,
+        status: query.status,
+        tipo: query.tipo,
+        grupoMercadoriaId: query.grupoMercadoriaId,
+        setorEstoque: query.setorEstoque,
+        ordenar: query.ordenar,
+        page: query.page,
+        pageSize: query.pageSize
+      });
+      return paginadoDeResultado({ itens, total, page: query.page, pageSize: query.pageSize });
+    } catch (error) {
+      return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+    }
+  });
+
+  /**
+   * ROTAS ESTATICAS ANTES DE `/:id` — senao o Fastify casaria "opcoes" e "filtros" como um id.
+   *
+   * `/opcoes` e a projecao REDUZIDA para escolher produto em formulario: sem fiscal, custo, margem
+   * ou preco. Por isso aceita tambem quem so opera mercadorias.
+   */
   app.get(
-    "/api/produtos",
+    "/api/produtos/opcoes",
     { preHandler: exigirAlgumaPermissao(["cadastro_produtos_visualizar", "mercadorias_visualizar"]) },
+    async (request, reply) => {
+      const query = produtosOpcoesQuerySchema.parse(request.query);
+      try {
+        const escopoEmpresas = escopoEmpresaAtiva(
+          request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
+          query.empresaId
+        );
+        return ok(await listarOpcoesDeProduto({ escopoEmpresas, busca: query.busca, ids: query.ids }));
+      } catch (error) {
+        return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
+    }
+  );
+
+  /** Valores existentes de setor e grupo, para montar o painel de filtros da listagem. */
+  app.get(
+    "/api/produtos/filtros",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {
@@ -67,9 +122,26 @@ export async function registrarRotasProdutos(app: FastifyInstance): Promise<void
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        return paginadoDeArray(await listarProdutos(escopo), query.page, query.pageSize);
+        return ok(await listarFiltrosDeProduto(escopo));
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
+      }
+    }
+  );
+
+  /** Detalhe completo (com as quatro satelites) para o formulario de edicao. */
+  app.get(
+    "/api/produtos/:id",
+    { preHandler: exigirPermissao("cadastro_produtos_visualizar") },
+    async (request, reply) => {
+      const { id } = idParamsSchema.parse(request.params);
+      try {
+        const escopo = request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [];
+        return ok(await detalharProduto(id, escopo));
+      } catch (error) {
+        if (error instanceof ProdutoNaoEncontradoError) return erro(reply, 404, error.message, "NOT_FOUND");
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
       }
     }
   );

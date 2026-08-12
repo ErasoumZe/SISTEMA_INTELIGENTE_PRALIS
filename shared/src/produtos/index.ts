@@ -109,10 +109,91 @@ export const produtoPayloadSchema = z.object({
   forcar: z.boolean().optional().default(false)
 });
 
+// As SEIS ordenacoes da listagem. Sao contrato: o banco ordena, nao o navegador.
+export const ordenacaoProdutosSchema = z
+  .enum(["recentes", "antigos", "az", "za", "codigo_asc", "codigo_desc"])
+  .default("recentes");
+
+/**
+ * Listagem completa (tela de Produtos): busca, quatro filtros, seis ordenacoes e paginacao —
+ * tudo resolvido no servidor. `pageSize` herda o teto de 100 do `paginationQuerySchema`.
+ */
+export const produtosListaQuerySchema = empresaQuerySchema.extend({
+  busca: z.string().trim().max(120).optional(),
+  status: statusProdutoSchema.optional(),
+  tipo: tipoProdutoSchema.optional(),
+  grupoMercadoriaId: uuidSchema.optional(),
+  setorEstoque: z.string().trim().max(120).optional(),
+  ordenar: ordenacaoProdutosSchema
+});
+
+/**
+ * Projecao REDUZIDA, para escolher produto em formulario. Nao devolve fiscal, custo, margem nem
+ * preco: quem preenche uma mercadoria nao precisa — e nao deve — enxergar o comercial da loja.
+ *
+ * `ids` hidrata o item ja selecionado, para que a edicao de um registro antigo mostre o rotulo do
+ * produto mesmo que ele nao caia na primeira pagina da busca.
+ */
+export const produtosOpcoesQuerySchema = empresaQuerySchema.extend({
+  busca: z.string().trim().max(120).optional(),
+  ids: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .transform((valor) => (valor ? valor.split(",").filter(Boolean) : []))
+    .pipe(z.array(uuidSchema).max(50))
+});
+
 export const produtosQuerySchema = empresaQuerySchema;
 export const importarProdutosSchema = importarEmpresaPayloadSchema;
 export const exportarProdutoSchema = exportarEmpresaPayloadSchema;
 export const produtoParamsSchema = apiIdParamsSchema;
+
+export type OrdenacaoProdutos = z.infer<typeof ordenacaoProdutosSchema>;
+export type ProdutosListaQuery = z.infer<typeof produtosListaQuerySchema>;
+export type ProdutosOpcoesQuery = z.infer<typeof produtosOpcoesQuerySchema>;
+
+/** O que a listagem devolve por produto. Sem satelites — o detalhe vive em `GET /api/produtos/:id`. */
+export interface ProdutoResumo {
+  id: string;
+  empresaId: string;
+  codigo: string | null;
+  codigoInterno: string | null;
+  codigoBarras: string | null;
+  descricao: string;
+  marca: string | null;
+  tipo: string;
+  status: string;
+  grupoMercadoriaId: string | null;
+  grupoNome: string | null;
+  quantidadeIndividual: string;
+  unidadeIndividualSigla: string | null;
+  quantidadeEstoque: string;
+  estoqueMin: string | null;
+  estoqueMax: string | null;
+  setorEstoque: string | null;
+  precoVenda: string | null;
+  precoVendaAtual: number | null;
+  fotoUrl: string | null;
+  criadoPorNome: string | null;
+}
+
+/** Item da projecao reduzida (seletores). */
+export interface ProdutoOpcao {
+  id: string;
+  descricao: string;
+  codigoInterno: string | null;
+  codigoBarras: string | null;
+  marca: string | null;
+  status: string;
+}
+
+/** Valores existentes para montar os filtros da tela, dentro do escopo do ator. */
+export interface FiltrosDeProduto {
+  setores: string[];
+  grupos: Array<{ id: string; nome: string }>;
+}
 
 export type ProdutoPayload = z.infer<typeof produtoPayloadSchema>;
 export type ProdutoConversaoPayload = z.infer<typeof produtoConversaoPayloadSchema>;

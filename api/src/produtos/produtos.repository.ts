@@ -1,27 +1,34 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
+  gruposMercadorias,
+  perfisUsuarios,
   produtos,
   produtosConversoes,
   produtosFiscal,
   produtosPromocoes,
-  produtosTransformacao
+  produtosTransformacao,
+  unidadesMedida
 } from "@padaria/db/schema/cadastro";
 import { banco } from "../banco/conexao.js";
 
 /**
- * `inArray` com lista vazia gera SQL invalido no Drizzle. Quando a pagina nao tem produto nenhum,
- * usamos um uuid que nunca existe — mais simples que ramificar cada uma das quatro consultas.
+ * Detalhe COMPLETO de um produto, com as quatro satelites — o que o formulario de edicao precisa.
+ *
+ * Devolve `null` quando o produto nao existe OU esta fora do escopo autorizado: quem chama responde
+ * 404 nos dois casos, para nao permitir enumerar o cadastro de outra empresa.
  */
-const SEM_RESULTADO = "00000000-0000-0000-0000-000000000000";
+export async function detalheProdutoRepository(id: string, escopoEmpresas: string[]) {
+  if (!escopoEmpresas.length) return null;
 
-export async function listarProdutosRepository(escopoEmpresas: string[]) {
-  const linhas = await banco
+  const [produto] = await banco
     .select({
       id: produtos.id,
       empresaId: produtos.empresaId,
       grupoMercadoriaId: produtos.grupoMercadoriaId,
+      grupoNome: gruposMercadorias.nome,
       unidadeMedidaId: produtos.unidadeMedidaId,
       unidadeIndividualId: produtos.unidadeIndividualId,
+      unidadeIndividualSigla: unidadesMedida.sigla,
       codigo: produtos.codigo,
       codigoInterno: produtos.codigoInterno,
       codigoBarras: produtos.codigoBarras,
@@ -44,28 +51,30 @@ export async function listarProdutosRepository(escopoEmpresas: string[]) {
       setorEstoque: produtos.setorEstoque,
       localVenda1: produtos.localVenda1,
       localVenda2: produtos.localVenda2,
-      fotoUrl: produtos.fotoUrl
+      fotoUrl: produtos.fotoUrl,
+      criadoEm: produtos.criadoEm,
+      criadoPorNome: perfisUsuarios.nome
     })
     .from(produtos)
-    .where(inArray(produtos.empresaId, escopoEmpresas))
-    .orderBy(asc(produtos.descricao));
+    .leftJoin(gruposMercadorias, eq(produtos.grupoMercadoriaId, gruposMercadorias.id))
+    .leftJoin(unidadesMedida, eq(produtos.unidadeIndividualId, unidadesMedida.id))
+    .leftJoin(perfisUsuarios, eq(produtos.criadoPor, perfisUsuarios.usuarioId))
+    .where(and(eq(produtos.id, id), inArray(produtos.empresaId, escopoEmpresas)));
 
-  // As satelites sao buscadas SO dos produtos ja filtrados pelo escopo. A versao anterior lia as
-  // quatro tabelas inteiras, sem WHERE nenhum — todas as empresas, a cada listagem.
-  const ids = linhas.length ? linhas.map((produto) => produto.id) : [SEM_RESULTADO];
+  if (!produto) return null;
+
   const conversoes = await banco
     .select({
       id: produtosConversoes.id,
-      produtoId: produtosConversoes.produtoId,
       unidadeMedidaId: produtosConversoes.unidadeMedidaId,
       quantidade: produtosConversoes.quantidade,
       unidadesIndividuais: produtosConversoes.unidadesIndividuais
     })
     .from(produtosConversoes)
-    .where(inArray(produtosConversoes.produtoId, ids));
-  const fiscais = await banco
+    .where(eq(produtosConversoes.produtoId, id));
+
+  const [fiscal] = await banco
     .select({
-      produtoId: produtosFiscal.produtoId,
       ncm: produtosFiscal.ncm,
       cest: produtosFiscal.cest,
       categoriaFiscal: produtosFiscal.categoriaFiscal,
@@ -78,21 +87,21 @@ export async function listarProdutosRepository(escopoEmpresas: string[]) {
       icms: produtosFiscal.icms
     })
     .from(produtosFiscal)
-    .where(inArray(produtosFiscal.produtoId, ids));
-  const transformacoes = await banco
+    .where(eq(produtosFiscal.produtoId, id));
+
+  const [transformacao] = await banco
     .select({
-      produtoId: produtosTransformacao.produtoId,
       precisao: produtosTransformacao.precisao,
       quantidade: produtosTransformacao.quantidade,
       unidade: produtosTransformacao.unidade,
       produtoReceituario: produtosTransformacao.produtoReceituario
     })
     .from(produtosTransformacao)
-    .where(inArray(produtosTransformacao.produtoId, ids));
+    .where(eq(produtosTransformacao.produtoId, id));
+
   const promocoes = await banco
     .select({
       id: produtosPromocoes.id,
-      produtoId: produtosPromocoes.produtoId,
       tipo: produtosPromocoes.tipo,
       valor: produtosPromocoes.valor,
       descontoFracao: produtosPromocoes.descontoFracao,
@@ -108,19 +117,7 @@ export async function listarProdutosRepository(escopoEmpresas: string[]) {
       validaAte: produtosPromocoes.validaAte
     })
     .from(produtosPromocoes)
-    .where(inArray(produtosPromocoes.produtoId, ids));
+    .where(eq(produtosPromocoes.produtoId, id));
 
-  return linhas.map((produto) => ({
-    ...produto,
-    conversoes: conversoes.filter((conversao) => conversao.produtoId === produto.id),
-    fiscal: fiscais.find((item) => item.produtoId === produto.id) ?? null,
-    transformacao: transformacoes.find((item) => item.produtoId === produto.id) ?? null,
-    promocoes: promocoes.filter((item) => item.produtoId === produto.id)
-  }));
-}
-
-/** Empresa dona do produto, para decidir escopo sem carregar o registro inteiro. */
-export async function empresaDoProdutoRepository(id: string): Promise<string | null> {
-  const [linha] = await banco.select({ empresaId: produtos.empresaId }).from(produtos).where(eq(produtos.id, id));
-  return linha?.empresaId ?? null;
+  return { ...produto, conversoes, fiscal: fiscal ?? null, transformacao: transformacao ?? null, promocoes };
 }

@@ -22,7 +22,14 @@ import {
   type ProdutoParaGravar
 } from "./produtos-escrita.repository.js";
 import { copiarProdutosRepository } from "./produtos-importacao.repository.js";
-import { listarProdutosRepository } from "./produtos.repository.js";
+import {
+  filtrosDeProdutoRepository,
+  listarProdutosPaginadoRepository,
+  opcoesDeProdutoRepository,
+  promocoesDosProdutosRepository,
+  type FiltroListaProdutos
+} from "./produtos-leitura.repository.js";
+import { detalheProdutoRepository } from "./produtos.repository.js";
 
 /**
  * Nome/descricao repetidos na mesma loja. Recusa com confirmacao — o "cadastrar mesmo assim"
@@ -65,32 +72,97 @@ export class ReferenciaDeOutraEmpresaError extends Error {
   }
 }
 
-export async function listarProdutos(escopoDados: string[]) {
-  if (!escopoDados.length) return [];
+type PromocaoDoBanco = {
+  tipo: string;
+  valor: string | null;
+  descontoFracao: string | null;
+  horaInicio: string | null;
+  horaFim: string | null;
+  seg: boolean;
+  ter: boolean;
+  qua: boolean;
+  qui: boolean;
+  sex: boolean;
+  sab: boolean;
+  dom: boolean;
+};
+
+function paraRegraDePromocao(promo: PromocaoDoBanco): PromocaoRegra {
+  return {
+    tipo: promo.tipo === "valor" ? "valor" : "desconto",
+    valor: promo.valor == null ? null : Number(promo.valor),
+    descontoFracao: promo.descontoFracao == null ? null : Number(promo.descontoFracao),
+    horaInicio: promo.horaInicio,
+    horaFim: promo.horaFim,
+    dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom]
+  };
+}
+
+/**
+ * ADR-003: o preco vigente (com promocao ativa por dia/horario) e derivado na LEITURA, pelo
+ * servidor — nunca persistido nem calculado pelo cliente.
+ */
+function precoVigente(precoVenda: string | null, promocoes: PromocaoDoBanco[], agora: Date): number | null {
+  if (precoVenda == null) return null;
+  return calcularPrecoVendaComPromocao({
+    precoVenda: Number(precoVenda),
+    agora,
+    promocoes: promocoes.map(paraRegraDePromocao)
+  });
+}
+
+/**
+ * Listagem paginada NO BANCO, com busca, filtros e ordenacao server-side. So as promocoes DA
+ * PAGINA sao carregadas — nenhuma outra satelite entra no resumo.
+ */
+export async function listarProdutos(filtro: FiltroListaProdutos) {
+  if (!filtro.escopoEmpresas.length) return { itens: [], total: 0 };
   const agora = new Date();
-  const linhas = await listarProdutosRepository(escopoDados);
-  // ADR-002/003: o preco vigente (com promocao ativa por dia/horario) e derivado na
-  // LEITURA, pelo servidor — nunca persistido nem calculado pelo cliente.
-  return linhas.map((produto) => ({
-    ...produto,
-    precoVendaAtual:
-      produto.precoVenda == null
-        ? null
-        : calcularPrecoVendaComPromocao({
-            precoVenda: Number(produto.precoVenda),
-            agora,
-            promocoes: produto.promocoes.map(
-              (promo): PromocaoRegra => ({
-                tipo: promo.tipo === "valor" ? "valor" : "desconto",
-                valor: promo.valor == null ? null : Number(promo.valor),
-                descontoFracao: promo.descontoFracao == null ? null : Number(promo.descontoFracao),
-                horaInicio: promo.horaInicio,
-                horaFim: promo.horaFim,
-                dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom]
-              })
-            )
-          })
-  }));
+  const { itens, total } = await listarProdutosPaginadoRepository(filtro);
+  const promocoes = await promocoesDosProdutosRepository(itens.map((produto) => produto.id));
+  return {
+    itens: itens.map((produto) => ({
+      ...produto,
+      precoVendaAtual: precoVigente(
+        produto.precoVenda,
+        promocoes.filter((promo) => promo.produtoId === produto.id),
+        agora
+      )
+    })),
+    total
+  };
+}
+
+/** Detalhe completo para o formulario. `null` = inexistente OU fora do escopo (404 nos dois). */
+export async function detalharProduto(id: string, escopoDados: string[]) {
+  const produto = await detalheProdutoRepository(id, escopoDados);
+  if (!produto) throw new ProdutoNaoEncontradoError();
+  return { ...produto, precoVendaAtual: precoVigente(produto.precoVenda, produto.promocoes, new Date()) };
+}
+
+/**
+ * Projecao reduzida para seletores. **Teto duro de `LIMITE_DE_OPCOES` linhas, sempre.**
+ *
+ * O numero e escolhido, nao arbitrario: o mix real da rede fica na casa das centenas, entao o
+ * seletor abre completo no uso de hoje — e continua **limitado**, para que a rota nunca vire
+ * "traga todos os produtos" quando o catalogo crescer. Passar do teto nao quebra nada: digitar
+ * refaz a consulta no servidor (`busca`), e `ids` hidrata o item ja escolhido mesmo que ele esteja
+ * fora do recorte. Os seletores que usam `ProdutoAutocomplete` ja funcionam assim.
+ */
+const LIMITE_DE_OPCOES = 500;
+
+export async function listarOpcoesDeProduto(entrada: {
+  escopoEmpresas: string[];
+  busca: string | undefined;
+  ids: string[];
+}) {
+  if (!entrada.escopoEmpresas.length) return [];
+  return opcoesDeProdutoRepository({ ...entrada, limite: LIMITE_DE_OPCOES });
+}
+
+export async function listarFiltrosDeProduto(escopoDados: string[]) {
+  if (!escopoDados.length) return { setores: [], grupos: [] };
+  return filtrosDeProdutoRepository(escopoDados);
 }
 
 function mensagemDeDuplicado(duplicado: { descricao: string; criadoPorNome: string | null }, motivo: string) {
