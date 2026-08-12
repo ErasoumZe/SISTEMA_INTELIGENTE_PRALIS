@@ -282,10 +282,9 @@ describe("saldo insuficiente na conta de origem (R-143 / R-165) integration", ()
       await fecharBloqueador(bloqueador);
     }
 
-    const [respostaA, respostaB] = (await Promise.all([primeira!, segunda!])) as {
-      statusCode: number;
-      body: string;
-    }[];
+    type RespostaCorrida = { statusCode: number; body: string };
+    // Tupla, nao array: com `noUncheckedIndexedAccess` o indice de array e `T | undefined`.
+    const [respostaA, respostaB] = (await Promise.all([primeira!, segunda!])) as [RespostaCorrida, RespostaCorrida];
     const aceitas = [respostaA, respostaB].filter((resposta) => resposta.statusCode === 201);
     const recusadas = [respostaA, respostaB].filter((resposta) => resposta.statusCode === 409);
 
