@@ -33,7 +33,9 @@ describe("operacoes edicao integration", () => {
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta edicao" }
+      // R-165: a conta do PDV paga as cinco saidas editadas neste caso; sem fundo, o POST nem chega
+      // na edicao, que e o que o arquivo prova.
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta edicao", saldoInicial: 100_000 }
     });
     expect(conta.statusCode).toBe(201);
     const contaPdvId = json<{ data: { id: string } }>(conta).data.id;

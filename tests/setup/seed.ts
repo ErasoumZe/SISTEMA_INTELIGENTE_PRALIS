@@ -343,11 +343,23 @@ export async function aplicarSeedIntegracao() {
   // depende daqui — ela vive em `contas/conta-saldo-insuficiente.test.ts`, que cria contas
   // proprias com fundo baixo e declarado.
   //
-  // `contaCaixa`, `contaLivre` e `contaEntradas` seguem em ZERO de proposito: o caixa recebe o
-  // fundo de troco pelo malote do cofre (R-001), e `conta-fundo-saldo.test.ts` afirma que conta
-  // existente permanece com fundo 0 (migration aditiva, sem backfill).
+  // `contaCaixa` e `contaLivre` tambem PAGAM (despesa, retirada, mercadoria e transferencia saem
+  // delas em ~10 arquivos), entao tambem precisam de fundo: uma gaveta de caixa que paga fornecedor
+  // com R$ 0,00 e a mesma impossibilidade fisica do cofre zerado. Na vida real o troco chega pelo
+  // malote do cofre (R-001), mas nenhum destes arquivos encena o malote — encenar so para dar
+  // dinheiro seria fixture contando historia que o teste nao prova.
+  //
+  // `contaEntradas` segue em ZERO de proposito, e e ela quem sustenta a prova de que a migration
+  // foi ADITIVA (sem backfill), em `conta-fundo-saldo.test.ts`: conta que nasce sem fundo declarado
+  // continua com fundo 0. Ela so RECEBE entradas, entao nunca esbarra na porta de saldo.
   await banco.insert(contas).values([
-    { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
+    {
+      id: idsTeste.contaCaixa,
+      empresaId: idsTeste.empresaA,
+      nome: "Caixa Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
     {
       id: idsTeste.contaBanco,
       empresaId: idsTeste.empresaA,
@@ -355,7 +367,13 @@ export async function aplicarSeedIntegracao() {
       ativa: true,
       saldoInicial: "1000000.00"
     },
-    { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
+    {
+      id: idsTeste.contaLivre,
+      empresaId: idsTeste.empresaA,
+      nome: "Conta Livre Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
     {
       id: idsTeste.contaCofre,
       empresaId: idsTeste.empresaA,

@@ -44,7 +44,9 @@ describe("CX-M06 - campos operacionais do caixa pela rota real", () => {
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV CX-M06" }
+      // R-165: fundo para as saidas do operador; o que o arquivo prova e o CAMPO gravado
+      // (conta/caixa_id), nao o saldo.
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV CX-M06", saldoInicial: 100_000 }
     });
     expect(conta.statusCode, conta.body).toBe(201);
     contaDoPdv = json<{ data: { id: string } }>(conta).data.id;
