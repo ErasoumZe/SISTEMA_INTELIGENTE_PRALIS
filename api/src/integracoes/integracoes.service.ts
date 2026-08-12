@@ -103,6 +103,12 @@ function gerarUlid(): string {
 
 function jsonCanonico(valor: DadosExternos): string {
   if (valor === null || typeof valor !== "object") return JSON.stringify(valor);
+  // S8: o hash roda sobre o payload JA parseado pelo zod, onde as datas viraram `Date` — e um
+  // `Date` serializado por `Object.keys` colapsa em `{}`. Sem esta linha, um re-envio que so muda
+  // a data/hora da venda era deduplicado como "sem novidade" e a venda NUNCA migrava de caixa.
+  // Efeito colateral aceito (registrado no relatorio): hashes armazenados antes desta correcao
+  // divergem no proximo re-envio identico — um "atualizado" idempotente unico, sem duplicar nada.
+  if (valor instanceof Date) return JSON.stringify(valor.toISOString());
   if (Array.isArray(valor)) return `[${valor.map((item) => jsonCanonico(item)).join(",")}]`;
   const objeto = valor as Record<string, DadosExternos>;
   return `{${Object.keys(objeto)

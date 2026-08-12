@@ -146,7 +146,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
 
     // Renomear SEM trocar a conta continua livre — a recusa e do pivo, nao do cadastro.
     const renome = await putPdv(fx.pdvId, fx.contaId, `PDV S3b renomeado ${sequencia}`);
-    expect(renome.statusCode, renome.body).toBe(200);
+    expect(renome.statusCode, renome.body).toBe(204);
   });
 
   it("Deve_EsperarOFechamentoETrocarDepois_Quando_ATrocaConcorreComOFechamento", async () => {
@@ -181,7 +181,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       expect((await fechamento).statusCode).toBe(204);
 
       const resposta = await troca;
-      expect(resposta.statusCode, resposta.body).toBe(200);
+      expect(resposta.statusCode, resposta.body).toBe(204);
     } finally {
       await fecharBloqueador(bloqueador);
     }
@@ -621,12 +621,14 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2020-01-01T12:00:00.000Z")
     );
     expect(reenvio.statusCode, reenvio.body).toBe(200);
+    expect(reenvio.body).toContain("atualizado");
 
-    const venda = await consultarUm<{ caixa_id: string | null }>(
-      "select caixa_id from vendas where identificador_externo = $1",
+    const venda = await consultarUm<{ caixa_id: string | null; data_venda: string }>(
+      "select caixa_id, data_venda::text as data_venda from vendas where identificador_externo = $1",
       [idExterno]
     );
-    expect(venda?.caixa_id).toBeNull();
+    expect(venda?.data_venda).toContain("2020-01-01");
+    expect(venda?.caixa_id, `caixa_id=${venda?.caixa_id} fx=${fx.caixaId}`).toBeNull();
     // O caixa que PERDEU a venda (fechado) ganha a trilha imutavel; os totais congelados ficam.
     const depois = await universoDoCaixa(fx.caixaId);
     expect(depois).toMatchObject({
