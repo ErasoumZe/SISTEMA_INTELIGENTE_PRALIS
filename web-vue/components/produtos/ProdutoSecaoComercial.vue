@@ -5,7 +5,7 @@
  * O estoque ATUAL e somente leitura: ele so muda por movimentacao. Esta entrega nao cria
  * movimentacao nenhuma — o campo existe para conferencia, nao para digitacao.
  */
-import type { ProdutoForm } from "~/composables/useProdutoFormulario";
+import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
 
 defineProps<{
   form: ProdutoForm;

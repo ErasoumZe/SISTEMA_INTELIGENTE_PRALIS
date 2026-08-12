@@ -2,7 +2,7 @@
 /** Identificacao + "Como se compra". As duas previas usam a funcao de dominio, nunca copia local. */
 import ProdutoFoto from "~/components/produtos/ProdutoFoto.vue";
 import ProdutoScanner from "~/components/produtos/ProdutoScanner.vue";
-import type { ProdutoForm } from "~/composables/useProdutoFormulario";
+import type { ProdutoForm } from "~/composables/produto-formulario-mapa";
 
 const props = defineProps<{
   form: ProdutoForm;

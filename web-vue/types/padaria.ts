@@ -1,47 +1,9 @@
 // M3/ADR-002: tipos de formulario de cadastro agora moram no shared (fachada para o front).
-export type { CadastroForm, ProdutoConversaoForm, ProdutoFiscalForm, ProdutoTransformacaoForm } from "@padaria/shared";
+export type { CadastroForm } from "@padaria/shared";
 
 import type { ConfiguracaoAparenciaEmpresa, Permissao, TemaAplicacao } from "@padaria/shared";
 
 // Dados fiscais do produto como vêm da API (numeric chega como string).
-export type ProdutoFiscalDados = {
-  ncm?: string | null;
-  cest?: string | null;
-  categoriaFiscal?: string | null;
-  cstPisCofins?: string | null;
-  aliquotaCheia?: string | number | null;
-  aliquotaFcp?: string | number | null;
-  aliquotaPis?: string | number | null;
-  aliquotaCofins?: string | number | null;
-  reducaoIcms?: string | number | null;
-  icms?: string | number | null;
-};
-
-// Transformacao (ficha de receita) como vem da API e no formulario.
-export type ProdutoTransformacaoDados = {
-  precisao?: string | null;
-  quantidade?: string | number | null;
-  unidade?: string | null;
-  produtoReceituario?: string | null;
-};
-
-// Promocao como vem da API (1:N).
-export type ProdutoPromocaoDados = {
-  tipo?: string | null;
-  valor?: string | number | null;
-  descontoFracao?: string | number | null;
-  horaInicio?: string | null;
-  horaFim?: string | null;
-  seg?: boolean;
-  ter?: boolean;
-  qua?: boolean;
-  qui?: boolean;
-  sex?: boolean;
-  sab?: boolean;
-  dom?: boolean;
-  validaAte?: string | null;
-};
-
 export type Opcao = {
   id: string;
   nome?: string;
@@ -87,9 +49,6 @@ export type Opcao = {
   localVenda1?: string | null;
   localVenda2?: string | null;
   fotoUrl?: string | null;
-  fiscal?: ProdutoFiscalDados | null;
-  transformacao?: ProdutoTransformacaoDados | null;
-  promocoes?: ProdutoPromocaoDados[];
   custo?: string | number | null;
   margem?: string | number | null;
   precoVenda?: string | number | null;

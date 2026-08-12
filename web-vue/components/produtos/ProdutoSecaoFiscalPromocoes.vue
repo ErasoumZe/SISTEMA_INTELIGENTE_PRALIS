@@ -6,7 +6,7 @@
  * (R-145: o dado fiscal dela esta errado e causa pagamento de imposto a maior). Nao ha calculo
  * tributario aqui — os campos so sao guardados.
  */
-import { promocaoVazia, type ProdutoForm } from "~/composables/useProdutoFormulario";
+import { promocaoVazia, type ProdutoForm } from "~/composables/produto-formulario-mapa";
 
 const props = defineProps<{
   form: ProdutoForm;

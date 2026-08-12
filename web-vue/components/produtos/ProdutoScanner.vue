@@ -54,15 +54,19 @@ function fechar() {
 }
 
 watch(aberto, (ligado) => (ligado ? void iniciar() : parar()));
-onBeforeUnmount(parar);
-if (import.meta.client) {
-  // Navegar para outra rota nao dispara `onBeforeUnmount` do dialogo em todos os casos.
-  const router = useRouter();
-  router.beforeEach((_para, _de, seguir) => {
-    parar();
-    seguir();
-  });
-}
+
+// Navegar para outra rota nao dispara `onBeforeUnmount` do dialogo em todos os casos, entao a
+// camera tambem e parada na troca de rota. `beforeEach` devolve a funcao que REMOVE o guard: sem
+// chamar isso, cada montagem do formulario deixaria mais um guard global pendurado no router.
+const removerGuardaDeRota = useRouter().beforeEach((_para, _de, seguir) => {
+  parar();
+  seguir();
+});
+
+onBeforeUnmount(() => {
+  parar();
+  removerGuardaDeRota();
+});
 </script>
 
 <template>

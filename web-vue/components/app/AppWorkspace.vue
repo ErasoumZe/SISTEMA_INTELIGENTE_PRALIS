@@ -1418,7 +1418,6 @@ async function salvarCadastro() {
     const formSnapshot: CadastroForm = {
       ...formCadastro.value,
       empresaIds: [...formCadastro.value.empresaIds],
-      produtoConversoes: formCadastro.value.produtoConversoes.map((conversao) => ({ ...conversao })),
       // S-06: a listagem esconde 52 permissoes do form e o servidor faz REPLACE total — sem
       // reinjetar aqui, salvar pela tela apaga o que ela mesma escondeu. A fonte e `opcoes`
       // (completa e sem paginacao), nao `permissoesPagina` (uma pagina, que nasce vazia).

@@ -9,34 +9,6 @@ import {
 } from "./domain";
 
 describe("formCadastroDeLinha", () => {
-  it("reconstroi o formulario de produto (booleanos, conversoes JSON, precos)", () => {
-    const form = formCadastroDeLinha(
-      {
-        id: "p1",
-        nome: "Pao Frances",
-        descricao: "Pao Frances 50g",
-        codigo: "PR-0001",
-        marca: "Casa",
-        auto: "true",
-        status: "inativo",
-        tipo: "transformacao",
-        custo: "10",
-        margem: "30",
-        precoVenda: "6.5",
-        unidadeMedidaId: "u1",
-        conversoes: JSON.stringify([{ unidadeMedidaId: "u2", quantidade: 12, unidadesIndividuais: 1 }])
-      },
-      {}
-    );
-    expect(form.descricao).toBe("Pao Frances 50g");
-    expect(form.auto).toBe(true);
-    expect(form.status).toBe("inativo");
-    expect(form.tipo).toBe("transformacao");
-    expect(form.precoVenda).toBe("6.5");
-    expect(form.unidadeIndividualId).toBe("u1");
-    expect(form.produtoConversoes).toEqual([{ unidadeMedidaId: "u2", quantidade: "12", unidadesIndividuais: "1" }]);
-  });
-
   it("aplica mascaras em documento/whatsapp/cep de cliente", () => {
     const form = formCadastroDeLinha(
       { nome: "Cliente", documento: "12345678901", whatsapp: "11987654321", cep: "01001000" },
@@ -49,9 +21,6 @@ describe("formCadastroDeLinha", () => {
 
   it("usa defaults quando a linha e minima e divide empresaIds", () => {
     const form = formCadastroDeLinha({ nome: "X", empresaIds: "e1,e2" }, {});
-    expect(form.status).toBe("ativo");
-    expect(form.tipo).toBe("revenda");
-    expect(form.quantidadeCaixa).toBe("1");
     expect(form.ativo).toBe(true);
     // `role` NAO tem default aqui. `formCadastroDeLinha` monta o form de EDICAO, e assumir
     // "usuario_comum" para uma linha que chegou sem papel rebaixa o alvo no salvar seguinte. O

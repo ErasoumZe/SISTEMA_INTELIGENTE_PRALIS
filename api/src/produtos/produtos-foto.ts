@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
@@ -52,9 +52,11 @@ export async function salvarFotoDeProduto(
   const caminho = path.join(pasta, `${randomUUID()}${extensao}`);
   await pipeline(arquivo.file, createWriteStream(caminho));
 
-  // O @fastify/multipart corta o stream no limite e marca a flag — sem isto, o arquivo truncado
-  // ficaria no disco passando por foto valida.
+  // O @fastify/multipart corta o stream no limite e marca a flag. O pedaco ja gravado e APAGADO
+  // antes de recusar: sem isto, cada tentativa acima de 8 MB deixaria um arquivo orfao no volume —
+  // lixo que ninguem referencia, que o backup carrega e que so cresce.
   if (arquivo.file.truncated) {
+    await rm(caminho, { force: true });
     throw new FotoInvalidaError("Foto acima de 8 MB.");
   }
 
