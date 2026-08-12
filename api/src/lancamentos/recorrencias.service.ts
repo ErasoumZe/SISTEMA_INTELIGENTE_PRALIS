@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { despesas } from "@padaria/db/schema/despesa";
 import { lancamentosRecorrencias } from "@padaria/db/schema/lancamento";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -63,14 +63,22 @@ export async function cancelarSerieRecorrencia(
       if (trava?.status !== "aberto") caixasFechados.add(parcela.caixaId);
     }
 
-    const removiveis = candidatas.filter((parcela) => !parcela.caixaId || !caixasFechados.has(parcela.caixaId));
-    if (removiveis.length === 0) return { removidas: 0 };
+    // O DELETE reavalia TODOS os predicados da R-063 no proprio comando (READ COMMITTED refaz o
+    // teste sobre a versao corrente da linha): parcela que foi PAGA, ou que ganhou `caixa_id`
+    // novo, entre a listagem e o DELETE, escapa sozinha — a revisao pegou a versao anterior, que
+    // decidia por retrato sem trava e confiava numa lista de ids. So cai parcela sem caixa ou de
+    // caixa ABERTO E TRAVADO acima; caixa que apareceu depois (nunca travado) preserva a parcela.
+    const caixasAbertosTravados = [...caixasVistos].filter((caixaId) => !caixasFechados.has(caixaId));
     const removidas = await tx
       .delete(tabela)
       .where(
-        inArray(
-          tabela.id,
-          removiveis.map((parcela) => parcela.id)
+        and(
+          eq(tabela.recorrenciaId, recorrenciaId),
+          gt(tabela.dataVencimento, hoje),
+          isNull(tabela.dataPagamento),
+          caixasAbertosTravados.length > 0
+            ? or(isNull(tabela.caixaId), inArray(tabela.caixaId, caixasAbertosTravados))
+            : isNull(tabela.caixaId)
         )
       )
       .returning({ id: tabela.id });

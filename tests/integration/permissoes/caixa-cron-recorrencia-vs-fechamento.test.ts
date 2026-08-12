@@ -299,6 +299,42 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
     });
   });
 
+  // S2-d — a janela que a revisao pegou: o pagamento que commita ENTRE a listagem e o DELETE.
+  // O DELETE reavalia os predicados da R-063 sobre a versao corrente da linha (READ COMMITTED):
+  // parcela paga no meio da corrida escapa sozinha, mesmo ja listada como candidata.
+  it("Deve_PreservarAParcelaPaga_Quando_OPagamentoCommitaDuranteOCancelamento", async () => {
+    const fx = await novaFixture("S2d serie", "admin");
+    const marcador = `P0-S2d-${sequencia}`;
+    const serie = await serieDoAdmin(fx, marcador);
+
+    const bloqueador = await abrirBloqueador();
+    try {
+      // O bloqueador FAZ o papel da edicao concorrente: segura a linha da 1a parcela, deixa o
+      // cancelamento listar e prender no DELETE, grava o pagamento e commita.
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from despesas where id = $1 for no key update", [serie.primeiraId]);
+
+      const cancelamento = cancelarSerie(serie.recorrenciaId);
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+
+      await bloqueador.cliente.query("update despesas set data_pagamento = '2026-08-01' where id = $1", [
+        serie.primeiraId
+      ]);
+      await bloqueador.cliente.query("commit");
+
+      const resposta = await cancelamento;
+      expect(resposta.statusCode, resposta.body).toBe(200);
+      // So as 2 parcelas nao pagas caem; a paga no meio da corrida fica.
+      expect(json<{ data: { removidas: number } }>(resposta).data.removidas).toBe(2);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    expect(
+      await consultarUm<{ id: string }>("select id from despesas where id = $1", [serie.primeiraId])
+    ).not.toBeNull();
+  });
+
   it("Deve_ApagarSobOLock_Quando_OCancelamentoVenceOFechamento", async () => {
     const fx = await novaFixture("S2c serie", "admin");
     const marcador = `P0-S2c-${sequencia}`;

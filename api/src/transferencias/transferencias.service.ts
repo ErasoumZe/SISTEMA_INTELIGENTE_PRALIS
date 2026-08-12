@@ -296,10 +296,18 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
     // locks de varios caixas sairem sempre na mesma ordem — sem ciclo com o fechamento, que trava
     // um unico caixa.
     const agendadasVencidas = await listarAgendadasVencidasRepository(agora, tx);
+    // Cada caixa e travado/revalidado UMA vez (mesmo desenho do cancelamento de serie): o veredito
+    // vale para a transacao inteira porque o FOR SHARE impede o caixa de fechar ate o commit.
+    const caixaAbertoPorId = new Map<string, boolean>();
     for (const agendada of agendadasVencidas) {
       if (agendada.caixaId) {
-        const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
-        if (trava?.status !== "aberto") continue;
+        let aberto = caixaAbertoPorId.get(agendada.caixaId);
+        if (aberto === undefined) {
+          const trava = await travarCaixaCompartilhadoRepository(agendada.caixaId, tx);
+          aberto = trava?.status === "aberto";
+          caixaAbertoPorId.set(agendada.caixaId, aberto);
+        }
+        if (!aberto) continue;
       }
       await efetivarTransferenciaAgendadaRepository(
         agendada.id,
