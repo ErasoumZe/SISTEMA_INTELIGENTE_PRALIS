@@ -58,9 +58,11 @@ watch(aberto, (ligado) => (ligado ? void iniciar() : parar()));
 // Navegar para outra rota nao dispara `onBeforeUnmount` do dialogo em todos os casos, entao a
 // camera tambem e parada na troca de rota. `beforeEach` devolve a funcao que REMOVE o guard: sem
 // chamar isso, cada montagem do formulario deixaria mais um guard global pendurado no router.
-const removerGuardaDeRota = useRouter().beforeEach((_para, _de, seguir) => {
+//
+// Sem o callback `next()`: o Vue Router 4 o depreciou e reclamava no console a cada navegacao.
+// Guard que nao bloqueia nada apenas retorna.
+const removerGuardaDeRota = useRouter().beforeEach(() => {
   parar();
-  seguir();
 });
 
 onBeforeUnmount(() => {

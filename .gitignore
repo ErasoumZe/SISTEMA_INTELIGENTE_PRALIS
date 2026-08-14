@@ -47,3 +47,4 @@ PROJECT_BRAIN/mockups-rodrigo/*.png
 # Saida crua de comando que falhou, salva na raiz para ler depois (ex.: erro-seed.txt). E log de uma
 # execucao local: util no disco, ruido no historico.
 /erro-*.txt
+.playwright-mcp

@@ -20,23 +20,19 @@ const entrada = ref<HTMLInputElement | null>(null);
 const arrastando = ref(false);
 const enviando = ref(false);
 const erro = ref("");
-/** Preview local do arquivo ainda nao enviado. Revogado sempre que troca ou o componente morre. */
-const previewLocal = ref("");
 
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 const TETO = 8 * 1024 * 1024;
 
-const endereco = computed(() => {
-  if (previewLocal.value) return previewLocal.value;
-  return props.produtoId && props.fotoUrl ? `${apiUrl}/api/produtos/${props.produtoId}/foto` : "";
-});
+// A foto NAO pode ser um `<img src>` apontando para a API: outra origem + CORP do helmet = imagem
+// bloqueada pelo navegador. O composable baixa com credenciais e devolve um object URL.
+const { endereco, carregar: carregarFoto, mostrarArquivoLocal, revogar: revogarPreview } = useFotoDeProduto();
 
-function revogarPreview() {
-  if (previewLocal.value) {
-    URL.revokeObjectURL(previewLocal.value);
-    previewLocal.value = "";
-  }
-}
+watch(
+  () => [props.produtoId, props.fotoUrl],
+  () => void carregarFoto(apiUrl, props.produtoId, Boolean(props.fotoUrl)),
+  { immediate: true }
+);
 
 function validar(arquivo: File): string {
   if (!TIPOS.includes(arquivo.type)) return "Formato não aceito. Envie JPEG, PNG ou WebP.";
@@ -48,8 +44,7 @@ async function usar(arquivo: File) {
   erro.value = validar(arquivo);
   if (erro.value) return;
 
-  revogarPreview();
-  previewLocal.value = URL.createObjectURL(arquivo);
+  mostrarArquivoLocal(arquivo);
 
   // Sem id ainda (cadastro novo): o arquivo sobe depois que o produto nascer.
   if (!props.produtoId) {
@@ -75,7 +70,6 @@ async function enviar(arquivo: File) {
       throw new Error(problema?.title ?? "Não foi possível enviar a foto.");
     }
     const payload = (await resposta.json()) as { data: { fotoUrl: string } };
-    revogarPreview();
     emit("alterada", payload.data.fotoUrl);
   } catch (falha) {
     erro.value = falha instanceof Error ? falha.message : "Não foi possível enviar a foto.";
@@ -117,8 +111,6 @@ function aoSoltar(evento: DragEvent) {
   const arquivo = evento.dataTransfer?.files?.[0];
   if (arquivo) void usar(arquivo);
 }
-
-onBeforeUnmount(revogarPreview);
 </script>
 
 <template>

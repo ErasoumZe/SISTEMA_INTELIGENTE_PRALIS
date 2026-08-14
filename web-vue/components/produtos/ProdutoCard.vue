@@ -16,8 +16,13 @@ const { apiUrl } = useApi();
 const ativo = computed(() => props.produto.status === "ativo");
 const ehRevenda = computed(() => props.produto.tipo === "revenda");
 
-/** A foto vem SEMPRE pela rota autenticada — inclusive a legada, que a API redireciona. */
-const enderecoDaFoto = computed(() => (props.produto.fotoUrl ? `${apiUrl}/api/produtos/${props.produto.id}/foto` : ""));
+/**
+ * A foto vem pela rota autenticada — inclusive a legada, que a API redireciona. Baixada por fetch e
+ * exibida como object URL: `<img src>` apontando direto para a API e bloqueado pelo navegador
+ * (outra origem + `Cross-Origin-Resource-Policy: same-origin` do helmet).
+ */
+const { endereco: enderecoDaFoto, carregar: carregarFoto } = useFotoDeProduto();
+onMounted(() => void carregarFoto(apiUrl, props.produto.id, Boolean(props.produto.fotoUrl)));
 
 const gramatura = computed(() => {
   const quantidade = Number(props.produto.quantidadeIndividual);
