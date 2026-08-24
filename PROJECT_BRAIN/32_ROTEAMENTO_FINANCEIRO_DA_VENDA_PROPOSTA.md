@@ -1,9 +1,26 @@
 # Issue #152 — contrato de roteamento financeiro do CREARE + proposta de migration 0032
 
-> **STATUS: PARADO AGUARDANDO AUTORIZAÇÃO.** Nada foi aplicado. Nenhum arquivo de schema,
+> **STATUS: PARADO. A MIGRATION PASSA; O CONTRATO AINDA NÃO.** Nada foi aplicado. Nenhum arquivo de schema,
 > migration, journal ou snapshot foi criado ou alterado. Este documento é o gate do item 3 da
 > `docs/prompts/RETOMADA-CAIXA-TESTAVEL-2026-08-24.md` e do §4.6 do `AGENTS.md` (migration +
 > fórmula que envolve dinheiro).
+>
+> **Veredito depois dos quatro revisores read-only (§13, §16, §17, §20) e da minha conferência no
+> código:** **não autorize a 0032 como ela estava.** Foram oito defeitos P0 no total — um deles
+> dentro do meu próprio SQL, já corrigido na §5 (lógica ternária no CHECK, §20 P0-1); os outros
+> sete estão no par "fórmula da §8 + caminho de escrita da §9", que **não deve ser autorizado**
+> como escrito. Conferi pessoalmente no código os cinco mais graves; todos se confirmaram.
+>
+> Dois deles mudam o escopo da entrega e são decisão sua, não minha:
+>
+> - **A #152 sozinha não faz a conta do PDV parar de derivar negativa** (§16 P0-C). O fechamento
+>   debita a conta pelo líquido inteiro, cartão incluído, e não passa pela porta R-165. A entrega
+>   trocaria o 409 visível da despesa por um negativo silencioso no fechamento.
+> - **A #152 não pode subir antes da #41** (§20 P0-2). Duas ingestões simultâneas da mesma venda
+>   ainda criam duas linhas em `vendas`; hoje isso é invisível para o saldo, e com a fórmula nova
+>   passaria a **creditar o valor duas vezes**.
+>
+> O consolidado com o que cada ponto exige está na §18.
 
 ## 1. Estado verificado (Gate Zero)
 
@@ -153,7 +170,14 @@ ALTER TABLE "formas_pagamento" ADD COLUMN "usa_conta_do_pdv" boolean DEFAULT fal
 ALTER TABLE "formas_pagamento" ADD COLUMN "conta_recebivel_id" uuid;--> statement-breakpoint
 ALTER TABLE "formas_pagamento" ADD COLUMN "conta_final_id" uuid;--> statement-breakpoint
 ALTER TABLE "formas_pagamento" ADD COLUMN "disponibilidade" text;--> statement-breakpoint
+-- Trilha (P1 do revisor de seguranca): mudar roteamento e mudar o destino do dinheiro. Sem esta
+-- coluna, quem redirecionou e para onde some. Nulavel e sem backfill: linha antiga fica sem autor,
+-- que e a verdade sobre ela.
+ALTER TABLE "formas_pagamento" ADD COLUMN "atualizado_por" text;--> statement-breakpoint
 
+ALTER TABLE "formas_pagamento" ADD CONSTRAINT "formas_pagamento_atualizado_por_perfis_usuarios_usuario_id_fk"
+  FOREIGN KEY ("atualizado_por") REFERENCES "public"."perfis_usuarios"("usuario_id")
+  ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "formas_pagamento" ADD CONSTRAINT "formas_pagamento_conta_recebivel_empresa_fk"
   FOREIGN KEY ("conta_recebivel_id","empresa_id") REFERENCES "public"."contas"("id","empresa_id")
   ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -164,16 +188,30 @@ ALTER TABLE "formas_pagamento" ADD CONSTRAINT "formas_pagamento_conta_final_empr
 -- `disponibilidade` NULL e o estado "sem roteamento" — e o que TODA forma existente vira, e o que
 -- toda forma criada automaticamente pelo CREARE continua sendo ate o admin configurar. E o
 -- estado que abre pendencia (R-168), nunca um destino inventado.
+--
+-- DOMINIO SEPARADO, e nao por acidente da disjuncao abaixo: e o mesmo padrao enumerado do
+-- `vendas_pagamentos_roteamento_status_check`, e sem ele o dominio nao seria enforcado.
+ALTER TABLE "formas_pagamento" ADD CONSTRAINT "formas_pagamento_disponibilidade_check"
+  CHECK ("formas_pagamento"."disponibilidade" is null
+      or "formas_pagamento"."disponibilidade" in ('imediata', 'por_evento'));--> statement-breakpoint
+
+-- `is not distinct from`, e NAO `=`. CORRECAO P0 do revisor de banco: com `=`, uma coluna nulavel
+-- faz o ramo valer NULL, e CHECK so recusa quando a expressao da FALSE — `FALSE or NULL or FALSE`
+-- e NULL e PASSA. O estado que escapava era o pior possivel: `disponibilidade` NULL com
+-- `usa_conta_do_pdv = true`. A tabela de decisao da ingestao ramifica por `usa_conta_do_pdv`, entao
+-- uma forma meio-cadastrada (checkbox marcado, disponibilidade em branco) viraria dinheiro
+-- IMEDIATAMENTE GASTAVEL na conta do PDV — exatamente o "fallback silencioso" que a suite tem de
+-- matar. `is not distinct from` devolve TRUE/FALSE tambem para NULL e fecha o furo.
 ALTER TABLE "formas_pagamento" ADD CONSTRAINT "formas_pagamento_roteamento_check" CHECK (
   ("formas_pagamento"."disponibilidade" is null
        and "formas_pagamento"."usa_conta_do_pdv" = false
        and "formas_pagamento"."conta_recebivel_id" is null
        and "formas_pagamento"."conta_final_id" is null)
-  or ("formas_pagamento"."disponibilidade" = 'imediata'
+  or ("formas_pagamento"."disponibilidade" is not distinct from 'imediata'
        and "formas_pagamento"."usa_conta_do_pdv" = true
        and "formas_pagamento"."conta_recebivel_id" is null
        and "formas_pagamento"."conta_final_id" is null)
-  or ("formas_pagamento"."disponibilidade" = 'por_evento'
+  or ("formas_pagamento"."disponibilidade" is not distinct from 'por_evento'
        and "formas_pagamento"."usa_conta_do_pdv" = false
        and "formas_pagamento"."conta_recebivel_id" is not null
        and "formas_pagamento"."conta_final_id" is not null));--> statement-breakpoint
@@ -244,6 +282,9 @@ ALTER TABLE "vendas_pagamentos" DROP COLUMN IF EXISTS "conta_recebivel_id";
 ALTER TABLE "vendas_pagamentos" DROP COLUMN IF EXISTS "roteamento_status";
 
 ALTER TABLE "formas_pagamento" DROP CONSTRAINT IF EXISTS "formas_pagamento_roteamento_check";
+ALTER TABLE "formas_pagamento" DROP CONSTRAINT IF EXISTS "formas_pagamento_disponibilidade_check";
+ALTER TABLE "formas_pagamento" DROP CONSTRAINT IF EXISTS "formas_pagamento_atualizado_por_perfis_usuarios_usuario_id_fk";
+ALTER TABLE "formas_pagamento" DROP COLUMN IF EXISTS "atualizado_por";
 ALTER TABLE "formas_pagamento" DROP CONSTRAINT IF EXISTS "formas_pagamento_conta_final_empresa_fk";
 ALTER TABLE "formas_pagamento" DROP CONSTRAINT IF EXISTS "formas_pagamento_conta_recebivel_empresa_fk";
 ALTER TABLE "formas_pagamento" DROP COLUMN IF EXISTS "disponibilidade";
@@ -303,6 +344,11 @@ funcionando sem enxergá-las. A migration pode ser aplicada **antes** do deploy 
 
 ## 8. A mudança de fórmula (exige autorização separada — `AGENTS.md` §4.6)
 
+> ⚠️ **ESTA SEÇÃO NÃO SOBREVIVEU À REVISÃO.** Creditar por `sum(total_pago)` cria uma segunda
+> fórmula de dinheiro (§15 P0-A), faz a diferença evaporar em silêncio contra a R-170
+> (§15 P0-B) e, com a ingestão concorrente ainda não idempotente, credita em dobro
+> (§17 P0-2). Está mantida como registro do que foi proposto e recusado.
+
 `shared/src/caixa/regras.ts` ganha **um** termo:
 
 ```ts
@@ -350,6 +396,10 @@ outra entidade, outra pergunta.
 
 ## 9. Caminho de escrita — um só
 
+> ⚠️ **O TÍTULO ESTÁ ERRADO E A SEÇÃO TAMBÉM.** Existem **três** escritores de
+> `vendas_pagamentos`, não um, e o `PUT /api/vendas` apaga o snapshot de roteamento em venda
+> integrada (§15 P0-D, §17 P0-3). Mantida como registro.
+
 Tudo dentro da transação que já existe em `receberVendaIntegracao`. Nenhuma segunda API.
 
 1. `resolverVinculosVenda` passa a resolver também, por `formaPagamentoId`, a linha de roteamento da
@@ -388,6 +438,10 @@ e apontar as contas). Sem página nova, sem navegação, sem segundo caminho. Fi
 
 ## 11. Cobertura de testes proposta (item 5 da entrega vertical)
 
+> ⚠️ **INSUFICIENTE.** O revisor de QA mostrou que o teste 9 não fica vermelho, que o 7 é
+> tautológico, que a rede de regressão do 8 não cobre nada do novo e que o 6 não tem fixture.
+> Cinco mutações sobrevivem. Ver §16 antes de escrever qualquer teste.
+
 | #   | Teste                                                                                                   | Tipo       |
 | --- | ------------------------------------------------------------------------------------------------------- | ---------- |
 | 1   | Dinheiro no PDV com turno aberto → saldo da conta do PDV sobe; a despesa que hoje dá 409 passa          | integração |
@@ -407,6 +461,8 @@ pendência no reenvio; **contar em dobro** (venda com `conta_origem_id` **e** pa
 
 ## 12. Decisões que são do José/Rodrigo, não minhas
 
+> ⚠️ **SUPERADA PELA §18.** Eram três decisões; depois das quatro revisões são sete.
+
 1. **Reenvio de venda antiga.** O agente do CREARE reenvia vendas. Uma venda antiga reenviada
    depois do deploy passaria a ter roteamento e — se for dinheiro — creditaria retroativamente a
    conta do PDV, mudando o saldo de um período já fechado. Sem `UPDATE` e sem backfill, mas mexe em
@@ -420,11 +476,493 @@ pendência no reenvio; **contar em dobro** (venda com `conta_origem_id` **e** pa
    seguinte. Confirmar que ela **fica fora** da #152.
 3. **A fórmula do dinheiro** (§8) precisa do seu "pode".
 
-## 13. O que NÃO foi feito
+## 13. Revisão read-only — segurança (achados incorporados)
 
-- Nenhum arquivo criado, alterado ou gerado: `db/src/schema/**`, `db/migrations/**`,
-  `_journal.json`, `meta/*_snapshot.json`, `api/src/**`, `shared/src/**`, `web-vue/**`.
-- `git fetch` continua bloqueado por credencial — base remota não comprovada.
-- Nenhuma implementação, nenhum revisor, nenhum gate pesado, nenhum Playwright, nenhum DEV local:
-  todos vêm **depois** da autorização.
+Revisor read-only de segurança rodou sobre esta proposta. **Um P0 e três P1.** As correções abaixo
+passam a fazer parte do escopo da #152; a migration da §5 muda em um ponto (P1 da trilha).
+
+### P0 — `cadastro_formas_pagamento_editar` viraria permissão de dinheiro
+
+Hoje essa permissão significa "renomear uma forma"
+([formas-pagamento.controller.ts:55-72](../api/src/formas-pagamento/formas-pagamento.controller.ts#L55-L72)).
+Com a 0032 ela passaria a decidir **para onde vai o dinheiro** — quem podia renomear passaria a
+poder apontar o recebimento para uma conta à sua escolha, inclusive uma que ele mesmo criou, sem
+nenhuma permissão financeira. É escalação por reuso de permissão e contraria a R-172.
+
+`exigirPermissao`/`exigirAlgumaPermissao` ([guards.ts](../api/src/auth/guards.ts)) não têm variante
+AND, então a exigência tem de ficar no service e valer **só para o subconjunto de campos de
+roteamento**: alterar `nome` continua com `cadastro_formas_pagamento_editar`; alterar
+`conta_recebivel_id` / `conta_final_id` / `usa_conta_do_pdv` / `disponibilidade` / `adquirente` exige
+permissão financeira dedicada. O cargo **Financeiro** já existe na referência
+([referencia-permissoes.ts:280](../db/src/referencia-permissoes.ts#L280)) — é acrescentar uma
+permissão ao conjunto, não inventar cargo.
+
+### P1 — a FK simples de `vendas_pagamentos` deixa a 6ª consulta cruzar tenant
+
+`vendas_pagamentos.conta_final_id` com FK simples para `contas(id)` permite, no banco, linha de
+venda da Empresa A apontando para conta da Empresa B. A 6ª consulta da §8 filtra por
+`conta_final_id IN (:contaIds)` **sem amarrar `vendas.empresa_id` a `contas.empresa_id`** — um bug
+de resolução, um reenvio ou uma forma migrada de empresa creditaria a Empresa B e nada reclamaria.
+O precedente de `forma_pagamento_id` (também FK simples) **não** serve de defesa: aquele campo é
+rótulo, este entra no saldo.
+
+**Correção sem backfill:** a 6ª consulta junta `contas c` exigindo `c.empresa_id = v.empresa_id`, e
+o teste 6 da §11 passa a cobrir a **linha já gravada**, não só o `INSERT`.
+
+### P1 — a projeção de `GET /api/formas_pagamento` vazaria ids de conta
+
+O guard é um OR de três permissões
+([formas-pagamento.controller.ts:14-22](../api/src/formas-pagamento/formas-pagamento.controller.ts#L14-L22)):
+`cadastro_formas_pagamento_visualizar`, `relatorio_vendas_visualizar` **ou** `entradas_visualizar`.
+Hoje projeta só `id/empresaId/nome`. Incluir os campos de roteamento entregaria ids de conta a
+perfis que não passam em nenhuma das cinco permissões do `GET /api/contas`
+([contas.controller.ts:18-28](../api/src/contas/contas.controller.ts#L18-L28)).
+
+Não reabre sozinho o 409 da R-165 — o corpo restrito continua sem número — mas quebra a premissa
+escrita em [lancamentos.dominio.ts:993-997](../api/src/lancamentos/lancamentos.dominio.ts#L993-L997)
+("com `GET /api/contas` entregando os ids…"): a enumeração de contas deixaria de estar atrás de
+`cadastro_contas_visualizar`, e o operador de caixa (`caixa_operar` + `entradas_visualizar`) passaria
+a ter **ids e caminho de saída**. **Correção:** projeção condicional — roteamento só com
+`cadastro_formas_pagamento_visualizar`; **nome** de conta só com `cadastro_contas_visualizar`.
+
+### P1 — mudança de roteamento ficaria sem trilha
+
+`formas_pagamento` não tem `criado_por`/`atualizado_por`, o repository grava só `nome` +
+`atualizadoEm`
+([formas-pagamento.repository.ts:17-24](../api/src/formas-pagamento/formas-pagamento.repository.ts#L17-L24))
+e não existe tabela de trilha. Quem redirecionou o dinheiro, e para onde, sumiria.
+**A migration da §5 ganha `ALTER TABLE "formas_pagamento" ADD COLUMN "atualizado_por" text` com FK
+para `perfis_usuarios(usuario_id)`** — aditiva, nulável, sem backfill.
+
+### P2 — dois defeitos de camada que o roteamento agrava
+
+1. `salvarFormaPagamento`
+   ([formas-pagamento.service.ts:10-13](../api/src/formas-pagamento/formas-pagamento.service.ts#L10-L13))
+   valida só `empresaId` + `nome`. Com os campos novos, conta de outra empresa vira violação `23503`
+   crua → **500 em vez de 403/400**. O schema Zod em
+   [shared/src/formas-pagamento/index.ts](../shared/src/formas-pagamento/index.ts) precisa crescer junto.
+2. O `UPDATE` usa `empresaId` **vindo do body** e não confere linhas afetadas: hoje é inofensivo
+   (só renomeia); com roteamento vira **no-op silencioso devolvendo 204**.
+
+### P2 — a pendência do §10 é faturamento, não cadastro
+
+Agrupada por forma com **valor total**, ela é receita agregada. Atrás de
+`cadastro_formas_pagamento_visualizar` daria faturamento a quem administra cadastro e não tem
+`relatorio_vendas_visualizar`. Precisa ser **endpoint próprio** — embutida no
+`GET /api/formas_pagamento` cairia no guard OR e chegaria a `entradas_visualizar` — com o **valor**
+atrás de `relatorio_vendas_visualizar` e a contagem/ocorrências atrás da permissão de cadastro.
+
+## 14. Achados meus, fora dos revisores
+
+1. **Venda integrada pode chegar sem pagamento nenhum.** `PagamentosVenda` é
+   `z.array(...).default([])`
+   ([shared/src/integracoes/index.ts:116](../shared/src/integracoes/index.ts#L116)) e não há
+   validação cruzada de total. Venda sem pagamento não roteia nada e credita nada — precisa nascer
+   pendência, não passar em silêncio.
+2. **A soma dos pagamentos pode divergir do valor da venda.** A venda de retaguarda **já** exige
+   `soma(tiposPagamento) == valorOriginal`
+   ([vendas.service.ts:39-44](../api/src/vendas/vendas.service.ts#L39-L44)) — tolerância zero, mas
+   contra `valorOriginal`, **não** contra o líquido (`original − desconto + acréscimo`) que o saldo
+   usa. A venda integrada **não tem validação nenhuma**. Se a conta for creditada por
+   `sum(total_pago)` e a venda valer o líquido, os dois números divergem. É exatamente a divergência
+   de tolerância zero da **R-170**: a ingestão precisa comparar `sum(PagamentosVenda.valor)` com
+   `liquidoCentavos(venda)` e, divergindo, **preservar a venda e nascer pendente** em vez de
+   escolher um número em silêncio. Isso pede motivo explícito na pendência — proponho
+   `pendencia_motivo text` em `('sem_mapa','sem_pdv','sem_pagamento','divergencia')`, nulável,
+   dentro da mesma migration.
+3. **O SQL da §5 é intenção, não o arquivo final.** Existe teste que provisiona o banco pelas
+   migrations e pelo `db:push` do schema e exige estrutura **idêntica**
+   (`Deve_GerarEstruturaIdenticaAoPush_Quando_ProvisionarViaMigrate`,
+   [migracoes.test.ts:133](../tests/integration/migracoes/migracoes.test.ts#L133)). O arquivo tem de
+   sair de `db:generate` a partir de `app.schema.ts` editado — escrever à mão quebra esse teste.
+4. **Playwright não existe neste repositório.** Nenhuma dependência, config, pasta `e2e/` ou
+   `.spec.ts` em `package.json`, `web-vue/package.json`, `tests/package.json` ou `node_modules`. O
+   teste visual focado exigido pela retomada precisa **instalar** Playwright — mexe em
+   `package.json`, `package-lock.json` e nos gates `audit:deps`/`depcheck`/`knip`. É escopo próprio,
+   precisa de autorização e só faz sentido depois do GREEN.
+5. **Índice parcial não serve ao `ON DELETE restrict`.** Os três índices da §5 são parciais, então
+   excluir uma conta faria varredura em `vendas_pagamentos`. Hoje é teórico: **não existe rota
+   `DELETE` para contas nem para formas de pagamento** (verificado nos dois controllers). Fica
+   registrado para quando existir.
+
+## 15. Revisão read-only — finanças e dados (5 P0)
+
+O revisor de finanças/dados leu a proposta contra o código. **Conferi pessoalmente os três achados
+mais graves antes de aceitá-los** — todos se confirmaram.
+
+### P0-A — a proposta cria uma SEGUNDA fórmula de dinheiro para o mesmo evento
+
+O termo antigo credita o **líquido** (`original − desconto + acréscimo`,
+[contas.repository.ts:243](../api/src/contas/contas.repository.ts#L243) via `liquidoCentavos`). O
+termo que eu propus credita **Σ `vendas_pagamentos.total_pago`**. Nada garante que sejam iguais — e
+o único validador existente garante o **contrário**:
+[vendas.service.ts:39-44](../api/src/vendas/vendas.service.ts#L39-L44) compara a soma dos pagamentos
+com `valorOriginal`, o **subtotal**, não com o líquido. Por contrato da retaguarda os dois números
+diferem por `(desconto − acréscimo)`.
+
+O ADR-001 ("a venda entra pelo líquido", [regras.ts:50-53](../shared/src/caixa/regras.ts#L50-L53))
+deixaria de valer para a venda integrada. Duas fórmulas para o mesmo evento é exatamente o que o
+`AGENTS.md` §4.1 proíbe. **Isso invalida a §8 como escrita.**
+
+### P0-B — a diferença entre os dois números evapora em silêncio (é a R-170)
+
+Consequência direta do P0-A: a diferença não é creditada, não é registrada, não abre pendência e
+não aparece em relatório nenhum. A R-170 diz literalmente "tolerância de R$ 0,00 … nenhum número é
+escolhido em silêncio". A proposta escolhe Σ pagamentos e descarta o líquido. Agravante levantado
+pelo revisor: já existe `TOLERANCIA_CONCILIACAO_CENTAVOS = 1`
+([shared/src/integracoes/index.ts:184](../shared/src/integracoes/index.ts#L184)) — a R-170 já tem
+uma contradição em código, e a proposta acrescentaria a segunda.
+
+### P0-C — o fechamento continua debitando a conta do PDV pelo líquido inteiro (**conferido por mim**)
+
+O mais importante dos cinco. Eu havia escrito que "o saldo do caixa não é tocado — outra entidade,
+outra pergunta". **Está errado, e o erro esconde o defeito de verdade.**
+
+- `calcularTotaisCaixaOperacionalRepository` soma **toda** venda do caixa pelo líquido, **sem
+  nenhum filtro de forma de pagamento**
+  ([caixa.repository.ts:1147-1181](../api/src/caixa/caixa.repository.ts#L1147-L1181)). Cartão conta
+  como dinheiro no caixa.
+- `fecharCaixa` cria um `retorno` da conta do PDV para o cofre **no valor desse saldo inteiro**
+  ([caixa.service.ts:618-641](../api/src/caixa/caixa.service.ts#L618-L641)) e esse caminho **não
+  chama `exigirSaldoSuficienteNaConta`** (confirmei: a porta só aparece em despesas, mercadorias,
+  retiradas e transferências; `caixa.service.ts` não a importa).
+
+Depois da correção proposta, a conta do PDV passaria a **receber só a parcela em dinheiro** e a ser
+**debitada pelo líquido inteiro** a cada fechamento. Ela continua derivando negativa todo dia,
+exatamente pela parcela de cartão. **A entrega trocaria o 409 visível da despesa por um negativo
+silencioso no fechamento.** O teste 1 da §11 provaria a correção dentro de um turno aberto e
+passaria verde sem perceber isso.
+
+### P0-D — existem TRÊS escritores de `vendas_pagamentos`, não um (**conferido por mim**)
+
+A §9 afirma "um caminho de escrita, nenhuma segunda API". É falso:
+
+| Escritor                                                                               | Origem                |
+| -------------------------------------------------------------------------------------- | --------------------- |
+| [integracoes.repository.ts:722](../api/src/integracoes/integracoes.repository.ts#L722) | integração            |
+| [vendas.repository.ts:247](../api/src/vendas/vendas.repository.ts#L247)                | `POST /api/vendas`    |
+| [vendas.repository.ts:379](../api/src/vendas/vendas.repository.ts#L379)                | `PUT /api/vendas/:id` |
+
+E o PUT **apaga todos os `vendas_pagamentos` da venda** e reinsere só as colunas base
+([vendas.repository.ts:364-387](../api/src/vendas/vendas.repository.ts#L364-L387)) — com a 0032, os
+reinseridos voltam ao DEFAULT `nao_aplicavel`, com conta e `disponivel_em` nulos.
+
+Conferi que esse PUT **alcança venda integrada**: `atualizarVenda`
+([vendas.service.ts:82-108](../api/src/vendas/vendas.service.ts#L82-L108)) só exige
+`entradas_editar` e que a venda pertença ao caixa aberto do ator
+([lancamentos.dominio.ts:346-362](../api/src/lancamentos/lancamentos.dominio.ts#L346-L362)) — que é
+exatamente a situação de uma venda em dinheiro roteada minutos antes. **O operador corrige um
+detalhe da venda e apaga em silêncio o crédito da conta do PDV**, sem `UPDATE` em histórico, sem
+trilha, sem a porta R-165 perceber.
+
+Ainda no mesmo eixo: `POST/PUT /api/vendas` aceitam `contaOrigemId` **e** `tiposPagamento` no mesmo
+payload ([shared/src/vendas/index.ts:71,76](../shared/src/vendas/index.ts#L71)). A guarda
+`v.conta_origem_id IS NULL` não duplica — ela **engole o roteamento**: o líquido inteiro vai para
+uma conta só, como disponível, incluindo a parcela de cartão. É a R-169 reaberta por um caminho que
+já existe.
+
+### P0-E — a onda de reenvio em massa já está agendada (**conferido por mim**)
+
+Eu tratei "reenvio de venda antiga" como hipótese na §12.1. **É um evento programado.** O comentário
+de `jsonCanonico` ([integracoes.service.ts:105-112](../api/src/integracoes/integracoes.service.ts#L105-L112))
+registra que o hash canônico mudou e conclui: _"hashes armazenados antes desta correcao divergem no
+proximo re-envio identico — um 'atualizado' idempotente unico"_. Ou seja: **toda venda ingerida antes
+daquela correção será reprocessada exatamente uma vez como `atualizado`.** Se o roteamento subir
+antes de essa onda escoar, um lote arbitrariamente grande de vendas históricas é roteado
+retroativamente e o saldo de contas de períodos fechados muda sozinho — sem `UPDATE`, mas mudando
+número de caixa fechado. A opção (b) da §12.1 deixa de ser preferência e vira **requisito**.
+
+### P1 do mesmo revisor, aceitos
+
+1. **Reenvio preserva `conta_origem_id`.** `valoresVenda` não tem `contaOrigemId` e o `update` usa
+   `set(valoresVenda)` ([integracoes.repository.ts:699](../api/src/integracoes/integracoes.repository.ts#L699)),
+   então um `conta_origem_id` posto pela retaguarda **sobrevive** ao reenvio e desliga o roteamento
+   daquela venda para sempre — sem crédito, sem pendência, sem sinal.
+2. **A §7 mede o eixo errado.** Ela prova ausência de **deadlock**. O risco real é outro: parte do
+   saldo passaria a vir de `vendas_pagamentos`, tabela que o lock de `contas` **não** protege. Uma
+   ingestão concorrente pode apagar as linhas roteadas ou cancelar a venda tomando só `KEY SHARE` —
+   que **convive** com o `NO KEY UPDATE` da porta. O crédito que a porta acabou de contar some
+   enquanto a despesa é autorizada. Minha frase "gastar dinheiro que não existe continua
+   impossível" está errada: o perigo não é um débito novo, é um **crédito que desaparece**.
+3. **Venda cancelada** continuaria aparecendo como recebível (`vendasRoteadasAReceber` sem filtro
+   de status).
+4. **"Zero página nova, zero API nova" é falso.** O cadastro é nome-only ponta a ponta —
+   [useCadastroView.ts:259](../web-vue/composables/useCadastroView.ts#L259),
+   [cadastro-local.ts:65-68](../web-vue/utils/cadastro-local.ts#L65-L68),
+   [formas-pagamento.repository.ts:5-11](../api/src/formas-pagamento/formas-pagamento.repository.ts#L5-L11).
+   Dois seletores de conta, adquirente, disponibilidade e painel de pendência significam mexer no
+   motor genérico que serve ~18 telas. É uma vertical de front inteira, e o §4 subestimou o custo.
+5. **Pendência com `forma_pagamento_id` NULL não se resolve na tela onde apareceria** — a correção
+   vive no dicionário da integração, não no cadastro de formas.
+6. **Venda de retaguarda sem conta fica fora da pendência**: `POST /api/vendas` com
+   `tiposPagamento` e **sem** `contaOrigemId` (ambos opcionais) credita nada e não abre pendência.
+7. **`disponivel_em` no futuro viraria saldo hoje** — o CHECK não compara com `now()`. Ou a fórmula
+   exige `disponivel_em <= now()`, ou a coluna é um booleano disfarçado de timestamp.
+8. **`adquirente` como texto livre não é cadastro** — diverge na grafia e quebra o agrupamento da
+   §10. A decisão 7 do documento `30` pede cadastro de verdade.
+9. **A conta do PDV pode ser auto-criada.** `criarPdvComContaRepository`
+   ([integracoes.repository.ts:487-501](../api/src/integracoes/integracoes.repository.ts#L487-L501))
+   cria PDV **e** conta quando o CREARE manda um `idCaixa` desconhecido, com `criarAutomaticamente`
+   default `true`. Dinheiro real pode cair numa conta que o admin nunca viu — então
+   `usa_conta_do_pdv` não é tão "explícito" quanto a §4 afirma.
+
+## 16. Revisão read-only — QA e falso-verde
+
+### P0 — o teste que eu disse que ficaria vermelho NÃO fica
+
+A §11 item 9 afirma que `conta-receita-creare.test.ts` "fica vermelho de propósito". **Não fica.** A
+forma "Dinheiro" do seed ([tests/setup/seed.ts:434-435](../tests/setup/seed.ts#L434-L435)) nasceria
+com `disponibilidade = NULL` → pagamento `pendente` → saldo continua 0 → despesa continua 409. O
+arquivo passaria **pelo motivo errado**: antes por coluna nula, depois por pendência. O RED que
+prova a correção só existe se a fixture ganhar roteamento.
+
+### P0 — a rede de regressão da §11 item 8 não cobre nada do novo
+
+`conta-saldo-insuficiente.test.ts` (13 casos) e `conta-saldo-locks.test.ts` usam contas criadas por
+`/api/contas`, sem PDV e sem venda integrada: a 6ª consulta vale **sempre 0** ali. Elas só pegariam
+omissão total (campo faltando → `NaN`), nunca consulta errada. E **nenhum** teste ingere venda
+concorrente com uma saída — a aresta de lock que a própria §7 manda revisar não tem cobertura.
+
+### P0 — as fixtures não suportam o teste de isolamento
+
+Não existe conta, forma, PDV nem chave de integração na Empresa B
+([seed.ts:355-372, 405-419, 434-435, 588-595](../tests/setup/seed.ts#L355-L372) são todos da
+Empresa A). O teste 6 da §11 não tem como ser escrito hoje. E dar roteamento à forma "Dinheiro" do
+seed global derrubaria `conta-fundo-saldo.test.ts`, `caixa-abertura-lacre.test.ts` e o próprio
+`conta-receita-creare.test.ts`. **Recomendação aceita: fixtures novas na Empresa B; roteamento
+criado dentro de cada teste pela API, nunca no seed global.**
+
+### P0 — o teste 7 (byte-a-byte) é tautológico
+
+O seed trunca e recria tudo já sob o schema novo, onde o DEFAULT `nao_aplicavel` torna a igualdade
+verdadeira **por construção**; e o banco de integração nasce de `db:push`
+([testcontainers.ts:92](../tests/setup/testcontainers.ts#L92)), então "antes da migration" nem
+existe nesse ambiente. Prova real: dois contêineres — migrar até 0031, semear, tirar snapshot
+ordenado das cinco consultas; **restaurar o mesmo dump**, aplicar 0032 + código novo, snapshot de
+novo, `toEqual`. O "antes" precisa conter venda de retaguarda com `conta_origem_id` **e**
+`vendas_pagamentos`, conta com saldo **negativo**, venda cancelada e transferência pendente.
+
+### Mutações que a suíte proposta NÃO mataria
+
+1. **Trocar `conta_final_id` por `conta_recebivel_id` na 6ª consulta.** No caso `imediata` as duas
+   colunas são a mesma conta do PDV, e no `por_evento` o `disponivel_em IS NULL` zera os dois lados.
+   Nenhum dos 10 testes distingue.
+2. **Remover a guarda `v.conta_origem_id IS NULL`.** Sob o caminho de escrita proposto ela é código
+   morto — só morre com fixture que insere a combinação proibida direto no banco.
+3. Remover `v.computar = true` / `v.status <> 'cancelado'` da 6ª consulta: sem teste de venda
+   integrada cancelada, passa.
+4. Trocar `disponivel_em = venda.data_venda` por `now()`: nenhum teste afirma a data.
+5. **Enfraquecer um CHECK mantendo o nome:** `migracoes.test.ts` compara só `conname`, nunca
+   `pg_get_constraintdef`. A paridade push × migrate é **nominal**, não estrutural.
+
+### Buracos de aceite
+
+Faltam: o caminho de **falha** do roteamento (a ingestão é uma transação só — se um CHECK novo
+estourar, a **venda inteira** faz rollback, e é justamente o oposto de "venda preservada"); a linha
+3 da tabela da §9 (`usa_conta_do_pdv` com PDV não resolvido); o assert negativo global (`roteado`
+com conta fora do cadastro = 0 linhas); o **inverso** do teste 2 (despesa contra conta cujo único
+crédito é `por_evento` tem de continuar **409**); e qualquer teste da decisão §12.1(b).
+
+## 17. Revisão read-only — banco, concorrência e idempotência
+
+O quarto revisor chegou depois de a §18 estar escrita. **Ele achou um P0 dentro do meu próprio SQL**
+e dois P0 de código que mudam o que a §8 e a §9 podem afirmar.
+
+### O que ele confirmou
+
+- O SQL da §5 roda em Postgres 16 e **toda linha existente passa** — ele provou caso a caso
+  (`MATCH SIMPLE` não checa FK com chave parcialmente nula; o DEFAULT `nao_aplicavel` satisfaz os
+  dois CHECKs; os três índices parciais nascem vazios). O precedente de sintaxe está em
+  `0021_minor_hobgoblin.sql` (checks qualificados) e `0030_idempotencia_transferencia_caixa.sql`
+  (índice parcial).
+- A ordem do rollback está certa: `contas_id_empresa_unica` cai **por último** porque as duas FKs
+  compostas dependem dela.
+- **Não há aresta nova de deadlock.** Ele refez a matriz contra os seis caminhos reais
+  (transferência de quatro pontas, cron, PUTs, ingestão, PUT de venda, `travarPdvRepository`) e
+  verificou o que sustenta tudo: **não existe `FOR UPDATE` em `contas` em lugar nenhum**, não
+  existe `DELETE` de conta, e o único `UPDATE contas` mexe em `nome`/`saldo_inicial`. A conclusão
+  da §7 está certa — pelo argumento incompleto, veja P1-3.
+
+### P0-1 (no meu SQL — **corrigido na §5**) — a lógica ternária deixava passar o pior estado
+
+`disponibilidade` é nulável e eu comparei com `=`. `NULL = 'imediata'` é `NULL`, e um `CHECK` só
+recusa quando a expressão dá **FALSE**. Refiz a conta e confirmei:
+
+| ramo | `disponibilidade` NULL, `usa_conta_do_pdv` **true**, contas NULL |
+| ---- | ---------------------------------------------------------------- |
+| 1    | `TRUE AND FALSE AND …` → **FALSE**                               |
+| 2    | `NULL AND TRUE AND …` → **NULL**                                 |
+| 3    | `NULL AND FALSE` → **FALSE**                                     |
+|      | `FALSE OR NULL OR FALSE` = **NULL → passa**                      |
+
+E esse é o estado mais perigoso que existe: a tabela de decisão da §9 ramifica por
+`usa_conta_do_pdv` **sem olhar `disponibilidade`**, então uma forma meio-cadastrada — checkbox
+marcado, disponibilidade em branco — viraria `roteado` + conta do PDV + `disponivel_em` preenchido,
+ou seja **dinheiro imediatamente gastável criado por cadastro pela metade**. É exatamente o mutante
+"fallback silencioso para a conta do PDV" que a §11 exige matar, e o CHECK que deveria matá-lo não
+matava.
+
+Já corrigido no SQL da §5: `is not distinct from` nos ramos 2 e 3, mais um
+`formas_pagamento_disponibilidade_check` enumerando o domínio — o mesmo padrão que
+`vendas_pagamentos_roteamento_status_check` já usava. O CHECK de `vendas_pagamentos` **não** tinha o
+furo (`roteamento_status` é `NOT NULL` e os testes são `IS [NOT] NULL`).
+
+### P0-2 — a #152 não pode subir antes da #41 (**conferido por mim**)
+
+A primeira ingestão concorrente da mesma venda **não serializa**. `travarVendaRepository` só é
+alcançado quando o registro **já existe** ([integracoes.service.ts:785-793](../api/src/integracoes/integracoes.service.ts#L785-L793)).
+Duas requisições simultâneas do mesmo `idVenda`:
+
+1. ambas leem `buscarRegistroIntegracaoRepository` e recebem `null`;
+2. ambas **inserem uma linha em `vendas`** — confirmei que **não existe unique em
+   `vendas.identificador_externo`**: o schema só tem `vendas_id_empresa_unica`, os índices de
+   empresa/data e caixa, e o parcial de órfãs ([app.schema.ts:904-916](../db/src/schema/app.schema.ts#L904-L916));
+3. ambas inserem os `vendas_pagamentos`;
+4. só no fim o `upsertRegistroIntegracaoRepository` serializa no unique de `integracoes_registros`,
+   e a segunda aponta o registro para a **sua** venda.
+
+Resultado: **duas vendas, uma órfã, com pagamentos completos.** Hoje isso é invisível para o saldo
+da conta porque `conta_origem_id` é NULL na venda integrada. **Com a fórmula da §8, a órfã passa a
+somar: +100% do valor na conta.**
+
+Isso é precisamente a issue **#41** ("idempotência da venda integrada: `UNIQUE` parcial +
+`ON CONFLICT`"), que o documento `30` §5 mantém como P0 de go-live **separado** desta branch. A
+minha afirmação da §9 ("não há como duplicar linha nem pendência") e o teste 5 da §11 estão errados
+nesse ramo — o teste passaria por acaso se as duas requisições não se cruzassem.
+
+Saídas possíveis, em ordem de preferência do revisor: `pg_advisory_xact_lock(hashtext(empresaId ||
+':' || idVenda))` logo depois da autenticação (resolve sem migration); fazer o upsert em
+`integracoes_registros` **antes** de criar a venda; ou o unique parcial da #41 — que exige contar
+duplicatas em produção antes, e o Gate Zero proíbe esse acesso.
+
+### P0-3 — mesmo achado do §16 P0-D, por outro caminho
+
+O revisor de banco chegou sozinho ao `atualizarVendaRepository` que apaga o snapshot. Dois
+revisores independentes no mesmo defeito. Ele acrescenta o outro lado: `valoresBaseEdicao`
+([lancamentos.dominio.ts:135](../api/src/lancamentos/lancamentos.dominio.ts#L135)) grava
+`contaOrigemId: dados.contaOrigemId ?? null`, então um PUT que **preencha** `conta_origem_id` numa
+venda integrada **troca o canal de crédito** e move dinheiro de uma conta para outra sem registro
+nenhum. Decisão explícita necessária: ou o PUT preserva o snapshot, ou venda integrada não é
+editável por essa rota.
+
+### P1-1 — erro de banco na ingestão vira 422 e o agente DESCARTA a venda (viola R-013)
+
+Os CHECKs e FKs novos criam classes de erro que não existiam nesse caminho: `23514`, `23503`,
+`23505`. O catch de [integracoes.service.ts:834-861](../api/src/integracoes/integracoes.service.ts#L834-L861)
+só re-lança `55P03` e `40P01`; todo o resto vira **422**. O comentário do próprio arquivo diz:
+_"4xx faz o agente DESCARTAR a venda, e a R-013 proibe recusar venda integrada."_ Ou seja: com a
+0032, um bug de roteamento deixa de ser "venda sem crédito" e vira **"venda perdida"**. Precisa
+mapear as três classes para 5xx **e** validar as invariantes no código antes do insert.
+
+### P1-2 — o rollback da §6 deixa o banco mentindo sobre si mesmo
+
+`db:migrate` é `drizzle-kit migrate`, que registra cada arquivo em `drizzle.__drizzle_migrations`. A
+§6 derruba os objetos e **deixa a linha da 0032 lá**: banco "com a 0032 aplicada" e sem nenhum
+objeto dela, impossível de reaplicar, e qualquer `db:generate` seguinte diverge. O rollback precisa
+de três passos que não estavam escritos: apagar a linha do ledger; reverter em bloco
+`0032_*.sql` + `idx 32` do journal + `meta/0032_snapshot.json` + `app.schema.ts` (a paridade dos
+três é exigida por `scripts/verificar-migrations.mjs`); e `DROP INDEX CONCURRENTLY` no caminho de
+produção.
+
+### P1-3 — a prova de lock passa a depender de dois invariantes que ninguém escreveu
+
+1. A **invariante 5** de [contas.repository.ts:65-66](../api/src/contas/contas.repository.ts#L65-L66)
+   ("mais de uma conta na mesma transação entra SEMPRE por `travarContasRepository`, em ordem
+   canônica de id") **fica falsa**: uma venda dividida trava N linhas de `contas` em `KEY SHARE` na
+   ordem do payload. É inofensivo hoje só porque `KEY SHARE × KEY SHARE` convive. Se alguém
+   reintroduzir `FOR UPDATE` em `contas` ou criar rota de DELETE de conta, o ABBA volta — agora com
+   duas fontes de FK, não uma. Tem de entrar por escrito naquele bloco, junto com a exceção
+   explícita à ordem canônica.
+2. A `UNIQUE(id, empresa_id)` **promove `empresa_id` a coluna-chave de `contas`**. A partir da 0032,
+   um futuro `UPDATE contas SET empresa_id` deixa de ser no-key-update e passa a conflitar com o
+   `KEY SHARE` das FKs. Aresta nova, hoje latente. A §7 não viu.
+
+### P1-5 — a §7 mediu o risco de lock na tabela errada
+
+Eu escrevi que `contas` é "desprezível por ter dezenas de linhas". O tamanho é irrelevante: a
+`ADD CONSTRAINT UNIQUE` toma **`ACCESS EXCLUSIVE` na tabela**, e `SELECT … FOR NO KEY UPDATE` toma
+`ROW SHARE`, que conflita. Pior: enquanto a `ALTER` espera na fila, **até `SELECT` simples empilha
+atrás dela** — toda a API que lê saldo congela, não só a porta de escrita. E a sessão da migration
+**não tem `lock_timeout`** (o de 10s de `db/src/sessao.ts` é das sessões da API).
+
+Ele fecha dois pontos que eu deixei pela metade na §7:
+
+- `drizzle-kit migrate` roda **cada arquivo dentro de uma transação**, então `CREATE INDEX
+CONCURRENTLY` **não tem caminho suportado hoje** — precisa de runner à parte.
+- Pelo mesmo motivo, `ADD CONSTRAINT NOT VALID` + `VALIDATE CONSTRAINT` **no mesmo arquivo não
+  ajuda em nada**: o `NOT VALID` já pegou `ACCESS EXCLUSIVE` e o segura até o commit. Tem de ser
+  migration separada.
+
+### P2 aceitos
+
+- **O terceiro índice tem a chave errada.** `vendas_pagamentos_roteamento_pendente_idx` está em
+  `forma_pagamento_id`, que na consulta da §10 é chave de `GROUP BY`, não filtro — o filtro de
+  tenant só existe depois do join com `vendas`. Melhor `(venda_id)` ou `(forma_pagamento_id, venda_id)`.
+- **Falta índice para o `RESTRICT`**: nenhum dos parciais é elegível para a checagem da FK, então
+  apagar conta faria seq scan. Latente (não há rota de DELETE), mas registrado. E o efeito colateral
+  precisa estar escrito: **a partir da 0032, conta que já apareceu num snapshot de venda vira
+  indeletável** — `contas.ativa` já é o caminho de desativação, então é uma porta que se fecha.
+- **O DEFAULT `nao_aplicavel` é modo de falha silencioso para linha NOVA**: se o código esquecer de
+  setar o status, a venda integrada nasce sem crédito em conta nenhuma — o bug de hoje, agora
+  invisível, e nenhum CHECK pega.
+- **Roteamento lido fora da trava da venda** (`resolverVinculosVenda` roda antes do lock): se o
+  admin editar a forma no meio, o snapshot pode ser o anterior. Defensável, mas o teste 5 precisa
+  fixar o esperado, senão nasce flaky.
+- **`criarFormaPagamentoRepository` roda dentro da transação de ingestão**: duas ingestões
+  concorrentes com a mesma forma nova colidem no unique → `23505` → 422 → venda descartada. Mesma
+  família do P1-1.
+- **Nomes de constraint divergentes tornam o rollback um no-op silencioso** por causa dos
+  `IF EXISTS`. O `db:generate` só emite esses nomes se `app.schema.ts` declarar `foreignKey({...})`
+  e `check("nome", …)` nomeados.
+- **Multixact na linha da conta do PDV**: toda venda em dinheiro do turno pega `KEY SHARE` na mesma
+  linha e segura até o commit. Custo, não deadlock — mas é a primeira vez que uma linha de `contas`
+  recebe lock de todo mundo.
+- **`MATCH SIMPLE` é o que salva o histórico.** Se alguém "melhorar" para `MATCH FULL`, toda forma
+  existente quebra. Precisa estar no comentário da migration.
+
+## 18. O que precisa ser decidido antes de eu implementar qualquer coisa
+
+Consolidando as quatro revisões (§13, §15, §16, §17) e a minha conferência no código. A #152 só sai
+depois destas oito decisões — sete são suas, uma já está resolvida.
+
+| #   | Ponto                                                                                                                                                                                                                                          | Origem             | Quem decide  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------ |
+| 1   | **Qual número credita a conta**: o líquido da venda ou a soma dos pagamentos? E, divergindo, o que acontece com a diferença (R-170)?                                                                                                           | §15 P0-A/P0-B      | José/Rodrigo |
+| 2   | **O fechamento**: a conta do PDV continua sendo debitada pelo líquido inteiro, cartão incluído? Se sim, ela segue derivando negativa e a #152 **não resolve o problema-raiz**. Se não, é mudança na fórmula do **caixa**, que encosta na #101. | §15 P0-C           | José         |
+| 3   | **Ordem com a #41**: a #152 não pode subir antes de a ingestão concorrente ser idempotente, senão a venda órfã credita o valor duas vezes. Antecipar a #41, ou entrar com trava consultiva na #152?                                            | §17 P0-2           | José         |
+| 4   | **`PUT /api/vendas` em venda integrada**: bloquear a edição, ou fazer o PUT recalcular o roteamento? Hoje ele **apaga** o crédito em silêncio.                                                                                                 | §15 P0-D, §17 P0-3 | José         |
+| 5   | **Corte do reenvio**: rotear só ingestão posterior ao deploy — e a data de corte é cadastro, não constante. Deixou de ser preferência e virou requisito: a onda de reenvio já está agendada.                                                   | §15 P0-E           | José         |
+| 6   | **Permissão financeira separada** para editar roteamento, em vez de reusar `cadastro_formas_pagamento_editar`.                                                                                                                                 | §13 P0             | José         |
+| 7   | **Escopo da liquidação**: fica fora da #152? Sem ela, cartão nunca vira dinheiro disponível.                                                                                                                                                   | §12.2              | José         |
+| 8   | ~~Lógica ternária no CHECK deixava passar cadastro pela metade como dinheiro gastável~~ — **já corrigido no SQL da §5**.                                                                                                                       | §17 P0-1           | resolvido    |
+
+### Sobre a migration em si
+
+O SQL da §5, **com a correção do P0-1 já aplicada**, é aditivo, inerte para o histórico (provado
+caso a caso pelo revisor de banco) e reversível. Nenhuma das sete decisões acima muda o SQL, com
+duas exceções: a decisão 1 provavelmente exige a coluna `pendencia_motivo` que propus na §14, e a
+§6 precisa ganhar os três passos de reversão do ledger apontados em §17 P1-2.
+
+Ainda assim **não recomendo aplicar antes das decisões**, porque aplicar schema que o código não
+vai usar do jeito planejado é criar dívida — e porque §17 P1-5 mostra que a aplicação toma
+`ACCESS EXCLUSIVE` em `contas`, o que congela toda leitura de saldo enquanto espera na fila.
+
+## 19. O que NÃO foi feito
+
+- **Nenhum arquivo de código criado, alterado ou gerado**: `db/src/schema/**`, `db/migrations/**`,
+  `_journal.json`, `meta/*_snapshot.json`, `api/src/**`, `shared/src/**`, `web-vue/**`, `tests/**`.
+  Os únicos arquivos tocados nesta sessão são este documento e `PROJECT_BRAIN/00_INDICE.md`.
+- **`git fetch` continua bloqueado** por credencial — a base remota não foi comprovada.
+- **Nenhuma implementação.** Os seis pontos da §18 precisam de decisão antes.
+- **Gates pesados não rodaram**: `lint`, `lint:deps`, `check`, build e `npm test` completo ficam
+  para o estado final, conforme o §6 do `AGENTS.md`. Rodei apenas a suíte focada da §2.
+- **Playwright não rodou porque não existe** (§14, item 4). Instalá-lo é escopo próprio, com
+  impacto em `package.json`, `package-lock.json` e nos gates de dependência.
+- **DEV local não foi levantado, não há prints e não há URL local para teste manual.** Isso vem
+  depois do primeiro GREEN funcional, que depende da autorização.
+- **Os quatro revisores read-only pedidos rodaram** — segurança (§13), finanças/dados (§15),
+  QA/falso-verde (§16) e banco/concorrência/idempotência (§17). Somaram **oito P0**. Conferi
+  pessoalmente no código os cinco mais graves antes de aceitá-los; todos se confirmaram.
+- **A única coisa que já corrigi** foi o P0 que era meu: a lógica ternária do CHECK, no SQL
+  da §5. Nada mais foi mexido, porque o resto depende das decisões da §18.
 - Nada de produção, CREARE real, segredo, planilha, deploy ou backfill.
