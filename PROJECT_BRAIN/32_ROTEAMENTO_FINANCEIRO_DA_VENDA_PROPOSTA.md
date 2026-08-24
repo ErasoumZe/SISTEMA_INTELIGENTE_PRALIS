@@ -1,42 +1,50 @@
 # Issue #152 — contrato de roteamento financeiro do CREARE + proposta de migration 0032
 
-> **STATUS: PARADO. A MIGRATION PASSA; O CONTRATO AINDA NÃO.** Nada foi aplicado. Nenhum arquivo de schema,
-> migration, journal ou snapshot foi criado ou alterado. Este documento é o gate do item 3 da
-> `docs/prompts/RETOMADA-CAIXA-TESTAVEL-2026-08-24.md` e do §4.6 do `AGENTS.md` (migration +
-> fórmula que envolve dinheiro).
+> **STATUS: GATE FECHADO, AGUARDANDO QUATRO CONFIRMAÇÕES.** Nada foi aplicado — nenhum arquivo de
+> schema, migration, journal, snapshot ou código foi criado ou alterado. Este documento é o gate do
+> item 3 da `docs/prompts/RETOMADA-CAIXA-TESTAVEL-2026-08-24.md` e do §4.6 do `AGENTS.md`.
 >
-> **Veredito depois dos quatro revisores read-only (§13, §16, §17, §20) e da minha conferência no
-> código:** **não autorize a 0032 como ela estava.** Foram oito defeitos P0 no total — um deles
-> dentro do meu próprio SQL, já corrigido na §5 (lógica ternária no CHECK, §20 P0-1); os outros
-> sete estão no par "fórmula da §8 + caminho de escrita da §9", que **não deve ser autorizado**
-> como escrito. Conferi pessoalmente no código os cinco mais graves; todos se confirmaram.
+> **Leia a §18 primeiro** — ela é a conclusão. As §§8–12 estão mantidas como registro do que foi
+> proposto e recusado, com aviso no topo de cada uma.
 >
-> Dois deles mudam o escopo da entrega e são decisão sua, não minha:
+> **Histórico curto.** A proposta original foi reprovada por quatro revisores read-only (§13, §15,
+> §16, §17): oito P0, cinco confirmados por mim no código. Um era meu, dentro do SQL, e já está
+> corrigido na §5. Na consolidação de 24/08 (§18) os sete pontos restantes foram confrontados com
+> R-166–R-172, com R-007/D-06 e com o código: **cinco já estavam decididos por regra vigente** e eu
+> é que os havia transformado em pergunta. Restam **quatro confirmações**, três de uma linha.
 >
-> - **A #152 sozinha não faz a conta do PDV parar de derivar negativa** (§16 P0-C). O fechamento
->   debita a conta pelo líquido inteiro, cartão incluído, e não passa pela porta R-165. A entrega
->   trocaria o 409 visível da despesa por um negativo silencioso no fechamento.
-> - **A #152 não pode subir antes da #41** (§20 P0-2). Duas ingestões simultâneas da mesma venda
->   ainda criam duas linhas em `vendas`; hoje isso é invisível para o saldo, e com a fórmula nova
->   passaria a **creditar o valor duas vezes**.
+> Duas conclusões que mudam a fila e não são minhas:
 >
-> O consolidado com o que cada ponto exige está na §18.
+> - **A #41 entra antes da #152** (§18 ponto 3). A primeira ingestão concorrente da mesma venda
+>   ainda cria duas linhas em `vendas`; hoje é invisível para o saldo, com o roteamento credita
+>   duas vezes. Se a #41 for primeiro, ela leva a `0032` e esta issue passa a ser a `0033`.
+> - **A conta do PDV continua derivando negativa depois da #152 — e isso está certo** (§18 ponto 2).
+>   É a R-007, adiada pelo José, e a dívida D-06, que manda expressamente não alterar a fórmula do
+>   fechamento. A #152 reduz o buraco de −1.000 para −600 no exemplo medido e **cria o dado que a
+>   D-06 precisa** para ser resolvida depois. Não é regressão nem escopo faltando.
 
 ## 1. Estado verificado (Gate Zero)
 
 | Item                | Verificado                                                  |
 | ------------------- | ----------------------------------------------------------- |
 | Branch              | `fix/caixa-saldo-insuficiente`                              |
-| HEAD                | `103679f3f8339c56426af44b794c2b5e7beb5056`                  |
-| Base local          | `origin/main` em `5127525071d655d31cf316324d3549fc24c69c45` |
+| HEAD                | `e6df198` (era `103679f` quando o documento nasceu)         |
+| Base remota         | `origin/main` = `5127525071d655d31cf316324d3549fc24c69c45`  |
 | Árvore              | limpa (`git status --porcelain` vazio)                      |
 | Stash               | vazio                                                       |
-| Commits preservados | 14 commits à frente da base; nenhum reescrito               |
-| `git fetch origin`  | **BLOQUEADO** — sem credencial; `gh` não instalado          |
+| Commits preservados | 16 commits à frente da base; nenhum reescrito               |
+| `git fetch origin`  | ✅ **executado com sucesso em 24/08** — ver correção abaixo |
 
-O `fetch` falhou com `could not read Username for 'https://github.com'`. O credential helper é o
-`manager` (GUI) e a sessão é não-interativa. É o **mesmo bloqueio já registrado no documento `30`,
-§2** — continua sem prova de que a base remota é a local. Não houve rebase nem merge.
+> **CORREÇÃO FACTUAL (rodada de consolidação, 24/08).** Quando este documento foi escrito, o
+> `fetch` falhava por credencial e o texto dizia "base remota não comprovada". **Isso deixou de
+> valer.** `git fetch origin --prune` rodou com sucesso e o resultado é:
+>
+> - `origin/main` está **exatamente** em `5127525071d655d31cf316324d3549fc24c69c45`, o mesmo hash
+>   que o documento `30` §2 registrava como base local. **Divergência zero.**
+> - `git rev-list --left-right --count origin/main...HEAD` = `0 16`: a branch só adiciona, o remoto
+>   não andou. Não houve rebase, merge nem reset.
+> - **Não existe branch remota `fix/caixa-saldo-insuficiente`** — este trabalho nunca foi enviado.
+> - O bloqueio registrado no documento `30` §2 está **resolvido** e pode ser fechado lá.
 
 ### Migration realmente livre
 
@@ -44,8 +52,13 @@ O `fetch` falhou com `could not read Username for 'https://github.com'`. O crede
 snapshot `0031_snapshot.json`). Varri **todas as refs locais e todos os `refs/remotes/origin/*`**
 (78 branches) procurando `db/migrations/003[2-9]*` e `db/migrations/00[4-9]*`: **nenhuma ocorrência**.
 
-**Próximo número livre: `0032`** — com a ressalva de que o remoto não pôde ser atualizado nesta
-sessão, então isso vale para o estado remoto conhecido localmente.
+**Próximo número livre: `0032`** — agora **com prova remota**: depois do `fetch` bem-sucedido,
+varri de novo todas as `refs/remotes/*` atrás de `db/migrations/003[2-9]*` e `00[4-9][0-9]*` e não
+há nenhuma ocorrência. A ressalva original ("vale só para o estado remoto conhecido localmente")
+caiu.
+
+> ⚠️ **Mas o número provavelmente muda.** Se a **#41** entrar antes da #152 (§18, ponto 3), ela
+> leva a `0032` com o `UNIQUE` parcial dela, e a migration desta issue passa a ser a **`0033`**.
 
 ## 2. RED reproduzido pelo fio real (item 1 da entrega vertical)
 
@@ -481,7 +494,19 @@ pendência no reenvio; **contar em dobro** (venda com `conta_origem_id` **e** pa
 Revisor read-only de segurança rodou sobre esta proposta. **Um P0 e três P1.** As correções abaixo
 passam a fazer parte do escopo da #152; a migration da §5 muda em um ponto (P1 da trilha).
 
-### P0 — `cadastro_formas_pagamento_editar` viraria permissão de dinheiro
+### P0 — a permissão de cadastro viraria permissão de dinheiro
+
+> **CORREÇÃO FACTUAL (24/08).** Fui conferir a matriz padrão em `db/src/referencia-permissoes.ts`:
+> **nenhum cargo de referência tem `cadastro_formas_pagamento_editar`** — só o Admin, pelo acesso
+> total. O Financeiro tem `cadastro_formas_pagamento_criar`
+> ([referencia-permissoes.ts:280](../db/src/referencia-permissoes.ts#L280)) e o `_visualizar` (via
+> `ativas`). Ou seja: o achado **não é** "meio mundo pode redirecionar dinheiro" na matriz padrão,
+> e a R-172 ("Admin configura contas/adquirentes/taxas") **já está satisfeita para o `_editar`**.
+> O risco real, que continua P0, é outro e tem dois lados: (a) o roteamento andaria de carona no
+> `_criar`, que o **Financeiro tem**; (b) permissão é editável por cargo/setor/usuário na tela de
+> Permissões, então um cargo custom com `_editar` passaria a mandar em dinheiro sem nenhum aval
+> financeiro. A correção recomendada é a mesma — permissão distinta para o subconjunto de
+> roteamento — mas o motivo é a R-172, não uma falha da matriz atual.
 
 Hoje essa permissão significa "renomear uma forma"
 ([formas-pagamento.controller.ts:55-72](../api/src/formas-pagamento/formas-pagamento.controller.ts#L55-L72)).
@@ -920,40 +945,216 @@ CONCURRENTLY` **não tem caminho suportado hoje** — precisa de runner à parte
 - **`MATCH SIMPLE` é o que salva o histórico.** Se alguém "melhorar" para `MATCH FULL`, toda forma
   existente quebra. Precisa estar no comentário da migration.
 
-## 18. O que precisa ser decidido antes de eu implementar qualquer coisa
+## 18. Gate fechado — os sete pontos, classificados (consolidação de 24/08)
 
-Consolidando as quatro revisões (§13, §15, §16, §17) e a minha conferência no código. A #152 só sai
-depois destas oito decisões — sete são suas, uma já está resolvida.
+> Esta seção **substitui** a tabela anterior de "oito decisões". Cada ponto foi confrontado com
+> R-166–R-172, com D-06/R-007 e com o código. **Cinco dos sete já estavam decididos por regra
+> vigente** — eu é que os tinha transformado em pergunta. Sobram **quatro confirmações**, três
+> delas de uma linha.
 
-| #   | Ponto                                                                                                                                                                                                                                          | Origem             | Quem decide  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------ |
-| 1   | **Qual número credita a conta**: o líquido da venda ou a soma dos pagamentos? E, divergindo, o que acontece com a diferença (R-170)?                                                                                                           | §15 P0-A/P0-B      | José/Rodrigo |
-| 2   | **O fechamento**: a conta do PDV continua sendo debitada pelo líquido inteiro, cartão incluído? Se sim, ela segue derivando negativa e a #152 **não resolve o problema-raiz**. Se não, é mudança na fórmula do **caixa**, que encosta na #101. | §15 P0-C           | José         |
-| 3   | **Ordem com a #41**: a #152 não pode subir antes de a ingestão concorrente ser idempotente, senão a venda órfã credita o valor duas vezes. Antecipar a #41, ou entrar com trava consultiva na #152?                                            | §17 P0-2           | José         |
-| 4   | **`PUT /api/vendas` em venda integrada**: bloquear a edição, ou fazer o PUT recalcular o roteamento? Hoje ele **apaga** o crédito em silêncio.                                                                                                 | §15 P0-D, §17 P0-3 | José         |
-| 5   | **Corte do reenvio**: rotear só ingestão posterior ao deploy — e a data de corte é cadastro, não constante. Deixou de ser preferência e virou requisito: a onda de reenvio já está agendada.                                                   | §15 P0-E           | José         |
-| 6   | **Permissão financeira separada** para editar roteamento, em vez de reusar `cadastro_formas_pagamento_editar`.                                                                                                                                 | §13 P0             | José         |
-| 7   | **Escopo da liquidação**: fica fora da #152? Sem ela, cartão nunca vira dinheiro disponível.                                                                                                                                                   | §12.2              | José         |
-| 8   | ~~Lógica ternária no CHECK deixava passar cadastro pela metade como dinheiro gastável~~ — **já corrigido no SQL da §5**.                                                                                                                       | §17 P0-1           | resolvido    |
+| #   | Ponto                                | Classe                           | Regra que decide              |
+| --- | ------------------------------------ | -------------------------------- | ----------------------------- |
+| 1   | Qual número credita a conta          | **A** — resolvido por regra      | R-004 + R-005/ADR-001 + R-170 |
+| 2   | Fechamento debita o líquido          | **A** — resolvido: **não mexer** | R-007 adiada + D-06           |
+| 3   | Ordem com a #41                      | **B** — dependência comprovada   | —                             |
+| 4   | `PUT /api/vendas` em venda integrada | **B** — dependência comprovada   | —                             |
+| 5   | Corte do reenvio                     | **A** — resolvido por regra      | R-166                         |
+| 6   | Permissão de roteamento              | **A** — resolvido por regra      | R-172                         |
+| 7   | Escopo da liquidação                 | **A** — resolvido por definição  | doc `30` §8                   |
 
-### Sobre a migration em si
+### 1 — Qual número credita a conta · **A**
 
-O SQL da §5, **com a correção do P0-1 já aplicada**, é aditivo, inerte para o histórico (provado
-caso a caso pelo revisor de banco) e reversível. Nenhuma das sete decisões acima muda o SQL, com
-duas exceções: a decisão 1 provavelmente exige a coluna `pendencia_motivo` que propus na §14, e a
-§6 precisa ganhar os três passos de reversão do ledger apontados em §17 P1-2.
+**Já está decidido.** R-004 diz que o saldo da conta é derivado; R-005/ADR-001 fixa o filtro; e a
+convenção vigente, escrita em [contas.repository.ts:122-124](../api/src/contas/contas.repository.ts#L122-L124)
+e [regras.ts:50-53](../shared/src/caixa/regras.ts#L50-L53), diz que **a venda entra pelo líquido**
+(`original − desconto + acréscimo`). O roteamento muda **para qual conta** o dinheiro vai, nunca
+**quanto** é.
 
-Ainda assim **não recomendo aplicar antes das decisões**, porque aplicar schema que o código não
-vai usar do jeito planejado é criar dívida — e porque §17 P1-5 mostra que a aplicação toma
-`ACCESS EXCLUSIVE` em `contas`, o que congela toda leitura de saldo enquanto espera na fila.
+O erro da §8 foi propor `Σ total_pago` como se fosse um número alternativo. A correção não precisa
+de decisão nova, precisa de **invariante**:
+
+> Na ingestão, exigir `Σ PagamentosVenda.valor == liquidoCentavos(venda)`.
+> Batendo, creditar cada `vendas_pagamentos` pelo próprio `total_pago` — que é a mesma quantia,
+> apenas distribuída entre as contas. **Zero rateio, zero arredondamento, uma fórmula só.**
+> Não batendo, a R-170 já manda o que fazer: preserva a venda, nada vira saldo disponível, abre
+> conciliação, e **nenhum número é escolhido em silêncio**.
+
+Tolerância: **zero**, porque a R-170 diz R$ 0,00. O `TOLERANCIA_CONCILIACAO_CENTAVOS = 1`
+([shared/src/integracoes/index.ts:184](../shared/src/integracoes/index.ts#L184)) é de outra
+pergunta — conferência de totais do dia por PDV — e **não pode ser reusado aqui**: seria inventar
+tolerância onde a regra proíbe.
+
+**Efeito no Caixa.** Venda de R$ 100 = R$ 40 em dinheiro + R$ 60 no cartão. Soma bate com o
+líquido: a conta do PDV sobe R$ 40 **disponíveis**, a conta de recebível sobe R$ 60 **não
+disponíveis**. Se o CREARE mandar pagamentos somando R$ 99 para um líquido de R$ 100, **nada entra
+em conta nenhuma**, a venda continua gravada e nasce uma conciliação de R$ 1.
+
+**Arquivos:** `shared/src/caixa/regras.ts` (termo novo no `saldoContaCentavos`),
+`api/src/contas/contas.repository.ts` (6ª consulta), `api/src/integracoes/integracoes.repository.ts`
+(invariante + snapshot). **Testes:** unidade da invariante; integração de venda dividida; integração
+de divergência que não credita nada.
+
+**A única confirmação que sobra** é de leitura, não de número: quando `Σ ≠ líquido`, a diferença
+não é atribuível a um pagamento específico, então a **venda inteira** nasce pendente. A R-170 fala
+em "a parcela divergente", mas aqui não existe parcela identificável.
+
+### 2 — O fechamento debita o líquido inteiro · **A (a regra é "não mexer")**
+
+Isto **não é** uma decisão nova desta issue: é a **R-007**, registrada como
+"❌ adiada pelo José" ([19_REGISTRO_DE_REGRAS.md:376](19_REGISTRO_DE_REGRAS.md)), e a dívida
+**D-06** ([18_DIVIDAS_TECNICAS.md:146](18_DIVIDAS_TECNICAS.md)), que diz literalmente: _"A correção
+foi deliberadamente adiada; não alterar a fórmula nesta rodada."_ Portanto a #152 **não toca** a
+fórmula do fechamento. Ponto encerrado por decisão anterior.
+
+O que precisa ficar escrito é a **consequência medida**, e ela é melhor do que eu havia dito.
+Fundo R$ 200, turno com R$ 1.000 em vendas (R$ 400 dinheiro + R$ 600 cartão):
+
+| Momento                  | Conta do PDV depois do fechamento |
+| ------------------------ | --------------------------------- |
+| Hoje                     | `200 + 0 − 1.200` = **−1.000**    |
+| Depois da #152           | `200 + 400 − 1.200` = **−600**    |
+| Depois de D-06 resolvida | `200 + 400 − 600` = **0** ✅      |
+
+A #152 **reduz** o buraco de R$ 1.000 para R$ 600; ela não o cria. E o mais importante: **a #152 é
+o pré-requisito da D-06**, não o contrário. A D-06 exige _"separar formas que representam dinheiro
+físico das demais, com decisão de negócio sobre a classificação"_ — e `usa_conta_do_pdv` +
+`disponibilidade = 'imediata'` **são exatamente essa classificação**. Sem a #152, a D-06 não tem
+dado com que trabalhar.
+
+**Arquivos afetados na #152: nenhum.** Para a vertical futura da D-06:
+`api/src/caixa/caixa.repository.ts` (`calcularTotaisCaixaOperacionalRepository`),
+`api/src/caixa/caixa.service.ts` (`fecharCaixa` / `registrarEntregaAoCofre`),
+`shared/src/caixa/regras.ts` (`saldoCaixaCentavos`).
+
+### 3 — Ordem com a #41 · **B, confirmada**
+
+Reconferido no código: em `receberVendaIntegracao`, o `travarVendaRepository` está dentro de
+`if (registro?.registroSistemaId)`
+([integracoes.service.ts:785-793](../api/src/integracoes/integracoes.service.ts#L785-L793)) — logo
+a **primeira** ingestão não tem ponto de serialização nenhum; e `vendas` não tem `UNIQUE` em
+`identificador_externo`. Duas ingestões simultâneas do mesmo `idVenda` criam **duas linhas em
+`vendas`**, uma órfã com pagamentos completos. Hoje é invisível para o saldo da conta; com o
+roteamento, a órfã **credita o valor de novo**.
+
+**Recomendação: #41 antes da #152, em branch própria, sem mistura.** Além de fechar esta janela,
+a #41 já é P0 de go-live autônomo no documento `30` §5, tem migration própria (`UNIQUE` parcial +
+`ON CONFLICT`) e exige contagem de duplicatas em produção — acesso que o Gate Zero proíbe a mim,
+mas que é da natureza da #41.
+
+A alternativa (`pg_advisory_xact_lock(hashtext(empresaId || ':' || idVenda))` dentro da #152, sem
+migration) **funciona**, mas cria um mecanismo temporário que a #41 depois substitui: dois caminhos
+para a mesma garantia, que é o que a regra-mãe do `AGENTS.md` §4.1 proíbe. Só vale se o José
+quiser a #152 primeiro por outro motivo.
+
+### 4 — `PUT /api/vendas` em venda integrada · **B, com uma agravante nova**
+
+Confirmado: `atualizarVendaRepository` apaga e reinsere os `vendas_pagamentos`
+([vendas.repository.ts:364-387](../api/src/vendas/vendas.repository.ts#L364-L387)) e
+`valoresBaseEdicao` grava `contaOrigemId`
+([lancamentos.dominio.ts:135](../api/src/lancamentos/lancamentos.dominio.ts#L135)).
+
+**A agravante:** o próximo reenvio do CREARE já sobrescreve a venda inteira
+(`db.update(vendas).set(valoresVenda)`, [integracoes.repository.ts:699](../api/src/integracoes/integracoes.repository.ts#L699))
+e apaga/reinsere produtos e pagamentos. Ou seja, **editar pagamentos de uma venda integrada pela
+retaguarda já é uma capacidade que não sobrevive ao próximo reenvio — hoje, antes da #152.** Não é
+uma função que estamos tirando; é uma que nunca foi confiável.
+
+**Recomendação:** no PUT, para venda com `integracao_chave_id is not null`, **recusar alteração de
+`tiposPagamento` e de `contaOrigemId`** com mensagem clara. O resto do PUT continua. É cirúrgico e
+não remove nada real.
+
+**Arquivos:** `api/src/vendas/vendas.service.ts` (`atualizarVenda`), `api/src/vendas/vendas.repository.ts`,
+`shared/src/vendas/index.ts`. **Testes:** PUT em venda integrada recusa os dois campos; PUT em venda
+de retaguarda continua igual.
+
+### 5 — Corte do reenvio · **A**
+
+**A R-166 já decide:** _"A correção atua somente nas escritas futuras. É proibido `UPDATE`, backfill
+ou regularização automática nesta entrega."_ Rotear uma venda antiga num reenvio **é** regularização
+automática de histórico. Proibido. Não há o que perguntar.
+
+O que estava em aberto era o **critério técnico**, e a §12.1 pedia ao José uma "data de corte em
+cadastro" que não é necessária. Melhor:
+
+> Uma coluna booleana em `vendas` decidida **no INSERT** — `roteamento_aplicavel`, `DEFAULT false`
+> (metadata-only para o histórico). Só a venda inserida pelo código que já tem roteamento nasce
+> `true`; todo reenvio lê a flag em vez de comparar datas.
+
+Sem data, sem cadastro, sem constante. E resolve exatamente a onda de reenvio já agendada pela
+mudança do hash canônico ([integracoes.service.ts:105-112](../api/src/integracoes/integracoes.service.ts#L105-L112)):
+as vendas antigas voltam como `atualizado`, continuam com a flag `false`, e nenhum saldo de período
+fechado se mexe.
+
+**Arquivos:** `db/src/schema/app.schema.ts` (coluna na migration desta issue),
+`api/src/integracoes/integracoes.repository.ts`. **Testes:** reenvio de venda antiga não credita;
+venda nova reenviada preserva o roteamento.
+
+### 6 — Permissão de roteamento · **A**
+
+A **R-172** já diz: _"Admin configura contas/adquirentes/taxas"_. Roteamento é configuração de
+conta, logo é do Admin. E a matriz padrão já está de acordo (ver a correção factual em §13).
+
+**Recomendação técnica:** permissão distinta — `cadastro_formas_pagamento_rotear` — concedida
+apenas no acesso total, protegendo o subconjunto de campos de roteamento **no POST e no PUT**. O
+POST importa porque o Financeiro tem `cadastro_formas_pagamento_criar`, e sem isso o roteamento
+entraria de carona na criação. Mais a projeção condicional no `GET /api/formas_pagamento`, cujo
+guard é um OR que inclui `entradas_visualizar`.
+
+**Arquivos:** `db/src/referencia-permissoes.ts`, `api/src/formas-pagamento/*`,
+`shared/src/formas-pagamento/index.ts`. **Testes:** cargo sem a permissão não roteia; operador de
+caixa não enxerga conta na listagem.
+
+### 7 — Escopo da liquidação · **A**
+
+O documento `30` §8 define "Caixa testável" como **P0-A, P0-B, P1-A, P1-B, P1-C e DEV concluídos**.
+Liquidação não está na lista. Logo: **vertical imediatamente posterior**, fora da #152.
+
+Reforço técnico: sem liquidação, dinheiro de cartão nunca fica disponível — **igual a hoje**, então
+não é regressão, e o bloqueio da R-165 (dinheiro físico) é resolvido de qualquer forma.
+
+**Ressalva honesta:** o roteiro CT-00–CT-19 **não existe no repositório** — ele é citado nos
+documentos `00`, `30` e `31`, mas o passo a passo está fora daqui. Não pude conferir item por item.
+Se algum passo do roteiro for "confirmar recebimento de cartão", esta resposta muda.
+
+### Nova ordem técnica recomendada
+
+A fila do documento `31` colocava a #152 em primeiro. A dependência comprovada no ponto 3 muda isso:
+
+| Ordem | Issue    | Branch                                                         | Migration | Por quê agora                                                                         |
+| ----- | -------- | -------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------- |
+| 1     | **#41**  | nova, a partir de `origin/main`                                | `0032`    | fecha a janela de ingestão concorrente **antes** de o dinheiro passar a depender dela |
+| 2     | **#152** | `fix/caixa-saldo-insuficiente` (rebase na #41 depois do merge) | `0033`    | roteamento financeiro; já tem a porta R-165 e o RED provados                          |
+| 3     | **#101** | `origin/101-c-01-fechamento-retorno-sangria` (já existe)       | própria   | transferência pendente × fechamento, inalterada                                       |
+| 4+    | —        | #76/#98, #153, #154                                            | —         | fila do `31` sem mudança                                                              |
+
+Fora da fila, como vertical própria depois da #152: a **liquidação** (ponto 7) e a **D-06/R-007**
+(ponto 2), nessa ordem — a D-06 depende da classificação de forma que a #152 cria.
+
+**As duas issues não se misturam.** A #41 não conhece roteamento; a #152 não mexe em idempotência de
+ingestão. O único acoplamento é a ordem e o número da migration.
+
+### Próxima entrega executável
+
+Assim que as quatro confirmações chegarem, a primeira entrega é a **#41**, em branch nova a partir
+de `origin/main` (`5127525`), nesta ordem:
+
+1. RED determinístico: duas ingestões simultâneas do mesmo `idVenda` produzem **duas** linhas em
+   `vendas` — provado pelo fio real, como foi feito em `conta-receita-creare.test.ts`.
+2. `UNIQUE` parcial em `vendas (empresa_id, integracao_chave_id, identificador_externo)
+WHERE identificador_externo is not null` + `ON CONFLICT` no insert. **SQL, rollback e contagem de
+   duplicatas apresentados antes de aplicar** — a contagem em produção é do José, não minha.
+3. GREEN, mutações, gates proporcionais, relatório.
+
+A #152 só é rebaseada e retomada depois de a #41 estar mergeada.
 
 ## 19. O que NÃO foi feito
 
 - **Nenhum arquivo de código criado, alterado ou gerado**: `db/src/schema/**`, `db/migrations/**`,
   `_journal.json`, `meta/*_snapshot.json`, `api/src/**`, `shared/src/**`, `web-vue/**`, `tests/**`.
   Os únicos arquivos tocados nesta sessão são este documento e `PROJECT_BRAIN/00_INDICE.md`.
-- **`git fetch` continua bloqueado** por credencial — a base remota não foi comprovada.
-- **Nenhuma implementação.** Os seis pontos da §18 precisam de decisão antes.
+- **`git fetch` deixou de estar bloqueado** e a base remota está comprovada (§1) — o texto
+  original deste documento sobre isso está corrigido lá.
+- **Nenhuma implementação.** Os pontos da §18 precisam de resposta antes.
 - **Gates pesados não rodaram**: `lint`, `lint:deps`, `check`, build e `npm test` completo ficam
   para o estado final, conforme o §6 do `AGENTS.md`. Rodei apenas a suíte focada da §2.
 - **Playwright não rodou porque não existe** (§14, item 4). Instalá-lo é escopo próprio, com
