@@ -14,9 +14,9 @@ auditoria viram issues próprias, sem reabrir silenciosamente uma entrega já en
 ## 2. Estado real de retomada
 
 - Branch ativa: `fix/caixa-saldo-insuficiente`.
-- HEAD documentado em 24/08: `0e83497596228a5546c8c2242fe40a3d2fca64ba`.
+- HEAD de referência no momento da publicação: `e2b3eafe9514da5fb6d943e1e5d7151b967db8ed`.
 - Base local conhecida: `origin/main` em `5127525071d655d31cf316324d3549fc24c69c45`.
-- A branch está 12 commits à frente da referência local e com árvore limpa.
+- A branch está 13 commits à frente da referência local e com árvore limpa.
 - A atualização remota **não foi comprovada** nesta sessão: `git fetch` ficou aguardando credencial.
   O primeiro gate da retomada é autenticar, buscar o remoto e comparar a base sem rebase destrutivo.
 - A porta R-165 está implementada e as suítes focadas estavam verdes, mas a branch não pode ser
@@ -43,7 +43,7 @@ Valem as regras R-166 a R-172 registradas no documento `19`:
 
 ## 4. Fila vertical até o Caixa testável
 
-### P0-A — concluir saldo insuficiente + roteamento futuro do CREARE
+### P0-A — #152 — concluir saldo insuficiente + roteamento futuro do CREARE
 
 **Branch atual.** Implementar o mínimo vertical que torna a R-165 compatível com venda integrada:
 
@@ -56,7 +56,7 @@ Valem as regras R-166 a R-172 registradas no documento `19`:
   mostrar SQL, rollback e impacto e **parar antes de aplicar**, conforme TECH-01 e R-156;
 - fechar mutations, revisores, gates, teste visual focado, PR e CI; merge/deploy continuam separados.
 
-### P0-B — transferência pendente × fechamento
+### P0-B — #101 — transferência pendente × fechamento
 
 Implementar CF-01 em branch própria depois de P0-A:
 
@@ -74,7 +74,7 @@ Unificar e corrigir as issues existentes #76 e #98:
 - soma completa fecha a pendência; diferença exige justificativa;
 - Despesa e Mercadoria usam um único contrato de discriminação.
 
-### P1-B — persistência da empresa
+### P1-B — #153 — persistência da empresa
 
 Provar e corrigir o caso em que empresa criada/selecionada some após reload ou novo login. Cobrir
 criação, vínculo, seleção persistida e isolamento Padaria Principal × Empresa B.
@@ -85,7 +85,7 @@ Remover o bloco antigo `Programar entrega ao cofre` de todas as telas. O único 
 `+ Nova transferência`, com `Retorno / Sangria`, lacre/documento e retornos obrigatórios quando
 marcado, permitindo múltiplos lacres e exibindo Saída − Entrada = Saldo.
 
-### P2 — ambiente DEV reproduzível
+### P2 — #154 — ambiente DEV reproduzível
 
 Corrigir senha/seed local e fixtures para que CT-00–CT-19 possam começar do zero sem edição manual
 no banco e sem criar estados financeiros fisicamente impossíveis.
