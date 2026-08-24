@@ -8,13 +8,21 @@
 > citação literal do José), os 18 arquivos do `PROJECT_BRAIN/`, a planilha, o Xmind e os 5 desenhos
 > do Rodrigo.
 
+> **Governança vigente do Caixa desde 24/08/2026:** Marco é o único executor atual e responde pelo
+> fechamento técnico, publicação de branch/PR e decisão de merge após revisão do HEAD exato, gates
+> verdes e zero P0/P1. José deixou de ser executor, revisor e gate obrigatório. As decisões
+> históricas atribuídas a José continuam preservadas e válidas até revogação explícita. Regras
+> operacionais ou financeiras ainda ausentes continuam dependendo de confirmação do Rodrigo. Ver
+> [34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md](34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md).
+
 ## Como usar (o contrato)
 
 1. **Toda regra tem um id `R-nnn`.** Prompt não descreve regra — prompt **cita o id**.
 2. **Regra sem teste é regra que vai cair em desuso de novo.** A coluna `Teste` é o antídoto.
 3. **Revogar é um ato explícito.** Muda o status para 🚫 aqui, com quem revogou e quando. Regra não
    some em silêncio.
-4. **Contradição não se resolve implementando.** Vai para a §1 e espera decisão do José.
+4. **Contradição não se resolve implementando.** Vai para a §1 e espera decisão de Marco; quando
+   envolver operação ou regra financeira ainda não documentada, exige confirmação do Rodrigo.
 
 ### Legenda de status
 
