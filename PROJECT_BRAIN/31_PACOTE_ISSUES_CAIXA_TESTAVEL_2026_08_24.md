@@ -5,6 +5,12 @@
 
 ## 1. Ordem oficial
 
+> ⚠️ **A ordem abaixo mudou em 24/08 pela R-174:** a **#41 passou para a frente da #152**, em branch
+> própria criada de `origin/main`, porque a ingestão concorrente ainda duplica a venda e o
+> roteamento da #152 transformaria isso em crédito em dobro. A tabela original fica como registro
+> da publicação. Ordem vigente: **#41 → #152 → #101 → #76/#98 → #153 → #154**, com a D-06/R-007
+> depois de roteamento e liquidação. Detalhe em `30` §4 e em `32` §18.
+
 | Ordem   | Prioridade | Ação no GitHub                  | Entrega                                                             |
 | ------- | ---------- | ------------------------------- | ------------------------------------------------------------------- |
 | 1       | P0         | criada #152                     | Saldo insuficiente + roteamento futuro do CREARE                    |

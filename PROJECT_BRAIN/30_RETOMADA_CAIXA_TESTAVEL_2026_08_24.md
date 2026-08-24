@@ -15,18 +15,25 @@ auditoria viram issues próprias, sem reabrir silenciosamente uma entrega já en
 
 - Branch ativa: `fix/caixa-saldo-insuficiente`.
 - HEAD de referência no momento da publicação: `e2b3eafe9514da5fb6d943e1e5d7151b967db8ed`.
-- Base local conhecida: `origin/main` em `5127525071d655d31cf316324d3549fc24c69c45`.
-- A branch está 13 commits à frente da referência local e com árvore limpa.
-- A atualização remota **não foi comprovada** nesta sessão: `git fetch` ficou aguardando credencial.
-  O primeiro gate da retomada é autenticar, buscar o remoto e comparar a base sem rebase destrutivo.
+- Base: `origin/main` em `5127525071d655d31cf316324d3549fc24c69c45`.
+- A branch está à frente da referência, com árvore limpa, e nenhum commit foi reescrito.
+- ✅ **REMOTO COMPROVADO (24/08).** `git fetch origin --prune` rodou com sucesso: `origin/main` está
+  **exatamente** em `5127525071d655d31cf316324d3549fc24c69c45`, o mesmo hash acima —
+  **divergência zero**. `git rev-list --left-right --count origin/main...HEAD` devolve `0 N`: a
+  branch só adiciona, o remoto não andou. Não existe branch remota `fix/caixa-saldo-insuficiente`
+  (este trabalho nunca foi enviado) e não há migration `0032+` em ref remota nenhuma. Não houve
+  rebase, merge nem reset. **A afirmação anterior de credencial indisponível está obsoleta e foi
+  removida daqui.**
 - A porta R-165 está implementada e as suítes focadas estavam verdes, mas a branch não pode ser
   publicada ainda: venda CREARE nasce sem destino financeiro (`conta_origem_id = null`) e, por isso,
   a receita não compõe saldo disponível de nenhuma conta.
 - Não foram executados no estado final: `npm test` completo, Playwright focado e três revisores.
+  Playwright, aliás, **não existe neste repositório** — instalá-lo é escopo próprio (ver `32` §14).
 
 ## 3. Decisões fechadas para a implementação
 
-Valem as regras R-166 a R-172 registradas no documento `19`:
+Valem as regras R-166 a R-172 registradas no documento `19` — **e, desde 24/08, também as R-173 a
+R-177**, aprovadas pelo José no gate da #152 (consolidação em `32` §18):
 
 1. Histórico negativo fica preservado; zero `UPDATE`, backfill ou regularização automática.
 2. Venda futura guarda empresa, forma, adquirente/provedor, conta de recebível e conta bancária final.
@@ -42,6 +49,28 @@ Valem as regras R-166 a R-172 registradas no documento `19`:
 7. Contas, adquirentes, taxas e vigências são cadastro administrativo — nunca nomes hardcoded.
 
 ## 4. Fila vertical até o Caixa testável
+
+> ⚠️ **ORDEM ALTERADA EM 24/08 (R-174).** A **#41 passou para a frente da #152**. A primeira
+> ingestão concorrente da mesma venda ainda cria duas linhas em `vendas` — hoje invisível para o
+> saldo da conta, mas com o roteamento da #152 passaria a creditar o valor **duas vezes**. As duas
+> issues não se misturam: a #41 não conhece roteamento, a #152 não mexe em idempotência de
+> ingestão. Consequência prática: a **#41 leva a migration `0032`** e a da #152 passa a ser a
+> `0033`. A D-06/R-007 entra **depois** de roteamento e liquidação, como vertical separada.
+>
+> Ordem vigente: **#41 → #152 → #101 → #76/#98 → #153 → #154**.
+
+### P0-ZERO — #41 — idempotência da venda integrada
+
+**Branch nova, a partir de `origin/main`.** Fecha a janela em que duas ingestões simultâneas do
+mesmo `idVenda` criam duas vendas:
+
+- índice único **parcial** conforme a R-175 — chave `(empresa_id, identificador_externo)`, predicado
+  `integracao_chave_id is not null and identificador_externo is not null`. `integracao_chave_id`
+  fica **fora** da chave de propósito: dentro dela, uma troca de credencial permitiria duplicar;
+- `ON CONFLICT` no insert da venda integrada, sem violar as invariantes de lock da R-164/R-165;
+- contagem read-only de duplicatas apresentada **antes** de aplicar — a leitura em produção é do
+  José;
+- SQL, rollback e testes mostrados antes; a execução para antes de aplicar (TECH-01).
 
 ### P0-A — #152 — concluir saldo insuficiente + roteamento futuro do CREARE
 
@@ -98,7 +127,8 @@ P0–P3. Playwright automatiza o determinístico; conferência humana cobre comp
 
 ## 5. P0 de go-live que não deve ser misturado nas correções visuais
 
-- #41: idempotência da venda integrada (`UNIQUE` parcial + `ON CONFLICT`), entrega separada.
+- ~~#41: idempotência da venda integrada~~ — **promovida para o início da fila em 24/08 (R-174)**;
+  continua sendo entrega separada, agora executada **antes** da #152. Ver §4.
 - #42: prova determinística de concorrência da integração.
 - #43: integridade/hash de datas da integração, após confirmar o estado atual da issue.
 - Correção pós-fechamento append-only (Q3): OS e migration próprias; nunca editar o original.

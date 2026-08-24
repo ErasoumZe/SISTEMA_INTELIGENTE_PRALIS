@@ -1,6 +1,10 @@
 # Issue #152 — contrato de roteamento financeiro do CREARE + proposta de migration 0032
 
-> **STATUS: GATE FECHADO, AGUARDANDO QUATRO CONFIRMAÇÕES.** Nada foi aplicado — nenhum arquivo de
+> **STATUS: GATE RESPONDIDO EM 24/08 — as quatro confirmações chegaram.** As decisões viraram as
+> regras **R-173 a R-177** no documento `19`; a fila mudou (R-174) e está em `30` §4. Esta issue
+> (#152) **não é mais a próxima**: a #41 vem antes. Nada de schema, migration ou código foi aplicado.
+>
+> **STATUS ORIGINAL DESTE DOCUMENTO:** Nada foi aplicado — nenhum arquivo de
 > schema, migration, journal, snapshot ou código foi criado ou alterado. Este documento é o gate do
 > item 3 da `docs/prompts/RETOMADA-CAIXA-TESTAVEL-2026-08-24.md` e do §4.6 do `AGENTS.md`.
 >
@@ -994,9 +998,10 @@ em conta nenhuma**, a venda continua gravada e nasce uma conciliação de R$ 1.
 (invariante + snapshot). **Testes:** unidade da invariante; integração de venda dividida; integração
 de divergência que não credita nada.
 
-**A única confirmação que sobra** é de leitura, não de número: quando `Σ ≠ líquido`, a diferença
-não é atribuível a um pagamento específico, então a **venda inteira** nasce pendente. A R-170 fala
-em "a parcela divergente", mas aqui não existe parcela identificável.
+**A única confirmação que sobrava** era de leitura, não de número: quando `Σ ≠ líquido`, a
+diferença não é atribuível a um pagamento específico, então a **venda inteira** nasce pendente.
+✅ **Aprovado pelo José em 24/08 — virou a R-173**, com tolerância zero explícita e a ressalva de
+que o `TOLERANCIA_CONCILIACAO_CENTAVOS = 1` não pode ser reusado aqui.
 
 ### 2 — O fechamento debita o líquido inteiro · **A (a regra é "não mexer")**
 
@@ -1036,7 +1041,7 @@ a **primeira** ingestão não tem ponto de serialização nenhum; e `vendas` nã
 `vendas`**, uma órfã com pagamentos completos. Hoje é invisível para o saldo da conta; com o
 roteamento, a órfã **credita o valor de novo**.
 
-**Recomendação: #41 antes da #152, em branch própria, sem mistura.** Além de fechar esta janela,
+✅ **Aprovado — R-174.** #41 antes da #152, em branch própria criada de `origin/main` atualizada, sem mistura. Além de fechar esta janela,
 a #41 já é P0 de go-live autônomo no documento `30` §5, tem migration própria (`UNIQUE` parcial +
 `ON CONFLICT`) e exige contagem de duplicatas em produção — acesso que o Gate Zero proíbe a mim,
 mas que é da natureza da #41.
@@ -1059,9 +1064,9 @@ e apaga/reinsere produtos e pagamentos. Ou seja, **editar pagamentos de uma vend
 retaguarda já é uma capacidade que não sobrevive ao próximo reenvio — hoje, antes da #152.** Não é
 uma função que estamos tirando; é uma que nunca foi confiável.
 
-**Recomendação:** no PUT, para venda com `integracao_chave_id is not null`, **recusar alteração de
-`tiposPagamento` e de `contaOrigemId`** com mensagem clara. O resto do PUT continua. É cirúrgico e
-não remove nada real.
+✅ **Aprovado — R-177.** No PUT, para venda com `integracao_chave_id is not null`, **recusar
+alteração de `tiposPagamento` e de `contaOrigemId`** com mensagem clara. Os demais campos
+permitidos continuam editáveis, e a venda manual não integrada mantém o fluxo próprio.
 
 **Arquivos:** `api/src/vendas/vendas.service.ts` (`atualizarVenda`), `api/src/vendas/vendas.repository.ts`,
 `shared/src/vendas/index.ts`. **Testes:** PUT em venda integrada recusa os dois campos; PUT em venda
@@ -1094,8 +1099,8 @@ venda nova reenviada preserva o roteamento.
 A **R-172** já diz: _"Admin configura contas/adquirentes/taxas"_. Roteamento é configuração de
 conta, logo é do Admin. E a matriz padrão já está de acordo (ver a correção factual em §13).
 
-**Recomendação técnica:** permissão distinta — `cadastro_formas_pagamento_rotear` — concedida
-apenas no acesso total, protegendo o subconjunto de campos de roteamento **no POST e no PUT**. O
+✅ **Aprovado — R-176.** Permissão dedicada, proibido reusar as genéricas de criar/renomear forma.
+Concedida apenas no acesso total, protegendo o subconjunto de campos de roteamento **no POST e no PUT**. O
 POST importa porque o Financeiro tem `cadastro_formas_pagamento_criar`, e sem isso o roteamento
 entraria de carona na criação. Mais a projeção condicional no `GET /api/formas_pagamento`, cujo
 guard é um OR que inclui `entradas_visualizar`.
@@ -1108,6 +1113,8 @@ caixa não enxerga conta na listagem.
 
 O documento `30` §8 define "Caixa testável" como **P0-A, P0-B, P1-A, P1-B, P1-C e DEV concluídos**.
 Liquidação não está na lista. Logo: **vertical imediatamente posterior**, fora da #152.
+✅ **Confirmado pelo José:** a D-06/R-007 vem **depois** de roteamento e liquidação, como entrega
+vertical separada, sem se misturar à #41 nem à #152.
 
 Reforço técnico: sem liquidação, dinheiro de cartão nunca fica disponível — **igual a hoje**, então
 não é regressão, e o bloqueio da R-165 (dinheiro físico) é resolvido de qualquer forma.
@@ -1140,9 +1147,18 @@ de `origin/main` (`5127525`), nesta ordem:
 
 1. RED determinístico: duas ingestões simultâneas do mesmo `idVenda` produzem **duas** linhas em
    `vendas` — provado pelo fio real, como foi feito em `conta-receita-creare.test.ts`.
-2. `UNIQUE` parcial em `vendas (empresa_id, integracao_chave_id, identificador_externo)
-WHERE identificador_externo is not null` + `ON CONFLICT` no insert. **SQL, rollback e contagem de
-   duplicatas apresentados antes de aplicar** — a contagem em produção é do José, não minha.
+2. `UNIQUE` parcial conforme a **R-175** — chave `(empresa_id, identificador_externo)`, predicado
+   `integracao_chave_id is not null and identificador_externo is not null` — mais `ON CONFLICT` no
+   insert. **SQL, rollback e contagem de duplicatas apresentados antes de aplicar**; a contagem em
+   produção é do José, não minha.
+
+   > **CORREÇÃO DO JOSÉ (24/08).** Eu havia escrito a chave como
+   > `(empresa_id, integracao_chave_id, identificador_externo)`. **Está errado e foi corrigido.**
+   > Com `integracao_chave_id` dentro da chave, uma troca de chave/credencial cria uma tupla nova
+   > para o mesmo `idVenda` e a venda duplica assim mesmo. A chave é `(empresa_id,
+identificador_externo)`; `integracao_chave_id` fica só no **predicado**, para manter a venda de
+   > retaguarda fora do índice. Virou a R-175.
+
 3. GREEN, mutações, gates proporcionais, relatório.
 
 A #152 só é rebaseada e retomada depois de a #41 estar mergeada.

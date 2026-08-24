@@ -33,7 +33,7 @@ a necessidade.
 | [16](16_DEFINITION_OF_DONE.md)                      | **Definition of Done**                 | o contrato de qualidade: quando uma entrega pode ser chamada de pronta                          |
 | [17](17_REGRAS_LANCAMENTOS_FINAIS.md)               | Regras de Lançamentos                  | a spec vigente ⚠️ _§3 (seeding) desatualizada — vale o quadro do `20`_                          |
 | [18](18_DIVIDAS_TECNICAS.md)                        | **Dívidas técnicas**                   | D-01 a D-23: o que foi achado e adiado de propósito                                             |
-| [19](19_REGISTRO_DE_REGRAS.md)                      | **Registro de regras**                 | **a fonte única.** R-001 a R-151, contradições C-01 a C-09, regras revogadas                    |
+| [19](19_REGISTRO_DE_REGRAS.md)                      | **Registro de regras**                 | **a fonte única.** R-001 a R-177, contradições C-01 a C-09, regras revogadas                    |
 | [20](20_ESTADO_DA_ENTREGA.md)                       | **Estado da entrega**                  | onde a entrega parou, o que trava, e os comandos de validação                                   |
 | [21](21_DECISOES_04_08.md)                          | **Reunião 04/08 (Marco)**              | escopo de Compras/Estoque/Relatórios, 8 bugs ao vivo, 11 perguntas em aberto                    |
 | [22](22_AUDITORIA_STACK_2026_08_05.md)              | **Auditoria de stack (05/08)**         | stack real, 20 riscos com arquivo:linha, ferramental e plano priorizado                         |
