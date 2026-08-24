@@ -118,11 +118,11 @@ para** durante a construção. `vendas` é a maior tabela candidata do sistema e
 > [`db/scripts/auditoria-vendas-integradas-duplicadas.sql`](../db/scripts/auditoria-vendas-integradas-duplicadas.sql),
 > junto dos demais scripts de diagnóstico do repositório:
 > `psql "$DATABASE_URL" -f db/scripts/auditoria-vendas-integradas-duplicadas.sql`.
-> Nenhum ambiente foi consultado — quem executa é o José.
+> Nenhum ambiente foi consultado. Se esta auditoria for necessária, Marco autoriza e executa ou
+> acompanha uma sessão explicitamente read-only, preservando a evidência e sem ampliar o acesso.
 
 **Somente leitura. Nenhum `UPDATE`, `DELETE` ou `INSERT`.** Nenhuma IA executa esta consulta em
-produção automaticamente. Se ela for necessária, Marco autoriza e executa ou acompanha uma sessão
-explicitamente read-only, preservando a evidência e sem ampliar o acesso.
+produção automaticamente.
 
 ```sql
 -- (1) Resposta em uma linha: existe duplicata?
