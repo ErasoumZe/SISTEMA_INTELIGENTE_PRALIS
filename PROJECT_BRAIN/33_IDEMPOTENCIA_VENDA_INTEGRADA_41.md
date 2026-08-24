@@ -114,8 +114,15 @@ para** durante a construção. `vendas` é a maior tabela candidata do sistema e
 
 ## 4. Consulta read-only de duplicidades
 
-**Somente leitura. Nenhum `UPDATE`, `DELETE` ou `INSERT`.** Quem roda em produção é o José; eu não
-tenho e não quero acesso.
+> **Pronta para rodar, e não foi rodada.** As quatro seções abaixo estão em
+> [`db/scripts/auditoria-vendas-integradas-duplicadas.sql`](../db/scripts/auditoria-vendas-integradas-duplicadas.sql),
+> junto dos demais scripts de diagnóstico do repositório:
+> `psql "$DATABASE_URL" -f db/scripts/auditoria-vendas-integradas-duplicadas.sql`.
+> Nenhum ambiente foi consultado — quem executa é o José.
+
+**Somente leitura. Nenhum `UPDATE`, `DELETE` ou `INSERT`.** Nenhuma IA executa esta consulta em
+produção automaticamente. Se ela for necessária, Marco autoriza e executa ou acompanha uma sessão
+explicitamente read-only, preservando a evidência e sem ampliar o acesso.
 
 ```sql
 -- (1) Resposta em uma linha: existe duplicata?
@@ -389,11 +396,76 @@ idêntico, alteração de rateio, `sem_novidade`), `integracoes.test.ts` e
 5. manter a decisão criar-ou-atualizar no registro em vez da venda → **RED-2 fica vermelho**;
 6. remover o mapeamento de `23505` para 5xx → 422 e venda descartada.
 
+## 7-A. RED escrito e medido — 24/08/2026
+
+Autorizado a avançar **somente** para a fase RED. Os três arquivos existem, rodaram e falham pelos
+sintomas descritos acima.
+
+| Arquivo                                             | Casos | Vermelhos | Verdes |
+| --------------------------------------------------- | ----- | --------- | ------ |
+| `venda-integrada-corrida-primeira-ingestao.test.ts` | 3     | 2         | 1      |
+| `venda-integrada-rotacao-de-chave.test.ts`          | 4     | 3         | 1      |
+| `venda-integrada-interleaving-sessoes.test.ts`      | 3     | 2         | 1      |
+| **Total**                                           | 10    | **7**     | 3      |
+
+```
+npx vitest run --project integration tests/integration/integracoes/venda-integrada-*.test.ts
+Test Files  3 failed (3)
+Tests       7 failed | 3 passed (10)
+Duration    80.35s
+exit code   1
+```
+
+### O que cada vermelho provou
+
+**Corrida — as duas ordens.** Os dois lados voltaram **200 com `status: "criado"` e `vendaId`
+DIFERENTE**, para o mesmo `identificadorExterno`:
+
+```
+A=200 {"status":"criado","vendaId":"01a035f2-c358-73f3-806c-bc20310c7ef1", ...}
+B=200 {"status":"criado","vendaId":"01a035f2-c355-76ba-9d07-fa386b96993e", ...}
+```
+
+Duas vendas, duas criações, um único `idVenda`. O resultado repetiu com a fila invertida — como
+previsto, hoje nada serializa depois da barreira, então a ordem não muda o desfecho.
+
+**Rotação de credencial.** Sem concorrência nenhuma: a ingestão pela chave nova respondeu
+`status: "criado"` e gravou a **segunda** venda. E os registros se separaram — o da chave antiga
+aponta para `01a035f3-17f1…` e o da chave nova para `01a035f3-18b9…`. **É a prova em execução de
+que a R-175 está certa:** com `integracao_chave_id` dentro da chave única, esta duplicata passaria
+mesmo depois da migration.
+
+**Interleaving em duas sessões.** Nas duas ordens, o segundo `INSERT` foi _"aceito sem erro"_ —
+nenhum `23505`, porque não existe `UNIQUE` parcial em `vendas`.
+
+### Os três verdes são guardas, não acaso
+
+1. **`o reenvio depois da corrida nao pode criar uma terceira venda`** — passa porque, depois da
+   corrida, o registro já existe e o reenvio entra pelo caminho de atualização. Guarda contra
+   regressão: a #41 não pode quebrar isto.
+2. **`a venda entra uma vez com a chave antiga`** — a linha de base. Se ficar vermelha, o defeito
+   medido é outro.
+3. **`venda de RETAGUARDA continua livre`** — duas vendas manuais no mesmo dia continuam válidas.
+   É a guarda do **predicado** do índice: se alguém transformar o parcial em `UNIQUE` cheio, este
+   caso quebra na hora.
+
+### Detalhes de execução que valem registro
+
+- **Sem `sleep` em lugar nenhum.** A sincronização é por condição (`esperarCadeiaDeBloqueio`), e a
+  barreira é a linha do caixa segurada por `FOR UPDATE` em conexão dedicada.
+- **A ingestão de aquecimento é obrigatória** e está no `beforeAll`: sem ela as duas concorrentes
+  disputariam o unique de `integracoes_vinculos` e serializariam **antes** do `INSERT`, medindo
+  outra coisa.
+- **A chave do seed não é tocada.** O arquivo da rotação cria as duas chaves que usa, para não
+  derrubar os demais testes de integração.
+- `tsc --noEmit` do workspace `tests`: **exit 0**. `eslint` nos três arquivos: **exit 0**.
+
 ## 8. Ordem de execução depois da autorização
 
 1. Criar a branch a partir de `origin/main` (`5127525`).
 2. Escrever os três RED e provar que ficam vermelhos pelo fio real.
-3. **Rodar a consulta da §4 no ambiente que o José indicar.** Havendo duplicata, **parar** — a
+3. **Rodar a consulta da §4 somente no ambiente e na sessão que Marco autorizar.** Havendo
+   duplicata, **parar** — a
    limpeza é OS própria (R-166).
 4. Só então gerar a migration por `db:generate`, mostrar o diff dos três arquivos e **parar de novo
    antes de aplicar**.
@@ -402,6 +474,7 @@ idêntico, alteração de rateio, `sem_novidade`), `integracoes.test.ts` e
 ## 9. O que NÃO foi feito nesta rodada
 
 - Nenhuma migration gerada ou aplicada; nenhum arquivo de schema, journal, snapshot ou código.
-- Nenhum acesso a produção — a contagem de duplicatas é do José.
+- Nenhum acesso automático a produção — a contagem de duplicatas é responsabilidade de Marco e
+  depende de autorização explícita para uma sessão read-only.
 - Nada da #152, da #101 ou da D-06 foi tocado ou misturado.
 - Nenhuma duplicata existente foi limpa, contada ou estimada.
