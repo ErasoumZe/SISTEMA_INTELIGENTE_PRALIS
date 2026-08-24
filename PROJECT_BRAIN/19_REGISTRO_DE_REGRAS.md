@@ -804,6 +804,20 @@ maior do que você definiu para transferência de retorno. Você vai precisar de
 transferência. Então a gente precisa rever"_ (p. 29). Enquanto essa regra não existir, **o módulo
 Caixa não pode ser declarado terminado**, embora tudo o mais funcione.
 
+### Idempotência da venda integrada — decisões transportadas para a #41 (José, 24/08/2026)
+
+> **Transporte parcial, de propósito.** As decisões do gate do Caixa foram registradas como
+> **R-166 a R-177**. Esta branch é só da **#41** e traz **apenas as duas que ela executa**. O
+> conjunto completo, com R-166–R-173, R-176 e R-177, chega junto com a branch da #152.
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                  | Origem                        | Status |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- | ------ |
+| **R-174** 🆕 | **A #41 vem antes da #152**, em branch separada criada de `origin/main` atualizada. A primeira ingestão concorrente da mesma venda não serializa e cria duas linhas em `vendas`; enquanto o saldo não depender disso é invisível, com roteamento passa a creditar em dobro. As duas issues não se misturam.                                            | José, gate #152, 24/08        | ✅     |
+| **R-175** 🆕 | **A chave única da venda integrada é `(empresa_id, identificador_externo)`**, com o índice parcial restrito a `integracao_chave_id is not null and identificador_externo is not null`. **`integracao_chave_id` fica no PREDICADO, nunca na chave**: incluí-lo permitiria duplicar a mesma venda depois de uma troca de chave/credencial da integração. | José, correção do gate, 24/08 | ✅     |
+
+Desenho completo da #41 — SQL, consulta read-only de duplicidade, rollback, `ON CONFLICT` e os três
+RED — em [`33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md`](33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md).
+
 ---
 
 ## §4 · Como isto deixa de ser mais um documento
