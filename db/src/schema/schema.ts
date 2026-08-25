@@ -1,3 +1,4 @@
+import * as admissoesSchema from "./admissoes/admissoes.schema.js";
 import * as autenticacaoSchema from "./autenticacao/autenticacao.schema.js";
 import * as cadastroSchema from "./cadastro/cadastro.schema.js";
 import * as caixaSchema from "./caixa/caixa.schema.js";
@@ -11,6 +12,7 @@ import * as transferenciaSchema from "./transferencia/transferencia.schema.js";
 import * as vendaSchema from "./venda/venda.schema.js";
 
 export const schema = {
+  ...admissoesSchema,
   ...autenticacaoSchema,
   ...cadastroSchema,
   ...caixaSchema,
