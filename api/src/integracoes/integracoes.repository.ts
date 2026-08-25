@@ -676,7 +676,9 @@ export async function registrarAlteracaoPosFechamentoRepository(
 
 // Predicado do indice unico parcial `vendas_integracao_identificador_unico_idx` (R-175), repetido
 // aqui porque e assim que o Postgres infere qual indice PARCIAL serve de arbitro no ON CONFLICT.
-// Precisa ser identico ao da migration 0032; divergir faz o conflito escapar como 23505 cru.
+// Precisa IMPLICAR o predicado da migration 0032. Divergir nao devolve 23505: o Postgres nao
+// infere arbitro nenhum e levanta 42P10 em TODA insercao — por isso 42P10 tambem entra na
+// familia transitoria do servico, e nao no 422 que descartaria a venda.
 //
 // Montado por OPERADORES do Drizzle, nunca por template de SQL cru — `verificar-arquitetura.mjs`
 // proibe SQL cru em api/src. O `as SQL` e necessario, nao cosmetico: `and()` e tipado como

@@ -28,7 +28,7 @@ import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
-import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
+import { codigoPostgresDoErro, ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
   buscarChavePorCodigoHashRepository,
@@ -862,7 +862,14 @@ export async function receberVendaIntegracao(
   } catch (error) {
     // Erros de dominio ja sao estruturados; nao viram "erro" de processamento.
     if (error instanceof ErroDominio) throw error;
-    const mensagemErro = error instanceof Error ? error.message : String(error);
+    const erroOriginal = error instanceof Error ? error : null;
+    // A mensagem do `DrizzleQueryError` e o SQL, nao o motivo: o "duplicate key value violates..."
+    // do Postgres fica em `cause`. Sem juntar os dois, o historico guarda o SQL e perde a causa —
+    // que e justamente o que um humano precisa ler depois.
+    const causa = erroOriginal?.cause instanceof Error ? erroOriginal.cause.message : "";
+    const mensagemErro = [erroOriginal ? erroOriginal.message : String(error), causa]
+      .filter(Boolean)
+      .join(" | causa: ");
     try {
       // Fora da transacao que sofreu rollback: conexao nova (banco default) -> o registro sobrevive.
       await registrarHistoricoRepository({
@@ -875,33 +882,47 @@ export async function receberVendaIntegracao(
       });
     } catch {
       // Nem gravar o erro foi possivel (ex.: banco fora): propaga o original -> 500 -> agente re-tenta.
-      throw error instanceof Error ? error : new Error(mensagemErro);
+      throw erroOriginal ?? new Error(mensagemErro);
     }
-    // Contencao transitoria (teto de lock 55P03; deadlock 40P01) NAO vira 422: 4xx faz o agente
-    // DESCARTAR a venda, e a R-013 proibe recusar venda integrada. O erro sobe intacto e o
-    // handler global responde 503 — que o agente re-tenta no proximo ciclo.
-    const codigoPostgres = (error as { code?: string }).code;
-    if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
-    // Mesma familia — contencao transitoria, resposta 503 que o agente re-tenta. Um unico ramo
-    // para as tres causas, de proposito: nada de segundo caminho de tratamento (AGENTS.md 4.1).
+    // FAMILIA TRANSITORIA da ingestao: um ramo so, 503 `LOCK_OCUPADO`, que o agente re-tenta.
+    // 4xx aqui faria o agente DESCARTAR a venda, e a R-013 proibe recusar venda integrada.
     //
-    //   S8            venda mudou de caixa entre a leitura e a trava;
-    //   #41 corrida   outra requisicao criou a mesma venda e commitou primeiro;
-    //   #41 `23505`   conflito RESIDUAL de unicidade. A #41 acrescentou um unique a `vendas`, e um
-    //                 conflito que escape do ON CONFLICT nao pode virar 422 — 4xx faz o agente
-    //                 DESCARTAR a venda (R-013). Rede de seguranca: com o predicado correto no
-    //                 ON CONFLICT este ramo nao deveria ser alcancado.
+    //   55P03 / 40P01   teto de lock estourado / deadlock (contencao com o fechamento do caixa);
+    //   23505           violacao de unicidade — inclusive a do indice da #41 que escape do
+    //                   ON CONFLICT, e a de `pdvs`/`clientes` quando duas ingestoes criam o mesmo
+    //                   cadastro novo ao mesmo tempo. Re-tentar resolve: na segunda vez o registro
+    //                   ja existe e o vinculo e encontrado. NAO se restringe a constraint do indice
+    //                   da #41 de proposito: para ESTE endpoint, re-tentar de graca e sempre melhor
+    //                   que descartar venda (R-013), e um 23505 permanente aparece como 503 repetido
+    //                   no historico, que e visivel;
+    //   42P10           `there is no unique or exclusion constraint matching the ON CONFLICT
+    //                   specification`. E o que o Postgres levanta quando o indice parcial NAO
+    //                   existe ou esta invalido (migration ainda nao aplicada, `CREATE INDEX
+    //                   CONCURRENTLY` abortado, rollback fora de ordem) — e ele estoura em TODA
+    //                   ingestao nova, nao so nas conflitantes. Sem este ramo, subir o codigo antes
+    //                   do indice descartaria 100% das vendas integradas em silencio;
+    //   S8              a venda mudou de caixa entre a leitura e a trava;
+    //   #41 corrida     outra requisicao criou a mesma venda e commitou primeiro.
     //
-    // MENSAGEM FIXA, e nao `mensagemErro`: a mensagem do driver embute o INSERT inteiro e os
-    // PARAMETROS da venda (identificador, valores, ids de PDV e de chave), e ela ia inteira para o
-    // corpo da resposta do integrador. O detalhe continua gravado no historico logo acima.
+    // `codigoPostgresDoErro` percorre a CADEIA de causas. Ler `error.code` direto nao funciona: o
+    // Drizzle embrulha toda falha de query num `DrizzleQueryError` que NAO copia o `code` — o erro
+    // do `pg` fica em `cause`. Enquanto isso passou batido, os ramos de 55P03/40P01 eram codigo
+    // morto e TODA falha de banco virava 422, ou seja, venda descartada.
+    const codigoPostgres = codigoPostgresDoErro(erroOriginal);
     if (
+      codigoPostgres === "55P03" ||
+      codigoPostgres === "40P01" ||
+      codigoPostgres === "23505" ||
+      codigoPostgres === "42P10" ||
       codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA ||
-      codigoPostgres === CODIGO_VENDA_DUPLICADA_EM_CORRIDA ||
-      codigoPostgres === "23505"
+      codigoPostgres === CODIGO_VENDA_DUPLICADA_EM_CORRIDA
     ) {
       throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
     }
-    throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
+    // MENSAGEM FIXA. `mensagemErro` aqui e o `message` do `DrizzleQueryError`, que embute o SQL
+    // inteiro e os PARAMETROS da venda — identificador, valores, ids de PDV e de chave — e ia
+    // direto para o corpo da resposta do integrador (e dai para o log da maquina da loja, via
+    // `api-client.js`). O detalhe continua gravado no historico logo acima, que e interno.
+    throw naoProcessavel("Falha ao processar venda integrada", "INTEGRATION_PROCESSING_ERROR");
   }
 }
