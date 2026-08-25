@@ -400,7 +400,8 @@ limpa duplicata existente. Não acessa produção.
 Três arquivos RED. Nenhum usa `sleep`: a sincronização é por **condição**, com os utilitários que já
 existem em `tests/setup/integracao.ts` (`abrirBloqueador`, `esperarCadeiaDeBloqueio`) — o mesmo
 padrão de `conta-saldo-insuficiente.test.ts:308-341`. `aindaPendente` também existe ali
-(`integracao.ts:211`) e passa a ser usado pelo **T-9**, não pelos três RED.
+(`integracao.ts:211`) e passa a ser usado pelo **T-9**, não pelos três RED. O T-9 mede o **índice**
+em sessões `pg` cruas — ele não passa pela API nem exercita o `ON CONFLICT` do serviço.
 
 ### RED-1 · corrida na primeira ingestão (as duas ordens)
 
@@ -491,12 +492,12 @@ green: nas duas ordens, um commit passa e o outro leva 23505 -> 1 linha
 Os três arquivos RED cobrem a corrida, a rotação e o interleaving. A auditoria read-only
 (`PRE-GREEN-ISSUE-41-IDEMPOTENCIA.md`) achou quatro buracos. Entram junto com o GREEN.
 
-| Id       | Caso                                                                                                                         | Por que é necessário                                                                                                                                                                                                             |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T-8**  | **Isolamento entre empresas** — o mesmo `idVenda` na empresa A e na B produz **duas** vendas legítimas, sem conflito         | A chave do índice começa por `empresa_id`, mas **nada prova isso hoje**. Exige uma chave de integração própria para `idsTeste.empresaB` (`tests/setup/contexto.ts:25`). Mata a mutação "buscar a venda sem filtrar `empresa_id`" |
-| **T-9**  | **O perdedor permanece PENDENTE enquanto o vencedor não commita**, usando `aindaPendente` (`tests/setup/integracao.ts:211`)  | É a prova de que o índice **arbitra** de fato: `ON CONFLICT DO NOTHING` espera o inserter concorrente. Mata a mutação "tirar o predicado do `where`", que faria estourar `23505` cru em vez de esperar                           |
-| **T-10** | **Resposta nominal 503**, com `code`, não apenas `statusCode >= 500`                                                         | RED-1 hoje só verifica a faixa. A R-013 merece asserção nominal: 4xx faria o agente **descartar** a venda                                                                                                                        |
-| **T-11** | **Pagamento dividido sob corrida** — reusar o rateio assimétrico de `pagamento-dividido.test.ts` dentro da barreira do RED-1 | Garante que o rollback do perdedor não deixa pagamento órfão nem empilha rateio na venda que sobrou                                                                                                                              |
+| Id       | Caso                                                                                                                         | Por que é necessário                                                                                                                                                                                                                                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T-8**  | **Isolamento entre empresas** — o mesmo `idVenda` na empresa A e na B produz **duas** vendas legítimas, sem conflito         | A chave do índice começa por `empresa_id`, mas **nada prova isso hoje**. Exige uma chave de integração própria para `idsTeste.empresaB` (`tests/setup/contexto.ts:25`). Mata a mutação "buscar a venda sem filtrar `empresa_id`"                                                                                                          |
+| **T-9**  | **O perdedor permanece PENDENTE enquanto o vencedor não commita**, usando `aindaPendente` (`tests/setup/integracao.ts:211`)  | Prova a **espera/serialização do ÍNDICE**, em duas sessões `pg` cruas: o segundo `INSERT` fica bloqueado pelo primeiro (`pg_blocking_pids`) e só acorda no commit dele. **Não passa pela API e não exercita o `ON CONFLICT`** — é propriedade do índice, e fica verde assim que a 0032 é aplicada, antes de qualquer mudança em `api/src` |
+| **T-10** | **Resposta nominal 503**, com `code`, não apenas `statusCode >= 500`                                                         | RED-1 hoje só verifica a faixa. A R-013 merece asserção nominal: 4xx faria o agente **descartar** a venda                                                                                                                                                                                                                                 |
+| **T-11** | **Pagamento dividido sob corrida** — reusar o rateio assimétrico de `pagamento-dividido.test.ts` dentro da barreira do RED-1 | Garante que o rollback do perdedor não deixa pagamento órfão nem empilha rateio na venda que sobrou                                                                                                                                                                                                                                       |
 
 `aindaPendente` já existe e **não era usado** por nenhum dos três RED — a menção a ele no cabeçalho
 da §7 estava adiantada. O T-9 é quem passa a usá-lo.
@@ -667,11 +668,24 @@ Cada mutação: aplicar, rodar a suíte, restaurar, conferir árvore limpa.
 | 4   | perdedor responde 4xx                       | morta                  | T-10                                              |
 | 5   | decisão volta para o `registro`             | morta                  | rotação (3 casos)                                 |
 | 6   | sem `ON CONFLICT` **e** sem a rede do 23505 | morta                  | T-10                                              |
-| 6b  | sem `ON CONFLICT`, **com** a rede           | morta                  | T-10 (prova que a rede é load-bearing)            |
+| 6b  | sem `ON CONFLICT`, **com** a rede do 23505  | ver ressalva abaixo    | —                                                 |
 | 7   | índice parcial → `UNIQUE` cheio             | **sobreviveu** → morta | **T-13**                                          |
 | 8   | esquece a linha do `status`                 | morta                  | rotação                                           |
 | 9   | busca sem filtrar `empresa_id`              | morta                  | T-8 (3 casos)                                     |
 | 10  | volta a ler `error.code` direto             | morta                  | **T-14**                                          |
+
+> **Ressalva sobre a M6b, corrigida em 25/08 após a auditoria do Codex.** A tabela dizia que o T-10
+> a matava. **Não mata, e não deveria.** Removendo o `ON CONFLICT` mas mantendo o tratamento de
+> `23505`, o conflito passa a chegar como erro do driver e o `catch` o converte no mesmo **503
+> `LOCK_OCUPADO`** — ou seja, **do ponto de vista do contrato externo a M6b é equivalente ao código
+> correto**, e nenhum teste de resposta HTTP pode distingui-la. O que ela muda é interno: o perdedor
+> descobre o conflito estourando em vez de esperando, e gasta uma transação abortada. A execução
+> registrada acima acusou "morta" porque a rodada aplicou M6 e M6b em sequência sobre a mesma
+> árvore; a leitura correta é **inconclusiva por construção**.
+>
+> **Não foi criado teste artificial para sustentar a afirmação anterior.** Distinguir M6b exigiria
+> medir o comportamento interno (esperar vs. estourar), e isso já é exatamente o que o **T-9** faz —
+> no nível do índice, que é onde a diferença existe.
 
 **As duas sobreviventes eram do índice, e sobreviveram pelo mesmo motivo: o código compensa a forma
 errada.** A M3 é o caso mais instrutivo — este documento previa que a rotação ficaria vermelha, e

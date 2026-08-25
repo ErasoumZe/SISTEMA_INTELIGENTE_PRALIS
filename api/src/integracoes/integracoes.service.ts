@@ -143,6 +143,22 @@ function erroVendaDuplicadaEmCorrida(): Error {
   return Object.assign(erro, { code: CODIGO_VENDA_DUPLICADA_EM_CORRIDA });
 }
 
+// Os transitorios que a ingestao sabe NOMEAR — respondem 503 `LOCK_OCUPADO`, o codigo que o caixa e
+// o agente ja conhecem. Ver o comentario no `catch` de `receberVendaIntegracao` para o porque de
+// cada um.
+const TRANSITORIOS_CONHECIDOS = new Set<string>([
+  "55P03",
+  "40P01",
+  "23505",
+  "42P10",
+  CODIGO_VENDA_MUDOU_DE_CAIXA,
+  CODIGO_VENDA_DUPLICADA_EM_CORRIDA
+]);
+
+// Forma de um SQLSTATE do Postgres: cinco caracteres de `[0-9A-Z]`. Serve para separar "o banco
+// falhou" de "o nosso codigo falhou" sem manter lista de codigos.
+const SQLSTATE = /^[0-9A-Z]{5}$/u;
+
 function hashChaveIntegracao(chave: string): string {
   return createHash("sha256").update(chave).digest("hex");
 }
@@ -909,15 +925,31 @@ export async function receberVendaIntegracao(
     // do `pg` fica em `cause`. Enquanto isso passou batido, os ramos de 55P03/40P01 eram codigo
     // morto e TODA falha de banco virava 422, ou seja, venda descartada.
     const codigoPostgres = codigoPostgresDoErro(erroOriginal);
-    if (
-      codigoPostgres === "55P03" ||
-      codigoPostgres === "40P01" ||
-      codigoPostgres === "23505" ||
-      codigoPostgres === "42P10" ||
-      codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA ||
-      codigoPostgres === CODIGO_VENDA_DUPLICADA_EM_CORRIDA
-    ) {
+    if (codigoPostgres && TRANSITORIOS_CONHECIDOS.has(codigoPostgres)) {
       throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
+    }
+    // QUALQUER OUTRO SQLSTATE REAL tambem e 5xx re-tentavel. Este ramo existe para NAO precisar de
+    // uma whitelist infinita: a lista acima cobre o que ja sabemos nomear, e este cobre o resto.
+    //
+    // O caso que expos a falta dele foi o `22003` (`numeric_value_out_of_range`): um valor que passa
+    // no contrato do payload (`z.coerce.number().min(0)`, sem teto) mas estoura o `numeric(14,2)` na
+    // gravacao. Ele caia no 422 abaixo e o agente DESCARTAVA a venda — perda definitiva por um
+    // problema que nem sequer e do agente.
+    //
+    // Corrigir so o `22003` seria tratar o sintoma: o proximo SQLSTATE inesperado repetiria a perda.
+    // A regra passa a ser estrutural — **se o Postgres falou, o agente re-tenta**. Um erro realmente
+    // permanente aparece como 503 repetido no historico, que e visivel e investigavel; o oposto,
+    // descartar venda em silencio, nao tem volta (R-013).
+    //
+    // A deteccao e a FORMA do SQLSTATE, nao uma lista: cinco caracteres `[0-9A-Z]`, como o padrao
+    // define. Codigos internos deste servico (`P0_...`) e de rede do Node (`ECONNREFUSED`) nao tem
+    // esse formato; `EPIPE`, que tem, e socket do banco caindo — tambem re-tentavel, tambem correto.
+    if (codigoPostgres && SQLSTATE.test(codigoPostgres)) {
+      throw new ErroDominio(
+        "Falha temporaria ao gravar a venda integrada; tente novamente",
+        503,
+        "INTEGRATION_DATABASE_ERROR"
+      );
     }
     // MENSAGEM FIXA. `mensagemErro` aqui e o `message` do `DrizzleQueryError`, que embute o SQL
     // inteiro e os PARAMETROS da venda — identificador, valores, ids de PDV e de chave — e ia
