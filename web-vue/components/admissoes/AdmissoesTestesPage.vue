@@ -5,7 +5,6 @@ import type {
   HistoricoTesteDto,
   MotivoCancelamento,
   ResultadoTeste,
-  SituacaoTeste,
   TesteDetalheDto,
   TesteListaDto
 } from "@padaria/shared";
@@ -16,6 +15,7 @@ import { formatarDataHora } from "~/utils/formatacao";
 import { corPrazoTeste, corStatusTeste, rotuloPrazoTeste, rotuloStatusTeste } from "~/utils/admissoes";
 import TesteDetalhePainel from "~/components/admissoes/TesteDetalhePainel.vue";
 import TesteFormDialog from "~/components/admissoes/TesteFormDialog.vue";
+import TestesFiltros, { type FiltrosTestes } from "~/components/admissoes/TestesFiltros.vue";
 
 // NENHUM `empresaId` entra aqui — nem como prop, nem na query. A empresa e derivada no servidor a
 // partir do perfil autorizado. O seletor global do shell fica escondido nesta tela (AppWorkspace
@@ -31,20 +31,15 @@ const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_te
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
-const opcoesSituacao: { valor: SituacaoTeste | ""; rotulo: string }[] = [
-  { valor: "ativo", rotulo: "Ativo" },
-  { valor: "inativo", rotulo: "Inativo" },
-  { valor: "", rotulo: "Todos" }
-];
-const opcoesPrazo = [
-  { valor: "", rotulo: "Qualquer prazo" },
-  { valor: "vence_hoje", rotulo: "Vence hoje" },
-  { valor: "vencido", rotulo: "Vencido" }
-];
-
-// Abre em Ativo: o teste em andamento e o que o DP precisa ver ao entrar. Encerrado e cancelado
-// continuam alcancaveis pelo mesmo filtro — nao ha lista separada de "arquivados".
-const filtros = reactive({ buscaNome: "", situacao: "ativo" as SituacaoTeste | "", cargoId: "", prazo: "" });
+// Os filtros vivem em `TestesFiltros` e chegam aqui APLICADOS. Guardar so o que foi aplicado evita
+// o defeito classico da lista que se contradiz: o texto do estado vazio falando de um filtro que o
+// operador digitou mas ainda nao mandou.
+const filtros = ref<FiltrosTestes>({ buscaNome: "", situacao: "ativo", cargoId: "", prazo: "" });
+const temFiltroAlemDoPadrao = computed(
+  () =>
+    Boolean(filtros.value.buscaNome || filtros.value.cargoId || filtros.value.prazo) ||
+    filtros.value.situacao !== "ativo"
+);
 
 const linhas = ref<TesteListaDto[]>([]);
 const total = ref(0);
@@ -93,10 +88,11 @@ function tratarErro(error: unknown, ondeNotificar = true) {
 function queryListagem() {
   const params = new URLSearchParams({ page: String(pagina.value), pageSize: String(itensPorPagina) });
   // Somente nome. CPF nunca entra em query string.
-  if (filtros.buscaNome.trim()) params.set("buscaNome", filtros.buscaNome.trim());
-  if (filtros.situacao) params.set("situacao", filtros.situacao);
-  if (filtros.cargoId) params.set("cargoId", filtros.cargoId);
-  if (filtros.prazo) params.set("prazo", filtros.prazo);
+  const atuais = filtros.value;
+  if (atuais.buscaNome.trim()) params.set("buscaNome", atuais.buscaNome.trim());
+  if (atuais.situacao) params.set("situacao", atuais.situacao);
+  if (atuais.cargoId) params.set("cargoId", atuais.cargoId);
+  if (atuais.prazo) params.set("prazo", atuais.prazo);
   return `?${params.toString()}`;
 }
 
@@ -122,14 +118,10 @@ async function carregarCargos() {
   }
 }
 
-function aplicarFiltros() {
+function aplicarFiltros(novos: FiltrosTestes) {
+  filtros.value = novos;
   pagina.value = 1;
   void carregar();
-}
-
-function limparFiltros() {
-  Object.assign(filtros, { buscaNome: "", situacao: "ativo", cargoId: "", prazo: "" });
-  aplicarFiltros();
 }
 
 function trocarPagina(nova: number) {
@@ -283,55 +275,7 @@ onMounted(async () => {
     </v-card-title>
 
     <v-card-text>
-      <v-row dense align="center" class="mb-2">
-        <v-col cols="12" md="4">
-          <v-text-field
-            v-model="filtros.buscaNome"
-            label="Buscar por nome"
-            density="comfortable"
-            hide-details
-            clearable
-            @keyup.enter="aplicarFiltros"
-          />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-select
-            v-model="filtros.situacao"
-            :items="opcoesSituacao"
-            item-title="rotulo"
-            item-value="valor"
-            label="Situação"
-            density="comfortable"
-            hide-details
-          />
-        </v-col>
-        <v-col cols="6" md="3">
-          <v-select
-            v-model="filtros.cargoId"
-            :items="[{ id: '', nome: 'Todos os cargos' }, ...cargos]"
-            item-title="nome"
-            item-value="id"
-            label="Cargo"
-            density="comfortable"
-            hide-details
-          />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-select
-            v-model="filtros.prazo"
-            :items="opcoesPrazo"
-            item-title="rotulo"
-            item-value="valor"
-            label="Prazo"
-            density="comfortable"
-            hide-details
-          />
-        </v-col>
-        <v-col cols="6" md="1" class="d-flex ga-2 justify-end">
-          <v-btn variant="text" size="small" @click="limparFiltros">Limpar</v-btn>
-          <v-btn variant="outlined" size="small" :loading="carregando" @click="aplicarFiltros">Filtrar</v-btn>
-        </v-col>
-      </v-row>
+      <TestesFiltros :cargos="cargos" :carregando="carregando" @aplicar="aplicarFiltros" />
 
       <v-alert v-if="erro" type="error" variant="tonal" density="comfortable" class="mb-3">
         {{ erro }}
@@ -344,7 +288,7 @@ onMounted(async () => {
            conteudo para fora da area visivel em 390px (PROJECT_BRAIN/67 secao 13.2). -->
       <p v-if="!carregando && !linhas.length" class="estado-vazio">
         {{
-          filtros.buscaNome || filtros.cargoId || filtros.prazo || filtros.situacao !== "ativo"
+          temFiltroAlemDoPadrao
             ? "Nenhum período de teste com esses filtros."
             : "Nenhum período de teste registrado."
         }}
