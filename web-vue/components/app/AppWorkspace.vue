@@ -110,6 +110,7 @@ type TipoPagina =
   | "notas_fiscais"
   | "tree"
   | "cadastro"
+  | "admissoes_testes"
   | "placeholder";
 
 const props = withDefaults(
@@ -261,6 +262,19 @@ const totalLiquidoOperacoes = ref<number | null>(null);
 const diaEntradas = ref("");
 
 const empresasDisponiveis = computed(() => empresas.value);
+
+// ADM-001: nesta tela a empresa NAO vem do navegador — o servidor a deriva de `perfil.empresaId` e
+// ignora qualquer escolha do cliente. Deixar o seletor global visivel aqui induziria o operador a
+// achar que trocar de empresa muda em qual empresa a pessoa esta sendo avaliada. Nao muda.
+//
+// Nao ha prop nova nem branch dentro do AppShell: ele JA mostra um chip estatico (nao clicavel)
+// quando ha no maximo uma empresa. Estreitar a lista para a empresa derivada usa esse suporte que
+// ja existe. `empresasDisponiveis` continua intacto para os formularios de cadastro.
+const empresasDoShell = computed(() => {
+  if (tipoPagina.value !== "admissoes_testes") return empresasDisponiveis.value;
+  const empresaDerivada = sessao.value?.perfil?.empresaId ?? "";
+  return empresasDisponiveis.value.filter((empresa) => empresa.id === empresaDerivada);
+});
 const empresaId = computed(() => empresaSelecionadaId.value);
 const opcoesEmpresa = computed(() => opcoesFiltradasPorEmpresa(opcoes.value, empresaId.value));
 const empresaAtiva = computed(
@@ -2003,7 +2017,7 @@ onBeforeUnmount(() => {
     :sessao="sessao"
     :telas="telasShell"
     :tela-ativa="telaAtiva"
-    :empresas="empresasDisponiveis"
+    :empresas="empresasDoShell"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
     :notificacoes="notificacoes"

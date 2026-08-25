@@ -273,16 +273,19 @@ export async function editarTeste(id: string, body: DadosExternos, perfil?: Perf
     if (!(await existeCargoNaEmpresaRepository(dados.cargoId, empresaId, tx))) {
       falharValidacao("Cargo nao pertence a empresa");
     }
+    // `cpf` ausente PRESERVA o gravado: a tela nao tem o valor para reenviar, porque o detalhe
+    // devolve mascarado. Quem quer trocar o CPF digita um novo, e so entao ele viaja.
+    const cpfFinal = dados.cpf ?? alvo.cpf;
     if (
-      dados.cpf !== alvo.cpf &&
-      (await existeTesteAbertoPorCpfRepository({ empresaId, cpf: dados.cpf, ignorarId: id }, tx))
+      cpfFinal !== alvo.cpf &&
+      (await existeTesteAbertoPorCpfRepository({ empresaId, cpf: cpfFinal, ignorarId: id }, tx))
     ) {
       throw conflito("Ja existe um periodo de teste em andamento para este CPF", "TESTE_ABERTO_DUPLICADO");
     }
 
     const depois = {
       nomeCompleto: dados.nomeCompleto,
-      cpf: dados.cpf,
+      cpf: cpfFinal,
       cargoId: dados.cargoId,
       jornadaHorario: dados.jornadaHorario,
       inicioEm: new Date(dados.inicioEm),

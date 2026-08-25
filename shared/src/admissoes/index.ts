@@ -115,8 +115,15 @@ export const criarTestePayloadSchema = z.object(camposEditaveisTeste).refine(per
 
 // `versao` obrigatoria em TODA escrita sobre registro existente: sem ela a ultima gravacao venceria
 // em silencio e duas edicoes simultaneas do DP perderiam uma.
+//
+// `cpf` e o UNICO campo opcional na edicao, e omiti-lo PRESERVA o valor gravado. Nao e inconsistencia
+// com o resto do payload, que e substituicao total — e a consequencia direta da regra de privacidade:
+// o detalhe devolve o CPF MASCARADO, entao o formulario nao tem o valor para reenviar. As
+// alternativas eram piores: revelar o CPF a cada abertura de edicao geraria um evento de auditoria
+// falso (ninguem pediu para ver), e exigir o campo apagaria o CPF de quem so quis corrigir o nome.
+// Mesmo idioma ja usado em `shared/src/cadastros` para `empresaIds`/`colaboradorId`.
 export const editarTestePayloadSchema = z
-  .object({ ...camposEditaveisTeste, versao: z.number().int().positive() })
+  .object({ ...camposEditaveisTeste, cpf: cpfTesteSchema.optional(), versao: z.number().int().positive() })
   .refine(periodoCoerente, mensagemPeriodo);
 
 export const encerrarTestePayloadSchema = z.object({
