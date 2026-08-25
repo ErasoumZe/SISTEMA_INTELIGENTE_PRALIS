@@ -37,6 +37,7 @@ import {
   buscarPdvAutomaticoRepository,
   buscarProdutoAutomaticoRepository,
   buscarRegistroIntegracaoRepository,
+  buscarVendaIntegradaPorIdentificadorRepository,
   buscarVinculoResolvidoRepository,
   contarVendasIntegradasNoDiaRepository,
   criarChaveIntegracaoRepository,
@@ -130,6 +131,16 @@ const CODIGO_VENDA_MUDOU_DE_CAIXA = "P0_VENDA_MUDOU_DE_CAIXA";
 function erroVendaMudouDeCaixa(): Error {
   const erro = new Error("Venda mudou de caixa durante o processamento; tente novamente");
   return Object.assign(erro, { code: CODIGO_VENDA_MUDOU_DE_CAIXA });
+}
+
+// #41: outra requisicao criou a MESMA venda integrada e commitou primeiro. Mesma familia do
+// `VENDA_MUDOU_DE_CAIXA` — transitorio, o agente re-tenta e o re-envio entra pelo caminho de
+// ATUALIZACAO, ja com a venda encontrada por `(empresa, identificador_externo)`.
+const CODIGO_VENDA_DUPLICADA_EM_CORRIDA = "P0_VENDA_DUPLICADA_EM_CORRIDA";
+
+function erroVendaDuplicadaEmCorrida(): Error {
+  const erro = new Error("Venda integrada esta sendo criada por outra requisicao; tente novamente");
+  return Object.assign(erro, { code: CODIGO_VENDA_DUPLICADA_EM_CORRIDA });
 }
 
 function hashChaveIntegracao(chave: string): string {
@@ -754,6 +765,15 @@ export async function receberVendaIntegracao(
         return { status: "sem_novidade", vendaId: registro.registroSistemaId, identificadorExterno };
       }
 
+      // #41: a EXISTENCIA da venda passa a ser decidida pela mesma chave do indice unico parcial
+      // (R-175), e nao mais pelo registro. O registro e escopado por `integracao_chave_id`: depois
+      // de uma troca de credencial ele nao acha a venda e o fluxo caia no INSERT para uma linha que
+      // ja existe. A partir daqui o `registro` tem UM so papel — o atalho de `sem_novidade` por
+      // hash, logo acima.
+      const vendaExistenteId =
+        registro?.registroSistemaId ??
+        (await buscarVendaIntegradaPorIdentificadorRepository(chave.empresaId, identificadorExterno, tx));
+
       const vinculos = await resolverVinculosVenda(chave, payload, tx);
 
       // P0/S8 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, SEM
@@ -761,9 +781,7 @@ export async function receberVendaIntegracao(
       // caixas (antigo -> novo -> nulo): ORIGEM e DESTINO entram na porta em ordem deterministica
       // de id, e a decisao de trilha de cada lado sai do status sob o lock. Caixa FECHADO
       // envolvido ganha a marca imutavel de pos-fechamento — inclusive o que PERDEU a venda.
-      const caixaOrigemId = registro?.registroSistemaId
-        ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx)
-        : null;
+      const caixaOrigemId = vendaExistenteId ? await buscarCaixaDaVendaRepository(vendaExistenteId, tx) : null;
       const caixaDestinoId = vinculos.caixaId;
       const statusPorCaixa = new Map<string, string>();
       const caixasEnvolvidos = [...new Set([caixaOrigemId, caixaDestinoId])]
@@ -782,13 +800,14 @@ export async function receberVendaIntegracao(
       // Travamos a LINHA da venda (ordem caixa -> linha, a mesma da porta) e relemos: divergiu,
       // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
       // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
-      if (registro?.registroSistemaId) {
+      if (vendaExistenteId) {
         // Linha ausente (sumiu, ou nao e desta empresa) = trava NAO adquirida: a comparacao abaixo
         // seria duas leituras sem trava se passasse batido. Falha FECHADO — o 503 se repete ate
         // alguem olhar, o que e melhor que mover dinheiro sem garantia (e continua 5xx: a venda
-        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave.
-        const travada = await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
-        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx) : null;
+        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave, ou da
+        // busca por `(empresa, identificador_externo)`, que ja filtra a empresa.
+        const travada = await travarVendaRepository(vendaExistenteId, chave.empresaId, tx);
+        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(vendaExistenteId, tx) : null;
         if (!travada || origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
       }
 
@@ -797,11 +816,18 @@ export async function receberVendaIntegracao(
           chave,
           payload,
           hashConteudo,
-          ...(registro ? { vendaSistemaId: registro.registroSistemaId } : {}),
+          ...(vendaExistenteId ? { vendaSistemaId: vendaExistenteId } : {}),
           ...vinculos
         },
         tx
       );
+
+      // `null` = o INSERT bateu no indice unico da R-175 e nao escreveu: outra requisicao criou a
+      // mesma venda e commitou primeiro. Recusa TRANSITORIA (nada gravado, rollback total) — o
+      // re-envio acha a venda pela busca acima e segue pelo caminho de atualizacao, com as travas
+      // na ordem canonica. Nao da para "aproveitar" a venda do vencedor aqui: esta transacao nunca
+      // travou aquela linha nem conhece o caixa de origem dela.
+      if (!venda) throw erroVendaDuplicadaEmCorrida();
 
       if (caixaDestinoId && statusPorCaixa.get(caixaDestinoId) !== "aberto") {
         await registrarAlteracaoPosFechamentoRepository(
@@ -827,7 +853,9 @@ export async function receberVendaIntegracao(
         tx
       );
 
-      const status = registro ? "atualizado" : "criado";
+      // `vendaExistenteId`, NAO `registro`: depois de uma troca de credencial o registro e nulo mas
+      // a venda existe, e responder "criado" para uma ATUALIZACAO seria mentir para o agente.
+      const status = vendaExistenteId ? "atualizado" : "criado";
       await registrarHistoricoRepository({ chave, identificadorExterno, hashConteudo, status, payload }, tx);
       return { status, vendaId: venda.id, identificadorExterno };
     });
@@ -854,9 +882,25 @@ export async function receberVendaIntegracao(
     // handler global responde 503 — que o agente re-tenta no proximo ciclo.
     const codigoPostgres = (error as { code?: string }).code;
     if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
-    // S8: mesma familia — contencao transitoria, resposta 503 que o agente re-tenta.
-    if (codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA) {
-      throw new ErroDominio(mensagemErro, 503, "LOCK_OCUPADO");
+    // Mesma familia — contencao transitoria, resposta 503 que o agente re-tenta. Um unico ramo
+    // para as tres causas, de proposito: nada de segundo caminho de tratamento (AGENTS.md 4.1).
+    //
+    //   S8            venda mudou de caixa entre a leitura e a trava;
+    //   #41 corrida   outra requisicao criou a mesma venda e commitou primeiro;
+    //   #41 `23505`   conflito RESIDUAL de unicidade. A #41 acrescentou um unique a `vendas`, e um
+    //                 conflito que escape do ON CONFLICT nao pode virar 422 — 4xx faz o agente
+    //                 DESCARTAR a venda (R-013). Rede de seguranca: com o predicado correto no
+    //                 ON CONFLICT este ramo nao deveria ser alcancado.
+    //
+    // MENSAGEM FIXA, e nao `mensagemErro`: a mensagem do driver embute o INSERT inteiro e os
+    // PARAMETROS da venda (identificador, valores, ids de PDV e de chave), e ela ia inteira para o
+    // corpo da resposta do integrador. O detalhe continua gravado no historico logo acima.
+    if (
+      codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA ||
+      codigoPostgres === CODIGO_VENDA_DUPLICADA_EM_CORRIDA ||
+      codigoPostgres === "23505"
+    ) {
+      throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
     }
     throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
   }

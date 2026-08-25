@@ -18,7 +18,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
+import { idsTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
 const DATA_VENDA = "2026-06-30T14:00:00.000Z";
@@ -78,13 +78,8 @@ describe("#41 · isolamento entre empresas (T-8)", () => {
     contexto = await criarContextoApiTeste();
     cookie = await cookieSessao(contexto.app, "multiempresa");
 
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.multiempresa.email
-    ]);
-    if (!usuario) throw new Error("Usuario multiempresa nao encontrado");
-
-    empresaA = await prepararEmpresa(idsTeste.empresaA, "A", usuario.id);
-    empresaB = await prepararEmpresa(idsTeste.empresaB, "B", usuario.id);
+    empresaA = await prepararEmpresa(idsTeste.empresaA, "A");
+    empresaB = await prepararEmpresa(idsTeste.empresaB, "B");
     expect(empresaA.chaveId).not.toBe(empresaB.chaveId);
   }, 180_000);
 
@@ -98,8 +93,15 @@ describe("#41 · isolamento entre empresas (T-8)", () => {
     return resposta;
   }
 
-  /** Conta + PDV + vinculo + caixa aberto + chave de integracao propria da empresa. */
-  async function prepararEmpresa(empresaId: string, sufixo: string, usuarioId: string): Promise<Empresa> {
+  /**
+   * Conta + PDV + vinculo + chave de integracao propria da empresa.
+   *
+   * SEM abrir caixa, de proposito. O seed so cria colaborador na empresa A, entao `/api/caixa/abrir`
+   * na empresa B recusa ("Usuario do caixa precisa estar vinculado a colaborador da empresa") — e
+   * caixa nao e o objeto deste arquivo. Sem caixa aberto a venda nasce com `caixa_id` nulo, que a
+   * R-013 permite: venda integrada nunca e recusada.
+   */
+  async function prepararEmpresa(empresaId: string, sufixo: string): Promise<Empresa> {
     const pdvExterno = `PDV-41-ISOLAMENTO-${sufixo}`;
 
     const conta = await criar("/api/contas", { empresaId, nome: `Conta R41 isolamento ${sufixo}` });
@@ -127,14 +129,6 @@ describe("#41 · isolamento entre empresas (T-8)", () => {
       }
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
-
-    await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: usuarioId,
-      dataHoraAbertura: "2026-06-29T08:00",
-      observacao: `Caixa R41 isolamento ${sufixo}`
-    });
 
     const chave = await criar("/api/integracoes/chaves", { empresaId, tipo: "vendas" });
     const chaveId = json<{ data: { id: string } }>(chave).data.id;
