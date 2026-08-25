@@ -5,6 +5,11 @@
 > derrubado na prova; e o Testcontainers da suíte). **Nunca em produção.** Código, testes,
 > mutações e quatro revisores read-only concluídos. Sem push, PR, merge ou deploy.
 >
+> **P1-A ENCERRADO em 25/08 por confirmação operacional do Marco** — §10.6. A chave da R-175
+> permanece `(empresa_id, identificador_externo)`, e ela é **exata**, não uma aproximação: cada loja
+> tem seu próprio servidor CREARE e seu próprio `empresa_id`. Restam P1-B (dívida) e P1-C (runbook
+> de deploy), nenhum deles bloqueando.
+>
 > **Leia a §10 primeiro** — é o resultado real: o que foi medido, o que os revisores acharam e as
 > **três decisões que ficaram para o Marco**. As §§1–9 são o desenho, e onde ele errou está marcado.
 
@@ -713,13 +718,13 @@ O comentário do predicado dizia que divergir "faz o conflito escapar como 23505
 o Postgres não infere árbitro e levanta `42P10`. E a §9 deste documento afirmava que nada de
 `api/src` fora tocado — três commits depois de ser verdade.
 
-#### EM ABERTO — precisam de decisão do Marco, e nenhum cabe na #41
+#### O que ficou fora da #41
 
-| #     | Achado                                                                                                                                                                                                                                                                                                                                           | Por que não foi corrigido aqui                                                                                                                                                                                                                                                                                                                                            |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A** | **Duas chaves ATIVAS na mesma empresa.** Nada impede (`integracoes_chaves` não tem unique de "uma ativa por empresa+tipo"). Com dois CREARE sob a mesma empresa, o mesmo `idVenda` vindo do segundo é tratado como **atualização** do primeiro: a venda da loja 1 é **sobrescrita, com 200**. Antes da #41 eram duas linhas — feio, mas visível. | É a contrapartida da R-175, que este documento não registrou. A correção real é um índice único parcial em `integracoes_chaves (empresa_id, tipo) where ativa` — **migration nova**, fora do escopo autorizado. E "uma empresa pode ter dois agentes CREARE?" é regra de negócio, não decisão técnica. A auditoria de produção (§4-A) mostra que **hoje** não há colisão. |
-| **B** | `vendas.integracao_chave_id` é `on delete set null`. Apagar uma chave tira a venda do índice **e** da busca, em silêncio, reabrindo a duplicata. Não há `delete` de chave na API (só `ativa = false`), mas há em `db/seed.ts:621`.                                                                                                               | Trocar para `on delete restrict` é **migration nova**.                                                                                                                                                                                                                                                                                                                    |
-| **C** | Deploy do índice: `infra/docker-compose.coolify.yml` roda `api:prod:migrate` automático, e a §3 diz que "não existe caminho suportado" para `CONCURRENTLY`. Além disso a sessão de migration **não tem `lock_timeout`** (`db/src/sessao.ts`), então o `CREATE INDEX` espera indefinidamente e enfileira todo escritor de `vendas`.               | É decisão de **deploy**, com runbook próprio — e aplicar migration em produção tem autorização separada.                                                                                                                                                                                                                                                                  |
+| #     | Achado                                                                                                                   | Situação                                                                                                                                                                                                                                                                                                                                      |
+| ----- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | Duas instalações CREARE compartilhando um `empresa_id` fariam a segunda venda **sobrescrever** a primeira                | ✅ **ENCERRADO em 25/08** — não pode acontecer. Ver §10.6                                                                                                                                                                                                                                                                                     |
+| **B** | `vendas.integracao_chave_id` é `on delete set null`: apagar uma chave tira a venda do índice **e** da busca, em silêncio | **Dívida registrada, não bloqueia.** O único caminho que apaga chave é `db/seed.ts:621` (DEV); a API só inativa (`ativa = false`) e não existe rota `DELETE` de empresa. Correção = `on delete restrict`, **migration própria**, com o seed reordenado no mesmo commit — hoje a linha 621 passaria a falhar, porque as vendas só somem na 646 |
+| **C** | Deploy do índice: `CREATE UNIQUE INDEX` sem `CONCURRENTLY`, e a sessão de migration sem `lock_timeout`                   | **Runbook obrigatório de deploy, não código.** Ver §10.7. A "janela de descarte" já está fechada pelo HEAD: `55P03` durante a construção do índice hoje é **503 retriable**, não 422                                                                                                                                                          |
 
 Sobre o `23505` **não** ser restrito à constraint do índice: foi decisão consciente. Para este
 endpoint, re-tentar de graça é sempre melhor que descartar venda (R-013), e um `23505` permanente
@@ -728,3 +733,64 @@ aparece como 503 repetido no histórico, que é visível.
 ### 10.5 Gates finais
 
 Preenchido na execução final — ver o relatório autônomo em `D:\Conteudo Sistema Pralis -ago\`.
+
+### 10.6 P1-A ENCERRADO — uma loja, um servidor CREARE, um `empresa_id`
+
+**Confirmação operacional do Marco, 25/08/2026.** É regra de negócio, e fecha o único P1 que
+segurava a entrega.
+
+- **Cada loja tem o seu próprio servidor CREARE.**
+- **Cada loja corresponde a um `empresa_id` diferente** no Pralis.
+- Logo existe **1:1 entre `empresa_id`, loja e instalação CREARE**. Duas lojas **nunca**
+  compartilham o mesmo `empresa_id`.
+- Dentro de cada servidor existem **vários caixas/PDVs**, cada um com o seu código de PDV.
+- `idVendaBalcao` é único **dentro do servidor CREARE daquela loja**.
+- O **IP** ajuda na rastreabilidade operacional, mas **não integra a chave**: ele muda.
+
+**Por que isso torna a chave da R-175 exata, e não uma aproximação.** O escopo real de unicidade do
+`idVenda` é a instalação do CREARE — `integracoes-scripts/src/payload.js:117-118` monta
+`CREARE:<idVendaBalcao>`, e `idVendaBalcao` é a PK do banco daquela instalação. Com instalação ≡
+`empresa_id`, o escopo da instalação **é** o escopo da empresa. `(empresa_id, identificador_externo)`
+passa a ser o recorte natural, não um atalho.
+
+**E confirma que PDV seria a granularidade ERRADA.** Dentro de uma instalação o `idVendaBalcao` é
+global **entre os caixas** — o `idDispositivo` é campo separado da mesma venda
+(`payload.js:119`). Escopar por PDV deixaria passar duas vendas com o mesmo `idVenda` da mesma loja
+chegando com dispositivos diferentes: seria uma chave **mais fraca** que a atual.
+
+**Decisões que decorrem, e que não serão feitas:**
+
+- **não** criar `origem_instalacao_id` — a instalação já é a empresa;
+- **não** incluir PDV na chave — é rastreabilidade, e a granularidade errada;
+- **não** incluir IP na chave — muda;
+- **não** incluir `integracao_chave_id` na chave — é o que a R-175 já proíbe, e é o que faz a rotação
+  de credencial funcionar;
+- **não** criar migration para o P1-A;
+- **não** implementar desativação automática de chave como condição da #41. Uma segunda chave ativa
+  na mesma empresa deixa de ser cenário de perda de dado, porque não existe uma segunda loja atrás
+  dela — o que sobra é rotação, que é exatamente o que o RED-2 cobre.
+
+> Registrado aqui, e não só no prompt, porque decisão de negócio que vive em conversa se perde
+> (`AGENTS.md` §3). Fonte: confirmação de Marco em 25/08/2026.
+
+### 10.7 P1-C — runbook obrigatório antes do deploy
+
+Não é código, é procedimento; e **não foi executado**. Detalhe completo, com as consultas de
+pré-checagem, em `D:\Conteudo Sistema Pralis -ago\GATE-P1-ISSUE-41-ORIGEM-FK-DEPLOY-2026-08-25.md`.
+
+O essencial:
+
+1. **A ordem já é garantida pelo pipeline.** `infra/docker-compose.coolify.yml:47-49` — a API só sobe
+   com `service_completed_successfully` do serviço `migrate`. Índice válido primeiro, código depois.
+2. **A janela de descarte está fechada.** Durante a construção do índice a API **antiga** continua no
+   ar e leva `55P03`; com os commits `c368b33`/`1c72914` isso é **503 `LOCK_OCUPADO`**, que o agente
+   re-tenta e ainda enfileira em disco. O pior caso passou de _perder venda_ para _pausar a ingestão_.
+3. **Falta um teto na sessão da migration.** `db/src/sessao.ts:3-6` deixa migrations fora dos tetos
+   de propósito, então o `CREATE UNIQUE INDEX` espera **indefinidamente** pelo `SHARE` — e enquanto
+   espera, enfileira todo escritor novo de `vendas`. Como `api` depende de `migrate`, a API nova
+   nunca subiria. Mitigação: `SET lock_timeout = '15s'` na sessão da migration (via `command` do
+   serviço ou `PGOPTIONS`, sem tocar em `db/src/sessao.ts`); estourar não é falha — é soltar a fila
+   e tentar na janela seguinte.
+4. **Validar no catálogo depois:** `indisvalid` e `indisready` verdadeiros e a definição completa —
+   a mesma verificação que o **T-13** já faz na suíte.
+5. **Rollback forward-only**, conforme §5.1.
