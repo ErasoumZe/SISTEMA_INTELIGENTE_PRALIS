@@ -221,18 +221,41 @@ limpar).
 DROP INDEX IF EXISTS "vendas_integracao_identificador_unico_idx";
 ```
 
-Sem perda: o índice não guarda dado, e nenhuma coluna é criada. Mas o rollback **não é só o SQL** —
-são quatro passos, na ordem (o passo 4 é o que faltava no rollback da #152, apontado pelo revisor de
-banco em `32` §17 P1-2):
+Sem perda: o índice não guarda dado, e nenhuma coluna é criada. Mas o rollback **não é só o SQL**, e
+**ele é diferente em produção e em banco local**.
+
+> **CORREÇÃO DE 25/08 (Marco).** A versão anterior mandava, no passo 4, apagar à mão a linha da 0032
+> em `drizzle.__drizzle_migrations`. **Isso está proibido em produção.** Editar o ledger de
+> migrations a mão é alteração de estado de controle sem trilha: some o registro de que a migration
+> rodou, dois ambientes divergem em silêncio e não fica evidência de quem fez. O procedimento
+> abaixo substitui aquele passo.
+
+### 5.1 Produção — **forward-only**, nunca desfazer para trás
+
+Produção **não reverte migration**. Se a 0032 precisar sair, a correção anda **para a frente**:
 
 1. **Derrubar o código primeiro.** Código que espera o índice (o `ON CONFLICT`) contra um banco sem
    ele volta a duplicar em silêncio, que é pior que falhar.
-2. `DROP INDEX` — em produção, `DROP INDEX CONCURRENTLY`, pelo mesmo motivo do `CREATE`.
-3. Reverter em **bloco** `db/migrations/0032_*.sql`, a entrada `idx 32` do `_journal.json`,
-   `meta/0032_snapshot.json` e `db/src/schema/app.schema.ts` — `scripts/verificar-migrations.mjs`
-   exige a paridade dos três e a corrente de `prevId`.
-4. Apagar a linha da 0032 em `drizzle.__drizzle_migrations`. Sem isso o banco fica "com a 0032
-   aplicada" e sem o índice: impossível reaplicar, e o próximo `db:generate` diverge.
+2. Abrir uma **migration nova** (0033+) contendo apenas
+   `DROP INDEX CONCURRENTLY IF EXISTS "vendas_integracao_identificador_unico_idx"`, com **runbook
+   próprio e revisado**. O `CONCURRENTLY` não roda dentro de transação — é o mesmo passo de runner
+   separado que o `CREATE` exige.
+3. O ledger `drizzle.__drizzle_migrations` **não é tocado a mão**: ele passa a registrar a 0032 e a
+   0033, que é a verdade do que aconteceu. O histórico fica auditável.
+
+### 5.2 Banco local descartável — recriar, não remendar
+
+Em DEV e em Testcontainers **não existe rollback manual**: derruba-se o banco e recria-se do zero
+(`npm run db:dev:down` e `db:dev:up`, ou simplesmente a próxima execução da suíte, que provisiona
+container novo). É mais rápido e mais confiável do que qualquer reversão parcial.
+
+### 5.3 Reverter o CÓDIGO da 0032 (as duas situações)
+
+Se a decisão for tirar a 0032 do repositório antes de qualquer deploy, os quatro arquivos saem em
+**bloco**: `db/migrations/0032_*.sql`, a entrada `idx 32` do `_journal.json`,
+`meta/0032_snapshot.json` e a declaração em `db/src/schema/app.schema.ts`.
+`scripts/verificar-migrations.mjs` exige a paridade dos três e a corrente de `prevId` — reverter
+só um deles quebra o `check`.
 
 ## 6. Desenho do `ON CONFLICT`
 
