@@ -20,10 +20,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { abrirBloqueador, consultarTodos, fecharBloqueador, type ClienteBloqueador } from "../../setup/integracao.js";
+import {
+  abrirBloqueador,
+  aindaPendente,
+  consultarTodos,
+  esperarBloqueioPor,
+  fecharBloqueador,
+  type ClienteBloqueador
+} from "../../setup/integracao.js";
 
 const VENDA_ORDEM_AB = "R41-SESSOES-ORDEM-AB";
 const VENDA_ORDEM_BA = "R41-SESSOES-ORDEM-BA";
+const VENDA_PENDENTE = "R41-SESSOES-PERDEDOR-PENDENTE";
 
 // As colunas obrigatorias de `vendas` (as demais tem default). E o mesmo shape que
 // `criarOuAtualizarVendaIntegradaRepository` monta em `valoresVenda`, reduzido ao que a chave
@@ -120,6 +128,56 @@ describe("#41 · interleaving controlado em duas sessoes independentes", () => {
     ).toBe(false);
     expect(segunda.erro).toContain("23505");
     expect(linhas.length, `esperada UMA venda para ${VENDA_ORDEM_BA}, encontradas ${linhas.length}`).toBe(1);
+  });
+
+  // T-9 · o perdedor precisa ESPERAR, nao estourar na hora.
+  //
+  // E a diferenca entre o indice ARBITRAR o conflito e a insercao simplesmente falhar: com o unique
+  // parcial, o Postgres segura o segundo inserter ate saber se a chave do primeiro vai existir. Se
+  // alguem tirar o predicado do `where` do ON CONFLICT (ou o proprio indice), some a espera e o
+  // segundo INSERT falha de imediato — este caso pega isso.
+  //
+  // Duas provas somadas, porque `aindaPendente` sozinho seria fraco: uma promessa que resolve em 1ms
+  // tambem "ainda esta pendente" num tick de macrotask. `esperarBloqueioPor` confirma no proprio
+  // Postgres, por `pg_blocking_pids`, que a sessao 2 esta bloqueada PELA sessao 1.
+  //
+  // Este caso e propriedade do INDICE, nao do codigo: ele fica verde assim que a 0032 e aplicada,
+  // antes de qualquer mudanca em `api/src`.
+  it("T-9 · a sessao 2 fica PENDENTE enquanto a sessao 1 nao commita", async () => {
+    const s1 = await abrirBloqueador();
+    const s2 = await abrirBloqueador();
+    try {
+      await s1.cliente.query("begin");
+      await s2.cliente.query("begin");
+
+      await inserir(s1, VENDA_PENDENTE, "venda da sessao 1");
+
+      // `.then(ok, err)` primeiro: transforma a rejeicao futura em valor e evita unhandled rejection
+      // enquanto a promessa fica pendurada de proposito.
+      const segunda = inserir(s2, VENDA_PENDENTE, "venda da sessao 2").then(
+        () => "resolvida",
+        () => "rejeitada"
+      );
+
+      expect(
+        await esperarBloqueioPor(s1, 1),
+        "o Postgres deveria mostrar a sessao 2 bloqueada PELA sessao 1 (pg_blocking_pids)"
+      ).toBe(true);
+      expect(await aindaPendente(segunda), "o segundo INSERT nao pode ter resolvido antes do commit do primeiro").toBe(
+        true
+      );
+
+      await s1.cliente.query("commit");
+
+      expect(await segunda, "solto o primeiro, o segundo tem de acordar REJEITADO").toBe("rejeitada");
+      await s2.cliente.query("rollback").catch(() => undefined);
+    } finally {
+      await fecharBloqueador(s1);
+      await fecharBloqueador(s2);
+    }
+
+    const linhas = await vendasDe(VENDA_PENDENTE);
+    expect(linhas.length, `esperada UMA venda para ${VENDA_PENDENTE}, encontradas ${linhas.length}`).toBe(1);
   });
 
   it("venda de RETAGUARDA continua livre: o indice nao pode alcancar quem nao e da integracao", async () => {

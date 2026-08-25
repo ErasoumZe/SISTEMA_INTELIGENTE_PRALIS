@@ -45,6 +45,17 @@ const DATA_VENDA = "2026-06-30T12:00:00.000Z";
 const VENDA_AQUECIMENTO = "R41-CORRIDA-AQUECIMENTO";
 const VENDA_ORDEM_AB = "R41-CORRIDA-ORDEM-AB";
 const VENDA_ORDEM_BA = "R41-CORRIDA-ORDEM-BA";
+const VENDA_NOMINAL_503 = "R41-CORRIDA-NOMINAL-503";
+const VENDA_DIVIDIDA = "R41-CORRIDA-PAGAMENTO-DIVIDIDO";
+
+// Rateio ASSIMETRICO (7.31 + 4.27 + 3.42 = 15.00), o mesmo criterio de `pagamento-dividido.test.ts`:
+// se um pagamento empilhar ou sumir na corrida, a soma nao fecha por acaso.
+const RATEIO = [
+  { id: "DIN", descricao: "Dinheiro", valor: 7.31 },
+  { id: "R41-CARTAO", descricao: "Cartao R41", valor: 4.27 },
+  { id: "R41-PIX", descricao: "Pix R41", valor: 3.42 }
+];
+const TOTAL_RATEIO = 15;
 
 type Resposta = { statusCode: number; body: string; json: () => unknown };
 
@@ -81,6 +92,22 @@ function payloadVenda(idVenda: string) {
       }
     ],
     PagamentosVenda: [{ idVenda, idFormaPagamento: "DIN", descricaoFormaPagamento: "Dinheiro", valor: 25 }]
+  };
+}
+
+// Mesma venda do `payloadVenda`, mas com o rateio em tres formas — para o T-11.
+function payloadDividido(idVenda: string) {
+  const base = payloadVenda(idVenda);
+  return {
+    ...base,
+    Venda: { ...base.Venda, valorOriginal: TOTAL_RATEIO, valorTotal: TOTAL_RATEIO },
+    ItensVenda: [{ ...base.ItensVenda[0]!, valorUnitario: TOTAL_RATEIO, total: TOTAL_RATEIO }],
+    PagamentosVenda: RATEIO.map((forma) => ({
+      idVenda,
+      idFormaPagamento: forma.id,
+      descricaoFormaPagamento: forma.descricao,
+      valor: forma.valor
+    }))
   };
 }
 
@@ -253,6 +280,89 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
   it("ordem B->A: a fila invertida tem de dar o mesmo invariante", async () => {
     const [b, a] = await corrida(VENDA_ORDEM_BA);
     await conferirInvariante(VENDA_ORDEM_BA, [a, b]);
+  });
+
+  // T-10 · a recusa do perdedor tem de ser NOMINALMENTE 503, nao "algum 5xx".
+  //
+  // A R-013 proibe recusar venda integrada: um 4xx faz o agente DESCARTAR a venda. 422 e o valor
+  // exato que o `catch` do servico produz hoje para erro nao classificado — e por isso que ele e
+  // citado pelo nome aqui. `LOCK_OCUPADO` e o codigo transitorio que a ingestao ja usa para
+  // `55P03`, `40P01` e `VENDA_MUDOU_DE_CAIXA`; o conflito de corrida entra na MESMA familia, sem
+  // abrir um segundo caminho.
+  it("T-10 · o perdedor responde exatamente 503 LOCK_OCUPADO, nunca 422", async () => {
+    const [a, b] = await corrida(VENDA_NOMINAL_503);
+    const recusada = [a, b].find((resposta) => resposta.statusCode !== 200);
+
+    expect(recusada, `uma das duas entregas deveria ser recusada. A=${a.statusCode} | B=${b.statusCode}`).toBeDefined();
+    expect(
+      recusada!.statusCode,
+      `a recusa tem de ser 503 (transitorio, o agente re-tenta). Recebido ${recusada!.statusCode}: ${recusada!.body}`
+    ).toBe(503);
+    expect(
+      json<{ code?: string }>(recusada!).code,
+      "mesmo codigo transitorio que a ingestao ja usa; nada de codigo novo"
+    ).toBe("LOCK_OCUPADO");
+
+    for (const resposta of [a, b]) {
+      expect(
+        resposta.statusCode,
+        `nenhuma das duas pode ser 422: 4xx faz o agente descartar a venda (R-013). ${resposta.body}`
+      ).not.toBe(422);
+    }
+    expect((await vendasDe(VENDA_NOMINAL_503)).length).toBe(1);
+  });
+
+  // T-11 · pagamento dividido sob corrida.
+  //
+  // O perdedor sofre rollback DEPOIS de ter resolvido vinculos e antes de gravar as filhas. Se o
+  // rollback nao for completo, sobra pagamento apontando para uma venda que nao existe mais, ou o
+  // rateio empilha na venda que sobreviveu (o bug historico de ~R$1.000 citado na D-06).
+  it("T-11 · pagamento dividido sob corrida nao duplica nem deixa filho orfao", async () => {
+    const bloqueador = await abrirBloqueador();
+    let primeira: Promise<Resposta>;
+    let segunda: Promise<Resposta>;
+    try {
+      await bloqueador.cliente.query("begin");
+      await bloqueador.cliente.query("select id from fechamentos_caixa where id = $1 for update", [caixaId]);
+      primeira = enviar(payloadDividido(VENDA_DIVIDIDA));
+      expect(await esperarCadeiaDeBloqueio(bloqueador, 1)).toBe(true);
+      segunda = enviar(payloadDividido(VENDA_DIVIDIDA));
+      expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+    const [a, b] = await Promise.all([primeira!, segunda!]);
+
+    const linhas = await vendasDe(VENDA_DIVIDIDA);
+    expect(linhas.length, `esperada UMA venda dividida; encontradas ${linhas.length}. A=${a.body} | B=${b.body}`).toBe(
+      1
+    );
+
+    const filhas = await consultarUm<{ pagamentos: string; produtos: string; soma: string }>(
+      `select (select count(*) from vendas_pagamentos vp
+                 join vendas v on v.id = vp.venda_id where v.identificador_externo = $1)::text as pagamentos,
+              (select count(*) from vendas_produtos vp
+                 join vendas v on v.id = vp.venda_id where v.identificador_externo = $1)::text as produtos,
+              (select coalesce(sum(vp.total_pago), 0) from vendas_pagamentos vp
+                 join vendas v on v.id = vp.venda_id where v.identificador_externo = $1)::text as soma`,
+      [VENDA_DIVIDIDA]
+    );
+
+    expect(filhas?.pagamentos, "as tres formas do rateio, sem empilhar a copia do perdedor").toBe(
+      String(RATEIO.length)
+    );
+    expect(filhas?.produtos, "um item so").toBe("1");
+    expect(Number(filhas?.soma), "a soma dos pagamentos tem de bater com o total da venda").toBe(TOTAL_RATEIO);
+
+    // Filha apontando para venda inexistente e impossivel pela FK, mas o rollback incompleto
+    // apareceria como filha da venda ERRADA — ja coberto pelas contagens acima.
+    const orfas = await consultarUm<{ total: string }>(
+      `select count(*)::text as total
+         from vendas_pagamentos vp
+         left join vendas v on v.id = vp.venda_id
+        where v.id is null`
+    );
+    expect(orfas?.total, "nenhum pagamento orfao no banco inteiro").toBe("0");
   });
 
   it("o reenvio depois da corrida nao pode criar uma terceira venda", async () => {
