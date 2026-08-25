@@ -1,8 +1,11 @@
 # 33 — #41: idempotência da venda integrada (desenho, aguardando autorização)
 
-> **STATUS: PARADO ANTES DE GERAR E DE APLICAR A MIGRATION.** Nenhum arquivo de schema, migration,
-> journal, snapshot ou código foi criado ou alterado. Este documento é o gate TECH-01 / `AGENTS.md`
-> §4.6 da **#41**, que a **R-174** colocou à frente da #152.
+> **STATUS (25/08): MIGRATION CANDIDATA GERADA, NÃO APLICADA.** A auditoria read-only de produção
+> voltou **zerada** (§4-A), o que liberou a geração local. `db/migrations/0032_*`, a entrada do
+> journal e o snapshot existem no repositório e **não foram executados em banco nenhum** — nem DEV.
+> Nenhum arquivo de `api/src` foi tocado: o `ON CONFLICT` (§6) continua **não implementado** e os 7
+> RED continuam vermelhos de propósito. Este documento é o gate TECH-01 / `AGENTS.md` §4.6 da
+> **#41**, que a **R-174** colocou à frente da #152.
 >
 > A #41 **não conhece roteamento financeiro**. Nada da #152 entra aqui.
 >
@@ -13,13 +16,15 @@
 
 ## 1. Estado de partida
 
-| Item                  | Valor                                                       |
-| --------------------- | ----------------------------------------------------------- |
-| Branch atual          | `fix/caixa-saldo-insuficiente` (é da #152, não desta)       |
-| HEAD                  | `de3de2b`                                                   |
-| `origin/main`         | `5127525071d655d31cf316324d3549fc24c69c45` — **comprovado** |
-| Branch da #41         | **a criar**, a partir de `origin/main`                      |
-| Migration desta issue | `0032` (a da #152 passa a `0033`)                           |
+| Item                  | Valor                                                    |
+| --------------------- | -------------------------------------------------------- |
+| Branch da #41         | `fix/venda-integrada-idempotencia`                       |
+| Criada de             | `origin/main` `5127525071d655d31cf316324d3549fc24c69c45` |
+| RED                   | `b633afb` — 7 vermelhos + 3 guardas verdes               |
+| Migration desta issue | `0032` (a da #152 passa a `0033`)                        |
+
+> A tabela original citava `fix/caixa-saldo-insuficiente` e o HEAD `de3de2b` porque este documento
+> nasceu na branch da #152, antes de a #41 existir. Corrigido em 25/08.
 
 ## 2. O defeito, pelo código
 
@@ -114,12 +119,13 @@ para** durante a construção. `vendas` é a maior tabela candidata do sistema e
 
 ## 4. Consulta read-only de duplicidades
 
-> **Pronta para rodar, e não foi rodada.** As quatro seções abaixo estão em
+> **A seção 1 foi executada por Marco em 25/08 e voltou zerada — evidência na §4-A.** As seções 2 a
+> 4 continuam sem execução (só fariam sentido com duplicata > 0). As quatro estão em
 > [`db/scripts/auditoria-vendas-integradas-duplicadas.sql`](../db/scripts/auditoria-vendas-integradas-duplicadas.sql),
 > junto dos demais scripts de diagnóstico do repositório:
 > `psql "$DATABASE_URL" -f db/scripts/auditoria-vendas-integradas-duplicadas.sql`.
-> Nenhum ambiente foi consultado. Se esta auditoria for necessária, Marco autoriza e executa ou
-> acompanha uma sessão explicitamente read-only, preservando a evidência e sem ampliar o acesso.
+> Marco autoriza e executa, ou acompanha, uma sessão explicitamente read-only, preservando a
+> evidência e sem ampliar o acesso.
 
 **Somente leitura. Nenhum `UPDATE`, `DELETE` ou `INSERT`.** Nenhuma IA executa esta consulta em
 produção automaticamente.
@@ -184,6 +190,31 @@ migration **não pode ser aplicada** enquanto as duplicatas existirem — e limp
 **regularização de histórico**, proibida pela R-166 nesta entrega: vira OS própria, medida,
 auditável e autorizada, com a consulta (3) dizendo quanto disso está em caixa fechado.
 
+## 4-A. Auditoria de produção — executada e ZERADA (25/08/2026)
+
+Marco executou a **seção 1** de `db/scripts/auditoria-vendas-integradas-duplicadas.sql` em
+produção, em transação **READ ONLY**, encerrada com **`ROLLBACK`**. Nenhum dado foi alterado.
+
+| Campo               | Valor |
+| ------------------- | ----- |
+| `grupos_duplicados` | **0** |
+| `linhas_excedentes` | **0** |
+
+| Evidência | Registro                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------ |
+| Data      | 25/08/2026                                                                                       |
+| Ambiente  | produção                                                                                         |
+| Modo      | transação `READ ONLY`, encerrada com `ROLLBACK`                                                  |
+| Executor  | Marco (sessão read-only autorizada) — nenhuma IA acessou produção                                |
+| Consultas | somente a seção 1, agregada; seções 2–4 **não** foram executadas                                 |
+| Exposição | nenhuma: só os dois agregados saíram; nenhum `empresa_id`, `identificador_externo` ou `venda_id` |
+| Exit code | 0 (aprovada)                                                                                     |
+
+**Consequência:** a alternativa (B) do gate está satisfeita — a migration **pode ser gerada**
+localmente. Zero duplicata também significa que o `CREATE UNIQUE INDEX` **não falhará por dado
+preexistente**, e que **não há regularização histórica a fazer** (a R-166 continua intacta: nada a
+limpar).
+
 ## 5. Rollback
 
 ```sql
@@ -229,9 +260,30 @@ const vendaExistenteId =
   (await buscarVendaIntegradaPorIdentificadorRepository(chave.empresaId, identificadorExterno, tx));
 ```
 
-`vendaExistenteId` substitui `registro?.registroSistemaId` nos **três** pontos onde ele é usado: a
-origem do caixa, o `travarVendaRepository` e o `vendaSistemaId` passado ao repositório. O `registro`
-mantém **um só** papel: o atalho de `sem_novidade` por hash.
+`vendaExistenteId` substitui `registro?.registroSistemaId` em **QUATRO** pontos. O `registro` mantém
+**um só** papel: o atalho de `sem_novidade` por hash.
+
+| #   | Linha atual                                                                   | O que muda                                                                                           |
+| --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | [service.ts:764-766](../api/src/integracoes/integracoes.service.ts#L764-L766) | a origem do caixa passa a usar `vendaExistenteId`                                                    |
+| 2   | [service.ts:788-793](../api/src/integracoes/integracoes.service.ts#L788-L793) | a guarda `if (registro?.registroSistemaId)` vira `if (vendaExistenteId)`; a trava e a releitura idem |
+| 3   | [service.ts:798](../api/src/integracoes/integracoes.service.ts#L798)          | `...(vendaExistenteId ? { vendaSistemaId: vendaExistenteId } : {})`                                  |
+| 4   | **[service.ts:830](../api/src/integracoes/integracoes.service.ts#L830)**      | **`const status = vendaExistenteId ? "atualizado" : "criado";`**                                     |
+
+> **CORREÇÃO DE 25/08 — o ponto 4 estava faltando neste documento.** A versão anterior dizia "três
+> pontos" e deixava de fora
+> [integracoes.service.ts:830](../api/src/integracoes/integracoes.service.ts#L830):
+>
+> ```ts
+> const status = registro ? "atualizado" : "criado";
+> ```
+>
+> **O status precisa depender de `vendaExistenteId`, não de `registro`.** Sem isso a rotação de
+> credencial grava **uma** venda — que é o comportamento certo — mas responde **`"criado"`**, e o
+> RED-2 (`venda-integrada-rotacao-de-chave.test.ts`) exige **`"atualizado"`**. O resultado seria um
+> meio-verde: dado correto no banco, resposta mentindo para o agente. **Rotação de chave responde
+> `"atualizado"`, sempre.** Achado na auditoria read-only registrada em
+> `PRE-GREEN-ISSUE-41-IDEMPOTENCIA.md` (I-1).
 
 Efeito: **a rotação de credencial (§2.2) deixa de chegar ao INSERT.** A venda é encontrada, o
 caminho de atualização roda com todas as travas na ordem canônica, e o
@@ -277,12 +329,44 @@ levanta o erro transitório, sofre rollback (inclusive dos cadastros que `resolv
 possa ter criado), responde 503, e o agente re-tenta. No re-envio, o §6.1 encontra a venda e o fluxo
 é o de atualização.
 
-### 6.3 Terceira mudança, pequena e obrigatória: `23505` não pode virar 422
+### 6.3 Terceira mudança, OBRIGATÓRIA e P0: `23505` residual nunca pode virar 422
 
-O `catch` de `receberVendaIntegracao` re-lança só `55P03` e `40P01`; **todo o resto vira 422**
-([integracoes.service.ts:834-861](../api/src/integracoes/integracoes.service.ts#L834-L861)) — e o
-comentário do próprio arquivo diz que 4xx faz o agente descartar a venda. Como a #41 é justamente
-quem **adiciona um unique a `vendas`**, mapear `23505` para 5xx é escopo dela, não da #152.
+> **CORREÇÃO DE 25/08.** Este item era descrito aqui como "pequena". **Não é.** É P0 funcional: sem
+> ele, um conflito que escape do `ON CONFLICT` **perde venda de verdade**.
+
+O `catch` de `receberVendaIntegracao` re-lança só `55P03` e `40P01`; **todo o resto cai na última
+linha e vira 422** via `naoProcessavel`
+([integracoes.service.ts:834-862](../api/src/integracoes/integracoes.service.ts#L834-L862),
+[erros.ts:51-53](../api/src/erros.ts#L51-L53)) — e o comentário do próprio arquivo diz que 4xx faz o
+agente **descartar** a venda, o que a R-013 proíbe.
+
+Contrato desta issue, sem ambiguidade:
+
+- **conflito residual `23505` nunca pode virar 422 descartável;**
+- **conflito transitório responde 503 retriable** — o agente re-tenta e, no re-envio, o §6.1 encontra
+  a venda e o fluxo é o de atualização;
+- **reutilizar o mecanismo do `VENDA_MUDOU_DE_CAIXA`**: `Error` simples com `code`, espelhando
+  `erroVendaMudouDeCaixa` ([service.ts:128-133](../api/src/integracoes/integracoes.service.ts#L128-L133)),
+  convertido a `ErroDominio(503, "LOCK_OCUPADO")` ao lado de
+  [service.ts:858-860](../api/src/integracoes/integracoes.service.ts#L858-L860). **Nada de segundo
+  caminho para o mesmo ato** (`AGENTS.md` §4.1);
+- **não criar quinto status** em `integracoes_historico`. O
+  `integracoes_historico_status_check` aceita `('criado','atualizado','sem_novidade','erro')`
+  ([app.schema.ts:836-839](../db/src/schema/app.schema.ts#L836-L839)); um status novo exigiria
+  migration, e migration fora do índice parcial está **fora do escopo da #41**.
+
+#### P2 separado — ruído no contador de erros
+
+O `catch` grava o histórico em [service.ts:840](../api/src/integracoes/integracoes.service.ts#L840),
+**antes** de classificar o código em [856-860](../api/src/integracoes/integracoes.service.ts#L856-L860).
+Logo **todo transitório de hoje já deixa uma linha `status = 'erro'`** — `55P03`, `40P01` e
+`VENDA_MUDOU_DE_CAIXA` inclusive — e o erro de corrida se comportará igual. Consequência visível: a
+tela de Integrações passa a mostrar `erros > 0` a cada entrega duplicada benigna, porque
+`listarHistoricoIntegracao` agrega por dia.
+
+**Fica documentado como P2 separado, fora da #41.** Não é regressão (o comportamento é o mesmo dos
+transitórios que já existem) e resolvê-lo exigiria ou um status novo (migration) ou reordenar o
+`catch` — decisões que não pertencem a esta issue.
 
 ### 6.4 O que a #41 NÃO faz
 
@@ -292,8 +376,9 @@ limpa duplicata existente. Não acessa produção.
 ## 7. Testes RED determinísticos
 
 Três arquivos RED. Nenhum usa `sleep`: a sincronização é por **condição**, com os utilitários que já
-existem em `tests/setup/integracao.ts` (`abrirBloqueador`, `esperarCadeiaDeBloqueio`,
-`aindaPendente`) — o mesmo padrão de `conta-saldo-insuficiente.test.ts:308-341`.
+existem em `tests/setup/integracao.ts` (`abrirBloqueador`, `esperarCadeiaDeBloqueio`) — o mesmo
+padrão de `conta-saldo-insuficiente.test.ts:308-341`. `aindaPendente` também existe ali
+(`integracao.ts:211`) e passa a ser usado pelo **T-9**, não pelos três RED.
 
 ### RED-1 · corrida na primeira ingestão (as duas ordens)
 
@@ -379,6 +464,21 @@ hoje:  os dois commits passam nas DUAS ordens  -> 2 linhas
 green: nas duas ordens, um commit passa e o outro leva 23505 -> 1 linha
 ```
 
+### Testes que FALTAM para o GREEN — T-8 a T-11 (acrescentados em 25/08)
+
+Os três arquivos RED cobrem a corrida, a rotação e o interleaving. A auditoria read-only
+(`PRE-GREEN-ISSUE-41-IDEMPOTENCIA.md`) achou quatro buracos. Entram junto com o GREEN.
+
+| Id       | Caso                                                                                                                         | Por que é necessário                                                                                                                                                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T-8**  | **Isolamento entre empresas** — o mesmo `idVenda` na empresa A e na B produz **duas** vendas legítimas, sem conflito         | A chave do índice começa por `empresa_id`, mas **nada prova isso hoje**. Exige uma chave de integração própria para `idsTeste.empresaB` (`tests/setup/contexto.ts:25`). Mata a mutação "buscar a venda sem filtrar `empresa_id`" |
+| **T-9**  | **O perdedor permanece PENDENTE enquanto o vencedor não commita**, usando `aindaPendente` (`tests/setup/integracao.ts:211`)  | É a prova de que o índice **arbitra** de fato: `ON CONFLICT DO NOTHING` espera o inserter concorrente. Mata a mutação "tirar o predicado do `where`", que faria estourar `23505` cru em vez de esperar                           |
+| **T-10** | **Resposta nominal 503**, com `code`, não apenas `statusCode >= 500`                                                         | RED-1 hoje só verifica a faixa. A R-013 merece asserção nominal: 4xx faria o agente **descartar** a venda                                                                                                                        |
+| **T-11** | **Pagamento dividido sob corrida** — reusar o rateio assimétrico de `pagamento-dividido.test.ts` dentro da barreira do RED-1 | Garante que o rollback do perdedor não deixa pagamento órfão nem empilha rateio na venda que sobrou                                                                                                                              |
+
+`aindaPendente` já existe e **não era usado** por nenhum dos três RED — a menção a ele no cabeçalho
+da §7 estava adiantada. O T-9 é quem passa a usá-lo.
+
 ### Regressão obrigatória
 
 `tests/integration/integracoes/` inteiro — em especial `pagamento-dividido.test.ts` (reenvio
@@ -394,7 +494,12 @@ idêntico, alteração de rateio, `sem_novidade`), `integracoes.test.ts` e
 3. pôr `integracao_chave_id` na chave do índice → **RED-2 fica vermelho**;
 4. devolver 4xx no lugar de 5xx no perdedor → o agente descartaria a venda (R-013);
 5. manter a decisão criar-ou-atualizar no registro em vez da venda → **RED-2 fica vermelho**;
-6. remover o mapeamento de `23505` para 5xx → 422 e venda descartada.
+6. remover o mapeamento de `23505` para 5xx → 422 e venda descartada;
+7. transformar o índice parcial em `UNIQUE` cheio → a guarda "venda de RETAGUARDA continua livre"
+   (RED-3) quebra na hora;
+8. **esquecer a linha [830](../api/src/integracoes/integracoes.service.ts#L830)** (o `status`) →
+   **RED-2 fica vermelho** exigindo `"atualizado"` e recebendo `"criado"`;
+9. buscar a venda sem filtrar `empresa_id` → **T-8 fica vermelho**.
 
 ## 7-A. RED escrito e medido — 24/08/2026
 
@@ -471,10 +576,16 @@ nenhum `23505`, porque não existe `UNIQUE` parcial em `vendas`.
    antes de aplicar**.
 5. Implementar §6.1, §6.2 e §6.3, GREEN, mutações, gates, relatório.
 
-## 9. O que NÃO foi feito nesta rodada
+## 9. O que NÃO foi feito (atualizado em 25/08)
 
-- Nenhuma migration gerada ou aplicada; nenhum arquivo de schema, journal, snapshot ou código.
-- Nenhum acesso automático a produção — a contagem de duplicatas é responsabilidade de Marco e
-  depende de autorização explícita para uma sessão read-only.
+- **A migration NÃO foi aplicada** — nem em produção, nem em DEV, nem no banco dos testes. Ela
+  existe como arquivo versionado e nada mais.
+- **Nenhum arquivo de `api/src` foi tocado.** O `ON CONFLICT` da §6 continua não implementado, a
+  busca por `(empresa, identificador)` não existe, e o mapeamento de `23505` não foi feito.
+- **Os 7 RED continuam vermelhos**, de propósito, e não foram reexecutados nesta rodada.
+- T-8 a T-11 estão especificados e **não foram escritos**.
+- `npm test` completo, mutações e gates finais não rodaram.
+- Nenhuma IA acessou produção. As seções 2 a 4 da auditoria não foram executadas.
+- Nenhuma duplicata foi limpa (não havia nenhuma) e nenhum dado histórico foi reescrito.
 - Nada da #152, da #101 ou da D-06 foi tocado ou misturado.
-- Nenhuma duplicata existente foi limpa, contada ou estimada.
+- Sem push, PR, merge ou deploy.
