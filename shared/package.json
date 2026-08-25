@@ -11,6 +11,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./admissoes": {
+      "types": "./dist/admissoes/index.d.ts",
+      "development": "./src/admissoes/index.ts",
+      "default": "./dist/admissoes/index.js"
+    },
     "./app": {
       "types": "./dist/app/index.d.ts",
       "development": "./src/app/index.ts",

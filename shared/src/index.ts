@@ -1,4 +1,5 @@
 export * from "./app/index.js";
+export * from "./admissoes/index.js";
 export * from "./api/index.js";
 export * from "./autenticacao/index.js";
 export * from "./cadastros/index.js";

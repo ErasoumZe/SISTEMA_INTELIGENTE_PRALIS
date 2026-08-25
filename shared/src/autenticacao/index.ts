@@ -119,6 +119,20 @@ export const permissoes = [
   "cadastro_colaboradores_criar",
   "cadastro_colaboradores_editar",
   "cadastro_colaboradores_excluir",
+  // ADM-001 — periodo de teste. DELIBERADAMENTE separadas de `cadastro_colaboradores_*`: quem
+  // cadastra colaborador operacional NAO ganha acesso a admissao, e o inverso tambem vale. O
+  // pre-cadastro carrega CPF e decisao sobre pessoa em avaliacao; ampliar isso para os
+  // consumidores operacionais da lista de colaboradores (Caixa, despesas) seria o oposto da
+  // minimizacao que a CX-M05 fez em `GET /api/colaboradores`.
+  //
+  // `encerrar` e permissao PROPRIA, e nao um caso de `editar`: encerrar exige resultado
+  // (aprovado_para_admissao | nao_prosseguir) e e terminal. Quem corrige um erro de digitacao nao
+  // e necessariamente quem decide o desfecho do teste.
+  "admissoes_testes_visualizar",
+  "admissoes_testes_criar",
+  "admissoes_testes_editar",
+  "admissoes_testes_encerrar",
+  "admissoes_testes_cancelar",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",
@@ -205,6 +219,8 @@ export const permissoes = [
   "menu_produtos_desabilitado",
   "menu_colaboradores_mostrar",
   "menu_colaboradores_desabilitado",
+  "menu_admissoes_testes_mostrar",
+  "menu_admissoes_testes_desabilitado",
   "menu_folha_ponto_mostrar",
   "menu_folha_ponto_desabilitado",
   "menu_avaliacao_qualidade_mostrar",

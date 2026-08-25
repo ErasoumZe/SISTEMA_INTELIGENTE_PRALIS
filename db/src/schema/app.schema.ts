@@ -19,6 +19,7 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import type { AcaoHistoricoTeste, MotivoCancelamento, ResultadoTeste, StatusTeste } from "@padaria/shared/admissoes";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 
@@ -367,7 +368,17 @@ export const cargos = pgTable(
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
   },
-  (table) => [unique("cargos_empresa_nome_unica").on(table.empresaId, table.nome)]
+  (table) => [
+    unique("cargos_empresa_nome_unica").on(table.empresaId, table.nome),
+    // ADITIVA (ADM-001). Serve de alvo para a FK COMPOSTA de `admissoes_testes`, que confere cargo
+    // e empresa numa constraint so. E o mesmo padrao de `fechamentos_caixa_id_empresa_unica`.
+    //
+    // Nao pode falhar ao ser criada: `id` ja e a PK, entao (id, empresa_id) e trivialmente unico em
+    // qualquer linha existente. Existe para tornar IMPOSSIVEL, no banco, apontar para cargo de
+    // outra empresa — que e exatamente o buraco que `colaboradores.setor_id` ainda tem
+    // (a FK dele nao compoe `empresa_id`; ver api/src/colaboradores/colaboradores.service.ts).
+    unique("cargos_id_empresa_unica").on(table.id, table.empresaId)
+  ]
 );
 
 export const permissoesCargos = pgTable(
@@ -1947,5 +1958,170 @@ export const debitosColaboradores = pgTable(
     check("debitos_colaboradores_tipo_check", sql`${table.tipo} in ('FECHAMENTO_CAIXA', 'DESPESA', 'RETIRADA')`),
     check("debitos_colaboradores_valor_check", sql`${table.valor} >= 0`),
     index("debitos_colaboradores_empresa_colaborador_idx").on(table.empresaId, table.colaboradorId)
+  ]
+);
+
+// =================================================================================================
+// ADM-001 — Controle de periodo de teste (piloto TNP).
+//
+// NAO e o cadastro operacional. `admissoes_testes` NUNCA escreve em `colaboradores`, nao tem
+// `colaborador_id` e nao efetiva ninguem — nem quando o resultado e `aprovado_para_admissao`.
+// Aprovar aqui registra a DECISAO do DP; abrir a admissao e criar/vincular o colaborador sao
+// verticais proprias.
+//
+// A empresa nunca vem do cliente: o servico a deriva de `perfil.empresa_id` e so aceita quando ela
+// esta dentro das empresas permitidas do ator. A coluna existe para o recorte e para as FKs
+// compostas, nao para ser escolhida.
+// =================================================================================================
+
+export const admissoesTestes = pgTable(
+  "admissoes_testes",
+  {
+    id: idUuid,
+    empresaId,
+    status: text("status").$type<StatusTeste>().notNull().default("em_teste"),
+    // Concorrencia otimista. Toda escrita sobre linha existente compara e incrementa; sem isto duas
+    // edicoes simultaneas do DP perderiam uma em silencio ("ultima gravacao vence").
+    versao: integer("versao").notNull().default(1),
+    nomeCompleto: text("nome_completo").notNull(),
+    // Somente digitos. O digito verificador e conferido em `shared/src/admissoes/cpf.ts` (contrato)
+    // — o CHECK abaixo garante o FORMATO no banco, que e o que o banco consegue garantir sozinho.
+    cpf: text("cpf").notNull(),
+    cargoId: uuid("cargo_id").notNull(),
+    // Texto livre nesta vertical: o Pralis nao tem catalogo de jornada. `turnos` e turno
+    // (nome + hora inicio/fim) e `colaboradores_jornadas` exige um colaborador que ainda nao existe.
+    jornadaHorario: text("jornada_horario").notNull(),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fimCombinadoEm: timestamp("fim_combinado_em", { withTimezone: true }).notNull(),
+    // Preenchido SO no encerramento, e obrigatorio la (ver a coerencia de status abaixo).
+    resultado: text("resultado").$type<ResultadoTeste>(),
+    // Lista FECHADA. "Excluir" na tela e este cancelamento — nao ha DELETE fisico em lugar nenhum
+    // desta vertical, e o motivo e obrigatorio (ver a coerencia de status abaixo).
+    motivoCancelamento: text("motivo_cancelamento").$type<MotivoCancelamento>(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    atualizadoPor: text("atualizado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    encerradoPor: text("encerrado_por").references(() => perfisUsuarios.usuarioId),
+    canceladoPor: text("cancelado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm,
+    encerradoEm: timestamp("encerrado_em", { withTimezone: true }),
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    // FK COMPOSTA, e nao `references(() => cargos.id)`: assim o banco recusa cargo de outra
+    // empresa por conta propria. A FK simples deixaria a garantia inteira nas maos do servico —
+    // que e como `colaboradores.setor_id` virou um ponteiro estrangeiro representavel.
+    foreignKey({
+      columns: [table.cargoId, table.empresaId],
+      foreignColumns: [cargos.id, cargos.empresaId],
+      name: "admissoes_testes_cargo_empresa_fk"
+    }),
+    // Alvo da FK composta vinda de `admissoes_testes_historico`.
+    unique("admissoes_testes_id_empresa_unica").on(table.id, table.empresaId),
+    check("admissoes_testes_status_check", sql`${table.status} in ('em_teste', 'encerrado', 'cancelado')`),
+    check("admissoes_testes_versao_check", sql`${table.versao} > 0`),
+    check("admissoes_testes_cpf_check", sql`${table.cpf} ~ '^[0-9]{11}$'`),
+    check("admissoes_testes_nome_check", sql`length(btrim(${table.nomeCompleto})) > 0`),
+    check("admissoes_testes_jornada_check", sql`length(btrim(${table.jornadaHorario})) > 0`),
+    check("admissoes_testes_periodo_check", sql`${table.fimCombinadoEm} > ${table.inicioEm}`),
+    check(
+      "admissoes_testes_resultado_check",
+      sql`${table.resultado} is null or ${table.resultado} in ('aprovado_para_admissao', 'nao_prosseguir')`
+    ),
+    check(
+      "admissoes_testes_motivo_cancelamento_check",
+      sql`${table.motivoCancelamento} is null or ${table.motivoCancelamento} in ('nao_aprovado_no_teste', 'sem_continuidade_apos_dia_de_teste')`
+    ),
+    // Um CHECK unico para os tres estados, em vez de seis condicionais soltos: estado terminal
+    // pela metade (encerrado sem resultado, cancelado sem motivo, cancelado com `encerrado_por`)
+    // deixa de ser representavel. Sem isto, um bug no servico grava a linha incoerente e ela so
+    // aparece meses depois, num relatorio.
+    check(
+      "admissoes_testes_coerencia_status_check",
+      sql`(
+        ${table.status} = 'em_teste'
+        and ${table.resultado} is null
+        and ${table.motivoCancelamento} is null
+        and ${table.encerradoPor} is null and ${table.encerradoEm} is null
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'encerrado'
+        and ${table.resultado} is not null
+        and ${table.motivoCancelamento} is null
+        and ${table.encerradoPor} is not null and ${table.encerradoEm} is not null
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'cancelado'
+        and ${table.resultado} is null
+        and ${table.motivoCancelamento} is not null
+        and ${table.encerradoPor} is null and ${table.encerradoEm} is null
+        and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
+      )`
+    ),
+    // "Bloquear teste aberto duplicado na mesma empresa" enforcado no BANCO, nao so no servico:
+    // duas criacoes simultaneas com o mesmo CPF passariam pelas duas verificacoes previas e
+    // gravariam as duas. O indice PARCIAL e o que permite que o mesmo CPF volte depois — teste
+    // encerrado ou cancelado nao ocupa a vaga.
+    uniqueIndex("admissoes_testes_cpf_em_teste_unico")
+      .on(table.empresaId, table.cpf)
+      .where(sql`${table.status} = 'em_teste'`),
+    // Ordem da fila do DP: o que vence antes aparece antes, dentro da empresa e do status.
+    index("admissoes_testes_empresa_status_fim_idx").on(
+      table.empresaId,
+      table.status,
+      table.fimCombinadoEm,
+      table.id
+    )
+  ]
+);
+
+// Trilha append-only. NUNCA guarda valor de campo — so o NOME dos campos alterados. Gravar
+// antes/depois duplicaria a PII dentro da propria auditoria, que e o oposto do que ela existe para
+// fazer. Quem quiser o valor atual le a linha raiz; valor antigo nao e recuperavel de proposito.
+export const admissoesTestesHistorico = pgTable(
+  "admissoes_testes_historico",
+  {
+    id: idUuid,
+    empresaId,
+    testeId: uuid("teste_id").notNull(),
+    versao: integer("versao").notNull(),
+    acao: text("acao").$type<AcaoHistoricoTeste>().notNull(),
+    atorUsuarioId: text("ator_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    camposAlterados: jsonb("campos_alterados")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ocorridoEm: timestamp("ocorrido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.testeId, table.empresaId],
+      foreignColumns: [admissoesTestes.id, admissoesTestes.empresaId],
+      name: "admissoes_testes_historico_teste_empresa_fk"
+    }).onDelete("cascade"),
+    check(
+      "admissoes_testes_historico_acao_check",
+      sql`${table.acao} in ('criado', 'alterado', 'encerrado', 'cancelado', 'cpf_revelado')`
+    ),
+    check("admissoes_testes_historico_versao_check", sql`${table.versao} > 0`),
+    // Unico PARCIAL, e nao unico simples: transicao de estado tem uma versao propria, entao repetir
+    // um cancelamento nao consegue gravar um segundo evento — a idempotencia fica no banco. Mas
+    // `cpf_revelado` NAO incrementa versao e acontece quantas vezes o DP revelar; um unico simples
+    // recusaria a segunda revelacao e a auditoria perderia justamente o que deve registrar.
+    uniqueIndex("admissoes_testes_historico_evento_unico")
+      .on(table.testeId, table.versao)
+      .where(sql`${table.acao} <> 'cpf_revelado'`),
+    index("admissoes_testes_historico_teste_idx").on(
+      table.empresaId,
+      table.testeId,
+      table.ocorridoEm,
+      table.id
+    )
   ]
 );
