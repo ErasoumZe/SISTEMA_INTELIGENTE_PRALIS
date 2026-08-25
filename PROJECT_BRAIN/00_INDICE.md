@@ -45,6 +45,7 @@ a necessidade.
 | [28](28_ENTREGA_AO_COFRE_D1_D10_B1_B5.md) | **Entrega ao cofre (06/08)**   | D1-D10 e B1-B5: parcial, atomico, idempotente, solicitacao programada (#101 reescrita)   |
 | [29](29_RUNBOOK_ROTACAO_ADMIN.md)         | **Runbook do admin (R-162)**   | primeira instalacao, rotacao explicita e prova de que redeploy preserva credencial       |
 | [30](30_PRODUTOS_PRALIS_X_ERP.md)         | **Produtos: Pralis × ERP**     | mapa de campos, o que falta trazer do app antigo e em que ordem                          |
+| [29](29_PLANILHAS_DA_OPERACAO.md)         | **Planilhas da operacao**      | contas reais, taxas de cartao, conciliacao, dominio de producao e 9 regras novas         |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
