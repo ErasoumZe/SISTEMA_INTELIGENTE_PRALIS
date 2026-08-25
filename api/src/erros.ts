@@ -12,6 +12,29 @@ export function mensagemDominioOuRelancar(error: DadosExternos): string {
   throw error;
 }
 
+/**
+ * O SQLSTATE do Postgres, procurado na CADEIA de causas — nunca so no topo.
+ *
+ * O Drizzle embrulha TODA falha de query num `DrizzleQueryError`
+ * (`node_modules/drizzle-orm/errors.js`), cuja mensagem e `Failed query: <SQL>\nparams: <params>` e
+ * que **nao copia o `code`**: o erro do driver `pg`, com `code`/`constraint`/`detail`, fica em
+ * `cause`. Ler `(error as { code }).code` direto devolve `undefined` para todo erro de banco, e
+ * ramos como "55P03 vira 503" viram codigo morto sem ninguem perceber.
+ *
+ * `api/src/caixa/caixa.service.ts` ja fazia essa varredura a mao para o `23505` da abertura de
+ * caixa; isto e a mesma leitura, num lugar so. Percorre a cadeia inteira porque nada garante que o
+ * embrulho tenha um nivel unico.
+ */
+export function codigoPostgresDoErro(error: Error | null): string | undefined {
+  let atual: Error | null = error;
+  for (let nivel = 0; nivel < 5 && atual; nivel += 1) {
+    const codigo = (atual as Error & { code?: string }).code;
+    if (typeof codigo === "string") return codigo;
+    atual = atual.cause instanceof Error ? atual.cause : null;
+  }
+  return undefined;
+}
+
 // Falha que NAO e regra de negocio. Existe para NAO cair no ramo de `mensagemDominioOuRelancar` que
 // devolve `error.message` ao cliente: por ser subclasse (`constructor !== Error`), e relancada e o
 // handler global a loga e responde 500 "Erro interno", sem detalhe interno no corpo.

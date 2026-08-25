@@ -47,6 +47,8 @@ const VENDA_ORDEM_AB = "R41-CORRIDA-ORDEM-AB";
 const VENDA_ORDEM_BA = "R41-CORRIDA-ORDEM-BA";
 const VENDA_NOMINAL_503 = "R41-CORRIDA-NOMINAL-503";
 const VENDA_DIVIDIDA = "R41-CORRIDA-PAGAMENTO-DIVIDIDO";
+const VENDA_ERRO_DE_DRIVER = "R41-CORRIDA-ERRO-DE-DRIVER";
+const PDV_COLIDIDO = "PDV R41 colisao de cadastro";
 
 // Rateio ASSIMETRICO (7.31 + 4.27 + 3.42 = 15.00), o mesmo criterio de `pagamento-dividido.test.ts`:
 // se um pagamento empilhar ou sumir na corrida, a soma nao fecha por acaso.
@@ -363,6 +365,69 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
         where v.id is null`
     );
     expect(orfas?.total, "nenhum pagamento orfao no banco inteiro").toBe("0");
+  });
+
+  // T-14 · erro REAL do driver pela rota tem de virar 503, nunca 422.
+  //
+  // Este e o caso que faltava, e ele quase passou batido. Os demais testes exercitam erros
+  // SINTETICOS — `Error` criado no servico com `Object.assign(erro, { code })` — que tem o `code` no
+  // topo. Erro de banco NAO e assim: o Drizzle embrulha toda falha de query num `DrizzleQueryError`
+  // que NAO copia o `code` (node_modules/drizzle-orm/errors.js), e o erro do `pg` fica em `cause`.
+  //
+  // Enquanto o servico lia `error.code` direto, os ramos de 55P03/40P01/23505 eram CODIGO MORTO e
+  // toda falha de banco virava 422 — que a R-013 proibe, porque faz o agente DESCARTAR a venda.
+  //
+  // A colisao usada aqui e de CADASTRO, nao de venda: um PDV novo com nome ja tomado. E o cenario
+  // real de duas ingestoes criando o mesmo PDV ao mesmo tempo, e produz um 23505 legitimo do driver
+  // dentro da transacao da ingestao.
+  it("T-14 · erro real do driver responde 503, nao 422, e nao vaza SQL", async () => {
+    const bloqueador = await abrirBloqueador();
+    let requisicao: Promise<Resposta>;
+    try {
+      await bloqueador.cliente.query("begin");
+      const conta = await bloqueador.cliente.query<{ id: string }>(
+        "insert into contas (empresa_id, nome) values ($1, $2) returning id",
+        [idsTeste.empresaA, "Conta R41 colisao"]
+      );
+      // PDV com o nome que a ingestao vai tentar criar. Ainda NAO commitado: quem chegar depois
+      // espera no unique `pdvs_empresa_nome_unica` ate sabermos o desfecho desta transacao.
+      await bloqueador.cliente.query("insert into pdvs (empresa_id, nome, conta_id) values ($1, $2, $3)", [
+        idsTeste.empresaA,
+        PDV_COLIDIDO,
+        conta.rows[0]?.id
+      ]);
+
+      // `idCaixa` inedito => sem vinculo => a ingestao cria o PDV pelo `nomeCaixa`, que colide.
+      const payload = payloadVenda(VENDA_ERRO_DE_DRIVER);
+      payload.Venda.idCaixa = "PDV-EXTERNO-R41-COLISAO";
+      payload.Venda.nomeCaixa = PDV_COLIDIDO;
+      requisicao = enviar(payload);
+
+      expect(await esperarCadeiaDeBloqueio(bloqueador, 1), "a ingestao deveria estar parada no unique de `pdvs`").toBe(
+        true
+      );
+
+      // Commit: agora o nome existe de verdade e a ingestao acorda com 23505 do driver.
+      await bloqueador.cliente.query("commit");
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+
+    const resposta = await requisicao!;
+
+    expect(
+      resposta.statusCode,
+      `erro de banco na ingestao tem de ser 5xx retriable. Recebido ${resposta.statusCode}: ${resposta.body}`
+    ).toBe(503);
+    expect(json<{ code?: string }>(resposta).code).toBe("LOCK_OCUPADO");
+    expect(resposta.statusCode, "422 aqui faria o agente DESCARTAR a venda — e o que a R-013 proibe").not.toBe(422);
+
+    // O corpo nao pode carregar a mensagem crua do driver, que embute o SQL e os PARAMETROS.
+    expect(resposta.body, "o corpo nao pode trazer o SQL do driver").not.toContain("Failed query");
+    expect(resposta.body, "nem os parametros da venda").not.toContain(VENDA_ERRO_DE_DRIVER);
+
+    // A venda nao entrou (rollback total) — o agente vai re-tentar e ai o PDV ja existe.
+    expect((await vendasDe(VENDA_ERRO_DE_DRIVER)).length).toBe(0);
   });
 
   it("o reenvio depois da corrida nao pode criar uma terceira venda", async () => {
