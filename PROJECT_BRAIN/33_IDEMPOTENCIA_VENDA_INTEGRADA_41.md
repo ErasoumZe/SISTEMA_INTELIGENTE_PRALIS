@@ -1,18 +1,12 @@
 # 33 — #41: idempotência da venda integrada (desenho, aguardando autorização)
 
-> **STATUS (25/08): MIGRATION CANDIDATA GERADA, NÃO APLICADA.** A auditoria read-only de produção
-> voltou **zerada** (§4-A), o que liberou a geração local. `db/migrations/0032_*`, a entrada do
-> journal e o snapshot existem no repositório e **não foram executados em banco nenhum** — nem DEV.
-> Nenhum arquivo de `api/src` foi tocado: o `ON CONFLICT` (§6) continua **não implementado** e os 7
-> RED continuam vermelhos de propósito. Este documento é o gate TECH-01 / `AGENTS.md` §4.6 da
-> **#41**, que a **R-174** colocou à frente da #152.
+> **STATUS (25/08): #41 IMPLEMENTADA E VERDE, aguardando publicação.** A migration 0032 foi
+> aplicada **somente em banco local descartável** (container deste projeto, banco criado e
+> derrubado na prova; e o Testcontainers da suíte). **Nunca em produção.** Código, testes,
+> mutações e quatro revisores read-only concluídos. Sem push, PR, merge ou deploy.
 >
-> A #41 **não conhece roteamento financeiro**. Nada da #152 entra aqui.
->
-> **Sobre os links deste documento.** Ele nasceu na branch da #152 e cita os documentos `30` e `32`
-> e as regras R-166, R-173, R-176 e R-177, que **não estão nesta branch** — chegam com a #152. Aqui
-> valem apenas **R-174** e **R-175**, transportadas para o documento `19`. Os links quebrados para
-> `30`/`32` são esperados e voltam a resolver quando as duas branches estiverem em `main`.
+> **Leia a §10 primeiro** — é o resultado real: o que foi medido, o que os revisores acharam e as
+> **três decisões que ficaram para o Marco**. As §§1–9 são o desenho, e onde ele errou está marcado.
 
 ## 1. Estado de partida
 
@@ -599,16 +593,138 @@ nenhum `23505`, porque não existe `UNIQUE` parcial em `vendas`.
    antes de aplicar**.
 5. Implementar §6.1, §6.2 e §6.3, GREEN, mutações, gates, relatório.
 
-## 9. O que NÃO foi feito (atualizado em 25/08)
+## 9. O que NÃO foi feito
 
-- **A migration NÃO foi aplicada** — nem em produção, nem em DEV, nem no banco dos testes. Ela
-  existe como arquivo versionado e nada mais.
-- **Nenhum arquivo de `api/src` foi tocado.** O `ON CONFLICT` da §6 continua não implementado, a
-  busca por `(empresa, identificador)` não existe, e o mapeamento de `23505` não foi feito.
-- **Os 7 RED continuam vermelhos**, de propósito, e não foram reexecutados nesta rodada.
-- T-8 a T-11 estão especificados e **não foram escritos**.
-- `npm test` completo, mutações e gates finais não rodaram.
-- Nenhuma IA acessou produção. As seções 2 a 4 da auditoria não foram executadas.
-- Nenhuma duplicata foi limpa (não havia nenhuma) e nenhum dado histórico foi reescrito.
-- Nada da #152, da #101 ou da D-06 foi tocado ou misturado.
+- **Nada em produção.** A migration não foi aplicada lá, o CREARE real não foi tocado, nenhuma
+  consulta além da §4-A (agregada, `READ ONLY`, `ROLLBACK`) foi executada.
 - Sem push, PR, merge ou deploy.
+- Nenhum backfill, `UPDATE` histórico ou limpeza de duplicata (não havia nenhuma).
+- Nada da #152, da #101 ou da D-06 foi tocado ou misturado.
+- **Três achados P1 dos revisores ficaram em aberto por exigirem decisão ou migration própria** —
+  §10.4.
+
+## 10. Resultado real — 25/08/2026
+
+### 10.1 Migration aplicada em banco local descartável
+
+Banco `padaria_mig_0032` criado no container **deste projeto** (`padaria-db-dev-db-1`), migrado pelo
+mecanismo oficial e **derrubado** no fim. Nenhum container de outro projeto foi tocado.
+
+| Comando                                                  | Exit |
+| -------------------------------------------------------- | ---- |
+| `npm run db:dev:up`                                      | 0    |
+| `create database padaria_mig_0032`                       | 0    |
+| `npm run db:migrate` (33 migrations, do zero)            | 0    |
+| `drop database padaria_mig_0032` + `npm run db:dev:down` | 0    |
+
+Provas lidas do catálogo do Postgres, não do arquivo:
+
+| #   | Prova                                       | Resultado                                                                                                                                                                    |
+| --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | migration registrada                        | `33 migrations no ledger`                                                                                                                                                    |
+| 2   | índice existe                               | `CREATE UNIQUE INDEX ... ON public.vendas USING btree (empresa_id, identificador_externo) WHERE ((integracao_chave_id IS NOT NULL) AND (identificador_externo IS NOT NULL))` |
+| 3   | chave exata, na ordem                       | `2:empresa_id`, `19:identificador_externo`                                                                                                                                   |
+| 4   | `integracao_chave_id` na chave?             | **`f`** — e no predicado: **`t`**; único: **`t`**                                                                                                                            |
+| 5   | venda manual (sem chave, sem identificador) | duas linhas aceitas                                                                                                                                                          |
+| 5b  | com chave, identificador nulo               | duas linhas aceitas                                                                                                                                                          |
+| 6   | mesmo identificador em empresas diferentes  | as duas aceitas                                                                                                                                                              |
+| 7   | duplicata na mesma empresa                  | **recusada**, `Key (empresa_id, identificador_externo)=(…, VENDA-X) already exists`                                                                                          |
+| 8   | rotação — mesma venda, chave diferente      | **recusada** pela mesma chave                                                                                                                                                |
+
+> O DEV local (`padaria`) **não tem** `drizzle.__drizzle_migrations`: ele é provisionado por
+> `db:push`, não por `db:migrate`. Por isso a prova foi feita num banco novo, que também prova o
+> caminho da migration **desde o zero** — o que o DEV não provaria.
+
+### 10.2 Como o RED mudou com o índice, e por quê isso importa
+
+A suíte provisiona por `db:push:force` a partir do `app.schema.ts`, então o índice entrou nos testes
+assim que foi declarado — **antes de qualquer mudança em `api/src`**:
+
+| Momento         | Resultado                                                         |
+| --------------- | ----------------------------------------------------------------- |
+| Antes da #41    | 3 arquivos, **7 vermelhos**, 3 verdes                             |
+| Só com o índice | 2 arquivos, **5 vermelhos**, 5 verdes — RED-3 inteiro ficou verde |
+| Com o código    | **50 testes, 0 falhas, exit 0**                                   |
+
+O que o meio do caminho revelou: com o índice e sem o código, a corrida já produzia **uma** venda —
+e o perdedor recebia **422**. Ou seja, **o índice sozinho conserta o dado e quebra o contrato**: 4xx
+faz o agente descartar a venda. Foi essa medição que provou que a §6.3 é P0 e não acabamento.
+
+### 10.3 Mutações — 11 aplicadas, 11 mortas (duas exigiram teste novo)
+
+Cada mutação: aplicar, rodar a suíte, restaurar, conferir árvore limpa.
+
+| #   | Mutação                                     | Resultado              | Quem matou                                        |
+| --- | ------------------------------------------- | ---------------------- | ------------------------------------------------- |
+| 1   | `DO NOTHING` → `DO UPDATE`                  | morta                  | corrida + **T-11 pegou 6 pagamentos em vez de 3** |
+| 2   | tira o `where` do `ON CONFLICT`             | morta                  | corrida (aquecimento quebra)                      |
+| 3   | `integracao_chave_id` **na chave**          | **sobreviveu** → morta | **T-12 e T-13**                                   |
+| 4   | perdedor responde 4xx                       | morta                  | T-10                                              |
+| 5   | decisão volta para o `registro`             | morta                  | rotação (3 casos)                                 |
+| 6   | sem `ON CONFLICT` **e** sem a rede do 23505 | morta                  | T-10                                              |
+| 6b  | sem `ON CONFLICT`, **com** a rede           | morta                  | T-10 (prova que a rede é load-bearing)            |
+| 7   | índice parcial → `UNIQUE` cheio             | **sobreviveu** → morta | **T-13**                                          |
+| 8   | esquece a linha do `status`                 | morta                  | rotação                                           |
+| 9   | busca sem filtrar `empresa_id`              | morta                  | T-8 (3 casos)                                     |
+| 10  | volta a ler `error.code` direto             | morta                  | **T-14**                                          |
+
+**As duas sobreviventes eram do índice, e sobreviveram pelo mesmo motivo: o código compensa a forma
+errada.** A M3 é o caso mais instrutivo — este documento previa que a rotação ficaria vermelha, e
+estava **errado**: depois da §6.1 a venda é procurada por `(empresa, identificador)` antes do
+`INSERT`, então a rotação nunca depende do índice. O índice é a rede, e a rede não estava sendo
+testada. **T-12** (mesma venda sob chaves diferentes, medindo o banco) e **T-13** (a forma do índice
+lida de `pg_indexes`, com prova negativa de que `integracao_chave_id` não está na chave) fecharam a
+lacuna.
+
+### 10.4 Os quatro revisores read-only — um P0 achado pelos quatro
+
+Todos leram o HEAD `c860eea` sem executar nada.
+
+#### CORRIGIDO — P0: o `code` do Postgres nunca chegava ao `catch`
+
+Achado pelos quatro, independentemente, e confirmado por mim no `drizzle-orm@0.45.2` instalado.
+`DrizzleQueryError` embrulha toda falha de query, põe o SQL e os parâmetros na mensagem e **não
+copia o `code`** — o erro do `pg` fica em `cause`. Enquanto o serviço lia `error.code` direto:
+
+- os ramos de `55P03`/`40P01` eram **código morto** (defeito **pré-existente**, invisível até aqui);
+- o mapeamento de `23505` que a §6.3 acrescentou **nunca disparava**;
+- **toda** falha de banco na ingestão virava 422 → o agente **descarta** a venda → R-013 violada.
+
+O próprio repositório já resolvia isso em `caixa.service.ts:99-106`. Faltava um lugar só.
+Corrigido com `codigoPostgresDoErro` em [`erros.ts`](../api/src/erros.ts), usada na ingestão **e**
+no handler global — onde o mesmo ramo estava morto para **todas** as rotas.
+
+#### CORRIGIDO — P0: `42P10` descartaria 100% das vendas
+
+Quando o índice parcial **não existe ou está inválido** — migration não aplicada, `CREATE INDEX
+CONCURRENTLY` abortado, rollback fora de ordem — o Postgres levanta `42P10` em **toda** inserção,
+não só nas conflitantes. Ele não estava em ramo nenhum: 422, venda descartada, em silêncio e de
+forma contínua. **Pior que a duplicata que a #41 conserta.** Entrou na família transitória.
+
+#### CORRIGIDO — P2: o corpo do 422 vazava o SQL e os parâmetros
+
+Medido na reexecução dos RED: o corpo levava `Failed query: <INSERT inteiro>\nparams: <…>`, com
+identificador, valores, ids de PDV e de chave — e daí para o log da máquina da loja. Agora a
+mensagem é fixa; o detalhe (**mais a causa**, que antes se perdia) fica no histórico, que é interno.
+
+#### CORRIGIDO — P1/P2 de documentação
+
+O comentário do predicado dizia que divergir "faz o conflito escapar como 23505 cru". Não escapa:
+o Postgres não infere árbitro e levanta `42P10`. E a §9 deste documento afirmava que nada de
+`api/src` fora tocado — três commits depois de ser verdade.
+
+#### EM ABERTO — precisam de decisão do Marco, e nenhum cabe na #41
+
+| #     | Achado                                                                                                                                                                                                                                                                                                                                           | Por que não foi corrigido aqui                                                                                                                                                                                                                                                                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | **Duas chaves ATIVAS na mesma empresa.** Nada impede (`integracoes_chaves` não tem unique de "uma ativa por empresa+tipo"). Com dois CREARE sob a mesma empresa, o mesmo `idVenda` vindo do segundo é tratado como **atualização** do primeiro: a venda da loja 1 é **sobrescrita, com 200**. Antes da #41 eram duas linhas — feio, mas visível. | É a contrapartida da R-175, que este documento não registrou. A correção real é um índice único parcial em `integracoes_chaves (empresa_id, tipo) where ativa` — **migration nova**, fora do escopo autorizado. E "uma empresa pode ter dois agentes CREARE?" é regra de negócio, não decisão técnica. A auditoria de produção (§4-A) mostra que **hoje** não há colisão. |
+| **B** | `vendas.integracao_chave_id` é `on delete set null`. Apagar uma chave tira a venda do índice **e** da busca, em silêncio, reabrindo a duplicata. Não há `delete` de chave na API (só `ativa = false`), mas há em `db/seed.ts:621`.                                                                                                               | Trocar para `on delete restrict` é **migration nova**.                                                                                                                                                                                                                                                                                                                    |
+| **C** | Deploy do índice: `infra/docker-compose.coolify.yml` roda `api:prod:migrate` automático, e a §3 diz que "não existe caminho suportado" para `CONCURRENTLY`. Além disso a sessão de migration **não tem `lock_timeout`** (`db/src/sessao.ts`), então o `CREATE INDEX` espera indefinidamente e enfileira todo escritor de `vendas`.               | É decisão de **deploy**, com runbook próprio — e aplicar migration em produção tem autorização separada.                                                                                                                                                                                                                                                                  |
+
+Sobre o `23505` **não** ser restrito à constraint do índice: foi decisão consciente. Para este
+endpoint, re-tentar de graça é sempre melhor que descartar venda (R-013), e um `23505` permanente
+aparece como 503 repetido no histórico, que é visível.
+
+### 10.5 Gates finais
+
+Preenchido na execução final — ver o relatório autônomo em `D:\Conteudo Sistema Pralis -ago\`.
