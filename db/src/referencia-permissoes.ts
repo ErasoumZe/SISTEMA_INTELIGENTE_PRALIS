@@ -39,6 +39,8 @@ const permissaoAcessoPorTela = {
   fornecedores: "cadastro_fornecedores_visualizar",
   produtos: "cadastro_produtos_visualizar",
   colaboradores: "cadastro_colaboradores_visualizar",
+  // ADM-001. Tela PROPRIA de admissao: nao herda nem concede `cadastro_colaboradores_*`.
+  admissoes_testes: "admissoes_testes_visualizar",
   folha_ponto: "folha_ponto_visualizar",
   avaliacao_qualidade: "avaliacao_qualidade_visualizar",
   avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
@@ -191,7 +193,8 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "perdas_sobras",
       "estoque_produtos",
       "relatorio_dre",
-      "clientes"
+      "clientes",
+      "admissoes_testes"
     ],
     // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
     extras: [
@@ -225,6 +228,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_contas_usuarios_excluir",
       // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
       "lancamentos_recorrencia_criar",
+      // ADM-001: a Gerencia opera o periodo de teste junto com o DP (decisao de Marco).
+      "admissoes_testes_criar",
+      "admissoes_testes_editar",
+      "admissoes_testes_encerrar",
+      "admissoes_testes_cancelar",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -233,8 +241,19 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargo({
-    ativas: ["despesas", "colaboradores", "folha_ponto"],
-    extras: ["despesas_criar", "despesas_discriminar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
+    ativas: ["despesas", "colaboradores", "folha_ponto", "admissoes_testes"],
+    // ADM-001: o DP opera o periodo de teste por inteiro. As quatro acoes sao PROPRIAS da
+    // admissao — `cadastro_colaboradores_*` continua sem abrir nada aqui, e vice-versa.
+    extras: [
+      "despesas_criar",
+      "despesas_discriminar",
+      "cadastro_colaboradores_criar",
+      "cadastro_colaboradores_editar",
+      "admissoes_testes_criar",
+      "admissoes_testes_editar",
+      "admissoes_testes_encerrar",
+      "admissoes_testes_cancelar",
+    ]
   }),
   RH: permissoesDoCargo({
     ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
