@@ -46,12 +46,13 @@ a necessidade.
 | [29](29_RUNBOOK_ROTACAO_ADMIN.md)         | **Runbook do admin (R-162)**   | primeira instalacao, rotacao explicita e prova de que redeploy preserva credencial       |
 | [30](30_PRODUTOS_PRALIS_X_ERP.md)         | **Produtos: Pralis × ERP**     | mapa de campos, o que falta trazer do app antigo e em que ordem                          |
 | [29](29_PLANILHAS_DA_OPERACAO.md)         | **Planilhas da operacao**      | contas reais, taxas de cartao, conciliacao, dominio de producao e 9 regras novas         |
+| [31](31_ADMISSAO_PERIODO_DE_TESTE.md)     | **Admissao: periodo de teste** | ADM-001: empresa derivada, Ativo/Inativo derivado, "excluir" = arquivar, CPF fora de GET   |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **31**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **32**.
 
 ## Regra de ouro deste brain
 
