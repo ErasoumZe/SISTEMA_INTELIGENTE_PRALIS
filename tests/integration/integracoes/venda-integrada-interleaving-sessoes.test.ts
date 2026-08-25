@@ -24,6 +24,7 @@ import {
   abrirBloqueador,
   aindaPendente,
   consultarTodos,
+  consultarUm,
   esperarBloqueioPor,
   fecharBloqueador,
   type ClienteBloqueador
@@ -32,6 +33,7 @@ import {
 const VENDA_ORDEM_AB = "R41-SESSOES-ORDEM-AB";
 const VENDA_ORDEM_BA = "R41-SESSOES-ORDEM-BA";
 const VENDA_PENDENTE = "R41-SESSOES-PERDEDOR-PENDENTE";
+const VENDA_CHAVES_DIFERENTES = "R41-SESSOES-CHAVES-DIFERENTES";
 
 // As colunas obrigatorias de `vendas` (as demais tem default). E o mesmo shape que
 // `criarOuAtualizarVendaIntegradaRepository` monta em `valoresVenda`, reduzido ao que a chave
@@ -178,6 +180,80 @@ describe("#41 · interleaving controlado em duas sessoes independentes", () => {
 
     const linhas = await vendasDe(VENDA_PENDENTE);
     expect(linhas.length, `esperada UMA venda para ${VENDA_PENDENTE}, encontradas ${linhas.length}`).toBe(1);
+  });
+
+  // T-12 · a MESMA venda sob CHAVES DIFERENTES tem de colidir.
+  //
+  // E a rotacao de credencial vista do lado do BANCO. O codigo ja resolve isso antes de chegar ao
+  // INSERT (a venda e procurada por empresa + identificador, sem olhar a chave) — e foi exatamente
+  // por isso que a mutacao "poe integracao_chave_id na chave do indice" SOBREVIVEU a rodada de
+  // mutacoes: nenhum teste pela API a alcancava, porque o servico compensava o indice errado.
+  // Este caso fecha a lacuna medindo o INDICE, nao o servico.
+  it("T-12 · o mesmo identificador sob CHAVES diferentes colide (R-175)", async () => {
+    const outraChave = await consultarUm<{ id: string }>(
+      `insert into integracoes_chaves (empresa_id, tipo, codigo)
+         values ($1, 'vendas', 'R41-SESSOES-CHAVE-2') returning id`,
+      [idsTeste.empresaA]
+    );
+    if (!outraChave) throw new Error("Chave auxiliar nao criada");
+
+    const sessao = await abrirBloqueador();
+    try {
+      await sessao.cliente.query(INSERT_VENDA, [
+        idsTeste.empresaA,
+        idsTeste.integracaoChave,
+        "venda com a chave 1",
+        VENDA_CHAVES_DIFERENTES
+      ]);
+
+      const segunda = await sessao.cliente
+        .query(INSERT_VENDA, [idsTeste.empresaA, outraChave.id, "venda com a chave 2", VENDA_CHAVES_DIFERENTES])
+        .then(
+          () => ({ aceita: true, erro: "" }),
+          (erro: { code?: string }) => ({ aceita: false, erro: erro.code ?? "?" })
+        );
+
+      expect(
+        segunda.aceita,
+        "trocar a chave da integracao NAO pode liberar uma segunda venda com o mesmo identificador — " +
+          "e por isso que integracao_chave_id fica no PREDICADO e nunca na chave do indice (R-175)"
+      ).toBe(false);
+      expect(segunda.erro).toBe("23505");
+    } finally {
+      await fecharBloqueador(sessao);
+    }
+
+    expect((await vendasDe(VENDA_CHAVES_DIFERENTES)).length).toBe(1);
+  });
+
+  // T-13 · a FORMA do indice, lida do catalogo do Postgres.
+  //
+  // Os demais casos medem COMPORTAMENTO, e comportamento pode ser compensado pelo codigo — foi assim
+  // que duas mutacoes de indice sobreviveram. Este prende o indice em si: unicidade, chave, ordem e
+  // predicado. Se alguem mudar a forma, quebra aqui mesmo que a API continue respondendo certo.
+  it("T-13 · o indice e UNICO, PARCIAL e com a chave na ordem certa", async () => {
+    const indice = await consultarUm<{ definicao: string }>(
+      "select indexdef as definicao from pg_indexes where indexname = $1",
+      ["vendas_integracao_identificador_unico_idx"]
+    );
+    expect(indice?.definicao, "o indice da R-175 tem de existir").toBeTruthy();
+
+    const definicao = indice?.definicao ?? "";
+    expect(definicao, "tem de ser UNIQUE").toContain("CREATE UNIQUE INDEX");
+    expect(definicao, "chave = (empresa_id, identificador_externo), nesta ordem").toContain(
+      "(empresa_id, identificador_externo)"
+    );
+    expect(definicao, "tem de ser PARCIAL — sem o WHERE ele indexaria o historico inteiro").toContain("WHERE");
+    expect(definicao, "o predicado precisa exigir integracao_chave_id").toContain("integracao_chave_id IS NOT NULL");
+    expect(definicao, "e tambem identificador_externo").toContain("identificador_externo IS NOT NULL");
+
+    // Prova NEGATIVA: a coluna da chave da integracao nao pode estar na lista de colunas indexadas.
+    const colunasDaChave = definicao.slice(definicao.indexOf("btree ("), definicao.indexOf("WHERE"));
+    expect(
+      colunasDaChave.includes("integracao_chave_id"),
+      "integracao_chave_id vive no PREDICADO, nunca na chave: com ele na chave, trocar a credencial " +
+        "criaria uma tupla nova e a duplicata passaria pelo indice"
+    ).toBe(false);
   });
 
   it("venda de RETAGUARDA continua livre: o indice nao pode alcancar quem nao e da integracao", async () => {
