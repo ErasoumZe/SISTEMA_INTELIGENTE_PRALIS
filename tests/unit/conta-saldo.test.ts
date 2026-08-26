@@ -13,6 +13,7 @@ import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 function totais(parcial: Partial<TotaisContaCentavos> = {}): TotaisContaCentavos {
   return {
     vendas: 0,
+    vendasRoteadas: 0,
     transferenciasEntrada: 0,
     transferenciasSaida: 0,
     despesas: 0,
@@ -23,6 +24,36 @@ function totais(parcial: Partial<TotaisContaCentavos> = {}): TotaisContaCentavos
 }
 
 describe("saldoContaCentavos (D8)", () => {
+  // R-167/R-169 (#152): o pagamento roteado E disponivel soma pelo PROPRIO total_pago.
+  it("credita pagamento roteado disponivel pelo proprio valor, sem rateio", () => {
+    const resumo = totais({ vendasRoteadas: paraCentavos(40) });
+    expect(deCentavos(saldoContaCentavos(paraCentavos(200), resumo))).toBe(240);
+  });
+
+  // O recebivel em aberto NAO chega neste termo — quem o exclui e a consulta (disponivel_em nulo).
+  // O teste fixa a consequencia: uma venda de 100 paga 40 em dinheiro e 60 no cartao credita 40 na
+  // conta do PDV, e nao 100.
+  it("venda dividida credita so a parcela disponivel", () => {
+    const contaDoPdv = totais({ vendasRoteadas: paraCentavos(40) });
+    expect(deCentavos(saldoContaCentavos(0, contaDoPdv))).toBe(40);
+    const contaDeRecebivel = totais({ vendasRoteadas: 0 });
+    expect(deCentavos(saldoContaCentavos(0, contaDeRecebivel))).toBe(0);
+  });
+
+  // O termo novo e SOMA, e nao substituicao: venda de retaguarda (conta_origem_id) continua contando
+  // exatamente como antes, ao lado do roteamento.
+  it("nao substitui o termo antigo de vendas", () => {
+    const resumo = totais({ vendas: paraCentavos(100), vendasRoteadas: paraCentavos(40) });
+    expect(deCentavos(saldoContaCentavos(0, resumo))).toBe(140);
+  });
+
+  // Historico byte a byte: sem pagamento roteado, o saldo e o mesmo numero de antes da #152.
+  it("conta sem roteamento nenhum devolve o saldo historico inalterado", () => {
+    const resumo = totais({ vendas: paraCentavos(100), despesas: paraCentavos(30) });
+    expect(resumo.vendasRoteadas).toBe(0);
+    expect(deCentavos(saldoContaCentavos(paraCentavos(200), resumo))).toBe(270);
+  });
+
   it("R-036 desconta a saida pendente uma vez e nao credita o destino", () => {
     const resumo = totais({ transferenciasSaida: paraCentavos(500), transferenciasPendentes: paraCentavos(500) });
     expect(deCentavos(saldoContaCentavos(paraCentavos(10_000), resumo))).toBe(9_500);

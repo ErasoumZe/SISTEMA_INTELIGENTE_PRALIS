@@ -1,10 +1,10 @@
-import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { contas, contasUsuarios } from "@padaria/db/schema/cadastro";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { transferencias } from "@padaria/db/schema/transferencia";
-import { vendas } from "@padaria/db/schema/venda";
+import { vendas, vendasPagamentos } from "@padaria/db/schema/venda";
 import {
   saldoContaCentavos,
   saldoPendenteContaCentavos,
@@ -174,6 +174,47 @@ export async function saldosDasContasRepository(
     })
     .from(vendas)
     .where(and(inArray(vendas.contaOrigemId, contaIds), eq(vendas.computar, true), ne(vendas.status, "cancelado")));
+  // 6a consulta — R-167/R-169 (#152): pagamento de venda integrada ROTEADO e ja DISPONIVEL.
+  //
+  // A venda integrada nao credita por `conta_origem_id` (ele nasce NULL nela): credita por
+  // PAGAMENTO, e cada pagamento pode ir para uma conta diferente. Por isso e uma consulta propria,
+  // e nao um `or` na consulta de vendas.
+  //
+  // Tres amarras, todas necessarias:
+  //
+  //   `roteamento_status = 'roteado' AND disponivel_em IS NOT NULL`
+  //       so entra no saldo o que ja e GASTAVEL. Recebivel em aberto (cartao, Pix por evento) tem
+  //       `disponivel_em` nulo e fica de fora — existe no financeiro, nao no saldo. E exatamente o
+  //       par que o indice parcial `vendas_pagamentos_conta_final_disponivel_idx` cobre, porque a
+  //       porta de saldo (R-165) le isto A CADA ESCRITA de saida.
+  //
+  //   `contas.empresa_id = vendas.empresa_id`
+  //       o TENANT no proprio SQL. `vendas_pagamentos` nao tem `empresa_id` e a FK de
+  //       `conta_final_id` e simples (so `contas.id`), entao nada no banco impediria um pagamento
+  //       de apontar para conta de outra empresa. O caminho de escrita copia da forma, que ja e da
+  //       empresa da venda — mas o saldo nao pode DEPENDER de o escritor ter feito certo.
+  //
+  //   `vendas.conta_origem_id IS NULL`
+  //       impede DUPLA CONTAGEM de forma estrutural. Se uma venda credita pela via antiga
+  //       (`conta_origem_id`, contada na consulta de vendas acima), ela nao credita de novo aqui.
+  //       Uma venda soma por UM caminho, nunca por dois. Na pratica a venda integrada sempre tem
+  //       `conta_origem_id` nulo; a guarda existe para o dia em que alguem mudar isso sem perceber.
+  const linhasVendasRoteadas = await db
+    .select({ contaFinalId: vendasPagamentos.contaFinalId, totalPago: vendasPagamentos.totalPago })
+    .from(vendasPagamentos)
+    .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+    .innerJoin(contas, eq(contas.id, vendasPagamentos.contaFinalId))
+    .where(
+      and(
+        inArray(vendasPagamentos.contaFinalId, contaIds),
+        eq(vendasPagamentos.roteamentoStatus, "roteado"),
+        isNotNull(vendasPagamentos.disponivelEm),
+        eq(contas.empresaId, vendas.empresaId),
+        isNull(vendas.contaOrigemId),
+        eq(vendas.computar, true),
+        ne(vendas.status, "cancelado")
+      )
+    );
   // Transferencia nao filtra por contaIds: ela toca DUAS contas e a origem pode estar fora do
   // escopo (cofre de outra empresa mandando para esta). O acumulador ignora conta desconhecida.
   const linhasTransferencias = await db
@@ -225,6 +266,7 @@ export async function saldosDasContasRepository(
       id,
       {
         vendas: 0,
+        vendasRoteadas: 0,
         transferenciasEntrada: 0,
         transferenciasSaida: 0,
         transferenciasPendentes: 0,
@@ -241,6 +283,10 @@ export async function saldosDasContasRepository(
   };
 
   for (const linha of linhasVendas) acumular(linha.contaOrigemId, "vendas", liquidoCentavos(linha));
+  // Pelo PROPRIO `total_pago`, sem rateio e sem arredondamento: a soma dos pagamentos ja foi
+  // obrigada a bater com o liquido da venda na ingestao (R-173).
+  for (const linha of linhasVendasRoteadas)
+    acumular(linha.contaFinalId, "vendasRoteadas", paraCentavos(linha.totalPago));
   for (const linha of linhasTransferencias) {
     const valor = paraCentavos(linha.valorOriginal);
     if (transferenciaContaComoEntrada(linha.status)) acumular(linha.contaDestinoId, "transferenciasEntrada", valor);
@@ -326,6 +372,7 @@ async function saldosComPendenciaDasContasRepository(empresasPermitidasIds: stri
         pendente: deCentavos(
           saldoPendenteContaCentavos({
             vendas: 0,
+            vendasRoteadas: 0,
             transferenciasEntrada: 0,
             transferenciasSaida: pendentes.get(id) ?? 0,
             transferenciasPendentes: pendentes.get(id) ?? 0,
