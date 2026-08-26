@@ -119,10 +119,20 @@ acesso** chamado PADEIRO, e toda regra de permissão por cargo passaria a enxerg
 | Pergunta | Responde | Tabela |
 | --- | --- | --- |
 | o que a pessoa **pode ver** | cargo de acesso | `cargos` → `permissoes_cargos` |
-| o que a pessoa **faz** | função operacional | `admissoes_funcoes` |
+| o que a pessoa **faz** | função operacional | `funcoes_operacionais` |
 
-`admissoes_funcoes` é por empresa, com nome, **CBO opcional** e ativo/inativo. Não se liga a
-`permissoes_cargos`, `permissoes_setores` nem `colaboradores_cargos`.
+`funcoes_operacionais` é por empresa, com nome, **CBO opcional**, ativo/inativo e auditoria. Não se
+liga a `cargos`, `permissoes_cargos`, `permissoes_setores` nem `colaboradores_cargos`.
+
+**O catálogo não pertence a Admissões** — decisão de Marco em 26/08/2026. Ele nasceu aqui, mas a
+pergunta que responde é a mesma que o cadastro de colaboradores vai fazer. Por isso o nome não leva
+prefixo de módulo e a tabela sai por `@padaria/db/schema/cadastro`, ao lado de `cargos`: é lado a
+lado que a diferença fica visível.
+
+Mantido `admissoes_funcoes`, o nome convidaria uma **segunda** lista de funções no dia em que o
+cadastro precisasse dela — e duas listas para a mesma pergunta é o defeito que a regra-mãe proíbe.
+
+`admissoes_testes.funcao_id` **não mudou**. O que mudou foi o dono do catálogo, não a referência.
 
 - **CBO é opcional** porque nem sempre é conhecido no momento do teste, e recusar a função por falta
   dele travaria o DP num dado que não muda a decisão. Na planilha o CBO é *derivado* do cargo por
@@ -153,9 +163,10 @@ contratuais, planilha, contabilidade, efetivação e qualquer escrita em `colabo
   padrão de `vendas_comprovantes`), mas **antimalware não existe no sistema hoje**.
 - Catálogo de jornada (D-6). A planilha mostrou uma lista de 3 valores (`TAG1TURNO`), mas ela é
   **etiqueta de turno**, não jornada completa — não fecha a decisão.
-- Quem administra o catálogo de `admissoes_funcoes`: não há tela de manutenção nesta vertical. A
-  carga inicial da TNP vai por SQL revisado.
-- Se a função operacional deve ser promovida a catálogo compartilhado quando a vertical de cadastro
-  de colaboradores precisar da mesma lista. Hoje ela pertence a Admissões. **Decisão de Marco** —
-  a alternativa é uma segunda lista de funções, que é o defeito que a regra-mãe proíbe.
+- Quem administra o catálogo de `funcoes_operacionais`: **não há tela de manutenção em lugar
+  nenhum**. Nem em Admissões, nem no cadastro. Hoje só dá para povoar por SQL, e a carga inicial da
+  TNP depende disso. Como o catálogo agora é compartilhado, a tela pertence ao cadastro — não a esta
+  vertical.
+- Permissão de quem edita o catálogo: `admissoes_testes_visualizar` abre a **leitura** pelo seletor
+  do formulário. Escrever ainda não tem permissão definida, porque não há escrita.
 - Momento e regra da efetivação, recontratação e CPF já existente como colaborador.
