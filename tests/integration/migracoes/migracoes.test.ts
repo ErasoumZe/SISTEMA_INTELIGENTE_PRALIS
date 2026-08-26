@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { consultarTodos, consultarUm } from "../../setup/integracao.js";
+import { consultarTodos } from "../../setup/integracao.js";
+import { lerTriggersManuais } from "@padaria/db/triggers-manuais";
 
 const raizRepositorio = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -14,6 +16,50 @@ const journalMigracoes = JSON.parse(
   readFileSync(new URL("../../../db/migrations/meta/_journal.json", import.meta.url), "utf8")
 ) as { entries: unknown[] };
 const totalMigracoesEsperado = journalMigracoes.entries.length;
+
+// --- triggers de `atualizado_em` ----------------------------------------------------------------
+//
+// O conjunto esperado e DERIVADO das migrations, nao digitado. Um numero fixo aqui envelhece a cada
+// tabela nova: era `21`, virou mentira quando a 0032 e a 0033 entraram, e o gate so acusou muito
+// depois do commit.
+//
+// Duas origens, e o teste precisa cobrir as duas:
+//   - a 0002 instala percorrendo um ARRAY LITERAL de nomes de tabela;
+//   - toda tabela criada DEPOIS precisa do `create trigger` escrito a mao na propria migration, porque
+//     a 0002 nao volta atras. Foi assim na 0032 (funcoes_operacionais, admissoes_testes) e na 0033
+//     (admissoes_processos).
+//
+// A segunda metade vem de `lerTriggersManuais`, o MESMO modulo que o provisionamento de dev e o de
+// Testcontainers usam para instalar. Se o teste tivesse a propria varredura, ele poderia passar
+// concordando consigo mesmo enquanto o provisionamento instalava outra coisa.
+const dirMigracoes = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+
+function tabelasDoArrayDa0002(): string[] {
+  const sql = readFileSync(join(dirMigracoes, "0002_hardening_atualizado_em.sql"), "utf8");
+  const inicio = sql.indexOf("array array[");
+  const fim = sql.indexOf("] loop", inicio);
+  if (inicio < 0 || fim < 0) throw new Error("bloco de tabelas da 0002 nao encontrado");
+  return [...sql.slice(inicio, fim).matchAll(/'([a-z_]+)'/g)].map((achado) => achado[1] ?? "");
+}
+
+// Tabelas que TEM a coluna `atualizado_em` e NAO tem o trigger. Nao e o estado desejado — e o estado
+// real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
+// quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
+const semTriggerConhecidas = ["maquininhas", "notas_fiscais", "pedidos", "turnos"];
+
+const sqlTabelasComTrigger = `
+  select distinct event_object_table as tabela
+  from information_schema.triggers
+  where trigger_name like '%set_atualizado_em'
+  order by 1
+`;
+
+const sqlTabelasComColuna = `
+  select table_name as tabela
+  from information_schema.columns
+  where table_schema = 'public' and column_name = 'atualizado_em'
+  order by 1
+`;
 
 const sqlColunas = `
   select table_name, column_name, data_type, is_nullable, coalesce(column_default, '') as column_default
@@ -159,20 +205,43 @@ describe("migracoes integration", () => {
   });
 
   it("Deve_CriarTriggersDeAtualizadoEm_Quando_ProvisionarViaMigrate", async () => {
-    const { rows } = await bancoMigrado.query<{ total: number }>(
-      `select count(distinct event_object_table)::int as total
-       from information_schema.triggers
-       where trigger_name like '%set_atualizado_em'`
+    const aMao = lerTriggersManuais();
+
+    // O nome do trigger CARREGA o nome da tabela. Nao e cosmetico: a consulta acha os triggers por
+    // `like '%set_atualizado_em'`, entao um nome fora da convencao some do gate sem quebrar nada.
+    for (const { arquivo, nome, tabela } of aMao) {
+      expect(nome, arquivo).toBe(`${tabela}_set_atualizado_em`);
+    }
+
+    // Nomeadas de proposito, e nao so contadas: se a 0032 ou a 0033 perderem o bloco de trigger, o
+    // teste diz QUAL tabela ficou sem — a 0002 nao cobre nenhuma das tres.
+    expect(aMao.map((achado) => achado.tabela).sort()).toEqual([
+      "admissoes_processos",
+      "admissoes_testes",
+      "funcoes_operacionais"
+    ]);
+
+    const esperadas = [...new Set([...tabelasDoArrayDa0002(), ...aMao.map((achado) => achado.tabela)])].sort();
+
+    const comTriggerMigrate = (await bancoMigrado.query<{ tabela: string }>(sqlTabelasComTrigger)).rows.map(
+      (linha) => linha.tabela
     );
-    expect(rows[0]?.total).toBe(21);
+    // Igualdade de CONJUNTO, nos dois sentidos: acusa tanto o trigger que a migration prometeu e nao
+    // criou quanto o que existe no banco sem migration nenhuma pedindo.
+    expect(comTriggerMigrate).toEqual(esperadas);
 
     // O banco global (push + aplicacao pos-push) precisa ter as mesmas triggers.
-    const triggersPush = await consultarUm<{ total: number }>(
-      `select count(distinct event_object_table)::int as total
-       from information_schema.triggers
-       where trigger_name like '%set_atualizado_em'`
+    const comTriggerPush = (await consultarTodos<{ tabela: string }>(sqlTabelasComTrigger)).map(
+      (linha) => linha.tabela
     );
-    expect(triggersPush?.total).toBe(21);
+    expect(comTriggerPush).toEqual(esperadas);
+
+    // A coluna sem o trigger e o defeito silencioso: `atualizado_em` fica parada e ninguem percebe.
+    // A lista de excecoes conhecidas esta declarada em `semTriggerConhecidas` — a quinta quebra aqui.
+    const comColuna = (await bancoMigrado.query<{ tabela: string }>(sqlTabelasComColuna)).rows.map(
+      (linha) => linha.tabela
+    );
+    expect(comColuna.filter((tabela) => !esperadas.includes(tabela))).toEqual(semTriggerConhecidas);
   });
 
   it("Deve_AtualizarAtualizadoEm_Quando_EditarRegistro", async () => {

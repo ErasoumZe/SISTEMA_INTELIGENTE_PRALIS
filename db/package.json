@@ -83,6 +83,11 @@
       "types": "./dist/src/sessao.d.ts",
       "development": "./src/sessao.ts",
       "default": "./dist/src/sessao.js"
+    },
+    "./triggers-manuais": {
+      "types": "./dist/triggers-manuais.d.ts",
+      "development": "./triggers-manuais.ts",
+      "default": "./dist/triggers-manuais.js"
     }
   },
   "scripts": {

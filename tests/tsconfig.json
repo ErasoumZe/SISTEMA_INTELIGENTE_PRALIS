@@ -7,6 +7,7 @@
       "@padaria/api/*": ["api/src/*.ts"],
       "@padaria/shared": ["shared/src/index.ts"],
       "@padaria/shared/*": ["shared/src/*/index.ts"],
+      "@padaria/db/triggers-manuais": ["db/triggers-manuais.ts"],
       "@padaria/db/schema": ["db/src/schema/index.ts"],
       "@padaria/db/schema/admissoes": ["db/src/schema/admissoes/admissoes.schema.ts"],
       "@padaria/db/schema/autenticacao": ["db/src/schema/autenticacao/autenticacao.schema.ts"],
