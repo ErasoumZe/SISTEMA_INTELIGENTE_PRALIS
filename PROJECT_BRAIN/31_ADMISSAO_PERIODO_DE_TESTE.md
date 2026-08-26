@@ -5,7 +5,7 @@
 
 ## O que é, em uma linha
 
-O DP registra um período de teste combinado com uma pessoa — nome, CPF, cargo, jornada, início e fim
+O DP registra um período de teste combinado com uma pessoa — nome, CPF, **função**, jornada, início e fim
 — e decide o desfecho na mão. O sistema mostra o prazo passar e **nunca** age sozinho.
 
 ## A fronteira que sustenta o módulo
@@ -97,11 +97,48 @@ reutiliza `turnos` nem se inventa catálogo.
 **DP** e **Gerência** recebem as cinco permissões. O administrador é o *role* `usuario_admin`, que já
 recebe qualquer permissão nova do catálogo por `permissoesAcessoTotal` — não há o que conceder.
 
-**Não existe cargo "ADM" no Pralis.** Os dez cargos reais são Caixa, Tesouraria, Gerencia, Compras,
+**Não existe cargo "ADM" no Pralis.** Os dez cargos de **acesso** reais são Caixa, Tesouraria, Gerencia, Compras,
 DP, RH, Fiscal, Diretor de Operacoes, Diretor Geral e Financeiro.
 
 `encerrar` é permissão **própria**, e não um caso de `editar`: encerrar exige resultado e é terminal.
 Quem corrige um erro de digitação não é necessariamente quem decide o desfecho.
+
+### D-8 · Função operacional não é cargo de acesso
+
+> Corrigido em 26/08/2026, depois da extração da planilha (issue #162). **É um P0.**
+
+A primeira versão apontava `admissoes_testes.cargo_id` para `cargos`. Isso estava errado, e a
+extração deixou o erro visível: a planilha do RH usa "cargo" para **função operacional** — 31 valores
+como PADEIRO, BALCONISTA, FAXINEIRO — enquanto `cargos` no Pralis é catálogo de **acesso**. Ele é a
+chave primária de `permissoes_cargos`, e seus dez valores são Caixa, Tesouraria, Gerencia, Compras,
+DP, RH, Fiscal, Diretor de Operacoes, Diretor Geral e Financeiro.
+
+A consequência prática: registrar um período de teste de PADEIRO exigiria criar um **cargo de
+acesso** chamado PADEIRO, e toda regra de permissão por cargo passaria a enxergá-lo.
+
+| Pergunta | Responde | Tabela |
+| --- | --- | --- |
+| o que a pessoa **pode ver** | cargo de acesso | `cargos` → `permissoes_cargos` |
+| o que a pessoa **faz** | função operacional | `admissoes_funcoes` |
+
+`admissoes_funcoes` é por empresa, com nome, **CBO opcional** e ativo/inativo. Não se liga a
+`permissoes_cargos`, `permissoes_setores` nem `colaboradores_cargos`.
+
+- **CBO é opcional** porque nem sempre é conhecido no momento do teste, e recusar a função por falta
+  dele travaria o DP num dado que não muda a decisão. Na planilha o CBO é *derivado* do cargo por
+  script; aqui é atributo da função — o mesmo dado, sem o gatilho.
+- **Desativar, não excluir.** Tira a função das escolhas novas sem quebrar teste antigo que aponta
+  para ela. Mesma razão do D-3. Editar um teste antigo mantendo a função já gravada é permitido
+  mesmo se ela foi desativada depois; **trocar para** uma inativa, não.
+- **A tabela nasce vazia.** As 31 funções extraídas são evidência sanitizada, não carga. Povoar é
+  decisão de quem opera, por SQL revisado — nunca por seed automático.
+
+Efeito colateral: `unique("cargos_id_empresa_unica")`, que existia só como alvo da FK composta,
+**saiu**. Com a referência trocada, a ADM-001 não toca nenhuma tabela existente — o diff da vertical
+virou puramente aditivo.
+
+**Setor e área ficam de fora desta entrega**, e não vão para `permissoes_setores`: importar 33
+setores operacionais numa tabela de permissão é decisão de segurança, não de cadastro.
 
 ## Fora desta vertical
 
@@ -114,5 +151,11 @@ contratuais, planilha, contabilidade, efetivação e qualquer escrita em `colabo
   fechar tamanho máximo, quem acessa, retenção, descarte e antivírus. **Nada foi implementado** — nem
   campo, nem upload, nem storage. A infraestrutura de arquivo já existe (`@fastify/multipart` e o
   padrão de `vendas_comprovantes`), mas **antimalware não existe no sistema hoje**.
-- Catálogo de jornada (D-6).
+- Catálogo de jornada (D-6). A planilha mostrou uma lista de 3 valores (`TAG1TURNO`), mas ela é
+  **etiqueta de turno**, não jornada completa — não fecha a decisão.
+- Quem administra o catálogo de `admissoes_funcoes`: não há tela de manutenção nesta vertical. A
+  carga inicial da TNP vai por SQL revisado.
+- Se a função operacional deve ser promovida a catálogo compartilhado quando a vertical de cadastro
+  de colaboradores precisar da mesma lista. Hoje ela pertence a Admissões. **Decisão de Marco** —
+  a alternativa é uma segunda lista de funções, que é o defeito que a regra-mãe proíbe.
 - Momento e regra da efetivação, recontratação e CPF já existente como colaborador.
