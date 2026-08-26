@@ -13,7 +13,7 @@ export async function registrarRotasRoteamento(app: FastifyInstance): Promise<vo
   // configurar; quem cuida do dinheiro ve quanto esta parado. Cada metade atras da sua permissao.
   app.get(
     "/api/roteamento/pendencias",
-    { preHandler: exigirAlgumaPermissao(["cadastro_formas_pagamento_roteamento", "entradas_visualizar"]) },
+    { preHandler: exigirAlgumaPermissao(["cadastro_formas_pagamento_roteamento", "relatorio_vendas_visualizar"]) },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {
@@ -23,9 +23,14 @@ export async function registrarRotasRoteamento(app: FastifyInstance): Promise<vo
         );
         const pendencias = await listarPendenciasRoteamento(escopo, {
           podeConfigurar: temPermissao(request.perfilUsuario?.permissoes, "cadastro_formas_pagamento_roteamento"),
-          // Faturamento agregado exige permissao FINANCEIRA. Quem so tem a permissao cadastral de
-          // roteamento e configurador: ve o que falta configurar, nunca quanto a loja vendeu.
-          podeVerFinanceiro: temPermissao(request.perfilUsuario?.permissoes, "entradas_visualizar")
+          // `relatorio_vendas_visualizar`, e NAO `entradas_visualizar`. A diferenca e grande: quem tem
+          // `entradas_visualizar` e o OPERADOR DE CAIXA, e a permissao dele vem acompanhada de
+          // `menu_entradas_somente_caixa_aberto` — em `GET /api/vendas` o servidor o prende ao dia
+          // contabil do caixa que ele tem aberto. Esta rota nao tem esse recorte, entao usar a mesma
+          // permissao aqui entregaria a ele o faturamento pendente da EMPRESA INTEIRA, de todos os
+          // PDVs e de todos os dias, numa tela que ele ja abre. E o que o doc 32 §13 mandou desde o
+          // inicio: o valor fica atras da permissao de relatorio de vendas.
+          podeVerFinanceiro: temPermissao(request.perfilUsuario?.permissoes, "relatorio_vendas_visualizar")
         });
         return ok(pendencias);
       } catch (error) {

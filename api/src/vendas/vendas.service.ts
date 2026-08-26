@@ -21,9 +21,9 @@ import {
   criarVendaRepository,
   listarVendasRepository,
   totaisVendasRepository,
+  assinaturaDoPagamento,
   vendaEhIntegradaRepository
 } from "./vendas.repository.js";
-import { paraCentavos } from "@padaria/shared/dinheiro";
 import { proibido } from "../erros.js";
 import {
   resolverComputarLancamento,
@@ -88,7 +88,7 @@ function assinaturaPagamentos(
   pagamentos: ReadonlyArray<{ formaPagamentoId?: string | null | undefined; totalPago: number | string }>
 ): string {
   return pagamentos
-    .map((pagamento) => `${pagamento.formaPagamentoId ?? "-"}|${paraCentavos(pagamento.totalPago)}`)
+    .map((pagamento) => assinaturaDoPagamento(pagamento.formaPagamentoId ?? null, pagamento.totalPago))
     .sort()
     .join(";");
 }
@@ -123,21 +123,19 @@ export async function atualizarVenda(
   return executarEmTransacao(async (tx) => {
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarVendaDetalheRepository(vendaId, tx);
-    // R-177 ANTES da validacao de caixa, e a ordem e de MENSAGEM, nao de seguranca: "venda integrada
-    // nao tem pagamento editado pela retaguarda" e a razao verdadeira da recusa. Deixar a validacao
-    // de caixa responder primeiro devolveria "nao pertence ao seu caixa aberto", que manda o operador
-    // procurar o problema no lugar errado.
+
+    // TENANT PRIMEIRO, e a R-177 SO DEPOIS DA TRAVA. As duas coisas juntas fecham o oraculo:
+    // `buscarVendaDetalheRepository` filtra so por `vendas.id`, entao se a recusa da R-177 respondesse
+    // antes da checagem de empresa ela confirmaria, para um id de outra empresa, que o registro
+    // existe, que e integrado e que os pagamentos diferem do enviado. Registro alheio tem de
+    // continuar indistinguivel de registro inexistente.
     //
-    // Nao mexe na ordem de LOCKS (P0 lancamento x fechamento): esta checagem nao trava nada — le a
-    // previa que ja foi buscada e compara com o payload. E uma venda integrada nao deixa de ser
-    // integrada por concorrencia.
-    //
-    // Nao e funcao sendo retirada: o proximo reenvio do CREARE ja sobrescreve a venda e reinsere os
-    // pagamentos, entao essa edicao NUNCA sobreviveu — hoje, antes do roteamento. Com roteamento ela
-    // passaria a apagar o credito em silencio.
-    if (previa && (await vendaEhIntegradaRepository(vendaId, tx))) {
-      recusarEdicaoFinanceiraDeVendaIntegrada(previa, dados);
+    // O preco e de mensagem: quem editar venda de caixa alheio recebe primeiro "nao pertence ao seu
+    // caixa aberto". Correcao vale mais que mensagem.
+    if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId) || previa.empresaId !== dados.empresaId) {
+      throw new Error("Registro nao encontrado");
     }
+
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da venda.
     const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
     if (!(await travarVendaRepository(vendaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
@@ -146,9 +144,24 @@ export async function atualizarVenda(
     // retomar o lock do caixa.
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
+
+    // R-177 sobre o estado RECEM-LIDO, sob a trava — nunca sobre o retrato pre-lock. Um reenvio do
+    // CREARE que commite na janela entre a leitura e o lock reescreve os pagamentos, e um payload que
+    // batia com o retrato antigo passaria a divergir dos atuais. O bit "e integrada" nao muda por
+    // concorrencia; a COMPARACAO muda, e e ela que a regra protege.
+    const vendaIntegrada = await vendaEhIntegradaRepository(vendaId, tx);
+    if (vendaIntegrada && existente) recusarEdicaoFinanceiraDeVendaIntegrada(existente, dados);
+
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
-    await atualizarVendaRepository(vendaId, normalizados, computar, tx);
+    // P0 (#152): em venda integrada os pagamentos NAO sao apagados e recriados. O delete+insert fazia
+    // as linhas renascerem no DEFAULT `nao_aplicavel`, o credito sumia da conta e — pior — a venda
+    // passava a ser lida como historica, entao nenhum reenvio a rotearia de novo. Perda permanente,
+    // silenciosa, por um PUT que a R-177 PERMITE (editar so a observacao).
+    //
+    // A guarda acima ja garantiu que os pagamentos do payload sao os mesmos que estao gravados, entao
+    // nao ha o que reescrever: preservar e a operacao correta, nao um contorno.
+    await atualizarVendaRepository(vendaId, normalizados, computar, tx, { preservarPagamentos: vendaIntegrada });
     return { id: vendaId, computar };
   });
 }

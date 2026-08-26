@@ -70,13 +70,14 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
     expect(json<{ code?: string }>(resposta).code).toBe("INSUFFICIENT_PERMISSION");
   });
 
-  it("o caixa ve o dinheiro pendente, mas NAO a lista de configuracao", async () => {
+  // O operador de CAIXA nao entra. `entradas_visualizar` vem com `somente_caixa_aberto`, e em
+  // `GET /api/vendas` o servidor o prende ao dia do caixa dele. Esta rota nao tem esse recorte, entao
+  // liberar por `entradas_visualizar` entregaria a ele o faturamento pendente da empresa inteira, de
+  // todos os PDVs e de todos os dias.
+  it("o operador de caixa NAO ve o faturamento pendente da empresa", async () => {
     const resposta = await pendencias(cookieCaixa);
-    assertOk(resposta);
-    const dados = json<{ data: Pendencias }>(resposta).data;
-    // `null` diz "voce nao ve isto"; lista vazia diria "nao ha nada". A diferenca importa na tela.
-    expect(dados.formasSemRoteamento, "configurar roteamento nao e trabalho do caixa").toBeNull();
-    expect(dados.vendasPendentes, "o caixa ve entradas, entao ve o que ficou pendente").not.toBeNull();
+    expect(resposta.statusCode, resposta.body).toBe(403);
+    expect(json<{ code?: string }>(resposta).code).toBe("INSUFFICIENT_PERMISSION");
   });
 
   it("a pendencia aparece de verdade quando uma venda fica sem roteamento", async () => {
