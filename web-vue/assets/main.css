@@ -2381,24 +2381,37 @@ body {
 }
 /* ===================== FIM SHELL-01 ===================== */
 
-/* ===================== INICIO SHELL-02 — ALVO DE TOQUE DO BOTAO DE MENU (26/08/2026) =====================
+/* ===================== INICIO SHELL-02 — TRAVA DE ALVO DE TOQUE DO BOTAO DE MENU (26/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   Defeito: a regra S2 do bloco RESPONSIVIDADE OFICIAL (linha ~1286) mira
-   `.padaria-topbar > .v-btn`, mas o botao de abrir menu nao e filho da topbar — ele
-   vive dentro de `.topbar-left` (AppShell.vue:265-266), entao o combinador `>` nao
-   casa e a regra nunca pintou ninguem. Na pratica o botao caia na regra global
-   `.v-btn--icon` (linha ~2305), que garante 40px: passa o minimo geral do 67 §9, mas
-   reprova os 44px que o 67 §13.4 exige no mobile.
-
-   Conserto: mirar exclusivamente o `v-btn` filho de `.topbar-left` dentro do mesmo
-   limiar de <=768px. `min-*` e piso, nao teto: nada encolhe, so deixa de poder ficar
-   abaixo de 44x44.
-
-   Por que aqui e nao na linha 1286: o bloco RESPONSIVIDADE OFICIAL e historico e
-   congelado (67 §13), e regra nova de aparencia entra no fim do arquivo (67 §13.8).
-   O seletor morto do S2 continua la, inerte; remove-lo e limpeza de bloco congelado
-   e pede issue propria.
+   LEIA ANTES DE MEXER: isto e uma TRAVA, nao um conserto. Hoje nao muda um pixel.
+   O botao de abrir menu (AppShell.vue:265) e um `v-btn` com `icon`, sem `size` e sem
+   `density`, entao cai nos padroes do Vuetify 3.12.8. Em
+   node_modules/vuetify/lib/components/VBtn/VBtn.css:
+     .v-btn--size-default                 --v-btn-height: 36px                      (l. 45)
+     .v-btn--icon.v-btn--density-default  width/height: calc(--v-btn-height + 12px) (l. 189)
+   36 + 12 = 48. O nuxt.config.ts nao mexe em `density` do VBtn, so em `rounded`.
+   MEDIDO por Marco no inspetor em 26/08/2026, a 390px: 48 x 48, nome "Abrir menu",
+   role button, focavel por teclado. O minimo de 44px do 67 §13.4 ja estava cumprido —
+   e sempre esteve. `min-*` e piso: um piso de 44 sob um elemento de 48 nunca encosta.
+   Entao para que serve: para o dia em que alguem puser `density="compact"` no botao,
+   trocar o `size`, ou o Vuetify mudar o padrao numa atualizacao. Qualquer um dos tres
+   derruba os 48px em silencio.
+   E o terceiro pode chegar SOZINHO: web-vue/package.json declara `"vuetify": "^3.11.3"` —
+   faixa com caret. Um `npm install` sobe a minor e pode mover o padrao sem ninguem editar
+   uma linha de codigo. E o cenario concreto que esta trava protege.
+   Existe precedente para prender isso em teste — tests/e2e/produtos-formulario.spec.ts:216-226
+   ja mede alvo de toque e reprova abaixo de 44px, citando o 67 §13.3. O que nao existe e
+   assercao cobrindo ESTE botao. Enquanto nao existir, a trava e o que resta.
+   A trava segura em 44 e o 67 §13.4 continua valendo.
+   A primeira versao deste comentario afirmava que o botao "reprovava os 44px". Era
+   falso, e a medicao provou. Foi corrigido em vez de apagado porque comentario que
+   mente ja custou caro aqui — ver o cabecalho de web-vue/utils/cores-categoria.ts.
+   Vizinhanca: o seletor S2 do bloco RESPONSIVIDADE OFICIAL (linha ~1286) mira
+   `.padaria-topbar > .v-btn` e esta MORTO, porque o botao e neto da topbar e o `>`
+   nao casa. Continua la porque aquele bloco e historico e congelado (67 §13).
+   Remove-lo e o SHELL-06, que tem de ir declaracao por declaracao: a metade
+   `.topbar-page-id` da S3 (1295-1300) esta VIVA e e a unica fonte do ellipsis do
+   titulo no mobile.
    ========================================================================================================= */
 @media (width <= 768px) {
   .shell-mobills .topbar-left > .v-btn {
