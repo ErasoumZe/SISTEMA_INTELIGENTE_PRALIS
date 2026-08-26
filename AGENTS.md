@@ -17,8 +17,12 @@ Engineer. Isso significa, na prática:
   é seu trabalho ver antes.
 - Você **questiona o pedido** quando ele conflita com o que já existe, em vez de executar cego.
 
-O José decide regra de negócio (junto com o Rodrigo, dono da padaria) e aprova merges.
-Você executa e é responsável pela **qualidade técnica** do que entrega.
+No módulo **Caixa**, Marco é o responsável atual pela execução e pelo encerramento técnico. Ele
+coordena implementação, revisão, push, PR e decide/executa o merge quando o HEAD revisado estiver
+com os gates verdes e zero P0/P1. José não é mais executor, revisor ou gate obrigatório do Caixa.
+Rodrigo continua sendo a fonte das regras operacionais e financeiras ainda não documentadas.
+Deploy, migration em produção, alteração histórica, segredo e mudança de fórmula financeira
+continuam com autorização própria e nunca são consequência automática do merge.
 
 ## 2. O projeto em 5 linhas
 
@@ -100,37 +104,43 @@ negócio. Sem informação → **pergunte**.
    **diga isso** — não entregue "pronto".
 5. **Rode `lint` + `check` + testes** no fim (não a cada edição).
 6. **Reporte com honestidade**: o que ficou pronto, o que não ficou, o que você decidiu e por quê,
-   e o que precisa de decisão do José.
+   e o que ainda precisa de decisão de Marco ou de confirmação operacional do Rodrigo.
 
 ### 5.1 Execução paralela vigente (issue #104)
 
-- A fila atual é somente de **Marco e José**; Kaylane não participa desta rodada.
+- A fila atual do **Caixa** é executada por **Marco**. José não participa como executor ou gate
+  obrigatório; Kaylane não participa desta rodada.
 - A issue-mestra **#136** define a ordem de execução. Cada pessoa trabalha em uma issue e uma
   branch por vez, sempre a partir da base confirmada e nunca diretamente na `main`.
-- Marco e José não alteram os mesmos arquivos na mesma janela sem coordenação prévia.
+- Se outra pessoa atuar em módulo ou branch paralela, ela não altera os mesmos arquivos da janela
+  de Marco sem coordenação prévia.
 - O Claude principal é o único escritor da entrega; agentes de revisão trabalham somente em
   leitura.
 - Cada entrega termina com `lint`, `check`, testes proporcionais ao risco, relatório autônomo e
   revisão antes de qualquer publicação.
-- **Push, PR, merge e deploy são autorizações separadas.** José decide merge e deploy.
+- **Push, PR, merge e deploy são atos separados.** Marco pode executar push, PR e merge das
+  entregas do Caixa após revisão do HEAD, gates verdes e zero P0/P1. Deploy continua exigindo
+  autorização própria.
 - Migration, fórmula de dinheiro, alteração de dados históricos ou regra de negócio ausente
-  interrompem a execução para decisão de José/Rodrigo.
+  interrompem a execução para decisão de Marco e, quando operacional/financeira, confirmação de
+  Rodrigo.
 
-## 6. Preferências operacionais do José
+## 6. Preferências operacionais vigentes
 
 - Não altere/recrie/gere migrations sem pedido explícito.
 - Não rode builds durante o ciclo de edição — só quando pedido ou no fechamento.
 - Testes no final de todas as edições, não a cada alteração pequena.
 - Antes de validar, prefira checks pontuais e leitura de código; validação pesada no fechamento.
-- **NÃO MERGEIE.** O José testa local e decide o deploy para produção.
+- No Caixa, Marco só faz merge depois de revisar o HEAD exato, obter gates verdes e zerar P0/P1.
+  Merge não autoriza deploy em produção.
 - Branches sem acento no nome.
 
-## 7. Como falar com o José
+## 7. Como reportar o trabalho
 
 - **Português**, direto, sem enrolação.
 - Não diga "pronto" se não estiver — diga o que falta.
 - Traga **números e caminhos de arquivo**, não impressões ("4 lugares abrem caixa: A, B, C, D" é
   útil; "acho que tem duplicidade" não é).
 - Quando errar, diga o que errou e como corrige. Sem rodeios e sem se desculpar em excesso.
-- Quando discordar da instrução, **fale** — com o argumento técnico. Ele quer uma equipe sênior,
-  não um executor.
+- Quando discordar da instrução, **fale** — com o argumento técnico. Marco precisa de uma equipe
+  sênior, não de um executor silencioso.

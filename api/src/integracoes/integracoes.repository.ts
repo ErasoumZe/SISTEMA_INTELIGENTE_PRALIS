@@ -1,5 +1,5 @@
 import type { DadosExternos } from "@padaria/shared/api";
-import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sum, type SQL } from "drizzle-orm";
 import {
   clientes,
   contas,
@@ -422,6 +422,42 @@ export async function buscarRegistroIntegracaoRepository(
   return registro ?? null;
 }
 
+/**
+ * A venda integrada pela MESMA chave do indice unico parcial da R-175:
+ * `(empresa_id, identificador_externo) where integracao_chave_id is not null`.
+ *
+ * POR QUE ISTO EXISTE, se `buscarRegistroIntegracaoRepository` ja responde "ja recebi esta venda?":
+ * porque o registro e escopado por `integracao_chave_id` (unique
+ * `integracoes_registros_externo_unico`). Depois de uma TROCA DE CREDENCIAL o registro da chave
+ * antiga nao e encontrado, `registro` volta nulo e o servico tomava o caminho de INSERT para uma
+ * venda que JA EXISTE — duplicata sequencial, sem corrida nenhuma.
+ *
+ * Ao decidir criar-ou-atualizar pela mesma chave que o BANCO usa para recusar duplicata, os dois
+ * lados passam a concordar: o que o indice barra, o codigo ja resolveu antes de tentar.
+ *
+ * SEM TRAVA de proposito. Este e um pre-retrato, e ele nao autoriza nada: quem manda e a releitura
+ * sob `travarVendaRepository`, feita logo adiante na mesma transacao (invariante da S8, R-164). E
+ * exatamente o mesmo padrao ja usado para o caixa de ORIGEM.
+ */
+export async function buscarVendaIntegradaPorIdentificadorRepository(
+  empresaId: string,
+  identificadorExterno: string,
+  db: ExecutorBanco = banco
+): Promise<string | null> {
+  const [linha] = await db
+    .select({ id: vendas.id })
+    .from(vendas)
+    .where(
+      and(
+        eq(vendas.empresaId, empresaId),
+        eq(vendas.identificadorExterno, identificadorExterno),
+        isNotNull(vendas.integracaoChaveId)
+      )
+    )
+    .limit(1);
+  return linha?.id ?? null;
+}
+
 export async function registrarSemNovidadeRepository(
   chave: IntegracaoChaveLinha,
   identificadorExterno: string,
@@ -638,6 +674,21 @@ export async function registrarAlteracaoPosFechamentoRepository(
     });
 }
 
+// Predicado do indice unico parcial `vendas_integracao_identificador_unico_idx` (R-175), repetido
+// aqui porque e assim que o Postgres infere qual indice PARCIAL serve de arbitro no ON CONFLICT.
+// Precisa IMPLICAR o predicado da migration 0032. Divergir nao devolve 23505: o Postgres nao
+// infere arbitro nenhum e levanta 42P10 em TODA insercao — por isso 42P10 tambem entra na
+// familia transitoria do servico, e nao no 422 que descartaria a venda.
+//
+// Montado por OPERADORES do Drizzle, nunca por template de SQL cru — `verificar-arquitetura.mjs`
+// proibe SQL cru em api/src. O `as SQL` e necessario, nao cosmetico: `and()` e tipado como
+// `SQL | undefined` (o caso de lista vazia, impossivel aqui), e o `exactOptionalPropertyTypes` do
+// projeto recusa `undefined` explicito na propriedade opcional `where`.
+const PREDICADO_VENDA_INTEGRADA_UNICA = and(
+  isNotNull(vendas.integracaoChaveId),
+  isNotNull(vendas.identificadorExterno)
+) as SQL;
+
 export async function criarOuAtualizarVendaIntegradaRepository(
   input: {
     chave: IntegracaoChaveLinha;
@@ -689,11 +740,30 @@ export async function criarOuAtualizarVendaIntegradaRepository(
       atualizadoEm: new Date()
     };
 
-    const vendaId = input.vendaSistemaId
-      ? input.vendaSistemaId
-      : (await db.insert(vendas).values(valoresVenda).returning({ id: vendas.id }))[0]?.id;
+    let vendaId = input.vendaSistemaId;
+    if (!vendaId) {
+      // R-175 (#41): o INSERT arbitra pelo indice unico parcial de `vendas` — ver
+      // PREDICADO_VENDA_INTEGRADA_UNICA logo acima.
+      //
+      // DO NOTHING, nunca DO UPDATE. Quem chega aqui acredita estar CRIANDO: calculou
+      // `caixaOrigemId = null` e nao travou a linha da venda. Um DO UPDATE atropelaria as
+      // invariantes da S8 — trava de origem e destino em ordem deterministica, marca de
+      // pos-fechamento no caixa que PERDEU a venda e a deteccao de "a venda mudou de caixa".
+      const [criada] = await db
+        .insert(vendas)
+        .values(valoresVenda)
+        .onConflictDoNothing({
+          target: [vendas.empresaId, vendas.identificadorExterno],
+          where: PREDICADO_VENDA_INTEGRADA_UNICA
+        })
+        .returning({ id: vendas.id });
 
-    if (!vendaId) throw new Error("Venda nao criada");
+      // Zero linhas NAO e falha: outra requisicao criou a mesma venda e commitou primeiro. Quem
+      // decide o que isso significa para o HTTP e o servico — repositorio nao conhece taxonomia de
+      // erro. O `null` diz "perdi a corrida", e nada foi escrito.
+      if (!criada) return null;
+      vendaId = criada.id;
+    }
 
     if (input.vendaSistemaId) {
       await db.update(vendas).set(valoresVenda).where(eq(vendas.id, input.vendaSistemaId));

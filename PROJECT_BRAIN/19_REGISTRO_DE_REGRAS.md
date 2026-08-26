@@ -8,13 +8,21 @@
 > citação literal do José), os 18 arquivos do `PROJECT_BRAIN/`, a planilha, o Xmind e os 5 desenhos
 > do Rodrigo.
 
+> **Governança vigente do Caixa desde 24/08/2026:** Marco é o único executor atual e responde pelo
+> fechamento técnico, publicação de branch/PR e decisão de merge após revisão do HEAD exato, gates
+> verdes e zero P0/P1. José deixou de ser executor, revisor e gate obrigatório. As decisões
+> históricas atribuídas a José continuam preservadas e válidas até revogação explícita. Regras
+> operacionais ou financeiras ainda ausentes continuam dependendo de confirmação do Rodrigo. Ver
+> [34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md](34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md).
+
 ## Como usar (o contrato)
 
 1. **Toda regra tem um id `R-nnn`.** Prompt não descreve regra — prompt **cita o id**.
 2. **Regra sem teste é regra que vai cair em desuso de novo.** A coluna `Teste` é o antídoto.
 3. **Revogar é um ato explícito.** Muda o status para 🚫 aqui, com quem revogou e quando. Regra não
    some em silêncio.
-4. **Contradição não se resolve implementando.** Vai para a §1 e espera decisão do José.
+4. **Contradição não se resolve implementando.** Vai para a §1 e espera decisão de Marco; quando
+   envolver operação ou regra financeira ainda não documentada, exige confirmação do Rodrigo.
 
 ### Legenda de status
 
@@ -821,6 +829,22 @@ José: _"por isso que eu não implementei... vamos supor que ele feche com défi
 maior do que você definiu para transferência de retorno. Você vai precisar de mais uma
 transferência. Então a gente precisa rever"_ (p. 29). Enquanto essa regra não existir, **o módulo
 Caixa não pode ser declarado terminado**, embora tudo o mais funcione.
+
+### Idempotência da venda integrada — decisões transportadas para a #41 (José, 24/08/2026)
+
+> **Transporte parcial, de propósito.** As decisões do gate do Caixa foram registradas como
+> **R-166 a R-177**. Esta branch é só da **#41** e traz **apenas as duas que ela executa**. O
+> conjunto completo, com R-166–R-173, R-176 e R-177, chega junto com a branch da #152.
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Origem                                | Status |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | ------ |
+| **R-174** 🆕 | **A #41 vem antes da #152**, em branch separada criada de `origin/main` atualizada. A primeira ingestão concorrente da mesma venda não serializa e cria duas linhas em `vendas`; enquanto o saldo não depender disso é invisível, com roteamento passa a creditar em dobro. As duas issues não se misturam.                                                                                                                                                                                                                                                                                            | José, gate #152, 24/08                | ✅     |
+| **R-175** 🆕 | **A chave única da venda integrada é `(empresa_id, identificador_externo)`**, com o índice parcial restrito a `integracao_chave_id is not null and identificador_externo is not null`. **`integracao_chave_id` fica no PREDICADO, nunca na chave**: incluí-lo permitiria duplicar a mesma venda depois de uma troca de chave/credencial da integração.                                                                                                                                                                                                                                                 | José, correção do gate, 24/08         | ✅     |
+| **R-178** 🆕 | **Uma loja = um servidor CREARE = um `empresa_id`.** Cada loja tem a sua própria instalação do CREARE e corresponde a um `empresa_id` exclusivo no Pralis; duas lojas **nunca** compartilham `empresa_id`. Dentro de cada servidor existem **vários caixas/PDVs**, cada um com o seu código de PDV, e o `idVendaBalcao` é único **dentro daquele servidor**. **PDV e IP são rastreabilidade, não chave**: o PDV é uma granularidade abaixo do escopo real do identificador, e o IP muda. É esta regra que torna a chave da R-175 **exata** — o escopo da instalação e o escopo da empresa são o mesmo. | Marco, confirmação operacional, 25/08 | ✅     |
+
+Desenho completo da #41 — SQL, consulta read-only de duplicidade, rollback, `ON CONFLICT` e os três
+RED — em [`33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md`](33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md).
+A confirmação operacional que encerrou o P1-A está na §10.6 daquele documento.
 
 ---
 
