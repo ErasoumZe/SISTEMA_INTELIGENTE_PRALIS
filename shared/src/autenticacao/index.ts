@@ -133,6 +133,14 @@ export const permissoes = [
   "admissoes_testes_editar",
   "admissoes_testes_encerrar",
   "admissoes_testes_cancelar",
+  // ADM-002 V0. Permissoes PROPRIAS do processo de admissao: `admissoes_testes_visualizar` NAO
+  // abre o processo, e o processo nao abre o teste. A fronteira vale nos dois sentidos, como ja
+  // vale entre Admissoes e o cadastro operacional.
+  //
+  // Iniciar NAO tem permissao propria: quem pode `admissoes_testes_encerrar` inicia, porque
+  // iniciar e consequencia de efetivar, nao um ato separado.
+  "admissoes_processos_visualizar",
+  "admissoes_processos_cancelar",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",
