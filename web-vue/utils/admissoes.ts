@@ -32,9 +32,30 @@ export const explicacaoSituacaoTeste: Record<SituacaoTeste, string> = {
   inativo: "Inativo porque o teste foi encerrado ou cancelado"
 };
 
+// O RESULTADO GRAVADO, como ele aparece no registro depois de encerrado. E um estado, nao um
+// comando — o painel le "Resultado: Aprovado para admissão".
 export const rotuloResultadoTeste: Record<ResultadoTeste, string> = {
   aprovado_para_admissao: "Aprovado para admissão",
   nao_prosseguir: "Não prosseguir"
+};
+
+/**
+ * A ACAO de encerrar, como ela aparece na hora de ESCOLHER. Grava exatamente os mesmos dois valores.
+ *
+ * Separado de `rotuloResultadoTeste` de proposito: escolher e um imperativo ("Efetivar para
+ * admissão"), o registro e um estado ("Aprovado para admissão"). Um so texto para os dois faria o
+ * painel de um teste encerrado dizer "Resultado: Efetivar para admissão", que nao e o que aconteceu.
+ */
+export const rotuloAcaoEncerramento: Record<ResultadoTeste, string> = {
+  aprovado_para_admissao: "Efetivar para admissão",
+  nao_prosseguir: "Encerrar sem prosseguir"
+};
+
+/** O que cada escolha faz — e, no caso positivo, o que ela ainda NAO faz. */
+export const ajudaAcaoEncerramento: Record<ResultadoTeste, string> = {
+  aprovado_para_admissao:
+    "Marca o teste como aprovado para admissão. O convite e a solicitação de documentos serão criados na próxima etapa.",
+  nao_prosseguir: "Encerra o período de teste sem seguir para admissão. O registro fica Inativo."
 };
 
 export const rotuloMotivoCancelamento: Record<MotivoCancelamento, string> = {

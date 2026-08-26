@@ -9,6 +9,8 @@ import {
   rotuloPrazoTeste,
   rotuloResultadoTeste,
   explicacaoSituacaoTeste,
+  ajudaAcaoEncerramento,
+  rotuloAcaoEncerramento,
   rotuloSituacaoTeste,
   rotuloStatusTeste
 } from "~/utils/admissoes";
@@ -40,7 +42,13 @@ const dialogCancelar = ref(false);
 const resultadoEscolhido = ref<ResultadoTeste | null>(null);
 const motivoEscolhido = ref<MotivoCancelamento | null>(null);
 
-const opcoesResultado = resultadosTeste.map((valor) => ({ valor, rotulo: rotuloResultadoTeste[valor] }));
+// Rotulo de ACAO, nao de resultado gravado: aqui o DP esta escolhendo o que fazer. A ajuda vira
+// subtitulo da opcao, para a diferenca entre os dois desfechos aparecer antes do clique.
+const opcoesResultado = resultadosTeste.map((valor) => ({
+  valor,
+  rotulo: rotuloAcaoEncerramento[valor],
+  subtitle: ajudaAcaoEncerramento[valor]
+}));
 const opcoesMotivo = motivosCancelamentoTeste.map((valor) => ({ valor, rotulo: rotuloMotivoCancelamento[valor] }));
 
 watch(
@@ -217,15 +225,19 @@ function confirmarCancelar() {
             :items="opcoesResultado"
             item-title="rotulo"
             item-value="valor"
-            label="Resultado *"
+            item-props
+            label="Desfecho *"
             density="comfortable"
           />
+          <p v-if="resultadoEscolhido" class="ajuda-desfecho">
+            {{ ajudaAcaoEncerramento[resultadoEscolhido] }}
+          </p>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialogEncerrar = false">Voltar</v-btn>
           <v-btn color="primary" variant="flat" :disabled="!resultadoEscolhido" @click="confirmarEncerrar">
-            Encerrar teste
+            {{ resultadoEscolhido ? rotuloAcaoEncerramento[resultadoEscolhido] : "Encerrar teste" }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -358,6 +370,14 @@ function confirmarCancelar() {
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
   min-width: 132px;
+}
+
+/* Explicacao do desfecho escolhido, dentro do dialogo. */
+.ajuda-desfecho {
+  margin-top: var(--cx-sp-2);
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+  line-height: 1.5;
 }
 
 /* A frase que diz de onde a situacao vem. Discreta de proposito: e explicacao, nao dado. */
