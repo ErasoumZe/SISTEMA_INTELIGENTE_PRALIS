@@ -2452,3 +2452,69 @@ body {
   color: var(--cx-brand-text);
 }
 /* ===================== FIM VIS-05 ===================== */
+
+/* ===================== INICIO VIS-04 — HIERARQUIA E ALVO DE BOTAO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A §5.5 da direcao pede "primaria solida em --cx-brand". ISSO NAO ENTRA, por decisao de Marco
+   em 26/08/2026: `aplicarTema` (useApi.ts:170) aponta o `primary` do Vuetify para a cor da
+   CATEGORIA DA TELA, e 20 botoes usam `color="primary"`. Cravar a marca repintaria todos de
+   roxo e mataria o acento por tela — o que a §0.1 e o 67 §3 proibem. A hierarquia entra por
+   PESO, ALVO e LAYOUT; a cor continua vindo do tema. Zero cor muda neste bloco.
+
+   Antes de escrever, li o VBtn.css do Vuetify 3.12.8 para nao repetir o erro do SHELL-02 (piso
+   que nunca encosta). O que JA EXISTE e por isso nao viraria regra nova aqui:
+     - hover e active: `.v-btn__overlay` ja tinge; somar --cx-hover/--cx-pressed por baixo
+       escureceria DUAS vezes, em vez de suprir estado que falta;
+     - foco: o `:focus-visible` global da camada de acabamento ja da o anel de 2px em --cx-focus
+       com offset 2px, em todo ponto focavel;
+     - secundaria de contorno e ghost sem borda: `.v-btn--variant-outlined` ja e
+       `background: transparent` + `border: thin solid currentColor` (l. 142), e
+       `.v-btn--variant-text` ja e transparente (l. 119).
+   Fica registrado o que NAO da para cumprir: o `cursor: not-allowed` do 67 §9 e inalcancavel,
+   porque `.v-btn--disabled` tem `pointer-events: none` (l. 226-228) e o cursor nunca chega ao
+   elemento. Mudar isso e mexer em comportamento, nao em aparencia. A opacidade, metade viva do
+   requisito, ja esta la.
+
+   Seletor com DUAS classes de proposito: o Vuetify declara `.v-btn { font-weight: 500 }` com a
+   mesma especificidade de uma classe, e o main.css nao tem ordem de carga garantida contra o CSS
+   do modulo. `.v-btn.v-btn--variant-flat` vence por especificidade, independente da ordem.
+
+   Sem `.shell-mobills`: dialogo do Vuetify e teleportado para fora da casca, e e dentro dele que
+   vivem Salvar e Cancelar. Escopar na casca deixaria justamente os botoes de formulario de fora.
+   =================================================================================================== */
+
+/* 1. Peso: a primaria e a unica que pesa. Vuetify entrega 500 para todo botao. */
+.v-btn.v-btn--variant-flat,
+.v-btn.v-btn--variant-elevated {
+  font-weight: 600;
+}
+
+/* 2. Alvo de toque. Botao comum do Vuetify tem 36px de altura
+   (`--v-btn-height: 36px` + `.v-btn--density-default { height: calc(... + 0px) }`) e NENHUM
+   min-height — o do arquivo so cobre `.v-btn--icon` e os `small` de Produtos. Cresce a area
+   clicavel, nao o desenho: fonte e padding seguem os do Vuetify. */
+.v-btn.v-btn--variant-flat,
+.v-btn.v-btn--variant-elevated {
+  min-height: 44px;
+}
+@media (width <= 768px) {
+  .v-btn.v-btn--density-default,
+  .v-btn.v-btn--density-comfortable,
+  .v-btn.v-btn--density-compact {
+    min-height: 44px;
+  }
+}
+
+/* 3. No XS a acao principal ocupa a linha e o grupo quebra em vez de espremer (67 §13.4).
+   `.v-card-actions` e flex sem wrap no Vuetify, entao tres botoes numa tela de 390px
+   comprimiam ate o rotulo cortar. */
+@media (width <= 600px) {
+  .v-card-actions {
+    flex-wrap: wrap;
+  }
+  .v-card-actions > .v-btn {
+    flex: 1 1 auto;
+  }
+}
+/* ===================== FIM VIS-04 ===================== */
