@@ -42,58 +42,95 @@ const textoOpcional = z
   .transform((valor) => (valor === "" ? null : valor))
   .nullable();
 
-export const formaPagamentoPayloadSchema = z
-  .object({
-    empresaId: uuidSchema,
-    nome: z.string().min(1),
-    adquirente: textoOpcional.optional(),
-    usaContaDoPdv: z.boolean().optional(),
-    contaRecebivelId: uuidSchema.nullable().optional(),
-    contaFinalId: uuidSchema.nullable().optional(),
-    disponibilidade: z.enum(disponibilidadesRoteamento).nullable().optional()
-  })
-  .superRefine((dados, ctx) => {
-    // Mesmo dominio do `formas_pagamento_roteamento_check` da migration 0033, em tres ramos
-    // mutuamente exclusivos. Existe aqui TAMBEM, e nao so no banco, para o cadastro responder 400
-    // apontando o campo errado em vez de 503 com um 23514 sanitizado.
-    //
-    // Se um dia os dois divergirem, o banco vence — ele e a ultima porta. Ha teste amarrando os
-    // dois: o mesmo payload recusado aqui tem de ser recusado la.
-    const disponibilidade = dados.disponibilidade ?? null;
-    const usaContaDoPdv = dados.usaContaDoPdv ?? false;
-    const recebivel = dados.contaRecebivelId ?? null;
-    const final = dados.contaFinalId ?? null;
+/**
+ * Os tres ramos validos do roteamento, iguais ao `formas_pagamento_roteamento_check` da 0033.
+ *
+ * Fica FORA do schema do payload de proposito. O PUT e parcial: um corpo que so renomeia a forma nao
+ * carrega os campos de roteamento, e validar o corpo isolado recusaria o estado ja gravado. Quem
+ * valida e o servico, sobre o roteamento RESULTANTE (o gravado, com os campos enviados por cima).
+ */
+export function roteamentoCoerente(
+  roteamento: RoteamentoDaForma
+): { ok: true } | { ok: false; campo: CampoRoteamento; mensagem: string } {
+  const { disponibilidade, usaContaDoPdv, contaRecebivelId, contaFinalId } = roteamento;
 
-    const semRoteamento = disponibilidade === null && !usaContaDoPdv && recebivel === null && final === null;
-    const contaDoPdv = disponibilidade === "imediata" && usaContaDoPdv && recebivel === null && final === null;
-    const recebivelProprio = disponibilidade === "por_evento" && !usaContaDoPdv && recebivel !== null && final !== null;
+  const semRoteamento =
+    disponibilidade === null && !usaContaDoPdv && contaRecebivelId === null && contaFinalId === null;
+  const contaDoPdv =
+    disponibilidade === "imediata" && usaContaDoPdv && contaRecebivelId === null && contaFinalId === null;
+  const recebivelProprio =
+    disponibilidade === "por_evento" && !usaContaDoPdv && contaRecebivelId !== null && contaFinalId !== null;
+  if (semRoteamento || contaDoPdv || recebivelProprio) return { ok: true };
 
-    if (semRoteamento || contaDoPdv || recebivelProprio) return;
+  if (disponibilidade === null) {
+    return {
+      ok: false,
+      campo: "disponibilidade",
+      mensagem:
+        "Forma meio-cadastrada: escolha a disponibilidade. Marcar a conta do PDV ou informar conta sem dizer quando o dinheiro fica disponivel deixaria o valor gastavel por engano"
+    };
+  }
+  if (disponibilidade === "imediata") {
+    return {
+      ok: false,
+      campo: "usaContaDoPdv",
+      mensagem:
+        "Disponibilidade imediata e dinheiro fisico: exige a conta do PDV marcada e nenhuma conta de recebivel ou final"
+    };
+  }
+  return {
+    ok: false,
+    campo: "contaRecebivelId",
+    mensagem: "Disponibilidade por evento exige conta de recebivel E conta final, e nao pode usar a conta do PDV"
+  };
+}
 
-    if (disponibilidade === null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["disponibilidade"],
-        message:
-          "Forma meio-cadastrada: escolha a disponibilidade. Marcar a conta do PDV ou informar conta sem dizer quando o dinheiro fica disponivel deixaria o valor gastavel por engano"
-      });
-      return;
-    }
-    if (disponibilidade === "imediata") {
-      ctx.addIssue({
-        code: "custom",
-        path: ["usaContaDoPdv"],
-        message:
-          "Disponibilidade imediata e dinheiro fisico: exige a conta do PDV marcada e nenhuma conta de recebivel ou final"
-      });
-      return;
-    }
-    ctx.addIssue({
-      code: "custom",
-      path: ["contaRecebivelId"],
-      message: "Disponibilidade por evento exige conta de recebivel E conta final, e nao pode usar a conta do PDV"
-    });
-  });
+// Campo AUSENTE no corpo significa "nao estou mexendo nisso" — nunca "limpe". A diferenca decide se
+// um PUT que so renomeia a forma preserva ou apaga o destino do dinheiro.
+export function mesclarRoteamento(
+  atual: RoteamentoDaForma,
+  enviado: Partial<Record<CampoRoteamento, string | boolean | null | undefined>>
+): RoteamentoDaForma {
+  return {
+    adquirente: enviado.adquirente !== undefined ? (enviado.adquirente as string | null) : atual.adquirente,
+    usaContaDoPdv: enviado.usaContaDoPdv !== undefined ? Boolean(enviado.usaContaDoPdv) : atual.usaContaDoPdv,
+    contaRecebivelId:
+      enviado.contaRecebivelId !== undefined ? (enviado.contaRecebivelId as string | null) : atual.contaRecebivelId,
+    contaFinalId: enviado.contaFinalId !== undefined ? (enviado.contaFinalId as string | null) : atual.contaFinalId,
+    disponibilidade:
+      enviado.disponibilidade !== undefined
+        ? (enviado.disponibilidade as DisponibilidadeRoteamento | null)
+        : atual.disponibilidade
+  };
+}
+
+export function mesmoRoteamento(a: RoteamentoDaForma, b: RoteamentoDaForma): boolean {
+  return (
+    a.adquirente === b.adquirente &&
+    a.usaContaDoPdv === b.usaContaDoPdv &&
+    a.contaRecebivelId === b.contaRecebivelId &&
+    a.contaFinalId === b.contaFinalId &&
+    a.disponibilidade === b.disponibilidade
+  );
+}
+
+export const SEM_ROTEAMENTO: RoteamentoDaForma = {
+  adquirente: null,
+  usaContaDoPdv: false,
+  contaRecebivelId: null,
+  contaFinalId: null,
+  disponibilidade: null
+};
+
+export const formaPagamentoPayloadSchema = z.object({
+  empresaId: uuidSchema,
+  nome: z.string().min(1),
+  adquirente: textoOpcional.optional(),
+  usaContaDoPdv: z.boolean().optional(),
+  contaRecebivelId: uuidSchema.nullable().optional(),
+  contaFinalId: uuidSchema.nullable().optional(),
+  disponibilidade: z.enum(disponibilidadesRoteamento).nullable().optional()
+});
 
 export type FormaPagamentoPayload = z.infer<typeof formaPagamentoPayloadSchema>;
 

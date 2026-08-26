@@ -9,13 +9,18 @@ import {
   vendaAceitaRoteamento,
   type StatusRoteamento
 } from "@padaria/shared/integracoes";
-import { formaPagamentoPayloadSchema, type RoteamentoDaForma } from "@padaria/shared/formas-pagamento";
+import {
+  mesclarRoteamento,
+  mesmoRoteamento,
+  roteamentoCoerente,
+  SEM_ROTEAMENTO,
+  type RoteamentoDaForma
+} from "@padaria/shared/formas-pagamento";
 import { liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 
 const CONTA_PDV = "11111111-1111-4111-8111-111111111111";
 const CONTA_RECEBIVEL = "22222222-2222-4222-8222-222222222222";
 const CONTA_FINAL = "33333333-3333-4333-8333-333333333333";
-const EMPRESA = "44444444-4444-4444-8444-444444444444";
 const AGORA = new Date("2026-08-26T13:00:00.000Z");
 
 const dinheiro: RoteamentoDaForma = {
@@ -189,65 +194,79 @@ describe("vendaAceitaRoteamento — corte historico da R-166", () => {
   });
 });
 
-describe("formaPagamentoPayloadSchema — o cadastro recusa o meio-caminho", () => {
-  const base = { empresaId: EMPRESA, nome: "Cartao" };
+describe("roteamentoCoerente — o cadastro recusa o meio-caminho", () => {
+  const monta = (parcial: Partial<RoteamentoDaForma>): RoteamentoDaForma => ({ ...SEM_ROTEAMENTO, ...parcial });
 
   it("aceita forma sem roteamento nenhum", () => {
-    expect(formaPagamentoPayloadSchema.safeParse(base).success).toBe(true);
+    expect(roteamentoCoerente(SEM_ROTEAMENTO).ok).toBe(true);
   });
 
   it("aceita dinheiro na conta do PDV", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({
-      ...base,
-      disponibilidade: "imediata",
-      usaContaDoPdv: true
-    });
-    expect(resultado.success).toBe(true);
+    expect(roteamentoCoerente(monta({ disponibilidade: "imediata", usaContaDoPdv: true })).ok).toBe(true);
   });
 
   it("aceita recebivel com as duas contas", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({
-      ...base,
-      disponibilidade: "por_evento",
-      contaRecebivelId: CONTA_RECEBIVEL,
-      contaFinalId: CONTA_FINAL
-    });
-    expect(resultado.success).toBe(true);
+    const coerente = roteamentoCoerente(
+      monta({ disponibilidade: "por_evento", contaRecebivelId: CONTA_RECEBIVEL, contaFinalId: CONTA_FINAL })
+    );
+    expect(coerente.ok).toBe(true);
   });
 
   // O estado perigoso: checkbox marcado e disponibilidade em branco. Sem esta recusa, o dinheiro
   // viraria saldo GASTAVEL na conta do PDV por uma forma que ninguem terminou de cadastrar.
   it("recusa a forma meio-cadastrada (conta do PDV sem disponibilidade)", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({ ...base, usaContaDoPdv: true });
-    expect(resultado.success).toBe(false);
-    expect(JSON.stringify(resultado.error?.issues)).toContain("disponibilidade");
+    const resultado = roteamentoCoerente(monta({ usaContaDoPdv: true }));
+    expect(resultado.ok).toBe(false);
+    expect(resultado.ok === false && resultado.campo).toBe("disponibilidade");
   });
 
   it("recusa por_evento sem as contas", () => {
-    expect(formaPagamentoPayloadSchema.safeParse({ ...base, disponibilidade: "por_evento" }).success).toBe(false);
+    expect(roteamentoCoerente(monta({ disponibilidade: "por_evento" })).ok).toBe(false);
   });
 
   it("recusa por_evento com apenas uma das contas", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({
-      ...base,
-      disponibilidade: "por_evento",
-      contaFinalId: CONTA_FINAL
-    });
-    expect(resultado.success).toBe(false);
+    expect(roteamentoCoerente(monta({ disponibilidade: "por_evento", contaFinalId: CONTA_FINAL })).ok).toBe(false);
   });
 
   it("recusa imediata com conta explicita (contradicao)", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({
-      ...base,
-      disponibilidade: "imediata",
-      usaContaDoPdv: true,
-      contaFinalId: CONTA_FINAL
-    });
-    expect(resultado.success).toBe(false);
+    const resultado = roteamentoCoerente(
+      monta({ disponibilidade: "imediata", usaContaDoPdv: true, contaFinalId: CONTA_FINAL })
+    );
+    expect(resultado.ok).toBe(false);
+  });
+});
+
+describe("mesclarRoteamento — AUSENTE nao e NULO", () => {
+  const roteada: RoteamentoDaForma = {
+    adquirente: null,
+    usaContaDoPdv: true,
+    contaRecebivelId: null,
+    contaFinalId: null,
+    disponibilidade: "imediata"
+  };
+
+  // O caso que quebrou em teste: um PUT que so renomeia a forma nao carrega os campos de roteamento.
+  // Se "ausente" virasse "nulo", o destino do dinheiro sumiria em silencio — e sem passar por
+  // permissao nenhuma, porque quem renomeia nao precisa da permissao dedicada.
+  it("corpo sem campo de roteamento PRESERVA o que estava gravado", () => {
+    const alvo = mesclarRoteamento(roteada, {});
+    expect(mesmoRoteamento(alvo, roteada)).toBe(true);
   });
 
-  it("recusa disponibilidade fora do dominio", () => {
-    const resultado = formaPagamentoPayloadSchema.safeParse({ ...base, disponibilidade: "quando_der" });
-    expect(resultado.success).toBe(false);
+  it("corpo com nulo EXPLICITO limpa o roteamento", () => {
+    const alvo = mesclarRoteamento(roteada, { disponibilidade: null, usaContaDoPdv: false });
+    expect(alvo.disponibilidade).toBeNull();
+    expect(mesmoRoteamento(alvo, roteada)).toBe(false);
+  });
+
+  it("corpo parcial altera so o campo enviado", () => {
+    const alvo = mesclarRoteamento(roteada, { adquirente: "Cielo" });
+    expect(alvo.adquirente).toBe("Cielo");
+    expect(alvo.disponibilidade).toBe("imediata");
+    expect(alvo.usaContaDoPdv).toBe(true);
+  });
+
+  it("forma nova sem campos nasce sem roteamento", () => {
+    expect(mesmoRoteamento(mesclarRoteamento(SEM_ROTEAMENTO, {}), SEM_ROTEAMENTO)).toBe(true);
   });
 });

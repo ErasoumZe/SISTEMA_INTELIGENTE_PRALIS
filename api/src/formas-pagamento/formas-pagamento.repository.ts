@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { formasPagamento } from "@padaria/db/schema/cadastro";
+import { contas, formasPagamento } from "@padaria/db/schema/cadastro";
 import type { DisponibilidadeRoteamento, RoteamentoDaForma } from "@padaria/shared/formas-pagamento";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
@@ -87,6 +87,23 @@ export async function buscarRoteamentosDaEmpresaRepository(
       }
     ])
   );
+}
+
+// Quais das contas informadas realmente pertencem a empresa. Existe para o cadastro responder 400
+// dizendo o que esta errado, em vez de deixar a FK COMPOSTA estourar 23503 e virar erro tecnico
+// sanitizado. A FK continua sendo a ultima porta — esta checagem e a primeira.
+export async function contasDaEmpresaRepository(
+  contaIds: string[],
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<Set<string>> {
+  const unicas = [...new Set(contaIds.filter(Boolean))];
+  if (!unicas.length) return new Set();
+  const linhas = await db
+    .select({ id: contas.id })
+    .from(contas)
+    .where(and(eq(contas.empresaId, empresaId), inArray(contas.id, unicas)));
+  return new Set(linhas.map((linha) => linha.id));
 }
 
 export async function salvarFormaPagamentoRepository(
