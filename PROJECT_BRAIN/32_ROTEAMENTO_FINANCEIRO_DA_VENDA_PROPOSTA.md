@@ -1,4 +1,30 @@
-# Issue #152 — contrato de roteamento financeiro do CREARE + proposta de migration 0032
+# Issue #152 — contrato de roteamento financeiro do CREARE + migration 0033
+
+> ## Estado em 26/08/2026 — a migration existe, e é a `0033`
+>
+> A #41 foi mesclada na `main` e levou a `0032`, como este documento previa nos §1 e §18. A migration
+> desta issue é a **`0033_roteamento_financeiro_da_venda`**, gerada por
+> `npm run db:generate --workspace @padaria/db` e commitada em `e7a9537`.
+>
+> **Toda menção a "0032" no corpo abaixo que fale da migration DESTA issue deve ser lida como
+> `0033`.** As menções dos §1 e §18 à `0032` como número livre são históricas e continuam corretas —
+> foi exatamente o que aconteceu, só que quem a levou foi a #41.
+>
+> **Uma correção ao SQL do §5:** o gerador emitiu o `UNIQUE` de `contas` **depois** das FKs compostas
+> que o referenciam, e a migration **não aplicava** —
+> `ERROR: there is no unique constraint matching given keys for referenced table "contas"`. O §5
+> sempre esteve certo ao pôr esse statement em primeiro lugar; o gerador é que inverteu. O statement
+> foi movido de volta para o topo, com o motivo escrito no cabeçalho do `.sql`.
+>
+> **Provado em Postgres 16 descartável, criado e derrubado:** as 34 migrations aplicam do zero; 18
+> casos de comportamento passam, incluindo a forma meio-cadastrada (`disponibilidade` NULL com
+> `usa_conta_do_pdv = true`) sendo recusada, a conta de outra empresa barrada pela FK composta e o
+> pagamento `pendente` com `disponivel_em` recusado; o rollback do §6 foi aplicado de verdade e não
+> sobrou objeto nenhum, com vendas e formas de pagamento preservadas; e a `0033` reaplica por cima.
+> Suíte completa `npm test` **exit 0** (unidade 172, integração 790 + 1 skipped).
+>
+> **Nada foi aplicado em produção.** Esta entrega é schema; o caminho de escrita do §9 e a mudança de
+> fórmula do §8 continuam fora dela.
 
 > **STATUS: GATE RESPONDIDO EM 24/08 — as quatro confirmações chegaram.** As decisões viraram as
 > regras **R-173 a R-177** no documento `19`; a fila mudou (R-174) e está em `30` §4. Esta issue
@@ -156,10 +182,10 @@ Não existe fallback: se a forma não tem roteamento, ou se `usa_conta_do_pdv = 
 foi resolvido, o pagamento nasce `pendente`. Nunca cai em Dinheiro, Outro ou conta do PDV por
 omissão. A conta do PDV só é usada quando o admin **marcou explicitamente** `usa_conta_do_pdv`.
 
-## 5. Migration 0032 — SQL completo
+## 5. Migration 0033 — SQL completo
 
-Arquivo proposto: `db/migrations/0032_roteamento_financeiro_da_venda.sql`
-(+ entrada `idx 32` no `_journal.json` + `meta/0032_snapshot.json`, ambos gerados por
+Arquivo entregue: `db/migrations/0033_roteamento_financeiro_da_venda.sql`
+(+ entrada `idx 33` no `_journal.json` + `meta/0033_snapshot.json`, ambos gerados por
 `npm run db:generate --workspace @padaria/db`, nunca à mão — `scripts/verificar-migrations.mjs`
 exige a paridade dos três).
 
@@ -313,7 +339,12 @@ ALTER TABLE "formas_pagamento" DROP COLUMN IF EXISTS "adquirente";
 ALTER TABLE "contas" DROP CONSTRAINT IF EXISTS "contas_id_empresa_unica";
 ```
 
-**O rollback não perde nenhum dado anterior à 0032** — todo objeto derrubado foi criado por ela.
+**O rollback foi executado, e não só revisado.** Aplicado no banco descartável logo depois da
+`0033`: sobraram **zero** colunas, **zero** constraints e **zero** índices dela, e a venda e as três
+formas de pagamento de teste continuaram lá. Em seguida a `0033` reaplicou por cima, o que fecha a
+ida e volta.
+
+**O rollback não perde nenhum dado anterior à 0033** — todo objeto derrubado foi criado por ela.
 Perde-se o roteamento configurado depois (redigitável no cadastro) e os snapshots gravados nas
 vendas novas. As **vendas em si continuam intactas**: nenhuma coluna pré-existente é tocada.
 
@@ -514,7 +545,7 @@ passam a fazer parte do escopo da #152; a migration da §5 muda em um ponto (P1 
 
 Hoje essa permissão significa "renomear uma forma"
 ([formas-pagamento.controller.ts:55-72](../api/src/formas-pagamento/formas-pagamento.controller.ts#L55-L72)).
-Com a 0032 ela passaria a decidir **para onde vai o dinheiro** — quem podia renomear passaria a
+Com a 0033 ela passa a decidir **para onde vai o dinheiro** — quem podia renomear passaria a
 poder apontar o recebimento para uma conta à sua escolha, inclusive uma que ele mesmo criou, sem
 nenhuma permissão financeira. É escalação por reuso de permissão e contraria a R-172.
 
@@ -673,7 +704,7 @@ A §9 afirma "um caminho de escrita, nenhuma segunda API". É falso:
 | [vendas.repository.ts:379](../api/src/vendas/vendas.repository.ts#L379)                | `PUT /api/vendas/:id` |
 
 E o PUT **apaga todos os `vendas_pagamentos` da venda** e reinsere só as colunas base
-([vendas.repository.ts:364-387](../api/src/vendas/vendas.repository.ts#L364-L387)) — com a 0032, os
+([vendas.repository.ts:364-387](../api/src/vendas/vendas.repository.ts#L364-L387)) — com a 0033, os
 reinseridos voltam ao DEFAULT `nao_aplicavel`, com conta e `disponivel_em` nulos.
 
 Conferi que esse PUT **alcança venda integrada**: `atualizarVenda`
@@ -767,7 +798,7 @@ O seed trunca e recria tudo já sob o schema novo, onde o DEFAULT `nao_aplicavel
 verdadeira **por construção**; e o banco de integração nasce de `db:push`
 ([testcontainers.ts:92](../tests/setup/testcontainers.ts#L92)), então "antes da migration" nem
 existe nesse ambiente. Prova real: dois contêineres — migrar até 0031, semear, tirar snapshot
-ordenado das cinco consultas; **restaurar o mesmo dump**, aplicar 0032 + código novo, snapshot de
+ordenado das cinco consultas; **restaurar o mesmo dump**, aplicar 0033 + código novo, snapshot de
 novo, `toEqual`. O "antes" precisa conter venda de retaguarda com `conta_origem_id` **e**
 `vendas_pagamentos`, conta com saldo **negativo**, venda cancelada e transferência pendente.
 
@@ -880,16 +911,16 @@ Os CHECKs e FKs novos criam classes de erro que não existiam nesse caminho: `23
 `23505`. O catch de [integracoes.service.ts:834-861](../api/src/integracoes/integracoes.service.ts#L834-L861)
 só re-lança `55P03` e `40P01`; todo o resto vira **422**. O comentário do próprio arquivo diz:
 _"4xx faz o agente DESCARTAR a venda, e a R-013 proibe recusar venda integrada."_ Ou seja: com a
-0032, um bug de roteamento deixa de ser "venda sem crédito" e vira **"venda perdida"**. Precisa
+0033, um bug de roteamento deixa de ser "venda sem crédito" e vira **"venda perdida"**. Precisa
 mapear as três classes para 5xx **e** validar as invariantes no código antes do insert.
 
 ### P1-2 — o rollback da §6 deixa o banco mentindo sobre si mesmo
 
 `db:migrate` é `drizzle-kit migrate`, que registra cada arquivo em `drizzle.__drizzle_migrations`. A
-§6 derruba os objetos e **deixa a linha da 0032 lá**: banco "com a 0032 aplicada" e sem nenhum
+§6 derruba os objetos e **deixa a linha da 0033 lá**: banco "com a 0033 aplicada" e sem nenhum
 objeto dela, impossível de reaplicar, e qualquer `db:generate` seguinte diverge. O rollback precisa
 de três passos que não estavam escritos: apagar a linha do ledger; reverter em bloco
-`0032_*.sql` + `idx 32` do journal + `meta/0032_snapshot.json` + `app.schema.ts` (a paridade dos
+`0033_*.sql` + `idx 33` do journal + `meta/0033_snapshot.json` + `app.schema.ts` (a paridade dos
 três é exigida por `scripts/verificar-migrations.mjs`); e `DROP INDEX CONCURRENTLY` no caminho de
 produção.
 
@@ -902,7 +933,7 @@ produção.
    reintroduzir `FOR UPDATE` em `contas` ou criar rota de DELETE de conta, o ABBA volta — agora com
    duas fontes de FK, não uma. Tem de entrar por escrito naquele bloco, junto com a exceção
    explícita à ordem canônica.
-2. A `UNIQUE(id, empresa_id)` **promove `empresa_id` a coluna-chave de `contas`**. A partir da 0032,
+2. A `UNIQUE(id, empresa_id)` **promove `empresa_id` a coluna-chave de `contas`**. A partir da 0033,
    um futuro `UPDATE contas SET empresa_id` deixa de ser no-key-update e passa a conflitar com o
    `KEY SHARE` das FKs. Aresta nova, hoje latente. A §7 não viu.
 
@@ -929,7 +960,7 @@ CONCURRENTLY` **não tem caminho suportado hoje** — precisa de runner à parte
   tenant só existe depois do join com `vendas`. Melhor `(venda_id)` ou `(forma_pagamento_id, venda_id)`.
 - **Falta índice para o `RESTRICT`**: nenhum dos parciais é elegível para a checagem da FK, então
   apagar conta faria seq scan. Latente (não há rota de DELETE), mas registrado. E o efeito colateral
-  precisa estar escrito: **a partir da 0032, conta que já apareceu num snapshot de venda vira
+  precisa estar escrito: **a partir da 0033, conta que já apareceu num snapshot de venda vira
   indeletável** — `contas.ativa` já é o caminho de desativação, então é uma porta que se fecha.
 - **O DEFAULT `nao_aplicavel` é modo de falha silencioso para linha NOVA**: se o código esquecer de
   setar o status, a venda integrada nasce sem crédito em conta nenhuma — o bug de hoje, agora
