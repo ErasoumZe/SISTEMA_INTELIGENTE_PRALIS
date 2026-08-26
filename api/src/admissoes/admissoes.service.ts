@@ -16,8 +16,7 @@ import {
 import type { DadosExternos, PaginationQuery } from "@padaria/shared/api";
 import { diaNegocio, janelaDiaNegocio } from "@padaria/shared/datas";
 import type { PerfilUsuario } from "@padaria/shared";
-import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { conflito, naoEncontrado, proibido } from "../erros.js";
+import { conflito, naoEncontrado } from "../erros.js";
 import { falharValidacao } from "../utils.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
@@ -39,46 +38,9 @@ import {
   type TesteDetalheLinha,
   type TesteLinha
 } from "./admissoes.repository.js";
-
-// --- Empresa derivada -----------------------------------------------------------------------------
-//
-// A UNICA fonte de empresa deste modulo. Nada aqui le empresa do corpo, da query ou do path — os
-// contratos em `shared/src/admissoes` nem sequer tem o campo.
-//
-// Tres recusas distintas, todas 403 e todas fail-closed:
-//   1. sem perfil          -> nao ha ator;
-//   2. perfil sem empresa  -> `perfis_usuarios.empresa_id` e NULLABLE (e vira null quando a empresa
-//                             e removida, por `on delete set null`);
-//   3. empresa fora do escopo -> `empresa_id` do perfil e gravado por um caminho independente de
-//                             `usuarios_empresas` e PODE apontar para fora do escopo do usuario.
-//                             Isto esta documentado no proprio codigo, em
-//                             api/src/usuarios/usuarios.service.ts. Sem o cruzamento, o DP gravaria
-//                             teste numa empresa que ele nao tem permissao de acessar.
-//
-// Nunca escolher empresa automaticamente: cair para `empresaIds[0]` seria adivinhar em qual empresa
-// uma pessoa esta sendo avaliada.
-export function empresaDoAtor(perfil?: PerfilUsuario): string {
-  if (!perfil) throw proibido("Perfil de usuario nao configurado", "PROFILE_NOT_CONFIGURED");
-  const empresaId = perfil.empresaId;
-  if (!empresaId) {
-    throw proibido(
-      "Seu perfil nao tem empresa definida. Peca ao administrador para configurar antes de usar Periodos de teste.",
-      "PROFILE_COMPANY_NOT_SET"
-    );
-  }
-  if (!podeAcessarEmpresa(perfil, empresaId)) {
-    throw proibido(
-      "A empresa do seu perfil esta fora do seu escopo de acesso. Peca ao administrador para corrigir.",
-      "PROFILE_COMPANY_OUT_OF_SCOPE"
-    );
-  }
-  return empresaId;
-}
-
-function atorDoPerfil(perfil?: PerfilUsuario): string {
-  if (!perfil) throw proibido("Perfil de usuario nao configurado", "PROFILE_NOT_CONFIGURED");
-  return perfil.usuarioId;
-}
+import { atorDoPerfil, empresaDoAtor } from "./ator.js";
+import { criarProcessoDaEfetivacao } from "./processos.service.js";
+import { obterProcessoPorTesteRepository } from "./processos.repository.js";
 
 function testeNaoEncontrado(): never {
   // MESMA resposta para "nao existe" e para "e de outra empresa", de proposito: distinguir os dois
@@ -132,7 +94,8 @@ function paraDetalheDto(linha: TesteDetalheLinha, agora: Date): TesteDetalheDto 
     encerradoPorNome: linha.encerradoPorNome,
     encerradoEm: linha.encerradoEm?.toISOString() ?? null,
     canceladoPorNome: linha.canceladoPorNome,
-    canceladoEm: linha.canceladoEm?.toISOString() ?? null
+    canceladoEm: linha.canceladoEm?.toISOString() ?? null,
+    processoId: linha.processoId
   };
 }
 
@@ -346,8 +309,36 @@ export async function encerrarTeste(id: string, body: DadosExternos, perfil?: Pe
   return executarEmTransacao(async (tx) => {
     const alvo = await bloquearTesteRepository(id, empresaId, tx);
     if (!alvo) testeNaoEncontrado();
-    // Encerrar ja encerrado NAO e idempotente: o resultado pode ser outro, e trocar o desfecho de um
-    // teste terminado exigiria uma decisao que ninguem tomou. Recusa explicita.
+
+    // --- RAMO IDEMPOTENTE (ADM-002 C-1.1) --------------------------------------------------------
+    //
+    // "Efetivar para admissao" e o unico caminho para iniciar a admissao, mas caminho unico nao e
+    // chamada unica: duplo clique e resposta de rede perdida sao o caso normal, e o segundo envio
+    // chega com payload identico.
+    //
+    // Ele vem ANTES da checagem de `versao` de proposito. A repeticao carrega a versao ANTERIOR a
+    // transicao — o cliente nao recebeu a resposta que a incrementaria. Checar versao primeiro
+    // recusaria a repeticao com VERSAO_CONFLITANTE, e o erro ambiguo voltaria com outro nome.
+    //
+    // Este ramo NAO ESCREVE, entao dispensa guarda de concorrencia. O que ele exige e igualdade de
+    // INTENCAO: o mesmo resultado que ja foi gravado.
+    if (alvo.status === "encerrado" && dados.resultado === "aprovado_para_admissao") {
+      if (alvo.resultado !== "aprovado_para_admissao") {
+        throw conflito("Este periodo de teste foi encerrado com outro desfecho", "TESTE_NAO_EDITAVEL");
+      }
+      const existente = await obterProcessoPorTesteRepository(id, empresaId, tx);
+      if (!existente) {
+        // INVARIANTE: teste encerrado como aprovado SEMPRE tem processo — os dois nascem na mesma
+        // transacao e ha unique(teste_id). Chegar aqui significa atomicidade quebrada. Falhar alto e
+        // melhor que criar o processo agora, que repararia por efeito colateral e esconderia o
+        // defeito.
+        throw new Error("Invariante quebrada: teste aprovado sem processo de admissao");
+      }
+      return { ...alvo, processoId: existente.id };
+    }
+
+    // Fora do ramo acima, encerrar ja encerrado NAO e idempotente: trocar o desfecho de um teste
+    // terminado exigiria uma decisao que ninguem tomou. Recusa explicita.
     if (alvo.status !== "em_teste") {
       throw conflito("Este periodo de teste ja foi encerrado ou cancelado", "TESTE_NAO_EDITAVEL");
     }
@@ -367,7 +358,17 @@ export async function encerrarTeste(id: string, body: DadosExternos, perfil?: Pe
       { testeId: id, empresaId, versao: encerrado.versao, acao: "encerrado", atorUsuarioId: ator },
       tx
     );
-    return encerrado;
+
+    // A admissao nasce AQUI, na mesma transacao. Nao ha acao "iniciar admissao": um segundo caminho
+    // para o mesmo ato e o defeito que a regra-mae do PROJECT_BRAIN/16 proibe. Falha de qualquer
+    // parte desfaz o encerramento junto.
+    if (dados.resultado !== "aprovado_para_admissao") return { ...encerrado, processoId: null };
+
+    const processo = await criarProcessoDaEfetivacao(
+      { empresaId, testeId: id, atorUsuarioId: ator },
+      tx
+    );
+    return { ...encerrado, processoId: processo.id };
   });
 }
 

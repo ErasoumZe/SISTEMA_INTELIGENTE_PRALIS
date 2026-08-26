@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lt, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
+import { admissoesProcessos, admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
 // `cargos` NAO entra aqui. Ele e catalogo de ACESSO (chave de `permissoes_cargos`); a funcao
 // operacional e `funcoesOperacionais`, logo abaixo na mesma lista. O import ausente e a primeira
 // barreira contra a mistura voltar por conveniencia.
@@ -47,6 +47,7 @@ export type TesteDetalheLinha = TesteLinha & {
   encerradoEm: Date | null;
   canceladoPorNome: string | null;
   canceladoEm: Date | null;
+  processoId: string | null;
 };
 
 // `%` e `_` do termo digitado sao literais para quem busca, nao curingas. Sem escapar, digitar "%"
@@ -140,7 +141,9 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
       encerradoPorNome: perfilEncerrador.nome,
       encerradoEm: admissoesTestes.encerradoEm,
       canceladoPorNome: perfilCancelador.nome,
-      canceladoEm: admissoesTestes.canceladoEm
+      canceladoEm: admissoesTestes.canceladoEm,
+      // LEFT join: teste nao efetivado nao tem processo, e isso e o caso comum.
+      processoId: admissoesProcessos.id
     })
     .from(admissoesTestes)
     .innerJoin(
@@ -154,6 +157,13 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
     .leftJoin(perfilAtualizador, eq(perfilAtualizador.usuarioId, admissoesTestes.atualizadoPor))
     .leftJoin(perfilEncerrador, eq(perfilEncerrador.usuarioId, admissoesTestes.encerradoPor))
     .leftJoin(perfilCancelador, eq(perfilCancelador.usuarioId, admissoesTestes.canceladoPor))
+    .leftJoin(
+      admissoesProcessos,
+      and(
+        eq(admissoesProcessos.testeId, admissoesTestes.id),
+        eq(admissoesProcessos.empresaId, admissoesTestes.empresaId)
+      )
+    )
     // A empresa entra no proprio WHERE: "nao existe" e "e de outra empresa" produzem a MESMA
     // resposta vazia, entao a rota nao vira oraculo sobre pessoa de outro tenant.
     .where(and(eq(admissoesTestes.id, id), eq(admissoesTestes.empresaId, empresaId)))
@@ -172,6 +182,9 @@ export async function bloquearTesteRepository(id: string, empresaId: string, db:
       versao: admissoesTestes.versao,
       cpf: admissoesTestes.cpf,
       nomeCompleto: admissoesTestes.nomeCompleto,
+      // Necessario para o ramo idempotente da efetivacao conferir se a INTENCAO da repeticao e a
+      // mesma do desfecho ja gravado.
+      resultado: admissoesTestes.resultado,
       funcaoId: admissoesTestes.funcaoId,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
