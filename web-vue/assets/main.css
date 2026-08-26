@@ -2627,3 +2627,44 @@ body {
   border: 1px solid var(--cx-line-soft);
 }
 /* ===================== FIM VIS-02 ===================== */
+
+/* ===================== INICIO VIS-07 — CAPSULA DO ITEM ATIVO DO MENU (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Elemento-assinatura da Direcao C. MUDA A FORMA DO REALCE, NAO A COR.
+
+   ZERO cor aqui. O ativo continua exatamente como esta: `--item-cor-faixa` com texto branco nas
+   telas com categoria (linha 1841) e `--shell-active-bg` nas neutras (linha 1806). Este bloco so
+   mexe em raio e geometria.
+
+   O TERCEIRO SINAL CONTINUA INTEIRO. A barra de 3px do `.sidebar-item.active::before` (1850-1857)
+   vive em `left: 0`, e a capsula cresce para a DIREITA — nao a toca. Nao ha `overflow: hidden`
+   nem `z-index` neste bloco, entao ela nao e cortada nem coberta, e o `cx-barra-ativa` continua
+   animando. Os tres sinais do 67 §9 (fundo, peso, barra) seguem; a capsula e o QUARTO.
+
+   COMO ELA ALCANCA A BORDA SEM CRIAR ROLAGEM — e a parte nao obvia.
+   O respiro lateral do menu nao e do item nem da `.sidebar-nav` (que tem `padding: 12px 0`): vem
+   do `padding-inline: 12px` do `.drawer-shell` (linha 779). O caminho ingenuo — dar
+   `margin-right` negativo ao item ativo — furaria a caixa de conteudo da `.sidebar-nav`, e como
+   ela e `overflow-y: auto`, o eixo horizontal computa `auto` junto: apareceria barra de rolagem
+   horizontal dentro do menu. Em vez disso, quem perde o respiro a direita e a FAIXA INTEIRA
+   (`.sidebar-scroll-shell`). O item ativo entao alcanca a borda por largura normal, sem estourar
+   caixa nenhuma. O `.v-navigation-drawer__content` ja e `overflow: hidden` (linha 257), entao
+   nada escapa da gaveta.
+
+   NO RAIL, A CAPSULA NAO ENTRA. Escopado em `:not(.rail)`, e por classe de estado em vez de
+   largura: o rail e decidido pelo `matchMedia` do AppShell (769-1024) e a classe e a verdade.
+   No rail o item e `justify-items: center` sobre uma coluna de 28px; esticar so a direita
+   deslocaria o icone do eixo da capsula — exatamente o "vazar ou cortar o icone" que nao pode
+   acontecer. La o realce fica como hoje.
+
+   SEM MOVIMENTO NOVO. Nao animo raio nem geometria: o item ja transiciona `background` e `color`
+   em --cx-dur-1, e a barra ja entra com `cx-barra-ativa`. Como nada novo se move, tambem nao ha
+   `transform` para acrescentar as excecoes do reset de `prefers-reduced-motion` (67 §7).
+   ================================================================================================= */
+.shell-mobills .padaria-sidebar:not(.rail) .sidebar-scroll-shell {
+  margin-inline-end: calc(var(--cx-sp-3) * -1);
+}
+.shell-mobills .padaria-sidebar:not(.rail) .sidebar-item.active {
+  border-radius: var(--cx-r-md) var(--cx-r-pill) var(--cx-r-pill) var(--cx-r-md);
+}
+/* ===================== FIM VIS-07 ===================== */
