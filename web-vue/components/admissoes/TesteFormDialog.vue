@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { CargoOpcaoDto, TesteDetalheDto } from "@padaria/shared";
+import type { FuncaoOpcaoDto, TesteDetalheDto } from "@padaria/shared";
 import { cpfValido } from "@padaria/shared";
 import { apenasDigitos, dataHoraLocal, dataHoraParaUtc, mascararCpf } from "~/utils/formatacao";
 
 const props = defineProps<{
   aberto: boolean;
   teste: TesteDetalheDto | null;
-  cargos: CargoOpcaoDto[];
+  funcoes: FuncaoOpcaoDto[];
   salvando: boolean;
   erro: string;
 }>();
@@ -22,7 +22,7 @@ const editando = computed(() => Boolean(props.teste));
 const form = reactive({
   nomeCompleto: "",
   cpf: "",
-  cargoId: "",
+  funcaoId: "",
   jornadaHorario: "",
   inicioEm: "",
   fimCombinadoEm: ""
@@ -42,7 +42,7 @@ watch(
     alterandoCpf.value = false;
     form.nomeCompleto = teste?.nomeCompleto ?? "";
     form.cpf = "";
-    form.cargoId = teste?.cargoId ?? "";
+    form.funcaoId = teste?.funcaoId ?? "";
     form.jornadaHorario = teste?.jornadaHorario ?? "";
     form.inicioEm = teste ? dataHoraLocal(teste.inicioEm) : "";
     form.fimCombinadoEm = teste ? dataHoraLocal(teste.fimCombinadoEm) : "";
@@ -64,7 +64,30 @@ const erroCpf = computed(() => {
   if (digitos.length !== 11) return "O CPF precisa ter 11 dígitos.";
   return cpfValido(digitos) ? "" : "CPF inválido.";
 });
-const erroCargo = computed(() => (form.cargoId ? "" : "Escolha o cargo."));
+const erroFuncao = computed(() => {
+  if (!form.funcaoId) return "Escolha a função.";
+  const escolhida = props.funcoes.find((funcao) => funcao.id === form.funcaoId);
+  // Inativa só passa quando já era a do registro: desativar tira das escolhas novas, não impede
+  // corrigir o nome de um teste antigo. O servidor aplica a mesma regra — esta é a cópia da tela.
+  if (escolhida && !escolhida.ativo && form.funcaoId !== props.teste?.funcaoId) {
+    return "Esta função está inativa. Escolha outra.";
+  }
+  return "";
+});
+
+/**
+ * Função inativa continua na lista, desabilitada.
+ *
+ * Some-la deixaria o formulário de edição de um teste antigo com o seletor em branco, e a pessoa
+ * concluiria que o dado se perdeu. Desabilitada, ela aparece e diz por quê.
+ */
+function propsDaFuncao(funcao: FuncaoOpcaoDto) {
+  const eraADoRegistro = funcao.id === props.teste?.funcaoId;
+  return {
+    disabled: !funcao.ativo && !eraADoRegistro,
+    subtitle: funcao.ativo ? (funcao.cbo ? `CBO ${funcao.cbo}` : undefined) : "inativa"
+  };
+}
 const erroJornada = computed(() => (form.jornadaHorario.trim() ? "" : "Informe a jornada ou o horário combinado."));
 const erroInicio = computed(() => (form.inicioEm ? "" : "Informe a data e hora de início."));
 const erroFim = computed(() => {
@@ -77,7 +100,7 @@ const erroFim = computed(() => {
 
 const invalido = computed(() =>
   Boolean(
-    erroNome.value || erroCpf.value || erroCargo.value || erroJornada.value || erroInicio.value || erroFim.value
+    erroNome.value || erroCpf.value || erroFuncao.value || erroJornada.value || erroInicio.value || erroFim.value
   )
 );
 
@@ -85,7 +108,7 @@ function salvar() {
   if (invalido.value) return;
   const payload: Record<string, unknown> = {
     nomeCompleto: form.nomeCompleto.trim(),
-    cargoId: form.cargoId,
+    funcaoId: form.funcaoId,
     jornadaHorario: form.jornadaHorario.trim(),
     inicioEm: dataHoraParaUtc(form.inicioEm),
     fimCombinadoEm: dataHoraParaUtc(form.fimCombinadoEm)
@@ -159,12 +182,13 @@ function salvar() {
           <v-row dense>
             <v-col cols="12" md="5">
               <v-select
-                v-model="form.cargoId"
-                :items="cargos"
+                v-model="form.funcaoId"
+                :items="funcoes"
+                :item-props="propsDaFuncao"
                 item-title="nome"
                 item-value="id"
-                label="Cargo *"
-                :error-messages="erroCargo"
+                label="Função *"
+                :error-messages="erroFuncao"
                 density="comfortable"
               />
             </v-col>

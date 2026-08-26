@@ -115,8 +115,10 @@ function confirmarCancelar() {
           <v-btn v-if="!cpfRevelado" variant="text" size="x-small" @click="emit('revelarCpf')">Ver</v-btn>
         </dd>
 
-        <dt>Cargo</dt>
-        <dd>{{ teste.cargoNome }}</dd>
+        <dt>Função</dt>
+        <!-- CBO ao lado do nome: é o código que a planilha derivava por script, e quem preenche
+             guia de admissão precisa dele sem abrir outra tela. -->
+        <dd>{{ teste.funcaoNome }}<span v-if="teste.funcaoCbo" class="cbo"> · CBO {{ teste.funcaoCbo }}</span></dd>
 
         <dt>Jornada / horário</dt>
         <dd>{{ teste.jornadaHorario }}</dd>
@@ -320,6 +322,12 @@ function confirmarCancelar() {
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
   line-height: 1.6;
+}
+
+/* O CBO acompanha o nome da funcao sem competir com ele: e codigo de referencia, nao o rotulo. */
+.cbo {
+  color: var(--cx-ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 /* No celular o painel ocupa a tela toda e as acoes viram largura total. */

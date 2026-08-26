@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import type { CargoOpcaoDto, SituacaoTeste } from "@padaria/shared";
+import type { FuncaoOpcaoDto, SituacaoTeste } from "@padaria/shared";
 
 export type FiltrosTestes = {
   buscaNome: string;
   situacao: SituacaoTeste | "";
-  cargoId: string;
+  funcaoId: string;
   prazo: "" | "vence_hoje" | "vencido";
 };
 
-defineProps<{ cargos: CargoOpcaoDto[]; carregando: boolean }>();
+defineProps<{ funcoes: FuncaoOpcaoDto[]; carregando: boolean }>();
 
 const emit = defineEmits<{ (event: "aplicar", filtros: FiltrosTestes): void }>();
 
 // Abre em Ativo: o teste em andamento e o que o DP precisa ver ao entrar. Encerrado e cancelado
 // continuam alcancaveis pelo MESMO filtro — nao existe lista separada de "arquivados".
-const PADRAO: FiltrosTestes = { buscaNome: "", situacao: "ativo", cargoId: "", prazo: "" };
+const PADRAO: FiltrosTestes = { buscaNome: "", situacao: "ativo", funcaoId: "", prazo: "" };
 
 const filtros = reactive<FiltrosTestes>({ ...PADRAO });
 
@@ -69,11 +69,11 @@ function limpar() {
     </v-col>
     <v-col cols="6" md="3">
       <v-select
-        v-model="filtros.cargoId"
-        :items="[{ id: '', nome: 'Todos os cargos' }, ...cargos]"
+        v-model="filtros.funcaoId"
+        :items="[{ id: '', nome: 'Todas as funções' }, ...funcoes]"
         item-title="nome"
         item-value="id"
-        label="Cargo"
+        label="Função"
         density="comfortable"
         hide-details
       />

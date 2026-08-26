@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type {
   AuthSession,
-  CargoOpcaoDto,
+  FuncaoOpcaoDto,
   HistoricoTesteDto,
   MotivoCancelamento,
   ResultadoTeste,
@@ -34,10 +34,10 @@ const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OU
 // Os filtros vivem em `TestesFiltros` e chegam aqui APLICADOS. Guardar so o que foi aplicado evita
 // o defeito classico da lista que se contradiz: o texto do estado vazio falando de um filtro que o
 // operador digitou mas ainda nao mandou.
-const filtros = ref<FiltrosTestes>({ buscaNome: "", situacao: "ativo", cargoId: "", prazo: "" });
+const filtros = ref<FiltrosTestes>({ buscaNome: "", situacao: "ativo", funcaoId: "", prazo: "" });
 const temFiltroAlemDoPadrao = computed(
   () =>
-    Boolean(filtros.value.buscaNome || filtros.value.cargoId || filtros.value.prazo) ||
+    Boolean(filtros.value.buscaNome || filtros.value.funcaoId || filtros.value.prazo) ||
     filtros.value.situacao !== "ativo"
 );
 
@@ -45,7 +45,7 @@ const linhas = ref<TesteListaDto[]>([]);
 const total = ref(0);
 const pagina = ref(1);
 const itensPorPagina = 10;
-const cargos = ref<CargoOpcaoDto[]>([]);
+const funcoes = ref<FuncaoOpcaoDto[]>([]);
 const carregando = ref(false);
 const erro = ref("");
 const bloqueio = ref("");
@@ -91,7 +91,7 @@ function queryListagem() {
   const atuais = filtros.value;
   if (atuais.buscaNome.trim()) params.set("buscaNome", atuais.buscaNome.trim());
   if (atuais.situacao) params.set("situacao", atuais.situacao);
-  if (atuais.cargoId) params.set("cargoId", atuais.cargoId);
+  if (atuais.funcaoId) params.set("funcaoId", atuais.funcaoId);
   if (atuais.prazo) params.set("prazo", atuais.prazo);
   return `?${params.toString()}`;
 }
@@ -110,9 +110,9 @@ async function carregar() {
   }
 }
 
-async function carregarCargos() {
+async function carregarFuncoes() {
   try {
-    cargos.value = await apiGet<CargoOpcaoDto[]>("/api/admissoes/cargos");
+    funcoes.value = await apiGet<FuncaoOpcaoDto[]>("/api/admissoes/funcoes");
   } catch (error) {
     tratarErro(error);
   }
@@ -245,7 +245,7 @@ function cancelar(motivoCancelamento: MotivoCancelamento) {
 }
 
 onMounted(async () => {
-  await carregarCargos();
+  await carregarFuncoes();
   if (!bloqueio.value) await carregar();
 });
 </script>
@@ -275,7 +275,7 @@ onMounted(async () => {
     </v-card-title>
 
     <v-card-text>
-      <TestesFiltros :cargos="cargos" :carregando="carregando" @aplicar="aplicarFiltros" />
+      <TestesFiltros :funcoes="funcoes" :carregando="carregando" @aplicar="aplicarFiltros" />
 
       <v-alert v-if="erro" type="error" variant="tonal" density="comfortable" class="mb-3">
         {{ erro }}
@@ -300,7 +300,7 @@ onMounted(async () => {
             <tr>
               <th>Nome</th>
               <th>CPF</th>
-              <th>Cargo</th>
+              <th>Função</th>
               <th>Início</th>
               <th>Fim combinado</th>
               <th>Situação</th>
@@ -311,7 +311,7 @@ onMounted(async () => {
             <tr v-for="linha in linhas" :key="linha.id">
               <td class="celula-nome">{{ linha.nomeCompleto }}</td>
               <td class="cx-num">{{ linha.cpfMascarado }}</td>
-              <td>{{ linha.cargoNome }}</td>
+              <td>{{ linha.funcaoNome }}</td>
               <td class="cx-num">{{ formatarDataHora(linha.inicioEm) }}</td>
               <td class="cx-num">
                 {{ formatarDataHora(linha.fimCombinadoEm) }}
@@ -357,7 +357,7 @@ onMounted(async () => {
   <TesteFormDialog
     :aberto="formAberto"
     :teste="testeEmEdicao"
-    :cargos="cargos"
+    :funcoes="funcoes"
     :salvando="salvando"
     :erro="formErro || avisoCpf"
     @salvar="salvar"
