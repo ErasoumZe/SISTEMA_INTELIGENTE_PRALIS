@@ -139,6 +139,33 @@ describe("admissoes processos integration", () => {
     expect(divergente.statusCode).toBe(409);
   });
 
+  it("P0-3b Deve_Responder200_Quando_EncerrarSemProsseguirRepetido", async () => {
+    // A idempotencia e SIMETRICA: o duplo clique dOi igual nos dois desfechos, mesmo sem processo a
+    // devolver. Antes este caso caia em 409 e a pessoa nao sabia se tinha funcionado.
+    const teste = await criarTeste(cookieDp, "63017285074");
+    const corpo = { versao: teste.versao, resultado: "nao_prosseguir" };
+    const primeira = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/testes/${teste.id}/encerrar`,
+      headers: { cookie: cookieDp },
+      payload: corpo
+    });
+    assertOk(primeira);
+
+    const repetida = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/testes/${teste.id}/encerrar`,
+      headers: { cookie: cookieDp },
+      payload: corpo
+    });
+    assertOk(repetida);
+    expect(repetida.json().data.processoId).toBeNull();
+
+    const linha = await consultarUm<{ n: number }>(`select count(*)::int as n from admissoes_processos where teste_id = '${teste.id}'`);
+    if (!linha) throw new Error("consulta sem linha");
+    expect(linha.n).toBe(0);
+  });
+
   // ---------------------------------------------------------------- P0-1 tenant
   it("P0-1 Deve_Responder404_Quando_ProcessoDeOutraEmpresa", async () => {
     const teste = await criarTeste(cookieDp, "15350946056");

@@ -322,10 +322,17 @@ export async function encerrarTeste(id: string, body: DadosExternos, perfil?: Pe
     //
     // Este ramo NAO ESCREVE, entao dispensa guarda de concorrencia. O que ele exige e igualdade de
     // INTENCAO: o mesmo resultado que ja foi gravado.
-    if (alvo.status === "encerrado" && dados.resultado === "aprovado_para_admissao") {
-      if (alvo.resultado !== "aprovado_para_admissao") {
+    if (alvo.status === "encerrado") {
+      // A INTENCAO precisa bater. Repetir e reenviar o mesmo desfecho; mandar outro e tentar trocar
+      // o desfecho de um teste terminado, que e conflito real.
+      if (alvo.resultado !== dados.resultado) {
         throw conflito("Este periodo de teste foi encerrado com outro desfecho", "TESTE_NAO_EDITAVEL");
       }
+      // `nao_prosseguir` nao tem processo a devolver, e nao deve ter. Mas a repeticao dele sofre o
+      // MESMO problema do duplo clique, entao tambem responde 200 com o estado existente. Antes isto
+      // caia em 409 e a pessoa nao sabia se o encerramento tinha funcionado.
+      if (dados.resultado !== "aprovado_para_admissao") return { ...alvo, processoId: null };
+
       const existente = await obterProcessoPorTesteRepository(id, empresaId, tx);
       if (!existente) {
         // INVARIANTE: teste encerrado como aprovado SEMPRE tem processo — os dois nascem na mesma
