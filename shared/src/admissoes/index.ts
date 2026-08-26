@@ -95,7 +95,12 @@ const instanteSchema = z.string().datetime();
 const camposEditaveisTeste = {
   nomeCompleto: z.string().trim().min(1).max(LIMITE_NOME),
   cpf: cpfTesteSchema,
-  cargoId: uuidSchema,
+  // FUNCAO OPERACIONAL (`admissoes_funcoes`), nunca cargo de acesso (`cargos`).
+  //
+  // `cargos` e a chave primaria de `permissoes_cargos`: apontar para la faria registrar um PADEIRO
+  // exigir a criacao de um cargo de ACESSO chamado PADEIRO, visivel a toda regra de permissao por
+  // cargo. O nome do campo carrega a distincao para ninguem reintroduzi-la por engano.
+  funcaoId: uuidSchema,
   // Texto livre nesta vertical (decisao de Marco, correcao 5): o Pralis nao tem catalogo de
   // jornada. `turnos` e turno (nome + hora inicio/fim) e `colaboradores_jornadas` exige um
   // colaborador que ainda nao existe neste fluxo.
@@ -152,7 +157,7 @@ export const testesQuerySchema = paginationQuerySchema.extend({
   // Filtro UNICO de situacao. Ausente = todos. Nao existe filtro paralelo por `status` tecnico:
   // seriam duas formas de pedir a mesma coisa, com respostas capazes de divergir.
   situacao: situacaoTesteSchema.optional(),
-  cargoId: uuidSchema.optional(),
+  funcaoId: uuidSchema.optional(),
   // `prazo` so tem efeito sobre `em_teste`; nos demais status o servidor ignora o filtro.
   prazo: z.enum(["vence_hoje", "vencido"]).optional()
 });
@@ -167,8 +172,10 @@ export const testeListaDtoSchema = z.object({
   id: z.string(),
   nomeCompleto: z.string(),
   cpfMascarado: z.string(),
-  cargoId: z.string(),
-  cargoNome: z.string(),
+  funcaoId: z.string(),
+  funcaoNome: z.string(),
+  // CBO da funcao no momento da leitura. `null` quando a funcao nao tem codigo cadastrado.
+  funcaoCbo: z.string().nullable(),
   jornadaHorario: z.string(),
   inicioEm: z.string(),
   fimCombinadoEm: z.string(),
@@ -215,10 +222,19 @@ export const historicoTesteDtoSchema = z.object({
   ocorridoEm: z.string()
 });
 
-// Leitura MINIMA de cargos dentro de Admissoes (correcao 6): so id e nome, recortada pela empresa
-// derivada. Existe para o formulario nao depender de `cadastro_colaboradores_visualizar`, que e
-// permissao de outro dominio — `GET /api/cargos` continua como esta, para quem cuida do cadastro.
-export const cargoOpcaoDtoSchema = z.object({ id: z.string(), nome: z.string() });
+// Leitura MINIMA das FUNCOES OPERACIONAIS da empresa derivada, para o seletor do formulario.
+//
+// Nao e `GET /api/cargos`: aquilo lista cargo de ACESSO e exige `cadastro_colaboradores_visualizar`,
+// permissao de outro dominio. Sao catalogos distintos, com donos distintos.
+export const funcaoOpcaoDtoSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  cbo: z.string().nullable(),
+  // Inativas TAMBEM viajam, marcadas. Omiti-las deixaria o formulario de edicao de um teste antigo
+  // sem o proprio valor gravado na lista, e o seletor apareceria vazio. Impedir a ESCOLHA de uma
+  // inativa e regra da tela e do servico, nao motivo para esconder o dado.
+  ativo: z.boolean()
+});
 
 export type CriarTestePayload = z.infer<typeof criarTestePayloadSchema>;
 export type EditarTestePayload = z.infer<typeof editarTestePayloadSchema>;
@@ -230,4 +246,4 @@ export type TesteListaDto = z.infer<typeof testeListaDtoSchema>;
 export type TesteDetalheDto = z.infer<typeof testeDetalheDtoSchema>;
 export type VerificacaoCpfDto = z.infer<typeof verificacaoCpfDtoSchema>;
 export type HistoricoTesteDto = z.infer<typeof historicoTesteDtoSchema>;
-export type CargoOpcaoDto = z.infer<typeof cargoOpcaoDtoSchema>;
+export type FuncaoOpcaoDto = z.infer<typeof funcaoOpcaoDtoSchema>;
