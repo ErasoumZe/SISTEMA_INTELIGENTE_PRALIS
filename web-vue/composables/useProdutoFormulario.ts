@@ -1,0 +1,230 @@
+import type { ProdutoDetalhe } from "@padaria/shared";
+import {
+  calcularPrecoVenda,
+  montarComoSeCompra,
+  montarDescricao,
+  montarValidacaoQtd,
+  validarPromocoesDoProduto
+} from "@padaria/shared";
+import { mensagemErro } from "~/utils/domain";
+import {
+  formularioDoDetalhe,
+  formularioVazio,
+  numero,
+  payloadDoFormulario,
+  type ProdutoForm
+} from "~/composables/produto-formulario-mapa";
+
+/**
+ * Estado do formulario de produto. As previas (descricao, "como se compra", preco) usam as MESMAS
+ * funcoes puras que o servidor usa — e por isso que previa e valor gravado nunca divergem.
+ */
+
+export function useProdutoFormulario(empresaId: Ref<string>, produtoId: Ref<string | null>) {
+  const { apiGet, apiPost, apiPut } = useApi();
+
+  const form = ref<ProdutoForm>(formularioVazio(empresaId.value));
+  const unidades = ref<Array<{ id: string; sigla: string; nome: string }>>([]);
+  const grupos = ref<Array<{ id: string; nome: string }>>([]);
+
+  const carregando = ref(false);
+  const salvando = ref(false);
+  const erro = ref("");
+  const duplicado = ref("");
+  const alterado = ref(false);
+  /** Foto escolhida antes de o produto existir: sobe logo depois do POST. */
+  const fotoPendente = ref<File | null>(null);
+
+  let estadoOriginal = JSON.stringify(form.value);
+  watch(
+    form,
+    () => {
+      alterado.value = JSON.stringify(form.value) !== estadoOriginal;
+    },
+    { deep: true }
+  );
+
+  const siglaDaUnidade = computed(
+    () => unidades.value.find((unidade) => unidade.id === form.value.unidadeIndividualId)?.sigla ?? ""
+  );
+
+  const descricaoPreview = computed(() =>
+    montarDescricao(form.value.descricao, form.value.quantidadeIndividual, siglaDaUnidade.value)
+  );
+
+  const comoSeCompraPreview = computed(() =>
+    montarComoSeCompra({
+      embalagem: form.value.embalagem,
+      cDe: form.value.cDe,
+      quantidadeCaixa: numero(form.value.quantidadeCaixa),
+      medidaCompra: form.value.medidaCompra,
+      descricao: descricaoPreview.value || form.value.descricao
+    })
+  );
+
+  const validacaoQtdPreview = computed(() =>
+    form.value.tipo === "transformacao"
+      ? montarValidacaoQtd(
+          descricaoPreview.value || form.value.descricao,
+          form.value.precisao,
+          numero(form.value.quantidadeTransformacao) ?? 0,
+          form.value.unidadeTransformacao
+        )
+      : ""
+  );
+
+  /**
+   * Previa do preco. O servidor recalcula e MANDA (ADR-002) — isto aqui e so para a pessoa ver o
+   * numero antes de salvar. `margemGrupo: 0` porque `grupos_mercadorias.margem` ainda nao existe
+   * (migration bloqueada; ver PROJECT_BRAIN/30 §7).
+   */
+  const precoPreview = computed(() =>
+    calcularPrecoVenda({
+      auto: form.value.auto,
+      custo: numero(form.value.custo) ?? 0,
+      quantidadeCaixa: numero(form.value.quantidadeCaixa) ?? 1,
+      margem: form.value.margemPercentual ? (numero(form.value.margemPercentual) ?? 0) / 100 : null,
+      margemGrupo: 0,
+      precoManual: numero(form.value.precoVenda) ?? 0,
+      temProduto: Boolean(form.value.descricao.trim())
+    })
+  );
+
+  /** Erros por campo — alimentam `error-messages` e o foco no primeiro invalido. */
+  const erros = computed(() => {
+    const lista: Record<string, string> = {};
+    if (!form.value.descricao.trim()) lista["descricao"] = "Informe a descrição do produto.";
+    if (!form.value.unidadeIndividualId) lista["unidadeIndividualId"] = "Escolha a unidade individual.";
+    const quantidade = numero(form.value.quantidadeIndividual);
+    if (quantidade == null || quantidade <= 0) lista["quantidadeIndividual"] = "A quantidade precisa ser maior que 0.";
+    const minimo = numero(form.value.estoqueMin);
+    const maximo = numero(form.value.estoqueMax);
+    if (minimo != null && maximo != null && maximo < minimo) {
+      lista["estoqueMax"] = "O máximo não pode ser menor que o mínimo.";
+    }
+    const unidadesDasConversoes = form.value.conversoes.map((item) => item.unidadeMedidaId).filter(Boolean);
+    if (new Set(unidadesDasConversoes).size !== unidadesDasConversoes.length) {
+      lista["conversoes"] = "A mesma unidade aparece em duas conversões.";
+    }
+    return lista;
+  });
+
+  const errosDePromocao = computed(() =>
+    validarPromocoesDoProduto(
+      form.value.promocoes.map((promo) => ({
+        tipo: promo.tipo,
+        valor: numero(promo.valor),
+        descontoFracao: promo.descontoPercentual ? (numero(promo.descontoPercentual) ?? 0) / 100 : null,
+        horaInicio: promo.horaInicio || null,
+        horaFim: promo.horaFim || null,
+        dias: promo.dias,
+        validaAte: promo.validaAte || null
+      }))
+    )
+  );
+
+  const valido = computed(() => Object.keys(erros.value).length === 0 && errosDePromocao.value.length === 0);
+
+  async function carregarOpcoes() {
+    if (!empresaId.value) return;
+    const consulta = `?empresaId=${empresaId.value}&pageSize=100`;
+    const [listaUnidades, listaGrupos] = await Promise.all([
+      apiGet<Array<{ id: string; sigla: string; nome: string }>>(`/api/unidades_medida${consulta}`),
+      apiGet<{ gruposMercadorias: Array<{ id: string; nome: string }> }>(`/api/grupos${consulta}`)
+    ]);
+    unidades.value = listaUnidades;
+    grupos.value = listaGrupos.gruposMercadorias;
+  }
+
+  async function carregar() {
+    carregando.value = true;
+    erro.value = "";
+    try {
+      await carregarOpcoes();
+      if (produtoId.value) {
+        form.value = formularioDoDetalhe(await apiGet<ProdutoDetalhe>(`/api/produtos/${produtoId.value}`));
+      }
+      estadoOriginal = JSON.stringify(form.value);
+      alterado.value = false;
+    } catch (falha) {
+      erro.value = mensagemErro(falha);
+    } finally {
+      carregando.value = false;
+    }
+  }
+
+  /**
+   * Salva. Devolve o id em caso de sucesso, ou `null` — e o formulario CONSERVA tudo o que a pessoa
+   * digitou. `salvando` bloqueia o duplo clique.
+   */
+  async function salvar(forcar = false): Promise<string | null> {
+    if (salvando.value || !valido.value) return null;
+    salvando.value = true;
+    erro.value = "";
+    duplicado.value = "";
+    try {
+      const payload = payloadDoFormulario(form.value, empresaId.value, forcar);
+      let id = produtoId.value;
+      if (id) {
+        await apiPut(`/api/produtos/${id}`, payload);
+      } else {
+        const criado = await apiPost<{ id: string }>("/api/produtos", payload);
+        id = criado.id;
+      }
+      // Foto escolhida antes de o produto existir sobe agora. Se ELA falhar, o produto ja esta
+      // salvo — o erro aparece, mas ninguem recadastra o produto por causa disso.
+      if (id && fotoPendente.value) {
+        await enviarFotoPendente(id);
+        fotoPendente.value = null;
+      }
+      estadoOriginal = JSON.stringify(form.value);
+      alterado.value = false;
+      return id;
+    } catch (falha) {
+      const mensagem = mensagemErro(falha);
+      // "Cadastrar mesmo assim" vale para descricao repetida; EAN repetido e bloqueio absoluto.
+      if (mensagem.includes("Ja existe o produto") && !mensagem.includes("codigo de barras")) {
+        duplicado.value = mensagem;
+      } else {
+        erro.value = mensagem;
+      }
+      return null;
+    } finally {
+      salvando.value = false;
+    }
+  }
+
+  const { apiUrl } = useApi();
+  async function enviarFotoPendente(id: string) {
+    const corpo = new FormData();
+    corpo.append("arquivo", fotoPendente.value as File);
+    const resposta = await fetch(`${apiUrl}/api/produtos/${id}/foto`, {
+      method: "POST",
+      credentials: "include",
+      body: corpo
+    });
+    if (!resposta.ok) throw new Error("Produto salvo, mas a foto não subiu. Abra o produto e envie de novo.");
+  }
+
+  return {
+    form,
+    unidades,
+    grupos,
+    carregando,
+    salvando,
+    erro,
+    duplicado,
+    alterado,
+    fotoPendente,
+    erros,
+    errosDePromocao,
+    valido,
+    siglaDaUnidade,
+    descricaoPreview,
+    comoSeCompraPreview,
+    validacaoQtdPreview,
+    precoPreview,
+    carregar,
+    salvar
+  };
+}

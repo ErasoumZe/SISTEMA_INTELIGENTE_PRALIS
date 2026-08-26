@@ -72,43 +72,6 @@ export function useCadastroView(params: {
         cidade: item.cidade,
         estado: item.estado
       }));
-    if (tela === "produtos")
-      return listas.produtos.map((item) => ({
-        id: item.id,
-        nome: item.descricao,
-        descricao: item.descricao,
-        codigo: item.codigo,
-        codigoBarras: item.codigoBarras,
-        marca: item.marca ?? "",
-        grupoMercadoriaId: item.grupoMercadoriaId ?? "",
-        unidadeIndividualId: item.unidadeIndividualId ?? item.unidadeMedidaId ?? "",
-        unidade:
-          listas.unidadesMedida.find((unidade) => unidade.id === (item.unidadeIndividualId ?? item.unidadeMedidaId))
-            ?.sigla ?? "",
-        quantidadeIndividual: String(item.quantidadeIndividual ?? "1"),
-        embalagem: item.embalagem ?? "",
-        cDe: item.cDe ?? "",
-        quantidadeCaixa: String(item.quantidadeCaixa ?? "1"),
-        medidaCompra: item.medidaCompra ?? "",
-        custo: item.custo != null ? String(item.custo) : "",
-        margem: item.margem != null ? String(Number(item.margem) * 100) : "",
-        precoVenda: item.precoVenda != null ? String(item.precoVenda) : "",
-        preco_atual: item.precoVendaAtual != null ? dinheiro(item.precoVendaAtual) : "-",
-        auto: item.auto ? "true" : "false",
-        status: item.status ?? "ativo",
-        tipo: item.tipo ?? "revenda",
-        quantidadeEstoque: String(item.quantidadeEstoque ?? "0"),
-        estoqueMin: item.estoqueMin != null ? String(item.estoqueMin) : "",
-        estoqueMax: item.estoqueMax != null ? String(item.estoqueMax) : "",
-        setorEstoque: item.setorEstoque ?? "",
-        localVenda1: item.localVenda1 ?? "",
-        localVenda2: item.localVenda2 ?? "",
-        fotoUrl: item.fotoUrl ?? "",
-        fiscal: JSON.stringify(item.fiscal ?? null),
-        transformacao: JSON.stringify(item.transformacao ?? null),
-        promocoes: JSON.stringify(item.promocoes ?? []),
-        conversoes: JSON.stringify(item.conversoes ?? [])
-      }));
     if (tela === "colaboradores")
       return listas.colaboradores.map((item) => ({
         id: item.id,

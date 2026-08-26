@@ -40,7 +40,9 @@ const rotas: Array<{ rota: string; permite: PerfilTeste[]; nega: PerfilTeste[] }
   { rota: "/api/colaboradores", permite: ["caixa", "discriminador"], nega: ["semPermissao"] },
   { rota: "/api/grupos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
   { rota: "/api/fornecedores", permite: ["discriminador", "caixa"], nega: ["semPermissao"] },
-  { rota: "/api/produtos", permite: ["discriminador", "caixa"], nega: ["semPermissao"] }
+  // P-04: quem so opera mercadorias usa a PROJECAO REDUZIDA. A listagem completa (`/api/produtos`)
+  // passou a exigir `cadastro_produtos_visualizar`, porque devolve custo, margem e preco.
+  { rota: "/api/produtos/opcoes", permite: ["discriminador", "caixa"], nega: ["semPermissao"] }
 ];
 
 const permitidos = rotas.flatMap(({ rota, permite }) => permite.map((perfil) => ({ rota, perfil })));

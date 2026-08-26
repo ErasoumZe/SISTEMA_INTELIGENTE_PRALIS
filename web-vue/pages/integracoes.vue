@@ -171,7 +171,7 @@ async function carregarOpcoesVinculo() {
   ] = await Promise.all([
     apiGet<Opcao[]>(`/api/pdvs${query}`),
     apiGet<Opcao[]>(`/api/clientes${query}`),
-    apiGet<Opcao[]>(`/api/produtos${query}`),
+    apiGet<Opcao[]>(`/api/produtos/opcoes${query}`),
     apiGet<Opcao[]>(`/api/formas_pagamento${query}`),
     apiGet<Opcao[]>(`/api/colaboradores${query}`)
   ]);

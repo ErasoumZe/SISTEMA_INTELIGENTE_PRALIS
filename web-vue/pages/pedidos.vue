@@ -18,7 +18,6 @@ const erro = ref("");
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
 const pedidos = ref<PedidoDto[]>([]);
-const produtos = ref<Opcao[]>([]);
 const detalhe = ref<PedidoDto | null>(null);
 const dialogDetalhe = ref(false);
 const gerando = ref(false);
@@ -60,10 +59,6 @@ function corStatus(status: string) {
   return "warning";
 }
 
-function tituloProduto(item: Opcao) {
-  return item.descricao || item.nome || item.id;
-}
-
 async function carregarEmpresas() {
   empresas.value = await apiGet<Opcao[]>("/api/empresas");
   empresaId.value =
@@ -74,11 +69,10 @@ async function carregarDados() {
   if (!empresaId.value) return;
   empresaCarregando.value = true;
   try {
+    // Produtos NAO sao mais carregados aqui: o ProdutoAutocomplete busca no servidor conforme se
+    // digita, em vez de depender de uma lista pre-carregada (que vinha cortada na primeira pagina).
     const query = `?empresaId=${empresaId.value}`;
-    [produtos.value, pedidos.value] = await Promise.all([
-      apiGet<Opcao[]>(`/api/produtos${query}`),
-      apiGet<PedidoDto[]>(`/api/pedidos${query}`)
-    ]);
+    pedidos.value = await apiGet<PedidoDto[]>(`/api/pedidos${query}`);
   } catch (error) {
     notificar(mensagemErro(error), "error");
   } finally {
@@ -261,15 +255,9 @@ onMounted(async () => {
         <v-card-text>
           <v-row v-for="(item, indice) in formManual.itens" :key="`item-${indice}`" dense align="center">
             <v-col cols="12" md="7">
-              <v-select
-                v-model="item.produtoId"
-                :items="produtos"
-                :item-title="tituloProduto"
-                item-value="id"
-                label="Produto"
-                density="comfortable"
-                clearable
-              />
+              <!-- Busca remota: o seletor deixou de depender da lista pre-carregada, que estava
+                   presa a primeira pagina da API. -->
+              <ProdutoAutocomplete v-model="item.produtoId" :empresa-id="empresaId" />
             </v-col>
             <v-col cols="8" md="4">
               <v-text-field v-model="item.quantidade" type="number" min="0" label="Quantidade" density="comfortable" />

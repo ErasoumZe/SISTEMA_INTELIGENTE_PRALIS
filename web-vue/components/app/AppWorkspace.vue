@@ -636,7 +636,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+      carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), [])
     ]);
@@ -753,7 +753,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         ),
         carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
         carregarOpcaoOpcional(faltas, "Unidades de medida", () => apiGet<Opcao[]>(`/api/unidades_medida${query}`), []),
-        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos${query}`), []),
+        carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
         carregarOpcaoOpcional(
           faltas,
           "Grupos de patrimônio",
@@ -840,15 +840,6 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
-  } else if (tela === "produtos") {
-    const [produtos, grupos, unidades] = await Promise.all([
-      apiGet<Opcao[]>(`/api/produtos${query}`),
-      apiGet<Pick<Opcoes, "gruposMercadorias">>(`/api/grupos${query}`),
-      apiGet<Opcao[]>(`/api/unidades_medida${query}`)
-    ]);
-    dados.produtos = produtos;
-    dados.gruposMercadorias = grupos.gruposMercadorias;
-    dados.unidadesMedida = unidades;
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
@@ -1060,7 +1051,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
     },
     produtos: async () => {
-      alvo.produtos = await apiGet<Opcao[]>(`/api/produtos${query}`);
+      alvo.produtos = await apiGet<Opcao[]>(`/api/produtos/opcoes${query}`);
     },
     formasPagamento: async () => {
       alvo.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
@@ -1427,7 +1418,6 @@ async function salvarCadastro() {
     const formSnapshot: CadastroForm = {
       ...formCadastro.value,
       empresaIds: [...formCadastro.value.empresaIds],
-      produtoConversoes: formCadastro.value.produtoConversoes.map((conversao) => ({ ...conversao })),
       // S-06: a listagem esconde 52 permissoes do form e o servidor faz REPLACE total — sem
       // reinjetar aqui, salvar pela tela apaga o que ela mesma escondeu. A fonte e `opcoes`
       // (completa e sem paginacao), nao `permissoesPagina` (uma pagina, que nasce vazia).

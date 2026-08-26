@@ -679,12 +679,12 @@ iniciado" e marcando as quatro como ❌. Estava errado. A conferência contra o 
 Cadastro de Produtos **existe, está implementado e tem 20 testes**. Detalhe completo em
 `24_CADASTRO_DE_PRODUTOS.md`.
 
-| Id    | Regra                                                                                                                                                                                              | Origem           | Status                                                                                                |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| R-145 | **A fonte do cadastro de produtos é a planilha do Rodrigo**, não o cadastro do CREARE. **Os dados fiscais da planilha NÃO serão importados** — estão errados e causam pagamento de imposto a maior | José p.42, 49-50 | ✅ cumprida no seed (`seed-planilha.ts` não grava campo fiscal). ⚠️ ver conflito de fontes em `24` §4 |
-| R-146 | Produto tem dois tipos: **revenda** e **transformação**. Preço de venda = custo × margem, com opção de digitar manual                                                                              | José p.43-44     | ✅ implementada e testada (`shared/src/produtos/regras.ts`, 20 testes)                                |
-| R-147 | A **promoção** só se aplica com produto cadastrado, mesmo código e dentro da janela de vigência. Fora dela, volta o preço normal                                                                   | José p.47        | ⚠️ janela de vigência pronta; falta o "mesmo código", que depende do PDV                              |
-| R-148 | **Pedido automático** dispara no estoque mínimo, na quantidade que falta para o máximo. **O comprador sempre aprova ou reprova**; pode deixar rascunho que se auto-aprova no mínimo                | José p.36, 56    | ❌ só existem as colunas de estoque mín./máx.; nenhuma lógica de disparo                              |
+| Id    | Regra                                                                                                                                                                                              | Origem           | Status                                                                                                                                                                   |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R-145 | **A fonte do cadastro de produtos é a planilha do Rodrigo**, não o cadastro do CREARE. **Os dados fiscais da planilha NÃO serão importados** — estão errados e causam pagamento de imposto a maior | José p.42, 49-50 | ✅ cumprida no seed (`seed-planilha.ts` não grava campo fiscal). O conflito de fontes do `24` §4 foi **fechado pela R-165** (12/08): o importador do Pralis foi removido |
+| R-146 | Produto tem dois tipos: **revenda** e **transformação**. Preço de venda = custo × margem, com opção de digitar manual                                                                              | José p.43-44     | ✅ implementada e testada (`shared/src/produtos/regras.ts`, 20 testes)                                                                                                   |
+| R-147 | A **promoção** só se aplica com produto cadastrado, mesmo código e dentro da janela de vigência. Fora dela, volta o preço normal                                                                   | José p.47        | ⚠️ janela de vigência pronta; falta o "mesmo código", que depende do PDV                                                                                                 |
+| R-148 | **Pedido automático** dispara no estoque mínimo, na quantidade que falta para o máximo. **O comprador sempre aprova ou reprova**; pode deixar rascunho que se auto-aprova no mínimo                | José p.36, 56    | ❌ só existem as colunas de estoque mín./máx.; nenhuma lógica de disparo                                                                                                 |
 
 **Relatórios e IA**
 
@@ -759,6 +759,24 @@ Notas de desenho:
   retorno/sangria ao cofre confirmado após o fechamento **continua passando** (não altera os
   totais; teste T4). Espelho da S1: agendada vencida presa a caixa fechado permanece `agendada`
   (reavaliada por ciclo) até o mesmo fluxo futuro.
+
+### Produtos — fonte única de criação (12/08/2026, P-04)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Origem      | Status | Teste                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ | -------------------------------------------- |
+| **R-165** 🆕 | **Somente a planilha do Rodrigo pode CRIAR produto.** O app Pralis antigo **deixa de ser fonte executável** — `api/src/scripts/importar-pralis.ts` e o script `importar:pralis` foram **removidos**, não desativados. Dado do Pralis não cria produto e **nunca** importa dado fiscal (mantém a R-145). Enriquecimento futuro dos campos comerciais só poderá atuar sobre produto **previamente conciliado**, nunca criar produto, e **depende de nova autorização** do José — não existe hoje e não foi implementado. A regra é revisável, mas **esta é a vigente**: enquanto não houver decisão nova, a única porta de criação em massa é `scripts/seed-planilha.ts`, e a manual é o cadastro da tela | José, 12/08 | ✅     | `produtos-fonte-unica` (ausência do caminho) |
+
+Notas de desenho:
+
+- **Isto resolve o `C-09`** (conflito de fontes) e a `§4` do `24`/`§5` do `30`, que estavam abertos
+  desde 05/08 esperando exatamente esta decisão. O conflito era potencial, não atual — o
+  `base-products.json` não tinha bloco fiscal preenchido —, mas o caminho existia e podia ser
+  rodado por engano.
+- **A pasta `CADASTRO DE PRODUTOS/` continua no disco e continua ignorada pelo Git.** Ela é
+  referência **visual e histórica** (telas, ícones, textos de ajuda) — nunca aplicação a ser
+  copiada, mergeada ou executada. Os `.env` dela não são lidos nem citados.
+- A decisão de 03/07 (_"Pralis é a fonte de verdade"_) fica **REVOGADA** por esta regra. Ela
+  permanece citada nos documentos apenas para explicar por que o importador existiu.
 - **Não restou caminho financeiro fora da porta.** S3/S4/S5/S8 entraram por decisão expressa do
   José (11/08); S6 está **provado por teste** (reescrever contas no PUT/confirmar não altera um
   segundo caixa — nenhum lock novo era necessário); S7 (`liberar-trava` sem preHandler) **não

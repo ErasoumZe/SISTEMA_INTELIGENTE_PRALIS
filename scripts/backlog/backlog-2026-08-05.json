@@ -953,10 +953,10 @@
     "milestone": "M6 - Decisoes",
     "area": "decisao",
     "prioridade": "P1",
-    "titulo": "Conflito de fontes: `importar-pralis` x `seed-planilha`",
-    "contexto": "Existem DOIS importadores ativos gravando na mesma tabela de produtos com fontes diferentes: `api/src/scripts/importar-pralis.ts` (decisao de 03/07, 'Pralis e a fonte de verdade', traz o bloco fiscal completo em `:67`, `:248`) e `scripts/seed-planilha.ts` (R-145, de 04/08: a fonte e a planilha do Rodrigo e dado fiscal NAO entra porque esta errado e causa pagamento de imposto a maior). Formalmente nao colidem, mas o documento mais novo declara que dado fiscal herdado e a origem de um prejuizo fiscal REAL.",
-    "fazer": "Decidir qual e a fonte oficial hoje e registrar no `19`. Se o `importar-pralis` continuar, remover o bloco fiscal dele.",
-    "aceite": "Uma fonte oficial registrada. Nenhum caminho importa dado fiscal herdado.",
+    "titulo": "[RESOLVIDO 12/08 - R-165] Conflito de fontes do cadastro de produtos",
+    "contexto": "RESOLVIDO em 12/08/2026 pela R-165. Existiam DOIS importadores ativos gravando na mesma tabela de produtos com fontes diferentes: o importador do app Pralis (decisao de 03/07, 'Pralis e a fonte de verdade', que trazia o bloco fiscal completo) e `scripts/seed-planilha.ts` (R-145, de 04/08: a fonte e a planilha do Rodrigo e dado fiscal NAO entra porque esta errado e causa pagamento de imposto a maior). Formalmente nao colidiam, mas o documento mais novo declara que dado fiscal herdado e a origem de um prejuizo fiscal REAL.",
+    "fazer": "NADA - ja executado. Jose decidiu (R-165) que somente a planilha do Rodrigo cria produto; o importador do Pralis e o script npm dele foram REMOVIDOS do repositorio, e um teste (`tests/unit/produtos-fonte-unica.test.ts`) impede o caminho de voltar.",
+    "aceite": "ATENDIDO: fonte oficial registrada na R-165; nenhum caminho executavel importa dado fiscal herdado.",
     "referencia": "24 S4"
   },
   {
