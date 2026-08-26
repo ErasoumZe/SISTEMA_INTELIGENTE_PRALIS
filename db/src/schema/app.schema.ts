@@ -19,7 +19,15 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
-import type { AcaoHistoricoTeste, MotivoCancelamento, ResultadoTeste, StatusTeste } from "@padaria/shared/admissoes";
+import type {
+  AcaoHistoricoProcesso,
+  AcaoHistoricoTeste,
+  MotivoCancelamento,
+  MotivoCancelamentoProcesso,
+  ResultadoTeste,
+  StatusProcesso,
+  StatusTeste
+} from "@padaria/shared/admissoes";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
 
@@ -2174,6 +2182,119 @@ export const admissoesTestesHistorico = pgTable(
     index("admissoes_testes_historico_teste_idx").on(
       table.empresaId,
       table.testeId,
+      table.ocorridoEm,
+      table.id
+    )
+  ]
+);
+
+// =================================================================================================
+// ADM-002 V0 — Processo de admissao.
+//
+// Nasce de um teste encerrado com `aprovado_para_admissao`, na MESMA transacao que o encerra. Nao ha
+// acao "iniciar admissao": um segundo caminho para o mesmo ato e o defeito que a regra-mae proibe.
+//
+// NAO tem `colaborador_id` e nao referencia `colaboradores`. O vinculo com o cadastro operacional e
+// escopo inteiro da V7 — incluindo a coluna que o representara. Antecipa-la agora criaria coluna
+// nula que ninguem sabe preencher, e uma FK que exigiria mexer em `colaboradores` antes da hora.
+//
+// Esta vertical e PURAMENTE ADITIVA: nenhuma tabela existente e alterada.
+// =================================================================================================
+
+export const admissoesProcessos = pgTable(
+  "admissoes_processos",
+  {
+    id: idUuid,
+    empresaId,
+    /** A ORIGEM. O processo so existe por causa dela. */
+    testeId: uuid("teste_id").notNull(),
+    status: text("status").$type<StatusProcesso>().notNull().default("iniciado"),
+    versao: integer("versao").notNull().default(1),
+    motivoCancelamento: text("motivo_cancelamento").$type<MotivoCancelamentoProcesso>(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    atualizadoPor: text("atualizado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    canceladoPor: text("cancelado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm,
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    // FK COMPOSTA: o banco recusa teste de outra empresa por conta propria.
+    foreignKey({
+      columns: [table.testeId, table.empresaId],
+      foreignColumns: [admissoesTestes.id, admissoesTestes.empresaId],
+      name: "admissoes_processos_teste_empresa_fk"
+    }),
+    // UM teste, UM processo — no banco, nao no servico. E a rede para duas transacoes concorrentes
+    // passarem juntas pelo lock; repeticao e tratada pelo ramo idempotente do servico.
+    unique("admissoes_processos_teste_unico").on(table.testeId),
+    // Alvo da FK composta vinda do historico. Tabela NOVA — nao fere a regra de nao tocar existentes.
+    unique("admissoes_processos_id_empresa_unica").on(table.id, table.empresaId),
+    // SOMENTE os dois estados alcancaveis na V0. Aceitar um estado antes de a regra dele existir e
+    // gravar vocabulario que ninguem confirmou, e que passa a ser gravavel por qualquer bug.
+    check("admissoes_processos_status_check", sql`${table.status} in ('iniciado', 'cancelado')`),
+    check("admissoes_processos_versao_check", sql`${table.versao} > 0`),
+    check(
+      "admissoes_processos_motivo_cancelamento_check",
+      sql`${table.motivoCancelamento} is null or ${table.motivoCancelamento} in ('desistencia_do_candidato', 'vaga_cancelada')`
+    ),
+    // Um CHECK unico para os dois estados: cancelado pela metade deixa de ser representavel.
+    check(
+      "admissoes_processos_coerencia_status_check",
+      sql`(
+        ${table.status} = 'iniciado'
+        and ${table.motivoCancelamento} is null
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'cancelado'
+        and ${table.motivoCancelamento} is not null
+        and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
+      )`
+    ),
+    index("admissoes_processos_empresa_status_criado_idx").on(
+      table.empresaId,
+      table.status,
+      table.criadoEm,
+      table.id
+    )
+  ]
+);
+
+export const admissoesProcessosHistorico = pgTable(
+  "admissoes_processos_historico",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    versao: integer("versao").notNull(),
+    acao: text("acao").$type<AcaoHistoricoProcesso>().notNull(),
+    atorUsuarioId: text("ator_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    // NOMES de campos, nunca valores: gravar antes/depois duplicaria a PII dentro da propria trilha.
+    camposAlterados: jsonb("campos_alterados")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ocorridoEm: timestamp("ocorrido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_historico_processo_empresa_fk"
+    }).onDelete("cascade"),
+    check("admissoes_processos_historico_acao_check", sql`${table.acao} in ('criado', 'cancelado')`),
+    check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
+    // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
+    uniqueIndex("admissoes_processos_historico_evento_unico").on(table.processoId, table.versao),
+    index("admissoes_processos_historico_processo_idx").on(
+      table.empresaId,
+      table.processoId,
       table.ocorridoEm,
       table.id
     )

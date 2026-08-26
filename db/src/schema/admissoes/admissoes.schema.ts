@@ -2,7 +2,12 @@
 // operacional: ele nao cria colaborador, nao tem `colaborador_id` e nao efetiva ninguem. Manter o
 // subcaminho proprio faz a fronteira aparecer no import (`@padaria/db/schema/admissoes`), em vez de
 // depender de quem le lembrar da regra.
-export { admissoesTestes, admissoesTestesHistorico } from "../app.schema.js";
+export {
+  admissoesProcessos,
+  admissoesProcessosHistorico,
+  admissoesTestes,
+  admissoesTestesHistorico
+} from "../app.schema.js";
 
 // A FUNCAO OPERACIONAL nao sai por aqui. Ela e `funcoesOperacionais`, exportada por
 // `@padaria/db/schema/cadastro`: catalogo operacional compartilhavel por empresa, que nasceu nesta

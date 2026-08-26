@@ -3,6 +3,8 @@ import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
 import { cpfValido, normalizarCpf } from "./cpf.js";
 
 export * from "./cpf.js";
+// ADM-002 V0 — o processo de admissao, que nasce do teste efetivado.
+export * from "./processos.js";
 
 // =================================================================================================
 // ADM-001 — Controle de periodo de teste (piloto TNP).
@@ -191,6 +193,10 @@ export const testeListaDtoSchema = z.object({
 // Autoria resolvida por join em `perfis_usuarios`: SO o nome. E-mail nunca entra na projecao.
 export const testeDetalheDtoSchema = testeListaDtoSchema.extend({
   motivoCancelamento: motivoCancelamentoSchema.nullable(),
+  // ADM-002: o processo de admissao que nasceu deste teste, se houver. `null` em todo teste que nao
+  // foi efetivado. Existe para a tela oferecer o caminho de volta ao processo depois de reabrir o
+  // teste — sem ele, o link so funcionaria no instante da efetivacao.
+  processoId: z.string().nullable(),
   criadoPorNome: z.string().nullable(),
   criadoEm: z.string(),
   atualizadoPorNome: z.string().nullable(),
