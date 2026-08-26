@@ -29,6 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "fechar"): void;
+  (event: "verProcesso"): void;
   (event: "editar"): void;
   (event: "revelarCpf"): void;
   (event: "encerrar", resultado: ResultadoTeste): void;
@@ -172,6 +173,15 @@ function confirmarCancelar() {
           <li v-if="!historico.length" class="historico-vazio">Sem eventos registrados.</li>
         </ul>
       </section>
+
+      <!-- ADM-002: o caminho de volta ao processo. So aparece quando ele existe, e ele so existe
+           quando o teste foi efetivado. Nao ha botao de "iniciar": efetivar JA iniciou. -->
+      <div v-if="teste.processoId" class="painel-admissao">
+        <p class="mb-2"><strong>Admissão iniciada.</strong> O processo nasceu desta efetivação.</p>
+        <v-btn variant="outlined" size="small" prepend-icon="mdi-arrow-right" @click="emit('verProcesso')">
+          Ver processo de admissão
+        </v-btn>
+      </div>
 
       <footer class="painel-acoes">
         <v-btn v-if="emAndamento && podeEditar" variant="outlined" :disabled="processando" @click="emit('editar')">
@@ -370,6 +380,14 @@ function confirmarCancelar() {
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
   min-width: 132px;
+}
+
+/* O bloco da admissao iniciada: destacado sem competir com as acoes do teste. */
+.painel-admissao {
+  border: 1px solid var(--cx-line);
+  border-radius: 8px;
+  padding: var(--cx-sp-3);
+  font-size: var(--cx-fs-caption);
 }
 
 /* Explicacao do desfecho escolhido, dentro do dialogo. */

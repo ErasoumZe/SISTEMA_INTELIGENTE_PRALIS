@@ -2,6 +2,9 @@
 import type {
   AuthSession,
   FuncaoOpcaoDto,
+  HistoricoProcessoDto,
+  MotivoCancelamentoProcesso,
+  ProcessoDetalheDto,
   HistoricoTesteDto,
   MotivoCancelamento,
   ResultadoTeste,
@@ -28,6 +31,11 @@ const podeCriar = computed(() => temPermissao(permissoes.value, "admissoes_teste
 const podeEditar = computed(() => temPermissao(permissoes.value, "admissoes_testes_editar"));
 const podeEncerrar = computed(() => temPermissao(permissoes.value, "admissoes_testes_encerrar"));
 const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_testes_cancelar"));
+// ADM-002: permissoes PROPRIAS do processo. Ver o teste nao abre o processo, e vice-versa.
+const podeVerProcesso = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
+const podeCancelarProcesso = computed(() =>
+  temPermissao(permissoes.value, "admissoes_processos_cancelar")
+);
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
@@ -221,6 +229,61 @@ async function salvar(payload: Record<string, unknown>) {
   }
 }
 
+// =================================================================================================
+// ADM-002 — o processo de admissao.
+//
+// Nao ha acao de iniciar: efetivar o teste JA cria o processo, na mesma transacao. O que existe aqui
+// e o caminho para VER o que foi criado.
+// =================================================================================================
+const processoAberto = ref(false);
+const processo = ref<ProcessoDetalheDto | null>(null);
+const historicoProcesso = ref<HistoricoProcessoDto[]>([]);
+const processoProcessando = ref(false);
+
+async function abrirProcesso(id: string) {
+  processoAberto.value = true;
+  try {
+    processo.value = await apiGet<ProcessoDetalheDto>(`/api/admissoes/processos/${id}`);
+    const eventos = await apiGetPaginado<HistoricoProcessoDto>(
+      `/api/admissoes/processos/${id}/historico?page=1&pageSize=50`
+    );
+    historicoProcesso.value = eventos.itens;
+  } catch (error) {
+    tratarErro(error);
+    processoAberto.value = false;
+  }
+}
+
+function verProcessoDoTeste() {
+  if (!detalhe.value?.processoId) return;
+  detalheAberto.value = false;
+  void abrirProcesso(detalhe.value.processoId);
+}
+
+function voltarAoTeste() {
+  if (!processo.value) return;
+  const testeId = processo.value.testeId;
+  processoAberto.value = false;
+  void abrirDetalhe(testeId);
+}
+
+async function cancelarProcessoAdmissao(motivoCancelamento: MotivoCancelamentoProcesso) {
+  if (!processo.value) return;
+  processoProcessando.value = true;
+  try {
+    await apiPost(`/api/admissoes/processos/${processo.value.id}/cancelar`, {
+      versao: processo.value.versao,
+      motivoCancelamento
+    });
+    notificar("Processo de admissão cancelado e arquivado.");
+    await abrirProcesso(processo.value.id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    processoProcessando.value = false;
+  }
+}
+
 async function executarTransicao(rota: string, corpo: Record<string, unknown>, mensagem: string) {
   if (!detalhe.value) return;
   detalheProcessando.value = true;
@@ -236,8 +299,34 @@ async function executarTransicao(rota: string, corpo: Record<string, unknown>, m
   }
 }
 
-function encerrar(resultado: ResultadoTeste) {
-  void executarTransicao("encerrar", { resultado }, "Período de teste encerrado.");
+async function encerrar(resultado: ResultadoTeste) {
+  if (!detalhe.value) return;
+  detalheProcessando.value = true;
+  try {
+    // A resposta traz o processo criado (ou o existente, se for repeticao). Levar direto a ele e o
+    // que faz "Efetivar para admissao" ser o caminho unico: nao ha um segundo passo manual.
+    const resposta = await apiPost<{ processoId: string | null }>(
+      `/api/admissoes/testes/${detalhe.value.id}/encerrar`,
+      { versao: detalhe.value.versao, resultado }
+    );
+    await carregar();
+    if (resposta.processoId && podeVerProcesso.value) {
+      notificar("Teste efetivado. Admissão iniciada.");
+      detalheAberto.value = false;
+      await abrirProcesso(resposta.processoId);
+      return;
+    }
+    notificar(
+      resposta.processoId
+        ? "Teste efetivado. Admissão iniciada."
+        : "Período de teste encerrado."
+    );
+    await abrirDetalhe(detalhe.value.id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    detalheProcessando.value = false;
+  }
 }
 
 function cancelar(motivoCancelamento: MotivoCancelamento) {
@@ -368,6 +457,17 @@ onMounted(async () => {
     @verificar-cpf="verificarCpf"
   />
 
+  <ProcessoDetalhePainel
+    :aberto="processoAberto"
+    :processo="processo"
+    :historico="historicoProcesso"
+    :pode-cancelar="podeCancelarProcesso"
+    :processando="processoProcessando"
+    @cancelar="cancelarProcessoAdmissao"
+    @fechar="processoAberto = false"
+    @ver-teste="voltarAoTeste"
+  />
+
   <TesteDetalhePainel
     :aberto="detalheAberto"
     :teste="detalhe"
@@ -382,6 +482,7 @@ onMounted(async () => {
     @editar="abrirEdicao"
     @revelar-cpf="revelarCpf"
     @encerrar="encerrar"
+    @ver-processo="verProcessoDoTeste"
     @cancelar="cancelar"
   />
 

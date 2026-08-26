@@ -1,4 +1,14 @@
-import type { MotivoCancelamento, PrazoTeste, ResultadoTeste, SituacaoTeste, StatusTeste } from "@padaria/shared";
+import type {
+  AcaoHistoricoProcesso,
+  MotivoCancelamento,
+  MotivoCancelamentoProcesso,
+  PrazoTeste,
+  ResultadoTeste,
+  SituacaoProcesso,
+  SituacaoTeste,
+  StatusProcesso,
+  StatusTeste
+} from "@padaria/shared";
 
 // Rotulos em UM lugar so: a lista, o formulario e o painel de detalhe mostram os mesmos estados, e
 // tres copias divergiriam no primeiro ajuste de texto.
@@ -81,6 +91,41 @@ export function corStatusTeste(status: StatusTeste) {
   if (status === "em_teste") return "primary";
   if (status === "encerrado") return "success";
   return "warning";
+}
+
+// =================================================================================================
+// ADM-002 — processo de admissao. Mesmo idioma dos rotulos do teste, e pelo mesmo motivo: a tela
+// nunca reimplementa a regra, so exibe o que o servidor derivou.
+// =================================================================================================
+
+export const rotuloStatusProcesso: Record<StatusProcesso, string> = {
+  iniciado: "Iniciado",
+  cancelado: "Cancelado e arquivado"
+};
+
+export const rotuloSituacaoProcesso: Record<SituacaoProcesso, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo"
+};
+
+/** De onde a situacao vem. Sem isto, "Ativo" ao lado de "Iniciado" parece um segundo campo. */
+export const explicacaoSituacaoProcesso: Record<SituacaoProcesso, string> = {
+  ativo: "Ativo porque a admissão está em andamento",
+  inativo: "Inativo porque o processo foi cancelado"
+};
+
+export const rotuloMotivoCancelamentoProcesso: Record<MotivoCancelamentoProcesso, string> = {
+  desistencia_do_candidato: "Desistência do candidato",
+  vaga_cancelada: "Vaga cancelada"
+};
+
+export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> = {
+  criado: "Admissão iniciada",
+  cancelado: "Cancelado e arquivado"
+};
+
+export function corStatusProcesso(status: StatusProcesso) {
+  return status === "iniciado" ? "primary" : "warning";
 }
 
 export function corPrazoTeste(prazo: PrazoTeste | null) {
