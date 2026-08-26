@@ -2493,7 +2493,11 @@ body {
 /* 2. Alvo de toque. Botao comum do Vuetify tem 36px de altura
    (`--v-btn-height: 36px` + `.v-btn--density-default { height: calc(... + 0px) }`) e NENHUM
    min-height — o do arquivo so cobre `.v-btn--icon` e os `small` de Produtos. Cresce a area
-   clicavel, nao o desenho: fonte e padding seguem os do Vuetify. */
+   clicavel, nao o desenho: fonte e padding seguem os do Vuetify.
+
+   RESSALVA (26/08/2026, achado do revisor): estas duas declaracoes fecham a PRIMARIA e o
+   mobile, nao o alvo inteiro. No desktop, `text` e `outlined` continuavam nos 36px. Quem
+   fecha essa metade e o bloco VIS-04b, no fim do arquivo. Ler os dois juntos. */
 .v-btn.v-btn--variant-flat,
 .v-btn.v-btn--variant-elevated {
   min-height: 44px;
@@ -2518,3 +2522,40 @@ body {
   }
 }
 /* ===================== FIM VIS-04 ===================== */
+
+/* ===================== INICIO VIS-04b — ALVO DE TEXT E OUTLINED NO DESKTOP (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Fecha a metade que o VIS-04 deixou aberta (achado do revisor).
+
+   Provado por leitura da cascata inteira, nao por impressao. Regras de `min-height` que tocam
+   botao, no arquivo todo:
+     1152  `.row-actions .v-btn`                 40px  — escopado
+     1163  `.caixa-edit.v-btn`                   40px  — escopado
+     1288  `.padaria-topbar > .v-btn`            44px  — SELETOR MORTO (ver SHELL-02)
+     2307  `.v-btn--icon`                        40px
+     2351/2361  `size-small` de Produtos       40/44px — escopado
+     2419  `.shell-mobills .topbar-left > .v-btn` 44px — so <=768
+     2499  `variant-flat` e `variant-elevated`   44px  — VIS-04, qualquer largura
+     2505  todas as densidades                   44px  — VIS-04, so <=768
+   Conclusao: um `variant="text"` ou `variant="outlined"` no desktop, fora de `.row-actions`,
+   de `.caixa-edit` e de Produtos, nao encontra min-height NENHUM e fica nos 36px do Vuetify.
+   Sao os botoes de Cancelar, Fechar, Limpar e Filtrar — ConfirmacaoDialog.vue:21,
+   VendaDetalheDialog.vue:31, CadastroTable.vue:182, HistoricoCaixasPage.vue:211.
+
+   36px reprova o minimo GERAL de 40px do 67 §9. Piso de 40, e nao de 44: os 44 o 67 §13.4
+   reserva a primarias e ao mobile, e ambos ja estao cobertos pelo VIS-04.
+
+   Escopado em `width > 768px` de proposito. Sem isso, esta regra viria DEPOIS da de <=768px do
+   VIS-04 com a mesma especificidade e derrubaria o alvo do mobile de 44 para 40 — o conserto
+   de uma metade quebrando a outra.
+
+   `:not(.v-btn--icon)` porque botao de icone ja tem os 40px na linha 2307: incluir seria
+   escrever regra que empata consigo mesma, o tipo de no-op que esta frente ja produziu tres vezes.
+   ============================================================================================== */
+@media (width > 768px) {
+  .v-btn.v-btn--variant-text:not(.v-btn--icon),
+  .v-btn.v-btn--variant-outlined:not(.v-btn--icon) {
+    min-height: 40px;
+  }
+}
+/* ===================== FIM VIS-04b ===================== */
