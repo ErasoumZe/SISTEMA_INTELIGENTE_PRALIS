@@ -28,7 +28,7 @@ import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
-import { codigoPostgresDoErro, ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
+import { codigoPostgresDoErro, ErroDominio, erroValidacao, falhaTecnica, naoAutorizado, proibido } from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
   buscarChavePorCodigoHashRepository,
@@ -951,10 +951,23 @@ export async function receberVendaIntegracao(
         "INTEGRATION_DATABASE_ERROR"
       );
     }
-    // MENSAGEM FIXA. `mensagemErro` aqui e o `message` do `DrizzleQueryError`, que embute o SQL
-    // inteiro e os PARAMETROS da venda — identificador, valores, ids de PDV e de chave — e ia
-    // direto para o corpo da resposta do integrador (e dai para o log da maquina da loja, via
-    // `api-client.js`). O detalhe continua gravado no historico logo acima, que e interno.
-    throw naoProcessavel("Falha ao processar venda integrada", "INTEGRATION_PROCESSING_ERROR");
+    // FALHA TECNICA INESPERADA — bug NOSSO, nao do CREARE.
+    //
+    // Chegar aqui significa: nao e `ErroDominio` (relancado no topo do catch), nao e validacao do
+    // payload (tratada antes da transacao) e nao tem SQLSTATE (os dois ramos acima). Sobra o que
+    // realmente e nosso: `TypeError`, guarda interna violada, invariante quebrada.
+    //
+    // Isto devolvia **422 `INTEGRATION_PROCESSING_ERROR`**, e era o ultimo lugar em que a #41 ainda
+    // descartava venda: 4xx faz o agente classificar como PERMANENTE e jogar a venda fora
+    // (`integracoes-scripts/src/retry.js`). Um bug do servidor nao pode custar a venda de ninguem —
+    // e a R-013 nao abre excecao para "a culpa foi nossa".
+    //
+    // Sobe INTACTO para o handler global: ele loga, manda para a captura de erros e responde
+    // **500 "Erro interno"** com corpo fixo (`api/src/app.ts`). Assim a stack original sobrevive
+    // para o diagnostico, o corpo HTTP nao carrega mensagem, SQL, parametros nem valores, e o
+    // agente ve um 5xx — que ele re-tenta e enfileira em disco.
+    //
+    // A causa completa ja foi gravada no historico logo acima, que e interno.
+    throw erroOriginal ?? falhaTecnica("Falha tecnica ao processar venda integrada");
   }
 }
