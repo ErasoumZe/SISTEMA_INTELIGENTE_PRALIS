@@ -2380,3 +2380,30 @@ body {
   align-content: start;
 }
 /* ===================== FIM SHELL-01 ===================== */
+
+/* ===================== INICIO SHELL-02 — ALVO DE TOQUE DO BOTAO DE MENU (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Defeito: a regra S2 do bloco RESPONSIVIDADE OFICIAL (linha ~1286) mira
+   `.padaria-topbar > .v-btn`, mas o botao de abrir menu nao e filho da topbar — ele
+   vive dentro de `.topbar-left` (AppShell.vue:265-266), entao o combinador `>` nao
+   casa e a regra nunca pintou ninguem. Na pratica o botao caia na regra global
+   `.v-btn--icon` (linha ~2305), que garante 40px: passa o minimo geral do 67 §9, mas
+   reprova os 44px que o 67 §13.4 exige no mobile.
+
+   Conserto: mirar exclusivamente o `v-btn` filho de `.topbar-left` dentro do mesmo
+   limiar de <=768px. `min-*` e piso, nao teto: nada encolhe, so deixa de poder ficar
+   abaixo de 44x44.
+
+   Por que aqui e nao na linha 1286: o bloco RESPONSIVIDADE OFICIAL e historico e
+   congelado (67 §13), e regra nova de aparencia entra no fim do arquivo (67 §13.8).
+   O seletor morto do S2 continua la, inerte; remove-lo e limpeza de bloco congelado
+   e pede issue propria.
+   ========================================================================================================= */
+@media (width <= 768px) {
+  .shell-mobills .topbar-left > .v-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* ===================== FIM SHELL-02 ===================== */
