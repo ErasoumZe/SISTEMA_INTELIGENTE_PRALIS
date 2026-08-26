@@ -2362,3 +2362,21 @@ body {
   }
 }
 /* ===================== FIM CADASTRO DE PRODUTOS V2 ===================== */
+
+/* ===================== INICIO SHELL-01 — MENU LATERAL ANCORADO NO TOPO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Defeito: `.sidebar-nav` (linha ~411) e `display: grid` com `height: 100%`. Sem
+   `align-content`, a propriedade cai no valor inicial `normal`, que em container grid
+   se comporta como `stretch`: o espaco livre e distribuido entre as trilhas de tamanho
+   `auto`. Com poucos grupos no menu (o caso de perfil com menos permissoes), sobra muita
+   altura e cada `.sidebar-group` recebe uma fatia dela — o menu abre um vao enorme entre
+   os grupos em vez de comecar no topo.
+
+   Conserto: ancorar as trilhas no inicio. Nao ha valor de cor, espaco, raio ou duracao
+   envolvido — e so a regra de alinhamento que faltava.
+   ======================================================================================================== */
+.shell-mobills .sidebar-nav {
+  align-content: start;
+}
+/* ===================== FIM SHELL-01 ===================== */
