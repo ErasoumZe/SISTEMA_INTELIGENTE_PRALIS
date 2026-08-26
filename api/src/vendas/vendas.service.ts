@@ -12,7 +12,8 @@ import { executarEmTransacao } from "../banco/conexao.js";
 import {
   exigirPermissaoLancamento,
   obterCaixaParaLancamento,
-  somaConfereCentavos
+  somaConfereCentavos,
+  somaConfereComTotalCentavos
 } from "../lancamentos/lancamentos.dominio.js";
 import {
   atualizarVendaRepository,
@@ -24,6 +25,7 @@ import {
   assinaturaDoPagamento,
   vendaEhIntegradaRepository
 } from "./vendas.repository.js";
+import { liquidoCentavos } from "@padaria/shared/dinheiro";
 import { proibido } from "../erros.js";
 import {
   resolverComputarLancamento,
@@ -32,6 +34,29 @@ import {
   validarReferenciasVenda
 } from "../lancamentos/lancamentos.dominio.js";
 
+/**
+ * R-173, confirmada por Marco em 26/08/2026.
+ *
+ * As duas somas da venda comparam com bases DIFERENTES, e a diferenca e proposital:
+ *
+ *   ITENS  -> `valor_original`, que e o SUBTOTAL. Os itens compoem o subtotal; desconto e acrescimo
+ *             sao da venda inteira e entram depois, em colunas proprias.
+ *
+ *   PAGAMENTOS -> o LIQUIDO (`original - desconto + acrescimo`), que e o VALOR FINAL COBRADO DO
+ *             CLIENTE. E o que ele efetivamente precisou pagar, e portanto e com isso que a soma das
+ *             formas de pagamento tem de bater.
+ *
+ * Ate esta correcao, os pagamentos eram comparados com o `valor_original`. Para qualquer venda com
+ * desconto ou acrescimo isso era insatisfazivel contra a R-173: o payload que fechava com o liquido
+ * (o correto) era recusado com 400 e NADA era gravado. Nao era dinheiro errado no banco — era venda
+ * que nao se conseguia editar, com a mensagem apontando para o lugar errado.
+ *
+ * `liquidoCentavos` e a MESMA funcao que o saldo da conta, o relatorio e a ingestao usam. Uma
+ * formula so para "quanto vale esta venda" — o que o ADR-001 exige.
+ *
+ * Taxa de adquirente NAO entra aqui: ela e custo financeiro separado e nao reduz o que o cliente
+ * precisou pagar. Nao ha, e nao pode haver, termo de taxa em `liquidoCentavos`.
+ */
 export function validarVenda(dados: VendaPayload): void {
   if (dados.itensVenda.length) {
     const valores = dados.itensVenda.map((item) => item.valorTotal);
@@ -41,8 +66,10 @@ export function validarVenda(dados: VendaPayload): void {
   }
   if (dados.tiposPagamento.length) {
     const valores = dados.tiposPagamento.map((item) => item.totalPago);
-    if (!somaConfereCentavos(valores, dados.valorOriginal)) {
-      throw new Error("Soma dos pagamentos da venda deve bater com o valor original");
+    if (!somaConfereComTotalCentavos(valores, liquidoCentavos(dados))) {
+      throw new Error(
+        "Soma dos pagamentos da venda deve bater com o valor final cobrado do cliente (original - desconto + acrescimo)"
+      );
     }
   }
 }

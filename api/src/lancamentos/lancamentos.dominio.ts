@@ -637,6 +637,14 @@ export function somaConfereCentavos(valores: number[], total: number): boolean {
   return soma === paraCentavos(total);
 }
 
+// Mesma comparacao, mas com o total JA em centavos inteiros. Existe para quem calculou o total com
+// `liquidoCentavos` nao precisar voltar para reais e converter de novo — cada ida e volta e uma
+// chance a mais de divergir por arredondamento, e aqui o assunto e dinheiro.
+export function somaConfereComTotalCentavos(valores: number[], totalCentavos: number): boolean {
+  const soma = valores.reduce((acumulado, valor) => acumulado + paraCentavos(valor), 0);
+  return soma === totalCentavos;
+}
+
 // --- Discriminacao com descontos em 3 niveis (PROJECT_BRAIN/17 §5) ----------------------------
 // O nivel 3 (geral) RATEIA entre os itens, entao o calculo e da LISTA INTEIRA, nunca item a item.
 // A regra mora no shared (calcularDiscriminacao); aqui so se traduz o payload de cada dominio.

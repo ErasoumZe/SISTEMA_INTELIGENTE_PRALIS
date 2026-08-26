@@ -1230,10 +1230,28 @@ dinheiro.
 
 ✅ **Ratificado por Marco em 26/08.**
 
-## 18-C. BLOQUEADOR FINANCEIRO em aberto — duas fórmulas de soma para a mesma tabela
+## 18-C. ✅ RESOLVIDO — a base da soma dos pagamentos é o valor final cobrado do cliente
 
-> ⛔ **A #152 não vai a PR enquanto isto estiver aberto.** Não é dívida de qualidade: é venda que o
-> sistema recusa gravar.
+> **CONFIRMAÇÃO DE MARCO, 26/08/2026.** A soma de `vendas_pagamentos` bate com o **valor final
+> cobrado do cliente**: `valor original − desconto + acréscimo`. **Taxa de adquirente/cartão é custo
+> financeiro separado e não altera essa soma** — ela não reduz o que o cliente precisou pagar.
+>
+> Corrigido: `validarVenda` passou a usar `liquidoCentavos`, a mesma função que o saldo da conta, o
+> relatório e a ingestão já usavam. **Uma fórmula só** para "quanto vale esta venda", que é o que o
+> ADR-001 exige e o que a §18 ponto 1 decidiu.
+>
+> **As duas somas da venda continuam com bases diferentes, e isso é proposital:** os ITENS compõem o
+> **subtotal** (`valor_original`), porque desconto e acréscimo são da venda inteira e entram depois,
+> em colunas próprias; os PAGAMENTOS batem com o **líquido**. Há caso de teste registrando essa
+> distinção, para ninguém "unificar" as duas por engano.
+>
+> Verificado antes de editar: `liquidoCentavos` é literalmente as três colunas, não há termo de taxa
+> em `shared/src/dinheiro`, `adquirente` só viaja como rótulo (nunca em aritmética), e o líquido
+> calculado bate com o `valorTotal` que o CREARE envia.
+
+### O que estava errado, para o registro
+
+`validarVenda` comparava a soma dos pagamentos com o `valor_original` (o subtotal).
 
 ### O conflito, com endereço
 
@@ -1285,9 +1303,11 @@ o ADR-001 exige. Junto vêm:
 - é preciso conferir se alguma venda de retaguarda existente depende do comportamento atual — a
   varredura é read-only e não altera histórico.
 
-**Por que não foi feito nesta rodada:** mudar a fórmula de soma de dinheiro exige autorização própria
-(`AGENTS.md` §4.6), e a autorização desta rodada excluiu explicitamente alteração de fórmula
-financeira.
+**Cobertura:** `tests/unit/venda-soma-pagamentos.test.ts`, 16 casos — sem ajuste, com desconto, com
+acréscimo, com os dois, tolerância zero, a prova de que taxa não entra na fórmula, o cruzamento com o
+`valorTotal` do CREARE, e a distinção entre a base dos itens e a dos pagamentos. Os casos de desconto
+e de acréscimo **recusam explicitamente a soma antiga**: se alguém voltar a comparar com o subtotal,
+eles ficam vermelhos na hora.
 
 ## 18-D. Dívidas registradas, sem migration nova
 

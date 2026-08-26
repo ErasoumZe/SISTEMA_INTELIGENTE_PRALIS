@@ -334,13 +334,11 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
       headers: { cookie: cookieAdmin },
       payload: { ...base, tiposPagamento: [{ formaPagamentoId: null, totalPago: 999 }] }
     });
-    // Status EXATO — e quem recusa aqui NAO e a R-177: `validarVenda` roda antes da transacao e ja
-    // rejeita a soma que nao bate com o valor da venda. Registrado assim de proposito, porque e um
-    // fato do codigo: existem DUAS invariantes de soma sobre a mesma tabela (`validarVenda` sobre o
-    // valor original; a R-173 sobre o liquido). A que importa para este caso e que, por qualquer
-    // porta, um payload que mexe nos pagamentos de venda integrada NAO passa.
+    // Status EXATO. `validarVenda` roda antes da transacao e recusa primeiro, porque 999 nao bate com
+    // o valor final cobrado do cliente — a MESMA base da R-173, desde que a formula foi unificada
+    // (confirmacao de Marco, 26/08). Antes existiam duas bases e a mensagem apontava para o subtotal.
     expect(somaQuebrada.statusCode, somaQuebrada.body).toBe(400);
-    expect(somaQuebrada.body).toContain("Soma dos pagamentos");
+    expect(somaQuebrada.body).toContain("valor final cobrado do cliente");
 
     // E o que realmente conta: nada foi reescrito no banco por essa tentativa.
     const aposTentativa = await consultarUm<{ total: string; linhas: string }>(
