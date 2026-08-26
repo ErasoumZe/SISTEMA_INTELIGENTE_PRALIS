@@ -20,9 +20,13 @@ const filtros = reactive<FiltrosTestes>({ ...PADRAO });
 
 // Filtro UNICO de situacao, derivado dos estados tecnicos. Nao ha um segundo filtro por `status`:
 // seriam duas formas de pedir a mesma coisa, capazes de divergir.
+//
+// O rotulo carrega a EQUIVALENCIA entre os dois vocabularios. "Ativo" sozinho nao diz que agrupa
+// `em_teste`, e "Inativo" sozinho nao diz que junta encerrado com cancelado — e quem nao sabe disso
+// procura um teste encerrado em "Ativo" e conclui que ele sumiu.
 const opcoesSituacao: { valor: SituacaoTeste | ""; rotulo: string }[] = [
-  { valor: "ativo", rotulo: "Ativo" },
-  { valor: "inativo", rotulo: "Inativo" },
+  { valor: "ativo", rotulo: "Ativo — em teste" },
+  { valor: "inativo", rotulo: "Inativo — encerrado ou cancelado" },
   { valor: "", rotulo: "Todos" }
 ];
 

@@ -3,15 +3,33 @@ import type { MotivoCancelamento, PrazoTeste, ResultadoTeste, SituacaoTeste, Sta
 // Rotulos em UM lugar so: a lista, o formulario e o painel de detalhe mostram os mesmos estados, e
 // tres copias divergiriam no primeiro ajuste de texto.
 
+// O ESTADO TECNICO do teste. Sao os tres do banco, e nao ha um quarto.
+//
+// `cancelado` le "Cancelado e arquivado" porque a palavra sozinha nao diz o que aconteceu com o
+// registro. Quem cancela precisa saber, na propria etiqueta, que o cadastro continua la.
 export const rotuloStatusTeste: Record<StatusTeste, string> = {
   em_teste: "Em teste",
   encerrado: "Encerrado",
-  cancelado: "Cancelado"
+  cancelado: "Cancelado e arquivado"
 };
 
+// A SITUACAO na empresa, DERIVADA do status por `situacaoDoTeste` em `shared`. Nao existe coluna,
+// nem campo de formulario, nem filtro paralelo — e nao pode passar a existir.
 export const rotuloSituacaoTeste: Record<SituacaoTeste, string> = {
   ativo: "Ativo",
   inativo: "Inativo"
+};
+
+/**
+ * De onde vem a situacao. Texto curto, para a tela nao deixar a derivacao implicita.
+ *
+ * Sem isto, "Ativo" ao lado de "Em teste" parece um segundo campo que alguem escolheu — e o passo
+ * seguinte e alguem pedir para "mudar para Inativo sem encerrar", que e o estado paralelo que a
+ * D-2 do PROJECT_BRAIN/31 proibe.
+ */
+export const explicacaoSituacaoTeste: Record<SituacaoTeste, string> = {
+  ativo: "Ativo porque o teste está em andamento",
+  inativo: "Inativo porque o teste foi encerrado ou cancelado"
 };
 
 export const rotuloResultadoTeste: Record<ResultadoTeste, string> = {

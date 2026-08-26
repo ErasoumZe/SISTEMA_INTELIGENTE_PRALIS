@@ -46,16 +46,28 @@ derivada por `situacaoDoTeste`, em `shared`:
 | `encerrado`    | Inativo  |
 | `cancelado`    | Inativo  |
 
+Na tela, os dois aparecem **rotulados e separados** — "Status do teste" e "Situação na empresa" —,
+com uma frase curta dizendo de onde a situação vem. Antes eram dois chips soltos lado a lado, e dois
+chips sem rótulo parecem dois campos independentes: a leitura seguinte seria pedir para "mudar para
+Inativo sem encerrar", que é exatamente o estado paralelo que esta decisão proíbe. O filtro carrega
+a mesma equivalência no rótulo: *Ativo — em teste*, *Inativo — encerrado ou cancelado*.
+
 **Não existe coluna, enum, índice nem filtro paralelo de ativo/inativo.** Criar um seria a segunda
 fonte de status que o `06_GAPS_E_DECISOES` já registrou como **SUPERADA** ("status Ativo/Inativo como
 workflow"). A regra mora em `shared` porque a tela e o repositório precisam da mesma resposta.
 
 Não há reabertura. `encerrado` e `cancelado` são terminais.
 
-### D-3 · "Excluir" é cancelar e arquivar
+### D-3 · Cancelar e arquivar — a tela não diz mais "Excluir"
 
-O botão **Excluir** da tela chama `POST /api/admissoes/testes/:id/cancelar`. Exige um motivo da lista
-fechada, sai da listagem padrão (que abre em Ativo) e **preserva o histórico inteiro**.
+O botão se chama **Cancelar e arquivar** e chama `POST /api/admissoes/testes/:id/cancelar`. Exige um
+motivo da lista fechada, sai da listagem padrão (que abre em Ativo) e **preserva o histórico
+inteiro**.
+
+> Ele já se chamou "Excluir", e o nome era mentira: a ação nunca apagou nada. Renomeado em
+> 26/08/2026, junto com o diálogo, que agora lista o que de fato acontece — fica Inativo, sai da
+> listagem, preserva o histórico, exige motivo, não reabre. **A regra não mudou; o rótulo passou a
+> descrevê-la.**
 
 **Não existe exclusão física nesta vertical**, e não é só escolha de produto: o histórico referencia
 a raiz com `on delete cascade`, então apagar a linha apagaria a própria auditoria junto.

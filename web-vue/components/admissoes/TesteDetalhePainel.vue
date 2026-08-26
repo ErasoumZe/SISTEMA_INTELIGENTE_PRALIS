@@ -8,6 +8,7 @@ import {
   rotuloMotivoCancelamento,
   rotuloPrazoTeste,
   rotuloResultadoTeste,
+  explicacaoSituacaoTeste,
   rotuloSituacaoTeste,
   rotuloStatusTeste
 } from "~/utils/admissoes";
@@ -90,20 +91,28 @@ function confirmarCancelar() {
           <h2 class="painel-nome">{{ teste.nomeCompleto }}</h2>
           <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="emit('fechar')" />
         </div>
-        <div class="d-flex align-center flex-wrap ga-2 mt-2">
-          <v-chip :color="corStatusTeste(teste.status)" size="small" variant="tonal">
-            {{ rotuloStatusTeste[teste.status] }}
-          </v-chip>
-          <v-chip size="small" variant="outlined">{{ rotuloSituacaoTeste[teste.situacao] }}</v-chip>
-          <v-chip
-            v-if="teste.prazo && teste.prazo !== 'no_prazo'"
-            :color="corPrazoTeste(teste.prazo)"
-            size="small"
-            variant="tonal"
-          >
-            {{ rotuloPrazoTeste[teste.prazo] }}
-          </v-chip>
+        <!-- Dois chips soltos lado a lado ("Encerrado" e "Inativo") pareciam dois campos
+             independentes, e o passo seguinte seria alguem pedir para mudar um sem o outro. Cada um
+             ganha rotulo, e a situacao ganha a frase que diz de onde ela vem. -->
+        <div class="painel-estados mt-3">
+          <div class="estado">
+            <span class="estado-rotulo">Status do teste</span>
+            <v-chip :color="corStatusTeste(teste.status)" size="small" variant="tonal">
+              {{ rotuloStatusTeste[teste.status] }}
+            </v-chip>
+          </div>
+          <div class="estado">
+            <span class="estado-rotulo">Situação na empresa</span>
+            <v-chip size="small" variant="outlined">{{ rotuloSituacaoTeste[teste.situacao] }}</v-chip>
+          </div>
+          <div v-if="teste.prazo && teste.prazo !== 'no_prazo'" class="estado">
+            <span class="estado-rotulo">Prazo</span>
+            <v-chip :color="corPrazoTeste(teste.prazo)" size="small" variant="tonal">
+              {{ rotuloPrazoTeste[teste.prazo] }}
+            </v-chip>
+          </div>
         </div>
+        <p class="painel-derivacao">{{ explicacaoSituacaoTeste[teste.situacao] }}.</p>
       </header>
 
       <dl class="painel-campos">
@@ -167,10 +176,11 @@ function confirmarCancelar() {
           :disabled="processando"
           @click="dialogEncerrar = true"
         >
-          Encerrar
+          Encerrar teste
         </v-btn>
-        <!-- "Excluir" e cancelamento arquivado: exige motivo, sai da listagem padrao e preserva a
-             auditoria. Nao existe exclusao fisica nesta vertical. -->
+        <!-- O botao diz o que a acao FAZ. Chamava-se "Excluir", e era mentira: nao existe exclusao
+             fisica nesta vertical — o historico referencia a raiz com `on delete cascade`, entao
+             apagar a linha apagaria a propria auditoria junto. -->
         <v-btn
           v-if="emAndamento && podeCancelar"
           color="error"
@@ -178,7 +188,7 @@ function confirmarCancelar() {
           :disabled="processando"
           @click="dialogCancelar = true"
         >
-          Excluir
+          Cancelar e arquivar
         </v-btn>
       </footer>
 
@@ -196,9 +206,12 @@ function confirmarCancelar() {
 
     <v-dialog v-model="dialogEncerrar" max-width="460">
       <v-card>
-        <v-card-title>Encerrar período de teste</v-card-title>
+        <v-card-title>Encerrar teste</v-card-title>
         <v-card-text>
-          <p class="mb-3">Encerrar registra a decisão do DP. Não abre admissão nem cria colaborador.</p>
+          <p class="mb-3">
+            Encerrar registra a decisão do DP e exige um resultado. Não abre admissão nem cria
+            colaborador. O registro passa a <strong>Inativo</strong> e não pode ser reaberto.
+          </p>
           <v-select
             v-model="resultadoEscolhido"
             :items="opcoesResultado"
@@ -212,7 +225,7 @@ function confirmarCancelar() {
           <v-spacer />
           <v-btn variant="text" @click="dialogEncerrar = false">Voltar</v-btn>
           <v-btn color="primary" variant="flat" :disabled="!resultadoEscolhido" @click="confirmarEncerrar">
-            Encerrar
+            Encerrar teste
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -220,12 +233,15 @@ function confirmarCancelar() {
 
     <v-dialog v-model="dialogCancelar" max-width="460">
       <v-card>
-        <v-card-title>Excluir período de teste</v-card-title>
+        <v-card-title>Cancelar e arquivar</v-card-title>
         <v-card-text>
-          <p class="mb-3">
-            O registro é cancelado e arquivado: sai da listagem padrão, mas o histórico é preservado. Não há
-            exclusão definitiva.
-          </p>
+          <p class="mb-2"><strong>Isto não apaga o cadastro.</strong> O que acontece:</p>
+          <ul class="mb-3 ps-5">
+            <li>o registro fica <strong>Inativo</strong> e sai da listagem padrão;</li>
+            <li>o histórico inteiro é preservado, inclusive quem fez o quê;</li>
+            <li>é obrigatório informar um motivo;</li>
+            <li>não há reabertura, e não existe exclusão definitiva nesta tela.</li>
+          </ul>
           <v-select
             v-model="motivoEscolhido"
             :items="opcoesMotivo"
@@ -239,7 +255,7 @@ function confirmarCancelar() {
           <v-spacer />
           <v-btn variant="text" @click="dialogCancelar = false">Voltar</v-btn>
           <v-btn color="error" variant="flat" :disabled="!motivoEscolhido" @click="confirmarCancelar">
-            Excluir
+            Cancelar e arquivar
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -322,6 +338,45 @@ function confirmarCancelar() {
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
   line-height: 1.6;
+}
+
+/* Cada estado com seu rotulo, em coluna: lado a lado eles voltariam a parecer dois campos
+   independentes, que e exatamente a leitura que este bloco existe para desfazer. */
+.painel-estados {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cx-sp-2);
+}
+
+.estado {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+}
+
+.estado-rotulo {
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+  min-width: 132px;
+}
+
+/* A frase que diz de onde a situacao vem. Discreta de proposito: e explicacao, nao dado. */
+.painel-derivacao {
+  margin-top: var(--cx-sp-2);
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+}
+
+@media (max-width: 480px) {
+  .estado {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .estado-rotulo {
+    min-width: 0;
+  }
 }
 
 /* O CBO acompanha o nome da funcao sem competir com ele: e codigo de referencia, nao o rotulo. */

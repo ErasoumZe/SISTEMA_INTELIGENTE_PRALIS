@@ -303,7 +303,10 @@ onMounted(async () => {
               <th>Função</th>
               <th>Início</th>
               <th>Fim combinado</th>
-              <th>Situação</th>
+              <!-- A coluna mostra `rotuloStatusTeste`, entao o cabecalho diz STATUS. Dizia
+                   "Situação" e apontava para outra coisa — duas palavras para dois conceitos que a
+                   tela precisa manter separados. -->
+              <th>Status do teste</th>
               <th class="text-right">Ações</th>
             </tr>
           </thead>
