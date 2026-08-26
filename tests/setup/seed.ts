@@ -106,7 +106,14 @@ const usuarios: UsuarioSeed[] = [
       // Gerencia configura o vinculo usuario<->conta (FOTO 4) — paridade com a referencia de producao.
       "cadastro_contas_usuarios_visualizar",
       "cadastro_contas_usuarios_criar",
-      "cadastro_contas_usuarios_excluir"
+      "cadastro_contas_usuarios_excluir",
+      // R-176 (#152): cadastra e renomeia FORMA, mas NAO decide para onde vai o dinheiro. E o mesmo
+      // recorte do Financeiro em producao, que tem `cadastro_formas_pagamento_criar` e nao tem a
+      // permissao dedicada de roteamento. Sem este cargo, o teste da R-176 nao teria como provar a
+      // separacao: qualquer usuario ou e admin (tem tudo) ou nao mexe em forma nenhuma.
+      "cadastro_formas_pagamento_visualizar",
+      "cadastro_formas_pagamento_criar",
+      "cadastro_formas_pagamento_editar"
     ]
   },
   {

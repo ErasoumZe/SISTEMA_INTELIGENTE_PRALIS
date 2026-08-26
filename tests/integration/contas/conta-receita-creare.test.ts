@@ -1,32 +1,31 @@
-// PROVA do estado ATUAL: a receita da venda vinda do CREARE nao credita conta nenhuma no saldo.
+// A receita do CREARE e o saldo das contas — o antes e o depois da #152, pelo fio real.
 //
-// Este arquivo NAO propoe correcao — ele PRENDE o comportamento medido, porque a correcao depende
-// de decisao de negocio do Jose (qual conta recebe cada forma de pagamento, e quando o valor fica
-// disponivel). Sem essa decisao, qualquer "conserto" aqui seria regra financeira inventada.
+// Este arquivo NASCEU prendendo o estado anterior: "venda do CREARE nao credita conta nenhuma, e por
+// isso a porta de saldo recusa saida legitima do PDV". Ele avisava, no proprio cabecalho, que ficaria
+// vermelho no dia em que a decisao de negocio chegasse. Chegou (R-167 a R-177), e agora ele prova a
+// regra nova — inclusive a metade que NAO mudou.
 //
-// Por que isso importa para a porta de saldo (R-143/R-165): a porta recusa saida sem fundo. Se a
-// receita real do PDV nao entra em nenhuma conta que o saldo enxerga, a porta passa a recusar
-// despesa/mercadoria/retirada/transferencia LEGITIMAS da conta do PDV — e o operador de caixa e o
-// mais exposto, porque a R-121 o prende a conta do PDV e ele nao tem outra para escolher.
+// O que continua igual, e e o ponto mais importante da R-168: sem roteamento configurado, NADA muda.
+// A forma que o CREARE cria sozinha nasce sem destino, o pagamento fica PENDENTE e o saldo segue
+// zero. Nao existe fallback para Dinheiro, para Outro ou para a conta do PDV "por omissao".
 //
-// Mecanismo, verificado no codigo:
-//   - `criarOuAtualizarVendaIntegradaRepository` monta `valoresVenda` SEM `contaOrigemId`
-//     (api/src/integracoes/integracoes.repository.ts) -> a venda nasce com `conta_origem_id = NULL`;
-//   - `saldosDasContasRepository` soma vendas com `inArray(vendas.contaOrigemId, contaIds)`
-//     (api/src/contas/contas.repository.ts) -> linha com NULL nunca entra em conta alguma.
-//
-// Se algum dia a venda integrada passar a gravar a conta, ESTE arquivo fica vermelho — de
-// proposito: e o sinal de que a decisao do Jose foi implementada e precisa ser revista aqui.
+// O que muda: com o roteamento configurado pelo Admin, a venda credita — pelo PAGAMENTO, nunca pela
+// venda, porque `vendas.conta_origem_id` continua NULL na venda integrada.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
 type ContaComSaldo = { id: string; saldoAtual: number };
+type PagamentoIntegrado = {
+  idFormaPagamento: string;
+  descricaoFormaPagamento: string;
+  valor: number;
+};
 
-describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", () => {
+describe("receita do CREARE x saldo das contas (#152, R-167 a R-173)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   const carimbo = Date.now();
@@ -40,13 +39,21 @@ describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", 
     await contexto.fechar();
   });
 
-  function payloadVendaIntegrada(idVenda: string, idCaixaExterno: string, valor: number) {
+  function payloadVendaIntegrada(
+    idVenda: string,
+    idCaixaExterno: string,
+    valor: number,
+    pagamentos?: PagamentoIntegrado[]
+  ) {
+    const lista: PagamentoIntegrado[] = pagamentos ?? [
+      { idFormaPagamento: "DIN", descricaoFormaPagamento: "Dinheiro", valor }
+    ];
     return {
-      DadosIntegracao: { origem: "vitest-prova-receita" },
+      DadosIntegracao: { origem: "vitest-roteamento" },
       Venda: {
         idVenda,
         idCaixa: idCaixaExterno,
-        nomeCaixa: "PDV prova receita",
+        nomeCaixa: "PDV roteamento",
         idCliente: null,
         nomeCliente: null,
         documentoCliente: null,
@@ -70,17 +77,17 @@ describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", 
           itemCancelado: false
         }
       ],
-      PagamentosVenda: [{ idVenda, idFormaPagamento: "DIN", descricaoFormaPagamento: "Dinheiro", valor }]
+      PagamentosVenda: lista.map((pagamento) => ({ idVenda, ...pagamento }))
     };
   }
 
-  it("venda do CREARE nasce SEM conta de origem e nao entra no saldo de nenhuma conta", async () => {
-    // Conta + PDV proprios, para que a prova nao dependa do estado das contas do seed.
+  // Conta + PDV + vinculo do PDV, para a prova nao depender do estado do seed.
+  async function montarPdv(sufixo: string) {
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: `Prova receita ${carimbo}`, saldoInicial: 0 }
+      payload: { empresaId: idsTeste.empresaA, nome: `Conta ${sufixo} ${carimbo}`, saldoInicial: 0 }
     });
     expect(conta.statusCode, conta.body).toBe(201);
     const contaId = json<{ data: { id: string } }>(conta).data.id;
@@ -89,12 +96,12 @@ describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", 
       method: "POST",
       url: "/api/pdvs",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: `PDV prova receita ${carimbo}`, contaId, ativo: true }
+      payload: { empresaId: idsTeste.empresaA, nome: `PDV ${sufixo} ${carimbo}`, contaId, ativo: true }
     });
     expect(pdv.statusCode, pdv.body).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const identificadorExterno = `PDV-PROVA-${carimbo}`;
+    const identificadorExterno = `PDV-${sufixo.toUpperCase()}-${carimbo}`;
     const vinculo = await contexto.app.inject({
       method: "PUT",
       url: "/api/integracoes/vinculos",
@@ -104,81 +111,123 @@ describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", 
         tipo: "vendas",
         tipoRegistro: "pdv",
         identificadorExterno,
-        descricaoExterna: "PDV prova receita",
+        descricaoExterna: `PDV ${sufixo}`,
         registroSistemaId: pdvId
       }
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
+    return { contaId, pdvId, identificadorExterno };
+  }
 
-    // Venda de R$ 500 pela ROTA REAL da integracao (sem tocar no CREARE de verdade).
-    const idVenda = `PROVA-RECEITA-${carimbo}`;
-    const ingestao = await contexto.app.inject({
+  async function ingerir(payload: ReturnType<typeof payloadVendaIntegrada>) {
+    return contexto.app.inject({
       method: "POST",
       url: "/api/integracoes",
       headers: { "x-api-key": idsTeste.integracaoCodigo },
-      payload: payloadVendaIntegrada(idVenda, identificadorExterno, 500)
+      payload
     });
-    expect(ingestao.statusCode, ingestao.body).toBe(200);
+  }
 
-    // 1) A venda existe, aprovada e computavel...
-    const venda = await consultarUm<{ conta_origem_id: string | null; valor_original: string; computar: boolean }>(
-      "select conta_origem_id, valor_original, computar from vendas where identificador_externo = $1",
-      [idVenda]
-    );
-    expect(venda, "a venda integrada deveria existir").toBeTruthy();
-    expect(venda?.computar).toBe(true);
-    // 2) ...e MESMO ASSIM nasce sem conta de origem.
-    expect(venda?.conta_origem_id, "hoje a venda do CREARE nao carrega conta de credito").toBeNull();
-
-    // 3) Consequencia direta: o saldo da conta do PDV segue ZERO, apesar dos R$ 500 de receita.
+  async function saldoDaConta(contaId: string) {
     const saldos = await contexto.app.inject({
       method: "GET",
       url: `/api/contas/saldos?empresaId=${idsTeste.empresaA}`,
       headers: { cookie: cookieAdmin }
     });
     assertOk(saldos);
-    const linha = json<{ data: ContaComSaldo[] }>(saldos).data.find((c) => c.id === contaId);
-    expect(linha?.saldoAtual, "a receita de 500 nao creditou a conta do PDV").toBe(0);
-  });
+    return json<{ data: ContaComSaldo[] }>(saldos).data.find((conta) => conta.id === contaId)?.saldoAtual ?? null;
+  }
 
-  it("por isso a porta recusa uma saida LEGITIMA da conta que acabou de vender R$ 500", async () => {
-    const conta = await contexto.app.inject({
+  async function criarConta(nome: string) {
+    const resposta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: `Prova recusa ${carimbo}`, saldoInicial: 0 }
+      payload: { empresaId: idsTeste.empresaA, nome: `${nome} ${carimbo}`, saldoInicial: 0 }
     });
-    const contaId = json<{ data: { id: string } }>(conta).data.id;
-    const pdv = await contexto.app.inject({
-      method: "POST",
-      url: "/api/pdvs",
-      headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: `PDV prova recusa ${carimbo}`, contaId, ativo: true }
-    });
-    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
-    const identificadorExterno = `PDV-RECUSA-${carimbo}`;
-    await contexto.app.inject({
+    expect(resposta.statusCode, resposta.body).toBe(201);
+    return json<{ data: { id: string } }>(resposta).data.id;
+  }
+
+  // Roteia, pelo cadastro real (Admin + permissao dedicada), a forma que o CREARE criou sozinha.
+  async function rotearFormaComoDinheiro(nomeDaForma: string) {
+    const forma = await consultarUm<{ id: string; nome: string }>(
+      "select id, nome from formas_pagamento where empresa_id = $1 and nome = $2",
+      [idsTeste.empresaA, nomeDaForma]
+    );
+    expect(forma, `a forma ${nomeDaForma} deveria ter sido criada pela ingestao`).toBeTruthy();
+    const resposta = await contexto.app.inject({
       method: "PUT",
-      url: "/api/integracoes/vinculos",
+      url: `/api/formas-pagamento/${forma?.id}`,
       headers: { cookie: cookieAdmin },
       payload: {
         empresaId: idsTeste.empresaA,
-        tipo: "vendas",
-        tipoRegistro: "pdv",
-        identificadorExterno,
-        descricaoExterna: "PDV prova recusa",
-        registroSistemaId: pdvId
+        nome: forma?.nome,
+        disponibilidade: "imediata",
+        usaContaDoPdv: true
       }
     });
-    const ingestao = await contexto.app.inject({
-      method: "POST",
-      url: "/api/integracoes",
-      headers: { "x-api-key": idsTeste.integracaoCodigo },
-      payload: payloadVendaIntegrada(`PROVA-RECUSA-${carimbo}`, identificadorExterno, 500)
-    });
+    expect(resposta.statusCode, resposta.body).toBe(204);
+    return forma?.id ?? "";
+  }
+
+  async function pagamentosDaVenda(idVenda: string) {
+    const venda = await consultarUm<{ id: string; conta_origem_id: string | null; computar: boolean }>(
+      "select id, conta_origem_id, computar from vendas where identificador_externo = $1",
+      [idVenda]
+    );
+    const pagamentos = await consultarTodos<{
+      roteamento_status: string;
+      conta_recebivel_id: string | null;
+      conta_final_id: string | null;
+      disponivel_em: string | null;
+      adquirente: string | null;
+      total_pago: string;
+    }>(
+      `select roteamento_status, conta_recebivel_id, conta_final_id, disponivel_em, adquirente, total_pago
+         from vendas_pagamentos where venda_id = $1 order by total_pago`,
+      [venda?.id]
+    );
+    return { venda, pagamentos };
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // R-168 — sem roteamento, nada muda. E a metade do arquivo antigo que CONTINUA valendo.
+  // -------------------------------------------------------------------------------------------
+
+  it("forma sem roteamento: venda existe, pagamento fica PENDENTE e o saldo segue zero", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("sem-roteamento");
+    const idVenda = `SEM-ROT-${carimbo}`;
+    const ingestao = await ingerir(
+      payloadVendaIntegrada(idVenda, identificadorExterno, 500, [
+        { idFormaPagamento: `DIN-SR-${carimbo}`, descricaoFormaPagamento: `Dinheiro SR ${carimbo}`, valor: 500 }
+      ])
+    );
     expect(ingestao.statusCode, ingestao.body).toBe(200);
 
-    // Despesa de R$ 100 contra uma conta que faturou R$ 500 no mesmo dia: hoje e RECUSADA.
+    const { venda, pagamentos } = await pagamentosDaVenda(idVenda);
+    expect(venda, "a venda integrada deveria existir").toBeTruthy();
+    expect(venda?.computar).toBe(true);
+    // A venda integrada NUNCA carrega conta de origem: ela credita pelo pagamento.
+    expect(venda?.conta_origem_id, "venda integrada nasce sem conta de origem").toBeNull();
+
+    expect(pagamentos.length).toBe(1);
+    expect(pagamentos[0]?.roteamento_status, "sem cadastro de roteamento o pagamento fica pendente").toBe("pendente");
+    // O coracao da R-168: nenhum destino inventado.
+    expect(pagamentos[0]?.conta_final_id, "nada de cair na conta do PDV por omissao").toBeNull();
+    expect(pagamentos[0]?.disponivel_em).toBeNull();
+
+    expect(await saldoDaConta(contaId), "a receita de 500 nao credita nada sem roteamento").toBe(0);
+  });
+
+  it("e a porta de saldo continua recusando saida da conta que vendeu, como antes da #152", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("recusa");
+    await ingerir(
+      payloadVendaIntegrada(`RECUSA-${carimbo}`, identificadorExterno, 500, [
+        { idFormaPagamento: `DIN-RE-${carimbo}`, descricaoFormaPagamento: `Dinheiro RE ${carimbo}`, valor: 500 }
+      ])
+    );
+
     const despesa = await contexto.app.inject({
       method: "POST",
       url: "/api/despesas",
@@ -187,15 +236,204 @@ describe("receita do CREARE x saldo das contas (prova do estado atual, R-165)", 
         empresaId: idsTeste.empresaA,
         dataReferencia: "2026-08-12",
         dataVencimento: "2026-08-12",
-        observacao: "prova receita CREARE",
+        observacao: "prova receita CREARE sem roteamento",
         valorOriginal: 100,
         contaOrigemId: contaId,
         grupoDespesaId: idsTeste.grupoDespesaOperacional,
         computar: true
       }
     });
-
     expect(despesa.statusCode, despesa.body).toBe(409);
     expect(json<{ code?: string }>(despesa).code).toBe("SALDO_INSUFICIENTE");
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // R-167/R-169 — com roteamento, o dinheiro chega. E so o que ja esta disponivel.
+  // -------------------------------------------------------------------------------------------
+
+  it("dinheiro roteado para a conta do PDV credita o saldo e libera a saida", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("com-roteamento");
+    const nomeForma = `Dinheiro CR ${carimbo}`;
+    const idForma = `DIN-CR-${carimbo}`;
+
+    // 1a ingestao: a forma nasce sem roteamento, o pagamento fica pendente e nada credita.
+    await ingerir(
+      payloadVendaIntegrada(`COM-ROT-A-${carimbo}`, identificadorExterno, 500, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 500 }
+      ])
+    );
+    expect(await saldoDaConta(contaId), "antes de rotear, zero").toBe(0);
+
+    await rotearFormaComoDinheiro(nomeForma);
+
+    // 2a ingestao, venda NOVA: nasce roteada e disponivel.
+    const idVenda = `COM-ROT-B-${carimbo}`;
+    const ingestao = await ingerir(
+      payloadVendaIntegrada(idVenda, identificadorExterno, 300, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 300 }
+      ])
+    );
+    expect(ingestao.statusCode, ingestao.body).toBe(200);
+
+    const { venda, pagamentos } = await pagamentosDaVenda(idVenda);
+    // Continua sem conta de origem: o credito vem do PAGAMENTO. E o que impede dupla contagem.
+    expect(venda?.conta_origem_id).toBeNull();
+    expect(pagamentos[0]?.roteamento_status).toBe("roteado");
+    expect(pagamentos[0]?.conta_recebivel_id, "dinheiro fisico: recebivel e final sao a conta do PDV").toBe(contaId);
+    expect(pagamentos[0]?.conta_final_id).toBe(contaId);
+    expect(pagamentos[0]?.disponivel_em, "dinheiro fisico ja e saldo").not.toBeNull();
+
+    // 300 da venda nova. A venda de 500 anterior ao roteamento continua pendente e NAO entra.
+    expect(await saldoDaConta(contaId), "credita so a venda que nasceu roteada").toBe(300);
+
+    const despesa = await contexto.app.inject({
+      method: "POST",
+      url: "/api/despesas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: "2026-08-12",
+        dataVencimento: "2026-08-12",
+        observacao: "saida legitima com roteamento",
+        valorOriginal: 100,
+        contaOrigemId: contaId,
+        grupoDespesaId: idsTeste.grupoDespesaOperacional,
+        computar: true
+      }
+    });
+    expect(despesa.statusCode, despesa.body).toBe(201);
+    expect(await saldoDaConta(contaId)).toBe(200);
+  });
+
+  it("cartao roteado vira RECEBIVEL: existe no roteamento e NAO entra no saldo", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("cartao");
+    const nomeForma = `Cartao ${carimbo}`;
+    const idForma = `CAR-${carimbo}`;
+    const contaRecebivelId = await criarConta("Recebivel cartao");
+    const contaFinalId = await criarConta("Banco cartao");
+
+    await ingerir(
+      payloadVendaIntegrada(`CARTAO-A-${carimbo}`, identificadorExterno, 100, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 100 }
+      ])
+    );
+    const forma = await consultarUm<{ id: string }>(
+      "select id from formas_pagamento where empresa_id = $1 and nome = $2",
+      [idsTeste.empresaA, nomeForma]
+    );
+    const configurar = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/formas-pagamento/${forma?.id}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: nomeForma,
+        adquirente: "Cielo",
+        disponibilidade: "por_evento",
+        contaRecebivelId,
+        contaFinalId
+      }
+    });
+    expect(configurar.statusCode, configurar.body).toBe(204);
+
+    const idVenda = `CARTAO-B-${carimbo}`;
+    await ingerir(
+      payloadVendaIntegrada(idVenda, identificadorExterno, 400, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 400 }
+      ])
+    );
+    const { pagamentos } = await pagamentosDaVenda(idVenda);
+    expect(pagamentos[0]?.roteamento_status).toBe("roteado");
+    expect(pagamentos[0]?.conta_recebivel_id).toBe(contaRecebivelId);
+    expect(pagamentos[0]?.conta_final_id).toBe(contaFinalId);
+    expect(pagamentos[0]?.adquirente).toBe("Cielo");
+    // R-169: roteado NAO e o mesmo que disponivel. Sem liquidacao, o cartao nao vira saldo.
+    expect(pagamentos[0]?.disponivel_em, "recebivel em aberto nao tem data de disponibilidade").toBeNull();
+
+    // Nenhuma das tres contas recebeu saldo: nem a do PDV, nem o recebivel, nem a final.
+    expect(await saldoDaConta(contaId), "cartao nao vai para a conta do PDV").toBe(0);
+    expect(await saldoDaConta(contaRecebivelId), "recebivel existe, mas nao e saldo gastavel").toBe(0);
+    expect(await saldoDaConta(contaFinalId), "a conta final so recebe quando liquidar").toBe(0);
+  });
+
+  it("venda dividida credita SO a parcela em dinheiro (o exemplo do gate)", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("dividida");
+    const nomeDinheiro = `Dinheiro DIV ${carimbo}`;
+    const nomeCartao = `Cartao DIV ${carimbo}`;
+    const divididos: PagamentoIntegrado[] = [
+      { idFormaPagamento: `DIN-DV-${carimbo}`, descricaoFormaPagamento: nomeDinheiro, valor: 40 },
+      { idFormaPagamento: `CAR-DV-${carimbo}`, descricaoFormaPagamento: nomeCartao, valor: 60 }
+    ];
+
+    await ingerir(payloadVendaIntegrada(`DIV-A-${carimbo}`, identificadorExterno, 100, divididos));
+    await rotearFormaComoDinheiro(nomeDinheiro);
+
+    const idVenda = `DIV-B-${carimbo}`;
+    await ingerir(payloadVendaIntegrada(idVenda, identificadorExterno, 100, divididos));
+
+    // 40 em dinheiro entram; 60 do cartao (sem roteamento) ficam pendentes e nao entram.
+    expect(await saldoDaConta(contaId), "so os 40 de dinheiro viram saldo").toBe(40);
+
+    const { pagamentos } = await pagamentosDaVenda(idVenda);
+    expect(pagamentos.map((linha) => linha.roteamento_status).sort()).toEqual(["pendente", "roteado"]);
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // R-173 — soma nao fecha: a VENDA INTEIRA fica pendente e nada entra em conta nenhuma.
+  // -------------------------------------------------------------------------------------------
+
+  it("soma dos pagamentos diferente do liquido deixa a venda INTEIRA pendente", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("divergente");
+    const nomeForma = `Dinheiro DIVERG ${carimbo}`;
+    const idForma = `DIN-DG-${carimbo}`;
+
+    await ingerir(
+      payloadVendaIntegrada(`DVG-A-${carimbo}`, identificadorExterno, 100, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 100 }
+      ])
+    );
+    await rotearFormaComoDinheiro(nomeForma);
+
+    // Venda de 100 com pagamentos somando 99: um centavo ja e divergencia (tolerancia ZERO).
+    const idVenda = `DVG-B-${carimbo}`;
+    const ingestao = await ingerir(
+      payloadVendaIntegrada(idVenda, identificadorExterno, 100, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 99 }
+      ])
+    );
+    // A venda NAO e recusada: ela e preservada (R-168/R-170).
+    expect(ingestao.statusCode, ingestao.body).toBe(200);
+
+    const { venda, pagamentos } = await pagamentosDaVenda(idVenda);
+    expect(venda, "a venda divergente continua gravada").toBeTruthy();
+    expect(
+      pagamentos.every((linha) => linha.roteamento_status === "pendente"),
+      "venda inteira pendente"
+    ).toBe(true);
+    expect(
+      pagamentos.every((linha) => linha.conta_final_id === null),
+      "nenhum destino escolhido"
+    ).toBe(true);
+
+    expect(await saldoDaConta(contaId), "nada entra quando a soma nao fecha").toBe(0);
+  });
+
+  it("divergencia de UM centavo tambem nao credita — sem tolerancia herdada da conciliacao", async () => {
+    const { contaId, identificadorExterno } = await montarPdv("um-centavo");
+    const nomeForma = `Dinheiro CENT ${carimbo}`;
+    const idForma = `DIN-CT-${carimbo}`;
+    await ingerir(
+      payloadVendaIntegrada(`CENT-A-${carimbo}`, identificadorExterno, 10, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 10 }
+      ])
+    );
+    await rotearFormaComoDinheiro(nomeForma);
+
+    await ingerir(
+      payloadVendaIntegrada(`CENT-B-${carimbo}`, identificadorExterno, 10, [
+        { idFormaPagamento: idForma, descricaoFormaPagamento: nomeForma, valor: 9.99 }
+      ])
+    );
+    expect(await saldoDaConta(contaId), "1 centavo de diferenca ja impede o credito").toBe(0);
   });
 });
