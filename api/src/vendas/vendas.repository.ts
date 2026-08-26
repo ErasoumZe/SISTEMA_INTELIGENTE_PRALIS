@@ -342,6 +342,17 @@ export async function buscarVendaDetalheRepository(
   };
 }
 
+// R-177 (#152): a venda veio da integracao? Leitura minima e proposital — nao entra no
+// `VendaDetalheDto`, porque `integracao_chave_id` e id interno e a tela nao precisa dele.
+export async function vendaEhIntegradaRepository(vendaId: string, db: ExecutorBanco = banco): Promise<boolean> {
+  const [linha] = await db
+    .select({ integracaoChaveId: vendas.integracaoChaveId })
+    .from(vendas)
+    .where(eq(vendas.id, vendaId))
+    .limit(1);
+  return Boolean(linha?.integracaoChaveId);
+}
+
 export async function atualizarVendaRepository(
   vendaId: string,
   dados: VendaPayload,

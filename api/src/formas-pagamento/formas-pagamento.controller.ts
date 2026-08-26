@@ -1,11 +1,22 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { formasPagamentoQuerySchema as empresaQuerySchema } from "@padaria/shared/formas-pagamento";
 import { criadoId, erro, paginadoDeArray, semConteudo } from "@padaria/shared/api";
+import { temPermissao } from "@padaria/shared/autenticacao";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
 import { listarFormasPagamento, salvarFormaPagamento } from "./formas-pagamento.service.js";
+
+// A permissao dedicada da R-176 e o autor da mudanca, lidos uma vez so. O POST importa tanto quanto
+// o PUT: o Financeiro tem `cadastro_formas_pagamento_criar` e, sem este corte, o roteamento entraria
+// de carona na CRIACAO da forma.
+function contextoRoteamento(request: FastifyRequest): { podeRotear: boolean; usuarioId: string | null } {
+  return {
+    podeRotear: temPermissao(request.perfilUsuario?.permissoes, "cadastro_formas_pagamento_roteamento"),
+    usuarioId: request.perfilUsuario?.usuarioId ?? null
+  };
+}
 
 export async function registrarRotasFormasPagamento(app: FastifyInstance): Promise<void> {
   // Lista consumida como OPCAO/filtro (relatorio de vendas) e para RESOLVER o nome da forma no
@@ -27,7 +38,14 @@ export async function registrarRotasFormasPagamento(app: FastifyInstance): Promi
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        return paginadoDeArray(await listarFormasPagamento(escopo), query.page, query.pageSize);
+        // R-176: as colunas de roteamento carregam id de CONTA e so saem para quem tem a permissao
+        // dedicada. Esta rota tambem atende `entradas_visualizar` (o operador precisa do NOME da
+        // forma no detalhe da venda) — sem o corte, o destino do dinheiro vazaria para ele.
+        const podeVerRoteamento = temPermissao(
+          request.perfilUsuario?.permissoes,
+          "cadastro_formas_pagamento_roteamento"
+        );
+        return paginadoDeArray(await listarFormasPagamento(escopo, podeVerRoteamento), query.page, query.pageSize);
       } catch (error) {
         return erro(reply, 403, mensagemDominioOuRelancar(error), "FORBIDDEN_COMPANY");
       }
@@ -43,7 +61,7 @@ export async function registrarRotasFormasPagamento(app: FastifyInstance): Promi
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
       try {
-        const salvo = await salvarFormaPagamento(null, request.body);
+        const salvo = await salvarFormaPagamento(null, request.body, contextoRoteamento(request));
         return criadoId(reply, salvo?.id ?? "formas-pagamento");
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
@@ -62,7 +80,7 @@ export async function registrarRotasFormasPagamento(app: FastifyInstance): Promi
         return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
       }
       try {
-        await salvarFormaPagamento(id, request.body);
+        await salvarFormaPagamento(id, request.body, contextoRoteamento(request));
         return semConteudo(reply);
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);

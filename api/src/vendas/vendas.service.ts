@@ -20,8 +20,11 @@ import {
   travarVendaRepository,
   criarVendaRepository,
   listarVendasRepository,
-  totaisVendasRepository
+  totaisVendasRepository,
+  vendaEhIntegradaRepository
 } from "./vendas.repository.js";
+import { paraCentavos } from "@padaria/shared/dinheiro";
+import { proibido } from "../erros.js";
 import {
   resolverComputarLancamento,
   resolverDataPagamentoLancamento,
@@ -78,6 +81,33 @@ export async function obterVenda(vendaId: string, perfil: PerfilUsuario): Promis
   return venda;
 }
 
+// Assinatura de comparacao dos pagamentos: forma + valor, em ordem estavel. Compara o que a venda
+// E, nao os campos que vieram no corpo — uma tela que devolve o mesmo conteudo continua salvando os
+// campos permitidos (observacao, descricao de desconto...) sem esbarrar na recusa.
+function assinaturaPagamentos(
+  pagamentos: ReadonlyArray<{ formaPagamentoId?: string | null | undefined; totalPago: number | string }>
+): string {
+  return pagamentos
+    .map((pagamento) => `${pagamento.formaPagamentoId ?? "-"}|${paraCentavos(pagamento.totalPago)}`)
+    .sort()
+    .join(";");
+}
+
+function recusarEdicaoFinanceiraDeVendaIntegrada(existente: VendaDetalheDto, dados: VendaPayload): void {
+  if ((dados.contaOrigemId ?? null) !== (existente.contaOrigemId ?? null)) {
+    throw proibido(
+      "Venda integrada nao tem a conta de origem alterada pela retaguarda: o destino do dinheiro vem do roteamento da forma de pagamento",
+      "VENDA_INTEGRADA_CONTA_ORIGEM"
+    );
+  }
+  if (assinaturaPagamentos(dados.tiposPagamento) !== assinaturaPagamentos(existente.tiposPagamento)) {
+    throw proibido(
+      "Venda integrada nao tem os pagamentos alterados pela retaguarda: o proximo reenvio do CREARE sobrescreveria a alteracao",
+      "VENDA_INTEGRADA_PAGAMENTOS"
+    );
+  }
+}
+
 export async function atualizarVenda(
   vendaId: string,
   dados: VendaPayload,
@@ -101,6 +131,15 @@ export async function atualizarVenda(
     // retomar o lock do caixa.
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
+    // R-177: venda integrada nao tem pagamentos nem conta de origem editados pela retaguarda.
+    //
+    // Nao e funcao sendo retirada: o proximo reenvio do CREARE ja sobrescreve a venda e reinsere os
+    // pagamentos, entao essa edicao NUNCA sobreviveu — hoje, antes do roteamento. Com roteamento ela
+    // passaria a apagar o credito em silencio, porque o snapshot da venda seria reescrito por um
+    // caminho que nao sabe rotear.
+    if (existente && (await vendaEhIntegradaRepository(vendaId, tx))) {
+      recusarEdicaoFinanceiraDeVendaIntegrada(existente, dados);
+    }
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     await atualizarVendaRepository(vendaId, normalizados, computar, tx);
