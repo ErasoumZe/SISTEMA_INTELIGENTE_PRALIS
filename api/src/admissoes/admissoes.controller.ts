@@ -13,7 +13,7 @@ import {
   criarTeste,
   editarTeste,
   encerrarTeste,
-  listarCargosAdmissoes,
+  listarFuncoesAdmissoes,
   listarHistorico,
   listarTestes,
   obterTeste,
@@ -50,14 +50,14 @@ export async function registrarRotasAdmissoes(app: FastifyInstance) {
     }
   );
 
-  // Cargos da empresa derivada, so id e nome. Existe para o formulario NAO depender de
-  // `GET /api/cargos`, que exige `cadastro_colaboradores_visualizar` — permissao de outro dominio.
+  // FUNCOES OPERACIONAIS da empresa derivada. Nao e `GET /api/cargos`: aquilo lista cargo de ACESSO
+  // e exige `cadastro_colaboradores_visualizar`, permissao de outro dominio. Catalogos distintos.
   app.get(
-    "/api/admissoes/cargos",
+    "/api/admissoes/funcoes",
     { preHandler: exigirPermissao("admissoes_testes_visualizar") },
     async (request, reply) => {
       try {
-        return ok(await listarCargosAdmissoes(request.perfilUsuario));
+        return ok(await listarFuncoesAdmissoes(request.perfilUsuario));
       } catch (error) {
         return responderErro(reply, error);
       }

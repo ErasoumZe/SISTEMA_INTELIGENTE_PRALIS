@@ -1,7 +1,10 @@
-import { and, asc, count, eq, gte, ilike, inArray, lt, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
-import { cargos, colaboradores, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import { admissoesFuncoes, admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
+// `cargos` NAO entra aqui. Ele e catalogo de ACESSO (chave de `permissoes_cargos`); a funcao
+// operacional vive em `admissoes_funcoes`. O import ausente e a primeira barreira contra a
+// mistura voltar por conveniencia.
+import { colaboradores, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import type {
   AcaoHistoricoTeste,
   MotivoCancelamento,
@@ -23,8 +26,9 @@ const perfilAtor = alias(perfisUsuarios, "perfil_ator");
 export type TesteLinha = {
   id: string;
   nomeCompleto: string;
-  cargoId: string;
-  cargoNome: string;
+  funcaoId: string;
+  funcaoNome: string;
+  funcaoCbo: string | null;
   jornadaHorario: string;
   inicioEm: Date;
   fimCombinadoEm: Date;
@@ -64,7 +68,7 @@ export async function listarTestesRepository(
 
   if (query.buscaNome) filtros.push(ilike(admissoesTestes.nomeCompleto, padraoBusca(query.buscaNome)));
   if (query.situacao) filtros.push(inArray(admissoesTestes.status, statusDaSituacao));
-  if (query.cargoId) filtros.push(eq(admissoesTestes.cargoId, query.cargoId));
+  if (query.funcaoId) filtros.push(eq(admissoesTestes.funcaoId, query.funcaoId));
   // Prazo so existe para teste em andamento — encerrado/cancelado nao vence.
   if (query.prazo) {
     filtros.push(eq(admissoesTestes.status, "em_teste"));
@@ -79,14 +83,15 @@ export async function listarTestesRepository(
   const where = and(...filtros);
   const [{ total } = { total: 0 }] = await banco.select({ total: count() }).from(admissoesTestes).where(where);
 
-  // Join com `cargos` casando TAMBEM a empresa: e a mesma defesa em profundidade da FK composta.
-  // Cargo de outra empresa nao existe aqui, mas o join nao depende disso para estar correto.
+  // Join com `admissoes_funcoes` casando TAMBEM a empresa: e a mesma defesa em profundidade da FK
+  // composta. Funcao de outra empresa nao existe aqui, mas o join nao depende disso para estar certo.
   const itens = await banco
     .select({
       id: admissoesTestes.id,
       nomeCompleto: admissoesTestes.nomeCompleto,
-      cargoId: admissoesTestes.cargoId,
-      cargoNome: cargos.nome,
+      funcaoId: admissoesTestes.funcaoId,
+      funcaoNome: admissoesFuncoes.nome,
+      funcaoCbo: admissoesFuncoes.cbo,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
       fimCombinadoEm: admissoesTestes.fimCombinadoEm,
@@ -95,7 +100,13 @@ export async function listarTestesRepository(
       versao: admissoesTestes.versao
     })
     .from(admissoesTestes)
-    .innerJoin(cargos, and(eq(cargos.id, admissoesTestes.cargoId), eq(cargos.empresaId, admissoesTestes.empresaId)))
+    .innerJoin(
+      admissoesFuncoes,
+      and(
+        eq(admissoesFuncoes.id, admissoesTestes.funcaoId),
+        eq(admissoesFuncoes.empresaId, admissoesTestes.empresaId)
+      )
+    )
     .where(where)
     // `id` como desempate: sem ele, dois testes com o mesmo fim trocam de lugar entre paginas e o
     // operador ve a mesma linha duas vezes.
@@ -111,8 +122,9 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
     .select({
       id: admissoesTestes.id,
       nomeCompleto: admissoesTestes.nomeCompleto,
-      cargoId: admissoesTestes.cargoId,
-      cargoNome: cargos.nome,
+      funcaoId: admissoesTestes.funcaoId,
+      funcaoNome: admissoesFuncoes.nome,
+      funcaoCbo: admissoesFuncoes.cbo,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
       fimCombinadoEm: admissoesTestes.fimCombinadoEm,
@@ -131,7 +143,13 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
       canceladoEm: admissoesTestes.canceladoEm
     })
     .from(admissoesTestes)
-    .innerJoin(cargos, and(eq(cargos.id, admissoesTestes.cargoId), eq(cargos.empresaId, admissoesTestes.empresaId)))
+    .innerJoin(
+      admissoesFuncoes,
+      and(
+        eq(admissoesFuncoes.id, admissoesTestes.funcaoId),
+        eq(admissoesFuncoes.empresaId, admissoesTestes.empresaId)
+      )
+    )
     .leftJoin(perfilCriador, eq(perfilCriador.usuarioId, admissoesTestes.criadoPor))
     .leftJoin(perfilAtualizador, eq(perfilAtualizador.usuarioId, admissoesTestes.atualizadoPor))
     .leftJoin(perfilEncerrador, eq(perfilEncerrador.usuarioId, admissoesTestes.encerradoPor))
@@ -154,7 +172,7 @@ export async function bloquearTesteRepository(id: string, empresaId: string, db:
       versao: admissoesTestes.versao,
       cpf: admissoesTestes.cpf,
       nomeCompleto: admissoesTestes.nomeCompleto,
-      cargoId: admissoesTestes.cargoId,
+      funcaoId: admissoesTestes.funcaoId,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
       fimCombinadoEm: admissoesTestes.fimCombinadoEm
@@ -168,13 +186,20 @@ export async function bloquearTesteRepository(id: string, empresaId: string, db:
   return linha ?? null;
 }
 
-export async function existeCargoNaEmpresaRepository(cargoId: string, empresaId: string, db: TransacaoBanco) {
+/**
+ * A funcao existe nesta empresa? Devolve tambem a SITUACAO dela.
+ *
+ * Devolve a linha, e nao um booleano, porque "nao existe" e "existe mas esta inativa" sao recusas
+ * diferentes: a primeira e erro de referencia, a segunda e regra de catalogo — e so a segunda pode
+ * ser aceita quando o teste ja apontava para aquela funcao antes de ela ser desativada.
+ */
+export async function obterFuncaoDaEmpresaRepository(funcaoId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
-    .select({ id: cargos.id })
-    .from(cargos)
-    .where(and(eq(cargos.id, cargoId), eq(cargos.empresaId, empresaId)))
+    .select({ id: admissoesFuncoes.id, ativo: admissoesFuncoes.ativo })
+    .from(admissoesFuncoes)
+    .where(and(eq(admissoesFuncoes.id, funcaoId), eq(admissoesFuncoes.empresaId, empresaId)))
     .limit(1);
-  return Boolean(linha);
+  return linha ?? null;
 }
 
 /** Existe OUTRO teste em andamento com este CPF na empresa? `ignorarId` exclui o proprio alvo. */
@@ -225,7 +250,7 @@ export async function criarTesteRepository(
     empresaId: string;
     nomeCompleto: string;
     cpf: string;
-    cargoId: string;
+    funcaoId: string;
     jornadaHorario: string;
     inicioEm: Date;
     fimCombinadoEm: Date;
@@ -242,7 +267,7 @@ export async function criarTesteRepository(
       empresaId: input.empresaId,
       nomeCompleto: input.nomeCompleto,
       cpf: input.cpf,
-      cargoId: input.cargoId,
+      funcaoId: input.funcaoId,
       jornadaHorario: input.jornadaHorario,
       inicioEm: input.inicioEm,
       fimCombinadoEm: input.fimCombinadoEm,
@@ -261,7 +286,7 @@ export async function atualizarTesteRepository(
     versaoAtual: number;
     nomeCompleto: string;
     cpf: string;
-    cargoId: string;
+    funcaoId: string;
     jornadaHorario: string;
     inicioEm: Date;
     fimCombinadoEm: Date;
@@ -276,7 +301,7 @@ export async function atualizarTesteRepository(
     .set({
       nomeCompleto: input.nomeCompleto,
       cpf: input.cpf,
-      cargoId: input.cargoId,
+      funcaoId: input.funcaoId,
       jornadaHorario: input.jornadaHorario,
       inicioEm: input.inicioEm,
       fimCombinadoEm: input.fimCombinadoEm,
@@ -430,15 +455,20 @@ export async function listarHistoricoRepository(
 }
 
 /**
- * Leitura MINIMA de cargos para o formulario de Admissoes.
+ * Leitura MINIMA das FUNCOES OPERACIONAIS para o formulario de Admissoes.
  *
- * Existe para a tela nao depender de `GET /api/cargos`, que exige `cadastro_colaboradores_visualizar`
- * — permissao de OUTRO dominio. Devolve so id e nome, recortado pela empresa derivada.
+ * Nao e `GET /api/cargos`: aquilo lista cargo de ACESSO e exige `cadastro_colaboradores_visualizar`,
+ * permissao de OUTRO dominio. Sao catalogos distintos, com donos distintos.
+ *
+ * Devolve tambem as INATIVAS, com a marca. Filtrar aqui deixaria o formulario de edicao de um teste
+ * antigo sem o proprio valor gravado na lista, e o seletor apareceria vazio — a tela desabilita a
+ * escolha de inativa, que e onde essa regra pertence.
  */
-export async function listarCargosDaEmpresaRepository(empresaId: string) {
+export async function listarFuncoesDaEmpresaRepository(empresaId: string) {
   return banco
-    .select({ id: cargos.id, nome: cargos.nome })
-    .from(cargos)
-    .where(eq(cargos.empresaId, empresaId))
-    .orderBy(asc(cargos.nome));
+    .select({ id: admissoesFuncoes.id, nome: admissoesFuncoes.nome, cbo: admissoesFuncoes.cbo, ativo: admissoesFuncoes.ativo })
+    .from(admissoesFuncoes)
+    .where(eq(admissoesFuncoes.empresaId, empresaId))
+    // Ativas primeiro; dentro de cada grupo, por nome.
+    .orderBy(desc(admissoesFuncoes.ativo), asc(admissoesFuncoes.nome));
 }

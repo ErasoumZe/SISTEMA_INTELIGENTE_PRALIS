@@ -19,18 +19,18 @@ import type { PerfilUsuario } from "@padaria/shared";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { conflito, naoEncontrado, proibido } from "../erros.js";
 import { falharValidacao } from "../utils.js";
-import { executarEmTransacao } from "../banco/conexao.js";
+import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   atualizarTesteRepository,
   bloquearTesteRepository,
   cancelarTesteRepository,
   criarTesteRepository,
   encerrarTesteRepository,
-  existeCargoNaEmpresaRepository,
+  obterFuncaoDaEmpresaRepository,
   existeColaboradorPorCpfRepository,
   existeTesteAbertoPorCpfRepository,
   existeTesteAbertoPorCpfSemTransacaoRepository,
-  listarCargosDaEmpresaRepository,
+  listarFuncoesDaEmpresaRepository,
   listarHistoricoRepository,
   listarTestesRepository,
   obterCpfDoTesteRepository,
@@ -107,8 +107,9 @@ function paraListaDto(linha: TesteLinha, agora: Date): TesteListaDto {
     nomeCompleto: linha.nomeCompleto,
     // Constante. A lista nunca carrega digito nenhum do CPF — nem parcial.
     cpfMascarado: cpfTotalmenteMascarado(),
-    cargoId: linha.cargoId,
-    cargoNome: linha.cargoNome,
+    funcaoId: linha.funcaoId,
+    funcaoNome: linha.funcaoNome,
+    funcaoCbo: linha.funcaoCbo,
     jornadaHorario: linha.jornadaHorario,
     inicioEm: linha.inicioEm.toISOString(),
     fimCombinadoEm: linha.fimCombinadoEm.toISOString(),
@@ -176,8 +177,8 @@ export async function listarHistorico(id: string, query: PaginationQuery, perfil
   };
 }
 
-export async function listarCargosAdmissoes(perfil?: PerfilUsuario) {
-  return listarCargosDaEmpresaRepository(empresaDoAtor(perfil));
+export async function listarFuncoesAdmissoes(perfil?: PerfilUsuario) {
+  return listarFuncoesDaEmpresaRepository(empresaDoAtor(perfil));
 }
 
 // --- Verificacao de CPF ---------------------------------------------------------------------------
@@ -195,6 +196,27 @@ export async function verificarCpf(body: DadosExternos, perfil?: PerfilUsuario) 
   return { jaExisteColaborador, jaExisteTesteAberto };
 }
 
+/**
+ * A funcao existe nesta empresa e pode ser USADA agora?
+ *
+ * `permitirInativa` existe para a edicao: um teste antigo pode apontar para funcao desativada depois,
+ * e recusar a edicao inteira por causa disso impediria corrigir um nome. Trocar PARA uma inativa
+ * continua recusado — desativar existe justamente para tirar a funcao das escolhas novas.
+ *
+ * A mensagem nao distingue "nao existe" de "e de outra empresa": distinguir entregaria a existencia
+ * de uma funcao de outro tenant de graca.
+ */
+async function exigirFuncaoUtilizavel(
+  funcaoId: string,
+  empresaId: string,
+  tx: TransacaoBanco,
+  permitirInativa: boolean
+) {
+  const funcao = await obterFuncaoDaEmpresaRepository(funcaoId, empresaId, tx);
+  if (!funcao) falharValidacao("Funcao nao pertence a empresa");
+  if (!funcao.ativo && !permitirInativa) falharValidacao("Esta funcao esta inativa e nao pode ser escolhida");
+}
+
 // --- Escrita --------------------------------------------------------------------------------------
 
 export async function criarTeste(body: DadosExternos, perfil?: PerfilUsuario) {
@@ -203,9 +225,7 @@ export async function criarTeste(body: DadosExternos, perfil?: PerfilUsuario) {
   const dados = criarTestePayloadSchema.parse(body);
 
   return executarEmTransacao(async (tx) => {
-    if (!(await existeCargoNaEmpresaRepository(dados.cargoId, empresaId, tx))) {
-      falharValidacao("Cargo nao pertence a empresa");
-    }
+    await exigirFuncaoUtilizavel(dados.funcaoId, empresaId, tx, false);
     // Pre-checagem para a mensagem ser exata. NAO e a garantia: a garantia e o indice unico parcial,
     // conferido logo abaixo pelo retorno nulo do insert.
     if (await existeTesteAbertoPorCpfRepository({ empresaId, cpf: dados.cpf }, tx)) {
@@ -217,7 +237,7 @@ export async function criarTeste(body: DadosExternos, perfil?: PerfilUsuario) {
         empresaId,
         nomeCompleto: dados.nomeCompleto,
         cpf: dados.cpf,
-        cargoId: dados.cargoId,
+        funcaoId: dados.funcaoId,
         jornadaHorario: dados.jornadaHorario,
         inicioEm: new Date(dados.inicioEm),
         fimCombinadoEm: new Date(dados.fimCombinadoEm),
@@ -241,13 +261,13 @@ export async function criarTeste(body: DadosExternos, perfil?: PerfilUsuario) {
 
 // Nomes de campos alterados — nunca os valores. E o que a trilha guarda.
 function camposAlterados(
-  antes: { nomeCompleto: string; cpf: string; cargoId: string; jornadaHorario: string; inicioEm: Date; fimCombinadoEm: Date },
-  depois: { nomeCompleto: string; cpf: string; cargoId: string; jornadaHorario: string; inicioEm: Date; fimCombinadoEm: Date }
+  antes: { nomeCompleto: string; cpf: string; funcaoId: string; jornadaHorario: string; inicioEm: Date; fimCombinadoEm: Date },
+  depois: { nomeCompleto: string; cpf: string; funcaoId: string; jornadaHorario: string; inicioEm: Date; fimCombinadoEm: Date }
 ) {
   const campos: string[] = [];
   if (antes.nomeCompleto !== depois.nomeCompleto) campos.push("nomeCompleto");
   if (antes.cpf !== depois.cpf) campos.push("cpf");
-  if (antes.cargoId !== depois.cargoId) campos.push("cargoId");
+  if (antes.funcaoId !== depois.funcaoId) campos.push("funcaoId");
   if (antes.jornadaHorario !== depois.jornadaHorario) campos.push("jornadaHorario");
   if (antes.inicioEm.getTime() !== depois.inicioEm.getTime()) campos.push("inicioEm");
   if (antes.fimCombinadoEm.getTime() !== depois.fimCombinadoEm.getTime()) campos.push("fimCombinadoEm");
@@ -260,7 +280,7 @@ export async function editarTeste(id: string, body: DadosExternos, perfil?: Perf
   const dados = editarTestePayloadSchema.parse(body);
 
   return executarEmTransacao(async (tx) => {
-    // Autorizacao ANTES da validacao de regra: validar primeiro responderia "cargo invalido" para
+    // Autorizacao ANTES da validacao de regra: validar primeiro responderia "funcao invalida" para
     // um teste de outra empresa, entregando existencia de graca.
     const alvo = await bloquearTesteRepository(id, empresaId, tx);
     if (!alvo) testeNaoEncontrado();
@@ -270,9 +290,9 @@ export async function editarTeste(id: string, body: DadosExternos, perfil?: Perf
     if (alvo.versao !== dados.versao) {
       throw conflito("Alguem alterou este periodo de teste enquanto voce editava", "VERSAO_CONFLITANTE");
     }
-    if (!(await existeCargoNaEmpresaRepository(dados.cargoId, empresaId, tx))) {
-      falharValidacao("Cargo nao pertence a empresa");
-    }
+    // Manter a funcao que ja estava gravada e permitido mesmo se ela foi desativada depois; trocar
+    // PARA uma inativa, nao.
+    await exigirFuncaoUtilizavel(dados.funcaoId, empresaId, tx, dados.funcaoId === alvo.funcaoId);
     // `cpf` ausente PRESERVA o gravado: a tela nao tem o valor para reenviar, porque o detalhe
     // devolve mascarado. Quem quer trocar o CPF digita um novo, e so entao ele viaja.
     const cpfFinal = dados.cpf ?? alvo.cpf;
@@ -286,7 +306,7 @@ export async function editarTeste(id: string, body: DadosExternos, perfil?: Perf
     const depois = {
       nomeCompleto: dados.nomeCompleto,
       cpf: cpfFinal,
-      cargoId: dados.cargoId,
+      funcaoId: dados.funcaoId,
       jornadaHorario: dados.jornadaHorario,
       inicioEm: new Date(dados.inicioEm),
       fimCombinadoEm: new Date(dados.fimCombinadoEm)
