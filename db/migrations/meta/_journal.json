@@ -232,6 +232,13 @@
       "when": 1787662859368,
       "tag": "0032_idempotencia_venda_integrada",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787748137962,
+      "tag": "0033_roteamento_financeiro_da_venda",
+      "breakpoints": true
     }
   ]
 }
