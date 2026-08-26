@@ -44,6 +44,7 @@ import {
   type StatusRoteamento
 } from "@padaria/shared/integracoes";
 import { buscarRoteamentosDaEmpresaRepository } from "../formas-pagamento/formas-pagamento.repository.js";
+import type { RoteamentoDaForma } from "@padaria/shared/formas-pagamento";
 
 export type IntegracaoChaveLinha = {
   id: string;
@@ -846,13 +847,13 @@ export async function criarOuAtualizarVendaIntegradaRepository(
     const formaIds = input.payload.PagamentosVenda.map(
       (pagamento) => input.formasPagamentoPorIdentificador.get(pagamento.idFormaPagamento) ?? null
     );
-    const roteamentos = aplicavel
+    const roteamentos: Map<string, RoteamentoDaForma> = aplicavel
       ? await buscarRoteamentosDaEmpresaRepository(
           input.chave.empresaId,
           formaIds.filter((id): id is string => !!id),
           db
         )
-      : new Map();
+      : new Map<string, RoteamentoDaForma>();
     const contaDoPdvId =
       aplicavel && input.pdvId ? await buscarContaDoPdvRepository(input.pdvId, input.chave.empresaId, db) : null;
 
