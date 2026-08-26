@@ -2668,3 +2668,38 @@ body {
   border-radius: var(--cx-r-md) var(--cx-r-pill) var(--cx-r-pill) var(--cx-r-md);
 }
 /* ===================== FIM VIS-07 ===================== */
+
+/* ===================== INICIO VIS-12 — RAIL SEM BARRA DE ROLAGEM (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   DEFEITO MEDIDO a 1024px, nos dois temas: `.sidebar-nav` com clientWidth 51 e scrollWidth 92.
+   Como ela e `overflow-y: auto`, o eixo X computa `auto` junto e a barra aparece de verdade, no
+   canto inferior esquerdo do rail.
+
+   A CAUSA NAO E O `display: block` — medi, e a trilha do rotulo JA COLAPSA certo.
+   O computado do item no rail e `grid-template-columns: 28px 0px 0px`: os `0fr` viraram 0px, como
+   deviam. Quem estoura e o SPAN, que mede 105px mesmo com `min-width: 0` e `overflow: hidden`.
+   O motivo e o `justify-items: center` da linha 2107: com `center`, o item de grade deixa de
+   esticar para a trilha e passa a ser dimensionado por MAX-CONTENT — 105px de "Lancamentos" —,
+   e so depois e centralizado numa trilha de 0px. O `overflow: hidden` do span clipa o TEXTO
+   dentro dele, mas nao encolhe a caixa dele.
+
+   A conta fecha com a medicao: as trilhas somam 28px e o `justify-content: center` as centra em
+   51px, entao a trilha do rotulo comeca em 39,5px; 39,5 + 105/2 = 92. E exatamente o scrollWidth
+   observado.
+
+   CONSERTO: clipar no item, que e onde o excesso nasce. Nao mexe no `display`, entao a animacao
+   do rail continua inteira — a transicao vive em `grid-template-columns` do item e em `opacity`
+   do span, e clipar nao interrompe nenhuma das duas.
+
+   O QUE NAO E CLIPADO, conferido pela mesma aritmetica e depois medido: o icone ocupa 15..36px
+   (trilha de 28px centrada, icone de 21px) e o chevron da categoria ocupa ~30..48px — os dois
+   inteiramente dentro dos 51px. A barra de 3px do item ativo vive em `left: 0` com 55% de altura,
+   tambem dentro da caixa. Os tres sinais do 67 §9 seguem intactos.
+
+   Bloco novo no fim do arquivo porque o SHELL (onde a linha 2107 mora) e congelado.
+   ================================================================================================ */
+.shell-mobills .padaria-sidebar.rail .sidebar-item {
+  overflow: hidden;
+}
+/* ===================== FIM VIS-12 ===================== */
