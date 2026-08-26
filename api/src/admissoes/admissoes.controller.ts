@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import type { DadosExternos } from "@padaria/shared/api";
 import {
   historicoQuerySchema,
   testeParamsSchema,
@@ -24,7 +25,7 @@ import {
 // Traduz o `new Error` das validacoes de regra (`falharValidacao`) em 4xx. `ErroDominio` NAO passa
 // por aqui: `mensagemDominioOuRelancar` o relanca e o handler global de app.ts responde com o status
 // e o `code` proprios. Falha tecnica tambem e relancada e vira 500 logado, nunca 400 com texto cru.
-function responderErro(reply: FastifyReply, error: unknown) {
+function responderErro(reply: FastifyReply, error: DadosExternos) {
   const mensagem = mensagemDominioOuRelancar(error);
   return erro(reply, statusErroValidacao(mensagem), mensagem);
 }

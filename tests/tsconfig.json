@@ -8,6 +8,7 @@
       "@padaria/shared": ["shared/src/index.ts"],
       "@padaria/shared/*": ["shared/src/*/index.ts"],
       "@padaria/db/schema": ["db/src/schema/index.ts"],
+      "@padaria/db/schema/admissoes": ["db/src/schema/admissoes/admissoes.schema.ts"],
       "@padaria/db/schema/autenticacao": ["db/src/schema/autenticacao/autenticacao.schema.ts"],
       "@padaria/db/schema/cadastro": ["db/src/schema/cadastro/cadastro.schema.ts"],
       "@padaria/db/schema/caixa": ["db/src/schema/caixa/caixa.schema.ts"],
