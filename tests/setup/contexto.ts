@@ -31,6 +31,10 @@ export const idsTeste = {
   pdvLivre: "11111111-1111-4111-8111-111111111302",
   areaA: "11111111-1111-4111-8111-111111111401",
   setorA: "11111111-1111-4111-8111-111111111402",
+  // ADM-001: funcao OPERACIONAL (o oficio: padeiro, atendente), catalogo proprio e separado de
+  // `cargos` — cargo no Pralis e cargo de ACESSO, chave de `permissoes_cargos`. Um periodo de teste
+  // exige `funcaoId`, entao sem esta linha toda a integracao de admissoes morre na fixture.
+  funcaoOperacionalA: "11111111-1111-4111-8111-111111111403",
   cargoAdmin: "11111111-1111-4111-8111-111111111501",
   cargoCaixa: "11111111-1111-4111-8111-111111111502",
   cargoGerente: "11111111-1111-4111-8111-111111111503",
