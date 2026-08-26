@@ -1,0 +1,260 @@
+<script setup lang="ts">
+// R-167/R-176 (#152) — onde o Admin decide PARA ONDE vai o dinheiro de uma forma de pagamento.
+//
+// Componente proprio, e nao mais um campo no cadastro generico, por tres motivos que sao o mesmo:
+// e outro ATO (decidir destino de dinheiro, nao renomear forma), outra PERMISSAO (a dedicada da
+// R-176) e outro publico (so o Admin). Nao e segunda rota para cadastrar forma — e a unica rota
+// para rotear.
+import { computed, ref, watch } from "vue";
+import { useApi } from "~/composables/useApi";
+
+type Conta = { id: string; nome?: string };
+type Disponibilidade = "imediata" | "por_evento";
+type Roteamento = {
+  adquirente: string | null;
+  usaContaDoPdv: boolean;
+  contaRecebivelId: string | null;
+  contaFinalId: string | null;
+  disponibilidade: Disponibilidade | null;
+};
+
+const props = defineProps<{
+  aberto: boolean;
+  empresaId: string;
+  forma: { id: string; nome: string } | null;
+  contas: Conta[];
+  podeConfigurar: boolean;
+}>();
+
+const emit = defineEmits<{ (event: "fechar"): void; (event: "salvo"): void }>();
+
+const { apiGet, apiPut } = useApi();
+
+const carregando = ref(false);
+const salvando = ref(false);
+const erro = ref("");
+const destino = ref<"sem_roteamento" | "conta_do_pdv" | "recebivel">("sem_roteamento");
+const adquirente = ref("");
+const contaRecebivelId = ref<string | null>(null);
+const contaFinalId = ref<string | null>(null);
+
+// BLOQUEADO: rotear para conta propria exige conta cadastrada. Sem nenhuma, o caminho "recebivel"
+// nao pode nem ser oferecido — oferecer e deixar o Admin preencher para receber erro no fim.
+const semContas = computed(() => props.contas.length === 0);
+
+const opcoesDestino = computed(() => [
+  { valor: "sem_roteamento", titulo: "Sem roteamento", ajuda: "A venda fica pendente e nao entra em saldo." },
+  {
+    valor: "conta_do_pdv",
+    titulo: "Dinheiro na conta do PDV",
+    ajuda: "Disponivel na hora, no caixa que registrou a venda."
+  },
+  {
+    valor: "recebivel",
+    titulo: "Recebivel (cartao, Pix, voucher)",
+    ajuda: semContas.value
+      ? "Cadastre ao menos uma conta para usar este destino."
+      : "Entra no financeiro e so vira saldo quando a liquidacao confirmar."
+  }
+]);
+
+function aplicar(roteamento: Roteamento) {
+  adquirente.value = roteamento.adquirente ?? "";
+  contaRecebivelId.value = roteamento.contaRecebivelId;
+  contaFinalId.value = roteamento.contaFinalId;
+  if (roteamento.disponibilidade === "imediata") destino.value = "conta_do_pdv";
+  else if (roteamento.disponibilidade === "por_evento") destino.value = "recebivel";
+  else destino.value = "sem_roteamento";
+}
+
+async function carregar() {
+  if (!props.forma || !props.podeConfigurar) return;
+  carregando.value = true;
+  erro.value = "";
+  try {
+    // A listagem so devolve as colunas de roteamento a quem tem a permissao dedicada — por isso o
+    // dialogo le da mesma rota que a tela ja usa, em vez de inventar um GET por id.
+    const formas = await apiGet<Array<{ id: string } & Partial<Roteamento>>>(
+      `/api/formas_pagamento?empresaId=${props.empresaId}&pageSize=100`
+    );
+    const atual = formas.find((item) => item.id === props.forma?.id);
+    aplicar({
+      adquirente: atual?.adquirente ?? null,
+      usaContaDoPdv: atual?.usaContaDoPdv ?? false,
+      contaRecebivelId: atual?.contaRecebivelId ?? null,
+      contaFinalId: atual?.contaFinalId ?? null,
+      disponibilidade: atual?.disponibilidade ?? null
+    });
+  } catch {
+    erro.value = "Nao foi possivel carregar o roteamento desta forma.";
+  } finally {
+    carregando.value = false;
+  }
+}
+
+watch(
+  () => [props.aberto, props.forma?.id],
+  ([aberto]) => {
+    if (aberto) void carregar();
+  },
+  { immediate: true }
+);
+
+const podeSalvar = computed(() => {
+  if (salvando.value || carregando.value || !props.podeConfigurar) return false;
+  if (destino.value === "recebivel") return Boolean(contaRecebivelId.value && contaFinalId.value);
+  return true;
+});
+
+async function salvar() {
+  if (!props.forma || !podeSalvar.value) return;
+  salvando.value = true;
+  erro.value = "";
+  const corpo = {
+    empresaId: props.empresaId,
+    nome: props.forma.nome,
+    adquirente: adquirente.value.trim() || null,
+    usaContaDoPdv: destino.value === "conta_do_pdv",
+    contaRecebivelId: destino.value === "recebivel" ? contaRecebivelId.value : null,
+    contaFinalId: destino.value === "recebivel" ? contaFinalId.value : null,
+    disponibilidade: destino.value === "conta_do_pdv" ? "imediata" : destino.value === "recebivel" ? "por_evento" : null
+  };
+  try {
+    await apiPut(`/api/formas-pagamento/${props.forma.id}`, corpo);
+    emit("salvo");
+    emit("fechar");
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Nao foi possivel salvar o roteamento.";
+  } finally {
+    salvando.value = false;
+  }
+}
+</script>
+
+<template>
+  <v-dialog :model-value="aberto" max-width="640" scrollable @update:model-value="emit('fechar')">
+    <v-card>
+      <v-card-title class="text-wrap">Roteamento financeiro — {{ forma?.nome }}</v-card-title>
+
+      <v-card-text>
+        <!-- SEM PERMISSAO: a tela diz o que falta, em vez de um formulario morto. -->
+        <v-alert v-if="!podeConfigurar" type="info" variant="tonal" density="comfortable">
+          Voce nao tem permissao para configurar o roteamento financeiro. Fale com o Admin.
+        </v-alert>
+
+        <!-- CARREGANDO -->
+        <div v-else-if="carregando" class="py-6 text-center">
+          <v-progress-circular indeterminate color="primary" aria-label="Carregando roteamento" />
+        </div>
+
+        <!-- ERRO com nova tentativa -->
+        <v-alert v-else-if="erro && !salvando" type="error" variant="tonal" density="comfortable">
+          {{ erro }}
+          <template #append>
+            <v-btn size="small" variant="text" @click="carregar">Tentar de novo</v-btn>
+          </template>
+        </v-alert>
+
+        <div v-else class="roteamento">
+          <p class="text-body-2 mb-4">
+            Enquanto uma forma nao tem destino, a venda paga por ela fica <strong>pendente</strong> e nao entra em
+            saldo. Nada cai em conta por omissao.
+          </p>
+
+          <v-radio-group v-model="destino" hide-details class="mb-2">
+            <v-radio
+              v-for="opcao in opcoesDestino"
+              :key="opcao.valor"
+              :value="opcao.valor"
+              :disabled="opcao.valor === 'recebivel' && semContas"
+            >
+              <template #label>
+                <span class="d-flex flex-column">
+                  <span class="font-weight-medium">{{ opcao.titulo }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ opcao.ajuda }}</span>
+                </span>
+              </template>
+            </v-radio>
+          </v-radio-group>
+
+          <!-- BLOQUEADO: falta pre-requisito, e a tela diz qual. -->
+          <v-alert v-if="semContas" type="warning" variant="tonal" density="compact" class="mb-4">
+            Nenhuma conta cadastrada nesta empresa. Cadastre uma conta para poder rotear cartao, Pix ou voucher.
+          </v-alert>
+
+          <div v-if="destino === 'recebivel'" class="campos">
+            <v-select
+              v-model="contaRecebivelId"
+              :items="contas"
+              item-title="nome"
+              item-value="id"
+              label="Conta de recebivel"
+              hint="Onde o valor fica enquanto a adquirente nao liquidou."
+              persistent-hint
+              density="comfortable"
+            />
+            <v-select
+              v-model="contaFinalId"
+              :items="contas"
+              item-title="nome"
+              item-value="id"
+              label="Conta final"
+              hint="Onde o dinheiro cai quando a liquidacao confirmar."
+              persistent-hint
+              density="comfortable"
+            />
+          </div>
+
+          <v-text-field
+            v-if="destino !== 'sem_roteamento'"
+            v-model="adquirente"
+            label="Adquirente ou provedor (opcional)"
+            hint="Ex.: Cielo, Rede, PagSeguro. E atributo da forma, nao muda o destino."
+            persistent-hint
+            density="comfortable"
+            class="mt-4"
+          />
+
+          <v-alert v-if="erro && salvando === false" type="error" variant="tonal" density="compact" class="mt-4">
+            {{ erro }}
+          </v-alert>
+        </div>
+      </v-card-text>
+
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="emit('fechar')">Fechar</v-btn>
+        <v-btn
+          v-if="podeConfigurar"
+          color="primary"
+          variant="flat"
+          :loading="salvando"
+          :disabled="!podeSalvar"
+          @click="salvar"
+        >
+          Salvar roteamento
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</template>
+
+<style scoped>
+.roteamento {
+  /* 390px: o dialogo nunca empurra a pagina para os lados. */
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.campos {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .campos {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+</style>

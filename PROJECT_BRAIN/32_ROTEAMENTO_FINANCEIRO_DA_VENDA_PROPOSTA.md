@@ -1194,6 +1194,42 @@ identificador_externo)`; `integracao_chave_id` fica só no **predicado**, para m
 
 A #152 só é rebaseada e retomada depois de a #41 estar mergeada.
 
+## 18-B. Duas decisões finais de Marco, 26/08 — ratificadas na implementação
+
+### 1 — O corte histórico é DERIVADO, sem `roteamento_aplicavel` e sem migration 0034
+
+A §18 ponto 5 propunha uma coluna booleana em `vendas`, decidida no INSERT. **Ela não existe, e não
+vai existir.** A `0033` foi gerada a partir da §5, que é anterior àquela proposta, e a issue está
+proibida de criar a `0034` ou de mexer na `0033`.
+
+O marcador passou a ser o próprio **`vendas_pagamentos.roteamento_status`**: o código novo **nunca**
+grava `nao_aplicavel`, então uma venda com qualquer pagamento diferente disso foi escrita pelo código
+com roteamento. Venda anterior tem tudo no DEFAULT e continua assim, inclusive quando o CREARE a
+reenvia.
+
+**Isto é melhor do que a coluna, e não apenas um contorno.** A coluna seria uma **segunda fonte de
+verdade** para um fato que os pagamentos já contam — exatamente o "segundo caminho" que a regra-mãe
+do `AGENTS.md` §4.1 proíbe. Duas fontes divergem; uma só, não.
+
+**Borda conhecida, resolvida para o lado seguro:** uma venda que já existia e não tem pagamento
+nenhum gravado não tem como provar que nasceu do código novo, então é tratada como **histórica**.
+Custa uma pendência a mais; nunca credita dinheiro que o passado não creditou.
+
+✅ **Ratificado por Marco em 26/08.**
+
+### 2 — Pix direto permanece `por_evento` nesta issue
+
+O CHECK da `0033` só admite `imediata` junto de `usa_conta_do_pdv = true`, isto é, dinheiro que cai
+na gaveta do PDV. Para o Pix direto cair numa **conta bancária** e virar saldo seria preciso
+**confirmação bancária** — e confirmação é liquidação, que a §18 ponto 7 colocou explicitamente fora
+da #152.
+
+Então o Pix direto é roteado como **recebível**: existe no financeiro, aparece nas pendências e **não
+vira saldo gastável** até que a liquidação (vertical posterior) confirme. É conservador e não inventa
+dinheiro.
+
+✅ **Ratificado por Marco em 26/08.**
+
 ## 19. O que NÃO foi feito
 
 - **Nenhum arquivo de código criado, alterado ou gerado**: `db/src/schema/**`, `db/migrations/**`,

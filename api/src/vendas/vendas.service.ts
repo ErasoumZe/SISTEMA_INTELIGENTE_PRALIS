@@ -123,6 +123,21 @@ export async function atualizarVenda(
   return executarEmTransacao(async (tx) => {
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarVendaDetalheRepository(vendaId, tx);
+    // R-177 ANTES da validacao de caixa, e a ordem e de MENSAGEM, nao de seguranca: "venda integrada
+    // nao tem pagamento editado pela retaguarda" e a razao verdadeira da recusa. Deixar a validacao
+    // de caixa responder primeiro devolveria "nao pertence ao seu caixa aberto", que manda o operador
+    // procurar o problema no lugar errado.
+    //
+    // Nao mexe na ordem de LOCKS (P0 lancamento x fechamento): esta checagem nao trava nada — le a
+    // previa que ja foi buscada e compara com o payload. E uma venda integrada nao deixa de ser
+    // integrada por concorrencia.
+    //
+    // Nao e funcao sendo retirada: o proximo reenvio do CREARE ja sobrescreve a venda e reinsere os
+    // pagamentos, entao essa edicao NUNCA sobreviveu — hoje, antes do roteamento. Com roteamento ela
+    // passaria a apagar o credito em silencio.
+    if (previa && (await vendaEhIntegradaRepository(vendaId, tx))) {
+      recusarEdicaoFinanceiraDeVendaIntegrada(previa, dados);
+    }
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da venda.
     const caixa = await validarEdicaoNoCaixaAberto(previa, dados, perfil, tx);
     if (!(await travarVendaRepository(vendaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
@@ -131,15 +146,6 @@ export async function atualizarVenda(
     // retomar o lock do caixa.
     const existente = await buscarVendaDetalheRepository(vendaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
-    // R-177: venda integrada nao tem pagamentos nem conta de origem editados pela retaguarda.
-    //
-    // Nao e funcao sendo retirada: o proximo reenvio do CREARE ja sobrescreve a venda e reinsere os
-    // pagamentos, entao essa edicao NUNCA sobreviveu — hoje, antes do roteamento. Com roteamento ela
-    // passaria a apagar o credito em silencio, porque o snapshot da venda seria reescrito por um
-    // caminho que nao sabe rotear.
-    if (existente && (await vendaEhIntegradaRepository(vendaId, tx))) {
-      recusarEdicaoFinanceiraDeVendaIntegrada(existente, dados);
-    }
     const referenciaInvalida = await validarReferenciasVenda(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     await atualizarVendaRepository(vendaId, normalizados, computar, tx);

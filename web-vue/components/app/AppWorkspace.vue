@@ -1762,8 +1762,23 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   }
 }
 
+// #152 — a forma cujo ROTEAMENTO esta sendo editado. Mora aqui porque a acao nasce numa linha da
+// tabela generica; o formulario em si vive em RoteamentoFinanceiroDialog.vue.
+const formaRoteamentoSelecionada = ref<{ id: string; nome: string } | null>(null);
+
+function abrirRoteamentoDaForma(forma: { id: string; nome: string }) {
+  formaRoteamentoSelecionada.value = forma;
+}
+
+function fecharRoteamentoDaForma() {
+  formaRoteamentoSelecionada.value = null;
+}
+
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
   if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
+  if (payload.event === "roteamentoFinanceiro" && payload.linha.id) {
+    abrirRoteamentoDaForma({ id: payload.linha.id, nome: payload.linha.nome ?? "" });
+  }
 }
 
 provide(WORKSPACE_CONTEXT, {
@@ -1875,6 +1890,15 @@ const pageContext = computed(() => ({
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
   podeEditarEntrada: temPermissao("entradas_editar"),
+  // #152: o minimo que as telas de roteamento precisam do container generico — a empresa ativa,
+  // a permissao dedicada da R-176 e as contas para escolher destino. Toda a UI de roteamento vive
+  // em componentes proprios; aqui so passa o contexto.
+  empresaIdAtiva: empresaId.value,
+  podeConfigurarRoteamento: temPermissao("cadastro_formas_pagamento_roteamento"),
+  contasDaEmpresa: opcoesEmpresa.value.contas ?? [],
+  formaRoteamentoSelecionada: formaRoteamentoSelecionada.value,
+  abrirRoteamentoDaForma,
+  fecharRoteamentoDaForma,
   vendaDetalhe: vendaDetalhe.value,
   modalVendaDetalheAberto: modalVendaDetalheAberto.value,
   vendaDetalheCarregando: vendaDetalheCarregando.value,

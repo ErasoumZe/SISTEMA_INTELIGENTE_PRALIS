@@ -23,6 +23,8 @@ const props = defineProps<{
   itensPorPaginaServidor?: number;
   podeExcluir?: boolean;
   excluindoId?: string;
+  // #152: so o Admin com a permissao dedicada (R-176) enxerga a acao de roteamento.
+  podeConfigurarRoteamento?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -54,6 +56,11 @@ const acoesExtras = computed(() => {
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }
     ];
+  // #152: decidir PARA ONDE vai o dinheiro de uma forma e outro ato, com outra permissao — por isso
+  // e uma acao propria na linha, e nao mais um campo no formulario generico de cadastro. Continua
+  // sendo UM caminho: e a unica rota para rotear.
+  if (props.tela === "formas_pagamento" && props.podeConfigurarRoteamento)
+    return [{ label: "Roteamento", event: "roteamentoFinanceiro", condicao: () => true }];
   // O vinculo usuario <-> contas era editado tambem por aqui (botao "Contas" na linha do usuario).
   // Removido: o D8 poe fundo e "quem opera" no cadastro da CONTA, num salvar so. Manter os dois
   // lados seria a segunda rota para o mesmo ato (DoD item 2).
