@@ -134,10 +134,16 @@ describe("#41 · interleaving controlado em duas sessoes independentes", () => {
 
   // T-9 · o perdedor precisa ESPERAR, nao estourar na hora.
   //
-  // E a diferenca entre o indice ARBITRAR o conflito e a insercao simplesmente falhar: com o unique
-  // parcial, o Postgres segura o segundo inserter ate saber se a chave do primeiro vai existir. Se
-  // alguem tirar o predicado do `where` do ON CONFLICT (ou o proprio indice), some a espera e o
-  // segundo INSERT falha de imediato — este caso pega isso.
+  // ESCOPO DESTE CASO, para nao prometer mais do que ele entrega: o que esta sob teste aqui e o
+  // INDICE UNICO PARCIAL, medido por SQL CRU — duas sessoes abrem transacao e dao INSERT direto na
+  // tabela, sem passar pela API e sem `ON CONFLICT` nenhum.
+  //
+  // O que ele prova e a ESPERA/SERIALIZACAO que o indice causa: com o unique parcial, o Postgres
+  // segura o segundo inserter ate saber se a chave do primeiro vai existir, e so entao o rejeita.
+  // Tire o indice e a espera some — as duas linhas entram.
+  //
+  // Quem cobre o `ON CONFLICT` executado pelo caminho REAL da API e o RED-1, em
+  // `venda-integrada-corrida-primeira-ingestao.test.ts`. Nao este caso.
   //
   // Duas provas somadas, porque `aindaPendente` sozinho seria fraco: uma promessa que resolve em 1ms
   // tambem "ainda esta pendente" num tick de macrotask. `esperarBloqueioPor` confirma no proprio
