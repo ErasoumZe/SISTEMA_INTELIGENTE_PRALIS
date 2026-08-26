@@ -123,8 +123,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     // existir, vira 40P01. Sem este ramo os dois viravam 500 "Erro interno": o operador nao sabia
     // que era so tentar de novo e o agente CREARE nao distinguia bug de fila. 503 e transitorio
     // por contrato (o agente re-tenta 5xx; 4xx ele descarta — R-013 proibe descartar venda).
-    // `codigoPostgresDoErro` e nao `error.code`: o Drizzle EMBRULHA o erro do pg, e ler so a raiz
-    // deixava 40P01 (deadlock) escapar como 500 opaco — medido na rota real das transferencias.
+    // `codigoPostgresDoErro` e nao `error.code`: o Drizzle embrulha TODA falha de query num
+    // `DrizzleQueryError` que NAO copia o `code` — o erro do driver `pg` fica em `cause`. Ler a
+    // raiz devolvia `undefined` para todo erro de banco, e este ramo era codigo morto: 40P01
+    // (deadlock) escapava como 500 opaco, medido na rota real das transferencias.
     const codigoPostgres = codigoPostgresDoErro(error as ErroEncadeado);
     if (codigoPostgres === "55P03" || codigoPostgres === "40P01") {
       request.log.warn(error, "contencao de lock acima do teto");

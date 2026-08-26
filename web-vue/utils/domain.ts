@@ -10,16 +10,7 @@ import {
   type TemaAplicacao
 } from "@padaria/shared";
 // M3/ADR-002: serializacao formulario -> payload agora mora no shared; fachada para o front.
-export {
-  bloqueioCadastroUsuario,
-  cadastroPayload,
-  fiscalDoFormProduto,
-  margemFracaoDoForm,
-  numeroCampoOuNulo,
-  precoVendaDoFormProduto,
-  promocoesDoFormProduto,
-  transformacaoDoFormProduto
-} from "@padaria/shared";
+export { bloqueioCadastroUsuario, cadastroPayload, numeroCampoOuNulo } from "@padaria/shared";
 import type {
   AcaoNovo,
   CadastroForm,
@@ -27,9 +18,7 @@ import type {
   ItemMenu,
   OperacaoForm,
   Opcao,
-  Opcoes,
-  ProdutoPromocaoDados,
-  ProdutoTransformacaoDados
+  Opcoes
 } from "~/types/padaria";
 import { mascararCep, mascararDocumento, mascararWhatsapp } from "./formatacao";
 import { corCategoriaPorTela } from "./tema";
@@ -582,51 +571,7 @@ export function formCadastroVazio(): CadastroForm {
     sigla: "",
     horaInicio: "",
     horaFim: "",
-    codigo: "",
-    codigoBarras: "",
-    descricao: "",
     marca: "",
-    unidadeIndividualId: "",
-    quantidadeIndividual: "1",
-    embalagem: "",
-    cDe: "",
-    quantidadeCaixa: "1",
-    medidaCompra: "",
-    grupoMercadoriaId: "",
-    produtoConversoes: [],
-    custo: "",
-    margem: "",
-    precoVenda: "",
-    auto: false,
-    status: "ativo",
-    tipo: "revenda",
-    quantidadeEstoque: "0",
-    estoqueMin: "",
-    estoqueMax: "",
-    setorEstoque: "",
-    localVenda1: "",
-    localVenda2: "",
-    fotoUrl: "",
-    fiscal: {
-      ncm: "",
-      cest: "",
-      categoriaFiscal: "",
-      cstPisCofins: "",
-      aliquotaCheia: "",
-      aliquotaFcp: "",
-      aliquotaPis: "",
-      aliquotaCofins: "",
-      reducaoIcms: "",
-      icms: ""
-    },
-    transformacao: { precisao: "", quantidade: "", unidade: "", produtoReceituario: "" },
-    promoTipo: "nenhum",
-    promoValor: "",
-    promoDescontoPct: "",
-    promoHoraInicio: "",
-    promoHoraFim: "",
-    promoDias: [false, false, false, false, false, false, false],
-    promoValidaAte: "",
     contaId: "",
     ativo: true,
     tipoGrupo: "despesa",
@@ -759,95 +704,6 @@ export function tipoEndpointCadastro(tela: string, form?: CadastroForm) {
 }
 
 // Reconstroi o bloco fiscal do formulario a partir da linha (JSON) da listagem, para edicao.
-export function fiscalFormDeLinha(fiscalJson: string | undefined): CadastroForm["fiscal"] {
-  const vazio = formCadastroVazio().fiscal;
-  try {
-    const f = JSON.parse(fiscalJson ?? "null") as Record<string, string | number | null> | null;
-    if (!f) return vazio;
-    const txt = (v: string | number | null | undefined) => (v == null ? "" : String(v));
-    return {
-      ncm: txt(f.ncm),
-      cest: txt(f.cest),
-      categoriaFiscal: txt(f.categoriaFiscal),
-      cstPisCofins: txt(f.cstPisCofins),
-      aliquotaCheia: txt(f.aliquotaCheia),
-      aliquotaFcp: txt(f.aliquotaFcp),
-      aliquotaPis: txt(f.aliquotaPis),
-      aliquotaCofins: txt(f.aliquotaCofins),
-      reducaoIcms: txt(f.reducaoIcms),
-      icms: txt(f.icms)
-    };
-  } catch {
-    return vazio;
-  }
-}
-
-// Reconstroi o bloco transformacao do formulario a partir da linha (JSON) da listagem.
-export function transformacaoFormDeLinha(json: string | undefined): CadastroForm["transformacao"] {
-  const vazio = formCadastroVazio().transformacao;
-  try {
-    const t = JSON.parse(json ?? "null") as ProdutoTransformacaoDados | null;
-    if (!t) return vazio;
-    return {
-      precisao: t.precisao ?? "",
-      quantidade: t.quantidade != null ? String(t.quantidade) : "",
-      unidade: t.unidade ?? "",
-      produtoReceituario: t.produtoReceituario ?? ""
-    };
-  } catch {
-    return vazio;
-  }
-}
-
-// Reconstroi os campos de promocao do formulario a partir da primeira promocao da linha (JSON).
-export function promoFormDeLinha(promocoesJson: string | undefined) {
-  const vazio = formCadastroVazio();
-  const base = {
-    promoTipo: vazio.promoTipo,
-    promoValor: vazio.promoValor,
-    promoDescontoPct: vazio.promoDescontoPct,
-    promoHoraInicio: vazio.promoHoraInicio,
-    promoHoraFim: vazio.promoHoraFim,
-    promoDias: vazio.promoDias,
-    promoValidaAte: vazio.promoValidaAte
-  };
-  try {
-    const arr = JSON.parse(promocoesJson ?? "[]") as ProdutoPromocaoDados[];
-    const p = arr[0];
-    if (!p) return base;
-    return {
-      promoTipo: (p.tipo as CadastroForm["promoTipo"]) || "nenhum",
-      promoValor: p.valor != null ? String(p.valor) : "",
-      promoDescontoPct: p.descontoFracao != null ? String(Number(p.descontoFracao) * 100) : "",
-      promoHoraInicio: (p.horaInicio ?? "").slice(0, 5),
-      promoHoraFim: (p.horaFim ?? "").slice(0, 5),
-      promoDias: [p.seg, p.ter, p.qua, p.qui, p.sex, p.sab, p.dom].map(Boolean),
-      promoValidaAte: p.validaAte ?? ""
-    };
-  } catch {
-    return base;
-  }
-}
-
-function conversoesDeLinha(json: string | undefined) {
-  try {
-    const conversoes = JSON.parse(json ?? "[]") as Array<{
-      unidadeMedidaId?: string;
-      quantidade?: string;
-      unidadesIndividuais?: string;
-    }>;
-    return conversoes.map((conversao) => ({
-      unidadeMedidaId: conversao.unidadeMedidaId ?? "",
-      quantidade: String(conversao.quantidade ?? ""),
-      unidadesIndividuais: String(conversao.unidadesIndividuais ?? "")
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// Reconstroi o formulario de cadastro (todos os tipos) a partir da linha da listagem, para edicao.
-// Puro: recebe as regras (calculadas no chamador via useCadastroView) como parametro.
 export function formCadastroDeLinha(
   linha: Record<string, string | undefined>,
   regras: Record<string, boolean>
@@ -885,34 +741,7 @@ export function formCadastroDeLinha(
     sigla: linha.sigla ?? "",
     horaInicio: (linha.inicio ?? "").slice(0, 5),
     horaFim: (linha.fim ?? "").slice(0, 5),
-    codigo: linha.codigo ?? "",
-    codigoBarras: linha.codigoBarras ?? "",
-    descricao: linha.descricao ?? linha.nome ?? "",
     marca: linha.marca ?? "",
-    unidadeIndividualId: linha.unidadeIndividualId ?? linha.unidadeMedidaId ?? "",
-    quantidadeIndividual: linha.quantidadeIndividual ?? "1",
-    embalagem: linha.embalagem ?? "",
-    cDe: linha.cDe ?? "",
-    quantidadeCaixa: linha.quantidadeCaixa ?? "1",
-    medidaCompra: linha.medidaCompra ?? "",
-    grupoMercadoriaId: linha.grupoMercadoriaId ?? "",
-    custo: linha.custo ?? "",
-    margem: linha.margem ?? "",
-    precoVenda: linha.precoVenda ?? "",
-    auto: linha.auto === "true",
-    status: (linha.status as CadastroForm["status"]) || "ativo",
-    tipo: (linha.tipo as CadastroForm["tipo"]) || "revenda",
-    quantidadeEstoque: linha.quantidadeEstoque ?? "0",
-    estoqueMin: linha.estoqueMin ?? "",
-    estoqueMax: linha.estoqueMax ?? "",
-    setorEstoque: linha.setorEstoque ?? "",
-    localVenda1: linha.localVenda1 ?? "",
-    localVenda2: linha.localVenda2 ?? "",
-    fotoUrl: linha.fotoUrl ?? "",
-    fiscal: fiscalFormDeLinha(linha.fiscal),
-    transformacao: transformacaoFormDeLinha(linha.transformacao),
-    ...promoFormDeLinha(linha.promocoes),
-    produtoConversoes: conversoesDeLinha(linha.conversoes),
     contaId: linha.contaId ?? "",
     ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
     tipoGrupo: (linha.tipoGrupo as CadastroForm["tipoGrupo"]) || "despesa",

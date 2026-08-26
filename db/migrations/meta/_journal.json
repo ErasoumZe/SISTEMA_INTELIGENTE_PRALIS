@@ -225,6 +225,13 @@
       "when": 1786109755727,
       "tag": "0031_solicitacao_cofre_cancelamento_recusa",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787662859368,
+      "tag": "0032_idempotencia_venda_integrada",
+      "breakpoints": true
     }
   ]
 }

@@ -5,13 +5,15 @@ const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 const textoObrigatorioSchema = z.string().trim().min(1);
 
-// Dinheiro de item de venda: mantem a regra >= 0 (boa regra — o agente normaliza na origem), mas cita
-// o campo e o valor recebido na mensagem. Se um negativo voltar a escapar do CREARE, o historico de
-// erro aponta exatamente o que chegou, em vez da mensagem generica do zod.
+// Dinheiro de item de venda: mantem a regra >= 0 (boa regra — o agente normaliza na origem) e cita o
+// CAMPO na mensagem, para o erro ser acionavel em vez de generico.
+//
+// O valor recebido NAO entra na mensagem. Ele entrava (`recebido: ${issue.input}`) e ia parar no
+// corpo da resposta HTTP do integrador, junto com o `caminho` do campo — refletindo de volta um dado
+// financeiro cru que ninguem precisa ver ali. O caminho do zod ja diz QUAL item e QUAL campo falhou;
+// quem precisa do valor tem o payload inteiro gravado no historico, que e interno.
 const dinheiroItemSchema = (campo: string) =>
-  z.coerce
-    .number()
-    .min(0, { error: (issue) => `${campo} do item nao pode ser negativo (recebido: ${String(issue.input)})` });
+  z.coerce.number().min(0, { error: () => `${campo} do item nao pode ser negativo` });
 
 export const tiposIntegracao = ["vendas"] as const;
 // "colaborador" e um tipo de vinculo (de-para / pendencia "sem conversao") mas NAO um campo de config:

@@ -33,7 +33,7 @@ a necessidade.
 | [16](16_DEFINITION_OF_DONE.md)                      | **Definition of Done**                    | o contrato de qualidade: quando uma entrega pode ser chamada de pronta                          |
 | [17](17_REGRAS_LANCAMENTOS_FINAIS.md)               | Regras de Lançamentos                     | a spec vigente ⚠️ _§3 (seeding) desatualizada — vale o quadro do `20`_                          |
 | [18](18_DIVIDAS_TECNICAS.md)                        | **Dívidas técnicas**                      | D-01 a D-23: o que foi achado e adiado de propósito                                             |
-| [19](19_REGISTRO_DE_REGRAS.md)                      | **Registro de regras**                    | **a fonte única.** R-001 a R-177, contradições C-01 a C-09, regras revogadas                    |
+| [19](19_REGISTRO_DE_REGRAS.md)                      | **Registro de regras**                    | **a fonte única.** R-001 a R-151, contradições C-01 a C-09, regras revogadas                    |
 | [20](20_ESTADO_DA_ENTREGA.md)                       | **Estado da entrega**                     | onde a entrega parou, o que trava, e os comandos de validação                                   |
 | [21](21_DECISOES_04_08.md)                          | **Reunião 04/08 (Marco)**                 | escopo de Compras/Estoque/Relatórios, 8 bugs ao vivo, 11 perguntas em aberto                    |
 | [22](22_AUDITORIA_STACK_2026_08_05.md)              | **Auditoria de stack (05/08)**            | stack real, 20 riscos com arquivo:linha, ferramental e plano priorizado                         |
@@ -44,16 +44,29 @@ a necessidade.
 | [27](27_AVALIACAO_FINAL_CAIXA.md)                   | **Avaliacao final (05/08)**               | reconciliacao das tres leituras, 2 correcoes minhas, plano em ondas com gate                    |
 | [28](28_ENTREGA_AO_COFRE_D1_D10_B1_B5.md)           | **Entrega ao cofre (06/08)**              | D1-D10 e B1-B5: parcial, atomico, idempotente, solicitacao programada (#101 reescrita)          |
 | [29](29_RUNBOOK_ROTACAO_ADMIN.md)                   | **Runbook do admin (R-162)**              | primeira instalacao, rotacao explicita e prova de que redeploy preserva credencial              |
+| [30](30_PRODUTOS_PRALIS_X_ERP.md)                   | **Produtos: Pralis × ERP**                | mapa de campos, o que falta trazer do app antigo e em que ordem                                 |
+| [29](29_PLANILHAS_DA_OPERACAO.md)                   | **Planilhas da operacao**                 | contas reais, taxas de cartao, conciliacao, dominio de producao e 9 regras novas                |
 | [30](30_RETOMADA_CAIXA_TESTAVEL_2026_08_24.md)      | **Retomada do Caixa testável**            | estado real em 24/08, decisões R-166–R-172 e fila vertical até CT-00–CT-19                      |
 | [31](31_PACOTE_ISSUES_CAIXA_TESTAVEL_2026_08_24.md) | **Pacote de issues do Caixa testável**    | fila GitHub deduplicada e corpos das entregas até a auditoria final                             |
 | [32](32_ROTEAMENTO_FINANCEIRO_DA_VENDA_PROPOSTA.md) | **Roteamento financeiro da venda**        | #152: 4 revisões, 8 P0, gate fechado — 5 pontos já eram regra, 4 confirmações e a #41 na frente |
-| [33](33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md)         | **Idempotência da venda integrada (#41)** | desenho da 0032: SQL, consulta de duplicidade, rollback, ON CONFLICT e RED — nada aplicado      |
+| [33](33_IDEMPOTENCIA_VENDA_INTEGRADA_41.md)         | **Idempotência da venda integrada (#41)** | desenho da 0032: SQL, consulta de duplicidade, rollback, `ON CONFLICT` e os três RED            |
+| [34](34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md)       | **Governança atual do Caixa (24/08)**     | Marco é o único executor atual; gates de revisão, merge e autorizações separadas                |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)                 | Linguagem visual Cicluz                   | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**            |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md)           | Relatório da rodada visual                | o que mudou por arquivo em 01/08 e o que ficou aberto                                           |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **34**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **35**.
+>
+> ⚠️ **Dois números estão ocupados duas vezes**, porque duas linhas de trabalho avançaram em
+> paralelo e cada uma pegou o próximo livre que via: **29** (`29_RUNBOOK_ROTACAO_ADMIN.md` e
+> `29_PLANILHAS_DA_OPERACAO.md`) e **30** (`30_PRODUTOS_PRALIS_X_ERP.md` e
+> `30_RETOMADA_CAIXA_TESTAVEL_2026_08_24.md`). Os quatro arquivos existem e estão listados acima;
+> renumerar é decisão à parte, porque quebra link em relatório e commit já publicado.
+>
+> Os documentos **33** e **34** vieram da branch da **#41**: o `33` é o desenho da idempotência da
+> venda integrada (migration `0032`), e o `34` registra a governança atual do Caixa. As regras
+> R-174, R-175 e R-178 que os acompanham estão no documento `19`.
 
 ## Regra de ouro deste brain
 

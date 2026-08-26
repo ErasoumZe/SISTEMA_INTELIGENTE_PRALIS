@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "vendas_integracao_identificador_unico_idx" ON "vendas" USING btree ("empresa_id","identificador_externo") WHERE "vendas"."integracao_chave_id" is not null and "vendas"."identificador_externo" is not null;

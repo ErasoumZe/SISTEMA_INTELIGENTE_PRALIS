@@ -912,7 +912,26 @@ export const vendas = pgTable(
     // Suporta a revinculacao retroativa: achar vendas ORFAS (caixa_id NULL) de um PDV num intervalo.
     index("vendas_orfas_pdv_data_idx")
       .on(table.empresaId, table.pdvId, table.dataVenda)
-      .where(sql`${table.caixaId} is null`)
+      .where(sql`${table.caixaId} is null`),
+    // R-175 (#41): UMA venda integrada por (empresa, identificador externo).
+    //
+    // PARCIAL, e nao `unique(...)`: constraint nao aceita predicado, e a venda de RETAGUARDA precisa
+    // ficar de fora — ela nasce com `integracao_chave_id` NULL e `identificador_externo` NULL (o
+    // payload de /api/vendas nem tem o campo), e duas vendas manuais no mesmo dia sao legitimas.
+    //
+    // `integracao_chave_id` fica no PREDICADO e NUNCA na chave. O registro da integracao e escopado
+    // por chave (`integracoes_registros_externo_unico`), entao uma troca de credencial faz o mesmo
+    // idVenda ser lido como inedito; com a chave dentro do indice a tupla seria nova e a duplicata
+    // passaria — o indice pareceria proteger e nao protegeria. No predicado ele so separa venda
+    // integrada de venda manual, que e o papel dele.
+    //
+    // `empresa_id` PRIMEIRO na chave: duas empresas podem reusar o mesmo identificador externo do
+    // PDV sem colidir.
+    //
+    // Precedente de forma: `transferencias_idempotencia_unica` (migration 0030).
+    uniqueIndex("vendas_integracao_identificador_unico_idx")
+      .on(table.empresaId, table.identificadorExterno)
+      .where(sql`${table.integracaoChaveId} is not null and ${table.identificadorExterno} is not null`)
   ]
 );
 

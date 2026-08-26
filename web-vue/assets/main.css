@@ -2333,3 +2333,32 @@ body {
   }
 }
 /* ===================== FIM CAMADA DE ACABAMENTO ===================== */
+
+/* ===================== INICIO CADASTRO DE PRODUTOS V2 (P-04, 12/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+
+   Motivo: as telas novas de Produtos usam `v-btn size="small"` nas pilulas de filtro e nas acoes
+   de linha (Editar, Remover, Adicionar). O `small` do Vuetify tem 28px de altura e reprova o
+   minimo de 40px do alvo de toque (67 §9). A regra global existente so cobre `.v-btn--icon`.
+
+   Cresce a AREA CLICAVEL, nao o desenho: a fonte e o padding horizontal continuam os do `small`.
+   =========================================================================================== */
+.produtos-tela .v-btn--size-small,
+.produto-filtros .v-btn--size-small,
+.produto-card .v-btn--size-small,
+.produto-form .v-btn--size-small,
+.produto-foto .v-btn--size-small {
+  min-height: 40px;
+}
+
+/* 13.4: primaria e mobile pedem 44px. */
+@media (max-width: 768px) {
+  .produtos-tela .v-btn--size-small,
+  .produto-filtros .v-btn--size-small,
+  .produto-card .v-btn--size-small,
+  .produto-form .v-btn--size-small,
+  .produto-foto .v-btn--size-small {
+    min-height: 44px;
+  }
+}
+/* ===================== FIM CADASTRO DE PRODUTOS V2 ===================== */

@@ -5,7 +5,8 @@ import {
   calcularPrecoVendaComPromocao,
   montarComoSeCompra,
   montarDescricao,
-  resolverMargemGrupo
+  resolverMargemGrupo,
+  validarPromocoesDoProduto
 } from "@padaria/shared/produtos";
 
 describe("produtos/regras — preco de venda", () => {
@@ -109,12 +110,54 @@ describe("produtos/regras — texto e lookups", () => {
     expect(montarDescricao("Farinha de Trigo", 25, "KG")).toBe("FARINHA DE TRIGO 25 KG");
   });
 
-  it("montarComoSeCompra: embalagem DE", () => {
-    expect(montarComoSeCompra("saco", "DE", 25, "FARINHA 25 KG")).toBe("1 SACO DE25 (FARINHA 25 KG)");
+  // Formato OFICIAL (12/08/2026). Havia duas implementacoes divergentes — a compartilhada
+  // (`"1 SACO DE25 (…)"`) e a da tela; sobrou uma so, e este e o caso canonico do enunciado.
+  it("montarComoSeCompra: formato oficial com DE", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "SACO",
+        cDe: "DE",
+        quantidadeCaixa: 25,
+        medidaCompra: "KG",
+        descricao: "FARINHA DE TRIGO 25 KG"
+      })
+    ).toBe("Saco de 25 KG — FARINHA DE TRIGO 25 KG");
   });
 
-  it("montarComoSeCompra: embalagem C/", () => {
-    expect(montarComoSeCompra("lt", "C/", 10, "TESTE")).toBe("1 LT C/ (TESTE)");
+  it("montarComoSeCompra: formato oficial com C/", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "CX",
+        cDe: "C/",
+        quantidadeCaixa: 12,
+        medidaCompra: "UN",
+        descricao: "REFRIGERANTE 350 ML"
+      })
+    ).toBe("Caixa com 12 UN — REFRIGERANTE 350 ML");
+  });
+
+  it("montarComoSeCompra: sigla fora do dicionario vira ela mesma", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: "BALDE",
+        cDe: "DE",
+        quantidadeCaixa: 5,
+        medidaCompra: "LT",
+        descricao: "OLEO 5 LT"
+      })
+    ).toBe("BALDE de 5 LT — OLEO 5 LT");
+  });
+
+  it("montarComoSeCompra: sem embalagem nao inventa texto", () => {
+    expect(
+      montarComoSeCompra({
+        embalagem: null,
+        cDe: "DE",
+        quantidadeCaixa: 25,
+        medidaCompra: "KG",
+        descricao: "FARINHA DE TRIGO 25 KG"
+      })
+    ).toBe("");
   });
 
   it("resolverMargemGrupo: acha pelo nome, ou 0", () => {
@@ -129,5 +172,116 @@ describe("produtos/regras — texto e lookups", () => {
   it("arredondar: 2 casas por padrao", () => {
     expect(arredondar(4.811)).toBe(4.81);
     expect(arredondar(2.835)).toBe(2.84);
+  });
+});
+
+describe("produtos/regras — promocao: validacao e desempate (P-04)", () => {
+  const segundaAs11 = new Date(2026, 7, 10, 11, 0);
+
+  it("a ORDEM do banco nunca decide o preco: vence o menor", () => {
+    const dezPorCento = {
+      tipo: "desconto" as const,
+      descontoFracao: 0.1,
+      dias: [true, true, true, true, true, true, true]
+    };
+    const trintaPorCento = {
+      tipo: "desconto" as const,
+      descontoFracao: 0.3,
+      dias: [true, true, true, true, true, true, true]
+    };
+    const umaOrdem = calcularPrecoVendaComPromocao({
+      precoVenda: 100,
+      agora: segundaAs11,
+      promocoes: [dezPorCento, trintaPorCento]
+    });
+    const outraOrdem = calcularPrecoVendaComPromocao({
+      precoVenda: 100,
+      agora: segundaAs11,
+      promocoes: [trintaPorCento, dezPorCento]
+    });
+    expect(umaOrdem).toBe(70);
+    expect(outraOrdem).toBe(70);
+  });
+
+  it("promocao com validade VENCIDA nao aplica", () => {
+    expect(
+      calcularPrecoVendaComPromocao({
+        precoVenda: 100,
+        agora: segundaAs11,
+        promocoes: [{ tipo: "desconto", descontoFracao: 0.5, validaAte: "2026-08-09" }]
+      })
+    ).toBe(100);
+  });
+
+  it("promocao valida ATE hoje ainda aplica", () => {
+    expect(
+      calcularPrecoVendaComPromocao({
+        precoVenda: 100,
+        agora: segundaAs11,
+        promocoes: [{ tipo: "desconto", descontoFracao: 0.5, validaAte: "2026-08-10" }]
+      })
+    ).toBe(50);
+  });
+
+  it("recusa promocao sem o valor exigido pelo tipo", () => {
+    expect(validarPromocoesDoProduto([{ tipo: "valor", valor: null }])[0]).toContain("informe o valor");
+    expect(validarPromocoesDoProduto([{ tipo: "desconto", descontoFracao: null }])[0]).toContain("percentual");
+  });
+
+  it("recusa desconto fora de 0% a 100%", () => {
+    expect(validarPromocoesDoProduto([{ tipo: "desconto", descontoFracao: 1.5 }])[0]).toContain("entre 0% e 100%");
+    expect(validarPromocoesDoProduto([{ tipo: "desconto", descontoFracao: 0 }])[0]).toContain("entre 0% e 100%");
+    expect(validarPromocoesDoProduto([{ tipo: "desconto", descontoFracao: 1 }])).toEqual([]);
+  });
+
+  it("recusa fim anterior ao inicio e manda dividir a promocao que vira o dia", () => {
+    const erros = validarPromocoesDoProduto([
+      { tipo: "desconto", descontoFracao: 0.1, horaInicio: "22:00", horaFim: "02:00" }
+    ]);
+    expect(erros[0]).toContain("dividida em duas");
+  });
+
+  it("recusa duas promocoes que se sobrepoem no mesmo dia", () => {
+    const erros = validarPromocoesDoProduto([
+      {
+        tipo: "desconto",
+        descontoFracao: 0.1,
+        horaInicio: "10:00",
+        horaFim: "12:00",
+        dias: [true, false, false, false, false, false, false]
+      },
+      { tipo: "valor", valor: 5, dias: [true, false, false, false, false, false, false] }
+    ]);
+    expect(erros.some((erro) => erro.includes("se sobrepõem"))).toBe(true);
+  });
+
+  it("aceita duas promocoes em dias diferentes", () => {
+    expect(
+      validarPromocoesDoProduto([
+        { tipo: "desconto", descontoFracao: 0.1, dias: [true, false, false, false, false, false, false] },
+        { tipo: "desconto", descontoFracao: 0.2, dias: [false, true, false, false, false, false, false] }
+      ])
+    ).toEqual([]);
+  });
+
+  it("aceita duas promocoes no mesmo dia em janelas que nao se cruzam", () => {
+    expect(
+      validarPromocoesDoProduto([
+        {
+          tipo: "desconto",
+          descontoFracao: 0.1,
+          horaInicio: "08:00",
+          horaFim: "10:00",
+          dias: [true, false, false, false, false, false, false]
+        },
+        {
+          tipo: "desconto",
+          descontoFracao: 0.2,
+          horaInicio: "14:00",
+          horaFim: "16:00",
+          dias: [true, false, false, false, false, false, false]
+        }
+      ])
+    ).toEqual([]);
   });
 });

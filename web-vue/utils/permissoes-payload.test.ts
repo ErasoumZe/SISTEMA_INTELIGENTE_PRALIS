@@ -273,7 +273,6 @@ function payloadDaTela(form: ReturnType<typeof formCadastroVazio>, listas: Lista
   const formSnapshot = {
     ...form,
     empresaIds: [...form.empresaIds],
-    produtoConversoes: form.produtoConversoes.map((conversao) => ({ ...conversao })),
     regras: regrasComOcultasPreservadas(form, listas)
   };
   return cadastroPayload("permissoes", formSnapshot, EMPRESA) as {

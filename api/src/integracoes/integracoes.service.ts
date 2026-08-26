@@ -28,7 +28,15 @@ import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
-import { ErroDominio, erroValidacao, naoAutorizado, naoProcessavel, proibido } from "../erros.js";
+import {
+  codigoPostgresDoErro,
+  ErroDominio,
+  type ErroEncadeado,
+  erroValidacao,
+  falhaTecnica,
+  naoAutorizado,
+  proibido
+} from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
   buscarChavePorCodigoHashRepository,
@@ -37,6 +45,7 @@ import {
   buscarPdvAutomaticoRepository,
   buscarProdutoAutomaticoRepository,
   buscarRegistroIntegracaoRepository,
+  buscarVendaIntegradaPorIdentificadorRepository,
   buscarVinculoResolvidoRepository,
   contarVendasIntegradasNoDiaRepository,
   criarChaveIntegracaoRepository,
@@ -131,6 +140,44 @@ function erroVendaMudouDeCaixa(): Error {
   const erro = new Error("Venda mudou de caixa durante o processamento; tente novamente");
   return Object.assign(erro, { code: CODIGO_VENDA_MUDOU_DE_CAIXA });
 }
+
+// #41: outra requisicao criou a MESMA venda integrada e commitou primeiro. Mesma familia do
+// `VENDA_MUDOU_DE_CAIXA` — transitorio, o agente re-tenta e o re-envio entra pelo caminho de
+// ATUALIZACAO, ja com a venda encontrada por `(empresa, identificador_externo)`.
+const CODIGO_VENDA_DUPLICADA_EM_CORRIDA = "P0_VENDA_DUPLICADA_EM_CORRIDA";
+
+function erroVendaDuplicadaEmCorrida(): Error {
+  const erro = new Error("Venda integrada esta sendo criada por outra requisicao; tente novamente");
+  return Object.assign(erro, { code: CODIGO_VENDA_DUPLICADA_EM_CORRIDA });
+}
+
+// Os transitorios que a ingestao sabe NOMEAR — todos respondem 503 `LOCK_OCUPADO`, o codigo que o
+// caixa e o agente ja conhecem. Ver o comentario no `catch` de `receberVendaIntegracao`.
+//
+// SAO DOIS CONJUNTOS, e nao um, porque a LEITURA de cada grupo e diferente. `codigoPostgresDoErro`
+// filtra por FORMA de SQLSTATE (cinco caracteres `[0-9A-Z]`) e continua descendo na cadeia quando
+// acha um `code` que nao casa — e assim que ele impede um erro do Node por cima (`ECONNREFUSED`)
+// de esconder o erro do banco embaixo. O efeito colateral e que ele NUNCA devolve os sentinelas
+// deste servico, que sao `P0_...`. Num conjunto so, esses dois ramos virariam codigo morto e a
+// corrida concorrente passaria a responder 500 em vez de 503.
+const TRANSITORIOS_PG = new Set<string>(["55P03", "40P01", "23505", "42P10"]);
+const TRANSITORIOS_INTERNOS = new Set<string>([CODIGO_VENDA_MUDOU_DE_CAIXA, CODIGO_VENDA_DUPLICADA_EM_CORRIDA]);
+
+// Le os sentinelas internos na cadeia, SEM filtro de formato — o oposto de `codigoPostgresDoErro`,
+// e de proposito: aqui o que se procura nao tem forma de SQLSTATE.
+function sentinelaTransitorio(erro: ErroEncadeado | null | undefined): string | undefined {
+  let atual = erro;
+  for (let nivel = 0; nivel < 5 && atual && typeof atual === "object"; nivel += 1) {
+    const codigo = atual.code;
+    if (typeof codigo === "string" && TRANSITORIOS_INTERNOS.has(codigo)) return codigo;
+    atual = atual.cause;
+  }
+  return undefined;
+}
+
+// Forma de um SQLSTATE do Postgres: cinco caracteres de `[0-9A-Z]`. Serve para separar "o banco
+// falhou" de "o nosso codigo falhou" sem manter lista de codigos.
+const SQLSTATE = /^[0-9A-Z]{5}$/u;
 
 function hashChaveIntegracao(chave: string): string {
   return createHash("sha256").update(chave).digest("hex");
@@ -754,6 +801,15 @@ export async function receberVendaIntegracao(
         return { status: "sem_novidade", vendaId: registro.registroSistemaId, identificadorExterno };
       }
 
+      // #41: a EXISTENCIA da venda passa a ser decidida pela mesma chave do indice unico parcial
+      // (R-175), e nao mais pelo registro. O registro e escopado por `integracao_chave_id`: depois
+      // de uma troca de credencial ele nao acha a venda e o fluxo caia no INSERT para uma linha que
+      // ja existe. A partir daqui o `registro` tem UM so papel — o atalho de `sem_novidade` por
+      // hash, logo acima.
+      const vendaExistenteId =
+        registro?.registroSistemaId ??
+        (await buscarVendaIntegradaPorIdentificadorRepository(chave.empresaId, identificadorExterno, tx));
+
       const vinculos = await resolverVinculosVenda(chave, payload, tx);
 
       // P0/S8 — a excecao CREARE da porta unica (R-013): o mesmo FOR SHARE dos lancamentos, SEM
@@ -761,9 +817,7 @@ export async function receberVendaIntegracao(
       // caixas (antigo -> novo -> nulo): ORIGEM e DESTINO entram na porta em ordem deterministica
       // de id, e a decisao de trilha de cada lado sai do status sob o lock. Caixa FECHADO
       // envolvido ganha a marca imutavel de pos-fechamento — inclusive o que PERDEU a venda.
-      const caixaOrigemId = registro?.registroSistemaId
-        ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx)
-        : null;
+      const caixaOrigemId = vendaExistenteId ? await buscarCaixaDaVendaRepository(vendaExistenteId, tx) : null;
       const caixaDestinoId = vinculos.caixaId;
       const statusPorCaixa = new Map<string, string>();
       const caixasEnvolvidos = [...new Set([caixaOrigemId, caixaDestinoId])]
@@ -782,13 +836,14 @@ export async function receberVendaIntegracao(
       // Travamos a LINHA da venda (ordem caixa -> linha, a mesma da porta) e relemos: divergiu,
       // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
       // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
-      if (registro?.registroSistemaId) {
+      if (vendaExistenteId) {
         // Linha ausente (sumiu, ou nao e desta empresa) = trava NAO adquirida: a comparacao abaixo
         // seria duas leituras sem trava se passasse batido. Falha FECHADO — o 503 se repete ate
         // alguem olhar, o que e melhor que mover dinheiro sem garantia (e continua 5xx: a venda
-        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave.
-        const travada = await travarVendaRepository(registro.registroSistemaId, chave.empresaId, tx);
-        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(registro.registroSistemaId, tx) : null;
+        // nunca e descartada). Hoje inalcancavel: o id vem de registro escopado pela chave, ou da
+        // busca por `(empresa, identificador_externo)`, que ja filtra a empresa.
+        const travada = await travarVendaRepository(vendaExistenteId, chave.empresaId, tx);
+        const origemSobTrava = travada ? await buscarCaixaDaVendaRepository(vendaExistenteId, tx) : null;
         if (!travada || origemSobTrava !== caixaOrigemId) throw erroVendaMudouDeCaixa();
       }
 
@@ -797,11 +852,18 @@ export async function receberVendaIntegracao(
           chave,
           payload,
           hashConteudo,
-          ...(registro ? { vendaSistemaId: registro.registroSistemaId } : {}),
+          ...(vendaExistenteId ? { vendaSistemaId: vendaExistenteId } : {}),
           ...vinculos
         },
         tx
       );
+
+      // `null` = o INSERT bateu no indice unico da R-175 e nao escreveu: outra requisicao criou a
+      // mesma venda e commitou primeiro. Recusa TRANSITORIA (nada gravado, rollback total) — o
+      // re-envio acha a venda pela busca acima e segue pelo caminho de atualizacao, com as travas
+      // na ordem canonica. Nao da para "aproveitar" a venda do vencedor aqui: esta transacao nunca
+      // travou aquela linha nem conhece o caixa de origem dela.
+      if (!venda) throw erroVendaDuplicadaEmCorrida();
 
       if (caixaDestinoId && statusPorCaixa.get(caixaDestinoId) !== "aberto") {
         await registrarAlteracaoPosFechamentoRepository(
@@ -827,14 +889,23 @@ export async function receberVendaIntegracao(
         tx
       );
 
-      const status = registro ? "atualizado" : "criado";
+      // `vendaExistenteId`, NAO `registro`: depois de uma troca de credencial o registro e nulo mas
+      // a venda existe, e responder "criado" para uma ATUALIZACAO seria mentir para o agente.
+      const status = vendaExistenteId ? "atualizado" : "criado";
       await registrarHistoricoRepository({ chave, identificadorExterno, hashConteudo, status, payload }, tx);
       return { status, vendaId: venda.id, identificadorExterno };
     });
   } catch (error) {
     // Erros de dominio ja sao estruturados; nao viram "erro" de processamento.
     if (error instanceof ErroDominio) throw error;
-    const mensagemErro = error instanceof Error ? error.message : String(error);
+    const erroOriginal = error instanceof Error ? error : null;
+    // A mensagem do `DrizzleQueryError` e o SQL, nao o motivo: o "duplicate key value violates..."
+    // do Postgres fica em `cause`. Sem juntar os dois, o historico guarda o SQL e perde a causa —
+    // que e justamente o que um humano precisa ler depois.
+    const causa = erroOriginal?.cause instanceof Error ? erroOriginal.cause.message : "";
+    const mensagemErro = [erroOriginal ? erroOriginal.message : String(error), causa]
+      .filter(Boolean)
+      .join(" | causa: ");
     try {
       // Fora da transacao que sofreu rollback: conexao nova (banco default) -> o registro sobrevive.
       await registrarHistoricoRepository({
@@ -847,17 +918,82 @@ export async function receberVendaIntegracao(
       });
     } catch {
       // Nem gravar o erro foi possivel (ex.: banco fora): propaga o original -> 500 -> agente re-tenta.
-      throw error instanceof Error ? error : new Error(mensagemErro);
+      throw erroOriginal ?? new Error(mensagemErro);
     }
-    // Contencao transitoria (teto de lock 55P03; deadlock 40P01) NAO vira 422: 4xx faz o agente
-    // DESCARTAR a venda, e a R-013 proibe recusar venda integrada. O erro sobe intacto e o
-    // handler global responde 503 — que o agente re-tenta no proximo ciclo.
-    const codigoPostgres = (error as { code?: string }).code;
-    if (codigoPostgres === "55P03" || codigoPostgres === "40P01") throw error;
-    // S8: mesma familia — contencao transitoria, resposta 503 que o agente re-tenta.
-    if (codigoPostgres === CODIGO_VENDA_MUDOU_DE_CAIXA) {
-      throw new ErroDominio(mensagemErro, 503, "LOCK_OCUPADO");
+    // FAMILIA TRANSITORIA da ingestao: um ramo so, 503 `LOCK_OCUPADO`, que o agente re-tenta.
+    // 4xx aqui faria o agente DESCARTAR a venda, e a R-013 proibe recusar venda integrada.
+    //
+    //   55P03 / 40P01   teto de lock estourado / deadlock (contencao com o fechamento do caixa);
+    //   23505           violacao de unicidade — inclusive a do indice da #41 que escape do
+    //                   ON CONFLICT, e a de `pdvs`/`clientes` quando duas ingestoes criam o mesmo
+    //                   cadastro novo ao mesmo tempo. Re-tentar resolve: na segunda vez o registro
+    //                   ja existe e o vinculo e encontrado. NAO se restringe a constraint do indice
+    //                   da #41 de proposito: para ESTE endpoint, re-tentar de graca e sempre melhor
+    //                   que descartar venda (R-013), e um 23505 permanente aparece como 503 repetido
+    //                   no historico, que e visivel;
+    //   42P10           `there is no unique or exclusion constraint matching the ON CONFLICT
+    //                   specification`. E o que o Postgres levanta quando o indice parcial NAO
+    //                   existe ou esta invalido (migration ainda nao aplicada, `CREATE INDEX
+    //                   CONCURRENTLY` abortado, rollback fora de ordem) — e ele estoura em TODA
+    //                   ingestao nova, nao so nas conflitantes. Sem este ramo, subir o codigo antes
+    //                   do indice descartaria 100% das vendas integradas em silencio;
+    //   S8              a venda mudou de caixa entre a leitura e a trava;
+    //   #41 corrida     outra requisicao criou a mesma venda e commitou primeiro.
+    //
+    // `codigoPostgresDoErro` percorre a CADEIA de causas. Ler `error.code` direto nao funciona: o
+    // Drizzle embrulha toda falha de query num `DrizzleQueryError` que NAO copia o `code` — o erro
+    // do `pg` fica em `cause`. Enquanto isso passou batido, os ramos de 55P03/40P01 eram codigo
+    // morto e TODA falha de banco virava 422, ou seja, venda descartada.
+    // Sentinelas deste servico primeiro: eles nao tem forma de SQLSTATE e por isso nao aparecem em
+    // `codigoPostgresDoErro`.
+    const cadeia = erroOriginal as ErroEncadeado | null;
+    if (sentinelaTransitorio(cadeia)) {
+      throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
     }
-    throw naoProcessavel(`Falha ao processar venda integrada: ${mensagemErro}`, "INTEGRATION_PROCESSING_ERROR");
+    const codigoPostgres = codigoPostgresDoErro(cadeia);
+    if (codigoPostgres && TRANSITORIOS_PG.has(codigoPostgres)) {
+      throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
+    }
+    // QUALQUER OUTRO SQLSTATE REAL tambem e 5xx re-tentavel. Este ramo existe para NAO precisar de
+    // uma whitelist infinita: a lista acima cobre o que ja sabemos nomear, e este cobre o resto.
+    //
+    // O caso que expos a falta dele foi o `22003` (`numeric_value_out_of_range`): um valor que passa
+    // no contrato do payload (`z.coerce.number().min(0)`, sem teto) mas estoura o `numeric(14,2)` na
+    // gravacao. Ele caia no 422 abaixo e o agente DESCARTAVA a venda — perda definitiva por um
+    // problema que nem sequer e do agente.
+    //
+    // Corrigir so o `22003` seria tratar o sintoma: o proximo SQLSTATE inesperado repetiria a perda.
+    // A regra passa a ser estrutural — **se o Postgres falou, o agente re-tenta**. Um erro realmente
+    // permanente aparece como 503 repetido no historico, que e visivel e investigavel; o oposto,
+    // descartar venda em silencio, nao tem volta (R-013).
+    //
+    // A deteccao e a FORMA do SQLSTATE, nao uma lista: cinco caracteres `[0-9A-Z]`, como o padrao
+    // define. Codigos internos deste servico (`P0_...`) e de rede do Node (`ECONNREFUSED`) nao tem
+    // esse formato; `EPIPE`, que tem, e socket do banco caindo — tambem re-tentavel, tambem correto.
+    if (codigoPostgres && SQLSTATE.test(codigoPostgres)) {
+      throw new ErroDominio(
+        "Falha temporaria ao gravar a venda integrada; tente novamente",
+        503,
+        "INTEGRATION_DATABASE_ERROR"
+      );
+    }
+    // FALHA TECNICA INESPERADA — bug NOSSO, nao do CREARE.
+    //
+    // Chegar aqui significa: nao e `ErroDominio` (relancado no topo do catch), nao e validacao do
+    // payload (tratada antes da transacao) e nao tem SQLSTATE (os dois ramos acima). Sobra o que
+    // realmente e nosso: `TypeError`, guarda interna violada, invariante quebrada.
+    //
+    // Isto devolvia **422 `INTEGRATION_PROCESSING_ERROR`**, e era o ultimo lugar em que a #41 ainda
+    // descartava venda: 4xx faz o agente classificar como PERMANENTE e jogar a venda fora
+    // (`integracoes-scripts/src/retry.js`). Um bug do servidor nao pode custar a venda de ninguem —
+    // e a R-013 nao abre excecao para "a culpa foi nossa".
+    //
+    // Sobe INTACTO para o handler global: ele loga, manda para a captura de erros e responde
+    // **500 "Erro interno"** com corpo fixo (`api/src/app.ts`). Assim a stack original sobrevive
+    // para o diagnostico, o corpo HTTP nao carrega mensagem, SQL, parametros nem valores, e o
+    // agente ve um 5xx — que ele re-tenta e enfileira em disco.
+    //
+    // A causa completa ja foi gravada no historico logo acima, que e interno.
+    throw erroOriginal ?? falhaTecnica("Falha tecnica ao processar venda integrada");
   }
 }
