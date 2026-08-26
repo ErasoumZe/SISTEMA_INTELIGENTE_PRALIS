@@ -1230,6 +1230,92 @@ dinheiro.
 
 ✅ **Ratificado por Marco em 26/08.**
 
+## 18-C. BLOQUEADOR FINANCEIRO em aberto — duas fórmulas de soma para a mesma tabela
+
+> ⛔ **A #152 não vai a PR enquanto isto estiver aberto.** Não é dívida de qualidade: é venda que o
+> sistema recusa gravar.
+
+### O conflito, com endereço
+
+|                | Compara com                                     | Onde                                                                                                                                                                                                                |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validarVenda` | **`valorOriginal`** (o subtotal)                | [`api/src/vendas/vendas.service.ts:42-47`](../api/src/vendas/vendas.service.ts#L42-L47), via `somaConfereCentavos` em [`lancamentos.dominio.ts:635-638`](../api/src/lancamentos/lancamentos.dominio.ts#L635-L638)   |
+| **R-173**      | **líquido** = `original − desconto + acréscimo` | [`integracoes.repository.ts:889-895`](../api/src/integracoes/integracoes.repository.ts#L889-L895), via `somaDosPagamentosFecha` em [`shared/src/integracoes/index.ts:340`](../shared/src/integracoes/index.ts#L340) |
+
+Para **qualquer venda com desconto ou acréscimo as duas são mutuamente insatisfazíveis**: o payload
+que fecha com o líquido não fecha com o original, e vice-versa.
+
+### O que acontece hoje, na prática
+
+O `PUT /api/vendas` chama `validarVenda` **antes** da transação. Uma venda integrada com desconto ou
+acréscimo, cujos pagamentos somam o líquido (que é o correto pela R-173), recebe:
+
+```
+400 "Soma dos pagamentos da venda deve bater com o valor original"
+```
+
+**A edição é recusada e nada é gravado.** Não há dinheiro errado no banco — há venda que não se
+consegue editar. E a mensagem aponta para o lugar errado: ela sugere que os pagamentos estão errados,
+quando quem está desatualizada é a fórmula da validação.
+
+O mesmo conflito atinge a criação de venda de retaguarda com desconto/acréscimo, que é caminho
+anterior à #152 — logo o defeito **não nasceu aqui**, mas a #152 o torna visível e o herda.
+
+### Testes afetados
+
+- [`roteamento-pendencias-e-put.test.ts`](../tests/integration/integracoes/roteamento-pendencias-e-put.test.ts):
+  o caso "PUT em venda integrada recusa mudar os pagamentos" afirma **400 com a mensagem da soma**, e
+  não o 403 da R-177 — porque `validarVenda` responde primeiro. O caso está correto ao descrever o
+  código de hoje, e vai precisar mudar quando a fórmula for unificada.
+- Todos os casos de `roteamento-put-preserva-snapshot.test.ts` usam venda **sem desconto e sem
+  acréscimo**, justamente para não esbarrar no conflito. É contorno consciente, registrado aqui.
+
+### A mudança mínima, depois da decisão de Marco/Rodrigo
+
+Uma linha, e ela é decisão de negócio, não de código:
+
+> `somaConfereCentavos(valores, dados.valorOriginal)` em `vendas.service.ts:44` passa a comparar com
+> **`liquidoCentavos(dados)`**, a mesma função que o saldo da conta e a R-173 já usam.
+
+Isso deixa **uma fórmula só** para "quanto vale esta venda", que é o que a §18 ponto 1 decidiu e o que
+o ADR-001 exige. Junto vêm:
+
+- a mensagem passa a dizer "líquido", não "valor original";
+- o caso de teste citado acima passa a esperar o **403 da R-173/R-177**;
+- é preciso conferir se alguma venda de retaguarda existente depende do comportamento atual — a
+  varredura é read-only e não altera histórico.
+
+**Por que não foi feito nesta rodada:** mudar a fórmula de soma de dinheiro exige autorização própria
+(`AGENTS.md` §4.6), e a autorização desta rodada excluiu explicitamente alteração de fórmula
+financeira.
+
+## 18-D. Dívidas registradas, sem migration nova
+
+Achados das quatro revisões que **não** bloqueiam a entrega e ficam nomeados para não voltarem como
+"achado novo":
+
+- **FK simples no lado FATO.** `vendas_pagamentos.conta_recebivel_id`/`conta_final_id` apontam para
+  `contas(id)`, e não para o par `(id, empresa_id)` como o lado CADASTRO. O banco aceitaria um
+  pagamento da empresa A apontando para conta da empresa B. Hoje o caminho de escrita é seguro (as
+  duas leituras são escopadas por empresa) e a 6ª consulta do saldo amarra
+  `contas.empresa_id = vendas.empresa_id` no próprio SQL — com teste dedicado. Fechar isso no banco
+  exigiria `empresa_id` em `vendas_pagamentos`, que é migration e backfill.
+- **Custo da 6ª consulta.** Ela roda dentro da porta de saldo, a cada escrita de saída, e não tem
+  recorte temporal. O índice parcial cobre o predicado, mas `total_pago` não está nele, então há
+  heap fetch por linha. O passo seguinte é `INCLUDE (total_pago)` ou agregação em SQL — os dois
+  dependem de migration.
+- **Reprocessamento explícito de pendência.** Configurar o roteamento hoje não reprocessa as vendas
+  já ingeridas: o reenvio do CREARE com hash idêntico curto-circuita em `sem_novidade`. A pendência
+  aparece na tela e não tem botão que a resolva. Precisa de decisão sobre a forma (endpoint próprio
+  ou reingestão forçada) antes de virar código.
+- **Índice `vendas_pagamentos_conta_recebivel_aberto_idx` sem leitor.** Criado pela `0033` para a
+  vertical de liquidação, que é posterior. Custo de escrita até lá.
+- **Janela de deploy da `0033`.** Três `CREATE INDEX` não-concorrentes e dois `ADD CONSTRAINT CHECK`
+  em `vendas_pagamentos` bloqueiam escrita durante a validação. Vale janela declarada, ou
+  `CONCURRENTLY` + `NOT VALID`/`VALIDATE` em migration separada.
+- **`AppWorkspace.vue` continua acima do teto do `AGENTS.md` §4.5.** Esta entrega acrescentou ~24
+  linhas de contexto; toda a UI de roteamento vive em componentes próprios (260 e 188 linhas).
+
 ## 19. O que NÃO foi feito
 
 - **Nenhum arquivo de código criado, alterado ou gerado**: `db/src/schema/**`, `db/migrations/**`,
