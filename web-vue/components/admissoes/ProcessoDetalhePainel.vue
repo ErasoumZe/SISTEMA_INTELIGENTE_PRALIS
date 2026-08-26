@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import type { HistoricoProcessoDto, MotivoCancelamentoProcesso, ProcessoDetalheDto } from "@padaria/shared";
-import { motivosCancelamentoProcesso } from "@padaria/shared";
+import type { HistoricoProcessoDto, ProcessoDetalheDto } from "@padaria/shared";
 import {
   corStatusProcesso,
   explicacaoSituacaoProcesso,
   rotuloAcaoHistoricoProcesso,
-  rotuloMotivoCancelamentoProcesso,
   rotuloSituacaoProcesso,
   rotuloStatusProcesso
 } from "~/utils/admissoes";
@@ -20,18 +18,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: "cancelar", motivo: MotivoCancelamentoProcesso): void;
+  // Sem motivo: a V0 nao tem lista de motivos, e o cancelamento e auditado por ator, data e acao.
+  (event: "cancelar"): void;
   (event: "fechar"): void;
   (event: "verTeste"): void;
 }>();
 
 const dialogCancelar = ref(false);
-const motivoEscolhido = ref<MotivoCancelamentoProcesso | null>(null);
-
-const opcoesMotivo = motivosCancelamentoProcesso.map((valor) => ({
-  valor,
-  rotulo: rotuloMotivoCancelamentoProcesso[valor]
-}));
 
 const emAndamento = computed(() => props.processo?.status === "iniciado");
 
@@ -40,13 +33,11 @@ watch(
   (aberto) => {
     if (aberto) return;
     dialogCancelar.value = false;
-    motivoEscolhido.value = null;
   }
 );
 
 function confirmarCancelar() {
-  if (!motivoEscolhido.value) return;
-  emit("cancelar", motivoEscolhido.value);
+  emit("cancelar");
   dialogCancelar.value = false;
 }
 </script>
@@ -91,10 +82,6 @@ function confirmarCancelar() {
           <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
         </dd>
 
-        <template v-if="processo.motivoCancelamento">
-          <dt>Motivo do cancelamento</dt>
-          <dd>{{ rotuloMotivoCancelamentoProcesso[processo.motivoCancelamento] }}</dd>
-        </template>
       </dl>
 
       <p class="painel-nota">
@@ -141,26 +128,15 @@ function confirmarCancelar() {
           <p class="mb-2"><strong>Isto não apaga o processo.</strong> O que acontece:</p>
           <ul class="mb-3 ps-5">
             <li>o processo fica <strong>Inativo</strong>;</li>
-            <li>o histórico inteiro é preservado, inclusive quem fez o quê;</li>
-            <li>é obrigatório informar um motivo;</li>
+            <li>o histórico registra quem cancelou e quando;</li>
             <li>não há reabertura, e não existe exclusão definitiva.</li>
           </ul>
-          <p class="mb-3">O período de teste de origem <strong>não</strong> é alterado.</p>
-          <v-select
-            v-model="motivoEscolhido"
-            :items="opcoesMotivo"
-            item-title="rotulo"
-            item-value="valor"
-            label="Motivo *"
-            density="comfortable"
-          />
+          <p class="mb-0">O período de teste de origem <strong>não</strong> é alterado.</p>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialogCancelar = false">Voltar</v-btn>
-          <v-btn color="error" variant="flat" :disabled="!motivoEscolhido" @click="confirmarCancelar">
-            Cancelar e arquivar
-          </v-btn>
+          <v-btn color="error" variant="flat" @click="confirmarCancelar">Cancelar e arquivar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

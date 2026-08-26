@@ -23,7 +23,6 @@ import type {
   AcaoHistoricoProcesso,
   AcaoHistoricoTeste,
   MotivoCancelamento,
-  MotivoCancelamentoProcesso,
   ResultadoTeste,
   StatusProcesso,
   StatusTeste
@@ -2210,7 +2209,9 @@ export const admissoesProcessos = pgTable(
     testeId: uuid("teste_id").notNull(),
     status: text("status").$type<StatusProcesso>().notNull().default("iniciado"),
     versao: integer("versao").notNull().default(1),
-    motivoCancelamento: text("motivo_cancelamento").$type<MotivoCancelamentoProcesso>(),
+    // Sem coluna de MOTIVO: a lista real depende de validacao do DP que ainda nao aconteceu, e uma
+    // lista provisoria vira regra definitiva assim que o CHECK roda. O cancelamento e auditado por
+    // ator, data e acao — que e o que a trilha precisa responder.
     criadoPor: text("criado_por")
       .notNull()
       .references(() => perfisUsuarios.usuarioId),
@@ -2238,20 +2239,14 @@ export const admissoesProcessos = pgTable(
     // gravar vocabulario que ninguem confirmou, e que passa a ser gravavel por qualquer bug.
     check("admissoes_processos_status_check", sql`${table.status} in ('iniciado', 'cancelado')`),
     check("admissoes_processos_versao_check", sql`${table.versao} > 0`),
-    check(
-      "admissoes_processos_motivo_cancelamento_check",
-      sql`${table.motivoCancelamento} is null or ${table.motivoCancelamento} in ('desistencia_do_candidato', 'vaga_cancelada')`
-    ),
     // Um CHECK unico para os dois estados: cancelado pela metade deixa de ser representavel.
     check(
       "admissoes_processos_coerencia_status_check",
       sql`(
         ${table.status} = 'iniciado'
-        and ${table.motivoCancelamento} is null
         and ${table.canceladoPor} is null and ${table.canceladoEm} is null
       ) or (
         ${table.status} = 'cancelado'
-        and ${table.motivoCancelamento} is not null
         and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
       )`
     ),

@@ -37,7 +37,6 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
     versao: linha.versao,
     testeId: linha.testeId,
     testeNomeCompleto: linha.testeNomeCompleto,
-    motivoCancelamento: linha.motivoCancelamento,
     criadoPorNome: linha.criadoPorNome,
     criadoEm: linha.criadoEm.toISOString(),
     atualizadoPorNome: linha.atualizadoPorNome,
@@ -134,7 +133,6 @@ export async function cancelarProcesso(id: string, body: DadosExternos, perfil?:
         id,
         empresaId,
         versaoAtual: alvo.versao,
-        motivoCancelamento: dados.motivoCancelamento,
         atorUsuarioId: ator,
         canceladoEm: new Date()
       },

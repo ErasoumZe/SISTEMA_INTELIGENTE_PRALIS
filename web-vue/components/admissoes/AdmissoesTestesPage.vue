@@ -3,7 +3,6 @@ import type {
   AuthSession,
   FuncaoOpcaoDto,
   HistoricoProcessoDto,
-  MotivoCancelamentoProcesso,
   ProcessoDetalheDto,
   HistoricoTesteDto,
   MotivoCancelamento,
@@ -267,13 +266,12 @@ function voltarAoTeste() {
   void abrirDetalhe(testeId);
 }
 
-async function cancelarProcessoAdmissao(motivoCancelamento: MotivoCancelamentoProcesso) {
+async function cancelarProcessoAdmissao() {
   if (!processo.value) return;
   processoProcessando.value = true;
   try {
     await apiPost(`/api/admissoes/processos/${processo.value.id}/cancelar`, {
-      versao: processo.value.versao,
-      motivoCancelamento
+      versao: processo.value.versao
     });
     notificar("Processo de admissão cancelado e arquivado.");
     await abrirProcesso(processo.value.id);

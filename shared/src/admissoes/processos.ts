@@ -41,15 +41,15 @@ export function situacaoDoProcesso(status: StatusProcesso): SituacaoProcesso {
 }
 
 /**
- * Lista FECHADA, pelo mesmo motivo da ADM-001: motivo livre sobre pessoa em avaliacao atrai
- * justamente a PII que o modulo evita.
+ * NAO HA MOTIVO ESTRUTURADO DE CANCELAMENTO NA V0. Nao e esquecimento.
  *
- * PROVISORIA — precisa de confirmacao do DP. Estes dois cobrem o que se sabe hoje; se o DP precisar
- * de um terceiro, ele entra por migration aditiva no CHECK.
+ * Uma lista provisoria vira regra definitiva no instante em que o CHECK do banco roda, e renomear ou
+ * remover um valor ja gravado e caro. Como a lista real depende de validacao do DP que ainda nao
+ * aconteceu, a V0 nao inventa uma.
+ *
+ * O cancelamento continua possivel e auditado por ATOR, DATA e ACAO, que e o que a trilha precisa
+ * para responder "quem cancelou e quando". Motivo controlado e vertical futura.
  */
-export const motivosCancelamentoProcesso = ["desistencia_do_candidato", "vaga_cancelada"] as const;
-export const motivoCancelamentoProcessoSchema = z.enum(motivosCancelamentoProcesso);
-export type MotivoCancelamentoProcesso = z.infer<typeof motivoCancelamentoProcessoSchema>;
 
 /** Trilha append-only. So as duas acoes que a V0 alcanca. */
 export const acoesHistoricoProcesso = ["criado", "cancelado"] as const;
@@ -58,8 +58,7 @@ export type AcaoHistoricoProcesso = z.infer<typeof acaoHistoricoProcessoSchema>;
 
 // --- Entradas -------------------------------------------------------------------------------------
 export const cancelarProcessoPayloadSchema = z.object({
-  versao: z.number().int().positive(),
-  motivoCancelamento: motivoCancelamentoProcessoSchema
+  versao: z.number().int().positive()
 });
 
 export const processoParamsSchema = apiIdParamsSchema;
@@ -81,7 +80,6 @@ export const processoDetalheDtoSchema = z.object({
   // A ORIGEM. O processo so existe por causa dela, e a tela precisa do caminho de volta.
   testeId: z.string(),
   testeNomeCompleto: z.string(),
-  motivoCancelamento: motivoCancelamentoProcessoSchema.nullable(),
   // SO o nome. E-mail nunca entra na projecao — e identificador reaproveitavel em outras rotas.
   criadoPorNome: z.string().nullable(),
   criadoEm: z.string(),

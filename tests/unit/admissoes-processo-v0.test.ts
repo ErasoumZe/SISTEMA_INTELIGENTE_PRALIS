@@ -71,9 +71,56 @@ describe("a V0 nao cresce para fora do escopo", () => {
     }
   });
 
+  it("motivo estruturado de cancelamento nao existe em lugar nenhum", () => {
+    // Escrito em pedacos para este arquivo nao ser o unico culpado da propria varredura.
+    const proibido = "motivo" + "Cancelamento";
+    for (const { nome, codigo } of fontes) {
+      expect(codigo, nome).not.toContain(proibido);
+    }
+    const schema = readFileSync(join(RAIZ, "db", "src", "schema", "app.schema.ts"), "utf8");
+    const bloco = schema.slice(schema.indexOf('pgTable(\n  "admissoes_processos"'));
+    expect(bloco.slice(0, 4000)).not.toContain("motivo_cancelamento");
+  });
+
   it("nenhuma tela de processo aparece no menu", () => {
     const menu = semComentarios(readFileSync(join(RAIZ, "web-vue", "utils", "menu.ts"), "utf8"));
     expect(menu).not.toContain("admissoes_processos");
+  });
+});
+
+describe("as permissoes do processo sao concedidas pelo catalogo", () => {
+  const referencia = readFileSync(join(RAIZ, "db", "src", "referencia-permissoes.ts"), "utf8");
+
+  it("DP e Gerencia recebem visualizar e cancelar", () => {
+    // Concessao pelo mecanismo real: `permissoesDoCargo`. Nao ha atalho no frontend — a tela le
+    // `sessao.perfil.permissoes`, que vem daqui.
+    for (const cargo of ["Gerencia", "DP"]) {
+      const inicio = referencia.indexOf(`${cargo}: permissoesDoCargo(`);
+      expect(inicio, cargo).toBeGreaterThan(-1);
+      const bloco = referencia.slice(inicio, referencia.indexOf("}),", inicio));
+      expect(bloco, cargo).toContain("admissoes_processos_visualizar");
+      expect(bloco, cargo).toContain("admissoes_processos_cancelar");
+    }
+  });
+
+  it("nao existe permissao de INICIAR processo", () => {
+    // Iniciar e consequencia de efetivar o teste, nao um ato separado — entao nao tem permissao.
+    const catalogo = readFileSync(join(RAIZ, "shared", "src", "autenticacao", "index.ts"), "utf8");
+    expect(catalogo).toContain('"admissoes_processos_visualizar"');
+    expect(catalogo).toContain('"admissoes_processos_cancelar"');
+    expect(catalogo).not.toContain("admissoes_processos_iniciar");
+    expect(catalogo).not.toContain("admissoes_processos_criar");
+  });
+
+  it("o processo nao entra por menu: as permissoes vao em extras, nao em ativas", () => {
+    // `ativas` mapeia chave de MENU para a permissao de visualizar. Como o processo nao tem menu,
+    // entrar por ali criaria a entrada que a V0 decidiu nao ter.
+    for (const cargo of ["Gerencia", "DP"]) {
+      const inicio = referencia.indexOf(`${cargo}: permissoesDoCargo(`);
+      const bloco = referencia.slice(inicio, referencia.indexOf("}),", inicio));
+      const ativas = bloco.slice(bloco.indexOf("ativas:"), bloco.indexOf("]", bloco.indexOf("ativas:")));
+      expect(ativas, cargo).not.toContain("admissoes_processos");
+    }
   });
 });
 
@@ -104,13 +151,18 @@ describe("estados: exatamente dois, e nenhum antecipado", () => {
     expect(colunas).not.toContain("ativo");
   });
 
-  it("o payload de cancelar descarta situacao", () => {
+  it("o payload de cancelar descarta situacao e motivo", () => {
+    // Motivo estruturado NAO existe na V0: uma lista provisoria vira regra definitiva no instante em
+    // que o CHECK roda, e renomear valor ja gravado e caro. Entra como vertical propria depois da
+    // validacao do DP.
     const dados = cancelarProcessoPayloadSchema.parse({
       versao: 1,
-      motivoCancelamento: "vaga_cancelada",
-      situacao: "inativo"
+      situacao: "inativo",
+      motivoCancelamento: "qualquer_coisa"
     });
     expect(dados).not.toHaveProperty("situacao");
+    expect(dados).not.toHaveProperty("motivoCancelamento");
+    expect(Object.keys(dados)).toEqual(["versao"]);
   });
 });
 

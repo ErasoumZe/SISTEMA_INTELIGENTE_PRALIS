@@ -6,11 +6,7 @@ import {
   admissoesTestes
 } from "@padaria/db/schema/admissoes";
 import { perfisUsuarios } from "@padaria/db/schema/cadastro";
-import type {
-  AcaoHistoricoProcesso,
-  MotivoCancelamentoProcesso,
-  StatusProcesso
-} from "@padaria/shared/admissoes";
+import type { AcaoHistoricoProcesso, StatusProcesso } from "@padaria/shared/admissoes";
 import type { PaginationQuery, ResultadoPaginado } from "@padaria/shared/api";
 import { banco, type TransacaoBanco } from "../banco/conexao.js";
 
@@ -26,7 +22,6 @@ export type ProcessoLinha = {
   versao: number;
   testeId: string;
   testeNomeCompleto: string;
-  motivoCancelamento: MotivoCancelamentoProcesso | null;
   criadoPorNome: string | null;
   criadoEm: Date;
   atualizadoPorNome: string | null;
@@ -87,7 +82,6 @@ export async function obterProcessoRepository(id: string, empresaId: string): Pr
       versao: admissoesProcessos.versao,
       testeId: admissoesProcessos.testeId,
       testeNomeCompleto: admissoesTestes.nomeCompleto,
-      motivoCancelamento: admissoesProcessos.motivoCancelamento,
       // SO o nome. E-mail nunca entra na projecao.
       criadoPorNome: perfilCriador.nome,
       criadoEm: admissoesProcessos.criadoEm,
@@ -136,7 +130,6 @@ export async function cancelarProcessoRepository(
     id: string;
     empresaId: string;
     versaoAtual: number;
-    motivoCancelamento: MotivoCancelamentoProcesso;
     atorUsuarioId: string;
     canceladoEm: Date;
   },
@@ -147,7 +140,6 @@ export async function cancelarProcessoRepository(
     .set({
       status: "cancelado",
       versao: input.versaoAtual + 1,
-      motivoCancelamento: input.motivoCancelamento,
       atualizadoPor: input.atorUsuarioId,
       canceladoPor: input.atorUsuarioId,
       canceladoEm: input.canceladoEm

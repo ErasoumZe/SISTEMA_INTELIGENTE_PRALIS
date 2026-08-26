@@ -228,7 +228,7 @@ describe("admissoes processos integration", () => {
       method: "POST",
       url: `/api/admissoes/processos/${processoId}/cancelar`,
       headers: { cookie: cookieDp },
-      payload: { versao: 1, motivoCancelamento: "vaga_cancelada" }
+      payload: { versao: 1 }
     });
     assertOk(primeiro);
 
@@ -236,7 +236,7 @@ describe("admissoes processos integration", () => {
       method: "POST",
       url: `/api/admissoes/processos/${processoId}/cancelar`,
       headers: { cookie: cookieDp },
-      payload: { versao: 2, motivoCancelamento: "vaga_cancelada" }
+      payload: { versao: 2 }
     });
     // Terminal: nao ha reabertura e nao ha segundo cancelamento.
     expect(segundo.statusCode).toBe(409);
@@ -258,7 +258,7 @@ describe("admissoes processos integration", () => {
         method: "POST",
         url: `/api/admissoes/processos/${processoId}/cancelar`,
         headers: { cookie: cookieDp },
-        payload: { versao: 1, motivoCancelamento: "desistencia_do_candidato" }
+        payload: { versao: 1 }
       })
     );
 

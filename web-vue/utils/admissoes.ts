@@ -1,7 +1,6 @@
 import type {
   AcaoHistoricoProcesso,
   MotivoCancelamento,
-  MotivoCancelamentoProcesso,
   PrazoTeste,
   ResultadoTeste,
   SituacaoProcesso,
@@ -112,11 +111,6 @@ export const rotuloSituacaoProcesso: Record<SituacaoProcesso, string> = {
 export const explicacaoSituacaoProcesso: Record<SituacaoProcesso, string> = {
   ativo: "Ativo porque a admissão está em andamento",
   inativo: "Inativo porque o processo foi cancelado"
-};
-
-export const rotuloMotivoCancelamentoProcesso: Record<MotivoCancelamentoProcesso, string> = {
-  desistencia_do_candidato: "Desistência do candidato",
-  vaga_cancelada: "Vaga cancelada"
 };
 
 export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> = {

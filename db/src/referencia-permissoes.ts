@@ -233,6 +233,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_testes_editar",
       "admissoes_testes_encerrar",
       "admissoes_testes_cancelar",
+      // ADM-002 V0: a Gerencia acompanha e cancela o processo de admissao, junto com o DP.
+      // Nao ha permissao de "iniciar": iniciar e consequencia de efetivar o teste.
+      "admissoes_processos_visualizar",
+      "admissoes_processos_cancelar",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -253,6 +257,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_testes_editar",
       "admissoes_testes_encerrar",
       "admissoes_testes_cancelar",
+      // ADM-002 V0. Nao entram por `ativas` porque o processo NAO tem entrada de menu: ele e
+      // alcancado so pelo teste efetivado.
+      "admissoes_processos_visualizar",
+      "admissoes_processos_cancelar",
     ]
   }),
   RH: permissoesDoCargo({
