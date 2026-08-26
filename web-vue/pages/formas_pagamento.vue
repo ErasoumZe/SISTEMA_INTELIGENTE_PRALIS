@@ -33,6 +33,7 @@ import RoteamentoFinanceiroDialog from "~/components/financeiro/RoteamentoFinanc
       :contas="ctx.contasDaEmpresa"
       :pode-configurar="ctx.podeConfigurarRoteamento"
       @fechar="ctx.fecharRoteamentoDaForma"
+      @salvo="ctx.recarregarTela"
     />
   </AppWorkspace>
 </template>

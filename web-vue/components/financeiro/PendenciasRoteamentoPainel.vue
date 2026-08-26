@@ -33,22 +33,32 @@ const emit = defineEmits<{ (event: "configurar", forma: FormaSemRoteamento): voi
 
 const { apiGet } = useApi();
 
-const carregando = ref(false);
+// Comeca em `true`: enquanto a empresa nao resolveu, o painel NAO pode afirmar nada. Antes ele caia
+// no ramo "nenhuma pendencia" — dizia "toda venda integrada tem destino financeiro definido" sem ter
+// feito uma unica consulta. Afirmar o oposto do que se sabe e pior do que nao dizer nada.
+const carregando = ref(true);
 const semPermissao = ref(false);
 const erro = ref("");
 const dados = ref<Pendencias | null>(null);
 
 async function carregar() {
-  if (!props.empresaId) return;
+  // Sem empresa resolvida, permanece em CARREGANDO — nunca em "vazio".
+  if (!props.empresaId) {
+    carregando.value = true;
+    return;
+  }
   carregando.value = true;
   erro.value = "";
   semPermissao.value = false;
   try {
     dados.value = await apiGet<Pendencias>(`/api/roteamento/pendencias?empresaId=${props.empresaId}`);
   } catch (falha) {
-    const mensagem = falha instanceof Error ? falha.message : "";
-    // SEM PERMISSAO e um estado proprio, e nao um erro: nao ha "tentar de novo" que resolva.
-    if (/permiss/iu.test(mensagem)) semPermissao.value = true;
+    // Pelo STATUS/CODIGO, nunca por regex na mensagem. Texto de erro muda; contrato nao. Com regex,
+    // mudar a frase em `guards.ts` tornava o estado "sem permissao" inalcancavel e o painel passava a
+    // oferecer "tentar de novo" para sempre contra um 403 que nunca vai mudar.
+    const status = (falha as { status?: number } | null)?.status;
+    const codigo = (falha as { codigo?: string; code?: string } | null)?.codigo;
+    if (status === 403 || status === 401 || codigo === "INSUFFICIENT_PERMISSION") semPermissao.value = true;
     else erro.value = "Nao foi possivel carregar as pendencias financeiras.";
     dados.value = null;
   } finally {
@@ -63,8 +73,10 @@ defineExpose({ carregar });
 const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const formas = computed(() => dados.value?.formasSemRoteamento ?? null);
 const vendas = computed(() => dados.value?.vendasPendentes ?? null);
+// So afirma "nada pendente" quando existe RESPOSTA. `dados` nulo significa que nao houve consulta
+// bem-sucedida — e nesse caso o painel nao diz nada.
 const nadaPendente = computed(
-  () => (formas.value?.length ?? 0) === 0 && (vendas.value?.totalPagamentos ?? 0) === 0 && !semPermissao.value
+  () => dados.value !== null && (formas.value?.length ?? 0) === 0 && (vendas.value?.totalPagamentos ?? 0) === 0
 );
 </script>
 
@@ -91,7 +103,11 @@ const nadaPendente = computed(
     <template v-else>
       <!-- VAZIO: boa noticia, e merece ser dita com todas as letras. -->
       <v-alert v-if="nadaPendente" type="success" variant="tonal" density="comfortable">
-        Nenhuma pendência de roteamento. Toda venda integrada tem destino financeiro definido.
+        <span v-if="vendas"
+          >Nenhuma pendência de roteamento. Toda venda integrada tem destino financeiro definido.</span
+        >
+        <!-- Quem só configura não enxerga vendas: não pode afirmar sobre elas. -->
+        <span v-else>Nenhuma forma de pagamento sem roteamento configurado.</span>
       </v-alert>
 
       <!-- BLOQUEADO: ha forma sem configuracao, entao ha venda que nao vira saldo. -->

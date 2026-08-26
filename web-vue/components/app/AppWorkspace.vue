@@ -840,6 +840,17 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
+    // #152 — P0: sem as CONTAS aqui, o dialogo de roteamento nascia com `contas: []`, a opcao
+    // "Recebivel (cartao, Pix, voucher)" ficava permanentemente desabilitada e a tela mentia
+    // "Nenhuma conta cadastrada nesta empresa". Rotear cartao pela tela de Formas era impossivel, e
+    // nao havia caminho alternativo: a lista de pendencias so mostra forma SEM roteamento, entao uma
+    // forma ja roteada como conta do PDV nao podia ser mudada para recebivel por rota nenhuma.
+    //
+    // So carrega para quem tem a permissao dedicada — quem nao configura roteamento nao precisa da
+    // lista de contas, e `carregarOpcaoOpcional` degrada para [] sem derrubar a tela.
+    if (temPermissao("cadastro_formas_pagamento_roteamento")) {
+      dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
+    }
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
@@ -1899,6 +1910,9 @@ const pageContext = computed(() => ({
   formaRoteamentoSelecionada: formaRoteamentoSelecionada.value,
   abrirRoteamentoDaForma,
   fecharRoteamentoDaForma,
+  // Depois de salvar o roteamento, a tela precisa reler: a acao da linha e a projecao do GET
+  // dependem do que acabou de mudar.
+  recarregarTela: () => carregarDadosPagina(),
   vendaDetalhe: vendaDetalhe.value,
   modalVendaDetalheAberto: modalVendaDetalheAberto.value,
   vendaDetalheCarregando: vendaDetalheCarregando.value,

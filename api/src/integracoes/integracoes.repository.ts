@@ -700,6 +700,35 @@ const PREDICADO_VENDA_INTEGRADA_UNICA = and(
   isNotNull(vendas.identificadorExterno)
 ) as SQL;
 
+// As contas que HOJE recebem credito DISPONIVEL desta venda.
+//
+// Existe para a ingestao travar essas contas antes de mexer na venda (P1 de concorrencia): reenviar
+// uma venda cancelada, ou reroteada, RETIRA credito que ja esta no saldo — e retirar saldo tem de
+// passar pela mesma porta que a R-165 usa para autorizar saida, senao uma despesa aprovada sobre
+// R$ 500 pode terminar com a conta em R$ -500 porque o CREARE cancelou a venda em paralelo.
+//
+// Mesmo predicado da 6a consulta do saldo, de proposito: se um dia divergirem, a trava protegeria um
+// conjunto diferente do que o saldo conta.
+export async function contasComCreditoDisponivelDaVendaRepository(
+  vendaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<string[]> {
+  const linhas = await db
+    .select({ contaFinalId: vendasPagamentos.contaFinalId })
+    .from(vendasPagamentos)
+    .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+    .where(
+      and(
+        eq(vendasPagamentos.vendaId, vendaId),
+        eq(vendas.empresaId, empresaId),
+        eq(vendasPagamentos.roteamentoStatus, "roteado"),
+        isNotNull(vendasPagamentos.disponivelEm)
+      )
+    );
+  return [...new Set(linhas.map((linha) => linha.contaFinalId).filter((id): id is string => !!id))];
+}
+
 // A conta do PDV, escopada pela EMPRESA. O escopo nao e decoracao: e ele que impede o dinheiro de
 // uma loja cair na conta de outra caso um id de PDV chegue trocado.
 export async function buscarContaDoPdvRepository(

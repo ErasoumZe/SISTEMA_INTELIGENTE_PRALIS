@@ -52,11 +52,13 @@ const painel = ref<InstanceType<typeof PendenciasRoteamentoPainel> | null>(null)
   flex-direction: column;
   gap: 32px;
   max-width: 100%;
-  /* 390px: nenhuma secao empurra a pagina para os lados; quem rola e a tabela, dentro do bloco. */
-  overflow-x: hidden;
+  /* 390px: quem rola e a tabela, dentro do proprio bloco. Aqui NAO se usa `overflow-x: hidden` —
+     cortar conteudo esconde do usuario que ha algo ali, o que e pior do que a barra de rolagem. */
+  min-width: 0;
 }
 
 .secao-financeira {
   max-width: 100%;
+  min-width: 0;
 }
 </style>

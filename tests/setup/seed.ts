@@ -148,6 +148,26 @@ const usuarios: UsuarioSeed[] = [
     permissoes: [...permissoesAcessoTotal]
   },
   {
+    // #152/R-176 — CONFIGURADOR PURO: decide para onde vai o dinheiro, e nao ve dinheiro nenhum.
+    //
+    // Existe para provar a separacao das duas metades da pendencia. Sem ele o caso nao tem como ser
+    // escrito: o admin ve tudo, e qualquer outro cargo leva 403 na rota inteira — o ramo em que
+    // `formasSemRoteamento` vem preenchido e `vendasPendentes` vem `null` nunca seria exercitado, e
+    // a protecao de "faturamento agregado nao chega a quem so configura" ficaria sem prova.
+    perfil: "configuradorRoteamento",
+    cargoId: idsTeste.cargoConfiguradorRoteamento,
+    colaboradorId: idsTeste.colaboradorConfiguradorRoteamento,
+    colaboradorCargoId: idsTeste.colaboradorCargoConfiguradorRoteamento,
+    role: "usuario_comum",
+    permissoes: [
+      "cadastro_formas_pagamento_visualizar",
+      "cadastro_formas_pagamento_editar",
+      // A permissao dedicada da R-176 — e NENHUMA permissao financeira: sem `entradas_visualizar`,
+      // sem `relatorio_vendas_visualizar`.
+      "cadastro_formas_pagamento_roteamento"
+    ]
+  },
+  {
     // So visualiza e discrimina (sem criar/editar/caixa) — prova a permissao propria isolada.
     // Carrega TAMBEM as flags `_somente_caixa_aberto` e NAO tem caixa aberto: e a fixture do
     // escopo restrito por caixa (o admin deixou de servir para isso, ele nao herda restricao).

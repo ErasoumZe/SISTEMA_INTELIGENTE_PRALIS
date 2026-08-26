@@ -32,7 +32,15 @@ const { apiGet, apiPut } = useApi();
 
 const carregando = ref(false);
 const salvando = ref(false);
-const erro = ref("");
+// Dois erros SEPARADOS, e a separacao e o conserto: com um so, falhar ao salvar trocava o formulario
+// inteiro pelo alerta e o Admin perdia o que preencheu — e o "tentar de novo" recarregava do servidor
+// por cima. Erro de CARGA substitui o formulario (nao ha o que preservar); erro de SALVAR fica ao lado
+// dele, com o preenchimento intacto.
+const erroCarga = ref("");
+const erroSalvar = ref("");
+// A forma nao foi encontrada na listagem: estado DESCONHECIDO, nunca "sem roteamento". Tratar
+// ausencia como "sem roteamento" faria o Salvar apagar o destino de uma forma ja configurada.
+const naoEncontrada = ref(false);
 const destino = ref<"sem_roteamento" | "conta_do_pdv" | "recebivel">("sem_roteamento");
 const adquirente = ref("");
 const contaRecebivelId = ref<string | null>(null);
@@ -70,7 +78,9 @@ function aplicar(roteamento: Roteamento) {
 async function carregar() {
   if (!props.forma || !props.podeConfigurar) return;
   carregando.value = true;
-  erro.value = "";
+  erroCarga.value = "";
+  erroSalvar.value = "";
+  naoEncontrada.value = false;
   try {
     // A listagem so devolve as colunas de roteamento a quem tem a permissao dedicada — por isso o
     // dialogo le da mesma rota que a tela ja usa, em vez de inventar um GET por id.
@@ -78,15 +88,22 @@ async function carregar() {
       `/api/formas_pagamento?empresaId=${props.empresaId}&pageSize=100`
     );
     const atual = formas.find((item) => item.id === props.forma?.id);
+    if (!atual) {
+      // Nao achou = nao sei. Assumir "sem roteamento" seria o estado MAIS DESTRUTIVO: o Salvar
+      // mandaria `disponibilidade: null` e apagaria o destino de uma forma que pode estar roteada.
+      naoEncontrada.value = true;
+      erroCarga.value = "Nao foi possivel ler o roteamento atual desta forma.";
+      return;
+    }
     aplicar({
-      adquirente: atual?.adquirente ?? null,
-      usaContaDoPdv: atual?.usaContaDoPdv ?? false,
-      contaRecebivelId: atual?.contaRecebivelId ?? null,
-      contaFinalId: atual?.contaFinalId ?? null,
-      disponibilidade: atual?.disponibilidade ?? null
+      adquirente: atual.adquirente ?? null,
+      usaContaDoPdv: atual.usaContaDoPdv ?? false,
+      contaRecebivelId: atual.contaRecebivelId ?? null,
+      contaFinalId: atual.contaFinalId ?? null,
+      disponibilidade: atual.disponibilidade ?? null
     });
   } catch {
-    erro.value = "Nao foi possivel carregar o roteamento desta forma.";
+    erroCarga.value = "Nao foi possivel carregar o roteamento desta forma.";
   } finally {
     carregando.value = false;
   }
@@ -102,6 +119,8 @@ watch(
 
 const podeSalvar = computed(() => {
   if (salvando.value || carregando.value || !props.podeConfigurar) return false;
+  // Sem saber o estado atual, salvar so pode destruir.
+  if (naoEncontrada.value || erroCarga.value) return false;
   if (destino.value === "recebivel") return Boolean(contaRecebivelId.value && contaFinalId.value);
   return true;
 });
@@ -109,7 +128,7 @@ const podeSalvar = computed(() => {
 async function salvar() {
   if (!props.forma || !podeSalvar.value) return;
   salvando.value = true;
-  erro.value = "";
+  erroSalvar.value = "";
   const corpo = {
     empresaId: props.empresaId,
     nome: props.forma.nome,
@@ -124,7 +143,8 @@ async function salvar() {
     emit("salvo");
     emit("fechar");
   } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Nao foi possivel salvar o roteamento.";
+    // Fica no `erroSalvar`: o formulario continua na tela, com tudo que o Admin preencheu.
+    erroSalvar.value = falha instanceof Error ? falha.message : "Nao foi possivel salvar o roteamento.";
   } finally {
     salvando.value = false;
   }
@@ -132,9 +152,17 @@ async function salvar() {
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" max-width="640" scrollable @update:model-value="emit('fechar')">
+  <v-dialog
+    :model-value="aberto"
+    max-width="640"
+    scrollable
+    aria-labelledby="titulo-roteamento-financeiro"
+    @update:model-value="emit('fechar')"
+  >
     <v-card>
-      <v-card-title class="text-wrap">Roteamento financeiro — {{ forma?.nome }}</v-card-title>
+      <v-card-title id="titulo-roteamento-financeiro" class="text-wrap">
+        Roteamento financeiro — {{ forma?.nome }}
+      </v-card-title>
 
       <v-card-text>
         <!-- SEM PERMISSAO: a tela diz o que falta, em vez de um formulario morto. -->
@@ -147,9 +175,9 @@ async function salvar() {
           <v-progress-circular indeterminate color="primary" aria-label="Carregando roteamento" />
         </div>
 
-        <!-- ERRO com nova tentativa -->
-        <v-alert v-else-if="erro && !salvando" type="error" variant="tonal" density="comfortable">
-          {{ erro }}
+        <!-- ERRO DE CARGA com nova tentativa. Nao ha formulario a preservar aqui. -->
+        <v-alert v-else-if="erroCarga" type="error" variant="tonal" density="comfortable">
+          {{ erroCarga }}
           <template #append>
             <v-btn size="small" variant="text" @click="carregar">Tentar de novo</v-btn>
           </template>
@@ -161,7 +189,7 @@ async function salvar() {
             saldo. Nada cai em conta por omissao.
           </p>
 
-          <v-radio-group v-model="destino" hide-details class="mb-2">
+          <v-radio-group v-model="destino" hide-details class="mb-2" label="Destino do dinheiro desta forma">
             <v-radio
               v-for="opcao in opcoesDestino"
               :key="opcao.valor"
@@ -215,8 +243,12 @@ async function salvar() {
             class="mt-4"
           />
 
-          <v-alert v-if="erro && salvando === false" type="error" variant="tonal" density="compact" class="mt-4">
-            {{ erro }}
+          <!-- ERRO DE SALVAR: ao lado do formulario, que continua preenchido. -->
+          <v-alert v-if="erroSalvar" type="error" variant="tonal" density="compact" class="mt-4">
+            {{ erroSalvar }}
+            <template #append>
+              <v-btn size="small" variant="text" :disabled="!podeSalvar" @click="salvar">Tentar de novo</v-btn>
+            </template>
           </v-alert>
         </div>
       </v-card-text>
@@ -241,9 +273,11 @@ async function salvar() {
 
 <style scoped>
 .roteamento {
-  /* 390px: o dialogo nunca empurra a pagina para os lados. */
+  /* 390px: o conteudo cabe na largura. Se algum dia estourar, ROLA — nunca e cortado, que e modo de
+     falha pior: o usuario nao ve que ha algo ali. */
   max-width: 100%;
-  overflow-x: hidden;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .campos {

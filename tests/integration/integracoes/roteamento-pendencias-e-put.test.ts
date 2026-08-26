@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste } from "../../setup/contexto.js";
+import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
 type Pendencias = {
@@ -21,6 +21,14 @@ type Pendencias = {
     itens: Array<{ vendaId: string; valor: number; formaPagamento: string | null }>;
   } | null;
 };
+
+async function usuarioAdminId() {
+  const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+    usuariosTeste.admin.email
+  ]);
+  if (!usuario) throw new Error("Usuario admin nao encontrado");
+  return usuario.id;
+}
 
 describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", () => {
   let contexto: ContextoApiTeste;
@@ -68,6 +76,24 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
     const resposta = await pendencias(cookieGerente);
     expect(resposta.statusCode, resposta.body).toBe(403);
     expect(json<{ code?: string }>(resposta).code).toBe("INSUFFICIENT_PERMISSION");
+  });
+
+  // O CONFIGURADOR PURO: tem a permissao dedicada da R-176 e nenhuma permissao financeira. E o unico
+  // ator que exercita o ramo das duas metades decididas em separado — 403 aqui seria falso-verde,
+  // porque provaria que a rota fechou, nao que o agregado foi retido.
+  it("quem so CONFIGURA ve o que falta configurar e recebe o financeiro como null", async () => {
+    const cookieConfigurador = await cookieSessao(contexto.app, "configuradorRoteamento");
+    const resposta = await pendencias(cookieConfigurador);
+    assertOk(resposta);
+    const dados = json<{ data: Pendencias }>(resposta).data;
+
+    // Ve a lista de trabalho dele...
+    expect(dados.formasSemRoteamento, "o configurador precisa ver o que falta configurar").not.toBeNull();
+    // ...e NAO ve dinheiro. `null` e o contrato: "voce nao ve isto", diferente de lista vazia.
+    expect(dados.vendasPendentes, "faturamento agregado nao chega a quem so configura").toBeNull();
+    // Prova pelo corpo cru: nenhum numero de faturamento atravessa.
+    expect(resposta.body).not.toContain("valorTotal");
+    expect(resposta.body).not.toContain("totalPagamentos");
   });
 
   // O operador de CAIXA nao entra. `entradas_visualizar` vem com `somente_caixa_aberto`, e em
@@ -184,6 +210,22 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
       }
     });
 
+    // Sem o caixa aberto do admin, o PUT morre na regra de caixa antes de chegar na R-177 — e o
+    // teste provaria a regra errada.
+    const abrirCaixa = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: await usuarioAdminId(),
+        dataHoraAbertura: "2026-08-12T08:00",
+        observacao: "Caixa R177"
+      }
+    });
+    expect(abrirCaixa.statusCode, abrirCaixa.body).toBe(201);
+
     const idVenda = `R177-${carimbo}`;
     const nomeForma = `Forma R177 ${carimbo}`;
     const ingestao = await contexto.app.inject({
@@ -292,37 +334,48 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
       headers: { cookie: cookieAdmin },
       payload: { ...base, tiposPagamento: [{ formaPagamentoId: null, totalPago: 999 }] }
     });
-    expect(somaQuebrada.statusCode, somaQuebrada.body).toBeGreaterThanOrEqual(400);
-    expect(somaQuebrada.statusCode).toBeLessThan(500);
+    // Status EXATO — e quem recusa aqui NAO e a R-177: `validarVenda` roda antes da transacao e ja
+    // rejeita a soma que nao bate com o valor da venda. Registrado assim de proposito, porque e um
+    // fato do codigo: existem DUAS invariantes de soma sobre a mesma tabela (`validarVenda` sobre o
+    // valor original; a R-173 sobre o liquido). A que importa para este caso e que, por qualquer
+    // porta, um payload que mexe nos pagamentos de venda integrada NAO passa.
+    expect(somaQuebrada.statusCode, somaQuebrada.body).toBe(400);
+    expect(somaQuebrada.body).toContain("Soma dos pagamentos");
 
-    // 3) A R-177 nao bloqueia DEMAIS: mexer so num campo permitido nao dispara a recusa dela.
+    // E o que realmente conta: nada foi reescrito no banco por essa tentativa.
+    const aposTentativa = await consultarUm<{ total: string; linhas: string }>(
+      `select coalesce(sum(total_pago), 0)::text as total, count(*)::text as linhas
+         from vendas_pagamentos where venda_id = $1`,
+      [venda?.id]
+    );
+    expect(Number(aposTentativa?.total)).toBe(120);
+    expect(Number(aposTentativa?.linhas)).toBe(1);
+
+    // 3) A R-177 nao bloqueia DEMAIS: editar so um campo permitido PASSA, com status exato.
     //
-    // A afirmacao e sobre o CODIGO, e nao sobre 200, de proposito. A venda integrada nasce vinculada
-    // ao caixa do turno, e editar lancamento de caixa que nao e o seu ja era recusado antes da #152
-    // (regra de caixa aberto). Exigir 200 aqui faria o teste depender do estado de caixa da fixture e
-    // provaria outra coisa. O que precisa ser verdade e: se recusar, NAO e por causa da R-177.
+    // O teste anterior aceitava qualquer resposta que nao fosse codigo da R-177 — asserção que nao
+    // conseguia falhar, e que por isso serviu de cobertura para o P0 do PUT destrutivo.
     const mudarObservacao = await contexto.app.inject({
       method: "PUT",
       url: `/api/vendas/${venda?.id}`,
       headers: { cookie: cookieAdmin },
       payload: { ...base, observacao: `revisado ${carimbo}` }
     });
-    const codigoObservacao = json<{ code?: string }>(mudarObservacao).code;
-    expect(
-      ["VENDA_INTEGRADA_PAGAMENTOS", "VENDA_INTEGRADA_CONTA_ORIGEM"],
-      `editar campo permitido nao pode cair na R-177. Resposta: ${mudarObservacao.body}`
-    ).not.toContain(codigoObservacao);
+    expect(mudarObservacao.statusCode, mudarObservacao.body).toBe(200);
 
-    // E os dois campos protegidos seguem como a integracao os deixou.
-    const depois = await consultarUm<{ conta_origem_id: string | null }>(
-      "select conta_origem_id from vendas where id = $1",
+    // O campo permitido mudou, e os dois campos protegidos seguem como a integracao os deixou.
+    const depois = await consultarUm<{ conta_origem_id: string | null; observacao: string | null }>(
+      "select conta_origem_id, observacao from vendas where id = $1",
       [venda?.id]
     );
+    expect(depois?.observacao).toBe(`revisado ${carimbo}`);
     expect(depois?.conta_origem_id, "venda integrada segue sem conta de origem").toBeNull();
-    const pagamentosDepois = await consultarUm<{ total: string }>(
-      "select coalesce(sum(total_pago), 0)::text as total from vendas_pagamentos where venda_id = $1",
+    const pagamentosDepois = await consultarUm<{ total: string; linhas: string }>(
+      `select coalesce(sum(total_pago), 0)::text as total, count(*)::text as linhas
+         from vendas_pagamentos where venda_id = $1`,
       [venda?.id]
     );
     expect(Number(pagamentosDepois?.total), "os pagamentos nao foram reescritos").toBe(120);
+    expect(Number(pagamentosDepois?.linhas), "nem duplicados").toBe(1);
   });
 });
