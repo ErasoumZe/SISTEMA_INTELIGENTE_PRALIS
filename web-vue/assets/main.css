@@ -2559,3 +2559,71 @@ body {
   }
 }
 /* ===================== FIM VIS-04b ===================== */
+
+/* ===================== INICIO VIS-02 — CARTAO: RAIO, RESPIRO E O ESCURO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   ESCOPO ESTREITO, e o motivo importa: a camada de acabamento de 01/08 JA fez a maior parte da
+   §5.7. Reescrever seria o quarto no-op da frente. Conferido linha a linha, ja esta certo e NAO
+   foi tocado aqui:
+     2164  `.content-frame .v-card`        --cx-r-lg + --cx-e-1
+     2170  `.content-frame .card-total`    --cx-e-2
+     2225  `.v-overlay__content > .v-card` --cx-r-xl + --cx-e-3   (modal)
+     2233  `.v-menu > .v-overlay__content` --cx-r-md + --cx-e-2   (menu suspenso)
+     2182  `.responsive-table-shell`       --cx-r-lg + borda 1px
+     login.vue:134                         --cx-r-xl
+   As tres elevacoes ja sao de DUAS sombras cada (contato + ambiente), como manda o 67 §6.
+
+   O `border-radius: 14px` da `.responsive-table-shell` (linha 1131) esta MORTO: a linha 2183
+   redeclara com a mesma especificidade e vence por ordem. Tokeniza-lo seria mexer em bloco
+   congelado para nao mudar pixel nenhum. Fica registrado, nao reescrito.
+
+   Sobra pouco, e e isto:
+
+   1. `.cadastro-filter-grid` (linha 1092) tem `border-radius: 14px` VIVO — nada redeclara depois.
+      Numero magico contra a regra de ouro do 67. Vira --cx-r-lg (16px). E o unico raio do lote
+      que muda pixel: 2px a mais no painel de filtros de cadastros e permissoes.
+
+   2. Respiro. O Vuetify da `padding: 1rem` no `.v-card-text` e `0.625rem 1rem` no `.v-card-item`
+      (VCard.css l. 165 e 255) — 16px, que e --cx-sp-4. O 67 §4 reserva sp-5/sp-6 para padding de
+      card; sp-4 e espaco ENTRE CAMPOS. Sobe para --cx-sp-5.
+
+   3. Cabecalho interno separado por --cx-line-soft. `:not(:last-child)` porque so ha o que
+      separar quando existe conteudo depois: card so de cabecalho nao ganha linha solta embaixo.
+
+   ---- MODO ESCURO — implementado, e PENDENTE como D-06 ----
+   No claro o card se separa por ELEVACAO. No escuro isso nao funciona: --cx-e-1 e sombra preta
+   (`rgb(0 0 0 / 0.4)`) e some sobre --cx-canvas #0f1318. A separacao passa a ser LUMINANCIA mais
+   contorno. Medido, nos dois temas:
+     escuro  superficie x canvas  1,12:1   line-soft x canvas  1,30:1   (line x canvas  1,44:1)
+     claro   superficie x canvas  1,08:1   line-soft x canvas  1,05:1
+   POR QUE FICA PENDENTE: nenhum desses pares alcanca os 3:1 que o 67 §11 pede para borda que
+   carrega significado — e no escuro a borda deixa de ser reforco e vira a separacao PRINCIPAL,
+   porque a sombra sumiu. O mais forte disponivel e --cx-line (1,44:1), e mesmo ele nao passa.
+   Ou o 67 reconhece que contorno de card e agrupamento e nao componente — o claro sempre viveu
+   a 1,08:1 e ninguem reclamou —, ou a paleta precisa de um tom de linha novo, o que esta frente
+   nao pode inventar (§0.1). Segui a instrucao e usei --cx-line-soft. Decisao de Marco.
+   A sombra do escuro nao foi removida: tira-la exigiria `!important` novo, que o lote proibe.
+   =========================================================================================== */
+
+/* 1. Raio do painel de filtros: numero magico vira token. */
+.cadastro-filter-grid {
+  border-radius: var(--cx-r-lg);
+}
+
+/* 2. Respiro de card (67 §4: sp-5/sp-6 e padding de card; sp-4 e entre campos). */
+.content-frame .v-card > .v-card-item,
+.content-frame .v-card > .v-card-text {
+  padding: var(--cx-sp-5);
+}
+
+/* 3. Cabecalho interno separado, so quando ha conteudo depois dele. */
+.content-frame .v-card > .v-card-item:not(:last-child) {
+  border-bottom: 1px solid var(--cx-line-soft);
+}
+
+/* 4. Escuro: o contorno assume o lugar da sombra que sumiu. Ver D-06 no banner. */
+:root[data-theme="dark"] .content-frame .v-card {
+  border: 1px solid var(--cx-line-soft);
+}
+/* ===================== FIM VIS-02 ===================== */
