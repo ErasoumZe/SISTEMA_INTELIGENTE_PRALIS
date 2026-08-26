@@ -1,10 +1,10 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lt, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { admissoesFuncoes, admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
+import { admissoesTestes, admissoesTestesHistorico } from "@padaria/db/schema/admissoes";
 // `cargos` NAO entra aqui. Ele e catalogo de ACESSO (chave de `permissoes_cargos`); a funcao
-// operacional vive em `admissoes_funcoes`. O import ausente e a primeira barreira contra a
-// mistura voltar por conveniencia.
-import { colaboradores, perfisUsuarios } from "@padaria/db/schema/cadastro";
+// operacional e `funcoesOperacionais`, logo abaixo na mesma lista. O import ausente e a primeira
+// barreira contra a mistura voltar por conveniencia.
+import { colaboradores, funcoesOperacionais, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import type {
   AcaoHistoricoTeste,
   MotivoCancelamento,
@@ -83,15 +83,15 @@ export async function listarTestesRepository(
   const where = and(...filtros);
   const [{ total } = { total: 0 }] = await banco.select({ total: count() }).from(admissoesTestes).where(where);
 
-  // Join com `admissoes_funcoes` casando TAMBEM a empresa: e a mesma defesa em profundidade da FK
+  // Join com `funcoes_operacionais` casando TAMBEM a empresa: e a mesma defesa em profundidade da FK
   // composta. Funcao de outra empresa nao existe aqui, mas o join nao depende disso para estar certo.
   const itens = await banco
     .select({
       id: admissoesTestes.id,
       nomeCompleto: admissoesTestes.nomeCompleto,
       funcaoId: admissoesTestes.funcaoId,
-      funcaoNome: admissoesFuncoes.nome,
-      funcaoCbo: admissoesFuncoes.cbo,
+      funcaoNome: funcoesOperacionais.nome,
+      funcaoCbo: funcoesOperacionais.cbo,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
       fimCombinadoEm: admissoesTestes.fimCombinadoEm,
@@ -101,10 +101,10 @@ export async function listarTestesRepository(
     })
     .from(admissoesTestes)
     .innerJoin(
-      admissoesFuncoes,
+      funcoesOperacionais,
       and(
-        eq(admissoesFuncoes.id, admissoesTestes.funcaoId),
-        eq(admissoesFuncoes.empresaId, admissoesTestes.empresaId)
+        eq(funcoesOperacionais.id, admissoesTestes.funcaoId),
+        eq(funcoesOperacionais.empresaId, admissoesTestes.empresaId)
       )
     )
     .where(where)
@@ -123,8 +123,8 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
       id: admissoesTestes.id,
       nomeCompleto: admissoesTestes.nomeCompleto,
       funcaoId: admissoesTestes.funcaoId,
-      funcaoNome: admissoesFuncoes.nome,
-      funcaoCbo: admissoesFuncoes.cbo,
+      funcaoNome: funcoesOperacionais.nome,
+      funcaoCbo: funcoesOperacionais.cbo,
       jornadaHorario: admissoesTestes.jornadaHorario,
       inicioEm: admissoesTestes.inicioEm,
       fimCombinadoEm: admissoesTestes.fimCombinadoEm,
@@ -144,10 +144,10 @@ export async function obterTesteRepository(id: string, empresaId: string): Promi
     })
     .from(admissoesTestes)
     .innerJoin(
-      admissoesFuncoes,
+      funcoesOperacionais,
       and(
-        eq(admissoesFuncoes.id, admissoesTestes.funcaoId),
-        eq(admissoesFuncoes.empresaId, admissoesTestes.empresaId)
+        eq(funcoesOperacionais.id, admissoesTestes.funcaoId),
+        eq(funcoesOperacionais.empresaId, admissoesTestes.empresaId)
       )
     )
     .leftJoin(perfilCriador, eq(perfilCriador.usuarioId, admissoesTestes.criadoPor))
@@ -195,9 +195,9 @@ export async function bloquearTesteRepository(id: string, empresaId: string, db:
  */
 export async function obterFuncaoDaEmpresaRepository(funcaoId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
-    .select({ id: admissoesFuncoes.id, ativo: admissoesFuncoes.ativo })
-    .from(admissoesFuncoes)
-    .where(and(eq(admissoesFuncoes.id, funcaoId), eq(admissoesFuncoes.empresaId, empresaId)))
+    .select({ id: funcoesOperacionais.id, ativo: funcoesOperacionais.ativo })
+    .from(funcoesOperacionais)
+    .where(and(eq(funcoesOperacionais.id, funcaoId), eq(funcoesOperacionais.empresaId, empresaId)))
     .limit(1);
   return linha ?? null;
 }
@@ -466,9 +466,9 @@ export async function listarHistoricoRepository(
  */
 export async function listarFuncoesDaEmpresaRepository(empresaId: string) {
   return banco
-    .select({ id: admissoesFuncoes.id, nome: admissoesFuncoes.nome, cbo: admissoesFuncoes.cbo, ativo: admissoesFuncoes.ativo })
-    .from(admissoesFuncoes)
-    .where(eq(admissoesFuncoes.empresaId, empresaId))
+    .select({ id: funcoesOperacionais.id, nome: funcoesOperacionais.nome, cbo: funcoesOperacionais.cbo, ativo: funcoesOperacionais.ativo })
+    .from(funcoesOperacionais)
+    .where(eq(funcoesOperacionais.empresaId, empresaId))
     // Ativas primeiro; dentro de cada grupo, por nome.
-    .orderBy(desc(admissoesFuncoes.ativo), asc(admissoesFuncoes.nome));
+    .orderBy(desc(funcoesOperacionais.ativo), asc(funcoesOperacionais.nome));
 }

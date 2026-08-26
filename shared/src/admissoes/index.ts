@@ -95,7 +95,7 @@ const instanteSchema = z.string().datetime();
 const camposEditaveisTeste = {
   nomeCompleto: z.string().trim().min(1).max(LIMITE_NOME),
   cpf: cpfTesteSchema,
-  // FUNCAO OPERACIONAL (`admissoes_funcoes`), nunca cargo de acesso (`cargos`).
+  // FUNCAO OPERACIONAL (`funcoes_operacionais`), nunca cargo de acesso (`cargos`).
   //
   // `cargos` e a chave primaria de `permissoes_cargos`: apontar para la faria registrar um PADEIRO
   // exigir a criacao de um cargo de ACESSO chamado PADEIRO, visivel a toda regra de permissao por

@@ -387,6 +387,68 @@ export const permissoesCargos = pgTable(
   (table) => [primaryKey({ columns: [table.cargoId] })]
 );
 
+/**
+ * FUNCAO OPERACIONAL — o que a pessoa FAZ. Nao e cargo de acesso.
+ *
+ * Fica AQUI, ao lado de `cargos` e `permissoes_cargos`, de proposito: e ao lado que a diferenca
+ * aparece. As duas tabelas tem nome e empresa, e sao lidas por gente diferente para perguntas
+ * diferentes:
+ *
+ *   `cargos`                -> o que a pessoa PODE VER. Chave primaria de `permissoes_cargos`.
+ *                              Dez valores: Caixa, Tesouraria, Gerencia, Compras, DP, RH, Fiscal,
+ *                              Diretor de Operacoes, Diretor Geral, Financeiro.
+ *   `funcoes_operacionais`  -> o que a pessoa FAZ. PADEIRO, BALCONISTA, FAXINEIRO.
+ *
+ * Apontar admissao para `cargos` significaria que registrar um PADEIRO exige criar um cargo de
+ * ACESSO chamado PADEIRO — e qualquer regra de permissao por cargo passaria a enxerga-lo.
+ *
+ * Catalogo OPERACIONAL COMPARTILHAVEL por empresa: nasceu em Admissoes, mas nao pertence a ela. O
+ * cadastro de colaboradores usara a mesma lista quando existir. Nome sem prefixo de modulo porque
+ * `admissoes_funcoes` convidaria a segunda lista de funcoes no dia em que o cadastro precisasse
+ * dela — e duas listas para a mesma pergunta e o defeito que a regra-mae proibe.
+ *
+ * NUNCA se liga a `cargos`, `permissoes_cargos`, `permissoes_setores` ou `colaboradores_cargos`.
+ *
+ * Nasce VAZIA. A planilha do RH tem 31 funcoes, mas elas sao evidencia sanitizada, nao carga: a
+ * decisao de povoar a tabela e de quem opera, e vai por SQL revisado, nunca por seed automatico.
+ */
+export const funcoesOperacionais = pgTable(
+  "funcoes_operacionais",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    /**
+     * CBO — Classificacao Brasileira de Ocupacoes, 6 digitos.
+     *
+     * Opcional porque o codigo nem sempre e conhecido no momento do teste, e recusar a funcao por
+     * falta dele travaria o DP num dado que nao muda a decisao. Na planilha o CBO e DERIVADO do
+     * cargo por script; aqui ele e um atributo da funcao, que e o mesmo dado sem o gatilho.
+     */
+    cbo: text("cbo"),
+    /**
+     * Situacao da funcao no catalogo.
+     *
+     * Desativar tira a funcao das escolhas NOVAS sem quebrar registro antigo que ja aponta para ela —
+     * excluir apagaria a leitura do historico, que e o mesmo motivo pelo qual "Excluir" no periodo
+     * de teste cancela e arquiva em vez de apagar.
+     */
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("funcoes_operacionais_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo da FK COMPOSTA de quem referencia a funcao.
+    unique("funcoes_operacionais_id_empresa_unica").on(table.id, table.empresaId),
+    check("funcoes_operacionais_nome_check", sql`length(btrim(${table.nome})) > 0`),
+    // Formato, nao existencia: o banco nao valida CBO contra a tabela do MTE.
+    check("funcoes_operacionais_cbo_check", sql`${table.cbo} is null or ${table.cbo} ~ '^[0-9]{6}$'`),
+    // Ordem do seletor: dentro da empresa, ativas primeiro, por nome.
+    index("funcoes_operacionais_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
+  ]
+);
+
 export const gruposDespesas = pgTable("grupos_despesas", {
   id: idUuid,
   empresaId,
@@ -1966,59 +2028,6 @@ export const debitosColaboradores = pgTable(
 // compostas, nao para ser escolhida.
 // =================================================================================================
 
-/**
- * FUNCAO OPERACIONAL — o que a pessoa vai FAZER. Nao e cargo de acesso.
- *
- * Existe porque `cargos` neste sistema e catalogo de ACESSO: ele e a chave primaria de
- * `permissoes_cargos`, e os dez valores reais sao Caixa, Tesouraria, Gerencia, Compras, DP, RH,
- * Fiscal, Diretor de Operacoes, Diretor Geral e Financeiro. Apontar o periodo de teste para la
- * significaria que registrar um PADEIRO exigiria criar um cargo de acesso chamado PADEIRO — e
- * qualquer regra de permissao por cargo passaria a enxerga-lo.
- *
- * Nada aqui se liga a `permissoes_cargos`, `permissoes_setores` ou `colaboradores_cargos`. A
- * separacao e o ponto: cargo de acesso responde "o que pode ver"; funcao operacional responde
- * "o que faz". Sao perguntas diferentes e listas diferentes.
- *
- * Nasce VAZIA. A planilha do RH tem 31 funcoes, mas elas sao evidencia sanitizada, nao carga: a
- * decisao de povoar a tabela e de quem opera, e vai por SQL revisado, nunca por seed automatico.
- */
-export const admissoesFuncoes = pgTable(
-  "admissoes_funcoes",
-  {
-    id: idUuid,
-    empresaId,
-    nome: text("nome").notNull(),
-    /**
-     * CBO — Classificacao Brasileira de Ocupacoes, 6 digitos.
-     *
-     * Opcional porque o codigo nem sempre e conhecido no momento do teste, e recusar a funcao por
-     * falta dele travaria o DP num dado que nao muda a decisao. Na planilha o CBO e DERIVADO do
-     * cargo por script; aqui ele e um atributo da funcao, que e o mesmo dado sem o gatilho.
-     */
-    cbo: text("cbo"),
-    /**
-     * Situacao da funcao no catalogo.
-     *
-     * Desativar tira a funcao das escolhas NOVAS sem quebrar teste antigo que ja aponta para ela —
-     * excluir apagaria a leitura do registro historico, que e o mesmo motivo pelo qual "Excluir" no
-     * periodo de teste cancela e arquiva em vez de apagar.
-     */
-    ativo: boolean("ativo").notNull().default(true),
-    criadoEm,
-    atualizadoEm
-  },
-  (table) => [
-    unique("admissoes_funcoes_empresa_nome_unica").on(table.empresaId, table.nome),
-    // Alvo da FK COMPOSTA de `admissoes_testes`.
-    unique("admissoes_funcoes_id_empresa_unica").on(table.id, table.empresaId),
-    check("admissoes_funcoes_nome_check", sql`length(btrim(${table.nome})) > 0`),
-    // Formato, nao existencia: o banco nao valida CBO contra a tabela do MTE.
-    check("admissoes_funcoes_cbo_check", sql`${table.cbo} is null or ${table.cbo} ~ '^[0-9]{6}$'`),
-    // Ordem do seletor: dentro da empresa, ativas primeiro, por nome.
-    index("admissoes_funcoes_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
-  ]
-);
-
 export const admissoesTestes = pgTable(
   "admissoes_testes",
   {
@@ -2057,12 +2066,12 @@ export const admissoesTestes = pgTable(
     canceladoEm: timestamp("cancelado_em", { withTimezone: true })
   },
   (table) => [
-    // FK COMPOSTA, e nao `references(() => admissoesFuncoes.id)`: assim o banco recusa funcao de
+    // FK COMPOSTA, e nao `references(() => funcoesOperacionais.id)`: assim o banco recusa funcao de
     // outra empresa por conta propria. A FK simples deixaria a garantia inteira nas maos do
     // servico — que e como `colaboradores.setor_id` virou um ponteiro estrangeiro representavel.
     foreignKey({
       columns: [table.funcaoId, table.empresaId],
-      foreignColumns: [admissoesFuncoes.id, admissoesFuncoes.empresaId],
+      foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
       name: "admissoes_testes_funcao_empresa_fk"
     }),
     // Alvo da FK composta vinda de `admissoes_testes_historico`.

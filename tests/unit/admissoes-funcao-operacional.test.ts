@@ -2,8 +2,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { admissoesFuncoes, admissoesTestes } from "@padaria/db/schema/admissoes";
-import { cargos } from "@padaria/db/schema/cadastro";
+import { admissoesTestes } from "@padaria/db/schema/admissoes";
+// As duas saem do MESMO barrel de propósito: é lado a lado que a diferença entre catálogo de acesso
+// e catálogo operacional precisa ficar visível para quem lê.
+import { cargos, funcoesOperacionais } from "@padaria/db/schema/cadastro";
 import {
   criarTestePayloadSchema,
   funcaoOpcaoDtoSchema,
@@ -157,12 +159,14 @@ describe("o contrato so aceita funcao operacional", () => {
 });
 
 describe("o schema separa as duas listas", () => {
-  const funcoes = getTableConfig(admissoesFuncoes);
+  const funcoes = getTableConfig(funcoesOperacionais);
   const testes = getTableConfig(admissoesTestes);
   const colunasDoTeste = testes.columns.map((coluna) => coluna.name);
 
-  it("admissoes_funcoes tem nome, CBO e situacao, por empresa", () => {
-    expect(funcoes.name).toBe("admissoes_funcoes");
+  it("funcoes_operacionais tem nome, CBO e situacao, por empresa", () => {
+    // O nome NAO leva prefixo de modulo: o catalogo nasceu em Admissoes mas nao pertence a ela, e
+    // `admissoes_funcoes` convidaria uma segunda lista de funcoes quando o cadastro precisar dela.
+    expect(funcoes.name).toBe("funcoes_operacionais");
     const colunas = funcoes.columns.map((coluna) => coluna.name);
     expect(colunas).toEqual(expect.arrayContaining(["empresa_id", "nome", "cbo", "ativo"]));
   });
@@ -172,9 +176,9 @@ describe("o schema separa as duas listas", () => {
     expect(colunasDoTeste).not.toContain("cargo_id");
   });
 
-  it("a FK do teste tem admissoes_funcoes como destino, composta com a empresa", () => {
+  it("a FK do teste tem funcoes_operacionais como destino, composta com a empresa", () => {
     const referencias = testes.foreignKeys.map((fk) => fk.reference());
-    const paraFuncao = referencias.find((r) => r.foreignTable === admissoesFuncoes);
+    const paraFuncao = referencias.find((r) => r.foreignTable === funcoesOperacionais);
     expect(paraFuncao).toBeDefined();
     // Composta: sem `empresa_id` na FK, apontar para funcao de outro tenant volta a ser representavel.
     expect(paraFuncao?.foreignColumns.map((c) => c.name).sort()).toEqual(["empresa_id", "id"]);
@@ -192,7 +196,7 @@ describe("o schema separa as duas listas", () => {
     expect(nomes).not.toContain("cargos_id_empresa_unica");
   });
 
-  it("admissoes_funcoes nao se liga a permissoes", () => {
+  it("funcoes_operacionais nao se liga a permissoes", () => {
     const destinos = funcoes.foreignKeys.map((fk) => fk.reference().foreignTable);
     expect(destinos).not.toContain(cargos);
   });
