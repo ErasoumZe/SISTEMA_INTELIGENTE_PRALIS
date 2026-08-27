@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import type { HistoricoProcessoDto, ProcessoDetalheDto } from "@padaria/shared";
+import type { DadosInternosDto, HistoricoProcessoDto, ProcessoDetalheDto, SituacaoExame } from "@padaria/shared";
 import {
   corStatusProcesso,
   explicacaoSituacaoProcesso,
   rotuloAcaoHistoricoProcesso,
+  rotuloIdentidadeProcesso,
+  rotuloOrigemProcesso,
   rotuloSituacaoProcesso,
   rotuloStatusProcesso
 } from "~/utils/admissoes";
+import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
 import { formatarDataHora } from "~/utils/formatacao";
 
 const props = defineProps<{
@@ -14,6 +17,7 @@ const props = defineProps<{
   processo: ProcessoDetalheDto | null;
   historico: HistoricoProcessoDto[];
   podeCancelar: boolean;
+  podeEditarInternos: boolean;
   processando: boolean;
 }>();
 
@@ -22,6 +26,8 @@ const emit = defineEmits<{
   (event: "cancelar"): void;
   (event: "fechar"): void;
   (event: "verTeste"): void;
+  (event: "salvarInternos", dados: Omit<DadosInternosDto, "exameExigeAtencao" | "exameAtualizadoPorNome" | "exameAtualizadoEm">): void;
+  (event: "atualizarExame", situacao: SituacaoExame): void;
 }>();
 
 const dialogCancelar = ref(false);
@@ -75,19 +81,53 @@ function confirmarCancelar() {
       </header>
 
       <dl class="painel-campos">
-        <dt>Origem</dt>
+        <dt>Candidato</dt>
         <dd>
-          Período de teste de <strong>{{ processo.testeNomeCompleto }}</strong>
-          <br />
-          <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
+          <strong>{{ rotuloIdentidadeProcesso(processo.nomeCompleto) }}</strong>
+          <!-- Sem nome no processo direto ate o candidato responder. Dizer isso e mais honesto que
+               um traco, e muito mais honesto que inventar identidade. -->
+          <span v-if="!processo.nomeCompleto" class="painel-derivacao">
+            O nome chega com a resposta do candidato.
+          </span>
         </dd>
 
+        <!-- ORIGEM: so leitura. Nao ha controle que a troque — ela se registra, nao se escolhe. -->
+        <dt>Origem</dt>
+        <dd>
+          {{ rotuloOrigemProcesso[processo.origem] }}
+          <template v-if="processo.testeId">
+            <br />
+            <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
+          </template>
+        </dd>
+
+        <dt>Função operacional</dt>
+        <dd>{{ processo.funcaoNome ?? "—" }}</dd>
+
+        <dt>Jornada / horário</dt>
+        <dd>{{ processo.jornadaHorario ?? "—" }}</dd>
       </dl>
 
-      <p class="painel-nota">
-        A admissão foi iniciada. Convite, formulário do candidato, documentos e vínculo com o cadastro
-        operacional ainda não existem — chegam nas próximas etapas.
-      </p>
+      <ProcessoInternosBloco
+        :internos="processo.internos"
+        :pode-editar="podeEditarInternos"
+        :processando="processando"
+        :em-andamento="emAndamento"
+        @salvar="(dados) => emit('salvarInternos', dados)"
+        @atualizar-exame="(situacao) => emit('atualizarExame', situacao)"
+      />
+
+      <!-- O convite fica DESABILITADO com o motivo escrito, e nao existe rota que o emita. Emitir um
+           link que ainda nao abre gastaria a confianca do DP na primeira tentativa. -->
+      <section class="painel-convite">
+        <h3>Convite ao candidato</h3>
+        <v-alert type="info" variant="tonal" density="compact">
+          <strong>Indisponível.</strong> O cadastro online do candidato depende de duas coisas que ainda
+          não existem: o aviso de privacidade aprovado, com versão registrada, e a política de
+          documentos (tipo real do arquivo, tamanho, antimalware, storage e descarte). Enquanto isso,
+          nenhum link é gerado — nem para teste.
+        </v-alert>
+      </section>
 
       <footer class="painel-acoes">
         <v-btn

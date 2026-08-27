@@ -111,6 +111,7 @@ type TipoPagina =
   | "tree"
   | "cadastro"
   | "admissoes_testes"
+  | "admissoes_processos"
   | "placeholder";
 
 const props = withDefaults(
@@ -271,7 +272,9 @@ const empresasDisponiveis = computed(() => empresas.value);
 // quando ha no maximo uma empresa. Estreitar a lista para a empresa derivada usa esse suporte que
 // ja existe. `empresasDisponiveis` continua intacto para os formularios de cadastro.
 const empresasDoShell = computed(() => {
-  if (tipoPagina.value !== "admissoes_testes") return empresasDisponiveis.value;
+  if (tipoPagina.value !== "admissoes_testes" && tipoPagina.value !== "admissoes_processos") {
+    return empresasDisponiveis.value;
+  }
   const empresaDerivada = sessao.value?.perfil?.empresaId ?? "";
   return empresasDisponiveis.value.filter((empresa) => empresa.id === empresaDerivada);
 });

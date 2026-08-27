@@ -172,6 +172,15 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "admissoes_testes_visualizar",
     icone: "mdi-account-clock"
   },
+  // ADM-003 V1A. UNICO item de menu do processo. A lista e consulta: a unica acao de criacao nela e
+  // "+ Novo cadastro", que abre a admissao direta. Efetivar teste continua criando o processo pela
+  // tela de Periodos de teste, sem passar por aqui.
+  admissoes_processos: {
+    id: "admissoes_processos",
+    titulo: "Processos de admissão",
+    permissao: "admissoes_processos_visualizar",
+    icone: "mdi-clipboard-account"
+  },
   folha_ponto: {
     id: "folha_ponto",
     titulo: "Folhas de ponto",

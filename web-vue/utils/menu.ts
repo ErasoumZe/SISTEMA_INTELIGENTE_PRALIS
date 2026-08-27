@@ -75,6 +75,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "clientes",
       "colaboradores",
       "admissoes_testes",
+      "admissoes_processos",
       "folha_ponto",
       "avaliacao_qualidade",
       "avaliacao_colaboradores",

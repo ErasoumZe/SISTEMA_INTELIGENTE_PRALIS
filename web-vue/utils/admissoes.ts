@@ -1,8 +1,10 @@
 import type {
   AcaoHistoricoProcesso,
   MotivoCancelamento,
+  OrigemProcesso,
   PrazoTeste,
   ResultadoTeste,
+  SituacaoExame,
   SituacaoProcesso,
   SituacaoTeste,
   StatusProcesso,
@@ -115,8 +117,39 @@ export const explicacaoSituacaoProcesso: Record<SituacaoProcesso, string> = {
 
 export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> = {
   criado: "Admissão iniciada",
-  cancelado: "Cancelado e arquivado"
+  cancelado: "Cancelado e arquivado",
+  internos_alterados: "Dados internos alterados",
+  exame_alterado: "Exame admissional atualizado"
 };
+
+/** De onde o processo nasceu. SÓ LEITURA — a origem se registra, não se escolhe. */
+export const rotuloOrigemProcesso: Record<OrigemProcesso, string> = {
+  teste_efetivado: "Período de teste efetivado",
+  admissao_direta: "Admissão direta"
+};
+
+/**
+ * O nome só existe quando veio de um período de teste. No processo direto ele chega depois, com a
+ * resposta do candidato — e até lá a tela diz isso, em vez de mostrar um traço ou inventar
+ * identidade para preencher o vazio.
+ */
+export function rotuloIdentidadeProcesso(nomeCompleto: string | null): string {
+  return nomeCompleto ?? "Aguardando dados do candidato";
+}
+
+export const rotuloSituacaoExame: Record<SituacaoExame, string> = {
+  pendente: "Pendente",
+  guia_entregue: "Guia entregue",
+  agendado: "Agendado",
+  realizado: "Realizado",
+  exige_acao: "Exige ação"
+};
+
+/** Enquanto não for "Realizado", o DP vê o aviso. A regra é do servidor; aqui só a cor. */
+export function corSituacaoExame(situacao: SituacaoExame) {
+  if (situacao === "realizado") return "success";
+  return situacao === "exige_acao" ? "error" : "warning";
+}
 
 export function corStatusProcesso(status: StatusProcesso) {
   return status === "iniciado" ? "primary" : "warning";

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type {
   AuthSession,
+  DadosInternosDto,
   FuncaoOpcaoDto,
+  SituacaoExame,
   HistoricoProcessoDto,
   ProcessoDetalheDto,
   HistoricoTesteDto,
@@ -34,6 +36,11 @@ const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_te
 const podeVerProcesso = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
 const podeCancelarProcesso = computed(() =>
   temPermissao(permissoes.value, "admissoes_processos_cancelar")
+);
+// ADM-003 V1A: o bloco interno e o MESMO em qualquer lugar que o painel abra. Nao ha segunda tela
+// nem segunda rota — o painel e um so, e a acao tambem.
+const podeEditarInternos = computed(() =>
+  temPermissao(permissoes.value, "admissoes_processos_editar_internos")
 );
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
@@ -260,10 +267,46 @@ function verProcessoDoTeste() {
 }
 
 function voltarAoTeste() {
-  if (!processo.value) return;
-  const testeId = processo.value.testeId;
+  // `testeId` e nulo na admissao direta (ADM-003 V1A). Daqui isso nao acontece — esta tela so abre
+  // processo vindo de teste —, mas o tipo agora admite nulo, e voltar para "lugar nenhum" seria uma
+  // tela em branco sem explicacao.
+  const testeId = processo.value?.testeId;
+  if (!testeId) return;
   processoAberto.value = false;
   void abrirDetalhe(testeId);
+}
+
+async function salvarInternosDoProcesso(
+  dados: Omit<DadosInternosDto, "exameExigeAtencao" | "exameAtualizadoPorNome" | "exameAtualizadoEm">
+) {
+  if (!processo.value) return;
+  processoProcessando.value = true;
+  try {
+    await apiPut(`/api/admissoes/processos/${processo.value.id}/internos`, dados);
+    notificar("Dados internos salvos.");
+    await abrirProcesso(processo.value.id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    processoProcessando.value = false;
+  }
+}
+
+async function atualizarExameDoProcesso(situacao: SituacaoExame) {
+  if (!processo.value) return;
+  processoProcessando.value = true;
+  try {
+    await apiPut(`/api/admissoes/processos/${processo.value.id}/exame`, {
+      versao: processo.value.internos.versao,
+      situacao
+    });
+    notificar("Exame admissional atualizado.");
+    await abrirProcesso(processo.value.id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    processoProcessando.value = false;
+  }
 }
 
 async function cancelarProcessoAdmissao() {
@@ -458,8 +501,11 @@ onMounted(async () => {
     :processo="processo"
     :historico="historicoProcesso"
     :pode-cancelar="podeCancelarProcesso"
+    :pode-editar-internos="podeEditarInternos"
     :processando="processoProcessando"
     @cancelar="cancelarProcessoAdmissao"
+    @salvar-internos="salvarInternosDoProcesso"
+    @atualizar-exame="atualizarExameDoProcesso"
     @fechar="processoAberto = false"
     @ver-teste="voltarAoTeste"
   />
