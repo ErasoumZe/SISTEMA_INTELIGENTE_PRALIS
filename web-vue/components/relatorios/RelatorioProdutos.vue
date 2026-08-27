@@ -36,7 +36,6 @@ watch(
 <template>
   <v-card>
     <v-card-title class="report-card-head">
-      <div class="text-h6">Produtos mais vendidos</div>
       <div class="text-body-2 text-muted">Relatório permitido para caixa e gerente.</div>
     </v-card-title>
     <v-card-text>

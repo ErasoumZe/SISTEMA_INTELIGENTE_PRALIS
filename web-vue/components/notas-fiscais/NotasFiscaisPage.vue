@@ -154,7 +154,6 @@ watch(filtroStatus, () => void buscar());
   <v-card>
     <v-card-title class="d-flex align-center justify-space-between ga-3 flex-wrap">
       <div>
-        <div class="text-h6">Notas fiscais</div>
         <div class="text-body-2 text-muted">NF-e importadas da contabilidade, para revisao.</div>
       </div>
       <div class="d-flex ga-2">

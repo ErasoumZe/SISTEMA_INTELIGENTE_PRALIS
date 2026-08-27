@@ -138,7 +138,7 @@ watch(() => props.empresaId, aplicarFiltros, { immediate: true });
 
 <template>
   <v-card>
-    <v-card-title>Histórico de caixas</v-card-title>
+    <!-- Titulo removido: o nome da tela ja e o cabecalho da pagina (VIS-10). -->
     <v-card-text>
       <v-row dense>
         <v-col cols="12" md="2">
