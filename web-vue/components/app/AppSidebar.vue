@@ -151,6 +151,7 @@ useItemAtivoVisivel();
                   <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
                        movimento liga o estado fechado ao aberto em vez de cortar. -->
                   <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
+                  <v-tooltip v-if="rail" activator="parent" location="right" :text="no.titulo" :transition="false" />
                 </button>
                 <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
                      e por isso os filhos ficam SEMPRE montados: com v-if nao ha o que animar.
@@ -168,6 +169,7 @@ useItemAtivoVisivel();
                       :tela-ativa="telaAtiva"
                       :desabilitada="telasDesabilitadasSet.has(tela.id)"
                       :motivo="textoTooltipTela(tela.id)"
+                      :rail="rail"
                       @navegar="emit('navegar')"
                     />
                   </div>
@@ -179,6 +181,7 @@ useItemAtivoVisivel();
                 :tela-ativa="telaAtiva"
                 :desabilitada="telasDesabilitadasSet.has(no.id)"
                 :motivo="textoTooltipTela(no.id)"
+                :rail="rail"
                 @navegar="emit('navegar')"
               />
             </template>
