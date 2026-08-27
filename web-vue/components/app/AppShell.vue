@@ -5,6 +5,7 @@ import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { agruparTelasMenu } from "~/utils/menu";
+import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -33,6 +34,7 @@ const rota = useRoute();
 // Verdade sobre "estou no painel" vem da ROTA, e nao de `telaAtiva`: o botao aponta para "/", entao
 // quem responde se ele ja esta no destino e o proprio caminho atual.
 const naHome = computed(() => rota.path === "/");
+const telaTemCategoria = computed(() => Boolean(CATEGORIA_POR_TELA[props.telaAtiva]));
 
 async function sair() {
   saindo.value = true;
@@ -376,7 +378,10 @@ onMounted(() => {
         </div>
       </header>
 
-      <div class="content-frame">
+      <!-- `tela-com-cor` e o unico sinal que o CSS tem de que a tela pertence a uma categoria: o
+           `--padaria-brand` e injetado em TODA tela (na neutra ele e a marca), entao ele nao serve
+           para distinguir. A lista de quem tem cor continua sendo so o `CATEGORIA_POR_TELA`. -->
+      <div class="content-frame" :class="{ 'tela-com-cor': telaTemCategoria }">
         <slot />
       </div>
     </v-main>

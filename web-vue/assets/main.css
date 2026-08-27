@@ -3305,3 +3305,77 @@ body {
   }
 }
 /* ===================== FIM VIS-E6c ===================== */
+
+/* ===================== INICIO VIS-E6d — A LISTAGEM GANHA A CARA NOVA (27/08/2026) =====================
+   Bloco aditivo e reversivel. E o item que alcanca ~25 telas: Entradas, Despesas, Transferencias,
+   Mercadorias, Retiradas, Contas a pagar, Pedidos e todos os cadastros.
+
+   O QUE JA ESTAVA CERTO e por isso NAO foi reescrito (69 §1.2 — bloco que nao muda nada e divida):
+     cabecalho da tabela  ja e --cx-surface-sunken + maiuscula pequena + --cx-tracking-wide +
+                          --cx-ink-soft + --cx-fs-micro, na camada de acabamento (linha ~2212)
+     linha                ja tem divisor so horizontal, sem grade vertical, sem zebra, e hover
+                          --cx-hover em --cx-dur-1
+     paginacao            ja tem contagem a esquerda e controles a direita por
+                          `flex-sm-row justify-space-between align-center`, e quebra em coluna no XS
+   Nenhum `!important` novo entrou, e nenhum dos existentes foi tocado.
+
+   O QUE MUDA:
+
+   1. FILTROS PERDEM A MOLDURA DURA. O painel usava `--marca-fundo`, que e alias de canvas: um
+      retangulo cor-de-fundo com borda dura dentro de uma pagina da mesma cor. Passa a falar a
+      lingua do card — superficie N1, hairline, e no claro a elevacao no lugar da borda pesada.
+      A faixa propria das acoes (`grid-column: 1 / -1`) FICA: e ela que impede a sobreposicao que
+      o VIS-01 investigou.
+
+   2. A CASCA DA TABELA VIRA CARD DE VERDADE. Ela tinha borda e raio mas nenhum fundo e nenhuma
+      elevacao — o fundo vinha da `.v-table` por baixo. Agora e N1 explicito, com `--cx-e-1` no
+      claro. No escuro NAO ganha sombra: sombra preta sobre #0f1318 nao levanta nada, e quem
+      separa la e o contorno (D-06, e o linear.app pelo mesmo motivo).
+
+   3. TODA TELA GANHA BRILHO — muda so o matiz. Com categoria, a cor dela, que chega por
+      `--padaria-brand` (injetado por tela pelo `aplicarTema`). Sem categoria, cinza de
+      `--cx-ink-soft`. O sinal que distingue e a classe `.tela-com-cor`, posta pelo AppShell a
+      partir do `CATEGORIA_POR_TELA`: o `--padaria-brand` sozinho nao serve, porque em tela neutra
+      ele tambem tem valor. O brilho fica no canto superior direito e esmaece aos 60% — o
+      cabecalho da tabela e as linhas vivem abaixo disso, entao ele nunca cai sobre texto.
+
+   FICA INTOCADO (67 §13.2): `overflow-x: auto`, `min-width: 680px`, Acoes `sticky right` no
+   mobile, barra de rolagem visivel, celula longa com `max-width: 340px`. Nunca `nowrap` global.
+   Nenhuma coluna adicionada, removida ou reordenada.
+   ======================================================================================================= */
+
+/* 1 · filtros na lingua do card */
+.content-frame .cadastro-filter-grid {
+  border-color: var(--cx-line-soft);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+:root[data-theme="dark"] .content-frame .cadastro-filter-grid {
+  box-shadow: none;
+}
+
+/* 2 · a casca da tabela vira card no nivel N1 */
+.content-frame .responsive-table-shell {
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+:root[data-theme="dark"] .content-frame .responsive-table-shell {
+  box-shadow: none;
+}
+
+/* 3 · brilho: cinza por padrao, cor da categoria quando a tela tem uma */
+.content-frame .responsive-table-shell {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+.content-frame.tela-com-cor .responsive-table-shell {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--padaria-brand, var(--cx-brand)) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* ===================== FIM VIS-E6d ===================== */
