@@ -88,15 +88,15 @@ checkpoint de 26/08).
 
 ## 3. Decisões tomadas
 
-| #          | Decisão                                                                             | Quando |
-| ---------- | ----------------------------------------------------------------------------------- | ------ |
-| **D-02**   | A Direção C do Stitch é a direção oficial, nos limites do §2 da proposta            | 26/08  |
-| **D-04**   | O título da tela vive **só na página**. O `.topbar-page-id` é removido              | 26/08  |
-| **D-01**   | **Noto Sans permanece.** Trocar fonte exige aprovação (`67` §8)                     | 26/08  |
-| **D-06**   | No claro o card se separa por elevação; no escuro por luminância + `--cx-line-soft` | 26/08  |
-| **D-COR**  | Zero hex novo. A home usa as seis categorias existentes                             | 27/08  |
-| **D-HOME** | A home não espelha o menu: até 6 favoritos por estrela + espaço de relatórios       | 27/08  |
-| **D-05**   | Filete de categoria no card: **suspenso**, acrescentaria lugar onde a cor aparece   | 26/08  |
+| #          | Decisão                                                                                                                                                                                                                 | Quando |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **D-02**   | A Direção C do Stitch é a direção oficial, nos limites do §2 da proposta                                                                                                                                                | 26/08  |
+| **D-04**   | O título da tela vive **só na página**. O `.topbar-page-id` é removido                                                                                                                                                  | 26/08  |
+| **D-01**   | **Noto Sans permanece.** Trocar fonte exige aprovação (`67` §8)                                                                                                                                                         | 26/08  |
+| **D-06**   | No claro o card se separa por elevação; no escuro por luminância + `--cx-line-soft`                                                                                                                                     | 26/08  |
+| **D-COR**  | Zero hex novo. A home usa as seis categorias existentes                                                                                                                                                                 | 27/08  |
+| **D-HOME** | A home não espelha o menu: até 6 favoritos por estrela + espaço de relatórios. **DECIDIDA, NÃO IMPLEMENTADA** — o E-1a entregou a home espelhando o menu com 32 atalhos, e a decisão é posterior à entrega. É a Etapa 2 | 27/08  |
+| **D-05**   | Filete de categoria no card: **suspenso**, acrescentaria lugar onde a cor aparece                                                                                                                                       | 26/08  |
 
 ### Abertas
 
@@ -124,6 +124,10 @@ existem espalhados — `CadastroTablePage.vue:66`, `PlaceholderPage.vue:11`,
 criada.
 
 ### Etapa 2 · Home definitiva · ~4h
+
+> **O que está no ar hoje NÃO é isto.** O E-1a entregou a home espelhando o menu com 32 atalhos
+> em lista. A D-HOME veio depois. Esta etapa é o que substitui aquilo — e o caminho antigo (a
+> lista de 32) tem de ser REMOVIDO, não empilhado ao lado dos blocos novos (`16`, regra-mãe).
 
 Evolui o E-1, que já entregou `AppAtalhosTelas.vue` (53 linhas) e `atalhos-home.ts` com teste.
 A lista de atalhos vira **grid de blocos quadrados** tipo springboard, um por categoria, com a
