@@ -25,6 +25,9 @@ const props = defineProps<{
   podeEditar: boolean;
   podeEncerrar: boolean;
   podeCancelar: boolean;
+  // ADM-002: permissao PROPRIA do processo. Sem ela o cartao nao aparece — oferecer um botao que
+  // responde 403 e pior que nao oferecer.
+  podeVerProcesso: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -175,8 +178,9 @@ function confirmarCancelar() {
       </section>
 
       <!-- ADM-002: o caminho de volta ao processo. So aparece quando ele existe, e ele so existe
-           quando o teste foi efetivado. Nao ha botao de "iniciar": efetivar JA iniciou. -->
-      <div v-if="teste.processoId" class="painel-admissao">
+           quando o teste foi efetivado. Nao ha botao de "iniciar": efetivar JA iniciou.
+           E o UNICO caminho ate o painel do processo: efetivar nao abre nada sozinho. -->
+      <div v-if="teste.processoId && podeVerProcesso" class="painel-admissao">
         <p class="mb-2"><strong>Admissão iniciada.</strong> O processo nasceu desta efetivação.</p>
         <v-btn variant="outlined" size="small" prepend-icon="mdi-arrow-right" @click="emit('verProcesso')">
           Ver processo de admissão

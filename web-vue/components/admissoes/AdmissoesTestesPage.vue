@@ -301,24 +301,22 @@ async function encerrar(resultado: ResultadoTeste) {
   if (!detalhe.value) return;
   detalheProcessando.value = true;
   try {
-    // A resposta traz o processo criado (ou o existente, se for repeticao). Levar direto a ele e o
-    // que faz "Efetivar para admissao" ser o caminho unico: nao ha um segundo passo manual.
+    // A resposta traz o processo criado (ou o existente, se for repeticao). Ela e o que faz o teste
+    // encerrado ja mostrar o cartao "Admissao iniciada" com o caminho para o processo.
     const resposta = await apiPost<{ processoId: string | null }>(
       `/api/admissoes/testes/${detalhe.value.id}/encerrar`,
       { versao: detalhe.value.versao, resultado }
     );
     await carregar();
-    if (resposta.processoId && podeVerProcesso.value) {
-      notificar("Teste efetivado. Admissão iniciada.");
-      detalheAberto.value = false;
-      await abrirProcesso(resposta.processoId);
-      return;
-    }
     notificar(
       resposta.processoId
         ? "Teste efetivado. Admissão iniciada."
         : "Período de teste encerrado."
     );
+    // Fica NO TESTE, sempre — inclusive para quem tem a permissao e para usuario_admin. Abrir o
+    // processo sozinho tirava a pessoa da tela sem ela ter pedido, e escondia justamente a
+    // confirmacao do que acabou de acontecer. Quem quiser ver o processo clica em
+    // "Ver processo de admissao", que segue sendo o unico caminho ate ele.
     await abrirDetalhe(detalhe.value.id);
   } catch (error) {
     tratarErro(error);
@@ -476,6 +474,7 @@ onMounted(async () => {
     :pode-editar="podeEditar"
     :pode-encerrar="podeEncerrar"
     :pode-cancelar="podeCancelar"
+    :pode-ver-processo="podeVerProcesso"
     @fechar="detalheAberto = false"
     @editar="abrirEdicao"
     @revelar-cpf="revelarCpf"
