@@ -2,10 +2,9 @@
 import type { AuthSession } from "@padaria/shared";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
-import AppMenuItem from "~/components/app/AppMenuItem.vue";
+import AppSidebar from "~/components/app/AppSidebar.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
-import { agruparTelasMenu } from "~/utils/menu";
-import { CATEGORIA_POR_SECAO, CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -35,15 +34,6 @@ const rota = useRoute();
 // quem responde se ele ja esta no destino e o proprio caminho atual.
 const naHome = computed(() => rota.path === "/");
 const telaTemCategoria = computed(() => Boolean(CATEGORIA_POR_TELA[props.telaAtiva]));
-
-// Custom property, como o `--item-cor` do AppMenuItem: a lista de quem tem cor continua sendo so o
-// `CATEGORIA_POR_SECAO`. Aponta para o TOKEN e nunca para o hex (licao do VIS-E2a: com hex a marca
-// ficava com a cor do claro tambem no escuro). Secao sem cor devolve `undefined` e o CSS cai no
-// neutro do `var(--grupo-cor, ...)` — mesma forma, mesmo tamanho, so a tinta muda.
-function estiloGrupo(titulo: string) {
-  const categoria = CATEGORIA_POR_SECAO[titulo];
-  return categoria ? { "--grupo-cor": `var(--cat-${categoria}-tinta)` } : undefined;
-}
 
 async function sair() {
   saindo.value = true;
@@ -75,37 +65,8 @@ const telaAtual = computed(
 );
 const nomeEmpresaCurto = computed(() => empresaAtiva.value?.nome ?? "Empresa");
 const caixaAberto = computed(() => props.caixaStatus?.caixaAberto ?? null);
-const telasDesabilitadasSet = computed(() => new Set(props.telasDesabilitadas ?? []));
 const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.value : true));
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
-
-const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
-
-// Categorias do menu (hoje so "Lancamentos"): abrem/fecham no clique. Fica aberta enquanto uma das
-// telas de dentro dela e a tela atual — quem esta em /despesas ve onde esta.
-const categoriasAbertas = ref<Record<string, boolean>>({});
-
-function categoriaAberta(id: string) {
-  return categoriasAbertas.value[id] ?? false;
-}
-
-function alternarCategoria(id: string) {
-  categoriasAbertas.value[id] = !categoriaAberta(id);
-}
-
-watch(
-  [() => props.telaAtiva, telasAgrupadas],
-  ([telaAtiva, grupos]) => {
-    for (const grupo of grupos) {
-      for (const no of grupo.itens) {
-        if (no.tipo === "categoria" && no.itens.some((tela) => tela.id === telaAtiva)) {
-          categoriasAbertas.value[no.id] = true;
-        }
-      }
-    }
-  },
-  { immediate: true }
-);
 
 // Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
 const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuário");
@@ -115,10 +76,6 @@ const iniciaisUsuario = computed(() => {
   const iniciais = (partes[0]?.[0] ?? "") + (partes.length > 1 ? (partes[partes.length - 1]?.[0] ?? "") : "");
   return iniciais.toUpperCase() || "U";
 });
-
-function textoTooltipTela(telaId: string) {
-  return props.motivosTelasDesabilitadas?.[telaId] ?? "Tela indisponivel para este perfil.";
-}
 
 // Agora quem rola e a area de conteudo (.padaria-main), nao a janela — entao o reset de scroll
 // do router nao se aplica. Ao trocar de tela, volta o conteudo ao topo.
@@ -146,10 +103,6 @@ function fecharDrawerMobile() {
   if (viewportMobile.value) drawerMobileAberto.value = false;
 }
 
-// O menu volta para onde o usuario o deixou. A causa (a casca REMONTA a cada rota, entao a
-// `.sidebar-nav` e outra e nasce em zero) e a medicao estao no proprio composable.
-useItemAtivoVisivel();
-
 onMounted(() => {
   // Breakpoints alinhados ao padrao responsivo: <=768 = drawer (overlay),
   // 769-1024 = rail (icones), >1024 = drawer fixo completo.
@@ -175,112 +128,28 @@ onMounted(() => {
 
 <template>
   <v-layout class="padaria-shell shell-mobills">
-    <v-navigation-drawer
-      :model-value="drawerAberto"
-      :permanent="!viewportMobile"
-      :temporary="viewportMobile"
-      width="300"
-      rail-width="72"
+    <!-- A coluna de navegacao vive no AppSidebar.vue desde o VIS-E7a. O que ficou aqui e o que e
+         da CASCA: layout, breakpoints, topbar. O estado do drawer continua nascendo aqui porque o
+         botao de menu da topbar tambem o alterna — dois donos para um estado seria a origem de um
+         descompasso, e o 67 §13.1 documenta o preco disso. -->
+    <AppSidebar
+      :telas="telas"
+      :tela-ativa="telaAtiva"
+      :telas-desabilitadas="telasDesabilitadas"
+      :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
+      :escuro="escuro"
+      :caixa-aberto="caixaAberto"
+      :aberto="drawerAberto"
       :rail="drawerRail"
-      class="padaria-sidebar"
-      :class="{ rail: drawerRail }"
-      @update:model-value="atualizarDrawerAberto"
+      :recolhido="drawerRecolhido"
+      :mobile="viewportMobile"
+      @update:aberto="atualizarDrawerAberto"
+      @alternar="alternarDrawer"
+      @navegar="fecharDrawerMobile"
     >
-      <div class="drawer-shell">
-        <div class="drawer-top">
-          <button
-            type="button"
-            class="sidebar-logo-row"
-            :title="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
-            :aria-label="drawerRecolhido ? 'Expandir menu' : 'Recolher menu'"
-            @click="alternarDrawer"
-          >
-            <img
-              :src="
-                drawerRail
-                  ? '/cicluz/cicluz-simbolo.png'
-                  : escuro
-                    ? '/cicluz/logo-cicluz-branca.png'
-                    : '/cicluz/logo-cicluz.png'
-              "
-              alt="Cicluz Gestão Profissional"
-              class="sidebar-logo"
-              width="220"
-              height="72"
-            />
-          </button>
-
-          <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->
-          <div class="sidebar-actions">
-            <slot name="actions" />
-          </div>
-
-          <slot name="caixa" :caixa-aberto="caixaAberto" />
-        </div>
-
-        <div class="sidebar-scroll-shell">
-          <nav class="sidebar-nav" aria-label="Menu principal">
-            <div
-              v-for="grupo in telasAgrupadas"
-              :key="grupo.titulo"
-              class="sidebar-group"
-              :style="estiloGrupo(grupo.titulo)"
-            >
-              <div class="sidebar-group-label">{{ grupo.titulo }}</div>
-              <template v-for="no in grupo.itens" :key="no.id">
-                <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->
-                <template v-if="no.tipo === 'categoria'">
-                  <button
-                    type="button"
-                    class="sidebar-item sidebar-categoria"
-                    :class="{ aberta: categoriaAberta(no.id) }"
-                    :aria-expanded="categoriaAberta(no.id)"
-                    :aria-controls="`sidebar-subitens-${no.id}`"
-                    @click="alternarCategoria(no.id)"
-                  >
-                    <v-icon :icon="no.icone" size="21" />
-                    <span>{{ no.titulo }}</span>
-                    <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
-                         movimento liga o estado fechado ao aberto em vez de cortar. -->
-                    <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
-                  </button>
-                  <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
-                       e por isso os filhos ficam SEMPRE montados: com v-if nao ha o que animar.
-                       Fechado, o CSS tira a visibilidade — some tambem da ordem do Tab. -->
-                  <div
-                    :id="`sidebar-subitens-${no.id}`"
-                    class="sidebar-subitens-wrap"
-                    :class="{ aberta: categoriaAberta(no.id) }"
-                  >
-                    <div class="sidebar-subitens">
-                      <AppMenuItem
-                        v-for="tela in no.itens"
-                        :key="tela.id"
-                        :tela="tela"
-                        :tela-ativa="telaAtiva"
-                        :desabilitada="telasDesabilitadasSet.has(tela.id)"
-                        :motivo="textoTooltipTela(tela.id)"
-                        @navegar="fecharDrawerMobile"
-                      />
-                    </div>
-                  </div>
-                </template>
-                <AppMenuItem
-                  v-else
-                  :tela="no"
-                  :tela-ativa="telaAtiva"
-                  :desabilitada="telasDesabilitadasSet.has(no.id)"
-                  :motivo="textoTooltipTela(no.id)"
-                  @navegar="fecharDrawerMobile"
-                />
-              </template>
-            </div>
-          </nav>
-        </div>
-        <!-- Logout unico: vive no menu do perfil do usuario (topbar). O botao "Sair" da sidebar foi
-             removido para nao existir dois caminhos para o mesmo ato (Definition of Done). -->
-      </div>
-    </v-navigation-drawer>
+      <template #actions><slot name="actions" /></template>
+      <template #caixa="{ caixaAberto: aberto }"><slot name="caixa" :caixa-aberto="aberto" /></template>
+    </AppSidebar>
 
     <v-main class="padaria-main">
       <header class="padaria-topbar">
