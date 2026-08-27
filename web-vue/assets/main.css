@@ -2972,3 +2972,68 @@ body {
   }
 }
 /* ===================== FIM VIS-E2a ===================== */
+
+/* ===================== INICIO VIS-E2b — FAIXA DE RELATORIOS (27/08/2026) =====================
+   anchor: linear.app/DESIGN.md — hairline, hierarquia por peso, nenhum numero gritando.
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par do AppBlocosRelatorio.vue.
+
+   Sao quatro blocos de MESMO peso de proposito: sao quatro relatorios pares, nao um protagonista
+   com tres coadjuvantes. Por isso o valor e discreto — a faixa de quatro numerones e justamente o
+   que a skill product-ui-design marca como "cara de IA". O rotulo vem antes do numero, em Noto
+   Sans e nao em monospace, e nenhum bloco tem ponto de status, brilho ou barra colorida.
+
+   Ausencia de dado sai como travessao, nao como zero: o `.vazio` apenas apaga um pouco a tinta,
+   sem inventar cor de aviso — nao ha erro nenhum em nao ter leitura ainda.
+   ============================================================================================ */
+.relatorios-faixa {
+  display: grid;
+  gap: var(--cx-sp-3);
+}
+.relatorios-faixa-titulo {
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+.relatorios-grade {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--cx-sp-4);
+}
+@media (width <= 768px) {
+  .relatorios-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--cx-sp-3);
+  }
+}
+
+.relatorio-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cx-sp-1);
+  min-height: 44px;
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface);
+}
+.relatorio-bloco-rotulo {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+}
+.relatorio-bloco-valor {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-h2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--cx-tracking-tight);
+  line-height: 1.1;
+}
+.relatorio-bloco-valor.vazio {
+  color: var(--cx-ink-soft);
+}
+/* ===================== FIM VIS-E2b ===================== */

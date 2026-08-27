@@ -1884,6 +1884,11 @@ const pageContext = computed(() => ({
   telasMenu: telasShell.value,
   telasMenuDesabilitadas: telasDesabilitadasMenu.value,
   motivosTelasMenuDesabilitadas: motivosTelasDesabilitadas.value,
+  // Blocos de relatorio do painel: a REGRA de quem ve o que vive em `utils/blocos-relatorio.ts`
+  // e recebe esta funcao. E o MESMO `temPermissao` que o workspace inteiro usa — nao nasce uma
+  // segunda fonte de verdade sobre permissao, e nenhuma permissao nova entra.
+  temPermissao,
+  notificacoesPainel: notificacoes.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
   // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
