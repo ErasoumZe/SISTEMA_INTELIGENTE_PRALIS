@@ -209,12 +209,9 @@ onMounted(async () => {
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 
     <div v-else class="d-grid ga-4">
-      <div class="d-flex flex-wrap align-center justify-space-between ga-3">
-        <div>
-          <h1 class="text-h5 font-weight-bold">Pedidos de reposicao</h1>
-          <p class="text-body-2 text-medium-emphasis">Compra/reposicao de estoque (manual e automatico).</p>
-        </div>
-      </div>
+      <!-- VIS-10: o cabecalho proprio desta pagina passa a usar o componente comum. Titulo e
+           subtitulo sao os mesmos que ja estavam aqui. -->
+      <AppCabecalhoTela titulo="Pedidos de reposicao" subtitulo="Compra/reposicao de estoque (manual e automatico)." />
 
       <v-card v-if="podeCriar" variant="tonal">
         <v-card-title class="text-subtitle-1">Gerar pedido automatico</v-card-title>

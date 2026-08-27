@@ -361,21 +361,21 @@ onMounted(async () => {
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 
     <div v-else class="d-grid ga-4">
-      <div class="d-flex flex-wrap align-center justify-space-between ga-3">
-        <div>
-          <h1 class="text-h5 font-weight-bold">Integrações</h1>
-          <div class="text-body-2 text-muted">Chaves, funcionamento e dicionário de conversão do PDV.</div>
-        </div>
-        <v-select
-          v-model="tipoSelecionado"
-          :items="integracoes"
-          item-title="nome"
-          item-value="tipo"
-          label="Integração"
-          hide-details
-          max-width="260"
-        />
-      </div>
+      <!-- VIS-10: cabecalho proprio passa a usar o componente comum. O seletor de tipo, que ja
+           vivia a direita do titulo, vai para o slot de acoes. Textos inalterados. -->
+      <AppCabecalhoTela titulo="Integrações" subtitulo="Chaves, funcionamento e dicionário de conversão do PDV.">
+        <template #acoes>
+          <v-select
+            v-model="tipoSelecionado"
+            :items="integracoes"
+            item-title="nome"
+            item-value="tipo"
+            label="Integração"
+            hide-details
+            max-width="260"
+          />
+        </template>
+      </AppCabecalhoTela>
 
       <v-tabs v-model="aba" density="comfortable">
         <v-tab value="chaves">Chaves</v-tab>

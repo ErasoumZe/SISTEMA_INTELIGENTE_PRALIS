@@ -5,6 +5,10 @@ import RelatorioVendasPage from "~/components/relatorios/RelatorioVendasPage.vue
 
 <template>
   <AppWorkspace tela-inicial="relatorio_vendas" tipo-pagina="relatorio_vendas" v-slot="ctx">
+    <!-- VIS-10: esta tela nunca teve cabecalho proprio — vivia do titulo da topbar, que saiu.
+         O nome vem do menu (`telaAtual`), sem texto novo. -->
+    <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? ''" />
+
     <RelatorioVendasPage
       :empresa-id="ctx.empresaId"
       :pdvs="ctx.opcoesEmpresa.pdvs"
