@@ -63,7 +63,7 @@ function temCor(id: string) {
                 aria-disabled="true"
                 :aria-label="`${tela.titulo} — ${tela.motivo}`"
               >
-                <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="28" /></span>
+                <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
                 <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
               </span>
             </template>
@@ -77,7 +77,7 @@ function temCor(id: string) {
             :class="{ 'com-cor': temCor(tela.id) }"
             :style="estiloCor(tela.id)"
           >
-            <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="28" /></span>
+            <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
             <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
           </NuxtLink>
         </template>

@@ -2804,13 +2804,15 @@ body {
    `CATEGORIA_POR_TELA`, e nao nasce uma copia aqui. Tela sem categoria fica neutra: decisao do
    67 §3, nao esquecimento. Zero hex neste arquivo.
 
-   O VIDRO no titulo de secao so se justifica porque ele e STICKY: vira chrome de verdade, com o
-   conteudo passando por baixo. O 67 §10 reserva `--cx-chrome` ao chrome e proibe vidro em cartao
-   de conteudo — um titulo fixo que o conteudo atravessa cumpre o requisito; um titulo parado
-   seria decoracao e estaria proibido. O `@supports` de fallback e obrigatorio e esta abaixo.
+   O TITULO DE SECAO nao tem vidro nem fundo. A versao anterior era uma barra que atravessava a
+   tela; virou o rotulo puro, alinhado a esquerda. Sem barra ele deixa de ser chrome, e o 67 §10
+   reserva `--cx-chrome` ao chrome — vidro num rotulo parado seria decoracao.
 
-   Grade: 5 -> 4 -> 3 -> 2, sem pular passo (67 §13.4). Media query propria porque o `md` do
-   Vuetify so ativa a 960px e o tablet ficaria sem degrau.
+   A GRADE NAO CONTA COLUNAS, define TAMANHO. Contar coluna com `aspect-ratio: 1/1` fazia o bloco
+   inflar para ocupar a sobra: em 1440 menos a sidebar dava ~290px de lado, um cartaz. A
+   referencia e springboard, onde o icone tem ~40px. Com `auto-fill` + `minmax` cabem quantos
+   couberem e o bloco nunca cresce alem do necessario — e um usuario com duas telas ve dois
+   blocos pequenos, nao dois cartazes com um deserto ao lado.
    ========================================================================================== */
 .inicio-painel {
   display: grid;
@@ -2824,45 +2826,23 @@ body {
 }
 
 .atalhos-grupo-titulo {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0 0 var(--cx-sp-4);
-  padding: var(--cx-sp-2) var(--cx-sp-3);
-  border-radius: var(--cx-r-sm);
-  background: var(--cx-chrome);
-  backdrop-filter: var(--cx-chrome-blur);
-  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  margin: 0 0 var(--cx-sp-3);
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-micro);
   font-weight: 700;
   letter-spacing: var(--cx-tracking-wide);
   text-transform: uppercase;
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .atalhos-grupo-titulo {
-    background: var(--cx-surface);
-  }
-}
 
 .atalhos-grade {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: var(--cx-sp-4);
 }
-@media (width <= 1240px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-@media (width <= 1024px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
+/* Em tela estreita o piso cede para caber tres por linha em 390px, sem virar bloco gigante. */
 @media (width <= 768px) {
   .atalhos-grade {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
     gap: var(--cx-sp-3);
   }
 }
@@ -2872,10 +2852,10 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--cx-sp-3);
+  gap: var(--cx-sp-2);
   aspect-ratio: 1 / 1;
   min-height: 44px;
-  padding: var(--cx-sp-4);
+  padding: var(--cx-sp-3);
   border: 1px solid var(--cx-line-soft);
   border-radius: var(--cx-r-lg);
   background: var(--cx-surface);
@@ -2894,8 +2874,8 @@ body {
 .atalho-bloco-icone {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--cx-r-md);
   background: var(--cx-surface-sunken);
   color: var(--cx-ink-soft);
@@ -2905,11 +2885,16 @@ body {
   color: var(--bloco-cor);
 }
 .atalho-bloco-rotulo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   min-width: 0;
+  overflow: hidden;
   font-size: var(--cx-fs-caption);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.25;
   overflow-wrap: anywhere;
+  text-overflow: ellipsis;
 }
 
 /* Os quatro estados do 67 §9. */
