@@ -2731,127 +2731,6 @@ body {
 }
 /* ===================== FIM VIS-08 ===================== */
 
-/* ===================== INICIO VIS-E1a — ATALHOS DO PAINEL (27/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-   Par do componente AppAtalhosTelas.vue; um nao serve sem o outro.
-
-   A home era tela orfa: o unico `router.push("/")` do sistema esta em login.vue:26 e o logo da
-   sidebar chama `alternarDrawer`, nao navega. Depois de sair do painel nao havia como voltar sem
-   deslogar ou editar a URL. E o painel so dizia "selecione uma tela no menu" — nao fazia nada.
-
-   A grade nao usa os breakpoints do Vuetify DE PROPOSITO: o `md` dele so ativa a 960px, entao
-   tablet (768-960) ficaria sem passo proprio e a progressao pularia de 3 para 1, o que o 67 §13.4
-   proibe. Com media query propria a progressao e 5 -> 3 -> 2 -> 1.
-
-   Cartao NEUTRO. A cor de categoria entra so no icone, pelo `:color` do v-icon, que le o mesmo
-   `tela.cor` que o menu ja usa — nao e lugar novo de cor, e a mesma tela pintando o mesmo icone.
-   Superficie, borda e rotulo seguem neutros: a lista de onde a categoria aparece e regra do 67 §3,
-   e ampliar essa lista foi o que suspendeu o VIS-11 (D-05).
-
-   `cursor: not-allowed` aqui FUNCIONA, ao contrario do caso do VIS-04 (D-VIS-04a): o cartao
-   desabilitado e um `<span>`, nao um `.v-btn--disabled` com `pointer-events: none`, entao o
-   cursor chega ao elemento.
-   ============================================================================================ */
-
-/* Com atalhos, o painel deixa de ser uma tela de recado centralizada e passa a ter conteudo:
-   comeca no topo e ocupa a largura. `:has()` ja e usado neste arquivo (linha 1316). */
-.inicio-vazio:has(.atalhos-home) {
-  align-content: start;
-  justify-items: stretch;
-  gap: var(--cx-sp-7);
-}
-
-.atalhos-home {
-  display: grid;
-  gap: var(--cx-sp-7);
-}
-
-/* Mesmo tratamento tipografico do rotulo de grupo do menu: o painel repete a organizacao de la. */
-.atalhos-grupo-titulo {
-  margin-bottom: var(--cx-sp-3);
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-wide);
-  text-transform: uppercase;
-}
-
-.atalhos-grade {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--cx-sp-4);
-}
-@media (width <= 1024px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (width <= 768px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (width <= 480px) {
-  .atalhos-grade {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.atalho-card {
-  display: flex;
-  align-items: center;
-  gap: var(--cx-sp-3);
-  min-height: 44px;
-  padding: var(--cx-sp-4);
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-md);
-  background: var(--cx-surface);
-  box-shadow: var(--cx-e-1);
-  color: var(--cx-ink);
-  font-size: var(--cx-fs-body);
-  font-weight: 600;
-  text-decoration: none;
-  transition:
-    background var(--cx-dur-1) var(--cx-ease),
-    border-color var(--cx-dur-1) var(--cx-ease),
-    box-shadow var(--cx-dur-2) var(--cx-ease);
-}
-.atalho-rotulo {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Os quatro estados do 67 §9. */
-.atalho-card:hover:not(.disabled) {
-  border-color: var(--cx-line);
-  background: var(--cx-hover);
-  box-shadow: var(--cx-e-2);
-}
-.atalho-card:active:not(.disabled) {
-  background: var(--cx-pressed);
-  transform: translateY(1px);
-}
-.atalho-card:focus-visible {
-  outline: 2px solid var(--cx-focus);
-  outline-offset: 2px;
-}
-.atalho-card.disabled {
-  box-shadow: none;
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* Duracao zero nao desfaz deslocamento ja aplicado (67 §7); a excecao vive AQUI para o bloco
-   continuar reversivel por delecao, sem editar a lista do reset global. */
-@media (prefers-reduced-motion: reduce) {
-  .atalho-card:active:not(.disabled) {
-    transform: none;
-  }
-}
-/* ===================== FIM VIS-E1a ===================== */
-
 /* ===================== INICIO VIS-E1b — BOTAO DE VOLTAR AO PAINEL (27/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
 
@@ -2940,3 +2819,156 @@ body {
   }
 }
 /* ===================== FIM VIS-10 ===================== */
+
+/* ===================== INICIO VIS-E2a — PAINEL EM BLOCOS (27/08/2026) =====================
+   anchor: springboard do iPhone — quadrado, icone grande em cima, rotulo curto embaixo, alvo
+   inteiro clicavel. diverge: sem brilho, sem sombra colorida, sem contador; a cor vem das seis
+   categorias que o sistema ja usa.
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   SUBSTITUI o VIS-E1a, que foi REMOVIDO no mesmo commit. A versao em lista nao ficou escondida
+   nem atras de flag: saiu (16, regra-mae). Em 1440 ela deixava metade da tela vazia.
+
+   D-HOME (27/08): a home nao espelha o menu em lista. D-COR: a cor vem das seis categorias.
+
+   A COR entra por custom property (`--bloco-cor`, `--bloco-cor-soft`) descida pelo componente,
+   como o AppMenuItem ja faz com `--item-cor` — a lista de quem tem cor continua sendo so o
+   `CATEGORIA_POR_TELA`, e nao nasce uma copia aqui. Tela sem categoria fica neutra: decisao do
+   67 §3, nao esquecimento. Zero hex neste arquivo.
+
+   O VIDRO no titulo de secao so se justifica porque ele e STICKY: vira chrome de verdade, com o
+   conteudo passando por baixo. O 67 §10 reserva `--cx-chrome` ao chrome e proibe vidro em cartao
+   de conteudo — um titulo fixo que o conteudo atravessa cumpre o requisito; um titulo parado
+   seria decoracao e estaria proibido. O `@supports` de fallback e obrigatorio e esta abaixo.
+
+   Grade: 5 -> 4 -> 3 -> 2, sem pular passo (67 §13.4). Media query propria porque o `md` do
+   Vuetify so ativa a 960px e o tablet ficaria sem degrau.
+   ========================================================================================== */
+.inicio-painel {
+  display: grid;
+  gap: var(--cx-sp-6);
+  align-content: start;
+}
+
+.atalhos-home {
+  display: grid;
+  gap: var(--cx-sp-7);
+}
+
+.atalhos-grupo-titulo {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 var(--cx-sp-4);
+  padding: var(--cx-sp-2) var(--cx-sp-3);
+  border-radius: var(--cx-r-sm);
+  background: var(--cx-chrome);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .atalhos-grupo-titulo {
+    background: var(--cx-surface);
+  }
+}
+
+.atalhos-grade {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--cx-sp-4);
+}
+@media (width <= 1240px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (width <= 1024px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (width <= 768px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--cx-sp-3);
+  }
+}
+
+.atalho-bloco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cx-sp-3);
+  aspect-ratio: 1 / 1;
+  min-height: 44px;
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+  color: var(--cx-ink);
+  text-align: center;
+  text-decoration: none;
+  transition:
+    border-color var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-2) var(--cx-ease),
+    background var(--cx-dur-1) var(--cx-ease);
+}
+
+/* O icone mora numa pastilha tingida pela categoria; o rotulo fica na tinta neutra, para o
+   contraste nao depender da cor (67 §11) e o quadro nao virar bloco colorido. */
+.atalho-bloco-icone {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+}
+.atalho-bloco.com-cor .atalho-bloco-icone {
+  background: var(--bloco-cor-soft);
+  color: var(--bloco-cor);
+}
+.atalho-bloco-rotulo {
+  min-width: 0;
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Os quatro estados do 67 §9. */
+.atalho-bloco:hover:not(.disabled) {
+  border-color: var(--cx-line);
+  background: var(--cx-hover);
+  box-shadow: var(--cx-e-2);
+}
+.atalho-bloco:active:not(.disabled) {
+  background: var(--cx-pressed);
+  transform: translateY(1px);
+}
+.atalho-bloco:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+.atalho-bloco.disabled {
+  box-shadow: none;
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Duracao zero nao desfaz deslocamento ja aplicado (67 §7); a excecao vive AQUI para o bloco
+   continuar reversivel por delecao. */
+@media (prefers-reduced-motion: reduce) {
+  .atalho-bloco:active:not(.disabled) {
+    transform: none;
+  }
+}
+/* ===================== FIM VIS-E2a ===================== */

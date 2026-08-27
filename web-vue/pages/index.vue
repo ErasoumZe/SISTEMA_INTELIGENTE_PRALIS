@@ -1,32 +1,28 @@
 <script setup lang="ts">
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
+import AppCabecalhoTela from "~/components/app/AppCabecalhoTela.vue";
 import AppAtalhosTelas from "~/components/app/AppAtalhosTelas.vue";
-
-// So LE o estado do tema — `inicializar`/`alternar` continuam sendo do AppShell, que e quem
-// aplica. `escuro` vem de `useState`, entao e o mesmo valor, nao uma segunda cópia.
-const { escuro } = useModoEscuro();
 </script>
 
 <template>
   <!-- O slot padrao do AppWorkspace ja entrega o `pageContext`; daqui saem so as tres chaves que
        os atalhos consomem, sem recalcular permissao nenhuma. -->
   <AppWorkspace v-slot="ctx" tipo-pagina="inicio">
-    <section class="inicio-vazio">
-      <div class="inicio-hero">
-        <!-- A logo clara era fixa aqui: no tema escuro ela aparecia apagada sobre o cartao escuro.
-             Mesmo padrao do AppShell.vue:186-189, que ja resolvia isso — copiado, nao reinventado. -->
-        <img
-          :src="escuro ? '/cicluz/logo-cicluz-branca.png' : '/cicluz/logo-cicluz.png'"
-          alt="Cicluz Gestão Profissional"
-          class="inicio-hero-logo"
-          width="300"
-          height="98"
-        />
-        <h1>Bem-vindo ao Painel</h1>
-      </div>
-      <!-- "Selecione uma tela no menu lateral" e "Comece pelo menu a esquerda" sairam daqui: com os
-           atalhos na propria tela, elas deixaram de ser dica e viraram instrucao errada. Manter as
-           duas seria empilhar caminho antigo sobre caminho novo (regra-mae do 16). -->
+    <section class="inicio-painel">
+      <!-- O cartao de hero (logo grande + "Bem-vindo ao Painel" numa caixa com luz de fundo) SAIU.
+           Tres motivos, nesta ordem:
+           1. a logo ja vive na sidebar — era a marca duas vezes na mesma tela, e o item 2 do DoD
+              proibe segundo caminho para o mesmo ato;
+           2. com os blocos preenchendo a tela o cartao virou ocupacao de espaco sem funcao: em
+              390px ele empurrava o conteudo real para baixo da dobra;
+           3. depois do VIS-10 as 27 telas abrem com o MESMO cabecalho. A home tinha um formato
+              proprio, e um lugar destoando e o que faz o conjunto parecer inacabado.
+           O TEXTO nao foi inventado nem trocado: "Bem-vindo ao Painel" e o mesmo `<h1>` que estava
+           no hero, agora no cabecalho comum.
+           Consequencia assumida: o conserto do VIS-13 (logo certa por tema) morre junto com o
+           elemento que ele consertava. Estava certo enquanto o hero existiu. -->
+      <AppCabecalhoTela titulo="Bem-vindo ao Painel" />
+
       <AppAtalhosTelas
         :telas="ctx.telasMenu"
         :desabilitadas="ctx.telasMenuDesabilitadas"
