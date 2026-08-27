@@ -1309,6 +1309,26 @@ acréscimo, com os dois, tolerância zero, a prova de que taxa não entra na fó
 e de acréscimo **recusam explicitamente a soma antiga**: se alguém voltar a comparar com o subtotal,
 eles ficam vermelhos na hora.
 
+## 18-E. Encerramento — 27/08/2026
+
+|                       |                                                                     |
+| --------------------- | ------------------------------------------------------------------- |
+| PR                    | **#164**, mesclada                                                  |
+| Merge commit          | **`3a59994aa6003bfda919b739c6d228fb8241c233`**                      |
+| HEAD auditado         | `cd9c345` — ancestral de `origin/main`, alcançável pelo próprio SHA |
+| CI da `main` no merge | **verde** nos dois jobs                                             |
+| Issue #152            | **`CLOSED` (`COMPLETED`)** em 27/08 12:55 UTC                       |
+
+Merge commit de propósito — nem squash nem rebase — para que o HEAD auditado continue na
+ancestralidade da `main`.
+
+> ⚠️ **A migration `0033` está apenas VERSIONADA. Não foi aplicada em produção.** Estar na `main`
+> não a executa. Deploy e janela de migration ficaram **fora** deste encerramento e dependem do
+> runbook do §18-D: três `CREATE INDEX` não-concorrentes e dois `ADD CONSTRAINT CHECK` bloqueiam
+> escrita em `vendas_pagamentos` durante a validação.
+
+As três dívidas do §18-D seguem abertas e nomeadas — fechar a issue não as fecha.
+
 ## 18-D. Dívidas registradas, sem migration nova
 
 Achados das quatro revisões que **não** bloqueiam a entrega e ficam nomeados para não voltarem como
