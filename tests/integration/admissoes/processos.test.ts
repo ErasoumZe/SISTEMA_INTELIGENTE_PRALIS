@@ -3,7 +3,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
 
 /**
  * ADM-002 V0 — os P0 do processo de admissao.
@@ -332,5 +332,282 @@ describe("admissoes processos integration", () => {
     const aposCancelar = await consultarUm<{ n: number }>(`select count(*)::int as n from admissoes_processos_historico where processo_id = '${processoId}'`);
     if (!aposCancelar) throw new Error("consulta sem linha");
     expect(aposCancelar.n).toBe(2);
+  });
+  // ============================================================ ADM-003 V1A: admissao direta
+  //
+  // A partir daqui, os casos da segunda origem. Eles convivem com os de cima de proposito: o teste
+  // que garante que a ADM-002 nao regrediu tem de morar ao lado do que a estende.
+
+  /** Cria um processo de admissao DIRETA e devolve o id. */
+  async function criarDireta(cookie: string, jornada = "Seg a sex, 08:00 as 17:00") {
+    return contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/processos",
+      headers: { cookie },
+      payload: {
+        funcaoId: idsTeste.funcaoOperacionalA,
+        jornadaHorario: jornada,
+        dataAdmissao: "2026-09-15"
+      }
+    });
+  }
+
+  it("P0-V1A Deve_CriarProcessoSemTeste_Quando_AdmissaoDireta", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const linha = await consultarUm<{ origem: string; teste_id: string | null; funcao_id: string | null }>(
+      `select origem, teste_id, funcao_id from admissoes_processos where id = '${id}'`
+    );
+    expect(linha?.origem).toBe("admissao_direta");
+    // Sem teste, e com funcao PROPRIA: e a origem direta inteira em duas colunas.
+    expect(linha?.teste_id).toBeNull();
+    expect(linha?.funcao_id).toBe(idsTeste.funcaoOperacionalA);
+
+    // O bloco interno nasce junto, ja em `pendente` — a tela nunca precisa decidir entre criar e editar.
+    const internos = await consultarUm<{ exame_situacao: string; data_admissao: string }>(
+      `select exame_situacao, data_admissao::text from admissoes_processos_internos where processo_id = '${id}'`
+    );
+    expect(internos?.exame_situacao).toBe("pendente");
+    expect(internos?.data_admissao).toBe("2026-09-15");
+  });
+
+  it("P0-V1A Deve_IgnorarTesteId_Quando_EnviadoNaCriacaoDireta", async () => {
+    // O contrato nao conhece `testeId`. Manda-lo nao cria processo de origem teste por engano — e
+    // isso importa porque e a diferenca entre "o servico confere" e "e impossivel pedir".
+    const teste = await criarTeste(cookieDp, "11122233396");
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/processos",
+      headers: { cookie: cookieDp },
+      payload: {
+        funcaoId: idsTeste.funcaoOperacionalA,
+        jornadaHorario: "Seg a sex",
+        dataAdmissao: "2026-09-15",
+        testeId: teste.id
+      }
+    });
+    assertOk(criado, 201);
+    const linha = await consultarUm<{ origem: string; teste_id: string | null }>(
+      `select origem, teste_id from admissoes_processos where id = '${criado.json().data.id}'`
+    );
+    expect(linha?.origem).toBe("admissao_direta");
+    expect(linha?.teste_id).toBeNull();
+  });
+
+  it("P0-V1A Deve_RecusarNoBanco_Quando_OrigemForIncoerente", async () => {
+    // A coerencia mora no BANCO. Sem o CHECK, um bug no servico criaria a segunda fonte de funcao —
+    // e a partir dai "de onde vem a jornada?" passaria a ter duas respostas.
+    const teste = await criarTeste(cookieDp, "44455566619");
+    const efetivado = await efetivar(cookieDp, teste.id, teste.versao);
+    assertOk(efetivado);
+    const processoId = efetivado.json().data.processoId;
+
+    // Processo vindo de teste NAO pode ganhar funcao propria.
+    await expect(
+      executarSql(
+        `update admissoes_processos set funcao_id = '${idsTeste.funcaoOperacionalA}' where id = '${processoId}'`
+      )
+    ).rejects.toThrow();
+
+    // E processo direto nao pode perder a dele.
+    const direto = await criarDireta(cookieDp);
+    assertOk(direto, 201);
+    await expect(
+      executarSql(`update admissoes_processos set funcao_id = null where id = '${direto.json().data.id}'`)
+    ).rejects.toThrow();
+  });
+
+  it("P0-V1A Deve_MarcarOrigemTeste_Quando_EfetivacaoCriaOProcesso", async () => {
+    // A ADM-002 nao regride: efetivar continua criando o processo, agora com a origem escrita.
+    const teste = await criarTeste(cookieDp, "77788899941");
+    const efetivado = await efetivar(cookieDp, teste.id, teste.versao);
+    assertOk(efetivado);
+
+    const linha = await consultarUm<{ origem: string; funcao_id: string | null }>(
+      `select origem, funcao_id from admissoes_processos where id = '${efetivado.json().data.processoId}'`
+    );
+    expect(linha?.origem).toBe("teste_efetivado");
+    // Funcao NAO e recopiada: ela mora no teste, e o CHECK garante que aqui fique nula.
+    expect(linha?.funcao_id).toBeNull();
+  });
+
+  it("P0-V1A Deve_ListarAsDuasOrigens_Quando_ConsultarProcessos", async () => {
+    const lista = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/processos?page=1&pageSize=50",
+      headers: { cookie: cookieDp }
+    });
+    assertOk(lista);
+    const itens = lista.json().data as { origem: string; nomeCompleto: string | null }[];
+    expect(itens.some((i) => i.origem === "teste_efetivado")).toBe(true);
+
+    const diretos = itens.filter((i) => i.origem === "admissao_direta");
+    expect(diretos.length).toBeGreaterThan(0);
+    // O processo direto chega SEM nome, e e assim que tem de ser ate o candidato responder.
+    expect(diretos.every((i) => i.nomeCompleto === null)).toBe(true);
+  });
+
+  it("P0-V1A Deve_Responder403_Quando_SemPermissaoDeCriarOuEditarInternos", async () => {
+    const direto = await criarDireta(cookieDp);
+    assertOk(direto, 201);
+    const processoId = direto.json().data.id;
+
+    // Ator `usuario_comum` com lista VAZIA, e alvo EXISTENTE da mesma empresa: e o unico arranjo que
+    // prova autorizacao. O perfil admin nao serve — `usuario_admin` recebe tudo no perfil.service.
+    const criar = await criarDireta(cookieSemPermissao);
+    expect(criar.statusCode).toBe(403);
+
+    const internos = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/internos`,
+      headers: { cookie: cookieSemPermissao },
+      payload: { versao: 1, ctpsNumero: "123" }
+    });
+    expect(internos.statusCode).toBe(403);
+
+    const exame = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/exame`,
+      headers: { cookie: cookieSemPermissao },
+      payload: { versao: 1, situacao: "realizado" }
+    });
+    expect(exame.statusCode).toBe(403);
+
+    const linha = await consultarUm<{ exame_situacao: string }>(
+      `select exame_situacao from admissoes_processos_internos where processo_id = '${processoId}'`
+    );
+    expect(linha?.exame_situacao).toBe("pendente");
+  });
+
+  it("P0-V1A Deve_PercorrerAsCincoSituacoesDoExame_E_RecusarUmaSexta", async () => {
+    const direto = await criarDireta(cookieDp);
+    assertOk(direto, 201);
+    const processoId = direto.json().data.id;
+
+    let versao = 1;
+    for (const situacao of ["guia_entregue", "agendado", "exige_acao", "realizado"]) {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/admissoes/processos/${processoId}/exame`,
+        headers: { cookie: cookieDp },
+        payload: { versao, situacao }
+      });
+      expect(resposta.statusCode, situacao).toBe(204);
+      versao += 1;
+    }
+
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoId}`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(detalhe);
+    const internos = detalhe.json().data.internos;
+    expect(internos.exameSituacao).toBe("realizado");
+    // O alerta e DERIVADO: some sozinho quando o exame fica realizado.
+    expect(internos.exameExigeAtencao).toBe(false);
+
+    // Um sexto valor e recusado pelo BANCO, nao so pelo Zod.
+    await expect(
+      executarSql(
+        `update admissoes_processos_internos set exame_situacao = 'aguardando_dp' where processo_id = '${processoId}'`
+      )
+    ).rejects.toThrow();
+  });
+
+  it("P0-V1A Deve_Recusar_Quando_VersaoDosInternosEstiverVelha", async () => {
+    const direto = await criarDireta(cookieDp);
+    assertOk(direto, 201);
+    const processoId = direto.json().data.id;
+
+    const primeira = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/internos`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 1, ctpsNumero: "0001234", ctpsUf: "SP", pisPasepNit: "12345678901" }
+    });
+    expect(primeira.statusCode).toBe(204);
+
+    // A versao do BLOCO INTERNO, nao a do processo: editar CTPS nao e editar o processo.
+    const repetida = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/internos`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 1, ctpsNumero: "0009999" }
+    });
+    expect(repetida.statusCode).toBe(409);
+
+    const linha = await consultarUm<{ ctps_numero: string }>(
+      `select ctps_numero from admissoes_processos_internos where processo_id = '${processoId}'`
+    );
+    expect(linha?.ctps_numero).toBe("0001234");
+  });
+
+  it("P0-V1A Deve_GravarTrilha_Quando_InternosOuExameMudam", async () => {
+    const direto = await criarDireta(cookieDp);
+    assertOk(direto, 201);
+    const processoId = direto.json().data.id;
+
+    await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/internos`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 1, observacoesRh: "anotacao interna" }
+    });
+    await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/exame`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 2, situacao: "agendado" }
+    });
+
+    const eventos = await consultarTodos<{ acao: string; campos_alterados: string[] }>(
+      `select acao, campos_alterados from admissoes_processos_historico where processo_id = '${processoId}' order by ocorrido_em`
+    );
+    expect(eventos.map((e) => e.acao)).toEqual(["criado", "internos_alterados", "exame_alterado"]);
+    // NOMES de campo, nunca valores: o conteudo nao pode ser reconstruido a partir da trilha.
+    expect(JSON.stringify(eventos)).not.toContain("anotacao interna");
+    expect(eventos.at(-1)?.campos_alterados).toEqual(["exameSituacao"]);
+  });
+
+  it("P0-V1A Deve_Responder404_Quando_ProcessoDiretoForDeOutraEmpresa", async () => {
+    const funcaoB = "33333333-3333-4333-8333-333333330501";
+    const processoB = "33333333-3333-4333-8333-333333330502";
+    await executarSql(
+      "insert into funcoes_operacionais (id, empresa_id, nome) values ($1, $2, $3) on conflict do nothing",
+      [funcaoB, idsTeste.empresaB, "Funcao Direta B"]
+    );
+    await executarSql(
+      `insert into admissoes_processos
+         (id, empresa_id, origem, teste_id, funcao_id, jornada_horario, criado_por, atualizado_por)
+       select $1, $2, 'admissao_direta', null, $3, 'Seg a sex', p.usuario_id, p.usuario_id
+         from perfis_usuarios p limit 1`,
+      [processoB, idsTeste.empresaB, funcaoB]
+    );
+
+    for (const rota of [
+      { method: "GET" as const, url: `/api/admissoes/processos/${processoB}` },
+      { method: "PUT" as const, url: `/api/admissoes/processos/${processoB}/internos`, payload: { versao: 1 } },
+      { method: "PUT" as const, url: `/api/admissoes/processos/${processoB}/exame`, payload: { versao: 1, situacao: "agendado" } }
+    ]) {
+      const resposta = await contexto.app.inject({
+        method: rota.method,
+        url: rota.url,
+        headers: { cookie: cookieDp },
+        ...(rota.payload ? { payload: rota.payload } : {})
+      });
+      expect(resposta.statusCode, rota.url).toBe(404);
+    }
+
+    // E ele nao aparece na lista da empresa A.
+    const lista = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/processos?page=1&pageSize=50",
+      headers: { cookie: cookieDp }
+    });
+    assertOk(lista);
+    expect(JSON.stringify(lista.json().data)).not.toContain(processoB);
   });
 });

@@ -196,6 +196,35 @@ export async function atualizarInternosRepository(
   return linha ?? null;
 }
 
+/**
+ * Avanca a versao do PROCESSO por um evento que nao muda o status.
+ *
+ * A trilha tem `unique (processo_id, versao)` — ela garante que repetir uma transicao nao grave dois
+ * eventos. Editar o bloco interno tambem e um evento do processo, entao precisa da propria versao,
+ * senao o segundo evento colide com o primeiro e a escrita inteira falha.
+ *
+ * Sao DUAS versoes com DOIS trabalhos, e nao uma duplicada: `internos.versao` responde "alguem
+ * editou o formulario embaixo de mim"; `processos.versao` responde "quantos eventos este processo ja
+ * teve". Um evento interno mexe nas duas, por motivos diferentes.
+ */
+export async function avancarVersaoProcessoRepository(
+  input: { id: string; empresaId: string; versaoAtual: number; atorUsuarioId: string },
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(admissoesProcessos)
+    .set({ versao: input.versaoAtual + 1, atualizadoPor: input.atorUsuarioId })
+    .where(
+      and(
+        eq(admissoesProcessos.id, input.id),
+        eq(admissoesProcessos.empresaId, input.empresaId),
+        eq(admissoesProcessos.versao, input.versaoAtual)
+      )
+    )
+    .returning({ versao: admissoesProcessos.versao });
+  return linha ?? null;
+}
+
 /** Exame: acao propria, com autoria e data proprias. */
 export async function atualizarExameRepository(
   input: {

@@ -18,6 +18,7 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { empresaDoAtor, atorDoPerfil } from "./ator.js";
 import {
   atualizarExameRepository,
+  avancarVersaoProcessoRepository,
   atualizarInternosRepository,
   bloquearInternosRepository,
   bloquearProcessoRepository,
@@ -228,12 +229,22 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
       throw conflito("Alguem alterou estes dados enquanto voce editava", "VERSAO_CONFLITANTE");
     }
 
+    // A trilha e indexada por (processo_id, versao): o evento precisa da PROPRIA versao do processo,
+    // senao colide com o `criado`. Ver `avancarVersaoProcessoRepository`.
+    const evento = await avancarVersaoProcessoRepository(
+      { id, empresaId, versaoAtual: alvo.versao, atorUsuarioId: ator },
+      tx
+    );
+    if (!evento) {
+      throw conflito("Alguem alterou este processo enquanto voce editava", "VERSAO_CONFLITANTE");
+    }
+
     // NOMES de campo, nunca valores: gravar o conteudo duplicaria dado interno dentro da trilha.
     await registrarEventoProcessoRepository(
       {
         processoId: id,
         empresaId,
-        versao: alvo.versao,
+        versao: evento.versao,
         acao: "internos_alterados",
         atorUsuarioId: ator,
         camposAlterados: ["dataAdmissao", "ctpsNumero", "ctpsSerie", "ctpsUf", "pisPasepNit", "observacoesRh"]
@@ -278,11 +289,19 @@ export async function atualizarExame(id: string, body: DadosExternos, perfil?: P
       throw conflito("Alguem alterou estes dados enquanto voce editava", "VERSAO_CONFLITANTE");
     }
 
+    const evento = await avancarVersaoProcessoRepository(
+      { id, empresaId, versaoAtual: alvo.versao, atorUsuarioId: ator },
+      tx
+    );
+    if (!evento) {
+      throw conflito("Alguem alterou este processo enquanto voce editava", "VERSAO_CONFLITANTE");
+    }
+
     await registrarEventoProcessoRepository(
       {
         processoId: id,
         empresaId,
-        versao: alvo.versao,
+        versao: evento.versao,
         acao: "exame_alterado",
         atorUsuarioId: ator,
         camposAlterados: ["exameSituacao"]

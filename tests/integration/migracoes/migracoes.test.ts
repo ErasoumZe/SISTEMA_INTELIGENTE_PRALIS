@@ -213,10 +213,15 @@ describe("migracoes integration", () => {
       expect(nome, arquivo).toBe(`${tabela}_set_atualizado_em`);
     }
 
-    // Nomeadas de proposito, e nao so contadas: se a 0032 ou a 0033 perderem o bloco de trigger, o
-    // teste diz QUAL tabela ficou sem — a 0002 nao cobre nenhuma das tres.
+    // Nomeadas de proposito, e nao so contadas: se uma migration perder o bloco de trigger, o teste
+    // diz QUAL tabela ficou sem — a 0002 nao cobre nenhuma delas.
+    //
+    // Esta lista CRESCE a cada tabela nova com `atualizado_em`, e e assim que tem de ser: o gate
+    // disparou quando a 0034 chegou, e acrescentar o nome aqui e a decisao consciente que ele
+    // cobra. Trocar por uma contagem seria voltar ao `21` que envelheceu em silencio.
     expect(aMao.map((achado) => achado.tabela).sort()).toEqual([
       "admissoes_processos",
+      "admissoes_processos_internos",
       "admissoes_testes",
       "funcoes_operacionais"
     ]);
