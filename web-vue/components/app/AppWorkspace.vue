@@ -1878,6 +1878,12 @@ const pageContext = computed(() => ({
   resumo: resumo.value,
   telaAtual: telaAtual.value,
   telaAtiva: telaAtiva.value,
+  // Os atalhos do painel (P-03a) leem EXATAMENTE a lista que o AppShell recebe, com as mesmas
+  // desabilitadas e os mesmos motivos. Nao ha filtro proprio la: uma segunda fonte de verdade
+  // sobre permissao um dia diverge, e o painel passa a oferecer tela que o usuario nao abre.
+  telasMenu: telasShell.value,
+  telasMenuDesabilitadas: telasDesabilitadasMenu.value,
+  motivosTelasMenuDesabilitadas: motivosTelasDesabilitadas.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
   // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.

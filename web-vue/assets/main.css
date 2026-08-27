@@ -2763,3 +2763,124 @@ body {
   }
 }
 /* ===================== FIM VIS-08 ===================== */
+
+/* ===================== INICIO VIS-E1a — ATALHOS DO PAINEL (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Par do componente AppAtalhosTelas.vue; um nao serve sem o outro.
+
+   A home era tela orfa: o unico `router.push("/")` do sistema esta em login.vue:26 e o logo da
+   sidebar chama `alternarDrawer`, nao navega. Depois de sair do painel nao havia como voltar sem
+   deslogar ou editar a URL. E o painel so dizia "selecione uma tela no menu" — nao fazia nada.
+
+   A grade nao usa os breakpoints do Vuetify DE PROPOSITO: o `md` dele so ativa a 960px, entao
+   tablet (768-960) ficaria sem passo proprio e a progressao pularia de 3 para 1, o que o 67 §13.4
+   proibe. Com media query propria a progressao e 5 -> 3 -> 2 -> 1.
+
+   Cartao NEUTRO. A cor de categoria entra so no icone, pelo `:color` do v-icon, que le o mesmo
+   `tela.cor` que o menu ja usa — nao e lugar novo de cor, e a mesma tela pintando o mesmo icone.
+   Superficie, borda e rotulo seguem neutros: a lista de onde a categoria aparece e regra do 67 §3,
+   e ampliar essa lista foi o que suspendeu o VIS-11 (D-05).
+
+   `cursor: not-allowed` aqui FUNCIONA, ao contrario do caso do VIS-04 (D-VIS-04a): o cartao
+   desabilitado e um `<span>`, nao um `.v-btn--disabled` com `pointer-events: none`, entao o
+   cursor chega ao elemento.
+   ============================================================================================ */
+
+/* Com atalhos, o painel deixa de ser uma tela de recado centralizada e passa a ter conteudo:
+   comeca no topo e ocupa a largura. `:has()` ja e usado neste arquivo (linha 1316). */
+.inicio-vazio:has(.atalhos-home) {
+  align-content: start;
+  justify-items: stretch;
+  gap: var(--cx-sp-7);
+}
+
+.atalhos-home {
+  display: grid;
+  gap: var(--cx-sp-7);
+}
+
+/* Mesmo tratamento tipografico do rotulo de grupo do menu: o painel repete a organizacao de la. */
+.atalhos-grupo-titulo {
+  margin-bottom: var(--cx-sp-3);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+
+.atalhos-grade {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--cx-sp-4);
+}
+@media (width <= 1024px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (width <= 768px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width <= 480px) {
+  .atalhos-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.atalho-card {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-3);
+  min-height: 44px;
+  padding: var(--cx-sp-4);
+  border: 1px solid var(--cx-line-soft);
+  border-radius: var(--cx-r-md);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    border-color var(--cx-dur-1) var(--cx-ease),
+    box-shadow var(--cx-dur-2) var(--cx-ease);
+}
+.atalho-rotulo {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Os quatro estados do 67 §9. */
+.atalho-card:hover:not(.disabled) {
+  border-color: var(--cx-line);
+  background: var(--cx-hover);
+  box-shadow: var(--cx-e-2);
+}
+.atalho-card:active:not(.disabled) {
+  background: var(--cx-pressed);
+  transform: translateY(1px);
+}
+.atalho-card:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+.atalho-card.disabled {
+  box-shadow: none;
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Duracao zero nao desfaz deslocamento ja aplicado (67 §7); a excecao vive AQUI para o bloco
+   continuar reversivel por delecao, sem editar a lista do reset global. */
+@media (prefers-reduced-motion: reduce) {
+  .atalho-card:active:not(.disabled) {
+    transform: none;
+  }
+}
+/* ===================== FIM VIS-E1a ===================== */
