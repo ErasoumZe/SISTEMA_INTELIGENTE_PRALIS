@@ -121,22 +121,23 @@ const saldo = computed(() => entrada.value - saida.value);
 
 <template>
   <div class="tesouraria">
-    <!-- Cabecalho + acao primaria (independente de caixa) -->
-    <header class="tes-head">
-      <div class="tes-title">
-        <h2>{{ telaAtual?.titulo ?? "Tesouraria" }}</h2>
-        <p>
-          Movimente dinheiro entre contas (cofre → caixas → banco).
-          <span class="tes-count"
-            >{{ totalOperacoes }} transferência{{ totalOperacoes === 1 ? "" : "s" }} · total
-            {{ dinheiro(totalPeriodo) }}</span
-          >
-        </p>
-      </div>
-      <v-btn v-if="podeCriar" class="tes-nova" prepend-icon="mdi-plus" rounded="pill" @click="emit('nova')">
-        Nova transferência
-      </v-btn>
-    </header>
+    <!-- Cabecalho + acao primaria (independente de caixa). Este ja era a forma que o VIS-10
+         unifica — titulo, subtitulo e acao a direita, acima dos cards —, entao aqui a mudanca e
+         so passar a usar o componente comum. Texto e botao sao os mesmos. -->
+    <AppCabecalhoTela :titulo="telaAtual?.titulo ?? 'Tesouraria'">
+      <template #subtitulo>
+        Movimente dinheiro entre contas (cofre → caixas → banco).
+        <span class="tes-count"
+          >{{ totalOperacoes }} transferência{{ totalOperacoes === 1 ? "" : "s" }} · total
+          {{ dinheiro(totalPeriodo) }}</span
+        >
+      </template>
+      <template #acoes>
+        <v-btn v-if="podeCriar" class="tes-nova" prepend-icon="mdi-plus" rounded="pill" @click="emit('nova')">
+          Nova transferência
+        </v-btn>
+      </template>
+    </AppCabecalhoTela>
 
     <!-- Cards de total: Saida · Entrada · Saldo (cor --cat-transferencias) -->
     <section class="tes-cards" aria-label="Totais de transferências">

@@ -514,17 +514,6 @@ body {
   gap: 10px;
 }
 
-.topbar-page-id {
-  flex: 1;
-  min-width: 0;
-  color: #020617;
-  font-size: 15px;
-  font-weight: 900;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .operacoes-layout {
   display: grid;
   gap: 22px;
@@ -961,12 +950,6 @@ body {
   min-height: 64px;
   box-shadow: 0 1px 0 rgba(94, 55, 49, 0.02);
 }
-.topbar-page-id {
-  color: var(--marca-tinta);
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -0.2px;
-}
 
 /* ---- Conteudo ---- */
 .content-frame {
@@ -1291,12 +1274,6 @@ body {
   .padaria-topbar {
     grid-template-columns: 44px minmax(0, 1fr) auto;
     column-gap: 8px;
-  }
-  .topbar-page-id {
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 }
 /* S4 — nome de empresa longo: no maximo 2 linhas */
@@ -1901,14 +1878,6 @@ body {
   gap: var(--cx-sp-2);
   min-width: 0;
 }
-/* Hierarquia da topbar: o titulo da pagina e o unico elemento com peso; empresa,
-   tema, sino e avatar sao satelites. Antes os cinco competiam pelo mesmo peso. */
-.shell-mobills .topbar-page-id {
-  color: var(--cx-ink);
-  font-size: var(--cx-fs-title);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-tight);
-}
 .shell-mobills .topbar-actions {
   justify-self: end;
   gap: var(--cx-sp-1);
@@ -2023,9 +1992,6 @@ body {
   .shell-mobills .topbar-empresa {
     max-width: none;
     padding: 6px;
-  }
-  .shell-mobills .topbar-page-id {
-    font-size: 15px;
   }
 }
 @media (width <= 560px) {
@@ -2409,9 +2375,10 @@ body {
    Vizinhanca: o seletor S2 do bloco RESPONSIVIDADE OFICIAL (linha ~1286) mira
    `.padaria-topbar > .v-btn` e esta MORTO, porque o botao e neto da topbar e o `>`
    nao casa. Continua la porque aquele bloco e historico e congelado (67 §13).
-   Remove-lo e o SHELL-06, que tem de ir declaracao por declaracao: a metade
-   `.topbar-page-id` da S3 (1295-1300) esta VIVA e e a unica fonte do ellipsis do
-   titulo no mobile.
+   Remove-lo e o SHELL-06, que tem de ir declaracao por declaracao. A metade
+   `.topbar-page-id` da S3 era a unica fonte do ellipsis do titulo no mobile e por isso estava
+   VIVA — ate 27/08, quando o VIS-10 tirou o titulo da topbar. Sem o elemento ela perdeu a
+   funcao e saiu junto; o que resta da S3 e so a metade `.padaria-topbar`, morta desde sempre.
    ========================================================================================================= */
 @media (width <= 768px) {
   .shell-mobills .topbar-left > .v-btn {
@@ -2900,3 +2867,76 @@ body {
   color: var(--cx-brand-text);
 }
 /* ===================== FIM VIS-E1b ===================== */
+
+/* ===================== INICIO VIS-10 — CABECALHO DE TELA (27/08/2026) =====================
+   anchor: linear.app/DESIGN.md — hierarquia por peso e cor, hairline, zero atmosfera.
+   diverge: escala --cx-fs-* e Noto Sans, que sao decisao de marca deste sistema (67 §8, D-01).
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par do AppCabecalhoTela.vue; um nao serve sem o outro.
+
+   D-04 (26/08): o titulo da tela vive SO na pagina. O `.topbar-page-id` foi removido do
+   AppShell e as CINCO regras dele sairam do main.css junto — inclusive a metade `.topbar-page-id`
+   da S3, que era a unica fonte do ellipsis do titulo no mobile e por isso continuava viva. Sem o
+   elemento ela perdeu a funcao, e so por isso saiu. E remocao de caminho antigo (16, regra-mae),
+   nao limpeza oportunista.
+
+   Isto UNIFICA cinco cabecalhos que ja existiam — topbar, CadastroTable, PlaceholderPage,
+   OperacoesPage e TesourariaCockpit —, nao cria um sexto. O `.tes-head` da Tesouraria ja era
+   exatamente esta forma; ele virou o modelo.
+
+   Sem eyebrow, sem pilula de secao, sem numero de secao em monospace: sao sinais de "cara de IA"
+   e nao existem em produto de verdade. O titulo se sustenta por tamanho e peso.
+   ========================================================================================== */
+.cabecalho-tela {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--cx-sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--cx-sp-6);
+}
+.cabecalho-tela-texto {
+  min-width: 0;
+}
+.cabecalho-tela-titulo {
+  margin: 0;
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-h1);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-tight);
+  line-height: 1.2;
+}
+.cabecalho-tela-subtitulo {
+  margin: var(--cx-sp-1) 0 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-lead);
+  line-height: 1.5;
+}
+.cabecalho-tela-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  flex-shrink: 0;
+}
+
+/* Tablet: o titulo desce um degrau para nao competir com o conteudo em tela estreita. */
+@media (width <= 1024px) {
+  .cabecalho-tela-titulo {
+    font-size: var(--cx-fs-h2);
+  }
+}
+
+/* XS: acao principal ocupa a linha, em vez de espremer ao lado do titulo (67 §13.4). */
+@media (width <= 600px) {
+  .cabecalho-tela {
+    margin-bottom: var(--cx-sp-5);
+  }
+  .cabecalho-tela-acoes {
+    width: 100%;
+  }
+  .cabecalho-tela-acoes > * {
+    flex: 1 1 auto;
+  }
+}
+/* ===================== FIM VIS-10 ===================== */

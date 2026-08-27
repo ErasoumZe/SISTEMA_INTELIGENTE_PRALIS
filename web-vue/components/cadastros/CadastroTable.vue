@@ -120,12 +120,11 @@ function proximaPagina() {
 </script>
 
 <template>
-  <v-card>
-    <v-card-title class="cadastro-card-title d-flex align-center justify-space-between ga-3">
-      <div>
-        <div class="text-h6">{{ titulo }}</div>
-        <div class="text-body-2 text-muted">{{ descricao }}</div>
-      </div>
+  <!-- O titulo saiu de DENTRO do card e virou cabecalho da pagina (VIS-10, D-04). As acoes vieram
+       junto, com a mesma classe `.cadastro-card-actions` de antes, para as regras responsivas que
+       ja existem continuarem valendo. Nenhum botao foi criado, removido ou renomeado. -->
+  <AppCabecalhoTela :titulo="titulo" :subtitulo="descricao">
+    <template #acoes>
       <div class="cadastro-card-actions d-flex ga-2">
         <v-btn v-if="podeImportar" size="small" variant="outlined" :disabled="acaoCarregando" @click="emit('importar')"
           >Importar</v-btn
@@ -141,8 +140,10 @@ function proximaPagina() {
           {{ acao }}
         </v-btn>
       </div>
-    </v-card-title>
+    </template>
+  </AppCabecalhoTela>
 
+  <v-card>
     <v-card-text>
       <div v-if="modoServidor" class="cadastro-filter-grid mb-4">
         <v-text-field

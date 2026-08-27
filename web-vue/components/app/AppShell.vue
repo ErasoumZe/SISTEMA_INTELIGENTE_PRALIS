@@ -266,9 +266,12 @@ onMounted(() => {
       <header class="padaria-topbar">
         <!-- ESQUERDA: no desktop o proprio logo recolhe/expande o menu; no mobile (drawer overlay)
              ainda e preciso um gatilho para abrir. -->
+        <!-- O `.topbar-page-id` foi REMOVIDO (D-04, 26/08): o titulo da tela vive so na pagina,
+             no AppCabecalhoTela. Nao ha duplicidade — um lugar diz o nome da tela, e ele fica
+             grande, junto do conteudo que nomeia. Este zona guarda so o gatilho do menu no
+             mobile; no desktop ela fica vazia e a topbar sobra para o contexto a direita. -->
         <div class="topbar-left">
           <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
-          <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
         </div>
 
         <!-- DIREITA: painel + empresa + tema + usuario. -->
