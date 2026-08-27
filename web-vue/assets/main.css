@@ -31,6 +31,26 @@
   /* Derivadas da propria superficie/tinta: seguem o tema da empresa E o modo
      escuro sem precisar ser redeclaradas em nenhum dos dois lugares. */
   --cx-surface-sunken: color-mix(in srgb, var(--cx-ink) 4%, var(--cx-surface));
+  /* ESCADA DE SUPERFICIE — o nivel que faltava (27/08/2026, inspirado no linear.app, cuja
+     profundidade vem de escada + hairline e quase nenhuma sombra no escuro).
+
+     A escada tem TRES degraus e um recesso, e a distincao importa:
+       N0 --cx-canvas          fundo da pagina
+       N1 --cx-surface         card, casca de conteudo
+       N2 --cx-surface-raised  card ELEVADO: card de total, menu suspenso, modal
+       (recesso) --cx-surface-sunken  campo recuado DENTRO do N1 — nao e degrau da escada
+
+     MEDIDO, e um numero corrigiu a premissa: no claro `canvas -> sunken` da 1,002, ou seja,
+     eles NAO sao niveis vizinhos distinguiveis. Nao sao mesmo: `sunken` e recesso dentro do
+     card, nao rung entre canvas e card. As adjacencias reais medem
+       claro   canvas->surface 1,080  ·  surface->raised 1,000 (a elevacao e que separa)
+       escuro  canvas->surface 1,123  ·  surface->raised 1,262
+
+     NO CLARO O N2 TEM A MESMA TINTA DO N1, de proposito: branco nao clareia. Ali quem levanta e
+     a elevacao (--cx-e-2), como o D-06 ja mandava. No escuro sombra preta some sobre #0f1318,
+     entao o N2 clareia 8% e o degrau vira maior que o de canvas->surface. E a mesma logica do
+     MISTURA_SOFT_ESCURO: o escuro precisa de tinta onde o claro usa sombra. */
+  --cx-surface-raised: var(--cx-surface);
   --cx-hover: color-mix(in srgb, var(--cx-ink) 6%, transparent);
   --cx-pressed: color-mix(in srgb, var(--cx-ink) 11%, transparent);
 
@@ -134,6 +154,8 @@
 
   --cx-canvas: #0f1318;
   --cx-surface: #191f26;
+  /* No escuro o N2 clareia, porque sombra preta sobre #0f1318 nao levanta nada. */
+  --cx-surface-raised: color-mix(in srgb, var(--cx-surface) 92%, white);
   --cx-ink: #e7e9ec;
   --cx-ink-soft: #a6afba;
   --cx-line: #2a323c;
@@ -3121,3 +3143,35 @@ body {
   );
 }
 /* ===================== FIM VIS-E5d ===================== */
+
+/* ===================== INICIO VIS-E6a — ESCADA DE SUPERFICIE APLICADA (27/08/2026) =====================
+   anchor: linear.app/DESIGN.md, secao Elevation & Depth — "depth is carried by surface ladder +
+   hairline borders; the brand resists drop shadows on dark almost entirely".
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par do token `--cx-surface-raised` criado no topo; sem consumidor o token seria divida.
+
+   QUEM VIVE EM QUE CAMADA, agora explicito:
+     N0 canvas          fundo da pagina (.padaria-main / body)
+     N1 surface         card de conteudo, casca de tabela            <- ja era assim
+     N2 surface-raised  card de TOTAL, menu suspenso, modal          <- entra aqui
+
+   Antes os tres do N2 se distinguiam SO por sombra. No claro isso basta; no escuro nao, porque
+   sombra preta sobre #0f1318 nao levanta nada — era por isso que o card quase sumia no fundo.
+   Agora, no escuro, eles clareiam 8% e o degrau fica maior (1,262) que o de canvas->surface
+   (1,123). No claro o valor e o mesmo do N1 e quem levanta continua sendo `--cx-e-2`/`--cx-e-3`.
+
+   Nao ha `!important` novo: os seletores abaixo tem especificidade maior que a do `.v-card` do
+   Vuetify, entao vencem por conta propria.
+   ======================================================================================================= */
+.content-frame .card-total.v-card {
+  background: var(--cx-surface-raised);
+}
+.v-menu > .v-overlay__content,
+.v-menu > .v-overlay__content .v-list {
+  background: var(--cx-surface-raised);
+}
+.v-overlay__content > .v-card {
+  background: var(--cx-surface-raised);
+}
+/* ===================== FIM VIS-E6a ===================== */
