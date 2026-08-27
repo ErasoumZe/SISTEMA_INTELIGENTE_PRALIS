@@ -228,7 +228,9 @@ watch(filtroStatus, () => void buscar());
               </td>
             </tr>
             <tr v-if="!linhasFiltradas.length && !carregando">
-              <td colspan="7" class="text-center text-muted py-8">Nenhuma nota fiscal encontrada.</td>
+              <td colspan="7" class="text-center text-muted py-8">
+                <span class="tabela-vazio">Nenhuma nota fiscal encontrada.</span>
+              </td>
             </tr>
           </tbody>
         </v-table>

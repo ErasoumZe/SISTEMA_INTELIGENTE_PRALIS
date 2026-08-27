@@ -309,7 +309,9 @@ onMounted(async () => {
               </thead>
               <tbody>
                 <tr v-if="!pedidos.length">
-                  <td colspan="6" class="text-center text-medium-emphasis">Nenhum pedido encontrado.</td>
+                  <td colspan="6" class="text-center text-medium-emphasis">
+                    <span class="tabela-vazio">Nenhum pedido encontrado.</span>
+                  </td>
                 </tr>
                 <tr v-for="pedido in pedidos" :key="pedido.id">
                   <td>{{ pedido.tipo === "automatico" ? "Automatico" : "Manual" }}</td>

@@ -252,7 +252,9 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                   </tr>
                 </template>
                 <tr v-if="!operacoesPaginadas.length">
-                  <td colspan="4" class="text-center text-muted py-8">Nenhum lancamento encontrado.</td>
+                  <td colspan="4" class="text-center text-muted py-8">
+                    <span class="tabela-vazio">Nenhum lancamento encontrado.</span>
+                  </td>
                 </tr>
               </tbody>
             </v-table>

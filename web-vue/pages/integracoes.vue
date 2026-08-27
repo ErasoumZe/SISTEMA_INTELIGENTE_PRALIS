@@ -624,7 +624,9 @@ onMounted(async () => {
                   </tr>
                   <tr v-if="!vinculosSemConversaoFiltrados.length">
                     <td colspan="4" class="text-center text-muted">
-                      {{ dicionarioCarregando ? "Carregando..." : "Nenhum item encontrado." }}
+                      <span class="tabela-vazio">
+                        {{ dicionarioCarregando ? "Carregando..." : "Nenhum item encontrado." }}
+                      </span>
                     </td>
                   </tr>
                 </tbody>

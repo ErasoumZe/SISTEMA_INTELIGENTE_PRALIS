@@ -232,7 +232,11 @@ function proximaPagina() {
             </tr>
             <tr v-if="!linhasPaginadas.length">
               <td :colspan="colunas.length + (temAcoes ? 1 : 0)" class="text-center text-muted py-8">
-                {{ modoServidor && !buscou ? "Informe os filtros e clique em Buscar." : "Nenhum registro cadastrado." }}
+                <span class="tabela-vazio">
+                  {{
+                    modoServidor && !buscou ? "Informe os filtros e clique em Buscar." : "Nenhum registro cadastrado."
+                  }}
+                </span>
               </td>
             </tr>
           </tbody>
