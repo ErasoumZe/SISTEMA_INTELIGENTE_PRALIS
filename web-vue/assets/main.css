@@ -3084,3 +3084,40 @@ body {
   background-image: var(--cx-brand-gradiente);
 }
 /* ===================== FIM VIS-E5c ===================== */
+
+/* ===================== INICIO VIS-E5d — BRILHO TAMBEM NO BLOCO NEUTRO (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+
+   DEFEITO VISTO EM TELA por Marco: so 6 das telas tem categoria (`CATEGORIA_POR_TELA`), entao
+   com o VIS-E5b sozinho 6 blocos brilhavam e o resto ficava chapado. A grade virava remendo —
+   metade com luz, metade sem, e sem logica visivel para quem olha.
+
+   Conserto: TODO bloco recebe o mesmo tratamento; muda so o matiz. O que tem categoria brilha na
+   cor dela; o que nao tem brilha em cinza, com `--cx-ink-soft`.
+
+   O 67 §3 continua respeitado, e o ponto e sutil: a regra de la e que tela sem categoria nao
+   recebe COR DE CATEGORIA. Cinza nao e cor de categoria — e a ausencia dela. A lista de quem tem
+   cor continua sendo so o `CATEGORIA_POR_TELA`, e nenhum bloco neutro passou a fingir que tem uma.
+
+   Mesma `--cx-brilho-forca` dos blocos coloridos, entao a intensidade e uma decisao so no sistema
+   inteiro. Medido, texto sobre o brilho neutro:
+     claro   fundo #f2f3f4  contraste 13,54
+     escuro  fundo #2d333b  contraste 10,47
+   Ambos muito acima do minimo de 4,5:1 do 67 §11 — a forca nao precisou de um valor proprio.
+   ========================================================================================================= */
+.atalho-bloco:not(.com-cor) {
+  background-image: radial-gradient(
+    120% 100% at 100% 0%,
+    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* O hover troca o `background` (cor); sem repetir a imagem aqui ela sumiria no hover. */
+.atalho-bloco:not(.com-cor):hover:not(.disabled) {
+  background-image: radial-gradient(
+    120% 100% at 100% 0%,
+    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* ===================== FIM VIS-E5d ===================== */
