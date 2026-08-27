@@ -1774,7 +1774,12 @@ body {
   min-height: 48px;
   justify-content: center;
   border-radius: var(--cx-r-pill) !important;
-  background: var(--cx-brand) !important;
+  /* Gradiente da marca (D-VIS-E5a resolvida, 27/08/2026). NAO e `!important` novo: o `!important`
+     ja estava nesta linha desde o bloco SHELL — mudou o VALOR, nao a forca. Era esta declaracao
+     que impedia o `background-image` de pegar, e por isso a Etapa 5 deixou o FAB de fora.
+     Medido, o rotulo branco sobre as duas pontas: 7,76 na cheia e 5,35 na clareada.
+     O hover em `--cx-brand-strong` continua como estava, logo abaixo. */
+  background: var(--cx-brand-gradiente) !important;
   color: var(--cx-brand-on) !important;
   font-weight: 800;
   letter-spacing: 0.4px;
