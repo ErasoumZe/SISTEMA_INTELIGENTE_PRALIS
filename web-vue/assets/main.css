@@ -2388,38 +2388,6 @@ body {
 }
 /* ===================== FIM SHELL-02 ===================== */
 
-/* ===================== INICIO VIS-05 — CHIP DE DICA LEGIVEL NO ESCURO (26/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   Defeito confirmado em tela por Marco (390px, tema escuro): o chip "Comece pelo menu a
-   esquerda" (pages/index.vue:20) fica roxo sobre roxo escuro, praticamente invisivel.
-
-   Causa: `.inicio-hero-hint` (linha ~1011, bloco congelado) pinta o texto com
-   `--marca-acento-forte`, que e alias de `--cx-brand-strong`. O fundo, `--marca-acento-suave`
-   (= `--cx-brand-wash`), OBEDECE ao tema — ele e a marca a 10% sobre `--cx-surface`, entao
-   escurece junto. A tinta nao: `--cx-brand-strong` e literal e vale o mesmo nos dois temas.
-   No escuro isso poe #35128c sobre #211e38. Medido: 1,24:1, contra o minimo de 4,5:1 do 67 §11.
-
-   E exatamente a armadilha que o 67 §3 ja documenta — "nunca use a marca como texto sobre
-   superficie escura" — e para a qual `--cx-brand-text` foi criado: no claro ele E
-   `--cx-brand-strong`; no escuro ele clareia para 45% da marca sobre branco.
-
-   Conserto: trocar a tinta pelo token que ja existe. Nao ha cor nova aqui, e no claro nao muda
-   NADA — o valor computado continua sendo o mesmo #35128c de hoje. Medido:
-     claro   antes 10,92:1  ->  depois 10,92:1  (identico: --cx-brand-text = --cx-brand-strong)
-     escuro  antes  1,24:1  ->  depois  6,66:1
-   E o oposto de mudar cor: e fazer a cor obedecer ao tema, como manda a §0.1 da direcao visual.
-
-   Fora de escopo, registrado: `.status-pill` (linha ~868) tem `background: #8a6608` cravado,
-   hex que nao corresponde a token nenhum do sistema. Marco decidiu em 26/08/2026 deixar como
-   esta — passa AA (5,27:1 com branco) e trocar seria mudar cor. Os chips de
-   `.regra-permitir`/`.regra-negar` (68 §6.2, D-08) seguem fora por serem tela de negocio.
-   ======================================================================================================== */
-.shell-mobills .inicio-hero-hint {
-  color: var(--cx-brand-text);
-}
-/* ===================== FIM VIS-05 ===================== */
-
 /* ===================== INICIO VIS-04 — HIERARQUIA E ALVO DE BOTAO (26/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
 
