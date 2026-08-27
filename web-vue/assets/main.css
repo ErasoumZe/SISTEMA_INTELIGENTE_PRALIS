@@ -54,6 +54,23 @@
      teclado no modo escuro. No claro segue sendo o roxo da marca (7,8:1). */
   --cx-focus: var(--cx-brand);
   --cx-brand-ring: color-mix(in srgb, var(--cx-focus) 40%, transparent);
+  /* GRADIENTE DA MARCA (vivid glass, 27/08/2026). Um so no sistema inteiro, e so em preenchimento
+     que JA e da marca — nunca em botao que carrega a cor da categoria da tela.
+
+     A referencia do Stitch usa `linear-gradient(to right, #6515DD, #8B44F7)`. O primeiro stop E o
+     `--cx-brand`. O segundo NAO foi copiado: seria hex novo, que a §1.1 congela. Ele e derivado da
+     propria marca.
+
+     A PROPORCAO E MEDIDA, nao escolhida. O pedido original era 62% da marca sobre branco, o que da
+     #a06eea e poe o branco a 3,55:1 — reprova o minimo de 4,5:1 do 67 §11 justamente na ponta
+     clara, que e onde a tinta branca sofre. Medido em passos: 75% da 4,77 e 80% da 5,35. Ficou 80%,
+     que sobra margem e ainda cai a um fio do #8b44f7 do Stitch (que mede 4,92). */
+  --cx-brand-gradiente: linear-gradient(to right, var(--cx-brand), color-mix(in srgb, var(--cx-brand) 80%, white));
+  /* FORCA DO BRILHO de categoria no card. Muda por tema pelo mesmo motivo do MISTURA_SOFT_ESCURO
+     do `cores-categoria.ts`: tinta colorida sobre #0f1318 precisa de mais presenca para aparecer;
+     a mesma forca sobre #f4f6fa vira mancha. Medido: com estes valores o texto sobre o card fica
+     entre 13,2 e 14,0 no claro e entre 11,1 e 12,7 no escuro, nas seis categorias. */
+  --cx-brilho-forca: 8%;
 
   /* ---- Cor: semantica de TEXTO (AA >= 4.5:1 sobre canvas e superficie) ----
      Nao confundir com as cores de tema do Vuetify (success/error), que sao
@@ -127,6 +144,8 @@
   /* Marca clareada para servir de tinta/grafico sobre superficie escura (6,9:1). */
   --cx-brand-text: color-mix(in srgb, var(--cx-brand) 45%, #ffffff);
   --cx-focus: var(--cx-brand-text);
+  /* Ver a nota no bloco claro: o escuro precisa de mais tinta para o brilho existir. */
+  --cx-brilho-forca: 14%;
 
   --cx-e-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px -4px rgb(0 0 0 / 0.5);
   --cx-e-2: 0 1px 3px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.6);
