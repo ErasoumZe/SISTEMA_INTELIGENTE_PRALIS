@@ -146,6 +146,10 @@ function fecharDrawerMobile() {
   if (viewportMobile.value) drawerMobileAberto.value = false;
 }
 
+// O menu volta para onde o usuario o deixou. A causa (a casca REMONTA a cada rota, entao a
+// `.sidebar-nav` e outra e nasce em zero) e a medicao estao no proprio composable.
+useItemAtivoVisivel();
+
 onMounted(() => {
   // Breakpoints alinhados ao padrao responsivo: <=768 = drawer (overlay),
   // 769-1024 = rail (icones), >1024 = drawer fixo completo.
