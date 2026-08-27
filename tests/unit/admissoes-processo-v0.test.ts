@@ -6,8 +6,10 @@ import { admissoesProcessos, admissoesProcessosHistorico } from "@padaria/db/sch
 import { colaboradores } from "@padaria/db/schema/cadastro";
 import {
   cancelarProcessoPayloadSchema,
+  exameExigeAtencao,
   processoDetalheDtoSchema,
   situacaoDoProcesso,
+  situacoesExame,
   statusProcesso
 } from "@padaria/shared/admissoes";
 
@@ -49,19 +51,59 @@ describe("a V0 nao cresce para fora do escopo", () => {
 
   it("nao existe rota de iniciar admissao", () => {
     // Escrito em pedacos para este arquivo nao ser o unico culpado da propria varredura.
-    const proibido = "/api/admissoes/" + "processos/:id/iniciar";
-    for (const { nome, codigo } of fontes) {
-      expect(codigo, nome).not.toContain(proibido);
-      expect(codigo, nome).not.toMatch(/app\s*\.\s*post\s*\(\s*"\/api\/admissoes\/processos"/u);
+    for (const verbo of ["iniciar", "efetivar"]) {
+      const proibido = "/api/admissoes/" + "processos/:id/" + verbo;
+      for (const { nome, codigo } of fontes) {
+        expect(codigo, `${nome} (${verbo})`).not.toContain(proibido);
+      }
     }
   });
 
-  it("nao existe rota de LISTA de processos", () => {
-    // A V0 nao tem listagem, pagina de lista nem menu: o processo e alcancado so pelo teste
-    // efetivado. Lista sem filtro, paginacao e dono definido seria superficie criada cedo demais.
-    for (const { nome, codigo } of fontes) {
-      expect(codigo, nome).not.toMatch(/app\s*\.\s*get\s*\(\s*"\/api\/admissoes\/processos"\s*,/u);
+  it("existe UMA rota de criacao, e ela e a admissao direta", () => {
+    // A V1A trouxe a admissao direta, e com ela o POST que a V0 proibia. A guarda nao foi apagada:
+    // ela deixou de exigir "nenhuma criacao" e passou a exigir "exatamente uma, e so essa".
+    const criacoes = fontes.flatMap(({ codigo }) => [
+      ...codigo.matchAll(/app\s*\.\s*post\s*\(\s*"(\/api\/admissoes\/processos[^"]*)"/gu)
+    ]);
+    const rotas = criacoes.map((achado) => achado[1]).filter((rota) => !rota?.includes(":id"));
+    expect(rotas).toEqual(["/api/admissoes/processos"]);
+
+    const controller = fontes.find((f) => f.nome === "processos.controller.ts");
+    expect(controller?.codigo).toContain("admissoes_processos_criar_direta");
+  });
+
+  it("o processo NUNCA nasce de POST quando ha teste", () => {
+    // A garantia nao e "o service confere": o contrato nao TEM o campo, entao pedir origem teste por
+    // aquela rota e impossivel, e nao apenas proibido.
+    const contrato = readFileSync(join(RAIZ, "shared", "src", "admissoes", "processos.ts"), "utf8");
+    const bloco = contrato.slice(
+      contrato.indexOf("criarProcessoDiretoPayloadSchema"),
+      contrato.indexOf("dadosInternosPayloadSchema")
+    );
+    expect(bloco).not.toContain("testeId");
+    // Nem identidade: nome e CPF pertencem ao formulario do candidato.
+    expect(bloco).not.toContain("nomeCompleto");
+    expect(bloco.toLowerCase()).not.toContain("cpf");
+  });
+
+  it("a lista existe, e e consulta — nao tem acao de criar por outro nome", () => {
+    // A V0 nao tinha lista de proposito. A V1A precisou dela: a admissao direta nao tem teste de onde
+    // ser alcancada, e sem lista um processo direto nasceria inalcancavel. A guarda mudou de "nao
+    // existe" para "existe uma, e nenhuma acao paralela de criacao mora nela".
+    const controller = fontes.find((f) => f.nome === "processos.controller.ts");
+    expect(controller?.codigo).toMatch(/app\s*\.\s*get\s*\(\s*"\/api\/admissoes\/processos"\s*,/u);
+
+    const tela = semComentarios(
+      readFileSync(join(RAIZ, "web-vue", "components", "admissoes", "AdmissoesProcessosPage.vue"), "utf8")
+    );
+    for (const verbo of ["Iniciar admissão", "Efetivar", "Iniciar processo"]) {
+      expect(tela, verbo).not.toContain(verbo);
     }
+    // Um unico BOTAO de criacao. Conta o gatilho, nao a palavra: o estado vazio tambem menciona
+    // "Novo cadastro" para explicar de onde vem um processo, e explicar nao e oferecer um segundo
+    // caminho.
+    expect([...tela.matchAll(/@click="novoAberto = true"/gu)]).toHaveLength(1);
+    expect(tela).toContain("+ Novo cadastro");
   });
 
   it("o modulo do processo nao referencia colaborador", () => {
@@ -82,44 +124,70 @@ describe("a V0 nao cresce para fora do escopo", () => {
     expect(bloco.slice(0, 4000)).not.toContain("motivo_cancelamento");
   });
 
-  it("nenhuma tela de processo aparece no menu", () => {
+  it("o processo tem UMA entrada de menu, nao duas", () => {
     const menu = semComentarios(readFileSync(join(RAIZ, "web-vue", "utils", "menu.ts"), "utf8"));
-    expect(menu).not.toContain("admissoes_processos");
+    expect([...menu.matchAll(/"admissoes_processos"/gu)]).toHaveLength(1);
+
+    // E uma pagina so. Duas rotas para a mesma tela seria o defeito que a regra-mae proibe.
+    const paginas = readdirSync(join(RAIZ, "web-vue", "pages")).filter((n) => n.includes("admissoes_processos"));
+    expect(paginas).toEqual(["admissoes_processos.vue"]);
   });
 });
 
 describe("as permissoes do processo sao concedidas pelo catalogo", () => {
   const referencia = readFileSync(join(RAIZ, "db", "src", "referencia-permissoes.ts"), "utf8");
 
-  it("DP e Gerencia recebem visualizar e cancelar", () => {
+  it("DP e Gerencia alcancam o processo, e so o DP preenche o bloco interno", () => {
     // Concessao pelo mecanismo real: `permissoesDoCargo`. Nao ha atalho no frontend — a tela le
     // `sessao.perfil.permissoes`, que vem daqui.
     for (const cargo of ["Gerencia", "DP"]) {
       const inicio = referencia.indexOf(`${cargo}: permissoesDoCargo(`);
       expect(inicio, cargo).toBeGreaterThan(-1);
       const bloco = referencia.slice(inicio, referencia.indexOf("}),", inicio));
-      expect(bloco, cargo).toContain("admissoes_processos_visualizar");
+      // `_visualizar` vem de `ativas` (a chave de menu) desde a V1A; cancelar e criar continuam extras.
+      expect(bloco, cargo).toContain("admissoes_processos");
       expect(bloco, cargo).toContain("admissoes_processos_cancelar");
+      expect(bloco, cargo).toContain("admissoes_processos_criar_direta");
     }
+
+    // O bloco interno carrega CTPS, PIS/NIT e o exame: a Gerencia inicia, o DP preenche.
+    const inicioDp = referencia.indexOf("DP: permissoesDoCargo(");
+    const blocoDp = referencia.slice(inicioDp, referencia.indexOf("}),", inicioDp));
+    expect(blocoDp).toContain("admissoes_processos_editar_internos");
+
+    const inicioGerencia = referencia.indexOf("Gerencia: permissoesDoCargo(");
+    const blocoGerencia = referencia.slice(inicioGerencia, referencia.indexOf("}),", inicioGerencia));
+    expect(blocoGerencia).not.toContain("admissoes_processos_editar_internos");
   });
 
-  it("nao existe permissao de INICIAR processo", () => {
-    // Iniciar e consequencia de efetivar o teste, nao um ato separado — entao nao tem permissao.
+  it("o cargo Diretor Geral continua vazio", () => {
+    // O acesso total do diretor vem do ROLE `usuario_admin`, nao do cargo. Conceder aqui sujaria a
+    // tela de permissoes do cargo, que e mantida vazia de proposito.
+    expect(referencia).toContain('"Diretor Geral": permissoesDoCargo({})');
+  });
+
+  it("a unica permissao de criacao e a da admissao DIRETA", () => {
+    // Iniciar continua sendo consequencia de efetivar o teste, nao um ato separado. O que a V1A
+    // acrescentou foi a admissao direta — e o nome da permissao diz qual das duas origens ela abre.
     const catalogo = readFileSync(join(RAIZ, "shared", "src", "autenticacao", "index.ts"), "utf8");
     expect(catalogo).toContain('"admissoes_processos_visualizar"');
     expect(catalogo).toContain('"admissoes_processos_cancelar"');
+    expect(catalogo).toContain('"admissoes_processos_criar_direta"');
+    expect(catalogo).toContain('"admissoes_processos_editar_internos"');
     expect(catalogo).not.toContain("admissoes_processos_iniciar");
-    expect(catalogo).not.toContain("admissoes_processos_criar");
+    // O generico continua nao existindo: criar sem dizer a origem seria o segundo caminho.
+    expect(catalogo).not.toContain('"admissoes_processos_criar"');
   });
 
-  it("o processo nao entra por menu: as permissoes vao em extras, nao em ativas", () => {
-    // `ativas` mapeia chave de MENU para a permissao de visualizar. Como o processo nao tem menu,
-    // entrar por ali criaria a entrada que a V0 decidiu nao ter.
+  it("o processo entra por menu: a chave vai em ativas, nao em extras", () => {
+    // Inversao consciente da guarda da V0. `ativas` mapeia chave de MENU para a permissao de
+    // visualizar; a V0 mantinha o processo fora porque nao havia como chegar sem teste. A admissao
+    // direta mudou a premissa: sem menu, o processo direto seria inalcancavel.
     for (const cargo of ["Gerencia", "DP"]) {
       const inicio = referencia.indexOf(`${cargo}: permissoesDoCargo(`);
       const bloco = referencia.slice(inicio, referencia.indexOf("}),", inicio));
       const ativas = bloco.slice(bloco.indexOf("ativas:"), bloco.indexOf("]", bloco.indexOf("ativas:")));
-      expect(ativas, cargo).not.toContain("admissoes_processos");
+      expect(ativas, cargo).toContain("admissoes_processos");
     }
   });
 });
@@ -215,15 +283,33 @@ describe("a origem e o vinculo com o teste", () => {
     expect(uniques).toContain("teste_id");
   });
 
-  it("o detalhe exige a origem", () => {
+  it("o detalhe exige a ORIGEM, e admite processo sem teste e sem nome", () => {
+    const internos = {
+      versao: 1,
+      dataAdmissao: null,
+      ctpsNumero: null,
+      ctpsSerie: null,
+      ctpsUf: null,
+      pisPasepNit: null,
+      observacoesRh: null,
+      exameSituacao: "pendente" as const,
+      exameExigeAtencao: true,
+      exameAtualizadoPorNome: null,
+      exameAtualizadoEm: null
+    };
     const base = {
       id: "id",
+      origem: "admissao_direta" as const,
       status: "iniciado" as const,
       situacao: "ativo" as const,
       versao: 1,
-      testeId: "id-teste",
-      testeNomeCompleto: "Pessoa de Teste",
-      motivoCancelamento: null,
+      // Admissao direta: sem teste e sem nome ate o candidato responder. O DTO precisa admitir isso
+      // — inventar identidade para preencher o vazio e exatamente o que a vertical recusou.
+      testeId: null,
+      nomeCompleto: null,
+      funcaoNome: "Balconista",
+      jornadaHorario: "Seg a sex",
+      internos,
       criadoPorNome: null,
       criadoEm: "2026-09-01T12:00:00.000Z",
       atualizadoPorNome: null,
@@ -231,10 +317,40 @@ describe("a origem e o vinculo com o teste", () => {
       canceladoPorNome: null,
       canceladoEm: null
     };
-    expect(processoDetalheDtoSchema.parse(base).testeId).toBe("id-teste");
+    const lido = processoDetalheDtoSchema.parse(base);
+    expect(lido.testeId).toBeNull();
+    expect(lido.nomeCompleto).toBeNull();
 
-    const { testeId, ...semOrigem } = base;
+    // A ORIGEM, essa, e obrigatoria: e ela que diz se falta caminho de volta ou se ele nunca existiu.
+    const { origem, ...semOrigem } = base;
     expect(processoDetalheDtoSchema.safeParse(semOrigem).success).toBe(false);
+  });
+
+  it("o exame tem exatamente as cinco situacoes confirmadas", () => {
+    expect([...situacoesExame]).toEqual([
+      "pendente",
+      "guia_entregue",
+      "agendado",
+      "realizado",
+      "exige_acao"
+    ]);
+    // O alerta e DERIVADO: nao existe coluna, indice nem filtro paralelo de pendencia.
+    expect(situacoesExame.filter(exameExigeAtencao)).toEqual([
+      "pendente",
+      "guia_entregue",
+      "agendado",
+      "exige_acao"
+    ]);
+  });
+
+  it("nada de convite, upload ou storage entrou nesta vertical", () => {
+    // O convite depende do aviso juridico aprovado e da politica de documentos. Ate la nao existe
+    // token, rota publica, upload nem storage — e emitir link que nao abre esta fora de cogitacao.
+    for (const { nome, codigo } of fontesDoProcesso()) {
+      for (const proibido of ["token", "convite", "upload", "storage", "multipart"]) {
+        expect(codigo.toLowerCase(), `${nome} (${proibido})`).not.toContain(proibido);
+      }
+    }
   });
 });
 

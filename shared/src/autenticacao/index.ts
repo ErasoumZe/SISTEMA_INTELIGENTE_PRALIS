@@ -141,6 +141,13 @@ export const permissoes = [
   // iniciar e consequencia de efetivar, nao um ato separado.
   "admissoes_processos_visualizar",
   "admissoes_processos_cancelar",
+  // ADM-003 V1A. `criar_direta` e a UNICA entrada de processo sem teste — e por isso ela existe e
+  // se chama assim: nao ha "criar processo" generico, porque criar a partir de um teste continua
+  // sendo consequencia de efetivar, nunca um ato separado.
+  "admissoes_processos_criar_direta",
+  // Separada de `criar_direta` porque o bloco interno carrega CTPS, PIS/NIT e o exame: a Gerencia
+  // inicia o processo, o DP e quem preenche.
+  "admissoes_processos_editar_internos",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",
@@ -229,6 +236,8 @@ export const permissoes = [
   "menu_colaboradores_desabilitado",
   "menu_admissoes_testes_mostrar",
   "menu_admissoes_testes_desabilitado",
+  "menu_admissoes_processos_mostrar",
+  "menu_admissoes_processos_desabilitado",
   "menu_folha_ponto_mostrar",
   "menu_folha_ponto_desabilitado",
   "menu_avaliacao_qualidade_mostrar",

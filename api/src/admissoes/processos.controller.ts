@@ -2,10 +2,18 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { DadosExternos } from "@padaria/shared/api";
 import { processoParamsSchema } from "@padaria/shared/admissoes";
 import { exigirPermissao } from "../auth/guards.js";
-import { erro, ok } from "@padaria/shared/api";
+import { criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
-import { cancelarProcesso, listarHistoricoProcesso, obterProcesso } from "./processos.service.js";
+import {
+  atualizarExame,
+  cancelarProcesso,
+  criarProcessoDireto,
+  listarHistoricoProcesso,
+  listarProcessos,
+  obterProcesso,
+  salvarDadosInternos
+} from "./processos.service.js";
 
 function responderErro(reply: FastifyReply, error: DadosExternos) {
   const mensagem = mensagemDominioOuRelancar(error);
@@ -24,6 +32,36 @@ function responderErro(reply: FastifyReply, error: DadosExternos) {
  * sem dono definido seria superficie criada antes de existir necessidade.
  */
 export async function registrarRotasAdmissoesProcessos(app: FastifyInstance) {
+  // ADM-003 V1A: a UNICA rota que cria processo, e ela cria SO admissao direta. O contrato Zod nao
+  // tem `testeId`, entao pedir origem teste por aqui e impossivel, nao apenas proibido — quem tem
+  // teste continua chegando pela efetivacao, que e o unico caminho daquela origem.
+  app.post(
+    "/api/admissoes/processos",
+    { preHandler: exigirPermissao("admissoes_processos_criar_direta") },
+    async (request, reply) => {
+      try {
+        const criado = await criarProcessoDireto(request.body ?? {}, request.perfilUsuario);
+        return criadoId(reply, criado.id);
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  // LISTA. Existe desde a V1A porque a admissao direta nao tem teste de onde ser alcancada. E
+  // consulta: nao ha aqui nenhuma acao de iniciar, efetivar ou criar.
+  app.get(
+    "/api/admissoes/processos",
+    { preHandler: exigirPermissao("admissoes_processos_visualizar") },
+    async (request, reply) => {
+      try {
+        return paginadoDeResultado(await listarProcessos(request.query, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
   app.get(
     "/api/admissoes/processos/:id",
     { preHandler: exigirPermissao("admissoes_processos_visualizar") },
@@ -44,6 +82,36 @@ export async function registrarRotasAdmissoesProcessos(app: FastifyInstance) {
       try {
         const { id } = processoParamsSchema.parse(request.params);
         return ok(await listarHistoricoProcesso(id, request.query, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  app.put(
+    "/api/admissoes/processos/:id/internos",
+    { preHandler: exigirPermissao("admissoes_processos_editar_internos") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        await salvarDadosInternos(id, request.body ?? {}, request.perfilUsuario);
+        return semConteudo(reply);
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  // Exame admissional: permissao do BLOCO INTERNO, nao uma terceira. Quem preenche CTPS e quem
+  // acompanha o exame sao a mesma pessoa; separar aqui seria permissao sem dono.
+  app.put(
+    "/api/admissoes/processos/:id/exame",
+    { preHandler: exigirPermissao("admissoes_processos_editar_internos") },
+    async (request, reply) => {
+      try {
+        const { id } = processoParamsSchema.parse(request.params);
+        await atualizarExame(id, request.body ?? {}, request.perfilUsuario);
+        return semConteudo(reply);
       } catch (error) {
         return responderErro(reply, error);
       }

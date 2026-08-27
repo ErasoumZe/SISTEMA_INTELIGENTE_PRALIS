@@ -5,6 +5,7 @@
 export {
   admissoesProcessos,
   admissoesProcessosHistorico,
+  admissoesProcessosInternos,
   admissoesTestes,
   admissoesTestesHistorico
 } from "../app.schema.js";

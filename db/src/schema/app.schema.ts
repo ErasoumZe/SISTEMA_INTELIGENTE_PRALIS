@@ -2205,8 +2205,24 @@ export const admissoesProcessos = pgTable(
   {
     id: idUuid,
     empresaId,
-    /** A ORIGEM. O processo so existe por causa dela. */
-    testeId: uuid("teste_id").notNull(),
+    // ADM-003 V1A: DUAS origens, UM processo. Nao ha segunda tabela nem segundo tipo — o que muda
+    // e de onde vieram os dados, e o CHECK de coerencia abaixo torna a mistura irrepresentavel.
+    // O default cobre as linhas que ja existem: todas nasceram de um teste efetivado.
+    // A uniao literal vive aqui por ora; sobe para `shared` quando o service da V1A chegar.
+    origem: text("origem")
+      .$type<"teste_efetivado" | "admissao_direta">()
+      .notNull()
+      .default("teste_efetivado"),
+    /**
+     * A ORIGEM, quando ela e um periodo de teste. NULO na admissao direta — e e o CHECK de
+     * coerencia, nao esta coluna, que garante que nulo so acontece na origem certa.
+     */
+    testeId: uuid("teste_id"),
+    // So na admissao direta. Na origem teste estes dois sao NULOS por CHECK: funcao e jornada moram
+    // em `admissoes_testes` e sao apenas EXIBIDAS: copiar aqui criaria a segunda fonte que a
+    // regra-mae proibe.
+    funcaoId: uuid("funcao_id"),
+    jornadaHorario: text("jornada_horario"),
     status: text("status").$type<StatusProcesso>().notNull().default("iniciado"),
     versao: integer("versao").notNull().default(1),
     // Sem coluna de MOTIVO: a lista real depende de validacao do DP que ainda nao aconteceu, e uma
@@ -2230,8 +2246,16 @@ export const admissoesProcessos = pgTable(
       foreignColumns: [admissoesTestes.id, admissoesTestes.empresaId],
       name: "admissoes_processos_teste_empresa_fk"
     }),
+    // FK COMPOSTA tambem para a funcao: o banco recusa funcao de outra empresa por conta propria.
+    foreignKey({
+      columns: [table.funcaoId, table.empresaId],
+      foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
+      name: "admissoes_processos_funcao_empresa_fk"
+    }),
     // UM teste, UM processo — no banco, nao no servico. E a rede para duas transacoes concorrentes
     // passarem juntas pelo lock; repeticao e tratada pelo ramo idempotente do servico.
+    // Segue valendo com `teste_id` anulavel: o Postgres permite varios NULL numa unique, entao N
+    // admissoes diretas convivem sem afrouxar a garantia da origem teste.
     unique("admissoes_processos_teste_unico").on(table.testeId),
     // Alvo da FK composta vinda do historico. Tabela NOVA — nao fere a regra de nao tocar existentes.
     unique("admissoes_processos_id_empresa_unica").on(table.id, table.empresaId),
@@ -2250,12 +2274,90 @@ export const admissoesProcessos = pgTable(
         and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
       )`
     ),
+    check(
+      "admissoes_processos_origem_check",
+      sql`${table.origem} in ('teste_efetivado', 'admissao_direta')`
+    ),
+    // A constraint que impede combinacao incoerente, nos DOIS sentidos:
+    //   origem teste  -> tem teste, e NAO tem copia de funcao/jornada;
+    //   origem direta -> nao tem teste, e funcao/jornada sao obrigatorias no proprio processo.
+    // Com isso, "duas fontes para o mesmo dado" deixa de ser representavel no banco.
+    check(
+      "admissoes_processos_origem_coerencia_check",
+      sql`(
+        ${table.origem} = 'teste_efetivado'
+        and ${table.testeId} is not null
+        and ${table.funcaoId} is null and ${table.jornadaHorario} is null
+      ) or (
+        ${table.origem} = 'admissao_direta'
+        and ${table.testeId} is null
+        and ${table.funcaoId} is not null and ${table.jornadaHorario} is not null
+      )`
+    ),
     index("admissoes_processos_empresa_status_criado_idx").on(
       table.empresaId,
       table.status,
       table.criadoEm,
       table.id
     )
+  ]
+);
+
+/**
+ * ADM-003 V1A — bloco INTERNO do DP. Vale para as duas origens.
+ *
+ * Tudo anulavel menos a situacao do exame: o DP preenche ao longo do tempo, e exigir tudo de uma vez
+ * travaria o processo num dado que ainda nao existe.
+ *
+ * FORA daqui, de proposito: area, setor, CBO e salario (dependem de `unique (id, empresa_id)` em
+ * `areas`/`setores`, que nao existe — sem ele nao ha FK composta, e a garantia de empresa cairia
+ * para o servico) e dados bancarios (dado sensivel sem finalidade antes de haver candidato).
+ */
+export const admissoesProcessosInternos = pgTable(
+  "admissoes_processos_internos",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    dataAdmissao: date("data_admissao"),
+    ctpsNumero: text("ctps_numero"),
+    ctpsSerie: text("ctps_serie"),
+    ctpsUf: text("ctps_uf"),
+    pisPasepNit: text("pis_pasep_nit"),
+    // Os CINCO valores confirmados pelo DP. O ALERTA enquanto nao for 'realizado' e DERIVADO em
+    // `shared`, nunca gravado — nao existe coluna, indice nem filtro paralelo de pendencia.
+    exameSituacao: text("exame_situacao")
+      .$type<"pendente" | "guia_entregue" | "agendado" | "realizado" | "exige_acao">()
+      .notNull()
+      .default("pendente"),
+    exameAtualizadoEm: timestamp("exame_atualizado_em", { withTimezone: true }),
+    exameAtualizadoPor: text("exame_atualizado_por").references(() => perfisUsuarios.usuarioId),
+    observacoesRh: text("observacoes_rh"),
+    versao: integer("versao").notNull().default(1),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_internos_processo_empresa_fk"
+    }).onDelete("cascade"),
+    unique("admissoes_processos_internos_processo_unico").on(table.processoId),
+    check(
+      "admissoes_processos_internos_exame_check",
+      sql`${table.exameSituacao} in ('pendente', 'guia_entregue', 'agendado', 'realizado', 'exige_acao')`
+    ),
+    check("admissoes_processos_internos_versao_check", sql`${table.versao} > 0`),
+    check(
+      "admissoes_processos_internos_ctps_uf_check",
+      sql`${table.ctpsUf} is null or ${table.ctpsUf} ~ '^[A-Z]{2}$'`
+    ),
+    check(
+      "admissoes_processos_internos_pis_check",
+      sql`${table.pisPasepNit} is null or ${table.pisPasepNit} ~ '^[0-9]{11}$'`
+    ),
+    index("admissoes_processos_internos_exame_idx").on(table.empresaId, table.exameSituacao)
   ]
 );
 
@@ -2283,7 +2385,10 @@ export const admissoesProcessosHistorico = pgTable(
       foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
       name: "admissoes_processos_historico_processo_empresa_fk"
     }).onDelete("cascade"),
-    check("admissoes_processos_historico_acao_check", sql`${table.acao} in ('criado', 'cancelado')`),
+    check(
+      "admissoes_processos_historico_acao_check",
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado')`
+    ),
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
     uniqueIndex("admissoes_processos_historico_evento_unico").on(table.processoId, table.versao),

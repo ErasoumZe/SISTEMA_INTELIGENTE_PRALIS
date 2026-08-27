@@ -41,6 +41,10 @@ const permissaoAcessoPorTela = {
   colaboradores: "cadastro_colaboradores_visualizar",
   // ADM-001. Tela PROPRIA de admissao: nao herda nem concede `cadastro_colaboradores_*`.
   admissoes_testes: "admissoes_testes_visualizar",
+  // ADM-003 V1A: o processo ganha menu porque a admissao direta nao tem teste de onde ser
+  // alcancada. Sem a tela, um processo direto nasceria inalcancavel. A lista e CONSULTA: a unica
+  // acao de criacao nela e "Novo cadastro", e nao ha segundo verbo para o mesmo ato.
+  admissoes_processos: "admissoes_processos_visualizar",
   folha_ponto: "folha_ponto_visualizar",
   avaliacao_qualidade: "avaliacao_qualidade_visualizar",
   avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
@@ -189,6 +193,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "promocoes",
       "relatorio_faltas",
       "relatorio_advertencias",
+      "admissoes_processos",
       "pedidos",
       "perdas_sobras",
       "estoque_produtos",
@@ -235,8 +240,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_testes_cancelar",
       // ADM-002 V0: a Gerencia acompanha e cancela o processo de admissao, junto com o DP.
       // Nao ha permissao de "iniciar": iniciar e consequencia de efetivar o teste.
-      "admissoes_processos_visualizar",
+      // `_visualizar` vem de `ativas` na V1A, junto do menu — nao se repete aqui.
       "admissoes_processos_cancelar",
+      // ADM-003 V1A: a Gerencia INICIA a admissao direta. Nao preenche o bloco interno — CTPS,
+      // PIS/NIT e exame ficam com o DP.
+      "admissoes_processos_criar_direta",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -245,7 +253,7 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargo({
-    ativas: ["despesas", "colaboradores", "folha_ponto", "admissoes_testes"],
+    ativas: ["despesas", "colaboradores", "folha_ponto", "admissoes_testes", "admissoes_processos"],
     // ADM-001: o DP opera o periodo de teste por inteiro. As quatro acoes sao PROPRIAS da
     // admissao — `cadastro_colaboradores_*` continua sem abrir nada aqui, e vice-versa.
     extras: [
@@ -257,10 +265,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_testes_editar",
       "admissoes_testes_encerrar",
       "admissoes_testes_cancelar",
-      // ADM-002 V0. Nao entram por `ativas` porque o processo NAO tem entrada de menu: ele e
-      // alcancado so pelo teste efetivado.
-      "admissoes_processos_visualizar",
+      // ADM-002 V0. `_visualizar` passou para `ativas` na V1A, quando o processo ganhou menu.
       "admissoes_processos_cancelar",
+      // ADM-003 V1A: o DP opera a admissao direta por inteiro — abre e preenche o bloco interno.
+      "admissoes_processos_criar_direta",
+      "admissoes_processos_editar_internos",
     ]
   }),
   RH: permissoesDoCargo({

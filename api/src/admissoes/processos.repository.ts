@@ -1,12 +1,19 @@
-import { and, asc, count, eq, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   admissoesProcessos,
   admissoesProcessosHistorico,
+  admissoesProcessosInternos,
   admissoesTestes
 } from "@padaria/db/schema/admissoes";
-import { perfisUsuarios } from "@padaria/db/schema/cadastro";
-import type { AcaoHistoricoProcesso, StatusProcesso } from "@padaria/shared/admissoes";
+import { funcoesOperacionais, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import type {
+  AcaoHistoricoProcesso,
+  OrigemProcesso,
+  ProcessosQuery,
+  SituacaoExame,
+  StatusProcesso
+} from "@padaria/shared/admissoes";
 import type { PaginationQuery, ResultadoPaginado } from "@padaria/shared/api";
 import { banco, type TransacaoBanco } from "../banco/conexao.js";
 
@@ -15,19 +22,40 @@ const perfilCriador = alias(perfisUsuarios, "perfil_criador_processo");
 const perfilAtualizador = alias(perfisUsuarios, "perfil_atualizador_processo");
 const perfilCancelador = alias(perfisUsuarios, "perfil_cancelador_processo");
 const perfilAtor = alias(perfisUsuarios, "perfil_ator_processo");
+const perfilExame = alias(perfisUsuarios, "perfil_exame_processo");
+// A funcao pode vir de DOIS lugares, e nunca dos dois ao mesmo tempo: do teste (origem teste) ou do
+// proprio processo (origem direta). Dois aliases porque sao dois joins distintos sobre a mesma
+// tabela — e o `coalesce` no SELECT e a unica linha que resolve a origem para quem le.
+const funcaoDoTeste = alias(funcoesOperacionais, "funcao_do_teste");
+const funcaoDoProcesso = alias(funcoesOperacionais, "funcao_do_processo");
 
 export type ProcessoLinha = {
   id: string;
+  origem: OrigemProcesso;
   status: StatusProcesso;
   versao: number;
-  testeId: string;
-  testeNomeCompleto: string;
+  // NULO na admissao direta. O CHECK do banco garante que so e nulo nessa origem.
+  testeId: string | null;
+  // NULO ate o candidato responder, no processo direto. Nao ha coluna de nome no processo.
+  nomeCompleto: string | null;
+  funcaoNome: string | null;
+  jornadaHorario: string | null;
   criadoPorNome: string | null;
   criadoEm: Date;
   atualizadoPorNome: string | null;
   atualizadoEm: Date;
   canceladoPorNome: string | null;
   canceladoEm: Date | null;
+  internosVersao: number;
+  internosDataAdmissao: string | null;
+  ctpsNumero: string | null;
+  ctpsSerie: string | null;
+  ctpsUf: string | null;
+  pisPasepNit: string | null;
+  observacoesRh: string | null;
+  exameSituacao: SituacaoExame;
+  exameAtualizadoPorNome: string | null;
+  exameAtualizadoEm: Date | null;
 };
 
 /**
@@ -54,6 +82,151 @@ export async function criarProcessoRepository(
   return linha ?? null;
 }
 
+/**
+ * Cria o processo da ADMISSAO DIRETA. Sem teste, com funcao e jornada proprias.
+ *
+ * `origem` vai explicita, e nao pelo default: o default existe para as linhas que ja estavam la, nao
+ * para esconder a intencao de quem escreve. O CHECK de coerencia recusa a combinacao errada — este
+ * insert e o unico lugar que pode produzir `admissao_direta`.
+ */
+export async function criarProcessoDiretoRepository(
+  input: {
+    empresaId: string;
+    funcaoId: string;
+    jornadaHorario: string;
+    atorUsuarioId: string;
+  },
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .insert(admissoesProcessos)
+    .values({
+      empresaId: input.empresaId,
+      origem: "admissao_direta",
+      testeId: null,
+      funcaoId: input.funcaoId,
+      jornadaHorario: input.jornadaHorario,
+      criadoPor: input.atorUsuarioId,
+      atualizadoPor: input.atorUsuarioId
+    })
+    .returning({ id: admissoesProcessos.id, versao: admissoesProcessos.versao });
+  if (!linha) throw new Error("Processo de admissao direta nao criado");
+  return linha;
+}
+
+/** A funcao operacional existe nesta empresa, e esta ativa? */
+export async function obterFuncaoAtivaRepository(funcaoId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ id: funcoesOperacionais.id, ativo: funcoesOperacionais.ativo })
+    .from(funcoesOperacionais)
+    .where(and(eq(funcoesOperacionais.id, funcaoId), eq(funcoesOperacionais.empresaId, empresaId)))
+    .limit(1);
+  return linha ?? null;
+}
+
+/**
+ * O bloco interno nasce junto do processo, nas DUAS origens, para que a tela nunca precise decidir
+ * entre criar e atualizar — e para que o exame comece em `pendente` desde o primeiro instante.
+ */
+export async function criarInternosRepository(
+  input: { empresaId: string; processoId: string; dataAdmissao: string | null },
+  db: TransacaoBanco
+) {
+  await db.insert(admissoesProcessosInternos).values({
+    empresaId: input.empresaId,
+    processoId: input.processoId,
+    dataAdmissao: input.dataAdmissao
+  });
+}
+
+/** Trava o bloco interno antes de validar. Mesmo padrao do processo e da ADM-001. */
+export async function bloquearInternosRepository(processoId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({
+      id: admissoesProcessosInternos.id,
+      versao: admissoesProcessosInternos.versao,
+      exameSituacao: admissoesProcessosInternos.exameSituacao
+    })
+    .from(admissoesProcessosInternos)
+    .where(
+      and(
+        eq(admissoesProcessosInternos.processoId, processoId),
+        eq(admissoesProcessosInternos.empresaId, empresaId)
+      )
+    )
+    .limit(1)
+    .for("no key update");
+  return linha ?? null;
+}
+
+/** `versaoAtual` no WHERE: retorno nulo significa que alguem alterou no meio. */
+export async function atualizarInternosRepository(
+  input: {
+    processoId: string;
+    empresaId: string;
+    versaoAtual: number;
+    dataAdmissao: string | null;
+    ctpsNumero: string | null;
+    ctpsSerie: string | null;
+    ctpsUf: string | null;
+    pisPasepNit: string | null;
+    observacoesRh: string | null;
+  },
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(admissoesProcessosInternos)
+    .set({
+      dataAdmissao: input.dataAdmissao,
+      ctpsNumero: input.ctpsNumero,
+      ctpsSerie: input.ctpsSerie,
+      ctpsUf: input.ctpsUf,
+      pisPasepNit: input.pisPasepNit,
+      observacoesRh: input.observacoesRh,
+      versao: input.versaoAtual + 1
+    })
+    .where(
+      and(
+        eq(admissoesProcessosInternos.processoId, input.processoId),
+        eq(admissoesProcessosInternos.empresaId, input.empresaId),
+        eq(admissoesProcessosInternos.versao, input.versaoAtual)
+      )
+    )
+    .returning({ versao: admissoesProcessosInternos.versao });
+  return linha ?? null;
+}
+
+/** Exame: acao propria, com autoria e data proprias. */
+export async function atualizarExameRepository(
+  input: {
+    processoId: string;
+    empresaId: string;
+    versaoAtual: number;
+    situacao: SituacaoExame;
+    atorUsuarioId: string;
+    atualizadoEm: Date;
+  },
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(admissoesProcessosInternos)
+    .set({
+      exameSituacao: input.situacao,
+      exameAtualizadoPor: input.atorUsuarioId,
+      exameAtualizadoEm: input.atualizadoEm,
+      versao: input.versaoAtual + 1
+    })
+    .where(
+      and(
+        eq(admissoesProcessosInternos.processoId, input.processoId),
+        eq(admissoesProcessosInternos.empresaId, input.empresaId),
+        eq(admissoesProcessosInternos.versao, input.versaoAtual)
+      )
+    )
+    .returning({ versao: admissoesProcessosInternos.versao });
+  return linha ?? null;
+}
+
 /** O processo deste teste, se existir. E o que sustenta o ramo idempotente da efetivacao. */
 export async function obterProcessoPorTesteRepository(
   testeId: string,
@@ -74,37 +247,143 @@ export async function obterProcessoPorTesteRepository(
  * A empresa entra no proprio WHERE: "nao existe" e "e de outra empresa" produzem a MESMA resposta
  * vazia, entao a rota nao vira oraculo sobre processo de outro tenant.
  */
-export async function obterProcessoRepository(id: string, empresaId: string): Promise<ProcessoLinha | null> {
-  const [linha] = await banco
-    .select({
-      id: admissoesProcessos.id,
-      status: admissoesProcessos.status,
-      versao: admissoesProcessos.versao,
-      testeId: admissoesProcessos.testeId,
-      testeNomeCompleto: admissoesTestes.nomeCompleto,
-      // SO o nome. E-mail nunca entra na projecao.
-      criadoPorNome: perfilCriador.nome,
-      criadoEm: admissoesProcessos.criadoEm,
-      atualizadoPorNome: perfilAtualizador.nome,
-      atualizadoEm: admissoesProcessos.atualizadoEm,
-      canceladoPorNome: perfilCancelador.nome,
-      canceladoEm: admissoesProcessos.canceladoEm
-    })
+/**
+ * A projecao do processo, valendo para as DUAS origens.
+ *
+ * O join com `admissoes_testes` e LEFT: na admissao direta nao ha teste, e um inner join faria o
+ * processo direto sumir da propria consulta — bug silencioso, do tipo que so aparece em producao.
+ *
+ * `coalesce` resolve a origem em UMA linha: funcao e jornada vem do teste (herdadas) ou do proprio
+ * processo (direta). Quem consome nao precisa saber de onde, e nao existe copia entre as duas.
+ */
+function selecaoProcesso() {
+  return {
+    id: admissoesProcessos.id,
+    origem: admissoesProcessos.origem,
+    status: admissoesProcessos.status,
+    versao: admissoesProcessos.versao,
+    testeId: admissoesProcessos.testeId,
+    nomeCompleto: admissoesTestes.nomeCompleto,
+    funcaoNome: sql<string | null>`coalesce(${funcaoDoTeste.nome}, ${funcaoDoProcesso.nome})`,
+    jornadaHorario: sql<string | null>`coalesce(${admissoesTestes.jornadaHorario}, ${admissoesProcessos.jornadaHorario})`,
+    // SO o nome. E-mail nunca entra na projecao.
+    criadoPorNome: perfilCriador.nome,
+    criadoEm: admissoesProcessos.criadoEm,
+    atualizadoPorNome: perfilAtualizador.nome,
+    atualizadoEm: admissoesProcessos.atualizadoEm,
+    canceladoPorNome: perfilCancelador.nome,
+    canceladoEm: admissoesProcessos.canceladoEm,
+    internosVersao: admissoesProcessosInternos.versao,
+    internosDataAdmissao: admissoesProcessosInternos.dataAdmissao,
+    ctpsNumero: admissoesProcessosInternos.ctpsNumero,
+    ctpsSerie: admissoesProcessosInternos.ctpsSerie,
+    ctpsUf: admissoesProcessosInternos.ctpsUf,
+    pisPasepNit: admissoesProcessosInternos.pisPasepNit,
+    observacoesRh: admissoesProcessosInternos.observacoesRh,
+    exameSituacao: admissoesProcessosInternos.exameSituacao,
+    exameAtualizadoPorNome: perfilExame.nome,
+    exameAtualizadoEm: admissoesProcessosInternos.exameAtualizadoEm
+  };
+}
+
+/** A consulta base, com todos os joins. Cada um casa TAMBEM a empresa. */
+function consultaProcesso() {
+  return banco
+    .select(selecaoProcesso())
     .from(admissoesProcessos)
-    // Join casando TAMBEM a empresa: mesma defesa em profundidade da FK composta.
-    .innerJoin(
+    .leftJoin(
       admissoesTestes,
       and(
         eq(admissoesTestes.id, admissoesProcessos.testeId),
         eq(admissoesTestes.empresaId, admissoesProcessos.empresaId)
       )
     )
+    .leftJoin(
+      funcaoDoTeste,
+      and(
+        eq(funcaoDoTeste.id, admissoesTestes.funcaoId),
+        eq(funcaoDoTeste.empresaId, admissoesTestes.empresaId)
+      )
+    )
+    .leftJoin(
+      funcaoDoProcesso,
+      and(
+        eq(funcaoDoProcesso.id, admissoesProcessos.funcaoId),
+        eq(funcaoDoProcesso.empresaId, admissoesProcessos.empresaId)
+      )
+    )
+    .leftJoin(
+      admissoesProcessosInternos,
+      and(
+        eq(admissoesProcessosInternos.processoId, admissoesProcessos.id),
+        eq(admissoesProcessosInternos.empresaId, admissoesProcessos.empresaId)
+      )
+    )
     .leftJoin(perfilCriador, eq(perfilCriador.usuarioId, admissoesProcessos.criadoPor))
     .leftJoin(perfilAtualizador, eq(perfilAtualizador.usuarioId, admissoesProcessos.atualizadoPor))
     .leftJoin(perfilCancelador, eq(perfilCancelador.usuarioId, admissoesProcessos.canceladoPor))
+    .leftJoin(perfilExame, eq(perfilExame.usuarioId, admissoesProcessosInternos.exameAtualizadoPor));
+}
+
+/**
+ * O bloco interno nasce junto do processo. O `??` cobre a linha da ADM-002 criada antes da 0034 —
+ * sem ele, um processo antigo chegaria a tela com versao nula.
+ */
+type LinhaConsultada = Omit<ProcessoLinha, "internosVersao" | "exameSituacao"> & {
+  internosVersao: number | null;
+  exameSituacao: SituacaoExame | null;
+};
+
+function normalizar(linha: LinhaConsultada): ProcessoLinha {
+  return {
+    ...linha,
+    internosVersao: linha.internosVersao ?? 1,
+    exameSituacao: linha.exameSituacao ?? "pendente"
+  };
+}
+
+/**
+ * Detalhe do processo.
+ *
+ * A empresa entra no proprio WHERE: "nao existe" e "e de outra empresa" produzem a MESMA resposta
+ * vazia, entao a rota nao vira oraculo sobre processo de outro tenant.
+ */
+export async function obterProcessoRepository(id: string, empresaId: string): Promise<ProcessoLinha | null> {
+  const [linha] = await consultaProcesso()
     .where(and(eq(admissoesProcessos.id, id), eq(admissoesProcessos.empresaId, empresaId)))
     .limit(1);
-  return linha ?? null;
+  return linha ? normalizar(linha) : null;
+}
+
+/**
+ * LISTA. Consulta e nada mais — nao ha aqui acao de iniciar, efetivar ou criar.
+ *
+ * Sem busca por nome e SEM busca por CPF: documento nunca entra em query string (D-4 do
+ * PROJECT_BRAIN/31), e no processo direto o nome so existe depois da resposta do candidato.
+ */
+export async function listarProcessosRepository(
+  empresaId: string,
+  query: ProcessosQuery
+): Promise<ResultadoPaginado<ProcessoLinha>> {
+  const filtros: SQL[] = [eq(admissoesProcessos.empresaId, empresaId)];
+  if (query.origem) filtros.push(eq(admissoesProcessos.origem, query.origem));
+  if (query.situacao) {
+    filtros.push(eq(admissoesProcessos.status, query.situacao === "ativo" ? "iniciado" : "cancelado"));
+  }
+  const where = and(...filtros);
+
+  const [{ total } = { total: 0 }] = await banco
+    .select({ total: count() })
+    .from(admissoesProcessos)
+    .where(where);
+
+  const itens = await consultaProcesso()
+    .where(where)
+    .orderBy(desc(admissoesProcessos.criadoEm), desc(admissoesProcessos.id))
+    .limit(query.pageSize)
+    .offset((query.page - 1) * query.pageSize);
+
+  return { itens: itens.map(normalizar), total, page: query.page, pageSize: query.pageSize };
 }
 
 /** Bloqueia a linha antes de validar. Mesmo padrao da ADM-001. */
