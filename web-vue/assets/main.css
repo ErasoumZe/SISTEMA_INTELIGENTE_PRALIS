@@ -3053,3 +3053,34 @@ body {
   );
 }
 /* ===================== FIM VIS-E5b ===================== */
+
+/* ===================== INICIO VIS-E5c — GRADIENTE SO NO QUE JA E DA MARCA (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+
+   LEIA ANTES DE "COMPLETAR" ISTO. O gradiente NAO e global, e nao e esquecimento.
+
+   O botao primario do Pralis NAO e roxo: ele carrega a cor da CATEGORIA DA TELA, injetada pelo
+   `aplicarTema` (useApi.ts:165) em `cores["primary"]`. Medido no navegador em 27/08:
+     Colaboradores (tela neutra)   --v-theme-primary = 101,21,221  -> #6515dd, a marca
+     Entradas      (tela com cor)  --v-theme-primary = 202,138,4   -> #ca8a04, entradas
+   Um `background-image` roxo pinta POR CIMA do `background-color`, entao cravar o gradiente da
+   marca em `.v-btn--variant-flat/elevated` mataria o acento de categoria em toda tela colorida.
+   E o mesmo erro que o VIS-04 ja cometeu uma vez, e a §1.1 proibe.
+
+   A referencia vivid_glass nao tem esse conflito porque foi desenhada com UMA primaria. O Pralis
+   tem seis. Por isso o gradiente fica onde a cor JA e a marca por natureza, e so ali.
+
+   NAO ALCANCA O FAB "+ NOVO", e isso e um bloqueio real, nao uma escolha: a linha 1740 declara
+   `background: var(--cx-brand) !important` — atalho shorthand, que zera `background-image`, com
+   `!important`, dentro do bloco SHELL, que e congelado. Venc-lo exige `!important` novo (proibido
+   neste lote) ou editar bloco congelado. As duas saidas pedem autorizacao propria. O mesmo vale
+   para o `.tes-nova` da Tesouraria.
+
+   Medido, branco sobre as duas pontas: 7,76 na cheia e 5,35 na clareada — as duas acima do
+   minimo de 4,5:1 do 67 §11. O gradiente e ESTATICO: nada anima, entao nao ha o que o reset de
+   `prefers-reduced-motion` desligar.
+   ============================================================================================== */
+.shell-mobills .topbar-avatar {
+  background-image: var(--cx-brand-gradiente);
+}
+/* ===================== FIM VIS-E5c ===================== */
