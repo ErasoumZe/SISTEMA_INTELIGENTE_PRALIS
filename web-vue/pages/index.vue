@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import AppWorkspace from "~/components/app/AppWorkspace.vue";
 import AppAtalhosTelas from "~/components/app/AppAtalhosTelas.vue";
+
+// So LE o estado do tema — `inicializar`/`alternar` continuam sendo do AppShell, que e quem
+// aplica. `escuro` vem de `useState`, entao e o mesmo valor, nao uma segunda cópia.
+const { escuro } = useModoEscuro();
 </script>
 
 <template>
@@ -9,8 +13,10 @@ import AppAtalhosTelas from "~/components/app/AppAtalhosTelas.vue";
   <AppWorkspace v-slot="ctx" tipo-pagina="inicio">
     <section class="inicio-vazio">
       <div class="inicio-hero">
+        <!-- A logo clara era fixa aqui: no tema escuro ela aparecia apagada sobre o cartao escuro.
+             Mesmo padrao do AppShell.vue:186-189, que ja resolvia isso — copiado, nao reinventado. -->
         <img
-          src="/cicluz/logo-cicluz.png"
+          :src="escuro ? '/cicluz/logo-cicluz-branca.png' : '/cicluz/logo-cicluz.png'"
           alt="Cicluz Gestão Profissional"
           class="inicio-hero-logo"
           width="300"
