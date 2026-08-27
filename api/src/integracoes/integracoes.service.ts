@@ -28,9 +28,18 @@ import { empresasPermitidas, podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
 import { enviarEmail } from "../auth/email.js";
-import { codigoPostgresDoErro, ErroDominio, erroValidacao, falhaTecnica, naoAutorizado, proibido } from "../erros.js";
+import {
+  codigoPostgresDoErro,
+  ErroDominio,
+  type ErroEncadeado,
+  erroValidacao,
+  falhaTecnica,
+  naoAutorizado,
+  proibido
+} from "../erros.js";
 import {
   buscarCaixaParaVendaRepository,
+  contasComCreditoDisponivelDaVendaRepository,
   buscarChavePorCodigoHashRepository,
   buscarClienteAutomaticoRepository,
   buscarFormaPagamentoAutomaticoRepository,
@@ -67,6 +76,7 @@ import {
   type IntegracaoChaveLinha
 } from "./integracoes.repository.js";
 import { travarVendaRepository } from "../vendas/vendas.repository.js";
+import { travarContasRepository } from "../contas/contas.repository.js";
 
 export const integracoesDisponiveis: Array<{ tipo: TipoIntegracao; nome: string }> = [
   { tipo: "vendas", nome: "Vendas do PDV" }
@@ -143,17 +153,29 @@ function erroVendaDuplicadaEmCorrida(): Error {
   return Object.assign(erro, { code: CODIGO_VENDA_DUPLICADA_EM_CORRIDA });
 }
 
-// Os transitorios que a ingestao sabe NOMEAR — respondem 503 `LOCK_OCUPADO`, o codigo que o caixa e
-// o agente ja conhecem. Ver o comentario no `catch` de `receberVendaIntegracao` para o porque de
-// cada um.
-const TRANSITORIOS_CONHECIDOS = new Set<string>([
-  "55P03",
-  "40P01",
-  "23505",
-  "42P10",
-  CODIGO_VENDA_MUDOU_DE_CAIXA,
-  CODIGO_VENDA_DUPLICADA_EM_CORRIDA
-]);
+// Os transitorios que a ingestao sabe NOMEAR — todos respondem 503 `LOCK_OCUPADO`, o codigo que o
+// caixa e o agente ja conhecem. Ver o comentario no `catch` de `receberVendaIntegracao`.
+//
+// SAO DOIS CONJUNTOS, e nao um, porque a LEITURA de cada grupo e diferente. `codigoPostgresDoErro`
+// filtra por FORMA de SQLSTATE (cinco caracteres `[0-9A-Z]`) e continua descendo na cadeia quando
+// acha um `code` que nao casa — e assim que ele impede um erro do Node por cima (`ECONNREFUSED`)
+// de esconder o erro do banco embaixo. O efeito colateral e que ele NUNCA devolve os sentinelas
+// deste servico, que sao `P0_...`. Num conjunto so, esses dois ramos virariam codigo morto e a
+// corrida concorrente passaria a responder 500 em vez de 503.
+const TRANSITORIOS_PG = new Set<string>(["55P03", "40P01", "23505", "42P10"]);
+const TRANSITORIOS_INTERNOS = new Set<string>([CODIGO_VENDA_MUDOU_DE_CAIXA, CODIGO_VENDA_DUPLICADA_EM_CORRIDA]);
+
+// Le os sentinelas internos na cadeia, SEM filtro de formato — o oposto de `codigoPostgresDoErro`,
+// e de proposito: aqui o que se procura nao tem forma de SQLSTATE.
+function sentinelaTransitorio(erro: ErroEncadeado | null | undefined): string | undefined {
+  let atual = erro;
+  for (let nivel = 0; nivel < 5 && atual && typeof atual === "object"; nivel += 1) {
+    const codigo = atual.code;
+    if (typeof codigo === "string" && TRANSITORIOS_INTERNOS.has(codigo)) return codigo;
+    atual = atual.cause;
+  }
+  return undefined;
+}
 
 // Forma de um SQLSTATE do Postgres: cinco caracteres de `[0-9A-Z]`. Serve para separar "o banco
 // falhou" de "o nosso codigo falhou" sem manter lista de codigos.
@@ -817,6 +839,28 @@ export async function receberVendaIntegracao(
       // ninguem escreve. A recusa e transitoria (5xx) — a R-013 proibe 4xx aqui, que faria o
       // agente DESCARTAR a venda; ele re-tenta e o ciclo seguinte trava o caixa certo.
       if (vendaExistenteId) {
+        // P1 (#152) — CONTAS ANTES DA LINHA DA VENDA, que e a ordem canonica da R-164/R-165
+        // (pdvs -> fechamentos_caixa -> contas -> linha do lancamento -> filhas).
+        //
+        // Por que a ingestao passou a precisar disto: desde a 6a consulta do saldo, `vendas_pagamentos`
+        // e fonte de saldo. Um reenvio que CANCELA a venda, ou que a rerroteia, RETIRA credito que ja
+        // esta disponivel — e retirar saldo tem de passar pela mesma porta que autoriza saida.
+        //
+        // Sem esta trava, a corrida era real e o desfecho era o que a R-165 existe para impedir:
+        //   T1 (despesa) trava a conta, le saldo 500, aprova saida de 500;
+        //   T2 (reenvio com venda cancelada) tira os 500 sem travar nada;
+        //   as duas commitam e a conta fica em -500.
+        //
+        // `FOR NO KEY UPDATE` e o MESMO modo que a porta usa, entao as duas transacoes se enxergam e
+        // se serializam. Nao ha ciclo de deadlock: ninguem no sistema toma `contas` DEPOIS da linha da
+        // venda — a porta trava contas e escreve o lancamento; aqui travamos contas e depois a venda.
+        const contasComCredito = await contasComCreditoDisponivelDaVendaRepository(
+          vendaExistenteId,
+          chave.empresaId,
+          tx
+        );
+        if (contasComCredito.length) await travarContasRepository(contasComCredito, chave.empresaId, tx);
+
         // Linha ausente (sumiu, ou nao e desta empresa) = trava NAO adquirida: a comparacao abaixo
         // seria duas leituras sem trava se passasse batido. Falha FECHADO — o 503 se repete ate
         // alguem olhar, o que e melhor que mover dinheiro sem garantia (e continua 5xx: a venda
@@ -924,8 +968,14 @@ export async function receberVendaIntegracao(
     // Drizzle embrulha toda falha de query num `DrizzleQueryError` que NAO copia o `code` — o erro
     // do `pg` fica em `cause`. Enquanto isso passou batido, os ramos de 55P03/40P01 eram codigo
     // morto e TODA falha de banco virava 422, ou seja, venda descartada.
-    const codigoPostgres = codigoPostgresDoErro(erroOriginal);
-    if (codigoPostgres && TRANSITORIOS_CONHECIDOS.has(codigoPostgres)) {
+    // Sentinelas deste servico primeiro: eles nao tem forma de SQLSTATE e por isso nao aparecem em
+    // `codigoPostgresDoErro`.
+    const cadeia = erroOriginal as ErroEncadeado | null;
+    if (sentinelaTransitorio(cadeia)) {
+      throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
+    }
+    const codigoPostgres = codigoPostgresDoErro(cadeia);
+    if (codigoPostgres && TRANSITORIOS_PG.has(codigoPostgres)) {
       throw new ErroDominio("Venda integrada em processamento concorrente; tente novamente", 503, "LOCK_OCUPADO");
     }
     // QUALQUER OUTRO SQLSTATE REAL tambem e 5xx re-tentavel. Este ramo existe para NAO precisar de

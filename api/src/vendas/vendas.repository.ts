@@ -9,6 +9,7 @@ import {
   liquidoCentavos,
   liquidoDeSomasCentavos
 } from "@padaria/shared/dinheiro";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 
@@ -342,12 +343,33 @@ export async function buscarVendaDetalheRepository(
   };
 }
 
+// A assinatura de um pagamento: forma + valor em centavos. E a MESMA chave que a R-177 usa para
+// decidir se os pagamentos mudaram — de proposito, para o guard e a preservacao do snapshot nunca
+// discordarem sobre o que e "o mesmo pagamento".
+export function assinaturaDoPagamento(formaPagamentoId: string | null, totalPago: number | string): string {
+  return `${formaPagamentoId ?? "-"}|${paraCentavos(totalPago)}`;
+}
+
+// R-177 (#152): a venda veio da integracao? Leitura minima e proposital — nao entra no
+// `VendaDetalheDto`, porque `integracao_chave_id` e id interno e a tela nao precisa dele.
+export async function vendaEhIntegradaRepository(vendaId: string, db: ExecutorBanco = banco): Promise<boolean> {
+  const [linha] = await db
+    .select({ integracaoChaveId: vendas.integracaoChaveId })
+    .from(vendas)
+    .where(eq(vendas.id, vendaId))
+    .limit(1);
+  return Boolean(linha?.integracaoChaveId);
+}
+
 export async function atualizarVendaRepository(
   vendaId: string,
   dados: VendaPayload,
   computar: boolean,
-  db?: ExecutorBanco
+  db?: ExecutorBanco,
+  // Venda integrada: os pagamentos ficam como estao, com o snapshot de roteamento intacto.
+  opcoes: { preservarPagamentos?: boolean } = {}
 ): Promise<void> {
+  const preservarPagamentos = opcoes.preservarPagamentos ?? false;
   await executarComTransacaoOpcional(db, async (tx) => {
     await tx
       .update(vendas)
@@ -361,7 +383,17 @@ export async function atualizarVendaRepository(
       .where(eq(vendas.id, vendaId));
 
     await tx.delete(vendasProdutos).where(eq(vendasProdutos.vendaId, vendaId));
-    await tx.delete(vendasPagamentos).where(eq(vendasPagamentos.vendaId, vendaId));
+    // #152 — P0: em venda INTEGRADA os pagamentos ficam INTOCADOS.
+    //
+    // O delete+insert fazia as linhas renascerem no DEFAULT (`nao_aplicavel`, contas nulas): o credito
+    // sumia do saldo e a venda passava a ser lida como historica, entao nenhum reenvio do CREARE a
+    // rotearia de novo. Perda permanente e silenciosa, disparada por um PUT que a R-177 PERMITE.
+    //
+    // Quem chama com `preservarPagamentos` ja provou, sob a trava, que os pagamentos do payload sao
+    // identicos aos gravados (R-177). Nao ha o que reescrever.
+    if (!preservarPagamentos) {
+      await tx.delete(vendasPagamentos).where(eq(vendasPagamentos.vendaId, vendaId));
+    }
 
     for (const item of dados.itensVenda) {
       await tx.insert(vendasProdutos).values({
@@ -375,15 +407,17 @@ export async function atualizarVendaRepository(
         valorTotal: String(item.valorTotal)
       });
     }
-    for (const pagamento of dados.tiposPagamento) {
-      await tx.insert(vendasPagamentos).values({
-        vendaId,
-        formaPagamentoId: pagamento.formaPagamentoId ?? null,
-        tipoPagamentoAutomacaoId: pagamento.tipoPagamentoAutomacaoId ?? null,
-        tipoPagamentoAutomacao: pagamento.tipoPagamentoAutomacao ?? null,
-        numeroVendas: pagamento.numeroVendas,
-        totalPago: String(pagamento.totalPago)
-      });
+    if (!preservarPagamentos) {
+      for (const pagamento of dados.tiposPagamento) {
+        await tx.insert(vendasPagamentos).values({
+          vendaId,
+          formaPagamentoId: pagamento.formaPagamentoId ?? null,
+          tipoPagamentoAutomacaoId: pagamento.tipoPagamentoAutomacaoId ?? null,
+          tipoPagamentoAutomacao: pagamento.tipoPagamentoAutomacao ?? null,
+          numeroVendas: pagamento.numeroVendas,
+          totalPago: String(pagamento.totalPago)
+        });
+      }
     }
   });
 }

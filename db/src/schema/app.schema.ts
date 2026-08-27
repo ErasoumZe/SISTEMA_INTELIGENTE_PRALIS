@@ -180,21 +180,73 @@ export const contas = pgTable(
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
   },
-  (table) => [check("contas_saldo_inicial_check", sql`${table.saldoInicial} >= 0`)]
+  (table) => [
+    check("contas_saldo_inicial_check", sql`${table.saldoInicial} >= 0`),
+    // Alvo das FKs COMPOSTAS do roteamento (#152). Sem este par, o cadastro de uma forma de
+    // pagamento poderia apontar para conta de OUTRA empresa e o banco nao reclamaria. Mesmo padrao
+    // ja usado por `vendas_id_empresa_unica` e `fechamentos_caixa_id_empresa_unica`.
+    unique("contas_id_empresa_unica").on(table.id, table.empresaId)
+  ]
 );
 
+// R-167 (#152): metade CADASTRO do roteamento financeiro — para onde vai o dinheiro DESTA forma
+// NESTA empresa. Fica aqui, e nao em tabela nova, porque a chave de roteamento da R-167 e
+// (empresa, forma) e esta tabela JA e exatamente essa chave: um cadastro novo com
+// `unique(empresa_id, forma_pagamento_id)` seria o "segundo caminho" que o AGENTS.md proibe.
 export const formasPagamento = pgTable(
   "formas_pagamento",
   {
     id: idUuid,
     empresaId,
     nome: text("nome").notNull(),
+    // Atributo da forma, nao chave: o payload do CREARE (`PagamentosVenda`) nao tem campo de
+    // adquirente. Se um dia tiver, vira chave sem quebrar o que ja estiver gravado.
+    adquirente: text("adquirente"),
+    // So e usada quando o admin marcou EXPLICITAMENTE. Nao existe fallback para a conta do PDV.
+    usaContaDoPdv: boolean("usa_conta_do_pdv").notNull().default(false),
+    contaRecebivelId: uuid("conta_recebivel_id"),
+    contaFinalId: uuid("conta_final_id"),
+    // NULL e o estado "sem roteamento": e o que TODA forma existente vira, e o que toda forma
+    // criada pelo CREARE continua sendo ate o admin configurar. E o estado que abre pendencia
+    // (R-168), nunca um destino inventado.
+    disponibilidade: text("disponibilidade"),
+    // Trilha: mudar roteamento e mudar o destino do dinheiro (R-176). Nulavel e sem backfill —
+    // linha antiga fica sem autor, que e a verdade sobre ela (R-166).
+    atualizadoPor: text("atualizado_por").references(() => perfisUsuarios.usuarioId),
     criadoEm,
     atualizadoEm,
     importadoDe: uuid("importado_de").references(() => empresas.id, { onDelete: "set null" }),
     idImportado: uuid("id_importado")
   },
-  (table) => [unique("formas_pagamento_empresa_nome_unica").on(table.empresaId, table.nome)]
+  (table) => [
+    unique("formas_pagamento_empresa_nome_unica").on(table.empresaId, table.nome),
+    // FKs COMPOSTAS: a conta tem de ser da MESMA empresa da forma. `restrict` porque apagar uma
+    // conta que e destino de dinheiro nao pode virar roteamento nulo em silencio.
+    foreignKey({
+      columns: [table.contaRecebivelId, table.empresaId],
+      foreignColumns: [contas.id, contas.empresaId],
+      name: "formas_pagamento_conta_recebivel_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.contaFinalId, table.empresaId],
+      foreignColumns: [contas.id, contas.empresaId],
+      name: "formas_pagamento_conta_final_empresa_fk"
+    }).onDelete("restrict"),
+    check(
+      "formas_pagamento_disponibilidade_check",
+      sql`${table.disponibilidade} is null or ${table.disponibilidade} in ('imediata', 'por_evento')`
+    ),
+    // `is not distinct from`, e NAO `=`. Com `=`, uma coluna nulavel faz o ramo valer NULL, e CHECK
+    // so recusa quando a expressao da FALSE — `FALSE or NULL or FALSE` e NULL e PASSA. O estado que
+    // escapava era o pior: `disponibilidade` NULL com `usa_conta_do_pdv = true`, ou seja, uma forma
+    // meio-cadastrada virando dinheiro IMEDIATAMENTE GASTAVEL na conta do PDV.
+    check(
+      "formas_pagamento_roteamento_check",
+      sql`(${table.disponibilidade} is null and ${table.usaContaDoPdv} = false and ${table.contaRecebivelId} is null and ${table.contaFinalId} is null)
+       or (${table.disponibilidade} is not distinct from 'imediata' and ${table.usaContaDoPdv} = true and ${table.contaRecebivelId} is null and ${table.contaFinalId} is null)
+       or (${table.disponibilidade} is not distinct from 'por_evento' and ${table.usaContaDoPdv} = false and ${table.contaRecebivelId} is not null and ${table.contaFinalId} is not null)`
+    )
+  ]
 );
 
 export const pdvs = pgTable(
@@ -977,12 +1029,47 @@ export const vendasPagamentos = pgTable(
     tipoPagamentoAutomacao: text("tipo_pagamento_automacao"),
     numeroVendas: integer("numero_vendas").notNull().default(0),
     totalPago: valorMonetario("total_pago").notNull().default("0"),
+    // R-167 (#152): metade FATO — o roteamento QUE VALIA no momento da venda. E snapshot de
+    // proposito: mudar o cadastro amanha nao pode reescrever o passado.
+    //
+    // `nao_aplicavel` e o DEFAULT porque e a verdade sobre as linhas que ja existem — elas sao
+    // anteriores ao conceito, e o credito delas continua vindo de `vendas.conta_origem_id`. Assim a
+    // migration e ADITIVA: nenhum UPDATE, nenhum backfill (R-166).
+    roteamentoStatus: text("roteamento_status").notNull().default("nao_aplicavel"),
+    contaRecebivelId: uuid("conta_recebivel_id").references(() => contas.id, { onDelete: "restrict" }),
+    contaFinalId: uuid("conta_final_id").references(() => contas.id, { onDelete: "restrict" }),
+    adquirente: text("adquirente"),
+    // R-169: recebivel e saldo disponivel sao estados diferentes. Enquanto `disponivel_em` for
+    // nulo, o pagamento e recebivel e NAO vira saldo gastavel.
+    disponivelEm: timestamp("disponivel_em", { withTimezone: true }),
     criadoEm
   },
   (table) => [
     check("vendas_pagamentos_numero_vendas_check", sql`${table.numeroVendas} >= 0`),
     check("vendas_pagamentos_total_pago_check", sql`${table.totalPago} >= 0`),
-    index("vendas_pagamentos_venda_idx").on(table.vendaId)
+    check(
+      "vendas_pagamentos_roteamento_status_check",
+      sql`${table.roteamentoStatus} in ('nao_aplicavel', 'pendente', 'roteado')`
+    ),
+    // `disponivel_em` so pode existir em linha ROTEADA. E o unico jeito de o BANCO impedir que um
+    // recebivel vire saldo gastavel sem roteamento.
+    check(
+      "vendas_pagamentos_roteamento_check",
+      sql`(${table.roteamentoStatus} <> 'roteado' and ${table.contaRecebivelId} is null and ${table.contaFinalId} is null and ${table.disponivelEm} is null)
+       or (${table.roteamentoStatus} = 'roteado' and ${table.contaRecebivelId} is not null and ${table.contaFinalId} is not null)`
+    ),
+    index("vendas_pagamentos_venda_idx").on(table.vendaId),
+    // PARCIAIS, porque a porta de saldo (R-165) le isto A CADA ESCRITA de saida. Sem eles a porta
+    // ganharia uma varredura de `vendas_pagamentos` por lancamento.
+    index("vendas_pagamentos_conta_final_disponivel_idx")
+      .on(table.contaFinalId)
+      .where(sql`${table.roteamentoStatus} = 'roteado' and ${table.disponivelEm} is not null`),
+    index("vendas_pagamentos_conta_recebivel_aberto_idx")
+      .on(table.contaRecebivelId)
+      .where(sql`${table.roteamentoStatus} = 'roteado' and ${table.disponivelEm} is null`),
+    index("vendas_pagamentos_roteamento_pendente_idx")
+      .on(table.formaPagamentoId)
+      .where(sql`${table.roteamentoStatus} = 'pendente'`)
   ]
 );
 

@@ -131,6 +131,11 @@ export const permissoes = [
   "cadastro_formas_pagamento_criar",
   "cadastro_formas_pagamento_editar",
   "cadastro_formas_pagamento_excluir",
+  // R-176 (#152): PERMISSAO DEDICADA para o roteamento financeiro. Nao reusa criar/editar de
+  // proposito — o Financeiro tem `cadastro_formas_pagamento_criar` e, sem esta separacao, o
+  // destino do dinheiro entraria de carona na criacao de uma forma. Quem renomeia forma nao
+  // decide para onde vai o dinheiro. Nasce so no acesso total (usuario_admin).
+  "cadastro_formas_pagamento_roteamento",
   "aparencia_visualizar",
   "aparencia_editar",
   "integracoes_visualizar",

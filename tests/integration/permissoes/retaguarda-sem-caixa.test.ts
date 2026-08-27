@@ -122,7 +122,9 @@ describe("CX-M06 A-1/A-4 - retaguarda lanca sem caixa aberto e o caixa_id segue 
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV A-1" }
+      // R-165: fundo para as saidas do operador de caixa; o que o arquivo prova e o caixa_id
+      // seguindo a conta (A-1/A-4), nao o saldo.
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV A-1", saldoInicial: 100_000 }
     });
     expect(conta.statusCode, conta.body).toBe(201);
     contaDoPdv = json<{ data: { id: string } }>(conta).data.id;

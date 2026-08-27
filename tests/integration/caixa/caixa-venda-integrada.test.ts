@@ -87,7 +87,12 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     const usuarioAdmin = await usuarioAdminId();
 
     // Conta + PDV proprios, e vinculo do idCaixa externo -> este PDV (para a venda cair aqui).
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta demo venda integrada" });
+    // R-165: a conta do PDV precisa de fundo para as 4 saidas manuais deste cenario.
+    const conta = await criar("/api/contas", {
+      empresaId: idsTeste.empresaA,
+      nome: "Conta demo venda integrada",
+      saldoInicial: 100_000
+    });
     const contaId = json<{ data: { id: string } }>(conta).data.id;
     const pdv = await criar("/api/pdvs", {
       empresaId: idsTeste.empresaA,
@@ -216,7 +221,11 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
   });
 
   it("aceita venda tardia e marca qual venda alterou o caixa depois do fechamento (R-013)", async () => {
-    const conta = await criar("/api/contas", { empresaId: idsTeste.empresaA, nome: "Conta venda tardia" });
+    const conta = await criar("/api/contas", {
+      empresaId: idsTeste.empresaA,
+      nome: "Conta venda tardia",
+      saldoInicial: 100_000
+    });
     const contaId = json<{ data: { id: string } }>(conta).data.id;
     const pdv = await criar("/api/pdvs", {
       empresaId: idsTeste.empresaA,

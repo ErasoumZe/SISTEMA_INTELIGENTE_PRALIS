@@ -59,7 +59,9 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
 
   // Abre um caixa proprio (conta + PDV frescos, criados pelo admin) para o usuario do cookie operar.
   async function abrirCaixa(cookie: string, email: string, nome: string, dataHora: string) {
-    const contaId = await criarComoAdmin("/api/contas", { empresaId, nome: `Conta ${nome}` });
+    // R-165: fundo para as despesas do ciclo de vida; o que o arquivo prova e a permissao de
+    // pagar/ver D-Pago, nao o saldo.
+    const contaId = await criarComoAdmin("/api/contas", { empresaId, nome: `Conta ${nome}`, saldoInicial: 100_000 });
     const pdvId = await criarComoAdmin("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
     const abrir = await post(cookie, "/api/caixa/abrir", {
       empresaId,

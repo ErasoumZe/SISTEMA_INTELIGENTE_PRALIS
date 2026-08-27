@@ -802,6 +802,95 @@ Notas de desenho:
   operacional**: alteração em LOTE de `pdvs` passa a serializar com aberturas em voo (teto de 10s
   → 503) — fazer em blocos pequenos ou fora do horário de caixa.
 
+### Conta — saldo insuficiente (12/08/2026, P0)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Origem                            | Status | Teste                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | ------ | ------------------------------------------ |
+| **R-165** 🆕 | **Nenhuma movimentação pode comprometer mais dinheiro do que existe na conta de origem.** É a R-143 ("não existe transferência sem fundo na conta de origem") cumprida e generalizada para as quatro saídas (despesa, mercadoria, retirada, transferência). Porta única `exigirSaldoSuficienteNaConta`, irmã de `obterCaixaDaSaida`: **trava a linha de `contas` com `FOR UPDATE` e só então relê o saldo**, dentro da mesma transação que grava. Ordem única passa a ser `pdvs → fechamentos_caixa → contas → linha do lançamento → filhas` — o degrau que a R-164 já havia registrado e deixado por implementar. Recusa é **409 `SALDO_INSUFICIENTE`** com `disponivel/solicitado/faltam`, **sem escrita nenhuma**. A **aritmética não muda**: `saldoContaCentavos` continua podendo devolver negativo para histórico já gravado — o que nasce é uma porta de ESCRITA, não uma fórmula nova. **Zero migration.** | Marco, 12/08, sobre R-143 do José | ✅     | `conta-saldo-insuficiente` (12) + mutações |
+
+Notas de desenho:
+
+- **Uma conta por transação, e é isso que torna a prova de ausência de ciclo trivial.** Todo
+  lançamento tem exatamente uma `conta_origem_id`; a transferência trava só a **origem**, porque o
+  destino apenas recebe e creditar jamais torna um saldo insuficiente. Sem duas contas na mesma
+  transação, não existe ordem entre contas para divergir entre chamadores.
+- **`FOR UPDATE`, e não o `FOR SHARE` do caixa** — aqui o objetivo é o oposto. No caixa, o SHARE
+  existe para lançamentos **não** serializarem entre si; na conta, duas saídas da mesma conta
+  **precisam** serializar, senão as duas leem R$ 10, as duas se acham cabíveis e a conta termina
+  negativa. Provado por mutação: rebaixar para `for share` derruba o caso de corrida.
+- **O PUT cobra o DELTA, não o valor.** O saldo derivado já desconta o valor gravado do próprio
+  lançamento; sem devolvê-lo (`saldoJaReservadoNaMesmaConta`), o reenvio idêntico seria cobrado
+  duas vezes e uma **redução legítima** poderia ser recusada. O crédito só é devolvido quando a
+  conta **não** muda — na troca de conta o dinheiro volta sozinho para a antiga assim que o UPDATE
+  grava, porque o saldo é derivado e não há reserva materializada para estornar.
+- **Recorrência reserva a série INTEIRA de uma vez.** Um POST cria até 12 lançamentos na mesma
+  transação, todos da mesma conta; validar só a 1ª ocorrência deixaria 11 passarem sem lastro. Ou
+  cabe a série toda, ou não entra nenhuma.
+- **Aprovar NF-e ligando `computar` é débito novo**, ainda que nenhum valor mude — sem a porta ali,
+  uma mercadoria criada com `computar = false` seria a porta dos fundos do P0.
+- **Agendada é o instante do débito, não a criação.** `transferenciaContaComoSaida` conta
+  `pendente`, nunca `agendada`; logo quem debita é o cron ao efetivar `agendada → pendente`. Sem
+  fundo, a linha **permanece `agendada` e é reavaliada no ciclo seguinte** — espelho exato do que a
+  S1 já faz com caixa fechado. É `continue`, não `throw`: derrubar a transação travaria as outras
+  agendadas do mesmo lote.
+- **Juros/acréscimo continuam FORA da conta**, porque continuam fora de `saldosDasContasRepository`.
+  A porta compara `valor_original` puro — exatamente o que o saldo subtrai. Corrigir isso é a
+  **D-09**, que muda saldo histórico e depende de decisão do José (R-115/R-156); fazê-lo aqui seria
+  mudar fórmula de dinheiro em silêncio.
+- **Sangria/retorno e o fechamento não ganharam porta nova**: já tinham teto próprio sobre o saldo
+  do **caixa** (`caixa.service.ts`), que é outra entidade e outra pergunta. A R-165 é sobre a CONTA.
+- **O universo lido pela porta é filtrado por conta.** `saldosDasContasRepository` ganhou um filtro
+  opcional de contas — mesma fórmula, universo menor. Sem isso, cada escrita varreria as cinco
+  tabelas da empresa inteira, e **não existe índice em `conta_origem_id`/`conta_destino_id`**
+  (dívida registrada, não corrigida aqui).
+- **As contas do seed passaram a nascer com fundo** (R-020: "vale para todas as contas"). Antes as
+  cinco nasciam em zero e a suíte só passava porque nada validava saldo — um cofre zerado
+  despachando malote de R$ 490 é um estado fisicamente impossível que os testes codificavam como
+  normal. 17 testes quebraram quando a porta entrou, **todos** apontando para o Cofre. A prova da
+  regra **não** depende desse fundo: ela vive em arquivo próprio, com contas de fundo baixo e
+  declarado.
+- **Saldo negativo de conta nunca foi proibido pelo brain** — a única proibição de negativo era a do
+  caixa **físico**. O teste unitário `conta-saldo.test.ts` continua afirmando que o **derivado** pode
+  ser negativo, e continua verde: ele testa a aritmética pura, que esta OS não tocou.
+
+### Caixa — destino financeiro, disponibilidade e fechamento (24/08/2026)
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                         | Origem                                               | Status |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------ |
+| **R-166** 🆕 | **Saldos históricos negativos são preservados exatamente como estão.** A correção atua somente nas escritas futuras. É proibido `UPDATE`, backfill ou regularização automática nesta entrega; eventual regularização será OS separada, medida, auditável e autorizada.                                                                                                                                                                        | Marco, decisão final FIN-05, 24/08                   | ✅     |
+| **R-167** 🆕 | **Toda venda futura precisa de roteamento financeiro por empresa, forma de pagamento e adquirente/provedor**, apontando conta de recebível e conta bancária final. Os nomes reais são cadastro administrativo, não código hardcoded. Uma venda continua sendo uma venda; seus destinos financeiros ficam separados e rastreáveis.                                                                                                             | Marco/Rodrigo/José, questionário final FIN-01, 24/08 | ✅     |
+| **R-168** 🆕 | **Venda integrada sem mapeamento nunca é descartada nem recebe destino inventado.** Ela é preservada, fica com roteamento financeiro pendente e não aumenta saldo disponível. O Financeiro/Tesouraria recebe pendência; são proibidos fallbacks silenciosos para Dinheiro, Outro ou conta do PDV.                                                                                                                                             | Marco, FIN-02, 24/08                                 | ✅     |
+| **R-169** 🆕 | **Recebível e saldo disponível são estados diferentes.** Dinheiro físico fica disponível no caixa aberto; Pix direto só após confirmação bancária; Pix de maquininha e débito após liquidação da adquirente; crédito por parcela liquidada; voucher após pagamento do emissor; venda a cliente após boleto/Pix quitado. Inicialmente a confirmação é da Tesouraria/Financeiro por conciliação; API futura pode automatizar sem mudar a regra. | Marco, FIN-03, 24/08                                 | ✅     |
+| **R-170** 🆕 | **Divergência entre venda, pagamentos e liquidação tem tolerância de R$ 0,00.** Preserva-se a venda, abre-se pendência de conciliação, nenhum número é escolhido em silêncio e a parcela divergente não vira saldo disponível. A resolução exige causa, evidência e ajuste auditável.                                                                                                                                                         | Marco, FIN-04, 24/08                                 | ✅     |
+| **R-171** 🆕 | **Transferência pendente não desaparece no fechamento.** Se o dinheiro ainda não saiu fisicamente, o fechamento espera confirmar, cancelar ou reprogramar. Se já saiu, o fechamento comum é bloqueado e um fluxo especial registra origem, destino, lacre/documento, valor em trânsito, responsável e motivo.                                                                                                                                 | Marco, CF-01, 24/08                                  | ✅     |
+| **R-172** 🆕 | **Papéis financeiros ficam separados:** Admin configura contas/adquirentes/taxas; Caixa registra o turno; Gerência aprova exceções da loja; Financeiro/Tesouraria confirma liquidações e divergências; Contabilidade valida classificação/DRE; Auditoria é somente leitura. Ações sensíveis mantêm trilha e segunda aprovação quando aplicável.                                                                                               | Marco, GOV-01, 24/08                                 | ✅     |
+
+### Caixa — decisões do gate da #152 (José, 24/08/2026)
+
+Aprovadas em bloco depois da consolidação registrada em `32` §18. As cinco fecham pontos que
+estavam abertos; nenhuma delas autoriza migration, fórmula ou produção.
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Origem                        | Status |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------ |
+| **R-173** 🆕 | **Divergência entre a soma dos pagamentos e o líquido da venda deixa a VENDA INTEIRA pendente.** A venda é preservada integralmente, nenhum valor fica disponível em conta nenhuma e abre-se pendência de conciliação com tolerância **zero**. Fecha a leitura que faltava da R-170: quando a soma não fecha, não existe "parcela divergente" identificável — o pendente é a venda. O `TOLERANCIA_CONCILIACAO_CENTAVOS = 1` é de outra pergunta (conferência de totais do dia por PDV) e **não** pode ser reusado aqui. | José, gate #152, 24/08        | ✅     |
+| **R-174** 🆕 | **A #41 vem antes da #152**, em branch separada criada de `origin/main` atualizada. A primeira ingestão concorrente da mesma venda não serializa e cria duas linhas em `vendas`; enquanto o saldo não depender disso é invisível, com roteamento passa a creditar em dobro. As duas issues não se misturam.                                                                                                                                                                                                             | José, gate #152, 24/08        | ✅     |
+| **R-175** 🆕 | **A chave única da venda integrada é `(empresa_id, identificador_externo)`**, com o índice parcial restrito a `integracao_chave_id is not null and identificador_externo is not null`. **`integracao_chave_id` fica no PREDICADO, nunca na chave**: incluí-lo permitiria duplicar a mesma venda depois de uma troca de chave/credencial da integração.                                                                                                                                                                  | José, correção do gate, 24/08 | ✅     |
+| **R-176** 🆕 | **Somente o Admin configura roteamento, contas, adquirentes e taxas.** Alterar roteamento financeiro exige **permissão dedicada** — é proibido reusar as permissões genéricas de criar ou renomear forma de pagamento. Aplica a R-172 ao caso concreto.                                                                                                                                                                                                                                                                 | José, gate #152, 24/08        | ✅     |
+| **R-177** 🆕 | **Venda integrada não tem `tiposPagamento` nem `conta_origem_id` alterados pelo PUT da retaguarda.** Os demais campos permitidos continuam editáveis, e a venda manual não integrada mantém o fluxo próprio. Motivo medido: o reenvio do CREARE já sobrescreve a venda e reinsere os pagamentos, então essa edição nunca sobreviveu — e com roteamento ela apagaria o crédito em silêncio.                                                                                                                              | José, gate #152, 24/08        | ✅     |
+
+**D-06/R-007 continua adiada, agora com ordem explícita:** entra como entrega vertical separada
+**depois** de existirem roteamento (#152) e liquidação. Não se mistura à #41 nem à #152. É a D-06
+que zera a conta do PDV; a #152 apenas reduz o desvio e produz a classificação de forma que a D-06
+exige.
+
+Notas de implementação:
+
+- TECH-01 autoriza apenas o desenho e a geração **local** de migration depois de conferir schema,
+  journal, snapshots e branches. O SQL completo, rollback, testes e impacto precisam ser mostrados;
+  a execução para antes de aplicar.
+- As regras acima não autorizam produção, backfill, mudança histórica, deploy ou fórmula financeira.
+- Plano executável e ordem das branches: `30_RETOMADA_CAIXA_TESTAVEL_2026_08_24.md`.
+
 ---
 
 ## §1-D · Contradições abertas em 05/08/2026

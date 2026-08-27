@@ -34,6 +34,17 @@ import type {
 } from "@padaria/shared/integracoes";
 import { diaNegocio } from "@padaria/shared/datas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco } from "../banco/conexao.js";
+import { liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import {
+  resolverRoteamentoDoPagamento,
+  somaDosPagamentosFecha,
+  vendaAceitaRoteamento,
+  type MotivoPendenciaRoteamento,
+  type RoteamentoDoPagamento,
+  type StatusRoteamento
+} from "@padaria/shared/integracoes";
+import { buscarRoteamentosDaEmpresaRepository } from "../formas-pagamento/formas-pagamento.repository.js";
+import type { RoteamentoDaForma } from "@padaria/shared/formas-pagamento";
 
 export type IntegracaoChaveLinha = {
   id: string;
@@ -689,6 +700,61 @@ const PREDICADO_VENDA_INTEGRADA_UNICA = and(
   isNotNull(vendas.identificadorExterno)
 ) as SQL;
 
+// As contas que HOJE recebem credito DISPONIVEL desta venda.
+//
+// Existe para a ingestao travar essas contas antes de mexer na venda (P1 de concorrencia): reenviar
+// uma venda cancelada, ou reroteada, RETIRA credito que ja esta no saldo — e retirar saldo tem de
+// passar pela mesma porta que a R-165 usa para autorizar saida, senao uma despesa aprovada sobre
+// R$ 500 pode terminar com a conta em R$ -500 porque o CREARE cancelou a venda em paralelo.
+//
+// Mesmo predicado da 6a consulta do saldo, de proposito: se um dia divergirem, a trava protegeria um
+// conjunto diferente do que o saldo conta.
+export async function contasComCreditoDisponivelDaVendaRepository(
+  vendaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<string[]> {
+  const linhas = await db
+    .select({ contaFinalId: vendasPagamentos.contaFinalId })
+    .from(vendasPagamentos)
+    .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+    .where(
+      and(
+        eq(vendasPagamentos.vendaId, vendaId),
+        eq(vendas.empresaId, empresaId),
+        eq(vendasPagamentos.roteamentoStatus, "roteado"),
+        isNotNull(vendasPagamentos.disponivelEm)
+      )
+    );
+  return [...new Set(linhas.map((linha) => linha.contaFinalId).filter((id): id is string => !!id))];
+}
+
+// A conta do PDV, escopada pela EMPRESA. O escopo nao e decoracao: e ele que impede o dinheiro de
+// uma loja cair na conta de outra caso um id de PDV chegue trocado.
+export async function buscarContaDoPdvRepository(
+  pdvId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<string | null> {
+  const [linha] = await db
+    .select({ contaId: pdvs.contaId })
+    .from(pdvs)
+    .where(and(eq(pdvs.id, pdvId), eq(pdvs.empresaId, empresaId)))
+    .limit(1);
+  return linha?.contaId ?? null;
+}
+
+// O que a venda virou do ponto de vista financeiro. Vai para o historico interno e para a resposta
+// do agente em forma resumida — nunca com id de conta, que e dado financeiro interno.
+export type ResumoRoteamentoVenda = {
+  aplicavel: boolean;
+  somaFecha: boolean;
+  diferencaCentavos: number;
+  roteados: number;
+  pendentes: number;
+  motivos: MotivoPendenciaRoteamento[];
+};
+
 export async function criarOuAtualizarVendaIntegradaRepository(
   input: {
     chave: IntegracaoChaveLinha;
@@ -765,6 +831,21 @@ export async function criarOuAtualizarVendaIntegradaRepository(
       vendaId = criada.id;
     }
 
+    // CORTE HISTORICO (R-166), lido ANTES de apagar os pagamentos — depois do delete a informacao
+    // nao existe mais. O marcador e o proprio `roteamento_status`: o codigo novo nunca grava
+    // `nao_aplicavel`, entao venda cujos pagamentos estao todos nesse estado e anterior ao
+    // roteamento e continua assim, inclusive quando o CREARE a reenvia. Rotear no reenvio seria
+    // regularizacao automatica de historico, que a R-166 proibe.
+    let statusExistentes: StatusRoteamento[] = [];
+    if (input.vendaSistemaId) {
+      const linhas = await db
+        .select({ status: vendasPagamentos.roteamentoStatus })
+        .from(vendasPagamentos)
+        .where(eq(vendasPagamentos.vendaId, input.vendaSistemaId));
+      statusExistentes = linhas.map((linha) => linha.status as StatusRoteamento);
+    }
+    const aplicavel = vendaAceitaRoteamento({ criando: !input.vendaSistemaId, statusExistentes });
+
     if (input.vendaSistemaId) {
       await db.update(vendas).set(valoresVenda).where(eq(vendas.id, input.vendaSistemaId));
       await db.delete(vendasProdutos).where(eq(vendasProdutos.vendaId, input.vendaSistemaId));
@@ -788,18 +869,93 @@ export async function criarOuAtualizarVendaIntegradaRepository(
       });
     }
 
-    for (const pagamento of input.payload.PagamentosVenda) {
+    // --- Roteamento financeiro da venda (R-167/R-168/R-169/R-173) -----------------------------
+    //
+    // UMA consulta de roteamento por venda, nunca uma por pagamento. Quando a venda nao e aplicavel
+    // (historico), nem sequer consultamos: nada muda para ela.
+    const formaIds = input.payload.PagamentosVenda.map(
+      (pagamento) => input.formasPagamentoPorIdentificador.get(pagamento.idFormaPagamento) ?? null
+    );
+    const roteamentos: Map<string, RoteamentoDaForma> = aplicavel
+      ? await buscarRoteamentosDaEmpresaRepository(
+          input.chave.empresaId,
+          formaIds.filter((id): id is string => !!id),
+          db
+        )
+      : new Map<string, RoteamentoDaForma>();
+    const contaDoPdvId =
+      aplicavel && input.pdvId ? await buscarContaDoPdvRepository(input.pdvId, input.chave.empresaId, db) : null;
+
+    // R-173: a soma dos pagamentos tem de bater com o LIQUIDO da venda, com tolerancia ZERO. Uma
+    // formula so — a mesma `liquidoCentavos` que o saldo da conta usa desde sempre.
+    const soma = somaDosPagamentosFecha({
+      liquidoCentavos: liquidoCentavos(valoresVenda),
+      pagamentosCentavos: input.payload.PagamentosVenda.map((pagamento) => paraCentavos(pagamento.valor))
+    });
+
+    const resumo: ResumoRoteamentoVenda = {
+      aplicavel,
+      somaFecha: soma.fecha,
+      diferencaCentavos: soma.diferencaCentavos,
+      roteados: 0,
+      pendentes: 0,
+      motivos: []
+    };
+
+    for (const [indice, pagamento] of input.payload.PagamentosVenda.entries()) {
+      const formaPagamentoId = formaIds[indice] ?? null;
+
+      // Tres caminhos, nesta ordem, e a ordem importa:
+      //   1. venda historica  -> `nao_aplicavel`, o estado de quem e anterior ao conceito;
+      //   2. soma nao fecha   -> a VENDA INTEIRA fica pendente (R-173). Quando a soma nao bate, a
+      //      diferenca nao e atribuivel a um pagamento especifico, entao nao ha "parcela divergente"
+      //      — nenhum valor entra em conta nenhuma e nasce uma conciliacao;
+      //   3. caso normal      -> decisao por forma, sem fallback (R-168).
+      const decisao: RoteamentoDoPagamento | null = !aplicavel
+        ? null
+        : !soma.fecha
+          ? {
+              status: "pendente",
+              contaRecebivelId: null,
+              contaFinalId: null,
+              adquirente: null,
+              disponivelEm: null,
+              motivo: "soma_nao_fecha"
+            }
+          : resolverRoteamentoDoPagamento({
+              roteamento: formaPagamentoId ? (roteamentos.get(formaPagamentoId) ?? null) : null,
+              contaDoPdvId,
+              dataVenda
+            });
+
+      if (decisao?.status === "roteado") resumo.roteados += 1;
+      if (decisao?.status === "pendente") {
+        resumo.pendentes += 1;
+        if (!resumo.motivos.includes(decisao.motivo)) resumo.motivos.push(decisao.motivo);
+      }
+
       await db.insert(vendasPagamentos).values({
         vendaId,
-        formaPagamentoId: input.formasPagamentoPorIdentificador.get(pagamento.idFormaPagamento) ?? null,
+        formaPagamentoId,
         tipoPagamentoAutomacaoId: pagamento.idFormaPagamento,
         tipoPagamentoAutomacao: pagamento.descricaoFormaPagamento,
         numeroVendas: 1,
-        totalPago: String(pagamento.valor)
+        totalPago: String(pagamento.valor),
+        // Sem decisao = venda historica: as colunas ficam no DEFAULT (`nao_aplicavel`, tudo nulo),
+        // que e a verdade sobre ela.
+        ...(decisao
+          ? {
+              roteamentoStatus: decisao.status,
+              contaRecebivelId: decisao.contaRecebivelId,
+              contaFinalId: decisao.contaFinalId,
+              adquirente: decisao.adquirente,
+              disponivelEm: decisao.disponivelEm
+            }
+          : {})
       });
     }
 
-    return { id: vendaId };
+    return { id: vendaId, roteamento: resumo };
   });
 }
 

@@ -397,7 +397,14 @@ export async function listarAgendadasVencidasRepository(agora = new Date(), db: 
     .select({
       id: transferencias.id,
       caixaId: transferencias.caixaId,
-      tempoConfirmacao: transferencias.tempoConfirmacao
+      tempoConfirmacao: transferencias.tempoConfirmacao,
+      // R-165: efetivar `agendada -> pendente` e o instante em que o dinheiro passa a SAIR da
+      // origem (`transferenciaContaComoSaida` conta `pendente`, nunca `agendada`). O cron precisa
+      // destes campos para conferir o saldo antes de efetivar.
+      empresaId: transferencias.empresaId,
+      contaOrigemId: transferencias.contaOrigemId,
+      valorOriginal: transferencias.valorOriginal,
+      computar: transferencias.computar
     })
     .from(transferencias)
     .where(

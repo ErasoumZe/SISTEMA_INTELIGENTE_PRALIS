@@ -840,6 +840,17 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     dados.clientes = await apiGet<Opcao[]>(`/api/clientes${query}`);
   } else if (tela === "formas_pagamento") {
     dados.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
+    // #152 — P0: sem as CONTAS aqui, o dialogo de roteamento nascia com `contas: []`, a opcao
+    // "Recebivel (cartao, Pix, voucher)" ficava permanentemente desabilitada e a tela mentia
+    // "Nenhuma conta cadastrada nesta empresa". Rotear cartao pela tela de Formas era impossivel, e
+    // nao havia caminho alternativo: a lista de pendencias so mostra forma SEM roteamento, entao uma
+    // forma ja roteada como conta do PDV nao podia ser mudada para recebivel por rota nenhuma.
+    //
+    // So carrega para quem tem a permissao dedicada — quem nao configura roteamento nao precisa da
+    // lista de contas, e `carregarOpcaoOpcional` degrada para [] sem derrubar a tela.
+    if (temPermissao("cadastro_formas_pagamento_roteamento")) {
+      dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
+    }
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
@@ -1762,8 +1773,23 @@ async function restaurarPadraoCargo(linha: Record<string, string | undefined>) {
   }
 }
 
+// #152 — a forma cujo ROTEAMENTO esta sendo editado. Mora aqui porque a acao nasce numa linha da
+// tabela generica; o formulario em si vive em RoteamentoFinanceiroDialog.vue.
+const formaRoteamentoSelecionada = ref<{ id: string; nome: string } | null>(null);
+
+function abrirRoteamentoDaForma(forma: { id: string; nome: string }) {
+  formaRoteamentoSelecionada.value = forma;
+}
+
+function fecharRoteamentoDaForma() {
+  formaRoteamentoSelecionada.value = null;
+}
+
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
   if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
+  if (payload.event === "roteamentoFinanceiro" && payload.linha.id) {
+    abrirRoteamentoDaForma({ id: payload.linha.id, nome: payload.linha.nome ?? "" });
+  }
 }
 
 provide(WORKSPACE_CONTEXT, {
@@ -1875,6 +1901,18 @@ const pageContext = computed(() => ({
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
   podeEditarEntrada: temPermissao("entradas_editar"),
+  // #152: o minimo que as telas de roteamento precisam do container generico — a empresa ativa,
+  // a permissao dedicada da R-176 e as contas para escolher destino. Toda a UI de roteamento vive
+  // em componentes proprios; aqui so passa o contexto.
+  empresaIdAtiva: empresaId.value,
+  podeConfigurarRoteamento: temPermissao("cadastro_formas_pagamento_roteamento"),
+  contasDaEmpresa: opcoesEmpresa.value.contas ?? [],
+  formaRoteamentoSelecionada: formaRoteamentoSelecionada.value,
+  abrirRoteamentoDaForma,
+  fecharRoteamentoDaForma,
+  // Depois de salvar o roteamento, a tela precisa reler: a acao da linha e a projecao do GET
+  // dependem do que acabou de mudar.
+  recarregarTela: () => carregarDadosPagina(),
   vendaDetalhe: vendaDetalhe.value,
   modalVendaDetalheAberto: modalVendaDetalheAberto.value,
   vendaDetalheCarregando: vendaDetalheCarregando.value,

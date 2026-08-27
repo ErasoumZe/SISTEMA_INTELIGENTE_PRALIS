@@ -756,9 +756,19 @@ await banco
 const contaCaixa = (
   await banco.insert(contas).values({ empresaId, nome: "Caixa loja" }).returning({ id: contas.id })
 )[0];
-const contaBanco = (await banco.insert(contas).values({ empresaId, nome: "Banco" }).returning({ id: contas.id }))[0];
+// R-020 ("as contas nascem com o saldo da planilha como fundo") + R-165: Banco e Cofre sao as
+// contas que ORIGINAM dinheiro no ambiente DEV. Antes desta OS as tres nasciam em zero, o que so
+// era inofensivo porque nada validava saldo — com a porta da R-165 no lugar, um DEV assim recusaria
+// a primeira despesa e o `dev:local --prepare` entregaria um ambiente onde nada pode ser gasto.
+// "Caixa loja" segue em ZERO de proposito: ela recebe o fundo de troco pelo malote do cofre (R-001),
+// que e exatamente o fluxo que o roteiro CT-03 exercita.
+const contaBanco = (
+  await banco.insert(contas).values({ empresaId, nome: "Banco", saldoInicial: "50000.00" }).returning({ id: contas.id })
+)[0];
 // Cofre: origem da transferencia automatica de abertura do caixa (R8). Mapeado na empresa abaixo.
-const contaCofre = (await banco.insert(contas).values({ empresaId, nome: "Cofre" }).returning({ id: contas.id }))[0];
+const contaCofre = (
+  await banco.insert(contas).values({ empresaId, nome: "Cofre", saldoInicial: "50000.00" }).returning({ id: contas.id })
+)[0];
 if (!contaCaixa) throw new Error("Conta caixa nao foi criada");
 if (!contaBanco) throw new Error("Conta banco nao foi criada");
 if (!contaCofre) throw new Error("Conta cofre nao foi criada");

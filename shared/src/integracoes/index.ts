@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
+import type { RoteamentoDaForma } from "../formas-pagamento/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
@@ -232,3 +233,136 @@ export type IntegracaoHistoricoDto = z.infer<typeof integracaoHistoricoDtoSchema
 export type IntegracaoCampoConfigDto = z.infer<typeof integracaoCampoConfigDtoSchema>;
 export type IntegracaoVinculoDto = z.infer<typeof integracaoVinculoDtoSchema>;
 export type IntegracaoIngestaoResultado = z.infer<typeof integracaoIngestaoResultadoSchema>;
+
+// =====================================================================================
+// R-167 / R-168 / R-169 / R-173 — roteamento financeiro da venda integrada (#152)
+//
+// Tudo aqui e PURO de proposito: a decisao de para onde vai o dinheiro tem de ser testavel sem
+// banco, sem HTTP e sem CREARE. O repositorio so aplica o que estas funcoes decidem.
+// =====================================================================================
+
+// Os tres estados de um pagamento, iguais ao `vendas_pagamentos_roteamento_status_check` da 0033.
+export const statusRoteamento = ["nao_aplicavel", "pendente", "roteado"] as const;
+export type StatusRoteamento = (typeof statusRoteamento)[number];
+
+// Por que a venda/pagamento ficou pendente. Vai para a tela de pendencias e para o historico; NUNCA
+// para o corpo da resposta do agente, que so precisa saber que a venda foi aceita.
+export const motivosPendenciaRoteamento = [
+  "forma_sem_cadastro",
+  "forma_sem_roteamento",
+  "pdv_nao_resolvido",
+  "venda_sem_data",
+  "soma_nao_fecha"
+] as const;
+export type MotivoPendenciaRoteamento = (typeof motivosPendenciaRoteamento)[number];
+
+export type RoteamentoDoPagamento =
+  | {
+      status: "roteado";
+      contaRecebivelId: string;
+      contaFinalId: string;
+      adquirente: string | null;
+      // `null` = recebivel em aberto: existe no financeiro e NAO entra no saldo gastavel (R-169).
+      disponivelEm: Date | null;
+      motivo: null;
+    }
+  | {
+      status: "pendente";
+      contaRecebivelId: null;
+      contaFinalId: null;
+      adquirente: string | null;
+      disponivelEm: null;
+      motivo: MotivoPendenciaRoteamento;
+    };
+
+function pendente(motivo: MotivoPendenciaRoteamento, adquirente: string | null = null): RoteamentoDoPagamento {
+  return { status: "pendente", contaRecebivelId: null, contaFinalId: null, adquirente, disponivelEm: null, motivo };
+}
+
+/**
+ * Decide o destino de UM pagamento da venda integrada.
+ *
+ * Nao existe fallback. Se a forma nao tem cadastro, nao tem roteamento, ou pede a conta do PDV sem
+ * que o PDV tenha sido resolvido, o pagamento nasce PENDENTE: a venda e preservada e nada vira
+ * saldo (R-168). Cair em Dinheiro, Outro ou na conta do PDV "por omissao" e exatamente o que a
+ * regra proibe.
+ */
+export function resolverRoteamentoDoPagamento(entrada: {
+  roteamento: RoteamentoDaForma | null;
+  contaDoPdvId: string | null;
+  dataVenda: Date | null;
+}): RoteamentoDoPagamento {
+  const { roteamento, contaDoPdvId, dataVenda } = entrada;
+
+  // Forma que o vinculo nao resolveu, ou que o CREARE acabou de criar sozinha.
+  if (!roteamento) return pendente("forma_sem_cadastro");
+  const adquirente = roteamento.adquirente;
+  if (roteamento.disponibilidade === null) return pendente("forma_sem_roteamento", adquirente);
+
+  if (roteamento.usaContaDoPdv) {
+    // Dinheiro fisico. So e dinheiro do caixa se houver caixa: sem PDV/turno resolvido, o valor nao
+    // tem onde cair e vira pendencia — nunca a conta "mais provavel".
+    if (!contaDoPdvId) return pendente("pdv_nao_resolvido", adquirente);
+    // Sem hora da venda nao da para dizer QUANDO ficou disponivel. Preferimos a pendencia a inventar
+    // um instante — a data e o que decide em qual dia o dinheiro entrou.
+    if (!dataVenda) return pendente("venda_sem_data", adquirente);
+    return {
+      status: "roteado",
+      contaRecebivelId: contaDoPdvId,
+      contaFinalId: contaDoPdvId,
+      adquirente,
+      disponivelEm: dataVenda,
+      motivo: null
+    };
+  }
+
+  // `por_evento`: os CHECKs da 0033 garantem as duas contas preenchidas aqui. O `??` existe so para
+  // o TypeScript; se algum dia o banco deixasse passar nulo, a leitura correta e pendencia.
+  if (!roteamento.contaRecebivelId || !roteamento.contaFinalId) return pendente("forma_sem_roteamento", adquirente);
+  return {
+    status: "roteado",
+    contaRecebivelId: roteamento.contaRecebivelId,
+    contaFinalId: roteamento.contaFinalId,
+    adquirente,
+    // Recebivel: aparece no financeiro e NAO vira saldo gastavel ate a liquidacao confirmar. A
+    // liquidacao e vertical posterior (doc 32 §18 ponto 7); nesta issue nada confirma sozinho.
+    disponivelEm: null,
+    motivo: null
+  };
+}
+
+/**
+ * R-173: a soma dos pagamentos tem de bater com o liquido da venda, com tolerancia ZERO.
+ *
+ * Nao usa `TOLERANCIA_CONCILIACAO_CENTAVOS`: aquele 1 centavo e da conferencia de totais do dia por
+ * PDV, outra pergunta. Reusa-lo aqui seria inventar tolerancia onde a R-170 escreveu R$ 0,00.
+ */
+export function somaDosPagamentosFecha(entrada: { liquidoCentavos: number; pagamentosCentavos: number[] }): {
+  fecha: boolean;
+  somaCentavos: number;
+  diferencaCentavos: number;
+} {
+  const somaCentavos = entrada.pagamentosCentavos.reduce((total, valor) => total + valor, 0);
+  const diferencaCentavos = somaCentavos - entrada.liquidoCentavos;
+  return { fecha: diferencaCentavos === 0, somaCentavos, diferencaCentavos };
+}
+
+/**
+ * O corte historico da R-166, derivado — sem coluna nova e sem data de corte.
+ *
+ * O marcador e o proprio `roteamento_status`: o codigo novo NUNCA grava `nao_aplicavel`, entao uma
+ * venda com qualquer pagamento diferente de `nao_aplicavel` foi escrita pelo codigo com roteamento.
+ * Venda anterior tem todos os pagamentos no DEFAULT `nao_aplicavel` e continua assim para sempre,
+ * inclusive quando o CREARE a reenvia.
+ *
+ * A venda que esta sendo CRIADA agora e sempre aplicavel. A que ja existia so e aplicavel se ela
+ * propria ja tinha roteamento — o reenvio preserva o que a venda era, nunca promove historico.
+ *
+ * Caso de borda, resolvido para o lado seguro: uma venda existente SEM nenhum pagamento gravado nao
+ * tem como provar que nasceu do codigo novo, entao e tratada como historica. O custo e uma pendencia
+ * a mais; o beneficio e nunca creditar dinheiro que o passado nao creditou.
+ */
+export function vendaAceitaRoteamento(entrada: { criando: boolean; statusExistentes: StatusRoteamento[] }): boolean {
+  if (entrada.criando) return true;
+  return entrada.statusExistentes.some((status) => status !== "nao_aplicavel");
+}

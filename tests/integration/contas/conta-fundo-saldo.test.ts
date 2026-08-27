@@ -230,7 +230,11 @@ describe("conta com fundo e saldo derivado (D8) integration", () => {
   });
 
   it("contas existentes seguem com fundo 0 (migration aditiva, sem backfill)", async () => {
-    const conta = (await saldos()).find((linha) => linha.id === idsTeste.contaCaixa);
+    // `contaEntradas`, e nao mais `contaCaixa`: a prova aqui e que conta nascida SEM fundo declarado
+    // continua em 0 (a migration nao fez backfill), e `contaEntradas` e exatamente essa conta — so
+    // recebe entradas, nunca paga, entao nao precisa de fundo (R-165). `contaCaixa` deixou de servir
+    // porque agora nasce com fundo, por PAGAR saidas em varios arquivos.
+    const conta = (await saldos()).find((linha) => linha.id === idsTeste.contaEntradas);
     expect(conta?.saldoInicial).toBe(0);
   });
 });

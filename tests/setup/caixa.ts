@@ -30,11 +30,15 @@ export async function abrirCaixaDoOperador(
   ]);
   if (!usuario) throw new Error(`Usuario ${entrada.emailOperador} nao encontrado`);
 
+  // R-165: a conta do PDV nasce com fundo porque os casos que usam esta fixture LANCAM SAIDAS por
+  // ela (despesa, retirada, mercadoria, transferencia). O fundo nao interfere no que eles provam —
+  // eles medem a corrida contra o FECHAMENTO, e o saldo do caixa (ADR-001) e apurado por
+  // entradas - saidas do fechamento, sem olhar o fundo da conta.
   const conta = await app.inject({
     method: "POST",
     url: "/api/contas",
     headers: { cookie: entrada.cookieAdmin },
-    payload: { empresaId, nome: `Conta ${entrada.nome}` }
+    payload: { empresaId, nome: `Conta ${entrada.nome}`, saldoInicial: 100_000 }
   });
   expect(conta.statusCode, conta.body).toBe(201);
   const contaId = json<{ data: { id: string } }>(conta).data.id;

@@ -106,7 +106,14 @@ const usuarios: UsuarioSeed[] = [
       // Gerencia configura o vinculo usuario<->conta (FOTO 4) — paridade com a referencia de producao.
       "cadastro_contas_usuarios_visualizar",
       "cadastro_contas_usuarios_criar",
-      "cadastro_contas_usuarios_excluir"
+      "cadastro_contas_usuarios_excluir",
+      // R-176 (#152): cadastra e renomeia FORMA, mas NAO decide para onde vai o dinheiro. E o mesmo
+      // recorte do Financeiro em producao, que tem `cadastro_formas_pagamento_criar` e nao tem a
+      // permissao dedicada de roteamento. Sem este cargo, o teste da R-176 nao teria como provar a
+      // separacao: qualquer usuario ou e admin (tem tudo) ou nao mexe em forma nenhuma.
+      "cadastro_formas_pagamento_visualizar",
+      "cadastro_formas_pagamento_criar",
+      "cadastro_formas_pagamento_editar"
     ]
   },
   {
@@ -139,6 +146,26 @@ const usuarios: UsuarioSeed[] = [
     colaboradorCargoId: idsTeste.colaboradorCargoMultiempresa,
     role: "usuario_admin",
     permissoes: [...permissoesAcessoTotal]
+  },
+  {
+    // #152/R-176 — CONFIGURADOR PURO: decide para onde vai o dinheiro, e nao ve dinheiro nenhum.
+    //
+    // Existe para provar a separacao das duas metades da pendencia. Sem ele o caso nao tem como ser
+    // escrito: o admin ve tudo, e qualquer outro cargo leva 403 na rota inteira — o ramo em que
+    // `formasSemRoteamento` vem preenchido e `vendasPendentes` vem `null` nunca seria exercitado, e
+    // a protecao de "faturamento agregado nao chega a quem so configura" ficaria sem prova.
+    perfil: "configuradorRoteamento",
+    cargoId: idsTeste.cargoConfiguradorRoteamento,
+    colaboradorId: idsTeste.colaboradorConfiguradorRoteamento,
+    colaboradorCargoId: idsTeste.colaboradorCargoConfiguradorRoteamento,
+    role: "usuario_comum",
+    permissoes: [
+      "cadastro_formas_pagamento_visualizar",
+      "cadastro_formas_pagamento_editar",
+      // A permissao dedicada da R-176 — e NENHUMA permissao financeira: sem `entradas_visualizar`,
+      // sem `relatorio_vendas_visualizar`.
+      "cadastro_formas_pagamento_roteamento"
+    ]
   },
   {
     // So visualiza e discrimina (sem criar/editar/caixa) — prova a permissao propria isolada.
@@ -332,11 +359,55 @@ export async function aplicarSeedIntegracao() {
     await banco.insert(permissoesUsuarios).values({ usuarioId, regras: regrasPermissoes(usuario.permissoes) });
   }
 
+  // R-020 ("as contas nascem com o saldo da planilha como fundo") + R-165: as contas que ORIGINAM
+  // dinheiro precisam ter dinheiro. Antes desta OS as cinco nasciam em zero, e a suite so passava
+  // porque nada validava saldo — um cofre zerado despachando malote de R$ 490 e um estado
+  // fisicamente impossivel que os testes codificavam como normal (17 deles quebraram quando a
+  // porta de saldo entrou, todos apontando para o Cofre).
+  //
+  // Fundo alto de proposito: e teto, nao cenario. Nenhuma suite deve esbarrar na R-165 por
+  // acidente ao somar operacoes de arquivos diferentes no mesmo banco. A prova da regra NAO
+  // depende daqui — ela vive em `contas/conta-saldo-insuficiente.test.ts`, que cria contas
+  // proprias com fundo baixo e declarado.
+  //
+  // `contaCaixa` e `contaLivre` tambem PAGAM (despesa, retirada, mercadoria e transferencia saem
+  // delas em ~10 arquivos), entao tambem precisam de fundo: uma gaveta de caixa que paga fornecedor
+  // com R$ 0,00 e a mesma impossibilidade fisica do cofre zerado. Na vida real o troco chega pelo
+  // malote do cofre (R-001), mas nenhum destes arquivos encena o malote — encenar so para dar
+  // dinheiro seria fixture contando historia que o teste nao prova.
+  //
+  // `contaEntradas` segue em ZERO de proposito, e e ela quem sustenta a prova de que a migration
+  // foi ADITIVA (sem backfill), em `conta-fundo-saldo.test.ts`: conta que nasce sem fundo declarado
+  // continua com fundo 0. Ela so RECEBE entradas, entao nunca esbarra na porta de saldo.
   await banco.insert(contas).values([
-    { id: idsTeste.contaCaixa, empresaId: idsTeste.empresaA, nome: "Caixa Integracao", ativa: true },
-    { id: idsTeste.contaBanco, empresaId: idsTeste.empresaA, nome: "Banco Integracao", ativa: true },
-    { id: idsTeste.contaLivre, empresaId: idsTeste.empresaA, nome: "Conta Livre Integracao", ativa: true },
-    { id: idsTeste.contaCofre, empresaId: idsTeste.empresaA, nome: "Cofre Integracao", ativa: true },
+    {
+      id: idsTeste.contaCaixa,
+      empresaId: idsTeste.empresaA,
+      nome: "Caixa Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
+    {
+      id: idsTeste.contaBanco,
+      empresaId: idsTeste.empresaA,
+      nome: "Banco Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
+    {
+      id: idsTeste.contaLivre,
+      empresaId: idsTeste.empresaA,
+      nome: "Conta Livre Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
+    {
+      id: idsTeste.contaCofre,
+      empresaId: idsTeste.empresaA,
+      nome: "Cofre Integracao",
+      ativa: true,
+      saldoInicial: "1000000.00"
+    },
     { id: idsTeste.contaEntradas, empresaId: idsTeste.empresaA, nome: "Conta Entradas Integracao", ativa: true }
   ]);
   // Conta cofre mapeada na empresa (Regra 5): origem da transferencia automatica de abertura (R8).
