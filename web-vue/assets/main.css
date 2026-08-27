@@ -2703,3 +2703,63 @@ body {
   overflow: hidden;
 }
 /* ===================== FIM VIS-12 ===================== */
+
+/* ===================== INICIO VIS-08 — ESTADO VAZIO VISIVEL EM 390px (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Par do commit de marcacao que criou o `.tabela-vazio`; um nao serve sem o outro.
+
+   DEFEITO MEDIDO a 390px, em 5 telas (a sexta tinha dados na hora da medicao):
+
+     Entradas        texto em 216..466px   casca 324px
+     Contas a pagar  texto em 188..494px   casca 326px
+     Pedidos         texto em 243..439px   casca 326px
+     Turnos          texto em 232..450px   casca 326px
+     Notas fiscais   texto em 270..517px   casca 326px
+
+   Ou seja: o recado nao some, ele e CORTADO. Comeca perto do fim do visivel e perde de metade a
+   dois tercos do texto; o resto so aparece rolando a tabela de lado.
+
+   A causa nao e tabela larga, como o 68 §6.3 supunha. O `min-width: 680px` (linha 205) e piso de
+   TODA tabela dentro da casca, entao ate uma de 4 colunas e esticada para 680px. A celula de
+   `colspan` ocupa esses 680px e o `text-center` centra o texto nela, a ~340px — enquanto a casca
+   visivel mede ~325px. O Historico de caixas, o "caso conhecido" da premissa, nem usa
+   `.responsive-table-shell`.
+
+   POR QUE PRENDER O ELEMENTO E NAO A CELULA: a celula carrega `text-center`, utilitario do
+   Vuetify que vem com `!important`. Venc-la exigiria `!important` novo, proibido neste lote.
+   O `.tabela-vazio` e um elemento sem classe utilitaria em cima, entao basta especificidade.
+
+   COMO FUNCIONA — e as duas tentativas que a medicao reprovou antes desta:
+   1) `position: sticky; left: 0` sozinho NAO resolve. Sticky puxa de volta o que sairia pela
+      ESQUERDA; aqui o texto esta longe demais para a DIREITA e, no scroll 0, nao ha nada a
+      prender. Medido: nao mudou um pixel.
+   2) `display: block` + `width: fit-content` + sticky trouxe o texto para a esquerda, mas sem
+      quebrar linha. Medido: "Nenhuma despesa pendente encontrada." tem 306px e ficava em
+      41..347px, ainda 21px fora dos 326px visiveis. Passou em 4 telas e reprovou em 1.
+   O que funciona e `display: block` + `text-align: left` + teto de largura. Como bloco, a caixa
+   ocupa a celula inteira e o `text-align` proprio vence o `center` HERDADO da `<td>` — heranca,
+   nao cascata, entao o `!important` do utilitario nao entra na disputa. O teto forca a quebra de
+   linha quando o recado nao cabe.
+
+   SOBRE O TETO DE LARGURA, e a divida que ele carrega: a largura visivel e a da
+   `.responsive-table-shell`, e CSS nao permite a um descendente ler a largura de um ancestral que
+   nao seja seu bloco contedor. O teto e reconstruido a partir das margens conhecidas — recuo do
+   `.content-frame` mais padding do card mais borda —, o que da `100vw - sp-8 - sp-4`. Medido, bate
+   com a casca real: 326px a 390px de viewport. E acoplamento, e esta anotado: se o padding de card
+   do VIS-02 mudar, este teto precisa ser refeito. A saida definitiva e `container-type:
+   inline-size` na casca e `100cqi` aqui — nao entrou porque impoe contencao a um elemento que TODA
+   tabela usa, e isso pede validacao propria.
+
+   Escopado em <=768px: no desktop a tabela cabe e o texto centralizado esta certo.
+   O respiro vertical de sp-8 ja vem da camada de acabamento (linha 2273); aqui entra so o
+   horizontal, para o recado nao encostar na borda.
+   ======================================================================================================= */
+@media (width <= 768px) {
+  .responsive-table-shell .tabela-vazio {
+    display: block;
+    text-align: left;
+    max-width: calc(100vw - var(--cx-sp-8) - var(--cx-sp-4));
+    padding-inline: var(--cx-sp-6);
+  }
+}
+/* ===================== FIM VIS-08 ===================== */
