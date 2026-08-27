@@ -3009,3 +3009,47 @@ body {
   color: var(--cx-ink-soft);
 }
 /* ===================== FIM VIS-E2b ===================== */
+
+/* ===================== INICIO VIS-E5b — BRILHO DE CATEGORIA NO CARD (27/08/2026) =====================
+   anchor: vivid_glass_dashboard_dark (direcao aprovada por Marco). diverge: nenhum hex do
+   `code.html` foi copiado — os #d1bcff, #e7e0ee e companhia sao sobra da paleta Material do Stitch.
+   A luz aqui e a cor da categoria que o sistema JA tem, na forca do token do bloco anterior.
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+
+   O QUE JA ESTAVA CERTO e por isso NAO foi reescrito: o tile do icone. O VIS-E2a ja o entregou
+   com 40px, `--cx-r-md`, fundo na `-soft` e icone na `tinta`/`tintaEscura`, com o neutro em
+   `--cx-surface-sunken` + `--cx-ink-soft`. E exatamente o que esta etapa pediria. Bloco que nao
+   muda nada e divida, nao entrega (69 §1.2).
+
+   O BRILHO e `background-image` sobre o `background-color` do card: fica ACIMA da superficie e
+   ABAIXO do conteudo, sem nenhum z-index e sem elemento novo. Radial no canto superior direito,
+   esmaecendo ate transparente aos 60% — o texto vive na metade de baixo, onde a luz ja acabou.
+
+   MEDIDO no pior caso (a luz cheia por baixo do texto), nas seis categorias:
+     claro   13,21 a 13,95     escuro  11,15 a 12,72
+   Todas com folga sobre o minimo de 4,5:1 do 67 §11, entao a forca nao precisou cair.
+
+   TELA SEM CATEGORIA NAO GANHA BRILHO. O seletor exige `.com-cor`, e a lista de quem tem cor
+   continua sendo so o `CATEGORIA_POR_TELA` (67 §3). Neutro segue neutro — e decisao, nao
+   esquecimento.
+
+   A SUPERFICIE NAO MUDA: no claro a separacao continua por elevacao, no escuro por contorno
+   (D-06, VIS-02). O brilho e uma camada a mais, nao uma troca de fundo.
+   ==================================================================================================== */
+.atalho-bloco.com-cor {
+  background-image: radial-gradient(
+    120% 100% at 100% 0%,
+    color-mix(in srgb, var(--bloco-cor-base) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* O hover ja troca o `background` (cor); sem repetir a imagem aqui ela sumiria no hover. */
+.atalho-bloco.com-cor:hover:not(.disabled) {
+  background-image: radial-gradient(
+    120% 100% at 100% 0%,
+    color-mix(in srgb, var(--bloco-cor-base) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* ===================== FIM VIS-E5b ===================== */

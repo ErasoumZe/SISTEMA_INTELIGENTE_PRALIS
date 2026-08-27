@@ -35,7 +35,11 @@ function estiloCor(id: string) {
   // que a suite ja mede em 4,5:1 sobre esse fundo. Assim a inversao de tema vem de graca.
   return {
     "--bloco-cor": `var(--cat-${categoria}-tinta)`,
-    "--bloco-cor-soft": `var(--cat-${categoria}-soft)`
+    "--bloco-cor-soft": `var(--cat-${categoria}-soft)`,
+    // A `base` e a cor CHEIA, e e ela que faz o brilho — a `tinta` ja e escurecida para servir de
+    // texto e daria um brilho apagado. O brilho fica atras do conteudo, entao nao precisa passar
+    // em contraste; quem precisa e o texto POR CIMA dele, medido no bloco VIS-E5b.
+    "--bloco-cor-base": `var(--cat-${categoria}-base)`
   };
 }
 function temCor(id: string) {
