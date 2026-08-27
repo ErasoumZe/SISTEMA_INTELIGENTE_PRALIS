@@ -286,15 +286,20 @@ onMounted(() => {
                de tela justo para quem mais precisa da referencia. `aria-current="page"` e a forma
                padrao de dizer "voce esta aqui", e mantem o controle alcancavel — mesma logica do
                item ativo do menu, que e marcado e nao removido. -->
+          <!-- Casa + rotulo. O nome e "Painel", nao "Dashboard": a R-100 manda portugues e o
+               sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
+               `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
           <v-btn
             to="/"
-            icon="mdi-view-dashboard-outline"
             variant="text"
             class="topbar-painel"
+            prepend-icon="mdi-home-variant"
             title="Ir para o painel"
             aria-label="Ir para o painel"
             :aria-current="naHome ? 'page' : undefined"
-          />
+          >
+            <span class="topbar-painel-rotulo">Painel</span>
+          </v-btn>
 
           <v-menu v-if="empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">

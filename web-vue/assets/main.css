@@ -3379,3 +3379,47 @@ body {
   );
 }
 /* ===================== FIM VIS-E6d ===================== */
+
+/* ===================== INICIO VIS-E6h — BOTAO DO PAINEL COM ROTULO (27/08/2026) =====================
+   Bloco aditivo e reversivel. Substitui o realce que o VIS-E1b dava ao botao so-icone.
+
+   Casa + a palavra "Painel". E "Painel" e nao "Dashboard": a R-100 manda portugues e o sistema
+   chama assim em todo lugar — no menu, no titulo da tela e no cabecalho.
+
+   TILE ARREDONDADO, nao botao chapado: a superficie recuada e o raio dao a ele a mesma linguagem
+   dos outros tiles, em vez de mais um botao de texto solto na topbar. O raio NAO e declarado
+   aqui: medi e o computado sai 8px, que e o default `rounded="lg"` do nuxt.config e tambem o
+   `--cx-r-sm` que o 67 §5 reserva a botao. Declarar `--cx-r-md` era regra que nao pintava — e o
+   valor certo ja vinha de graca.
+
+   Em tela estreita o ROTULO recolhe e sobra a casa; o `aria-label` continua no elemento, entao
+   quem usa leitor de tela nao perde o nome. Estando no painel, `aria-current="page"` e o realce
+   da marca — nao desabilitado, que tiraria o controle da ordem de Tab (mesma decisao do VIS-E1b).
+   ==================================================================================================== */
+.shell-mobills .topbar-actions > .topbar-painel {
+  width: auto;
+  min-width: 0;
+  padding-inline: var(--cx-sp-3);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.shell-mobills .topbar-actions > .topbar-painel:hover {
+  color: var(--cx-ink);
+}
+.shell-mobills .topbar-actions > .topbar-painel[aria-current="page"] {
+  background: var(--cx-brand-wash);
+  color: var(--cx-brand-text);
+}
+@media (width <= 768px) {
+  .shell-mobills .topbar-painel-rotulo {
+    display: none;
+  }
+  .shell-mobills .topbar-actions > .topbar-painel {
+    padding-inline: var(--cx-sp-2);
+  }
+}
+/* ===================== FIM VIS-E6h ===================== */
