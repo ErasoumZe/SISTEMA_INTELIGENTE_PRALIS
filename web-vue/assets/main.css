@@ -129,13 +129,19 @@
   --cx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ---- Tipografia: poucos tamanhos, bem espacados entre si ---- */
+  /* ESCALA COM SALTO (27/08/2026). A anterior era 11/12/14/15/17/21/27 e o meio dela era mush:
+     body 14 -> lead 15 e um pixel, e lead 15 -> title 17 quase nao se ve. Era isso que fazia
+     titulo de pagina, titulo de bloco e corpo parecerem a mesma coisa a tres metros.
+     Micro, caption e body NAO mudam: sao lidos de perto e 14 e o que sustenta a densidade da
+     tabela. O salto entra de `lead` para cima, com a razao crescendo — 1,14 · 1,25 · 1,30 · 1,31 —
+     que e como escala de display se comporta. */
   --cx-fs-micro: 11px;
   --cx-fs-caption: 12px;
   --cx-fs-body: 14px;
-  --cx-fs-lead: 15px;
-  --cx-fs-title: 17px;
-  --cx-fs-h2: 21px;
-  --cx-fs-h1: 27px;
+  --cx-fs-lead: 16px;
+  --cx-fs-title: 20px;
+  --cx-fs-h2: 26px;
+  --cx-fs-h1: 34px;
   --cx-tracking-tight: -0.018em;
   --cx-tracking-wide: 0.08em;
 
@@ -3222,3 +3228,75 @@ body {
   -webkit-backdrop-filter: none;
 }
 /* ===================== FIM VIS-E6b ===================== */
+
+/* ===================== INICIO VIS-E6c — RITMO, DENSIDADE E MARGEM (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par da escala tipografica ajustada no topo.
+
+   UM RITMO VERTICAL, e ele e um so no sistema:
+     cabecalho -> primeiro bloco   --cx-sp-6   (24px)
+     entre blocos da pagina        --cx-sp-6
+     dentro do card                --cx-sp-5   (20px)  <- ja era assim desde o VIS-02
+     entre secoes de atalho        --cx-sp-7   (32px)  <- ja era assim
+   O que muda aqui e so o que ainda estava em px solto.
+
+   MARGEM DE PAGINA: `.content-frame` usava `18px 32px 28px`, tres numeros soltos, o que a regra
+   de ouro do 67 proibe. Vira token, e a lateral abre de 32 para --cx-sp-8 (48px) no desktop
+   largo: em 1440 com a sidebar de 300px sobra 1140px de conteudo, e 32px de respiro deixava o
+   card colado na borda. Abaixo de 1280 volta a --cx-sp-6, senao come largura util.
+
+   DENSIDADE DA TABELA: a altura de 48px da linha NAO muda (67 §13.2 e VIS-02). O que aperta e o
+   padding horizontal da celula, que no Vuetify e 16px; a 12px cabe mais coluna sem espremer o
+   texto, que era a reclamacao. Ha uma tensao honesta aqui e ela fica registrada: "mais linhas
+   visiveis" pede altura menor, e a altura esta congelada — entao o ganho e de largura, nao de
+   quantidade de linhas.
+
+   E o `scroll-margin-top` do item de menu: a `web-design-guidelines` aponta que elemento sticky
+   nao pode encobrir o que esta com foco. A faixa de grupo virou sticky no VIS-E6b, entao um item
+   focado por Tab poderia deslizar para baixo dela. O `scroll-margin-top` reserva a altura da
+   faixa. Achado da skill sobre o commit anterior, consertado aqui em vez de reaberto.
+   ==================================================================================================== */
+.content-frame {
+  padding: var(--cx-sp-5) var(--cx-sp-8) var(--cx-sp-7);
+}
+@media (width <= 1280px) {
+  .content-frame {
+    padding: var(--cx-sp-5) var(--cx-sp-6) var(--cx-sp-6);
+  }
+}
+
+/* Ritmo: o cabecalho de tela e o primeiro degrau, e ele ja define o resto. */
+.cabecalho-tela {
+  margin-bottom: var(--cx-sp-6);
+}
+
+/* Densidade: a linha continua com 48px; o que abre e a largura util da celula.
+   O seletor repete a cadeia do Vuetify de proposito. A primeira versao era
+   `.responsive-table-shell .v-table td` e NAO pintava nada: o Vuetify usa
+   `.v-table > .v-table__wrapper > table > tbody > tr > td`, que tem as mesmas 2 classes e 4
+   elementos contra 1 — e o desempate por elemento ia para ele. Medido: a celula continuava em
+   16px. Com a cadeia repetida mais a classe da casca, sao 3 classes, e passa a valer. */
+.responsive-table-shell .v-table > .v-table__wrapper > table > tbody > tr > td,
+.responsive-table-shell .v-table > .v-table__wrapper > table > tbody > tr > th,
+.responsive-table-shell .v-table > .v-table__wrapper > table > thead > tr > th {
+  padding-inline: var(--cx-sp-3);
+}
+
+/* Sticky nao encobre foco (web-interface-guidelines). A faixa de grupo mede ~28px. */
+.shell-mobills .sidebar-item {
+  scroll-margin-top: var(--cx-sp-7);
+}
+
+/* Titulo longo quebra equilibrado em vez de deixar uma palavra orfa na segunda linha. */
+.cabecalho-tela-titulo {
+  text-wrap: balance;
+}
+
+/* Em tela estreita o h1 de 34px nao cabe; o VIS-10 ja o desce para h2, e aqui ele desce mais um
+   degrau no XS, senao titulo longo corta. */
+@media (width <= 600px) {
+  .cabecalho-tela-titulo {
+    font-size: var(--cx-fs-title);
+  }
+}
+/* ===================== FIM VIS-E6c ===================== */
