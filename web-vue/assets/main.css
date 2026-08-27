@@ -3482,3 +3482,102 @@ body {
   content: "";
 }
 /* ===================== FIM VIS-E6g ===================== */
+
+/* ===================== INICIO VIS-E6e — UMA ESCALA SO DE BOTAO, E O BLOCO NO TAMANHO CERTO (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   1) O BOTAO. O defeito e consequencia do meu proprio VIS-04, e o comentario dele confessa sem
+   perceber: "cresce a area clicavel, nao o desenho: fonte e padding seguem os do Vuetify". Isso
+   estava certo para ALVO DE TOQUE e errado como ESCALA — a caixa subiu para 40/44px e o conteudo
+   ficou onde estava. Medido a 1440x900:
+
+     "Novo cadastro"        (size-small,   elevated)  caixa 44px  texto 12px  padding 12px
+     "Importar por periodo" (size-default, elevated)  caixa 44px  texto 14px  padding 16px
+
+   Os dois sao a acao primaria da sua tela e tem a MESMA altura, com tipo e respiro diferentes. O
+   de 12px flutua dentro de uma caixa grande demais para ele — e literalmente "botao do tamanho
+   errado": a caixa cresceu, a letra nao. Mesma coisa em "Ir para o caixa" (40px/12px) e em
+   "Importar" (outlined, 40px/12px).
+
+   A regra: BOTAO COM CAIXA VISIVEL usa tipo e respiro a altura da caixa que o VIS-04/04b lhe deu.
+   `text` fica de fora porque nao tem caixa — nele o sub-preenchimento e invisivel, e mexer ali
+   mudaria 20 botoes por tela sem ganho.
+   `.row-actions` fica de fora de proposito: e a acao densa DENTRO da linha da tabela, onde 12px e
+   a densidade certa e crescer a fonte alargaria a coluna. Densidade menor ali e decisao, nao
+   descuido — e nao ha uma escala unica que sirva a um toolbar e a uma celula ao mesmo tempo.
+   `.v-btn--icon` fica de fora porque nao tem texto para escalar.
+
+   2) O BLOCO DO PAINEL. Medido: 135x135 com icone de 40px, sete por linha em 1440. Grande demais
+   para um atalho — o bloco competia com o conteudo em vez de indexa-lo. Vai para `minmax(112px)`,
+   que a 1440 rende 116px de bloco e OITO por linha (a grade tem 1041px uteis: (1041+16)/(112+16)
+   = 8,2). O pedido falava em "~9 por linha"; nove exigiria bloco de 101px, e ai o rotulo de duas
+   linhas comeca a cortar. Fica o numero que foi pedido explicitamente — 112 — e o registro de que
+   a consequencia real e oito, nao nove.
+   O icone acompanha: 40 -> 32px. Sem isso o bloco encolhe e o icone nao, e a moldura aperta.
+   O <=768 fica como esta (104px): ja estava dimensionado para o celular e encolher junto quebraria
+   a unica largura em que a grade ja cabia bem.
+
+   3) O TOPO DA COLUNA, NO LUGAR. Nada muda de posicao: o "+ NOVO" continua onde estava, o card do
+   caixa embaixo dele, e "IR PARA O CAIXA" continua existindo. O que muda e o respiro.
+   O texto do card computava 16px — o unico corpo de 16px do sistema, contra `--cx-fs-body` de 14px
+   em todo o resto. Nao e enfase: e o default do navegador nunca declarado. Passa a 14px, o card
+   perde altura por consequencia e nao por corte.
+   O "+ NOVO" NAO encolhe: medido, ele ja esta em 44px/14px/600, porque o VIS-04 (dois seletores de
+   classe) ja vencia o `min-height: 46px` e o `font-size: 15px` de `.sidebar-new-button` (um
+   seletor). Ele ja estava na escala; quem estava fora eram os outros.
+   ============================================================================================== */
+
+/* 1. Tipo e respiro a altura da caixa. Tres classes para ganhar do VIS-04, que ja usa duas.
+   `tonal` entra junto: "IR PARA O CAIXA" e tonal e sofria o mesmo (caixa 40px, texto 12px). */
+.v-btn.v-btn--variant-flat:not(.v-btn--icon),
+.v-btn.v-btn--variant-elevated:not(.v-btn--icon),
+.v-btn.v-btn--variant-tonal:not(.v-btn--icon),
+.v-btn.v-btn--variant-outlined:not(.v-btn--icon) {
+  padding-inline: var(--cx-sp-4);
+  font-size: var(--cx-fs-body);
+}
+/* A celula da tabela mantem a densidade dela. Vem DEPOIS para vencer por ordem, ja que empata em
+   especificidade com a regra de cima. */
+.row-actions .v-btn.v-btn--variant-flat,
+.row-actions .v-btn.v-btn--variant-elevated,
+.row-actions .v-btn.v-btn--variant-tonal,
+.row-actions .v-btn.v-btn--variant-outlined {
+  padding-inline: var(--cx-sp-3);
+  font-size: var(--cx-fs-caption);
+}
+
+/* 2. O bloco do painel para de competir com o conteudo.
+   ESCOPADO em `width > 768px`, e a medicao e que mandou. Sem o escopo esta regra vem DEPOIS do
+   `@media (width <= 768px)` do VIS-E2a com a MESMA especificidade e ganha por ordem — o celular
+   herdava o minmax de 112 no lugar do de 104 e caia de tres colunas para DUAS, com o bloco indo a
+   165px. Encolher o bloco no desktop engordava ele no celular. E a mesma armadilha que o VIS-04b
+   ja tinha descrito neste arquivo; anotada aqui de novo porque descrever nao impediu. */
+@media (width > 768px) {
+  .atalhos-grade {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  }
+}
+.atalho-bloco-icone {
+  width: 32px;
+  height: 32px;
+}
+
+/* 3. O card do caixa encolhe POR RESPIRO, no lugar. Nada sai, nada se move: o titulo, a explicacao
+   e o botao continuam os mesmos, na mesma ordem.
+   DUAS tentativas foram apagadas por serem no-op, e ficam registradas para ninguem tentar de novo:
+     a) `font-size` no card — `.caixa-title` (14px) e `.caixa-meta` (12px) declaram o proprio
+        tamanho, entao a heranca nunca chega ao texto. 147px antes, 147px depois.
+     b) `margin-top` em `.caixa-card .caixa-edit` para baixar os 16px do `mt-4` — dois seletores de
+        classe contra um deveria vencer, mas os utilitarios do Vuetify sao `!important`. Derrubar
+        aquele 16 exigiria `!important` NOVO, e esta frente nao abre essa porta por 4px.
+   Ficam as duas declaracoes que movem numero de verdade: 2px do padding do topo e 2px da margem do
+   texto. Medido: o primeiro item do menu sobe de 349 para 345px. Quatro pixels — pequeno, e e o que
+   da para tirar sem mover nada de lugar nem cortar conteudo. Registro o tamanho real do ganho em
+   vez de descreve-lo como se fosse maior. */
+.caixa-card {
+  padding: var(--cx-sp-3);
+}
+.caixa-card .caixa-meta {
+  margin-top: var(--cx-sp-1);
+}
+/* ===================== FIM VIS-E6e ===================== */
