@@ -141,8 +141,17 @@
 
   /* ---- Material translucido: SO no chrome (sidebar/topbar/overlay).
      Nunca em card de conteudo nem atras de texto de leitura. ---- */
-  --cx-chrome: color-mix(in srgb, var(--cx-surface) 72%, transparent);
-  --cx-chrome-blur: saturate(180%) blur(20px);
+  /* VIDRO (27/08/2026): era 72%/78% e o conteudo mal se via passando por baixo. Aberto ate o
+     ponto que a MEDICAO permite. Texto `--cx-ink-soft` sobre o chrome, por superficie real que
+     rola embaixo:
+       claro  58%: canvas 5,63 · card 5,83 · sunken 5,63
+       escuro 62%: canvas 7,88 · card 7,48 · raised 6,87
+     Um valor NAO entrou na conta de proposito: a `-faixa` de categoria, que a 72% ja media 4,06.
+     Ela nunca passa por baixo do chrome — vive em cabecalho de modal (que fica ACIMA) e no item
+     ativo do menu (que esta DENTRO da sidebar, nao atras dela). Usar cor de texto ou faixa como
+     superficie de fundo era o erro da minha primeira medicao. */
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 58%, transparent);
+  --cx-chrome-blur: saturate(180%) blur(24px);
   --cx-scrim: rgb(15 23 42 / 0.32);
 }
 
@@ -173,7 +182,7 @@
   --cx-e-2: 0 1px 3px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.6);
   --cx-e-3: 0 2px 6px rgb(0 0 0 / 0.5), 0 28px 60px -18px rgb(0 0 0 / 0.7);
 
-  --cx-chrome: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 62%, transparent);
   --cx-scrim: rgb(0 0 0 / 0.55);
 }
 
@@ -3175,3 +3184,41 @@ body {
   background: var(--cx-surface-raised);
 }
 /* ===================== FIM VIS-E6a ===================== */
+
+/* ===================== INICIO VIS-E6b — O VIDRO VIRA ASSINATURA (27/08/2026) =====================
+   Bloco aditivo e reversivel. Par do ajuste de `--cx-chrome` no topo.
+
+   O chrome ja existia a 72%/78% com blur 20px, e o conteudo mal se via passando por baixo. Os
+   tokens abriram para 58%/62% com blur 24px — ate onde a medicao permite, nao mais.
+
+   A FAIXA DE GRUPO DO MENU passa a usar o mesmo vidro, um nivel acima do fundo da sidebar, e
+   fica STICKY: e o que a torna chrome de verdade, com os itens passando por baixo. Vidro em
+   rotulo parado seria decoracao, que o 67 §10 proibe.
+
+   A FAIXA DA HOME NAO VOLTA A TER VIDRO, e isso e deliberado: Marco validou em tela na Etapa 2 e
+   REPROVOU a barra atravessando a tela; ela virou rotulo puro no commit 91d26c4. Reintroduzi-la
+   aqui seria desfazer uma decisao tomada com a tela na frente. Registrado para ele decidir.
+
+   `@supports` de fallback obrigatorio, como em todo uso de vidro no arquivo.
+   ================================================================================================== */
+.shell-mobills .sidebar-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--cx-chrome);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .sidebar-group-label {
+    background: var(--cx-surface);
+  }
+}
+/* No rail o rotulo vira um divisor de 1px (linha ~1041): vidro num divisor nao faz sentido. */
+.shell-mobills .padaria-sidebar.rail .sidebar-group-label {
+  position: static;
+  background: var(--marca-linha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* ===================== FIM VIS-E6b ===================== */
