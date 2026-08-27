@@ -3581,3 +3581,33 @@ body {
   margin-top: var(--cx-sp-1);
 }
 /* ===================== FIM VIS-E6e ===================== */
+
+/* ===================== INICIO VIS-E6k — ALVO DE TOQUE DO ITEM DE MENU (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Achado da Etapa 6 pela diretriz de interface: em 390px os itens do menu mediam 42px de altura —
+   36 alvos abaixo dos 44px que o 67 §9 e o §13.4 exigem em tela de toque. Passa em WCAG 2.2 AA
+   (2.5.8 pede 24x24) e falha no piso do proprio projeto por 2px.
+
+   NAO SE MEXE na linha 481. Os 42px de la sao o valor BASE e estao certos no desktop, onde o
+   minimo geral do 67 §9 e 40. O que faltava era so o piso do mobile.
+
+   ANTES DE ESCREVER, a cascata inteira de `.sidebar-item`, para nao repetir o SHELL-02 (piso que
+   nunca encosta):
+     481  `.sidebar-item`                    min-height 42px + padding 10px 14px  <- o que vale
+     945  `.sidebar-item`                    so cor, fonte, raio e transicao — NAO toca altura
+     528  `.padaria-sidebar.rail .sidebar-item`  so grid e padding lateral (rail, 769-1024)
+   O conteudo mede 42px (icone 21 + linha de texto ~22 + 20 de padding), ou seja, esta ABAIXO do
+   piso novo — entao 44 morde de verdade. E a diferenca para o SHELL-02, onde o elemento ja tinha
+   48px e o piso de 44 nunca encostava.
+
+   Duas classes contra a uma da linha 481: ganha por especificidade, independente de ordem.
+   `.shell-mobills` esta sempre na casca (AppShell: `<v-layout class="padaria-shell shell-mobills">`),
+   e a linha 1762 ja usa este mesmo par de seletores — entao o alcance esta provado no arquivo.
+   ============================================================================================== */
+@media (width <= 768px) {
+  .shell-mobills .sidebar-item {
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-E6k ===================== */
