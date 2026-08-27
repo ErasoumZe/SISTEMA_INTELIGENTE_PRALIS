@@ -29,6 +29,10 @@ const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
 const saindo = ref(false);
 const router = useRouter();
+const rota = useRoute();
+// Verdade sobre "estou no painel" vem da ROTA, e nao de `telaAtiva`: o botao aponta para "/", entao
+// quem responde se ele ja esta no destino e o proprio caminho atual.
+const naHome = computed(() => rota.path === "/");
 
 async function sair() {
   saindo.value = true;
@@ -267,8 +271,26 @@ onMounted(() => {
           <div class="topbar-page-id">{{ telaAtual?.titulo ?? "Painel" }}</div>
         </div>
 
-        <!-- DIREITA: empresa + tema + usuario. -->
+        <!-- DIREITA: painel + empresa + tema + usuario. -->
         <div class="topbar-actions">
+          <!-- Volta ao painel. Fica FORA do v-if/v-else da empresa de proposito: dentro de um dos
+               ramos ele sumiria para quem tem uma empresa so.
+               `:to` e nao `@click` com push — assim clique do meio, "abrir em nova aba" e teclado
+               funcionam, porque continua sendo um link de verdade.
+               Ja no painel ele NAO e desabilitado: `disabled` o tiraria da ordem de Tab e do leitor
+               de tela justo para quem mais precisa da referencia. `aria-current="page"` e a forma
+               padrao de dizer "voce esta aqui", e mantem o controle alcancavel — mesma logica do
+               item ativo do menu, que e marcado e nao removido. -->
+          <v-btn
+            to="/"
+            icon="mdi-view-dashboard-outline"
+            variant="text"
+            class="topbar-painel"
+            title="Ir para o painel"
+            aria-label="Ir para o painel"
+            :aria-current="naHome ? 'page' : undefined"
+          />
+
           <v-menu v-if="empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">
               <button v-bind="menuProps" type="button" class="topbar-empresa" aria-label="Trocar de empresa">

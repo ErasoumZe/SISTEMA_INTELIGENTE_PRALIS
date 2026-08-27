@@ -2884,3 +2884,19 @@ body {
   }
 }
 /* ===================== FIM VIS-E1a ===================== */
+
+/* ===================== INICIO VIS-E1b — BOTAO DE VOLTAR AO PAINEL (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Ele herda o tamanho e a cor dos outros icones da topbar pela regra da linha 1953
+   (`.topbar-actions > .v-btn--icon`), entao aqui entra so o estado "voce ja esta aqui".
+
+   Estando no painel, o botao NAO e desabilitado — `disabled` o tiraria da ordem de Tab e do leitor
+   de tela. O sinal e `aria-current="page"`, e o realce visual abaixo e o par visivel dele: quem nao
+   usa leitor de tela precisa enxergar o mesmo que o leitor anuncia.
+   ================================================================================================== */
+.shell-mobills .topbar-actions > .topbar-painel[aria-current="page"] {
+  background: var(--cx-brand-wash);
+  color: var(--cx-brand-text);
+}
+/* ===================== FIM VIS-E1b ===================== */
