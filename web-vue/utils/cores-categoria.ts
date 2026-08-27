@@ -123,6 +123,40 @@ export const CATEGORIA_POR_TELA: Record<string, Categoria> = {
   retiradas: "retiradas"
 };
 
+/**
+ * Qual categoria pinta cada SEÇÃO do menu (as mesmas cinco que a home repete). É uma tabela
+ * DIFERENTE do `CATEGORIA_POR_TELA` porque a pergunta é outra: ali é "de que cor é esta tela",
+ * aqui é "esta seção tem UMA identidade?".
+ *
+ * Só entram as seções em que a resposta é sim e é única:
+ *
+ *   Entradas ......... a tela `entradas` é a única categorizada da seção.
+ *   Transferencias ... idem, `transferencias`.
+ *   Resultados ....... `resultado`, a categoria que já pinta o card-âncora do Caixa
+ *                      (CaixaResumoPage.vue). É a única das seis que nomeia um eixo do menu.
+ *
+ * FICAM DE FORA, e isso é a decisão, não o esquecimento:
+ *
+ *   Saidas ........... guarda TRÊS categorias (despesas, mercadorias, retiradas). Escolher uma
+ *                      seria mentir sobre as outras duas; misturar as três num gradiente seria
+ *                      inventar uma sétima cor que o `CORES_CATEGORIA` não tem. A seção fica sem
+ *                      cor, e as três aparecem onde são verdade: nos itens, via `--item-cor`.
+ *   Configuração ..... cadastro e administração não têm categoria em lugar nenhum do sistema
+ *                      (67 §3). Continuar sem é coerência, não falta.
+ *
+ * O desequilíbrio de "três seções com cor e duas sem" se resolve por FORMA: a marca antes do
+ * rótulo tem o mesmo tamanho e a mesma posição nas cinco, e só a tinta muda. O ritmo é igual; a
+ * cor é informação a mais para quem a tem, nunca o que segura a leitura.
+ *
+ * A chave é o TÍTULO da seção porque é o que `SECOES_MENU` e `montarAtalhosHome` carregam — não há
+ * id. `cores-categoria.test.ts` falha se uma chave daqui deixar de existir lá.
+ */
+export const CATEGORIA_POR_SECAO: Record<string, Categoria> = {
+  Entradas: "entradas",
+  Transferencias: "transferencias",
+  Resultados: "resultado"
+};
+
 export function corDaCategoria(categoria: Categoria): string {
   return CORES_CATEGORIA[categoria].base;
 }

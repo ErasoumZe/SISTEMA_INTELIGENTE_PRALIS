@@ -5,7 +5,7 @@ import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { agruparTelasMenu } from "~/utils/menu";
-import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import { CATEGORIA_POR_SECAO, CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -35,6 +35,15 @@ const rota = useRoute();
 // quem responde se ele ja esta no destino e o proprio caminho atual.
 const naHome = computed(() => rota.path === "/");
 const telaTemCategoria = computed(() => Boolean(CATEGORIA_POR_TELA[props.telaAtiva]));
+
+// Custom property, como o `--item-cor` do AppMenuItem: a lista de quem tem cor continua sendo so o
+// `CATEGORIA_POR_SECAO`. Aponta para o TOKEN e nunca para o hex (licao do VIS-E2a: com hex a marca
+// ficava com a cor do claro tambem no escuro). Secao sem cor devolve `undefined` e o CSS cai no
+// neutro do `var(--grupo-cor, ...)` — mesma forma, mesmo tamanho, so a tinta muda.
+function estiloGrupo(titulo: string) {
+  const categoria = CATEGORIA_POR_SECAO[titulo];
+  return categoria ? { "--grupo-cor": `var(--cat-${categoria}-tinta)` } : undefined;
+}
 
 async function sair() {
   saindo.value = true;
@@ -207,7 +216,12 @@ onMounted(() => {
 
         <div class="sidebar-scroll-shell">
           <nav class="sidebar-nav" aria-label="Menu principal">
-            <div v-for="grupo in telasAgrupadas" :key="grupo.titulo" class="sidebar-group">
+            <div
+              v-for="grupo in telasAgrupadas"
+              :key="grupo.titulo"
+              class="sidebar-group"
+              :style="estiloGrupo(grupo.titulo)"
+            >
               <div class="sidebar-group-label">{{ grupo.titulo }}</div>
               <template v-for="no in grupo.itens" :key="no.id">
                 <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->

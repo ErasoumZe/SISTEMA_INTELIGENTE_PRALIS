@@ -2,12 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CATEGORIA_POR_SECAO,
   CATEGORIA_POR_TELA,
   CORES_CATEGORIA,
   MISTURA_SOFT_ESCURO,
   corDaCategoria,
   type Categoria
 } from "./cores-categoria";
+import { SECOES_MENU } from "./menu";
 import { corCategoriaPorTela } from "./tema";
 
 // Le do DISCO, e nao por import: `main.css?raw` volta vazio (a config de teste do web-vue neutraliza
@@ -199,5 +201,50 @@ describe("corCategoriaPorTela deriva da fonte unica", () => {
     expect(corCategoriaPorTela["contas"]).toBeUndefined();
     expect(corCategoriaPorTela["caixa"]).toBeUndefined();
     expect(corCategoriaPorTela["aparencia"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// VIS-E6g — a faixa de identidade da SECAO (menu e home)
+//
+// A chave do `CATEGORIA_POR_SECAO` e o TITULO da secao, porque nem `SECOES_MENU` nem
+// `montarAtalhosHome` carregam id. Titulo e texto de tela: alguem corrige "Saidas" para "Saídas"
+// um dia e o mapa vira letra morta em silencio — a faixa some e nenhum teste reclama. Estas tres
+// linhas sao o que impede isso.
+describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () => {
+  const titulosDasSecoes = SECOES_MENU.map((secao) => secao.titulo);
+
+  it("toda chave do mapa e um titulo de secao existente", () => {
+    for (const titulo of Object.keys(CATEGORIA_POR_SECAO)) {
+      expect(titulosDasSecoes, `"${titulo}" nao e titulo de nenhuma secao de SECOES_MENU`).toContain(titulo);
+    }
+  });
+
+  // Anti-falso-verde: se `SECOES_MENU` vier vazio (import quebrado, renome de arquivo), o teste
+  // acima passa sem comparar nada. Esta linha exige que ele tenha encontrado as cinco secoes.
+  it("achou as cinco secoes declaradas — o teste acima nao passou no vazio", () => {
+    expect(titulosDasSecoes).toHaveLength(5);
+    expect(titulosDasSecoes).toContain("Saidas");
+    expect(titulosDasSecoes).toContain("Configuração");
+  });
+
+  // Saidas guarda tres categorias e Configuracao nenhuma: as duas ficam SEM cor de propriedade.
+  // Sem esta linha alguem "completa" o mapa escolhendo uma das tres de Saidas.
+  //
+  // "Geral" nao esta em SECOES_MENU e mesmo assim APARECE no menu: e o balde de sobra que o
+  // `agruparTelasMenu` cria quando alguma tela permitida nao caiu em secao nenhuma (menu.ts:140).
+  // Ele fica sem cor porque nao e uma secao desenhada, e sim uma rede de seguranca — dar cor a ele
+  // seria dar identidade ao acaso. Se alguem tentar, o teste de cima ja falha (nao e titulo de
+  // SECOES_MENU); esta linha diz por que a falha esta certa.
+  it("Saidas, Configuracao e o balde Geral continuam sem cor de secao", () => {
+    expect(CATEGORIA_POR_SECAO["Saidas"]).toBeUndefined();
+    expect(CATEGORIA_POR_SECAO["Configuração"]).toBeUndefined();
+    expect(CATEGORIA_POR_SECAO["Geral"]).toBeUndefined();
+  });
+
+  it("as tres secoes com cor apontam para categorias que existem na paleta", () => {
+    for (const [titulo, categoria] of Object.entries(CATEGORIA_POR_SECAO)) {
+      expect(CORES_CATEGORIA[categoria], titulo).toBeDefined();
+    }
   });
 });

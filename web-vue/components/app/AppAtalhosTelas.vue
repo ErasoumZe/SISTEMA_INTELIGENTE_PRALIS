@@ -15,7 +15,7 @@
 import type { ItemMenu } from "~/types/padaria";
 import { rotaTela } from "~/utils/domain";
 import { montarAtalhosHome } from "~/utils/atalhos-home";
-import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import { CATEGORIA_POR_SECAO, CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
   telas: ItemMenu[];
@@ -45,11 +45,19 @@ function estiloCor(id: string) {
 function temCor(id: string) {
   return Boolean(CATEGORIA_POR_TELA[id]);
 }
+
+// A cor da SECAO, no mesmo mapa que o menu lateral usa (VIS-E6g). A home repete as cinco secoes do
+// menu, entao repetir a identidade e o que faz os dois lugares serem o MESMO sistema e nao dois
+// desenhos parecidos. Secao sem cor devolve `undefined` e o CSS cai no neutro.
+function estiloGrupo(titulo: string) {
+  const categoria = CATEGORIA_POR_SECAO[titulo];
+  return categoria ? { "--grupo-cor": `var(--cat-${categoria}-tinta)` } : undefined;
+}
 </script>
 
 <template>
   <nav v-if="grupos.length" class="atalhos-home" aria-label="Atalhos das telas">
-    <section v-for="grupo in grupos" :key="grupo.titulo" class="atalhos-grupo">
+    <section v-for="grupo in grupos" :key="grupo.titulo" class="atalhos-grupo" :style="estiloGrupo(grupo.titulo)">
       <h2 class="atalhos-grupo-titulo">{{ grupo.titulo }}</h2>
       <div class="atalhos-grade">
         <template v-for="tela in grupo.telas" :key="tela.id">

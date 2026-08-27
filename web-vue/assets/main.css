@@ -3423,3 +3423,62 @@ body {
   }
 }
 /* ===================== FIM VIS-E6h ===================== */
+
+/* ===================== INICIO VIS-E6g — IDENTIDADE DE FAIXA DE GRUPO (27/08/2026) =====================
+   O menu tem cinco secoes (SECOES_MENU) e a home repete as MESMAS cinco. Ate aqui os dois lugares
+   mostravam so o rotulo em maiuscula: cinco blocos de texto identicos, e nada dizia que a secao
+   "Entradas" do menu e a secao "Entradas" da home sao a mesma coisa.
+
+   O que entra: uma marca antes do rotulo, nos dois lugares, com a cor da categoria da secao.
+
+   QUEM TEM COR (utils/cores-categoria.ts, `CATEGORIA_POR_SECAO`):
+     Entradas -> entradas · Transferencias -> transferencias · Resultados -> resultado
+   QUEM NAO TEM, e e decisao:
+     Saidas guarda TRES categorias (despesas, mercadorias, retiradas). Escolher uma mente sobre as
+     outras duas; misturar as tres num gradiente inventa uma setima cor que a paleta nao tem. As
+     tres ja aparecem onde sao verdade — no `--item-cor` de cada item.
+     Configuracao nao tem categoria em lugar nenhum do sistema (67 §3).
+     "Geral" e uma SEXTA faixa que o menu pode renderizar sem estar em SECOES_MENU: e o balde de
+     sobra do `agruparTelasMenu` (menu.ts:140) para tela permitida que nao caiu em secao nenhuma.
+     Fica no neutro porque nao e secao desenhada, e sim rede de seguranca.
+
+   O DESEQUILIBRIO SE RESOLVE POR FORMA, nao por cor: a marca tem o MESMO tamanho, a MESMA posicao
+   e o MESMO raio nas cinco secoes. So a tinta muda. Assim o ritmo da coluna e igual para todas, e a
+   cor vira informacao a mais para quem a tem — nunca o que segura a leitura. Uma secao sem cor nao
+   parece inacabada; parece uma secao sem cor.
+
+   A cor NAO carrega significado sozinha: o rotulo em texto esta sempre do lado (WCAG 1.4.1). A
+   marca e reforco, e por isso 3px de largura bastam e nao ha exigencia de contraste sobre ela.
+
+   O valor chega por `--grupo-cor`, custom property posta pelo Vue (AppShell e AppAtalhosTelas) a
+   partir do TOKEN `--cat-*-tinta` — nunca do hex do modulo. Com hex a marca ficaria com a cor do
+   tema claro tambem no escuro; foi o defeito medido no VIS-E2a. O token e redefinido no bloco
+   escuro, entao a inversao de tema vem de graca.
+
+   O neutro e `--cx-ink-soft` a 40%: o mesmo token que `--marca-tinta-suave` ja aliasa (linha 788),
+   entao sidebar e conteudo usam a mesma tinta sem duas fontes.
+
+   NO RAIL (769-1024px) nada muda: `.padaria-sidebar.rail .sidebar-group-label` e `display: none`
+   (linha 863, 3 classes) e ganha do seletor de 1 classe daqui. O rotulo continua escondido e o
+   `::before` junto — nao existe faixa recolhida nova, porque nao existia rotulo recolhido.
+   =========================================================================================== */
+
+/* Mesma forma nos dois lugares. `flex: none` porque o rotulo do menu pode quebrar em duas linhas
+   no drawer estreito, e a marca nao pode encolher junto. */
+.sidebar-group-label,
+.atalhos-grupo-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+}
+
+.sidebar-group-label::before,
+.atalhos-grupo-titulo::before {
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: var(--cx-r-pill);
+  background: var(--grupo-cor, color-mix(in srgb, var(--cx-ink-soft) 40%, transparent));
+  content: "";
+}
+/* ===================== FIM VIS-E6g ===================== */
