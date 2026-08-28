@@ -29,17 +29,19 @@ const grupos = computed(() => montarAtalhosHome(props.telas, props.desabilitadas
 /* SANFONA DA HOME (VIS-E7i). Mesmo mecanismo e mesma linguagem do menu — o 68 pede que os dois
    lugares nao sejam dois desenhos parecidos, e sim o mesmo sistema.
 
-   O ESTADO E O MESMO DO MENU, de proposito: `useGruposAbertos`, a mesma chave. Recolher
-   "Configuração" e uma afirmacao sobre o GRUPO ("nao trabalho com isso"), nao sobre a superficie
-   em que a pessoa clicou. Dois estados separados obrigariam a repetir a mesma decisao duas vezes.
+   O ESTADO E SEPARADO do menu — `useGruposAbertos("home")`, chave propria. A primeira versao
+   compartilhava a chave, argumentando que recolher um grupo era uma afirmacao sobre o GRUPO e nao
+   sobre a superficie. Em tela o argumento caiu: abrir um grupo aqui abria o mesmo no menu lateral,
+   e a mesma lista mexia sozinha em dois lugares. Coerencia de LINGUAGEM (mesmo mecanismo, mesmo
+   desenho, que continuam iguais) nao e a mesma coisa que estado compartilhado.
 
-   Por isso NAO ha watch aqui. Quem semeia o estado e o AppSidebar, que existe em toda pagina
-   (inclusive no Painel) e ja roda o `gruposIniciais`. Um segundo watch escrevendo o mesmo objeto
-   seria duas fontes para o mesmo dado.
+   NAO ha watch aqui porque nao ha o que semear: a tela ativa no Painel nao pertence a grupo
+   nenhum, entao `gruposIniciais` nao teria o que forcar. O `?? true` do `grupoAberto` da a mesma
+   regra por outro caminho: grupo desconhecido aparece ABERTO.
 
-   O `?? true` cobre o unico instante em que a home leria antes do AppSidebar semear: grupo
-   desconhecido aparece ABERTO, que e a mesma regra do `gruposIniciais`. */
-const gruposAbertos = useGruposAbertos().abertos;
+   DIVIDA: esta sanfona so existe porque a home ESPELHA o menu, e a D-HOME decidiu que ela nao
+   deveria. Ver o comentario de escopo no `useGruposAbertos`. */
+const gruposAbertos = useGruposAbertos("home").abertos;
 
 function grupoAberto(titulo: string) {
   return gruposAbertos.value[titulo] ?? true;

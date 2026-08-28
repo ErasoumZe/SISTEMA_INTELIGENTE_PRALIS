@@ -27,13 +27,32 @@ import { getCurrentInstance } from "vue";
  * tela ativa e forcado a aberto, por cima de tudo. Preferencia do usuario ganha do padrao; a tela
  * ativa ganha da preferencia.
  *
+ * ESCOPO — corrigido em 28/08/2026. A primeira versao usava UMA chave para o menu e para a home,
+ * argumentando que recolher um grupo e uma afirmacao sobre o GRUPO e nao sobre a superficie. O
+ * efeito em tela derrubou o argumento: abrir um grupo na home abria o mesmo no menu lateral, e o
+ * usuario via a mesma lista mexer sozinha em dois lugares. Coerencia de LINGUAGEM (mesmo
+ * mecanismo, mesmo desenho) nao e a mesma coisa que estado compartilhado.
+ *
+ * Agora sao duas chaves. `useGruposAbertos("menu")` e `useGruposAbertos("home")` nao se enxergam,
+ * nem em memoria nem no `sessionStorage`.
+ *
+ * DIVIDA REGISTRADA, e ela e maior que isto: a home so tem sanfona porque ESPELHA o menu — e a
+ * D-HOME decidiu em 26/08 que ela nao deveria espelhar. A sanfona apenas tornou o espelho
+ * visivel. O conserto de verdade e o Lote B, que troca o espelho pelas faixas da dashboard
+ * (Planejamento/SPEC-DASHBOARD-DADOS.md). Quando ele entrar, esta sanfona da home provavelmente
+ * some junto — entao NAO investir nela alem desta separacao.
+ *
  * Banco continua fora de questao: e outra frente e exigiria autorizacao do Marco (RD-04).
  */
-const CHAVE = "padaria.grupos-menu-abertos";
+/** Cada superficie tem a SUA sanfona. Ver o comentario de escopo em `useGruposAbertos`. */
+export type EscopoSanfona = "menu" | "home";
 
-export function useGruposAbertos() {
-  const abertos = useState<Record<string, boolean>>("sidebar-grupos-abertos", () => ({}));
-  const hidratado = useState<boolean>("sidebar-grupos-abertos.hidratado", () => false);
+const CHAVE_BASE = "padaria.grupos-abertos";
+
+export function useGruposAbertos(escopo: EscopoSanfona = "menu") {
+  const CHAVE = `${CHAVE_BASE}.${escopo}`;
+  const abertos = useState<Record<string, boolean>>(`sidebar-grupos-abertos:${escopo}`, () => ({}));
+  const hidratado = useState<boolean>(`sidebar-grupos-abertos:${escopo}.hidratado`, () => false);
 
   // `onMounted` so existe dentro do setup de um componente. O guard segue o padrao do useModoEscuro:
   // quem chamar fora de um componente continua tendo o estado em memoria funcionando.
