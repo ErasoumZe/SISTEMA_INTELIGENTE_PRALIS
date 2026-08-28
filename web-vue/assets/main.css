@@ -4029,3 +4029,60 @@ body {
   padding: 0;
 }
 /* ===================== FIM VIS-F9 ===================== */
+
+/* ===================== INICIO VIS-F14 — O TOPO DA SIDEBAR FECHA OS FUROS DE ALVO E DE FEEDBACK (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O `.sidebar-recolher` computava 32x32. Ele nasceu assim no VIS-E7h (`main.css:3419` declara
+   `width: 32px` e `min-height: 32px`), e o bloco de la NAO e tocado aqui — este seletor tem a mesma
+   especificidade e vem depois, entao vence por ordem.
+
+   A REGUA QUE FALHA NAO E A WCAG. O minimo da 2.5.8 e 24x24, e 32 passa nele com folga. O que 32
+   nao cumpre e o piso de 40px do PROPRIO PROJETO, no 67 §9 — e essa e a mesma regra que, meia hora
+   antes neste lote, pegou os 223x38 do `.sidebar-logo-alvo` e obrigou o `min-height: 40px` de la.
+
+   DUAS MEDIDAS, O MESMO PISO, NO MESMO LOTE: consertar uma e deixar a outra e a incoerencia que nao
+   pode subir — ainda mais num merge que adiciona um guardiao ao build. Foi por isso que ele entrou,
+   e nao porque a WCAG exigisse.
+
+   Eu tinha classificado isto como "pre-existente, nao e desta mudanca". Estava errado pela metade:
+   nao veio do F8 nem do F9, mas veio do VIS-E7h, que E ancestral do HEAD e sobe no mesmo merge.
+   Pre-existente em relacao ao commit nao quer dizer pre-existente em relacao ao que a frente entrega.
+   ========================================================================================================= */
+.sidebar-recolher {
+  width: 40px;
+  min-height: 40px;
+}
+
+/* 2 · O FEEDBACK VAI PARA O ALVO, e nao para a faixa inteira.
+   MEDIDO no navegador: passar o mouse na marca acendia `.sidebar-logo-row` INTEIRA (264px,
+   chevron e vao morto incluidos), e o `.sidebar-logo-alvo` — que e o botao de verdade — nao tinha
+   fundo proprio nenhum. Passar o mouse no CHEVRON acendia a faixa junto com ele.
+   Com dois controles vizinhos que fazem a mesma coisa, uma resposta visual so e pior que duas:
+   o alvo mente sobre o proprio tamanho, e nada distingue um do outro. Cada um acende a si.
+   A regra da faixa vem do bloco SHELL, que e congelado — ela nao e editada, e neutralizada aqui
+   com a mesma especificidade e ordem posterior. */
+.shell-mobills .sidebar-logo-row:hover,
+.shell-mobills .sidebar-logo-row:active {
+  background: none;
+  transform: none;
+}
+.shell-mobills button.sidebar-logo-alvo:hover {
+  background: var(--cx-hover);
+}
+.shell-mobills button.sidebar-logo-alvo:active {
+  background: var(--cx-pressed);
+}
+
+/* 3 · MAO SO NO QUE CLICA. Abaixo de 1024px a casca vira `<div role="img">` de proposito, porque
+   recolher nao e escolha do usuario ali — mas o `cursor: pointer` ficava, e tablet com mouse
+   mostrava mao sobre uma marca inerte. O seletor de elemento resolve sem `v-if` no template. */
+.sidebar-logo-alvo {
+  cursor: default;
+}
+button.sidebar-logo-alvo {
+  cursor: pointer;
+  /* O anel do `:focus-visible` global desenhava um retangulo vivo dentro de uma faixa arredondada. */
+  border-radius: var(--cx-r-md);
+}
+/* ===================== FIM VIS-F14 ===================== */

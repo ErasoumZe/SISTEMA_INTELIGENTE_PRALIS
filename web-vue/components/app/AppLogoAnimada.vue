@@ -132,7 +132,12 @@ const rootStyle = computed(() => ({
 </script>
 
 <template>
-  <div class="lumi-flow" :style="rootStyle" aria-label="Logo animada da Cicluz" role="img">
+  <!-- DECORATIVO, SEMPRE. Ele nasceu com `role="img"` e nome proprio, e isso produzia nome
+       DUPLICADO: no login o `AppMarcaCicluz` ja anuncia "Cicluz Gestao Profissional", e o leitor de
+       tela ouvia "Logo animada da Cicluz" antes disso. Medido: dois nomes expostos na mesma marca.
+       O nome sempre vem de quem MONTA — o botao da sidebar, ou a palavra no login. Aqui dentro
+       nunca ha contexto para nomear, so o desenho. -->
+  <div class="lumi-flow" :style="rootStyle" aria-hidden="true">
     <img :src="logoSymbolUrl" alt="" aria-hidden="true" class="lumi-flow__base-image" />
 
     <svg
