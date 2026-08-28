@@ -125,22 +125,53 @@ useItemAtivoVisivel();
     <div class="drawer-shell">
       <div class="drawer-top">
         <div class="sidebar-logo-row">
-          <!-- NO RAIL o simbolo e ANIMADO; expandido continua a logo com texto, que este
-               componente nao substitui — ele e so o simbolo. O `alt`/`aria-label` da identidade
-               fica no wrapper, porque o SVG interno e `aria-hidden` por ser decoracao. -->
-          <span v-if="rail" class="sidebar-logo-simbolo" role="img" aria-label="Cicluz Gestão Profissional">
-            <AppLogoAnimada :size="52" :glow-intensity="0.24" />
-          </span>
-          <!-- MENU ABERTO: a MESMA composicao do login, pelo mesmo componente. A palavra segue o
-               tema aqui (e nao no login) porque a superficie da sidebar inverte com ele. -->
-          <AppMarcaCicluz
-            v-else
-            orientacao="lateral"
-            :size="52"
-            :glow-intensity="0.22"
-            :escuro="escuro"
-            largura-palavra="136px"
-          />
+          <!-- A MARCA ALTERNA O MENU, junto com o chevron. Duas coisas se encontram aqui e as duas
+               ficam: o COMPONENTE animado (que substituiu o PNG estatico) e o comportamento de
+               recolher (que o `.sidebar-logo-alvo` trouxe).
+
+               UM SUBARVORE SO, com `<component :is>`, em vez de duas copias da marca sob `v-if`.
+               Duplicar a marca para so trocar a casca em volta seria garantir que as duas versoes
+               divergissem no primeiro ajuste de tamanho ou de brilho.
+
+               O NOME VIVE NA CASCA, e o miolo e sempre `aria-hidden`. Sem isso a marca seria
+               anunciada DUAS vezes: o `AppMarcaCicluz` ja carrega `role="img"` com o nome dela por
+               dentro. Com a casca nomeada e o miolo escondido, quem usa leitor de tela ouve uma
+               coisa so, e ouve a coisa certa em cada caso.
+
+               ACIMA DE 1024px a casca e `<button>` e o nome diz a marca E a acao — "Cicluz Gestao
+               Profissional — recolher menu". O chevron ao lado diz so "Recolher menu". Os dois
+               fazem a MESMA coisa (afordancia redundante, nao defeito), e e por os nomes serem
+               DIFERENTES que quem navega por leitor de tela consegue distinguir um do outro.
+               O nome comeca pelo texto da marca, que e o rotulo visivel, como pede a WCAG 2.5.3.
+
+               ABAIXO DE 1024px recolher nao e escolha do usuario: a casca vira `<div>` com
+               `role="img"`, porque botao que nao faz nada e pior que nao ter botao. -->
+          <component
+            :is="podeRecolher ? 'button' : 'div'"
+            :type="podeRecolher ? 'button' : undefined"
+            class="sidebar-logo-alvo"
+            :role="podeRecolher ? undefined : 'img'"
+            :aria-expanded="podeRecolher ? String(!rail) : undefined"
+            :aria-label="
+              podeRecolher
+                ? `Cicluz Gestão Profissional — ${rail ? 'expandir' : 'recolher'} menu`
+                : 'Cicluz Gestão Profissional'
+            "
+            @click="podeRecolher && emit('alternar')"
+          >
+            <span v-if="rail" class="sidebar-logo-simbolo" aria-hidden="true">
+              <AppLogoAnimada :size="52" :glow-intensity="0.24" />
+            </span>
+            <AppMarcaCicluz
+              v-else
+              orientacao="lateral"
+              :size="52"
+              :glow-intensity="0.22"
+              :escuro="escuro"
+              largura-palavra="136px"
+              aria-hidden="true"
+            />
+          </component>
           <button
             v-if="podeRecolher"
             type="button"
@@ -155,8 +186,10 @@ useItemAtivoVisivel();
         </div>
 
         <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->
+        <!-- O slot recebe o `rail` porque quem monta o botao precisa saber se ha rotulo. O escopo
+             existia no slot `caixa` pelo mesmo motivo, antes de ele mudar de lugar. -->
         <div class="sidebar-actions">
-          <slot name="actions" />
+          <slot name="actions" :rail="rail" />
         </div>
       </div>
 

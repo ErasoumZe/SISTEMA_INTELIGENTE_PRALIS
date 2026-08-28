@@ -3986,3 +3986,46 @@ body {
   vector-effect: non-scaling-stroke;
 }
 /* ===================== FIM VIS-F8 ===================== */
+
+/* ===================== INICIO VIS-F9 — A LOGO ALTERNA, E O "+" SOBREVIVE AO RAIL (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   1 · A LOGO VIRA ALVO. Ela ja ocupava a linha inteira; o que muda e que agora ha um `<button>` em
+   volta, e botao traz aparencia de fabrica (fundo, borda, padding) que precisa ser zerada. O alvo
+   fica com a altura da propria logo, que ja passa de 44px com folga.
+
+   2 · O "+ NOVO" DEIXA DE SUMIR NO RAIL. A regra historica da linha 519 poe `.sidebar-actions` em
+   `display: none` quando `.padaria-sidebar.rail`, e com isso a ACAO PRIMARIA do sistema nao existia
+   entre 769 e 1024px. Aqui ela e revertida com um seletor mais especifico, sem `!important` e sem
+   tocar no bloco historico: `.padaria-sidebar.rail .drawer-top .sidebar-actions` tem tres classes
+   contra duas, entao ganha por especificidade e nao por ordem.
+
+   O botao encolhe para um quadrado. 44px e o piso do 67 §9, e nao um numero escolhido aqui.
+   ============================================================================================== */
+/* `min-height` porque a MEDICAO pegou: a caixa da logo renderizava 223x38, e o piso do 67 §9 e
+   40px. A altura vinha da imagem escalada, nao de uma regra — e altura que ninguem declarou e
+   altura que ninguem defende. Este alvo so existe acima de 1024px, onde o piso e 40 e nao 44. */
+.sidebar-logo-alvo {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.padaria-sidebar.rail .drawer-top .sidebar-actions {
+  display: flex;
+  justify-content: center;
+}
+.shell-mobills .sidebar-new-button.rail {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+/* ===================== FIM VIS-F9 ===================== */

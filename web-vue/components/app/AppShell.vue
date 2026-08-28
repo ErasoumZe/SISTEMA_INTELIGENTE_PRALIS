@@ -189,7 +189,7 @@ onMounted(() => {
       @alternar="alternarDrawer"
       @navegar="fecharDrawerMobile"
     >
-      <template #actions><slot name="actions" /></template>
+      <template #actions="{ rail: railAtual }"><slot name="actions" :rail="railAtual" /></template>
     </AppSidebar>
 
     <v-main class="padaria-main">

@@ -2113,10 +2113,37 @@ onBeforeUnmount(() => {
       </NuxtLink>
     </template>
 
-    <template v-if="acoesNovo.length" #actions>
+    <template v-if="acoesNovo.length" #actions="{ rail }">
       <v-menu>
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" class="sidebar-new-button" prepend-icon="mdi-plus">Novo</v-btn>
+          <!-- NO RAIL o rotulo sai e sobra o "+", com tooltip — o mesmo padrao do item de menu
+               recolhido (VIS-E7b). Antes ele SUMIA por inteiro (`main.css:519` punha
+               `.sidebar-actions` em `display: none`), e a acao primaria do sistema simplesmente nao
+               existia entre 769 e 1024px.
+               O `aria-label` fica nos DOIS ramos: quem usa leitor de tela nao pode depender da
+               largura da tela para saber o que o botao faz.
+               A tooltip so e MONTADA quando ha rail, e nao desabilitada — `v-tooltip` desabilitada
+               ainda injeta `aria-describedby` apontando para um elemento que nunca renderiza, e
+               esse defeito ja foi corrigido uma vez neste projeto, no AppMenuItem. -->
+          <v-tooltip v-if="rail" text="Novo lançamento" location="end">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="{ ...menuProps, ...tooltipProps }"
+                class="sidebar-new-button rail"
+                icon="mdi-plus"
+                aria-label="Novo lançamento"
+              />
+            </template>
+          </v-tooltip>
+          <v-btn
+            v-else
+            v-bind="menuProps"
+            class="sidebar-new-button"
+            prepend-icon="mdi-plus"
+            aria-label="Novo lançamento"
+          >
+            Novo
+          </v-btn>
         </template>
         <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
              abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->
