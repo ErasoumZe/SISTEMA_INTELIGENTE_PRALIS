@@ -2,6 +2,18 @@
 const router = useRouter();
 const { apiUrl } = useApi();
 
+// A tela de login NAO tem controle de tema, mas TEM tema — e a diferenca entre as duas coisas foi o
+// erro do VIS-13, que fechou este item dizendo "o login nao tem tema, a logo clara esta certa".
+//
+// O `useModoEscuro` escreve `data-theme` no <html> (useModoEscuro.ts:29) e persiste em localStorage
+// (linha 45). O caminho do defeito e o logout: `sair()` faz `router.push("/login")`, que e navegacao
+// CLIENT-SIDE — o documento nao recarrega, o `data-theme="dark"` continua no <html>, e a tela de
+// login herda o escuro. Com a logo de texto escuro cravada, a marca sumia no fundo escuro.
+//
+// So o `escuro` e lido. NADA de `inicializar()` nem de alternador aqui: a tela nao ganha controle
+// novo, ela so respeita o tema que ja herdou.
+const { escuro } = useModoEscuro();
+
 const email = ref("");
 const password = ref("");
 const loading = ref(false);
@@ -37,7 +49,7 @@ async function login() {
     <div class="login-card">
       <div class="login-brand">
         <img
-          src="/cicluz/logo-cicluz.png"
+          :src="escuro ? '/cicluz/logo-cicluz-branca.png' : '/cicluz/logo-cicluz.png'"
           alt="Cicluz Gestão Profissional"
           class="login-logo"
           width="300"
