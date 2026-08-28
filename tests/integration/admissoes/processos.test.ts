@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// A matriz de cargos vem da REFERENCIA de producao, nunca copiada para ca: uma segunda lista
+// divergiria no primeiro ajuste e o teste passaria a provar a copia, nao a regra.
+import { permissoesPorCargo, regrasPermissoes } from "@padaria/db/referencia-permissoes";
+import type { Permissao } from "@padaria/shared";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { idsTeste } from "../../setup/contexto.js";
+import { idsTeste, usuariosTeste, type PerfilTeste } from "../../setup/contexto.js";
 import {
   abrirBloqueador,
   consultarTodos,
@@ -23,6 +27,9 @@ describe("admissoes processos integration", () => {
   let contexto: ContextoApiTeste;
   let cookieDp: string; // perfil "admin": usuario_admin recebe toda permissao nova do catalogo
   let cookieSemPermissao: string;
+  // Perfis com as permissoes REAIS dos cargos, montados a partir da referencia de producao.
+  let cookieGerenciaReal: string;
+  let cookieDpReal: string;
 
   /** Cria um teste em andamento e devolve id e versao. */
   async function criarTeste(cookie: string, cpf: string) {
@@ -55,12 +62,47 @@ describe("admissoes processos integration", () => {
     });
   }
 
+  /**
+   * Veste um usuario de teste com as permissoes REAIS de um cargo da referencia.
+   *
+   * Os perfis do seed de teste gravam permissao na camada de USUARIO, que e a ultima a ser
+   * resolvida — entao reescrever `permissoes_usuarios` e o caminho mais direto e nao depende do
+   * nome do cargo normalizar. Tem de ser `usuario_comum`: `usuario_admin` recebe acesso total
+   * antes de olhar qualquer camada, e o teste provaria nada.
+   */
+  async function vestirPermissoes(perfil: PerfilTeste, regras: Permissao[]) {
+    const alvo = await consultarUm<{ id: string }>(
+      `select u.id from "user" u where u.email = $1`,
+      [usuariosTeste[perfil].email]
+    );
+    if (!alvo) throw new Error(`usuario de teste ausente: ${perfil}`);
+    await executarSql(
+      `insert into permissoes_usuarios (usuario_id, regras) values ($1, $2::jsonb)
+         on conflict (usuario_id) do update set regras = excluded.regras`,
+      [alvo.id, JSON.stringify(regrasPermissoes(regras))]
+    );
+  }
+
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieDp = await cookieSessao(contexto.app, "admin");
     // `semPermissao`: usuario_comum da MESMA empresa, com a lista de permissoes vazia. E o unico
     // ator que prova autorizacao — ver o comentario do P0-2.
     cookieSemPermissao = await cookieSessao(contexto.app, "semPermissao");
+
+    // `gerente` e `caixa` sao usuario_comum da mesma empresa. Vestidos com a matriz real, eles
+    // passam a provar o cargo, e nao apenas "lista vazia recebe 403".
+    // A referencia e um Record<string, ...>: o cargo ausente viraria lista vazia em silencio, e
+    // o teste passaria a provar "sem permissao", que e outro teste.
+    const matriz = (cargo: string): Permissao[] => {
+      const lista = permissoesPorCargo[cargo];
+      if (!lista) throw new Error(`cargo ausente na referencia: ${cargo}`);
+      return lista;
+    };
+    await vestirPermissoes("gerente", matriz("Gerencia"));
+    await vestirPermissoes("caixa", matriz("DP"));
+    cookieGerenciaReal = await cookieSessao(contexto.app, "gerente");
+    cookieDpReal = await cookieSessao(contexto.app, "caixa");
   }, 120_000);
 
   afterAll(async () => {
@@ -824,6 +866,109 @@ describe("admissoes processos integration", () => {
       });
       expect(resposta.statusCode, rota).toBe(403);
     }
+  });
+
+  it("P0-V1B Deve_Recusar403_Quando_CARGO_GerenciaEditaInternosOuExame", async () => {
+    // O teste vizinho usa um perfil de lista VAZIA — ele prova que 403 acontece, nao que a Gerencia
+    // e recusada. Este veste a matriz real: a Gerencia tem criar_direta e cancelar, e NAO tem
+    // editar_internos. E a unica prova da D-7 no nivel de comportamento.
+    const criado = await criarDiretaV1B(cookieDp, "02010101006");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    for (const rota of ["internos", "exame"]) {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/admissoes/processos/${id}/${rota}`,
+        headers: { cookie: cookieGerenciaReal },
+        payload: rota === "exame" ? { versao: 1, situacao: "aso_apto" } : { versao: 1, ctpsNumero: "1" }
+      });
+      expect(resposta.statusCode, rota).toBe(403);
+      expect(resposta.json().details?.permissao).toBe("admissoes_processos_editar_internos");
+    }
+
+    // E o que ela PODE: ver o processo continua valendo, senao o 403 acima seria so falta de acesso.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieGerenciaReal }
+    });
+    expect(detalhe.statusCode).toBe(200);
+  });
+
+  it("P0-V1B Deve_Permitir_Quando_CARGO_DpEditaInternosEExame", async () => {
+    // O outro lado da mesma moeda: a D-7 diz que o bloco interno e do DP, e ninguem provava isso
+    // com o cargo DP de verdade — os testes usavam admin, que passa por herdar tudo.
+    const criado = await criarDiretaV1B(cookieDp, "02020202077");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const internos = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/internos`,
+      headers: { cookie: cookieDpReal },
+      payload: { versao: 1, ctpsNumero: "12345" }
+    });
+    expect(internos.statusCode).toBe(204);
+
+    const exame = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDpReal },
+      payload: { versao: 2, situacao: "aso_apto" }
+    });
+    expect(exame.statusCode).toBe(204);
+  });
+
+  it("P0-V1B Deve_ListarFuncoes_Quando_AtorSoTemCriarDireta", async () => {
+    // O catalogo de funcoes exigia `admissoes_testes_visualizar`, permissao de OUTRO dominio: quem
+    // podia criar admissao direta nao conseguia carregar o proprio formulario. Aqui o ator tem
+    // criar_direta e NAO tem testes_visualizar — e a rota tem de responder 200.
+    await vestirPermissoes("tesouraria", ["admissoes_processos_criar_direta"]);
+    const cookie = await cookieSessao(contexto.app, "tesouraria");
+
+    const funcoes = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/funcoes",
+      headers: { cookie }
+    });
+    expect(funcoes.statusCode).toBe(200);
+
+    // O turno, que ja aceitava criar_direta, continua respondendo — os dois catalogos da MESMA tela
+    // nao podem pedir permissoes de dominios diferentes.
+    const turnos = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/turnos",
+      headers: { cookie }
+    });
+    expect(turnos.statusCode).toBe(200);
+  });
+
+  it("P0-V1B Deve_Recusar403EmFuncoes_Quando_AtorNaoTemNenhumaDasDuas", async () => {
+    // A abertura foi ADITIVA, nao um afrouxamento: quem nao tem nenhuma das duas continua fora.
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/funcoes",
+      headers: { cookie: cookieSemPermissao }
+    });
+    expect(resposta.statusCode).toBe(403);
+  });
+
+  it("P0-V1B Deve_ExporAtivo_Quando_ListarTurnosParaAdmissao", async () => {
+    // Sem `ativo` no DTO, turno desativado chegava marcado so como "incompleto" e a tela mandava o
+    // DP preencher etiqueta e dias que ja estavam la.
+    await semearTurnos();
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/turnos",
+      headers: { cookie: cookieDp }
+    });
+    assertOk(resposta, 200);
+    const itens = resposta.json().data as { ativo: boolean; completo: boolean }[];
+    expect(itens.length).toBeGreaterThan(0);
+    expect(itens.every((turno) => typeof turno.ativo === "boolean")).toBe(true);
+    // Turno completo e necessariamente ativo — e a regra de `turnoCompleto`.
+    expect(itens.filter((turno) => turno.completo).every((turno) => turno.ativo)).toBe(true);
   });
 
   it("P0-V1B Deve_PausarEretomar_Quando_AsoNaoAptoEdepoisApto", async () => {
