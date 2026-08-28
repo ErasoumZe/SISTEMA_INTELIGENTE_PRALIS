@@ -357,11 +357,36 @@ export const turnos = pgTable(
     nome: text("nome").notNull(),
     horaInicio: time("hora_inicio").notNull(),
     horaFim: time("hora_fim").notNull(),
+    // ADM-003 V1A/V1B: as duas colunas abaixo sao ANULAVEIS de proposito. Turno que ja existe nao
+    // tem etiqueta nem dias, e exigir de imediato quebraria o cadastro atual. Nenhum valor e
+    // deduzido do nome: preencher e ato do DP na tela de Turnos.
+    //
+    // A consequencia esta em `admissoes_processos`: turno INCOMPLETO (sem etiqueta ou sem dias) nao
+    // pode ser escolhido numa admissao. Essa regra mora no servico e no teste, e nao aqui — um CHECK
+    // nao enxerga a outra tabela, e FK nao aponta para indice parcial.
+    etiqueta: text("etiqueta").$type<"M" | "T" | "I">(),
+    diasSemana: text("dias_semana").array(),
     ativo: boolean("ativo").notNull().default(true),
     criadoEm,
     atualizadoEm
   },
-  (table) => [unique("turnos_empresa_nome_unica").on(table.empresaId, table.nome)]
+  (table) => [
+    unique("turnos_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo da FK COMPOSTA vinda de `admissoes_processos`. Aditivo: nenhuma constraint existente muda,
+    // e as FKs de `colaboradores` e `fechamentos_caixa` seguem `on delete set null` — o Caixa nao
+    // percebe esta migration.
+    unique("turnos_id_empresa_unica").on(table.id, table.empresaId),
+    check("turnos_etiqueta_check", sql`${table.etiqueta} is null or ${table.etiqueta} in ('M', 'T', 'I')`),
+    // Vocabulario REUSADO de `colaboradores_jornadas.dia_da_semana`. Um segundo conjunto de nomes
+    // para dia da semana seria a divergencia da regra-mae, em miniatura.
+    check(
+      "turnos_dias_semana_check",
+      sql`${table.diasSemana} is null or (
+        array_length(${table.diasSemana}, 1) > 0
+        and ${table.diasSemana} <@ array['SEGUNDA','TERCA','QUARTA','QUINTA','SEXTA','SABADO','DOMINGO']::text[]
+      )`
+    )
+  ]
 );
 
 export const cargos = pgTable(
@@ -2218,11 +2243,30 @@ export const admissoesProcessos = pgTable(
      * coerencia, nao esta coluna, que garante que nulo so acontece na origem certa.
      */
     testeId: uuid("teste_id"),
-    // So na admissao direta. Na origem teste estes dois sao NULOS por CHECK: funcao e jornada moram
-    // em `admissoes_testes` e sao apenas EXIBIDAS: copiar aqui criaria a segunda fonte que a
+    // So na admissao direta. Na origem teste estes sao NULOS por CHECK: identidade, funcao e turno
+    // moram em `admissoes_testes` e sao apenas EXIBIDOS — copiar aqui criaria a segunda fonte que a
     // regra-mae proibe.
+    nomeCompleto: text("nome_completo"),
+    cpf: text("cpf"),
     funcaoId: uuid("funcao_id"),
+    turnoId: uuid("turno_id"),
+    /**
+     * `jornada_horario` PERMANECE. Ela e HISTORICO LEGADO dos processos diretos criados na V1A, antes
+     * do catalogo de turnos. Nao e escrita por nenhum caminho novo, nao e convertida e nao e apagada:
+     * converter "seg a sex, 08:00 as 17:00" em turno seria adivinhar qual turno da empresa aquilo era.
+     */
     jornadaHorario: text("jornada_horario"),
+    /**
+     * RETRATO do turno no ato da criacao. Nao e segunda fonte: responde outra pergunta. O catalogo
+     * responde "o que e o turno M hoje"; o retrato responde "o que foi combinado com esta pessoa".
+     * Quando o DP muda o horario do turno M, a primeira resposta muda e a segunda NAO pode — mesma
+     * razao pela qual uma venda guarda o preco praticado.
+     */
+    turnoRotulo: text("turno_rotulo"),
+    turnoEtiqueta: text("turno_etiqueta"),
+    turnoHoraInicio: time("turno_hora_inicio"),
+    turnoHoraFim: time("turno_hora_fim"),
+    turnoDiasSemana: text("turno_dias_semana").array(),
     status: text("status").$type<StatusProcesso>().notNull().default("iniciado"),
     versao: integer("versao").notNull().default(1),
     // Sem coluna de MOTIVO: a lista real depende de validacao do DP que ainda nao aconteceu, e uma
@@ -2252,6 +2296,17 @@ export const admissoesProcessos = pgTable(
       foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
       name: "admissoes_processos_funcao_empresa_fk"
     }),
+    // RESTRICT, e nao SET NULL: turno em uso numa admissao NAO se apaga. O `set null` das FKs de
+    // `colaboradores` e `fechamentos_caixa` continua como esta — ali perder a referencia e aceitavel,
+    // aqui apagaria em silencio o que foi combinado com uma pessoa.
+    //
+    // A traducao do erro 23503 em 409 TURNO_EM_USO e implementacao da vertical, no controller de
+    // Turnos. NAO ha SQL para isso, e nao havia como haver: o banco so sabe recusar.
+    foreignKey({
+      columns: [table.turnoId, table.empresaId],
+      foreignColumns: [turnos.id, turnos.empresaId],
+      name: "admissoes_processos_turno_empresa_fk"
+    }).onDelete("restrict"),
     // UM teste, UM processo — no banco, nao no servico. E a rede para duas transacoes concorrentes
     // passarem juntas pelo lock; repeticao e tratada pelo ramo idempotente do servico.
     // Segue valendo com `teste_id` anulavel: o Postgres permite varios NULL numa unique, entao N
@@ -2261,19 +2316,30 @@ export const admissoesProcessos = pgTable(
     unique("admissoes_processos_id_empresa_unica").on(table.id, table.empresaId),
     // SOMENTE os dois estados alcancaveis na V0. Aceitar um estado antes de a regra dele existir e
     // gravar vocabulario que ninguem confirmou, e que passa a ser gravavel por qualquer bug.
-    check("admissoes_processos_status_check", sql`${table.status} in ('iniciado', 'cancelado')`),
+    // ADM-003 V1B: `pausado` entra porque `aso_nao_apto` pausa o processo. Continua sem estado de
+    // vertical futura reservado — `aguardando_candidato`, `em_revisao_dp` e `efetivado` seguem fora.
+    check(
+      "admissoes_processos_status_check",
+      sql`${table.status} in ('iniciado', 'pausado', 'cancelado')`
+    ),
     check("admissoes_processos_versao_check", sql`${table.versao} > 0`),
-    // Um CHECK unico para os dois estados: cancelado pela metade deixa de ser representavel.
+    // Um CHECK unico para os estados: cancelado pela metade deixa de ser representavel.
+    // `pausado` se comporta como `iniciado` aqui — pausado nao esta cancelado.
     check(
       "admissoes_processos_coerencia_status_check",
       sql`(
-        ${table.status} = 'iniciado'
+        ${table.status} in ('iniciado', 'pausado')
         and ${table.canceladoPor} is null and ${table.canceladoEm} is null
       ) or (
         ${table.status} = 'cancelado'
         and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
       )`
     ),
+    check(
+      "admissoes_processos_nome_check",
+      sql`${table.nomeCompleto} is null or length(btrim(${table.nomeCompleto})) > 0`
+    ),
+    check("admissoes_processos_cpf_check", sql`${table.cpf} is null or ${table.cpf} ~ '^[0-9]{11}$'`),
     check(
       "admissoes_processos_origem_check",
       sql`${table.origem} in ('teste_efetivado', 'admissao_direta')`
@@ -2282,18 +2348,34 @@ export const admissoesProcessos = pgTable(
     //   origem teste  -> tem teste, e NAO tem copia de funcao/jornada;
     //   origem direta -> nao tem teste, e funcao/jornada sao obrigatorias no proprio processo.
     // Com isso, "duas fontes para o mesmo dado" deixa de ser representavel no banco.
+    // ESTRITO, sem NOT VALID. `NOT VALID` pareceria gentil e seria pior: aceitaria a linha legada na
+    // criacao, barraria qualquer UPDATE futuro dela com erro confuso, e deixaria dado invalido
+    // escondido atras de uma constraint que se declara satisfeita. Legado se resolve ANTES, por
+    // preflight que PARA — nunca afrouxando a regra.
+    //
+    // A metade TESTE segue exigindo `jornada_horario` nula: e ela que impede a jornada do teste ser
+    // recopiada. A metade DIRETA deixou de exigi-la — processo novo usa turno, e a linha legada da
+    // V1A continua valida com o texto que tem.
     check(
       "admissoes_processos_origem_coerencia_check",
       sql`(
         ${table.origem} = 'teste_efetivado'
         and ${table.testeId} is not null
-        and ${table.funcaoId} is null and ${table.jornadaHorario} is null
+        and ${table.nomeCompleto} is null and ${table.cpf} is null
+        and ${table.funcaoId} is null and ${table.turnoId} is null
+        and ${table.jornadaHorario} is null
       ) or (
         ${table.origem} = 'admissao_direta'
         and ${table.testeId} is null
-        and ${table.funcaoId} is not null and ${table.jornadaHorario} is not null
+        and ${table.nomeCompleto} is not null and ${table.cpf} is not null
+        and ${table.funcaoId} is not null and ${table.turnoId} is not null
       )`
     ),
+    // Ultima linha de defesa DENTRO desta tabela. A garantia entre teste e processo e o lock
+    // consultivo no servico: indice nao cruza tabelas, e alegar que cruza seria mentira.
+    uniqueIndex("admissoes_processos_cpf_ativo_unico")
+      .on(table.empresaId, table.cpf)
+      .where(sql`${table.cpf} is not null and ${table.status} <> 'cancelado'`),
     index("admissoes_processos_empresa_status_criado_idx").on(
       table.empresaId,
       table.status,
@@ -2326,8 +2408,10 @@ export const admissoesProcessosInternos = pgTable(
     pisPasepNit: text("pis_pasep_nit"),
     // Os CINCO valores confirmados pelo DP. O ALERTA enquanto nao for 'realizado' e DERIVADO em
     // `shared`, nunca gravado — nao existe coluna, indice nem filtro paralelo de pendencia.
+    // ADM-003 V1B: `realizado` SAI — virou ambiguo quando o desfecho ganhou dois lados, porque nao
+    // dizia se a pessoa podia ser admitida. `exige_acao` FICA, para a clinica pedir exame complementar.
     exameSituacao: text("exame_situacao")
-      .$type<"pendente" | "guia_entregue" | "agendado" | "realizado" | "exige_acao">()
+      .$type<"pendente" | "guia_entregue" | "agendado" | "aso_apto" | "aso_nao_apto" | "exige_acao">()
       .notNull()
       .default("pendente"),
     exameAtualizadoEm: timestamp("exame_atualizado_em", { withTimezone: true }),
@@ -2346,7 +2430,7 @@ export const admissoesProcessosInternos = pgTable(
     unique("admissoes_processos_internos_processo_unico").on(table.processoId),
     check(
       "admissoes_processos_internos_exame_check",
-      sql`${table.exameSituacao} in ('pendente', 'guia_entregue', 'agendado', 'realizado', 'exige_acao')`
+      sql`${table.exameSituacao} in ('pendente', 'guia_entregue', 'agendado', 'aso_apto', 'aso_nao_apto', 'exige_acao')`
     ),
     check("admissoes_processos_internos_versao_check", sql`${table.versao} > 0`),
     check(
@@ -2387,7 +2471,7 @@ export const admissoesProcessosHistorico = pgTable(
     }).onDelete("cascade"),
     check(
       "admissoes_processos_historico_acao_check",
-      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado')`
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado')`
     ),
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.

@@ -195,8 +195,10 @@ describe("as permissoes do processo sao concedidas pelo catalogo", () => {
 describe("estados: exatamente dois, e nenhum antecipado", () => {
   const config = getTableConfig(admissoesProcessos);
 
-  it("o contrato tem apenas iniciado e cancelado", () => {
-    expect([...statusProcesso]).toEqual(["iniciado", "cancelado"]);
+  it("os tres estados alcancaveis, e nenhum a mais", () => {
+    // A V0 tinha dois. A V1B trouxe `pausado` porque um ASO nao apto para o processo — e parar nao e
+    // cancelar. A guarda nao foi afrouxada: continua exigindo a lista EXATA.
+    expect([...statusProcesso]).toEqual(["iniciado", "pausado", "cancelado"]);
   });
 
   it("nenhum estado de vertical futura foi reservado", () => {
@@ -208,8 +210,11 @@ describe("estados: exatamente dois, e nenhum antecipado", () => {
     }
   });
 
-  it("a situacao e derivada, e cobre os dois estados", () => {
-    expect(statusProcesso.map(situacaoDoProcesso)).toEqual(["ativo", "inativo"]);
+  it("a situacao e derivada, e pausado NAO e ativo", () => {
+    expect(statusProcesso.map(situacaoDoProcesso)).toEqual(["ativo", "pausado", "inativo"]);
+    // O ponto da terceira situacao: chamar um processo parado de "Ativo" esconderia exatamente o que
+    // o DP precisa ver na lista.
+    expect(situacaoDoProcesso("pausado")).not.toBe("ativo");
   });
 
   it("a tabela nao tem coluna de situacao nem de ativo", () => {
@@ -326,19 +331,25 @@ describe("a origem e o vinculo com o teste", () => {
     expect(processoDetalheDtoSchema.safeParse(semOrigem).success).toBe(false);
   });
 
-  it("o exame tem exatamente as cinco situacoes confirmadas", () => {
+  it("o exame tem exatamente as seis situacoes confirmadas", () => {
+    // `realizado` SAIU: virou ambiguo quando o desfecho ganhou dois lados — nao dizia se a pessoa
+    // podia ser admitida. `exige_acao` ficou, para a clinica pedir exame complementar.
     expect([...situacoesExame]).toEqual([
       "pendente",
       "guia_entregue",
       "agendado",
-      "realizado",
+      "aso_apto",
+      "aso_nao_apto",
       "exige_acao"
     ]);
-    // O alerta e DERIVADO: nao existe coluna, indice nem filtro paralelo de pendencia.
+    expect([...situacoesExame]).not.toContain("realizado");
+    // O alerta e DERIVADO: nao existe coluna, indice nem filtro paralelo de pendencia. So `aso_apto`
+    // encerra a atencao do DP.
     expect(situacoesExame.filter(exameExigeAtencao)).toEqual([
       "pendente",
       "guia_entregue",
       "agendado",
+      "aso_nao_apto",
       "exige_acao"
     ]);
   });

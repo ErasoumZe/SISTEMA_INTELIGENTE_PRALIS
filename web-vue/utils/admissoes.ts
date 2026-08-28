@@ -101,17 +101,20 @@ export function corStatusTeste(status: StatusTeste) {
 
 export const rotuloStatusProcesso: Record<StatusProcesso, string> = {
   iniciado: "Iniciado",
+  pausado: "Pausado",
   cancelado: "Cancelado e arquivado"
 };
 
 export const rotuloSituacaoProcesso: Record<SituacaoProcesso, string> = {
   ativo: "Ativo",
+  pausado: "Pausado",
   inativo: "Inativo"
 };
 
 /** De onde a situacao vem. Sem isto, "Ativo" ao lado de "Iniciado" parece um segundo campo. */
 export const explicacaoSituacaoProcesso: Record<SituacaoProcesso, string> = {
   ativo: "Ativo porque a admissão está em andamento",
+  pausado: "Pausado porque o exame admissional voltou não apto",
   inativo: "Inativo porque o processo foi cancelado"
 };
 
@@ -119,7 +122,10 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   criado: "Admissão iniciada",
   cancelado: "Cancelado e arquivado",
   internos_alterados: "Dados internos alterados",
-  exame_alterado: "Exame admissional atualizado"
+  exame_alterado: "Exame admissional atualizado",
+  pausado: "Processo pausado (ASO não apto)",
+  retomado: "Processo retomado (ASO apto)",
+  cpf_revelado: "CPF revelado"
 };
 
 /** De onde o processo nasceu. SÓ LEITURA — a origem se registra, não se escolhe. */
@@ -141,18 +147,21 @@ export const rotuloSituacaoExame: Record<SituacaoExame, string> = {
   pendente: "Pendente",
   guia_entregue: "Guia entregue",
   agendado: "Agendado",
-  realizado: "Realizado",
+  aso_apto: "ASO apto",
+  aso_nao_apto: "ASO não apto",
   exige_acao: "Exige ação"
 };
 
-/** Enquanto não for "Realizado", o DP vê o aviso. A regra é do servidor; aqui só a cor. */
+/** Enquanto não for "ASO apto", o DP vê o aviso. A regra é do servidor; aqui só a cor. */
 export function corSituacaoExame(situacao: SituacaoExame) {
-  if (situacao === "realizado") return "success";
-  return situacao === "exige_acao" ? "error" : "warning";
+  if (situacao === "aso_apto") return "success";
+  // Não apto e exige ação são os dois que pedem decisão humana — os demais só esperam.
+  return situacao === "aso_nao_apto" || situacao === "exige_acao" ? "error" : "warning";
 }
 
 export function corStatusProcesso(status: StatusProcesso) {
-  return status === "iniciado" ? "primary" : "warning";
+  if (status === "iniciado") return "primary";
+  return status === "pausado" ? "error" : "warning";
 }
 
 export function corPrazoTeste(prazo: PrazoTeste | null) {

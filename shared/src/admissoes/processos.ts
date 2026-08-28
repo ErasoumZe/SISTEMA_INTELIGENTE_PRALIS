@@ -24,11 +24,11 @@ import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
  * qualquer bug. Ampliar a lista depois e migration aditiva e barata; desfazer nome errado com linha
  * gravada, nao.
  */
-export const statusProcesso = ["iniciado", "cancelado"] as const;
+export const statusProcesso = ["iniciado", "pausado", "cancelado"] as const;
 export const statusProcessoSchema = z.enum(statusProcesso);
 export type StatusProcesso = z.infer<typeof statusProcessoSchema>;
 
-export const situacoesProcesso = ["ativo", "inativo"] as const;
+export const situacoesProcesso = ["ativo", "pausado", "inativo"] as const;
 export const situacaoProcessoSchema = z.enum(situacoesProcesso);
 export type SituacaoProcesso = z.infer<typeof situacaoProcessoSchema>;
 
@@ -37,7 +37,10 @@ export type SituacaoProcesso = z.infer<typeof situacaoProcessoSchema>;
  * formulario nem filtro paralelo de ativo/inativo, e nao pode passar a existir.
  */
 export function situacaoDoProcesso(status: StatusProcesso): SituacaoProcesso {
-  return status === "iniciado" ? "ativo" : "inativo";
+  if (status === "iniciado") return "ativo";
+  // Pausado NAO e Ativo. Chamar de ativo esconderia justamente o que importa: o processo esta parado
+  // esperando decisao interna sobre um ASO nao apto.
+  return status === "pausado" ? "pausado" : "inativo";
 }
 
 // --- Origem (ADM-003 V1A) -------------------------------------------------------------------------
@@ -57,7 +60,14 @@ export type OrigemProcesso = z.infer<typeof origemProcessoSchema>;
 
 // --- Exame admissional ----------------------------------------------------------------------------
 /** As CINCO situacoes confirmadas pelo DP. */
-export const situacoesExame = ["pendente", "guia_entregue", "agendado", "realizado", "exige_acao"] as const;
+export const situacoesExame = [
+  "pendente",
+  "guia_entregue",
+  "agendado",
+  "aso_apto",
+  "aso_nao_apto",
+  "exige_acao"
+] as const;
 export const situacaoExameSchema = z.enum(situacoesExame);
 export type SituacaoExame = z.infer<typeof situacaoExameSchema>;
 
@@ -66,7 +76,7 @@ export type SituacaoExame = z.infer<typeof situacaoExameSchema>;
  * de "pendencia de exame", e nao pode passar a existir: seria a segunda fonte da mesma verdade.
  */
 export function exameExigeAtencao(situacao: SituacaoExame): boolean {
-  return situacao !== "realizado";
+  return situacao !== "aso_apto";
 }
 
 /**
@@ -85,7 +95,12 @@ export const acoesHistoricoProcesso = [
   "criado",
   "cancelado",
   "internos_alterados",
-  "exame_alterado"
+  "exame_alterado",
+  // ADM-003 V1B: pausar e retomar sao CONSEQUENCIA de registrar o ASO, nunca atos proprios — nao ha
+  // rota nem botao de retomar. A trilha registra os dois porque aconteceram.
+  "pausado",
+  "retomado",
+  "cpf_revelado"
 ] as const;
 export const acaoHistoricoProcessoSchema = z.enum(acoesHistoricoProcesso);
 export type AcaoHistoricoProcesso = z.infer<typeof acaoHistoricoProcessoSchema>;
