@@ -2647,22 +2647,6 @@ body {
 }
 /* ===================== FIM VIS-08 ===================== */
 
-/* ===================== INICIO VIS-E1b — BOTAO DE VOLTAR AO PAINEL (27/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   Ele herda o tamanho e a cor dos outros icones da topbar pela regra da linha 1953
-   (`.topbar-actions > .v-btn--icon`), entao aqui entra so o estado "voce ja esta aqui".
-
-   Estando no painel, o botao NAO e desabilitado — `disabled` o tiraria da ordem de Tab e do leitor
-   de tela. O sinal e `aria-current="page"`, e o realce visual abaixo e o par visivel dele: quem nao
-   usa leitor de tela precisa enxergar o mesmo que o leitor anuncia.
-   ================================================================================================== */
-.shell-mobills .topbar-actions > .topbar-painel[aria-current="page"] {
-  background: var(--cx-brand-wash);
-  color: var(--cx-brand-text);
-}
-/* ===================== FIM VIS-E1b ===================== */
-
 /* ===================== INICIO VIS-10 — CABECALHO DE TELA (27/08/2026) =====================
    anchor: linear.app/DESIGN.md — hierarquia por peso e cor, hairline, zero atmosfera.
    diverge: escala --cx-fs-* e Noto Sans, que sao decisao de marca deste sistema (67 §8, D-01).
@@ -3114,13 +3098,13 @@ body {
     background: var(--cx-surface);
   }
 }
-/* No rail o rotulo vira um divisor de 1px (linha ~1041): vidro num divisor nao faz sentido. */
-.shell-mobills .padaria-sidebar.rail .sidebar-group-label {
-  position: static;
-  background: var(--marca-linha);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
+/* NO RAIL nao entra regra nenhuma, e o comentario que estava aqui dizia o contrario. Ele afirmava
+   que "o rotulo vira um divisor de 1px" e desligava o vidro para esse divisor. O divisor nunca
+   aparece: a regra de tres classes que o torna `display: none` no rail vence, e nada abaixo dela
+   redeclara `display`. MEDIDO a 1024px: `display` computado = `none`, altura 0. O bloco que estava
+   aqui pintava um elemento que nao existe na tela — e usava `--marca-linha`, alias que o 67 §2
+   proibe em codigo novo. O banner do VIS-E6g le a mesma cascata corretamente; era este que estava
+   errado. Removido em 28/08/2026. */
 /* ===================== FIM VIS-E6b ===================== */
 
 /* ===================== INICIO VIS-E6c — RITMO, DENSIDADE E MARGEM (27/08/2026) =====================
@@ -3297,7 +3281,9 @@ body {
 /* ===================== FIM VIS-E6d ===================== */
 
 /* ===================== INICIO VIS-E6h — BOTAO DO PAINEL COM ROTULO (27/08/2026) =====================
-   Bloco aditivo e reversivel. Substitui o realce que o VIS-E1b dava ao botao so-icone.
+   Bloco aditivo e reversivel. Substitui o realce que o VIS-E1b dava ao botao so-icone. (O bloco
+   VIS-E1b foi apagado em 28/08/2026: a unica regra dele era byte a byte a mesma que este bloco ja
+   traz, entao ele nao pintava nada. As mencoes a ele aqui descrevem historia.)
 
    Casa + a palavra "Painel". E "Painel" e nao "Dashboard": a R-100 manda portugues e o sistema
    chama assim em todo lugar — no menu, no titulo da tela e no cabecalho.
