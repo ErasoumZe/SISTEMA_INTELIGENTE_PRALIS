@@ -58,10 +58,13 @@ function estiloGrupo(titulo: string) {
 // O watch reaproveita o estado que ja existe e so ACRESCENTA: registra grupo novo como fechado e
 // forca aberto o da tela ativa. Nunca escreve `false` por cima de um `true` que o usuario pos, que e
 // a mesma disciplina do watch da categoria logo abaixo.
-const gruposAbertos = useGruposAbertos();
+const { abertos: gruposAbertos, hidratado } = useGruposAbertos();
 
+// `hidratado` entra nas dependencias de proposito: o `sessionStorage` so e lido depois da montagem,
+// e o que vem de la tem precedencia sobre o padrao. Sem esta dependencia, a preferencia do usuario
+// entraria mas o grupo da tela ativa nao seria reaberto por cima dela.
 watch(
-  [() => props.telaAtiva, telasAgrupadas],
+  [() => props.telaAtiva, telasAgrupadas, hidratado],
   ([telaAtiva, grupos]) => {
     gruposAbertos.value = gruposIniciais(grupos, telaAtiva, gruposAbertos.value);
   },
