@@ -2,17 +2,71 @@
 const router = useRouter();
 const { apiUrl } = useApi();
 
-// A tela de login NAO tem controle de tema, mas TEM tema — e a diferenca entre as duas coisas foi o
-// erro do VIS-13, que fechou este item dizendo "o login nao tem tema, a logo clara esta certa".
+// A ENTRADA ABRE SEMPRE NO ESCURO (Marco, 28/08/2026). O fundo animado nao ficou bom no claro, e
+// manter duas versoes do mesmo desenho e divida; a entrada passa a ter um tema so, e a escolha de
+// claro/escuro continua existindo DENTRO do sistema.
 //
-// O `useModoEscuro` escreve `data-theme` no <html> (useModoEscuro.ts:29) e persiste em localStorage
-// (linha 45). O caminho do defeito e o logout: `sair()` faz `router.push("/login")`, que e navegacao
-// CLIENT-SIDE — o documento nao recarrega, o `data-theme="dark"` continua no <html>, e a tela de
-// login herda o escuro. Com a logo de texto escuro cravada, a marca sumia no fundo escuro.
+// Isto SUBSTITUI a leitura de `escuro` que existia aqui. O historico vale a pena guardar porque
+// custou um item: o VIS-13 fechou dizendo "o login nao tem tema, a logo clara esta certa", e estava
+// errado — a tela nao tinha CONTROLE de tema, mas herdava tema pelo logout, que e navegacao
+// client-side e nao recarrega o documento. Com o tema agora FORCADO, a logo deixa de depender de
+// estado e passa a ser sempre a branca, que e a correta sobre fundo escuro.
 //
-// So o `escuro` e lido. NADA de `inicializar()` nem de alternador aqui: a tela nao ganha controle
-// novo, ela so respeita o tema que ja herdou.
-const { escuro } = useModoEscuro();
+// O `useTemaEntrada` nao grava preferencia nenhuma — le, forca, e devolve o que estava. O porque
+// esta no proprio arquivo.
+useTemaEntrada();
+
+// O FUNDO SEGUE O MOUSE — so em ponteiro fino, so com movimento permitido.
+//
+// NUNCA escreve no DOM dentro do `mousemove`: o evento dispara mais vezes que os quadros da tela,
+// e escrever ali significa recalcular estilo varias vezes por quadro para nada. O `mousemove` so
+// guarda dois numeros; quem escreve e o `requestAnimationFrame`, uma vez por quadro.
+//
+// O AMORTECIMENTO tambem esta aqui, e nao no CSS com `transition`: uma transicao por cima de uma
+// propriedade que muda a cada quadro reinicia a interpolacao a cada quadro e o resultado e um
+// arrasto irregular. A interpolacao e feita na mao (`atual += (alvo - atual) * 0.06`), que da o
+// atraso suave e continuo que se espera de paralaxe.
+const fundoEl = ref<HTMLElement | null>(null);
+let quadro = 0;
+const alvo = { x: 0, y: 0 };
+const atual = { x: 0, y: 0 };
+
+function aoMoverMouse(e: MouseEvent) {
+  // -1..1 a partir do centro da janela. So guarda; nao toca no DOM.
+  alvo.x = (e.clientX / window.innerWidth) * 2 - 1;
+  alvo.y = (e.clientY / window.innerHeight) * 2 - 1;
+}
+
+function passo() {
+  atual.x += (alvo.x - atual.x) * 0.06;
+  atual.y += (alvo.y - atual.y) * 0.06;
+  const el = fundoEl.value;
+  if (el) {
+    // Duas custom properties em UM elemento. As manchas leem dali e cada uma multiplica pela
+    // propria profundidade — o navegador nao recalcula gradiente nenhum, so recompoe camadas.
+    el.style.setProperty("--mx", `${(atual.x * 26).toFixed(2)}px`);
+    el.style.setProperty("--my", `${(atual.y * 26).toFixed(2)}px`);
+  }
+  quadro = requestAnimationFrame(passo);
+}
+
+onMounted(() => {
+  if (typeof window === "undefined") return;
+  // As duas condicoes que Marco pos: ponteiro fino (em toque nao existe mouse) e movimento
+  // permitido. Sem qualquer uma delas o ouvinte nem chega a ser registrado — nao e um `if` dentro
+  // do laco, e o laco nao existir.
+  const fino = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const parado = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!fino || parado) return;
+  window.addEventListener("mousemove", aoMoverMouse, { passive: true });
+  quadro = requestAnimationFrame(passo);
+});
+
+onUnmounted(() => {
+  if (typeof window === "undefined") return;
+  window.removeEventListener("mousemove", aoMoverMouse);
+  cancelAnimationFrame(quadro);
+});
 
 const email = ref("");
 const password = ref("");
@@ -50,14 +104,14 @@ async function login() {
          escolhida para esta tela — ela E a paleta que o sistema ja usa para classificar dinheiro.
          `aria-hidden` e `pointer-events: none` porque isto nao e conteudo nem alvo: quem usa
          leitor de tela nao ouve nada a mais, e o clique atravessa como se nao existisse. -->
-    <div class="login-fundo" aria-hidden="true">
+    <div ref="fundoEl" class="login-fundo" aria-hidden="true">
       <span v-for="i in 7" :key="i" class="login-blob" :class="'blob-' + i" />
     </div>
 
     <div class="login-card">
       <div class="login-brand">
         <img
-          :src="escuro ? '/cicluz/logo-cicluz-branca.png' : '/cicluz/logo-cicluz.png'"
+          src="/cicluz/logo-cicluz-branca.png"
           alt="Cicluz Gestão Profissional"
           class="login-logo"
           width="300"
@@ -263,6 +317,18 @@ async function login() {
   animation: login-deriva var(--blob-dur) var(--cx-ease) var(--blob-atraso) infinite alternate;
 }
 
+/* PARALAXE PELO `translate`, e nao pelo `transform`: as manchas ja usam `transform` na animacao de
+   deriva, e escrever `transform` de novo aqui apagaria a animacao. `translate` e propriedade
+   SEPARADA e COMPOE com `transform`, entao as duas coisas convivem sem uma anular a outra e sem
+   precisar de um elemento embrulhador por mancha.
+   So dentro de `@media (hover: hover) and (pointer: fine)`: em toque nao existe mouse, e sem a
+   media as manchas ficariam esperando uma variavel que nunca chega. */
+@media (hover: hover) and (pointer: fine) {
+  .login-blob {
+    translate: calc(var(--mx, 0px) * var(--blob-prof)) calc(var(--my, 0px) * var(--blob-prof));
+  }
+}
+
 /* SO `transform` E `opacity`. Nenhuma das duas dispara layout ou paint — e o que permite sete
    manchas desfocadas a 60fps. Animar `top`/`left`/`width` aqui seria o caminho garantido para
    travar justamente a tela de entrada do sistema. */
@@ -283,6 +349,7 @@ async function login() {
    quando o olho percebe que e um laco. Os atrasos negativos comecam a animacao ja em curso, entao
    a tela nunca abre com as sete manchas alinhadas no mesmo quadro. */
 .blob-1 {
+  --blob-prof: 0.9;
   --blob-cor: var(--cat-entradas-base);
   --blob-tam: 46vmax;
   --blob-dx: 8vw;
@@ -294,6 +361,7 @@ async function login() {
   left: -10vmax;
 }
 .blob-2 {
+  --blob-prof: 1.15;
   --blob-cor: var(--cat-transferencias-base);
   --blob-tam: 38vmax;
   --blob-dx: -7vw;
@@ -305,6 +373,7 @@ async function login() {
   right: -12vmax;
 }
 .blob-3 {
+  --blob-prof: 0.75;
   --blob-cor: var(--cat-despesas-base);
   --blob-tam: 34vmax;
   --blob-dx: 6vw;
@@ -316,6 +385,7 @@ async function login() {
   bottom: -12vmax;
 }
 .blob-4 {
+  --blob-prof: 1.3;
   --blob-cor: var(--cat-mercadorias-base);
   --blob-tam: 30vmax;
   --blob-dx: -9vw;
@@ -327,6 +397,7 @@ async function login() {
   left: -8vmax;
 }
 .blob-5 {
+  --blob-prof: 0.6;
   --blob-cor: var(--cat-retiradas-base);
   --blob-tam: 28vmax;
   --blob-dx: 10vw;
@@ -338,6 +409,7 @@ async function login() {
   left: -14vmax;
 }
 .blob-6 {
+  --blob-prof: 1.05;
   --blob-cor: var(--cat-resultado-base);
   --blob-tam: 32vmax;
   --blob-dx: -8vw;
@@ -350,6 +422,7 @@ async function login() {
 }
 /* A MARCA e a maior e a mais atras: e ela que da o tom roxo geral; as outras seis pontuam. */
 .blob-7 {
+  --blob-prof: 0.35;
   --blob-cor: var(--cx-brand);
   --blob-tam: 58vmax;
   --blob-dx: 4vw;
@@ -525,6 +598,10 @@ async function login() {
      congelaria no quadro FINAL, nao no inicial — as manchas parariam deslocadas e ampliadas. */
   .login-blob {
     animation: none;
+    /* Sem seguir o mouse tambem. O ouvinte ja nem e registrado no script; este `translate: none` e
+       o cinto de seguranca para o caso de a preferencia mudar com a tela aberta, quando a media
+       query reavalia mas o `onMounted` nao roda de novo. */
+    translate: none;
   }
 }
 </style>

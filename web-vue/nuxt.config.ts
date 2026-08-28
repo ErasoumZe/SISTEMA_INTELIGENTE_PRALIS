@@ -17,7 +17,33 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "Cicluz Gestão Profissional",
-      link: [{ rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" }]
+      link: [{ rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" }],
+      // TEMA DAS TELAS DE ENTRADA, ANTES DO APP EXISTIR.
+      //
+      // Este projeto e `ssr: false` (linha 5), entao o HTML servido e uma casca vazia e o
+      // `useHead` do `useTemaEntrada` so consegue agir depois que o app inteiro monta. MEDIDO: a
+      // tela ficava CLARA ate 1422ms e so entao virava escura — uma piscada longa do tema errado,
+      // justamente na primeira tela que o usuario ve.
+      //
+      // Um script inline no <head> roda no parse do documento, antes da primeira pintura, e mata a
+      // piscada. E o unico lugar de onde da para fazer isso num SPA.
+      //
+      // NAO GRAVA NADA: so escreve o atributo no <html>. A preferencia do usuario continua vivendo
+      // no localStorage, intocada — quem entra e escolhe claro continua com claro. E casa com a
+      // MESMA lista de rotas do `useTemaEntrada`; mudar uma sem a outra faz a piscada voltar.
+      script: [
+        {
+          // SEM BARRA INVERTIDA, e isso nao e estilo: a primeira versao usava uma expressao
+          // regular e o `\/` foi DESESCAPADO na serializacao do head. O que chegou ao navegador
+          // foi `/^/(login|...)`, uma regex literal invalida — script quebrado, e a piscada de
+          // volta sem aviso. Comparacao de string nao tem esse risco.
+          innerHTML:
+            "var p=location.pathname;" +
+            'if(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);' +
+            'if(p==="/login"||p==="/forgot-password"||p==="/reset-password")' +
+            'document.documentElement.setAttribute("data-theme","dark")'
+        }
+      ]
     }
   },
   runtimeConfig: {

@@ -98,6 +98,38 @@ checkpoint de 26/08).
 | **D-HOME** | A home não espelha o menu: até 6 favoritos por estrela + espaço de relatórios. **DECIDIDA, NÃO IMPLEMENTADA** — o E-1a entregou a home espelhando o menu com 32 atalhos, e a decisão é posterior à entrega. É a Etapa 2 | 27/08  |
 | **D-05**   | Filete de categoria no card: **suspenso**, acrescentaria lugar onde a cor aparece                                                                                                                                       | 26/08  |
 
+| **D-LOGIN-VIDRO** | O cartão das telas de entrada é de **vidro**. Única exceção aberta ao `67` §10 ("nunca em card de conteúdo e nunca atrás de texto de leitura"), e vale só para `login`, `forgot-password` e `reset-password` | 28/08 |
+| **D-LOGIN-ESCURO** | As telas de entrada abrem **sempre no escuro**, para todos. A escolha claro/escuro continua existindo dentro do sistema | 28/08 |
+| **D-VIS-E5a** | O gradiente da marca (`--cx-brand-gradiente`) **alcança o FAB "+ NOVO"**. O banner do VIS-E5c que diz o contrário está desatualizado | 27/08 |
+
+**D-LOGIN-VIDRO — por que a exceção se sustenta.** A regra do `67` §10 existe porque vidro atrás de
+texto de leitura entrega o contraste a um fundo que o sistema **não controla**: conteúdo rolando,
+tabela, imagem. Na tela de entrada o fundo é conhecido, é nosso e não rola — são sete manchas cuja
+cor, posição e força nós escolhemos. O risco que a regra previne não existe ali.
+A opacidade não foi escolhida, foi medida em **24 instantes** da animação ao longo de 120s, porque
+as manchas se movem e um quadro só não representa o pior caso. Em 78%: 5,30:1 no claro e 7,15:1 no
+escuro. Piso conhecido: 70% ainda passa (5,11 / 7,00).
+**A ordem da correção é fixa:** se reprovar, sobe a opacidade do vidro. Nunca clareia o texto.
+
+**D-LOGIN-ESCURO — o que ela obriga.** O gradiente do fundo não ficou bom no tema claro, e manter
+duas versões do mesmo desenho é dívida. A entrada passa a ter um tema só.
+Isto **revoga em parte** o item "login responsivo aos dois temas": o login não precisa mais
+funcionar bem no claro, porque não abre no claro.
+É **comportamento novo numa tela que não deveria ganhar controle**, e por isso fica registrado: a
+exceção é autorizada por Marco. As duas regras que a tornam segura:
+
+1. as telas de entrada **leem e devolvem** a preferência, e **nunca gravam**. Se gravassem "dark",
+   quem prefere claro perderia a escolha só por passar pelo login — e passar pelo login é
+   obrigatório;
+2. restauram **duas** coisas ao sair: o `data-theme` do `<html>` e o tema do **Vuetify**. Esquecer o
+   segundo deixa os componentes calculados como claros por dentro — foi o sintoma que apareceu
+   quando a medição forçava só o atributo.
+
+Como o projeto é `ssr: false`, o atributo também é escrito por um **script inline no `<head>`**
+(`nuxt.config.ts`): sem ele a tela ficava clara até **1422ms** antes de virar escura. A lista de
+rotas do script e a do `useTemaEntrada` têm de andar juntas; mudar uma sem a outra traz a piscada
+de volta.
+
 ### Abertas
 
 - **D-03** — 360px entra no checklist ou é descartado por escrito? (`67` §13.7)
@@ -105,6 +137,9 @@ checkpoint de 26/08).
 - **D-08** — chips de permissão com hex cravado no `PermissoesGrade` (`68` §6.2). Tela de negócio
 - **R-097** — menu por categoria ou por setor? **Não bloqueia esta frente**, porque Marco decidiu
   em 27/08 manter o menu exatamente como está
+- **D-SIMBOLO** — o símbolo colorido da Cicluz depende de **arte nova** para virar vetor de verdade.
+  Ver o item no `ROTEIRO-DESIGN-ATE-O-FIM.md`: o que existe hoje não permite o gradiente animado que
+  Marco pediu
 
 ---
 

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { MENSAGEM_SENHA_CURTA, SENHA_MINIMA_CARACTERES, senhaAtendeMinimo } from "~/utils/senha-politica";
 
+// Tela de ENTRADA: abre sempre no escuro, pela mesma decisao do login (Marco, 28/08/2026). Le e
+// devolve a preferencia do usuario, nunca grava.
+useTemaEntrada();
+
 const route = useRoute();
 const { apiUrl } = useApi();
 

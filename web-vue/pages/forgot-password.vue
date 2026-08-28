@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Tela de ENTRADA: abre sempre no escuro, pela mesma decisao do login (Marco, 28/08/2026). Le e
+// devolve a preferencia do usuario, nunca grava.
+useTemaEntrada();
+
 const { apiUrl } = useApi();
 
 const email = ref("");
