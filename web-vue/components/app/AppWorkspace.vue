@@ -2083,7 +2083,6 @@ onBeforeUnmount(() => {
         <v-btn
           v-if="caixaAberto"
           class="mt-4 caixa-edit"
-          block
           size="small"
           variant="tonal"
           prepend-icon="mdi-cash-register"
@@ -2093,15 +2092,7 @@ onBeforeUnmount(() => {
         </v-btn>
         <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
              so NAVEGA para la — nao existe mais modal de abertura. -->
-        <v-btn
-          v-else
-          class="mt-4 caixa-edit"
-          block
-          size="small"
-          variant="tonal"
-          prepend-icon="mdi-cash-plus"
-          to="/caixa"
-        >
+        <v-btn v-else class="mt-4 caixa-edit" size="small" variant="tonal" prepend-icon="mdi-cash-plus" to="/caixa">
           Ir para o caixa
         </v-btn>
       </div>
@@ -2110,7 +2101,7 @@ onBeforeUnmount(() => {
     <template v-if="acoesNovo.length" #actions>
       <v-menu>
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
+          <v-btn v-bind="menuProps" class="sidebar-new-button" prepend-icon="mdi-plus">Novo</v-btn>
         </template>
         <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
              abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->

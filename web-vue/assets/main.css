@@ -3816,3 +3816,43 @@ body {
   transition: visibility 0s linear var(--cx-dur-2);
 }
 /* ===================== FIM VIS-E7i ===================== */
+
+/* ===================== INICIO VIS-E8d — BOTAO DE ACAO DEIXA DE SER FAIXA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Marco reprovou o "+ NOVO" e o "IR PARA O CAIXA" duas vezes. A primeira medicao olhou a coisa
+   errada — mediu ALTURA (44px, dentro da escala do 67 §9) e concluiu que estava certo. O problema
+   nunca foi altura. MEDIDO agora, com a sidebar em 300px:
+
+     + NOVO            271px de largura   =  90% da sidebar
+     IR PARA O CAIXA   249px              =  83%
+     Mobills "Novo"    168px em 260px     =  65%     <- a referencia
+
+   90% nao e botao, e faixa. A causa era o atributo `block` do Vuetify (`AppWorkspace.vue:2113`
+   e nos dois botoes do card do caixa), que forca `width: 100%`.
+
+   A LARGURA E DERIVADA, nao inventada: 65% da sidebar. Como o botao nao vive na sidebar e sim
+   dentro de contentores com padding, a conta reconstroi a largura da sidebar a partir do
+   contentor mais o padding que ele tem em volta. Assim, se o padding mudar, a proporcao continua
+   valendo — o numero nao fica cravado.
+
+     .sidebar-actions   fica dentro do `.drawer-shell` (padding sp-3 de cada lado)
+     .caixa-card        fica dentro do `.drawer-shell` E tem padding sp-3 proprio
+
+   ALTURA NAO MUDA. 44px continua sendo o piso do 67 §9, e o 44 do "+ NOVO" ja vinha do VIS-04.
+   =============================================================================================== */
+
+/* 1. A acao primaria: ~65% da sidebar, centralizada. */
+.shell-mobills .sidebar-new-button {
+  width: calc(0.65 * (100% + 2 * var(--cx-sp-3)));
+  justify-self: center;
+}
+
+/* 2. A acao do card do caixa, na mesma proporcao. `display: flex` e a mesma forma que o proprio
+      `.v-btn--block` do Vuetify usa; e o que permite o `margin-inline: auto` centralizar. */
+.shell-mobills .caixa-edit {
+  display: flex;
+  width: calc(0.65 * (100% + 4 * var(--cx-sp-3)));
+  margin-inline: auto;
+}
+/* ===================== FIM VIS-E8d ===================== */
