@@ -5,6 +5,7 @@ import pg from "pg";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { consultarTodos, consultarUm } from "../../setup/integracao.js";
+import { COMANDO_POSTGRES_SEM_DURABILIDADE, PARAMETROS_SEM_DURABILIDADE } from "../../setup/postgres-efemero.js";
 
 const raizRepositorio = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -98,6 +99,9 @@ describe("migracoes integration", () => {
       .withDatabase("padaria_migracoes")
       .withUsername("padaria_migracoes")
       .withPassword("padaria_migracoes")
+      // Mesmo tratamento do container da suite, da MESMA fonte: este aqui e o mais pesado do
+      // repositorio (todas as migrations + seed de desenvolvimento) e pagava a mesma espera de fsync.
+      .withCommand([...COMANDO_POSTGRES_SEM_DURABILIDADE])
       .withStartupTimeout(120_000)
       .start();
 
@@ -109,6 +113,20 @@ describe("migracoes integration", () => {
   afterAll(async () => {
     await bancoMigrado?.end();
     await container?.stop();
+  });
+
+  // Este container e o SEGUNDO Postgres efemero do repositorio, e o mais pesado: aplica as
+  // migrations todas e roda o seed de desenvolvimento. Ele paga a mesma espera de `fsync` que o
+  // container da suite pagava — por isso recebe os mesmos parametros, da mesma fonte unica. Sem
+  // este caso, o segundo container viraria o novo gargalo e ninguem perceberia.
+  it("Deve_RodarSemDurabilidade_Quando_ContainerEhEfemero", async () => {
+    const { rows } = await bancoMigrado.query<{ parametro: string; valor: string }>(
+      `select name as parametro, setting as valor
+         from pg_settings
+        where name in ('fsync', 'synchronous_commit', 'full_page_writes')
+        order by name`
+    );
+    expect(rows).toEqual(PARAMETROS_SEM_DURABILIDADE.map((parametro) => ({ parametro, valor: "off" })));
   });
 
   it("Deve_AplicarTodasAsEntradasDoJournal_Quando_ProvisionarBancoVazio", async () => {

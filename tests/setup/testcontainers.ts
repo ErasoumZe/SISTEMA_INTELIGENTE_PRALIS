@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { TestProject } from "vitest/node";
+import { COMANDO_POSTGRES_SEM_DURABILIDADE } from "./postgres-efemero.js";
 
 const migracaoTriggersUrl = new URL("../../db/migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
@@ -81,18 +82,8 @@ export async function setup(project: TestProject) {
     .withDatabase("padaria_test")
     .withUsername("padaria_test")
     .withPassword("padaria_test")
-    // Este banco nasce e morre com a rodada: durabilidade nele nao protege nada e cobra caro.
-    // Medindo `pg_stat_activity` durante o bootstrap, o laco de TRUNCATE ficava parado em
-    // `IO/WALSync` (69 s e 44 s) e `IO/DataFileImmediateSync` (21 s), sem UM bloqueio de lock —
-    // era espera de `fsync` dentro da VM do Docker/WSL2. E ela nao tem teto: o mesmo arquivo
-    // isolado ora custava ~50 s, ora estourava 120 s E 180 s. Subir o teto nao resolveu; desligar
-    // a durabilidade resolve a causa.
-    //
-    // `withCommand` troca o **Cmd**, nao o Entrypoint: a imagem oficial segue rodando
-    // `docker-entrypoint.sh`, que cria usuario e base ANTES do `exec postgres "$@"`.
-    // Nao ha como vazar para dev/producao/Coolify: nenhum compose do repo tem chave `command:`,
-    // e o Testcontainers fala direto com a API do Docker, fora do compose.
-    .withCommand(["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"])
+    // O porque de desligar durabilidade, e por que nao vaza, esta em `postgres-efemero.ts`.
+    .withCommand([...COMANDO_POSTGRES_SEM_DURABILIDADE])
     .withStartupTimeout(120_000)
     .start();
 
