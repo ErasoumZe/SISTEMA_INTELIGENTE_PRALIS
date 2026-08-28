@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Permissao } from "@padaria/shared";
-import { permissoesAcessoTotal } from "@padaria/shared";
+import { ehAdministradorTotal, permissoesAcessoTotal } from "@padaria/shared";
 import { FAIXA_DIA, FAIXA_IR_PARA, FAIXA_PRECISA, FAIXA_RELATORIOS } from "./dashboard-demo";
-import { MOTIVO_PADRAO, atalhosDoPainel, metricasPermitidas } from "./dashboard";
+import { MOTIVO_PADRAO, atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas } from "./dashboard";
 import { itemPorTela } from "./domain";
 import { usePermissoes } from "~/composables/usePermissoes";
 
@@ -129,5 +129,42 @@ describe("atalhosDoPainel — tela desabilitada diz o mesmo que o menu", () => {
     const telas = [itemPorTela["caixa"]!, itemPorTela["entradas"]!];
     const atalhos = atalhosDoPainel(["caixa", "entradas"], telas, ["caixa"], {});
     expect(atalhos.find((a) => a.id === "entradas")?.desabilitada).toBe(false);
+  });
+});
+
+describe("as faixas de número são de administrador", () => {
+  // Os tres papeis, como o proprio sistema os nomeia em `WorkspaceDialogs.vue:14-17`.
+  const comum = { role: "usuario_comum" } as const;
+  const admTotal = { role: "usuario_admin" } as const;
+  const admLegado = { role: "admin" } as const;
+
+  it("administrador total vê", () => {
+    expect(ehAdministradorTotal(admTotal)).toBe(true);
+  });
+
+  it("usuário comum não vê", () => {
+    expect(ehAdministradorTotal(comum)).toBe(false);
+  });
+
+  // ESTE e o caso que quase escapou. A irma `podeLancarSemCaixa` aceita `admin` tambem, e copiar
+  // o teste dela deixaria o legado vendo o dinheiro do negocio inteiro por herdar um nome. A API
+  // e explicita: `perfil.service.ts:10` diz que o role `admin` NAO tem efeito especial.
+  it("admin LEGADO não vê — ele não é o administrador total", () => {
+    expect(ehAdministradorTotal(admLegado)).toBe(false);
+  });
+
+  it("sem ser administrador, nenhuma faixa de número sobra", () => {
+    const faixas = [{ id: "dia" }, { id: "precisa" }, { id: "relatorios" }];
+    expect(faixasDeNumeroVisiveis(faixas, false)).toEqual([]);
+  });
+
+  it("sendo administrador, as três continuam", () => {
+    const faixas = [{ id: "dia" }, { id: "precisa" }, { id: "relatorios" }];
+    expect(faixasDeNumeroVisiveis(faixas, true)).toHaveLength(3);
+  });
+
+  // A permissao continua valendo POR CIMA: ser administrador nao pula o `metricasPermitidas`.
+  it("administrador sem permissão de dado continua sem o card", () => {
+    expect(metricasPermitidas(TODAS_AS_METRICAS, NENHUMA)).toEqual([]);
   });
 });

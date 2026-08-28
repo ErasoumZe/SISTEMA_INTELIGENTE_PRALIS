@@ -27,6 +27,7 @@ import AppDashboard from "~/components/app/AppDashboard.vue";
       <AppDashboard
         :telas="ctx.telasMenu"
         :tem-permissao="ctx.temPermissao"
+        :eh-administrador="ctx.ehAdministradorDoPainel"
         :desabilitadas="ctx.telasMenuDesabilitadas"
         :motivos="ctx.motivosTelasMenuDesabilitadas"
       />

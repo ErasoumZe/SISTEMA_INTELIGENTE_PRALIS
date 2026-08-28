@@ -2,6 +2,8 @@
 import {
   TELA_TEMA_RESUMO_CAIXA,
   deCentavos,
+  // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
+  ehAdministradorTotal,
   paraCentavos,
   // Mesma regra que o servico usa para decidir quem e retaguarda. Importada, nunca copiada.
   podeLancarSemCaixa,
@@ -276,6 +278,13 @@ const colaboradoresSelectUsuario = computed(() => [
   ...colaboradoresDisponiveisUsuario.value
 ]);
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+// O UNICO ponto de chamada do `ehAdministradorTotal`. Marco ja pediu, para depois, uma aba que
+// define o que cada usuario ve no painel; com a funcao chamada em tres lugares, o configurador
+// teria de achar os tres. Um ponto de decisao, descido como booleano.
+const ehAdministradorDoPainel = computed(() =>
+  sessao.value?.perfil ? ehAdministradorTotal(sessao.value.perfil) : false
+);
+
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
 // O ESTADO E O ROTULO, e essa foi a decisao entre as duas que Marco deixou em aberto (texto ao
 // lado do botao ou texto COMO rotulo). Numa topbar que ja carrega sete elementos, um texto solto
@@ -1890,10 +1899,17 @@ const pageContext = computed(() => ({
   telasMenu: telasShell.value,
   telasMenuDesabilitadas: telasDesabilitadasMenu.value,
   motivosTelasMenuDesabilitadas: motivosTelasDesabilitadas.value,
-  // Blocos de relatorio do painel: a REGRA de quem ve o que vive em `utils/blocos-relatorio.ts`
-  // e recebe esta funcao. E o MESMO `temPermissao` que o workspace inteiro usa — nao nasce uma
-  // segunda fonte de verdade sobre permissao, e nenhuma permissao nova entra.
+  // As metricas do painel filtram por esta funcao. E o MESMO `temPermissao` que o workspace inteiro
+  // usa — nao nasce uma segunda fonte de verdade sobre permissao, e nenhuma permissao nova entra.
+  //
+  // O texto anterior aqui citava `utils/blocos-relatorio.ts` como dono da regra. Aquele arquivo foi
+  // APAGADO em 28/08/2026, junto com o `atalhos-home.ts`, quando a dashboard deixou de espelhar o
+  // menu; a regra mudou de casa para `utils/dashboard.ts`. O comentario ficou apontando para um
+  // arquivo que nao existe, e comentario que mente e pior que comentario nenhum.
   temPermissao,
+  // A decisao de quem ve as faixas de NUMERO do painel desce PRONTA, como booleano. Ver o
+  // `ehAdministradorDoPainel` la em cima: e o unico ponto de chamada, e isso e deliberado.
+  ehAdministradorDoPainel: ehAdministradorDoPainel.value,
   notificacoesPainel: notificacoes.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,

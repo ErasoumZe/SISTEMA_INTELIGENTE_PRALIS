@@ -63,3 +63,26 @@ export function atalhosDoPainel(
   }
   return atalhos;
 }
+
+/**
+ * AS FAIXAS DE NÚMERO SÃO DE ADMINISTRADOR (Marco, 28/08/2026).
+ *
+ * O painel mostra dinheiro do negócio inteiro — entradas do dia, saldo, pendências, relatórios.
+ * Isso é leitura de dono, não de operação, e não é o mesmo que "pode abrir a tela": um caixa tem
+ * `entradas_visualizar` porque precisa lançar, e isso não faz dele alguém que deve ver o total da
+ * casa na primeira tela ao entrar.
+ *
+ * QUEM NÃO É ADMINISTRADOR NÃO VÊ FAIXA NENHUMA DE NÚMERO — e não vê cadeado, nem estado vazio,
+ * nem "você não tem acesso". Some, e o que sobra fecha o espaço. É o mesmo comportamento do menu,
+ * que esconde o que não é seu em vez de mostrar porta trancada.
+ *
+ * A FAIXA 4 ("Ir para") CONTINUA PARA TODOS: ela não tem número, é atalho de navegação, e já
+ * respeita o menu item a item pelo `atalhosDoPainel`.
+ *
+ * A decisão chega PRONTA, como booleano, e não é tomada aqui. O `ehAdministradorTotal` é chamado
+ * num lugar só, no `AppWorkspace` — se a regra fosse consultada em cada faixa, a aba de
+ * configuração do painel que Marco já pediu teria de achar todos os pontos de chamada.
+ */
+export function faixasDeNumeroVisiveis<T>(faixas: readonly T[], ehAdministradorTotal: boolean): T[] {
+  return ehAdministradorTotal ? [...faixas] : [];
+}

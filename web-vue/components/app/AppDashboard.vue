@@ -19,7 +19,7 @@ import type { Permissao } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import type { MetricaDemo } from "~/utils/dashboard-demo";
 import { FAIXA_DIA, FAIXA_IR_PARA, FAIXA_PRECISA, FAIXA_RELATORIOS } from "~/utils/dashboard-demo";
-import { atalhosDoPainel, metricasPermitidas } from "~/utils/dashboard";
+import { atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas } from "~/utils/dashboard";
 import { dinheiro, rotaTela } from "~/utils/domain";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
@@ -27,15 +27,27 @@ const props = defineProps<{
   /** A MESMA lista que o menu recebe. Nenhuma permissao e recalculada aqui. */
   telas: ItemMenu[];
   temPermissao: (permissao: Permissao) => boolean;
+  /** Chega PRONTO do `AppWorkspace`, que e o unico ponto de chamada da regra. */
+  ehAdministrador: boolean;
   desabilitadas?: string[];
   motivos?: Record<string, string>;
 }>();
 
-const faixas = computed(() => [
-  { id: "dia", titulo: "O dia", metricas: metricasPermitidas(FAIXA_DIA, props.temPermissao) },
-  { id: "precisa", titulo: "Precisa de você", metricas: metricasPermitidas(FAIXA_PRECISA, props.temPermissao) },
-  { id: "relatorios", titulo: "Relatórios", metricas: metricasPermitidas(FAIXA_RELATORIOS, props.temPermissao) }
-]);
+/* AS FAIXAS DE NUMERO SAO DE ADMINISTRADOR. Quem nao e nao ve NENHUMA delas — e nao ve cadeado,
+   nem estado vazio, nem "voce nao tem acesso". Elas somem e a FAIXA 4 fecha o espaco, que e o
+   mesmo comportamento do menu: esconder o que nao e seu em vez de mostrar porta trancada.
+   A permissao CONTINUA valendo por cima: ser administrador nao pula o `metricasPermitidas`, so
+   decide se a faixa chega a existir. Sao dois filtros em serie, nao um substituindo o outro. */
+const faixas = computed(() =>
+  faixasDeNumeroVisiveis(
+    [
+      { id: "dia", titulo: "O dia", metricas: metricasPermitidas(FAIXA_DIA, props.temPermissao) },
+      { id: "precisa", titulo: "Precisa de você", metricas: metricasPermitidas(FAIXA_PRECISA, props.temPermissao) },
+      { id: "relatorios", titulo: "Relatórios", metricas: metricasPermitidas(FAIXA_RELATORIOS, props.temPermissao) }
+    ],
+    props.ehAdministrador
+  )
+);
 
 const atalhos = computed(() =>
   atalhosDoPainel(FAIXA_IR_PARA, props.telas, props.desabilitadas ?? [], props.motivos ?? {})
