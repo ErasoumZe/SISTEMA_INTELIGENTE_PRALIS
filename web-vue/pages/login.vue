@@ -254,7 +254,11 @@ async function login() {
     background var(--cx-dur-1) var(--cx-ease);
 }
 .login-link:hover {
-  color: var(--cx-brand-strong);
+  /* `--cx-brand-text` e nao `--cx-brand-strong`: o 67 §3 classifica o `-strong` como "hover do
+     PREENCHIMENTO" e o `-text` como "marca como tinta ou grafico fino". O `-strong` nao tem
+     contraparte no escuro — medido, #35128c sobre #191f26 da 1,24:1. O `-text` tem (main.css:182)
+     e o proprio comentario de la declara 6,9:1. */
+  color: var(--cx-brand-text);
   background: var(--cx-hover);
 }
 
@@ -268,11 +272,15 @@ async function login() {
 
 /* Foco no roxo da marca (fixo: nao depende do tema por empresa, que aqui ainda nem carregou).
    Alem da borda, o campo focado ganha o anel — o mesmo do resto do sistema. */
+/* `--cx-focus` e nao `--cx-brand`: a borda do campo focado e GRAFICO FINO, e o 67 §3 e explicito —
+   "Nunca use --cx-brand como texto ou grafico fino sobre superficie escura: medido, #6515dd sobre
+   #191f26 da 2,1:1 e reprova o minimo de 3:1. Para isso existem --cx-brand-text e --cx-focus."
+   O `--cx-focus` e redefinido no escuro (main.css:183) e existe exatamente para isto. */
 .login-card :deep(.v-field--focused .v-field__outline) {
-  color: var(--cx-brand);
+  color: var(--cx-focus);
 }
 .login-card :deep(.v-field--focused .v-label) {
-  color: var(--cx-brand-strong);
+  color: var(--cx-brand-text);
 }
 .login-card :deep(.v-field--focused) {
   box-shadow: 0 0 0 3px var(--cx-brand-ring);

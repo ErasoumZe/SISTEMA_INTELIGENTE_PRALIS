@@ -3603,8 +3603,13 @@ body {
   font-weight: 600;
   text-decoration: none;
 }
+/* O hover NAO troca de cor, e isso e conserto de um defeito meu do VIS-E9a: o estado normal usa
+   `--cx-brand-text`, que CLAREIA no escuro, e o hover usava `--cx-brand-strong`, que nao tem
+   contraparte escura. O link ficava claro e ESCURECIA ao passar o mouse — o hover invertia o
+   sinal, justamente no tema em que ele fica quase invisivel (1,24:1). Sublinhado funciona nos dois
+   temas e nao depende de nenhum token novo. */
 .metrica-mais:hover {
-  color: var(--cx-brand-strong);
+  text-decoration: underline;
 }
 
 /* FAIXA 4: cinco atalhos em pilula. Nao e card — atalho nao carrega dado, entao nao imita um. */
