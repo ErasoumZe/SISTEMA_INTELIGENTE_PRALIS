@@ -74,6 +74,33 @@ const nomesDominioInglesBloqueados = [
   { regex: /\/api\/employees\b/, motivo: "rota de dominio em ingles bloqueada; use /api/colaboradores" }
 ];
 
+// Durabilidade desligada e privilegio de banco DESCARTAVEL, e de mais nenhum.
+//
+// `fsync=off`, `synchronous_commit=off` e `full_page_writes=off` deixam o Postgres rapido porque
+// param de garantir que o dado sobreviva a uma queda. Num container que nasce e morre com a rodada
+// isso nao custa nada; num banco de desenvolvimento, de producao ou do Coolify, custa os dados.
+//
+// A fronteira hoje e estrutural — nenhum compose tem chave `command:`, e o Testcontainers fala
+// direto com a API do Docker —, mas estrutura se perde num copiar e colar apressado. Esta guarda
+// transforma "nao vaza" em "nao TEM como vazar sem ficar vermelho".
+const parametrosSemDurabilidade = ["fsync=off", "synchronous_commit=off", "full_page_writes=off"];
+
+function podeDesligarDurabilidade(caminho) {
+  return caminho.replaceAll("\\", "/").includes("tests/");
+}
+
+// Os arquivos de orquestracao NAO estao em `alvos` (a varredura so olha codigo), e sao justamente
+// onde o vazamento seria grave. Por isso entram numa lista propria.
+const arquivosDeOrquestracao = [
+  "db/docker-compose-db.yml",
+  "db/docker-compose-db.dev.yml",
+  "db/docker-compose-db.prod.yml",
+  "infra/docker-compose.yml",
+  "infra/docker-compose.dev.yml",
+  "infra/docker-compose.prod.yml",
+  "infra/docker-compose.coolify.yml"
+].filter(existsSync);
+
 function caminhoIgnoradoParaDominio(caminho) {
   const normalizado = caminho.replaceAll("\\", "/");
   return (
@@ -117,11 +144,22 @@ for (const alvo of alvos.flatMap(listarArquivos)) {
   for (const [indice, linha] of linhas.entries()) {
     const problema = padroesProblematicos.find((padrao) => linha.includes(padrao));
     if (problema) falhas.push(`${alvo}:${indice + 1}: texto possivelmente corrompido: ${problema}`);
+    if (!podeDesligarDurabilidade(alvo)) {
+      const durabilidade = parametrosSemDurabilidade.find((padrao) => linha.includes(padrao));
+      if (durabilidade) falhas.push(`${alvo}:${indice + 1}: ${durabilidade} so vale em banco descartavel (tests/)`);
+    }
     if (!caminhoIgnoradoParaDominio(alvo)) {
       const dominioIngles = nomesDominioInglesBloqueados.find((padrao) => padrao.regex.test(linha));
       if (dominioIngles)
         falhas.push(`${alvo}:${indice + 1}: nome de dominio em ingles bloqueado: ${dominioIngles.motivo}`);
     }
+  }
+}
+
+for (const arquivo of arquivosDeOrquestracao) {
+  for (const [indice, linha] of readFileSync(arquivo, "utf8").split(/\r?\n/).entries()) {
+    const durabilidade = parametrosSemDurabilidade.find((padrao) => linha.includes(padrao));
+    if (durabilidade) falhas.push(`${arquivo}:${indice + 1}: ${durabilidade} em orquestracao — nunca fora de teste`);
   }
 }
 
