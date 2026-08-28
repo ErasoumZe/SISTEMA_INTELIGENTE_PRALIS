@@ -3791,3 +3791,55 @@ body {
   }
 }
 /* ===================== FIM VIS-F2 ===================== */
+
+/* ===================== INICIO VIS-F3 — O BRILHO DA VIVID_GLASS VOLTA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Marco aprovou de novo a referencia `vivid_glass_dashboard_dark` e pediu o tratamento por cima do
+   que ja existe, LEVE. Isto NAO e invencao nova: o efeito ja existiu como VIS-E5b/E5d e morreu por
+   ARRASTO, nao por defeito — os seletores `.atalho-bloco*` perderam a marcacao quando a dashboard
+   deixou de espelhar o menu (b3d20dc), e o CSS foi varrido junto. Nenhuma linha daquele commit
+   critica o brilho. Aqui ele volta, na marcacao de hoje.
+
+   GEOMETRIA E FORCA COPIADAS DO VIS-E6d, que esta vivo em `main.css:2997`: `90% 120% at 100% 0%`,
+   `--cx-brilho-forca`, morrendo em `transparent 60%`. O E5b usava `120% 100%`; manter as duas seria
+   duas geometrias para o mesmo efeito no mesmo sistema. Vence a que ja esta em producao.
+
+   `background-image` E NAO PSEUDO-ELEMENTO: a imagem pinta acima do `background-color` e abaixo do
+   conteudo sem elemento novo, sem `z-index` e sem `position`. Foi assim no E5b e continua sendo o
+   caminho mais barato.
+
+   TODO CARD BRILHA; MUDA SO O MATIZ. Isso e a licao do VIS-E5d, que nasceu de um defeito visto em
+   tela: com so as telas de categoria brilhando, a grade virava remendo. Aqui uma regra so resolve
+   os dois casos — o `var(--brilho-cor, var(--cx-ink-soft))` cai no cinza quando a categoria nao
+   existe, entao neutro tambem brilha, e sem regra separada.
+
+   O 67 §3 continua de pe: cinza nao e cor de categoria, e a ausencia dela. Nenhum bloco neutro
+   passou a fingir que tem uma, e a lista de quem tem cor continua sendo so o `CATEGORIA_POR_TELA`.
+
+   O QUE NAO MUDA, porque ja veio medido do Mobills §06: disco de 52px na variante `-faixa`, rotulo
+   14 e valor 20 (1,43x), valor NEUTRO, cor so no disco. Este bloco nao encosta em nada disso.
+   ============================================================================================== */
+.metrica-card,
+.atalho-pilula {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--brilho-cor, var(--cx-ink-soft)) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+
+/* A FAIXA DE GRUPO DO MENU NAO GANHA BRILHO, e isto e uma reversao pedida por Marco depois de ver
+   em tela: no menu o gradiente fica so nos BOTOES ("+ NOVO", e o aviso de caixa que subiu para a
+   topbar), e nao nas faixas. A faixa e larga e ocupa a coluna inteira, entao o brilho nela nao
+   lia como luz num controle — lia como fundo pintado atras do menu.
+   A barrinha de categoria do `::before` (VIS-E6g) CONTINUA: ela e quem diz a que grupo a secao
+   pertence, e ela nunca foi gradiente. A identidade de cor do menu nao se perdeu.
+
+   O ROTULO CRESCE de `--cx-fs-micro` (11px) para `--cx-fs-caption` (12px), tambem a pedido. Um
+   degrau da escala, nao um numero novo: o VIS-E7h ja o tinha subido de 10 para 11 quando ele virou
+   controle, e este e o proximo degrau existente. */
+.sidebar-group-label {
+  font-size: var(--cx-fs-caption);
+}
+/* ===================== FIM VIS-F3 ===================== */

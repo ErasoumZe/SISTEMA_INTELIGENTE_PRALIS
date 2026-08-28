@@ -47,13 +47,28 @@ const atalhos = computed(() =>
    E a variante `faixa`, nao a `base`: `faixa` e a unica das seis escolhida POR MEDICAO para receber
    branco por cima. A `base` reprova — entradas da 2,94:1 com branco, abaixo ate dos 3:1 que o
    67 §11 pede para objeto grafico. O `cores-categoria.ts` ja registra essa medicao. */
+/* O BRILHO DE FUNDO usa outra variante que o disco, e a diferenca e o que cada uma foi medida para
+   fazer. A `faixa` existe para receber BRANCO POR CIMA — e o fundo do disco, e o contraste dela e
+   contra a tinta que ela carrega, nao contra a pagina. Por isso ela nao se redefine no escuro, e
+   isso e proposital, nao esquecimento: branco sobre #9e6c03 mede igual nos dois temas.
+   Brilho de fundo e o problema OPOSTO: ele tinge a superficie da PAGINA, que inverte. A unica
+   variante de categoria que inverte junto e a `tinta` (o `cores-categoria.ts` a devolve como
+   `tintaEscura` no escuro), e e por isso que ela e a certa aqui. E o mesmo criterio que o VIS-E6d
+   ja usa vivo no arquivo, onde o brilho neutro sai de `--cx-ink-soft`, que tambem inverte.
+   Bonus de coerencia: a sidebar ja pinta a categoria do grupo com `tinta` (`--grupo-cor`), entao
+   card e menu passam a brilhar com a MESMA variante — "brilho" quer dizer uma coisa so. */
 function estiloDisco(categoria: MetricaDemo["categoria"]) {
-  return { "--disco-cor": `var(--cat-${categoria}-faixa)` };
+  return {
+    "--disco-cor": `var(--cat-${categoria}-faixa)`,
+    "--brilho-cor": `var(--cat-${categoria}-tinta)`
+  };
 }
 
 function estiloAtalho(id: string) {
   const categoria = CATEGORIA_POR_TELA[id];
-  return categoria ? { "--disco-cor": `var(--cat-${categoria}-faixa)` } : undefined;
+  return categoria
+    ? { "--disco-cor": `var(--cat-${categoria}-faixa)`, "--brilho-cor": `var(--cat-${categoria}-tinta)` }
+    : undefined;
 }
 
 /** Travessao para `null`: o painel ainda nao le esse dado. Zero inventado e pior que vazio. */
