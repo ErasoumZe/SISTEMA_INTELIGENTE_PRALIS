@@ -310,27 +310,6 @@ const saldo = computed(() => entrada.value - saida.value);
   gap: 18px;
 }
 
-/* ---- Cabecalho ---- */
-.tes-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.tes-title h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--shell-ink, #1f2733);
-}
-.tes-title p {
-  margin: 4px 0 0;
-  color: var(--shell-ink-soft, #64748b);
-  font-size: 13.5px;
-  font-weight: 600;
-}
 .tes-count {
   display: inline-block;
   margin-left: 4px;
@@ -580,9 +559,6 @@ const saldo = computed(() => entrada.value - saida.value);
   }
 }
 @media (width <= 560px) {
-  .tes-head {
-    gap: 12px;
-  }
   .tes-nova {
     width: 100%;
   }
