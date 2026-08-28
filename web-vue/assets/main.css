@@ -3940,3 +3940,49 @@ body {
 }
 
 /* ===================== FIM VIS-F7 ===================== */
+
+/* ===================== INICIO VIS-F8 — A LINHA DECORATIVA DO CARD (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Uma linha da serie do card, atras do conteudo, no rodape. E DECORACAO: `aria-hidden` no SVG, sem
+   eixo, sem rotulo e sem escala — ela da a sensacao de movimento do numero, nao o dado. Quem quer o
+   dado clica em "Ver mais". Nao carrega informacao sozinha, entao nao esbarra na WCAG 1.4.1.
+
+   ATRAS DO CONTEUDO SEM `z-index` NA PILHA TODA: o `.metrica-card` ganha `position: relative` e
+   `isolation: isolate`, e a linha vai para `z-index: -1`. O isolamento e o mesmo cuidado do login —
+   sem ele o `z-index` negativo escapa para o contexto de cima e a linha some ATRAS do card.
+
+   `overflow: hidden` porque a linha encosta nas bordas por construcao (a escala e relativa a
+   propria serie, entao o maior valor toca o topo da caixa).
+
+   A COR SAI DE `--brilho-cor`, a MESMA custom property que o brilho do VIS-F3 ja usa, com o mesmo
+   fallback neutro. Duas fontes de cor para o mesmo card divergiriam no primeiro ajuste.
+   A opacidade e baixa de proposito: medido no VIS-F3, o texto do card fica entre 5,01 e 7,48 sobre
+   o brilho; a linha vive ATRAS do texto e nao pode comer essa folga.
+   ================================================================================================ */
+.metrica-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.metrica-linha {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 34px;
+  opacity: 0.28;
+}
+.metrica-linha polyline {
+  fill: none;
+  stroke: var(--brilho-cor, var(--cx-ink-soft));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* `preserveAspectRatio="none"` estica o traco junto com a caixa; sem isto ele engrossaria na
+     horizontal em card largo. */
+  vector-effect: non-scaling-stroke;
+}
+/* ===================== FIM VIS-F8 ===================== */

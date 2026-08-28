@@ -43,12 +43,22 @@ export type MetricaDemo = {
    * Nenhuma permissão nova nasce aqui: todas já existem em `@padaria/shared`.
    */
   permissao: Permissao;
+  /**
+   * A SÉRIE DA LINHA DECORATIVA do card. Fictícia, como todo o resto deste arquivo — quando a
+   * chamada real entrar, ela vem do mesmo lugar que o `valor`.
+   *
+   * É DECORAÇÃO, e o desenho trata como tal: `aria-hidden`, sem eixo, sem rótulo, sem escala. Ela
+   * dá a sensação de movimento do número, não o dado. Quem precisa do dado clica em "Ver mais".
+   * Por isso ela também não pode ser o único portador de informação nenhuma (WCAG 1.4.1) — e não é.
+   */
+  serie: number[];
 };
 
 /** FAIXA 1 · O dia — entradas, despesas e saldo do dia contábil corrente. */
 export const FAIXA_DIA: MetricaDemo[] = [
   {
     id: "dia-entradas",
+    serie: [18, 24, 21, 30, 27, 36, 41],
     rotulo: "Entradas",
     valor: 4872.5,
     formato: "dinheiro",
@@ -59,6 +69,7 @@ export const FAIXA_DIA: MetricaDemo[] = [
   },
   {
     id: "dia-despesas",
+    serie: [22, 19, 25, 17, 21, 16, 14],
     rotulo: "Despesas",
     valor: 1340.9,
     formato: "dinheiro",
@@ -69,6 +80,7 @@ export const FAIXA_DIA: MetricaDemo[] = [
   },
   {
     id: "dia-saldo",
+    serie: [9, 14, 12, 20, 23, 28, 34],
     rotulo: "Saldo",
     valor: 3531.6,
     formato: "dinheiro",
@@ -83,6 +95,7 @@ export const FAIXA_DIA: MetricaDemo[] = [
 export const FAIXA_PRECISA: MetricaDemo[] = [
   {
     id: "precisa-caixas",
+    serie: [1, 2, 1, 3, 2, 2, 2],
     rotulo: "Caixas abertos",
     valor: 2,
     formato: "inteiro",
@@ -93,6 +106,7 @@ export const FAIXA_PRECISA: MetricaDemo[] = [
   },
   {
     id: "precisa-pendencias",
+    serie: [3, 4, 3, 6, 5, 7, 5],
     rotulo: "Pendências",
     valor: 5,
     formato: "inteiro",
@@ -107,6 +121,7 @@ export const FAIXA_PRECISA: MetricaDemo[] = [
 export const FAIXA_RELATORIOS: MetricaDemo[] = [
   {
     id: "rel-vendas",
+    serie: [120, 138, 129, 154, 147, 168, 181],
     rotulo: "Vendas",
     valor: 18430,
     formato: "dinheiro",
@@ -117,6 +132,7 @@ export const FAIXA_RELATORIOS: MetricaDemo[] = [
   },
   {
     id: "rel-mais-vendidos",
+    serie: [7, 9, 8, 11, 10, 12, 12],
     rotulo: "Mais vendidos",
     valor: 12,
     formato: "inteiro",
@@ -127,6 +143,7 @@ export const FAIXA_RELATORIOS: MetricaDemo[] = [
   },
   {
     id: "rel-abc",
+    serie: [42, 44, 41, 47, 45, 49, 52],
     rotulo: "Curva ABC",
     // Ainda não existe tela nem rota; o travessão diz isso em vez de inventar um número.
     valor: null,
@@ -138,6 +155,7 @@ export const FAIXA_RELATORIOS: MetricaDemo[] = [
   },
   {
     id: "rel-dre",
+    serie: [15, 12, 18, 16, 22, 19, 25],
     rotulo: "DRE",
     valor: null,
     formato: "dinheiro",

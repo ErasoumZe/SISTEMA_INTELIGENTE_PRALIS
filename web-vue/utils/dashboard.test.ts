@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Permissao } from "@padaria/shared";
 import { ehAdministradorTotal, permissoesAcessoTotal } from "@padaria/shared";
 import { FAIXA_DIA, FAIXA_IR_PARA, FAIXA_PRECISA, FAIXA_RELATORIOS } from "./dashboard-demo";
-import { MOTIVO_PADRAO, atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas } from "./dashboard";
+import {
+  MOTIVO_PADRAO,
+  atalhosDoPainel,
+  faixasDeNumeroVisiveis,
+  metricasPermitidas,
+  pontosDaSparkline
+} from "./dashboard";
 import { itemPorTela } from "./domain";
 import { usePermissoes } from "~/composables/usePermissoes";
 
@@ -166,5 +172,36 @@ describe("as faixas de número são de administrador", () => {
   // A permissao continua valendo POR CIMA: ser administrador nao pula o `metricasPermitidas`.
   it("administrador sem permissão de dado continua sem o card", () => {
     expect(metricasPermitidas(TODAS_AS_METRICAS, NENHUMA)).toEqual([]);
+  });
+});
+
+describe("pontosDaSparkline — decoração que não mente", () => {
+  it("o menor encosta embaixo e o maior encosta em cima", () => {
+    const pontos = pontosDaSparkline([10, 20], 100, 28).split(" ");
+    expect(pontos[0]).toBe("0.00,28.00");
+    expect(pontos[1]).toBe("100.00,0.00");
+  });
+
+  // Série plana daria divisão por amplitude zero. `NaN` no `points` some com a linha inteira sem
+  // erro nenhum no console — o defeito que só aparece no dia em que o dado fica plano.
+  it("série constante vira linha no meio, e não NaN", () => {
+    const pontos = pontosDaSparkline([7, 7, 7], 100, 28);
+    expect(pontos).not.toContain("NaN");
+    expect(pontos.split(" ").every((p) => p.endsWith(",14.00"))).toBe(true);
+  });
+
+  it("menos de dois pontos não desenha", () => {
+    expect(pontosDaSparkline([5], 100, 28)).toBe("");
+    expect(pontosDaSparkline([], 100, 28)).toBe("");
+  });
+
+  it("um ponto por valor da série", () => {
+    expect(pontosDaSparkline([1, 2, 3, 4, 5], 100, 28).split(" ")).toHaveLength(5);
+  });
+
+  it("toda métrica do painel tem série suficiente para desenhar", () => {
+    for (const metrica of TODAS_AS_METRICAS) {
+      expect(pontosDaSparkline(metrica.serie, 100, 28)).not.toBe("");
+    }
   });
 });

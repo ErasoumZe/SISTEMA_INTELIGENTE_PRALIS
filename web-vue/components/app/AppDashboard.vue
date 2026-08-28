@@ -19,7 +19,7 @@ import type { Permissao } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import type { MetricaDemo } from "~/utils/dashboard-demo";
 import { FAIXA_DIA, FAIXA_IR_PARA, FAIXA_PRECISA, FAIXA_RELATORIOS } from "~/utils/dashboard-demo";
-import { atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas } from "~/utils/dashboard";
+import { atalhosDoPainel, faixasDeNumeroVisiveis, metricasPermitidas, pontosDaSparkline } from "~/utils/dashboard";
 import { dinheiro, rotaTela } from "~/utils/domain";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
@@ -102,6 +102,18 @@ function escrever(metrica: MetricaDemo) {
             <span class="metrica-rotulo">{{ m.rotulo }}</span>
             <span class="metrica-valor cx-num" :class="{ vazio: m.valor === null }">{{ escrever(m) }}</span>
             <NuxtLink class="metrica-mais" :to="rotaTela(m.telaId)">Ver mais</NuxtLink>
+            <!-- DECORACAO, e por isso `aria-hidden`: quem usa leitor de tela nao ganha nada em
+                 ouvir uma sequencia de numeros sem eixo nem escala, e o dado ja esta no card, no
+                 rotulo e no valor. `preserveAspectRatio="none"` para a linha esticar com o card. -->
+            <svg
+              class="metrica-linha"
+              aria-hidden="true"
+              viewBox="0 0 100 28"
+              preserveAspectRatio="none"
+              focusable="false"
+            >
+              <polyline :points="pontosDaSparkline(m.serie, 100, 28)" />
+            </svg>
           </article>
         </div>
       </section>

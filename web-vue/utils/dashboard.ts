@@ -86,3 +86,32 @@ export function atalhosDoPainel(
 export function faixasDeNumeroVisiveis<T>(faixas: readonly T[], ehAdministradorTotal: boolean): T[] {
   return ehAdministradorTotal ? [...faixas] : [];
 }
+
+/**
+ * OS PONTOS DA LINHA DECORATIVA, normalizados para uma caixa de `largura` x `altura`.
+ *
+ * A escala é RELATIVA À PRÓPRIA SÉRIE — o menor valor encosta embaixo, o maior encosta em cima.
+ * Isso é deliberado e é o que a torna decoração honesta: ela mostra a FORMA da variação, e não
+ * sugere comparação entre cards, que teriam escalas diferentes. Uma linha decorativa com escala
+ * absoluta convidaria a comparar dois cards que não se comparam.
+ *
+ * SÉRIE CONSTANTE (todos os valores iguais) vira uma linha no MEIO, e não no topo nem no fundo:
+ * dividir por uma amplitude zero daria `NaN`, e o `NaN` no `points` some com a linha inteira sem
+ * erro nenhum no console — o tipo de defeito que só aparece no dia em que o dado é plano.
+ *
+ * Menos de dois pontos não desenha nada: uma linha precisa de dois.
+ */
+export function pontosDaSparkline(serie: readonly number[], largura: number, altura: number): string {
+  if (serie.length < 2) return "";
+  const menor = Math.min(...serie);
+  const maior = Math.max(...serie);
+  const amplitude = maior - menor;
+  const passo = largura / (serie.length - 1);
+  return serie
+    .map((valor, i) => {
+      const proporcao = amplitude === 0 ? 0.5 : (valor - menor) / amplitude;
+      const y = altura - proporcao * altura;
+      return `${(i * passo).toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
