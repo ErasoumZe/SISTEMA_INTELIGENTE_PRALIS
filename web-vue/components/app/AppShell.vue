@@ -27,6 +27,11 @@ const emit = defineEmits<{
 const drawerRecolhido = ref(false);
 const drawerMobileAberto = ref(false);
 const viewportMobile = ref(false);
+// Acima de 1024px o recolher e ESCOLHA do usuario. De 769 a 1024 o rail e imposto pelo viewport
+// (`atualizar()` abaixo), e de nada adianta um controle que o proximo resize desfaz. Este sinal e o
+// que diz a sidebar se existe algo a controlar — nao da para deduzir de `rail`, porque `rail` fica
+// `true` nos dois casos.
+const viewportAmplo = ref(false);
 const saindo = ref(false);
 const router = useRouter();
 const rota = useRoute();
@@ -112,6 +117,7 @@ onMounted(() => {
     const mobile = mediaMobile.matches;
     drawerRecolhido.value = mediaRail.matches;
     viewportMobile.value = mobile;
+    viewportAmplo.value = !mobile && !mediaRail.matches;
     if (!mobile) drawerMobileAberto.value = false;
   };
   atualizar();
@@ -164,6 +170,7 @@ onMounted(() => {
       :rail="drawerRail"
       :recolhido="drawerRecolhido"
       :mobile="viewportMobile"
+      :pode-recolher="viewportAmplo"
       @update:aberto="atualizarDrawerAberto"
       @alternar="alternarDrawer"
       @navegar="fecharDrawerMobile"

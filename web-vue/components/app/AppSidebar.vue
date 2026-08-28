@@ -28,6 +28,8 @@ const props = defineProps<{
   rail: boolean;
   recolhido: boolean;
   mobile: boolean;
+  /** Acima de 1024px, onde recolher e escolha do usuario e nao imposicao do viewport. */
+  podeRecolher: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -124,13 +126,7 @@ useItemAtivoVisivel();
   >
     <div class="drawer-shell">
       <div class="drawer-top">
-        <button
-          type="button"
-          class="sidebar-logo-row"
-          :title="recolhido ? 'Expandir menu' : 'Recolher menu'"
-          :aria-label="recolhido ? 'Expandir menu' : 'Recolher menu'"
-          @click="emit('alternar')"
-        >
+        <div class="sidebar-logo-row">
           <img
             :src="
               rail
@@ -144,7 +140,18 @@ useItemAtivoVisivel();
             width="220"
             height="72"
           />
-        </button>
+          <button
+            v-if="podeRecolher"
+            type="button"
+            class="sidebar-recolher"
+            :aria-expanded="!rail"
+            :title="rail ? 'Expandir menu' : 'Recolher menu'"
+            :aria-label="rail ? 'Expandir menu' : 'Recolher menu'"
+            @click="emit('alternar')"
+          >
+            <v-icon icon="mdi-chevron-left" size="20" />
+          </button>
+        </div>
 
         <!-- FAB "+ NOVO" no TOPO da sidebar (Mobills): pill roxo, menu curto de lancamento. -->
         <div class="sidebar-actions">

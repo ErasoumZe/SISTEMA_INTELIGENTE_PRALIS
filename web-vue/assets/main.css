@@ -3779,3 +3779,85 @@ body {
   }
 }
 /* ===================== FIM VIS-E7e ===================== */
+
+/* ===================== INICIO VIS-E7h — O TOPO DA SIDEBAR ENCOLHE (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O topo comia 345px antes do primeiro item do menu, medido a 1440. As parcelas, medidas e nao
+   estimadas: logo-row 54 · "+ NOVO" 44 (+10 de margem) · card do caixa 143.
+
+   O "+ NOVO" NAO E TOCADO: medido em 44px/14px/600, ja esta na escala unica do VIS-E6e. Bloco que
+   nao muda nada e divida.
+
+   1. O LOGO DEIXA DE SER BOTAO. Ele era o gatilho de recolher/expandir — um alvo de 300px de
+      largura para uma acao que nao se anuncia. Vira imagem, e o controle vira um chevron proprio,
+      com `aria-expanded`, que diz o que faz.
+
+      O CHEVRON SO EXISTE ACIMA DE 1024px, e a razao esta no proprio codigo: de 769 a 1024 o
+      `AppShell.vue` faz `drawerRecolhido.value = mediaRail.matches`, entao o rail e imposto pelo
+      viewport e o proximo resize desfaz qualquer alternancia. Controle que nao controla e
+      decoracao. Em <=768px nao existe recolher — a gaveta abre e fecha.
+
+      A ARMADILHA: `rail` fica `true` nos DOIS casos — o rail automatico de 769-1024 e o rail que o
+      usuario escolheu acima de 1024. Condicionar o chevron a `!rail` o faria sumir justamente
+      quando ele e o unico jeito de expandir de volta. Por isso o sinal e `podeRecolher`, que nasce
+      de `!mobile && !mediaRail.matches` no AppShell, e nao de `rail`.
+
+   2. O ATALHO DO LOGO SAI, e isso tinha um custo escondido. Em <=768px o clique no logo FECHAVA a
+      gaveta. Medido antes de remover: dos tres caminhos de saida, o botao da topbar fica COBERTO
+      pela propria gaveta e o Esc nao fazia nada — sobrava o scrim, e para teclado, nada. Por isso o
+      Esc foi consertado ANTES, no VIS-E7g. Agora sobram dois caminhos independentes do logo.
+
+   3. O ROTULO DE GRUPO vai de 10px para 11px (`--cx-fs-micro`). Ele virou <button> no VIS-E7c: um
+      controle em 10px com `letter-spacing` de 1.4px e pequeno demais para o que ele agora faz.
+   ================================================================================================ */
+
+/* 1. A linha do logo nao e mais controle: some o cursor, o fundo de hover e o alvo de foco. */
+.sidebar-logo-row {
+  justify-content: center;
+  gap: var(--cx-sp-2);
+  cursor: default;
+}
+.sidebar-logo-row:hover {
+  background: none;
+}
+
+/* 2. O chevron, na borda direita. `flex: none` para nao encolher quando o logo cresce. */
+.sidebar-recolher {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--cx-r-sm);
+  background: none;
+  color: var(--marca-tinta-suave);
+  cursor: pointer;
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    transform var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-recolher:hover {
+  background: var(--cx-hover);
+  color: var(--marca-tinta);
+}
+/* Recolhido, o chevron aponta para o outro lado: o mesmo icone girando, como o da categoria. Aqui
+   o `transform` E O ESTADO, entao ele fica fora da lista de excecoes do reduced-motion pelo mesmo
+   criterio do VIS-E7c — neutraliza-lo apontaria a seta para o lado errado. */
+.sidebar-recolher[aria-expanded="false"] {
+  transform: rotate(180deg);
+}
+
+/* 3. Recolhido acima de 1024px a coluna tem 72px, e logo (52) + chevron (32) nao cabem lado a lado.
+      Nesse estado — e SO nele, que e escolha do usuario — os dois empilham. */
+.padaria-sidebar.rail .sidebar-logo-row {
+  flex-direction: column;
+  gap: var(--cx-sp-1);
+}
+
+/* 4. O rotulo de grupo cresce: virou controle no VIS-E7c e 10px era pequeno demais para isso. */
+.sidebar-group-label {
+  font-size: var(--cx-fs-micro);
+}
+/* ===================== FIM VIS-E7h ===================== */

@@ -2073,7 +2073,12 @@ onBeforeUnmount(() => {
         </div>
         <div v-else>
           <div class="caixa-title">Não há caixa aberto</div>
-          <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
+          <!-- Uma linha, e nao duas. A frase de duas linhas era o que dominava a altura do card
+               (36 dos 143px medidos). Ela NAO foi removida: para o perfil que a le, medido em tela,
+               nenhuma tela do menu aparece desabilitada, entao nao existe tooltip carregando o
+               motivo — o argumento de que a informacao sobreviveria em outro lugar nao se
+               sustentou. Encurtar mantem o aviso e devolve o espaco. -->
+          <div class="caixa-meta">Telas financeiras exigem caixa aberto.</div>
         </div>
         <v-btn
           v-if="caixaAberto"
