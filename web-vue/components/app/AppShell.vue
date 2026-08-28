@@ -4,6 +4,7 @@ import type { Notificacao } from "@padaria/shared/notificacoes";
 import type { CaixaStatus, ItemMenu, Opcao } from "~/types/padaria";
 import AppSidebar from "~/components/app/AppSidebar.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
+import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
 
 const props = defineProps<{
@@ -75,6 +76,20 @@ const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value
 
 // Usuario da topbar (canto direito, estilo Mobills): nome, e-mail e iniciais para o avatar.
 const nomeUsuario = computed(() => props.sessao.perfil?.nome ?? props.sessao.user?.name ?? "Usuário");
+const primeiroNome = computed(() => nomeUsuario.value.trim().split(/\s+/)[0] ?? "");
+
+// O relogio nasce SO NO CLIENTE, e `null` ate montar. Formatar a hora no servidor e reformatar no
+// navegador da descompasso de hidratacao garantido: sao dois instantes diferentes, e o Vue acusa.
+const relogio = ref<Relogio | null>(null);
+let timerRelogio: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  const ler = () => (relogio.value = lerRelogio(new Date()));
+  ler();
+  // POR MINUTO, nao por segundo, e isso vem do formato: `lerRelogio` devolve HH:mm, entao 59 dos
+  // 60 disparos de um intervalo de 1s redesenhariam exatamente os mesmos pixels.
+  timerRelogio = setInterval(ler, 60_000);
+});
+onUnmounted(() => clearInterval(timerRelogio));
 const emailUsuario = computed(() => props.sessao.user?.email ?? "");
 const iniciaisUsuario = computed(() => {
   const partes = nomeUsuario.value.trim().split(/\s+/).filter(Boolean);
@@ -165,7 +180,6 @@ onMounted(() => {
       :telas-desabilitadas="telasDesabilitadas"
       :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
       :escuro="escuro"
-      :caixa-aberto="caixaAberto"
       :aberto="drawerAberto"
       :rail="drawerRail"
       :recolhido="drawerRecolhido"
@@ -176,7 +190,6 @@ onMounted(() => {
       @navegar="fecharDrawerMobile"
     >
       <template #actions><slot name="actions" /></template>
-      <template #caixa="{ caixaAberto: aberto }"><slot name="caixa" :caixa-aberto="aberto" /></template>
     </AppSidebar>
 
     <v-main class="padaria-main">
@@ -189,32 +202,29 @@ onMounted(() => {
              mobile; no desktop ela fica vazia e a topbar sobra para o contexto a direita. -->
         <div class="topbar-left">
           <v-btn v-if="viewportMobile" icon="mdi-menu" variant="text" title="Abrir menu" @click="alternarDrawer" />
+
+          <!-- RELOGIO, DATA E SAUDACAO ocupam a zona que o VIS-10 esvaziou ao tirar o nome da tela
+               daqui. Ordem de recolhimento definida por Marco e implementada no CSS: a saudacao sai
+               primeiro, a data depois, a hora fica. E a ordem do menos informativo para o mais:
+               "Boa tarde" e gentileza, a data se descobre em qualquer lugar, a hora e operacao. -->
+          <p v-if="relogio" class="topbar-relogio">
+            <span class="topbar-saudacao">{{ relogio.saudacao }}, {{ primeiroNome }}</span>
+            <span class="topbar-hora">{{ relogio.hora }}</span>
+            <span class="topbar-data">{{ relogio.data }}</span>
+          </p>
         </div>
 
-        <!-- DIREITA: painel + empresa + tema + usuario. -->
+        <!-- DIREITA: caixa + empresa + painel + tema + sino + avatar. -->
         <div class="topbar-actions">
-          <!-- Volta ao painel. Fica FORA do v-if/v-else da empresa de proposito: dentro de um dos
-               ramos ele sumiria para quem tem uma empresa so.
-               `:to` e nao `@click` com push — assim clique do meio, "abrir em nova aba" e teclado
-               funcionam, porque continua sendo um link de verdade.
-               Ja no painel ele NAO e desabilitado: `disabled` o tiraria da ordem de Tab e do leitor
-               de tela justo para quem mais precisa da referencia. `aria-current="page"` e a forma
-               padrao de dizer "voce esta aqui", e mantem o controle alcancavel — mesma logica do
-               item ativo do menu, que e marcado e nao removido. -->
-          <!-- Casa + rotulo. O nome e "Painel", nao "Dashboard": a R-100 manda portugues e o
-               sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
-               `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
-          <v-btn
-            to="/"
-            variant="text"
-            class="topbar-painel"
-            prepend-icon="mdi-home-variant"
-            title="Ir para o painel"
-            aria-label="Ir para o painel"
-            :aria-current="naHome ? 'page' : undefined"
-          >
-            <span class="topbar-painel-rotulo">Painel</span>
-          </v-btn>
+          <!-- ORDEM DA TOPBAR, definida por Marco: estado operacional (caixa), depois contexto
+               (empresa), depois navegacao (painel), depois as ferramentas (tema, sino, avatar).
+               A ordem e do MARKUP e nao do `order` do flexbox, de proposito: `order` reordena so o
+               visual e deixa o Tab na ordem antiga, o que separa quem enxerga de quem navega por
+               teclado (WCAG 2.4.3). Trocando no markup, as duas ordens continuam sendo a mesma.
+
+               O AVISO DE CAIXA era um bloco no topo da sidebar ate hoje. Quem o preenche e o
+               AppWorkspace, que e quem tem o status e a permissao — a casca so reserva o lugar. -->
+          <slot name="caixa" :caixa-aberto="caixaAberto" />
 
           <v-menu v-if="empresas.length > 1" location="bottom end">
             <template #activator="{ props: menuProps }">
@@ -240,6 +250,29 @@ onMounted(() => {
             <v-icon icon="mdi-domain" size="18" />
             <span>{{ nomeEmpresaCurto }}</span>
           </span>
+
+          <!-- Volta ao painel. Fica FORA do v-if/v-else da empresa de proposito: dentro de um dos
+               ramos ele sumiria para quem tem uma empresa so.
+               `:to` e nao `@click` com push — assim clique do meio, "abrir em nova aba" e teclado
+               funcionam, porque continua sendo um link de verdade.
+               Ja no painel ele NAO e desabilitado: `disabled` o tiraria da ordem de Tab e do leitor
+               de tela justo para quem mais precisa da referencia. `aria-current="page"` e a forma
+               padrao de dizer "voce esta aqui", e mantem o controle alcancavel — mesma logica do
+               item ativo do menu, que e marcado e nao removido. -->
+          <!-- Casa + rotulo. O nome e "Painel", nao "Dashboard": a R-100 manda portugues e o
+               sistema chama assim em todo lugar. O rotulo recolhe em tela estreita, mas o
+               `aria-label` fica — quem usa leitor de tela nao perde o nome no celular. -->
+          <v-btn
+            to="/"
+            variant="text"
+            class="topbar-painel"
+            prepend-icon="mdi-home-variant"
+            title="Ir para o painel"
+            aria-label="Ir para o painel"
+            :aria-current="naHome ? 'page' : undefined"
+          >
+            <span class="topbar-painel-rotulo">Painel</span>
+          </v-btn>
 
           <v-btn
             :icon="escuro ? 'mdi-weather-sunny' : 'mdi-weather-night'"

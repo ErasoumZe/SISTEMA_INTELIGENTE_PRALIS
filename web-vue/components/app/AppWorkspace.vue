@@ -277,6 +277,12 @@ const colaboradoresSelectUsuario = computed(() => [
 ]);
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
+// O ESTADO E O ROTULO, e essa foi a decisao entre as duas que Marco deixou em aberto (texto ao
+// lado do botao ou texto COMO rotulo). Numa topbar que ja carrega sete elementos, um texto solto
+// ao lado do botao gastaria largura duas vezes e criaria DOIS itens para recolher em vez de um. E
+// o estado e exatamente aquilo sobre o que se quer agir: o rotulo que diz "Nao ha caixa aberto" e
+// o mesmo alvo que leva a resolver isso.
+const rotuloCaixa = computed(() => (caixaAberto.value ? `Caixa: ${caixaAberto.value.pdvNome}` : "Não há caixa aberto"));
 const {
   temPermissao,
   podeAcessarTela,
@@ -2063,25 +2069,32 @@ onBeforeUnmount(() => {
     @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>
-      <!-- O CARD DO CAIXA VIROU LINHA (28/08/2026). Ele era o maior bloco do topo da sidebar: 125px
-           de moldura, fundo, titulo, frase e um botao de largura cheia — tres blocos empilhados de
-           largura quase cheia (logo, "+ NOVO", card) faziam o menu comecar depois de 342px.
+      <!-- O AVISO DE CAIXA MUDOU DE LUGAR (28/08/2026), por decisao do Marco: saiu do topo da
+           sidebar e subiu para a topbar, no grupo de "Painel" e da empresa. A proibicao de mover
+           coisa de lugar foi suspensa por ele para este item, e so para ele.
 
-           Agora e uma linha: ponto de estado + texto + link. Nada saiu de lugar e nada de funcao
-           se perdeu — o estado continua visivel e o caminho para /caixa continua existindo.
+           A PERMISSAO NAO MUDOU e nao ganhou fallback: `carregarStatusCaixa`
+           (AppWorkspace.vue:1006-1007) ja zera `caixaStatus` para quem nao tem `caixa_operar`, e o
+           `v-if` aqui e o mesmo de antes. Quem via, ve; quem nao via, continua sem ver.
 
-           SOBRE O PONTO DE ESTADO, que a product-ui-design marca como o tell numero 1 de UI feita
-           por IA: o que ela proibe e o ponto BRILHANTE ou PULSANTE usado como decoracao ("● Live").
-           Este e estatico, sem glow e sem animacao, e o texto ao lado diz o estado por extenso —
-           entao a cor nao e o unico sinal (WCAG 1.4.1) e o ponto e reforco, nao informacao. -->
-      <div v-if="temPermissao('caixa_operar')" class="caixa-linha">
-        <span class="caixa-ponto" :class="{ aberto: Boolean(caixaAberto) }" aria-hidden="true" />
-        <span class="caixa-estado">
-          {{ caixaAberto ? `Caixa: ${caixaAberto.pdvNome}` : "Não há caixa aberto" }}
-        </span>
-        <!-- Unico caminho de abertura: a tela /caixa. Este link so NAVEGA para la. -->
-        <NuxtLink class="caixa-ir" to="/caixa">{{ caixaAberto ? "Gerenciar" : "Ir para o caixa" }}</NuxtLink>
-      </div>
+           O ICONE MUDA COM O ESTADO, nao so a cor: aberto e `cash-check`, fechado e `cash-remove`.
+           Isso importa porque em tela estreita o rotulo recolhe e sobra so o icone — se o estado
+           vivesse na cor, quem nao distingue matiz perderia a informacao (WCAG 1.4.1). O nome
+           acessivel carrega o estado por extenso nos dois casos.
+
+           O `aria-label` COMECA pelo texto visivel de proposito: a WCAG 2.5.3 (Label in Name) pede
+           que o nome acessivel contenha o rotulo visivel, senao comando de voz por "Nao ha caixa
+           aberto" nao acha o controle. -->
+      <NuxtLink
+        v-if="temPermissao('caixa_operar')"
+        class="topbar-caixa"
+        to="/caixa"
+        :title="`${rotuloCaixa} — ir para o caixa`"
+        :aria-label="`${rotuloCaixa} — ir para o caixa`"
+      >
+        <v-icon :icon="caixaAberto ? 'mdi-cash-check' : 'mdi-cash-remove'" size="18" aria-hidden="true" />
+        <span class="topbar-caixa-texto">{{ rotuloCaixa }}</span>
+      </NuxtLink>
     </template>
 
     <template v-if="acoesNovo.length" #actions>

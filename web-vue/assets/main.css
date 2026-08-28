@@ -3668,64 +3668,126 @@ body {
   filter: grayscale(0.35);
 }
 
-/* ===================== INICIO VIS-E9b — O CARD DO CAIXA VIRA LINHA (28/08/2026) =====================
+/* ===================== INICIO VIS-F2 — O AVISO DE CAIXA SOBE PARA A TOPBAR (28/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
 
-   Reduzir o botao nao resolveu o topo da sidebar, e o diagnostico estava errado: o problema nao
-   era o tamanho de cada peca, era o ARRANJO. Logo, "+ NOVO" e card do caixa eram tres blocos
-   empilhados de largura quase cheia, e o menu so comecava depois de 342px.
+   Decisao do Marco, registrada como dele: o aviso de caixa sai do topo da sidebar e vai para a
+   topbar. A esquerda da topbar, vazia desde que o VIS-10 tirou o nome da tela de la, recebe
+   relogio + data + saudacao. O topo da sidebar fica so com logo, chevron e "+ NOVO".
 
-   O card deixa de ser card. Vira uma linha: ponto de estado + texto + link. Sem moldura, sem
-   fundo, sem botao de bloco.
+   ESTE BLOCO SUBSTITUI O VIS-E9b, que foi APAGADO no mesmo commit em vez de ficar ao lado deste.
+   As classes dele (`.caixa-linha`, `.caixa-ponto`, `.caixa-estado`, `.caixa-ir`) perderam a
+   marcacao quando o aviso mudou de lugar, e CSS sem marcacao e divida (16, regra-mae). Pelo mesmo
+   motivo o `.caixa-edit` do VIS-E8d ja estava morto desde o E9b e continua la — nao o toco aqui
+   porque apagar meio bloco datado quebraria a promessa de reversao dele; fica anotado.
 
-   A CLASSE MUDOU de `.caixa-card` para `.caixa-linha` de proposito: assim as regras historicas
-   (linhas 378, 853 e a de rail na 518) simplesmente deixam de casar, e nao foi preciso sobrescrever
-   nada nem abrir excecao de `!important`. O CSS antigo continua la, intacto e sem efeito — se um
-   dia o card voltar, ele volta inteiro.
+   ORDEM DE RECOLHIMENTO, definida por Marco e implementada nos tres @media do fim:
+     1o some a SAUDACAO   (gentileza)
+     2o some a DATA       (se descobre em qualquer outro lugar)
+     3o some o TEXTO do caixa, sobrando o icone com nome acessivel
+   O RELOGIO e o BOTAO DO CAIXA sao os ultimos, porque estado operacional bloqueante vale mais que
+   gentileza. Os cortes usam 1024 e 768, que sao a mesma escada do 67 §13.1; o terceiro precisou de
+   um numero proprio porque a escada nao tem degrau entre 768 e 0.
 
-   NADA DE FUNCAO SE PERDEU: o estado continua visivel, o caminho para /caixa continua existindo,
-   e o `temPermissao('caixa_operar')` continua sendo quem decide se a linha aparece.
-   ================================================================================================ */
-.caixa-linha {
+   O VIDRO E O GRADIENTE, os dois, como Marco pediu: a pilula e `--cx-chrome` com
+   `--cx-chrome-blur` (o mesmo material da sidebar e da topbar, e a topbar E chrome, entao o 67 §10
+   continua valendo), e por dentro dela um `::before` pinta `--cx-brand-gradiente`. O gradiente
+   precisa de pseudo-elemento porque nao da para esmaecer um token de gradiente numa camada de
+   `background` sem opacidade propria; com `opacity` no `::before`, o vidro le por baixo dele.
+
+   `isolation: isolate` NAO E ENFEITE: sem ele o `z-index: -1` do `::before` escapa para o contexto
+   de empilhamento de cima e o gradiente vai parar ATRAS do fundo da topbar, sumindo. Com o
+   isolamento, ele pinta acima do fundo da propria pilula e abaixo do texto, que e onde deve estar.
+   ============================================================================================== */
+
+/* ---- 1. Relogio, data e saudacao ---- */
+.shell-mobills .topbar-relogio {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--cx-sp-2);
-  min-height: 32px;
-  padding-inline: var(--cx-sp-1);
+  min-width: 0;
+  margin: 0;
   color: var(--cx-ink-soft);
   font-size: var(--cx-fs-caption);
-}
-/* Estatico: sem glow e sem animacao. O texto ao lado carrega o estado por extenso, entao a cor e
-   reforco e nao informacao (WCAG 1.4.1). */
-.caixa-ponto {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--cx-r-pill);
-  background: var(--cx-ink-soft);
-}
-.caixa-ponto.aberto {
-  background: var(--cx-positive);
-}
-.caixa-estado {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 600;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.caixa-ir {
-  flex: none;
-  margin-inline-start: auto;
-  color: var(--cx-brand-text);
+/* A hora e o unico dado que nunca some, entao e ela que carrega o peso. `tabular-nums` para o
+   texto nao dancar de largura quando os digitos trocam a cada minuto. */
+.shell-mobills .topbar-hora {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* `Intl` em pt-BR devolve "quinta-feira, 28 de agosto" em minuscula. */
+.shell-mobills .topbar-data::first-letter {
+  text-transform: uppercase;
+}
+
+/* ---- 2. O aviso de caixa ---- */
+.shell-mobills .topbar-caixa {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-height: 44px;
+  padding-inline: var(--cx-sp-3);
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-chrome);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-caption);
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
 }
-.caixa-ir:hover {
-  text-decoration: underline;
+.shell-mobills .topbar-caixa::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--cx-brand-gradiente);
+  opacity: 0.18;
 }
-/* No rail a linha some, como o card sumia (a regra da 518 nao alcanca a classe nova). */
-.padaria-sidebar.rail .caixa-linha {
-  display: none;
+/* Os quatro estados do 67 §9: repouso 0.18, hover 0.30, pressionado 0.42, e o foco vem do
+   `:focus-visible` global de `main.css:2000`. Sem `transform` em nenhum deles, entao este bloco nao
+   precisa entrar na lista de excecoes do `prefers-reduced-motion`. */
+.shell-mobills .topbar-caixa:hover::before {
+  opacity: 0.3;
 }
-/* ===================== FIM VIS-E9b ===================== */
+.shell-mobills .topbar-caixa:active::before {
+  opacity: 0.42;
+}
+/* Fallback solido obrigatorio, como em todo uso de vidro neste arquivo. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .topbar-caixa {
+    background: var(--cx-surface);
+  }
+}
+
+/* ---- 3. A escada de recolhimento ---- */
+@media (width <= 1024px) {
+  .shell-mobills .topbar-saudacao {
+    display: none;
+  }
+}
+@media (width <= 768px) {
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+}
+@media (width <= 560px) {
+  .shell-mobills .topbar-caixa-texto {
+    display: none;
+  }
+  /* Sem rotulo a pilula encolheria para menos que o alvo minimo; o quadrado de 44 e o piso. */
+  .shell-mobills .topbar-caixa {
+    justify-content: center;
+    min-width: 44px;
+    padding-inline: var(--cx-sp-2);
+  }
+}
+/* ===================== FIM VIS-F2 ===================== */

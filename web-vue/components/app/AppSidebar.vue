@@ -7,11 +7,10 @@
    era estado local do AppShell virou prop; o que era chamada direta virou evento. A marcacao de
    dentro do `<v-navigation-drawer>` veio inteira, comentarios inclusive.
 
-   Os slots `actions` e `caixa` sao repassados pelo AppShell exatamente com a mesma assinatura —
-   `caixa` continua escopado com `caixa-aberto`, mesmo nao havendo hoje quem consuma esse escopo
-   (AppWorkspace.vue:2065 usa `<template #caixa>` sem desestruturar). Assinatura publica nao se
-   encolhe num commit que promete nao mudar comportamento. */
-import type { CaixaOperacional, ItemMenu } from "~/types/padaria";
+   O slot `actions` e repassado pelo AppShell com a mesma assinatura. O slot `caixa` SAIU daqui em
+   28/08/2026: o aviso de caixa subiu para a topbar por decisao do Marco, e com ele foram embora a
+   prop `caixaAberto` e o escopo `caixa-aberto`, que nao tinham mais quem os consumisse. */
+import type { ItemMenu } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
 import { agruparTelasMenu } from "~/utils/menu";
 import { CATEGORIA_POR_SECAO } from "~/utils/cores-categoria";
@@ -23,7 +22,6 @@ const props = defineProps<{
   telasDesabilitadas?: string[];
   motivosTelasDesabilitadas?: Record<string, string>;
   escuro: boolean;
-  caixaAberto: CaixaOperacional | null;
   aberto: boolean;
   rail: boolean;
   recolhido: boolean;
@@ -157,8 +155,6 @@ useItemAtivoVisivel();
         <div class="sidebar-actions">
           <slot name="actions" />
         </div>
-
-        <slot name="caixa" :caixa-aberto="caixaAberto" />
       </div>
 
       <div class="sidebar-scroll-shell">
