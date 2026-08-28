@@ -83,7 +83,13 @@ const nomesDominioInglesBloqueados = [
 // A fronteira hoje e estrutural — nenhum compose tem chave `command:`, e o Testcontainers fala
 // direto com a API do Docker —, mas estrutura se perde num copiar e colar apressado. Esta guarda
 // transforma "nao vaza" em "nao TEM como vazar sem ficar vermelho".
-const parametrosSemDurabilidade = ["fsync=off", "synchronous_commit=off", "full_page_writes=off"];
+// Regex, e nao `includes`, porque o Postgres aceita `fsync = off` com espacos — e uma guarda de
+// texto que so pega a grafia colada da a impressao de proteger sem proteger.
+const parametrosSemDurabilidade = [
+  /\bfsync\s*=\s*off\b/,
+  /\bsynchronous_commit\s*=\s*off\b/,
+  /\bfull_page_writes\s*=\s*off\b/
+];
 
 // Ancorado no SEGMENTO, e nao em substring: `includes("tests/")` sozinho liberaria
 // `api/src/contests/` e `scripts/mytests/`, que nao sao pasta de teste nenhuma.
@@ -93,16 +99,16 @@ function podeDesligarDurabilidade(caminho) {
 }
 
 // Os arquivos de orquestracao NAO estao em `alvos` (a varredura so olha codigo), e sao justamente
-// onde o vazamento seria grave. Por isso entram numa lista propria.
-const arquivosDeOrquestracao = [
-  "db/docker-compose-db.yml",
-  "db/docker-compose-db.dev.yml",
-  "db/docker-compose-db.prod.yml",
-  "infra/docker-compose.yml",
-  "infra/docker-compose.dev.yml",
-  "infra/docker-compose.prod.yml",
-  "infra/docker-compose.coolify.yml"
-].filter(existsSync);
+// onde o vazamento seria grave.
+//
+// DESCOBERTOS, nao listados a mao: uma lista fixa esquece o `docker-compose.yml` da raiz — foi o que
+// aconteceu na primeira versao desta guarda — e nasce desatualizada no dia em que alguem cria um
+// `docker-compose.staging.yml`. Quem varre por padrao nao tem esse esquecimento.
+const arquivosDeOrquestracao = [".", "db", "infra"].filter(existsSync).flatMap((pasta) =>
+  readdirSync(pasta, { withFileTypes: true })
+    .filter((entrada) => entrada.isFile() && /^docker-compose.*\.ya?ml$/.test(entrada.name))
+    .map((entrada) => (pasta === "." ? entrada.name : join(pasta, entrada.name)))
+);
 
 function caminhoIgnoradoParaDominio(caminho) {
   const normalizado = caminho.replaceAll("\\", "/");
@@ -148,8 +154,9 @@ for (const alvo of alvos.flatMap(listarArquivos)) {
     const problema = padroesProblematicos.find((padrao) => linha.includes(padrao));
     if (problema) falhas.push(`${alvo}:${indice + 1}: texto possivelmente corrompido: ${problema}`);
     if (!podeDesligarDurabilidade(alvo)) {
-      const durabilidade = parametrosSemDurabilidade.find((padrao) => linha.includes(padrao));
-      if (durabilidade) falhas.push(`${alvo}:${indice + 1}: ${durabilidade} so vale em banco descartavel (tests/)`);
+      const durabilidade = parametrosSemDurabilidade.find((padrao) => padrao.test(linha));
+      if (durabilidade)
+        falhas.push(`${alvo}:${indice + 1}: durabilidade desligada so vale em banco descartavel (tests/)`);
     }
     if (!caminhoIgnoradoParaDominio(alvo)) {
       const dominioIngles = nomesDominioInglesBloqueados.find((padrao) => padrao.regex.test(linha));
@@ -161,8 +168,9 @@ for (const alvo of alvos.flatMap(listarArquivos)) {
 
 for (const arquivo of arquivosDeOrquestracao) {
   for (const [indice, linha] of readFileSync(arquivo, "utf8").split(/\r?\n/).entries()) {
-    const durabilidade = parametrosSemDurabilidade.find((padrao) => linha.includes(padrao));
-    if (durabilidade) falhas.push(`${arquivo}:${indice + 1}: ${durabilidade} em orquestracao — nunca fora de teste`);
+    const durabilidade = parametrosSemDurabilidade.find((padrao) => padrao.test(linha));
+    if (durabilidade)
+      falhas.push(`${arquivo}:${indice + 1}: durabilidade desligada em orquestracao — nunca fora de teste`);
   }
 }
 
