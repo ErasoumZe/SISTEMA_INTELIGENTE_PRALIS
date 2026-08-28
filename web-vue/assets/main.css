@@ -3611,3 +3611,111 @@ body {
   }
 }
 /* ===================== FIM VIS-E6k ===================== */
+
+/* ===================== INICIO VIS-E7c — GRUPOS DO MENU ABREM E FECHAM (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O rotulo do grupo (ENTRADAS, SAIDAS...) era `<div>` decorativa. Vira gatilho. O mecanismo NAO e
+   inventado: e o mesmo que a categoria "Lancamentos" ja usa desde o 17/D6 — altura animada por
+   `grid-template-rows: 0fr -> 1fr`, `--cx-dur-2`, chevron que gira. O 68 registra "grupos com
+   altura animada" na camada de acabamento.
+
+   TRES ARMADILHAS DO PADRAO, mapeadas antes de escrever:
+
+   1. A saida da ordem de Tab e 100% CSS. A categoria faz isso na linha 2169 com
+      `visibility: hidden` + `transition: visibility 0s linear var(--cx-dur-2)` — o delay igual a
+      duracao derruba a visibilidade DEPOIS do colapso, senao o conteudo some antes de encolher.
+      Sem replicar isso, os itens do grupo fechado continuam focaveis com altura zero: defeito de
+      teclado que nao aparece na tela.
+
+   2. `.sidebar-group` e `flex-direction: column; gap: 3px` (linha 1063). Ao envolver os itens num
+      wrap, esse gap passa a valer entre o GATILHO e o WRAP, e o espacamento entre itens some. Por
+      isso o `.sidebar-grupo-itens` reconstroi o `gap: 3px` por dentro.
+
+   3. O rotulo e `display: none` no rail (linha 863). Se o wrap dependesse so da classe `aberto`, um
+      grupo fechado ficaria fechado no rail SEM gatilho para reabrir — o usuario perderia telas sem
+      ter como recuperar. No rail os grupos ficam SEMPRE abertos, como hoje.
+
+   ALVO DE TOQUE: o rotulo media 25px. Como `<div>` isso era irrelevante; como controle, o 67 §9
+   exige 40px (44 no mobile). Ele cresce, e para o menu nao engordar por causa disso o respiro ENTRE
+   grupos cai de 12px para `--cx-sp-1`. A conta e o ganho medido estao no relatorio.
+
+   REDUCED-MOTION: o reset global (linha 2337) ja zera duracao e delay, e e o suficiente. O
+   `rotate(90deg)` do chevron NAO entra na lista de excecoes de `transform: none` — de proposito,
+   e pelo mesmo motivo que o chevron da categoria tambem nao entra: ali o transform E O ESTADO
+   ABERTO, nao decoracao. Neutraliza-lo deixaria o chevron apontando para o lado errado com o grupo
+   aberto, e quem usa reduced-motion perderia a unica pista visual. O aviso do 67 §7 vale para
+   transform de hover, que e ruido; nao para transform que carrega significado.
+   ============================================================================================== */
+
+/* 1. O rotulo vira controle sem mudar de aparencia. As regras de tipo, cor e maiuscula continuam
+      vindo da linha 1071; aqui so entra o que um `<button>` precisa para nao parecer botao. */
+.sidebar-group-label {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar-group-texto {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-group-label:hover {
+  color: var(--marca-tinta);
+}
+/* O respiro entre grupos encolhe porque o gatilho cresceu: o proprio cabecalho ja separa. */
+.sidebar-group + .sidebar-group {
+  margin-top: var(--cx-sp-1);
+}
+
+/* 2. O chevron: um so icone que gira, igual ao da categoria. */
+.sidebar-group-chevron {
+  flex: none;
+  color: var(--marca-tinta-suave);
+  transition: transform var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-group-label.aberto .sidebar-group-chevron {
+  transform: rotate(90deg);
+}
+
+/* 3. A altura anima de verdade, sem max-height chutado. */
+.sidebar-grupo-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-grupo-wrap.aberto {
+  grid-template-rows: 1fr;
+}
+.sidebar-grupo-wrap > .sidebar-grupo-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Fechado, os itens saem da ordem do Tab. O delay = duracao faz a visibilidade cair DEPOIS do
+   colapso; sem ele o conteudo sumiria antes de encolher. Copiado do padrao da linha 2169. */
+.sidebar-grupo-wrap:not(.aberto) > .sidebar-grupo-itens {
+  visibility: hidden;
+  transition: visibility 0s linear var(--cx-dur-2);
+}
+
+/* 4. No rail nao ha rotulo, entao nao pode haver sanfona: os grupos ficam sempre abertos. */
+.padaria-sidebar.rail .sidebar-grupo-wrap {
+  grid-template-rows: 1fr;
+}
+.padaria-sidebar.rail .sidebar-grupo-wrap:not(.aberto) > .sidebar-grupo-itens {
+  visibility: visible;
+}
+
+/* 5. Mobile: o alvo sobe para 44px, como o 67 §13.4 pede em tela de toque. */
+@media (width <= 768px) {
+  .shell-mobills .sidebar-group-label {
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-E7c ===================== */

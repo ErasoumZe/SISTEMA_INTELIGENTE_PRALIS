@@ -15,6 +15,7 @@ import type { CaixaOperacional, ItemMenu } from "~/types/padaria";
 import AppMenuItem from "~/components/app/AppMenuItem.vue";
 import { agruparTelasMenu } from "~/utils/menu";
 import { CATEGORIA_POR_SECAO } from "~/utils/cores-categoria";
+import { gruposIniciais, idDoGrupo } from "~/utils/sanfona-menu";
 
 const props = defineProps<{
   telas: ItemMenu[];
@@ -49,6 +50,30 @@ function textoTooltipTela(telaId: string) {
 function estiloGrupo(titulo: string) {
   const categoria = CATEGORIA_POR_SECAO[titulo];
   return categoria ? { "--grupo-cor": `var(--cat-${categoria}-tinta)` } : undefined;
+}
+
+// Sanfona dos GRUPOS (Entradas, Saidas, Resultados...). O estado vive no `useGruposAbertos`, fora
+// da casca, porque a casca remonta a cada rota — o porque completo esta no composable.
+//
+// O watch reaproveita o estado que ja existe e so ACRESCENTA: registra grupo novo como fechado e
+// forca aberto o da tela ativa. Nunca escreve `false` por cima de um `true` que o usuario pos, que e
+// a mesma disciplina do watch da categoria logo abaixo.
+const gruposAbertos = useGruposAbertos();
+
+watch(
+  [() => props.telaAtiva, telasAgrupadas],
+  ([telaAtiva, grupos]) => {
+    gruposAbertos.value = gruposIniciais(grupos, telaAtiva, gruposAbertos.value);
+  },
+  { immediate: true }
+);
+
+function grupoAberto(titulo: string) {
+  return gruposAbertos.value[titulo] ?? false;
+}
+
+function alternarGrupo(titulo: string) {
+  gruposAbertos.value = { ...gruposAbertos.value, [titulo]: !grupoAberto(titulo) };
 }
 
 // Categorias do menu (hoje so "Lancamentos"): abrem/fecham no clique. Fica aberta enquanto uma das
@@ -134,57 +159,81 @@ useItemAtivoVisivel();
             class="sidebar-group"
             :style="estiloGrupo(grupo.titulo)"
           >
-            <div class="sidebar-group-label">{{ grupo.titulo }}</div>
-            <template v-for="no in grupo.itens" :key="no.id">
-              <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->
-              <template v-if="no.tipo === 'categoria'">
-                <button
-                  type="button"
-                  class="sidebar-item sidebar-categoria"
-                  :class="{ aberta: categoriaAberta(no.id) }"
-                  :aria-expanded="categoriaAberta(no.id)"
-                  :aria-controls="`sidebar-subitens-${no.id}`"
-                  @click="alternarCategoria(no.id)"
-                >
-                  <v-icon :icon="no.icone" size="21" />
-                  <span>{{ no.titulo }}</span>
-                  <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
+            <button
+              type="button"
+              class="sidebar-group-label"
+              :class="{ aberto: grupoAberto(grupo.titulo) }"
+              :aria-expanded="grupoAberto(grupo.titulo)"
+              :aria-controls="idDoGrupo(grupo.titulo)"
+              @click="alternarGrupo(grupo.titulo)"
+            >
+              <span class="sidebar-group-texto">{{ grupo.titulo }}</span>
+              <v-icon class="sidebar-group-chevron" icon="mdi-chevron-right" size="16" />
+            </button>
+            <div
+              :id="idDoGrupo(grupo.titulo)"
+              class="sidebar-grupo-wrap"
+              :class="{ aberto: grupoAberto(grupo.titulo) }"
+            >
+              <div class="sidebar-grupo-itens">
+                <template v-for="no in grupo.itens" :key="no.id">
+                  <!-- Categoria (Lancamentos): entrada unica que abre e revela as telas de dentro. -->
+                  <template v-if="no.tipo === 'categoria'">
+                    <button
+                      type="button"
+                      class="sidebar-item sidebar-categoria"
+                      :class="{ aberta: categoriaAberta(no.id) }"
+                      :aria-expanded="categoriaAberta(no.id)"
+                      :aria-controls="`sidebar-subitens-${no.id}`"
+                      @click="alternarCategoria(no.id)"
+                    >
+                      <v-icon :icon="no.icone" size="21" />
+                      <span>{{ no.titulo }}</span>
+                      <!-- Um unico chevron que GIRA (CSS) no lugar de trocar de icone: o
                        movimento liga o estado fechado ao aberto em vez de cortar. -->
-                  <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
-                  <v-tooltip v-if="rail" activator="parent" location="right" :text="no.titulo" :transition="false" />
-                </button>
-                <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
+                      <v-icon class="sidebar-categoria-chevron" icon="mdi-chevron-right" size="18" />
+                      <v-tooltip
+                        v-if="rail"
+                        activator="parent"
+                        location="right"
+                        :text="no.titulo"
+                        :transition="false"
+                      />
+                    </button>
+                    <!-- A altura anima de verdade (grid-template-rows 0fr -> 1fr, ver main.css),
                      e por isso os filhos ficam SEMPRE montados: com v-if nao ha o que animar.
                      Fechado, o CSS tira a visibilidade — some tambem da ordem do Tab. -->
-                <div
-                  :id="`sidebar-subitens-${no.id}`"
-                  class="sidebar-subitens-wrap"
-                  :class="{ aberta: categoriaAberta(no.id) }"
-                >
-                  <div class="sidebar-subitens">
-                    <AppMenuItem
-                      v-for="tela in no.itens"
-                      :key="tela.id"
-                      :tela="tela"
-                      :tela-ativa="telaAtiva"
-                      :desabilitada="telasDesabilitadasSet.has(tela.id)"
-                      :motivo="textoTooltipTela(tela.id)"
-                      :rail="rail"
-                      @navegar="emit('navegar')"
-                    />
-                  </div>
-                </div>
-              </template>
-              <AppMenuItem
-                v-else
-                :tela="no"
-                :tela-ativa="telaAtiva"
-                :desabilitada="telasDesabilitadasSet.has(no.id)"
-                :motivo="textoTooltipTela(no.id)"
-                :rail="rail"
-                @navegar="emit('navegar')"
-              />
-            </template>
+                    <div
+                      :id="`sidebar-subitens-${no.id}`"
+                      class="sidebar-subitens-wrap"
+                      :class="{ aberta: categoriaAberta(no.id) }"
+                    >
+                      <div class="sidebar-subitens">
+                        <AppMenuItem
+                          v-for="tela in no.itens"
+                          :key="tela.id"
+                          :tela="tela"
+                          :tela-ativa="telaAtiva"
+                          :desabilitada="telasDesabilitadasSet.has(tela.id)"
+                          :motivo="textoTooltipTela(tela.id)"
+                          :rail="rail"
+                          @navegar="emit('navegar')"
+                        />
+                      </div>
+                    </div>
+                  </template>
+                  <AppMenuItem
+                    v-else
+                    :tela="no"
+                    :tela-ativa="telaAtiva"
+                    :desabilitada="telasDesabilitadasSet.has(no.id)"
+                    :motivo="textoTooltipTela(no.id)"
+                    :rail="rail"
+                    @navegar="emit('navegar')"
+                  />
+                </template>
+              </div>
+            </div>
           </div>
         </nav>
       </div>
