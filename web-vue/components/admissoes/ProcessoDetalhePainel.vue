@@ -8,7 +8,8 @@ import {
   rotuloOrigemProcesso,
   rotuloSituacaoProcesso,
   rotuloStatusProcesso,
-  rotuloTurnoDoProcesso
+  rotuloTurnoDoProcesso,
+  processoCancelavel
 } from "~/utils/admissoes";
 import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
 import { formatarDataHora } from "~/utils/formatacao";
@@ -33,7 +34,12 @@ const emit = defineEmits<{
 
 const dialogCancelar = ref(false);
 
-const emAndamento = computed(() => props.processo?.status === "iniciado");
+// Pausado TAMBEM cancela — e a mesma regra do servidor, que recusa so `cancelado`. Esconder o
+// botao na pausa deixava sem saida justamente o processo que o DP mais quer encerrar.
+const cancelavel = computed(() => {
+  const status = props.processo?.status;
+  return status !== undefined && processoCancelavel(status);
+});
 
 watch(
   () => props.aberto,
@@ -144,7 +150,7 @@ function confirmarCancelar() {
 
       <footer class="painel-acoes">
         <v-btn
-          v-if="emAndamento && podeCancelar"
+          v-if="cancelavel && podeCancelar"
           color="error"
           variant="text"
           :disabled="processando"

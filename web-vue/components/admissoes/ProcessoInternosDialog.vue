@@ -21,6 +21,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "fechar"): void;
+  // UM evento para o formulario inteiro. O servidor tem duas rotas; quem opera preencheu uma
+  // tela so, e ela nao pode escolher metade. `dados` vem null quando nada nos internos mudou —
+  // um PUT vazio consumiria uma versao e gravaria `internos_alterados` falso na trilha.
   (
     event: "salvar",
     dados: {
@@ -31,9 +34,9 @@ const emit = defineEmits<{
       ctpsUf: string | null;
       pisPasepNit: string | null;
       observacoesRh: string | null;
-    }
+    } | null,
+    exame: SituacaoExame | null
   ): void;
-  (event: "salvarExame", situacao: SituacaoExame): void;
 }>();
 
 const formulario = reactive({
@@ -84,22 +87,34 @@ const avisoExame = computed(() => {
   return "";
 });
 
+/** Os internos so vao se algum campo REALMENTE mudou — ver o comentario do emit. */
+const internosMudaram = computed(() => {
+  const atual = props.internos;
+  if (!atual) return false;
+  return (
+    (formulario.dataAdmissao || null) !== (atual.dataAdmissao ?? null) ||
+    (formulario.ctpsNumero || null) !== (atual.ctpsNumero ?? null) ||
+    (formulario.ctpsSerie || null) !== (atual.ctpsSerie ?? null) ||
+    (formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null) !== (atual.ctpsUf ?? null) ||
+    (formulario.pisPasepNit || null) !== (atual.pisPasepNit ?? null) ||
+    (formulario.observacoesRh || null) !== (atual.observacoesRh ?? null)
+  );
+});
+
 function salvar() {
   if (!props.internos || invalido.value) return;
-  // O exame tem rota e versão próprias no servidor: só é enviado quando de fato mudou.
-  if (exameMudou.value) {
-    emit("salvarExame", formulario.exameSituacao);
-    return;
-  }
-  emit("salvar", {
-    versao: props.internos.versao,
-    dataAdmissao: formulario.dataAdmissao || null,
-    ctpsNumero: formulario.ctpsNumero || null,
-    ctpsSerie: formulario.ctpsSerie || null,
-    ctpsUf: formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null,
-    pisPasepNit: formulario.pisPasepNit || null,
-    observacoesRh: formulario.observacoesRh || null
-  });
+  const dados = internosMudaram.value
+    ? {
+        versao: props.internos.versao,
+        dataAdmissao: formulario.dataAdmissao || null,
+        ctpsNumero: formulario.ctpsNumero || null,
+        ctpsSerie: formulario.ctpsSerie || null,
+        ctpsUf: formulario.ctpsUf ? formulario.ctpsUf.toUpperCase() : null,
+        pisPasepNit: formulario.pisPasepNit || null,
+        observacoesRh: formulario.observacoesRh || null
+      }
+    : null;
+  emit("salvar", dados, exameMudou.value ? formulario.exameSituacao : null);
 }
 </script>
 
@@ -175,7 +190,7 @@ function salvar() {
         <v-spacer />
         <v-btn variant="text" :disabled="salvando" @click="emit('fechar')">Cancelar</v-btn>
         <v-btn color="primary" variant="flat" :disabled="invalido || salvando" @click="salvar">
-          {{ exameMudou ? "Salvar exame" : "Salvar" }}
+          Salvar
         </v-btn>
       </v-card-actions>
     </v-card>

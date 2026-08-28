@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import type { FuncaoOpcaoDto, TurnoOpcaoDto } from "@padaria/shared";
 import { cpfValido, normalizarCpf } from "@padaria/shared";
-import { rotuloEtiquetaTurno, rotuloDiaSemanaCurto } from "~/utils/admissoes";
+import {
+  rotuloEtiquetaTurno,
+  rotuloDiaSemanaCurto,
+  diagnosticoTurnos,
+  mensagemDiagnosticoTurnos,
+  motivoTurnoIndisponivel
+} from "~/utils/admissoes";
 
 /**
  * "+ Novo cadastro" — a UNICA entrada de admissao direta.
@@ -16,6 +22,8 @@ const props = defineProps<{
   aberto: boolean;
   funcoes: FuncaoOpcaoDto[];
   turnos: TurnoOpcaoDto[];
+  // Sem este sinal, lista vazia por erro e lista vazia por cadastro vazio sao indistinguiveis.
+  turnosFalharam: boolean;
   empresaNome: string;
   empresaCnpj: string;
   salvando: boolean;
@@ -54,15 +62,25 @@ const funcoesAtivas = computed(() => props.funcoes.filter((funcao) => funcao.ati
  * por quê. O servidor recusa de qualquer forma — isto é a explicação, não a garantia.
  */
 const opcoesTurno = computed(() =>
-  props.turnos.map((turno) => ({
-    ...turno,
-    titulo: turno.completo
-      ? `${rotuloEtiquetaTurno[turno.etiqueta as "M" | "T" | "I"] ?? turno.etiqueta} · ${(turno.diasSemana ?? []).map(rotuloDiaSemanaCurto).join(", ")} · ${turno.horaInicio.slice(0, 5)}–${turno.horaFim.slice(0, 5)}`
-      : `${turno.nome} — incompleto`
-  }))
+  props.turnos.map((turno) => {
+    const motivo = motivoTurnoIndisponivel(turno);
+    return {
+      ...turno,
+      // "inativo" e "incompleto" sao motivos DIFERENTES. Chamar os dois de incompleto mandava
+      // o DP procurar etiqueta e dias num turno que ja os tinha — e so estava desativado.
+      titulo: motivo
+        ? `${turno.nome} — ${motivo}`
+        : `${rotuloEtiquetaTurno[turno.etiqueta as "M" | "T" | "I"] ?? turno.etiqueta} · ${(turno.diasSemana ?? []).map(rotuloDiaSemanaCurto).join(", ")} · ${turno.horaInicio.slice(0, 5)}–${turno.horaFim.slice(0, 5)}`
+    };
+  })
 );
-const temTurnoIncompleto = computed(() => props.turnos.some((turno) => !turno.completo));
-const semTurnoUsavel = computed(() => props.turnos.every((turno) => !turno.completo));
+const temTurnoIndisponivel = computed(() => props.turnos.some((turno) => !turno.completo));
+
+// Quatro causas, quatro frases. A regra e pura e testada em `utils/admissoes`.
+const diagnostico = computed(() => diagnosticoTurnos(props.turnos, props.turnosFalharam));
+const avisoTurnos = computed(() =>
+  diagnostico.value === "ok" ? "" : mensagemDiagnosticoTurnos[diagnostico.value]
+);
 
 const cpfNormalizado = computed(() => normalizarCpf(formulario.cpf));
 const cpfErro = computed(() => {
@@ -119,15 +137,14 @@ function salvar() {
         </div>
 
         <v-alert
-          v-if="semTurnoUsavel"
-          type="warning"
+          v-if="avisoTurnos"
+          :type="diagnostico === 'falha_carregamento' ? 'error' : 'warning'"
           variant="tonal"
           density="compact"
           class="mb-4"
           role="alert"
         >
-          Nenhum turno desta empresa está completo. Configure etiqueta (M/T/I) e dias da semana em
-          <strong>Turnos</strong> antes de cadastrar uma admissão.
+          {{ avisoTurnos }}
         </v-alert>
 
         <form class="formulario" @submit.prevent="salvar">
@@ -162,7 +179,7 @@ function salvar() {
             :item-props="(item) => ({ disabled: !item.completo })"
             label="Turno *"
             density="comfortable"
-            :hint="temTurnoIncompleto ? 'Turnos incompletos aparecem desabilitados.' : ''"
+            :hint="temTurnoIndisponivel ? 'Turnos incompletos ou inativos aparecem desabilitados.' : ''"
             persistent-hint
           />
           <v-text-field

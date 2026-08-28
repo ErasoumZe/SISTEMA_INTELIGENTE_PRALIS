@@ -209,3 +209,53 @@ export function corPrazoTeste(prazo: PrazoTeste | null) {
   if (prazo === "vence_hoje") return "warning";
   return undefined;
 }
+
+/**
+ * Cancelar vale de `iniciado` E de `pausado`; `cancelado` e terminal.
+ *
+ * A tela escondia o botao em `pausado` (`status === "iniciado"`), enquanto o servidor aceitava —
+ * ver a guarda em `cancelarProcesso`, que recusa so `cancelado`. Um processo parado por ASO nao
+ * apto e justamente um dos que o DP quer encerrar, entao esconder o botao deixava a pausa sem
+ * saida pela tela. A regra mora aqui, num lugar so, para o painel nao a reescrever.
+ */
+export function processoCancelavel(status: StatusProcesso): boolean {
+  return status !== "cancelado";
+}
+
+/**
+ * Por que o seletor de turno esta vazio ou inutil. Quatro causas com quatro respostas diferentes, e
+ * antes disto as quatro caiam na mesma frase — `turnos.every(nao completo)` e `true` em lista
+ * vazia, entao "nenhum turno completo" aparecia igual para lista vazia, para falha de rede e para
+ * turno de fato incompleto. O DP era mandado configurar etiqueta num turno que nem existia.
+ */
+export type DiagnosticoTurnos =
+  | "ok"
+  | "falha_carregamento"
+  | "nenhum_cadastrado"
+  | "todos_inativos"
+  | "todos_incompletos";
+
+export function diagnosticoTurnos(
+  turnos: readonly { ativo: boolean; completo: boolean }[],
+  falhouCarregamento: boolean
+): DiagnosticoTurnos {
+  // A falha vem primeiro: sem resposta do servidor, a lista vazia nao prova nada sobre o cadastro.
+  if (falhouCarregamento) return "falha_carregamento";
+  if (turnos.length === 0) return "nenhum_cadastrado";
+  if (turnos.some((turno) => turno.completo)) return "ok";
+  return turnos.every((turno) => !turno.ativo) ? "todos_inativos" : "todos_incompletos";
+}
+
+export const mensagemDiagnosticoTurnos: Record<Exclude<DiagnosticoTurnos, "ok">, string> = {
+  falha_carregamento: "Não foi possível carregar os turnos. Tente novamente.",
+  nenhum_cadastrado: "Nenhum turno cadastrado nesta empresa. Cadastre um turno antes de admitir.",
+  todos_inativos: "Todos os turnos desta empresa estão inativos. Reative um turno para admitir.",
+  todos_incompletos:
+    "Nenhum turno desta empresa está completo. Configure etiqueta (M/T/I) e dias da semana."
+};
+
+/** Por que ESTE turno nao pode ser escolhido. Inativo e incompleto sao motivos diferentes. */
+export function motivoTurnoIndisponivel(turno: { ativo: boolean; completo: boolean }): string | null {
+  if (turno.completo) return null;
+  return turno.ativo ? "incompleto" : "inativo";
+}

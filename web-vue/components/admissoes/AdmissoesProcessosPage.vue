@@ -51,6 +51,10 @@ const snackbar = reactive({ show: false, text: "", color: "success" });
 
 const funcoes = ref<FuncaoOpcaoDto[]>([]);
 const turnos = ref<TurnoOpcaoDto[]>([]);
+// Falha de CADA catalogo, separada. Lista vazia por erro e lista vazia por cadastro vazio
+// pedem respostas diferentes, e sem estes dois sinalizadores a tela nao as distingue.
+const funcoesFalharam = ref(false);
+const turnosFalharam = ref(false);
 const novoAberto = ref(false);
 const salvando = ref(false);
 const novoErro = ref("");
@@ -107,13 +111,27 @@ async function carregar() {
   }
 }
 
+/**
+ * Os dois catalogos carregam INDEPENDENTES. Em serie no mesmo `try`, um 403 em `/funcoes`
+ * impedia `/turnos` de sequer ser chamado, e o seletor vazio dizia "nenhum turno completo" —
+ * diagnostico errado para um problema que nem era de turno.
+ */
 async function carregarCatalogos() {
-  try {
-    funcoes.value = await apiGet<FuncaoOpcaoDto[]>("/api/admissoes/funcoes");
-    turnos.value = await apiGet<TurnoOpcaoDto[]>("/api/admissoes/turnos");
-  } catch (error) {
-    tratarErro(error);
-  }
+  const [resultadoFuncoes, resultadoTurnos] = await Promise.allSettled([
+    apiGet<FuncaoOpcaoDto[]>("/api/admissoes/funcoes"),
+    apiGet<TurnoOpcaoDto[]>("/api/admissoes/turnos")
+  ]);
+
+  funcoesFalharam.value = resultadoFuncoes.status === "rejected";
+  if (resultadoFuncoes.status === "fulfilled") funcoes.value = resultadoFuncoes.value;
+
+  turnosFalharam.value = resultadoTurnos.status === "rejected";
+  if (resultadoTurnos.status === "fulfilled") turnos.value = resultadoTurnos.value;
+
+  // Um aviso so, do primeiro que falhou: dois snackbars para a mesma abertura de tela seriam
+  // ruido. O diagnostico especifico aparece dentro do modal, ao lado do campo.
+  const falha = [resultadoFuncoes, resultadoTurnos].find((r) => r.status === "rejected");
+  if (falha && falha.status === "rejected") tratarErro(falha.reason);
 }
 
 function trocarPagina(nova: number) {
@@ -162,44 +180,43 @@ async function criarDireta(dados: {
   }
 }
 
-async function salvarInternos(dados: Record<string, unknown>) {
-  if (!processo.value) return;
-  processando.value = true;
-  internosErro.value = "";
-  try {
-    await apiPut(`/api/admissoes/processos/${processo.value.id}/internos`, dados);
-    internosAberto.value = false;
-    notificar("Dados internos salvos.");
-    await abrirDetalhe(processo.value.id);
-    await carregar();
-  } catch (error) {
-    internosErro.value = mensagemErro(error);
-  } finally {
-    processando.value = false;
-  }
-}
-
 /**
- * O exame tem rota e versao PROPRIAS no servidor: alterar o bloco interno nao e alterar o exame.
- * Quem opera ve um formulario so — a separacao vive no contrato, nao na tela.
+ * UM salvamento, ainda que o servidor tenha duas rotas. Antes, mudar o exame junto com
+ * CTPS/PIS descartava os campos internos em silencio: o modal emitia so o exame e voltava.
  *
- * Pausa e retomada acontecem no servidor, dentro desta mesma chamada. Nao ha botao de retomar.
+ * Ordem: internos PRIMEIRO, exame depois. As duas rotas travam pelo MESMO contador
+ * (`internos.versao`) e cada PUT o incrementa, entao o segundo precisa da versao relida — dai
+ * o GET no meio. E se o exame falhar, os dados do DP ja estao salvos e so a escolha do exame
+ * precisa ser refeita; na ordem inversa o processo pausaria e os dados se perderiam.
  */
-async function salvarExame(situacao: SituacaoExame) {
+async function salvarInternos(
+  dados: Record<string, unknown> | null,
+  exame: SituacaoExame | null
+) {
   if (!processo.value) return;
+  const id = processo.value.id;
   processando.value = true;
   internosErro.value = "";
   try {
-    await apiPut(`/api/admissoes/processos/${processo.value.id}/exame`, {
-      versao: processo.value.internos.versao,
-      situacao
-    });
+    if (dados) await apiPut(`/api/admissoes/processos/${id}/internos`, dados);
+
+    if (exame) {
+      // Releitura obrigatoria: o PUT anterior responde 204 e nao devolve a versao nova.
+      if (dados) await abrirDetalhe(id);
+      await apiPut(`/api/admissoes/processos/${id}/exame`, {
+        versao: processo.value.internos.versao,
+        situacao: exame
+      });
+    }
+
     internosAberto.value = false;
-    notificar("Exame admissional atualizado.");
-    await abrirDetalhe(processo.value.id);
+    notificar(exame ? "Exame admissional atualizado." : "Dados internos salvos.");
+    await abrirDetalhe(id);
     await carregar();
   } catch (error) {
+    // O modal fica ABERTO com o erro visivel: fechar perderia o que ainda nao foi gravado.
     internosErro.value = mensagemErro(error);
+    await abrirDetalhe(id);
   } finally {
     processando.value = false;
   }
@@ -264,6 +281,7 @@ onMounted(async () => {
     :aberto="novoAberto"
     :funcoes="funcoes"
     :turnos="turnos"
+    :turnos-falharam="turnosFalharam"
     :empresa-nome="empresaNome"
     :empresa-cnpj="empresaCnpj"
     :salvando="salvando"
@@ -279,7 +297,6 @@ onMounted(async () => {
     :erro="internosErro"
     @fechar="internosAberto = false"
     @salvar="salvarInternos"
-    @salvar-exame="salvarExame"
   />
 
   <ProcessoDetalhePainel
