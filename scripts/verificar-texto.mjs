@@ -85,8 +85,11 @@ const nomesDominioInglesBloqueados = [
 // transforma "nao vaza" em "nao TEM como vazar sem ficar vermelho".
 const parametrosSemDurabilidade = ["fsync=off", "synchronous_commit=off", "full_page_writes=off"];
 
+// Ancorado no SEGMENTO, e nao em substring: `includes("tests/")` sozinho liberaria
+// `api/src/contests/` e `scripts/mytests/`, que nao sao pasta de teste nenhuma.
 function podeDesligarDurabilidade(caminho) {
-  return caminho.replaceAll("\\", "/").includes("tests/");
+  const normalizado = caminho.replaceAll("\\", "/");
+  return normalizado.startsWith("tests/") || normalizado.includes("/tests/");
 }
 
 // Os arquivos de orquestracao NAO estao em `alvos` (a varredura so olha codigo), e sao justamente

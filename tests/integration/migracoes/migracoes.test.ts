@@ -120,11 +120,15 @@ describe("migracoes integration", () => {
   // container da suite pagava — por isso recebe os mesmos parametros, da mesma fonte unica. Sem
   // este caso, o segundo container viraria o novo gargalo e ninguem perceberia.
   it("Deve_RodarSemDurabilidade_Quando_ContainerEhEfemero", async () => {
+    // O filtro sai da MESMA constante da assercao. Com a lista literal aqui, acrescentar um quarto
+    // parametro quebrava por tamanho de array — vermelho de verdade, mas apontando para o lugar
+    // errado. Com `= any($1)`, os dois lados nao tem como divergir.
     const { rows } = await bancoMigrado.query<{ parametro: string; valor: string }>(
       `select name as parametro, setting as valor
          from pg_settings
-        where name in ('fsync', 'synchronous_commit', 'full_page_writes')
-        order by name`
+        where name = any($1)
+        order by name`,
+      [[...PARAMETROS_SEM_DURABILIDADE]]
     );
     expect(rows).toEqual(PARAMETROS_SEM_DURABILIDADE.map((parametro) => ({ parametro, valor: "off" })));
   });

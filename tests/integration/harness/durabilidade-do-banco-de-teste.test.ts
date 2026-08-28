@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { consultarUm } from "../../setup/integracao.js";
+import { PARAMETROS_SEM_DURABILIDADE } from "../../setup/postgres-efemero.js";
 
 // O banco de integracao e DESCARTAVEL: nasce e morre com a rodada. Durabilidade nele nao protege
 // nada — so cobra o preco.
@@ -17,9 +18,9 @@ import { consultarUm } from "../../setup/integracao.js";
 // `pg_locks`. Os detectores de corrida da suite leem memoria compartilhada
 // (`pg_blocking_pids`/`pg_stat_activity`) e o unico advisory lock do sistema nunca e gravado em WAL.
 describe("harness - o banco de teste roda sem durabilidade", () => {
-  const desligados = ["fsync", "synchronous_commit", "full_page_writes"] as const;
-
-  it.each(desligados)("%s esta desligado no Postgres efemero", async (parametro) => {
+  // Os nomes vem da MESMA constante que monta o comando do container. Uma copia local aqui seria a
+  // quarta lista dos mesmos tres parametros — e a primeira a ficar para tras.
+  it.each(PARAMETROS_SEM_DURABILIDADE)("%s esta desligado no Postgres efemero", async (parametro) => {
     // `show X` devolve a coluna com o NOME do parametro; `current_setting` deixa dar apelido e
     // aceita o parametro ligado, sem interpolar texto na consulta.
     const linha = await consultarUm<{ valor: string }>("select current_setting($1) as valor", [parametro]);
