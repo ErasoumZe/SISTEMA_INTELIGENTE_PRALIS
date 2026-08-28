@@ -148,7 +148,7 @@ export const CATEGORIA_POR_TELA: Record<string, Categoria> = {
  * rótulo tem o mesmo tamanho e a mesma posição nas cinco, e só a tinta muda. O ritmo é igual; a
  * cor é informação a mais para quem a tem, nunca o que segura a leitura.
  *
- * A chave é o TÍTULO da seção porque é o que `SECOES_MENU` e `montarAtalhosHome` carregam — não há
+ * A chave é o TÍTULO da seção porque é o que `SECOES_MENU` carrega — não há
  * id. `cores-categoria.test.ts` falha se uma chave daqui deixar de existir lá.
  */
 export const CATEGORIA_POR_SECAO: Record<string, Categoria> = {

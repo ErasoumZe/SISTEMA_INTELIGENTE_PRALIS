@@ -208,7 +208,7 @@ describe("corCategoriaPorTela deriva da fonte unica", () => {
 // VIS-E6g — a faixa de identidade da SECAO (menu e home)
 //
 // A chave do `CATEGORIA_POR_SECAO` e o TITULO da secao, porque nem `SECOES_MENU` nem
-// `montarAtalhosHome` carregam id. Titulo e texto de tela: alguem corrige "Saidas" para "Saídas"
+// carrega id. Titulo e texto de tela: alguem corrige "Saidas" para "Saídas"
 // um dia e o mapa vira letra morta em silencio — a faixa some e nenhum teste reclama. Estas tres
 // linhas sao o que impede isso.
 describe("CATEGORIA_POR_SECAO acompanha as secoes que existem de verdade", () => {

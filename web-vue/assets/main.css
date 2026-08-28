@@ -2722,252 +2722,19 @@ body {
 }
 /* ===================== FIM VIS-10 ===================== */
 
-/* ===================== INICIO VIS-E2a — PAINEL EM BLOCOS (27/08/2026) =====================
-   anchor: springboard do iPhone — quadrado, icone grande em cima, rotulo curto embaixo, alvo
-   inteiro clicavel. diverge: sem brilho, sem sombra colorida, sem contador; a cor vem das seis
-   categorias que o sistema ja usa.
-
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
-   SUBSTITUI o VIS-E1a, que foi REMOVIDO no mesmo commit. A versao em lista nao ficou escondida
-   nem atras de flag: saiu (16, regra-mae). Em 1440 ela deixava metade da tela vazia.
-
-   D-HOME (27/08): a home nao espelha o menu em lista. D-COR: a cor vem das seis categorias.
-
-   A COR entra por custom property (`--bloco-cor`, `--bloco-cor-soft`) descida pelo componente,
-   como o AppMenuItem ja faz com `--item-cor` — a lista de quem tem cor continua sendo so o
-   `CATEGORIA_POR_TELA`, e nao nasce uma copia aqui. Tela sem categoria fica neutra: decisao do
-   67 §3, nao esquecimento. Zero hex neste arquivo.
-
-   O TITULO DE SECAO nao tem vidro nem fundo. A versao anterior era uma barra que atravessava a
-   tela; virou o rotulo puro, alinhado a esquerda. Sem barra ele deixa de ser chrome, e o 67 §10
-   reserva `--cx-chrome` ao chrome — vidro num rotulo parado seria decoracao.
-
-   A GRADE NAO CONTA COLUNAS, define TAMANHO. Contar coluna com `aspect-ratio: 1/1` fazia o bloco
-   inflar para ocupar a sobra: em 1440 menos a sidebar dava ~290px de lado, um cartaz. A
-   referencia e springboard, onde o icone tem ~40px. Com `auto-fill` + `minmax` cabem quantos
-   couberem e o bloco nunca cresce alem do necessario — e um usuario com duas telas ve dois
-   blocos pequenos, nao dois cartazes com um deserto ao lado.
-   ========================================================================================== */
+/* ===================== INICIO VIS-E2a — RESPIRO DA PAGINA DO PAINEL (27/08/2026) =====================
+   Do bloco original sobrou SO isto. O resto — a grade de 32 blocos quadrados por grupo, o brilho
+   de categoria neles e a sanfona — foi apagado em 28/08/2026, quando a dashboard deixou de
+   espelhar o menu. As classes nao existem mais em template nenhum: `.atalhos-home`,
+   `.atalhos-grupo*`, `.atalhos-grade`, `.atalho-bloco*`. O caminho antigo nao fica ao lado do
+   novo (16, regra-mae).
+   ============================================================================================ */
 .inicio-painel {
   display: grid;
   gap: var(--cx-sp-6);
   align-content: start;
 }
-
-.atalhos-home {
-  display: grid;
-  gap: var(--cx-sp-7);
-}
-
-.atalhos-grupo-titulo {
-  margin: 0 0 var(--cx-sp-3);
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-wide);
-  text-transform: uppercase;
-}
-
-.atalhos-grade {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: var(--cx-sp-4);
-}
-/* Em tela estreita o piso cede para caber tres por linha em 390px, sem virar bloco gigante. */
-@media (width <= 768px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-    gap: var(--cx-sp-3);
-  }
-}
-
-.atalho-bloco {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--cx-sp-2);
-  aspect-ratio: 1 / 1;
-  min-height: 44px;
-  padding: var(--cx-sp-3);
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface);
-  box-shadow: var(--cx-e-1);
-  color: var(--cx-ink);
-  text-align: center;
-  text-decoration: none;
-  transition:
-    border-color var(--cx-dur-1) var(--cx-ease),
-    box-shadow var(--cx-dur-2) var(--cx-ease),
-    background var(--cx-dur-1) var(--cx-ease);
-}
-
-/* O icone mora numa pastilha tingida pela categoria; o rotulo fica na tinta neutra, para o
-   contraste nao depender da cor (67 §11) e o quadro nao virar bloco colorido. */
-.atalho-bloco-icone {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--cx-r-md);
-  background: var(--cx-surface-sunken);
-  color: var(--cx-ink-soft);
-}
-.atalho-bloco.com-cor .atalho-bloco-icone {
-  background: var(--bloco-cor-soft);
-  color: var(--bloco-cor);
-}
-.atalho-bloco-rotulo {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--cx-fs-caption);
-  font-weight: 600;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-  text-overflow: ellipsis;
-}
-
-/* Os quatro estados do 67 §9. */
-.atalho-bloco:hover:not(.disabled) {
-  border-color: var(--cx-line);
-  background: var(--cx-hover);
-  box-shadow: var(--cx-e-2);
-}
-.atalho-bloco:active:not(.disabled) {
-  background: var(--cx-pressed);
-  transform: translateY(1px);
-}
-.atalho-bloco:focus-visible {
-  outline: 2px solid var(--cx-focus);
-  outline-offset: 2px;
-}
-.atalho-bloco.disabled {
-  box-shadow: none;
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* Duracao zero nao desfaz deslocamento ja aplicado (67 §7); a excecao vive AQUI para o bloco
-   continuar reversivel por delecao. */
-@media (prefers-reduced-motion: reduce) {
-  .atalho-bloco:active:not(.disabled) {
-    transform: none;
-  }
-}
 /* ===================== FIM VIS-E2a ===================== */
-
-/* ===================== INICIO VIS-E2b — FAIXA DE RELATORIOS (27/08/2026) =====================
-   anchor: linear.app/DESIGN.md — hairline, hierarquia por peso, nenhum numero gritando.
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
-   Par do AppBlocosRelatorio.vue.
-
-   Sao quatro blocos de MESMO peso de proposito: sao quatro relatorios pares, nao um protagonista
-   com tres coadjuvantes. Por isso o valor e discreto — a faixa de quatro numerones e justamente o
-   que a skill product-ui-design marca como "cara de IA". O rotulo vem antes do numero, em Noto
-   Sans e nao em monospace, e nenhum bloco tem ponto de status, brilho ou barra colorida.
-
-   Ausencia de dado sai como travessao, nao como zero: o `.vazio` apenas apaga um pouco a tinta,
-   sem inventar cor de aviso — nao ha erro nenhum em nao ter leitura ainda.
-   ============================================================================================ */
-.relatorios-faixa {
-  display: grid;
-  gap: var(--cx-sp-3);
-}
-.relatorios-faixa-titulo {
-  margin: 0;
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-wide);
-  text-transform: uppercase;
-}
-.relatorios-grade {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--cx-sp-4);
-}
-@media (width <= 768px) {
-  .relatorios-grade {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--cx-sp-3);
-  }
-}
-
-.relatorio-bloco {
-  display: flex;
-  flex-direction: column;
-  gap: var(--cx-sp-1);
-  min-height: 44px;
-  padding: var(--cx-sp-4);
-  border: 1px solid var(--cx-line-soft);
-  border-radius: var(--cx-r-lg);
-  background: var(--cx-surface);
-}
-.relatorio-bloco-rotulo {
-  color: var(--cx-ink-soft);
-  font-size: var(--cx-fs-caption);
-  font-weight: 600;
-}
-.relatorio-bloco-valor {
-  color: var(--cx-ink);
-  font-size: var(--cx-fs-h2);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--cx-tracking-tight);
-  line-height: 1.1;
-}
-.relatorio-bloco-valor.vazio {
-  color: var(--cx-ink-soft);
-}
-/* ===================== FIM VIS-E2b ===================== */
-
-/* ===================== INICIO VIS-E5b — BRILHO DE CATEGORIA NO CARD (27/08/2026) =====================
-   anchor: vivid_glass_dashboard_dark (direcao aprovada por Marco). diverge: nenhum hex do
-   `code.html` foi copiado — os #d1bcff, #e7e0ee e companhia sao sobra da paleta Material do Stitch.
-   A luz aqui e a cor da categoria que o sistema JA tem, na forca do token do bloco anterior.
-
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
-
-   O QUE JA ESTAVA CERTO e por isso NAO foi reescrito: o tile do icone. O VIS-E2a ja o entregou
-   com 40px, `--cx-r-md`, fundo na `-soft` e icone na `tinta`/`tintaEscura`, com o neutro em
-   `--cx-surface-sunken` + `--cx-ink-soft`. E exatamente o que esta etapa pediria. Bloco que nao
-   muda nada e divida, nao entrega (69 §1.2).
-
-   O BRILHO e `background-image` sobre o `background-color` do card: fica ACIMA da superficie e
-   ABAIXO do conteudo, sem nenhum z-index e sem elemento novo. Radial no canto superior direito,
-   esmaecendo ate transparente aos 60% — o texto vive na metade de baixo, onde a luz ja acabou.
-
-   MEDIDO no pior caso (a luz cheia por baixo do texto), nas seis categorias:
-     claro   13,21 a 13,95     escuro  11,15 a 12,72
-   Todas com folga sobre o minimo de 4,5:1 do 67 §11, entao a forca nao precisou cair.
-
-   TELA SEM CATEGORIA NAO GANHA BRILHO. O seletor exige `.com-cor`, e a lista de quem tem cor
-   continua sendo so o `CATEGORIA_POR_TELA` (67 §3). Neutro segue neutro — e decisao, nao
-   esquecimento.
-
-   A SUPERFICIE NAO MUDA: no claro a separacao continua por elevacao, no escuro por contorno
-   (D-06, VIS-02). O brilho e uma camada a mais, nao uma troca de fundo.
-   ==================================================================================================== */
-.atalho-bloco.com-cor {
-  background-image: radial-gradient(
-    120% 100% at 100% 0%,
-    color-mix(in srgb, var(--bloco-cor-base) var(--cx-brilho-forca), transparent) 0%,
-    transparent 60%
-  );
-}
-/* O hover ja troca o `background` (cor); sem repetir a imagem aqui ela sumiria no hover. */
-.atalho-bloco.com-cor:hover:not(.disabled) {
-  background-image: radial-gradient(
-    120% 100% at 100% 0%,
-    color-mix(in srgb, var(--bloco-cor-base) var(--cx-brilho-forca), transparent) 0%,
-    transparent 60%
-  );
-}
-/* ===================== FIM VIS-E5b ===================== */
 
 /* ===================== INICIO VIS-E5c — GRADIENTE SO NO QUE JA E DA MARCA (27/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
@@ -2999,43 +2766,6 @@ body {
   background-image: var(--cx-brand-gradiente);
 }
 /* ===================== FIM VIS-E5c ===================== */
-
-/* ===================== INICIO VIS-E5d — BRILHO TAMBEM NO BLOCO NEUTRO (27/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
-
-   DEFEITO VISTO EM TELA por Marco: so 6 das telas tem categoria (`CATEGORIA_POR_TELA`), entao
-   com o VIS-E5b sozinho 6 blocos brilhavam e o resto ficava chapado. A grade virava remendo —
-   metade com luz, metade sem, e sem logica visivel para quem olha.
-
-   Conserto: TODO bloco recebe o mesmo tratamento; muda so o matiz. O que tem categoria brilha na
-   cor dela; o que nao tem brilha em cinza, com `--cx-ink-soft`.
-
-   O 67 §3 continua respeitado, e o ponto e sutil: a regra de la e que tela sem categoria nao
-   recebe COR DE CATEGORIA. Cinza nao e cor de categoria — e a ausencia dela. A lista de quem tem
-   cor continua sendo so o `CATEGORIA_POR_TELA`, e nenhum bloco neutro passou a fingir que tem uma.
-
-   Mesma `--cx-brilho-forca` dos blocos coloridos, entao a intensidade e uma decisao so no sistema
-   inteiro. Medido, texto sobre o brilho neutro:
-     claro   fundo #f2f3f4  contraste 13,54
-     escuro  fundo #2d333b  contraste 10,47
-   Ambos muito acima do minimo de 4,5:1 do 67 §11 — a forca nao precisou de um valor proprio.
-   ========================================================================================================= */
-.atalho-bloco:not(.com-cor) {
-  background-image: radial-gradient(
-    120% 100% at 100% 0%,
-    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
-    transparent 60%
-  );
-}
-/* O hover troca o `background` (cor); sem repetir a imagem aqui ela sumiria no hover. */
-.atalho-bloco:not(.com-cor):hover:not(.disabled) {
-  background-image: radial-gradient(
-    120% 100% at 100% 0%,
-    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
-    transparent 60%
-  );
-}
-/* ===================== FIM VIS-E5d ===================== */
 
 /* ===================== INICIO VIS-E6a — ESCADA DE SUPERFICIE APLICADA (27/08/2026) =====================
    anchor: linear.app/DESIGN.md, secao Elevation & Depth — "depth is carried by surface ladder +
@@ -3367,15 +3097,13 @@ body {
 
 /* Mesma forma nos dois lugares. `flex: none` porque o rotulo do menu pode quebrar em duas linhas
    no drawer estreito, e a marca nao pode encolher junto. */
-.sidebar-group-label,
-.atalhos-grupo-titulo {
+.sidebar-group-label {
   display: flex;
   align-items: center;
   gap: var(--cx-sp-2);
 }
 
-.sidebar-group-label::before,
-.atalhos-grupo-titulo::before {
+.sidebar-group-label::before {
   flex: none;
   width: 3px;
   height: 12px;
@@ -3454,16 +3182,6 @@ body {
    herdava o minmax de 112 no lugar do de 104 e caia de tres colunas para DUAS, com o bloco indo a
    165px. Encolher o bloco no desktop engordava ele no celular. E a mesma armadilha que o VIS-04b
    ja tinha descrito neste arquivo; anotada aqui de novo porque descrever nao impediu. */
-@media (width > 768px) {
-  .atalhos-grade {
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  }
-}
-.atalho-bloco-icone {
-  width: 32px;
-  height: 32px;
-}
-
 /* 3. O card do caixa encolhe POR RESPIRO, no lugar. Nada sai, nada se move: o titulo, a explicacao
    e o botao continuam os mesmos, na mesma ordem.
    DUAS tentativas foram apagadas por serem no-op, e ficam registradas para ninguem tentar de novo:
@@ -3737,86 +3455,6 @@ body {
 }
 /* ===================== FIM VIS-E7h ===================== */
 
-/* ===================== INICIO VIS-E7i — A HOME GANHA A MESMA SANFONA (28/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   Mesmo mecanismo e mesma linguagem do menu (VIS-E7c): altura animada por
-   `grid-template-rows: 0fr -> 1fr` em `--cx-dur-2`, chevron unico que gira, e a saida da ordem do
-   Tab por `visibility` com delay igual a duracao. Menu e home nao podem ser dois desenhos
-   parecidos; sao o mesmo sistema.
-
-   O QUE NAO MUDA, de proposito: a faixa de identidade do grupo (VIS-E6g) continua no `<h2>`, onde
-   sempre esteve, e os blocos com brilho de categoria nao foram tocados. Este bloco so acrescenta o
-   gatilho e o comportamento.
-
-   ESTRUTURA: o `<h2>` continua sendo cabecalho e ganha um `<button>` dentro — padrao WAI-ARIA de
-   sanfona. Transformar o proprio `<h2>` em botao tiraria a navegacao por cabecalho do leitor de
-   tela, que na home e o jeito rapido de pular entre secoes.
-
-   ESTADO INICIAL: tudo aberto, e o motivo e o mesmo do menu. A sanfona ACRESCENTA a possibilidade
-   de recolher; ela nao recolhe por conta propria. E aqui isso pesa mais: quem tem poucas
-   permissoes ve dois blocos, e sanfona fechada para dois blocos e atrito sem ganho.
-   Grupo sem tela permitida continua nao aparecendo — o `agruparTelasMenu` ja garante isso.
-   ================================================================================================ */
-
-/* 1. O gatilho ocupa a linha do cabecalho, sem parecer botao. O `<h2>` ja e flex com a faixa no
-      `::before` (VIS-E6g); o botao entra como o filho que estica. */
-.atalhos-grupo-gatilho {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cx-sp-2);
-  min-height: 32px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  text-align: start;
-  text-transform: inherit;
-  cursor: pointer;
-}
-.atalhos-grupo-gatilho:hover {
-  color: var(--cx-ink);
-}
-.atalhos-grupo-texto {
-  min-width: 0;
-}
-
-/* 2. O chevron gira, igual ao do menu. O `transform` E O ESTADO, entao fica fora das excecoes de
-      `transform: none` do reduced-motion pelo mesmo criterio do VIS-E7c. */
-.atalhos-grupo-chevron {
-  flex: none;
-  transition: transform var(--cx-dur-2) var(--cx-ease);
-}
-.atalhos-grupo-gatilho.aberto .atalhos-grupo-chevron {
-  transform: rotate(90deg);
-}
-
-/* 3. A altura anima de verdade, sem max-height chutado. */
-.atalhos-grupo-wrap {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--cx-dur-2) var(--cx-ease);
-}
-.atalhos-grupo-wrap.aberto {
-  grid-template-rows: 1fr;
-}
-.atalhos-grupo-wrap > .atalhos-grade {
-  min-height: 0;
-  overflow: hidden;
-}
-/* Fechado, os blocos saem da ordem do Tab. O delay = duracao derruba a visibilidade DEPOIS do
-   colapso; sem ele o conteudo sumiria antes de encolher. Mesmo par do VIS-E7c. */
-.atalhos-grupo-wrap:not(.aberto) > .atalhos-grade {
-  visibility: hidden;
-  transition: visibility 0s linear var(--cx-dur-2);
-}
-/* ===================== FIM VIS-E7i ===================== */
-
 /* ===================== INICIO VIS-E8d — BOTAO DE ACAO DEIXA DE SER FAIXA (28/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
 
@@ -3856,3 +3494,171 @@ body {
   margin-inline: auto;
 }
 /* ===================== FIM VIS-E8d ===================== */
+
+/* ===================== INICIO VIS-E9a — A DASHBOARD DEIXA DE ESPELHAR O MENU (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O painel listava TODAS as telas permitidas, agrupadas por secao — 32 blocos quadrados, com
+   sanfona. Era o menu duas vezes na mesma pagina, e a D-HOME decidiu em 26/08 que nao deveria ser
+   assim. Agora sao quatro faixas, e a ultima tem CINCO atalhos.
+
+   anchor: card de numero do Mobills (Temp/mobills.txt §06): card com raio grande e elevacao 1,
+   disco chapado de 52px com icone branco de 24 dentro, rotulo em cima, valor embaixo, razao
+   valor/rotulo ~1,4x, e o rotulo da SECAO fora do card.
+
+   AS DUAS REGRAS QUE VALE COPIAR INTEIRAS:
+
+   1. O VALOR E NEUTRO; a cor vive so no DISCO. Quatro cards lado a lado com quatro cores fortes
+      continuam legiveis porque o olho le quatro numeros da mesma cor e usa o disco como etiqueta.
+      Numero colorido em card e a cor competindo com o dado.
+   2. A hierarquia vem de PESO, nao de salto de tamanho: `--cx-fs-title` (20px) sobre
+      `--cx-fs-body` (14px) da 1,43x. Nao e o "numero gigante" que a product-ui-design marca como
+      cara de IA — e o proprio Mobills nao usa: 22,4 sobre 16.
+
+   OS DOIS ERROS DELES QUE NAO SE REPETEM AQUI, e o relatorio nomeia os dois:
+   - "o circulo troca de lado" entre telas. Aqui o disco fica SEMPRE a esquerda, em todas as faixas.
+   - "alguns cards tem um › e outros nao, sem regra visivel". Aqui TODO card termina em "Ver mais".
+
+   O DISCO usa a variante `faixa`, nao a `base`: `faixa` e a unica escolhida POR MEDICAO para
+   receber branco por cima. A `base` reprova (entradas da 2,94:1 com branco, abaixo dos 3:1 que o
+   67 §11 pede para objeto grafico).
+
+   CARD SEM DADO (`valor: null`) segue a variante "dentro de card" do §05 do relatorio: travessao e
+   a saida do card, SEM acao propria. O §05 separa "nao existe ainda" — que ganha botao — de "nao
+   ha nada neste recorte" — que nao ganha. Um numero que o painel ainda nao le e o segundo caso.
+
+   GRADE: quatro por linha, duas em 900, uma em 480. As faixas de 3 e de 2 cards usam a MESMA
+   grade de 4 colunas, entao o card tem a mesma largura em todas as faixas e as reguas se alinham
+   verticalmente. Card que muda de largura de faixa para faixa e o que faz a pagina parecer
+   remendada.
+   ================================================================================================ */
+
+.painel-faixas {
+  display: grid;
+  gap: var(--cx-sp-7);
+}
+.faixa {
+  display: grid;
+  gap: var(--cx-sp-3);
+}
+/* O rotulo da secao fica FORA do card: ele orienta, nao compete. */
+.faixa-titulo {
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+.faixa-grade {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--cx-sp-4);
+}
+
+/* O card. UMA so forma de agrupamento — superficie + elevacao —, sem borda por cima (67 §6). */
+.metrica-card {
+  display: grid;
+  gap: var(--cx-sp-1);
+  padding: var(--cx-sp-5) var(--cx-sp-5) var(--cx-sp-3);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+/* Escuro separa por luminancia + contorno; claro por elevacao (D-06). */
+:root[data-theme="dark"] .metrica-card {
+  border: 1px solid var(--cx-line-soft);
+}
+
+.metrica-disco {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--cx-sp-2);
+  place-items: center;
+  border-radius: var(--cx-r-pill);
+  background: var(--disco-cor, var(--cx-ink-soft));
+  color: var(--cx-brand-on);
+}
+.metrica-rotulo {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-body);
+  font-weight: 500;
+}
+.metrica-valor {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 600;
+}
+.metrica-valor.vazio {
+  color: var(--cx-ink-soft);
+}
+/* "Ver mais" no rodape, separado por regua — o card termina numa saida, nao no numero. */
+.metrica-mais {
+  margin-top: var(--cx-sp-3);
+  padding-top: var(--cx-sp-2);
+  border-top: 1px solid var(--cx-line-soft);
+  color: var(--cx-brand-text);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  text-decoration: none;
+}
+.metrica-mais:hover {
+  color: var(--cx-brand-strong);
+}
+
+/* FAIXA 4: cinco atalhos em pilula. Nao e card — atalho nao carrega dado, entao nao imita um. */
+.atalhos-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-3);
+}
+.atalho-pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-height: 44px;
+  padding: var(--cx-sp-2) var(--cx-sp-4) var(--cx-sp-2) var(--cx-sp-2);
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+  text-decoration: none;
+  transition: box-shadow var(--cx-dur-2) var(--cx-ease);
+}
+:root[data-theme="dark"] .atalho-pilula {
+  border: 1px solid var(--cx-line-soft);
+}
+.atalho-pilula:hover {
+  box-shadow: var(--cx-e-2);
+}
+.atalho-disco {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--cx-r-pill);
+  background: var(--disco-cor, var(--cx-ink-soft));
+  color: var(--cx-brand-on);
+}
+
+@media (width <= 900px) {
+  .faixa-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width <= 480px) {
+  .faixa-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* ===================== FIM VIS-E9a ===================== */
+
+/* Atalho bloqueado: continua visivel, marcado, com o motivo no tooltip — igual ao menu. */
+.atalho-pilula.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.35);
+}
