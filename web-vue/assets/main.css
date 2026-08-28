@@ -3261,10 +3261,37 @@ body {
    focado por Tab poderia deslizar para baixo dela. O `scroll-margin-top` reserva a altura da
    faixa. Achado da skill sobre o commit anterior, consertado aqui em vez de reaberto.
    ==================================================================================================== */
-.content-frame {
-  padding: var(--cx-sp-5) var(--cx-sp-8) var(--cx-sp-7);
+/* ESCOPADO EM `> 1024px` — correcao de P0 em 27/08/2026 (VIS-E7e), nao era assim quando este
+   bloco nasceu. A intencao declarada aqui em cima era tokenizar a MARGEM DE PAGINA do desktop
+   ("`.content-frame` usava `18px 32px 28px`, tres numeros soltos"). Mas a regra saiu sem media
+   query, no fim do arquivo, com especificidade (0,1,0) — a mesma das anteriores. Media query nao
+   soma especificidade, entao ela vencia por ORDEM e matava a escada de mobile inteira:
+
+     linha  710  (< 1280px)  22px 16px
+     linha  737              14px 10px 20px
+     linha 1307 (<= 1024px)  20px 20px 28px
+     linha 1312 (<=  768px)  16px 14px 24px
+     linha 1317 (<=  390px)  14px 12px 20px   <- o lateral de 12px que o mobile usava
+
+   O comentario da linha 1305 diz para que a escada existe: "corrige regressao de padding no
+   mobile". Ela nao era alvo deste bloco; foi dano colateral.
+
+   O EFEITO GRAVE estava no VIS-08 (linha 2757): o teto do recado de estado vazio e
+   `100vw - sp-8 - sp-4` = `100vw - 64px`, e esses 64 foram MEDIDOS com o lateral de 12px
+   (12x2 do frame + 20x2 do card). Com 24px de lateral o espaco real cai para 302px enquanto o teto
+   continua em 326px: medido a 390, o recado estourava 37px para fora da propria casca de rolagem —
+   exatamente o defeito que o VIS-08 existe para consertar.
+
+   POR QUE ESCOPAR E NAO REFAZER O TETO: a escada de mobile e medida e sustenta o teto do VIS-08.
+   Refazer o teto seria recalcular um numero que so existe porque a escada existe, e trocaria uma
+   regressao por um acoplamento novo. Escopar devolve o estado medido e mantem o VIS-08 valido sem
+   toca-lo. */
+@media (width > 1024px) {
+  .content-frame {
+    padding: var(--cx-sp-5) var(--cx-sp-8) var(--cx-sp-7);
+  }
 }
-@media (width <= 1280px) {
+@media (width > 1024px) and (width <= 1280px) {
   .content-frame {
     padding: var(--cx-sp-5) var(--cx-sp-6) var(--cx-sp-6);
   }
@@ -3719,3 +3746,36 @@ body {
   }
 }
 /* ===================== FIM VIS-E7c ===================== */
+
+/* ===================== INICIO VIS-E7e — O TETO DO ESTADO VAZIO CONTA A CELULA (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Achado enquanto se media o P0 do `.content-frame`, e e defeito SEPARADO daquele — mais antigo, e
+   nao causado por ele. Com a escada de padding ja devolvida, medido a 390px:
+
+     casca visivel (`.responsive-table-shell`)   326px, comeca em x=32
+     celula (`td`)                               comeca em x=33 (1px de borda)
+     recado (`.tabela-vazio`)                    comeca em x=45, largura 326, termina em x=371
+     estouro para fora da casca                  13px
+
+   Os 13px sao `1px de borda + 12px de padding lateral da celula`. O teto do VIS-08 (linha 2757) e
+   `100vw - sp-8 - sp-4`, que desconta o recuo do `.content-frame` (12x2) e o padding do card
+   (20x2) — mas NAO desconta o padding da propria celula onde o recado vive. A conta sempre esteve
+   incompleta: quando o VIS-08 nasceu a celula tinha 16px e o estouro era de 17px; o VIS-E6d baixou
+   o padding para 12px e o estouro caiu para 13 sem que ninguem percebesse a causa.
+
+   Aqui entra so o `max-width` corrigido, e NAO uma edicao do bloco VIS-08 — ele continua inteiro e
+   revertivel por delecao, como manda o 67 §13.8-2. `--cx-sp-6` e exatamente os 12px de cada lado da
+   celula. Os 2px das bordas ficam de fora de proposito: nao ha token de 1px e inventar um numero
+   solto aqui seria trocar um acoplamento por outro.
+
+   A divida de fundo continua registrada no proprio VIS-08: a saida definitiva e
+   `container-type: inline-size` na casca com `100cqi` aqui, que dispensa reconstruir margem por
+   margem. Nao entra agora porque impoe contencao a um elemento que TODA tabela usa.
+   ================================================================================================ */
+@media (width <= 768px) {
+  .responsive-table-shell .tabela-vazio {
+    max-width: calc(100vw - var(--cx-sp-8) - var(--cx-sp-4) - var(--cx-sp-6));
+  }
+}
+/* ===================== FIM VIS-E7e ===================== */
