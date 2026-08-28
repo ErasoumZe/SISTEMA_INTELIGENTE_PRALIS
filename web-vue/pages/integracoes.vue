@@ -12,7 +12,7 @@ import type {
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
-import { mensagemErro } from "~/utils/domain";
+import { itemPorTela, mensagemErro } from "~/utils/domain";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -361,9 +361,14 @@ onMounted(async () => {
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 
     <div v-else class="d-grid ga-4">
-      <!-- VIS-10: cabecalho proprio passa a usar o componente comum. O seletor de tipo, que ja
-           vivia a direita do titulo, vai para o slot de acoes. Textos inalterados. -->
-      <AppCabecalhoTela titulo="Integrações" subtitulo="Chaves, funcionamento e dicionário de conversão do PDV.">
+      <!-- O NOME DA TELA VEM DO MENU (`itemPorTela`), e nao de uma string escrita aqui — antes a
+           mesma palavra estava em dois lugares, e duas fontes para o mesmo nome divergem com o tempo.
+           NAO da para usar `ctx.telaAtual`: esta pagina monta `AppShell` direto, sem o
+           `AppWorkspace`. O seletor de tipo segue no slot de acoes, como estava. -->
+      <AppCabecalhoTela
+        :titulo="itemPorTela.integracoes?.titulo ?? ''"
+        subtitulo="Chaves, funcionamento e dicionário de conversão do PDV."
+      >
         <template #acoes>
           <v-select
             v-model="tipoSelecionado"

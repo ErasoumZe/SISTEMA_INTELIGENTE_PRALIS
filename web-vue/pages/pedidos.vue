@@ -3,7 +3,7 @@ import type { AuthSession, PedidoDto, PedidoRecorrencia } from "@padaria/shared"
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
-import { mensagemErro } from "~/utils/domain";
+import { itemPorTela, mensagemErro } from "~/utils/domain";
 
 const router = useRouter();
 const { apiGet, apiPost, carregarSessao } = useApi();
@@ -209,9 +209,18 @@ onMounted(async () => {
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 
     <div v-else class="d-grid ga-4">
-      <!-- VIS-10: o cabecalho proprio desta pagina passa a usar o componente comum. Titulo e
-           subtitulo sao os mesmos que ja estavam aqui. -->
-      <AppCabecalhoTela titulo="Pedidos de reposicao" subtitulo="Compra/reposicao de estoque (manual e automatico)." />
+      <!-- O NOME DA TELA VEM DO MENU (`itemPorTela`), e nao de uma string escrita aqui. Antes eram
+           dois lugares dizendo o nome da mesma tela, e eles ja divergiam: o menu dizia "Pedidos" e o
+           cabecalho dizia "Pedidos de reposicao".
+           NAO da para usar `ctx.telaAtual` aqui: esta pagina monta `AppShell` direto, sem o
+           `AppWorkspace`, entao nao existe `ctx`. Importar o `itemPorTela` e a menor mudanca que
+           resolve, e nao mexe em assinatura de slot de nenhuma outra pagina.
+           O CONTEXTO NAO SE PERDE: o subtitulo, uma linha abaixo, continua dizendo do que se trata.
+           De quebra o subtitulo ganhou os acentos que faltavam (R-100). -->
+      <AppCabecalhoTela
+        :titulo="itemPorTela.pedidos?.titulo ?? ''"
+        subtitulo="Compra e reposição de estoque (manual e automática)."
+      />
 
       <v-card v-if="podeCriar" variant="tonal">
         <v-card-title class="text-subtitle-1">Gerar pedido automatico</v-card-title>

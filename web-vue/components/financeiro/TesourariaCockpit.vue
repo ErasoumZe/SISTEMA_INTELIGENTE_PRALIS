@@ -310,11 +310,23 @@ const saldo = computed(() => entrada.value - saida.value);
   gap: 18px;
 }
 
+/* `--cat-transferencias-tinta` e nao `-strong`, e sao as QUATRO ocorrencias do arquivo, nao uma.
+   O `-strong` NAO tem contraparte no tema escuro: o bloco `:root[data-theme="dark"]` redefine so
+   `-soft` e `-tinta` de cada categoria. Medido, sobre o canvas:
+     -strong #bb460a   claro 4,86  ·  escuro 3,54   <- reprovava no escuro
+     -tinta            claro 7,05  ·  escuro 8,35
+   Trocar so o `.tes-count` consertaria o numero e deixaria as outras tres divergindo dentro do
+   mesmo arquivo, entao vao as quatro. O fallback `#9a3412` saiu junto: fallback de hex existe para
+   quando o token pode faltar, e este nao pode — se faltar, o defeito e o token, e ele tem de
+   aparecer.
+   NAO foi criado `--cat-*-strong` no bloco escuro: isso e camada de token (69 §1.1), afeta as seis
+   categorias de uma vez, e o guardiao ainda nao alcanca o `:root`. Fica registrado como divida de
+   sistema no roteiro. */
 .tes-count {
   display: inline-block;
   margin-left: 4px;
   font-weight: 700;
-  color: var(--cat-transferencias-strong, #9a3412);
+  color: var(--cat-transferencias-tinta);
 }
 .tes-nova {
   background: var(--cat-transferencias-base, #c2410c) !important;
@@ -373,7 +385,7 @@ const saldo = computed(() => entrada.value - saida.value);
   letter-spacing: 0;
   font-size: 9.5px;
   font-weight: 700;
-  color: var(--cat-transferencias-strong, #9a3412);
+  color: var(--cat-transferencias-tinta);
   background: var(--cat-transferencias-soft, #fff1e8);
   border-radius: 5px;
   padding: 1px 5px;
@@ -463,7 +475,7 @@ const saldo = computed(() => entrada.value - saida.value);
   font-size: 14.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--cat-transferencias-strong, #9a3412);
+  color: var(--cat-transferencias-tinta);
 }
 .tes-num {
   text-align: right;
@@ -507,7 +519,7 @@ const saldo = computed(() => entrada.value - saida.value);
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 12px;
   background: var(--cat-transferencias-soft, #fff1e8);
-  color: var(--cat-transferencias-strong, #9a3412);
+  color: var(--cat-transferencias-tinta);
   border-radius: 5px;
   padding: 1px 5px;
 }

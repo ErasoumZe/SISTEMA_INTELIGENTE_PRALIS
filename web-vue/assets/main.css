@@ -2752,11 +2752,11 @@ body {
    A referencia vivid_glass nao tem esse conflito porque foi desenhada com UMA primaria. O Pralis
    tem seis. Por isso o gradiente fica onde a cor JA e a marca por natureza, e so ali.
 
-   NAO ALCANCA O FAB "+ NOVO", e isso e um bloqueio real, nao uma escolha: a linha 1740 declara
-   `background: var(--cx-brand) !important` — atalho shorthand, que zera `background-image`, com
-   `!important`, dentro do bloco SHELL, que e congelado. Venc-lo exige `!important` novo (proibido
-   neste lote) ou editar bloco congelado. As duas saidas pedem autorizacao propria. O mesmo vale
-   para o `.tes-nova` da Tesouraria.
+   ALCANCA O FAB "+ NOVO" desde 27/08/2026 (D-VIS-E5a). A `.shell-mobills .sidebar-new-button`
+   aplica `background: var(--cx-brand-gradiente) !important`, e NAO e `!important` novo: ele ja
+   estava naquela linha desde o bloco SHELL — mudou o VALOR, nao a forca. Ate 28/08 este paragrafo
+   afirmava o contrario, e citava um numero de linha que ja nao existia; ficou desatualizado.
+   Segue VERDADEIRO o fim: o `.tes-nova` da Tesouraria continua sem gradiente.
 
    Medido, branco sobre as duas pontas: 7,76 na cheia e 5,35 na clareada — as duas acima do
    minimo de 4,5:1 do 67 §11. O gradiente e ESTATICO: nada anima, entao nao ha o que o reset de
