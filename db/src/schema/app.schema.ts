@@ -29,6 +29,7 @@ import type {
 } from "@padaria/shared/admissoes";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
+import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -364,8 +365,8 @@ export const turnos = pgTable(
     // A consequencia esta em `admissoes_processos`: turno INCOMPLETO (sem etiqueta ou sem dias) nao
     // pode ser escolhido numa admissao. Essa regra mora no servico e no teste, e nao aqui — um CHECK
     // nao enxerga a outra tabela, e FK nao aponta para indice parcial.
-    etiqueta: text("etiqueta").$type<"M" | "T" | "I">(),
-    diasSemana: text("dias_semana").array(),
+    etiqueta: text("etiqueta").$type<EtiquetaTurno>(),
+    diasSemana: text("dias_semana").array().$type<DiaSemana[]>(),
     ativo: boolean("ativo").notNull().default(true),
     criadoEm,
     atualizadoEm

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
+import { cpfTesteSchema } from "./index.js";
 
 /**
  * ADM-002 V0 — o PROCESSO DE ADMISSAO.
@@ -120,8 +121,14 @@ export const cancelarProcessoPayloadSchema = z.object({
  * NAO ha area, setor, CBO, salario nem dados bancarios — fora desta vertical.
  */
 export const criarProcessoDiretoPayloadSchema = z.object({
+  nomeCompleto: z.string().trim().min(1, "Informe o nome completo").max(200),
+  // MESMO schema do periodo de teste: valida digito verificador e normaliza para 11 digitos. Um
+  // segundo validador de CPF seria a segunda regra para a mesma pergunta.
+  cpf: cpfTesteSchema,
   funcaoId: z.string().uuid("Funcao operacional invalida"),
-  jornadaHorario: z.string().trim().min(1, "Informe a jornada/horario").max(200),
+  // Turno do CATALOGO da empresa. Nao ha mais jornada em texto: a coluna existe para o historico
+  // legado da V1A e nao e escrita por este caminho.
+  turnoId: z.string().uuid("Turno invalido"),
   dataAdmissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de admissao invalida")
 });
 
@@ -201,7 +208,11 @@ export const processoListaDtoSchema = z.object({
   status: statusProcessoSchema,
   situacao: situacaoProcessoSchema,
   nomeCompleto: z.string().nullable(),
+  // A lista NUNCA carrega digito de CPF, nem parcial — mesma regra da ADM-001. Constante quando ha
+  // CPF, nula quando nao ha (processo de origem teste, cujo CPF mora no teste).
+  cpfMascarado: z.string().nullable(),
   funcaoNome: z.string().nullable(),
+  turnoResumo: z.string().nullable(),
   dataAdmissao: z.string().nullable(),
   exameSituacao: situacaoExameSchema,
   criadoEm: z.string()
@@ -243,7 +254,22 @@ export const processoDetalheDtoSchema = z.object({
   nomeCompleto: z.string().nullable(),
   // Funcao e jornada: da origem teste sao HERDADAS e apenas exibidas; da direta vem do proprio
   // processo. Quem le nao precisa saber de onde — o servidor resolve numa funcao so.
+  cpfMascarado: z.string().nullable(),
   funcaoNome: z.string().nullable(),
+  /**
+   * RETRATO do turno no ato da criacao — nao o catalogo de hoje. Se o DP mudar o horario do turno M
+   * amanha, isto NAO muda: e o que foi combinado com esta pessoa.
+   */
+  turnoEtiqueta: z.string().nullable(),
+  turnoRotulo: z.string().nullable(),
+  turnoHoraInicio: z.string().nullable(),
+  turnoHoraFim: z.string().nullable(),
+  turnoDiasSemana: z.array(z.string()).nullable(),
+  /**
+   * HISTORICO LEGADO. Processos diretos criados na V1A, antes do catalogo de turnos, guardaram a
+   * jornada em texto. Nao e escrita por caminho novo e nao foi convertida — converter seria adivinhar
+   * qual turno da empresa aquele texto era.
+   */
   jornadaHorario: z.string().nullable(),
   internos: dadosInternosDtoSchema,
   // SO o nome. E-mail nunca entra na projecao — e identificador reaproveitavel em outras rotas.

@@ -39,6 +39,12 @@ import {
   type TesteLinha
 } from "./admissoes.repository.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
+// O lock e a leitura do PROCESSO vem do repositorio dele: e a mesma pergunta feita dos dois lados, e
+// duplicar a consulta aqui criaria a segunda resposta para "esta pessoa ja esta em admissao?".
+import {
+  existeProcessoAtivoPorCpfRepository,
+  travarPessoaRepository
+} from "./processos.repository.js";
 import { criarProcessoDaEfetivacao } from "./processos.service.js";
 import { obterProcessoPorTesteRepository } from "./processos.repository.js";
 
@@ -188,6 +194,19 @@ export async function criarTeste(body: DadosExternos, perfil?: PerfilUsuario) {
   const dados = criarTestePayloadSchema.parse(body);
 
   return executarEmTransacao(async (tx) => {
+    // PRIMEIRA coisa da transacao (ADM-003 V1B): serializa esta pessoa nesta empresa.
+    //
+    // O indice unico parcial abaixo continua sendo a garantia DENTRO desta tabela. O que ele nao
+    // alcanca e a corrida com a ADMISSAO DIRETA, que grava noutra tabela — indice nao cruza tabelas.
+    // Este lock e o outro lado do que `processos.service.ts` toma: um lado so nao resolveria nada.
+    await travarPessoaRepository(empresaId, dados.cpf, tx);
+    if (await existeProcessoAtivoPorCpfRepository(dados.cpf, empresaId, tx)) {
+      throw conflito(
+        "Ja existe um processo de admissao em andamento para este CPF nesta empresa.",
+        "CPF_JA_EM_ADMISSAO"
+      );
+    }
+
     await exigirFuncaoUtilizavel(dados.funcaoId, empresaId, tx, false);
     // Pre-checagem para a mensagem ser exata. NAO e a garantia: a garantia e o indice unico parcial,
     // conferido logo abaixo pelo retorno nulo do insert.

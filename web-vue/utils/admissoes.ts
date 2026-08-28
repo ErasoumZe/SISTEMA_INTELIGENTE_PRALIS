@@ -10,6 +10,7 @@ import type {
   StatusProcesso,
   StatusTeste
 } from "@padaria/shared";
+import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
 
 // Rotulos em UM lugar so: a lista, o formulario e o painel de detalhe mostram os mesmos estados, e
 // tres copias divergiriam no primeiro ajuste de texto.
@@ -127,6 +128,45 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   retomado: "Processo retomado (ASO apto)",
   cpf_revelado: "CPF revelado"
 };
+
+/**
+ * ADM-003 V1B — turno. A etiqueta é como a operação fala do turno; os dias vêm do mesmo vocabulário
+ * de `colaboradores_jornadas`, para não existirem dois nomes para segunda-feira.
+ */
+export const rotuloEtiquetaTurno: Record<EtiquetaTurno, string> = {
+  M: "M · Manhã",
+  T: "T · Tarde",
+  I: "I · Integral"
+};
+
+const rotuloDiaSemana: Record<DiaSemana, string> = {
+  SEGUNDA: "seg",
+  TERCA: "ter",
+  QUARTA: "qua",
+  QUINTA: "qui",
+  SEXTA: "sex",
+  SABADO: "sáb",
+  DOMINGO: "dom"
+};
+
+export function rotuloDiaSemanaCurto(dia: string): string {
+  return rotuloDiaSemana[dia as DiaSemana] ?? dia;
+}
+
+/** O retrato do turno numa linha: etiqueta, dias e horários. Vazio vira "—", nunca inventa. */
+export function rotuloTurnoDoProcesso(processo: {
+  turnoEtiqueta: string | null;
+  turnoHoraInicio: string | null;
+  turnoHoraFim: string | null;
+  turnoDiasSemana: string[] | null;
+}): string | null {
+  if (!processo.turnoEtiqueta) return null;
+  const dias = processo.turnoDiasSemana?.map(rotuloDiaSemanaCurto).join(", ") ?? "";
+  const inicio = processo.turnoHoraInicio?.slice(0, 5) ?? "";
+  const fim = processo.turnoHoraFim?.slice(0, 5) ?? "";
+  const etiqueta = rotuloEtiquetaTurno[processo.turnoEtiqueta as EtiquetaTurno] ?? processo.turnoEtiqueta;
+  return [etiqueta, dias, `${inicio}–${fim}`].filter(Boolean).join(" · ");
+}
 
 /** De onde o processo nasceu. SÓ LEITURA — a origem se registra, não se escolhe. */
 export const rotuloOrigemProcesso: Record<OrigemProcesso, string> = {

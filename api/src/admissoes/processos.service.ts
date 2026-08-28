@@ -11,14 +11,24 @@ import {
   type ProcessoDetalheDto,
   type ProcessoListaDto
 } from "@padaria/shared/admissoes";
+import { cpfTotalmenteMascarado } from "@padaria/shared/admissoes";
+import { turnoCompleto } from "@padaria/shared/turnos";
 import type { DadosExternos } from "@padaria/shared/api";
 import type { PerfilUsuario } from "@padaria/shared";
 import { conflito, erroValidacao, naoEncontrado } from "../erros.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { empresaDoAtor, atorDoPerfil } from "./ator.js";
+// A leitura do TESTE vem do repositorio da ADM-001: perguntar "existe teste aberto com este CPF?"
+// e a mesma pergunta nas duas verticais, e reescreve-la aqui criaria a segunda resposta.
+import { existeTesteAbertoPorCpfRepository } from "./admissoes.repository.js";
 import {
   atualizarExameRepository,
   avancarVersaoProcessoRepository,
+  definirStatusProcessoRepository,
+  existeProcessoAtivoPorCpfRepository,
+  obterCpfDoProcessoRepository,
+  obterTurnoDaEmpresaRepository,
+  travarPessoaRepository,
   atualizarInternosRepository,
   bloquearInternosRepository,
   bloquearProcessoRepository,
@@ -54,7 +64,15 @@ function paraDetalheDto(linha: ProcessoLinha): ProcessoDetalheDto {
     // NULO no processo direto ate o candidato responder. Quem exibe decide o rotulo — o servidor
     // nao inventa identidade para preencher o vazio.
     nomeCompleto: linha.nomeCompleto,
+    // Constante, nunca parcial: a projecao nao carrega digito de CPF. Revelar e ato proprio e
+    // auditado, como na ADM-001.
+    cpfMascarado: linha.cpf ? cpfTotalmenteMascarado() : null,
     funcaoNome: linha.funcaoNome,
+    turnoEtiqueta: linha.turnoEtiqueta,
+    turnoRotulo: linha.turnoRotulo,
+    turnoHoraInicio: linha.turnoHoraInicio,
+    turnoHoraFim: linha.turnoHoraFim,
+    turnoDiasSemana: linha.turnoDiasSemana,
     jornadaHorario: linha.jornadaHorario,
     internos: {
       versao: linha.internosVersao,
@@ -136,17 +154,41 @@ export async function criarProcessoDireto(body: DadosExternos, perfil?: PerfilUs
   const dados = criarProcessoDiretoPayloadSchema.parse(body);
 
   return executarEmTransacao(async (tx) => {
+    // PRIMEIRA coisa da transacao, antes de qualquer leitura: serializa esta pessoa nesta empresa.
+    // Depois da leitura seria tarde — em READ COMMITTED, ler nao trava nada, e duas transacoes
+    // simultaneas passariam pelas duas checagens e gravariam as duas.
+    await travarPessoaRepository(empresaId, dados.cpf, tx);
+    await recusarSeCpfJaEstaEmUso(dados.cpf, empresaId, tx);
+
     const funcao = await obterFuncaoAtivaRepository(dados.funcaoId, empresaId, tx);
     // "Nao existe nesta empresa" e "existe e esta inativa" sao recusas diferentes. A FK composta ja
     // impediria a primeira no banco, mas a mensagem certa vale mais que um 23503 cru.
     if (!funcao) throw erroValidacao("Funcao operacional nao encontrada nesta empresa");
     if (!funcao.ativo) throw erroValidacao("Esta funcao operacional esta inativa");
 
+    const turno = await obterTurnoDaEmpresaRepository(dados.turnoId, empresaId, tx);
+    if (!turno) throw erroValidacao("Turno nao encontrado nesta empresa");
+    // Turno INCOMPLETO nao serve para admitir: a tela precisa mostrar etiqueta, dias e horarios, e
+    // metade disso nao existiria. A tela ja nao oferece — isto recusa quem tentar forcar.
+    if (!turnoCompleto(turno)) {
+      throw erroValidacao(
+        "Este turno esta incompleto: configure etiqueta (M/T/I) e dias da semana no cadastro de Turnos."
+      );
+    }
+
     const criado = await criarProcessoDiretoRepository(
       {
         empresaId,
+        nomeCompleto: dados.nomeCompleto,
+        cpf: dados.cpf,
         funcaoId: dados.funcaoId,
-        jornadaHorario: dados.jornadaHorario,
+        turnoId: turno.id,
+        // RETRATO tirado agora. O catalogo pode mudar depois; o combinado com esta pessoa, nao.
+        turnoRotulo: turno.nome,
+        turnoEtiqueta: turno.etiqueta!,
+        turnoHoraInicio: turno.horaInicio,
+        turnoHoraFim: turno.horaFim,
+        turnoDiasSemana: turno.diasSemana!,
         atorUsuarioId: ator
       },
       tx
@@ -169,6 +211,69 @@ export async function criarProcessoDireto(body: DadosExternos, perfil?: PerfilUs
   });
 }
 
+/**
+ * Recusa se o CPF ja esta em uso nesta empresa, nos DOIS caminhos — teste em andamento ou processo
+ * nao cancelado.
+ *
+ * Chamada SEMPRE depois de `travarPessoaRepository`, nunca antes: sem o lock, isto e so uma leitura
+ * que duas transacoes fazem ao mesmo tempo e as duas aprovam.
+ *
+ * A mensagem NAO diz de quem e o CPF, nem onde ele esta: quem pergunta ja sabe o numero que digitou,
+ * e dizer mais entregaria a existencia de um cadastro alheio.
+ */
+async function recusarSeCpfJaEstaEmUso(cpf: string, empresaId: string, tx: TransacaoBanco) {
+  if (await existeTesteAbertoPorCpfRepository({ empresaId, cpf }, tx)) {
+    throw conflito(
+      "Ja existe um periodo de teste em andamento para este CPF nesta empresa.",
+      "CPF_JA_EM_ADMISSAO"
+    );
+  }
+  if (await existeProcessoAtivoPorCpfRepository(cpf, empresaId, tx)) {
+    throw conflito(
+      "Ja existe um processo de admissao em andamento para este CPF nesta empresa.",
+      "CPF_JA_EM_ADMISSAO"
+    );
+  }
+}
+
+/**
+ * REVELAR o CPF do processo. Ato explicito e auditado, na mesma transacao da leitura: se a auditoria
+ * falhar, o CPF nao sai. Mesma disciplina do D-4 do PROJECT_BRAIN/31.
+ */
+export async function revelarCpfDoProcesso(id: string, perfil?: PerfilUsuario) {
+  const empresaId = empresaDoAtor(perfil);
+  const ator = atorDoPerfil(perfil);
+
+  return executarEmTransacao(async (tx) => {
+    const alvo = await bloquearProcessoRepository(id, empresaId, tx);
+    if (!alvo) processoNaoEncontrado();
+
+    const linha = await obterCpfDoProcessoRepository(id, empresaId, tx);
+    // Processo vindo de teste nao tem CPF proprio — ele mora no teste, e e la que se revela.
+    if (!linha?.cpf) {
+      throw erroValidacao("Este processo nao tem CPF proprio: ele veio de um periodo de teste.");
+    }
+
+    const evento = await avancarVersaoProcessoRepository(
+      { id, empresaId, versaoAtual: alvo.versao, atorUsuarioId: ator },
+      tx
+    );
+    if (!evento) throw conflito("Alguem alterou este processo enquanto voce lia", "VERSAO_CONFLITANTE");
+
+    await registrarEventoProcessoRepository(
+      {
+        processoId: id,
+        empresaId,
+        versao: evento.versao,
+        acao: "cpf_revelado",
+        atorUsuarioId: ator
+      },
+      tx
+    );
+    return { cpf: linha.cpf };
+  });
+}
+
 export async function listarProcessos(query: DadosExternos, perfil?: PerfilUsuario) {
   const empresaId = empresaDoAtor(perfil);
   const filtros = processosQuerySchema.parse(query);
@@ -179,7 +284,13 @@ export async function listarProcessos(query: DadosExternos, perfil?: PerfilUsuar
     status: linha.status,
     situacao: situacaoDoProcesso(linha.status),
     nomeCompleto: linha.nomeCompleto,
+    cpfMascarado: linha.cpf ? cpfTotalmenteMascarado() : null,
     funcaoNome: linha.funcaoNome,
+    // Resumo do RETRATO, para a lista caber numa coluna. `null` quando veio do teste, que ainda nao
+    // tem turno de catalogo — nesse caso a jornada legada aparece no detalhe.
+    turnoResumo: linha.turnoEtiqueta
+      ? `${linha.turnoEtiqueta} · ${linha.turnoHoraInicio?.slice(0, 5) ?? ""}–${linha.turnoHoraFim?.slice(0, 5) ?? ""}`
+      : null,
     dataAdmissao: linha.internosDataAdmissao,
     exameSituacao: linha.exameSituacao,
     criadoEm: linha.criadoEm.toISOString()
@@ -201,7 +312,9 @@ export async function salvarDadosInternos(id: string, body: DadosExternos, perfi
     // do bloco interno em vez do 404 do processo — dois textos distintos para quem tenta adivinhar.
     const alvo = await bloquearProcessoRepository(id, empresaId, tx);
     if (!alvo) processoNaoEncontrado();
-    if (alvo.status !== "iniciado") {
+    // PAUSADO continua editavel — e obrigatorio que continue: e registrando `aso_apto` num processo
+    // pausado que ele volta a `iniciado`. Recusar aqui deixaria a pausa sem saida.
+    if (alvo.status === "cancelado") {
       throw conflito("Este processo de admissao foi cancelado", "PROCESSO_NAO_EDITAVEL");
     }
 
@@ -264,7 +377,9 @@ export async function atualizarExame(id: string, body: DadosExternos, perfil?: P
   return executarEmTransacao(async (tx) => {
     const alvo = await bloquearProcessoRepository(id, empresaId, tx);
     if (!alvo) processoNaoEncontrado();
-    if (alvo.status !== "iniciado") {
+    // PAUSADO continua editavel — e obrigatorio que continue: e registrando `aso_apto` num processo
+    // pausado que ele volta a `iniciado`. Recusar aqui deixaria a pausa sem saida.
+    if (alvo.status === "cancelado") {
       throw conflito("Este processo de admissao foi cancelado", "PROCESSO_NAO_EDITAVEL");
     }
 
@@ -308,6 +423,42 @@ export async function atualizarExame(id: string, body: DadosExternos, perfil?: P
       },
       tx
     );
+
+    /**
+     * A PAUSA e a RETOMADA sao CONSEQUENCIA de registrar o ASO, na mesma transacao — nunca atos
+     * proprios. Nao existe rota nem botao de retomar: um verbo separado para isto seria o segundo
+     * caminho para o mesmo ato, que a regra-mae proibe.
+     *
+     * Retomar so acontece a partir de PAUSADO. Registrar apto num processo ja iniciado nao mexe no
+     * status — nao ha nada de onde voltar.
+     */
+    const statusAlvo =
+      dados.situacao === "aso_nao_apto" && alvo.status === "iniciado"
+        ? ("pausado" as const)
+        : dados.situacao === "aso_apto" && alvo.status === "pausado"
+          ? ("iniciado" as const)
+          : null;
+
+    if (statusAlvo) {
+      const transicao = await definirStatusProcessoRepository(
+        { id, empresaId, versaoAtual: evento.versao, status: statusAlvo, atorUsuarioId: ator },
+        tx
+      );
+      if (!transicao) {
+        throw conflito("Alguem alterou este processo enquanto voce editava", "VERSAO_CONFLITANTE");
+      }
+      await registrarEventoProcessoRepository(
+        {
+          processoId: id,
+          empresaId,
+          versao: transicao.versao,
+          acao: statusAlvo === "pausado" ? "pausado" : "retomado",
+          atorUsuarioId: ator
+        },
+        tx
+      );
+    }
+
     return atualizado;
   });
 }
@@ -349,7 +500,9 @@ export async function cancelarProcesso(id: string, body: DadosExternos, perfil?:
     // processo de outra empresa, entregando existencia de graca.
     const alvo = await bloquearProcessoRepository(id, empresaId, tx);
     if (!alvo) processoNaoEncontrado();
-    if (alvo.status !== "iniciado") {
+    // Pausado TAMBEM cancela: um processo parado por ASO nao apto e justamente um dos que o DP vai
+    // querer encerrar. `cancelado` continua terminal — dali nao se volta.
+    if (alvo.status === "cancelado") {
       throw conflito("Este processo de admissao ja foi cancelado", "PROCESSO_NAO_CANCELAVEL");
     }
     if (alvo.versao !== dados.versao) {

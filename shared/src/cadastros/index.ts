@@ -47,6 +47,9 @@ export type CadastroForm = {
   sigla: string;
   horaInicio: string;
   horaFim: string;
+  /** ADM-003 V1B — turno. Vazio significa "nao informado", e o payload o traduz para `null`. */
+  etiquetaTurno: "" | "M" | "T" | "I";
+  diasSemanaTurno: string[];
   /** Do item de PATRIMONIO — o unico cadastro deste modal que ainda tem marca. */
   marca: string;
   contaId: string;
@@ -137,7 +140,17 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     };
   if (tela === "unidades") return { empresaId, nome: form.nome, sigla: form.sigla };
   if (tela === "turnos")
-    return { empresaId, nome: form.nome, horaInicio: form.horaInicio, horaFim: form.horaFim, ativo: form.ativo };
+    return {
+      empresaId,
+      nome: form.nome,
+      horaInicio: form.horaInicio,
+      horaFim: form.horaFim,
+      ativo: form.ativo,
+      // O formulario SEMPRE manda os dois: quem edita pela tela ve o valor atual e decide. Vazio vira
+      // `null` (limpar), e nao `undefined` — "nao mexer" e para cliente que nem conhece os campos.
+      etiqueta: form.etiquetaTurno || null,
+      diasSemana: form.diasSemanaTurno.length ? form.diasSemanaTurno : null
+    };
   if (tela === "fornecedores") return { empresaId, nome: form.nome, documento: form.documento || null };
   if (tela === "socios_gestores") return { empresaId, nome: form.nome, ativo: form.ativo };
   if (tela === "clientes")

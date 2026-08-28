@@ -75,15 +75,21 @@ describe("a V0 nao cresce para fora do escopo", () => {
   it("o processo NUNCA nasce de POST quando ha teste", () => {
     // A garantia nao e "o service confere": o contrato nao TEM o campo, entao pedir origem teste por
     // aquela rota e impossivel, e nao apenas proibido.
+    //
+    // A V1B trouxe identidade para o pre-cadastro do DP — nome e CPF passaram a estar aqui, por
+    // decisao. O que NAO pode aparecer nunca e `testeId`: e ele que abriria o segundo caminho.
     const contrato = readFileSync(join(RAIZ, "shared", "src", "admissoes", "processos.ts"), "utf8");
     const bloco = contrato.slice(
       contrato.indexOf("criarProcessoDiretoPayloadSchema"),
       contrato.indexOf("dadosInternosPayloadSchema")
     );
     expect(bloco).not.toContain("testeId");
-    // Nem identidade: nome e CPF pertencem ao formulario do candidato.
-    expect(bloco).not.toContain("nomeCompleto");
-    expect(bloco.toLowerCase()).not.toContain("cpf");
+    // E o pre-cadastro exige exatamente o que o DP confirmou.
+    for (const campo of ["nomeCompleto", "cpf", "funcaoId", "turnoId", "dataAdmissao"]) {
+      expect(bloco, campo).toContain(campo);
+    }
+    // Jornada em texto saiu do formulario: turno vem do catalogo.
+    expect(bloco).not.toContain("jornadaHorario");
   });
 
   it("a lista existe, e e consulta — nao tem acao de criar por outro nome", () => {
@@ -311,9 +317,16 @@ describe("a origem e o vinculo com o teste", () => {
       // Admissao direta: sem teste e sem nome ate o candidato responder. O DTO precisa admitir isso
       // — inventar identidade para preencher o vazio e exatamente o que a vertical recusou.
       testeId: null,
-      nomeCompleto: null,
+      nomeCompleto: "Pessoa Sintetica",
+      cpfMascarado: "•••.•••.•••-••",
       funcaoNome: "Balconista",
-      jornadaHorario: "Seg a sex",
+      turnoEtiqueta: "M",
+      turnoRotulo: "Manha",
+      turnoHoraInicio: "06:00:00",
+      turnoHoraFim: "14:00:00",
+      turnoDiasSemana: ["SEGUNDA", "TERCA"],
+      // HISTORICO LEGADO: nulo em processo novo, preenchido nos que a V1A criou antes do catalogo.
+      jornadaHorario: null,
       internos,
       criadoPorNome: null,
       criadoEm: "2026-09-01T12:00:00.000Z",
@@ -323,8 +336,11 @@ describe("a origem e o vinculo com o teste", () => {
       canceladoEm: null
     };
     const lido = processoDetalheDtoSchema.parse(base);
+    // Sem teste, mas COM identidade: e a admissao direta da V1B.
     expect(lido.testeId).toBeNull();
-    expect(lido.nomeCompleto).toBeNull();
+    expect(lido.nomeCompleto).toBe("Pessoa Sintetica");
+    // A projecao nunca carrega digito: mascara constante, revelacao e ato auditado a parte.
+    expect(lido.cpfMascarado).not.toMatch(/[0-9]/);
 
     // A ORIGEM, essa, e obrigatoria: e ela que diz se falta caminho de volta ou se ele nunca existiu.
     const { origem, ...semOrigem } = base;

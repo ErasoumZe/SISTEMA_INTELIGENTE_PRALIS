@@ -1,6 +1,7 @@
 import { toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import type { Permissao } from "@padaria/shared";
 import type { CadastroForm, Opcao, Opcoes, PermissoesPaginadas, TreeItem } from "~/types/padaria";
+import { rotuloDiaSemanaCurto } from "~/utils/admissoes";
 import { dinheiro, permissaoPertenceASecao, permissoes, permissoesOcultasNaTela } from "~/utils/domain";
 import type { SecaoPermissao } from "~/utils/domain";
 
@@ -116,6 +117,13 @@ export function useCadastroView(params: {
         nome: item.nome ?? "",
         inicio: (item.horaInicio ?? "").slice(0, 5),
         fim: (item.horaFim ?? "").slice(0, 5),
+        // ADM-003 V1B. `etiqueta` e `dias` vazios significam TURNO INCOMPLETO — ele continua valido
+        // no cadastro, mas nao pode ser escolhido numa admissao. A grade mostra isso para o DP saber
+        // o que falta preencher, em vez de descobrir na hora de admitir.
+        etiquetaTurno: item.etiqueta ?? "",
+        etiqueta: item.etiqueta ?? "—",
+        dias: item.diasSemana?.length ? item.diasSemana.map(rotuloDiaSemanaCurto).join(", ") : "—",
+        diasSemanaTurno: (item.diasSemana ?? []).join(","),
         ativo: item.ativo === false ? "Não" : "Sim"
       }));
     if (tela === "usuarios")
@@ -224,7 +232,7 @@ export function useCadastroView(params: {
       grupos: ["Nome", "Tipo"],
       unidades: ["Nome", "Sigla"],
       patrimonio: ["Tipo", "Sigla", "Nome", "Marca", "Setor"],
-      turnos: ["Nome", "Inicio", "Fim", "Ativo"],
+      turnos: ["Nome", "Etiqueta", "Dias", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
       usuarios: ["Nome", "Email", "Role", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],

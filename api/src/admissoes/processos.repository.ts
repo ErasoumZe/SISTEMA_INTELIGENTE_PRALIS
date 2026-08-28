@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   admissoesProcessos,
@@ -6,7 +6,8 @@ import {
   admissoesProcessosInternos,
   admissoesTestes
 } from "@padaria/db/schema/admissoes";
-import { funcoesOperacionais, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import { funcoesOperacionais, perfisUsuarios, turnos } from "@padaria/db/schema/cadastro";
+import { sqlTravarAdmissaoDaPessoa } from "@padaria/db/sessao";
 import type {
   AcaoHistoricoProcesso,
   OrigemProcesso,
@@ -14,6 +15,7 @@ import type {
   SituacaoExame,
   StatusProcesso
 } from "@padaria/shared/admissoes";
+import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
 import type { PaginationQuery, ResultadoPaginado } from "@padaria/shared/api";
 import { banco, type TransacaoBanco } from "../banco/conexao.js";
 
@@ -38,7 +40,14 @@ export type ProcessoLinha = {
   testeId: string | null;
   // NULO ate o candidato responder, no processo direto. Nao ha coluna de nome no processo.
   nomeCompleto: string | null;
+  nomeCompletoDireto: string | null;
+  cpf: string | null;
   funcaoNome: string | null;
+  turnoEtiqueta: string | null;
+  turnoRotulo: string | null;
+  turnoHoraInicio: string | null;
+  turnoHoraFim: string | null;
+  turnoDiasSemana: string[] | null;
   jornadaHorario: string | null;
   criadoPorNome: string | null;
   criadoEm: Date;
@@ -92,8 +101,15 @@ export async function criarProcessoRepository(
 export async function criarProcessoDiretoRepository(
   input: {
     empresaId: string;
+    nomeCompleto: string;
+    cpf: string;
     funcaoId: string;
-    jornadaHorario: string;
+    turnoId: string;
+    turnoRotulo: string;
+    turnoEtiqueta: EtiquetaTurno;
+    turnoHoraInicio: string;
+    turnoHoraFim: string;
+    turnoDiasSemana: DiaSemana[];
     atorUsuarioId: string;
   },
   db: TransacaoBanco
@@ -104,14 +120,88 @@ export async function criarProcessoDiretoRepository(
       empresaId: input.empresaId,
       origem: "admissao_direta",
       testeId: null,
+      nomeCompleto: input.nomeCompleto,
+      cpf: input.cpf,
       funcaoId: input.funcaoId,
-      jornadaHorario: input.jornadaHorario,
+      turnoId: input.turnoId,
+      // RETRATO gravado no ato. Nao e copia do catalogo: e o que foi combinado com esta pessoa, e
+      // precisa sobreviver a uma edicao futura do turno.
+      turnoRotulo: input.turnoRotulo,
+      turnoEtiqueta: input.turnoEtiqueta,
+      turnoHoraInicio: input.turnoHoraInicio,
+      turnoHoraFim: input.turnoHoraFim,
+      turnoDiasSemana: input.turnoDiasSemana,
+      // `jornadaHorario` NAO e escrita: ela existe so para o historico legado da V1A.
       criadoPor: input.atorUsuarioId,
       atualizadoPor: input.atorUsuarioId
     })
     .returning({ id: admissoesProcessos.id, versao: admissoesProcessos.versao });
   if (!linha) throw new Error("Processo de admissao direta nao criado");
   return linha;
+}
+
+/**
+ * Serializa, DENTRO da transacao, tudo que decide sobre a mesma pessoa na mesma empresa.
+ *
+ * Precisa ser chamado nos DOIS caminhos — criar teste e criar admissao direta — antes de qualquer
+ * leitura. Um lado so nao resolve nada: e justamente a corrida entre eles que indice nenhum alcanca,
+ * porque indice nao cruza tabelas.
+ */
+export async function travarPessoaRepository(empresaId: string, cpf: string, db: TransacaoBanco) {
+  await db.execute(sqlTravarAdmissaoDaPessoa(empresaId, cpf));
+}
+
+/** Existe processo NAO cancelado com este CPF nesta empresa? Le depois do lock, nunca antes. */
+export async function existeProcessoAtivoPorCpfRepository(
+  cpf: string,
+  empresaId: string,
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .select({ id: admissoesProcessos.id })
+    .from(admissoesProcessos)
+    .where(
+      and(
+        eq(admissoesProcessos.cpf, cpf),
+        eq(admissoesProcessos.empresaId, empresaId),
+        ne(admissoesProcessos.status, "cancelado")
+      )
+    )
+    .limit(1);
+  return Boolean(linha);
+}
+
+/** O CPF do processo, para a revelacao auditada. Mesma disciplina da ADM-001. */
+export async function obterCpfDoProcessoRepository(id: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({ cpf: admissoesProcessos.cpf, versao: admissoesProcessos.versao })
+    .from(admissoesProcessos)
+    .where(and(eq(admissoesProcessos.id, id), eq(admissoesProcessos.empresaId, empresaId)))
+    .limit(1);
+  return linha ?? null;
+}
+
+/**
+ * O turno, com o que a admissao precisa para decidir se ele serve.
+ *
+ * Devolve a linha inteira, e nao um booleano: "nao existe nesta empresa" e "existe mas esta
+ * incompleto" sao recusas diferentes, com mensagens diferentes.
+ */
+export async function obterTurnoDaEmpresaRepository(turnoId: string, empresaId: string, db: TransacaoBanco) {
+  const [linha] = await db
+    .select({
+      id: turnos.id,
+      nome: turnos.nome,
+      etiqueta: turnos.etiqueta,
+      diasSemana: turnos.diasSemana,
+      horaInicio: turnos.horaInicio,
+      horaFim: turnos.horaFim,
+      ativo: turnos.ativo
+    })
+    .from(turnos)
+    .where(and(eq(turnos.id, turnoId), eq(turnos.empresaId, empresaId)))
+    .limit(1);
+  return linha ?? null;
 }
 
 /** A funcao operacional existe nesta empresa, e esta ativa? */
@@ -225,6 +315,34 @@ export async function avancarVersaoProcessoRepository(
   return linha ?? null;
 }
 
+/**
+ * Muda o STATUS do processo sem tocar nos campos de cancelamento. Serve a pausa e a retomada, que
+ * sao consequencia de registrar o ASO — nunca atos proprios. Nao ha rota nem botao para elas.
+ */
+export async function definirStatusProcessoRepository(
+  input: {
+    id: string;
+    empresaId: string;
+    versaoAtual: number;
+    status: "iniciado" | "pausado";
+    atorUsuarioId: string;
+  },
+  db: TransacaoBanco
+) {
+  const [linha] = await db
+    .update(admissoesProcessos)
+    .set({ status: input.status, versao: input.versaoAtual + 1, atualizadoPor: input.atorUsuarioId })
+    .where(
+      and(
+        eq(admissoesProcessos.id, input.id),
+        eq(admissoesProcessos.empresaId, input.empresaId),
+        eq(admissoesProcessos.versao, input.versaoAtual)
+      )
+    )
+    .returning({ versao: admissoesProcessos.versao });
+  return linha ?? null;
+}
+
 /** Exame: acao propria, com autoria e data proprias. */
 export async function atualizarExameRepository(
   input: {
@@ -292,9 +410,20 @@ function selecaoProcesso() {
     status: admissoesProcessos.status,
     versao: admissoesProcessos.versao,
     testeId: admissoesProcessos.testeId,
-    nomeCompleto: admissoesTestes.nomeCompleto,
+    // A identidade vem do teste OU do proprio processo, nunca dos dois: o CHECK de coerencia torna a
+    // coexistencia impossivel, e o `coalesce` resolve a origem numa linha so.
+    nomeCompleto: sql<string | null>`coalesce(${admissoesTestes.nomeCompleto}, ${admissoesProcessos.nomeCompleto})`,
+    nomeCompletoDireto: admissoesProcessos.nomeCompleto,
+    cpf: sql<string | null>`coalesce(${admissoesTestes.cpf}, ${admissoesProcessos.cpf})`,
     funcaoNome: sql<string | null>`coalesce(${funcaoDoTeste.nome}, ${funcaoDoProcesso.nome})`,
-    jornadaHorario: sql<string | null>`coalesce(${admissoesTestes.jornadaHorario}, ${admissoesProcessos.jornadaHorario})`,
+    // RETRATO, nao catalogo: sai das colunas do processo. Se o turno mudar amanha, isto nao muda.
+    turnoEtiqueta: admissoesProcessos.turnoEtiqueta,
+    turnoRotulo: admissoesProcessos.turnoRotulo,
+    turnoHoraInicio: admissoesProcessos.turnoHoraInicio,
+    turnoHoraFim: admissoesProcessos.turnoHoraFim,
+    turnoDiasSemana: admissoesProcessos.turnoDiasSemana,
+    // HISTORICO LEGADO: so a origem direta da V1A tem. A do teste e proibida de ter, por CHECK.
+    jornadaHorario: admissoesProcessos.jornadaHorario,
     // SO o nome. E-mail nunca entra na projecao.
     criadoPorNome: perfilCriador.nome,
     criadoEm: admissoesProcessos.criadoEm,

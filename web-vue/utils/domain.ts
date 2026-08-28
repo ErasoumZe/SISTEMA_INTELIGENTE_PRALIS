@@ -592,6 +592,8 @@ export function formCadastroVazio(): CadastroForm {
     sigla: "",
     horaInicio: "",
     horaFim: "",
+    etiquetaTurno: "",
+    diasSemanaTurno: [],
     marca: "",
     contaId: "",
     ativo: true,
@@ -762,6 +764,10 @@ export function formCadastroDeLinha(
     sigla: linha.sigla ?? "",
     horaInicio: (linha.inicio ?? "").slice(0, 5),
     horaFim: (linha.fim ?? "").slice(0, 5),
+    // Vem da linha da grade, que ja traz o valor gravado. O formulario SEMPRE mostra o que existe —
+    // e por isso salvar pela tela nunca apaga sem querer: o campo chega preenchido.
+    etiquetaTurno: (linha.etiquetaTurno as CadastroForm["etiquetaTurno"]) || "",
+    diasSemanaTurno: linha.diasSemanaTurno ? linha.diasSemanaTurno.split(",") : [],
     marca: linha.marca ?? "",
     contaId: linha.contaId ?? "",
     ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),
