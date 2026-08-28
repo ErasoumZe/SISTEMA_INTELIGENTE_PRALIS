@@ -32,6 +32,18 @@ describe("idDoGrupo", () => {
     expect(SECOES_MENU).toHaveLength(5);
   });
 
+  // Menu e home renderizam os MESMOS titulos ao mesmo tempo no Painel. Sem prefixo os ids
+  // colidiriam e o `aria-controls` de um lado apontaria para o painel do outro.
+  it("o prefixo separa menu e home, que coexistem na mesma pagina", () => {
+    for (const secao of SECOES_MENU) {
+      const doMenu = idDoGrupo(secao.titulo);
+      const daHome = idDoGrupo(secao.titulo, "atalhos");
+      expect(doMenu, secao.titulo).not.toBe(daHome);
+      expect(daHome, secao.titulo).toMatch(/^atalhos-grupo-[a-z0-9-]+$/);
+    }
+    expect(SECOES_MENU).toHaveLength(5);
+  });
+
   it("nao colide entre as secoes existentes", () => {
     const ids = SECOES_MENU.map((secao) => idDoGrupo(secao.titulo));
     expect(new Set(ids).size).toBe(ids.length);

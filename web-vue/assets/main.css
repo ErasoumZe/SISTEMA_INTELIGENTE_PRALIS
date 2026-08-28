@@ -3861,3 +3861,83 @@ body {
   font-size: var(--cx-fs-micro);
 }
 /* ===================== FIM VIS-E7h ===================== */
+
+/* ===================== INICIO VIS-E7i — A HOME GANHA A MESMA SANFONA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Mesmo mecanismo e mesma linguagem do menu (VIS-E7c): altura animada por
+   `grid-template-rows: 0fr -> 1fr` em `--cx-dur-2`, chevron unico que gira, e a saida da ordem do
+   Tab por `visibility` com delay igual a duracao. Menu e home nao podem ser dois desenhos
+   parecidos; sao o mesmo sistema.
+
+   O QUE NAO MUDA, de proposito: a faixa de identidade do grupo (VIS-E6g) continua no `<h2>`, onde
+   sempre esteve, e os blocos com brilho de categoria nao foram tocados. Este bloco so acrescenta o
+   gatilho e o comportamento.
+
+   ESTRUTURA: o `<h2>` continua sendo cabecalho e ganha um `<button>` dentro — padrao WAI-ARIA de
+   sanfona. Transformar o proprio `<h2>` em botao tiraria a navegacao por cabecalho do leitor de
+   tela, que na home e o jeito rapido de pular entre secoes.
+
+   ESTADO INICIAL: tudo aberto, e o motivo e o mesmo do menu. A sanfona ACRESCENTA a possibilidade
+   de recolher; ela nao recolhe por conta propria. E aqui isso pesa mais: quem tem poucas
+   permissoes ve dois blocos, e sanfona fechada para dois blocos e atrito sem ganho.
+   Grupo sem tela permitida continua nao aparecendo — o `agruparTelasMenu` ja garante isso.
+   ================================================================================================ */
+
+/* 1. O gatilho ocupa a linha do cabecalho, sem parecer botao. O `<h2>` ja e flex com a faixa no
+      `::before` (VIS-E6g); o botao entra como o filho que estica. */
+.atalhos-grupo-gatilho {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-2);
+  min-height: 32px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.atalhos-grupo-gatilho:hover {
+  color: var(--cx-ink);
+}
+.atalhos-grupo-texto {
+  min-width: 0;
+}
+
+/* 2. O chevron gira, igual ao do menu. O `transform` E O ESTADO, entao fica fora das excecoes de
+      `transform: none` do reduced-motion pelo mesmo criterio do VIS-E7c. */
+.atalhos-grupo-chevron {
+  flex: none;
+  transition: transform var(--cx-dur-2) var(--cx-ease);
+}
+.atalhos-grupo-gatilho.aberto .atalhos-grupo-chevron {
+  transform: rotate(90deg);
+}
+
+/* 3. A altura anima de verdade, sem max-height chutado. */
+.atalhos-grupo-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--cx-dur-2) var(--cx-ease);
+}
+.atalhos-grupo-wrap.aberto {
+  grid-template-rows: 1fr;
+}
+.atalhos-grupo-wrap > .atalhos-grade {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Fechado, os blocos saem da ordem do Tab. O delay = duracao derruba a visibilidade DEPOIS do
+   colapso; sem ele o conteudo sumiria antes de encolher. Mesmo par do VIS-E7c. */
+.atalhos-grupo-wrap:not(.aberto) > .atalhos-grade {
+  visibility: hidden;
+  transition: visibility 0s linear var(--cx-dur-2);
+}
+/* ===================== FIM VIS-E7i ===================== */

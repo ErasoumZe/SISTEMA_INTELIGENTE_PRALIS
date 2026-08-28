@@ -16,6 +16,7 @@ import type { ItemMenu } from "~/types/padaria";
 import { rotaTela } from "~/utils/domain";
 import { montarAtalhosHome } from "~/utils/atalhos-home";
 import { CATEGORIA_POR_SECAO, CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import { idDoGrupo } from "~/utils/sanfona-menu";
 
 const props = defineProps<{
   telas: ItemMenu[];
@@ -24,6 +25,29 @@ const props = defineProps<{
 }>();
 
 const grupos = computed(() => montarAtalhosHome(props.telas, props.desabilitadas ?? [], props.motivos ?? {}));
+
+/* SANFONA DA HOME (VIS-E7i). Mesmo mecanismo e mesma linguagem do menu — o 68 pede que os dois
+   lugares nao sejam dois desenhos parecidos, e sim o mesmo sistema.
+
+   O ESTADO E O MESMO DO MENU, de proposito: `useGruposAbertos`, a mesma chave. Recolher
+   "Configuração" e uma afirmacao sobre o GRUPO ("nao trabalho com isso"), nao sobre a superficie
+   em que a pessoa clicou. Dois estados separados obrigariam a repetir a mesma decisao duas vezes.
+
+   Por isso NAO ha watch aqui. Quem semeia o estado e o AppSidebar, que existe em toda pagina
+   (inclusive no Painel) e ja roda o `gruposIniciais`. Um segundo watch escrevendo o mesmo objeto
+   seria duas fontes para o mesmo dado.
+
+   O `?? true` cobre o unico instante em que a home leria antes do AppSidebar semear: grupo
+   desconhecido aparece ABERTO, que e a mesma regra do `gruposIniciais`. */
+const gruposAbertos = useGruposAbertos().abertos;
+
+function grupoAberto(titulo: string) {
+  return gruposAbertos.value[titulo] ?? true;
+}
+
+function alternarGrupo(titulo: string) {
+  gruposAbertos.value = { ...gruposAbertos.value, [titulo]: !grupoAberto(titulo) };
+}
 
 function estiloCor(id: string) {
   const categoria = CATEGORIA_POR_TELA[id];
@@ -58,41 +82,63 @@ function estiloGrupo(titulo: string) {
 <template>
   <nav v-if="grupos.length" class="atalhos-home" aria-label="Atalhos das telas">
     <section v-for="grupo in grupos" :key="grupo.titulo" class="atalhos-grupo" :style="estiloGrupo(grupo.titulo)">
-      <h2 class="atalhos-grupo-titulo">{{ grupo.titulo }}</h2>
-      <div class="atalhos-grade">
-        <template v-for="tela in grupo.telas" :key="tela.id">
-          <!-- Desabilitada CONTINUA visivel, com o mesmo motivo do menu. O painel nao pode
+      <!-- O <h2> continua sendo cabecalho e ganha um <button> dentro: e o padrao WAI-ARIA de
+           sanfona, e preserva a navegacao por cabecalho do leitor de tela, que sumiria se o
+           proprio <h2> virasse botao. A faixa colorida do VIS-E6g fica no <h2>, onde sempre
+           esteve. -->
+      <h2 class="atalhos-grupo-titulo">
+        <button
+          type="button"
+          class="atalhos-grupo-gatilho"
+          :class="{ aberto: grupoAberto(grupo.titulo) }"
+          :aria-expanded="grupoAberto(grupo.titulo)"
+          :aria-controls="idDoGrupo(grupo.titulo, 'atalhos')"
+          @click="alternarGrupo(grupo.titulo)"
+        >
+          <span class="atalhos-grupo-texto">{{ grupo.titulo }}</span>
+          <v-icon class="atalhos-grupo-chevron" icon="mdi-chevron-right" size="16" />
+        </button>
+      </h2>
+      <div
+        :id="idDoGrupo(grupo.titulo, 'atalhos')"
+        class="atalhos-grupo-wrap"
+        :class="{ aberto: grupoAberto(grupo.titulo) }"
+      >
+        <div class="atalhos-grade">
+          <template v-for="tela in grupo.telas" :key="tela.id">
+            <!-- Desabilitada CONTINUA visivel, com o mesmo motivo do menu. O painel nao pode
                ensinar uma coisa e o menu outra. -->
-          <v-tooltip v-if="tela.desabilitada" :text="tela.motivo">
-            <template #activator="{ props: tooltipProps }">
-              <span
-                v-bind="tooltipProps"
-                class="atalho-bloco disabled"
-                :class="{ 'com-cor': temCor(tela.id) }"
-                :style="estiloCor(tela.id)"
-                tabindex="0"
-                role="button"
-                aria-disabled="true"
-                :aria-label="`${tela.titulo} — ${tela.motivo}`"
-              >
-                <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
-                <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
-              </span>
-            </template>
-          </v-tooltip>
-          <!-- Navegacao por ROTA, e nao @click com push: preserva clique do meio, abrir em nova
+            <v-tooltip v-if="tela.desabilitada" :text="tela.motivo">
+              <template #activator="{ props: tooltipProps }">
+                <span
+                  v-bind="tooltipProps"
+                  class="atalho-bloco disabled"
+                  :class="{ 'com-cor': temCor(tela.id) }"
+                  :style="estiloCor(tela.id)"
+                  tabindex="0"
+                  role="button"
+                  aria-disabled="true"
+                  :aria-label="`${tela.titulo} — ${tela.motivo}`"
+                >
+                  <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
+                  <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
+                </span>
+              </template>
+            </v-tooltip>
+            <!-- Navegacao por ROTA, e nao @click com push: preserva clique do meio, abrir em nova
                aba e teclado. Mesmo `rotaTela` que o menu usa — uma fonte so para o destino. -->
-          <NuxtLink
-            v-else
-            :to="rotaTela(tela.id)"
-            class="atalho-bloco"
-            :class="{ 'com-cor': temCor(tela.id) }"
-            :style="estiloCor(tela.id)"
-          >
-            <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
-            <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
-          </NuxtLink>
-        </template>
+            <NuxtLink
+              v-else
+              :to="rotaTela(tela.id)"
+              class="atalho-bloco"
+              :class="{ 'com-cor': temCor(tela.id) }"
+              :style="estiloCor(tela.id)"
+            >
+              <span class="atalho-bloco-icone"><v-icon :icon="tela.icone" size="22" /></span>
+              <span class="atalho-bloco-rotulo">{{ tela.titulo }}</span>
+            </NuxtLink>
+          </template>
+        </div>
       </div>
     </section>
   </nav>

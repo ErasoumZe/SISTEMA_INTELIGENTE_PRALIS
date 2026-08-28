@@ -14,15 +14,19 @@ import type { GrupoMenu } from "~/utils/menu";
  *
  * Decompoe e remove os diacriticos em vez de tabelar substituicoes — assim um grupo novo com "ç",
  * "ã" ou hifen funciona sem ninguem lembrar de vir aqui.
+ *
+ * O PREFIXO existe porque o menu e a home renderizam os MESMOS titulos ao mesmo tempo no Painel:
+ * os dois saem de `agruparTelasMenu`. Sem prefixo os dois lados gerariam o mesmo id, e
+ * `aria-controls` casa por id literal — o leitor de tela acharia o painel errado, ou nenhum.
  */
-export function idDoGrupo(titulo: string): string {
+export function idDoGrupo(titulo: string, prefixo = "sidebar"): string {
   const base = titulo
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  return `sidebar-grupo-${base || "sem-nome"}`;
+  return `${prefixo}-grupo-${base || "sem-nome"}`;
 }
 
 /**
