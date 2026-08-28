@@ -125,18 +125,21 @@ useItemAtivoVisivel();
     <div class="drawer-shell">
       <div class="drawer-top">
         <div class="sidebar-logo-row">
-          <img
-            :src="
-              rail
-                ? '/cicluz/cicluz-simbolo.png'
-                : escuro
-                  ? '/cicluz/logo-cicluz-branca.png'
-                  : '/cicluz/logo-cicluz.png'
-            "
-            alt="Cicluz Gestão Profissional"
-            class="sidebar-logo"
-            width="220"
-            height="72"
+          <!-- NO RAIL o simbolo e ANIMADO; expandido continua a logo com texto, que este
+               componente nao substitui — ele e so o simbolo. O `alt`/`aria-label` da identidade
+               fica no wrapper, porque o SVG interno e `aria-hidden` por ser decoracao. -->
+          <span v-if="rail" class="sidebar-logo-simbolo" role="img" aria-label="Cicluz Gestão Profissional">
+            <AppLogoAnimada :size="52" :glow-intensity="0.24" />
+          </span>
+          <!-- MENU ABERTO: a MESMA composicao do login, pelo mesmo componente. A palavra segue o
+               tema aqui (e nao no login) porque a superficie da sidebar inverte com ele. -->
+          <AppMarcaCicluz
+            v-else
+            orientacao="lateral"
+            :size="52"
+            :glow-intensity="0.22"
+            :escuro="escuro"
+            largura-palavra="136px"
           />
           <button
             v-if="podeRecolher"

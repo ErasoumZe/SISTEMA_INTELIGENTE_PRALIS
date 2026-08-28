@@ -51,14 +51,20 @@ async function login() {
     <AppFundoEntrada />
 
     <div class="login-card cartao-entrada">
+      <!-- A MARCA: simbolo animado em cima, palavra embaixo.
+           A palavra vem de `cicluz-marca-dark.svg`, que e VETOR PURO (16 paths, zero bitmap) e ja
+           existia — nao foi preciso recortar nada do PNG nem gerar arquivo novo. Escala perfeito em
+           qualquer tamanho, ao contrario do PNG de 718x205 que estava aqui.
+           A variante `-dark` (tinta branca) e a certa porque a tela de entrada abre sempre no
+           escuro (D-LOGIN-ESCURO).
+           O `alt` fica so na palavra e o simbolo e decorativo: os dois juntos anunciariam a marca
+           duas vezes para quem usa leitor de tela. -->
       <div class="login-brand">
-        <img
-          src="/cicluz/logo-cicluz-branca.png"
-          alt="Cicluz Gestão Profissional"
-          class="login-logo"
-          width="300"
-          height="98"
-        />
+        <!-- O SIMBOLO EM DESTAQUE, e o tamanho e RESPONSIVO junto com a palavra: os dois saem de
+             `clamp()` sobre a largura do cartao, entao a proporcao entre eles nao muda quando o
+             cartao encolhe. Cravar px no simbolo e percentual na palavra faria a composicao se
+             desmontar em tela estreita. O menu nao muda — la o espaco e outro. -->
+        <AppMarcaCicluz size="clamp(104px, 38%, 148px)" :glow-intensity="0.26" />
       </div>
 
       <div class="login-head">

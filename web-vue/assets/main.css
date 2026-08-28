@@ -3920,3 +3920,23 @@ body {
   box-shadow: var(--cx-e-3);
 }
 /* ===================== FIM VIS-F6 ===================== */
+
+/* ===================== INICIO VIS-F7 — O SIMBOLO ANIMADO (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O simbolo animado entra em DOIS lugares: o rail (52px) e o cartao do login (88px). NAO entra na
+   home: com a sidebar recolhida os dois ficariam na mesma dobra com a mesma animacao, e o do
+   cabecalho nao acrescentava identidade nenhuma. A logo COM TEXTO do menu expandido nao muda — o
+   componente e so o simbolo, e troca-la por ele apagaria a palavra CICLUZ do menu.
+
+   `line-height: 0` no wrapper do rail nao e detalhe: sem ele a caixa de linha do `span` acrescenta
+   alguns pixels abaixo do SVG e o simbolo deixa de ficar centrado na faixa do logo.
+   ========================================================================================== */
+.sidebar-logo-simbolo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+/* ===================== FIM VIS-F7 ===================== */

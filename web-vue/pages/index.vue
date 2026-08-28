@@ -18,6 +18,11 @@ import AppDashboard from "~/components/app/AppDashboard.vue";
        nasceria uma segunda fonte de verdade sobre quem ve o que. -->
   <AppWorkspace v-slot="ctx" tipo-pagina="inicio">
     <section class="inicio-painel">
+      <!-- SEM MARCA ANIMADA AQUI, e isso e correcao de algo visto em tela: com a sidebar
+           recolhida o simbolo do rail e o do cabecalho ficavam na mesma dobra, a poucos
+           centimetros um do outro, com a MESMA animacao. Duas fontes de movimento identicas
+           competindo cansam, e a do cabecalho nao acrescentava identidade — a do rail ja estava
+           ali. O login mantem a dele porque e outra tela, e la o simbolo e a marca principal. -->
       <AppCabecalhoTela titulo="Bem-vindo ao Painel" />
       <AppDashboard
         :telas="ctx.telasMenu"
