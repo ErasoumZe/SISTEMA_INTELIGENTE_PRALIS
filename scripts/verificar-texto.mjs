@@ -83,12 +83,14 @@ const nomesDominioInglesBloqueados = [
 // A fronteira hoje e estrutural — nenhum compose tem chave `command:`, e o Testcontainers fala
 // direto com a API do Docker —, mas estrutura se perde num copiar e colar apressado. Esta guarda
 // transforma "nao vaza" em "nao TEM como vazar sem ficar vermelho".
-// Regex, e nao `includes`, porque o Postgres aceita `fsync = off` com espacos — e uma guarda de
-// texto que so pega a grafia colada da a impressao de proteger sem proteger.
+// O Postgres aceita QUATRO grafias para "desligado" — `off`, `0`, `false`, `no` — e nao diferencia
+// maiusculas nem no nome do parametro nem no valor. Uma guarda que so pega `fsync=off` minusculo
+// da a impressao de proteger sem proteger: bastava escrever `fsync=false` para passar.
+const desligado = "(?:off|0|false|no)";
 const parametrosSemDurabilidade = [
-  /\bfsync\s*=\s*off\b/,
-  /\bsynchronous_commit\s*=\s*off\b/,
-  /\bfull_page_writes\s*=\s*off\b/
+  new RegExp(`\\bfsync\\s*=\\s*${desligado}\\b`, "i"),
+  new RegExp(`\\bsynchronous_commit\\s*=\\s*${desligado}\\b`, "i"),
+  new RegExp(`\\bfull_page_writes\\s*=\\s*${desligado}\\b`, "i")
 ];
 
 // Ancorado no SEGMENTO, e nao em substring: `includes("tests/")` sozinho liberaria
@@ -101,14 +103,28 @@ function podeDesligarDurabilidade(caminho) {
 // Os arquivos de orquestracao NAO estao em `alvos` (a varredura so olha codigo), e sao justamente
 // onde o vazamento seria grave.
 //
-// DESCOBERTOS, nao listados a mao: uma lista fixa esquece o `docker-compose.yml` da raiz — foi o que
-// aconteceu na primeira versao desta guarda — e nasce desatualizada no dia em que alguem cria um
-// `docker-compose.staging.yml`. Quem varre por padrao nao tem esse esquecimento.
-const arquivosDeOrquestracao = [".", "db", "infra"].filter(existsSync).flatMap((pasta) =>
-  readdirSync(pasta, { withFileTypes: true })
-    .filter((entrada) => entrada.isFile() && /^docker-compose.*\.ya?ml$/.test(entrada.name))
-    .map((entrada) => (pasta === "." ? entrada.name : join(pasta, entrada.name)))
-);
+// DESCOBERTOS e RECURSIVOS. Duas versoes desta guarda ja falharam por olhar de menos: a primeira
+// listava os arquivos a mao e esqueceu o `docker-compose.yml` da raiz; a segunda descobria, mas so
+// no topo de tres pastas e so pelo nome `docker-compose*`. Ficavam de fora `compose.yaml` — o nome
+// preferencial do Compose Spec de hoje — e qualquer subpasta.
+const pastasIgnoradas = new Set(["node_modules", "dist", ".nuxt", ".output", ".git"]);
+const nomeDeCompose = /^(?:docker-compose.*|compose(?:\..*)?)\.ya?ml$/i;
+
+function descobrirOrquestracao(pasta) {
+  const encontrados = [];
+  const visitar = (atual) => {
+    for (const entrada of readdirSync(atual, { withFileTypes: true })) {
+      if (pastasIgnoradas.has(entrada.name)) continue;
+      const proximo = join(atual, entrada.name);
+      if (entrada.isDirectory()) visitar(proximo);
+      else if (entrada.isFile() && nomeDeCompose.test(entrada.name)) encontrados.push(proximo);
+    }
+  };
+  visitar(pasta);
+  return encontrados;
+}
+
+const arquivosDeOrquestracao = descobrirOrquestracao(".");
 
 function caminhoIgnoradoParaDominio(caminho) {
   const normalizado = caminho.replaceAll("\\", "/");
