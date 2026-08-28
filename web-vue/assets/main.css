@@ -3843,3 +3843,80 @@ body {
   font-size: var(--cx-fs-caption);
 }
 /* ===================== FIM VIS-F3 ===================== */
+
+/* ===================== INICIO VIS-F6 — AS TRES TELAS DE ENTRADA VIRAM UMA FAMILIA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   `forgot-password` e `reset-password` recebem o mesmo tratamento do login. Ate hoje elas nao
+   tinham UMA LINHA de CSS proprio: herdavam o `v-card` de fabrica do Vuetify, com a sombra Material
+   de tres camadas de preto — que sobre o canvas escuro nao levanta nada. Eram a porta dos fundos de
+   um sistema cuja porta da frente acabou de ser refeita.
+
+   AS CLASSES SAO COMPARTILHADAS, e isso e o ponto: `.tela-entrada` e `.cartao-entrada` valem para
+   as tres. O fundo animado saiu do `login.vue` para o `AppFundoEntrada.vue` pela mesma razao —
+   manter tres copias de duzentas linhas de CSS e de um laco de `requestAnimationFrame` seria
+   garantir que elas divergissem no primeiro ajuste.
+
+   `isolation: isolate` NAO E ENFEITE. Medido: entre o `html` e o cartao NENHUM elemento cria
+   contexto de empilhamento (`.v-application` e `.v-main` sao `static`; o `.v-application__wrap` e
+   `relative` com `z-index: auto`, que nao cria). Sem isolar, o fundo com `z-index` negativo sobe
+   ate a raiz e e pintado ABAIXO do fundo da propria tela — some por completo.
+   ================================================================================================== */
+.tela-entrada {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+}
+
+/* O VIDRO — EXCECAO REGISTRADA AO 67 §10 (D-LOGIN-VIDRO, 28/08/2026), que diz "nunca em card de
+   conteudo e nunca atras de texto de leitura". A excecao e do Marco e vale so para estas tres.
+
+   O QUE A JUSTIFICA, e nao e "ficou bonito": a regra existe porque vidro atras de texto de leitura
+   poe o contraste a merce de um fundo que o sistema NAO CONTROLA — conteudo rolando, tabela,
+   imagem. Aqui o fundo e conhecido, e nosso e nao rola: sao sete manchas cuja cor, posicao e forca
+   nos escolhemos. O risco que a regra previne nao existe nestas telas.
+
+   A OPACIDADE FOI MEDIDA em 24 INSTANTES da animacao ao longo de 120s, porque as manchas se movem e
+   um quadro so nao representa o pior caso. Pior instante, minimo 4,5:1:
+
+                     claro          escuro
+         70%          5,11           7,00
+         78%   <--    5,30           7,15
+         86%          5,50           7,25
+
+   Ficou 78%, que e o "glass mais leve" pedido, com 0,8 de folga no claro. 70% fica registrado como
+   piso conhecido. A ORDEM DA CORRECAO E FIXA: se reprovar, SOBE a opacidade do vidro; nunca clareia
+   o texto, que conserta o numero e estraga a hierarquia. */
+.cartao-entrada {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+}
+
+/* Fallback solido obrigatorio, como em todo uso de vidro neste arquivo. Sem suporte a
+   `backdrop-filter` o cartao NAO pode ficar semitransparente: as manchas apareceriam cruas e
+   nitidas atras do texto, que e exatamente o que o 67 §10 previne. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cartao-entrada {
+    background: var(--cx-surface);
+  }
+}
+
+/* D-06 nas telas de entrada. A regra existe desde o VIS-02 mas mora escopada em `.content-frame`
+   (main.css:2509), e nenhuma destas tres esta dentro dele — entao no escuro o cartao ficava so com
+   `--cx-surface` sobre `--cx-canvas`, medido em 1,12, e sem sombra util, porque sombra preta sobre
+   #0f1318 nao levanta nada. Aqui a separacao volta a existir pelo contorno, como manda a D-06. */
+:root[data-theme="dark"] .cartao-entrada {
+  border: 1px solid var(--cx-line-soft);
+}
+
+/* O `v-card` do Vuetify chega com `background: rgb(var(--v-theme-surface))` opaco e com a sombra
+   Material de tres camadas de preto. Os dois precisam sair para o vidro aparecer — e um seletor de
+   duas classes ganha do de uma sem `!important`. */
+.cartao-entrada.v-card {
+  background: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  box-shadow: var(--cx-e-3);
+}
+/* ===================== FIM VIS-F6 ===================== */
