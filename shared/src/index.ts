@@ -36,3 +36,17 @@ export * from "./relatorios/index.js";
 export * from "./saude/index.js";
 export * from "./tema/index.js";
 export * from "./pedidos/index.js";
+
+/**
+ * Turnos entra NOMEADO, e nao por `export *`, de proposito.
+ *
+ * `turnos` e `colaboradores` declaram os mesmos `diasSemana`, `diaSemanaSchema` e `DiaSemana`. Num
+ * `export *` esses tres nomes virariam ambiguos e o modulo simplesmente PARARIA de exporta-los pela
+ * raiz — sem erro aqui, com o erro aparecendo longe, em quem hoje os importa. Entao sobem so os
+ * simbolos de etiqueta, que nao colidem; dia da semana continua vindo de colaboradores.
+ *
+ * Por que a raiz precisa deles: o alias do Nuxt aponta `@padaria/shared` para ESTE arquivo, e alias
+ * do Vite casa por prefixo. Import de VALOR por subcaminho vira `.../index.ts/turnos` e da 404 no
+ * navegador, com typecheck e lint verdes — e por isso que `scripts/verificar-arquitetura.mjs` existe.
+ */
+export { etiquetasTurno, type EtiquetaTurno } from "./turnos/index.js";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CadastroForm } from "@padaria/shared";
-import { diasSemana, etiquetasTurno } from "@padaria/shared/turnos";
+import { diasSemana, etiquetasTurno } from "@padaria/shared";
 import { rotuloDiaSemanaCurto, rotuloEtiquetaTurno } from "~/utils/admissoes";
 
 /**
