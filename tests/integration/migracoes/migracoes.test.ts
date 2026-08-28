@@ -130,7 +130,12 @@ describe("migracoes integration", () => {
         order by name`,
       [[...PARAMETROS_SEM_DURABILIDADE]]
     );
-    expect(rows).toEqual(PARAMETROS_SEM_DURABILIDADE.map((parametro) => ({ parametro, valor: "off" })));
+    // Comparado como MAPA, nao como lista ordenada. A ordem do `order by name` so casava com a da
+    // constante por coincidencia alfabetica; um quarto parametro acrescentado no fim faria o teste
+    // falhar por ORDEM — vermelho de verdade, mas mandando quem le investigar o parametro errado.
+    expect(Object.fromEntries(rows.map((linha) => [linha.parametro, linha.valor]))).toEqual(
+      Object.fromEntries(PARAMETROS_SEM_DURABILIDADE.map((parametro) => [parametro, "off"]))
+    );
   });
 
   it("Deve_AplicarTodasAsEntradasDoJournal_Quando_ProvisionarBancoVazio", async () => {
