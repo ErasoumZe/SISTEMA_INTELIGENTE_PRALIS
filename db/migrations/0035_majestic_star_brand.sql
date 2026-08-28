@@ -13,9 +13,9 @@ ALTER TABLE "admissoes_processos" ADD COLUMN "turno_hora_fim" time;--> statement
 ALTER TABLE "admissoes_processos" ADD COLUMN "turno_dias_semana" text[];--> statement-breakpoint
 ALTER TABLE "turnos" ADD COLUMN "etiqueta" text;--> statement-breakpoint
 ALTER TABLE "turnos" ADD COLUMN "dias_semana" text[];--> statement-breakpoint
+ALTER TABLE "turnos" ADD CONSTRAINT "turnos_id_empresa_unica" UNIQUE("id","empresa_id");--> statement-breakpoint
 ALTER TABLE "admissoes_processos" ADD CONSTRAINT "admissoes_processos_turno_empresa_fk" FOREIGN KEY ("turno_id","empresa_id") REFERENCES "public"."turnos"("id","empresa_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "admissoes_processos_cpf_ativo_unico" ON "admissoes_processos" USING btree ("empresa_id","cpf") WHERE "admissoes_processos"."cpf" is not null and "admissoes_processos"."status" <> 'cancelado';--> statement-breakpoint
-ALTER TABLE "turnos" ADD CONSTRAINT "turnos_id_empresa_unica" UNIQUE("id","empresa_id");--> statement-breakpoint
 ALTER TABLE "admissoes_processos" ADD CONSTRAINT "admissoes_processos_nome_check" CHECK ("admissoes_processos"."nome_completo" is null or length(btrim("admissoes_processos"."nome_completo")) > 0);--> statement-breakpoint
 ALTER TABLE "admissoes_processos" ADD CONSTRAINT "admissoes_processos_cpf_check" CHECK ("admissoes_processos"."cpf" is null or "admissoes_processos"."cpf" ~ '^[0-9]{11}$');--> statement-breakpoint
 ALTER TABLE "admissoes_processos" ADD CONSTRAINT "admissoes_processos_status_check" CHECK ("admissoes_processos"."status" in ('iniciado', 'pausado', 'cancelado'));--> statement-breakpoint
