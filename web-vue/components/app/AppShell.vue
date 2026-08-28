@@ -119,9 +119,30 @@ onMounted(() => {
   mediaRail.addEventListener("change", atualizar);
   mediaMobile.addEventListener("change", atualizar);
 
+  // A gaveta de <=768px nao fechava no Esc. O `v-navigation-drawer` temporario do Vuetify 3 nao
+  // trata a tecla — diferente do `v-dialog`, que trata.
+  //
+  // MEDIDO com a gaveta aberta em 390px, os tres caminhos de saida:
+  //   botao da topbar  COBERTO pela propria gaveta (`document.elementFromPoint` devolve o
+  //                    `<img class="sidebar-logo">`), o que e proprio de gaveta em overlay
+  //   Esc              nao fazia nada
+  //   clique no scrim  fechava
+  // Sobrava UM caminho, e para quem navega por teclado, NENHUM: abria a gaveta e nao dispensava.
+  // WCAG 2.1.2 (sem armadilha de teclado) e o motivo de isto nao ser cosmetico.
+  const aoTeclar = (evento: KeyboardEvent) => {
+    if (evento.key !== "Escape") return;
+    if (!viewportMobile.value || !drawerMobileAberto.value) return;
+    // Dialogo aberto por cima trata o proprio Esc. Sem esta guarda, uma tecla fecharia a gaveta
+    // POR BAIXO do dialogo e deixaria o dialogo aberto — o usuario veria a tecla "nao funcionar".
+    if (document.querySelector(".v-overlay.v-dialog.v-overlay--active")) return;
+    drawerMobileAberto.value = false;
+  };
+  window.addEventListener("keydown", aoTeclar);
+
   onUnmounted(() => {
     mediaRail.removeEventListener("change", atualizar);
     mediaMobile.removeEventListener("change", atualizar);
+    window.removeEventListener("keydown", aoTeclar);
   });
 });
 </script>
