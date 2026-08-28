@@ -130,6 +130,50 @@ Como o projeto é `ssr: false`, o atributo também é escrito por um **script in
 rotas do script e a do `useTemaEntrada` têm de andar juntas; mudar uma sem a outra traz a piscada
 de volta.
 
+| **D-PAINEL-ADMIN** | As faixas de NÚMERO do painel são de **administrador total** (`usuario_admin`). O `admin` legado **não** entra. A faixa 4 ("Ir para") continua para todos | 28/08 |
+| **D-LOGO-ANIMADA** | O símbolo da Cicluz é **animado** no rail, no menu aberto e no login. Não entra na home | 28/08 |
+
+**D-PAINEL-ADMIN — o que ela obriga, e o que quase deu errado.** O painel mostra dinheiro do
+negócio inteiro; isso é leitura de **dono**, não de operação, e não é a mesma pergunta que "pode
+abrir a tela".
+
+Não nasceu permissão nova, e não podia: **`permissoesAcessoTotal` não é uma permissão** — é
+`readonly Permissao[]` (`shared/src/autenticacao/index.ts:276`), um catálogo derivado, e
+`temPermissao("permissoesAcessoTotal")` não compila. Nenhuma das ~250 permissões do enum significa
+administrador: quem responde isso é o **role**.
+
+A função é `ehAdministradorTotal(perfil)`, irmã da `podeLancarSemCaixa` no mesmo arquivo e pelo
+mesmo motivo já documentado lá: a tela precisa da mesma resposta que o servidor, e copiar a regra
+no front criaria duas verdades.
+
+**Só `usuario_admin`, e a diferença para a irmã é deliberada.** A `podeLancarSemCaixa` aceita
+`admin` também porque responde outra pergunta ("é retaguarda?"). Copiar o teste dela seria
+vazamento: o legado veria o número do negócio inteiro por herdar um nome. O sistema diz isso em
+três lugares — `api/src/auth/perfil.service.ts:10` ("o role admin NÃO tem efeito especial"), a
+linha 12 do mesmo arquivo (só `usuario_admin` recebe `permissoesAcessoTotal`) e o rótulo que o
+usuário lê em `WorkspaceDialogs.vue:14-17`.
+
+**Um ponto de chamada só**, no `AppWorkspace`, descendo como booleano. Marco já pediu, para depois,
+uma aba que define o que cada usuário vê no painel; com a função consultada em cada faixa, o
+configurador teria de achar todos os pontos.
+
+**Dois filtros em série:** ser administrador decide se a faixa **existe**; o `metricasPermitidas`
+continua decidindo, card a card, quem já podia ver o dado.
+
+**D-LOGO-ANIMADA — os três lugares e a armadilha.** Rail (só símbolo, 52px), menu aberto (símbolo
+
+- palavra, lateral, 52px) e login (empilhado, símbolo responsivo). **Não** entra na home: com a
+  sidebar recolhida, o símbolo do rail e o do cabeçalho ficavam na mesma dobra com a mesma animação.
+
+A armadilha é o movimento reduzido: a animação é **SMIL** (`<animate>` nativo do SVG), e **SMIL não
+obedece CSS**. O reset global do projeto zera `animation-duration` e não alcança um `<animate>` —
+sem tratamento em código a preferência seria ignorada e ninguém notaria, porque o reset _parece_
+cobrir tudo. Resolvido com `pauseAnimations()`, que mantém o símbolo visível e parado.
+
+Custo medido, navegador com GPU: menu aberto 52 fps (escuro) e 57 (claro) contra ~60 de linha de
+base. `glowIntensity` **não** é alavanca de desempenho — com glow 0 o número não muda, porque os
+três `feGaussianBlur` rodam de qualquer jeito.
+
 ### Abertas
 
 - **D-03** — 360px entra no checklist ou é descartado por escrito? (`67` §13.7)
