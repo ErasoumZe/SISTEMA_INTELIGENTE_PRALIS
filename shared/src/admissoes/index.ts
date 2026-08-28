@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
-import { cpfValido, normalizarCpf } from "./cpf.js";
 
 export * from "./cpf.js";
 // ADM-002 V0 — o processo de admissao, que nasce do teste efetivado.
@@ -82,12 +81,9 @@ export const motivoCancelamentoSchema = z.enum(motivosCancelamentoTeste);
 export type MotivoCancelamento = z.infer<typeof motivoCancelamentoSchema>;
 
 // --- Campos -------------------------------------------------------------------------------------
-// Refine ANTES do transform: `cpfValido` ja normaliza por dentro, entao a ordem nao muda o
-// resultado — mas mantem a entrada como string simples e a mensagem de erro presa ao campo.
-export const cpfTesteSchema = z
-  .string()
-  .refine((valor) => cpfValido(valor), { message: "CPF invalido" })
-  .transform(normalizarCpf);
+// `cpfTesteSchema` mora em `./cpf.ts`, junto do validador, e sai por `export * from "./cpf.js"`.
+// Importado explicitamente porque os schemas abaixo o usam neste mesmo arquivo.
+import { cpfTesteSchema } from "./cpf.js";
 
 // Instante absoluto em ISO-8601 com `Z`, como `Date.prototype.toISOString` produz. Guardado em
 // `timestamptz`. O dia de negocio (America/Sao_Paulo) e derivado com `diaNegocio` na hora de

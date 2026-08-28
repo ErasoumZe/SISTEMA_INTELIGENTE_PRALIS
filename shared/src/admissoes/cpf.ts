@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Primeiro validador de CPF do monorepo. Ate a ADM-001 o sistema so tinha `apenasDigitos`
 // (api/src/utils.ts) — nenhum lugar conferia digito verificador, e `colaboradores.cpf` nasceu sem
 // UNIQUE. Este modulo e a referencia para quando `colaboradores`/`usuarios` adotarem a mesma regra;
@@ -44,3 +46,19 @@ export function cpfValido(valor: string | null | undefined): boolean {
 export function cpfTotalmenteMascarado(): string {
   return "•••.•••.•••-••";
 }
+
+/**
+ * O CPF como contrato: valida digito verificador e normaliza para 11 digitos.
+ *
+ * Mora AQUI, e nao no `index.ts`, por uma razao concreta: `processos.ts` precisa dele, e importar do
+ * `index` criaria ciclo (`index` reexporta `processos`). Sob a condicao `development`, que resolve o
+ * `.ts` direto, esse ciclo deixava o schema `undefined` na hora de montar o payload — e a rota
+ * respondia 400 "expected a Zod schema" sem nenhuma pista de onde vinha.
+ *
+ * Refine ANTES do transform: `cpfValido` ja normaliza por dentro, entao a ordem nao muda o resultado
+ * — mas mantem a entrada como string simples e a mensagem de erro presa ao campo.
+ */
+export const cpfTesteSchema = z
+  .string()
+  .refine((valor) => cpfValido(valor), { message: "CPF invalido" })
+  .transform(normalizarCpf);

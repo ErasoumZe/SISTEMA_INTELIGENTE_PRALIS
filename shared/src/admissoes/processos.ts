@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
-import { cpfTesteSchema } from "./index.js";
+// Da FONTE, nunca do barril: `./index.js` reexporta este arquivo, e o ciclo deixaria o schema
+// indefinido em tempo de montagem sob a condicao `development`.
+import { cpfTesteSchema } from "./cpf.js";
 
 /**
  * ADM-002 V0 — o PROCESSO DE ADMISSAO.

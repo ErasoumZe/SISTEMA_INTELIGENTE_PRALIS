@@ -3,7 +3,14 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
+import {
+  abrirBloqueador,
+  consultarTodos,
+  consultarUm,
+  esperarBloqueioPor,
+  executarSql,
+  fecharBloqueador
+} from "../../setup/integracao.js";
 
 /**
  * ADM-002 V0 — os P0 do processo de admissao.
@@ -339,14 +346,70 @@ describe("admissoes processos integration", () => {
   // que garante que a ADM-002 nao regrediu tem de morar ao lado do que a estende.
 
   /** Cria um processo de admissao DIRETA e devolve o id. */
-  async function criarDireta(cookie: string, jornada = "Seg a sex, 08:00 as 17:00") {
+  const turnoCompletoId = "11111111-1111-4111-8111-111111111801";
+  const turnoIncompletoId = "11111111-1111-4111-8111-111111111802";
+  const turnoLivreId = "11111111-1111-4111-8111-111111111803";
+  // Turno PROPRIO do teste de preservacao: ele limpa a etiqueta no fim, e usar o compartilhado
+  // deixaria o proximo teste com um turno incompleto — dependencia de ordem disfarcada de bug.
+  const turnoEdicaoId = "11111111-1111-4111-8111-111111111804";
+
+  /** Turnos sinteticos desta suite. Criados por SQL porque a tela de Turnos e outra vertical. */
+  async function semearTurnos() {
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim, etiqueta, dias_semana)
+       values ($1, $2, 'Manha V1B', '06:00', '14:00', 'M', array['SEGUNDA','TERCA']::text[])
+       on conflict do nothing`,
+      [turnoCompletoId, idsTeste.empresaA]
+    );
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim)
+       values ($1, $2, 'Sem etiqueta V1B', '14:00', '22:00') on conflict do nothing`,
+      [turnoIncompletoId, idsTeste.empresaA]
+    );
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim, etiqueta, dias_semana)
+       values ($1, $2, 'Livre V1B', '08:00', '16:00', 'T', array['QUARTA']::text[])
+       on conflict do nothing`,
+      [turnoLivreId, idsTeste.empresaA]
+    );
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim, etiqueta, dias_semana)
+       values ($1, $2, 'Edicao V1B', '10:00', '18:00', 'M', array['SEGUNDA','TERCA']::text[])
+       on conflict do nothing`,
+      [turnoEdicaoId, idsTeste.empresaA]
+    );
+  }
+
+  /**
+   * Cria admissao direta. Desde a V1B o pre-cadastro do DP exige identidade e TURNO — jornada em
+   * texto saiu do contrato. Um CPF por chamada, porque agora ha unicidade por CPF na empresa.
+   */
+  let sequenciaCpf = 0;
+  function proximoCpfSintetico() {
+    // Base sintetica + digito verificador calculado: o contrato valida DV, entao numero inventado
+    // seria recusado antes de o teste chegar na regra que ele quer provar.
+    const base = String(30000000 + sequenciaCpf++ * 137).padStart(9, "0");
+    const dv = (parcial: string) => {
+      const numeros = parcial.split("").map(Number);
+      const soma = numeros.reduce((total, n, i) => total + n * (numeros.length + 1 - i), 0);
+      const resto = (soma * 10) % 11;
+      return resto > 9 ? 0 : resto;
+    };
+    const d1 = dv(base);
+    return `${base}${d1}${dv(base + d1)}`;
+  }
+
+  async function criarDireta(cookie: string, cpf = proximoCpfSintetico()) {
+    await semearTurnos();
     return contexto.app.inject({
       method: "POST",
       url: "/api/admissoes/processos",
       headers: { cookie },
       payload: {
+        nomeCompleto: "Pessoa Direta",
+        cpf,
         funcaoId: idsTeste.funcaoOperacionalA,
-        jornadaHorario: jornada,
+        turnoId: turnoCompletoId,
         dataAdmissao: "2026-09-15"
       }
     });
@@ -382,8 +445,10 @@ describe("admissoes processos integration", () => {
       url: "/api/admissoes/processos",
       headers: { cookie: cookieDp },
       payload: {
+        nomeCompleto: "Pessoa Direta",
+        cpf: proximoCpfSintetico(),
         funcaoId: idsTeste.funcaoOperacionalA,
-        jornadaHorario: "Seg a sex",
+        turnoId: turnoCompletoId,
         dataAdmissao: "2026-09-15",
         testeId: teste.id
       }
@@ -411,12 +476,16 @@ describe("admissoes processos integration", () => {
       )
     ).rejects.toThrow();
 
-    // E processo direto nao pode perder a dele.
+    // E processo direto nao pode perder a dele — nem a funcao, nem o turno, nem a identidade.
     const direto = await criarDireta(cookieDp);
     assertOk(direto, 201);
-    await expect(
-      executarSql(`update admissoes_processos set funcao_id = null where id = '${direto.json().data.id}'`)
-    ).rejects.toThrow();
+    const idDireto = direto.json().data.id;
+    for (const coluna of ["funcao_id", "turno_id", "nome_completo", "cpf"]) {
+      await expect(
+        executarSql(`update admissoes_processos set ${coluna} = null where id = '${idDireto}'`),
+        coluna
+      ).rejects.toThrow();
+    }
   });
 
   it("P0-V1A Deve_MarcarOrigemTeste_Quando_EfetivacaoCriaOProcesso", async () => {
@@ -445,8 +514,9 @@ describe("admissoes processos integration", () => {
 
     const diretos = itens.filter((i) => i.origem === "admissao_direta");
     expect(diretos.length).toBeGreaterThan(0);
-    // O processo direto chega SEM nome, e e assim que tem de ser ate o candidato responder.
-    expect(diretos.every((i) => i.nomeCompleto === null)).toBe(true);
+    // Desde a V1B o processo direto JA nasce com nome: o pre-cadastro do DP o exige. Antes ele vinha
+    // nulo, e a lista dizia "Aguardando dados do candidato" — essa regra mudou por decisao.
+    expect(diretos.every((i) => i.nomeCompleto !== null)).toBe(true);
   });
 
   it("P0-V1A Deve_Responder403_Quando_SemPermissaoDeCriarOuEditarInternos", async () => {
@@ -487,7 +557,7 @@ describe("admissoes processos integration", () => {
     const processoId = direto.json().data.id;
 
     let versao = 1;
-    for (const situacao of ["guia_entregue", "agendado", "exige_acao", "realizado"]) {
+    for (const situacao of ["guia_entregue", "agendado", "exige_acao", "aso_apto"]) {
       const resposta = await contexto.app.inject({
         method: "PUT",
         url: `/api/admissoes/processos/${processoId}/exame`,
@@ -505,7 +575,7 @@ describe("admissoes processos integration", () => {
     });
     assertOk(detalhe);
     const internos = detalhe.json().data.internos;
-    expect(internos.exameSituacao).toBe("realizado");
+    expect(internos.exameSituacao).toBe("aso_apto");
     // O alerta e DERIVADO: some sozinho quando o exame fica realizado.
     expect(internos.exameExigeAtencao).toBe(false);
 
@@ -579,12 +649,21 @@ describe("admissoes processos integration", () => {
       "insert into funcoes_operacionais (id, empresa_id, nome) values ($1, $2, $3) on conflict do nothing",
       [funcaoB, idsTeste.empresaB, "Funcao Direta B"]
     );
+    const turnoB = "33333333-3333-4333-8333-333333330503";
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim, etiqueta, dias_semana)
+       values ($1, $2, 'Turno B', '06:00', '14:00', 'M', array['SEGUNDA']::text[])
+       on conflict do nothing`,
+      [turnoB, idsTeste.empresaB]
+    );
     await executarSql(
       `insert into admissoes_processos
-         (id, empresa_id, origem, teste_id, funcao_id, jornada_horario, criado_por, atualizado_por)
-       select $1, $2, 'admissao_direta', null, $3, 'Seg a sex', p.usuario_id, p.usuario_id
+         (id, empresa_id, origem, teste_id, nome_completo, cpf, funcao_id, turno_id,
+          criado_por, atualizado_por)
+       select $1, $2, 'admissao_direta', null, 'Pessoa da Empresa B', '15350946056', $3, $4,
+              p.usuario_id, p.usuario_id
          from perfis_usuarios p limit 1`,
-      [processoB, idsTeste.empresaB, funcaoB]
+      [processoB, idsTeste.empresaB, funcaoB, turnoB]
     );
 
     for (const rota of [
@@ -609,5 +688,359 @@ describe("admissoes processos integration", () => {
     });
     assertOk(lista);
     expect(JSON.stringify(lista.json().data)).not.toContain(processoB);
+  });
+  // ============================================================ ADM-003 V1B
+  //
+  // Pre-cadastro do DP, turno por catalogo, CPF cruzado e ASO.
+
+  async function criarDiretaV1B(
+    cookie: string,
+    cpf: string,
+    turnoId = turnoCompletoId,
+    nomeCompleto = "Pessoa Direta V1B"
+  ) {
+    await semearTurnos();
+    return contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/processos",
+      headers: { cookie },
+      payload: { nomeCompleto, cpf, funcaoId: idsTeste.funcaoOperacionalA, turnoId, dataAdmissao: "2026-09-15" }
+    });
+  }
+
+  it("P0-V1B Deve_ExigirIdentidadeEturno_Quando_CriarAdmissaoDireta", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02000000045");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const linha = await consultarUm<{
+      nome_completo: string;
+      cpf: string;
+      turno_id: string;
+      turno_etiqueta: string;
+      turno_dias_semana: string[];
+      jornada_horario: string | null;
+    }>(
+      `select nome_completo, cpf, turno_id, turno_etiqueta, turno_dias_semana, jornada_horario
+         from admissoes_processos where id = '${id}'`
+    );
+    expect(linha?.nome_completo).toBe("Pessoa Direta V1B");
+    expect(linha?.cpf).toBe("02000000045");
+    expect(linha?.turno_id).toBe(turnoCompletoId);
+    // RETRATO gravado no ato — nao e o catalogo lido depois.
+    expect(linha?.turno_etiqueta).toBe("M");
+    expect(linha?.turno_dias_semana).toEqual(["SEGUNDA", "TERCA"]);
+    // Jornada em texto NAO e escrita por caminho novo: ela existe so para o legado da V1A.
+    expect(linha?.jornada_horario).toBeNull();
+
+    // A projecao nunca carrega digito de CPF.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(detalhe);
+    expect(JSON.stringify(detalhe.json().data)).not.toContain("02000000045");
+    expect(detalhe.json().data.cpfMascarado).not.toMatch(/[0-9]/);
+  });
+
+  it("P0-V1B Deve_Recusar_Quando_TurnoIncompleto", async () => {
+    // O seletor ja nao oferece. Isto prova que o SERVIDOR recusa quem tentar forcar.
+    const recusado = await criarDiretaV1B(cookieDp, "02001111169", turnoIncompletoId);
+    expect(recusado.statusCode).toBe(400);
+    expect(JSON.stringify(recusado.json())).toContain("incompleto");
+
+    const linha = await consultarUm<{ n: number }>(
+      `select count(*)::int as n from admissoes_processos where cpf = '02001111169'`
+    );
+    expect(linha?.n).toBe(0);
+  });
+
+  it("P0-V1B Deve_Recusar_Quando_CpfJaEstaEmTeste_E_Vice_Versa", async () => {
+    // Sentido 1: teste primeiro, admissao direta depois.
+    const cpfA = "02002222282";
+    await criarTeste(cookieDp, cpfA);
+    const direta = await criarDiretaV1B(cookieDp, cpfA);
+    expect(direta.statusCode).toBe(409);
+    expect(direta.json().code).toBe("CPF_JA_EM_ADMISSAO");
+
+    // Sentido 2: admissao direta primeiro, teste depois.
+    const cpfB = "02003333304";
+    assertOk(await criarDiretaV1B(cookieDp, cpfB), 201);
+    const teste = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/testes",
+      headers: { cookie: cookieDp },
+      payload: {
+        nomeCompleto: "Pessoa de Teste",
+        cpf: cpfB,
+        funcaoId: idsTeste.funcaoOperacionalA,
+        jornadaHorario: "seg a sex, 08:00 as 17:00",
+        inicioEm: "2026-09-01T12:00:00.000Z",
+        fimCombinadoEm: "2026-09-30T12:00:00.000Z"
+      }
+    });
+    expect(teste.statusCode).toBe(409);
+    expect(teste.json().code).toBe("CPF_JA_EM_ADMISSAO");
+  });
+
+  it("P0-V1B Deve_BloquearNoLock_Quando_TesteEDiretaCorremJuntos", async () => {
+    // A corrida CRUZADA: as duas rotas gravam em tabelas diferentes, entao indice nenhum as separa.
+    // Quem separa e o advisory lock, e este teste falha se ele for removido.
+    const cpf = "02004444410";
+    await semearTurnos();
+    const bloqueador = await abrirBloqueador();
+    try {
+      await bloqueador.cliente.query("begin");
+      // Toma a MESMA chave que o servico toma. Chave, nao linha: `for update` nao serviria.
+      await bloqueador.cliente.query(
+        "select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext($1::text || ':' || $2::text))",
+        [idsTeste.empresaA, cpf]
+      );
+
+      const emVoo = criarDiretaV1B(cookieDp, cpf);
+      // Condicao, nao sleep: prova que a rota esta parada NESTE lock, e nao que demorou.
+      expect(await esperarBloqueioPor(bloqueador)).toBe(true);
+
+      await bloqueador.cliente.query("rollback");
+      assertOk(await emVoo, 201);
+    } finally {
+      await fecharBloqueador(bloqueador);
+    }
+  });
+
+  it("P0-V1B Deve_Recusar403_Quando_GerenciaEditaInternosOuExame", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02005555533");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    // `semPermissao` esta na MESMA empresa e o alvo EXISTE: e o unico arranjo que prova autorizacao.
+    for (const rota of ["internos", "exame"]) {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/admissoes/processos/${id}/${rota}`,
+        headers: { cookie: cookieSemPermissao },
+        payload: rota === "exame" ? { versao: 1, situacao: "aso_apto" } : { versao: 1, ctpsNumero: "1" }
+      });
+      expect(resposta.statusCode, rota).toBe(403);
+    }
+  });
+
+  it("P0-V1B Deve_PausarEretomar_Quando_AsoNaoAptoEdepoisApto", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02006666657");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const naoApto = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 1, situacao: "aso_nao_apto" }
+    });
+    expect(naoApto.statusCode).toBe(204);
+
+    let processo = await consultarUm<{ status: string }>(
+      `select status from admissoes_processos where id = '${id}'`
+    );
+    expect(processo?.status).toBe("pausado");
+
+    // A situacao DERIVADA nao chama pausado de Ativo.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(detalhe);
+    expect(detalhe.json().data.situacao).toBe("pausado");
+
+    const versaoInternos = detalhe.json().data.internos.versao;
+    const apto = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDp },
+      payload: { versao: versaoInternos, situacao: "aso_apto" }
+    });
+    expect(apto.statusCode).toBe(204);
+
+    processo = await consultarUm<{ status: string }>(
+      `select status from admissoes_processos where id = '${id}'`
+    );
+    expect(processo?.status).toBe("iniciado");
+
+    const eventos = await consultarTodos<{ acao: string }>(
+      `select acao from admissoes_processos_historico where processo_id = '${id}' order by ocorrido_em`
+    );
+    expect(eventos.map((e) => e.acao)).toEqual([
+      "criado",
+      "exame_alterado",
+      "pausado",
+      "exame_alterado",
+      "retomado"
+    ]);
+  });
+
+  it("P0-V1B Deve_RetomarSoDePausado_E_PermitirCancelarPausado", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02007777770");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    // Apto num processo JA iniciado nao mexe no status — nao ha de onde voltar.
+    const apto = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDp },
+      payload: { versao: 1, situacao: "aso_apto" }
+    });
+    expect(apto.statusCode).toBe(204);
+    let processo = await consultarUm<{ status: string }>(
+      `select status from admissoes_processos where id = '${id}'`
+    );
+    expect(processo?.status).toBe("iniciado");
+    const eventos = await consultarTodos<{ acao: string }>(
+      `select acao from admissoes_processos_historico where processo_id = '${id}'`
+    );
+    expect(eventos.map((e) => e.acao)).not.toContain("retomado");
+
+    // Pausa e cancela a partir de pausado: um processo parado por inaptidao e dos que o DP encerra.
+    const detalhe1 = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDp },
+      payload: { versao: detalhe1.json().data.internos.versao, situacao: "aso_nao_apto" }
+    });
+    const detalhe2 = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    expect(detalhe2.json().data.status).toBe("pausado");
+
+    const cancelado = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${id}/cancelar`,
+      headers: { cookie: cookieDp },
+      payload: { versao: detalhe2.json().data.versao }
+    });
+    assertOk(cancelado);
+    processo = await consultarUm<{ status: string }>(
+      `select status from admissoes_processos where id = '${id}'`
+    );
+    expect(processo?.status).toBe("cancelado");
+  });
+
+  it("P0-V1B Deve_Recusar409_Quando_ExcluirTurnoEmUso_E_PermitirTurnoLivre", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02008888894");
+    assertOk(criado, 201);
+
+    const emUso = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/turnos/${turnoCompletoId}?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieDp }
+    });
+    // 409, e nao 500: o banco recusa, e o servico traduz o 23503.
+    expect(emUso.statusCode).toBe(409);
+    expect(emUso.json().code).toBe("TURNO_EM_USO");
+
+    const aindaLa = await consultarUm<{ n: number }>(
+      `select count(*)::int as n from turnos where id = '${turnoCompletoId}'`
+    );
+    expect(aindaLa?.n).toBe(1);
+
+    // Turno sem uso continua excluivel: a protecao e do que esta em uso, nao de tudo.
+    const livre = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/turnos/${turnoLivreId}?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieDp }
+    });
+    expect(livre.statusCode).toBe(204);
+  });
+
+  it("P0-V1B Deve_PreservarEtiquetaEdias_Quando_PayloadNaoOsTraz", async () => {
+    await semearTurnos();
+    // Um cliente que NAO conhece os campos novos salva o turno. Nada pode ser apagado.
+    const salvo = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/turnos/${turnoEdicaoId}`,
+      headers: { cookie: cookieDp },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Edicao V1B renomeada",
+        horaInicio: "06:00",
+        horaFim: "14:00",
+        ativo: true
+      }
+    });
+    // 204: salvar turno nao devolve corpo. O que importa e o efeito, conferido abaixo no banco.
+    expect(salvo.statusCode).toBe(204);
+
+    const linha = await consultarUm<{ nome: string; etiqueta: string; dias_semana: string[] }>(
+      `select nome, etiqueta, dias_semana from turnos where id = '${turnoEdicaoId}'`
+    );
+    expect(linha?.nome).toBe("Edicao V1B renomeada");
+    expect(linha?.etiqueta).toBe("M");
+    expect(linha?.dias_semana).toEqual(["SEGUNDA", "TERCA"]);
+
+    // Limpar exige `null` EXPLICITO — e a outra metade da regra.
+    await contexto.app.inject({
+      method: "PUT",
+      url: `/api/turnos/${turnoEdicaoId}`,
+      headers: { cookie: cookieDp },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Edicao V1B renomeada",
+        horaInicio: "06:00",
+        horaFim: "14:00",
+        ativo: true,
+        etiqueta: null
+      }
+    });
+    const limpa = await consultarUm<{ etiqueta: string | null; dias_semana: string[] }>(
+      `select etiqueta, dias_semana from turnos where id = '${turnoEdicaoId}'`
+    );
+    expect(limpa?.etiqueta).toBeNull();
+    expect(limpa?.dias_semana).toEqual(["SEGUNDA", "TERCA"]);
+  });
+
+  it("P0-V1B Deve_RevelarCpfComTrilha_E_NuncaEmQueryString", async () => {
+    const criado = await criarDiretaV1B(cookieDp, "02009999908");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const revelado = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${id}/cpf`,
+      headers: { cookie: cookieDp },
+      payload: {}
+    });
+    assertOk(revelado);
+    expect(revelado.json().data.cpf).toBe("02009999908");
+
+    // Revelar e ATO AUDITADO: se a trilha nao gravasse, o CPF nao teria saido.
+    const eventos = await consultarTodos<{ acao: string }>(
+      `select acao from admissoes_processos_historico where processo_id = '${id}'`
+    );
+    expect(eventos.map((e) => e.acao)).toContain("cpf_revelado");
+  });
+
+  it("P0-V1B Deve_NaoTer_SegundaRotaDeCriarOuRetomar", async () => {
+    // Guarda de superficie: o servidor nao pode ter ganhado um verbo paralelo.
+    for (const rota of [
+      { method: "POST" as const, url: `/api/admissoes/processos/${idsTeste.empresaA}/retomar` },
+      { method: "POST" as const, url: `/api/admissoes/processos/${idsTeste.empresaA}/iniciar` },
+      { method: "POST" as const, url: "/api/admissoes/processos/criar" }
+    ]) {
+      const resposta = await contexto.app.inject({
+        method: rota.method,
+        url: rota.url,
+        headers: { cookie: cookieDp },
+        payload: {}
+      });
+      expect(resposta.statusCode, rota.url).toBe(404);
+    }
   });
 });
