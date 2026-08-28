@@ -71,6 +71,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
   const atuais = usuariosDaConta().filter((id) => id !== usuarioId);
   formCadastro.value.usuariosIds = marcar ? [...atuais, String(usuarioId)] : atuais;
 }
+import CadastroCamposTurno from "~/components/cadastros/CadastroCamposTurno.vue";
 </script>
 
 <template>
@@ -293,15 +294,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
           <v-col v-if="cadastroTela === 'unidades'" cols="12" md="4"
             ><v-text-field v-model="formCadastro.sigla" label="Sigla"
           /></v-col>
-          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
-            <v-text-field v-model="formCadastro.horaInicio" type="time" label="Inicio" />
-          </v-col>
-          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
-            <v-text-field v-model="formCadastro.horaFim" type="time" label="Fim" />
-          </v-col>
-          <v-col v-if="cadastroTela === 'turnos'" cols="12" md="4">
-            <v-switch v-model="formCadastro.ativo" color="primary" label="Ativo" />
-          </v-col>
+          <CadastroCamposTurno v-if="cadastroTela === 'turnos'" v-model="formCadastro" />
           <v-col v-if="cadastroTela === 'colaboradores'" cols="12" md="6"
             ><v-text-field
               :model-value="formCadastro.cpf"

@@ -9,7 +9,8 @@ import {
   situacaoDoProcesso,
   type HistoricoProcessoDto,
   type ProcessoDetalheDto,
-  type ProcessoListaDto
+  type ProcessoListaDto,
+  type TurnoOpcaoDto
 } from "@padaria/shared/admissoes";
 import { cpfTotalmenteMascarado } from "@padaria/shared/admissoes";
 import { turnoCompleto } from "@padaria/shared/turnos";
@@ -38,6 +39,7 @@ import {
   criarProcessoRepository,
   listarHistoricoProcessoRepository,
   listarProcessosRepository,
+  listarTurnosDaEmpresaRepository,
   obterFuncaoAtivaRepository,
   obterProcessoPorTesteRepository,
   obterProcessoRepository,
@@ -272,6 +274,21 @@ export async function revelarCpfDoProcesso(id: string, perfil?: PerfilUsuario) {
     );
     return { cpf: linha.cpf };
   });
+}
+
+/** Turnos da empresa para o seletor. `completo` vem derivado, para a tela nao reimplementar a regra. */
+export async function listarTurnosParaAdmissao(perfil?: PerfilUsuario): Promise<TurnoOpcaoDto[]> {
+  const empresaId = empresaDoAtor(perfil);
+  const linhas = await listarTurnosDaEmpresaRepository(empresaId);
+  return linhas.map((turno) => ({
+    id: turno.id,
+    nome: turno.nome,
+    etiqueta: turno.etiqueta,
+    diasSemana: turno.diasSemana,
+    horaInicio: turno.horaInicio,
+    horaFim: turno.horaFim,
+    completo: turnoCompleto(turno)
+  }));
 }
 
 export async function listarProcessos(query: DadosExternos, perfil?: PerfilUsuario) {

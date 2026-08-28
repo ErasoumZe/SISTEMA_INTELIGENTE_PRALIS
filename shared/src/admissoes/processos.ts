@@ -181,6 +181,20 @@ export const exameProcessoPayloadSchema = z.object({
   situacao: situacaoExameSchema
 });
 
+/**
+ * Opcao de turno no seletor da admissao. Traz `completo` DERIVADO pelo servidor: a tela nao
+ * reimplementa a regra, so desabilita o que ja veio marcado.
+ */
+export const turnoOpcaoDtoSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  etiqueta: z.string().nullable(),
+  diasSemana: z.array(z.string()).nullable(),
+  horaInicio: z.string(),
+  horaFim: z.string(),
+  completo: z.boolean()
+});
+
 export const processoParamsSchema = apiIdParamsSchema;
 export const historicoProcessoQuerySchema = paginationQuerySchema;
 
@@ -297,6 +311,7 @@ export type CriarProcessoDiretoPayload = z.infer<typeof criarProcessoDiretoPaylo
 export type DadosInternosPayload = z.infer<typeof dadosInternosPayloadSchema>;
 export type ExameProcessoPayload = z.infer<typeof exameProcessoPayloadSchema>;
 export type ProcessosQuery = z.infer<typeof processosQuerySchema>;
+export type TurnoOpcaoDto = z.infer<typeof turnoOpcaoDtoSchema>;
 export type ProcessoListaDto = z.infer<typeof processoListaDtoSchema>;
 export type DadosInternosDto = z.infer<typeof dadosInternosDtoSchema>;
 export type ProcessoDetalheDto = z.infer<typeof processoDetalheDtoSchema>;

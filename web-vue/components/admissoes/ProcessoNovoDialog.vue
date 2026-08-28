@@ -1,98 +1,181 @@
 <script setup lang="ts">
-import type { FuncaoOpcaoDto } from "@padaria/shared";
+import type { FuncaoOpcaoDto, TurnoOpcaoDto } from "@padaria/shared";
+import { cpfValido, normalizarCpf } from "@padaria/shared";
+import { rotuloEtiquetaTurno, rotuloDiaSemanaCurto } from "~/utils/admissoes";
 
 /**
  * "+ Novo cadastro" — a UNICA entrada de admissao direta.
  *
- * Nao pergunta nome nem CPF: identidade e do formulario do candidato, e o CHECK do banco impede que
- * o processo passe a ter a sua propria. Nao pergunta empresa: ela vem do perfil, como em todo o
- * modulo. Nao pergunta area, setor, CBO nem salario: fora desta vertical.
+ * O DP preenche o pre-cadastro ANTES de qualquer link: nome, CPF, data de admissao, funcao e turno.
+ * Nao pergunta empresa nem CNPJ — vem do perfil, e aparecem so para conferencia.
  *
- * Quem veio de um periodo de teste NAO passa por aqui — efetivar o teste ja cria o processo, na
+ * Quem veio de um periodo de teste NAO passa por aqui: efetivar o teste ja cria o processo, na
  * propria tela de Testes. Nao existe segundo caminho para o mesmo ato.
  */
 const props = defineProps<{
   aberto: boolean;
   funcoes: FuncaoOpcaoDto[];
+  turnos: TurnoOpcaoDto[];
+  empresaNome: string;
+  empresaCnpj: string;
   salvando: boolean;
   erro: string;
 }>();
 
 const emit = defineEmits<{
   (event: "fechar"): void;
-  (event: "salvar", dados: { funcaoId: string; jornadaHorario: string; dataAdmissao: string }): void;
+  (
+    event: "salvar",
+    dados: { nomeCompleto: string; cpf: string; funcaoId: string; turnoId: string; dataAdmissao: string }
+  ): void;
 }>();
 
-const formulario = reactive({ funcaoId: "", jornadaHorario: "", dataAdmissao: "" });
+const formulario = reactive({ nomeCompleto: "", cpf: "", funcaoId: "", turnoId: "", dataAdmissao: "" });
 
 watch(
   () => props.aberto,
   (aberto) => {
     if (!aberto) return;
+    formulario.nomeCompleto = "";
+    formulario.cpf = "";
     formulario.funcaoId = "";
-    formulario.jornadaHorario = "";
+    formulario.turnoId = "";
     formulario.dataAdmissao = "";
   }
 );
 
-// So as funcoes ATIVAS: este e um cadastro NOVO, e escolher uma funcao desativada aqui seria criar
-// um processo que ja nasce apontando para catalogo fora de uso.
-const opcoes = computed(() => props.funcoes.filter((funcao) => funcao.ativo));
+// So as funcoes ATIVAS: este e um cadastro NOVO, e apontar para catalogo fora de uso ja nasceria errado.
+const funcoesAtivas = computed(() => props.funcoes.filter((funcao) => funcao.ativo));
+
+/**
+ * Turno INCOMPLETO aparece na lista, desabilitado, dizendo o que falta.
+ *
+ * Esconder seria pior: o DP procuraria um turno que existe no cadastro e nao acharia, sem entender
+ * por quê. O servidor recusa de qualquer forma — isto é a explicação, não a garantia.
+ */
+const opcoesTurno = computed(() =>
+  props.turnos.map((turno) => ({
+    ...turno,
+    titulo: turno.completo
+      ? `${rotuloEtiquetaTurno[turno.etiqueta as "M" | "T" | "I"] ?? turno.etiqueta} · ${(turno.diasSemana ?? []).map(rotuloDiaSemanaCurto).join(", ")} · ${turno.horaInicio.slice(0, 5)}–${turno.horaFim.slice(0, 5)}`
+      : `${turno.nome} — incompleto`
+  }))
+);
+const temTurnoIncompleto = computed(() => props.turnos.some((turno) => !turno.completo));
+const semTurnoUsavel = computed(() => props.turnos.every((turno) => !turno.completo));
+
+const cpfNormalizado = computed(() => normalizarCpf(formulario.cpf));
+const cpfErro = computed(() => {
+  if (!formulario.cpf.trim()) return "";
+  return cpfValido(formulario.cpf) ? "" : "CPF inválido";
+});
 
 const podeSalvar = computed(
   () =>
+    formulario.nomeCompleto.trim().length > 0 &&
+    cpfValido(formulario.cpf) &&
     Boolean(formulario.funcaoId) &&
-    formulario.jornadaHorario.trim().length > 0 &&
+    Boolean(formulario.turnoId) &&
     Boolean(formulario.dataAdmissao)
 );
 
 function salvar() {
   if (!podeSalvar.value) return;
   emit("salvar", {
+    nomeCompleto: formulario.nomeCompleto.trim(),
+    cpf: cpfNormalizado.value,
     funcaoId: formulario.funcaoId,
-    jornadaHorario: formulario.jornadaHorario.trim(),
+    turnoId: formulario.turnoId,
     dataAdmissao: formulario.dataAdmissao
   });
 }
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" max-width="560" @update:model-value="emit('fechar')">
-    <v-card>
-      <v-card-title>Novo cadastro de admissão</v-card-title>
-      <v-card-subtitle>
-        Admissão direta, sem período de teste. A empresa vem do seu perfil.
-      </v-card-subtitle>
+  <v-dialog
+    :model-value="aberto"
+    max-width="720"
+    scrollable
+    persistent
+    @update:model-value="(valor) => !valor && emit('fechar')"
+  >
+    <v-card role="dialog" aria-labelledby="titulo-novo-cadastro">
+      <v-card-title id="titulo-novo-cadastro" class="d-flex align-center justify-space-between">
+        <span>Novo cadastro de admissão</span>
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Fechar" @click="emit('fechar')" />
+      </v-card-title>
+      <v-card-subtitle>Admissão direta, sem período de teste.</v-card-subtitle>
 
       <v-card-text>
-        <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4">{{ erro }}</v-alert>
+        <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4" role="alert">
+          {{ erro }}
+        </v-alert>
+
+        <!-- Empresa e CNPJ vêm do perfil. Não há seletor, e não há como digitá-los. -->
+        <div class="empresa">
+          <span class="empresa-rotulo">Empresa</span>
+          <strong>{{ empresaNome || "—" }}</strong>
+          <span v-if="empresaCnpj" class="empresa-cnpj">CNPJ {{ empresaCnpj }}</span>
+        </div>
+
+        <v-alert
+          v-if="semTurnoUsavel"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-4"
+          role="alert"
+        >
+          Nenhum turno desta empresa está completo. Configure etiqueta (M/T/I) e dias da semana em
+          <strong>Turnos</strong> antes de cadastrar uma admissão.
+        </v-alert>
 
         <form class="formulario" @submit.prevent="salvar">
-          <v-select
-            v-model="formulario.funcaoId"
-            :items="opcoes"
-            item-title="nome"
-            item-value="id"
-            label="Função operacional"
+          <v-text-field
+            v-model="formulario.nomeCompleto"
+            label="Nome completo *"
             density="comfortable"
+            autofocus
+            maxlength="200"
           />
           <v-text-field
-            v-model="formulario.jornadaHorario"
-            label="Jornada / horário"
+            v-model="formulario.cpf"
+            label="CPF *"
             density="comfortable"
-            placeholder="Seg a sex, 08:00 às 17:00"
+            inputmode="numeric"
+            placeholder="000.000.000-00"
+            :error-messages="cpfErro"
+          />
+          <v-select
+            v-model="formulario.funcaoId"
+            :items="funcoesAtivas"
+            item-title="nome"
+            item-value="id"
+            label="Função operacional *"
+            density="comfortable"
+          />
+          <v-select
+            v-model="formulario.turnoId"
+            :items="opcoesTurno"
+            item-title="titulo"
+            item-value="id"
+            :item-props="(item) => ({ disabled: !item.completo })"
+            label="Turno *"
+            density="comfortable"
+            :hint="temTurnoIncompleto ? 'Turnos incompletos aparecem desabilitados.' : ''"
+            persistent-hint
           />
           <v-text-field
             v-model="formulario.dataAdmissao"
-            label="Data de admissão"
+            label="Data de admissão *"
             type="date"
             density="comfortable"
           />
         </form>
 
         <p class="nota">
-          Nome, CPF, endereço e dependentes chegam com a resposta do candidato — não são preenchidos
-          aqui.
+          Endereço, dependentes e documentos chegam depois, com a resposta do candidato — não são
+          preenchidos aqui.
         </p>
       </v-card-text>
 
@@ -110,11 +193,36 @@ function salvar() {
 <style scoped>
 .formulario {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.formulario > :first-child {
+  grid-column: 1 / -1;
+}
+.empresa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border: 1px solid rgb(var(--v-border-color), 0.25);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.empresa-rotulo,
+.empresa-cnpj {
+  font-size: 0.78rem;
+  opacity: 0.7;
 }
 .nota {
   font-size: 0.8rem;
   opacity: 0.75;
-  margin-top: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 768px) {
+  .formulario {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

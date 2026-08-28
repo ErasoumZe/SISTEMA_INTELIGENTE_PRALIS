@@ -171,6 +171,29 @@ export async function existeProcessoAtivoPorCpfRepository(
   return Boolean(linha);
 }
 
+/**
+ * Os turnos da empresa, para o seletor da admissao.
+ *
+ * Devolve TODOS, inclusive os incompletos e inativos, com a marca — a tela precisa poder dizer "este
+ * turno esta incompleto, configure no cadastro de Turnos" em vez de simplesmente nao mostrar e
+ * deixar o DP procurando o que sumiu.
+ */
+export async function listarTurnosDaEmpresaRepository(empresaId: string) {
+  return banco
+    .select({
+      id: turnos.id,
+      nome: turnos.nome,
+      etiqueta: turnos.etiqueta,
+      diasSemana: turnos.diasSemana,
+      horaInicio: turnos.horaInicio,
+      horaFim: turnos.horaFim,
+      ativo: turnos.ativo
+    })
+    .from(turnos)
+    .where(eq(turnos.empresaId, empresaId))
+    .orderBy(desc(turnos.ativo), asc(turnos.etiqueta), asc(turnos.nome));
+}
+
 /** O CPF do processo, para a revelacao auditada. Mesma disciplina da ADM-001. */
 export async function obterCpfDoProcessoRepository(id: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db

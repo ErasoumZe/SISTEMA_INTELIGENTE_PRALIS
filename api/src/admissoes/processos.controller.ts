@@ -11,6 +11,7 @@ import {
   criarProcessoDireto,
   listarHistoricoProcesso,
   listarProcessos,
+  listarTurnosParaAdmissao,
   obterProcesso,
   revelarCpfDoProcesso,
   salvarDadosInternos
@@ -57,6 +58,23 @@ export async function registrarRotasAdmissoesProcessos(app: FastifyInstance) {
     async (request, reply) => {
       try {
         return paginadoDeResultado(await listarProcessos(request.query, request.perfilUsuario));
+      } catch (error) {
+        return responderErro(reply, error);
+      }
+    }
+  );
+
+  /**
+   * Turnos da empresa para o seletor da admissao. Espelha `/api/admissoes/funcoes`, e pelo mesmo
+   * motivo: `GET /api/turnos` exige `empresaId` na query e `cadastro_turnos_visualizar`, permissao
+   * de outro dominio — e este modulo nao le empresa do cliente.
+   */
+  app.get(
+    "/api/admissoes/turnos",
+    { preHandler: exigirPermissao("admissoes_processos_criar_direta") },
+    async (request, reply) => {
+      try {
+        return ok(await listarTurnosParaAdmissao(request.perfilUsuario));
       } catch (error) {
         return responderErro(reply, error);
       }

@@ -6,22 +6,18 @@ import type {
   HistoricoProcessoDto,
   ProcessoDetalheDto,
   ProcessoListaDto,
-  SituacaoExame
+  SituacaoExame,
+  TurnoOpcaoDto
 } from "@padaria/shared";
 import { temPermissao } from "@padaria/shared";
+import { mascararCnpj } from "~/utils/formatacao";
 import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import {
-  corSituacaoExame,
-  corStatusProcesso,
-  rotuloIdentidadeProcesso,
-  rotuloOrigemProcesso,
-  rotuloSituacaoExame,
-  rotuloStatusProcesso
-} from "~/utils/admissoes";
 import ProcessoDetalhePainel from "~/components/admissoes/ProcessoDetalhePainel.vue";
+import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
+import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
 
 /**
  * ADM-003 V1A — "Processos de admissão".
@@ -54,9 +50,23 @@ const bloqueio = ref("");
 const snackbar = reactive({ show: false, text: "", color: "success" });
 
 const funcoes = ref<FuncaoOpcaoDto[]>([]);
+const turnos = ref<TurnoOpcaoDto[]>([]);
 const novoAberto = ref(false);
 const salvando = ref(false);
 const novoErro = ref("");
+
+// Empresa e CNPJ vem do PERFIL, nunca do cliente. Aparecem so para conferencia — nao ha seletor.
+const empresaDoPerfil = computed(() => {
+  const empresaId = sessao.value?.perfil?.empresaId;
+  return sessao.value?.empresas?.find((empresa) => empresa.id === empresaId) ?? null;
+});
+const empresaNome = computed(() => empresaDoPerfil.value?.nome ?? "");
+const empresaCnpj = computed(() =>
+  empresaDoPerfil.value?.cnpj ? mascararCnpj(empresaDoPerfil.value.cnpj) : ""
+);
+
+const internosAberto = ref(false);
+const internosErro = ref("");
 
 const detalheAberto = ref(false);
 const detalheCarregando = ref(false);
@@ -97,9 +107,10 @@ async function carregar() {
   }
 }
 
-async function carregarFuncoes() {
+async function carregarCatalogos() {
   try {
     funcoes.value = await apiGet<FuncaoOpcaoDto[]>("/api/admissoes/funcoes");
+    turnos.value = await apiGet<TurnoOpcaoDto[]>("/api/admissoes/turnos");
   } catch (error) {
     tratarErro(error);
   }
@@ -129,7 +140,13 @@ async function abrirDetalhe(id: string) {
   }
 }
 
-async function criarDireta(dados: { funcaoId: string; jornadaHorario: string; dataAdmissao: string }) {
+async function criarDireta(dados: {
+  nomeCompleto: string;
+  cpf: string;
+  funcaoId: string;
+  turnoId: string;
+  dataAdmissao: string;
+}) {
   salvando.value = true;
   novoErro.value = "";
   try {
@@ -145,36 +162,44 @@ async function criarDireta(dados: { funcaoId: string; jornadaHorario: string; da
   }
 }
 
-async function salvarInternos(
-  dados: Omit<DadosInternosDto, "exameExigeAtencao" | "exameAtualizadoPorNome" | "exameAtualizadoEm">
-) {
+async function salvarInternos(dados: Record<string, unknown>) {
   if (!processo.value) return;
   processando.value = true;
+  internosErro.value = "";
   try {
     await apiPut(`/api/admissoes/processos/${processo.value.id}/internos`, dados);
+    internosAberto.value = false;
     notificar("Dados internos salvos.");
     await abrirDetalhe(processo.value.id);
     await carregar();
   } catch (error) {
-    tratarErro(error);
+    internosErro.value = mensagemErro(error);
   } finally {
     processando.value = false;
   }
 }
 
-async function atualizarExame(situacao: SituacaoExame) {
+/**
+ * O exame tem rota e versao PROPRIAS no servidor: alterar o bloco interno nao e alterar o exame.
+ * Quem opera ve um formulario so — a separacao vive no contrato, nao na tela.
+ *
+ * Pausa e retomada acontecem no servidor, dentro desta mesma chamada. Nao ha botao de retomar.
+ */
+async function salvarExame(situacao: SituacaoExame) {
   if (!processo.value) return;
   processando.value = true;
+  internosErro.value = "";
   try {
     await apiPut(`/api/admissoes/processos/${processo.value.id}/exame`, {
       versao: processo.value.internos.versao,
       situacao
     });
+    internosAberto.value = false;
     notificar("Exame admissional atualizado.");
     await abrirDetalhe(processo.value.id);
     await carregar();
   } catch (error) {
-    tratarErro(error);
+    internosErro.value = mensagemErro(error);
   } finally {
     processando.value = false;
   }
@@ -197,13 +222,10 @@ async function cancelarProcesso() {
   }
 }
 
-function dataExibida(data: string | null) {
-  return data ? data.split("-").reverse().join("/") : "—";
-}
 
 onMounted(async () => {
   await carregar();
-  if (podeCriarDireta.value) await carregarFuncoes();
+  if (podeCriarDireta.value) await carregarCatalogos();
 });
 </script>
 
@@ -228,73 +250,36 @@ onMounted(async () => {
 
     <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4">{{ erro }}</v-alert>
 
-    <v-table v-if="linhas.length" density="comfortable">
-      <thead>
-        <tr>
-          <th>Candidato</th>
-          <th>Origem</th>
-          <th>Função</th>
-          <th>Admissão</th>
-          <th>Exame</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="linha in linhas" :key="linha.id">
-          <td>
-            <span :class="{ 'sem-nome': !linha.nomeCompleto }">
-              {{ rotuloIdentidadeProcesso(linha.nomeCompleto) }}
-            </span>
-          </td>
-          <td>{{ rotuloOrigemProcesso[linha.origem] }}</td>
-          <td>{{ linha.funcaoNome ?? "—" }}</td>
-          <td>{{ dataExibida(linha.dataAdmissao) }}</td>
-          <td>
-            <v-chip size="x-small" variant="tonal" :color="corSituacaoExame(linha.exameSituacao)">
-              {{ rotuloSituacaoExame[linha.exameSituacao] }}
-            </v-chip>
-          </td>
-          <td>
-            <v-chip size="x-small" variant="tonal" :color="corStatusProcesso(linha.status)">
-              {{ rotuloStatusProcesso[linha.status] }}
-            </v-chip>
-          </td>
-          <td class="text-end">
-            <v-btn variant="text" size="small" @click="abrirDetalhe(linha.id)">Abrir</v-btn>
-          </td>
-        </tr>
-      </tbody>
-    </v-table>
-
-    <p v-else-if="!carregando" class="vazio">
-      Nenhum processo de admissão nesta empresa ainda. Eles nascem ao efetivar um período de teste
-      ou, aqui, por “+ Novo cadastro”.
-    </p>
-
-    <nav v-if="totalPaginas > 1" class="paginacao">
-      <v-btn variant="text" size="small" :disabled="pagina <= 1" @click="trocarPagina(pagina - 1)">
-        Anterior
-      </v-btn>
-      <span>{{ pagina }} de {{ totalPaginas }}</span>
-      <v-btn
-        variant="text"
-        size="small"
-        :disabled="pagina >= totalPaginas"
-        @click="trocarPagina(pagina + 1)"
-      >
-        Próxima
-      </v-btn>
-    </nav>
+    <ProcessosTabela
+      :linhas="linhas"
+      :carregando="carregando"
+      :pagina="pagina"
+      :total-paginas="totalPaginas"
+      @abrir="abrirDetalhe"
+      @trocar-pagina="trocarPagina"
+    />
   </section>
 
   <ProcessoNovoDialog
     :aberto="novoAberto"
     :funcoes="funcoes"
+    :turnos="turnos"
+    :empresa-nome="empresaNome"
+    :empresa-cnpj="empresaCnpj"
     :salvando="salvando"
     :erro="novoErro"
     @fechar="novoAberto = false"
     @salvar="criarDireta"
+  />
+
+  <ProcessoInternosDialog
+    :aberto="internosAberto"
+    :internos="processo?.internos ?? null"
+    :salvando="processando"
+    :erro="internosErro"
+    @fechar="internosAberto = false"
+    @salvar="salvarInternos"
+    @salvar-exame="salvarExame"
   />
 
   <ProcessoDetalhePainel
@@ -307,8 +292,7 @@ onMounted(async () => {
     :processando="processando"
     @fechar="detalheAberto = false"
     @cancelar="cancelarProcesso"
-    @salvar-internos="salvarInternos"
-    @atualizar-exame="atualizarExame"
+    @editar-internos="() => { internosErro = ''; internosAberto = true; }"
   />
 
   <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>

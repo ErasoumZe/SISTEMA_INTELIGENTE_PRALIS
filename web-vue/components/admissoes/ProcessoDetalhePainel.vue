@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DadosInternosDto, HistoricoProcessoDto, ProcessoDetalheDto, SituacaoExame } from "@padaria/shared";
+import type { HistoricoProcessoDto, ProcessoDetalheDto } from "@padaria/shared";
 import {
   corStatusProcesso,
   explicacaoSituacaoProcesso,
@@ -7,7 +7,8 @@ import {
   rotuloIdentidadeProcesso,
   rotuloOrigemProcesso,
   rotuloSituacaoProcesso,
-  rotuloStatusProcesso
+  rotuloStatusProcesso,
+  rotuloTurnoDoProcesso
 } from "~/utils/admissoes";
 import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
 import { formatarDataHora } from "~/utils/formatacao";
@@ -26,8 +27,8 @@ const emit = defineEmits<{
   (event: "cancelar"): void;
   (event: "fechar"): void;
   (event: "verTeste"): void;
-  (event: "salvarInternos", dados: Omit<DadosInternosDto, "exameExigeAtencao" | "exameAtualizadoPorNome" | "exameAtualizadoEm">): void;
-  (event: "atualizarExame", situacao: SituacaoExame): void;
+  // UM evento. A edicao dos internos e do exame virou um modal so, aberto pela pagina.
+  (event: "editarInternos"): void;
 }>();
 
 const dialogCancelar = ref(false);
@@ -101,20 +102,32 @@ function confirmarCancelar() {
           </template>
         </dd>
 
+        <dt>CPF</dt>
+        <dd>{{ processo.cpfMascarado ?? "—" }}</dd>
+
         <dt>Função operacional</dt>
         <dd>{{ processo.funcaoNome ?? "—" }}</dd>
 
-        <dt>Jornada / horário</dt>
-        <dd>{{ processo.jornadaHorario ?? "—" }}</dd>
+        <dt>Turno</dt>
+        <dd>{{ rotuloTurnoDoProcesso(processo) ?? "—" }}</dd>
+
+        <!-- Só aparece quando existe: é registro anterior ao catálogo de turnos, e não foi convertido
+             porque converter seria adivinhar qual turno da empresa aquele texto era. -->
+        <template v-if="processo.jornadaHorario">
+          <dt>Jornada (registro anterior)</dt>
+          <dd>
+            {{ processo.jornadaHorario }}
+            <span class="painel-derivacao">Cadastro feito antes do catálogo de turnos.</span>
+          </dd>
+        </template>
       </dl>
 
       <ProcessoInternosBloco
         :internos="processo.internos"
         :pode-editar="podeEditarInternos"
         :processando="processando"
-        :em-andamento="emAndamento"
-        @salvar="(dados) => emit('salvarInternos', dados)"
-        @atualizar-exame="(situacao) => emit('atualizarExame', situacao)"
+        :editavel="processo.status !== 'cancelado'"
+        @editar="emit('editarInternos')"
       />
 
       <!-- O convite fica DESABILITADO com o motivo escrito, e nao existe rota que o emita. Emitir um
