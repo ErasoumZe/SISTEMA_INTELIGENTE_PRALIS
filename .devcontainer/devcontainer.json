@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "Pralis — Codespaces (Fase A)",
+
+  // Node 22: e a versao do CI (.github/workflows/ci.yml, node-version 22) e a dos
+  // Dockerfiles (node:22-alpine). Base Debian bookworm porque o Postgres 16 vem do
+  // repositorio oficial PGDG, instalado no post-create. Sem Docker-in-Docker nesta fase.
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+
+  // Heap de 6144 MB exige maquina de 8 GB. O CI ja precisa desse heap so para o lint
+  // (.github/workflows/ci.yml: NODE_OPTIONS=--max-old-space-size=6144).
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+
+  "containerEnv": {
+    "TZ": "America/Sao_Paulo",
+    "NODE_OPTIONS": "--max-old-space-size=6144",
+    "NODE_ENV": "development",
+
+    // Banco LOCAL ao Codespace. Valor sintetico, identico ao .env.example ja versionado.
+    // Fica aqui de proposito: se algum segredo de Codespaces injetar uma DATABASE_URL de
+    // producao, o post-create aborta ao ve-la (guarda de loopback).
+    "DATABASE_URL": "postgresql://padaria:padaria@127.0.0.1:5543/padaria",
+    "POSTGRES_USER": "padaria",
+    "POSTGRES_PASSWORD": "padaria",
+    "POSTGRES_DB": "padaria",
+    "POSTGRES_PORT": "5543",
+    "PGPORT": "5543",
+
+    "API_PORT": "4100",
+    "WEB_PORT": "5174",
+
+    // e2e nao entra na Fase A: nao baixar navegadores (~400 MB).
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
+  },
+
+  // Somente 5174 (web) e 4100 (API). A 5543 do Postgres NUNCA e encaminhada:
+  // o servidor escuta so em 127.0.0.1 dentro do Codespace.
+  "forwardPorts": [5174, 4100],
+
+  "portsAttributes": {
+    "5174": {
+      "label": "web-vue (Nuxt dev)",
+      "visibility": "private",
+      "onAutoForward": "notify"
+    },
+    "4100": {
+      "label": "api (Fastify)",
+      "visibility": "private",
+      "onAutoForward": "notify"
+    },
+    "5543": {
+      "label": "postgres — NUNCA encaminhar",
+      "onAutoForward": "ignore"
+    }
+  },
+
+  // Qualquer outra porta que apareca (HMR, vue-tsc, tsx watch, drizzle) fica local.
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/post-start.sh",
+
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      // Espelha .vscode/extensions.json (recommendations).
+      "extensions": ["Vue.volar", "dbaeumer.vscode-eslint", "esbenp.prettier-vscode"],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.eol": "\n"
+      }
+    }
+  }
+}
