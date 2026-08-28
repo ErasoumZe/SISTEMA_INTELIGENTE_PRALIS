@@ -53,9 +53,21 @@ export async function registrarRotasAdmissoes(app: FastifyInstance) {
 
   // FUNCOES OPERACIONAIS da empresa derivada. Nao e `GET /api/cargos`: aquilo lista cargo de ACESSO
   // e exige `cadastro_colaboradores_visualizar`, permissao de outro dominio. Catalogos distintos.
+  //
+  // Catalogo COMPARTILHADO: a mesma funcao e campo obrigatorio do teste (ADM-001) e do processo
+  // direto (ADM-003). Exigir so `admissoes_testes_visualizar` invertia a fronteira que este modulo
+  // declara — o processo passava a depender de testes — e deixava um perfil com direito de criar
+  // admissao direta sem conseguir carregar o proprio formulario. Mesmo motivo e mesma forma do
+  // `GET /api/turnos`, que aceita `caixa_operar` alem do cadastro. Quem nao tem nenhuma das duas
+  // continua recebendo 403.
   app.get(
     "/api/admissoes/funcoes",
-    { preHandler: exigirPermissao("admissoes_testes_visualizar") },
+    {
+      preHandler: exigirAlgumaPermissao([
+        "admissoes_testes_visualizar",
+        "admissoes_processos_criar_direta"
+      ])
+    },
     async (request, reply) => {
       try {
         return ok(await listarFuncoesAdmissoes(request.perfilUsuario));

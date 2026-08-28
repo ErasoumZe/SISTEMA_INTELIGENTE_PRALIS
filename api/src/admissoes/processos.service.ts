@@ -287,6 +287,7 @@ export async function listarTurnosParaAdmissao(perfil?: PerfilUsuario): Promise<
     diasSemana: turno.diasSemana,
     horaInicio: turno.horaInicio,
     horaFim: turno.horaFim,
+    ativo: turno.ativo,
     completo: turnoCompleto(turno)
   }));
 }

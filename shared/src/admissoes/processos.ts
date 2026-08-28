@@ -186,6 +186,12 @@ export const exameProcessoPayloadSchema = z.object({
 /**
  * Opcao de turno no seletor da admissao. Traz `completo` DERIVADO pelo servidor: a tela nao
  * reimplementa a regra, so desabilita o que ja veio marcado.
+ *
+ * `ativo` vem junto porque `completo` sozinho e ambiguo para quem le: `turnoCompleto` exige
+ * ativo E etiqueta E dias, entao um turno desativado com etiqueta e dias preenchidos chegava
+ * marcado como "incompleto" — e o DP ia ao cadastro, via os dois campos preenchidos e nao
+ * entendia o que faltava. Com `ativo`, a tela diz qual dos dois motivos e. Mesma razao pela qual
+ * `FuncaoOpcaoDto` ja carrega o seu.
  */
 export const turnoOpcaoDtoSchema = z.object({
   id: z.string(),
@@ -194,6 +200,7 @@ export const turnoOpcaoDtoSchema = z.object({
   diasSemana: z.array(z.string()).nullable(),
   horaInicio: z.string(),
   horaFim: z.string(),
+  ativo: z.boolean(),
   completo: z.boolean()
 });
 
