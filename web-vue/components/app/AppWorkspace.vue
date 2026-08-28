@@ -2063,38 +2063,24 @@ onBeforeUnmount(() => {
     @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>
-      <div v-if="temPermissao('caixa_operar')" class="caixa-card">
-        <div v-if="caixaAberto" class="d-flex align-start justify-space-between ga-2">
-          <div>
-            <div class="caixa-title">Caixa: {{ caixaAberto.pdvNome }}</div>
-            <div class="caixa-meta">Aberto em: {{ formatarDataHora(caixaAberto.dataHoraAbertura) }}</div>
-          </div>
-          <span class="status-pill">Aberto</span>
-        </div>
-        <div v-else>
-          <div class="caixa-title">Não há caixa aberto</div>
-          <!-- Uma linha, e nao duas. A frase de duas linhas era o que dominava a altura do card
-               (36 dos 143px medidos). Ela NAO foi removida: para o perfil que a le, medido em tela,
-               nenhuma tela do menu aparece desabilitada, entao nao existe tooltip carregando o
-               motivo — o argumento de que a informacao sobreviveria em outro lugar nao se
-               sustentou. Encurtar mantem o aviso e devolve o espaco. -->
-          <div class="caixa-meta">Telas financeiras exigem caixa aberto.</div>
-        </div>
-        <v-btn
-          v-if="caixaAberto"
-          class="mt-4 caixa-edit"
-          size="small"
-          variant="tonal"
-          prepend-icon="mdi-cash-register"
-          to="/caixa"
-        >
-          Gerenciar caixa
-        </v-btn>
-        <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
-             so NAVEGA para la — nao existe mais modal de abertura. -->
-        <v-btn v-else class="mt-4 caixa-edit" size="small" variant="tonal" prepend-icon="mdi-cash-plus" to="/caixa">
-          Ir para o caixa
-        </v-btn>
+      <!-- O CARD DO CAIXA VIROU LINHA (28/08/2026). Ele era o maior bloco do topo da sidebar: 125px
+           de moldura, fundo, titulo, frase e um botao de largura cheia — tres blocos empilhados de
+           largura quase cheia (logo, "+ NOVO", card) faziam o menu comecar depois de 342px.
+
+           Agora e uma linha: ponto de estado + texto + link. Nada saiu de lugar e nada de funcao
+           se perdeu — o estado continua visivel e o caminho para /caixa continua existindo.
+
+           SOBRE O PONTO DE ESTADO, que a product-ui-design marca como o tell numero 1 de UI feita
+           por IA: o que ela proibe e o ponto BRILHANTE ou PULSANTE usado como decoracao ("● Live").
+           Este e estatico, sem glow e sem animacao, e o texto ao lado diz o estado por extenso —
+           entao a cor nao e o unico sinal (WCAG 1.4.1) e o ponto e reforco, nao informacao. -->
+      <div v-if="temPermissao('caixa_operar')" class="caixa-linha">
+        <span class="caixa-ponto" :class="{ aberto: Boolean(caixaAberto) }" aria-hidden="true" />
+        <span class="caixa-estado">
+          {{ caixaAberto ? `Caixa: ${caixaAberto.pdvNome}` : "Não há caixa aberto" }}
+        </span>
+        <!-- Unico caminho de abertura: a tela /caixa. Este link so NAVEGA para la. -->
+        <NuxtLink class="caixa-ir" to="/caixa">{{ caixaAberto ? "Gerenciar" : "Ir para o caixa" }}</NuxtLink>
       </div>
     </template>
 

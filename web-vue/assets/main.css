@@ -3662,3 +3662,65 @@ body {
   opacity: 0.45;
   filter: grayscale(0.35);
 }
+
+/* ===================== INICIO VIS-E9b — O CARD DO CAIXA VIRA LINHA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Reduzir o botao nao resolveu o topo da sidebar, e o diagnostico estava errado: o problema nao
+   era o tamanho de cada peca, era o ARRANJO. Logo, "+ NOVO" e card do caixa eram tres blocos
+   empilhados de largura quase cheia, e o menu so comecava depois de 342px.
+
+   O card deixa de ser card. Vira uma linha: ponto de estado + texto + link. Sem moldura, sem
+   fundo, sem botao de bloco.
+
+   A CLASSE MUDOU de `.caixa-card` para `.caixa-linha` de proposito: assim as regras historicas
+   (linhas 378, 853 e a de rail na 518) simplesmente deixam de casar, e nao foi preciso sobrescrever
+   nada nem abrir excecao de `!important`. O CSS antigo continua la, intacto e sem efeito — se um
+   dia o card voltar, ele volta inteiro.
+
+   NADA DE FUNCAO SE PERDEU: o estado continua visivel, o caminho para /caixa continua existindo,
+   e o `temPermissao('caixa_operar')` continua sendo quem decide se a linha aparece.
+   ================================================================================================ */
+.caixa-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-height: 32px;
+  padding-inline: var(--cx-sp-1);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+/* Estatico: sem glow e sem animacao. O texto ao lado carrega o estado por extenso, entao a cor e
+   reforco e nao informacao (WCAG 1.4.1). */
+.caixa-ponto {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-ink-soft);
+}
+.caixa-ponto.aberto {
+  background: var(--cx-positive);
+}
+.caixa-estado {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.caixa-ir {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--cx-brand-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.caixa-ir:hover {
+  text-decoration: underline;
+}
+/* No rail a linha some, como o card sumia (a regra da 518 nao alcanca a classe nova). */
+.padaria-sidebar.rail .caixa-linha {
+  display: none;
+}
+/* ===================== FIM VIS-E9b ===================== */
