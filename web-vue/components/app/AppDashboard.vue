@@ -101,11 +101,21 @@ function escrever(metrica: MetricaDemo) {
             <span class="metrica-disco"><v-icon :icon="m.icone" size="24" /></span>
             <span class="metrica-rotulo">{{ m.rotulo }}</span>
             <span class="metrica-valor cx-num" :class="{ vazio: m.valor === null }">{{ escrever(m) }}</span>
-            <NuxtLink class="metrica-mais" :to="rotaTela(m.telaId)">Ver mais</NuxtLink>
+            <!-- O nome acessivel diz DE QUE e o "ver mais". Sao nove links iguais na tela, e quem
+                 navega por leitor de tela ouvia "Ver mais" nove vezes sem saber de que card era
+                 (WCAG 2.4.4). O texto visivel continua curto; o nome e que fica completo, e ele
+                 COMECA pelo texto visivel, como pede a 2.5.3. -->
+            <NuxtLink class="metrica-mais" :to="rotaTela(m.telaId)" :aria-label="`Ver mais sobre ${m.rotulo}`">
+              Ver mais
+            </NuxtLink>
             <!-- DECORACAO, e por isso `aria-hidden`: quem usa leitor de tela nao ganha nada em
                  ouvir uma sequencia de numeros sem eixo nem escala, e o dado ja esta no card, no
                  rotulo e no valor. `preserveAspectRatio="none"` para a linha esticar com o card. -->
+            <!-- SO DESENHA QUANDO HA DADO. Com `valor: null` o card mostra travessao — "ainda nao
+                 leio isso" — e a linha desenhava uma tendencia ascendente do mesmo jeito: o numero
+                 dizia uma coisa e o grafico dizia outra. Decoracao nao pode contradizer o dado. -->
             <svg
+              v-if="m.valor !== null"
               class="metrica-linha"
               aria-hidden="true"
               viewBox="0 0 100 28"

@@ -2900,11 +2900,6 @@ body {
   }
 }
 
-/* Ritmo: o cabecalho de tela e o primeiro degrau, e ele ja define o resto. */
-.cabecalho-tela {
-  margin-bottom: var(--cx-sp-6);
-}
-
 /* Densidade: a linha continua com 48px; o que abre e a largura util da celula.
    O seletor repete a cadeia do Vuetify de proposito. A primeira versao era
    `.responsive-table-shell .v-table td` e NAO pintava nada: o Vuetify usa
@@ -4086,3 +4081,74 @@ button.sidebar-logo-alvo {
   border-radius: var(--cx-r-md);
 }
 /* ===================== FIM VIS-F14 ===================== */
+
+/* ===================== INICIO VIS-F16 — A HOME: RITMO, ALVO E DECORACAO QUE NAO MENTE (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Cinco defeitos MEDIDOS na home, e quatro deles sao meus.
+
+   1 · O AR DO TOPO ERA O DOBRO DO DOCUMENTADO. O `main.css:2845` escreve o ritmo pretendido —
+   "cabecalho -> primeiro bloco: --cx-sp-6 (24px)". Medido: 48px. Somavam o `margin-bottom` do
+   `.cabecalho-tela` (24) com o `gap` do `.inicio-painel` (24, que hoje e sp-7/32). Ninguem decidiu
+   48; ele foi o resultado de duas regras que nao se viam.
+   E havia uma DECLARACAO DUPLICADA de `.cabecalho-tela { margin-bottom }` mais adiante no arquivo,
+   identica a primeira. Por vir depois, ela ANULAVA a regra XS de `@media (width <= 600px)` —
+   medido em 390px: 24px, quando a regra manda 20. A duplicata foi apagada e a regra XS voltou a
+   valer. O zero abaixo e ESCOPADO na home: as outras ~25 telas que usam `.cabecalho-tela` nao
+   mudam de ritmo.
+
+   2 · O "VER MAIS" TINHA 27px DE ALVO. O piso do 67 §9 e 40px, 44 no celular. Sao NOVE deles, e
+   sao a unica entrada de cada card — o `<article>` nao e clicavel. Passava na WCAG 2.5.8 (24x24) e
+   reprovava a regua do proprio projeto, que e mais dura.
+
+   3 · A LINHA DECORATIVA ATRAVESSAVA O TEXTO. Defeito que eu introduzi no VIS-F8: 34px ancorados na
+   base, contra um link que vive entre 12 e 39px da base — MEDIDO, 22px dos 27 do link, ou 81,5%
+   dele. A linha passava por cima do "Ver mais" e do fio divisor. Ela encolhe e desce para caber
+   ABAIXO do link, que e onde decoracao deve ficar.
+
+   4 · O DISCO SEM CATEGORIA REPROVAVA NO ESCURO. `caixa` e `contas_pagar` nao estao no
+   `CATEGORIA_POR_TELA`, entao caem no fallback `--cx-ink-soft` com icone BRANCO por cima. Medido:
+   2,22:1 no escuro, contra os 3:1 que o proprio comentario do arquivo exige para objeto grafico.
+   No claro dava 5,81 e passava — por isso ninguem viu.
+   O conserto NAO clareia o icone: troca o par. No escuro o disco neutro passa a ser
+   `--cx-surface-sunken` com o icone em `--cx-ink`, que e a combinacao que o sistema ja usa para
+   "sem cor de categoria" no resto das telas.
+   ========================================================================================================= */
+
+/* 1 · o ar do topo, so na home */
+.inicio-painel > .cabecalho-tela {
+  margin-bottom: 0;
+}
+
+/* 2 · o alvo do "Ver mais" */
+.metrica-mais {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+@media (width <= 768px) {
+  .metrica-mais {
+    min-height: 44px;
+  }
+}
+
+/* 3 · a linha decorativa sobe para ACIMA do divisor, e nao fica na base.
+   So encolher nao resolvia: com o "Ver mais" passando a 40px de alvo, ele ocupa a base do card, e
+   qualquer linha ancorada ali continuava cruzando o texto — medido, 22px de sobreposicao viraram
+   10px, o que e menos errado e nao e certo. Agora ela vive na faixa do VALOR, acima do fio
+   divisor, onde nao ha texto por baixo dela. */
+.metrica-linha {
+  /* MEDIDO no card: o "Ver mais" vai de 12 a 52px da base. A linha comeca onde ele acaba — 54px —
+     e sobe 28. Duas tentativas anteriores erraram por estimativa: `height: 22px` na base deixou
+     10px de cruzamento, e `bottom: 44px` deixou 8. So a geometria medida fecha em zero. */
+  bottom: 54px;
+  height: 28px;
+}
+
+/* 4 · o disco sem categoria no escuro */
+:root[data-theme="dark"] .metrica-card:not([style*="--disco-cor"]) .metrica-disco,
+:root[data-theme="dark"] .atalho-pilula:not([style*="--disco-cor"]) .atalho-disco {
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink);
+}
+/* ===================== FIM VIS-F16 ===================== */
