@@ -178,16 +178,32 @@ useItemAtivoVisivel();
               aria-hidden="true"
             />
           </button>
+          <!-- O MESMO BOTAO SERVE AS DUAS FAIXAS, e isso e deliberado: no celular ele nao e um
+               controle novo, e o mesmo controle aparecendo onde ele faltava. A acao e a mesma
+               (`alternar`), entao nao nasce um segundo caminho para fechar a gaveta — nascer um
+               segundo seria a origem de os dois divergirem depois.
+
+               NO CELULAR A GAVETA JA FECHAVA pelo simbolo (VIS-F15), e continua fechando. O que
+               faltava era AFORDANCIA: nada na tela dizia que dava para tocar ali. A seta diz.
+
+               O NOME E PROPRIO E DIFERENTE do da marca — "Fechar menu" contra "Cicluz Gestao
+               Profissional — fechar menu". Dois controles vizinhos com o mesmo nome fazem quem usa
+               leitor de tela ouvir a mesma coisa duas vezes sem saber distinguir; e o defeito que
+               o VIS-F14 corrigiu no desktop, e ele nao pode voltar pela porta do celular.
+
+               O ICONE MUDA COM A FAIXA porque a ACAO muda: no celular a gaveta FECHA (seta de
+               voltar), no desktop o menu recolhe ou expande (chevron). Acima de 1024px nada muda. -->
           <button
-            v-if="podeRecolher"
+            v-if="podeRecolher || mobile"
             type="button"
             class="sidebar-recolher"
-            :aria-expanded="!rail"
-            :title="rail ? 'Expandir menu' : 'Recolher menu'"
-            :aria-label="rail ? 'Expandir menu' : 'Recolher menu'"
+            :class="{ 'sidebar-fechar': mobile }"
+            :aria-expanded="mobile ? aberto : !rail"
+            :title="mobile ? 'Fechar menu' : rail ? 'Expandir menu' : 'Recolher menu'"
+            :aria-label="mobile ? 'Fechar menu' : rail ? 'Expandir menu' : 'Recolher menu'"
             @click="emit('alternar')"
           >
-            <v-icon icon="mdi-chevron-left" size="20" />
+            <v-icon :icon="mobile ? 'mdi-arrow-left' : 'mdi-chevron-left'" size="20" />
           </button>
         </div>
 

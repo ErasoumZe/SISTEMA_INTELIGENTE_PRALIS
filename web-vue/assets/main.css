@@ -4246,3 +4246,25 @@ button.sidebar-logo-alvo {
   display: none;
 }
 /* ===================== FIM VIS-F19 ===================== */
+
+/* ===================== INICIO VIS-F20 — A SETA DE FECHAR NA GAVETA DO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A gaveta do celular JA FECHAVA pelo simbolo desde o VIS-F15, e o clique estava correto. O que
+   faltava era AFORDANCIA: nada na tela dizia que dava para tocar ali — o usuario via uma logo, nao
+   um controle. Agora ha uma seta, e ela dispara a MESMA acao, sem criar segundo caminho.
+
+   44x44 E O PISO DO 67 §9 NO CELULAR, e por isso ele sobe de 40 (o valor do VIS-F14, que vale para
+   o desktop, onde o piso e 40).
+
+   `sidebar-fechar` existe para o botao poder ser DIFERENTE no celular sem que a regra do desktop
+   precise saber disso: la ele continua sendo o chevron de recolher, com o mesmo tamanho e o mesmo
+   nome de sempre.
+   ================================================================================================== */
+@media (width <= 768px) {
+  .sidebar-recolher.sidebar-fechar {
+    width: 44px;
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-F20 ===================== */
