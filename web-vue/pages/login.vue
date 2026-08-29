@@ -60,11 +60,29 @@ async function login() {
            O `alt` fica so na palavra e o simbolo e decorativo: os dois juntos anunciariam a marca
            duas vezes para quem usa leitor de tela. -->
       <div class="login-brand">
-        <!-- O SIMBOLO EM DESTAQUE, e o tamanho e RESPONSIVO junto com a palavra: os dois saem de
-             `clamp()` sobre a largura do cartao, entao a proporcao entre eles nao muda quando o
-             cartao encolhe. Cravar px no simbolo e percentual na palavra faria a composicao se
-             desmontar em tela estreita. O menu nao muda — la o espaco e outro. -->
-        <AppMarcaCicluz size="clamp(104px, 38%, 148px)" :glow-intensity="0.26" />
+        <!-- A MARCA DEITA, e isso e conserto de um defeito medido, nao gosto. Empilhada ela ocupava
+             354x204 — quase um TERCO dos 652px de altura do cartao —, e o cartao inteiro nao cabia
+             em 1366x630, faltando 54px. Nas telas onde cabia, a sobra era EXATAMENTE 0px: nao
+             cabia, cabia por acaso, e parava de caber ao primeiro pixel a menos. Com o Windows a
+             125%, que e padrao de fabrica em muito notebook, 1920x1080 vira ~1532x682 de viewport
+             CSS e o defeito aparece.
+             O componente ja sabia deitar (`orientacao="lateral"`, o mesmo do menu aberto): nao
+             nasceu composicao nova, so mudou a prop.
+             SO A MARCA MUDA. Titulo, subtitulo, campos, botao, link, slogan, largura do cartao,
+             fundo vivo e animacao de entrada ficam exatamente como estavam.
+
+             O SIMBOLO E RESPONSIVO A ALTURA DA TELA, e nao um px cravado. Em `vh`, ele fica grande
+             onde ha espaco e encolhe sozinho onde nao ha — que e exatamente onde o cartao estourava.
+             Cravar o tamanho seria escolher entre "grande" e "cabe"; o `clamp()` entrega os dois, e
+             o piso de 76px garante que ele nunca vire miniatura.
+
+             OS TAMANHOS SAIRAM DA MARCA ORIGINAL, medidos, e nao do olho — foi o olho que errou
+             duas vezes aqui. No PNG do lockup (718x205) o simbolo mede 162x178 e o bloco de texto
+             524x165, logo o simbolo vale 1,079 da ALTURA do texto. A tinta do simbolo animado
+             ocupa 90,4% da caixa dele. Dai sai a conta: bloco de texto de ~53px -> tinta de ~57px
+             -> caixa de 63px. A proporcao da marca fica igual a original em qualquer tamanho; o
+             que muda de uma superficie para outra e so a escala. -->
+        <AppMarcaCicluz size="clamp(76px, 13vh, 116px)" :glow-intensity="0.26" largura-palavra="176px" />
       </div>
 
       <div class="login-head">
@@ -197,6 +215,14 @@ async function login() {
   display: flex;
   justify-content: center;
   margin-bottom: var(--cx-sp-5);
+}
+/* A MARCA ENCOLHE ATE O CONTEUDO. Sem isto ela virava uma caixa de 354px — a largura util do
+   cartao — com 222px de conteudo encostado a ESQUERDA, porque `.marca-cicluz` alinha o proprio
+   conteudo em `flex-start`. O `justify-content: center` do pai centraliza a CAIXA, e a caixa
+   ocupava tudo: nao havia o que centralizar. Com `max-content` a caixa passa a ter o tamanho da
+   marca, e ai o centro do pai vale. */
+.login-brand :deep(.marca-cicluz) {
+  width: max-content;
 }
 .login-logo {
   width: clamp(150px, 52%, 190px);

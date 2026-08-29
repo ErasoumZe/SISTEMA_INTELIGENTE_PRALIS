@@ -6,19 +6,26 @@
    `AppLogoAnimada` direto. Um `v-if` aqui para esconder a palavra faria este componente carregar
    uma decisao que nao e dele.
 
-   A PALAVRA VEM DO PNG, RECORTADA POR CSS, e a escolha tem um porque medido. A primeira versao usou
-   `cicluz-marca-dark.svg`, que e vetor puro — mas ele tem SO "CICLUZ". Conferi os quatro SVG da
-   pasta de referencia, um a um, renderizados: NENHUM tem "Gestao Profissional". A assinatura so
-   existe no PNG do lockup completo.
-   Entre perder a assinatura e perder o vetor, perde-se o vetor: a marca e "CICLUZ Gestao
-   Profissional", e meia marca nao serve.
+   A PALAVRA E VETOR E A ASSINATURA E TEXTO DE VERDADE. As duas versoes anteriores estavam presas
+   entre duas saidas ruins, e as duas eram bitmap:
+     1a · so o SVG `cicluz-marca-dark` — vetor nitido, mas ele tem SO "CICLUZ". Meia marca.
+     2a · o PNG do lockup recortado por CSS — a marca inteira, mas RASTER. MEDIDO: a 136px de
+          largura a assinatura ficava com banda de 8,95px e traco mediano de 1,02px, abaixo do
+          menor token de tipo do projeto (`--cx-fs-micro`, 11px). E nao havia largura que salvasse:
+          nem no teto do login (176px) o traco passava de 1,32px. Ela nao ficava pequena, ficava
+          CINZA — meio pixel de traco vira metade de alfa.
 
-   O RECORTE NAO CRIA ARQUIVO. Medido no proprio PNG (718x205), o perfil de opacidade por coluna
-   mostra uma faixa TOTALMENTE transparente entre x=162 e x=193 — e ali que o simbolo acaba e o
-   texto comeca. O corte parte de x=186, dentro dessa faixa, entao nao raspa tinta de nenhum dos
-   dois lados. As outras faixas vazias (412-426 e 613-618) sao espacos entre letras.
-   As contas de largura e deslocamento sao PERCENTUAIS do proprio recorte, entao a composicao
-   escala junto com o container em qualquer tamanho — nao ha pixel cravado.
+   A terceira saida desfaz a premissa: ela era ilegivel POR SER BITMAP. Pixel escalado nao tem como
+   ficar nitido a 9px. Entao "CICLUZ" volta ao vetor (nitido em qualquer tamanho) e "Gestao
+   Profissional" vira TEXTO — que escala sem perder traco, e selecionavel, o leitor de tela le, e
+   tem contraste medivel de verdade em vez de ser imagem.
+   O PNG recortado saiu do projeto, e com ele o recorte em x=186 que precisou ser achado por perfil
+   de opacidade.
+
+   A PROPORCAO E CALIBRADA CONTRA A MARCA ORIGINAL, nao escolhida. Medido no PNG (718x205), na
+   regiao do texto: "CICLUZ" ocupa 524x104 e a assinatura 426x35. Logo a assinatura vale 0,813 da
+   largura do CICLUZ. O `letter-spacing` abaixo existe para bater essa razao — sem ele o texto sai
+   estreito demais e o travamento muda de forma.
 
    ATENCAO AO `escuro`: a palavra tem duas variantes de TINTA, e a escolha e pela superficie atras
    dela, nao pelo tema em si. No login e sempre a clara, porque a tela de entrada abre sempre no
@@ -51,19 +58,18 @@ withDefaults(
        duas vezes para quem usa leitor de tela. -->
   <div class="marca-cicluz" :class="`marca-cicluz--${orientacao}`">
     <AppLogoAnimada :size="size" :glow-intensity="glowIntensity" />
-    <span
-      class="marca-cicluz-palavra"
-      role="img"
-      aria-label="Cicluz Gestão Profissional"
-      :style="{ width: larguraPalavra }"
-    >
+    <!-- O nome sai naturalmente do `alt` mais o texto: o leitor de tela le "Cicluz Gestao
+         Profissional" sem `role="img"` nenhum. Antes era uma imagem so, com o nome cravado num
+         `aria-label` que podia divergir do que estava desenhado. -->
+    <span class="marca-cicluz-texto" :style="{ width: larguraPalavra }">
       <img
-        :src="escuro ? '/cicluz/logo-cicluz-branca.png' : '/cicluz/logo-cicluz.png'"
-        alt=""
-        aria-hidden="true"
-        width="718"
-        height="205"
+        :src="escuro ? '/cicluz/cicluz-palavra.svg' : '/cicluz/cicluz-palavra-escura.svg'"
+        alt="Cicluz"
+        class="marca-cicluz-palavra"
+        width="208"
+        height="46"
       />
+      <span class="marca-cicluz-assinatura">Gestão Profissional</span>
     </span>
   </div>
 </template>
@@ -86,23 +92,33 @@ withDefaults(
   flex-direction: row;
   gap: var(--cx-sp-2);
 }
-.marca-cicluz--lateral .marca-cicluz-palavra {
+.marca-cicluz--lateral .marca-cicluz-texto {
   min-width: 0;
 }
-/* O RECORTE. O bloco visivel vai de x=186 a x=718 do PNG, ou seja 532 de 718 de largura, com os
-   205 de altura inteiros — as duas linhas do texto entram, que era o ponto.
-     largura da imagem   718 / 532 = 134,96%
-     deslocamento        186 / 532 =  34,96%  (negativo)
-   Percentuais do proprio bloco, entao tudo escala junto e nada fica cravado em pixel. */
+.marca-cicluz-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
 .marca-cicluz-palavra {
   display: block;
-  overflow: hidden;
-  aspect-ratio: 532 / 205;
-}
-.marca-cicluz-palavra img {
-  display: block;
-  width: 134.96%;
+  width: 100%;
   height: auto;
-  margin-left: -34.96%;
+}
+/* A ASSINATURA. `--cx-fs-micro` e o piso de tipo do projeto, e e onde ela fica: ela e a linha menor
+   da marca, nao um segundo titulo.
+   `--cx-ink-soft` e nao `--cx-ink`: na marca original ela e mais leve e mais clara que o "CICLUZ",
+   e o token que ja existe para texto secundario e exatamente esse — de quebra ele inverte junto com
+   o tema, o que o PNG de duas variantes so fazia trocando de arquivo.
+   O `letter-spacing` NAO e gosto: e o que faz a largura bater os 0,813 da marca original, medidos
+   no PNG. Sem ele o texto sai estreito e o travamento muda de forma. */
+.marca-cicluz-assinatura {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 </style>

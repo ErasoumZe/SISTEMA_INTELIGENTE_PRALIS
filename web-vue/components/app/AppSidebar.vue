@@ -144,20 +144,26 @@ useItemAtivoVisivel();
                DIFERENTES que quem navega por leitor de tela consegue distinguir um do outro.
                O nome comeca pelo texto da marca, que e o rotulo visivel, como pede a WCAG 2.5.3.
 
-               ABAIXO DE 1024px recolher nao e escolha do usuario: a casca vira `<div>` com
-               `role="img"`, porque botao que nao faz nada e pior que nao ter botao. -->
-          <component
-            :is="podeRecolher ? 'button' : 'div'"
-            :type="podeRecolher ? 'button' : undefined"
+               E SEMPRE BOTAO, nas tres faixas. A versao anterior so o tornava clicavel acima de
+               1024px, com o argumento de que abaixo disso recolher nao seria escolha do usuario.
+               O argumento estava errado, e o teste mostrou: `drawerRail` e apenas `drawerRecolhido`
+               (AppShell.vue:75) — o rail NAO e imposto pelo viewport, entao `alternar` funciona nas
+               tres faixas. Medido antes do conserto: a 1000px o alvo era `<div>` e nao havia como
+               reabrir o menu; no celular, idem.
+               E na faixa do rail e justamente onde ele mais importa, porque ali os rotulos nao
+               aparecem e o simbolo e o unico caminho de volta.
+               No celular isto tambem fecha o A-03 do roteiro: a gaveta aberta nao tinha NENHUM
+               controle visivel para fechar — so o scrim e o Esc, os dois invisiveis.
+
+               O NOME ACOMPANHA A ACAO REAL de cada faixa: no celular a gaveta FECHA, no desktop o
+               menu recolhe ou expande. Dizer "recolher" onde a acao e "fechar" seria mentir para
+               quem so ouve o nome. -->
+          <button
+            type="button"
             class="sidebar-logo-alvo"
-            :role="podeRecolher ? undefined : 'img'"
-            :aria-expanded="podeRecolher ? String(!rail) : undefined"
-            :aria-label="
-              podeRecolher
-                ? `Cicluz Gestão Profissional — ${rail ? 'expandir' : 'recolher'} menu`
-                : 'Cicluz Gestão Profissional'
-            "
-            @click="podeRecolher && emit('alternar')"
+            :aria-expanded="mobile ? aberto : !rail"
+            :aria-label="`Cicluz Gestão Profissional — ${mobile ? 'fechar' : rail ? 'expandir' : 'recolher'} menu`"
+            @click="emit('alternar')"
           >
             <span v-if="rail" class="sidebar-logo-simbolo" aria-hidden="true">
               <AppLogoAnimada :size="52" :glow-intensity="0.24" />
@@ -171,7 +177,7 @@ useItemAtivoVisivel();
               largura-palavra="136px"
               aria-hidden="true"
             />
-          </component>
+          </button>
           <button
             v-if="podeRecolher"
             type="button"
