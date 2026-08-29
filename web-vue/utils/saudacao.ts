@@ -78,12 +78,30 @@ const formatadorData = new Intl.DateTimeFormat("pt-BR", {
   month: "long"
 });
 
-export type Relogio = { hora: string; data: string; saudacao: string };
+/**
+ * A DATA CURTA, para onde nao cabe a longa.
+ *
+ * Existe porque a topbar do celular tem 91px uteis a esquerda depois do hamburguer, medido a
+ * 390px — e "sexta-feira, 28 de agosto" pede mais de 150. A saida foi encurtar o FORMATO, nunca
+ * sumir com a informacao: a data continua na tela, so que como "28 ago".
+ *
+ * MESMO FUSO da longa. Um formatador com fuso e outro sem seria a origem garantida de duas datas
+ * diferentes na mesma tela virando o dia.
+ */
+const formatadorDataCurta = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO_NEGOCIO,
+  day: "2-digit",
+  month: "short"
+});
+
+export type Relogio = { hora: string; data: string; dataCurta: string; saudacao: string };
 
 export function lerRelogio(instante: Date): Relogio {
   return {
     hora: formatadorRelogio.format(instante),
     data: formatadorData.format(instante),
+    // `Intl` devolve "28 de ago." em pt-BR; o "de" e o ponto sao ruido num espaco de 91px.
+    dataCurta: formatadorDataCurta.format(instante).replace(" de ", " ").replace(".", ""),
     saudacao: textoDaSaudacao(horaDoNegocio(instante))
   };
 }

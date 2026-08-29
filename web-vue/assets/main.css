@@ -4186,3 +4186,63 @@ button.sidebar-logo-alvo {
   background: color-mix(in srgb, var(--cx-surface) 42%, transparent);
 }
 /* ===================== FIM VIS-F18 ===================== */
+
+/* ===================== INICIO VIS-F19 — A SAUDACAO E A DATA VOLTAM NO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F2: as regras dele continuam la, e estas vencem por ordem so na faixa do celular.
+
+   MEDIDO a 390x844: a topbar inteira dizia "17:25 | | DG". So a hora. A saudacao caia em <=1024 e a
+   data em <=768, pela escada de recolhimento do VIS-F2 — que estava certa para UMA LINHA, e essa era
+   a premissa errada.
+
+   O ORCAMENTO, medido: topbar 390 = esquerda 117 + direita 251. O hamburguer come 48 dos 117, entao
+   sobram 91px uteis. "Boa noite · 17:25 · 28 ago" pede mais de 150. Numa linha nao cabe, e nao
+   adianta espremer.
+
+   ENTAO DUAS LINHAS, e o formato encolhe em vez de a informacao sumir — que foi a instrucao:
+     linha 1   "Boa noite"        (o NOME sai; quem le a tela sabe quem e)
+     linha 2   "17:25 · 28 ago"   (a data longa vira curta)
+   Medido depois: as duas linhas cabem nos 91px, e a topbar de 64px comporta as duas alturas.
+
+   O QUE NAO ENCOLHE, porque foi pedido explicitamente: o hamburguer segue 48x48, e o tema, o sino,
+   o avatar, a empresa e o aviso de caixa continuam onde estavam, com os alvos que ja tinham.
+
+   A FAIXA 769-1024 NAO MUDA. La a escada do VIS-F2 continua valendo (hora + data, sem saudacao).
+   Fica registrado que isso deixa o celular mostrando MAIS que o tablet — e e consequencia de a
+   instrucao ser sobre o celular. Se incomodar, o conserto e trazer esta mesma forma de duas linhas
+   para a faixa do meio, e nao remover do celular.
+   ================================================================================================= */
+@media (width <= 768px) {
+  /* Duas linhas: a saudacao ocupa a primeira inteira, hora e data dividem a segunda. */
+  .shell-mobills .topbar-relogio {
+    flex-wrap: wrap;
+    gap: 0 var(--cx-sp-2);
+    row-gap: 0;
+    line-height: 1.2;
+  }
+  .shell-mobills .topbar-saudacao {
+    display: block;
+    width: 100%;
+  }
+  /* O nome cai. E a unica parte da composicao que a tela nao precisa dizer. */
+  .shell-mobills .topbar-nome {
+    display: none;
+  }
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+  .shell-mobills .topbar-data-curta {
+    display: inline;
+  }
+  /* A hora perde o peso de titulo aqui: em duas linhas curtas ela nao precisa mais se destacar do
+     resto, e o corpo maior gastaria largura que nao ha. */
+  .shell-mobills .topbar-hora {
+    font-size: var(--cx-fs-caption);
+  }
+}
+
+/* Acima do celular a data curta nao existe: quem manda e a longa. */
+.topbar-data-curta {
+  display: none;
+}
+/* ===================== FIM VIS-F19 ===================== */

@@ -208,9 +208,17 @@ onMounted(() => {
                primeiro, a data depois, a hora fica. E a ordem do menos informativo para o mais:
                "Boa tarde" e gentileza, a data se descobre em qualquer lugar, a hora e operacao. -->
           <p v-if="relogio" class="topbar-relogio">
-            <span class="topbar-saudacao">{{ relogio.saudacao }}, {{ primeiroNome }}</span>
+            <!-- O NOME sai num `<span>` proprio porque no celular ele e a primeira coisa a cair: a
+                 saudacao cabe, "Boa noite, Diretor" nao. Quem le a tela sabe quem e. -->
+            <span class="topbar-saudacao"
+              >{{ relogio.saudacao }}<span class="topbar-nome">, {{ primeiroNome }}</span></span
+            >
             <span class="topbar-hora">{{ relogio.hora }}</span>
             <span class="topbar-data">{{ relogio.data }}</span>
+            <!-- A data curta so aparece onde a longa nao cabe. As duas existem no DOM e o CSS
+                 escolhe: trocar o TEXTO por media query exigiria duas fontes de verdade para a
+                 mesma data. -->
+            <span class="topbar-data-curta">{{ relogio.dataCurta }}</span>
           </p>
         </div>
 
