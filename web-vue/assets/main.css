@@ -4268,3 +4268,36 @@ button.sidebar-logo-alvo {
   }
 }
 /* ===================== FIM VIS-F20 ===================== */
+
+/* ===================== INICIO VIS-F21 — A LINHA DECORATIVA NO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   ESCOPADO em <=768px: no desktop a linha nao muda, e isso e requisito, nao economia.
+
+   DOIS CONSERTOS, e o segundo so apareceu porque medi.
+
+   1 · ELA ENCOSTAVA NA BORDA. Medido a 390px: recuo da linha 0px contra 20px do texto do card. Ela
+   ia de borda a borda enquanto todo o conteudo respeitava o padding, e num card de 366px isso fica
+   evidente. Agora ela recua o mesmo `--cx-sp-5` do conteudo.
+
+   2 · ELA VOLTOU A CRUZAR O "VER MAIS", e isso e regressao do que o VIS-F16 garantiu. O motivo e
+   que o alvo do link muda de faixa: 40px no desktop, 44px no celular (piso do 67 §9). Com 44, o
+   topo do link sobe de 52 para 56px da base — e a linha, fixada em 54, passou a cruzar 2px.
+   Medido antes: 2px de sobreposicao a 390px, e 0 a 1440px. O numero e pequeno e o defeito nao: a
+   polilinha voltava a passar por cima do texto.
+   O conserto NAO e um chute com folga: 58px e o topo do link (56) mais 2 de respiro, medidos.
+
+   FICA REPORTADO, sem correcao porque o desktop e intocavel nesta rodada: a 1440px o recuo lateral
+   da linha tambem e 0px contra 20px do texto — a geometria e a mesma, e o que muda e so quanto ela
+   salta a vista num card mais largo.
+   ========================================================================================================= */
+@media (width <= 768px) {
+  .metrica-linha {
+    /* A largura e CALCULADA, e nao `auto`: num elemento substituido (o SVG) `width: auto` usa o
+       tamanho INTRINSECO e ignora as ancoras `left`/`right` — medido, a linha encolheu para 100px.
+       Com o calculo ela acompanha o card e respeita o mesmo recuo do conteudo. */
+    bottom: 58px;
+    left: var(--cx-sp-5);
+    width: calc(100% - var(--cx-sp-5) * 2);
+  }
+}
+/* ===================== FIM VIS-F21 ===================== */
