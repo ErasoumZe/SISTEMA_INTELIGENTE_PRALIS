@@ -4152,3 +4152,37 @@ button.sidebar-logo-alvo {
   color: var(--cx-ink);
 }
 /* ===================== FIM VIS-F16 ===================== */
+
+/* ===================== INICIO VIS-F18 — O VIDRO DA ENTRADA ABRE (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F6, que continua intacto: este seletor repete a mesma dupla e vence por ordem.
+
+   Marco pediu ver mais o fundo colorido atraves do cartao. O valor estava em 78% desde o VIS-F4 —
+   nao foi recusado, passou batido.
+
+   O CONTRASTE NAO DECIDIU SOZINHO, e isso foi a descoberta da medicao. Varri 78 · 70 · 64 · 58 ·
+   50 · 42 · 34 · 26 · 18 · 10, com 24 instantes ao longo de 120s, nos SETE textos do cartao
+   (titulo, subtitulo, assinatura, rotulo do campo, texto digitado, "Esqueci minha senha" e o
+   slogan). NENHUM valor reprovou: de 78% a 10% o pior instante so caiu de 6,72 para 5,65, sempre
+   acima do minimo de 4,5.
+
+   O motivo e o `backdrop-filter: blur(24px)`: ele uniformiza o fundo antes de o cartao compor, e o
+   canvas da entrada ja e quase preto. A opacidade do vidro quase nao muda o contraste — logo,
+   seguir a regra "o mais aberto que passe" ao pe da letra levaria a 10%, onde o cartao deixa de
+   ser cartao.
+
+   POR ISSO 42%, e nao o extremo: e onde o fundo aparece com forca (o roxo atravessa a superficie
+   inteira) e o cartao ainda LE como superficie, com borda e volume proprios. A excecao
+   D-LOGIN-VIDRO ao 67 §10 vive dessa condicao — "glass no card MAS DEIXANDO LER TUDO" —, e um
+   cartao invisivel nao e vidro, e ausencia de cartao.
+
+   MEDIDO em 42%, pior instante de 24: titulo 11,83 · subtitulo 6,63 · assinatura 6,40 · texto
+   digitado 15,04 · rotulo do campo 6,29 · "Esqueci minha senha" 7,63 · slogan 7,77.
+   O pior de todos e 6,29:1 — 1,4x o minimo. O slogan, que era o teto previsto por ser italico e
+   mais claro, na pratica nunca foi o pior: quem chega mais perto e o rotulo do campo.
+   ============================================================================================== */
+.cartao-entrada,
+.cartao-entrada.v-card {
+  background: color-mix(in srgb, var(--cx-surface) 42%, transparent);
+}
+/* ===================== FIM VIS-F18 ===================== */
