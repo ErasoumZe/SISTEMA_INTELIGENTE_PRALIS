@@ -38,6 +38,25 @@ const props = defineProps<{
    mesmo comportamento do menu: esconder o que nao e seu em vez de mostrar porta trancada.
    A permissao CONTINUA valendo por cima: ser administrador nao pula o `metricasPermitidas`, so
    decide se a faixa chega a existir. Sao dois filtros em serie, nao um substituindo o outro. */
+/* QUEM TEM DESTINO DE VERDADE, decidido pelo ROUTER e nao por uma lista escrita a mao.
+ *
+ * Lista a mao fica desatualizada no dia em que a tela de DRE nascer, e ninguem lembra de voltar
+ * aqui. O router sabe sozinho — mas nao pela pergunta obvia: `pages/[tela].vue` e um CORINGA que
+ * casa com QUALQUER caminho e renderiza o `PlaceholderPage`. Entao `/relatorio_dre` "existe" para o
+ * router do mesmo jeito que `/caixa`, e perguntar so "a rota resolve?" responderia sim para as
+ * duas.
+ *
+ * O que separa uma da outra e o registro casado: a tela de verdade casa uma rota ESTATICA; a que
+ * ainda nao existe casa o parametro `:tela` do coringa. Quando `relatorio_dre.vue` for criado, o
+ * `resolve` passa a casar a rota estatica e este teste vira `true` sozinho — sem ninguem editar
+ * nada aqui.
+ */
+const router = useRouter();
+function temDestino(telaId: string): boolean {
+  const alvo = router.resolve(rotaTela(telaId));
+  return alvo.matched.length > 0 && !alvo.matched.some((registro) => registro.path.includes(":tela"));
+}
+
 const faixas = computed(() =>
   faixasDeNumeroVisiveis(
     [
@@ -97,7 +116,15 @@ function escrever(metrica: MetricaDemo) {
       <section v-if="faixa.metricas.length" class="faixa" :aria-labelledby="`faixa-${faixa.id}`">
         <h2 :id="`faixa-${faixa.id}`" class="faixa-titulo">{{ faixa.titulo }}</h2>
         <div class="faixa-grade">
-          <article v-for="m in faixa.metricas" :key="m.id" class="metrica-card" :style="estiloDisco(m.categoria)">
+          <!-- `clicavel` so quando ha destino REAL. Card que levanta no hover e nao vai a lugar
+               nenhum promete e nao entrega — o usuario clica tres vezes achando que travou. -->
+          <article
+            v-for="m in faixa.metricas"
+            :key="m.id"
+            class="metrica-card"
+            :class="{ clicavel: temDestino(m.telaId) }"
+            :style="estiloDisco(m.categoria)"
+          >
             <span class="metrica-disco"><v-icon :icon="m.icone" size="24" /></span>
             <span class="metrica-rotulo">{{ m.rotulo }}</span>
             <span class="metrica-valor cx-num" :class="{ vazio: m.valor === null }">{{ escrever(m) }}</span>

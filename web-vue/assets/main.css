@@ -4383,3 +4383,69 @@ button.sidebar-logo-alvo {
   }
 }
 /* ===================== FIM VIS-F24 ===================== */
+
+/* ===================== INICIO VIS-F25 — O CARD DE METRICA RESPONDE E LEVA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Duas coisas: o card responde ao mouse, e o card INTEIRO leva ao relatorio.
+
+   O LINK NAO E NOVO — E O QUE JA EXISTIA, ESTICADO. O "Ver mais" ja e um `NuxtLink`
+   (AppDashboard.vue), entao envolver o card num segundo link ou botao criaria elemento interativo
+   ANINHADO: o leitor de tela anunciaria dois destinos para o mesmo lugar e o Tab pararia duas vezes
+   no mesmo card. E o mesmo defeito que o VIS-F14 corrigiu no topo da sidebar, e ele nao volta aqui.
+   Com o `::after` esticado ha UM elemento interativo por card, e o `aria-label` que o link ja
+   carrega continua sendo o nome do destino.
+
+   O `inset: 0` resolve contra o `.metrica-card`, que ja e `position: relative` desde o VIS-F8 — nao
+   foi preciso acrescentar posicionamento nenhum. O `overflow: hidden` do mesmo bloco RECORTA o
+   `::after` no retangulo do card, e isso e desejado: o alvo cobre o card e nao passa dele.
+
+   SO CARD COM DESTINO. Quem decide e o router, no componente, e nao uma lista aqui — ver o
+   comentario do `temDestino`. Card sem destino nao ganha alvo, nem cursor, nem hover: card que
+   levanta e nao vai a lugar nenhum promete e nao entrega.
+
+   O MOVIMENTO E SO `transform`, e por dois motivos. Um: `box-shadow`, `width` ou `top` animados
+   custam layout ou paint a cada quadro. Dois: `transform` NAO REFLUI, entao o card sobe sem
+   empurrar o vizinho — a grade fica parada, que era o requisito.
+
+   O ANEL DE FOCO VAI NO CARD, por `:focus-within`. Com o link esticado, o foco do teclado cai nas
+   duas palavras "Ver mais" e o anel desenharia so em volta delas — quem navega por teclado veria um
+   retangulo de 60px marcando um alvo de 249. O `:focus-within` devolve a moldura ao objeto que o
+   Tab de fato ativa.
+   ================================================================================================== */
+.metrica-card.clicavel {
+  transition:
+    transform var(--cx-dur-2) var(--cx-ease-out),
+    border-color var(--cx-dur-2) var(--cx-ease-out);
+}
+.metrica-card.clicavel .metrica-mais::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.metrica-card.clicavel:hover,
+.metrica-card.clicavel:focus-within {
+  transform: translateY(-2px);
+}
+/* O anel do `:focus-visible` global marca o link; aqui a moldura vai para o card inteiro, que e o
+   que o Tab realmente ativa. */
+.metrica-card.clicavel:focus-within {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+/* O `:focus-visible` do proprio link sai de cena: ele desenharia um segundo anel, menor, dentro do
+   primeiro. Um alvo, uma moldura. */
+.metrica-card.clicavel .metrica-mais:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* RESPONDER NAO E OPCIONAL; MOVER E. Sem o transform o card ainda diz que esta sob o mouse — por
+     contorno, que nao anima layout nem depende de movimento. */
+  .metrica-card.clicavel:hover,
+  .metrica-card.clicavel:focus-within {
+    transform: none;
+    border-color: var(--cx-focus);
+  }
+}
+/* ===================== FIM VIS-F25 ===================== */
