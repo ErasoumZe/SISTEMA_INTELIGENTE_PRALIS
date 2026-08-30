@@ -4449,3 +4449,113 @@ button.sidebar-logo-alvo {
   }
 }
 /* ===================== FIM VIS-F25 ===================== */
+
+/* ===================== INICIO VIS-F26 — O GRADIENTE DA MARCA ATRAVESSA A ASSINATURA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A PALETA E A QUE JA EXISTE. Sao as seis categorias do sistema, as mesmas que pintam as manchas do
+   fundo desta tela e o brilho dos cards. Uma paleta nova divergiria do simbolo no primeiro ajuste
+   que alguem fizesse num dos dois.
+
+   A VARIANTE E `-tinta`, E NAO `-base`, pelo mesmo criterio do VIS-F3: `-tinta` e a unica que
+   inverte com o tema, e no escuro ela e a versao CLAREADA, desenhada para servir de tinta sobre
+   superficie escura. A entrada abre sempre no escuro (D-LOGIN-ESCURO), entao aqui ela resolve
+   sempre para os valores claros — que e exatamente o que um texto sobre cartao escuro precisa.
+   `-base` traria #dc2626 e #6d28d9 crus sobre um cartao escuro, e essas sao as paradas que
+   reprovariam.
+
+   O TRACO JA ESTAVA PREPARADO: o VIS-F23 subiu o peso de 400 para 600 antes disto, porque gradiente
+   em traco fino nao preenche — as cores brigam no meio da letra e o resultado le como sujeira.
+
+   TRES CAMINHOS DE SEGURANCA, e nenhum deles e teorico:
+
+   1 · `@supports` — `background-clip: text` com `color: transparent` e uma dupla que so funciona
+       junta. Onde o clip nao existe, o texto transparente ficaria INVISIVEL. Por isso a cor solida
+       e o estado BASE, declarado fora do `@supports`, e o gradiente so entra onde ha suporte. O
+       caminho sem suporte nunca passa por "texto sem cor".
+
+   2 · `forced-colors` (alto contraste do Windows) — nesses modos o sistema substitui as cores, e um
+       texto pintado por `background-clip` desaparece por completo. A frase volta a ser tinta do
+       proprio sistema (`CanvasText`), e o `-webkit-text-fill-color` precisa ser desfeito junto,
+       senao ele continua transparente e vence a `color`.
+
+   3 · `prefers-reduced-motion` — o gradiente CONGELA, nao some. Quem pede menos movimento continua
+       vendo a frase colorida, parada. Mesma logica do `pauseAnimations()` da marca animada: retirar
+       a identidade de quem pediu menos movimento seria punir pelo ajuste.
+
+   A ANIMACAO E DECLARADA NO `login.vue`, e nao aqui, e isso nao e inconsistencia: o slogan ja tem a
+   animacao de ENTRADA, que e um keyframes SCOPED — o Vue RENOMEIA keyframes do proprio arquivo
+   (medido: `login-in-e8ce220f`), entao daqui nao ha como cita-lo para compor as duas. Declarar so o
+   fluxo aqui perdia a briga de especificidade com a regra scoped, e o gradiente ficava PARADO —
+   foi o que a primeira medicao pegou. O `@keyframes slogan-fluxo` fica global, aqui embaixo, e por
+   ser global atravessa o escopo sem ser renomeado.
+
+   O MOVIMENTO E `background-position`, e essa e a unica propriedade que atravessa texto recortado —
+   nao existe caminho por `transform` aqui, porque mover o elemento moveria a frase inteira em vez
+   de a cor correr por dentro dela. Fica registrado que ela custa paint, e por isso o alvo e uma
+   frase de 12px e nao uma superficie: medido, o custo nao aparece.
+   ======================================================================================================= */
+.login-slogan {
+  /* ESTADO BASE, e ele existe para o caminho sem suporte: cor solida legivel, nunca transparente. */
+  color: var(--cx-ink-soft);
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .login-slogan {
+    background-image: linear-gradient(
+      100deg,
+      var(--cat-entradas-tinta),
+      var(--cat-transferencias-tinta),
+      var(--cat-despesas-tinta),
+      var(--cat-resultado-tinta),
+      var(--cat-retiradas-tinta),
+      var(--cat-mercadorias-tinta),
+      var(--cat-entradas-tinta)
+    );
+    /* Larga o bastante para a cor CORRER por dentro da frase em vez de piscar entre duas paradas. */
+    background-size: 300% 100%;
+    /* O `repeat` NAO E ENFEITE, e o que impede a frase de SUMIR — e isso foi medido, nao suposto.
+       O valor herdado aqui era `no-repeat`. Com a imagem em 300% da caixa, `background-position`
+       em porcentagem desloca `X% x (caixa - imagem)` = `-2 x caixa x X`: em 150% a imagem sai
+       INTEIRA para fora da caixa. Sem imagem para recortar, o `-webkit-text-fill-color:
+       transparent` deixa a frase literalmente invisivel. A medicao pegou a frase apagando a partir
+       de 100% e ZERADA de 150% a 200% — 5 instantes de 17, cerca de 4,2s de cada 14s sem frase.
+       Com `repeat` a imagem ladrilha e sempre ha cor sob o texto, em qualquer posicao. */
+    background-repeat: repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* 150% NAO E UM NUMERO ESCOLHIDO POR GOSTO — E A LARGURA EXATA DE UM LADRILHO.
+   Deslocamento = `X% x (caixa - imagem)`; com a imagem em 300% da caixa isso da `-2 x caixa x X`.
+   Um ladrilho inteiro mede 3 caixas, entao `2 x X = 3` -> X = 150%. Percorrer exatamente um
+   ladrilho e o que faz o loop FECHAR SEM SALTO: o quadro final e pixel a pixel igual ao inicial.
+   Os 200% de antes andavam 1,33 ladrilho e davam um pulo de cor a cada volta — que so nao aparecia
+   porque, aqui, a frase ja tinha sumido antes de chegar la. E a primeira e a ultima parada do
+   gradiente sao a MESMA cor (`entradas`), entao a emenda tambem nao troca de tom. */
+@keyframes slogan-fluxo {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 150% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-slogan {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .login-slogan {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+/* ===================== FIM VIS-F26 ===================== */

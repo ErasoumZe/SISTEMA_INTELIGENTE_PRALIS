@@ -140,7 +140,7 @@ async function login() {
         <NuxtLink to="/forgot-password" class="login-link">Esqueci minha senha</NuxtLink>
       </v-form>
 
-      <p class="login-slogan">clareza em cada ciclo do seu negócio</p>
+      <p class="login-slogan">Clareza em cada ciclo do seu negócio</p>
     </div>
   </v-main>
 </template>
@@ -195,8 +195,18 @@ async function login() {
 .login-brand,
 .login-head,
 .login-form,
+/* DUAS ANIMACOES NO MESMO ELEMENTO, e a composicao precisa morar AQUI por um motivo tecnico, nao
+   por gosto: o `login-in` e um `@keyframes` de estilo SCOPED, e o Vue RENOMEIA keyframes definidos
+   no proprio arquivo (medido: ele computa como `login-in-e8ce220f`). Do `main.css` nao ha como
+   referenciar esse nome — qualquer tentativa de compor as duas la fora perderia a entrada.
+   Foi exatamente o que aconteceu na primeira versao: a regra do `main.css` declarava so o fluxo, a
+   scoped daqui venceu por especificidade, e o gradiente ficou PARADO.
+   O `slogan-fluxo` e global (vive no bloco VIS-F26 do main.css), entao ele atravessa o escopo sem
+   ser renomeado e pode ser citado daqui. */
 .login-slogan {
-  animation: login-in var(--cx-dur-3) var(--cx-ease-out) both;
+  animation:
+    login-in var(--cx-dur-3) var(--cx-ease-out) both,
+    slogan-fluxo 7s linear infinite;
 }
 .login-brand {
   animation-delay: 60ms;
@@ -207,8 +217,10 @@ async function login() {
 .login-form {
   animation-delay: 160ms;
 }
+/* O atraso e da ENTRADA, nao do fluxo: dois valores, um por animacao. Com um valor so, o gradiente
+   tambem ficaria 220ms parado antes de comecar — pouco, mas seria um atraso que ninguem pediu. */
 .login-slogan {
-  animation-delay: 220ms;
+  animation-delay: 220ms, 0s;
 }
 
 .login-brand {
