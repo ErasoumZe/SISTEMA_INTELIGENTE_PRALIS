@@ -4323,3 +4323,24 @@ button.sidebar-logo-alvo {
   width: calc(100% - var(--cx-sp-5) * 2);
 }
 /* ===================== FIM VIS-F22 ===================== */
+
+/* ===================== INICIO VIS-F23 — A ASSINATURA DO LOGIN ENGROSSA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O slogan e italico, 12px e de traco fino — medido, `font-weight: 400`. Traco fino nao segura
+   gradiente: as cores brigam no meio da letra em vez de preencher, e o resultado le como sujeira e
+   nao como cor.
+
+   SOBE O PESO, NAO O TAMANHO. Ele continua sendo assinatura discreta no rodape do cartao: 12px de
+   `--cx-fs-caption`, italico, e a mesma tinta. 400 -> 600 e o degrau que a base ja usa para texto
+   de apoio com presenca (o `.login-link` ao lado dele e 600), entao nao nasce peso novo no sistema.
+
+   NAO HA GRADIENTE AQUI, e isso e proposital: a instrucao que o definiria nao chegou. Este bloco
+   entrega so o traco mais grosso, que e o pre-requisito — quando o gradiente vier, ele encontra a
+   letra pronta para receber, e a matriz de contraste (parada de cor x instante do fundo) se mede
+   com o traco ja no peso final, que era o pedido.
+   ================================================================================================= */
+.login-slogan {
+  font-weight: 600;
+}
+/* ===================== FIM VIS-F23 ===================== */
