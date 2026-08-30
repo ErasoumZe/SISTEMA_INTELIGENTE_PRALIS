@@ -232,6 +232,31 @@ const rootStyle = computed(() => ({
         </g>
       </defs>
 
+      <!-- A PEGADA DESTA MARCA NAO E ESTAVEL, e isto aqui e REGISTRO de uma medicao, nao um defeito
+           em aberto: foi olhado, medido e decidido que nao incomoda. Fica escrito para quem vier
+           depois nao precisar redescobrir.
+
+           O QUE ACONTECE. A caixa do componente nao se mexe (52px no menu) e a base estatica
+           (`lumi-flow__base-image`) tambem nao. Quem se mexe e a LUZ: a cabeca viaja pelo traco, e
+           estas tres camadas sao borradas por `feGaussianBlur` com regiao de filtro enorme — com o
+           `glowIntensity` de 0,22 do menu, o `stdDeviation` do bloom da cerca de 12px CSS de sigma
+           numa marca de 52px. Como o overlay e `overflow: visible`, quando a cabeca passa pela
+           borda direita o halo AVANCA para o lado da palavra e depois recua.
+
+           MEDIDO no menu aberto, varrendo o ciclo: o vao de tinta entre o simbolo e o "CICLUZ" vai
+           de 16,25px em repouso a 7,00px no maior avanco — 9,25px de amplitude. Desses, 5,75px sao
+           o halo acendendo a margem vazia DENTRO da caixa e 3,50px sao luz pintando FORA dela.
+           E o motivo de o travamento parecer solto mesmo com a distancia entre caixas fixa em 8px.
+
+           SE UM DIA INCOMODAR, a resposta e recorte ASSIMETRICO: conter o brilho so na borda
+           direita, a que encara a palavra, com esmaecimento — mascara SVG em `userSpaceOnUse`,
+           branco ate ~90% do viewBox indo a transparente na borda, deixando esquerda, topo e base
+           transbordando como hoje. Recortar nos quatro lados (na silhueta da marca) tambem zera a
+           variacao, mas leva junto o halo em volta do simbolo, que foi reconquistado de proposito.
+
+           E NAO MECA ESTE VAO POR UM QUADRO SO: a fase muda o numero. Duas leituras minhas da
+           mesma borda deram 12,00 e 16,25. Use `pauseAnimations()` + `setCurrentTime(t)` para
+           congelar a linha do tempo do SMIL num instante exato antes de medir. -->
       <g class="lumi-flow__head-bloom" :filter="`url(#${ids.headBloom})`" :opacity="headBloomOpacity">
         <g :mask="`url(#${ids.headMask})`">
           <use :href="`#${ids.inkField}`" />
