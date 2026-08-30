@@ -4344,3 +4344,42 @@ button.sidebar-logo-alvo {
   font-weight: 600;
 }
 /* ===================== FIM VIS-F23 ===================== */
+
+/* ===================== INICIO VIS-F24 — A SAUDACAO CHEGA A FAIXA DO MEIO (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F19 nem o VIS-F2: estende o alcance do primeiro com um seletor proprio.
+
+   O VIS-F19 devolveu saudacao, hora e data ao celular, mas so ate 768px. Entre 769 e 1024 a escada
+   do VIS-F2 continuava valendo, e o resultado era uma tela MAIS LARGA mostrando MENOS informacao
+   que uma mais estreita. Isso e defeito, nao escolha — eu tinha registrado no VIS-F19 e a correcao
+   e trazer a forma de duas linhas para ca, nao remover do celular.
+
+   A MESMA FORMA COMPACTA da faixa do celular: saudacao na primeira linha, hora e data curta na
+   segunda, sem o nome. Ela ja estava medida e cabendo em 91px de espaco util a 390px; a faixa do
+   meio tem mais folga que isso, entao o que cabia no aperto cabe aqui com sobra.
+   ============================================================================================== */
+@media (769px <= width <= 1024px) {
+  .shell-mobills .topbar-relogio {
+    flex-wrap: wrap;
+    gap: 0 var(--cx-sp-2);
+    row-gap: 0;
+    line-height: 1.2;
+  }
+  .shell-mobills .topbar-saudacao {
+    display: block;
+    width: 100%;
+  }
+  .shell-mobills .topbar-nome {
+    display: none;
+  }
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+  .shell-mobills .topbar-data-curta {
+    display: inline;
+  }
+  .shell-mobills .topbar-hora {
+    font-size: var(--cx-fs-caption);
+  }
+}
+/* ===================== FIM VIS-F24 ===================== */
