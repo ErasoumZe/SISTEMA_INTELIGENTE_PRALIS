@@ -4301,3 +4301,25 @@ button.sidebar-logo-alvo {
   }
 }
 /* ===================== FIM VIS-F21 ===================== */
+
+/* ===================== INICIO VIS-F22 — O RECUO DA LINHA VALE EM TODA LARGURA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O VIS-F21 consertou o recuo lateral da linha decorativa SO no celular, e eu deixei o desktop de
+   fora por ler "a linha do desktop e intocavel" como "nao encoste". A leitura foi conservadora
+   demais: intocavel quer dizer NAO REDESENHE, e nao "deixe o defeito medido de pe". E o MESMO bug,
+   no lugar mais visto do sistema.
+
+   MEDIDO a 1440px: recuo da linha 0px contra 20px do texto do card. Ela ia de borda a borda
+   enquanto todo o conteudo respeitava o padding.
+
+   O RECUO SAI DA MEDIA QUERY e passa a valer em qualquer largura. O que CONTINUA por faixa e so o
+   `bottom`, e por um motivo medido: o alvo do "Ver mais" e 40px no desktop e 44px no celular (piso
+   do 67 §9), entao o topo do link fica em 52px da base num caso e 56 no outro. Um `bottom` unico
+   cruzaria o texto numa das duas faixas — foi exatamente esse o defeito que o VIS-F21 pegou.
+   ================================================================================================== */
+.metrica-linha {
+  left: var(--cx-sp-5);
+  width: calc(100% - var(--cx-sp-5) * 2);
+}
+/* ===================== FIM VIS-F22 ===================== */
