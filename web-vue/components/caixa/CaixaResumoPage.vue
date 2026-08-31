@@ -267,7 +267,7 @@ function fechar() {
 
 <template>
   <v-card>
-    <v-card-title>Caixa</v-card-title>
+    <!-- Titulo removido: o nome da tela ja e o cabecalho da pagina (VIS-10). -->
     <v-card-text>
       <v-alert v-if="!pdvs.length" type="warning" variant="tonal" class="mb-4">
         Cadastre um PDV com conta vinculada antes de abrir caixa.

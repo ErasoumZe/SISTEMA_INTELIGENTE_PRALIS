@@ -53,6 +53,7 @@ a necessidade.
 | [34](34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md)       | **Governança atual do Caixa (24/08)**     | Marco é o único executor atual; gates de revisão, merge e autorizações separadas                |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)                 | Linguagem visual Cicluz                   | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**            |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md)           | Relatório da rodada visual                | o que mudou por arquivo em 01/08 e o que ficou aberto                                           |
+| [69](69_PLANO_DESIGN_2026_08.md)              | Plano do design novo (ago/26)             | fila, decisões (D-01 a D-08), etapas até o fim e regras de convivência entre as frentes  |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.

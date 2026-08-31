@@ -2,6 +2,8 @@
 import {
   TELA_TEMA_RESUMO_CAIXA,
   deCentavos,
+  // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
+  ehAdministradorTotal,
   paraCentavos,
   // Mesma regra que o servico usa para decidir quem e retaguarda. Importada, nunca copiada.
   podeLancarSemCaixa,
@@ -276,7 +278,20 @@ const colaboradoresSelectUsuario = computed(() => [
   ...colaboradoresDisponiveisUsuario.value
 ]);
 const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+// O UNICO ponto de chamada do `ehAdministradorTotal`. Marco ja pediu, para depois, uma aba que
+// define o que cada usuario ve no painel; com a funcao chamada em tres lugares, o configurador
+// teria de achar os tres. Um ponto de decisao, descido como booleano.
+const ehAdministradorDoPainel = computed(() =>
+  sessao.value?.perfil ? ehAdministradorTotal(sessao.value.perfil) : false
+);
+
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
+// O ESTADO E O ROTULO, e essa foi a decisao entre as duas que Marco deixou em aberto (texto ao
+// lado do botao ou texto COMO rotulo). Numa topbar que ja carrega sete elementos, um texto solto
+// ao lado do botao gastaria largura duas vezes e criaria DOIS itens para recolher em vez de um. E
+// o estado e exatamente aquilo sobre o que se quer agir: o rotulo que diz "Nao ha caixa aberto" e
+// o mesmo alvo que leva a resolver isso.
+const rotuloCaixa = computed(() => (caixaAberto.value ? `Caixa: ${caixaAberto.value.pdvNome}` : "Não há caixa aberto"));
 const {
   temPermissao,
   podeAcessarTela,
@@ -1878,6 +1893,24 @@ const pageContext = computed(() => ({
   resumo: resumo.value,
   telaAtual: telaAtual.value,
   telaAtiva: telaAtiva.value,
+  // Os atalhos do painel (P-03a) leem EXATAMENTE a lista que o AppShell recebe, com as mesmas
+  // desabilitadas e os mesmos motivos. Nao ha filtro proprio la: uma segunda fonte de verdade
+  // sobre permissao um dia diverge, e o painel passa a oferecer tela que o usuario nao abre.
+  telasMenu: telasShell.value,
+  telasMenuDesabilitadas: telasDesabilitadasMenu.value,
+  motivosTelasMenuDesabilitadas: motivosTelasDesabilitadas.value,
+  // As metricas do painel filtram por esta funcao. E o MESMO `temPermissao` que o workspace inteiro
+  // usa — nao nasce uma segunda fonte de verdade sobre permissao, e nenhuma permissao nova entra.
+  //
+  // O texto anterior aqui citava `utils/blocos-relatorio.ts` como dono da regra. Aquele arquivo foi
+  // APAGADO em 28/08/2026, junto com o `atalhos-home.ts`, quando a dashboard deixou de espelhar o
+  // menu; a regra mudou de casa para `utils/dashboard.ts`. O comentario ficou apontando para um
+  // arquivo que nao existe, e comentario que mente e pior que comentario nenhum.
+  temPermissao,
+  // A decisao de quem ve as faixas de NUMERO do painel desce PRONTA, como booleano. Ver o
+  // `ehAdministradorDoPainel` la em cima: e o unico ponto de chamada, e isso e deliberado.
+  ehAdministradorDoPainel: ehAdministradorDoPainel.value,
+  notificacoesPainel: notificacoes.value,
   empresaAtiva: empresaAtiva.value,
   operacoesPaginadas: operacoesPaginadas.value,
   // Lista COMPLETA da tela (sem paginar) — usada pela Tesouraria para somar o total do periodo.
@@ -2052,49 +2085,65 @@ onBeforeUnmount(() => {
     @verificar-notificacao="verificarNotificacao"
   >
     <template #caixa>
-      <div v-if="temPermissao('caixa_operar')" class="caixa-card">
-        <div v-if="caixaAberto" class="d-flex align-start justify-space-between ga-2">
-          <div>
-            <div class="caixa-title">Caixa: {{ caixaAberto.pdvNome }}</div>
-            <div class="caixa-meta">Aberto em: {{ formatarDataHora(caixaAberto.dataHoraAbertura) }}</div>
-          </div>
-          <span class="status-pill">Aberto</span>
-        </div>
-        <div v-else>
-          <div class="caixa-title">Não há caixa aberto</div>
-          <div class="caixa-meta">Abra um caixa para operar as telas financeiras.</div>
-        </div>
-        <v-btn
-          v-if="caixaAberto"
-          class="mt-4 caixa-edit"
-          block
-          size="small"
-          variant="tonal"
-          prepend-icon="mdi-cash-register"
-          to="/caixa"
-        >
-          Gerenciar caixa
-        </v-btn>
-        <!-- Unico caminho de abertura: a tela /caixa (form inline da CaixaResumoPage). Este botao
-             so NAVEGA para la — nao existe mais modal de abertura. -->
-        <v-btn
-          v-else
-          class="mt-4 caixa-edit"
-          block
-          size="small"
-          variant="tonal"
-          prepend-icon="mdi-cash-plus"
-          to="/caixa"
-        >
-          Ir para o caixa
-        </v-btn>
-      </div>
+      <!-- O AVISO DE CAIXA MUDOU DE LUGAR (28/08/2026), por decisao do Marco: saiu do topo da
+           sidebar e subiu para a topbar, no grupo de "Painel" e da empresa. A proibicao de mover
+           coisa de lugar foi suspensa por ele para este item, e so para ele.
+
+           A PERMISSAO NAO MUDOU e nao ganhou fallback: `carregarStatusCaixa`
+           (AppWorkspace.vue:1006-1007) ja zera `caixaStatus` para quem nao tem `caixa_operar`, e o
+           `v-if` aqui e o mesmo de antes. Quem via, ve; quem nao via, continua sem ver.
+
+           O ICONE MUDA COM O ESTADO, nao so a cor: aberto e `cash-check`, fechado e `cash-remove`.
+           Isso importa porque em tela estreita o rotulo recolhe e sobra so o icone — se o estado
+           vivesse na cor, quem nao distingue matiz perderia a informacao (WCAG 1.4.1). O nome
+           acessivel carrega o estado por extenso nos dois casos.
+
+           O `aria-label` COMECA pelo texto visivel de proposito: a WCAG 2.5.3 (Label in Name) pede
+           que o nome acessivel contenha o rotulo visivel, senao comando de voz por "Nao ha caixa
+           aberto" nao acha o controle. -->
+      <NuxtLink
+        v-if="temPermissao('caixa_operar')"
+        class="topbar-caixa"
+        to="/caixa"
+        :title="`${rotuloCaixa} — ir para o caixa`"
+        :aria-label="`${rotuloCaixa} — ir para o caixa`"
+      >
+        <v-icon :icon="caixaAberto ? 'mdi-cash-check' : 'mdi-cash-remove'" size="18" aria-hidden="true" />
+        <span class="topbar-caixa-texto">{{ rotuloCaixa }}</span>
+      </NuxtLink>
     </template>
 
-    <template v-if="acoesNovo.length" #actions>
+    <template v-if="acoesNovo.length" #actions="{ rail }">
       <v-menu>
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" class="sidebar-new-button" block prepend-icon="mdi-plus">Novo</v-btn>
+          <!-- NO RAIL o rotulo sai e sobra o "+", com tooltip — o mesmo padrao do item de menu
+               recolhido (VIS-E7b). Antes ele SUMIA por inteiro (`main.css:519` punha
+               `.sidebar-actions` em `display: none`), e a acao primaria do sistema simplesmente nao
+               existia entre 769 e 1024px.
+               O `aria-label` fica nos DOIS ramos: quem usa leitor de tela nao pode depender da
+               largura da tela para saber o que o botao faz.
+               A tooltip so e MONTADA quando ha rail, e nao desabilitada — `v-tooltip` desabilitada
+               ainda injeta `aria-describedby` apontando para um elemento que nunca renderiza, e
+               esse defeito ja foi corrigido uma vez neste projeto, no AppMenuItem. -->
+          <v-tooltip v-if="rail" text="Novo lançamento" location="end">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="{ ...menuProps, ...tooltipProps }"
+                class="sidebar-new-button rail"
+                icon="mdi-plus"
+                aria-label="Novo lançamento"
+              />
+            </template>
+          </v-tooltip>
+          <v-btn
+            v-else
+            v-bind="menuProps"
+            class="sidebar-new-button"
+            prepend-icon="mdi-plus"
+            aria-label="Novo lançamento"
+          >
+            Novo
+          </v-btn>
         </template>
         <!-- 3 itens (Mobills): Entradas NAVEGA (venda so por integracao), Transferencias e Saidas
              abrem o modal do eixo — Saidas ja alterna Despesa/Mercadoria/Retirada por dentro. -->

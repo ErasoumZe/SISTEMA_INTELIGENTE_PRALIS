@@ -151,7 +151,6 @@ watch(
   <v-card>
     <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
-        <div class="text-h6">Relatório de Vendas</div>
         <div class="text-body-2 text-muted">Vendas com filtros por período, PDV, cliente e pagamento.</div>
       </div>
       <v-btn color="primary" prepend-icon="mdi-magnify" :loading="carregando" @click="aplicarFiltros">Buscar</v-btn>

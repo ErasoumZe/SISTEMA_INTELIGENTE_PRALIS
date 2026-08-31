@@ -20,18 +20,18 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <v-card>
-    <v-card-title class="cadastro-card-title d-flex align-center justify-space-between ga-3">
-      <div>
-        <div class="text-h6">{{ titulo }}</div>
-        <div class="text-body-2 text-muted">{{ descricao }}</div>
-      </div>
+  <!-- Mesmo movimento do CadastroTable (VIS-10): titulo e acoes saem de dentro do card e sobem
+       para o cabecalho da pagina. Texto e botoes sao os mesmos. Cobre Grupos e Areas e setores. -->
+  <AppCabecalhoTela :titulo="titulo" :subtitulo="descricao">
+    <template #acoes>
       <div class="cadastro-card-actions d-flex ga-2">
         <v-btn v-if="podeImportar" size="small" variant="outlined" @click="emit('importar')">Importar</v-btn>
         <v-btn size="small" color="primary" prepend-icon="mdi-plus" @click="emit('acionar')">{{ acao }}</v-btn>
       </div>
-    </v-card-title>
+    </template>
+  </AppCabecalhoTela>
 
+  <v-card>
     <v-card-text>
       <div class="d-grid ga-2">
         <div
