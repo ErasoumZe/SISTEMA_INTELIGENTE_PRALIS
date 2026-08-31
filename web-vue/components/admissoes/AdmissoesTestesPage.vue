@@ -15,6 +15,10 @@ import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import { corPrazoTeste, corStatusTeste, rotuloPrazoTeste, rotuloStatusTeste } from "~/utils/admissoes";
+// O detalhe do processo é o MESMO componente da tela de Processos — e agora vem importado.
+// Ele era usado só pela tag, e o auto-import do Nuxt registra `AdmissoesProcessoDetalhe*`, não o
+// nome curto: a tag não resolvia e o processo, visto daqui, nunca aparecia.
+import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import TesteDetalhePainel from "~/components/admissoes/TesteDetalhePainel.vue";
 import TesteFormDialog from "~/components/admissoes/TesteFormDialog.vue";
 import TestesFiltros, { type FiltrosTestes } from "~/components/admissoes/TestesFiltros.vue";
@@ -248,9 +252,15 @@ const processoAberto = ref(false);
 const processo = ref<ProcessoDetalheDto | null>(null);
 const historicoProcesso = ref<HistoricoProcessoDto[]>([]);
 const processoProcessando = ref(false);
+const processoCarregando = ref(false);
 
 async function abrirProcesso(id: string) {
   processoAberto.value = true;
+  processoCarregando.value = true;
+  // Zera ANTES do fetch. Sem isto, o modal abria mostrando o processo lido por ultimo — o dado de
+  // outra pessoa, por um instante, numa tela que existe justamente para nao vazar identidade.
+  processo.value = null;
+  historicoProcesso.value = [];
   try {
     processo.value = await apiGet<ProcessoDetalheDto>(`/api/admissoes/processos/${id}`);
     const eventos = await apiGetPaginado<HistoricoProcessoDto>(
@@ -260,6 +270,8 @@ async function abrirProcesso(id: string) {
   } catch (error) {
     tratarErro(error);
     processoAberto.value = false;
+  } finally {
+    processoCarregando.value = false;
   }
 }
 
@@ -468,10 +480,11 @@ onMounted(async () => {
     @verificar-cpf="verificarCpf"
   />
 
-  <ProcessoDetalhePainel
+  <ProcessoDetalheDialog
     :aberto="processoAberto"
     :processo="processo"
     :historico="historicoProcesso"
+    :carregando="processoCarregando"
     :pode-cancelar="podeCancelarProcesso"
     :pode-editar-internos="false"
     :processando="processoProcessando"

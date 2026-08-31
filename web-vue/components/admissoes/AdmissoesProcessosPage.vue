@@ -14,7 +14,7 @@ import { mascararCnpj } from "~/utils/formatacao";
 import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import ProcessoDetalhePainel from "~/components/admissoes/ProcessoDetalhePainel.vue";
+import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
 import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
@@ -299,7 +299,8 @@ onMounted(async () => {
     @salvar="salvarInternos"
   />
 
-  <ProcessoDetalhePainel
+  <!-- UM caminho de detalhe: o modal central. O painel lateral foi removido, nao escondido. -->
+  <ProcessoDetalheDialog
     :aberto="detalheAberto"
     :processo="processo"
     :historico="historico"
