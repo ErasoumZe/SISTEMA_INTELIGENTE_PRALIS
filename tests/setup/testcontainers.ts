@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { TestProject } from "vitest/node";
+import { COMANDO_POSTGRES_SEM_DURABILIDADE } from "./postgres-efemero.js";
 
 const migracaoTriggersUrl = new URL("../../db/migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
@@ -81,6 +82,8 @@ export async function setup(project: TestProject) {
     .withDatabase("padaria_test")
     .withUsername("padaria_test")
     .withPassword("padaria_test")
+    // O porque de desligar durabilidade, e por que nao vaza, esta em `postgres-efemero.ts`.
+    .withCommand([...COMANDO_POSTGRES_SEM_DURABILIDADE])
     .withStartupTimeout(120_000)
     .start();
 

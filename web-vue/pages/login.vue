@@ -2,6 +2,20 @@
 const router = useRouter();
 const { apiUrl } = useApi();
 
+// A ENTRADA ABRE SEMPRE NO ESCURO (Marco, 28/08/2026). O fundo animado nao ficou bom no claro, e
+// manter duas versoes do mesmo desenho e divida; a entrada passa a ter um tema so, e a escolha de
+// claro/escuro continua existindo DENTRO do sistema.
+//
+// Isto SUBSTITUI a leitura de `escuro` que existia aqui. O historico vale a pena guardar porque
+// custou um item: o VIS-13 fechou dizendo "o login nao tem tema, a logo clara esta certa", e estava
+// errado — a tela nao tinha CONTROLE de tema, mas herdava tema pelo logout, que e navegacao
+// client-side e nao recarrega o documento. Com o tema agora FORCADO, a logo deixa de depender de
+// estado e passa a ser sempre a branca, que e a correta sobre fundo escuro.
+//
+// O `useTemaEntrada` nao grava preferencia nenhuma — le, forca, e devolve o que estava. O porque
+// esta no proprio arquivo.
+useTemaEntrada();
+
 const email = ref("");
 const password = ref("");
 const loading = ref(false);
@@ -33,16 +47,42 @@ async function login() {
 </script>
 
 <template>
-  <v-main class="login-page d-flex align-center justify-center pa-4">
-    <div class="login-card">
+  <v-main class="login-page tela-entrada d-flex align-center justify-center pa-4">
+    <AppFundoEntrada />
+
+    <div class="login-card cartao-entrada">
+      <!-- A MARCA: simbolo animado em cima, palavra embaixo.
+           A palavra vem de `cicluz-marca-dark.svg`, que e VETOR PURO (16 paths, zero bitmap) e ja
+           existia — nao foi preciso recortar nada do PNG nem gerar arquivo novo. Escala perfeito em
+           qualquer tamanho, ao contrario do PNG de 718x205 que estava aqui.
+           A variante `-dark` (tinta branca) e a certa porque a tela de entrada abre sempre no
+           escuro (D-LOGIN-ESCURO).
+           O `alt` fica so na palavra e o simbolo e decorativo: os dois juntos anunciariam a marca
+           duas vezes para quem usa leitor de tela. -->
       <div class="login-brand">
-        <img
-          src="/cicluz/logo-cicluz.png"
-          alt="Cicluz Gestão Profissional"
-          class="login-logo"
-          width="300"
-          height="98"
-        />
+        <!-- A MARCA DEITA, e isso e conserto de um defeito medido, nao gosto. Empilhada ela ocupava
+             354x204 — quase um TERCO dos 652px de altura do cartao —, e o cartao inteiro nao cabia
+             em 1366x630, faltando 54px. Nas telas onde cabia, a sobra era EXATAMENTE 0px: nao
+             cabia, cabia por acaso, e parava de caber ao primeiro pixel a menos. Com o Windows a
+             125%, que e padrao de fabrica em muito notebook, 1920x1080 vira ~1532x682 de viewport
+             CSS e o defeito aparece.
+             O componente ja sabia deitar (`orientacao="lateral"`, o mesmo do menu aberto): nao
+             nasceu composicao nova, so mudou a prop.
+             SO A MARCA MUDA. Titulo, subtitulo, campos, botao, link, slogan, largura do cartao,
+             fundo vivo e animacao de entrada ficam exatamente como estavam.
+
+             O SIMBOLO E RESPONSIVO A ALTURA DA TELA, e nao um px cravado. Em `vh`, ele fica grande
+             onde ha espaco e encolhe sozinho onde nao ha — que e exatamente onde o cartao estourava.
+             Cravar o tamanho seria escolher entre "grande" e "cabe"; o `clamp()` entrega os dois, e
+             o piso de 76px garante que ele nunca vire miniatura.
+
+             OS TAMANHOS SAIRAM DA MARCA ORIGINAL, medidos, e nao do olho — foi o olho que errou
+             duas vezes aqui. No PNG do lockup (718x205) o simbolo mede 162x178 e o bloco de texto
+             524x165, logo o simbolo vale 1,079 da ALTURA do texto. A tinta do simbolo animado
+             ocupa 90,4% da caixa dele. Dai sai a conta: bloco de texto de ~53px -> tinta de ~57px
+             -> caixa de 63px. A proporcao da marca fica igual a original em qualquer tamanho; o
+             que muda de uma superficie para outra e so a escala. -->
+        <AppMarcaCicluz size="clamp(76px, 13vh, 116px)" :glow-intensity="0.26" largura-palavra="176px" />
       </div>
 
       <div class="login-head">
@@ -100,7 +140,7 @@ async function login() {
         <NuxtLink to="/forgot-password" class="login-link">Esqueci minha senha</NuxtLink>
       </v-form>
 
-      <p class="login-slogan">clareza em cada ciclo do seu negócio</p>
+      <p class="login-slogan">Clareza em cada ciclo do seu negócio</p>
     </div>
   </v-main>
 </template>
@@ -109,10 +149,18 @@ async function login() {
 /* Login e a UNICA tela que carrega antes de existir empresa: nenhum tema em runtime,
    tudo aqui e a camada de tokens crua (--cx-*, definida em assets/main.css). */
 
-/* Profundidade sem "aurora": duas luzes largas e fracas (6% e 4%), uma da marca no
-   alto e uma fria embaixo. O fundo tem volume, mas nada compete com o cartao. */
+/* AS DUAS LUZES CONTINUAM como base. O comentario que estava aqui dizia "profundidade sem aurora:
+   nada compete com o cartao", e essa decisao foi REVERTIDA por Marco em 28/08/2026, que pediu
+   "gradient das cores da Cicluz atras mexendo". Registro a nota antiga em vez de apaga-la: ela nao
+   estava errada, foi substituida por um pedido. O que sobrou dela como regra viva e o TETO — o
+   fundo se move, mas nao compete com o cartao, e por isso a forca das manchas e medida.
+
+   `position: relative` + `isolation: isolate` sao O QUE FAZ O FUNDO EXISTIR, e nao enfeite. Medido
+   antes de escrever: entre o `html` e o `.login-card` NENHUM elemento cria contexto de empilhamento
+   (`.v-application` e `.v-main` sao `static`; o `.v-application__wrap` e `relative` com
+   `z-index: auto`, que nao cria). Sem isolar, um decorativo de `z-index` negativo sobe ate a raiz e
+   e pintado ABAIXO do proprio fundo da `.login-page` — some por completo. */
 .login-page {
-  min-height: 100dvh;
   background:
     radial-gradient(130% 85% at 50% -15%, color-mix(in srgb, var(--cx-brand) 6%, transparent) 0%, transparent 60%),
     radial-gradient(
@@ -130,7 +178,6 @@ async function login() {
   width: 100%;
   max-width: min(420px, calc(100vw - 32px)); /* nunca ultrapassa a viewport */
   min-width: 0;
-  background: var(--cx-surface);
   border-radius: var(--cx-r-xl);
   padding: var(--cx-sp-8) var(--cx-sp-7) var(--cx-sp-6);
   box-shadow: var(--cx-e-3);
@@ -148,8 +195,18 @@ async function login() {
 .login-brand,
 .login-head,
 .login-form,
+/* DUAS ANIMACOES NO MESMO ELEMENTO, e a composicao precisa morar AQUI por um motivo tecnico, nao
+   por gosto: o `login-in` e um `@keyframes` de estilo SCOPED, e o Vue RENOMEIA keyframes definidos
+   no proprio arquivo (medido: ele computa como `login-in-e8ce220f`). Do `main.css` nao ha como
+   referenciar esse nome — qualquer tentativa de compor as duas la fora perderia a entrada.
+   Foi exatamente o que aconteceu na primeira versao: a regra do `main.css` declarava so o fluxo, a
+   scoped daqui venceu por especificidade, e o gradiente ficou PARADO.
+   O `slogan-fluxo` e global (vive no bloco VIS-F26 do main.css), entao ele atravessa o escopo sem
+   ser renomeado e pode ser citado daqui. */
 .login-slogan {
-  animation: login-in var(--cx-dur-3) var(--cx-ease-out) both;
+  animation:
+    login-in var(--cx-dur-3) var(--cx-ease-out) both,
+    slogan-fluxo 7s linear infinite;
 }
 .login-brand {
   animation-delay: 60ms;
@@ -160,14 +217,24 @@ async function login() {
 .login-form {
   animation-delay: 160ms;
 }
+/* O atraso e da ENTRADA, nao do fluxo: dois valores, um por animacao. Com um valor so, o gradiente
+   tambem ficaria 220ms parado antes de comecar — pouco, mas seria um atraso que ninguem pediu. */
 .login-slogan {
-  animation-delay: 220ms;
+  animation-delay: 220ms, 0s;
 }
 
 .login-brand {
   display: flex;
   justify-content: center;
   margin-bottom: var(--cx-sp-5);
+}
+/* A MARCA ENCOLHE ATE O CONTEUDO. Sem isto ela virava uma caixa de 354px — a largura util do
+   cartao — com 222px de conteudo encostado a ESQUERDA, porque `.marca-cicluz` alinha o proprio
+   conteudo em `flex-start`. O `justify-content: center` do pai centraliza a CAIXA, e a caixa
+   ocupava tudo: nao havia o que centralizar. Com `max-content` a caixa passa a ter o tamanho da
+   marca, e ai o centro do pai vale. */
+.login-brand :deep(.marca-cicluz) {
+  width: max-content;
 }
 .login-logo {
   width: clamp(150px, 52%, 190px);
@@ -242,7 +309,11 @@ async function login() {
     background var(--cx-dur-1) var(--cx-ease);
 }
 .login-link:hover {
-  color: var(--cx-brand-strong);
+  /* `--cx-brand-text` e nao `--cx-brand-strong`: o 67 §3 classifica o `-strong` como "hover do
+     PREENCHIMENTO" e o `-text` como "marca como tinta ou grafico fino". O `-strong` nao tem
+     contraparte no escuro — medido, #35128c sobre #191f26 da 1,24:1. O `-text` tem (main.css:182)
+     e o proprio comentario de la declara 6,9:1. */
+  color: var(--cx-brand-text);
   background: var(--cx-hover);
 }
 
@@ -256,11 +327,15 @@ async function login() {
 
 /* Foco no roxo da marca (fixo: nao depende do tema por empresa, que aqui ainda nem carregou).
    Alem da borda, o campo focado ganha o anel — o mesmo do resto do sistema. */
+/* `--cx-focus` e nao `--cx-brand`: a borda do campo focado e GRAFICO FINO, e o 67 §3 e explicito —
+   "Nunca use --cx-brand como texto ou grafico fino sobre superficie escura: medido, #6515dd sobre
+   #191f26 da 2,1:1 e reprova o minimo de 3:1. Para isso existem --cx-brand-text e --cx-focus."
+   O `--cx-focus` e redefinido no escuro (main.css:183) e existe exatamente para isto. */
 .login-card :deep(.v-field--focused .v-field__outline) {
-  color: var(--cx-brand);
+  color: var(--cx-focus);
 }
 .login-card :deep(.v-field--focused .v-label) {
-  color: var(--cx-brand-strong);
+  color: var(--cx-brand-text);
 }
 .login-card :deep(.v-field--focused) {
   box-shadow: 0 0 0 3px var(--cx-brand-ring);
@@ -287,6 +362,20 @@ async function login() {
   .login-submit:hover,
   .login-submit:active {
     transform: none;
+  }
+  /* O FUNDO CONGELA, NAO SOME — foi o pedido, e a diferenca importa: esconder tiraria a identidade
+     da tela justamente de quem pediu menos movimento, o que e punir pelo ajuste. Com
+     `animation: none` as manchas ficam nas posicoes declaradas em CSS, que sao o inicio do
+     percurso, e a composicao continua inteira.
+     Precisa estar AQUI e ser explicito: o reset global de `main.css:2233` zera
+     `animation-duration` e poe `iteration-count: 1`, o que numa animacao `infinite alternate`
+     congelaria no quadro FINAL, nao no inicial — as manchas parariam deslocadas e ampliadas. */
+  .login-blob {
+    animation: none;
+    /* Sem seguir o mouse tambem. O ouvinte ja nem e registrado no script; este `translate: none` e
+       o cinto de seguranca para o caso de a preferencia mudar com a tela aberta, quando a media
+       query reavalia mas o `onMounted` nao roda de novo. */
+    translate: none;
   }
 }
 </style>

@@ -51,7 +51,6 @@ watch(
   <v-card>
     <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
-        <div class="text-h6">Contas a pagar</div>
         <div class="text-body-2 text-muted">Despesas pendentes de pagamento.</div>
       </div>
       <v-btn color="primary" prepend-icon="mdi-magnify" :loading="carregando" @click="buscar">Buscar</v-btn>
@@ -83,7 +82,9 @@ watch(
               <td>{{ linha.status }}</td>
             </tr>
             <tr v-if="!linhas.length">
-              <td colspan="4" class="text-center text-muted py-8">Nenhuma despesa pendente encontrada.</td>
+              <td colspan="4" class="text-center text-muted py-8">
+                <span class="tabela-vazio">Nenhuma despesa pendente encontrada.</span>
+              </td>
             </tr>
           </tbody>
         </v-table>

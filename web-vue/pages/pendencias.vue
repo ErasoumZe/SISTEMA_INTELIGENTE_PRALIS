@@ -19,6 +19,11 @@ const painel = ref<InstanceType<typeof PendenciasRoteamentoPainel> | null>(null)
 <template>
   <AppWorkspace tela-inicial="fechamento" tipo-pagina="fechamento" v-slot="ctx">
     <div class="central-pendencias">
+      <!-- VIS-10: esta tela nunca teve cabecalho proprio — vivia do titulo da topbar, que saiu.
+           O nome vem do menu (`telaAtual`), sem texto novo. O `<h2>` do Roteamento financeiro
+           abaixo continua onde estava: ele nomeia a SECAO, nao a tela. -->
+      <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? ''" />
+
       <NotificacoesPendentesPage :notificacoes="ctx.notificacoes" @verificar="ctx.verificarNotificacao" />
 
       <section class="secao-financeira" aria-labelledby="titulo-pendencias-financeiras">
