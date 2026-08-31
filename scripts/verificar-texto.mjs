@@ -74,6 +74,58 @@ const nomesDominioInglesBloqueados = [
   { regex: /\/api\/employees\b/, motivo: "rota de dominio em ingles bloqueada; use /api/colaboradores" }
 ];
 
+// Durabilidade desligada e privilegio de banco DESCARTAVEL, e de mais nenhum.
+//
+// `fsync=off`, `synchronous_commit=off` e `full_page_writes=off` deixam o Postgres rapido porque
+// param de garantir que o dado sobreviva a uma queda. Num container que nasce e morre com a rodada
+// isso nao custa nada; num banco de desenvolvimento, de producao ou do Coolify, custa os dados.
+//
+// A fronteira hoje e estrutural — nenhum compose tem chave `command:`, e o Testcontainers fala
+// direto com a API do Docker —, mas estrutura se perde num copiar e colar apressado. Esta guarda
+// transforma "nao vaza" em "nao TEM como vazar sem ficar vermelho".
+// O Postgres aceita QUATRO grafias para "desligado" — `off`, `0`, `false`, `no` — e nao diferencia
+// maiusculas nem no nome do parametro nem no valor. Uma guarda que so pega `fsync=off` minusculo
+// da a impressao de proteger sem proteger: bastava escrever `fsync=false` para passar.
+const desligado = "(?:off|0|false|no)";
+const parametrosSemDurabilidade = [
+  new RegExp(`\\bfsync\\s*=\\s*${desligado}\\b`, "i"),
+  new RegExp(`\\bsynchronous_commit\\s*=\\s*${desligado}\\b`, "i"),
+  new RegExp(`\\bfull_page_writes\\s*=\\s*${desligado}\\b`, "i")
+];
+
+// Ancorado no SEGMENTO, e nao em substring: `includes("tests/")` sozinho liberaria
+// `api/src/contests/` e `scripts/mytests/`, que nao sao pasta de teste nenhuma.
+function podeDesligarDurabilidade(caminho) {
+  const normalizado = caminho.replaceAll("\\", "/");
+  return normalizado.startsWith("tests/") || normalizado.includes("/tests/");
+}
+
+// Os arquivos de orquestracao NAO estao em `alvos` (a varredura so olha codigo), e sao justamente
+// onde o vazamento seria grave.
+//
+// DESCOBERTOS e RECURSIVOS. Duas versoes desta guarda ja falharam por olhar de menos: a primeira
+// listava os arquivos a mao e esqueceu o `docker-compose.yml` da raiz; a segunda descobria, mas so
+// no topo de tres pastas e so pelo nome `docker-compose*`. Ficavam de fora `compose.yaml` — o nome
+// preferencial do Compose Spec de hoje — e qualquer subpasta.
+const pastasIgnoradas = new Set(["node_modules", "dist", ".nuxt", ".output", ".git"]);
+const nomeDeCompose = /^(?:docker-compose.*|compose(?:\..*)?)\.ya?ml$/i;
+
+function descobrirOrquestracao(pasta) {
+  const encontrados = [];
+  const visitar = (atual) => {
+    for (const entrada of readdirSync(atual, { withFileTypes: true })) {
+      if (pastasIgnoradas.has(entrada.name)) continue;
+      const proximo = join(atual, entrada.name);
+      if (entrada.isDirectory()) visitar(proximo);
+      else if (entrada.isFile() && nomeDeCompose.test(entrada.name)) encontrados.push(proximo);
+    }
+  };
+  visitar(pasta);
+  return encontrados;
+}
+
+const arquivosDeOrquestracao = descobrirOrquestracao(".");
+
 function caminhoIgnoradoParaDominio(caminho) {
   const normalizado = caminho.replaceAll("\\", "/");
   return (
@@ -117,11 +169,24 @@ for (const alvo of alvos.flatMap(listarArquivos)) {
   for (const [indice, linha] of linhas.entries()) {
     const problema = padroesProblematicos.find((padrao) => linha.includes(padrao));
     if (problema) falhas.push(`${alvo}:${indice + 1}: texto possivelmente corrompido: ${problema}`);
+    if (!podeDesligarDurabilidade(alvo)) {
+      const durabilidade = parametrosSemDurabilidade.find((padrao) => padrao.test(linha));
+      if (durabilidade)
+        falhas.push(`${alvo}:${indice + 1}: durabilidade desligada so vale em banco descartavel (tests/)`);
+    }
     if (!caminhoIgnoradoParaDominio(alvo)) {
       const dominioIngles = nomesDominioInglesBloqueados.find((padrao) => padrao.regex.test(linha));
       if (dominioIngles)
         falhas.push(`${alvo}:${indice + 1}: nome de dominio em ingles bloqueado: ${dominioIngles.motivo}`);
     }
+  }
+}
+
+for (const arquivo of arquivosDeOrquestracao) {
+  for (const [indice, linha] of readFileSync(arquivo, "utf8").split(/\r?\n/).entries()) {
+    const durabilidade = parametrosSemDurabilidade.find((padrao) => padrao.test(linha));
+    if (durabilidade)
+      falhas.push(`${arquivo}:${indice + 1}: durabilidade desligada em orquestracao — nunca fora de teste`);
   }
 }
 
