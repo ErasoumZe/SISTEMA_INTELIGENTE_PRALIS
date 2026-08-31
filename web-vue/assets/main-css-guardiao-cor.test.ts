@@ -406,6 +406,10 @@ describe("VIS-00 · a camada de token nao muda sem alguem ver", () => {
    * `toMatchInlineSnapshot` de proposito: nao cria diretorio `__snapshots__` novo, e o valor fica
    * ao lado do teste, onde quem edita o `main.css` ja esta olhando.
    */
+  // ATUALIZAR ESTE SNAPSHOT E UM ATO DELIBERADO, e so isso: o guardiao existe para que nenhum token
+  // mude em silencio, nao para congelar a paleta para sempre. Quem adiciona ou troca um token
+  // atualiza as duas listas no MESMO commit, com o motivo na mensagem — foi assim que
+  // `--cx-attention` entrou pela #101 (terceiro estado: nem bom nem ruim, uma etapa ainda aberta).
   it("os tokens do :root claro sao exatamente estes", () => {
     expect(tokensDoRoot(mainCss, ":root")).toMatchInlineSnapshot(`
       [
@@ -430,6 +434,7 @@ describe("VIS-00 · a camada de token nao muda sem alguem ver", () => {
         "--cx-brilho-forca: 8%",
         "--cx-positive: #157f3c",
         "--cx-negative: #c62828",
+        "--cx-attention: #9a5b00",
         "--cx-sp-1: 4px",
         "--cx-sp-2: 8px",
         "--cx-sp-3: 12px",
@@ -479,6 +484,7 @@ describe("VIS-00 · a camada de token nao muda sem alguem ver", () => {
         "--cx-line-soft: #232b34",
         "--cx-positive: #4ade80",
         "--cx-negative: #ff8a80",
+        "--cx-attention: #f0b45f",
         "--cx-brand-text: color-mix(in srgb, var(--cx-brand) 45%, #ffffff)",
         "--cx-focus: var(--cx-brand-text)",
         "--cx-brilho-forca: 14%",
