@@ -478,6 +478,11 @@ onMounted(async () => {
 
     `pode-ver-teste` e VERDADEIRO so aqui: e desta tela que se chega ao processo, e `voltarAoTeste`
     reabre o teste de origem. O caminho de volta existe, entao o botao existe.
+
+    `pode-ver-cpf` e falso pela mesma logica do "Editar". Daqui so se chega a processo vindo de
+    TESTE, e esse nao tem CPF proprio: a coluna e nula por CHECK, o documento mora no teste, e o
+    painel do teste ja o revela com a trilha da ADM-001. Oferecer aqui seria um botao que o
+    servidor recusa com 400 — e um segundo lugar para o mesmo ato.
   -->
   <ProcessoDetalheDialog
     :aberto="processoAberto"
@@ -488,6 +493,9 @@ onMounted(async () => {
     :pode-editar-internos="false"
     :processando="processoProcessando"
     :pode-ver-teste="true"
+    :pode-ver-cpf="false"
+    :cpf-revelado="null"
+    :revelando-cpf="false"
     @cancelar="cancelarProcessoAdmissao"
     @fechar="processoAberto = false"
     @ver-teste="voltarAoTeste"

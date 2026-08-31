@@ -64,7 +64,7 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
     versao: 3,
     testeId: "teste-1",
     nomeCompleto: "Maria Aparecida da Silva",
-    cpfMascarado: "***.***.***-**",
+    cpfMascarado: "•••.•••.•••-••",
     funcaoNome: "PADEIRO",
     turnoEtiqueta: "M",
     turnoRotulo: "Manhã",
@@ -94,6 +94,9 @@ function processoDe(status: StatusProcesso): ProcessoDetalheDto {
   };
 }
 
+/** O valor real de `cpfTotalmenteMascarado()`: nenhum digito, nem parcial. */
+const MASCARA = "•••.•••.•••-••";
+
 const HISTORICO: HistoricoProcessoDto[] = [
   {
     id: "evento-1",
@@ -105,6 +108,20 @@ const HISTORICO: HistoricoProcessoDto[] = [
   }
 ];
 
+/**
+ * A admissao DIRETA e a unica origem com CPF proprio: na vinda de teste a coluna do processo e nula
+ * por CHECK, e o documento mora no teste. So a direta pode revelar.
+ */
+function processoDireto(): ProcessoDetalheDto {
+  return {
+    ...processoDe("iniciado"),
+    origem: "admissao_direta",
+    testeId: null,
+    turnoEtiqueta: "T",
+    turnoRotulo: "Tarde"
+  };
+}
+
 type Cenario = {
   aberto?: boolean;
   processo?: ProcessoDetalheDto | null;
@@ -112,6 +129,9 @@ type Cenario = {
   podeEditarInternos?: boolean;
   /** O default e a tela de Testes, que TEM caminho de volta. A de Processos passa `false`. */
   podeVerTeste?: boolean;
+  podeVerCpf?: boolean;
+  cpfRevelado?: string | null;
+  revelandoCpf?: boolean;
   carregando?: boolean;
 };
 
@@ -130,6 +150,9 @@ function montar(cenario: Cenario = {}) {
       podeCancelar: cenario.podeCancelar ?? true,
       podeEditarInternos: cenario.podeEditarInternos ?? true,
       podeVerTeste: cenario.podeVerTeste ?? true,
+      podeVerCpf: cenario.podeVerCpf ?? false,
+      cpfRevelado: cenario.cpfRevelado ?? null,
+      revelandoCpf: cenario.revelandoCpf ?? false,
       processando: false,
       carregando: cenario.carregando ?? false
     }
@@ -190,7 +213,7 @@ describe("o detalhe abre como modal central", () => {
       "Maria Aparecida da Silva",
       "Período de teste efetivado",
       "Ver o teste",
-      "***.***.***-**",
+      MASCARA,
       "PADEIRO",
       "M · Manhã · seg, ter · 06:00–14:00",
       "Dados internos do DP",
@@ -244,6 +267,113 @@ describe("o caminho de volta ao teste so aparece onde ele existe", () => {
     montar({ processo: direta, podeVerTeste: true });
     expect(botaoPorTexto("Ver o teste")).toBeUndefined();
     expect(textoDoModal()).toContain("Admissão direta");
+  });
+});
+
+// ===== revelar CPF: ato explicito, auditado, e so dentro do modal ===============================
+
+// O servidor devolve DIGITOS CRUS; a tela e quem formata. O fixture segue a realidade.
+const CPF_CRU = "52998224725";
+const CPF_FORMATADO = "529.982.247-25";
+
+describe("o CPF so aparece quando alguem pede", () => {
+  it("Deve_MostrarSoAMascara_Quando_NinguemPediu", () => {
+    montar({ processo: processoDireto(), podeVerCpf: true });
+    expect(textoDoModal()).toContain(MASCARA);
+    expect(textoDoModal()).not.toContain(CPF_FORMATADO);
+    // Mascara CONSTANTE, nunca parcial: a projecao nao carrega digito nenhum.
+    expect(textoDoModal()).not.toMatch(/\d{3}\.\d{3}\.\d{3}-\d{2}/u);
+    expect(botaoPorTexto("Ver CPF")).toBeTruthy();
+  });
+
+  it("Deve_NaoOferecerVerCpf_Quando_SemPermissaoDeVisualizar", () => {
+    montar({ processo: processoDireto(), podeVerCpf: false });
+    expect(botaoPorTexto("Ver CPF")).toBeUndefined();
+    // E a mascara continua: esconder o botao nao pode esconder o campo.
+    expect(textoDoModal()).toContain(MASCARA);
+  });
+
+  it("Deve_NaoOferecerVerCpf_Quando_OrigemEhTesteEfetivado", () => {
+    // O processo vindo de teste NAO tem CPF proprio — a coluna e nula por CHECK e o servidor recusa
+    // com 400. A mascara aparece porque a projecao resolve por `coalesce`; o botao nao pode.
+    montar({ processo: processoDe("iniciado"), podeVerCpf: true });
+    expect(textoDoModal()).toContain(MASCARA);
+    expect(botaoPorTexto("Ver CPF")).toBeUndefined();
+  });
+
+  it("Deve_PedirUmaVezSo_Quando_CliqueDuplo", async () => {
+    // Dois cliques no mesmo tick chegam antes de qualquer re-render: `disabled` sozinho nao segura.
+    // Duas chamadas seriam dois eventos `cpf_revelado` na trilha para a mesma intencao.
+    const wrapper = montar({ processo: processoDireto(), podeVerCpf: true });
+    const botao = botaoPorTexto("Ver CPF");
+    botao?.click();
+    botao?.click();
+    botao?.click();
+    await nextTick();
+    expect(wrapper.emitted("revelarCpf")).toHaveLength(1);
+  });
+
+  it("Deve_NaoPedir_Quando_A_ChamadaJaEstaEmCurso", async () => {
+    const wrapper = montar({ processo: processoDireto(), podeVerCpf: true, revelandoCpf: true });
+    botaoPorTexto("Ver CPF")?.click();
+    await nextTick();
+    expect(wrapper.emitted("revelarCpf")).toBeUndefined();
+  });
+
+  it("Deve_MostrarOCpf_E_SumirComOBotao_Quando_A_PaginaRevelou", () => {
+    montar({ processo: processoDireto(), podeVerCpf: true, cpfRevelado: CPF_CRU });
+    expect(textoDoModal()).toContain(CPF_FORMATADO);
+    expect(textoDoModal()).not.toContain(MASCARA);
+    // Revelado uma vez, nao ha o que pedir de novo — e nao ha como gerar segunda auditoria a toa.
+    expect(botaoPorTexto("Ver CPF")).toBeUndefined();
+    // O aviso de que a consulta foi registrada aparece junto.
+    expect(textoDoModal()).toContain("registrada no histórico");
+  });
+
+  it("Deve_ManterSoAMascara_Quando_A_ChamadaFalha", async () => {
+    // A pagina nao escreve `cpfRevelado` no erro; ela so desliga o `revelandoCpf`.
+    const wrapper = montar({ processo: processoDireto(), podeVerCpf: true });
+    botaoPorTexto("Ver CPF")?.click();
+    await wrapper.setProps({ revelandoCpf: true });
+    await wrapper.setProps({ revelandoCpf: false });
+
+    expect(textoDoModal()).toContain(MASCARA);
+    expect(textoDoModal()).not.toContain(CPF_FORMATADO);
+    // E o botao volta a funcionar: falha nao pode travar a tela ate fechar o modal.
+    botaoPorTexto("Ver CPF")?.click();
+    await nextTick();
+    expect(wrapper.emitted("revelarCpf")).toHaveLength(2);
+  });
+
+  it("Deve_VoltarAMascara_Quando_A_PaginaLimpaAoFechar", async () => {
+    const wrapper = montar({ processo: processoDireto(), podeVerCpf: true, cpfRevelado: CPF_CRU });
+    expect(textoDoModal()).toContain(CPF_FORMATADO);
+
+    // E o que `fecharDetalhe` faz na pagina: fecha E zera o CPF revelado.
+    await wrapper.setProps({ aberto: false, cpfRevelado: null });
+    await assentar();
+    await wrapper.setProps({ aberto: true });
+    await assentar();
+
+    expect(textoDoModal()).toContain(MASCARA);
+    expect(textoDoModal()).not.toContain(CPF_FORMATADO);
+    // Reabrir exige pedir de novo — e pedir de novo grava outra linha na trilha, como deve ser.
+    expect(botaoPorTexto("Ver CPF")).toBeTruthy();
+  });
+
+  it("Deve_ManterOCpfSoDentroDoModal_Quando_Revelado", () => {
+    montar({ processo: processoDireto(), podeVerCpf: true, cpfRevelado: CPF_CRU });
+    // Fora do overlay nao pode haver rastro: nem no titulo do documento, nem em atributo nenhum.
+    const foraDoModal = document.body.innerHTML.replace(overlay()?.outerHTML ?? "", "");
+    expect(foraDoModal).not.toContain(CPF_FORMATADO);
+    expect(document.title).not.toContain(CPF_FORMATADO);
+    // Nem em `title`/`aria-label`/`alt` DENTRO do modal: o CPF e texto, nunca metadado copiavel.
+    for (const atributo of ["title", "aria-label", "alt", "href", "value", "placeholder"]) {
+      const comAtributo = [...(overlay()?.querySelectorAll(`[${atributo}]`) ?? [])];
+      for (const no of comAtributo) {
+        expect(no.getAttribute(atributo) ?? "", atributo).not.toContain(CPF_FORMATADO);
+      }
+    }
   });
 });
 
@@ -409,6 +539,40 @@ describe("o painel lateral saiu de verdade", () => {
     // E a tela dona continua escutando — remover o listener morto nao pode ter levado o vivo junto.
     const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
     expect(processos).toMatch(ESCUTA_EDITAR_INTERNOS);
+  });
+
+  it("Deve_A_ListagemNuncaTocarEmCpf", () => {
+    // A tabela nao tem coluna de CPF, nem mascarada. O documento so existe no detalhe, e so depois
+    // de um pedido explicito — PROJECT_BRAIN/31 D-4.
+    const tabela = semComentarios(readFileSync(join(PASTA, "ProcessosTabela.vue"), "utf8"));
+    expect(tabela.toLowerCase()).not.toContain("cpf");
+  });
+
+  it("Deve_A_PaginaRevelarPorPost_E_LimparAoFechar", () => {
+    const pagina = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+
+    // POST, nunca GET: documento nao entra em URL. E sem query string na rota.
+    expect(pagina).toMatch(/apiPost<\{ cpf: string \}>\(`\/api\/admissoes\/processos\/\$\{id\}\/cpf`/u);
+    expect(pagina).not.toMatch(/apiGet[^\n]*\/cpf/u);
+    expect(pagina).not.toMatch(/cpf[^\n]*[?&]\w+=/u);
+
+    // Fechar limpa o CPF revelado da memoria da tela, e o modal chama justamente essa funcao.
+    expect(pagina).toMatch(/function fecharDetalhe\(\)[\s\S]{0,200}?cpfRevelado\.value = null;/u);
+    expect(pagina).toContain('@fechar="fecharDetalhe"');
+
+    // O CPF revelado nao pode ir para lugar nenhum que sobreviva a tela. A varredura e por LINHA
+    // que fala de CPF: banir os identificadores no arquivo inteiro seria falso — `useState` e como
+    // a sessao chega aqui, e nada tem a ver com documento.
+    const linhasComCpf = pagina.split("\n").filter((linha) => /cpf/iu.test(linha));
+    expect(linhasComCpf.length).toBeGreaterThan(0);
+    for (const fuga of ["localStorage", "sessionStorage", "useState", "navigateTo", "console."]) {
+      expect(
+        linhasComCpf.filter((linha) => linha.includes(fuga)),
+        fuga
+      ).toEqual([]);
+    }
+    // Nem para o aviso de rodape: `notificar` recebe texto fixo, nunca o documento.
+    expect(pagina).not.toMatch(/notificar\([^)]*cpf/iu);
   });
 
   it("Deve_SerModalNaoGaveta_E_SemPersistent", () => {

@@ -37,6 +37,9 @@ const podeCancelar = computed(() => temPermissao(permissoes.value, "admissoes_pr
 const podeEditarInternos = computed(() =>
   temPermissao(permissoes.value, "admissoes_processos_editar_internos")
 );
+// Revelar CPF usa a permissao de VISUALIZAR, nao uma terceira: quem pode abrir o processo pode ver
+// o documento de quem esta sendo admitido — o que muda e que fica registrado quem viu e quando.
+const podeVerCpf = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
@@ -77,6 +80,11 @@ const detalheCarregando = ref(false);
 const processando = ref(false);
 const processo = ref<ProcessoDetalheDto | null>(null);
 const historico = ref<HistoricoProcessoDto[]>([]);
+
+// O CPF revelado vive SO na memoria da tela, e so enquanto o detalhe estiver aberto. Nao vai para
+// URL, store, storage nem listagem — e some no fechamento, em `fecharDetalhe`.
+const cpfRevelado = ref<string | null>(null);
+const revelandoCpf = ref(false);
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 
@@ -140,6 +148,11 @@ function trocarPagina(nova: number) {
 }
 
 async function abrirDetalhe(id: string) {
+  // Esta funcao tambem e o caminho de RECARGA (depois de revelar, salvar ou cancelar). Trocar de
+  // processo apaga o CPF revelado; reler o MESMO processo o mantem, senao revelar se desfaria
+  // sozinho no refetch que ele proprio dispara.
+  if (processo.value?.id !== id) cpfRevelado.value = null;
+
   detalheAberto.value = true;
   detalheCarregando.value = true;
   processo.value = null;
@@ -222,6 +235,42 @@ async function salvarInternos(
   }
 }
 
+/**
+ * Fechar o detalhe APAGA o CPF revelado. Ele nao sobrevive ao modal — reabrir exige pedir de novo,
+ * e pedir de novo grava outra linha na trilha, que e o comportamento certo: cada leitura do
+ * documento e um ato.
+ */
+function fecharDetalhe() {
+  detalheAberto.value = false;
+  cpfRevelado.value = null;
+}
+
+/**
+ * Revelar o CPF — POST, nunca GET: documento nao entra em URL, e o ato grava trilha na mesma
+ * transacao da leitura (PROJECT_BRAIN/31 D-4).
+ *
+ * A guarda de reentrancia e SINCRONA e mora aqui tambem, alem do modal: duas chamadas seriam dois
+ * eventos `cpf_revelado` para a mesma intencao.
+ */
+async function revelarCpf() {
+  if (!processo.value || revelandoCpf.value || cpfRevelado.value !== null) return;
+  const id = processo.value.id;
+  revelandoCpf.value = true;
+  try {
+    const resposta = await apiPost<{ cpf: string }>(`/api/admissoes/processos/${id}/cpf`, {});
+    cpfRevelado.value = resposta.cpf;
+    // Releitura obrigatoria: ao contrario da revelacao do TESTE, esta AVANCA a versao do processo
+    // (`avancarVersaoProcessoRepository`). Sem reler, a `versao` em memoria fica velha e o
+    // cancelamento seguinte levaria 409. De quebra, a trilha ja mostra o `cpf_revelado`.
+    await abrirDetalhe(id);
+  } catch (error) {
+    // Falha mantem SO a mascara: `cpfRevelado` nem chega a ser escrito.
+    tratarErro(error);
+  } finally {
+    revelandoCpf.value = false;
+  }
+}
+
 async function cancelarProcesso() {
   if (!processo.value) return;
   processando.value = true;
@@ -239,7 +288,6 @@ async function cancelarProcesso() {
   }
 }
 
-
 onMounted(async () => {
   await carregar();
   if (podeCriarDireta.value) await carregarCatalogos();
@@ -254,15 +302,12 @@ onMounted(async () => {
       <div>
         <h2>Processos de admissão</h2>
         <p class="subtitulo">
-          Um processo por admissão, venha ele de um período de teste efetivado ou de um cadastro
-          direto.
+          Um processo por admissão, venha ele de um período de teste efetivado ou de um cadastro direto.
         </p>
       </div>
       <!-- A UNICA acao de criacao desta tela. Nao ha "iniciar", nao ha "efetivar": quem veio de teste
            chega aqui ja criado, pela tela de Testes. -->
-      <v-btn v-if="podeCriarDireta" color="primary" variant="flat" @click="novoAberto = true">
-        + Novo cadastro
-      </v-btn>
+      <v-btn v-if="podeCriarDireta" color="primary" variant="flat" @click="novoAberto = true"> + Novo cadastro </v-btn>
     </header>
 
     <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4">{{ erro }}</v-alert>
@@ -315,9 +360,18 @@ onMounted(async () => {
     :pode-editar-internos="podeEditarInternos"
     :processando="processando"
     :pode-ver-teste="false"
-    @fechar="detalheAberto = false"
+    :pode-ver-cpf="podeVerCpf"
+    :cpf-revelado="cpfRevelado"
+    :revelando-cpf="revelandoCpf"
+    @fechar="fecharDetalhe"
     @cancelar="cancelarProcesso"
-    @editar-internos="() => { internosErro = ''; internosAberto = true; }"
+    @revelar-cpf="revelarCpf"
+    @editar-internos="
+      () => {
+        internosErro = '';
+        internosAberto = true;
+      }
+    "
   />
 
   <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>

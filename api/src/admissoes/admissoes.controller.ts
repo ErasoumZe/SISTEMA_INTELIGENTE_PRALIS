@@ -168,10 +168,14 @@ export async function registrarRotasAdmissoes(app: FastifyInstance) {
       const { id } = testeParamsSchema.parse(request.params);
       try {
         // Unica rota de escrita deste modulo que NAO responde 204: a efetivacao precisa devolver o
-        // processo que nasceu dela. E o que faz "Efetivar para admissao" ser o caminho unico —
-        // `AdmissoesTestesPage.encerrar` le `processoId` e leva direto ao processo, sem segundo
-        // passo manual. Com 204 a resposta vinha sem corpo, `processoId` era sempre undefined e a
-        // navegacao nunca acontecia.
+        // processo que nasceu dela. E o que faz "Efetivar para admissao" ser o caminho unico — o
+        // processo nasce na mesma transacao, sem segundo passo manual. Com 204 a resposta vinha sem
+        // corpo e `processoId` era sempre undefined.
+        //
+        // A TELA nao navega para o processo ao efetivar: `AdmissoesTestesPage.encerrar` reabre o
+        // detalhe do proprio teste e avisa. Chegar ao processo e ato separado, pelo "Ver processo"
+        // do painel do teste — quem acabou de decidir o desfecho nem sempre vai tratar da admissao
+        // agora.
         //
         // So `processoId` sai daqui: o resto do teste (CPF inclusive) volta pelo GET de detalhe,
         // que ja tem a projecao certa.

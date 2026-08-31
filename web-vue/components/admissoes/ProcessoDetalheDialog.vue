@@ -13,7 +13,7 @@ import {
   processoCancelavel
 } from "~/utils/admissoes";
 import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
-import { formatarDataHora } from "~/utils/formatacao";
+import { formatarDataHora, mascararCpf } from "~/utils/formatacao";
 
 /**
  * O detalhe do processo de admissao — MODAL CENTRAL, e o unico caminho de detalhe.
@@ -45,6 +45,18 @@ const props = defineProps<{
    * silencio no dia em que uma terceira tela montasse o modal; obrigatoria, cada chamador declara.
    */
   podeVerTeste: boolean;
+  /**
+   * `admissoes_processos_visualizar` — a MESMA permissao que abre o processo. Revelar nao pede uma
+   * segunda: o que muda e que fica registrado quem viu e quando.
+   */
+  podeVerCpf: boolean;
+  /**
+   * O CPF depois de revelado. Mora na PAGINA, nao aqui: e ela que faz a chamada auditada e que
+   * limpa o valor ao fechar. O modal so exibe — e so enquanto estiver aberto.
+   */
+  cpfRevelado: string | null;
+  /** A chamada esta em curso. Vem da pagina, que e quem sabe quando ela termina. */
+  revelandoCpf: boolean;
   processando: boolean;
   // O painel antigo NAO declarava esta prop, e a pagina a passava mesmo assim: virava atributo solto
   // e o carregamento nunca aparecia. Num drawer isso passava; um modal vazio no meio da tela, nao.
@@ -58,9 +70,59 @@ const emit = defineEmits<{
   (event: "verTeste"): void;
   // UM evento. A edicao dos internos e do exame virou um modal so, aberto pela pagina.
   (event: "editarInternos"): void;
+  (event: "revelarCpf"): void;
 }>();
 
 const dialogCancelar = ref(false);
+
+/**
+ * Revelar CPF — ato explicito, e UM por clique.
+ *
+ * O CPF do processo so existe na admissao DIRETA. Vindo de teste efetivado, a coluna
+ * `admissoes_processos.cpf` e nula por CHECK (PROJECT_BRAIN/34 D-1) e o documento mora no teste: o
+ * servidor responde 400 dizendo isso. Por isso o botao olha a ORIGEM, e nao a mascara — a mascara
+ * aparece nas duas origens, porque a projecao resolve por `coalesce`. Oferecer o botao onde ele so
+ * pode falhar seria o botao morto que a D-8.1 tirou daqui.
+ */
+const podeRevelarCpf = computed(
+  () =>
+    props.podeVerCpf &&
+    props.processo?.origem === "admissao_direta" &&
+    props.processo.cpfMascarado !== null &&
+    props.cpfRevelado === null
+);
+
+/**
+ * O que a celula do CPF mostra.
+ *
+ * O servidor devolve o documento em DIGITOS CRUS (`52998224725`), enquanto a mascara vem formatada
+ * (`•••.•••.•••-••`): sem formatar, revelar trocava um valor pontuado por uma tira de numeros, e
+ * ainda dava ao `overflow-wrap: anywhere` da celula a chance de partir o CPF no meio.
+ */
+const cpfExibido = computed(() =>
+  props.cpfRevelado ? mascararCpf(props.cpfRevelado) : (props.processo?.cpfMascarado ?? "—")
+);
+
+// Guarda SINCRONA do clique duplo. `disabled` sozinho nao basta: dois cliques no mesmo tick chegam
+// antes de qualquer re-render, e cada um viraria uma requisicao e um evento `cpf_revelado` na
+// trilha. Uma revelacao, uma linha de auditoria.
+const pedindoCpf = ref(false);
+const revelando = computed(() => pedindoCpf.value || props.revelandoCpf);
+
+function pedirCpf() {
+  if (revelando.value || props.cpfRevelado !== null) return;
+  pedindoCpf.value = true;
+  emit("revelarCpf");
+}
+
+// Borda de descida: a pagina terminou — com CPF ou com erro — e o botao volta a poder ser usado.
+// Sem isto, uma falha deixaria o botao travado ate fechar o modal.
+watch(
+  () => props.revelandoCpf,
+  (emCurso) => {
+    if (!emCurso) pedindoCpf.value = false;
+  }
+);
 
 // Enquanto o GET nao volta, `processo` e nulo. Mostrar o card vazio seria uma caixa em branco no
 // meio da tela; o drawer disfarcava isso porque encostava na borda.
@@ -94,6 +156,7 @@ watch(
     }
 
     dialogCancelar.value = false;
+    pedindoCpf.value = false;
 
     const alvo = origemDoFoco;
     origemDoFoco = null;
@@ -166,7 +229,39 @@ function confirmarCancelar() {
             </dd>
 
             <dt>CPF</dt>
-            <dd>{{ processo.cpfMascarado ?? "—" }}</dd>
+            <dd>
+              <!--
+                A mascara e o padrao, e continua ate alguem PEDIR o documento. Revelado, o CPF vive
+                so aqui dentro, enquanto o modal estiver aberto: nao vai para URL, query, titulo,
+                tooltip, aviso nem para a listagem.
+
+                O botao repete o tratamento do "Ver o teste" logo acima — `<br />` e `ps-0`, em
+                linha propria —, porque os dois moram na mesma celula deste `dl`.
+              -->
+              <span class="cx-num">{{ cpfExibido }}</span>
+              <template v-if="podeRevelarCpf">
+                <br />
+                <v-btn
+                  variant="text"
+                  size="x-small"
+                  class="ps-0"
+                  :loading="revelando"
+                  :disabled="revelando"
+                  @click="pedirCpf"
+                >
+                  Ver CPF
+                </v-btn>
+              </template>
+              <!--
+                Live region SEMPRE montada, e nao `v-if`: regiao que nasce junto com o texto
+                costuma nao ser anunciada por leitor de tela — e anunciar e justamente o ponto,
+                porque o valor muda depois de uma acao. Ela diz que a consulta foi registrada; o
+                documento em si nao entra aqui, para nao virar um segundo canal de saida do dado.
+              -->
+              <span class="detalhe-derivacao" role="status">
+                {{ cpfRevelado ? "CPF revelado. Esta consulta ficou registrada no histórico." : "" }}
+              </span>
+            </dd>
 
             <dt>Função operacional</dt>
             <dd>{{ processo.funcaoNome ?? "—" }}</dd>

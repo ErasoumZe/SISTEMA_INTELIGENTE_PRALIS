@@ -272,7 +272,10 @@ describe("a V0 e puramente aditiva", () => {
       const sql = readFileSync(join(dir, arquivo), "utf8");
       const alterados = [...sql.matchAll(/ALTER TABLE "([a-z0-9_]+)"/gi)].map((m) => m[1]);
       const permitidas = new Set(["admissoes_processos", "admissoes_processos_historico"]);
-      expect(alterados.filter((t) => !permitidas.has(t ?? "")), arquivo).toEqual([]);
+      expect(
+        alterados.filter((t) => !permitidas.has(t ?? "")),
+        arquivo
+      ).toEqual([]);
     }
   });
 });
@@ -396,5 +399,41 @@ describe("a trilha e append-only", () => {
     const codigo = readFileSync(join(RAIZ, "db", "src", "schema", "app.schema.ts"), "utf8");
     const bloco = codigo.slice(codigo.indexOf("admissoes_processos_historico_acao_check"));
     expect(bloco.slice(0, 160)).toContain("'criado', 'cancelado'");
+  });
+});
+
+/**
+ * ADM-003 V1C — a revelacao do CPF passou a ter botao na tela. A ROTA nao mudou; estas guardas
+ * fixam o que a tela agora depende, para que "melhorar" a rota depois nao vaze documento.
+ */
+describe("revelar CPF do processo continua um ato, e nunca uma URL", () => {
+  const controller = fontesDoProcesso().find((f) => f.nome === "processos.controller.ts");
+
+  it("a rota de CPF e POST, e nao existe GET equivalente", () => {
+    const codigo = controller?.codigo ?? "";
+    // Escrito em pedacos para este arquivo nao ser o unico culpado da propria varredura.
+    const rota = '"/api/admissoes/' + 'processos/:id/cpf"';
+    const declaracao = codigo.lastIndexOf("app.", codigo.indexOf(rota));
+    expect(declaracao, "rota de CPF nao encontrada").toBeGreaterThan(-1);
+
+    // O verbo que precede a rota tem de ser POST: documento nao entra em URL, e um GET ainda o
+    // deixaria no log do servidor, no historico do navegador e no `referer`.
+    expect(codigo.slice(declaracao, codigo.indexOf(rota))).toContain("app.post(");
+    expect([...codigo.matchAll(/app\.get\([^;]*?processos\/:id\/cpf/gsu)]).toHaveLength(0);
+  });
+
+  it("nenhuma rota do modulo aceita CPF em caminho ou query", () => {
+    for (const { nome, codigo } of fontesDoProcesso()) {
+      // Um `:cpf` no path ou um `cpf` lido de querystring poria o documento no log do servidor,
+      // no historico do navegador e no referer. A busca da listagem e por NOME, de proposito.
+      expect(codigo, `${nome} (path)`).not.toMatch(/"\/api\/admissoes\/processos[^"]*:cpf/u);
+      expect(codigo, `${nome} (query)`).not.toMatch(/request\s*\.\s*query[\s\S]{0,80}?\bcpf\b/u);
+    }
+  });
+
+  it("a revelacao usa a permissao de VISUALIZAR, e nao uma terceira", () => {
+    const codigo = controller?.codigo ?? "";
+    const bloco = codigo.slice(codigo.indexOf('processos/:id/cpf"'));
+    expect(bloco.slice(0, 300)).toContain("admissoes_processos_visualizar");
   });
 });
