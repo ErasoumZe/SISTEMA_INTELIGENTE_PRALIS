@@ -75,6 +75,25 @@ const sqlIndices = `
   order by indexname
 `;
 
+/**
+ * O PREDICADO dos indices, e nao so o nome.
+ *
+ * `sqlIndices` compara `indexname`, e nome nao carrega clausula parcial: um indice `WHERE ...` num
+ * caminho e total no outro passa despercebido, porque os dois se chamam igual. A migration 0036
+ * trocou exatamente o predicado de `admissoes_processos_historico_evento_unico`, entao ela precisa
+ * de uma comparacao que enxergue isso.
+ *
+ * Restrito a `admissoes_%` de proposito: ampliar para o banco inteiro e vertical propria, porque
+ * pode revelar drift preexistente em indices que nada tem a ver com esta mudanca — e um vermelho
+ * herdado esconderia o que este teste existe para provar.
+ */
+const sqlIndicesAdmissoes = `
+  select indexname, indexdef
+  from pg_indexes
+  where schemaname = 'public' and indexname like 'admissoes_%'
+  order by indexname
+`;
+
 const sqlConstraints = `
   select conrelid::regclass::text as tabela, conname
   from pg_constraint
@@ -196,6 +215,28 @@ describe("migracoes integration", () => {
       consultarTodos(sqlConstraints)
     ]);
     expect(constraintsMigrate).toEqual(constraintsPush);
+  });
+
+  it("P0-0036 Deve_TerOMesmoPredicadoDeIndice_Quando_ProvisionarViaMigrate", async () => {
+    const [defsMigrate, defsPush] = await Promise.all([
+      bancoMigrado
+        .query<{ indexname: string; indexdef: string }>(sqlIndicesAdmissoes)
+        .then((resultado) => resultado.rows),
+      consultarTodos<{ indexname: string; indexdef: string }>(sqlIndicesAdmissoes)
+    ]);
+    expect(defsMigrate).toEqual(defsPush);
+
+    // E o predicado tem de ser o da 0036, nos DOIS caminhos: o schema Drizzle e o arquivo .sql
+    // podem divergir em silencio, e foi essa divergencia que criou o defeito que a 0036 corrige.
+    const alvo = "admissoes_processos_historico_evento_unico";
+    for (const [origem, linhas] of [
+      ["migrate", defsMigrate],
+      ["push", defsPush]
+    ] as const) {
+      const indice = linhas.find((linha) => linha.indexname === alvo);
+      expect(indice, `${alvo} ausente em ${origem}`).toBeDefined();
+      expect(indice?.indexdef, origem).toContain("cpf_revelado");
+    }
   });
 
   it("Deve_DisponibilizarUuidV7_Quando_ProvisionarViaMigrate", async () => {

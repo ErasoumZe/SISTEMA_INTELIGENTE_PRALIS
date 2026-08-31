@@ -1278,4 +1278,191 @@ describe("admissoes processos integration", () => {
       expect(resposta.statusCode, rota.url).toBe(404);
     }
   });
+
+  // ============================================================ ADM-003 P0 / migration 0036
+  // Revelar CPF e LEITURA. Ate a 0036 ela consumia uma versao do processo, e consumir versao e
+  // UPDATE na linha raiz: gravava `atualizado_por` e disparava a trigger de `atualizado_em`. O
+  // detalhe passava a mostrar como "Alterado por" quem apenas tinha lido o documento.
+  //
+  // Estes casos provam as duas metades: o que a revelacao DEIXOU de fazer (escrever), e o que ela
+  // nao pode ter afrouxado (a unicidade das acoes funcionais).
+
+  /** A linha raiz crua. E aqui que a contaminacao apareceria — o DTO nao mostra `atualizado_em`. */
+  async function linhaRaiz(id: string) {
+    return consultarUm<{ versao: number; atualizado_por: string | null; atualizado_em: Date }>(
+      `select versao, atualizado_por, atualizado_em from admissoes_processos where id = $1`,
+      [id]
+    );
+  }
+
+  async function revelar(cookie: string, id: string) {
+    return contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${id}/cpf`,
+      headers: { cookie },
+      payload: {}
+    });
+  }
+
+  it("P0-0036 Deve_NaoContaminarVersaoNemAutoria_Quando_RevelarCpf", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    const antes = await linhaRaiz(id);
+    expect(antes).not.toBeNull();
+
+    // Quem revela e OUTRO ator, de proposito: com o mesmo criador, `atualizado_por` continuaria
+    // igual mesmo havendo UPDATE, e o teste passaria sem provar nada.
+    assertOk(await revelar(cookieDpReal, id));
+
+    const depois = await linhaRaiz(id);
+    expect(depois?.versao).toBe(antes?.versao);
+    expect(depois?.atualizado_por).toBe(antes?.atualizado_por);
+    expect(depois?.atualizado_em?.toISOString()).toBe(antes?.atualizado_em?.toISOString());
+  });
+
+  it("P0-0036 Deve_AuditarVariasRevelacoes_NaMesmaVersaoFuncional", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    // Tres leituras, tres linhas de trilha. Antes da 0036 cada uma exigia uma versao nova; com o
+    // indice unico simples, duas na mesma versao teriam violado a constraint e virado 500.
+    assertOk(await revelar(cookieDp, id));
+    assertOk(await revelar(cookieDpReal, id));
+    assertOk(await revelar(cookieDp, id));
+
+    const revelacoes = await consultarTodos<{ versao: number }>(
+      `select versao from admissoes_processos_historico where processo_id = $1 and acao = 'cpf_revelado'`,
+      [id]
+    );
+    expect(revelacoes).toHaveLength(3);
+
+    // Todas na MESMA versao, e essa versao e a funcional vigente — a do `criado`, que nao mudou.
+    const raiz = await linhaRaiz(id);
+    expect(new Set(revelacoes.map((linha) => linha.versao))).toEqual(new Set([raiz?.versao]));
+  });
+
+  it("P0-0036 Deve_CancelarSemConflito_Quando_OutroAtorRevelouOCpf", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    // Ator A le o detalhe e guarda a versao, como a tela faz ao abrir o modal.
+    const detalhe = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    assertOk(detalhe);
+    const versaoNaTelaDeA = detalhe.json().data.versao as number;
+
+    // Ator B revela o CPF enquanto o modal de A esta aberto.
+    assertOk(await revelar(cookieDpReal, id));
+
+    // A cancela com a versao que tinha. Ninguem alterou nada de negocio: tem de passar.
+    const cancelado = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${id}/cancelar`,
+      headers: { cookie: cookieDp },
+      payload: { versao: versaoNaTelaDeA }
+    });
+    expect(cancelado.statusCode).toBe(200);
+  });
+
+  it("P0-0036 Deve_EditarInternosEExameSemConflito_E_GravarNaVersaoSeguinte", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    assertOk(await revelar(cookieDp, id));
+
+    // A versao do BLOCO INTERNO nunca foi tocada pela revelacao — nem antes, nem agora. O que este
+    // caso prova e que o evento funcional seguinte grava sem colidir com o `cpf_revelado` que ficou
+    // na versao 1.
+    const internos = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/internos`,
+      headers: { cookie: cookieDpReal },
+      payload: { versao: 1, ctpsNumero: "1234567" }
+    });
+    expect(internos.statusCode).toBe(204);
+
+    const exame = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${id}/exame`,
+      headers: { cookie: cookieDpReal },
+      payload: { versao: 2, situacao: "guia_entregue" }
+    });
+    expect(exame.statusCode).toBe(204);
+
+    const eventos = await consultarTodos<{ acao: string; versao: number }>(
+      `select acao, versao from admissoes_processos_historico where processo_id = $1 order by ocorrido_em, versao`,
+      [id]
+    );
+    expect(eventos.map((evento) => evento.acao)).toEqual([
+      "criado",
+      "cpf_revelado",
+      "internos_alterados",
+      "exame_alterado"
+    ]);
+    // `criado` e `cpf_revelado` dividem a versao 1; os funcionais seguintes tem cada um a sua.
+    expect(eventos.map((evento) => evento.versao)).toEqual([1, 1, 2, 3]);
+  });
+
+  it("P0-0036 Deve_ManterAcoesFuncionaisUnicas_Quando_TransicaoRepetida", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    assertOk(await revelar(cookieDp, id));
+    assertOk(await revelar(cookieDp, id));
+
+    const cancelar = (versao: number) =>
+      contexto.app.inject({
+        method: "POST",
+        url: `/api/admissoes/processos/${id}/cancelar`,
+        headers: { cookie: cookieDp },
+        payload: { versao }
+      });
+
+    expect((await cancelar(1)).statusCode).toBe(200);
+    // Terminal continua terminal: o indice ficou PARCIAL, nao permissivo.
+    expect((await cancelar(2)).statusCode).toBe(409);
+
+    const eventos = await consultarTodos<{ acao: string }>(
+      `select acao from admissoes_processos_historico where processo_id = $1`,
+      [id]
+    );
+    const contar = (acao: string) => eventos.filter((evento) => evento.acao === acao).length;
+    expect(contar("criado")).toBe(1);
+    expect(contar("cancelado")).toBe(1);
+    expect(contar("cpf_revelado")).toBe(2);
+  });
+
+  it("P0-0036 Deve_ManterRevelacaoComoPostAuditado_E_RecusarGetEQuemNaoPodeVer", async () => {
+    const criado = await criarDireta(cookieDp);
+    assertOk(criado, 201);
+    const id = criado.json().data.id as string;
+
+    // Nao existe GET equivalente: documento nao entra em URL, e a rota de leitura seria cacheavel.
+    const porGet = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}/cpf`,
+      headers: { cookie: cookieDp }
+    });
+    expect(porGet.statusCode).toBe(404);
+
+    // Sem permissao de visualizar, nao ha revelacao — e nao ha trilha.
+    const semPermissao = await revelar(cookieSemPermissao, id);
+    expect(semPermissao.statusCode).toBe(403);
+
+    assertOk(await revelar(cookieDp, id));
+    const eventos = await consultarTodos<{ acao: string }>(
+      `select acao from admissoes_processos_historico where processo_id = $1 and acao = 'cpf_revelado'`,
+      [id]
+    );
+    expect(eventos).toHaveLength(1);
+  });
 });

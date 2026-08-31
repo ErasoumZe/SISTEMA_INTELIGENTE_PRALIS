@@ -1,9 +1,13 @@
 # 35 — Admissão: o fluxo completo, ponta a ponta (mapa e proposta)
 
-> Aberto em 31/08/2026, branch `feat/admissoes-testes-tnp`, HEAD `683ab97`. Piloto na **TNP**.
-> **Documento de mapeamento e proposta.** Nenhuma linha de código foi alterada, nenhuma migration foi
-> gerada e nada foi aplicado em banco nenhum. Sucede a `31` (ADM-001), a `33` (ADM-002 V0) e a `34`
+> Aberto em 31/08/2026, branch `feat/admissoes-testes-tnp`, sobre o HEAD `683ab97`. Piloto na **TNP**.
+> **Documento de mapeamento e proposta.** Sucede a `31` (ADM-001), a `33` (ADM-002 V0) e a `34`
 > (ADM-003 V1A/V1B), e não revoga nenhuma decisão delas.
+>
+> **Do mapa saiu uma correção, e só ela.** O achado A-1 (seção 12) virou a migration **0036** e a
+> mudança em `revelarCpfDoProcesso`, aprovadas por Marco em 31/08/2026. **Nada mais deste documento
+> foi implementado**: o SQL da seção 6 segue proposta, e **nenhuma migration foi aplicada em banco
+> nenhum** — nem a 0036.
 
 ## 0. Como ler
 
@@ -608,22 +612,36 @@ nada (quem pergunta já tem o token na mão) e evita o candidato ficar sem saber
 e foi calibrado para operador logado. Rota pública precisa de teto próprio por IP, bem mais baixo, e
 de um limite por token — o link é de uma pessoa, não de uma população.
 
-### 7.3 Trilha — e uma decisão que precisa vir junto
+### 7.3 Trilha — decisão tomada em 31/08/2026
 
 As ações novas (`convite_gerado`, `convite_revogado`, `ficha_enviada`, `ficha_devolvida`,
 `ficha_aprovada`, `efetivado`) ampliam o CHECK de `admissoes_processos_historico_acao_check`. Aditivo,
 barato.
 
-**O que não é barato:** `admissoes_processos_historico_evento_unico` é único em `(processo_id, versao)`
-**sem cláusula parcial** ([0033](db/migrations/0033_blue_trauma.sql#L48)) — diferente do histórico do
-teste, que é parcial. Hoje isso funciona porque **toda** ação do processo incrementa a versão. Ações
-do **candidato** não deveriam incrementar a versão do processo (ele não está editando o processo), e
-duas delas na mesma versão colidiriam no índice.
+**O que não era barato já foi resolvido.** `admissoes_processos_historico_evento_unico` nasceu único em
+`(processo_id, versao)` **sem cláusula parcial** ([0033](db/migrations/0033_blue_trauma.sql#L48)),
+diferente do histórico do teste. Isso obrigava **toda** ação a consumir uma versão — e consumir versão
+é UPDATE na linha raiz.
 
-Duas saídas, e a escolha precisa ser feita **antes** da V3, não depois: (a) tornar o índice parcial,
-como no teste; ou (b) manter a regra de que toda ação gravada incrementa a versão. Recomendo **(a)**,
-porque a alternativa faz o candidato invalidar a versão que o DP tem na tela — que é exatamente o
-defeito descrito no **A-1** da seção 12.
+> **Decisão de Marco, 31/08/2026: o índice vira parcial** (migration **0036**), excluindo apenas
+> `cpf_revelado`, sem tabela separada e sem tocar na 0033. É a mesma resposta que a ADM-001 deu na
+> 0032 — o processo convergiu para o teste, e não o contrário.
+>
+> As alternativas foram descartadas com o motivo escrito: manter o status quo deixaria a autoria
+> contaminada de pé; uma tabela separada de acessos reabriria a decisão da ADM-001 registrada em
+> [shared/src/admissoes/index.ts:70-71](shared/src/admissoes/index.ts#L70-L71) — *"`cpf_revelado` esta
+> aqui, e nao numa tabela separada, porque revelar CPF e um ato sobre ESTE teste e o DP precisa ler
+> tudo numa linha do tempo so."*
+
+**O que isso libera para a V3:** ação do candidato não precisa consumir versão do processo — ele não
+está editando o processo. Quando `ficha_enviada` e as demais chegarem, a mesma pergunta já está
+respondida, e a regra é a que vale para `cpf_revelado`.
+
+> **Achado de gate, aberto:** [migracoes.test.ts:188-192](tests/integration/migracoes/migracoes.test.ts#L188-L192)
+> compara `indexname` entre `migrate` e `push`, **não `indexdef`**. Um índice parcial num caminho e
+> total no outro passaria despercebido, porque o nome é o mesmo. A 0036 fecha esse buraco só para o
+> índice que ela toca; ampliar a comparação para todos é vertical própria — e pode revelar drift
+> preexistente em outros índices, que é justamente por que não entrou de carona aqui.
 
 ---
 
@@ -705,47 +723,51 @@ que ninguém usa — e campo que ninguém usa também custa, porque é dado pess
 
 ## 12. Achados da leitura
 
-Encontrados ao mapear, **não corrigidos** (este documento não altera código).
+Dois foram **corrigidos** em 31/08/2026 (A-1 e A-2, abaixo). Dois seguem **abertos** (A-3 e A-4).
 
-### A-1 · Uma leitura auditada escreve na linha do processo — e produz conflito falso
+### A-1 · Uma leitura auditada escrevia na linha do processo — **RESOLVIDO**
 
-> **Corrigido em 31/08/2026, no mesmo dia.** A primeira redação afirmava que a tela não recarrega o
-> processo e que revelar → cancelar dava 409 numa sessão só. **Estava errado:** a tela recarrega
-> ([AdmissoesProcessosPage.vue:262-265](web-vue/components/admissoes/AdmissoesProcessosPage.vue#L262-L265)),
-> com comentário que diz exatamente por quê, desde o commit `d6d677c`. O defeito é outro, e é este.
+> **Duas correções, na ordem em que aconteceram.**
+>
+> **A primeira foi minha, no texto.** A redação original dizia que a tela não recarrega o processo e
+> que revelar → cancelar dava 409 numa sessão só. **Estava errado:** a tela recarrega desde o commit
+> `d6d677c`, com comentário dizendo exatamente por quê.
+>
+> **A segunda foi no código**, depois de Marco recusar o defeito como estava descrito: o 409 dependia
+> de concorrência que ninguém observou, e por isso **não sustentava sozinho** o P0. O que sustentava
+> era outra coisa, verificável com um usuário e um clique — e é ela que foi corrigida.
 
-**FATO.** `revelarCpfDoProcesso` chama `avancarVersaoProcessoRepository`
-([processos.service.ts:259](api/src/admissoes/processos.service.ts#L259)), que faz
+**O defeito.** `revelarCpfDoProcesso` chamava `avancarVersaoProcessoRepository`, que faz
 `set({ versao: versaoAtual + 1, atualizadoPor: ator })`
-([processos.repository.ts:328](api/src/admissoes/processos.repository.ts#L328)) — e o UPDATE dispara a
-trigger `admissoes_processos_set_atualizado_em` da `0033`. Ou seja, **revelar um CPF é a única leitura
-do módulo que escreve na tabela raiz**, e escreve três coisas: `versao`, `atualizado_por` e
-`atualizado_em`.
+([processos.repository.ts:328](api/src/admissoes/processos.repository.ts#L328)), e o UPDATE disparava a
+trigger `admissoes_processos_set_atualizado_em` da `0033`. **Revelar um CPF era a única leitura do
+módulo que escrevia na tabela raiz** — `versao`, `atualizado_por` e `atualizado_em`.
 
-Três consequências, todas reais:
+O sintoma direto: o rodapé do detalhe mostrava como **"Alterado por … · data"** quem apenas *leu* o
+documento. A trilha registrava `cpf_revelado` corretamente; o cabeçalho, não. E não existia variante
+que resolvesse só a autoria — a trigger é `BEFORE UPDATE` em qualquer coluna, então enquanto houvesse
+UPDATE, `atualizado_em` mudaria.
 
-1. **O rodapé do detalhe passa a mentir.** "Alterado por … · data" mostra quem apenas *leu* o
-   documento, como se tivesse alterado o processo. A trilha registra `cpf_revelado` corretamente; o
-   cabeçalho, não.
-2. **Conflito falso em concorrência real.** A tela se protege relendo, mas isso só cobre a própria
-   aba. DP A com o detalhe aberto, DP B revela o CPF, DP A clica em "Cancelar e arquivar" → **409
-   "Alguém alterou este processo enquanto você lia"**, sem nenhuma alteração de negócio. A tela de
-   Testes, que também cancela o processo ([AdmissoesTestesPage.vue:290](web-vue/components/admissoes/AdmissoesTestesPage.vue#L290))
-   e nem oferece o botão de revelar, nunca se autocorrige.
-3. **A defesa vive no cliente.** É um `await abrirDetalhe(id)` num arquivo `.vue`. Qualquer consumidor
-   novo da API precisa lembrar dele — o oposto da disciplina do módulo, onde a regra mora no serviço e
-   no banco.
+O sintoma derivado, que existia mas não foi observado: em concorrência real (duas abas, dois DPs, ou a
+tela de Testes — que cancela o processo e nem oferece o botão de revelar), a versão mudava sem
+alteração de negócio e o cancelamento seguinte levava 409.
 
-O bloco interno **não** é afetado: ele tem versão própria (`admissoes_processos_internos.versao`), que
-a revelação não toca. Por isso o 409 de "salvar internos/exame" não vem daqui.
+**A correção.** Migration **0036** torna o índice do histórico parcial, e o serviço grava o evento com
+a versão vigente lida sob o lock, sem tocar na linha. O lock ficou — não para escrever, mas para a
+versão ser estável na transação e para manter a ordem de aquisição das demais escritas.
 
-### A-2 · As duas trilhas divergem no mesmo ato
+O bloco interno nunca foi afetado: ele tem versão própria (`admissoes_processos_internos.versao`), que
+a revelação não tocava. Por isso o 409 de "salvar internos/exame" nunca veio daqui.
 
-**FATO.** No teste, `cpf_revelado` **não** incrementa versão, e o índice do histórico é **parcial** de
-propósito, para aceitar a segunda revelação ([admissoes.service.ts:457-469](api/src/admissoes/admissoes.service.ts#L457-L469)).
-No processo, a mesma ação **incrementa** a versão, e o índice é simples. As duas escolhas são
-defensáveis isoladamente; juntas, são duas respostas para a mesma pergunta — e a segunda produz o A-1.
-É a decisão que a seção 7.3 precisa fechar antes da V3.
+### A-2 · As duas trilhas divergiam no mesmo ato — **RESOLVIDO**
+
+**Era o seguinte.** No teste, `cpf_revelado` não incrementa versão e o índice do histórico é parcial
+desde a 0032. No processo, a mesma ação incrementava a versão, e o índice era simples. Duas respostas
+para a mesma pergunta dentro do mesmo módulo — o que a `AGENTS.md` §4.1 proíbe — e era a segunda que
+produzia o A-1.
+
+**Resolvido pela 0036**, com o processo convergindo para o teste. As duas trilhas agora respondem
+igual, e a decisão está registrada na seção 7.3.
 
 ### A-3 · Comentário desatualizado em `shared`
 
@@ -766,11 +788,12 @@ resolver isso antes — e é uma decisão de Marco, não uma etapa técnica.
 
 ## 13. O que este documento **não** fez
 
-- Não gerou migration, não alterou schema Drizzle e não rodou `drizzle-kit`.
-- Não alterou uma linha de código de aplicação.
+- Não aplicou migration em banco nenhum — **inclusive a 0036**, que existe em arquivo e nunca rodou.
+- Não gerou nenhuma outra migration: o SQL da seção 6 (convite, ficha, dependentes, vínculo) segue proposta.
 - Não leu o banco de produção — a checagem de CPF duplicado em `colaboradores` (BLOQUEIO 3) continua **não feita**.
 - Não escreveu, sugeriu ou parafraseou o texto do aviso de privacidade.
 - Não definiu a política de documentos, retenção ou descarte.
 - Não inventou nada sobre o Conplus: listou as seis perguntas e parou.
 - Não tocou em `web-vue/components/admissoes/TesteFormDialog.vue`, em `PROJECT_BRAIN/32_ROBO_CARTOGRAFO_PLANILHAS.md` nem em `PROJECT_BRAIN/panilhas/`.
-- Não corrigiu os achados da seção 12.
+- Não corrigiu os achados **A-3** e **A-4** da seção 12: eles seguem abertos. A-1 e A-2 foram corrigidos, e é a única mudança de código que saiu daqui.
+- Não ampliou a comparação `migrate` × `push` para todos os índices (achado de gate na seção 7.3): a 0036 fecha só o índice que ela toca.
