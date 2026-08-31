@@ -187,6 +187,12 @@ export type ContextoConferencia = {
   // Quem entregou fisicamente (solicitacao D4 executada). Null em avulsa e retorno final — nesses
   // casos o operador e o `criadoPor`.
   executadoPor: string | null;
+  // P1/#101: a conferencia REESCREVE `conta_destino_id` com a candidata vencedora, entao ela e o
+  // terceiro escritor do destino — e tambem consegue fabricar um movimento Caixa -> Cofre. Os dois
+  // campos ja vinham no SELECT; ficam expostos para a guarda do servico decidir sem segunda ida ao
+  // banco.
+  caixaId: string | null;
+  contaCofreId: string | null;
   ehCaixaParaCofre: boolean;
 };
 
@@ -224,6 +230,8 @@ export async function buscarContextoConferenciaRepository(
     lacre: linha.lacre,
     criadoPor: linha.criadoPor,
     executadoPor: linha.executadoPor,
+    caixaId: linha.caixaId,
+    contaCofreId: linha.contaCofreId,
     ehCaixaParaCofre
   };
 }

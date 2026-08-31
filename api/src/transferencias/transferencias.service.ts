@@ -102,8 +102,15 @@ export async function listarTransferencias(
 //
 // A funcao e PURA: quem chama ja resolveu a conta cofre. Assim a criacao paga a consulta so quando
 // a origem e a conta do PDV, e a edicao — que precisa da mesma conta para a outra trava — paga uma
-// vez so. A mensagem mora aqui porque ela e a mesma nos dois caminhos, e duas copias divergiriam no
-// primeiro ajuste de texto.
+// vez so.
+//
+// A mensagem e uma constante porque os TRES escritores de `conta_destino_id` (criacao, edicao e
+// conferencia) recusam pelo mesmo motivo: quem quer levar dinheiro do Caixa ao Cofre usa o Caixa.
+// Tres copias divergiriam no primeiro ajuste de texto, e a terceira porta ja provou que escritor
+// esquecido e o modo de falha desta area.
+const CAMINHO_UNICO_DA_ENTREGA_AO_COFRE =
+  "Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa";
+
 function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
   contaOrigemId: string;
   contaDestinoId: string;
@@ -111,7 +118,7 @@ function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
   contaCofreId: string | null;
 }): void {
   if (!ehMovimentoDoCaixaParaOCofre(movimento)) return;
-  throw new Error("Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa");
+  throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
 }
 
 export async function criarTransferencia(
@@ -148,13 +155,21 @@ export async function criarTransferencia(
       }
       // A consulta ao cofre so acontece quando a origem E a conta do PDV: transferencia comum e
       // suprimento (cofre -> caixa) nao pagam por esta guarda.
+      //
+      // TODA conta que pode virar destino entra na verificacao — a ancora E as candidatas de
+      // `contasDestinoIds`. A conferencia reescreve `conta_destino_id` com a candidata vencedora,
+      // entao olhar so a ancora seria fechar a porta e deixar a janela ao lado aberta: bastava
+      // listar o cofre como candidato para montar o mesmo malote em dois tempos.
       if (caixa && dados.contaOrigemId === caixa.pdvContaId) {
-        exigirCaminhoUnicoDaEntregaAoCofre({
-          contaOrigemId: dados.contaOrigemId,
-          contaDestinoId: dados.contaDestinoId,
-          pdvContaId: caixa.pdvContaId,
-          contaCofreId: await buscarContaCofreEmpresaRepository(dados.empresaId, tx)
-        });
+        const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+        for (const contaDestinoId of [dados.contaDestinoId, ...dados.contasDestinoIds]) {
+          exigirCaminhoUnicoDaEntregaAoCofre({
+            contaOrigemId: dados.contaOrigemId,
+            contaDestinoId,
+            pdvContaId: caixa.pdvContaId,
+            contaCofreId
+          });
+        }
       }
 
       // R-143 literal ("nao existe transferencia sem fundo na conta de origem"), agora com teste.
@@ -227,6 +242,22 @@ export async function confirmarTransferencia(
     // Transferencia generica NAO entra neste ramo: la o comportamento vigente e preservado
     // (valor opcional, divergencia confirma e notifica).
     const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
+
+    // P1/#101 · a conferencia e o TERCEIRO escritor de `conta_destino_id`, e a autoridade final.
+    //
+    // `confirmarTransferenciaRepository` grava a conta candidata vencedora. Sem esta guarda, uma
+    // transferencia comum do caixa — criada com o cofre entre as `contasDestinoIds` — virava
+    // malote Caixa -> Cofre no ato da conferencia, depois do fechamento e sem nenhuma das amarras
+    // do fluxo canonico: sem confirmador exigido na criacao, sem ordem, sem idempotencia e sem
+    // recusa auditavel, porque `tipo` continua `suprimento` e `/recusar-conferencia` responde 404.
+    //
+    // A criacao ja nao deixa mais essa linha nascer. Esta trava alcanca as que JA existem: sem ela,
+    // o legado do banco continuaria com o atalho aberto. `ehCaixaParaCofre` sai de fora porque a
+    // entrega canonica confirma exatamente assim — e ela e o caminho que deve funcionar.
+    if (contexto && !contexto.ehCaixaParaCofre && contexto.caixaId && dados.contaDestinoId === contexto.contaCofreId) {
+      throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
+    }
+
     if (contexto?.ehCaixaParaCofre) {
       if (dados.valorRecebido == null) {
         throw erroValidacao(
