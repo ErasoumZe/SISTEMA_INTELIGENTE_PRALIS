@@ -253,6 +253,13 @@
       "when": 1787873811746,
       "tag": "0035_majestic_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788210687828,
+      "tag": "0036_sweet_mandarin",
+      "breakpoints": true
     }
   ]
 }
