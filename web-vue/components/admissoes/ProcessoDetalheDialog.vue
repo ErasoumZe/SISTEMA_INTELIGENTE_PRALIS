@@ -37,6 +37,14 @@ const props = defineProps<{
   historico: HistoricoProcessoDto[];
   podeCancelar: boolean;
   podeEditarInternos: boolean;
+  /**
+   * Se ESTA tela tem para onde levar o "Ver o teste". NAO e permissao — as duas acima sao.
+   *
+   * Obrigatoria de proposito: o modal e montado por duas telas, e so a de Testes sabe abrir um
+   * teste. Na de Processos o botao emitia para o vazio. Com a prop opcional o defeito voltaria em
+   * silencio no dia em que uma terceira tela montasse o modal; obrigatoria, cada chamador declara.
+   */
+  podeVerTeste: boolean;
   processando: boolean;
   // O painel antigo NAO declarava esta prop, e a pagina a passava mesmo assim: virava atributo solto
   // e o carregamento nunca aparecia. Num drawer isso passava; um modal vazio no meio da tela, nao.
@@ -148,7 +156,10 @@ function confirmarCancelar() {
             <dt>Origem</dt>
             <dd>
               {{ rotuloOrigemProcesso[processo.origem] }}
-              <template v-if="processo.testeId">
+              <!-- Duas condicoes, e as duas sao necessarias: o processo precisa TER teste, e a tela
+                   precisa saber abri-lo. Botao que nao leva a lugar nenhum gasta a confianca do DP
+                   mais rapido que botao ausente. -->
+              <template v-if="podeVerTeste && processo.testeId">
                 <br />
                 <v-btn variant="text" size="x-small" class="ps-0" @click="emit('verTeste')">Ver o teste</v-btn>
               </template>

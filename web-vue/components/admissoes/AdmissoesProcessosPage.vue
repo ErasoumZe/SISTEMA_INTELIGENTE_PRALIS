@@ -299,7 +299,13 @@ onMounted(async () => {
     @salvar="salvarInternos"
   />
 
-  <!-- UM caminho de detalhe: o modal central. O painel lateral foi removido, nao escondido. -->
+  <!--
+    UM caminho de detalhe: o modal central. O painel lateral foi removido, nao escondido.
+
+    `pode-ver-teste` e FALSO aqui: esta tela nao abre teste. Nao ha rota de processo para um teste
+    especifico, e mandar para a lista de Testes seria inventar navegacao. Sem esta linha o botao
+    "Ver o teste" renderizava e emitia para o vazio.
+  -->
   <ProcessoDetalheDialog
     :aberto="detalheAberto"
     :processo="processo"
@@ -308,6 +314,7 @@ onMounted(async () => {
     :pode-cancelar="podeCancelar"
     :pode-editar-internos="podeEditarInternos"
     :processando="processando"
+    :pode-ver-teste="false"
     @fechar="detalheAberto = false"
     @cancelar="cancelarProcesso"
     @editar-internos="() => { internosErro = ''; internosAberto = true; }"

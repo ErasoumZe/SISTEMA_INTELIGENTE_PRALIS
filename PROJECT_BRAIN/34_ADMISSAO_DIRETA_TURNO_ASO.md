@@ -142,12 +142,41 @@ carrega CTPS, PIS/NIT e o ASO. A Gerência recebe **403**, e há teste provando.
 
 - **"+ Novo cadastro"** continua a única entrada de admissão direta, em modal;
 - empresa e CNPJ aparecem **só para conferência**, vindos do perfil — sem seletor;
-- o painel lateral virou **só leitura**. Havia ali um formulário inline **e** uma fileira de botões de
-  exame: dois caminhos para o mesmo ato dentro de uma tela de leitura;
+- o detalhe do processo virou **só leitura**. Havia ali um formulário inline **e** uma fileira de
+  botões de exame: dois caminhos para o mesmo ato dentro de uma tela de leitura;
 - editar dados internos e exame acontece num **único modal**, que avisa a consequência **antes** do
   clique — escolher não apto diz que o processo será pausado;
 - a tela de **Testes** deixou de editar o processo: abre em leitura e leva para "Processos de
   admissão", que é a dona.
+
+> **O detalhe não é mais painel lateral: é modal central de leitura.** Atualizado em 31/08/2026.
+>
+> Ele era um `v-navigation-drawer` de 460px. Num celular de 390px isso é mais largo que a viewport,
+> e o que sobrava sumia atrás do `overflow-x: hidden` global — sem barra, sem sinal, sem alcance. A
+> gaveta também não prende o foco do teclado.
+>
+> O modal segue o desenho que o módulo já tinha (`ProcessoNovoDialog`, `ProcessoInternosDialog`), e
+> **sem `persistent`**: os dois seguram formulário com dado não salvo, e leitura não tem o que
+> segurar — X, Escape e clique fora fecham, e o foco volta para quem abriu. Nenhum campo, estado,
+> permissão ou ação mudou.
+>
+> A gaveta era montada por **duas** telas, e na de Testes só pela tag, sem `import`: o auto-import
+> do Nuxt registra `AdmissoesProcessoDetalhePainel`, não o nome curto, então ela nunca resolvia e o
+> processo, visto dali, não aparecia. As duas telas agora importam o mesmo modal — um caminho só.
+
+### D-8.1 · "Ver o teste" só existe onde há para onde ir
+
+O botão de voltar ao teste de origem **não é do processo, é do contexto**. Ele aparecia sempre que
+`testeId` existia, nas duas telas — e na de "Processos de admissão" emitia para o vazio: clicar não
+fazia nada, e nada explicava por quê. Não há rota de processo para um teste específico, e mandar
+para a lista de Testes seria inventar navegação que ninguém pediu.
+
+Quem monta o modal declara se sabe abrir um teste, por prop **obrigatória** (`podeVerTeste`):
+**Testes** passa `true` — é de lá que se chega ao processo, e é para lá que se volta; **Processos**
+passa `false`, e o botão não renderiza. Obrigatória, e não opcional com default: com default o
+defeito voltaria calado no dia em que uma terceira tela montasse o modal.
+
+Não é permissão — `podeCancelar` e `podeEditarInternos` são. É a existência do caminho.
 
 ---
 

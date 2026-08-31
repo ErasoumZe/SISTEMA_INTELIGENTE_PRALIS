@@ -480,6 +480,8 @@ onMounted(async () => {
     @verificar-cpf="verificarCpf"
   />
 
+  <!-- `pode-ver-teste` e VERDADEIRO so aqui: e desta tela que se chega ao processo, e
+       `voltarAoTeste` reabre o teste de origem. O caminho de volta existe, entao o botao existe. -->
   <ProcessoDetalheDialog
     :aberto="processoAberto"
     :processo="processo"
@@ -488,6 +490,7 @@ onMounted(async () => {
     :pode-cancelar="podeCancelarProcesso"
     :pode-editar-internos="false"
     :processando="processoProcessando"
+    :pode-ver-teste="true"
     @cancelar="cancelarProcessoAdmissao"
     @editar-internos="irParaProcessos"
     @fechar="processoAberto = false"

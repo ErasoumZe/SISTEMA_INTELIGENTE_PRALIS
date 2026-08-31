@@ -110,6 +110,8 @@ type Cenario = {
   processo?: ProcessoDetalheDto | null;
   podeCancelar?: boolean;
   podeEditarInternos?: boolean;
+  /** O default e a tela de Testes, que TEM caminho de volta. A de Processos passa `false`. */
+  podeVerTeste?: boolean;
   carregando?: boolean;
 };
 
@@ -127,6 +129,7 @@ function montar(cenario: Cenario = {}) {
       historico: HISTORICO,
       podeCancelar: cenario.podeCancelar ?? true,
       podeEditarInternos: cenario.podeEditarInternos ?? true,
+      podeVerTeste: cenario.podeVerTeste ?? true,
       processando: false,
       carregando: cenario.carregando ?? false
     }
@@ -142,8 +145,14 @@ function textoDoModal(): string {
   return overlay()?.textContent?.replace(/\s+/gu, " ").trim() ?? "";
 }
 
+/**
+ * Casa o rotulo INTEIRO, nao por substring: "Ver o teste de origem" casaria com `includes("Ver o
+ * teste")` e um rotulo novo passaria despercebido por um teste que jura provar o antigo.
+ */
 function botaoPorTexto(rotulo: string): HTMLElement | undefined {
-  return [...(overlay()?.querySelectorAll("button") ?? [])].find((botao) => botao.textContent?.includes(rotulo));
+  return [...(overlay()?.querySelectorAll("button") ?? [])].find(
+    (botao) => botao.textContent?.replace(/\s+/gu, " ").trim() === rotulo
+  );
 }
 
 /** Espera o `setTimeout(0)` da diretiva `click-outside` e o ciclo de render que ele dispara. */
@@ -201,6 +210,40 @@ describe("o detalhe abre como modal central", () => {
     // encostada na borda isso passava; uma caixa em branco no meio da tela, nao.
     montar({ processo: null, carregando: true });
     expect(textoDoModal()).toContain("Carregando o processo");
+  });
+});
+
+// ===== "Ver o teste": so onde ha para onde ir ===================================================
+
+describe("o caminho de volta ao teste so aparece onde ele existe", () => {
+  it("Deve_OferecerVerOTeste_Quando_A_TelaSabeAbrirOTeste", async () => {
+    // Contexto da tela de Testes: ela monta o modal e escuta `verTeste` com `voltarAoTeste`.
+    const wrapper = montar({ podeVerTeste: true });
+    const botao = botaoPorTexto("Ver o teste");
+    expect(botao).toBeTruthy();
+
+    botao?.click();
+    await nextTick();
+    expect(wrapper.emitted("verTeste")).toHaveLength(1);
+  });
+
+  it("Deve_NaoRenderizarVerOTeste_Quando_A_TelaNaoTemParaOndeLevar", () => {
+    // Contexto da tela de Processos: nao ha rota de processo para um teste especifico. O botao
+    // renderizava e emitia para o vazio — clicar nao fazia nada, e nada explicava por que.
+    montar({ podeVerTeste: false });
+    expect(botaoPorTexto("Ver o teste")).toBeUndefined();
+    // Ancora positiva: sem ela, um modal que nem renderizasse passaria neste teste — `overlay()`
+    // devolveria `null` e a assercao negativa ficaria verde por vacuidade.
+    expect(textoDoModal()).toContain("Período de teste efetivado");
+  });
+
+  it("Deve_NaoRenderizarVerOTeste_Quando_AdmissaoDireta_NaoTemTesteDeOrigem", () => {
+    // Esta guarda e da OUTRA metade da condicao — `testeId` —, que ja existia antes da correcao.
+    // Fica porque a admissao direta e o caso real em que nao ha teste nenhum para abrir.
+    const direta = { ...processoDe("iniciado"), origem: "admissao_direta" as const, testeId: null };
+    montar({ processo: direta, podeVerTeste: true });
+    expect(botaoPorTexto("Ver o teste")).toBeUndefined();
+    expect(textoDoModal()).toContain("Admissão direta");
   });
 });
 
@@ -278,15 +321,15 @@ describe("as acoes seguem o status e a permissao", () => {
     expect(textoDoModal()).toContain("Cancelado por Ana do DP");
   });
 
-  it("Deve_EsconderEdicaoInterna_Quando_Gerencia", async () => {
+  it("Deve_EsconderEdicaoInterna_Quando_Gerencia", () => {
     // A Gerencia nao recebe `admissoes_processos_editar_internos`: CTPS, PIS/NIT e o exame sao do DP.
     // Ela CANCELA — o botao de cancelar tem permissao propria e continua la.
-    const wrapper = montar({ podeEditarInternos: false });
+    montar({ podeEditarInternos: false });
     expect(botaoPorTexto("Editar")).toBeUndefined();
     expect(botaoPorTexto("Cancelar e arquivar")).toBeTruthy();
     // E nenhum caminho lateral: o bloco interno segue visivel, so que sem gatilho de edicao.
     expect(textoDoModal()).toContain("Dados internos do DP");
-    expect(wrapper.emitted("editarInternos")).toBeUndefined();
+    expect(textoDoModal()).toContain("CTPS");
   });
 
   it("Deve_ConfirmarAntesDeCancelar_Quando_CliqueEmCancelar", async () => {
@@ -318,10 +361,35 @@ describe("o painel lateral saiu de verdade", () => {
     // As DUAS telas montavam o mesmo painel. Migrar so a de Processos deixaria a de Testes com um
     // segundo caminho de detalhe — que e exatamente o que a regra-mae do AGENTS.md proibe.
     for (const tela of ["AdmissoesProcessosPage.vue", "AdmissoesTestesPage.vue"]) {
-      const codigo = readFileSync(join(PASTA, tela), "utf8");
+      // `semComentarios` porque comentar a montagem fora e' diferente de te-la: sem isto, envolver
+      // o bloco em `<!-- -->` deixaria a contagem em 1 e a tela sem modal nenhum, com a suite verde.
+      const codigo = semComentarios(readFileSync(join(PASTA, tela), "utf8"));
       expect(codigo, tela).not.toContain("ProcessoDetalhePainel");
       expect([...codigo.matchAll(/<ProcessoDetalheDialog/gu)], tela).toHaveLength(1);
     }
+  });
+
+  it("Deve_CadaTelaDeclararSeSabeAbrirOTeste", () => {
+    // A prop e obrigatoria, entao o `nuxt typecheck` ja pegaria a ausencia. Esta guarda fixa o
+    // VALOR de cada uma: e o par (tela, caminho) que o botao morto expos, e ele voltaria calado se
+    // alguem copiasse a linha da tela de Testes para a de Processos.
+    //
+    // Por CONTAGEM e sem comentarios: os dois comentarios que explicam a escolha citam
+    // `pode-ver-teste`, e um `toContain` no texto bruto nao distingue codigo de prosa nem recusaria
+    // uma tela que declarasse os dois valores.
+    const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+    const testes = semComentarios(readFileSync(join(PASTA, "AdmissoesTestesPage.vue"), "utf8"));
+
+    expect([...processos.matchAll(/:pode-ver-teste="false"/gu)]).toHaveLength(1);
+    expect([...processos.matchAll(/:pode-ver-teste="true"/gu)]).toHaveLength(0);
+    expect([...testes.matchAll(/:pode-ver-teste="true"/gu)]).toHaveLength(1);
+    expect([...testes.matchAll(/:pode-ver-teste="false"/gu)]).toHaveLength(0);
+
+    // E a tela que diz `true` precisa mesmo escutar o evento — senao o botao volta a ser morto.
+    // O casamento para no `="` de proposito: `@ver-teste="() => voltar()"` e refactor legitimo, e
+    // exigir um identificador simples faria a guarda gritar por cosmetica.
+    expect(testes).toMatch(/@ver-teste="/u);
+    expect(processos).not.toMatch(/@ver-teste="/u);
   });
 
   it("Deve_SerModalNaoGaveta_E_SemPersistent", () => {
