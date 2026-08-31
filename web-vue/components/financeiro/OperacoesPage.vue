@@ -84,6 +84,15 @@ function alternarDetalhe(operacao: OperacaoResumo) {
 
 <template>
   <div class="operacoes-layout">
+    <!-- Titulo da tela sobe para o topo da pagina (VIS-10, D-04): antes ele vivia dentro do card
+         da tabela, abaixo dos cards de resumo, e a tela abria sem dizer onde voce esta. O texto e
+         o mesmo que estava la. O totalizador do dia CONTINUA no cabecalho da tabela, porque ele
+         descreve a listagem, nao a tela. -->
+    <AppCabecalhoTela
+      :titulo="telaAtual?.titulo ?? ''"
+      :subtitulo="descricao || `Lançamentos da empresa ${empresaAtiva?.nome ?? ''}.`"
+    />
+
     <section v-if="resumo" class="summary-grid" aria-label="Resumo do caixa">
       <article class="summary-card card-entradas">
         <div class="summary-label"><v-icon icon="mdi-cash-plus" size="16" /> Entradas</div>
@@ -111,8 +120,8 @@ function alternarDetalhe(operacao: OperacaoResumo) {
       <v-card-text>
         <div class="table-heading d-flex align-start justify-space-between ga-4 flex-wrap">
           <div>
-            <h2>{{ telaAtual?.titulo }}</h2>
-            <p>{{ descricao || `Lançamentos da empresa ${empresaAtiva?.nome ?? ""}.` }}</p>
+            <!-- Titulo e descricao subiram para o AppCabecalhoTela, no topo da pagina (VIS-10).
+                 Aqui fica so o que descreve a LISTAGEM. -->
             <!-- Totalizador do DIA (S6): soma do filtro inteiro, nao da pagina. Quem confere o dia
                  precisa do total do dia — a pagina e so um recorte. -->
             <p v-if="totalLiquidoOperacoes !== null && totalLiquidoOperacoes !== undefined" class="op-totalizador">
@@ -252,7 +261,9 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                   </tr>
                 </template>
                 <tr v-if="!operacoesPaginadas.length">
-                  <td colspan="4" class="text-center text-muted py-8">Nenhum lancamento encontrado.</td>
+                  <td colspan="4" class="text-center text-muted py-8">
+                    <span class="tabela-vazio">Nenhum lancamento encontrado.</span>
+                  </td>
                 </tr>
               </tbody>
             </v-table>

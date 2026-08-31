@@ -12,7 +12,7 @@ import type {
 import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
-import { mensagemErro } from "~/utils/domain";
+import { itemPorTela, mensagemErro } from "~/utils/domain";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -361,21 +361,26 @@ onMounted(async () => {
     <v-alert v-if="erro" type="error" variant="tonal" class="mb-4">{{ erro }}</v-alert>
 
     <div v-else class="d-grid ga-4">
-      <div class="d-flex flex-wrap align-center justify-space-between ga-3">
-        <div>
-          <h1 class="text-h5 font-weight-bold">Integrações</h1>
-          <div class="text-body-2 text-muted">Chaves, funcionamento e dicionário de conversão do PDV.</div>
-        </div>
-        <v-select
-          v-model="tipoSelecionado"
-          :items="integracoes"
-          item-title="nome"
-          item-value="tipo"
-          label="Integração"
-          hide-details
-          max-width="260"
-        />
-      </div>
+      <!-- O NOME DA TELA VEM DO MENU (`itemPorTela`), e nao de uma string escrita aqui — antes a
+           mesma palavra estava em dois lugares, e duas fontes para o mesmo nome divergem com o tempo.
+           NAO da para usar `ctx.telaAtual`: esta pagina monta `AppShell` direto, sem o
+           `AppWorkspace`. O seletor de tipo segue no slot de acoes, como estava. -->
+      <AppCabecalhoTela
+        :titulo="itemPorTela.integracoes?.titulo ?? ''"
+        subtitulo="Chaves, funcionamento e dicionário de conversão do PDV."
+      >
+        <template #acoes>
+          <v-select
+            v-model="tipoSelecionado"
+            :items="integracoes"
+            item-title="nome"
+            item-value="tipo"
+            label="Integração"
+            hide-details
+            max-width="260"
+          />
+        </template>
+      </AppCabecalhoTela>
 
       <v-tabs v-model="aba" density="comfortable">
         <v-tab value="chaves">Chaves</v-tab>
@@ -624,7 +629,9 @@ onMounted(async () => {
                   </tr>
                   <tr v-if="!vinculosSemConversaoFiltrados.length">
                     <td colspan="4" class="text-center text-muted">
-                      {{ dicionarioCarregando ? "Carregando..." : "Nenhum item encontrado." }}
+                      <span class="tabela-vazio">
+                        {{ dicionarioCarregando ? "Carregando..." : "Nenhum item encontrado." }}
+                      </span>
                     </td>
                   </tr>
                 </tbody>

@@ -1,0 +1,117 @@
+// A REGRA da dashboard. Fica aqui, fora do componente, para ser testável sem runtime Nuxt/Vuetify —
+// mesmo espírito do `menu.ts` e do `sanfona-menu.ts`.
+//
+// ESTE MÓDULO NÃO DECIDE QUEM VÊ O QUÊ. Ele reorganiza a lista que já chegou filtrada, e filtra os
+// cards pela permissão que cada um declara. Se alguém acrescentar aqui um filtro próprio — "se for
+// diretor mostra tudo" —, nasce uma SEGUNDA fonte de verdade sobre permissão, e um dia ela diverge
+// da do menu. Foi exatamente isso que o `atalhos-home.ts` (apagado em 28/08) protegia, e a regra
+// volta com ele.
+import type { Permissao } from "@padaria/shared";
+import type { ItemMenu } from "~/types/padaria";
+import type { MetricaDemo } from "~/utils/dashboard-demo";
+import { itemPorTela } from "~/utils/domain";
+
+/** O mesmo texto que o `AppWorkspace` usa quando não há motivo específico. Uma fonte só. */
+export const MOTIVO_PADRAO = "Tela indisponivel para este perfil.";
+
+export type AtalhoPainel = ItemMenu & { desabilitada: boolean; motivo: string };
+
+/**
+ * VOCÊ VÊ O CARD SE JÁ PODE VER O DADO POR TRÁS DELE.
+ *
+ * Sem isto, a dashboard mostra "Entradas", "Saldo" e "Vendas" para qualquer um que faça login.
+ * Enquanto o dado é fictício isso é vazamento de estrutura; no dia em que `dashboard-demo` for
+ * trocado pela chamada real, vira vazamento de dado financeiro — que é o defeito que os oito casos
+ * de permissão do `blocos-relatorio.test.ts` existiam para impedir.
+ *
+ * Faixa que fica sem nenhum card não deve aparecer, nem o título dela. Quem chama decide isso pelo
+ * tamanho da lista devolvida.
+ */
+export function metricasPermitidas(
+  metricas: readonly MetricaDemo[],
+  temPermissao: (permissao: Permissao) => boolean
+): MetricaDemo[] {
+  return metricas.filter((metrica) => temPermissao(metrica.permissao));
+}
+
+/**
+ * Os atalhos da FAIXA 4, na ordem pedida, com o MESMO estado que o menu lateral mostra.
+ *
+ * A ARMADILHA QUE ISTO EVITA, e ela era um defeito ativo antes: `telasMenu` significa "aparece no
+ * menu", NÃO "pode abrir". O `telaDesabilitadaNoMenu` (domain.ts:366) devolve `true` para quem tem
+ * `menu_X_desabilitado` ou para quem depende de caixa aberto com o caixa fechado — e essas telas
+ * CONTINUAM na lista. Filtrar só por `telas` produzia uma pílula clicável para uma tela que o menu
+ * ao lado mostra cinza, com tooltip explicando que está bloqueada.
+ *
+ * A tela bloqueada não some: ela aparece marcada, com o motivo, igual ao menu. O painel não pode
+ * ensinar uma coisa e o menu outra.
+ */
+export function atalhosDoPainel(
+  ids: readonly string[],
+  telas: readonly ItemMenu[],
+  desabilitadas: readonly string[] = [],
+  motivos: Readonly<Record<string, string>> = {}
+): AtalhoPainel[] {
+  const visiveis = new Set(telas.map((tela) => tela.id));
+  const bloqueadas = new Set(desabilitadas);
+  const atalhos: AtalhoPainel[] = [];
+  for (const id of ids) {
+    if (!visiveis.has(id)) continue;
+    const item = itemPorTela[id];
+    if (!item) continue;
+    atalhos.push({ ...item, desabilitada: bloqueadas.has(id), motivo: motivos[id] ?? MOTIVO_PADRAO });
+  }
+  return atalhos;
+}
+
+/**
+ * AS FAIXAS DE NÚMERO SÃO DE ADMINISTRADOR (Marco, 28/08/2026).
+ *
+ * O painel mostra dinheiro do negócio inteiro — entradas do dia, saldo, pendências, relatórios.
+ * Isso é leitura de dono, não de operação, e não é o mesmo que "pode abrir a tela": um caixa tem
+ * `entradas_visualizar` porque precisa lançar, e isso não faz dele alguém que deve ver o total da
+ * casa na primeira tela ao entrar.
+ *
+ * QUEM NÃO É ADMINISTRADOR NÃO VÊ FAIXA NENHUMA DE NÚMERO — e não vê cadeado, nem estado vazio,
+ * nem "você não tem acesso". Some, e o que sobra fecha o espaço. É o mesmo comportamento do menu,
+ * que esconde o que não é seu em vez de mostrar porta trancada.
+ *
+ * A FAIXA 4 ("Ir para") CONTINUA PARA TODOS: ela não tem número, é atalho de navegação, e já
+ * respeita o menu item a item pelo `atalhosDoPainel`.
+ *
+ * A decisão chega PRONTA, como booleano, e não é tomada aqui. O `ehAdministradorTotal` é chamado
+ * num lugar só, no `AppWorkspace` — se a regra fosse consultada em cada faixa, a aba de
+ * configuração do painel que Marco já pediu teria de achar todos os pontos de chamada.
+ */
+export function faixasDeNumeroVisiveis<T>(faixas: readonly T[], ehAdministradorTotal: boolean): T[] {
+  return ehAdministradorTotal ? [...faixas] : [];
+}
+
+/**
+ * OS PONTOS DA LINHA DECORATIVA, normalizados para uma caixa de `largura` x `altura`.
+ *
+ * A escala é RELATIVA À PRÓPRIA SÉRIE — o menor valor encosta embaixo, o maior encosta em cima.
+ * Isso é deliberado e é o que a torna decoração honesta: ela mostra a FORMA da variação, e não
+ * sugere comparação entre cards, que teriam escalas diferentes. Uma linha decorativa com escala
+ * absoluta convidaria a comparar dois cards que não se comparam.
+ *
+ * SÉRIE CONSTANTE (todos os valores iguais) vira uma linha no MEIO, e não no topo nem no fundo:
+ * dividir por uma amplitude zero daria `NaN`, e o `NaN` no `points` some com a linha inteira sem
+ * erro nenhum no console — o tipo de defeito que só aparece no dia em que o dado é plano.
+ *
+ * Menos de dois pontos não desenha nada: uma linha precisa de dois.
+ */
+export function pontosDaSparkline(serie: readonly number[], largura: number, altura: number): string {
+  if (serie.length < 2) return "";
+  const menor = Math.min(...serie);
+  const maior = Math.max(...serie);
+  const amplitude = maior - menor;
+  const passo = largura / (serie.length - 1);
+  return serie
+    .map((valor, i) => {
+      const proporcao = amplitude === 0 ? 0.5 : (valor - menor) / amplitude;
+      const y = altura - proporcao * altura;
+      return `${(i * passo).toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}

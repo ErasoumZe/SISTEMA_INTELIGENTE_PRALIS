@@ -5,6 +5,10 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
 
 <template>
   <AppWorkspace tela-inicial="caixa" tipo-pagina="caixa" v-slot="ctx">
+    <!-- VIS-10: esta tela nunca teve cabecalho proprio — vivia do titulo da topbar, que saiu.
+         O nome vem do menu (`telaAtual`), sem texto novo. -->
+    <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? ''" />
+
     <CaixaResumoPage
       :resumo="ctx.resumo"
       :status="ctx.caixaStatus"
