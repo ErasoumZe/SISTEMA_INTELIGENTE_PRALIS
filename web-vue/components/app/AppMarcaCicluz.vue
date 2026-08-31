@@ -95,6 +95,16 @@ withDefaults(
 .marca-cicluz--lateral .marca-cicluz-texto {
   min-width: 0;
 }
+/* CORRECAO OPTICA, e ela contraria a regua de proposito. Medido: as caixas ja estavam centradas
+   (desalinho 0px) e a TINTA do simbolo ja ficava 1,5px ACIMA da tinta do texto. Mesmo assim o
+   simbolo LE como se estivesse baixo, porque a silhueta dele tem mais massa embaixo — o centro
+   geometrico e mais alto que o centro percebido.
+   `translateY` e nao `margin` para nao mexer na altura da linha: o chevron ao lado alinha pelo
+   centro da faixa, e mover a caixa o desalinharia. So no travamento LATERAL — no empilhado do
+   login o simbolo fica sobre o texto e a compensacao nao faz sentido. */
+.marca-cicluz--lateral > :first-child {
+  transform: translateY(-2px);
+}
 .marca-cicluz-texto {
   display: flex;
   flex-direction: column;

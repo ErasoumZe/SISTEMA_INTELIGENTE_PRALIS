@@ -171,7 +171,7 @@ useItemAtivoVisivel();
             <AppMarcaCicluz
               v-else
               orientacao="lateral"
-              :size="52"
+              :size="60"
               :glow-intensity="0.22"
               :escuro="escuro"
               largura-palavra="136px"
