@@ -8,11 +8,18 @@ import {
   TELA_TEMA_RESUMO_CAIXA,
   gruposPatrimonioPadrao,
   permissoes,
-  permissoesAcessoTotal,
-  type Permissao,
-  type RegrasPermissoes,
   type RoleUsuario
 } from "@padaria/shared";
+// A matriz de cargos vem da REFERENCIA, nunca copiada para ca. Ate 28/08/2026 este arquivo
+// mantinha uma segunda implementacao do mesmo motor mais uma segunda copia dos dados, "em
+// paridade manual" — e a paridade quebrou em silencio: o dev ficou inteiro na ADM-001 e nenhum
+// cargo recebia as permissoes de `admissoes_processos`. Nenhum teste acusou, porque nenhum teste
+// le este arquivo. Importar torna a divergencia impossivel, em vez de improvavel.
+import {
+  permissoesDoCargo,
+  permissoesPorCargo,
+  regrasPermissoes
+} from "./src/referencia-permissoes.js";
 import { schema } from "./src/schema/schema.js";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import {
@@ -145,286 +152,6 @@ const emailsSeedLegados = [
   "financeiro@padaria.local"
 ];
 
-const telasSomenteCaixaAbertoSeed = new Set<string>([
-  "entradas",
-  "transferencias",
-  "despesas",
-  "mercadorias",
-  "retiradas",
-  "fechamento",
-  "relatorio_produtos"
-]);
-
-const permissaoAcessoPorTelaSeed = {
-  entradas: "entradas_visualizar",
-  transferencias: "transferencias_visualizar",
-  despesas: "despesas_visualizar",
-  mercadorias: "mercadorias_visualizar",
-  retiradas: "retiradas_visualizar",
-  fechamento: "fechamento_com_diferenca_visualizar",
-  relatorio_produtos: "relatorio_produtos_visualizar",
-  caixa: "caixa_operar",
-  promocoes: "promocoes_visualizar",
-  relatorio_faltas: "relatorio_faltas_visualizar",
-  relatorio_advertencias: "relatorio_advertencias_visualizar",
-  pedidos: "pedidos_visualizar",
-  perdas_sobras: "perdas_sobras_visualizar",
-  estoque_produtos: "estoque_produtos_visualizar",
-  relatorio_dre: "relatorio_dre_visualizar",
-  clientes: "cadastro_clientes_visualizar",
-  fornecedores: "cadastro_fornecedores_visualizar",
-  produtos: "cadastro_produtos_visualizar",
-  colaboradores: "cadastro_colaboradores_visualizar",
-  // ADM-001. Tela PROPRIA de admissao: nao herda nem concede `cadastro_colaboradores_*`.
-  admissoes_testes: "admissoes_testes_visualizar",
-  folha_ponto: "folha_ponto_visualizar",
-  avaliacao_qualidade: "avaliacao_qualidade_visualizar",
-  avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
-  relatorio_fiscal: "relatorio_fiscal_visualizar",
-  fiscal_produtos: "cadastro_fiscal_produtos_visualizar",
-  patrimonio: "cadastro_patrimonio_visualizar",
-  ficha_tecnica: "cadastro_ficha_tecnica_visualizar",
-  ingredientes: "cadastro_ingredientes_visualizar",
-  relatorio_vendas: "relatorio_vendas_visualizar",
-  notas_fiscais: "notas_fiscais_visualizar",
-  contas_pagar: "contas_pagar_visualizar",
-  integracoes: "integracoes_visualizar",
-  contas: "cadastro_contas_visualizar",
-  grupos: "cadastro_grupos_visualizar",
-  pdv: "cadastro_pdv_visualizar",
-  formas_pagamento: "cadastro_formas_pagamento_visualizar",
-  empresas: "cadastro_empresas_visualizar",
-  unidades: "cadastro_unidades_medida_visualizar",
-  areas_setores: "cadastro_areas_setores_visualizar",
-  usuarios: "cadastro_usuarios_visualizar",
-  permissoes: "cadastro_permissoes_visualizar",
-  aparencia: "aparencia_visualizar"
-} as const satisfies Record<string, Permissao>;
-
-type TelaPermissaoSeed = keyof typeof permissaoAcessoPorTelaSeed;
-type PermissoesCargoSeed = {
-  ativas?: TelaPermissaoSeed[];
-  desabilitadas?: TelaPermissaoSeed[];
-  somenteCaixaAberto?: TelaPermissaoSeed[];
-  extras?: Permissao[];
-  todas?: boolean;
-};
-
-function menuMostrarSeed(tela: TelaPermissaoSeed) {
-  return `menu_${tela}_mostrar` as Permissao;
-}
-
-function menuDesabilitadoSeed(tela: TelaPermissaoSeed) {
-  return `menu_${tela}_desabilitado` as Permissao;
-}
-
-function menuSomenteCaixaAbertoSeed(tela: TelaPermissaoSeed) {
-  return `menu_${tela}_somente_caixa_aberto` as Permissao;
-}
-
-function permissoesDoCargoSeed(config: PermissoesCargoSeed): Permissao[] {
-  // "todas" NAO inclui as flags `_somente_caixa_aberto` (restricoes) — paridade com
-  // db/src/referencia-permissoes.ts e com o atalho de usuario_admin em api/src/auth/perfil.service.
-  if (config.todas) return [...permissoesAcessoTotal];
-  const resultado = new Set<Permissao>(config.extras ?? []);
-  for (const tela of config.ativas ?? []) {
-    resultado.add(permissaoAcessoPorTelaSeed[tela]);
-    resultado.add(menuMostrarSeed(tela));
-  }
-  for (const tela of config.somenteCaixaAberto ?? []) {
-    if (telasSomenteCaixaAbertoSeed.has(tela)) resultado.add(menuSomenteCaixaAbertoSeed(tela));
-  }
-  for (const tela of config.desabilitadas ?? []) {
-    resultado.add(menuDesabilitadoSeed(tela));
-  }
-  return [...resultado];
-}
-
-function regrasPermissoesSeed(lista: Permissao[]): RegrasPermissoes {
-  return Object.fromEntries(lista.map((permissao) => [permissao, true]));
-}
-
-// Ciclo de vida R7/R10 (Fase 1, doc 09 §4) — PARIDADE com db/src/referencia-permissoes.ts.
-const DOMINIOS_LANCAMENTO_FINANCEIRO = ["despesas", "mercadorias", "retiradas", "transferencias"] as const;
-function acoesLancamentoPorDominio(...acoes: string[]): Permissao[] {
-  return DOMINIOS_LANCAMENTO_FINANCEIRO.flatMap((dominio) => acoes.map((acao) => `${dominio}_${acao}` as Permissao));
-}
-
-const permissoesPorCargoSeed: Record<string, Permissao[]> = {
-  Caixa: permissoesDoCargoSeed({
-    ativas: [
-      "caixa",
-      "entradas",
-      "transferencias",
-      "despesas",
-      "mercadorias",
-      "retiradas",
-      "fechamento",
-      "relatorio_produtos"
-    ],
-    somenteCaixaAberto: [
-      "entradas",
-      "transferencias",
-      "despesas",
-      "mercadorias",
-      "retiradas",
-      "fechamento",
-      "relatorio_produtos"
-    ],
-    // R-121/R-122: o operador lanca TODAS as saidas e CORRIGE as proprias enquanto o caixa esta
-    // aberto. Sem `_excluir`: a R-015 depende do rastro — apagar lancamento apaga a explicacao da
-    // quebra. Sem `_pagar`/`_efetuar`/`_conferir`: ciclo de vida e da retaguarda (R-076/R-077).
-    extras: [
-      "entradas_criar",
-      "transferencias_criar",
-      "despesas_criar",
-      "despesas_editar",
-      "mercadorias_criar",
-      "mercadorias_editar",
-      "retiradas_criar",
-      "retiradas_editar"
-    ]
-  }),
-  Tesouraria: permissoesDoCargoSeed({
-    // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
-    // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
-    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
-    // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
-    extras: [
-      "transferencias_criar",
-      ...acoesLancamentoPorDominio("conferir"),
-      "cadastro_lacres_visualizar",
-      "cadastro_lacres_criar",
-      "cadastro_lacres_editar"
-    ]
-  }),
-  Gerencia: permissoesDoCargoSeed({
-    ativas: [
-      "caixa",
-      "entradas",
-      "transferencias",
-      "despesas",
-      "mercadorias",
-      "retiradas",
-      "fechamento",
-      "relatorio_produtos",
-      "promocoes",
-      "relatorio_faltas",
-      "relatorio_advertencias",
-      "pedidos",
-      "perdas_sobras",
-      "estoque_produtos",
-      "relatorio_dre",
-      "clientes",
-      "admissoes_testes"
-    ],
-    // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
-    // Mantido em paridade com db/src/referencia-permissoes.ts (producao).
-    extras: [
-      "entradas_criar",
-      "transferencias_criar",
-      "transferencias_editar",
-      "despesas_criar",
-      "despesas_editar",
-      "despesas_discriminar",
-      "mercadorias_criar",
-      "mercadorias_discriminar",
-      "mercadorias_aprovar",
-      "pedidos_aprovar",
-      "retiradas_criar",
-      "retiradas_editar",
-      "notas_fiscais_importar",
-      "caixas_gerenciar",
-      "caixa_alterar_horario",
-      "cadastro_turnos_visualizar",
-      "cadastro_turnos_criar",
-      "cadastro_turnos_editar",
-      "cadastro_turnos_excluir",
-      // Ciclo de vida R7/R10 (doc 09 §4): Gerencia EFETUA, edita, exclui e confere — NAO paga.
-      "mercadorias_editar",
-      // Gerencia configura o ESCOPO de conta por usuario (FOTO 4). Paridade com referencia de producao.
-      "cadastro_contas_usuarios_visualizar",
-      "cadastro_contas_usuarios_criar",
-      "cadastro_contas_usuarios_editar",
-      "cadastro_contas_usuarios_excluir",
-      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
-      "lancamentos_recorrencia_criar",
-      // ADM-001: a Gerencia opera o periodo de teste junto com o DP (decisao de Marco).
-      "admissoes_testes_criar",
-      "admissoes_testes_editar",
-      "admissoes_testes_encerrar",
-      "admissoes_testes_cancelar",
-      ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
-    ]
-  }),
-  Compras: permissoesDoCargoSeed({
-    ativas: ["pedidos", "mercadorias", "fornecedores", "produtos"],
-    extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
-  }),
-  DP: permissoesDoCargoSeed({
-    ativas: ["despesas", "colaboradores", "folha_ponto", "admissoes_testes"],
-    // ADM-001: o DP opera o periodo de teste por inteiro. As quatro acoes sao PROPRIAS da
-    // admissao — `cadastro_colaboradores_*` continua sem abrir nada aqui, e vice-versa.
-    extras: [
-      "despesas_criar",
-      "despesas_discriminar",
-      "cadastro_colaboradores_criar",
-      "cadastro_colaboradores_editar",
-      "admissoes_testes_criar",
-      "admissoes_testes_editar",
-      "admissoes_testes_encerrar",
-      "admissoes_testes_cancelar",
-    ]
-  }),
-  RH: permissoesDoCargoSeed({
-    ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]
-  }),
-  Fiscal: permissoesDoCargoSeed({
-    ativas: ["relatorio_fiscal", "fiscal_produtos"]
-  }),
-  "Diretor de Operacoes": permissoesDoCargoSeed({
-    ativas: ["relatorio_dre", "patrimonio", "ficha_tecnica", "ingredientes"]
-  }),
-  // Diretor Geral vira um cargo normal (sem "todas"): o acesso total do diretor vem do role
-  // usuario_admin (decisao de negocio: pergunta 3). Assim a tela de permissoes do cargo fica limpa.
-  "Diretor Geral": permissoesDoCargoSeed({}),
-  Financeiro: permissoesDoCargoSeed({
-    ativas: [
-      "relatorio_vendas",
-      "notas_fiscais",
-      "contas_pagar",
-      "transferencias",
-      "despesas",
-      "mercadorias",
-      "retiradas",
-      "relatorio_dre",
-      "grupos",
-      "pdv",
-      "formas_pagamento"
-    ],
-    extras: [
-      "relatorio_vendas_comprovantes_criar",
-      "transferencias_criar",
-      "transferencias_editar",
-      "despesas_criar",
-      "despesas_editar",
-      "despesas_discriminar",
-      "mercadorias_criar",
-      "mercadorias_discriminar",
-      "mercadorias_editar",
-      "retiradas_criar",
-      "retiradas_editar",
-      "notas_fiscais_importar",
-      "cadastro_grupos_criar",
-      "cadastro_pdv_criar",
-      "cadastro_formas_pagamento_criar",
-      // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
-      "lancamentos_recorrencia_criar",
-      // R-076/R-077: Financeiro paga e confere, sem efetuar; mantem as variantes *_dpago.
-      ...acoesLancamentoPorDominio("pagar", "conferir", "editar_dpago", "visualizar_dpago", "excluir", "excluir_dpago")
-    ]
-  })
-};
 
 type UsuarioSeed = {
   nome: string;
@@ -503,7 +230,7 @@ const usuariosSeed: UsuarioSeed[] = [
     role: "usuario_comum"
   }
 ];
-const nomesCargosSeed = [...Object.keys(permissoesPorCargoSeed), "Operador de caixa"];
+const nomesCargosSeed = [...Object.keys(permissoesPorCargo), "Operador de caixa"];
 
 async function usuarioPorEmail(email: string) {
   const [usuario] = await banco
@@ -696,7 +423,7 @@ const usuarioFinanceiroId = usuarioIds.get("financeiro@email.com");
 if (!usuarioFinanceiroId) throw new Error("Usuario financeiro nao foi criado");
 await banco
   .insert(permissoesUsuarios)
-  .values({ usuarioId: usuarioFinanceiroId, regras: regrasPermissoesSeed(["contas_pagar_visualizar"]) })
+  .values({ usuarioId: usuarioFinanceiroId, regras: regrasPermissoes(["contas_pagar_visualizar"]) })
   .onConflictDoNothing();
 console.info("[seed] OK Usuarios e perfis cadastrados/atualizados");
 
@@ -913,12 +640,12 @@ await banco
     // Setor "Loja" NAO concede permissoes amplas: cada cargo define seu proprio acesso.
     // (Antes concedia caixa_operar/entradas/relatorio_produtos a TODOS os membros, contaminando
     //  cargos estreitos como Tesouraria/DP/Fiscal. Operar caixa fica so no cargo Caixa.)
-    regras: regrasPermissoesSeed(permissoesDoCargoSeed({}))
+    regras: regrasPermissoes(permissoesDoCargo({}))
   })
   .onConflictDoNothing();
 
 const cargoIds = new Map<string, string>();
-for (const nome of Object.keys(permissoesPorCargoSeed)) {
+for (const nome of Object.keys(permissoesPorCargo)) {
   const cargoSeed = (
     await banco
       .insert(cargos)
@@ -933,11 +660,11 @@ for (const nome of Object.keys(permissoesPorCargoSeed)) {
   cargoIds.set(nome, cargoSeed.id);
 
   await banco.delete(permissoesCargos).where(eq(permissoesCargos.cargoId, cargoSeed.id));
-  const permissoesCargo = permissoesPorCargoSeed[nome] ?? [];
+  const permissoesCargo = permissoesPorCargo[nome] ?? [];
   if (permissoesCargo.length) {
     await banco
       .insert(permissoesCargos)
-      .values({ cargoId: cargoSeed.id, regras: regrasPermissoesSeed(permissoesCargo) })
+      .values({ cargoId: cargoSeed.id, regras: regrasPermissoes(permissoesCargo) })
       .onConflictDoNothing();
   }
 }

@@ -70,6 +70,13 @@ describe("admissoes processos integration", () => {
    * nome do cargo normalizar. Tem de ser `usuario_comum`: `usuario_admin` recebe acesso total
    * antes de olhar qualquer camada, e o teste provaria nada.
    */
+  /** A matriz REAL do cargo. Cargo ausente levanta erro: lista vazia viraria outro teste. */
+  function matriz(cargo: string): Permissao[] {
+    const lista = permissoesPorCargo[cargo];
+    if (!lista) throw new Error(`cargo ausente na referencia: ${cargo}`);
+    return lista;
+  }
+
   async function vestirPermissoes(perfil: PerfilTeste, regras: Permissao[]) {
     const alvo = await consultarUm<{ id: string }>(
       `select u.id from "user" u where u.email = $1`,
@@ -94,11 +101,6 @@ describe("admissoes processos integration", () => {
     // passam a provar o cargo, e nao apenas "lista vazia recebe 403".
     // A referencia e um Record<string, ...>: o cargo ausente viraria lista vazia em silencio, e
     // o teste passaria a provar "sem permissao", que e outro teste.
-    const matriz = (cargo: string): Permissao[] => {
-      const lista = permissoesPorCargo[cargo];
-      if (!lista) throw new Error(`cargo ausente na referencia: ${cargo}`);
-      return lista;
-    };
     await vestirPermissoes("gerente", matriz("Gerencia"));
     await vestirPermissoes("caixa", matriz("DP"));
     cookieGerenciaReal = await cookieSessao(contexto.app, "gerente");
@@ -894,6 +896,94 @@ describe("admissoes processos integration", () => {
       headers: { cookie: cookieGerenciaReal }
     });
     expect(detalhe.statusCode).toBe(200);
+  });
+
+  it("P0-V1B Deve_VerListaEDetalhe_Quando_CARGO_DpOuGerencia", async () => {
+    // Ate aqui, "DP e Gerencia visualizam Processos" so estava provado como TEXTO da referencia.
+    // Isto prova comportamento: lista e detalhe respondem 200 para os dois cargos reais.
+    const criado = await criarDiretaV1B(cookieDp, "02050505060");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    for (const [cargo, cookie] of [
+      ["DP", cookieDpReal],
+      ["Gerencia", cookieGerenciaReal]
+    ] as const) {
+      const lista = await contexto.app.inject({
+        method: "GET",
+        url: "/api/admissoes/processos?page=1&pageSize=10",
+        headers: { cookie }
+      });
+      expect(lista.statusCode, `${cargo} lista`).toBe(200);
+
+      const detalhe = await contexto.app.inject({
+        method: "GET",
+        url: `/api/admissoes/processos/${id}`,
+        headers: { cookie }
+      });
+      expect(detalhe.statusCode, `${cargo} detalhe`).toBe(200);
+    }
+  });
+
+  it("P0-V1B Deve_CriarDiretaECancelar_Quando_CARGO_DpOuGerencia", async () => {
+    // Criar admissao direta e cancelar sao os dois atos que a referencia da aos DOIS cargos. Antes,
+    // ambos so eram exercitados com o perfil admin, que passa por herdar tudo do role.
+    const cpfs = { DP: "02060606020", Gerencia: "02030303038" } as const;
+    for (const [cargo, cookie] of [
+      ["DP", cookieDpReal],
+      ["Gerencia", cookieGerenciaReal]
+    ] as const) {
+      const criado = await criarDiretaV1B(cookie, cpfs[cargo]);
+      expect(criado.statusCode, `${cargo} cria`).toBe(201);
+      // `criadoId` devolve o id, nao a versao. Processo recem-criado nasce na versao 1.
+      const alvo = criado.json().data.id as string;
+
+      const cancelado = await contexto.app.inject({
+        method: "POST",
+        url: `/api/admissoes/processos/${alvo}/cancelar`,
+        headers: { cookie },
+        payload: { versao: 1 }
+      });
+      expect(cancelado.statusCode, `${cargo} cancela`).toBe(200);
+    }
+  });
+
+  it("P0-V1B Deve_Recusar403EmTudo_Quando_CARGO_DiretorGeralSemRole", async () => {
+    // O cargo "Diretor Geral" e vazio de proposito: quem abre tudo e o role usuario_admin. Vestido
+    // num usuario_comum, ele nao passa em rota nenhuma. Se alguem "ajudar" o cargo com permissoes,
+    // este teste cai. O perfil e vestido AQUI, e nao no beforeAll, para o teste nao depender de
+    // ordem: quem veste o proprio ator no corpo nao pode ser desfeito por um vizinho.
+    await vestirPermissoes("semRecorrencia", matriz("Diretor Geral"));
+    const cookieCargoDiretor = await cookieSessao(contexto.app, "semRecorrencia");
+
+    const criado = await criarDiretaV1B(cookieDp, "02040404007");
+    assertOk(criado, 201);
+    const id = criado.json().data.id;
+
+    const rotas: [string, string, Record<string, unknown> | null][] = [
+      ["GET", "/api/admissoes/processos?page=1&pageSize=10", null],
+      ["GET", `/api/admissoes/processos/${id}`, null],
+      ["PUT", `/api/admissoes/processos/${id}/internos`, { versao: 1, ctpsNumero: "1" }],
+      ["PUT", `/api/admissoes/processos/${id}/exame`, { versao: 1, situacao: "aso_apto" }],
+      ["POST", `/api/admissoes/processos/${id}/cancelar`, { versao: 1 }]
+    ];
+    for (const [metodo, url, payload] of rotas) {
+      const resposta = await contexto.app.inject({
+        method: metodo as "GET",
+        url,
+        headers: { cookie: cookieCargoDiretor },
+        ...(payload ? { payload } : {})
+      });
+      expect(resposta.statusCode, `${metodo} ${url}`).toBe(403);
+    }
+
+    // Contraprova: o MESMO alvo, pelo perfil com role usuario_admin, responde 200.
+    const comRole = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${id}`,
+      headers: { cookie: cookieDp }
+    });
+    expect(comRole.statusCode).toBe(200);
   });
 
   it("P0-V1B Deve_Permitir_Quando_CARGO_DpEditaInternosEExame", async () => {
