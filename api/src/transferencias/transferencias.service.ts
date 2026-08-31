@@ -100,27 +100,18 @@ export async function listarTransferencias(
 // confirmador elegivel, numera a ordem, controla o lacre e e idempotente. Nada disso existe aqui, e
 // malote sem conferencia e a diferenca entre dinheiro rastreado e dinheiro sumido.
 //
-// A consulta ao cofre so acontece quando a origem E a conta do PDV: transferencia comum e
-// suprimento (cofre -> caixa) nao pagam por esta guarda.
-async function exigirCaminhoUnicoDaEntregaAoCofre(
-  dados: { empresaId: string; contaOrigemId: string; contaDestinoId: string },
-  caixa: { pdvContaId: string | null } | null,
-  tx: TransacaoBanco
-): Promise<void> {
-  if (!caixa || dados.contaOrigemId !== caixa.pdvContaId) return;
-  const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
-  if (
-    ehMovimentoDoCaixaParaOCofre({
-      contaOrigemId: dados.contaOrigemId,
-      contaDestinoId: dados.contaDestinoId,
-      pdvContaId: caixa.pdvContaId,
-      contaCofreId
-    })
-  ) {
-    throw new Error(
-      "Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa"
-    );
-  }
+// A funcao e PURA: quem chama ja resolveu a conta cofre. Assim a criacao paga a consulta so quando
+// a origem e a conta do PDV, e a edicao — que precisa da mesma conta para a outra trava — paga uma
+// vez so. A mensagem mora aqui porque ela e a mesma nos dois caminhos, e duas copias divergiriam no
+// primeiro ajuste de texto.
+function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
+  contaOrigemId: string;
+  contaDestinoId: string;
+  pdvContaId: string | null;
+  contaCofreId: string | null;
+}): void {
+  if (!ehMovimentoDoCaixaParaOCofre(movimento)) return;
+  throw new Error("Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa");
 }
 
 export async function criarTransferencia(
@@ -155,7 +146,16 @@ export async function criarTransferencia(
       if (!transferenciaLivre && !envolveContaPdv) {
         throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
       }
-      await exigirCaminhoUnicoDaEntregaAoCofre(dados, caixa, tx);
+      // A consulta ao cofre so acontece quando a origem E a conta do PDV: transferencia comum e
+      // suprimento (cofre -> caixa) nao pagam por esta guarda.
+      if (caixa && dados.contaOrigemId === caixa.pdvContaId) {
+        exigirCaminhoUnicoDaEntregaAoCofre({
+          contaOrigemId: dados.contaOrigemId,
+          contaDestinoId: dados.contaDestinoId,
+          pdvContaId: caixa.pdvContaId,
+          contaCofreId: await buscarContaCofreEmpresaRepository(dados.empresaId, tx)
+        });
+      }
 
       // R-143 literal ("nao existe transferencia sem fundo na conta de origem"), agora com teste.
       // Vale na CRIACAO porque e nela que o dinheiro sai (R-036): pendente ja conta como saida da
@@ -497,6 +497,47 @@ export async function atualizarTransferencia(
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
+
+    // P1/#101 · o PUT nao desmancha o que o fluxo do Caixa montou.
+    //
+    // Duas travas, e as duas guardam a MESMA guarda de fechamento (R-171), que reconhece a entrega
+    // pelo destino ser a conta cofre:
+    //
+    //  1. a entrega ao cofre ja gravada e IMUTAVEL (D5/D9). Sem isto, apontar o destino dela para
+    //     outra conta fazia o predicado parar de casar: o fechamento liberava e o malote continuava
+    //     na rua, sem turno aberto onde a divergencia do cofre pudesse cair;
+    //  2. o payload nao pode TRANSFORMAR uma transferencia comum do caixa em Caixa -> Cofre —
+    //     a mesma porta que a criacao ja fechou, alcancada por edicao.
+    //
+    // Lido do retrato SOB a trava (`existente`), nunca da pre-leitura: entre uma e outra a linha
+    // pode ter mudado de caixa.
+    //
+    // O que NAO entra aqui, de proposito: proibir toda troca de destino em linha com `caixa_id`.
+    // Corrigir a conta de destino de uma transferencia comum e edicao legitima e ja tem invariante
+    // provada em `caixa-portas-s3-s8` (S6). As duas travas acima fecham os dois bypasses sem
+    // alcancar esse caso. `status` tambem nao entra: `valoresBaseEdicao` nao o escreve — o PUT
+    // nunca pode mudar status, e uma trava para isso seria codigo morto fingindo protecao.
+    if (existente) {
+      const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+      const pdvContaId = caixa.pdvContaId;
+      if (
+        ehMovimentoDoCaixaParaOCofre({
+          contaOrigemId: existente.contaOrigemId,
+          contaDestinoId: existente.contaDestinoId,
+          pdvContaId,
+          contaCofreId
+        })
+      ) {
+        throw new Error("Entrega ao cofre e movimento imutavel: confira ou recuse a conferencia no cofre");
+      }
+      exigirCaminhoUnicoDaEntregaAoCofre({
+        contaOrigemId: dados.contaOrigemId,
+        contaDestinoId: dados.contaDestinoId,
+        pdvContaId,
+        contaCofreId
+      });
+    }
+
     // R-165 na EDICAO: delta real sobre a conta de ORIGEM. `jaReservado` so devolve o valor gravado
     // quando a origem NAO muda — senao o reenvio identico cobraria o valor duas vezes.
     await exigirSaldoSuficienteNaConta(
