@@ -707,23 +707,37 @@ que ninguém usa — e campo que ninguém usa também custa, porque é dado pess
 
 Encontrados ao mapear, **não corrigidos** (este documento não altera código).
 
-### A-1 · Revelar o CPF do processo invalida a versão que a tela tem na mão — e cancelar quebra
+### A-1 · Uma leitura auditada escreve na linha do processo — e produz conflito falso
 
-**FATO**, e é reproduzível:
+> **Corrigido em 31/08/2026, no mesmo dia.** A primeira redação afirmava que a tela não recarrega o
+> processo e que revelar → cancelar dava 409 numa sessão só. **Estava errado:** a tela recarrega
+> ([AdmissoesProcessosPage.vue:262-265](web-vue/components/admissoes/AdmissoesProcessosPage.vue#L262-L265)),
+> com comentário que diz exatamente por quê, desde o commit `d6d677c`. O defeito é outro, e é este.
 
-1. `revelarCpfDoProcesso` chama `avancarVersaoProcessoRepository`
-   ([processos.service.ts:259](api/src/admissoes/processos.service.ts#L259)) — a versão do processo vai de N para N+1.
-2. A tela guarda o CPF revelado e **não recarrega o processo**
-   ([AdmissoesProcessosPage.vue:255-267](web-vue/components/admissoes/AdmissoesProcessosPage.vue#L255-L267)) — `processo.value.versao` continua N.
-3. `cancelarProcesso` envia `versao: processo.value.versao`
-   ([AdmissoesProcessosPage.vue:279](web-vue/components/admissoes/AdmissoesProcessosPage.vue#L279)) — ou seja, N.
+**FATO.** `revelarCpfDoProcesso` chama `avancarVersaoProcessoRepository`
+([processos.service.ts:259](api/src/admissoes/processos.service.ts#L259)), que faz
+`set({ versao: versaoAtual + 1, atualizadoPor: ator })`
+([processos.repository.ts:328](api/src/admissoes/processos.repository.ts#L328)) — e o UPDATE dispara a
+trigger `admissoes_processos_set_atualizado_em` da `0033`. Ou seja, **revelar um CPF é a única leitura
+do módulo que escreve na tabela raiz**, e escreve três coisas: `versao`, `atualizado_por` e
+`atualizado_em`.
 
-Resultado: o DP revela o CPF, clica em "Cancelar e arquivar" e recebe **409 — "Alguém alterou este
-processo enquanto você lia"**. Ninguém alterou; foi ele mesmo, no clique anterior. Fechar e reabrir o
-modal resolve, o que torna o defeito daqueles que o operador aprende a contornar sem reportar.
+Três consequências, todas reais:
+
+1. **O rodapé do detalhe passa a mentir.** "Alterado por … · data" mostra quem apenas *leu* o
+   documento, como se tivesse alterado o processo. A trilha registra `cpf_revelado` corretamente; o
+   cabeçalho, não.
+2. **Conflito falso em concorrência real.** A tela se protege relendo, mas isso só cobre a própria
+   aba. DP A com o detalhe aberto, DP B revela o CPF, DP A clica em "Cancelar e arquivar" → **409
+   "Alguém alterou este processo enquanto você lia"**, sem nenhuma alteração de negócio. A tela de
+   Testes, que também cancela o processo ([AdmissoesTestesPage.vue:290](web-vue/components/admissoes/AdmissoesTestesPage.vue#L290))
+   e nem oferece o botão de revelar, nunca se autocorrige.
+3. **A defesa vive no cliente.** É um `await abrirDetalhe(id)` num arquivo `.vue`. Qualquer consumidor
+   novo da API precisa lembrar dele — o oposto da disciplina do módulo, onde a regra mora no serviço e
+   no banco.
 
 O bloco interno **não** é afetado: ele tem versão própria (`admissoes_processos_internos.versao`), que
-a revelação não toca.
+a revelação não toca. Por isso o 409 de "salvar internos/exame" não vem daqui.
 
 ### A-2 · As duas trilhas divergem no mesmo ato
 
