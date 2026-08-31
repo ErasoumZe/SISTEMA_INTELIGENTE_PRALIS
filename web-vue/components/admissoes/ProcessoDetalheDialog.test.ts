@@ -392,6 +392,25 @@ describe("o painel lateral saiu de verdade", () => {
     expect(processos).not.toMatch(/@ver-teste="/u);
   });
 
+  it("Deve_A_TelaDeTestesNaoEscutarEdicaoInterna_Porque_LaOBotaoNaoExiste", () => {
+    // O espelho do botao morto: listener sem botao. `pode-editar-internos="false"` impede o
+    // "Editar" de renderizar, entao `editarInternos` era inalcancavel dali — ninguem tinha como
+    // dispara-lo. Editar mora na tela "Processos de admissao", que ja tem entrada de menu.
+    //
+    // O padrao aceita as QUATRO grafias validas de um listener em SFC — `@editar-internos`,
+    // `@editarInternos`, e as duas com `v-on:` —, e nao exige o `=`, para que um modificador
+    // (`.once`) tambem case. Casar so a grafia kebab provaria a ausencia de UMA escrita, e o
+    // listener morto voltaria em camelCase com a suite verde.
+    const ESCUTA_EDITAR_INTERNOS = /(?:@|v-on:)editar-?[Ii]nternos/u;
+
+    const testes = semComentarios(readFileSync(join(PASTA, "AdmissoesTestesPage.vue"), "utf8"));
+    expect(testes).toContain(':pode-editar-internos="false"');
+    expect(testes).not.toMatch(ESCUTA_EDITAR_INTERNOS);
+    // E a tela dona continua escutando — remover o listener morto nao pode ter levado o vivo junto.
+    const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+    expect(processos).toMatch(ESCUTA_EDITAR_INTERNOS);
+  });
+
   it("Deve_SerModalNaoGaveta_E_SemPersistent", () => {
     // Sem os comentarios: o cabecalho do componente EXPLICA que era um drawer, e explicar o passado
     // nao e mante-lo. A varredura precisa julgar o codigo, nao a prosa.

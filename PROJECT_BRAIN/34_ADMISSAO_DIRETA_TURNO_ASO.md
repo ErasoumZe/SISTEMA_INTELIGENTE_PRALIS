@@ -146,8 +146,8 @@ carrega CTPS, PIS/NIT e o ASO. A Gerência recebe **403**, e há teste provando.
   botões de exame: dois caminhos para o mesmo ato dentro de uma tela de leitura;
 - editar dados internos e exame acontece num **único modal**, que avisa a consequência **antes** do
   clique — escolher não apto diz que o processo será pausado;
-- a tela de **Testes** deixou de editar o processo: abre em leitura e leva para "Processos de
-  admissão", que é a dona.
+- a tela de **Testes** deixou de editar o processo: abre em **leitura**, e só. Editar é na página
+  "Processos de admissão", que é a dona e já tem **entrada de menu própria**.
 
 > **O detalhe não é mais painel lateral: é modal central de leitura.** Atualizado em 31/08/2026.
 >
@@ -177,6 +177,20 @@ passa `false`, e o botão não renderiza. Obrigatória, e não opcional com defa
 defeito voltaria calado no dia em que uma terceira tela montasse o modal.
 
 Não é permissão — `podeCancelar` e `podeEditarInternos` são. É a existência do caminho.
+
+### D-8.2 · O espelho do botão morto: listener sem botão
+
+Corrigido em 31/08/2026, na revisão que a D-8.1 provocou.
+
+A tela de Testes escutava `@editar-internos` e navegava para "Processos de admissão". Só que ela
+passa `pode-editar-internos="false"`, então o botão "Editar" **nunca renderizava ali** — o listener
+era inalcançável, e a função de navegação, código morto. É o mesmo defeito da D-8.1 pelo avesso:
+lá, botão sem destino; aqui, destino sem botão.
+
+Os dois saíram. **Nada foi criado no lugar**: a tela de Testes continua só leitura do processo, e
+editar segue na página dona, alcançada pelo menu que já existe. Trocar o listener por um botão de
+atalho seria criar o segundo lugar para o mesmo ato — exatamente o que a `AGENTS.md` §4.1 proíbe, e
+o que a própria D-8 já tinha decidido.
 
 ---
 

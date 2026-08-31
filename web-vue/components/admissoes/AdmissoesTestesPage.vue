@@ -39,17 +39,6 @@ const podeVerProcesso = computed(() => temPermissao(permissoes.value, "admissoes
 const podeCancelarProcesso = computed(() =>
   temPermissao(permissoes.value, "admissoes_processos_cancelar")
 );
-/**
- * ADM-003 V1B: daqui o processo e SO LEITURA.
- *
- * Editar dados internos acontece num modal so, na tela "Processos de admissao", que e a dona do
- * processo. Abrir um segundo caminho de edicao aqui — mesmo reusando o mesmo modal — seria a
- * duplicidade que a regra-mae proibe, e o operador passaria a ter dois lugares para o mesmo ato.
- */
-function irParaProcessos() {
-  void navigateTo("/admissoes_processos");
-}
-
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
 // Os filtros vivem em `TestesFiltros` e chegam aqui APLICADOS. Guardar so o que foi aplicado evita
@@ -480,8 +469,16 @@ onMounted(async () => {
     @verificar-cpf="verificarCpf"
   />
 
-  <!-- `pode-ver-teste` e VERDADEIRO so aqui: e desta tela que se chega ao processo, e
-       `voltarAoTeste` reabre o teste de origem. O caminho de volta existe, entao o botao existe. -->
+  <!--
+    ADM-003 V1B: daqui o processo e SO LEITURA. `pode-editar-internos` e falso, entao o botao
+    "Editar" nao renderiza — e por isso NAO ha `@editar-internos` aqui. O listener existia e era
+    inalcancavel: ninguem tinha como dispara-lo. Editar continua na tela "Processos de admissao",
+    que e a dona do processo e ja tem entrada de menu propria; um atalho daqui seria o segundo
+    lugar para o mesmo ato que a regra-mae proibe.
+
+    `pode-ver-teste` e VERDADEIRO so aqui: e desta tela que se chega ao processo, e `voltarAoTeste`
+    reabre o teste de origem. O caminho de volta existe, entao o botao existe.
+  -->
   <ProcessoDetalheDialog
     :aberto="processoAberto"
     :processo="processo"
@@ -492,7 +489,6 @@ onMounted(async () => {
     :processando="processoProcessando"
     :pode-ver-teste="true"
     @cancelar="cancelarProcessoAdmissao"
-    @editar-internos="irParaProcessos"
     @fechar="processoAberto = false"
     @ver-teste="voltarAoTeste"
   />
