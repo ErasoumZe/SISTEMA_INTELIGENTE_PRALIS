@@ -241,6 +241,21 @@ async function recusarSeCpfJaEstaEmUso(cpf: string, empresaId: string, tx: Trans
 /**
  * REVELAR o CPF do processo. Ato explicito e auditado, na mesma transacao da leitura: se a auditoria
  * falhar, o CPF nao sai. Mesma disciplina do D-4 do PROJECT_BRAIN/31.
+ *
+ * O evento NAO incrementa a versao — nada mudou no processo. Revelar e LEITURA, e leitura nao pode
+ * escrever na linha raiz: `avancarVersaoProcessoRepository` gravava `atualizado_por` e disparava a
+ * trigger de `atualizado_em`, entao o detalhe passava a mostrar como "Alterado por" quem apenas
+ * tinha lido o documento. Nao havia como resolver so a autoria: a trigger e BEFORE UPDATE em
+ * qualquer coluna.
+ *
+ * Por isso o evento pode repetir, e o indice unico do historico e PARCIAL (migration 0036) —
+ * exatamente como o do periodo de teste desde a 0032. Sem ele, a segunda revelacao colidiria com o
+ * primeiro evento da mesma versao.
+ *
+ * O LOCK fica. Ele nao existe para escrever: existe para a versao lida ser a mesma durante a
+ * transacao inteira, para o 404 valer no instante da gravacao, e porque o INSERT no historico ja
+ * toma `FOR KEY SHARE` na linha do processo pela FK — travar antes, na mesma ordem das demais
+ * escritas, e o que impede inversao de lock com elas.
  */
 export async function revelarCpfDoProcesso(id: string, perfil?: PerfilUsuario) {
   const empresaId = empresaDoAtor(perfil);
@@ -256,17 +271,13 @@ export async function revelarCpfDoProcesso(id: string, perfil?: PerfilUsuario) {
       throw erroValidacao("Este processo nao tem CPF proprio: ele veio de um periodo de teste.");
     }
 
-    const evento = await avancarVersaoProcessoRepository(
-      { id, empresaId, versaoAtual: alvo.versao, atorUsuarioId: ator },
-      tx
-    );
-    if (!evento) throw conflito("Alguem alterou este processo enquanto voce lia", "VERSAO_CONFLITANTE");
-
     await registrarEventoProcessoRepository(
       {
         processoId: id,
         empresaId,
-        versao: evento.versao,
+        // A versao FUNCIONAL vigente no momento da leitura, vinda do lock. O evento registra "o que
+        // estava valendo quando alguem leu", nao uma versao nova.
+        versao: alvo.versao,
         acao: "cpf_revelado",
         atorUsuarioId: ator
       },

@@ -259,9 +259,13 @@ async function revelarCpf() {
   try {
     const resposta = await apiPost<{ cpf: string }>(`/api/admissoes/processos/${id}/cpf`, {});
     cpfRevelado.value = resposta.cpf;
-    // Releitura obrigatoria: ao contrario da revelacao do TESTE, esta AVANCA a versao do processo
-    // (`avancarVersaoProcessoRepository`). Sem reler, a `versao` em memoria fica velha e o
-    // cancelamento seguinte levaria 409. De quebra, a trilha ja mostra o `cpf_revelado`.
+    // Releitura para MOSTRAR o evento: o `cpf_revelado` acabou de entrar na trilha, e o historico
+    // do modal e carregado junto com o detalhe. Sem ela, o DP so veria a propria consulta
+    // registrada na proxima vez que abrisse o processo.
+    //
+    // Ela NAO existe mais para corrigir versao. Ate a migration 0036 a revelacao avancava a versao
+    // do processo, e reler era o que impedia o cancelamento seguinte de levar 409; hoje revelar nao
+    // escreve nada na linha raiz — nem versao, nem `atualizado_por`, nem `atualizado_em`.
     await abrirDetalhe(id);
   } catch (error) {
     // Falha mantem SO a mascara: `cpfRevelado` nem chega a ser escrito.
