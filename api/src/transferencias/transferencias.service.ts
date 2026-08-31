@@ -13,9 +13,11 @@ import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
+  buscarContaCofreEmpresaRepository,
   listarUsuariosTesourariaRepository,
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
+import { ehMovimentoDoCaixaParaOCofre } from "./entrega-cofre.repository.js";
 import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
@@ -84,6 +86,43 @@ export async function listarTransferencias(
   return listarTransferenciasRepository(query, empresasPermitidasIds);
 }
 
+// P1/#101 · a entrega ao cofre tem UM caminho, e nao e a transferencia comum.
+//
+// Esta rota nunca escreve `tipo`: a linha nasce `suprimento`. Lancada pelo operador, ela nascia
+// `pendente` e vinculada ao caixa dele — logo, contava como saida — mas o predicado da guarda de
+// fechamento (R-171) procura `sangria`/`retorno` e nao a via. O dinheiro saia do caixa para o cofre
+// e o turno fechava por cima dele: o defeito exato que a Fatia 1 existe para eliminar, entrando por
+// outra porta.
+//
+// Alargar a guarda seria tratar o sintoma. O que estava errado e a porta existir: pela D9/R-179
+// quem leva dinheiro do Caixa ao Cofre e o proprio Caixa, por
+// `POST /api/caixa/:id/transferencia-cofre` — o unico escritor de `sangria`/`retorno`, que exige
+// confirmador elegivel, numera a ordem, controla o lacre e e idempotente. Nada disso existe aqui, e
+// malote sem conferencia e a diferenca entre dinheiro rastreado e dinheiro sumido.
+//
+// A consulta ao cofre so acontece quando a origem E a conta do PDV: transferencia comum e
+// suprimento (cofre -> caixa) nao pagam por esta guarda.
+async function exigirCaminhoUnicoDaEntregaAoCofre(
+  dados: { empresaId: string; contaOrigemId: string; contaDestinoId: string },
+  caixa: { pdvContaId: string | null } | null,
+  tx: TransacaoBanco
+): Promise<void> {
+  if (!caixa || dados.contaOrigemId !== caixa.pdvContaId) return;
+  const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+  if (
+    ehMovimentoDoCaixaParaOCofre({
+      contaOrigemId: dados.contaOrigemId,
+      contaDestinoId: dados.contaDestinoId,
+      pdvContaId: caixa.pdvContaId,
+      contaCofreId
+    })
+  ) {
+    throw new Error(
+      "Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa"
+    );
+  }
+}
+
 export async function criarTransferencia(
   dados: TransferenciaPayload,
   perfil: PerfilUsuario
@@ -116,6 +155,7 @@ export async function criarTransferencia(
       if (!transferenciaLivre && !envolveContaPdv) {
         throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
       }
+      await exigirCaminhoUnicoDaEntregaAoCofre(dados, caixa, tx);
 
       // R-143 literal ("nao existe transferencia sem fundo na conta de origem"), agora com teste.
       // Vale na CRIACAO porque e nela que o dinheiro sai (R-036): pendente ja conta como saida da

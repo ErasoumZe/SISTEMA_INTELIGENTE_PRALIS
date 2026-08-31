@@ -34,6 +34,35 @@ export function ehEntregaCaixaParaCofre(linha: {
 }
 
 /**
+ * P1/#101 · o mesmo fato visto pelo CAMINHO DO DINHEIRO, e nao pelo `tipo` da linha.
+ *
+ * `ehEntregaCaixaParaCofre` acima pergunta "esta linha e uma entrega ao cofre?" e responde pelo
+ * `tipo`, que so o escritor unico do Caixa grava. Esta funcao pergunta outra coisa: "este movimento
+ * TIRA dinheiro do caixa e leva ao cofre?" — e responde pelas duas pontas, sem olhar `tipo`.
+ *
+ * A distincao existe porque foi exatamente por ela que o caminho antigo escapou: a rota generica
+ * nunca escreve `tipo` (a linha nasce `suprimento`), entao o predicado por tipo nao a via, embora o
+ * dinheiro fizesse o percurso identico. Pela D9/R-179 esse percurso tem UM caminho — o fluxo do
+ * proprio Caixa. Quem valida criacao e edicao de transferencia comum usa esta funcao para recusar.
+ *
+ * As duas pontas sao necessarias juntas: sair da conta do PDV para qualquer outro lugar e
+ * transferencia comum, e vir do cofre PARA o caixa e suprimento. So o par exato e entrega.
+ */
+export function ehMovimentoDoCaixaParaOCofre(movimento: {
+  contaOrigemId: string;
+  contaDestinoId: string;
+  pdvContaId: string | null;
+  contaCofreId: string | null;
+}): boolean {
+  return (
+    movimento.pdvContaId !== null &&
+    movimento.contaCofreId !== null &&
+    movimento.contaOrigemId === movimento.pdvContaId &&
+    movimento.contaDestinoId === movimento.contaCofreId
+  );
+}
+
+/**
  * G1/R-171 · as entregas ao cofre deste caixa que JA SAIRAM e ainda esperam conferencia.
  *
  * A metade SQL do predicado acima, com os mesmos tres criterios na mesma ordem.
