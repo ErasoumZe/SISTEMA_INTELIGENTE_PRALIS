@@ -3,6 +3,8 @@ import type { CaixaStatus, Opcao, ResumoCaixa, SolicitacaoCofre } from "~/types/
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
+import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
+import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
 const props = defineProps<{
@@ -126,6 +128,20 @@ const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
 const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fechamento.observacao.trim());
+
+// G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
+// o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
+const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
+
+// Sao DUAS travas, e ate agora so uma delas aparecia na tela — nenhuma delas desabilitava o botao.
+// A ordem programada (`agendada`, dinheiro que ainda NAO saiu) ja bloqueava o fechamento na API
+// desde a decisao 5, mas o operador so descobria clicando e levando 400. Agora as duas dizem a
+// mesma coisa no mesmo lugar: uma computada, um motivo, e o botao para antes.
+const motivoTravado = computed(() =>
+  motivoFechamentoTravado(entregasPendentes.value.length, (props.solicitacoes ?? []).length)
+);
+const fechamentoTravado = computed(() => motivoTravado.value !== null);
+const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
 const maquininhasSelect = computed(() =>
   (props.maquininhas ?? []).map((item) => ({
     ...item,
@@ -255,6 +271,13 @@ function executarSolicitacao(solicitacao: SolicitacaoCofre) {
 // transacao do fechamento; se o saldo ja e zero, apenas fecha. Nao existe segundo botao.
 function fechar() {
   const caixa = caixaAberto.value;
+  // Travado por entrega em transito: o botao continua focavel de proposito (`aria-disabled`, nao
+  // `disabled`), porque botao morto nao entra na navegacao por teclado e o leitor de tela nunca
+  // chega ao motivo. Clicar leva ao motivo, que e a unica coisa util a fazer aqui.
+  if (fechamentoTravado.value) {
+    blocoTravas.value?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
   if (!caixa || props.salvando || observacaoObrigatoriaPendente.value) return;
   emit("fecharCaixa", {
@@ -412,43 +435,49 @@ function fechar() {
           >, e a Tesouraria será notificada. A observação abaixo é obrigatória e será registrada junto com a quebra.
         </v-alert>
 
-        <!-- D4/D10: o que a retaguarda PROGRAMOU. Ainda nao movimentou dinheiro — nasce 'agendada'.
+        <!-- G1/R-171: o que ja saiu e ninguem conferiu. Vem ANTES das ordens programadas porque e
+           dinheiro na rua, nao um pedido: e a unica coisa que trava o fechamento agora. -->
+        <div ref="blocoTravas" tabindex="-1">
+          <EntregasAguardandoConferencia :entregas="entregasPendentes" />
+
+          <!-- D4/D10: o que a retaguarda PROGRAMOU. Ainda nao movimentou dinheiro — nasce 'agendada'.
            O valor e IMUTAVEL: o operador entrega exatamente o programado, usando o campo de lacre
            abaixo. Enquanto houver solicitacao aqui, o caixa nao fecha (decisao 5). -->
-        <template v-if="(solicitacoes ?? []).length">
-          <div class="text-subtitle-2 mb-2">Entregas solicitadas pela Tesouraria</div>
-          <v-alert
-            v-for="solicitacao in solicitacoes ?? []"
-            :key="solicitacao.id"
-            type="info"
-            variant="tonal"
-            class="mb-3"
-            data-teste="solicitacao-cofre"
-          >
-            <div class="d-flex flex-wrap align-center ga-3">
-              <div class="flex-grow-1">
-                <strong>{{ dinheiro(solicitacao.valor) }}</strong>
-                · {{ solicitacao.tipo === "sangria" ? "Sangria" : "Retorno" }}
-                <div v-if="solicitacao.observacao" class="text-caption">{{ solicitacao.observacao }}</div>
-                <div v-if="saldoAtual < solicitacao.valor" class="text-caption text-error">
-                  Saldo em espécie insuficiente ({{ dinheiro(saldoAtual) }}) — a entrega não pode ser executada
-                  parcialmente.
+          <template v-if="(solicitacoes ?? []).length">
+            <div class="text-subtitle-2 mb-2">Entregas solicitadas pela Tesouraria</div>
+            <v-alert
+              v-for="solicitacao in solicitacoes ?? []"
+              :key="solicitacao.id"
+              type="info"
+              variant="tonal"
+              class="mb-3"
+              data-teste="solicitacao-cofre"
+            >
+              <div class="d-flex flex-wrap align-center ga-3">
+                <div class="flex-grow-1">
+                  <strong>{{ dinheiro(solicitacao.valor) }}</strong>
+                  · {{ solicitacao.tipo === "sangria" ? "Sangria" : "Retorno" }}
+                  <div v-if="solicitacao.observacao" class="text-caption">{{ solicitacao.observacao }}</div>
+                  <div v-if="saldoAtual < solicitacao.valor" class="text-caption text-error">
+                    Saldo em espécie insuficiente ({{ dinheiro(saldoAtual) }}) — a entrega não pode ser executada
+                    parcialmente.
+                  </div>
                 </div>
+                <v-btn
+                  color="warning"
+                  variant="flat"
+                  prepend-icon="mdi-check-bold"
+                  :disabled="salvando || saldoAtual < solicitacao.valor"
+                  :loading="salvando"
+                  data-teste="botao-executar-solicitacao"
+                  @click="executarSolicitacao(solicitacao)"
+                >
+                  Executar {{ dinheiro(solicitacao.valor) }}
+                </v-btn>
               </div>
-              <v-btn
-                color="warning"
-                variant="flat"
-                prepend-icon="mdi-check-bold"
-                :disabled="salvando || saldoAtual < solicitacao.valor"
-                :loading="salvando"
-                data-teste="botao-executar-solicitacao"
-                @click="executarSolicitacao(solicitacao)"
-              >
-                Executar {{ dinheiro(solicitacao.valor) }}
-              </v-btn>
-            </div>
-          </v-alert>
-        </template>
+            </v-alert>
+          </template>
+        </div>
 
         <v-row dense>
           <v-col v-if="temSobra" cols="12" md="4">
@@ -499,12 +528,23 @@ function fechar() {
               :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
               :disabled="observacaoObrigatoriaPendente"
+              :aria-disabled="fechamentoTravado ? 'true' : undefined"
+              :class="{ 'botao-travado': fechamentoTravado }"
               :loading="salvando"
+              :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
               data-teste="botao-fechar"
               @click="fechar"
             >
               {{ temDeficit ? "Fechar com quebra" : "Fechar caixa" }}
             </v-btn>
+            <p
+              v-if="fechamentoTravado"
+              id="motivo-fechamento-travado"
+              class="text-caption mt-2 mb-0"
+              data-teste="motivo-fechamento-travado"
+            >
+              Fechamento travado: {{ motivoTravado }}
+            </p>
           </v-col>
         </v-row>
       </template>
@@ -513,6 +553,13 @@ function fechar() {
 </template>
 
 <style scoped>
+/* Travado, mas vivo: fica cinza e com cursor de recusa, e continua focavel — quem chega por
+   teclado precisa poder alcancar o botao para descobrir por que ele nao fecha. */
+.botao-travado {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Grade auto-responsiva: cada card tem largura minima confortavel e quebra sozinho — nunca aperta
    como no cockpit "fiel ao mockup" que foi revertido no contexto real. */
 .cat-grid {

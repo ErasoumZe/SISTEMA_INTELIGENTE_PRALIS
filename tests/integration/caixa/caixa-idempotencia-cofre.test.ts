@@ -21,13 +21,17 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
   let cookieAdmin: string;
   let cookieTesouraria: string;
   let cookieCaixa: string;
+  // O gerente tambem responde pelo cofre no seed. Ele existe aqui porque quem CRIOU o movimento
+  // nunca pode conferi-lo (R-028): quando a Tesouraria programa a entrega, quem confere e ele.
+  let cookieGerente: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieTesouraria, cookieCaixa] = await Promise.all([
+    [cookieAdmin, cookieTesouraria, cookieCaixa, cookieGerente] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "tesouraria"),
-      cookieSessao(contexto.app, "caixa")
+      cookieSessao(contexto.app, "caixa"),
+      cookieSessao(contexto.app, "gerente")
     ]);
   }, 120_000);
 
@@ -603,8 +607,25 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
     ]);
     expect(caixa?.status).toBe("aberto");
 
-    // Executada a ordem, o fechamento passa e devolve a sobra no mesmo ato (D6).
+    // Executada a ordem, a trava da D12 sai — mas o dinheiro passa a estar NA RUA, e a G1/R-171
+    // assume: `agendada` vira `pendente`, e pendente tambem nao deixa fechar.
     expect((await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, {})).statusCode).toBe(200);
+    const aindaEmTransito = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa 2" });
+    assertProblem(aindaEmTransito, 400);
+    expect(aindaEmTransito.body).toMatch(/aguardando confer[eê]ncia/iu);
+
+    // Conferida no cofre, o fechamento passa e devolve a sobra no mesmo ato (D6).
+    const entregue = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and status = 'pendente' order by criado_em desc limit 1",
+      [caixaId]
+    );
+    const conferencia = await post(
+      `/api/transferencias/${entregue!.id}/confirmar`,
+      { contaDestinoId: idsTeste.contaCofre, valorRecebido: 100 },
+      cookieGerente
+    );
+    expect(conferencia.statusCode, conferencia.body).toBe(200);
+
     const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento" });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });

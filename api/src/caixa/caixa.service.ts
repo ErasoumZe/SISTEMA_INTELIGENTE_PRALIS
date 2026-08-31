@@ -11,6 +11,7 @@ import type {
   CategoriaLancamentosCaixa,
   DetalheCaixaResponse,
   EditarAberturaCaixaPayload,
+  EntregaCofrePendente,
   ExecutarSolicitacaoCofrePayload,
   FecharCaixaPayload,
   HistoricoCaixaQuery,
@@ -84,6 +85,7 @@ import {
   type FiltrosHistoricoCaixa,
   type IntencaoEntregaCofre
 } from "./caixa.repository.js";
+import { listarEntregasAoCofrePendentesRepository } from "../transferencias/entrega-cofre.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
@@ -192,14 +194,51 @@ export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: Exe
   return montarResumoCaixa(totais, paraCentavos(caixa.dividaCofre));
 }
 
+// G1/R-171 · a UNICA porta que monta o status de um caixa aberto.
+//
+// Existia como o mesmo literal repetido em oito lugares. Com um campo a mais — as entregas que
+// travam o fechamento — repetir viraria dividir: bastaria uma rota esquecer o campo para a tela
+// mostrar "pode fechar" sobre um caixa que a API recusa. Aqui isso nao tem como acontecer.
+async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promise<CaixaStatus> {
+  return {
+    caixaAberto: serializarCaixa(caixa),
+    resumo: await calcularResumoCaixaOperacional(caixa, db),
+    entregasPendentes: serializarEntregasPendentes(await listarEntregasAoCofrePendentesRepository(caixa.id, db))
+  };
+}
+
+function serializarEntregasPendentes(
+  linhas: Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>
+): EntregaCofrePendente[] {
+  return linhas.map((linha) => ({
+    id: linha.id,
+    tipo: linha.tipo === "sangria" ? "sangria" : "retorno",
+    valor: deCentavos(linha.valorCentavos),
+    lacre: linha.lacre,
+    criadoEm: serializarData(linha.criadoEm) ?? ""
+  }));
+}
+
+// A recusa precisa dizer QUAL entrega trava. "Nao pode fechar" sozinho manda o operador adivinhar
+// entre as entregas do turno — e, no fim do expediente, adivinhar vira ligar para a Tesouraria.
+function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
+  const VISIVEIS = 3;
+  const descritas = entregas.slice(0, VISIVEIS).map((entrega) => {
+    const nome = entrega.tipo === "sangria" ? "Sangria" : "Retorno";
+    const lacre = entrega.lacre ? `, lacre ${entrega.lacre}` : "";
+    return `${nome} de R$ ${entrega.valor.toFixed(2)}${lacre}`;
+  });
+  const excedente = entregas.length - descritas.length;
+  if (excedente > 0) descritas.push(`e mais ${excedente}`);
+  return `Entrega ao cofre aguardando conferencia (${descritas.join("; ")}): confira no cofre antes de fechar o caixa`;
+}
+
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
   const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
-  if (!caixa) return { caixaAberto: null, resumo: null };
-  return {
-    caixaAberto: serializarCaixa(caixa),
-    resumo: await calcularResumoCaixaOperacional(caixa)
-  };
+  // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
+  if (!caixa) return { caixaAberto: null, resumo: null, entregasPendentes: [] };
+  return statusDoCaixaAberto(caixa);
 }
 
 export interface EscopoListagemCaixa {
@@ -384,7 +423,7 @@ async function abrirCaixaEmTransacao(
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
     // Abertura retroativa (ex.: abriu 12:53 informando 08:00): puxa as vendas orfas do periodo.
     await revincularVendasAoCaixa(aberto, tx);
-    return { caixaAberto: serializarCaixa(aberto), resumo: await calcularResumoCaixaOperacional(aberto, tx) };
+    return statusDoCaixaAberto(aberto, tx);
   });
 }
 
@@ -471,7 +510,7 @@ async function editarAberturaCaixaEmTransacao(
     if (!atualizado) throw new Error("Caixa nao encontrado apos edicao");
     // Qualquer edicao de horario dispara a revinculacao retroativa das vendas integradas.
     await revincularVendasAoCaixa(atualizado, tx);
-    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
+    return statusDoCaixaAberto(atualizado, tx);
   });
 }
 
@@ -577,8 +616,7 @@ export async function alterarHorarioCaixa(
       );
 
       return {
-        caixaAberto: serializarCaixa(atualizado),
-        resumo: await calcularResumoCaixaOperacional(atualizado, tx),
+        ...(await statusDoCaixaAberto(atualizado, tx)),
         revinculacao
       };
     });
@@ -610,6 +648,24 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (await existeSolicitacaoAgendadaRepository(caixa.id, tx)) {
       throw new Error("Existe solicitacao de entrega ao cofre pendente: execute ou cancele antes de fechar");
     }
+
+    // G1/R-171 · dinheiro que JA SAIU tambem trava o fechamento comum.
+    //
+    // A guarda acima cobre a ordem que ainda NAO virou dinheiro na rua. Esta cobre o oposto: o
+    // malote entregue de verdade e ainda nao conferido no cofre. Antes disto o caixa fechava por
+    // cima dele — o operador ia embora, e se o cofre encontrasse falta depois a divergencia nao
+    // tinha mais turno aberto onde cair. A saida do operador e uma so: conferencia no cofre.
+    //
+    // Lida DEPOIS da trava e ANTES do retorno final (D6/D7), entao o proprio ato do fechamento nao
+    // se auto-bloqueia. Corrida: a linha do caixa ja esta em FOR UPDATE aqui e `confirmarTransferencia`
+    // pede FOR SHARE na MESMA linha antes de mudar o status — as duas serializam, e este SELECT
+    // nunca decide sobre um retrato velho.
+    //
+    // Escopo: so o malote fisico Caixa -> Cofre, pelo predicado canonico. Transferencia generica
+    // pendente nao entra — travar alem do que a R-171 descreve prenderia operacao que hoje nao tem
+    // valvula de escape (o fluxo especial auditado e a fatia seguinte da #101).
+    const entregasPendentes = serializarEntregasPendentes(await listarEntregasAoCofrePendentesRepository(caixa.id, tx));
+    if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
 
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
     let saldoCentavos = saldoCaixaCentavos(totais);
@@ -690,7 +746,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // corrida — erro de dominio (400), nunca 500 por violacao de UNIQUE da quebra.
     if (linhasFechadas === 0) throw new Error("Caixa ja fechado");
 
-    return { caixaAberto: null, resumo: null } satisfies CaixaStatus;
+    return { caixaAberto: null, resumo: null, entregasPendentes: [] } satisfies CaixaStatus;
   });
 }
 
@@ -919,10 +975,7 @@ export async function criarTransferenciaCofreCaixa(
         lacre: dados.lacre?.trim() || null,
         observacao: dados.observacao?.trim() || null
       });
-      return {
-        caixaAberto: serializarCaixa(caixa),
-        resumo: await calcularResumoCaixaOperacional(caixa, tx)
-      };
+      return statusDoCaixaAberto(caixa, tx);
     }
 
     // Decisao 7: entrega avulsa tambem entrega dinheiro — sem quem conferir, nao sai.
@@ -955,7 +1008,7 @@ export async function criarTransferenciaCofreCaixa(
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
-    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
+    return statusDoCaixaAberto(atualizado, tx);
   });
 }
 
@@ -1076,10 +1129,7 @@ export async function executarSolicitacaoCofre(
     const caixa = await carregarCaixaParaSolicitacao(caixaId, perfil, tx);
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
 
-    const status = async () => ({
-      caixaAberto: serializarCaixa(caixa),
-      resumo: await calcularResumoCaixaOperacional(caixa, tx)
-    });
+    const status = () => statusDoCaixaAberto(caixa, tx);
 
     const lacre = dados.lacre?.trim() || null;
     const solicitacao = await buscarSolicitacaoCofreRepository(solicitacaoId, caixaId, tx);
@@ -1164,7 +1214,7 @@ export async function executarSolicitacaoCofre(
 
     const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!atualizado) throw new Error("Caixa nao encontrado");
-    return { caixaAberto: serializarCaixa(atualizado), resumo: await calcularResumoCaixaOperacional(atualizado, tx) };
+    return statusDoCaixaAberto(atualizado, tx);
   });
 }
 

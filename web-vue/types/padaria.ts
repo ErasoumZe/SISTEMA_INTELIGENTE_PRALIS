@@ -256,9 +256,23 @@ export type CaixaOperacional = {
   status: string;
 };
 
+// G1/R-171: uma entrega ao cofre que JA SAIU e ainda espera conferencia. Nao confundir com
+// SolicitacaoCofre, que e ordem `agendada` — dinheiro que ainda NAO saiu. As duas travam o
+// fechamento, por motivos opostos.
+export type EntregaCofrePendente = {
+  id: string;
+  tipo: "sangria" | "retorno";
+  valor: number;
+  lacre: string | null;
+  criadoEm: string;
+};
+
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+  // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
+  // e um dia significaria "a rota esqueceu de mandar".
+  entregasPendentes: EntregaCofrePendente[];
 };
 
 // D4: a entrega ao cofre que a retaguarda PROGRAMOU para este caixa. Enquanto esta aqui ela e so

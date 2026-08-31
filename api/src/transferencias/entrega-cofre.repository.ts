@@ -1,0 +1,76 @@
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { empresas } from "@padaria/db/schema/cadastro";
+import { transferencias } from "@padaria/db/schema/transferencia";
+import { paraCentavos } from "@padaria/shared/dinheiro";
+import { banco, type ExecutorBanco } from "../banco/conexao.js";
+
+/**
+ * A regra canonica de "esta transferencia e uma entrega do Caixa para o Cofre" — nos dois dialetos.
+ *
+ * Modulo PROPRIO, e nao um pedaco de `transferencias.repository.ts`, por duas razoes:
+ *
+ *  1. **Fonte unica.** A listagem usa o predicado para a tela saber qual regra aplicar; a conferencia
+ *     usa para escolher entre o fluxo estrito e o generico; e o fechamento usa para saber se ha
+ *     dinheiro na rua. Duas copias divergiriam, e a tela passaria a oferecer uma acao que a API
+ *     recusa — que foi exatamente o defeito ja corrigido aqui uma vez.
+ *  2. **Sem ciclo.** `transferencias.repository` alcanca `caixa.service` por
+ *     `lancamentos.dominio`, entao o Caixa nao pode importar de la. Este arquivo so conhece Drizzle,
+ *     o schema e a conexao — qualquer camada pode depender dele.
+ *
+ * Os tres criterios sao necessarios JUNTOS: nenhum sozinho distingue os fluxos.
+ */
+export function ehEntregaCaixaParaCofre(linha: {
+  caixaId: string | null;
+  tipo: string;
+  contaDestinoId: string;
+  contaCofreId: string | null;
+}): boolean {
+  return (
+    linha.caixaId !== null &&
+    (linha.tipo === "sangria" || linha.tipo === "retorno") &&
+    linha.contaCofreId !== null &&
+    linha.contaDestinoId === linha.contaCofreId
+  );
+}
+
+/**
+ * G1/R-171 · as entregas ao cofre deste caixa que JA SAIRAM e ainda esperam conferencia.
+ *
+ * A metade SQL do predicado acima, com os mesmos tres criterios na mesma ordem.
+ * `isNotNull(empresas.contaCofreId)` e redundante em SQL — a igualdade com NULL ja nao casa — e fica
+ * escrito assim de proposito: apagar um dos criterios daqui faria o par divergir sem nenhum teste
+ * ficar vermelho.
+ */
+export async function listarEntregasAoCofrePendentesRepository(
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>> {
+  const linhas = await db
+    .select({
+      id: transferencias.id,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      lacre: transferencias.nLacreDoc,
+      criadoEm: transferencias.criadoEm
+    })
+    .from(transferencias)
+    .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
+    .where(
+      and(
+        eq(transferencias.caixaId, caixaId),
+        eq(transferencias.status, "pendente"),
+        inArray(transferencias.tipo, ["sangria", "retorno"]),
+        isNotNull(empresas.contaCofreId),
+        eq(transferencias.contaDestinoId, empresas.contaCofreId)
+      )
+    )
+    .orderBy(asc(transferencias.criadoEm));
+
+  return linhas.map((linha) => ({
+    id: linha.id,
+    tipo: linha.tipo,
+    valorCentavos: paraCentavos(linha.valorOriginal),
+    lacre: linha.lacre,
+    criadoEm: linha.criadoEm
+  }));
+}

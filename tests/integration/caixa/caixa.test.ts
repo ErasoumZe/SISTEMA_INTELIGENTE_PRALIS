@@ -723,7 +723,13 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { tipo: "retorno", valor: 75, observacao: "Retorno ciclo", idempotenciaChave: randomUUID() }
+      payload: {
+        tipo: "retorno",
+        valor: 75,
+        lacre: "CAIXA-CICLO-RETORNO",
+        observacao: "Retorno ciclo",
+        idempotenciaChave: randomUUID()
+      }
     });
     expect(retorno.statusCode, retorno.body).toBe(200);
 
@@ -737,6 +743,11 @@ describe("caixa integration", () => {
     expect(statusDepois.json()).toMatchObject({
       data: { caixaAberto: { id: caixaId }, resumo: { totalTransferenciasSaida: 105, totalDespesas: 20, saldo: 0 } }
     });
+
+    // G1/R-171: o retorno saiu do caixa e esta `pendente` — dinheiro na rua trava o fechamento
+    // comum. Este teste e sobre a FORMULA do ciclo, nao sobre a conferencia, entao a entrega e
+    // dada por conferida pelo mesmo atalho direto que as duas transferencias acima ja usam.
+    await confirmarTransferenciaPorLacreDireto("CAIXA-CICLO-RETORNO", usuarioAdminId);
 
     const fechar = await contexto.app.inject({
       method: "POST",

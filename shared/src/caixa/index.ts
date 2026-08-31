@@ -310,6 +310,20 @@ export const solicitacaoCofreSchema = z.object({
   criadoEm: z.string()
 });
 
+// G1/R-171 — uma entrega ao cofre que JA SAIU do caixa e ainda nao foi conferida. Enquanto existir
+// uma destas, o caixa nao fecha pelo caminho comum: o dinheiro esta na rua e a divergencia futura
+// precisa de um turno aberto para ter dono.
+//
+// Nao confundir com `solicitacaoCofreSchema`: aquela e ordem `agendada`, dinheiro que AINDA NAO
+// saiu. As duas travam o fechamento, por motivos opostos.
+export const entregaCofrePendenteSchema = z.object({
+  id: uuidSchema,
+  tipo: z.enum(["sangria", "retorno"]),
+  valor: z.number(),
+  lacre: z.string().nullable(),
+  criadoEm: z.string()
+});
+
 // D4/decisao 2: cancelamento de solicitacao ainda `agendada`. Motivo obrigatorio — cancelar uma
 // ordem de dinheiro sem dizer por que nao e auditoria, e apagar rastro com outro nome. O banco
 // tambem exige (transferencias_cancelamento_check), entao a regra nao depende so desta validacao.
@@ -367,7 +381,11 @@ export const caixaOperacionalSchema = z.object({
 
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
-  resumo: resumoCaixaSchema.nullable()
+  resumo: resumoCaixaSchema.nullable(),
+  // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado
+  // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
+  // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".
+  entregasPendentes: entregaCofrePendenteSchema.array()
 });
 
 export const alterarHorarioCaixaResponseSchema = caixaStatusSchema.extend({
@@ -397,6 +415,7 @@ export type ExecutarSolicitacaoCofrePayload = z.infer<typeof executarSolicitacao
 export type CancelarSolicitacaoCofrePayload = z.infer<typeof cancelarSolicitacaoCofrePayloadSchema>;
 export type SolicitacaoCofreParams = z.infer<typeof solicitacaoCofreParamsSchema>;
 export type SolicitacaoCofre = z.infer<typeof solicitacaoCofreSchema>;
+export type EntregaCofrePendente = z.infer<typeof entregaCofrePendenteSchema>;
 export type CaixaAbertoResumo = z.infer<typeof caixaAbertoResumoSchema>;
 export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;
 export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;

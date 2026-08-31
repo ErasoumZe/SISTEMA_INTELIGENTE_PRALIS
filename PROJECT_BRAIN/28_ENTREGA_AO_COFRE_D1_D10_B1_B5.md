@@ -45,6 +45,28 @@ anterior caiu na rede".** Dois cliques entregavam o dinheiro duas vezes, com um 
 
 ---
 
+## §2-A · A D9 foi confirmada, e o texto da #101 estava desatualizado (27/08/2026)
+
+Ao preparar a **#101**, o texto da issue pedia o contrário da **D9**: recolocar a marcação
+**Transferência de Retorno / Sangria** dentro do modal **“+ Nova transferência”**. As duas leituras
+queriam **um** caminho único e discordavam sobre **qual**.
+
+**Marco decidiu em 27/08: vale a D9.** Virou a **R-179**.
+
+> `Caixa aberto → registrar sangria/retorno no próprio Caixa → entrega ao cofre → fechamento`
+
+O motivo é operacional: **quem faz sangria é o operador de caixa, de dentro do Caixa** — não a
+Tesouraria pelo cockpit. Recolocar o bloco no modal criaria de novo o segundo caminho que a D9
+removeu de propósito.
+
+**O legado a remover continua sendo a tela/caminho “Programar entrega ao cofre”**
+(`SolicitacoesCofrePainel` e as rotas `/api/caixa/:id/solicitacoes-cofre*`), na entrega apropriada da
+#101 — e **nunca** o fluxo do Caixa. `TransferenciaRetornoCampos` **não** será recriado.
+
+O texto da issue #101 foi atualizado para não contradizer esta decisão.
+
+---
+
 ## §3 · As correções de robustez (B1–B5)
 
 | Id     | O que estava errado                                                                                                                          | Correção                                                                                                     |
@@ -209,3 +231,95 @@ preservada; sete totais congelados; fechamento concorrente; rollback.
 
 **Não provado:** responsividade em 1440/1024/768/390 — o markup é mobile-first e foi revisado, mas
 **a tela não foi aberta em nenhuma das quatro larguras**.
+
+---
+
+## §9 · G1 da #101 — dinheiro que JÁ SAIU também trava o fechamento (27/08/2026)
+
+A **D12** acima resolveu metade da R-171: enquanto houver solicitação **`agendada`** — dinheiro que
+**ainda não saiu** — o caixa não fecha. A outra metade ficou aberta por engano de escopo: uma
+entrega **feita de verdade** e ainda não conferida no cofre **não impedia nada**.
+
+O caixa fechava por cima dela. O operador ia embora. Se o cofre encontrasse falta depois, **a
+divergência não tinha mais turno aberto onde cair**.
+
+### A guarda
+
+Em `fecharCaixa`, logo depois da guarda da D12:
+
+- lida **depois da trava** da linha do caixa e **antes** do retorno final (D6/D7). Por isso o próprio
+  ato de fechar **não se auto-bloqueia**: a guarda enxerga o estado anterior ao ato;
+- **corrida resolvida por construção**: o fechamento já segura a linha do caixa em `FOR UPDATE` e
+  `confirmarTransferencia` pede `FOR SHARE` na **mesma** linha antes de mudar o status. As duas
+  serializam, então este `SELECT` nunca decide sobre um retrato velho;
+- a mensagem **nomeia** as entregas (tipo, valor, lacre), até três e depois "e mais N". "Não pode
+  fechar" sozinho manda o operador adivinhar entre as entregas do turno.
+
+### Escopo — e a porta lateral que continua aberta
+
+O escopo é o **predicado canônico** de entrega Caixa → Cofre: caixa vinculado, tipo
+`sangria`/`retorno`, destino = conta cofre da empresa.
+
+> ⚠️ **Sabidamente incompleto.** O operador ainda pode mandar dinheiro da conta do PDV para o cofre
+> pela rota **genérica** `POST /api/transferencias`: lá o `tipo` não está no payload e nasce
+> `suprimento`, então a linha não é entrega canônica e **não trava** — embora fisicamente seja o
+> mesmo ato. Fechar essa porta significaria alargar a guarda para além do predicado canônico, e é
+> **exatamente** o caminho duplicado que a fatia de remoção do legado existe para eliminar.
+> Nenhum teste fixa esse comportamento: pinar um furo é transformá-lo em contrato.
+
+### `entrega-cofre.repository.ts` — a regra ganhou casa
+
+A consulta nasceu colada a `ehEntregaCaixaParaCofre`, mas o `lint:deps` cobrou o ciclo
+`caixa.service → transferencias.repository → lancamentos.dominio → caixa.service`.
+
+A saída **não** foi duplicar o predicado. Os dois dialetos da mesma regra — TS e SQL — passaram a
+morar num módulo que só conhece Drizzle, o schema e a conexão. Qualquer camada pode depender dele.
+
+### `entregasPendentes` viaja dentro do status
+
+`caixaStatusSchema` ganhou o campo, **obrigatório e nunca opcional**: ausente teria de significar
+"não há", e um dia significaria "a rota esqueceu de mandar". Para garantir isso, o literal que
+montava o status — repetido em **oito** lugares — virou uma porta só, `statusDoCaixaAberto`.
+
+### A tela
+
+Bloco próprio (`EntregasAguardandoConferencia.vue`), lido como manifesto de transporte: um trilho
+vertical liga as entregas em trânsito, cada uma com **valor, tipo, lacre e hora**. Não é vermelho —
+dinheiro a caminho do cofre não deu errado, só ainda não chegou; foi criado o token
+**`--cx-attention`**, que faltava na camada.
+
+**O botão de fechar continua focável.** Travado, recebe `aria-disabled` e **não** `disabled`: botão
+morto sai da navegação por teclado e o leitor de tela nunca chega ao motivo. Clicar leva ao bloco da
+trava.
+
+**Um caminho duplicado foi fechado de passagem:** a D12 vivia **só no servidor** — a tela mostrava a
+solicitação e **não** desabilitava o botão, então o operador clicava e levava um 400 previsível.
+Agora as duas travas têm **uma** computada e **um** motivo, em `utils/fechamento-travas.ts`.
+
+### O que está provado
+
+`tests/integration/caixa/fechamento-transferencia-pendente.test.ts`, **8 casos**: recusa citando a
+operação; conferência libera e o retorno final nasce `pendente` sem se auto-bloquear; recusa de
+conferência **não** libera; pendência de outro caixa não trava; escopo pelo tipo e escopo pelo
+destino; nada gravado pela metade; corrida com a conferência em voo, por `pg_blocking_pids`.
+
+**Mutação:** apagar a guarda mata 4 casos. Apagar o critério do destino **sobreviveu** na primeira
+tentativa — e o achado foi um **falso verde**: a transferência genérica era criada pela retaguarda e
+nascia com `caixa_id` nulo, então os casos de escopo passavam sem exercitar escopo nenhum. Corrigido
+(lançada pelo operador, com asserção de `caixa_id`), a mutação morre.
+
+**Quatro testes existentes** fixavam o comportamento antigo e foram atualizados incluindo a
+conferência antes do fechamento. O de idempotência ficou mais forte: prova que executar a ordem da
+Tesouraria **troca uma trava pela outra**.
+
+### O que ainda não está resolvido
+
+**Não existe válvula de escape.** A R-171 manda bloquear o fechamento comum **e** concluir o turno
+por um fluxo especial auditado. Esta entrega traz só o bloqueio. Até o fluxo especial existir, um
+caixa com entrega não conferida **não fecha** — se o responsável pelo cofre já foi embora, o turno
+fica aberto. **Implantar esta fatia sozinha não é recomendado.**
+
+**Assimetria conhecida:** o retorno final criado pelo **próprio fechamento** também nasce `pendente`
+e não trava. A diferença é de auditoria — ele nasce dentro do ato de fechar, com autor, horário e
+valor amarrados ao fechamento; uma sangria de quatro horas atrás não tem esse vínculo. É o fluxo
+especial auditado que resolve isso de vez.
