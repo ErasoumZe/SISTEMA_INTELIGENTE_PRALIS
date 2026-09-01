@@ -270,6 +270,11 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // ADM-003 V1A: o DP opera a admissao direta por inteiro — abre e preenche o bloco interno.
       "admissoes_processos_criar_direta",
       "admissoes_processos_editar_internos",
+      // ADM-003 V1B: o turno e campo OBRIGATORIO da admissao direta, e quem admite precisa poder
+      // cadastrar o turno que falta sem depender da Gerencia no meio do atendimento. Ver e criar,
+      // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.
+      "cadastro_turnos_visualizar",
+      "cadastro_turnos_criar",
     ]
   }),
   RH: permissoesDoCargo({

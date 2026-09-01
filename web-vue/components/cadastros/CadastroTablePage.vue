@@ -22,6 +22,11 @@ const props = defineProps<{
   paginaServidor?: number;
   itensPorPaginaServidor?: number;
   podeExcluir?: boolean;
+  // Editar era `true` fixo para toda tela de cadastro. Vira prop porque a partir da ADM-003 V1B
+  // existe cargo que CRIA turno e nao edita: sem isto o DP veria o botao, preencheria o formulario
+  // e levaria 403 no salvar — a tela oferecendo o que a rota recusa. Default `true` para as demais
+  // telas continuarem exatamente como estavam.
+  podeEditar?: boolean;
   excluindoId?: string;
 }>();
 
@@ -42,7 +47,7 @@ const emit = defineEmits<{
 }>();
 
 const acao = "Novo cadastro";
-const podeEditar = computed(() => true);
+const podeEditar = computed(() => props.podeEditar ?? true);
 const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).

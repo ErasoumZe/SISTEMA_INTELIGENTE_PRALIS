@@ -1892,6 +1892,9 @@ const pageContext = computed(() => ({
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
   podeEditarEntrada: temPermissao("entradas_editar"),
+  // Turnos: o DP cria mas nao edita (ADM-003 V1B). A tela precisa saber disso, senao oferece um
+  // botao que a rota recusa com 403.
+  podeEditarTurno: temPermissao("cadastro_turnos_editar"),
   vendaDetalhe: vendaDetalhe.value,
   modalVendaDetalheAberto: modalVendaDetalheAberto.value,
   vendaDetalheCarregando: vendaDetalheCarregando.value,
