@@ -3,7 +3,10 @@
 // subcaminho proprio faz a fronteira aparecer no import (`@padaria/db/schema/admissoes`), em vez de
 // depender de quem le lembrar da regra.
 export {
+  admissoesConvites,
   admissoesProcessos,
+  admissoesProcessosDependentes,
+  admissoesProcessosFicha,
   admissoesProcessosHistorico,
   admissoesProcessosInternos,
   admissoesTestes,

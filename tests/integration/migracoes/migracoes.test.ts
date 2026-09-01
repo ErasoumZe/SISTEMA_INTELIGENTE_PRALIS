@@ -262,6 +262,10 @@ describe("migracoes integration", () => {
     // cobra. Trocar por uma contagem seria voltar ao `21` que envelheceu em silencio.
     expect(aMao.map((achado) => achado.tabela).sort()).toEqual([
       "admissoes_processos",
+      // ADM-003 V2/V4. `admissoes_convites` NAO entra: convite nao se edita, entao a tabela nem tem
+      // `atualizado_em` — e sem a coluna, trigger seria mentira.
+      "admissoes_processos_dependentes",
+      "admissoes_processos_ficha",
       "admissoes_processos_internos",
       "admissoes_testes",
       "funcoes_operacionais"

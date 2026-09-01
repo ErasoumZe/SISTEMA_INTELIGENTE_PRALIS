@@ -2446,6 +2446,68 @@ export const admissoesProcessosInternos = pgTable(
   ]
 );
 
+/**
+ * ADM-003 V2 â€” o convite que leva o candidato a ficha.
+ *
+ * Guarda SO o hash do token. O token em claro e mostrado uma vez a quem o gerou e nao e recuperavel
+ * â€” mesma disciplina de `caixa_autorizacoes`. Guardar o segredo em claro faria do backup uma copia
+ * das chaves.
+ *
+ * Sem `atualizado_em` e sem trigger, de proposito: convite nao se edita. Acesso e revogacao tem
+ * colunas proprias, e a linha nunca muda de identidade.
+ */
+export const admissoesConvites = pgTable(
+  "admissoes_convites",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    // GRAVADO, nao derivado: o prazo combinado com a pessoa nao pode mudar porque a regra mudou.
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    avisoPrivacidadeVersao: text("aviso_privacidade_versao").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    primeiroAcessoEm: timestamp("primeiro_acesso_em", { withTimezone: true }),
+    ultimoAcessoEm: timestamp("ultimo_acesso_em", { withTimezone: true }),
+    revogadoEm: timestamp("revogado_em", { withTimezone: true }),
+    revogadoPor: text("revogado_por").references(() => perfisUsuarios.usuarioId)
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_convites_processo_empresa_fk"
+    }).onDelete("cascade"),
+    // Alvo da FK composta da trilha: o evento do candidato aponta para o convite que o produziu.
+    unique("admissoes_convites_id_empresa_unica").on(table.id, table.empresaId),
+    unique("admissoes_convites_token_hash_unico").on(table.tokenHash),
+    check("admissoes_convites_token_hash_check", sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`),
+    check("admissoes_convites_validade_check", sql`${table.expiraEm} > ${table.criadoEm}`),
+    // Revogar tem duas colunas, e elas andam juntas ou nao andam.
+    check(
+      "admissoes_convites_revogacao_check",
+      sql`num_nonnulls(${table.revogadoEm}, ${table.revogadoPor}) <> 1`
+    ),
+    check(
+      "admissoes_convites_acesso_check",
+      sql`${table.ultimoAcessoEm} is null or ${table.primeiroAcessoEm} is not null`
+    ),
+    // UM convite vigente por processo. Reemitir exige revogar o anterior na MESMA transacao â€” a
+    // pre-checagem sozinha nao segura duas chamadas simultaneas.
+    uniqueIndex("admissoes_convites_processo_vigente_unico")
+      .on(table.processoId)
+      .where(sql`${table.revogadoEm} is null`),
+    index("admissoes_convites_empresa_processo_idx").on(
+      table.empresaId,
+      table.processoId,
+      table.criadoEm
+    )
+  ]
+);
+
 export const admissoesProcessosHistorico = pgTable(
   "admissoes_processos_historico",
   {
@@ -2454,9 +2516,12 @@ export const admissoesProcessosHistorico = pgTable(
     processoId: uuid("processo_id").notNull(),
     versao: integer("versao").notNull(),
     acao: text("acao").$type<AcaoHistoricoProcesso>().notNull(),
-    atorUsuarioId: text("ator_usuario_id")
-      .notNull()
-      .references(() => perfisUsuarios.usuarioId),
+    // ANULAVEL desde a V2: o candidato NAO tem perfil no sistema â€” ele e um estranho com um link.
+    // Quem age por fora aparece pelo convite que o autorizou, e o CHECK abaixo garante que sempre
+    // ha exatamente um autor. Usuario tecnico "sistema" foi recusado: criaria ator falso na
+    // trilha, e a trilha existe justamente para dizer quem fez.
+    atorUsuarioId: text("ator_usuario_id").references(() => perfisUsuarios.usuarioId),
+    conviteId: uuid("convite_id"),
     // NOMES de campos, nunca valores: gravar antes/depois duplicaria a PII dentro da propria trilha.
     camposAlterados: jsonb("campos_alterados")
       .$type<string[]>()
@@ -2470,9 +2535,20 @@ export const admissoesProcessosHistorico = pgTable(
       foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
       name: "admissoes_processos_historico_processo_empresa_fk"
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.conviteId, table.empresaId],
+      foreignColumns: [admissoesConvites.id, admissoesConvites.empresaId],
+      name: "admissoes_processos_historico_convite_empresa_fk"
+    }),
+    // EXATAMENTE um autor: ou o ato e interno e tem usuario, ou veio pelo convite. Nunca os dois,
+    // nunca nenhum â€” trilha sem autor nao e trilha.
+    check(
+      "admissoes_processos_historico_autoria_check",
+      sql`num_nonnulls(${table.atorUsuarioId}, ${table.conviteId}) = 1`
+    ),
     check(
       "admissoes_processos_historico_acao_check",
-      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado')`
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
     ),
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
@@ -2485,14 +2561,163 @@ export const admissoesProcessosHistorico = pgTable(
     //
     // `cpf_revelado` nao incrementa versao e acontece quantas vezes o DP revelar. A unicidade das
     // acoes FUNCIONAIS nao muda: repetir um cancelamento segue recusado pelo banco.
+    //
+    // A V2 amplia a excecao: convite e ficha tambem NAO mexem em `admissoes_processos`, entao
+    // tambem nao consomem versao dele. A forma negativa e deliberada â€” ela diz "o indice vale para
+    // tudo, menos os eventos que nao consomem versao", que e a regra de verdade.
     uniqueIndex("admissoes_processos_historico_evento_unico")
       .on(table.processoId, table.versao)
-      .where(sql`${table.acao} <> 'cpf_revelado'`),
+      .where(
+        sql`${table.acao} not in ('cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
+      ),
     index("admissoes_processos_historico_processo_idx").on(
       table.empresaId,
       table.processoId,
       table.ocorridoEm,
       table.id
     )
+  ]
+);
+
+/**
+ * ADM-003 V3 â€” a ficha que o candidato preenche. Uma por processo.
+ *
+ * `situacao` e PROPRIA da ficha e nao e o status do processo: o processo pode seguir `iniciado`
+ * enquanto a ficha vai de rascunho a aprovada. Misturar os dois faria a lista de admissoes mudar
+ * porque alguem salvou um rascunho.
+ *
+ * Documentos entram como NUMERO, nunca como arquivo â€” anexo e a V5, e depende da politica de
+ * documentos que ainda nao existe.
+ */
+export const admissoesProcessosFicha = pgTable(
+  "admissoes_processos_ficha",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    situacao: text("situacao").notNull().default("rascunho"),
+    versao: integer("versao").notNull().default(1),
+    nomeSocial: text("nome_social"),
+    nascimento: date("nascimento"),
+    sexo: text("sexo"),
+    estadoCivil: text("estado_civil"),
+    racaCor: text("raca_cor"),
+    grauInstrucao: text("grau_instrucao"),
+    nacionalidade: text("nacionalidade"),
+    naturalidade: text("naturalidade"),
+    nomeMae: text("nome_mae"),
+    nomePai: text("nome_pai"),
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    municipio: text("municipio"),
+    uf: text("uf"),
+    telefone: text("telefone"),
+    email: text("email"),
+    rgNumero: text("rg_numero"),
+    rgOrgao: text("rg_orgao"),
+    rgUf: text("rg_uf"),
+    rgEmissao: date("rg_emissao"),
+    tituloEleitor: text("titulo_eleitor"),
+    tituloZona: text("titulo_zona"),
+    tituloSecao: text("titulo_secao"),
+    banco: text("banco"),
+    agencia: text("agencia"),
+    conta: text("conta"),
+    contaDigito: text("conta_digito"),
+    contaTipo: text("conta_tipo"),
+    // Ausencia de dependente e DECLARACAO, nao tabela vazia: tabela vazia tambem e "nao respondeu".
+    semDependentes: boolean("sem_dependentes"),
+    avisoPrivacidadeVersao: text("aviso_privacidade_versao"),
+    avisoAceitoEm: timestamp("aviso_aceito_em", { withTimezone: true }),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    revisadoEm: timestamp("revisado_em", { withTimezone: true }),
+    revisadoPor: text("revisado_por").references(() => perfisUsuarios.usuarioId),
+    revisaoPendencias: text("revisao_pendencias"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_ficha_processo_empresa_fk"
+    }).onDelete("cascade"),
+    unique("admissoes_processos_ficha_processo_unico").on(table.processoId),
+    check(
+      "admissoes_processos_ficha_situacao_check",
+      sql`${table.situacao} in ('rascunho', 'enviada', 'devolvida', 'aprovada')`
+    ),
+    check("admissoes_processos_ficha_versao_check", sql`${table.versao} > 0`),
+    check("admissoes_processos_ficha_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
+    check(
+      "admissoes_processos_ficha_rg_uf_check",
+      sql`${table.rgUf} is null or ${table.rgUf} ~ '^[A-Z]{2}$'`
+    ),
+    check("admissoes_processos_ficha_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
+    // O ciclo inteiro num CHECK so: enviada exige aceite e declaracao de dependentes; devolvida
+    // exige pendencia escrita, senao o candidato recebe de volta sem saber o que corrigir.
+    check(
+      "admissoes_processos_ficha_coerencia_check",
+      sql`(
+        (${table.situacao} = 'rascunho' and ${table.enviadoEm} is null and ${table.revisadoEm} is null)
+        or (${table.situacao} = 'enviada' and ${table.enviadoEm} is not null and ${table.revisadoEm} is null
+            and ${table.avisoAceitoEm} is not null and ${table.avisoPrivacidadeVersao} is not null
+            and ${table.semDependentes} is not null)
+        or (${table.situacao} = 'devolvida' and ${table.enviadoEm} is not null
+            and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null
+            and ${table.revisaoPendencias} is not null)
+        or (${table.situacao} = 'aprovada' and ${table.enviadoEm} is not null
+            and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null)
+      )`
+    ),
+    index("admissoes_processos_ficha_empresa_situacao_idx").on(table.empresaId, table.situacao),
+    // Aceite de TESTE tem de ser separavel por consulta, nao por memoria de quem estava la.
+    index("admissoes_processos_ficha_aviso_teste_idx")
+      .on(table.empresaId)
+      .where(sql`${table.avisoPrivacidadeVersao} like 'AVISO-TESTE-%'`)
+  ]
+);
+
+/**
+ * ADM-003 V4 â€” dependentes declarados na ficha. Zero ou muitos.
+ *
+ * Sao dados de TERCEIROS, possivelmente menores, de gente que pode nunca ser admitida. O CPF e
+ * opcional de proposito: crianca costuma nao ter, e exigir criaria dado falso.
+ */
+export const admissoesProcessosDependentes = pgTable(
+  "admissoes_processos_dependentes",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    nomeCompleto: text("nome_completo").notNull(),
+    nascimento: date("nascimento").notNull(),
+    parentesco: text("parentesco").notNull(),
+    cpf: text("cpf"),
+    finalidades: text("finalidades").array().notNull().default(sql`'{}'::text[]`),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_dependentes_processo_empresa_fk"
+    }).onDelete("cascade"),
+    check(
+      "admissoes_processos_dependentes_nome_check",
+      sql`length(btrim(${table.nomeCompleto})) > 0`
+    ),
+    check(
+      "admissoes_processos_dependentes_cpf_check",
+      sql`${table.cpf} is null or ${table.cpf} ~ '^[0-9]{11}$'`
+    ),
+    uniqueIndex("admissoes_processos_dependentes_cpf_unico")
+      .on(table.processoId, table.cpf)
+      .where(sql`${table.cpf} is not null`),
+    index("admissoes_processos_dependentes_empresa_processo_idx").on(table.empresaId, table.processoId)
   ]
 );

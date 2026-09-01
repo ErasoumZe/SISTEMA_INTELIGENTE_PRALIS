@@ -260,6 +260,13 @@
       "when": 1788210687828,
       "tag": "0036_sweet_mandarin",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788291890991,
+      "tag": "0037_awesome_maximus",
+      "breakpoints": true
     }
   ]
 }
