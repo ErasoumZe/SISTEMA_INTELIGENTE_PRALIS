@@ -50,12 +50,13 @@ a necessidade.
 | [33](33_ADMISSAO_PROCESSO_INICIADO.md)    | **Admissao: processo iniciado** | ADM-002 V0: nasce da efetivacao, sem botao de iniciar, dois estados, idempotencia simetrica |
 | [34](34_ADMISSAO_DIRETA_TURNO_ASO.md)     | **Admissao direta, turno e ASO** | ADM-003 V1B: pre-cadastro do DP, turno por catalogo com retrato, CPF por lock, ASO pausa e retoma |
 | [35](35_ADMISSAO_FLUXO_COMPLETO.md)       | **Admissao: fluxo completo (mapa)** | ADM-003: as 8 estacoes ate o colaborador, matriz de campos, SQL proposto e os 4 bloqueios — nada implementado |
+| [36](36_CADASTRO_COLABORADORES_PRE_CADASTRO_E_SITUACOES.md) | **Pre-cadastro e situacoes** | de onde vem quem ja trabalha: ficha contabil nao e carga, a fila de pre-cadastro, e os dois vocabularios de situacao |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **36**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **37**.
 
 ## Regra de ouro deste brain
 
