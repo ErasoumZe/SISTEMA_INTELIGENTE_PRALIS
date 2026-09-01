@@ -160,7 +160,57 @@ Registro como pendência, e **não como fato**: nada aqui virou enum, coluna ou 
 
 ---
 
-## 6. Fora deste documento
+## 6. Aviso de privacidade **de teste** — decisão de 01/09/2026
+
+> Esta decisão pertence tematicamente à `35` (o link do candidato é a V2). Fica registrada aqui por
+> determinação de Marco, e a `35` deve ser lida junto.
+
+**Decisão de Marco:** fica autorizado criar um aviso de privacidade **exclusivo de ambiente de
+teste**, chamado **`AVISO-TESTE-ADMISSAO-V1`**, para destravar o **fluxo técnico** do link do
+candidato.
+
+**O que esta decisão NÃO é.** Ela não é o aviso jurídico da Pralis, não aprova texto legal, e **não
+remove o BLOQUEIO 1**. Produção continua bloqueada exatamente como estava. O que ela destrava é a
+possibilidade de exercitar convite, ficha e devolução em ambiente isolado, com dado sintético —
+coisa que hoje é impossível porque a emissão exige uma versão de aviso vigente que não existe.
+
+### Regras inegociáveis
+
+- O texto diz, com todas as letras: **"Ambiente de teste — não use dados pessoais reais."**
+- Uso permitido **somente em banco e ambiente isolados de teste**.
+- A guarda é **do servidor**, obrigatoriamente. Botão desabilitado e flag de frontend são
+  conveniência, nunca garantia — quem chama a rota direto não vê botão nenhum.
+- Deve ser **impossível** emitir convite real ou aceitar este aviso em produção.
+- Testes usam **apenas dados sintéticos ou autorizados**.
+- **Não libera** upload de documentos, fotos, ASO, dado médico nem Conplus. Esses seguem bloqueados.
+- O aceite grava **versão e data/hora na trilha**.
+- Quando o aviso oficial existir, ele **substitui a configuração de emissão**. Os aceites de teste
+  **permanecem no histórico**, identificados como teste — não se apagam e não se convertem.
+
+### Por que "identificado como teste" precisa ser estrutural
+
+Se a única diferença entre um aceite de teste e um aceite real for a memória de quem estava lá, em
+seis meses ninguém sabe distinguir. O marcador tem que viver no dado: o prefixo **`AVISO-TESTE-`**
+na versão gravada é o que separa os dois, e a consulta que precisar excluir aceites de teste não
+depende de lista mantida à mão.
+
+### Onde a guarda mora
+
+Duas camadas, e nenhuma delas é a tela:
+
+1. **Configuração da versão vigente** recusa versão de teste quando o ambiente é produção. Mesmo
+   precedente do seed, que se recusa a rodar com `NODE_ENV=production` — falha fechada, antes de
+   qualquer escrita.
+2. **A rota de emissão** recusa com 409 quando não há versão vigente, e recusa também quando a
+   versão vigente é de teste e o ambiente é produção. Sem as duas, um deploy com configuração
+   errada emitiria link real contra um aviso que diz "não use dados reais".
+
+O detalhamento — SQL, contrato e os P0 que provam cada guarda — está no pacote de aprovação da
+V2–V4, e **nada disso foi implementado**: esta rodada só registra a decisão.
+
+---
+
+## 7. Fora deste documento
 
 Formulário público, convite, upload de documentos, dependentes, efetivação em `colaboradores`,
 importação gravando em banco, integração Conplus, e qualquer status de férias/atestado/INSS no
@@ -168,7 +218,7 @@ schema. Tudo isso é vertical própria, e a maior parte está bloqueada na `35`.
 
 ---
 
-## 7. Pendências
+## 8. Pendências
 
 - **Decisão de identidade:** pessoa (CPF) com N vínculos, ou linha única por matrícula. Bloqueia o
   modelo de pré-cadastro.
