@@ -400,3 +400,30 @@ Descoberta e registro apenas. Sem Fatia 2, sem migration, sem `.sql`, sem tocar 
 acesso a produção. A consulta somente leitura, a proposta de migration e o rollback estão no
 relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, e dependem de aprovação
 explícita depois que Marco vir SQL, impacto e amostra.
+
+### §10.7 · A decisão final fecha o modelo (R-183, 01/09/2026)
+
+O §10.4 listou três lacunas e a proposta que saiu delas foi **derrubada** por dois revisores
+read-only: creditar o cofre pelo valor declarado fabricava crédito que nenhuma contagem futura
+corrige (`api/src/contas/contas.repository.ts:292`), e `quebras_caixa` tem **um escritor e zero
+leitores** — a diferença sumiria de todo número consultável. A decisão de Rodrigo/Marco corrige a
+rota e fecha as três lacunas de uma vez:
+
+- **o cofre credita o CONTADO**, sempre. Falta vira quebra auditada (negativa); sobra é sobra e
+  **nunca** quebra positiva, mantendo a D7; recusa sem contagem registra **R$ 0,00** contado e o
+  declarado inteiro vira quebra;
+- **divergência não termina em `recebido`.** A transferência ganha estado terminal próprio,
+  auditável, que **continua contando como saída do Caixa** — devolver dinheiro ao Caixa está
+  proibido em todos os casos.
+
+Uma fórmula cobre os quatro desfechos, com `D` = declarado e `C` = contado:
+**quebra = −(D − C) quando D > C; nenhuma quebra quando C ≥ D.** O caso "sem contagem" é o extremo
+`C = 0`, não um ramo à parte.
+
+Consequência aceita e registrada: com sobra, o Caixa lança saída `D` e o Cofre entrada `C > D`. Os
+dois lados deixam de somar zero **de propósito** — foi dinheiro físico encontrado a mais, e a D7
+proíbe transformá-lo em quebra positiva.
+
+O desenho completo — schema, CHECKs, SQL forward e rollback, contratos, endpoints, tela e plano
+RED/GREEN — está no relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, **PARTE 4**.
+Migration continua dependendo de autorização explícita de Marco.
