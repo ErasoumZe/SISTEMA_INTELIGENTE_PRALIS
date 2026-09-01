@@ -323,3 +323,80 @@ fica aberto. **Implantar esta fatia sozinha não é recomendado.**
 e não trava. A diferença é de auditoria — ele nasce dentro do ato de fechar, com autor, horário e
 valor amarrados ao fechamento; uma sangria de quatro horas atrás não tem esse vínculo. É o fluxo
 especial auditado que resolve isso de vez.
+
+---
+
+## §10 · A saída da R-171 e o legado — decisões de Rodrigo (01/09/2026)
+
+O §9 fechou dizendo que **não existe válvula de escape** e que implantar aquela fatia sozinha não
+era recomendado. Rodrigo respondeu as duas perguntas que faltavam. Elas estão no `19` como
+**R-181** e **R-182**; aqui fica o que o código já sustenta e o que ainda não.
+
+### §10.1 · Recusa no cofre termina em quebra auditada (R-181)
+
+Quando o cofre confere e **não bate**, o dinheiro não volta: ele saiu do caixa de verdade. O
+caminho oficial passa a ser registrar a **diferença como quebra auditada** — valor, responsável e
+justificativa — e fechar o turno. Três não-caminhos ficam explícitos:
+
+- **não cancelar** a transferência: `cancelada` não conta como saída
+  (`shared/src/caixa/regras.ts:101`), então cancelar faria o dinheiro **reaparecer** no caixa;
+- **não confirmar** um valor que ninguém contou — era o único destravamento existente, e ele
+  premiava a mentira;
+- **não deixar o turno aberto**, que é o que acontece hoje e pode travar o PDV no dia seguinte
+  (`fechamentos_caixa_pdv_aberto_unico_idx`).
+
+### §10.2 · O legado da rota antiga é reclassificado (R-182)
+
+As linhas que nasceram `tipo = 'suprimento'` indo da conta do PDV para a conta cofre — a porta que
+a #101 fechou em `e0a5b2c`, `8c491f0` e `5ce948d` — são **reclassificadas para `retorno`/`sangria`**,
+preservando integralmente a auditoria. Reclassificar é corrigir o **rótulo** de um fato ocorrido, e
+não reescrever o fato: valor, contas, datas, lacre, autoria e `criado_em` ficam intactos.
+
+### §10.3 · O que o modelo atual já sustenta (leitura, sem inventar campo)
+
+| Precisa de…                                          | Já existe                                                                                                                                                                                                             | Onde                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| trilha do "conferi e não bateu"                      | `transferencias_conferencias_recusadas` — `motivo` NOT NULL, `valor_informado`, `lacre_informado`, `recusado_por`, `criado_em`, **uma linha por tentativa**, FK `RESTRICT`                                            | `db/src/schema/app.schema.ts:1721`                      |
+| diferença com valor, dono e justificativa            | `quebras_caixa` — `valor <> 0`, `observacao` não vazia, FK composta com o fechamento                                                                                                                                  | `db/src/schema/app.schema.ts:1905`                      |
+| distinguir os dois fluxos de entrega                 | `tipo` + `caixa_id` + destino = conta cofre (predicado canônico)                                                                                                                                                      | `api/src/transferencias/entrega-cofre.repository.ts:22` |
+| cancelamento auditável (para o que **é** cancelável) | `transferencias_cancelamento_check` exige autor, data e motivo juntos                                                                                                                                                 | `app.schema.ts:1651`                                    |
+| reclassificar `tipo` sem violar constraint           | legado tem `solicitacao_cofre_em is null`, então cai no **primeiro ramo** do `transferencias_solicitacao_cofre_check`, que não olha `tipo`; e `transferencias_recebimento_check` já é satisfeito por linha `pendente` | `app.schema.ts:1668` e `:1692`                          |
+
+### §10.4 · As três lacunas — o modelo **não** cobre isto hoje
+
+1. **`quebras_caixa` não sabe de onde veio a diferença.** Não há coluna apontando a transferência
+   divergente nem distinguindo "faltou na contagem do caixa" de "faltou no malote conferido no
+   cofre". Pior: `quebras_caixa_fechamento_unico` (`app.schema.ts:1924`) permite **uma quebra por
+   fechamento** — um turno com diferença de contagem **e** divergência no cofre não é representável.
+2. **Falta o estado terminal da entrega recusada.** Os quatro status são `pendente`, `recebido`,
+   `agendada`, `cancelada` (`app.schema.ts:1648`). `pendente` eterniza, `recebido` afirma que bateu,
+   `cancelada` devolve o dinheiro ao caixa. Nenhum diz "saiu, não chegou inteiro, a diferença virou
+   quebra".
+3. **A quebra só nasce dentro do fechamento.** `criarQuebraCaixaRepository`
+   (`api/src/caixa/caixa.repository.ts:306`) tem um único chamador, `fecharCaixa`, e o valor vem do
+   saldo apurado sob trava — não de uma divergência informada. Uma recusa que chegue **depois** do
+   fechamento não tem onde cair.
+
+Nenhuma das três se resolve com leitura: são decisão de modelagem da Fatia 2, e ficam registradas
+aqui para não serem redescobertas.
+
+### §10.5 · Critério técnico da linha legada
+
+Uma linha entra na população da R-182 quando **todos** valem:
+
+- `t.caixa_id is not null` — está amarrada a um turno;
+- `t.conta_origem_id = p.conta_id`, com `p` = PDV do caixa (`fechamentos_caixa.pdv_id → pdvs.conta_id`)
+  — é o mesmo critério que os totais usam para dizer "saiu do caixa"
+  (`api/src/caixa/caixa.repository.ts:1189`);
+- `t.conta_destino_id = e.conta_cofre_id` — chegou ao cofre configurado da empresa;
+- `t.tipo = 'suprimento'` — não é entrega canônica (que já nasce `sangria`/`retorno`);
+- `t.solicitacao_cofre_em is null` — não é solicitação D4;
+- `t.status = 'pendente'` — o escopo é o dinheiro **em trânsito**. Linha já `recebido` é histórico
+  fechado e **não** é tocada.
+
+### §10.6 · O que esta rodada NÃO fez
+
+Descoberta e registro apenas. Sem Fatia 2, sem migration, sem `.sql`, sem tocar dado real e sem
+acesso a produção. A consulta somente leitura, a proposta de migration e o rollback estão no
+relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, e dependem de aprovação
+explícita depois que Marco vir SQL, impacto e amostra.
