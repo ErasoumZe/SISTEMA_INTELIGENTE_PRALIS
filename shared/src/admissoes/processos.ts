@@ -222,8 +222,10 @@ export const processosQuerySchema = paginationQuerySchema.extend({
  * lista, um processo direto nasceria inalcancavel. E consulta e mais nada: nao ha aqui nenhuma acao
  * de iniciar, efetivar ou criar alem do "Novo cadastro" da propria tela.
  *
- * `nomeCompleto` e NULO no processo direto ate o candidato responder. A tela mostra isso com todas
- * as letras, em vez de inventar identidade.
+ * `nomeCompleto` resolve as DUAS origens por `coalesce` no repositorio: vem do teste quando a origem
+ * e `teste_efetivado`, e da propria linha quando e `admissao_direta` — onde o CHECK de coerencia o
+ * torna obrigatorio desde a V1B. O tipo segue anulavel porque o contrato nao consegue provar ao
+ * TypeScript o que o CHECK garante no banco; na pratica a lista nao recebe nome nulo.
  */
 export const processoListaDtoSchema = z.object({
   id: z.string(),
