@@ -15,7 +15,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createVuetify } from "vuetify";
 import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
-import type { HistoricoProcessoDto, ProcessoDetalheDto, StatusProcesso } from "@padaria/shared";
+import type { HistoricoProcessoDto, PainelConviteDto, ProcessoDetalheDto, StatusProcesso } from "@padaria/shared";
 import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 
 const PASTA = dirname(fileURLToPath(import.meta.url));
@@ -133,6 +133,9 @@ type Cenario = {
   cpfRevelado?: string | null;
   revelandoCpf?: boolean;
   carregando?: boolean;
+  convite?: PainelConviteDto | null;
+  podeConvidar?: boolean;
+  tokenEmitido?: string | null;
 };
 
 function montar(cenario: Cenario = {}) {
@@ -154,7 +157,11 @@ function montar(cenario: Cenario = {}) {
       cpfRevelado: cenario.cpfRevelado ?? null,
       revelandoCpf: cenario.revelandoCpf ?? false,
       processando: false,
-      carregando: cenario.carregando ?? false
+      carregando: cenario.carregando ?? false,
+      convite: cenario.convite ?? null,
+      podeConvidar: cenario.podeConvidar ?? false,
+      tokenEmitido: cenario.tokenEmitido ?? null,
+      convitePendente: false
     }
   });
 }

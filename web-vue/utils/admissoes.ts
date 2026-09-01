@@ -126,7 +126,14 @@ export const rotuloAcaoHistoricoProcesso: Record<AcaoHistoricoProcesso, string> 
   exame_alterado: "Exame admissional atualizado",
   pausado: "Processo pausado (ASO não apto)",
   retomado: "Processo retomado (ASO apto)",
-  cpf_revelado: "CPF revelado"
+  cpf_revelado: "CPF revelado",
+  // ADM-003 V2/V3. Convite e ficha sao atos sobre o MESMO processo, e por isso aparecem na
+  // mesma linha do tempo — o DP le tudo num lugar so.
+  convite_gerado: "Convite gerado",
+  convite_revogado: "Convite revogado",
+  ficha_enviada: "Ficha enviada pelo candidato",
+  ficha_devolvida: "Ficha devolvida para correção",
+  ficha_aprovada: "Ficha aprovada"
 };
 
 /**

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type {
+  ConviteEmitidoDto,
+  PainelConviteDto,
   AuthSession,
   DadosInternosDto,
   FuncaoOpcaoDto,
@@ -28,7 +30,7 @@ import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
  *
  * Nenhum `empresaId` sai daqui: a empresa e derivada no servidor a partir do perfil autorizado.
  */
-const { apiGet, apiGetPaginado, apiPost, apiPut } = useApi();
+const { apiGet, apiGetPaginado, apiPost, apiPut, apiDelete } = useApi();
 
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
@@ -40,6 +42,8 @@ const podeEditarInternos = computed(() =>
 // Revelar CPF usa a permissao de VISUALIZAR, nao uma terceira: quem pode abrir o processo pode ver
 // o documento de quem esta sendo admitido — o que muda e que fica registrado quem viu e quando.
 const podeVerCpf = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
+// ADM-003 V2. Emitir e revogar sao o MESMO direito: quem abre precisa poder fechar.
+const podeConvidar = computed(() => temPermissao(permissoes.value, "admissoes_processos_convidar"));
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
@@ -84,6 +88,11 @@ const historico = ref<HistoricoProcessoDto[]>([]);
 // O CPF revelado vive SO na memoria da tela, e so enquanto o detalhe estiver aberto. Nao vai para
 // URL, store, storage nem listagem — e some no fechamento, em `fecharDetalhe`.
 const cpfRevelado = ref<string | null>(null);
+// O painel do convite e o token vivem AQUI, e nao no modal: e a pagina que faz as chamadas e que
+// limpa os dois ao fechar. Token que sobrevive ao fechamento vira segredo esquecido na tela.
+const convite = ref<PainelConviteDto | null>(null);
+const tokenEmitido = ref<string | null>(null);
+const convitePendente = ref(false);
 const revelandoCpf = ref(false);
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
@@ -163,6 +172,7 @@ async function abrirDetalhe(id: string) {
       `/api/admissoes/processos/${id}/historico?page=1&pageSize=50`
     );
     historico.value = eventos.itens;
+    convite.value = await apiGet<PainelConviteDto>(`/api/admissoes/processos/${id}/convite`);
   } catch (error) {
     detalheAberto.value = false;
     tratarErro(error);
@@ -243,6 +253,48 @@ async function salvarInternos(
 function fecharDetalhe() {
   detalheAberto.value = false;
   cpfRevelado.value = null;
+  // Mesma disciplina: o token existe UMA vez e nao sobrevive ao fechamento do modal.
+  tokenEmitido.value = null;
+  convite.value = null;
+}
+
+/**
+ * Emitir o convite. Reemitir REVOGA o anterior — o servidor faz os dois na mesma transacao, e a
+ * tela nao precisa saber disso: ela pede um link novo e recebe um link novo.
+ *
+ * O token vem na resposta e e a UNICA vez que ele existe fora do servidor. Nao ha GET que o
+ * devolva, e por isso ele fica em memoria da pagina ate o modal fechar.
+ */
+async function emitirConvite() {
+  if (!processo.value || convitePendente.value) return;
+  const id = processo.value.id;
+  convitePendente.value = true;
+  try {
+    const emitido = await apiPost<ConviteEmitidoDto>(`/api/admissoes/processos/${id}/convite`, {});
+    tokenEmitido.value = emitido.token;
+    notificar("Convite gerado. Copie o link agora.");
+    await abrirDetalhe(id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    convitePendente.value = false;
+  }
+}
+
+async function revogarConvite() {
+  if (!processo.value || convitePendente.value) return;
+  const id = processo.value.id;
+  convitePendente.value = true;
+  try {
+    await apiDelete(`/api/admissoes/processos/${id}/convite`);
+    tokenEmitido.value = null;
+    notificar("Convite revogado. O link parou de valer.");
+    await abrirDetalhe(id);
+  } catch (error) {
+    tratarErro(error);
+  } finally {
+    convitePendente.value = false;
+  }
 }
 
 /**
@@ -367,6 +419,12 @@ onMounted(async () => {
     :pode-ver-cpf="podeVerCpf"
     :cpf-revelado="cpfRevelado"
     :revelando-cpf="revelandoCpf"
+    :convite="convite"
+    :pode-convidar="podeConvidar"
+    :token-emitido="tokenEmitido"
+    :convite-pendente="convitePendente"
+    @emitir-convite="emitirConvite"
+    @revogar-convite="revogarConvite"
     @fechar="fecharDetalhe"
     @cancelar="cancelarProcesso"
     @revelar-cpf="revelarCpf"

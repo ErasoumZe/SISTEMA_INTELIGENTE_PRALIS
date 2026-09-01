@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import type { HistoricoProcessoDto, ProcessoDetalheDto } from "@padaria/shared";
+import type { HistoricoProcessoDto, PainelConviteDto, ProcessoDetalheDto } from "@padaria/shared";
 import {
   corStatusProcesso,
   explicacaoSituacaoProcesso,
@@ -61,6 +61,18 @@ const props = defineProps<{
   // O painel antigo NAO declarava esta prop, e a pagina a passava mesmo assim: virava atributo solto
   // e o carregamento nunca aparecia. Num drawer isso passava; um modal vazio no meio da tela, nao.
   carregando?: boolean;
+  /**
+   * ADM-003 V2 — o convite ao candidato. `null` enquanto a pagina nao carregou.
+   *
+   * A SITUACAO vem derivada do servidor, e o motivo tambem: a tela nao decide se pode convidar,
+   * so mostra o que o servidor respondeu. Quem decide e a guarda de emissao.
+   */
+  convite: PainelConviteDto | null;
+  /** `admissoes_processos_convidar`. Sem ela, nao ha botao — e a rota recusa de qualquer forma. */
+  podeConvidar: boolean;
+  /** O token em claro, que existe UMA vez. Mora na pagina; o modal so exibe enquanto aberto. */
+  tokenEmitido: string | null;
+  convitePendente: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +83,8 @@ const emit = defineEmits<{
   // UM evento. A edicao dos internos e do exame virou um modal so, aberto pela pagina.
   (event: "editarInternos"): void;
   (event: "revelarCpf"): void;
+  (event: "emitirConvite"): void;
+  (event: "revogarConvite"): void;
 }>();
 
 const dialogCancelar = ref(false);
@@ -288,15 +302,75 @@ function confirmarCancelar() {
             @editar="emit('editarInternos')"
           />
 
-          <!-- O convite fica DESABILITADO com o motivo escrito, e nao existe rota que o emita. Emitir um
-               link que ainda nao abre gastaria a confianca do DP na primeira tentativa. -->
+          <!-- O convite existe, mas quem decide se pode emitir e o SERVIDOR: a tela mostra a situacao e o
+               motivo que vieram de la. Botao escondido nao protege de quem chama a rota direto. -->
           <section class="detalhe-convite">
             <h3>Convite ao candidato</h3>
-            <v-alert type="info" variant="tonal" density="compact">
-              <strong>Indisponível.</strong> O cadastro online do candidato depende de duas coisas que ainda não
-              existem: o aviso de privacidade aprovado, com versão registrada, e a política de documentos (tipo real do
-              arquivo, tamanho, antimalware, storage e descarte). Enquanto isso, nenhum link é gerado — nem para teste.
+
+            <v-alert v-if="convite?.situacao === 'indisponivel'" type="info" variant="tonal" density="compact">
+              <strong>Indisponível.</strong> {{ convite.motivo }}
             </v-alert>
+
+            <template v-else-if="convite">
+              <p v-if="convite.situacao === 'ausente'" class="detalhe-convite__vazio">
+                Nenhum convite emitido. O link leva o candidato ao formulário e vale por 14 dias.
+              </p>
+
+              <dl v-else-if="convite.convite" class="detalhe-lista">
+                <div>
+                  <dt>Situação</dt>
+                  <dd>
+                    <v-chip
+                      :color="convite.situacao === 'expirado' ? 'warning' : 'primary'"
+                      size="small"
+                      variant="flat"
+                    >
+                      {{ convite.situacao === "expirado" ? "Expirado" : "Vigente" }}
+                    </v-chip>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Validade</dt>
+                  <dd>{{ formatarDataHora(convite.convite.expiraEm) }}</dd>
+                </div>
+                <div>
+                  <dt>Primeiro acesso</dt>
+                  <dd>{{ convite.convite.primeiroAcessoEm ? formatarDataHora(convite.convite.primeiroAcessoEm) : "Ainda não abriu" }}</dd>
+                </div>
+                <div>
+                  <dt>Aviso aceito na versão</dt>
+                  <dd>{{ convite.convite.avisoPrivacidadeVersao }}</dd>
+                </div>
+              </dl>
+
+              <!-- O token aparece UMA vez. Nao ha rota que o devolva: fechado o modal, ele some. -->
+              <v-alert v-if="tokenEmitido" type="success" variant="tonal" density="compact" class="mt-3">
+                <p class="mb-2"><strong>Copie agora.</strong> Este link não aparece de novo.</p>
+                <code class="detalhe-convite__token">{{ tokenEmitido }}</code>
+              </v-alert>
+
+              <div v-if="podeConvidar" class="detalhe-convite__acoes">
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  size="small"
+                  :loading="convitePendente"
+                  @click="emit('emitirConvite')"
+                >
+                  {{ convite.situacao === "ausente" ? "Gerar link" : "Gerar novo link" }}
+                </v-btn>
+                <v-btn
+                  v-if="convite.convite"
+                  color="error"
+                  variant="text"
+                  size="small"
+                  :disabled="convitePendente"
+                  @click="emit('revogarConvite')"
+                >
+                  Revogar link
+                </v-btn>
+              </div>
+            </template>
           </section>
 
           <p class="detalhe-autoria">
@@ -388,6 +462,24 @@ function confirmarCancelar() {
 }
 
 .detalhe-derivacao,
+.detalhe-convite__vazio {
+  margin: 0;
+  color: var(--cx-texto-suave);
+}
+
+.detalhe-convite__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-2);
+  margin-top: var(--cx-sp-3);
+}
+
+.detalhe-convite__token {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
 .detalhe-autoria {
   font-size: var(--cx-fs-caption);
   color: var(--cx-ink-soft);
