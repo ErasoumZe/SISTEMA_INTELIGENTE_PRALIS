@@ -26,6 +26,7 @@ import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendi
 import { erro } from "@padaria/shared/api";
 import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAdmissoes } from "./admissoes/admissoes.controller.js";
+import { registrarRotasAdmissoesConvites } from "./admissoes/convites.controller.js";
 import { registrarRotasAdmissoesProcessos } from "./admissoes/processos.controller.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
 import { registrarRotasClientes } from "./clientes/clientes.controller.js";
@@ -220,6 +221,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasUnidadesMedida(app);
   await registrarRotasAdmissoes(app);
   await registrarRotasAdmissoesProcessos(app);
+  await registrarRotasAdmissoesConvites(app);
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
   await registrarRotasSociosGestores(app);

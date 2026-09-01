@@ -103,7 +103,14 @@ export const acoesHistoricoProcesso = [
   // rota nem botao de retomar. A trilha registra os dois porque aconteceram.
   "pausado",
   "retomado",
-  "cpf_revelado"
+  "cpf_revelado",
+  // ADM-003 V2/V3: atos sobre o convite e a ficha. Nenhum deles muda o STATUS do processo, entao
+  // nenhum consome versao dele — e por isso todos ficam fora do indice parcial de unicidade.
+  "convite_gerado",
+  "convite_revogado",
+  "ficha_enviada",
+  "ficha_devolvida",
+  "ficha_aprovada"
 ] as const;
 export const acaoHistoricoProcessoSchema = z.enum(acoesHistoricoProcesso);
 export type AcaoHistoricoProcesso = z.infer<typeof acaoHistoricoProcessoSchema>;

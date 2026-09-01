@@ -2,18 +2,21 @@ import { z } from "zod";
 import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
 
 export * from "./cpf.js";
-// ADM-002 V0 — o processo de admissao, que nasce do teste efetivado.
+// ADM-002 V0 â€” o processo de admissao, que nasce do teste efetivado.
 export * from "./processos.js";
+// ADM-003 V2 â€” o aviso que o candidato aceita. Versao vigente em constante, nunca em env ou tabela.
+export * from "./aviso-privacidade.js";
+export * from "./convites.js";
 
 // =================================================================================================
-// ADM-001 — Controle de periodo de teste (piloto TNP).
+// ADM-001 â€” Controle de periodo de teste (piloto TNP).
 //
-// UMA diferenca deliberada em relacao a TODOS os outros modulos: aqui NAO existe `empresaId` —
+// UMA diferenca deliberada em relacao a TODOS os outros modulos: aqui NAO existe `empresaId` â€”
 // nem na query, nem no corpo, nem no parametro de rota. Nenhum outro contrato do sistema e assim
 // (`empresaQuerySchema` carrega `empresaId` opcional e os payloads de cadastro o exigem).
 //
 // A empresa e derivada no servidor a partir de `perfil.empresaId`, e SO vale se ela existir E
-// estiver dentro de `empresasPermitidas(perfil)`. Qualquer divergencia e 403 — inclusive perfil
+// estiver dentro de `empresasPermitidas(perfil)`. Qualquer divergencia e 403 â€” inclusive perfil
 // sem empresa. Aceitar empresa do navegador aqui reabriria exatamente a superficie que a decisao
 // de Marco fechou, e um `empresaId` opcional no schema bastaria para alguem voltar a ler o corpo
 // "so nesse caso".
@@ -24,7 +27,7 @@ export * from "./processos.js";
 const uuidSchema = z.string().uuid();
 
 // Limites TECNICOS de texto, nao regra de negocio: existem para o payload nao virar deposito.
-// Nenhum deles foi aprovado como regra do DP — se o negocio precisar de outro numero, ele muda.
+// Nenhum deles foi aprovado como regra do DP â€” se o negocio precisar de outro numero, ele muda.
 const LIMITE_NOME = 180;
 const LIMITE_JORNADA = 120;
 
@@ -42,7 +45,7 @@ export const resultadoTesteSchema = z.enum(resultadosTeste);
 export type ResultadoTeste = z.infer<typeof resultadoTesteSchema>;
 
 // SITUACAO E DERIVADA, NAO ARMAZENADA. Nao existe coluna, enum de banco, indice nem filtro
-// independente de ativo/inativo — criar um seria a segunda fonte de status que o
+// independente de ativo/inativo â€” criar um seria a segunda fonte de status que o
 // PROJECT_BRAIN/06 ja registrou como SUPERADA ("status Ativo/Inativo como workflow").
 //
 // Mora em `shared` porque a LISTA (front) e o FILTRO (repositorio) precisam da mesma resposta.
@@ -87,7 +90,7 @@ import { cpfTesteSchema } from "./cpf.js";
 
 // Instante absoluto em ISO-8601 com `Z`, como `Date.prototype.toISOString` produz. Guardado em
 // `timestamptz`. O dia de negocio (America/Sao_Paulo) e derivado com `diaNegocio` na hora de
-// calcular o prazo — nunca com `slice(0, 10)`, que devolve o dia em UTC.
+// calcular o prazo â€” nunca com `slice(0, 10)`, que devolve o dia em UTC.
 const instanteSchema = z.string().datetime();
 
 const camposEditaveisTeste = {
@@ -120,7 +123,7 @@ export const criarTestePayloadSchema = z.object(camposEditaveisTeste).refine(per
 // em silencio e duas edicoes simultaneas do DP perderiam uma.
 //
 // `cpf` e o UNICO campo opcional na edicao, e omiti-lo PRESERVA o valor gravado. Nao e inconsistencia
-// com o resto do payload, que e substituicao total — e a consequencia direta da regra de privacidade:
+// com o resto do payload, que e substituicao total â€” e a consequencia direta da regra de privacidade:
 // o detalhe devolve o CPF MASCARADO, entao o formulario nao tem o valor para reenviar. As
 // alternativas eram piores: revelar o CPF a cada abertura de edicao geraria um evento de auditoria
 // falso (ninguem pediu para ver), e exigir o campo apagaria o CPF de quem so quis corrigir o nome.
@@ -179,7 +182,7 @@ export const testeListaDtoSchema = z.object({
   fimCombinadoEm: z.string(),
   status: statusTesteSchema,
   // Derivada de `status` pelo servidor com `situacaoDoTeste`. Viaja no DTO para a tela nao
-  // reimplementar a regra — e nao para ser gravada.
+  // reimplementar a regra â€” e nao para ser gravada.
   situacao: situacaoTesteSchema,
   resultado: resultadoTesteSchema.nullable(),
   prazo: prazoTesteSchema.nullable(),
@@ -191,7 +194,7 @@ export const testeDetalheDtoSchema = testeListaDtoSchema.extend({
   motivoCancelamento: motivoCancelamentoSchema.nullable(),
   // ADM-002: o processo de admissao que nasceu deste teste, se houver. `null` em todo teste que nao
   // foi efetivado. Existe para a tela oferecer o caminho de volta ao processo depois de reabrir o
-  // teste — sem ele, o link so funcionaria no instante da efetivacao.
+  // teste â€” sem ele, o link so funcionaria no instante da efetivacao.
   processoId: z.string().nullable(),
   criadoPorNome: z.string().nullable(),
   criadoEm: z.string(),
@@ -206,7 +209,7 @@ export const testeDetalheDtoSchema = testeListaDtoSchema.extend({
 export const cpfReveladoDtoSchema = z.object({ cpf: z.string() });
 
 // Somente booleanos: nome, id e status do colaborador NAO saem daqui. Devolver o registro
-// transformaria a rota num oraculo sobre pessoa fisica — foi isso que a CX-M05 removeu de
+// transformaria a rota num oraculo sobre pessoa fisica â€” foi isso que a CX-M05 removeu de
 // `colaboradores` (api/src/colaboradores/colaboradores.service.ts).
 export const verificacaoCpfDtoSchema = z.object({
   jaExisteColaborador: z.boolean(),
