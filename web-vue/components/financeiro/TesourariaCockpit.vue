@@ -49,17 +49,25 @@ const campos = reactive(camposConferenciaVazios());
 const erroConferencia = ref("");
 const salvandoConferencia = ref(false);
 const modoRecusa = ref(false);
+// R-183 · o desfecho da recusa. `false` mantem o comportamento de sempre (registra e reconfere);
+// `true` encerra: o cofre credita o contado, a falta vira quebra e o caixa destrava.
+const encerrarDivergencia = ref(false);
+const sobraConfirmada = ref(false);
 
 function abrirConferencia(operacao: OperacaoResumo) {
   Object.assign(campos, camposConferenciaVazios());
   erroConferencia.value = "";
   modoRecusa.value = false;
+  encerrarDivergencia.value = false;
+  sobraConfirmada.value = false;
   confirmando.value = operacao;
 }
 
 function fecharConferencia() {
   confirmando.value = null;
   modoRecusa.value = false;
+  encerrarDivergencia.value = false;
+  sobraConfirmada.value = false;
   Object.assign(campos, camposConferenciaVazios());
   erroConferencia.value = "";
 }
@@ -73,6 +81,16 @@ const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === 
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
 const motivoValido = computed(() => Boolean(campos.motivo.trim()));
+// A sobra so aparece quando o contado passa do declarado — e ai o consentimento vira obrigatorio,
+// senao o servidor recusa com 409. Mostrar a caixa sempre treinaria a pessoa a marcar sem ler.
+const contadoAcimaDoDeclarado = computed(() => {
+  const operacao = confirmando.value;
+  if (!operacao || !valorConferenciaValido(campos.valorRecebido)) return false;
+  return Number(campos.valorRecebido) > Number(operacao.valorOriginal);
+});
+const sobraPendenteDeConsentimento = computed(
+  () => encerrarDivergencia.value && contadoAcimaDoDeclarado.value && !sobraConfirmada.value
+);
 // "Nao bateu" so existe onde a rota de recusa existe. Na generica ela responde 404.
 const podeRecusar = computed(() => ehCaixaParaCofre.value);
 
@@ -81,6 +99,7 @@ async function enviarConferencia() {
   if (!operacao || salvandoConferencia.value) return;
   if (valorPendente.value) return;
   if (modoRecusa.value && (!podeRecusar.value || !motivoValido.value)) return;
+  if (sobraPendenteDeConsentimento.value) return;
 
   erroConferencia.value = "";
   salvandoConferencia.value = true;
@@ -89,7 +108,10 @@ async function enviarConferencia() {
     // nao e um desfecho do `/confirmar`.
     const rota = modoRecusa.value ? "recusar-conferencia" : "confirmar";
     const corpo = modoRecusa.value
-      ? montarPayloadRecusa(campos, operacao.contaDestinoId ?? "")
+      ? montarPayloadRecusa(campos, operacao.contaDestinoId ?? "", {
+          encerrar: encerrarDivergencia.value,
+          sobraConfirmada: sobraConfirmada.value
+        })
       : montarPayloadConfirmacao(campos, operacao.contaDestinoId ?? "", ehCaixaParaCofre.value);
     await apiPost(`/api/transferencias/${operacao.id}/${rota}`, corpo);
     fecharConferencia();
@@ -284,9 +306,39 @@ const saldo = computed(() => entrada.value - saida.value);
           :error="!motivoValido"
           data-teste="conferencia-motivo"
         />
-        <v-alert v-if="modoRecusa" type="warning" variant="tonal" density="compact" class="mb-2">
-          A transferência continua <strong>pendente</strong>. A divergência fica registrada e o operador e a Tesouraria
-          são notificados.
+        <!-- R-183 · o desfecho e uma ESCOLHA, e ela precisa estar aqui: sem encerrar, o caixa de
+             onde o dinheiro saiu continua travado. -->
+        <v-checkbox
+          v-if="modoRecusa"
+          v-model="encerrarDivergencia"
+          density="compact"
+          hide-details
+          class="mb-1"
+          data-teste="conferencia-encerrar"
+          label="Encerrar a divergência agora (libera o fechamento do caixa)"
+        />
+        <v-checkbox
+          v-if="modoRecusa && encerrarDivergencia && contadoAcimaDoDeclarado"
+          v-model="sobraConfirmada"
+          density="compact"
+          hide-details
+          class="mb-1"
+          data-teste="conferencia-sobra"
+          label="Confirmo que contei MAIS do que foi declarado"
+        />
+        <v-alert
+          v-if="modoRecusa && !encerrarDivergencia"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-2"
+        >
+          A transferência continua <strong>pendente</strong> e o caixa segue travado. A divergência fica registrada e o
+          operador e a Tesouraria são notificados.
+        </v-alert>
+        <v-alert v-if="modoRecusa && encerrarDivergencia" type="info" variant="tonal" density="compact" class="mb-2">
+          O cofre recebe <strong>o valor contado</strong>. Se faltou, a diferença vira quebra no nome de quem entregou —
+          e ela não tem volta. Se sobrou, o cofre recebe a mais e não há quebra.
         </v-alert>
         <v-alert v-if="erroConferencia" type="error" variant="tonal" density="compact">{{ erroConferencia }}</v-alert>
         <v-card-actions class="flex-wrap ga-2">
@@ -298,12 +350,14 @@ const saldo = computed(() => entrada.value - saida.value);
           <v-btn :disabled="salvandoConferencia" @click="fecharConferencia()">Fechar</v-btn>
           <v-btn
             :color="modoRecusa ? 'warning' : 'primary'"
-            :disabled="valorPendente || (modoRecusa && !motivoValido) || salvandoConferencia"
+            :disabled="
+              valorPendente || (modoRecusa && !motivoValido) || sobraPendenteDeConsentimento || salvandoConferencia
+            "
             :loading="salvandoConferencia"
             data-teste="conferencia-enviar"
             @click="enviarConferencia"
           >
-            {{ modoRecusa ? "Registrar divergência" : "Confirmar" }}
+            {{ modoRecusa ? (encerrarDivergencia ? "Encerrar divergência" : "Registrar divergência") : "Confirmar" }}
           </v-btn>
         </v-card-actions>
       </v-card>

@@ -254,7 +254,14 @@ function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
   });
   const excedente = entregas.length - descritas.length;
   if (excedente > 0) descritas.push(`e mais ${excedente}`);
-  return `Entrega ao cofre aguardando conferencia (${descritas.join("; ")}): confira no cofre antes de fechar o caixa`;
+  // R-183 · a saida depende de ja terem contado, e a tela ja diz isso antes do clique. Mandar
+  // "confira no cofre" para quem ja conferiu seria o servidor contradizendo a propria tela — e o
+  // operador ligando para a pessoa errada no fim do turno.
+  const jaContadas = entregas.some((entrega) => entrega.valorContado !== null);
+  const saida = jaContadas
+    ? "o cofre ja contou e precisa encerrar a divergencia antes de fechar o caixa"
+    : "confira no cofre antes de fechar o caixa";
+  return `Entrega ao cofre aguardando conferencia (${descritas.join("; ")}): ${saida}`;
 }
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
@@ -688,7 +695,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // Escopo: so o malote fisico Caixa -> Cofre, pelo predicado canonico. Transferencia generica
     // pendente nao entra — travar alem do que a R-171 descreve prenderia operacao que hoje nao tem
     // valvula de escape (o fluxo especial auditado e a fatia seguinte da #101).
-    const entregasPendentes = serializarEntregasPendentes(await listarEntregasAoCofrePendentesRepository(caixa.id, tx));
+    const entregasPendentes = await entregasPendentesDoCaixa(caixa.id, tx);
     if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
 
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);

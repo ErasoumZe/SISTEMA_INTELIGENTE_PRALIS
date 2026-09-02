@@ -406,7 +406,7 @@ export async function recusarConferencia(
       if (faltaCentavos > 0) {
         const dono = atual.executadoPor ?? atual.criadoPor;
         if (!dono) throw new Error("Entrega sem responsavel para responder pela quebra");
-        await criarQuebraCaixaRepository(
+        const quebra = await criarQuebraCaixaRepository(
           {
             empresaId: atual.empresaId,
             fechamentoCaixaId: atual.caixaId,
@@ -415,6 +415,28 @@ export async function recusarConferencia(
             valorCentavos: -faltaCentavos,
             observacao: dados.motivo.trim(),
             transferenciaId
+          },
+          tx
+        );
+
+        // A quebra emite o MESMO sinal que a quebra de contagem ja emitia (`caixa.service`, no
+        // fechamento): tipo `quebra_caixa` e `referenciaId` da propria quebra. Sem isto a maior
+        // consequencia financeira do ato chegaria ao dono como "conferencia recusada", indistinguivel
+        // de uma recusa que ele ainda pode resolver — e `quebras_caixa` nao tem leitor nenhum no
+        // sistema, entao esta notificacao e a unica superficie que existe.
+        const tesourariaDaQuebra = await listarUsuariosTesourariaRepository(atual.empresaId, tx);
+        await criarNotificacoesRepository(
+          {
+            empresaId: atual.empresaId,
+            tipo: "quebra_caixa",
+            destinatariosUsuarioIds: [
+              ...new Set(
+                [dono, ...tesourariaDaQuebra.map((item) => item.usuarioId)].filter((id): id is string => Boolean(id))
+              )
+            ],
+            referenciaId: quebra.id,
+            titulo: `Quebra por divergencia no cofre - ${atual.lacre ?? transferenciaId}`,
+            valorCentavos: -faltaCentavos
           },
           tx
         );

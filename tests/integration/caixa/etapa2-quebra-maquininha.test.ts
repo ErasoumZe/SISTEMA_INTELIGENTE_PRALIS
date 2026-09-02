@@ -163,7 +163,7 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
     expect(fechado.statusCode, fechado.body).toBe(204);
 
     const quebra = await consultarUm<{ id: string; empresa_id: string; valor: string; observacao: string }>(
-      "select id, empresa_id, valor, observacao from quebras_caixa where fechamento_caixa_id = $1",
+      "select id, empresa_id, valor, observacao from quebras_caixa where fechamento_caixa_id = $1 and transferencia_id is null",
       [caixaId]
     );
     expect(quebra).toMatchObject({

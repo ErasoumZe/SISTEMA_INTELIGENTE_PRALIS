@@ -63,11 +63,29 @@ export function montarPayloadConfirmacao(
   return { ...base, valorRecebido: Number(campos.valorRecebido) };
 }
 
-export type PayloadRecusa = PayloadConfirmacao & { motivo: string; valorRecebido?: number };
+export type PayloadRecusa = PayloadConfirmacao & {
+  motivo: string;
+  valorRecebido?: number;
+  encerrar?: boolean;
+  sobraConfirmada?: boolean;
+};
 
-// Decisao 8: a recusa exige motivo e SO existe no fluxo Caixa -> Cofre (na generica a rota responde
-// 404). Ela nao confirma nem cancela — o movimento segue `pendente`, e o registro auditavel e
-// commitado do outro lado.
-export function montarPayloadRecusa(campos: CamposConferencia, contaDestinoPadrao: string): PayloadRecusa {
-  return { ...montarPayloadConfirmacao(campos, contaDestinoPadrao, true), motivo: campos.motivo.trim() };
+// Decisao 8 + R-183: a recusa exige motivo e SO existe no fluxo Caixa -> Cofre (na generica a rota
+// responde 404). Ela tem DOIS desfechos, e a diferenca e quem paga:
+//
+//  - sem `encerrar`: registra a tentativa e o movimento segue `pendente`, para reconferir depois;
+//  - com `encerrar`: e o DESFECHO — o cofre credita o contado, a falta vira quebra e o caixa
+//    destrava. Sem esta flag chegar ao servidor, a rota existe e o caixa fica travado do mesmo
+//    jeito, que era o estado que a Fatia 2 existe para eliminar.
+//
+// `sobraConfirmada` acompanha `encerrar` porque o servidor recusa (409) contagem acima do declarado
+// sem consentimento explicito — a D7 proibe virar quebra positiva, entao o contrapeso e assumir.
+export function montarPayloadRecusa(
+  campos: CamposConferencia,
+  contaDestinoPadrao: string,
+  desfecho: { encerrar: boolean; sobraConfirmada: boolean } = { encerrar: false, sobraConfirmada: false }
+): PayloadRecusa {
+  const base = { ...montarPayloadConfirmacao(campos, contaDestinoPadrao, true), motivo: campos.motivo.trim() };
+  if (!desfecho.encerrar) return base;
+  return { ...base, encerrar: true, sobraConfirmada: desfecho.sobraConfirmada };
 }

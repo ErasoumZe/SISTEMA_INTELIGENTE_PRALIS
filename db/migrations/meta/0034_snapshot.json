@@ -1,5 +1,5 @@
 {
-  "id": "3682347f-4a67-4697-9784-25e628dee648",
+  "id": "8b89c4f5-eb1c-4ae0-be44-7ebb8eef2b31",
   "prevId": "70b6b644-e980-40b2-8164-0b3e1f08be77",
   "version": "7",
   "dialect": "postgresql",
@@ -6796,6 +6796,21 @@
           "method": "btree",
           "with": {}
         },
+        "quebras_caixa_fechamento_idx": {
+          "name": "quebras_caixa_fechamento_idx",
+          "columns": [
+            {
+              "expression": "fechamento_caixa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "quebras_caixa_empresa_usuario_idx": {
           "name": "quebras_caixa_empresa_usuario_idx",
           "columns": [
@@ -6863,6 +6878,10 @@
         "quebras_caixa_valor_nao_zero_check": {
           "name": "quebras_caixa_valor_nao_zero_check",
           "value": "\"quebras_caixa\".\"valor\" <> 0"
+        },
+        "quebras_caixa_divergencia_negativa_check": {
+          "name": "quebras_caixa_divergencia_negativa_check",
+          "value": "\"quebras_caixa\".\"transferencia_id\" is null or \"quebras_caixa\".\"valor\" < 0"
         },
         "quebras_caixa_observacao_nao_vazia_check": {
           "name": "quebras_caixa_observacao_nao_vazia_check",

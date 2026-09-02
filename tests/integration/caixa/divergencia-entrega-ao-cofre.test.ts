@@ -283,6 +283,62 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   });
 
   // ------------------------------------------------------------------------------------------
+  // RED-7b · a OUTRA metade da elegibilidade: quem entregou nao confere nem recusa a propria
+  // entrega. Sem este caso, reverter a exclusao de `executado_por` em `candidatoConfirmacao`
+  // passaria verde — e quem entregou escolheria o numero da propria quebra.
+  // ------------------------------------------------------------------------------------------
+  it("Deve_RecusarAConferencia_Quando_QuemEntregouTentaConferirAPropriaEntrega", async () => {
+    const fx = await novoCaixa("R183 auto conferencia");
+    await venda(500);
+    const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-AUTO-${sequencia}`);
+
+    // O operador que entregou tenta encerrar a propria divergencia.
+    const recusaPropria = await inject("POST", `/api/transferencias/${entrega}/recusar-conferencia`, cookieCaixa, {
+      contaDestinoId: idsTeste.contaCofre,
+      motivo: "Tentando conferir o proprio envio",
+      valorRecebido: 180,
+      encerrar: true
+    });
+    assertProblem(recusaPropria, 403);
+    expect((await linha(entrega))?.status).toBe("pendente");
+  });
+
+  // ------------------------------------------------------------------------------------------
+  // RED-9 · duas quebras no MESMO fechamento: a de contagem (turno fechou negativo) e a de
+  // divergencia (o cofre contou menos). E o caso que a migration 0034 destravou ao trocar o
+  // `unique(fechamento_caixa_id)` por dois indices parciais — antes dela, a segunda batia no unique.
+  // ------------------------------------------------------------------------------------------
+  it("Deve_ConviverDuasQuebras_Quando_HaFaltaNaContagemEDivergenciaNoCofre", async () => {
+    const fx = await novoCaixa("R183 duas quebras");
+    await venda(500);
+    const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-DUAS-${sequencia}`);
+    expect((await recusar(entrega, { valorRecebido: 180, encerrar: true })).statusCode).toBe(200);
+
+    // Despesa acima do que sobrou em especie: o turno fecha NEGATIVO e gera a quebra de contagem.
+    const despesa = await inject("POST", "/api/despesas", cookieCaixa, {
+      empresaId,
+      dataReferencia: DIA,
+      dataVencimento: DIA,
+      descricao: "Despesa do turno",
+      valorOriginal: 400,
+      contaOrigemId: fx.contaId,
+      grupoDespesaId: idsTeste.grupoDespesaOperacional
+    });
+    expect(despesa.statusCode, despesa.body).toBe(201);
+
+    const fechamento = await fechar(fx.caixaId, "Fechou com quebra de contagem");
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
+
+    const quebras = await quebrasDoFechamento(fx.caixaId);
+    expect(quebras).toHaveLength(2);
+    // Uma aponta a entrega divergente; a outra e a do turno, sem ponteiro.
+    expect(quebras.filter((q) => q.transferencia_id === entrega)).toEqual([
+      { valor: "-20.00", transferencia_id: entrega, usuario_id: fx.usuarioId }
+    ]);
+    expect(quebras.filter((q) => q.transferencia_id === null)).toHaveLength(1);
+  });
+
+  // ------------------------------------------------------------------------------------------
   // RED-8 · elegibilidade nas DUAS copias. Numa solicitacao D4, quem programa e quem executa ficam
   // os dois fora da conferencia (R-028). Se isso nao deixar ninguem elegivel, a EXECUCAO tem de ser
   // recusada — antes de o dinheiro sair. Corrigir so uma das copias produzia o oposto: entrega que

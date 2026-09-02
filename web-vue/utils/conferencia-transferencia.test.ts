@@ -81,6 +81,22 @@ describe("montarPayloadConfirmacao · transferencia GENERICA", () => {
 });
 
 describe("montarPayloadRecusa", () => {
+  // R-183 · sem a flag, a rota so registra a tentativa e o caixa continua travado. O default e
+  // deliberado: encerrar e uma escolha da pessoa que contou, nunca um efeito colateral.
+  it("nao manda encerrar quando o desfecho nao foi escolhido", () => {
+    const campos = { contaDestinoId: "", lacre: "L1", valorRecebido: "180", motivo: "faltou" };
+    expect(montarPayloadRecusa(campos, "conta-padrao")).not.toHaveProperty("encerrar");
+  });
+
+  it("manda encerrar e o consentimento da sobra quando escolhidos", () => {
+    const campos = { contaDestinoId: "", lacre: "L1", valorRecebido: "220", motivo: "sobrou" };
+    expect(montarPayloadRecusa(campos, "conta-padrao", { encerrar: true, sobraConfirmada: true })).toMatchObject({
+      encerrar: true,
+      sobraConfirmada: true,
+      valorRecebido: 220
+    });
+  });
+
   it("carrega o motivo aparado junto com valor e lacre conferidos", () => {
     const campos = { contaDestinoId: "", lacre: "LAC-9", valorRecebido: "80", motivo: "  faltou dinheiro  " };
     expect(montarPayloadRecusa(campos, "conta-padrao")).toEqual({

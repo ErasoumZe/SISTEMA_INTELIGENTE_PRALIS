@@ -278,10 +278,11 @@ export async function registrarRecusaConferenciaRepository(
 
 // R-183 · o DESFECHO da divergencia: `pendente -> divergente`, com o valor que o cofre contou.
 //
-// O `where` carrega as tres amarras juntas, e nenhuma e decorativa: `id` e obvio, `caixa_id` impede
-// encerrar entrega de OUTRO caixa (nos casos sobra e lacre nao nasce quebra, entao a FK nao seria
-// checada e nada mais barraria), e `status = 'pendente'` faz o ato ser irrepetivel — quem perder a
-// corrida acerta zero linhas e recebe o erro de dominio, nunca um segundo encerramento.
+// A amarra que faz o trabalho e `status = 'pendente'`: ela torna o ato irrepetivel — quem perder a
+// corrida acerta zero linhas e recebe erro de dominio, nunca um segundo encerramento. O `caixa_id`
+// vem junto como redundancia barata, e nao como protecao: o chamador o le da MESMA linha que o
+// UPDATE vai acertar, entao ele nunca pode falhar sozinho. Fica escrito assim para ninguem confiar
+// nele como escopo — o escopo real de "so este caixa" e do chamador.
 //
 // O selo e rompido aqui, como no `/confirmar`: entrega conferida com lacre intacto para sempre
 // mentiria no relatorio de lacres.

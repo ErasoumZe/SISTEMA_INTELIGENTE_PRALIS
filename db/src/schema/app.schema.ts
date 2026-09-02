@@ -1982,8 +1982,19 @@ export const quebrasCaixa = pgTable(
     uniqueIndex("quebras_caixa_transferencia_unica")
       .on(table.transferenciaId)
       .where(sql`${table.transferenciaId} is not null`),
+    // O unique antigo por fechamento era um indice COMPLETO nesta coluna, e a R-183 o trocou por um
+    // parcial. "As quebras deste fechamento" virou consulta inevitavel — agora um fechamento pode
+    // ter varias — e o parcial nao a serve (o planner nao tem como provar `transferencia_id is
+    // null`). Este indice devolve o que o unique dava de graca, e serve tambem a RI do CASCADE.
+    index("quebras_caixa_fechamento_idx").on(table.fechamentoCaixaId),
     index("quebras_caixa_empresa_usuario_idx").on(table.empresaId, table.usuarioId),
     check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    // R-183/D7 no BANCO: quebra de divergencia so pode ser NEGATIVA. A sobra nunca vira quebra
+    // positiva, e ate aqui isso vivia so no `if` do servico — um insert de suporte ou um escritor
+    // futuro transformaria a divida do operador em credito sem nada reclamar. A quebra de CONTAGEM
+    // (`transferencia_id is null`) fica de fora: a semantica antiga dela ("positivo = sobrou") e
+    // historico e nao muda aqui.
+    check("quebras_caixa_divergencia_negativa_check", sql`${table.transferenciaId} is null or ${table.valor} < 0`),
     check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`)
   ]
 );
