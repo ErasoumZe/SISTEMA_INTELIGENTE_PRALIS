@@ -13,6 +13,7 @@ import { formatarDataSomenteDia } from "~/utils/formatacao";
 import {
   camposConferenciaVazios,
   montarPayloadConfirmacao,
+  bloqueiaEnvioPorSobra,
   montarPayloadRecusa,
   valorConferenciaValido
 } from "~/utils/conferencia-transferencia";
@@ -89,9 +90,22 @@ const contadoAcimaDoDeclarado = computed(() => {
   if (!operacao || !valorConferenciaValido(campos.valorRecebido)) return false;
   return Number(campos.valorRecebido) > Number(operacao.valorOriginal);
 });
-const sobraPendenteDeConsentimento = computed(
-  () => encerrarDivergencia.value && contadoAcimaDoDeclarado.value && !sobraConfirmada.value
+const sobraPendenteDeConsentimento = computed(() =>
+  bloqueiaEnvioPorSobra({
+    modoRecusa: modoRecusa.value,
+    encerrar: encerrarDivergencia.value,
+    contouAMais: contadoAcimaDoDeclarado.value,
+    confirmou: sobraConfirmada.value
+  })
 );
+
+// Voltar para "Conferir" desfaz a ESCOLHA de encerrar, e nao so esconde a caixa: escolha que
+// sobrevive escondida e a origem de botao travado sem causa visivel.
+function alternarModoRecusa() {
+  modoRecusa.value = !modoRecusa.value;
+  encerrarDivergencia.value = false;
+  sobraConfirmada.value = false;
+}
 // "Nao bateu" so existe onde a rota de recusa existe. Na generica ela responde 404.
 const podeRecusar = computed(() => ehCaixaParaCofre.value);
 
@@ -351,7 +365,7 @@ const saldo = computed(() => entrada.value - saida.value);
         <v-alert v-if="erroConferencia" type="error" variant="tonal" density="compact">{{ erroConferencia }}</v-alert>
         <v-card-actions class="flex-wrap ga-2">
           <!-- "Nao bateu" so aparece onde a rota de recusa existe: na generica ela responde 404. -->
-          <v-btn v-if="podeRecusar" variant="text" data-teste="conferencia-alternar" @click="modoRecusa = !modoRecusa">
+          <v-btn v-if="podeRecusar" variant="text" data-teste="conferencia-alternar" @click="alternarModoRecusa">
             {{ modoRecusa ? "Voltar a conferir" : "Não bateu" }}
           </v-btn>
           <v-spacer />

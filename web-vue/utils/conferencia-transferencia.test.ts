@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   camposConferenciaVazios,
   montarPayloadConfirmacao,
+  bloqueiaEnvioPorSobra,
   montarPayloadRecusa,
   valorConferenciaValido
 } from "./conferencia-transferencia";
@@ -77,6 +78,34 @@ describe("montarPayloadConfirmacao · transferencia GENERICA", () => {
   it("valor invalido tambem e omitido (nao vira NaN no payload)", () => {
     const payload = montarPayloadConfirmacao({ ...camposConferenciaVazios(), valorRecebido: "abc" }, "conta", false);
     expect("valorRecebido" in payload).toBe(false);
+  });
+});
+
+// R-183 · o envio so pode ficar travado por sobra ENQUANTO a pessoa esta recusando e escolheu
+// encerrar. Fora disso o botao volta a funcionar, senao ele fica morto sem causa visivel — a caixa
+// de consentimento so aparece no modo recusa, entao o motivo do bloqueio estaria escondido.
+describe("bloqueiaEnvioPorSobra", () => {
+  it("bloqueia quando esta recusando, escolheu encerrar, contou a mais e nao confirmou", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: true, confirmou: false })).toBe(true);
+  });
+
+  it("libera assim que a sobra e confirmada", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: true, confirmou: true })).toBe(false);
+  });
+
+  it("nao bloqueia fora do modo recusa — e o caso do botao morto ao voltar para Conferir", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: false, encerrar: true, contouAMais: true, confirmou: false })).toBe(
+      false
+    );
+  });
+
+  it("nao bloqueia quando o encerramento nao foi escolhido, nem quando o contado nao passou", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: false, contouAMais: true, confirmou: false })).toBe(
+      false
+    );
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: false, confirmou: false })).toBe(
+      false
+    );
   });
 });
 

@@ -63,6 +63,25 @@ export function montarPayloadConfirmacao(
   return { ...base, valorRecebido: Number(campos.valorRecebido) };
 }
 
+// R-183 · quando o envio fica bloqueado pela sobra nao confirmada.
+//
+// `modoRecusa` entra na conta, e nao e detalhe: a caixa de consentimento so existe DENTRO do modo
+// recusa. Sem essa condicao, quem marcasse "encerrar", digitasse um valor acima do declarado e
+// voltasse para "Conferir" ficava com o botao morto e o motivo escondido — sem acao possivel a nao
+// ser fechar e reabrir o modal.
+//
+// Funcao pura, fora do SFC, pelo mesmo motivo de `fechamento-travas.ts`: dentro do componente esta
+// regra so seria exercitada montando a tela inteira com Vuetify, e regra que so o olho testa acaba
+// divergindo do servidor — que aqui responde 409 exatamente nesta condicao.
+export function bloqueiaEnvioPorSobra(estado: {
+  modoRecusa: boolean;
+  encerrar: boolean;
+  contouAMais: boolean;
+  confirmou: boolean;
+}): boolean {
+  return estado.modoRecusa && estado.encerrar && estado.contouAMais && !estado.confirmou;
+}
+
 export type PayloadRecusa = PayloadConfirmacao & {
   motivo: string;
   valorRecebido?: number;
