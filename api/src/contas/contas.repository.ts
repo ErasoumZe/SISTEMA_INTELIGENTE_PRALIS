@@ -9,6 +9,7 @@ import {
   saldoContaCentavos,
   saldoPendenteContaCentavos,
   transferenciaContaComoEntrada,
+  valorEntradaCentavos,
   transferenciaContaComoSaida,
   type TotaisContaCentavos
 } from "@padaria/shared";
@@ -222,6 +223,8 @@ export async function saldosDasContasRepository(
       contaOrigemId: transferencias.contaOrigemId,
       contaDestinoId: transferencias.contaDestinoId,
       valorOriginal: transferencias.valorOriginal,
+      // R-183: o que o cofre CONTOU. Null em tudo que nao e `divergente`.
+      valorRecebido: transferencias.valorRecebido,
       status: transferencias.status
     })
     .from(transferencias)
@@ -288,10 +291,20 @@ export async function saldosDasContasRepository(
   for (const linha of linhasVendasRoteadas)
     acumular(linha.contaFinalId, "vendasRoteadas", paraCentavos(linha.totalPago));
   for (const linha of linhasTransferencias) {
-    const valor = paraCentavos(linha.valorOriginal);
-    if (transferenciaContaComoEntrada(linha.status)) acumular(linha.contaDestinoId, "transferenciasEntrada", valor);
-    if (transferenciaContaComoSaida(linha.status)) acumular(linha.contaOrigemId, "transferenciasSaida", valor);
-    if (linha.status === "pendente") acumular(linha.contaOrigemId, "transferenciasPendentes", valor);
+    // R-183 · a origem perde o DECLARADO e o destino ganha o CONTADO. Sao dois numeros porque o
+    // fato e um so: saiu 200 do caixa, chegaram 180 no cofre, e os 20 viraram quebra. Um `const
+    // valor` compartilhado — como era ate aqui — devolveria a diferenca a origem e apagaria a
+    // divergencia do saldo, que e justamente o que a regra existe para tornar visivel.
+    const valorSaida = paraCentavos(linha.valorOriginal);
+    const valorEntrada = valorEntradaCentavos({
+      valorOriginalCentavos: valorSaida,
+      valorRecebidoCentavos: linha.valorRecebido === null ? null : paraCentavos(linha.valorRecebido)
+    });
+    if (transferenciaContaComoEntrada(linha.status)) {
+      acumular(linha.contaDestinoId, "transferenciasEntrada", valorEntrada);
+    }
+    if (transferenciaContaComoSaida(linha.status)) acumular(linha.contaOrigemId, "transferenciasSaida", valorSaida);
+    if (linha.status === "pendente") acumular(linha.contaOrigemId, "transferenciasPendentes", valorSaida);
   }
   for (const linha of linhasDespesas) acumular(linha.contaOrigemId, "despesas", paraCentavos(linha.valorOriginal));
   for (const linha of linhasRetiradas) acumular(linha.contaOrigemId, "retiradas", paraCentavos(linha.valorOriginal));

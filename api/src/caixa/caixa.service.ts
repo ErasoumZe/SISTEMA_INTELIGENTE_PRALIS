@@ -85,7 +85,10 @@ import {
   type FiltrosHistoricoCaixa,
   type IntencaoEntregaCofre
 } from "./caixa.repository.js";
-import { listarEntregasAoCofrePendentesRepository } from "../transferencias/entrega-cofre.repository.js";
+import {
+  listarEntregasAoCofrePendentesRepository,
+  ultimasRecusasPorTransferenciaRepository
+} from "../transferencias/entrega-cofre.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
@@ -203,20 +206,41 @@ async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promi
   return {
     caixaAberto: serializarCaixa(caixa),
     resumo: await calcularResumoCaixaOperacional(caixa, db),
-    entregasPendentes: serializarEntregasPendentes(await listarEntregasAoCofrePendentesRepository(caixa.id, db))
+    entregasPendentes: await entregasPendentesDoCaixa(caixa.id, db)
   };
 }
 
+// R-183 · a lista que a tela recebe carrega tambem o que o cofre JA CONTOU, quando ja contou.
+// Sao duas situacoes muito diferentes que a tela precisa distinguir: entrega sem recusa trava o
+// fechamento e nao tem saida nenhuma; entrega ja recusada trava tambem, mas a saida existe e esta
+// no cofre. Sem o numero, o operador leria "travado" nos dois casos.
+async function entregasPendentesDoCaixa(caixaId: string, db?: ExecutorBanco): Promise<EntregaCofrePendente[]> {
+  const linhas = await listarEntregasAoCofrePendentesRepository(caixaId, db);
+  const ultimas = await ultimasRecusasPorTransferenciaRepository(
+    linhas.map((linha) => linha.id),
+    db
+  );
+  return serializarEntregasPendentes(linhas, ultimas);
+}
+
 function serializarEntregasPendentes(
-  linhas: Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>
+  linhas: Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>,
+  ultimas: Map<string, { id: string; valorInformadoCentavos: number | null }> = new Map()
 ): EntregaCofrePendente[] {
-  return linhas.map((linha) => ({
-    id: linha.id,
-    tipo: linha.tipo === "sangria" ? "sangria" : "retorno",
-    valor: deCentavos(linha.valorCentavos),
-    lacre: linha.lacre,
-    criadoEm: serializarData(linha.criadoEm) ?? ""
-  }));
+  return linhas.map((linha) => {
+    const recusa = ultimas.get(linha.id);
+    return {
+      id: linha.id,
+      tipo: linha.tipo === "sangria" ? "sangria" : "retorno",
+      valor: deCentavos(linha.valorCentavos),
+      lacre: linha.lacre,
+      criadoEm: serializarData(linha.criadoEm) ?? "",
+      // R-183 · recusa SEM contagem vale zero contado, e nao "nao contou": e a leitura oficial do
+      // "lacre violado, nao abro" — o cofre nao recebe credito e o declarado inteiro vira quebra.
+      valorContado: recusa ? deCentavos(recusa.valorInformadoCentavos ?? 0) : null,
+      recusaId: recusa?.id ?? null
+    };
+  });
 }
 
 // A recusa precisa dizer QUAL entrega trava. "Nao pode fechar" sozinho manda o operador adivinhar
@@ -679,7 +703,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       // Decisao 7: o retorno final TAMBEM entrega dinheiro fisico, entao exige responsavel no
       // cofre. A checagem fica DENTRO deste `if` de proposito: fechamento sem sobra nao gera
       // entrega nenhuma e nao pode ser bloqueado por falta de quem conferir.
-      await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
+      await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
       await registrarEntregaAoCofre(
         {
           caixa: { ...caixa, pdvContaId: caixa.pdvContaId },
@@ -793,7 +817,7 @@ function conferirIntencaoEntrega(
 // A (3) e resolvida aqui, e nao no SQL, para usar exatamente a mesma resolucao do guard das rotas.
 // Duas regras de permissao para a mesma pergunta divergem no primeiro ajuste.
 async function existeConfirmadorElegivel(
-  input: { contaId: string; empresaId: string; criadoPor: string | null },
+  input: { contaId: string; empresaId: string; excluirUsuarioIds: Array<string | null> },
   tx: ExecutorBanco
 ): Promise<boolean> {
   const candidatos = await listarCandidatosConfirmacaoRepository(input, tx);
@@ -811,10 +835,18 @@ async function existeConfirmadorElegivel(
 //
 // `criadoPor` e quem VAI criar o movimento: se o unico vinculado ao cofre for ele mesmo, nao existe
 // confirmador — e e melhor descobrir isso agora do que com o dinheiro fora do caixa.
-async function exigirConfirmadorDoCofre(empresaId: string, criadoPor: string, tx: ExecutorBanco): Promise<void> {
+async function exigirConfirmadorDoCofre(
+  empresaId: string,
+  // R-183 · TODOS os impedidos, nao so o criador. Numa solicitacao D4 quem programa e quem entrega
+  // sao pessoas diferentes e as duas ficam fora da conferencia (R-028) — se a exclusao das duas nao
+  // deixar ninguem elegivel, a entrega precisa ser recusada AQUI, antes de o dinheiro sair. Deixar
+  // sair produzia o pior estado possivel: malote sem conferente e caixa que nao fecha mais.
+  excluirUsuarioIds: Array<string | null>,
+  tx: ExecutorBanco
+): Promise<void> {
   const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
-  if (!(await existeConfirmadorElegivel({ contaId: contaCofreId, empresaId, criadoPor }, tx))) {
+  if (!(await existeConfirmadorElegivel({ contaId: contaCofreId, empresaId, excluirUsuarioIds }, tx))) {
     throw new Error("Conta do cofre sem responsavel elegivel para conferir a entrega");
   }
 }
@@ -979,7 +1011,7 @@ export async function criarTransferenciaCofreCaixa(
     }
 
     // Decisao 7: entrega avulsa tambem entrega dinheiro — sem quem conferir, nao sai.
-    await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
+    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
 
     // D1: retorno/sangria parcial e permitido, mas NUNCA acima do que existe em especie. Sem este
     // teto, dois cliques levavam o saldo a negativo e o fechamento gravava quebra falsa no nome do
@@ -1045,7 +1077,7 @@ export async function programarSolicitacaoCofre(
     if (valorCentavos <= 0) throw new Error("Valor da solicitacao deve ser positivo");
 
     // Decisao 7: nao faz sentido programar uma entrega que ninguem podera receber.
-    await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
+    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
 
     // D4: SEM teto de saldo aqui, e de proposito. Programar nao movimenta dinheiro; a Tesouraria
     // pode pedir de manha o que so existira no caixa a tarde. O teto vale na EXECUCAO, que e onde
@@ -1159,7 +1191,12 @@ export async function executarSolicitacaoCofre(
 
     // Decisao 7: sem responsavel no Cofre nao existe quem confira a entrega. Bloqueia ANTES de o
     // dinheiro sair do caixa — senao ele fica `pendente` para sempre, fora do caixa e fora do cofre.
-    await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
+    //
+    // R-183 · aqui sao DUAS pessoas impedidas, nao uma: quem PROGRAMOU (`solicitacao.criadoPor`) e
+    // quem esta EXECUTANDO agora. As duas ficam fora da conferencia pela R-028, entao as duas
+    // precisam sair da conta de elegiveis ANTES de o malote sair. Excluir so o executor deixaria
+    // passar uma entrega que ninguem poderia conferir depois — e caixa que nunca fecha.
+    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId, solicitacao.criadoPor], tx);
 
     // D10 · o valor e o PROGRAMADO, ponto. A Tesouraria pediu R$ 100 => saem R$ 100. O payload nem
     // carrega valor, entao nao ha o que divergir aqui.

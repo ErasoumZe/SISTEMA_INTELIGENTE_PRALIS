@@ -44,6 +44,7 @@ import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padar
 import { vendas } from "@padaria/db/schema/venda";
 import {
   transferenciaContaComoEntrada,
+  valorEntradaCentavos,
   transferenciaContaComoSaida,
   type TotaisCaixaCentavos
 } from "@padaria/shared/caixa";
@@ -310,6 +311,9 @@ export async function criarQuebraCaixaRepository(
     usuarioId: string;
     valorCentavos: number;
     observacao: string;
+    // R-183 · qual entrega gerou a quebra. Ausente = quebra de CONTAGEM do turno, que e a unica que
+    // existia ate aqui — por isso o default e null e todo o historico continua valendo.
+    transferenciaId?: string | null;
   },
   db: ExecutorBanco = banco
 ) {
@@ -320,7 +324,8 @@ export async function criarQuebraCaixaRepository(
       fechamentoCaixaId: input.fechamentoCaixaId,
       usuarioId: input.usuarioId,
       valor: centavosParaDecimalBanco(input.valorCentavos),
-      observacao: input.observacao
+      observacao: input.observacao,
+      transferenciaId: input.transferenciaId ?? null
     })
     .returning({ id: quebrasCaixa.id });
   if (!quebra) throw new Error("Quebra de caixa nao registrada");
@@ -706,6 +711,9 @@ export async function buscarSolicitacaoCofreRepository(
   lacre: string | null;
   // Quem entregou o dinheiro. Null enquanto 'agendada'. Preservado apos a confirmacao.
   executadoPor: string | null;
+  // R-183 · quem PROGRAMOU. Sai daqui para o portao do confirmador excluir as duas pessoas de uma
+  // vez — o programador e o executor —, e nao so quem esta executando agora.
+  criadoPor: string | null;
 } | null> {
   const [linha] = await db
     .select({
@@ -714,6 +722,7 @@ export async function buscarSolicitacaoCofreRepository(
       valorOriginal: transferencias.valorOriginal,
       status: transferencias.status,
       observacao: transferencias.observacao,
+      criadoPor: transferencias.criadoPor,
       lacre: transferencias.nLacreDoc,
       executadoPor: transferencias.executadoPor
     })
@@ -829,11 +838,18 @@ export async function existeSolicitacaoAgendadaRepository(
 // computada por `resolverPermissoesEfetivas`. Reproduzir isso em SQL criaria uma segunda regra de
 // permissao, que divergiria da do guard no primeiro ajuste. O servico fecha a conta.
 export async function listarCandidatosConfirmacaoRepository(
-  input: { contaId: string; empresaId: string; criadoPor: string | null },
+  // R-183 · uma LISTA de excluidos, e nao so o criador. Numa solicitacao D4 quem programa e quem
+  // entrega sao pessoas diferentes, e as duas ficam impedidas de conferir (R-028). Este portao roda
+  // ANTES de o dinheiro sair: se a exclusao das duas nao deixar ninguem elegivel, a entrega nao
+  // acontece — melhor recusar a execucao do que descobrir depois que o malote nao tem conferente e
+  // o caixa nao fecha mais.
+  input: { contaId: string; empresaId: string; excluirUsuarioIds: Array<string | null> },
   db: ExecutorBanco = banco
 ): Promise<string[]> {
   const filtros = [eq(contasUsuarios.contaId, input.contaId), eq(contasUsuarios.empresaId, input.empresaId)];
-  if (input.criadoPor) filtros.push(ne(contasUsuarios.usuarioId, input.criadoPor));
+  for (const usuarioId of input.excluirUsuarioIds) {
+    if (usuarioId) filtros.push(ne(contasUsuarios.usuarioId, usuarioId));
+  }
 
   const linhas = await db
     .select({ usuarioId: contasUsuarios.usuarioId })
@@ -1157,6 +1173,8 @@ export async function calcularTotaisCaixaOperacionalRepository(
     db
       .select({
         valorOriginal: transferencias.valorOriginal,
+        // R-183: o que ENTROU. So a entrada usa este numero; a saida e sempre `valor_original`.
+        valorRecebido: transferencias.valorRecebido,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
         status: transferencias.status
@@ -1181,14 +1199,21 @@ export async function calcularTotaisCaixaOperacionalRepository(
     totais.entradas += liquidoCentavos(movimento);
   }
   for (const movimento of linhasTransferencias) {
-    const valor = paraCentavos(movimento.valorOriginal);
+    // R-183 · DOIS numeros, e a separacao nao e estilo. A saida e sempre `valor_original` — o que
+    // saiu do caixa nao muda porque o cofre contou menos. Usar um valor so para as duas pontas
+    // devolveria a diferenca ao caixa, que e exatamente o que a regra proibe.
+    const valorSaida = paraCentavos(movimento.valorOriginal);
+    const valorEntrada = valorEntradaCentavos({
+      valorOriginalCentavos: valorSaida,
+      valorRecebidoCentavos: movimento.valorRecebido === null ? null : paraCentavos(movimento.valorRecebido)
+    });
     if (transferenciaContaComoEntrada(movimento.status) && movimento.contaDestinoId === pdvContaId) {
-      totais.transferencias += valor;
-      totais.transferenciasEntrada += valor;
+      totais.transferencias += valorEntrada;
+      totais.transferenciasEntrada += valorEntrada;
     }
     if (transferenciaContaComoSaida(movimento.status) && movimento.contaOrigemId === pdvContaId) {
-      totais.transferencias += valor;
-      totais.transferenciasSaida += valor;
+      totais.transferencias += valorSaida;
+      totais.transferenciasSaida += valorSaida;
     }
   }
   for (const movimento of linhasDespesas) {

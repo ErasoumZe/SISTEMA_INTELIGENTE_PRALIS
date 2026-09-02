@@ -142,6 +142,7 @@ export async function buscarTransferenciaDetalheRepository(
       contaOrigemId: transferencias.contaOrigemId,
       contaDestinoId: transferencias.contaDestinoId,
       nLacreDoc: transferencias.nLacreDoc,
+      valorRecebido: transferencias.valorRecebido,
       agendadaPara: transferencias.agendadaPara,
       tempoConfirmacao: transferencias.tempoConfirmacao,
       prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
@@ -163,6 +164,8 @@ export async function buscarTransferenciaDetalheRepository(
     valorOriginal: numeroDecimal(transferencia.valorOriginal),
     valorAcrescimo: numeroDecimal(transferencia.valorAcrescimo),
     valorDesconto: numeroDecimal(transferencia.valorDesconto),
+    // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
+    valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
     contasDestinoIds: candidatos.map((item) => item.contaId),
     tempoConfirmacao: (transferencia.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
@@ -271,6 +274,57 @@ export async function registrarRecusaConferenciaRepository(
   return { id: recusa.id, tentativas: Number(total?.total ?? 1) };
 }
 
+// R-183 · o DESFECHO da divergencia: `pendente -> divergente`, com o valor que o cofre contou.
+//
+// O `where` carrega as tres amarras juntas, e nenhuma e decorativa: `id` e obvio, `caixa_id` impede
+// encerrar entrega de OUTRO caixa (nos casos sobra e lacre nao nasce quebra, entao a FK nao seria
+// checada e nada mais barraria), e `status = 'pendente'` faz o ato ser irrepetivel — quem perder a
+// corrida acerta zero linhas e recebe o erro de dominio, nunca um segundo encerramento.
+//
+// O selo e rompido aqui, como no `/confirmar`: entrega conferida com lacre intacto para sempre
+// mentiria no relatorio de lacres.
+export async function encerrarDivergenciaRepository(
+  input: {
+    transferenciaId: string;
+    caixaId: string;
+    valorRecebidoCentavos: number;
+    lacreDoMovimento: string | null;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string; empresaId: string } | null> {
+  const [vencedora] = await db
+    .update(transferencias)
+    .set({
+      status: "divergente",
+      valorRecebido: centavosParaDecimalBanco(input.valorRecebidoCentavos),
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.transferenciaId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "pendente")
+      )
+    )
+    .returning({ id: transferencias.id, empresaId: transferencias.empresaId });
+  if (!vencedora) return null;
+
+  if (!input.lacreDoMovimento) return vencedora;
+  const [lacre] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(
+      and(
+        eq(lacres.transferenciaId, input.transferenciaId),
+        eq(lacres.numero, input.lacreDoMovimento),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  if (!lacre) throw new Error("Lacre invalido, ja rompido ou pertencente a outra transferencia");
+  return vencedora;
+}
+
 export async function contasPertencemEmpresaRepository(
   contaIds: string[],
   empresaId: string,
@@ -297,7 +351,15 @@ async function candidatoConfirmacao(
   db: ExecutorBanco
 ) {
   const [permitida] = await db
-    .select({ id: transferencias.id, criadoPor: transferencias.criadoPor, nLacreDoc: transferencias.nLacreDoc })
+    .select({
+      id: transferencias.id,
+      criadoPor: transferencias.criadoPor,
+      // R-028 aplicada ao fluxo D4: numa solicitacao, `criado_por` e quem PROGRAMOU (retaguarda) e
+      // `executado_por` e quem ENTREGOU o malote. Excluir so o primeiro deixava o entregador
+      // conferir a propria entrega — e, com o encerramento da R-183, escolher o numero da quebra.
+      executadoPor: transferencias.executadoPor,
+      nLacreDoc: transferencias.nLacreDoc
+    })
     .from(transferenciasDestinosCandidatos)
     .innerJoin(transferencias, eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId))
     .innerJoin(
@@ -311,7 +373,7 @@ async function candidatoConfirmacao(
       )
     )
     .limit(1);
-  if (!permitida || permitida.criadoPor === usuarioId) return null;
+  if (!permitida || permitida.criadoPor === usuarioId || permitida.executadoPor === usuarioId) return null;
   return permitida;
 }
 

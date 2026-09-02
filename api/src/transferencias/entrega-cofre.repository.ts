@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { empresas } from "@padaria/db/schema/cadastro";
-import { transferencias } from "@padaria/db/schema/transferencia";
+import { transferencias, transferenciasConferenciasRecusadas } from "@padaria/db/schema/transferencia";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
@@ -102,4 +102,36 @@ export async function listarEntregasAoCofrePendentesRepository(
     lacre: linha.lacre,
     criadoEm: linha.criadoEm
   }));
+}
+
+// R-183 · a ULTIMA tentativa de conferencia de cada entrega. "Ultima" desempata por
+// `(criado_em, id)`: duplo clique grava duas linhas no mesmo instante, e sem o id o desfecho ficaria
+// nao-deterministico — o `uuid_generate_v7()` e monotonico, entao ele resolve.
+//
+// Uma consulta so para a lista inteira; o agrupamento fica em memoria porque sao unidades de linhas
+// por caixa, e um lateral por transferencia pagaria mais caro do que carrega.
+export async function ultimasRecusasPorTransferenciaRepository(
+  transferenciaIds: string[],
+  db: ExecutorBanco = banco
+): Promise<Map<string, { id: string; valorInformadoCentavos: number | null }>> {
+  if (!transferenciaIds.length) return new Map();
+  const linhas = await db
+    .select({
+      id: transferenciasConferenciasRecusadas.id,
+      transferenciaId: transferenciasConferenciasRecusadas.transferenciaId,
+      valorInformado: transferenciasConferenciasRecusadas.valorInformado,
+      criadoEm: transferenciasConferenciasRecusadas.criadoEm
+    })
+    .from(transferenciasConferenciasRecusadas)
+    .where(inArray(transferenciasConferenciasRecusadas.transferenciaId, transferenciaIds))
+    .orderBy(asc(transferenciasConferenciasRecusadas.criadoEm), asc(transferenciasConferenciasRecusadas.id));
+
+  const ultimas = new Map<string, { id: string; valorInformadoCentavos: number | null }>();
+  for (const linha of linhas) {
+    ultimas.set(linha.transferenciaId, {
+      id: linha.id,
+      valorInformadoCentavos: linha.valorInformado === null ? null : paraCentavos(linha.valorInformado)
+    });
+  }
+  return ultimas;
 }

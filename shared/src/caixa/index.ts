@@ -321,7 +321,16 @@ export const entregaCofrePendenteSchema = z.object({
   tipo: z.enum(["sangria", "retorno"]),
   valor: z.number(),
   lacre: z.string().nullable(),
-  criadoEm: z.string()
+  criadoEm: z.string(),
+  // R-183 · o que o cofre CONTOU na ultima tentativa de conferencia, quando ja houve uma. `null`
+  // significa "ninguem contou ainda" — e e essa diferenca que a tela precisa mostrar: entrega sem
+  // recusa trava o fechamento e nao tem saida; entrega ja recusada trava tambem, mas a saida existe
+  // e esta no cofre. Sem o numero aqui, o operador leria "travado" nos dois casos e nao saberia a
+  // quem cobrar.
+  valorContado: z.number().nullable(),
+  // A recusa que produziu esse numero. Serve de referencia estavel para a tela e para o suporte —
+  // "a ultima" e uma leitura dependente de ordem, e este id nao e.
+  recusaId: uuidSchema.nullable()
 });
 
 // D4/decisao 2: cancelamento de solicitacao ainda `agendada`. Motivo obrigatorio — cancelar uma

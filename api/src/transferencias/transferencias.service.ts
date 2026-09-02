@@ -14,6 +14,7 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
   buscarContaCofreEmpresaRepository,
+  criarQuebraCaixaRepository,
   listarUsuariosTesourariaRepository,
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
@@ -47,6 +48,7 @@ import {
   buscarTransferenciaDetalheRepository,
   travarTransferenciaRepository,
   confirmarTransferenciaRepository,
+  encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
   efetivarTransferenciaAgendadaRepository,
@@ -318,7 +320,7 @@ export async function recusarConferencia(
   transferenciaId: string,
   dados: RecusarConferenciaPayload,
   perfil: PerfilUsuario
-): Promise<{ registrada: true; transferenciaId: string; tentativas: number }> {
+): Promise<{ registrada: true; transferenciaId: string; tentativas: number; encerrada: boolean }> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
   return executarEmTransacao(async (tx) => {
     const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
@@ -326,7 +328,17 @@ export async function recusarConferencia(
     // Generica nao tem recusa auditavel: para ela isto e 404, e nao "nao pode" — o caminho dela
     // continua sendo o `/confirmar` com a regra vigente.
     if (!contexto.ehCaixaParaCofre) throw new Error("Registro nao encontrado");
-    if (contexto.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // R-183 · a linha do caixa vem TRAVADA (FOR SHARE) antes de qualquer decisao, exatamente como no
+    // `/confirmar`. Ate aqui a recusa nao travava nada porque nao movia dinheiro; agora ela pode
+    // encerrar a entrega e gravar quebra, entao precisa serializar com o fechamento em voo — senao
+    // duas verdades sobre o mesmo turno commitam em paralelo.
+    if (contexto.caixaId) await travarCaixaCompartilhadoRepository(contexto.caixaId, tx);
+
+    // Releitura SOB a trava: entre a leitura acima e o lock, um `/confirmar` ou outro encerramento
+    // pode ter mudado o desfecho. Sem isto a decisao sairia de um retrato velho.
+    const atual = await buscarContextoConferenciaRepository(transferenciaId, tx);
+    if (!atual || atual.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
 
     // Mesma elegibilidade da confirmacao: vinculado a conta destino, e nunca quem criou o movimento
     // (R-028). Sem isso, quem enviou o dinheiro poderia "recusar" a propria entrega.
@@ -336,33 +348,95 @@ export async function recusarConferencia(
     );
     if (!elegivel) throw new Error("Somente operador de uma conta destino pode conferir esta transferencia");
 
+    // R-183 · o que o cofre CONTOU. Quando a recusa vai encerrar, o numero e obrigatorio e pode ser
+    // ZERO — "lacre violado, nao abro e nao conto" e uma contagem valida de R$ 0,00, e e ela que faz
+    // o declarado inteiro virar quebra. Por isso `null` (nao informado) e recusado no encerramento:
+    // sem numero nao ha o que creditar nem o que quebrar.
+    const contadoCentavos = dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido);
+    if (dados.encerrar) {
+      if (contadoCentavos === null) {
+        throw erroValidacao(
+          "Informe o valor contado para encerrar a divergencia — use 0 quando o malote nao foi aberto",
+          "VALOR_CONTADO_OBRIGATORIO"
+        );
+      }
+      // C > D: a D7 proibe transformar sobra em quebra positiva, entao o unico contrapeso possivel e
+      // alguem assumir por escrito que contou MAIS do que foi declarado. Sem isso o cofre seria
+      // creditado a mais sem dono.
+      if (contadoCentavos > atual.valorCentavos && !dados.sobraConfirmada) {
+        throw new ErroDominio(
+          "Contagem acima do declarado: confirme a sobra para encerrar a divergencia",
+          409,
+          "SOBRA_NAO_CONFIRMADA"
+        );
+      }
+    }
+
     const registro = await registrarRecusaConferenciaRepository(
       {
         transferenciaId,
         recusadoPor: perfil.usuarioId,
         motivo: dados.motivo.trim(),
         lacreInformado: dados.nLacreDoc?.trim() || null,
-        valorInformadoCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido)
+        valorInformadoCentavos: contadoCentavos
       },
       tx
     );
 
+    // R-183 · o DESFECHO. Sem `encerrar`, nada muda: a entrega continua `pendente`, o fechamento
+    // continua travado e o cofre pode reconferir — que e o comportamento de sempre.
+    if (dados.encerrar && contadoCentavos !== null) {
+      if (!atual.caixaId) throw new Error("Entrega ao cofre sem caixa vinculado");
+      const encerrada = await encerrarDivergenciaRepository(
+        {
+          transferenciaId,
+          caixaId: atual.caixaId,
+          valorRecebidoCentavos: contadoCentavos,
+          lacreDoMovimento: atual.lacre
+        },
+        tx
+      );
+      // Zero linhas = a entrega deixou de ser `pendente` entre a trava e o UPDATE, ou nao e deste
+      // caixa. Erro de dominio, nunca um segundo encerramento silencioso.
+      if (!encerrada) throw new Error("Transferencia nao esta pendente de confirmacao");
+
+      // A falta vira quebra; a sobra nao (D7). A quebra nasce contra o fechamento a que a ENTREGA
+      // pertence — aberto ou fechado —, e e isso que faz o retorno final do fechamento ter desfecho.
+      const faltaCentavos = atual.valorCentavos - contadoCentavos;
+      if (faltaCentavos > 0) {
+        const dono = atual.executadoPor ?? atual.criadoPor;
+        if (!dono) throw new Error("Entrega sem responsavel para responder pela quebra");
+        await criarQuebraCaixaRepository(
+          {
+            empresaId: atual.empresaId,
+            fechamentoCaixaId: atual.caixaId,
+            usuarioId: dono,
+            // Negativo, na mesma convencao do escritor que ja existia: negativo = faltou.
+            valorCentavos: -faltaCentavos,
+            observacao: dados.motivo.trim(),
+            transferenciaId
+          },
+          tx
+        );
+      }
+    }
+
     // Quem precisa saber: quem ENTREGOU (o executor real da solicitacao D4, ou o criador quando a
     // entrega foi avulsa/retorno final) mais a Tesouraria/Gestao. Usar so `criado_por` numa
     // solicitacao programada avisaria quem programou e deixaria o operador no escuro.
-    const operador = contexto.executadoPor ?? contexto.criadoPor;
-    const tesouraria = await listarUsuariosTesourariaRepository(contexto.empresaId, tx);
+    const operador = atual.executadoPor ?? atual.criadoPor;
+    const tesouraria = await listarUsuariosTesourariaRepository(atual.empresaId, tx);
     const destinatarios = [
       ...new Set([operador, ...tesouraria.map((item) => item.usuarioId)].filter((id): id is string => Boolean(id)))
     ];
     await criarNotificacoesRepository(
       {
-        empresaId: contexto.empresaId,
+        empresaId: atual.empresaId,
         tipo: "transferencia_divergencia",
         destinatariosUsuarioIds: destinatarios,
         referenciaId: transferenciaId,
-        titulo: `Conferencia recusada (${registro.tentativas}a tentativa) - ${contexto.lacre ?? transferenciaId}`,
-        valorCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido) - contexto.valorCentavos,
+        titulo: `Conferencia recusada (${registro.tentativas}a tentativa) - ${atual.lacre ?? transferenciaId}`,
+        valorCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido) - atual.valorCentavos,
         // Cada nova tentativa reabre a pendencia: sem isto, quem ja tinha marcado a primeira
         // recusa como vista nunca seria avisado da segunda.
         reabrir: true
@@ -370,7 +444,7 @@ export async function recusarConferencia(
       tx
     );
 
-    return { registrada: true, transferenciaId, tentativas: registro.tentativas };
+    return { registrada: true, transferenciaId, tentativas: registro.tentativas, encerrada: Boolean(dados.encerrar) };
   });
 }
 
