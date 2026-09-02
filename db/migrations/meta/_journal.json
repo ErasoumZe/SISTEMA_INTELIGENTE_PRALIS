@@ -239,6 +239,13 @@
       "when": 1787748137962,
       "tag": "0033_roteamento_financeiro_da_venda",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788366761649,
+      "tag": "0034_divergencia_entrega_ao_cofre",
+      "breakpoints": true
     }
   ]
 }
