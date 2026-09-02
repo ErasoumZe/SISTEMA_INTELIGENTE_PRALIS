@@ -51,6 +51,7 @@ a necessidade.
 | [34](34_ADMISSAO_DIRETA_TURNO_ASO.md)     | **Admissao direta, turno e ASO** | ADM-003 V1B: pre-cadastro do DP, turno por catalogo com retrato, CPF por lock, ASO pausa e retoma |
 | [35](35_ADMISSAO_FLUXO_COMPLETO.md)       | **Admissao: fluxo completo (mapa)** | ADM-003: as 8 estacoes ate o colaborador, matriz de campos, SQL proposto e os 4 bloqueios — nada implementado |
 | [36](36_CADASTRO_COLABORADORES_PRE_CADASTRO_E_SITUACOES.md) | **Pre-cadastro e situacoes** | de onde vem quem ja trabalha: ficha contabil nao e carga, a fila de pre-cadastro, e os dois vocabularios de situacao |
+| [37](37_ADMISSAO_FICHA_PUBLICA_E_DEPENDENTES.md) | **Ficha publica e dependentes** | ADM-003 V3/V4 implementadas: link sem login, token so no fragmento e no cabecalho, dependentes com CPF conferido tambem pelo BANCO (D-7) |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
