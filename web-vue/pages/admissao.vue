@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import type { FichaPublicaDto } from "@padaria/shared";
+import {
+  cpfValido,
+  finalidadesSugeridas,
+  parentescosSugeridos,
+  type DependentesDto,
+  type FichaPublicaDto
+} from "@padaria/shared";
 import { CABECALHO_DO_CONVITE, tokenDoFragmento } from "~/utils/convite-token";
 
 /**
- * ADM-003 V3 — a ficha do candidato.
+ * ADM-003 V3/V4 — a ficha do candidato.
  *
  * A UNICA tela do sistema aberta a quem nao tem conta. Por isso ela nao monta `AppWorkspace`, nao
  * tem menu, nao le sessao e nao aparece em `itemPorTela` — se aparecesse, viraria item de menu.
@@ -98,6 +104,169 @@ function corpoDaFicha() {
   return campos;
 }
 
+// --- Dependentes (V4) ---------------------------------------------------------------------------
+//
+// A declaracao tem TRES estados, e a tela precisa mostrar os tres: `null` e "ainda nao respondeu",
+// e nao "tem dependentes". Quem apaga o ultimo dependente volta para `null` de proposito — apagar
+// nao e declarar, e o servidor devolve esse `null` para a pessoa responder de novo, conscientemente.
+//
+// O valor local so vai para o servidor junto com o rascunho ou com o envio. As rotas de dependente,
+// essas sim, devolvem a declaracao ja gravada, e o que elas devolvem manda: cadastrar alguem
+// desmarca "nao tenho" no servidor, e a tela precisa refletir isso sem discutir.
+
+type LinhaDependente = {
+  chave: string;
+  /** `null` enquanto a linha existe so na tela. */
+  id: string | null;
+  nomeCompleto: string;
+  nascimento: string;
+  parentesco: string;
+  cpf: string;
+  finalidades: string[];
+  /** Assinatura do que o servidor tem. Vazia numa linha nova, que por isso ja nasce por gravar. */
+  gravado: string;
+};
+
+const PARENTESCOS = [...parentescosSugeridos];
+const FINALIDADES = [...finalidadesSugeridas];
+
+const declaracao = ref<boolean | null>(null);
+const dependentes = ref<LinhaDependente[]>([]);
+const salvandoDependente = ref("");
+const botaoAdicionar = ref<{ $el?: HTMLElement } | null>(null);
+
+let sequencia = 0;
+
+function assinatura(linha: LinhaDependente): string {
+  return JSON.stringify([
+    linha.nomeCompleto.trim(),
+    linha.nascimento,
+    linha.parentesco.trim(),
+    linha.cpf.trim(),
+    [...linha.finalidades].sort()
+  ]);
+}
+
+function porGravar(linha: LinhaDependente): boolean {
+  return assinatura(linha) !== linha.gravado;
+}
+
+/** O erro que a pessoa ve ANTES de o servidor responder. O servidor e o banco repetem a conta. */
+function erroDoCpf(linha: LinhaDependente): string {
+  const valor = linha.cpf.trim();
+  if (valor === "") return "";
+  return cpfValido(valor) ? "" : "CPF inválido — confira os números.";
+}
+
+function erroDaLinha(linha: LinhaDependente): string {
+  if (linha.nomeCompleto.trim() === "") return "Informe o nome do dependente.";
+  if (!linha.nascimento) return "Informe a data de nascimento.";
+  if (linha.parentesco.trim() === "") return "Informe o parentesco.";
+  return erroDoCpf(linha);
+}
+
+function aplicarDependentes(dados: DependentesDto) {
+  if (ficha.value) ficha.value.versao = dados.versao;
+  declaracao.value = dados.semDependentes;
+  dependentes.value = dados.itens.map((item) => {
+    const linha: LinhaDependente = {
+      chave: item.id,
+      id: item.id,
+      nomeCompleto: item.nomeCompleto,
+      nascimento: item.nascimento,
+      parentesco: item.parentesco,
+      cpf: item.cpf ?? "",
+      finalidades: [...item.finalidades],
+      gravado: ""
+    };
+    linha.gravado = assinatura(linha);
+    return linha;
+  });
+}
+
+function adicionarDependente() {
+  sequencia += 1;
+  dependentes.value.push({
+    chave: `nova-${sequencia}`,
+    id: null,
+    nomeCompleto: "",
+    nascimento: "",
+    parentesco: "",
+    cpf: "",
+    finalidades: [],
+    gravado: ""
+  });
+  // Marcar "tenho dependentes" e a consequencia obvia de comecar a cadastrar um; o servidor grava
+  // isso sozinho no primeiro POST, e antecipar aqui evita a tela piscar entre os dois estados.
+  declaracao.value = false;
+}
+
+async function salvarDependente(linha: LinhaDependente) {
+  if (salvandoDependente.value || erroDaLinha(linha)) return;
+  salvandoDependente.value = linha.chave;
+  erro.value = "";
+  aviso.value = "";
+  try {
+    const corpo = {
+      nomeCompleto: linha.nomeCompleto.trim(),
+      nascimento: linha.nascimento,
+      parentesco: linha.parentesco.trim(),
+      cpf: linha.cpf.trim(),
+      finalidades: linha.finalidades
+    };
+    const dados = linha.id
+      ? await chamar<DependentesDto>("PUT", `/api/admissao/dependentes/${linha.id}`, corpo)
+      : await chamar<DependentesDto>("POST", "/api/admissao/dependentes", corpo);
+    if (dados) aplicarDependentes(dados);
+    aviso.value = "Dependente salvo.";
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível salvar o dependente.";
+  } finally {
+    salvandoDependente.value = "";
+  }
+}
+
+async function removerDependente(linha: LinhaDependente) {
+  if (salvandoDependente.value) return;
+  // Linha que nunca foi gravada some sem ida ao servidor: nao ha o que apagar la.
+  if (!linha.id) {
+    dependentes.value = dependentes.value.filter((atual) => atual.chave !== linha.chave);
+    await devolverOFoco();
+    return;
+  }
+  salvandoDependente.value = linha.chave;
+  erro.value = "";
+  aviso.value = "";
+  try {
+    const dados = await chamar<DependentesDto>("DELETE", `/api/admissao/dependentes/${linha.id}`);
+    if (dados) aplicarDependentes(dados);
+    aviso.value = "Dependente removido.";
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível remover o dependente.";
+  } finally {
+    salvandoDependente.value = "";
+    await devolverOFoco();
+  }
+}
+
+/**
+ * Depois de remover, o foco do teclado ficaria num botao que deixou de existir — e o navegador o
+ * devolve para o `body`, jogando quem usa teclado ou leitor de tela para o comeco da pagina.
+ */
+async function devolverOFoco() {
+  await nextTick();
+  botaoAdicionar.value?.$el?.focus();
+}
+
+async function carregarDependentes() {
+  const dados = await chamar<DependentesDto>("GET", "/api/admissao/dependentes");
+  if (dados) aplicarDependentes(dados);
+}
+
+const temDependentesGravados = computed(() => dependentes.value.some((linha) => linha.id !== null));
+const dependentesPorGravar = computed(() => dependentes.value.some(porGravar));
+const podeEnviar = computed(() => aceite.value && declaracao.value !== null && !dependentesPorGravar.value);
+
 async function carregar() {
   carregando.value = true;
   erro.value = "";
@@ -107,6 +276,8 @@ async function carregar() {
       ficha.value = dados;
       preencher(dados);
       aceite.value = dados.avisoAceitoEm !== null;
+      declaracao.value = dados.semDependentes;
+      await carregarDependentes();
     }
   } catch (falha) {
     erro.value = falha instanceof Error ? falha.message : "Nao foi possivel abrir o formulario.";
@@ -121,7 +292,11 @@ async function salvarRascunho() {
   erro.value = "";
   aviso.value = "";
   try {
-    await chamar("PUT", "/api/admissao/ficha", { versao: ficha.value.versao, ...corpoDaFicha() });
+    await chamar("PUT", "/api/admissao/ficha", {
+      versao: ficha.value.versao,
+      semDependentes: declaracao.value,
+      ...corpoDaFicha()
+    });
     aviso.value = "Rascunho salvo. Você pode voltar depois pelo mesmo link.";
     await carregar();
   } catch (falha) {
@@ -132,14 +307,14 @@ async function salvarRascunho() {
 }
 
 async function enviar() {
-  if (!ficha.value || salvando.value) return;
+  if (!ficha.value || salvando.value || declaracao.value === null) return;
   salvando.value = true;
   erro.value = "";
   aviso.value = "";
   try {
     await chamar("POST", "/api/admissao/ficha/enviar", {
       versao: ficha.value.versao,
-      semDependentes: true,
+      semDependentes: declaracao.value,
       avisoPrivacidadeVersao: ficha.value.avisoVersaoVigente,
       ...corpoDaFicha()
     });
@@ -222,6 +397,126 @@ onMounted(async () => {
             />
           </div>
 
+          <section class="dep">
+            <h2>Dependentes</h2>
+            <!-- A coluna guardada e `sem_dependentes`, entao "tenho" e false e "nao tenho" e true.
+                 A inversao mora aqui, num lugar so, em vez de virar um segundo campo na tela. -->
+            <v-radio-group
+              v-model="declaracao"
+              :disabled="somenteLeitura"
+              density="compact"
+              hide-details="auto"
+              label="Você tem dependentes a informar?"
+            >
+              <v-radio :value="false" label="Sim, tenho dependentes" />
+              <v-radio
+                :value="true"
+                :disabled="somenteLeitura || temDependentesGravados"
+                label="Não tenho dependentes"
+              />
+            </v-radio-group>
+
+            <p v-if="temDependentesGravados" class="ficha__nota">
+              Para declarar que não tem dependentes, remova antes os que já estão cadastrados.
+            </p>
+
+            <template v-if="declaracao === false">
+              <TransitionGroup name="dep-lista" tag="div" class="dep__lista">
+                <fieldset v-for="(linha, indice) in dependentes" :key="linha.chave" class="dep__item">
+                  <legend class="dep__legenda">Dependente {{ indice + 1 }}</legend>
+
+                  <div class="dep__campos">
+                    <v-text-field
+                      v-model="linha.nomeCompleto"
+                      label="Nome completo *"
+                      :disabled="somenteLeitura"
+                      density="comfortable"
+                      hide-details="auto"
+                    />
+                    <v-text-field
+                      v-model="linha.nascimento"
+                      label="Data de nascimento *"
+                      type="date"
+                      :disabled="somenteLeitura"
+                      density="comfortable"
+                      hide-details="auto"
+                    />
+                    <v-select
+                      v-model="linha.parentesco"
+                      :items="PARENTESCOS"
+                      label="Parentesco *"
+                      :disabled="somenteLeitura"
+                      density="comfortable"
+                      hide-details="auto"
+                    />
+                    <v-text-field
+                      v-model="linha.cpf"
+                      label="CPF (se tiver)"
+                      inputmode="numeric"
+                      :disabled="somenteLeitura"
+                      :error-messages="erroDoCpf(linha)"
+                      density="comfortable"
+                      hide-details="auto"
+                    />
+                    <v-select
+                      v-model="linha.finalidades"
+                      :items="FINALIDADES"
+                      label="Para que este dependente é informado"
+                      multiple
+                      chips
+                      :disabled="somenteLeitura"
+                      density="comfortable"
+                      hide-details="auto"
+                      class="dep__campo-largo"
+                    />
+                  </div>
+
+                  <footer v-if="!somenteLeitura" class="dep__acoes">
+                    <v-btn
+                      type="button"
+                      variant="text"
+                      color="error"
+                      :disabled="salvandoDependente !== ''"
+                      :aria-label="`Remover dependente ${indice + 1}`"
+                      @click="removerDependente(linha)"
+                    >
+                      Remover
+                    </v-btn>
+                    <v-btn
+                      type="button"
+                      variant="tonal"
+                      :loading="salvandoDependente === linha.chave"
+                      :disabled="!porGravar(linha) || erroDaLinha(linha) !== ''"
+                      :aria-label="`Salvar dependente ${indice + 1}`"
+                      @click="salvarDependente(linha)"
+                    >
+                      {{ linha.id ? "Salvar alterações" : "Salvar dependente" }}
+                    </v-btn>
+                  </footer>
+                </fieldset>
+              </TransitionGroup>
+
+              <v-btn
+                v-if="!somenteLeitura"
+                ref="botaoAdicionar"
+                type="button"
+                variant="outlined"
+                class="dep__adicionar"
+                @click="adicionarDependente"
+              >
+                Adicionar dependente
+              </v-btn>
+
+              <p v-if="dependentes.length === 0" class="ficha__nota">
+                Você marcou que tem dependentes. Cadastre pelo menos um antes de enviar a ficha.
+              </p>
+            </template>
+
+            <p v-else-if="declaracao === true" class="ficha__nota">
+              Você declarou que não há dependentes a informar. Se isso mudar, volte por este mesmo link.
+            </p>
+          </section>
+
           <section class="ficha__aviso">
             <h2>Aviso de privacidade</h2>
             <pre class="ficha__aviso-texto">{{ ficha.avisoTexto }}</pre>
@@ -233,16 +528,21 @@ onMounted(async () => {
             />
           </section>
 
-          <p class="ficha__nota">
-            Dependentes entram numa etapa seguinte, que ainda não está disponível. Ao enviar, você declara
-            que não há dependentes a informar agora.
-          </p>
-
           <footer v-if="!somenteLeitura" class="ficha__acoes">
-            <v-btn variant="text" :disabled="salvando" @click="salvarRascunho">Salvar rascunho</v-btn>
-            <v-btn color="primary" variant="flat" type="submit" :loading="salvando" :disabled="!aceite">
-              Enviar ficha
-            </v-btn>
+            <p v-if="dependentesPorGravar" class="ficha__nota">
+              Há dependente com alterações não salvas. Salve-o antes de enviar a ficha.
+            </p>
+            <p v-else-if="declaracao === null" class="ficha__nota">
+              Responda se você tem dependentes antes de enviar.
+            </p>
+            <div class="ficha__botoes">
+              <v-btn type="button" variant="text" :disabled="salvando" @click="salvarRascunho">
+                Salvar rascunho
+              </v-btn>
+              <v-btn color="primary" variant="flat" type="submit" :loading="salvando" :disabled="!podeEnviar">
+                Enviar ficha
+              </v-btn>
+            </div>
           </footer>
         </form>
       </template>
@@ -342,15 +642,109 @@ onMounted(async () => {
 }
 
 .ficha__acoes {
+  display: grid;
+  gap: var(--cx-sp-2);
+  justify-items: end;
+}
+
+.ficha__botoes {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--cx-sp-2);
 }
 
+/* --- Dependentes ------------------------------------------------------------------------------ */
+
+.dep {
+  display: grid;
+  gap: var(--cx-sp-3);
+}
+
+.dep__lista {
+  display: grid;
+  gap: var(--cx-sp-3);
+  /* Ancora para o item que sai: sem isto o 'position: absolute' da saida escaparia do cartao. */
+  position: relative;
+}
+
+/* `fieldset` de verdade, com `legend`: os campos se repetem por dependente, e sem o agrupamento um
+   leitor de tela anuncia cinco vezes "Nome completo" sem dizer de quem. */
+.dep__item {
+  border: 1px solid var(--cx-line);
+  border-radius: var(--cx-r-md);
+  padding: var(--cx-sp-4);
+  display: grid;
+  gap: var(--cx-sp-3);
+  min-width: 0;
+}
+
+.dep__legenda {
+  padding-inline: var(--cx-sp-2);
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink-soft);
+}
+
+.dep__campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cx-sp-3);
+  min-width: 0;
+}
+
+.dep__campo-largo {
+  grid-column: 1 / -1;
+}
+
+.dep__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cx-sp-2);
+}
+
+.dep__adicionar {
+  justify-self: start;
+}
+
+/* Entrada e saida assimetricas: quem chega desliza para o lugar, quem sai apenas recolhe — sem
+   promessa de movimento onde ja nao ha nada para olhar. So `opacity` e `transform`, que o
+   compositor resolve sem relayout. */
+.dep-lista-enter-active {
+  transition: opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.dep-lista-leave-active {
+  transition: opacity 140ms ease, transform 140ms ease;
+  position: absolute;
+}
+
+.dep-lista-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.dep-lista-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.dep-lista-move {
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dep-lista-enter-active,
+  .dep-lista-leave-active,
+  .dep-lista-move {
+    transition: none;
+  }
+}
+
 @media (max-width: 768px) {
   .ficha__campos,
-  .ficha__conferencia {
+  .ficha__conferencia,
+  .dep__campos {
     grid-template-columns: minmax(0, 1fr);
   }
 }
