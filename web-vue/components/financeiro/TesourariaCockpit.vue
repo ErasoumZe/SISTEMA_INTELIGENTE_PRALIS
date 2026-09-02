@@ -6,6 +6,7 @@
 // NAO depende de caixa aberto.
 //
 // A lista recebe da API o trajeto nominal, lacre, estado e data de recebimento.
+import { transferenciaContaComoEntrada, transferenciaContaComoSaida, valorEntradaCentavos } from "@padaria/shared";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
@@ -131,18 +132,25 @@ const totalPeriodo = computed(() => props.operacoesTela.reduce((soma, op) => som
 // R-183 · `divergente` entra nos dois lados, com numeros DIFERENTES. A saida e sempre o declarado
 // (o dinheiro saiu do caixa e nao volta); a entrada e o que o cofre CONTOU. Somar o declarado nos
 // dois lados faria a divergencia desaparecer do cockpit — que e justamente onde a Tesouraria olha.
-const CONTAM_COMO_SAIDA = ["pendente", "recebido", "divergente"];
-const CONTAM_COMO_ENTRADA = ["recebido", "divergente"];
+//
+// Os tres predicados vem do `shared`, e nao de uma copia local: o servidor decide o saldo por essas
+// mesmas funcoes, e uma lista de status escrita a mao aqui divergiria em silencio no dia em que
+// nascesse o sexto status. E o mesmo motivo pelo qual o predicado da entrega ao cofre tem casa
+// unica no back.
+// O coalesce fica local de proposito: `valorEntradaCentavos` fala em CENTAVOS e esta tela trabalha
+// em reais. Passar reais para um parametro chamado `...Centavos` seria mentir no nome para economizar
+// uma linha. O que precisava sair daqui era a LISTA DE STATUS, que e onde a divergencia silenciosa
+// mora — e ela agora vem do shared.
 const valorQueEntrou = (op: OperacaoResumo) => Number(op.valorRecebido ?? op.valorOriginal);
 
 const saida = computed(() =>
   props.operacoesTela
-    .filter((op) => CONTAM_COMO_SAIDA.includes(op.status))
+    .filter((op) => transferenciaContaComoSaida(op.status))
     .reduce((total, op) => total + Number(op.valorOriginal), 0)
 );
 const entrada = computed(() =>
   props.operacoesTela
-    .filter((op) => CONTAM_COMO_ENTRADA.includes(op.status))
+    .filter((op) => transferenciaContaComoEntrada(op.status))
     .reduce((total, op) => total + valorQueEntrou(op), 0)
 );
 const saldo = computed(() => entrada.value - saida.value);
