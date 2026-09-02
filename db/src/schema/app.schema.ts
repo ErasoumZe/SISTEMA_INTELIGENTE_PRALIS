@@ -2711,9 +2711,47 @@ export const admissoesProcessosDependentes = pgTable(
       "admissoes_processos_dependentes_nome_check",
       sql`length(btrim(${table.nomeCompleto})) > 0`
     ),
+    // ADM-003 V4 (D-7). O banco confere o DIGITO VERIFICADOR, e nao so o formato.
+    //
+    // Ate aqui a regra vivia so no Zod, e o banco aceitava 11 digitos quaisquer. Um caminho novo que
+    // esquecesse o contrato gravaria CPF invalido de um TERCEIRO — possivelmente uma crianca — e
+    // ninguem descobriria ate alguem precisar do dado. Aqui a regra vale para qualquer caminho.
+    //
+    // A expressao e inline, e nao uma funcao, de proposito: funcao chamada por CHECK precisa existir
+    // ANTES do `drizzle-kit push`, o que obrigaria a cria-la tambem em `db/setup-dev.mjs` e em
+    // `tests/setup/testcontainers.ts` — o mesmo caminho de provisionamento que ja nos custou tabela
+    // sem trigger. Expressao inline nao tem o que faltar no push.
+    //
+    // Modulo 11 da Receita, a mesma conta de `shared/src/admissoes/cpf.ts`: soma ponderada, vezes 10,
+    // resto por 11 — e o resto 10 vira 0, que e o que o resto por 10 no fim faz.
+    //
+    // O CASE nao e enfeite: o Postgres NAO garante ordem de avaliacao dentro de um AND. Com `and`, o
+    // `::int` pode rodar antes do regex, e um valor com letra viraria erro 22P02 em vez de violacao de
+    // CHECK — rejeitado do mesmo jeito, mas por uma porta que o tratamento de erro nao conhece. CASE e
+    // o mecanismo que a documentacao garante: so calcula digito depois de saber que sao 11 digitos.
+    //
+    // A guarda de sequencia repetida NAO e redundante: as onze sequencias (000..., 111...) passam na
+    // aritmetica do modulo 11 e precisam ser recusadas a parte. Ela usa `repeat` em vez do retrovisor
+    // `\1` de regex porque, dentro de template literal, `\1` e escape octal invalido: o texto cozido
+    // chega `undefined` no `sql` do Drizzle e a migration nasceria quebrada sem ninguem ver.
     check(
       "admissoes_processos_dependentes_cpf_check",
-      sql`${table.cpf} is null or ${table.cpf} ~ '^[0-9]{11}$'`
+      sql`${table.cpf} is null or case
+        when ${table.cpf} !~ '^[0-9]{11}$' then false
+        when ${table.cpf} = repeat(substring(${table.cpf}, 1, 1), 11) then false
+        else
+          substring(${table.cpf}, 10, 1)::int = (((
+            10 * substring(${table.cpf}, 1, 1)::int + 9 * substring(${table.cpf}, 2, 1)::int + 8 * substring(${table.cpf}, 3, 1)::int +
+            7 * substring(${table.cpf}, 4, 1)::int + 6 * substring(${table.cpf}, 5, 1)::int + 5 * substring(${table.cpf}, 6, 1)::int +
+            4 * substring(${table.cpf}, 7, 1)::int + 3 * substring(${table.cpf}, 8, 1)::int + 2 * substring(${table.cpf}, 9, 1)::int
+            ) * 10) % 11) % 10
+          and substring(${table.cpf}, 11, 1)::int = (((
+            11 * substring(${table.cpf}, 1, 1)::int + 10 * substring(${table.cpf}, 2, 1)::int + 9 * substring(${table.cpf}, 3, 1)::int +
+            8 * substring(${table.cpf}, 4, 1)::int + 7 * substring(${table.cpf}, 5, 1)::int + 6 * substring(${table.cpf}, 6, 1)::int +
+            5 * substring(${table.cpf}, 7, 1)::int + 4 * substring(${table.cpf}, 8, 1)::int + 3 * substring(${table.cpf}, 9, 1)::int +
+            2 * substring(${table.cpf}, 10, 1)::int
+            ) * 10) % 11) % 10
+      end`
     ),
     uniqueIndex("admissoes_processos_dependentes_cpf_unico")
       .on(table.processoId, table.cpf)

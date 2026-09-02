@@ -267,6 +267,13 @@
       "when": 1788291890991,
       "tag": "0037_awesome_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788368323821,
+      "tag": "0038_puzzling_black_bolt",
+      "breakpoints": true
     }
   ]
 }
