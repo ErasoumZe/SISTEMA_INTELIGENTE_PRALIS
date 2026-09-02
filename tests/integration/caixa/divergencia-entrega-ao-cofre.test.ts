@@ -283,24 +283,73 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   });
 
   // ------------------------------------------------------------------------------------------
-  // RED-7b · a OUTRA metade da elegibilidade: quem entregou nao confere nem recusa a propria
-  // entrega. Sem este caso, reverter a exclusao de `executado_por` em `candidatoConfirmacao`
-  // passaria verde — e quem entregou escolheria o numero da propria quebra.
+  // RED-7b · a OUTRA metade da elegibilidade (R-028): quem ENTREGOU nao encerra a propria entrega.
+  //
+  // A fixture precisa de cuidado, e a versao anterior deste caso nao tinha: usar o operador de caixa
+  // fazia a requisicao morrer no guard da rota (o cargo Caixa nao tem `transferencias_conferir`), e
+  // o teste ficava verde sem nunca chegar a regra. Provava a ausencia de permissao, nao a R-028.
+  //
+  // Aqui o ator TEM a permissao e TEM vinculo com o cofre — e mesmo assim e recusado, porque foi ele
+  // quem entregou. Montagem: o ADMIN programa (nao e vinculado ao cofre, entao o portao da D7 passa
+  // deixando tesouraria e gerente elegiveis) e o GERENTE executa. Ao tentar encerrar, ele cai em
+  // `candidatoConfirmacao` pelo ramo `executado_por` — 400 de dominio, nao 403 de permissao.
   // ------------------------------------------------------------------------------------------
-  it("Deve_RecusarAConferencia_Quando_QuemEntregouTentaConferirAPropriaEntrega", async () => {
-    const fx = await novoCaixa("R183 auto conferencia");
+  it("Deve_RecusarOEncerramento_Quando_QuemEntregouTentaEncerrarAPropriaEntrega", async () => {
+    const fx = await novoCaixa("R183 auto encerramento");
     await venda(500);
-    const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-AUTO-${sequencia}`);
 
-    // O operador que entregou tenta encerrar a propria divergencia.
-    const recusaPropria = await inject("POST", `/api/transferencias/${entrega}/recusar-conferencia`, cookieCaixa, {
-      contaDestinoId: idsTeste.contaCofre,
-      motivo: "Tentando conferir o proprio envio",
-      valorRecebido: 180,
-      encerrar: true
+    const programacao = await inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre`, cookieAdmin, {
+      tipo: "sangria",
+      valor: 200,
+      idempotenciaChave: randomUUID()
     });
-    assertProblem(recusaPropria, 403);
-    expect((await linha(entrega))?.status).toBe("pendente");
+    expect(programacao.statusCode, programacao.body).toBe(200);
+    const solicitacao = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and solicitacao_cofre_em is not null order by criado_em desc limit 1",
+      [fx.caixaId]
+    );
+
+    const execucao = await inject(
+      "POST",
+      `/api/caixa/${fx.caixaId}/solicitacoes-cofre/${solicitacao!.id}/executar`,
+      cookieGerente,
+      { lacre: `R183-AUTO-${sequencia}` }
+    );
+    expect(execucao.statusCode, execucao.body).toBe(200);
+    // O dinheiro saiu, e quem entregou foi o gerente.
+    expect(await linha(solicitacao!.id)).toMatchObject({ status: "pendente" });
+
+    const encerramentoProprio = await inject(
+      "POST",
+      `/api/transferencias/${solicitacao!.id}/recusar-conferencia`,
+      cookieGerente,
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "Tentando conferir o proprio envio",
+        valorRecebido: 180,
+        encerrar: true
+      }
+    );
+    // 400 de DOMINIO — se viesse 403, a requisicao teria morrido no guard e o caso nao provaria nada.
+    assertProblem(encerramentoProprio, 400);
+    expect(encerramentoProprio.body).toMatch(/conta destino/iu);
+    expect((await linha(solicitacao!.id))?.status).toBe("pendente");
+
+    // E o contraste que fecha o caso: quem NAO entregou encerra normalmente. Sem isto, a recusa
+    // acima poderia ser qualquer outra coisa quebrada no caminho.
+    const encerramentoDeTerceiro = await inject(
+      "POST",
+      `/api/transferencias/${solicitacao!.id}/recusar-conferencia`,
+      cookieTesouraria,
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        motivo: "Conferido pela Tesouraria",
+        valorRecebido: 180,
+        encerrar: true
+      }
+    );
+    expect(encerramentoDeTerceiro.statusCode, encerramentoDeTerceiro.body).toBe(200);
+    expect((await linha(solicitacao!.id))?.status).toBe("divergente");
   });
 
   // ------------------------------------------------------------------------------------------
