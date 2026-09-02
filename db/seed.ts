@@ -54,10 +54,12 @@ import {
   permissoesUsuarios,
   perfisUsuarios,
   produtos,
+  quebrasCaixa,
   retiradas,
   sessaoAutenticacao,
   setores,
   transferencias,
+  transferenciasConferenciasRecusadas,
   unidadesMedida,
   usuarioAutenticacao,
   usuariosEmpresas,
@@ -642,6 +644,24 @@ await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId
 await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
 await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
 await banco.delete(retiradas).where(eq(retiradas.empresaId, empresaId));
+// R-183 · as duas dependentes de `transferencias` com `ON DELETE RESTRICT` saem PRIMEIRO. A
+// auditoria financeira nao some junto com o movimento — foi assim que a FK foi desenhada —, e o
+// preco disso e que o reset precisa apaga-la explicitamente. Sem estas duas linhas, a partir da
+// primeira divergencia encerrada o `seed:dev` estoura 23503 e o reset morre no meio.
+//
+// `fechamentos_caixa` continua DEPOIS: `transferencias.caixa_id` e NO ACTION, entao inverter a
+// ordem so troca um 23503 por outro.
+const transferenciasEmpresa = await banco
+  .select({ id: transferencias.id })
+  .from(transferencias)
+  .where(eq(transferencias.empresaId, empresaId));
+const transferenciaIds = transferenciasEmpresa.map((transferencia) => transferencia.id);
+if (transferenciaIds.length) {
+  await banco
+    .delete(transferenciasConferenciasRecusadas)
+    .where(inArray(transferenciasConferenciasRecusadas.transferenciaId, transferenciaIds));
+}
+await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
