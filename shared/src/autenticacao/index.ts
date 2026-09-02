@@ -152,6 +152,10 @@ export const permissoes = [
   // necessariamente e quem manda o link para uma pessoa de fora. Uma permissao para os dois atos,
   // porque revogar e a correcao de emitir — separa-las deixaria alguem podendo abrir e nao fechar.
   "admissoes_processos_convidar",
+  // ADM-003 V3. Ver a ficha e revisa-la sao direitos diferentes: conferir o que o candidato
+  // mandou nao e o mesmo que aprovar ou devolver. Quem revisa precisa das duas.
+  "admissoes_processos_ver_ficha",
+  "admissoes_processos_revisar_ficha",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",

@@ -7,6 +7,7 @@ export * from "./processos.js";
 // ADM-003 V2 â€” o aviso que o candidato aceita. Versao vigente em constante, nunca em env ou tabela.
 export * from "./aviso-privacidade.js";
 export * from "./convites.js";
+export * from "./ficha.js";
 
 // =================================================================================================
 // ADM-001 â€” Controle de periodo de teste (piloto TNP).

@@ -52,6 +52,16 @@ export function naoProcessavel(message: string, code = "UNPROCESSABLE_ENTITY", d
   return new ErroDominio(message, 422, code, details);
 }
 
+/**
+ * 410 — existiu e acabou. Distinto do 404 de proposito: para quem tem o link, "expirou" e uma
+ * informacao util; para quem esta adivinhando, o 404 nao confirma que o recurso existe.
+ *
+ * O caixa ja fazia isso com `new ErroDominio(msg, 410, code)` na mao (token de autorizacao).
+ */
+export function foiEmbora(message: string, code = "GONE", details?: JsonValue): ErroDominio {
+  return new ErroDominio(message, 410, code, details);
+}
+
 export function conflito(message: string, code = "CONFLICT", details?: JsonValue): ErroDominio {
   return new ErroDominio(message, 409, code, details);
 }

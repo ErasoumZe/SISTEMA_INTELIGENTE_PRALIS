@@ -272,6 +272,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "admissoes_processos_editar_internos",
       // ADM-003 V2: o DP e quem conversa com o candidato, entao e ele quem emite e revoga o convite.
       "admissoes_processos_convidar",
+      // ADM-003 V3: e e ele quem le e revisa a ficha que volta. A Gerencia nao recebe nenhuma
+      // das duas — mesma fronteira do bloco interno, pelo mesmo motivo.
+      "admissoes_processos_ver_ficha",
+      "admissoes_processos_revisar_ficha",
       // ADM-003 V1B: o turno e campo OBRIGATORIO da admissao direta, e quem admite precisa poder
       // cadastrar o turno que falta sem depender da Gerencia no meio do atendimento. Ver e criar,
       // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.
