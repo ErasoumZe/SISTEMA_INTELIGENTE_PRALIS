@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ok } from "@padaria/shared/api";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+
+const RAIZ = join(import.meta.dirname, "..", "..", "..");
 
 describe("seguranca default-deny integration", () => {
   let contexto: ContextoApiTeste;
@@ -39,6 +43,28 @@ describe("seguranca default-deny integration", () => {
     expect(saude.statusCode).toBe(200);
     const me = await contexto.app.inject({ method: "GET", url: "/api/me" });
     expect(me.statusCode).toBe(401);
+  });
+
+  it("Deve_TravarOConteudoDaAllowlist_Quando_AlguemAbrirRotaNova", () => {
+    // Ate a V3 nenhum teste enumerava a allowlist: abrir uma rota ao publico passava em SILENCIO.
+    // Falha fechada protege contra esquecer de abrir; nada protegia contra abrir demais. Esta lista
+    // existe para que qualquer acrescimo vire um diff que alguem precisa aprovar.
+    const fonte = readFileSync(join(RAIZ, "api", "src", "app.ts"), "utf8");
+    const bloco = fonte.slice(
+      fonte.indexOf("const rotasComAutenticacaoPropria"),
+      fonte.indexOf("]);", fonte.indexOf("const rotasComAutenticacaoPropria"))
+    );
+    const rotas = [...bloco.matchAll(/"([^"]+)"/gu)].map((achado) => achado[1]).sort();
+    expect(rotas).toEqual([
+      "/api/admissao/ficha",
+      "/api/admissao/ficha/enviar",
+      "/api/auth/*",
+      "/api/integracoes",
+      "/api/integracoes/conciliacao",
+      "/api/me",
+      "/api/sessao",
+      "/health"
+    ]);
   });
 
   it("Deve_ResponderPreflightCors_Quando_SemSessao", async () => {

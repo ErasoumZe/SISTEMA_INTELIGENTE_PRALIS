@@ -1,0 +1,382 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { permissoesPorCargo, regrasPermissoes } from "@padaria/db/referencia-permissoes";
+import { avisoPrivacidadeVigente, type Permissao } from "@padaria/shared";
+import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
+import { assertOk } from "../../setup/asserts.js";
+import { cookieSessao } from "../../setup/auth.js";
+import { idsTeste, usuariosTeste, type PerfilTeste } from "../../setup/contexto.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { consultarTodos, consultarUm, executarSql } from "../../setup/integracao.js";
+
+const RAIZ_TESTE = join(import.meta.dirname, "..", "..", "..");
+
+/**
+ * ADM-003 V3 — os P0 da ficha publica.
+ *
+ * O que esta suite protege nao e a ficha: e a SUPERFICIE PUBLICA. Toda asserção aqui existe porque
+ * um erro nela fica exposto na internet, e nao atras de um login.
+ */
+describe("admissoes ficha publica integration", () => {
+  let contexto: ContextoApiTeste;
+  let cookieAdmin: string;
+  let cookieDpReal: string;
+  let cookieGerenciaReal: string;
+  let turnoId: string;
+  let sequencia = 0;
+
+  const CABECALHO = "x-admissao-convite";
+
+  function matriz(cargo: string): Permissao[] {
+    const lista = permissoesPorCargo[cargo];
+    if (!lista) throw new Error(`cargo ausente na referencia: ${cargo}`);
+    return lista;
+  }
+
+  async function vestirCargo(perfil: PerfilTeste, cargo: string) {
+    const alvo = await consultarUm<{ id: string }>(`select u.id from "user" u where u.email = $1`, [
+      usuariosTeste[perfil].email
+    ]);
+    if (!alvo) throw new Error(`usuario de teste ausente: ${perfil}`);
+    await executarSql(
+      `insert into permissoes_usuarios (usuario_id, regras) values ($1, $2::jsonb)
+         on conflict (usuario_id) do update set regras = excluded.regras`,
+      [alvo.id, JSON.stringify(regrasPermissoes(matriz(cargo)))]
+    );
+  }
+
+  function proximoCpf() {
+    const base = String(61000000 + sequencia++ * 883).padStart(9, "0");
+    const dv = (parcial: string) => {
+      const numeros = parcial.split("").map(Number);
+      const soma = numeros.reduce((total, n, i) => total + n * (numeros.length + 1 - i), 0);
+      const resto = (soma * 10) % 11;
+      return resto > 9 ? 0 : resto;
+    };
+    const d1 = dv(base);
+    return `${base}${d1}${dv(base + d1)}`;
+  }
+
+  /** Processo com ASO apto e convite emitido. Devolve o token em claro, que so existe aqui. */
+  async function processoComToken() {
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/processos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        nomeCompleto: "Pessoa Da Ficha",
+        cpf: proximoCpf(),
+        funcaoId: idsTeste.funcaoOperacionalA,
+        turnoId,
+        dataAdmissao: "2026-09-15"
+      }
+    });
+    assertOk(criado, 201);
+    const processoId = criado.json().data.id as string;
+
+    const exame = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/admissoes/processos/${processoId}/exame`,
+      headers: { cookie: cookieAdmin },
+      payload: { versao: 1, situacao: "aso_apto" }
+    });
+    expect(exame.statusCode, exame.body).toBe(204);
+
+    const convite = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${processoId}/convite`,
+      headers: { cookie: cookieAdmin },
+      payload: {}
+    });
+    assertOk(convite, 200);
+    return { processoId, token: convite.json().data.token as string };
+  }
+
+  function abrirFicha(token: string) {
+    return contexto.app.inject({ method: "GET", url: "/api/admissao/ficha", headers: { [CABECALHO]: token } });
+  }
+
+  /** Os campos que o contrato exige para ENVIAR. Todos sinteticos. */
+  function fichaCompleta(versao: number) {
+    return {
+      versao,
+      semDependentes: true,
+      avisoPrivacidadeVersao: avisoPrivacidadeVigente,
+      nascimento: "1995-04-10",
+      sexo: "Feminino",
+      estadoCivil: "Solteira",
+      racaCor: "Parda",
+      grauInstrucao: "Ensino medio completo",
+      nacionalidade: "Brasileira",
+      naturalidade: "Cidade Sintetica/SP",
+      nomeMae: "Mae Sintetica",
+      cep: "01001000",
+      logradouro: "Rua Sintetica",
+      numero: "100",
+      bairro: "Centro",
+      municipio: "Cidade Sintetica",
+      uf: "SP",
+      telefone: "11999990000",
+      rgNumero: "000000000",
+      rgOrgao: "SSP",
+      rgUf: "SP",
+      rgEmissao: "2015-01-20"
+    };
+  }
+
+  beforeAll(async () => {
+    contexto = await criarContextoApiTeste();
+    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    await vestirCargo("caixa", "DP");
+    await vestirCargo("gerente", "Gerencia");
+    cookieDpReal = await cookieSessao(contexto.app, "caixa");
+    cookieGerenciaReal = await cookieSessao(contexto.app, "gerente");
+
+    turnoId = "66666666-6666-4666-8666-666666660001";
+    await executarSql(
+      `insert into turnos (id, empresa_id, nome, hora_inicio, hora_fim, etiqueta, dias_semana)
+       values ($1, $2, 'Manha Ficha', '06:00', '14:00', 'M', array['SEGUNDA']::text[])
+       on conflict do nothing`,
+      [turnoId, idsTeste.empresaA]
+    );
+  }, 120_000);
+
+  afterAll(async () => {
+    await contexto.fechar();
+  });
+
+  it("P0-V3 Deve_Responder404_Quando_TokenDesconhecido", async () => {
+    // 404 e nao 401/410: quem esta adivinhando nao recebe confirmacao de que algo existe.
+    const resposta = await abrirFicha("f".repeat(64));
+    expect(resposta.statusCode, resposta.body).toBe(404);
+  });
+
+  it("P0-V3 Deve_Responder410_Quando_RevogadoOuExpirado", async () => {
+    const revogado = await processoComToken();
+    const revogar = await contexto.app.inject({
+      method: "DELETE",
+      url: `/api/admissoes/processos/${revogado.processoId}/convite`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(revogar.statusCode).toBe(204);
+    const aposRevogar = await abrirFicha(revogado.token);
+    expect(aposRevogar.statusCode, aposRevogar.body).toBe(410);
+    expect(aposRevogar.json().code).toBe("CONVITE_REVOGADO");
+
+    const vencido = await processoComToken();
+    // `criado_em` anda junto: o CHECK `expira_em > criado_em` recusa um convite que expirou antes de
+    // nascer — e ele esta certo. Envelhecer a linha e o jeito honesto de simular o prazo vencido.
+    await executarSql(
+      `update admissoes_convites
+          set criado_em = now() - interval '20 days', expira_em = now() - interval '1 day'
+        where processo_id = $1`,
+      [vencido.processoId]
+    );
+    const aposVencer = await abrirFicha(vencido.token);
+    expect(aposVencer.statusCode, aposVencer.body).toBe(410);
+    expect(aposVencer.json().code).toBe("CONVITE_EXPIRADO");
+  });
+
+  it("P0-V3 Deve_RecusarSemToken_E_NaoAceitarSessaoNoLugar", async () => {
+    // A rota e publica, mas nao e aberta: sem token nao entra. E cookie de usuario interno NAO
+    // substitui o token — o formulario do candidato nao herda acesso de quem esta logado.
+    const semNada = await contexto.app.inject({ method: "GET", url: "/api/admissao/ficha" });
+    expect(semNada.statusCode).toBe(401);
+
+    const comSessao = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissao/ficha",
+      headers: { cookie: cookieAdmin }
+    });
+    expect(comSessao.statusCode, comSessao.body).toBe(401);
+  });
+
+  it("P0-V3 Deve_DerivarEmpresaDoConvite_E_IgnorarOChamador", async () => {
+    const { token, processoId } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    assertOk(aberta, 200);
+
+    const linha = await consultarUm<{ empresa_id: string }>(
+      `select empresa_id from admissoes_processos_ficha where processo_id = $1`,
+      [processoId]
+    );
+    // A ficha nasceu na empresa do CONVITE. O candidato nunca informou empresa nenhuma.
+    expect(linha?.empresa_id).toBe(idsTeste.empresaA);
+  });
+
+  it("P0-V3 Deve_SalvarRascunho_E_UsarConcorrenciaOtimista", async () => {
+    const { token } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    assertOk(aberta, 200);
+    const versao = aberta.json().data.versao as number;
+
+    const salvar = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/admissao/ficha",
+      headers: { [CABECALHO]: token },
+      payload: { versao, bairro: "Centro" }
+    });
+    expect(salvar.statusCode, salvar.body).toBe(204);
+
+    // A MESMA versao de novo: a segunda gravacao perdeu a corrida e tem de saber disso.
+    const repetido = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/admissao/ficha",
+      headers: { [CABECALHO]: token },
+      payload: { versao, bairro: "Outro" }
+    });
+    expect(repetido.statusCode, repetido.body).toBe(409);
+    expect(repetido.json().code).toBe("VERSAO_CONFLITANTE");
+  });
+
+  it("P0-V3 Deve_GravarAceiteVersionado_E_TrilhaComAtorExterno_Quando_Enviar", async () => {
+    const { token, processoId } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    assertOk(aberta, 200);
+
+    const enviar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissao/ficha/enviar",
+      headers: { [CABECALHO]: token },
+      payload: fichaCompleta(aberta.json().data.versao as number)
+    });
+    expect(enviar.statusCode, enviar.body).toBe(204);
+
+    const ficha = await consultarUm<{
+      situacao: string;
+      aviso_privacidade_versao: string;
+      aviso_aceito_em: string | null;
+      sem_dependentes: boolean;
+    }>(
+      `select situacao, aviso_privacidade_versao, aviso_aceito_em, sem_dependentes
+         from admissoes_processos_ficha where processo_id = $1`,
+      [processoId]
+    );
+    expect(ficha?.situacao).toBe("enviada");
+    expect(ficha?.aviso_privacidade_versao).toBe(avisoPrivacidadeVigente);
+    expect(ficha?.aviso_aceito_em).not.toBeNull();
+    expect(ficha?.sem_dependentes).toBe(true);
+
+    const eventos = await consultarTodos<{ acao: string; ator_usuario_id: string | null; convite_id: string | null }>(
+      `select acao, ator_usuario_id, convite_id from admissoes_processos_historico
+        where processo_id = $1 and acao = 'ficha_enviada'`,
+      [processoId]
+    );
+    expect(eventos).toHaveLength(1);
+    // Ato EXTERNO: o candidato nao tem perfil, e o autor e o convite que o autorizou.
+    expect(eventos[0]?.ator_usuario_id).toBeNull();
+    expect(eventos[0]?.convite_id).not.toBeNull();
+  });
+
+  it("P0-V3 Deve_RecusarEdicao_Quando_JaEnviada", async () => {
+    const { token } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    const enviar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissao/ficha/enviar",
+      headers: { [CABECALHO]: token },
+      payload: fichaCompleta(aberta.json().data.versao as number)
+    });
+    expect(enviar.statusCode, enviar.body).toBe(204);
+
+    const depois = await abrirFicha(token);
+    const tentar = await contexto.app.inject({
+      method: "PUT",
+      url: "/api/admissao/ficha",
+      headers: { [CABECALHO]: token },
+      payload: { versao: depois.json().data.versao, bairro: "Nao pode" }
+    });
+    expect(tentar.statusCode, tentar.body).toBe(409);
+    expect(tentar.json().code).toBe("FICHA_NAO_EDITAVEL");
+  });
+
+  it("P0-V3 Deve_DevolverEReabrir_Quando_DpPedeCorrecao", async () => {
+    const { token, processoId } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    const enviar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissao/ficha/enviar",
+      headers: { [CABECALHO]: token },
+      payload: fichaCompleta(aberta.json().data.versao as number)
+    });
+    expect(enviar.statusCode, enviar.body).toBe(204);
+
+    const paraRevisar = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoId}/ficha`,
+      headers: { cookie: cookieDpReal }
+    });
+    assertOk(paraRevisar, 200);
+
+    const devolver = await contexto.app.inject({
+      method: "POST",
+      url: `/api/admissoes/processos/${processoId}/ficha/devolver`,
+      headers: { cookie: cookieDpReal },
+      payload: { versao: paraRevisar.json().data.versao, pendencias: "Confira o numero do RG." }
+    });
+    expect(devolver.statusCode, devolver.body).toBe(204);
+
+    // O candidato volta a editar, e ve o que precisa corrigir.
+    const reaberta = await abrirFicha(token);
+    assertOk(reaberta, 200);
+    expect(reaberta.json().data.situacao).toBe("devolvida");
+    expect(reaberta.json().data.revisaoPendencias).toBe("Confira o numero do RG.");
+
+    const reenviar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissao/ficha/enviar",
+      headers: { [CABECALHO]: token },
+      payload: fichaCompleta(reaberta.json().data.versao as number)
+    });
+    expect(reenviar.statusCode, reenviar.body).toBe(204);
+
+    // O CHECK do banco exige revisao ZERADA no ramo `enviada`: reenviar nao pode carregar o carimbo
+    // de quem devolveu.
+    const linha = await consultarUm<{ situacao: string; revisado_em: string | null }>(
+      `select situacao, revisado_em from admissoes_processos_ficha where processo_id = $1`,
+      [processoId]
+    );
+    expect(linha?.situacao).toBe("enviada");
+    expect(linha?.revisado_em).toBeNull();
+  });
+
+  it("P0-V3 Deve_RecusarRevisao_Quando_CARGO_NaoEhDp", async () => {
+    const { processoId } = await processoComToken();
+    for (const [rota, payload] of [
+      ["ficha", undefined],
+      ["ficha/devolver", { versao: 1, pendencias: "x" }]
+    ] as const) {
+      const metodo = payload ? "POST" : "GET";
+      const resposta = await contexto.app.inject({
+        method: metodo,
+        url: `/api/admissoes/processos/${processoId}/${rota}`,
+        headers: { cookie: cookieGerenciaReal },
+        ...(payload ? { payload } : {})
+      });
+      expect(resposta.statusCode, `${metodo} ${rota}`).toBe(403);
+    }
+  });
+
+  it("P0-V3 Deve_ManterOTokenForaDaUrl_E_ForaDaResposta", async () => {
+    // `req.url` e o campo que o logger do Fastify registra SEMPRE. Como a rota nao tem parametro
+    // de token nem aceita query, o token nao tem por onde entrar nele.
+    const { token } = await processoComToken();
+    const resposta = await abrirFicha(token);
+    assertOk(resposta, 200);
+
+    // E a resposta tambem nao devolve o token: nao ha rota que o recupere depois da emissao.
+    expect(resposta.body).not.toContain(token);
+
+    // A fonte do controller prova o resto: nenhuma rota publica declara token em caminho ou query.
+    const controller = readFileSync(
+      join(RAIZ_TESTE, "api", "src", "admissoes", "ficha.controller.ts"),
+      "utf8"
+    );
+    const rotasPublicas = [...controller.matchAll(/"(\/api\/admissao[^"]*)"/gu)].map((a) => a[1]);
+    expect(rotasPublicas.length).toBeGreaterThan(0);
+    for (const rota of rotasPublicas) {
+      expect(rota, rota).not.toContain(":");
+      expect(rota, rota).not.toContain("?");
+    }
+  });
+});
