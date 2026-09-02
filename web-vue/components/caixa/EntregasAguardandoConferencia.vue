@@ -16,6 +16,9 @@ import { formatarDataHora } from "~/utils/formatacao";
 const props = defineProps<{ entregas: EntregaCofrePendente[] }>();
 
 const total = computed(() => props.entregas.reduce((soma, entrega) => soma + entrega.valor, 0));
+// R-183 · quantas ja foram contadas pelo cofre e esperam so o encerramento. Muda o texto do bloco:
+// "confira no cofre" e instrucao errada para quem ja conferiu.
+const jaContadas = computed(() => props.entregas.filter((entrega) => entrega.valorContado !== null).length);
 const rotulo = (tipo: EntregaCofrePendente["tipo"]) => (tipo === "sangria" ? "Sangria" : "Retorno");
 </script>
 
@@ -30,9 +33,15 @@ const rotulo = (tipo: EntregaCofrePendente["tipo"]) => (tipo === "sangria" ? "Sa
     <header class="transito-cabecalho">
       <h3 id="transito-titulo" class="transito-titulo">Aguardando conferência no cofre</h3>
       <p class="transito-explica">
-        <strong class="cx-num">{{ dinheiro(total) }}</strong> saíram deste caixa e ainda não foram conferidos. O
-        fechamento fica travado até o cofre conferir cada entrega — assim, se faltar dinheiro, a diferença ainda tem um
-        turno aberto onde cair.
+        <strong class="cx-num">{{ dinheiro(total) }}</strong> saíram deste caixa e ainda não foram encerrados no cofre.
+        <template v-if="jaContadas">
+          O cofre já contou {{ jaContadas === 1 ? "uma delas" : `${jaContadas} delas` }} e ainda não encerrou a
+          divergência — é isso que falta para este caixa fechar.
+        </template>
+        <template v-else>
+          O fechamento fica travado até o cofre conferir cada entrega — assim, se faltar dinheiro, a diferença tem onde
+          cair.
+        </template>
       </p>
     </header>
 
@@ -51,6 +60,11 @@ const rotulo = (tipo: EntregaCofrePendente["tipo"]) => (tipo === "sangria" ? "Sa
           <span class="transito-lacre-rotulo">lacre</span>{{ entrega.lacre }}
         </span>
         <span v-else class="transito-sem-lacre">sem lacre</span>
+        <!-- R-183 · quando o cofre JA CONTOU, o numero e a informacao mais util da linha: e ele que
+             diz o tamanho da diferenca e a quem cobrar. Sem contagem, a linha segue como antes. -->
+        <span v-if="entrega.valorContado !== null" class="transito-contado">
+          <span class="transito-contado-rotulo">cofre contou</span>{{ dinheiro(entrega.valorContado) }}
+        </span>
         <span class="transito-hora">{{ formatarDataHora(entrega.criadoEm) }}</span>
       </li>
     </ul>
@@ -166,6 +180,18 @@ const rotulo = (tipo: EntregaCofrePendente["tipo"]) => (tipo === "sangria" ? "Sa
 
 .transito-lacre-rotulo {
   color: var(--cx-ink-soft);
+  margin-right: var(--cx-sp-1);
+}
+
+.transito-contado {
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-ink);
+  font-weight: 600;
+}
+
+.transito-contado-rotulo {
+  color: var(--cx-ink-soft);
+  font-weight: 400;
   margin-right: var(--cx-sp-1);
 }
 

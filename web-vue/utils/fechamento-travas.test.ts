@@ -21,6 +21,14 @@ describe("fechamento - motivo da trava", () => {
     expect(motivo).toMatch(/execute|cancelamento/u);
   });
 
+  // R-183 · entrega ja contada pelo cofre manda o operador para OUTRO lugar: nao adianta pedir
+  // conferencia de novo, o que falta e o cofre encerrar a divergencia.
+  it("entrega ja contada cobra o encerramento, e nao uma nova conferencia", () => {
+    const motivo = motivoFechamentoTravado(1, 0, 1);
+    expect(motivo).toMatch(/encerrou a diverg[eê]ncia/iu);
+    expect(motivo).not.toMatch(/aguardando confer[eê]ncia/iu);
+  });
+
   it("as duas juntas aparecem na mesma frase — esconder uma faria o operador resolver so metade", () => {
     const motivo = motivoFechamentoTravado(1, 1);
     expect(motivo).toMatch(/confer[eê]ncia no cofre/u);

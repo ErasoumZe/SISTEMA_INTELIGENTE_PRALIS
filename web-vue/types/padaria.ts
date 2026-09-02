@@ -185,6 +185,8 @@ export type OperacaoResumo = {
   descricao: string;
   // SUBTOTAL do lancamento — nao e o que o cliente pagou.
   valorOriginal: string;
+  // R-183 (transferencia): o que o cofre CONTOU. Null em tudo que nao e `divergente`.
+  valorRecebido?: number | null;
   // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
   // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
   valorLiquido?: string;
@@ -265,6 +267,10 @@ export type EntregaCofrePendente = {
   valor: number;
   lacre: string | null;
   criadoEm: string;
+  // R-183: o que o cofre CONTOU na ultima tentativa. `null` = ninguem contou ainda — e essa e a
+  // diferenca entre "confira no cofre" e "o cofre precisa encerrar a divergencia".
+  valorContado: number | null;
+  recusaId: string | null;
 };
 
 export type CaixaStatus = {

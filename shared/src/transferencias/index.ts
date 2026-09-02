@@ -43,6 +43,9 @@ export const transferenciaDtoSchema = z.object({
   valorOriginal: z.string(),
   computar: z.boolean(),
   status: z.enum(["pendente", "recebido", "agendada", "cancelada", "divergente"]),
+  // R-183: o que o cofre contou. Null em tudo que nao e `divergente` — quem soma ENTRADA usa
+  // este numero, senao o cockpit exibiria como recebido um valor que nunca chegou.
+  valorRecebido: z.number().nullable(),
   contaOrigemId: z.string(),
   contaDestinoId: z.string(),
   contaOrigemNome: z.string(),

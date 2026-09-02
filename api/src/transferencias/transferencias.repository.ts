@@ -37,6 +37,7 @@ export async function listarTransferenciasRepository(
       dataReferencia: transferencias.dataReferencia,
       descricao: textoDoMovimento(transferencias),
       valorOriginal: transferencias.valorOriginal,
+      valorRecebido: transferencias.valorRecebido,
       computar: transferencias.computar,
       status: transferencias.status,
       contaOrigemId: transferencias.contaOrigemId,
@@ -61,6 +62,7 @@ export async function listarTransferenciasRepository(
   return linhas.map(({ caixaId, tipo, contaCofreId, ...linha }) => ({
     ...linha,
     status: linha.status as TransferenciaDto["status"],
+    valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
     ehCaixaParaCofre: ehEntregaCaixaParaCofre({

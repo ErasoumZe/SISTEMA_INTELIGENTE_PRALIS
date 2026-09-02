@@ -138,7 +138,11 @@ const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
 // desde a decisao 5, mas o operador so descobria clicando e levando 400. Agora as duas dizem a
 // mesma coisa no mesmo lugar: uma computada, um motivo, e o botao para antes.
 const motivoTravado = computed(() =>
-  motivoFechamentoTravado(entregasPendentes.value.length, (props.solicitacoes ?? []).length)
+  motivoFechamentoTravado(
+    entregasPendentes.value.length,
+    (props.solicitacoes ?? []).length,
+    entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
+  )
 );
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
 const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");

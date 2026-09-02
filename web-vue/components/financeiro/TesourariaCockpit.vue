@@ -106,15 +106,22 @@ const totalPeriodo = computed(() => props.operacoesTela.reduce((soma, op) => som
 
 // Split direcional Saida/Entrada/Saldo: so existe quando ha resumo (contexto de caixa). Para o
 // tesoureiro puro (sem caixa) o resumo e nulo -> os cards ficam pendentes de backend.
+// R-183 · `divergente` entra nos dois lados, com numeros DIFERENTES. A saida e sempre o declarado
+// (o dinheiro saiu do caixa e nao volta); a entrada e o que o cofre CONTOU. Somar o declarado nos
+// dois lados faria a divergencia desaparecer do cockpit — que e justamente onde a Tesouraria olha.
+const CONTAM_COMO_SAIDA = ["pendente", "recebido", "divergente"];
+const CONTAM_COMO_ENTRADA = ["recebido", "divergente"];
+const valorQueEntrou = (op: OperacaoResumo) => Number(op.valorRecebido ?? op.valorOriginal);
+
 const saida = computed(() =>
   props.operacoesTela
-    .filter((op) => op.status === "pendente" || op.status === "recebido")
+    .filter((op) => CONTAM_COMO_SAIDA.includes(op.status))
     .reduce((total, op) => total + Number(op.valorOriginal), 0)
 );
 const entrada = computed(() =>
   props.operacoesTela
-    .filter((op) => op.status === "recebido")
-    .reduce((total, op) => total + Number(op.valorOriginal), 0)
+    .filter((op) => CONTAM_COMO_ENTRADA.includes(op.status))
+    .reduce((total, op) => total + valorQueEntrou(op), 0)
 );
 const saldo = computed(() => entrada.value - saida.value);
 </script>

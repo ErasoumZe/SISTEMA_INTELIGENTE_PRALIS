@@ -12,6 +12,8 @@ function entrega(parcial: Partial<EntregaCofrePendente> = {}): EntregaCofrePende
     valor: 200,
     lacre: "LAC-9",
     criadoEm: "2026-08-01T10:00:00.000Z",
+    valorContado: null,
+    recusaId: null,
     ...parcial
   };
 }
@@ -45,6 +47,22 @@ describe("EntregasAguardandoConferencia", () => {
   it("entrega sem lacre diz que nao tem, em vez de sumir com a informacao", () => {
     const tela = mount(EntregasAguardandoConferencia, { props: { entregas: [entrega({ lacre: null })] } });
     expect(tela.get('[data-teste="entrega-pendente"]').text()).toContain("sem lacre");
+  });
+
+  // R-183 · a entrega que o cofre JA CONTOU e outra situacao: o fechamento continua travado, mas a
+  // saida existe e esta no cofre. O numero contado e o que diz o tamanho da diferenca.
+  it("mostra o valor contado quando o cofre ja conferiu e ainda nao encerrou", () => {
+    const tela = mount(EntregasAguardandoConferencia, {
+      props: { entregas: [entrega({ valor: 200, valorContado: 180, recusaId: "r-1" })] }
+    });
+    expect(tela.get('[data-teste="entrega-pendente"]').text()).toContain("180,00");
+    expect(tela.get(".transito-explica").text()).toMatch(/ainda n[aã]o encerrou/iu);
+  });
+
+  it("sem contagem, o texto continua mandando conferir no cofre", () => {
+    const tela = mount(EntregasAguardandoConferencia, { props: { entregas: [entrega()] } });
+    expect(tela.get(".transito-explica").text()).toMatch(/at[eé] o cofre conferir/iu);
+    expect(tela.get('[data-teste="entrega-pendente"]').text()).not.toContain("cofre contou");
   });
 
   it("e um grupo rotulado: leitor de tela chega ao bloco pelo titulo, nao por um card anonimo", () => {
