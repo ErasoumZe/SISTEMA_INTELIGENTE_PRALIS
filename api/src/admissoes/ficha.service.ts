@@ -17,6 +17,7 @@ import { conflito, erroValidacao, foiEmbora, naoAutorizado, naoEncontrado } from
 import { env } from "../env.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
 import { hashTokenConvite } from "./convites.service.js";
+import { contarDependentesRepository } from "./dependentes.repository.js";
 import {
   atualizarFichaRepository,
   bloquearFichaRepository,
@@ -41,8 +42,12 @@ import {
  * trata — a do candidato deriva do convite, a do DP deriva do perfil.
  */
 
-/** Os campos que o candidato preenche — o payload menos a `versao`, que e controle. */
-type CamposDaFicha = Omit<FichaRascunhoPayload, "versao">;
+/**
+ * Os campos de TEXTO que o candidato preenche. Fora ficam `versao`, que e controle, e
+ * `semDependentes`, que e booleano e tem regra propria — se entrasse aqui, `camposDoPayload`
+ * transformaria `false` em `null` e a declaracao viraria "nao respondeu" a cada rascunho salvo.
+ */
+type CamposDaFicha = Omit<FichaRascunhoPayload, "versao" | "semDependentes">;
 
 const CAMPOS_DA_FICHA: readonly (keyof CamposDaFicha)[] = [
   "nomeSocial", "nascimento", "sexo", "estadoCivil", "racaCor", "grauInstrucao", "nacionalidade",
@@ -93,11 +98,15 @@ function camposDaLinha(ficha: LinhaDaFicha): CamposDaFicha {
   };
 }
 
+/** Uma frase so, usada no rascunho e no envio: o candidato precisa ler a mesma coisa nos dois. */
+const INCOERENTE_DECLAROU_QUE_NAO_TEM =
+  "Você marcou que não tem dependentes, mas há dependentes cadastrados.";
+
 function ehProducao(): boolean {
   return env.NODE_ENV === "production";
 }
 
-type Convite = NonNullable<Awaited<ReturnType<typeof buscarConvitePorTokenHashRepository>>>;
+export type Convite = NonNullable<Awaited<ReturnType<typeof buscarConvitePorTokenHashRepository>>>;
 
 /**
  * A porta do candidato. Token invalido e 404 — nao confirma existencia a quem esta adivinhando.
@@ -141,6 +150,7 @@ function paraDtoPublico(
   return {
     situacao: ficha.situacao as FichaPublicaDto["situacao"],
     versao: ficha.versao,
+    semDependentes: ficha.semDependentes,
     revisaoPendencias: ficha.revisaoPendencias,
     avisoPrivacidadeVersao: ficha.avisoPrivacidadeVersao,
     avisoAceitoEm: ficha.avisoAceitoEm?.toISOString() ?? null,
@@ -192,12 +202,24 @@ export async function salvarRascunhoFicha(token: string | undefined, body: Dados
 
   return executarEmTransacao(async (tx) => {
     const ficha = await exigirFichaEditavel(convite, dados.versao, tx);
+
+    // Declarar que NAO tem, tendo, e a unica incoerencia que ja da para recusar no rascunho. O
+    // contrario (marcar que tem, com a lista ainda vazia) e o estado normal de quem acabou de
+    // responder e ainda vai cadastrar — recusar aqui deixaria o candidato sem como comecar.
+    if (dados.semDependentes === true) {
+      const quantos = await contarDependentesRepository(convite.processoId, convite.empresaId, tx);
+      if (quantos > 0) throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
+    }
+
     const versao = await atualizarFichaRepository(
       {
         processoId: convite.processoId,
         empresaId: convite.empresaId,
         versaoAtual: ficha.versao,
-        campos: camposDoPayload(dados)
+        campos: camposDoPayload(dados),
+        // Ausente nao mexe no que esta gravado; `null` explicito devolve a ficha para "nao
+        // respondeu", que e como o candidato desfaz uma resposta dada por engano.
+        ...(dados.semDependentes === undefined ? {} : { semDependentes: dados.semDependentes })
       },
       tx
     );
@@ -228,6 +250,22 @@ export async function enviarFicha(token: string | undefined, body: DadosExternos
     if (!alvo) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
 
     const ficha = await exigirFichaEditavel(convite, dados.versao, tx);
+
+    // O CHECK do banco cobra que a declaracao EXISTA no envio; ele nao consegue cobrar que ela
+    // seja VERDADE, porque CHECK nao enxerga outra tabela. A conferencia e aqui, depois do lock
+    // da ficha — o mesmo lock que as rotas de dependente tomam, entao ninguem cadastra alguem
+    // entre a contagem e a gravacao.
+    const quantos = await contarDependentesRepository(convite.processoId, convite.empresaId, tx);
+    if (dados.semDependentes && quantos > 0) {
+      throw conflito(INCOERENTE_DECLAROU_QUE_NAO_TEM, "DEPENDENTES_INCOERENTES");
+    }
+    if (!dados.semDependentes && quantos === 0) {
+      throw conflito(
+        "Você marcou que tem dependentes, mas não cadastrou nenhum.",
+        "DEPENDENTES_INCOERENTES"
+      );
+    }
+
     const versao = await atualizarFichaRepository(
       {
         processoId: convite.processoId,
@@ -263,13 +301,28 @@ export async function enviarFicha(token: string | undefined, body: DadosExternos
   });
 }
 
-async function exigirFichaEditavel(convite: Convite, versaoCliente: number, tx: TransacaoBanco) {
+/**
+ * Trava a ficha e garante que ela ainda esta nas maos do candidato. Exportada porque as rotas de
+ * dependente precisam do MESMO lock: a ficha e o ponto unico de contencao do processo, e usar
+ * outro — ou nenhum — deixaria duas abas cadastrarem o mesmo dependente sem CPF em paralelo,
+ * onde o indice unico parcial nao alcanca.
+ *
+ * Nao cobra versao. Quem manda `versao` no corpo (rascunho e envio) cobra por cima, com
+ * `exigirFichaEditavel`. Dependente nao tem versao propria e nao usa a da ficha: exigi-la faria
+ * cada dependente cadastrado invalidar o formulario aberto do proprio candidato.
+ */
+export async function travarFichaEditavel(convite: Convite, tx: TransacaoBanco) {
   const ficha = await bloquearFichaRepository(convite.processoId, convite.empresaId, tx);
   if (!ficha) throw naoEncontrado("Ficha nao encontrada", "FICHA_AUSENTE");
   // Enviada e aprovada saem das maos do candidato. Devolvida volta — e esse e o ponto da devolucao.
   if (ficha.situacao === "enviada" || ficha.situacao === "aprovada") {
     throw conflito("Esta ficha ja foi enviada e esta em analise.", "FICHA_NAO_EDITAVEL");
   }
+  return ficha;
+}
+
+async function exigirFichaEditavel(convite: Convite, versaoCliente: number, tx: TransacaoBanco) {
+  const ficha = await travarFichaEditavel(convite, tx);
   if (ficha.versao !== versaoCliente) {
     throw conflito("Alguem gravou esta ficha enquanto voce editava", "VERSAO_CONFLITANTE");
   }
@@ -288,6 +341,7 @@ export async function obterFichaParaRevisao(
   return {
     situacao: ficha.situacao as FichaRevisaoDto["situacao"],
     versao: ficha.versao,
+    semDependentes: ficha.semDependentes,
     enviadoEm: ficha.enviadoEm?.toISOString() ?? null,
     revisadoEm: ficha.revisadoEm?.toISOString() ?? null,
     revisadoPorNome: ficha.revisadoPorNome,

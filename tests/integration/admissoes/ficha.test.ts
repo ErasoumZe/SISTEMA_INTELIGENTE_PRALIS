@@ -367,16 +367,24 @@ describe("admissoes ficha publica integration", () => {
     // E a resposta tambem nao devolve o token: nao ha rota que o recupere depois da emissao.
     expect(resposta.body).not.toContain(token);
 
-    // A fonte do controller prova o resto: nenhuma rota publica declara token em caminho ou query.
-    const controller = readFileSync(
-      join(RAIZ_TESTE, "api", "src", "admissoes", "ficha.controller.ts"),
-      "utf8"
-    );
-    const rotasPublicas = [...controller.matchAll(/"(\/api\/admissao[^"]*)"/gu)].map((a) => a[1]);
+    // A fonte dos controllers prova o resto: nenhuma rota publica declara token em caminho ou
+    // query. Os DOIS arquivos entram na varredura — a V4 criou `dependentes.controller.ts`, e
+    // varrer so o da ficha teria transformado o arquivo novo num ponto cego bem no lugar onde a
+    // garantia importa.
+    const arquivos = ["ficha.controller.ts", "dependentes.controller.ts"];
+    const rotasPublicas = arquivos.flatMap((arquivo) => {
+      const fonte = readFileSync(join(RAIZ_TESTE, "api", "src", "admissoes", arquivo), "utf8");
+      return [...fonte.matchAll(/"(\/api\/admissao[^"]*)"/gu)]
+        .map((achado) => achado[1])
+        .filter((rota): rota is string => rota !== undefined);
+    });
     expect(rotasPublicas.length).toBeGreaterThan(0);
     for (const rota of rotasPublicas) {
-      expect(rota, rota).not.toContain(":");
       expect(rota, rota).not.toContain("?");
+      // O UNICO parametro de caminho permitido e `:id`, que e o id do dependente. Qualquer outro
+      // nome (`:token`, `:convite`, `:t`) poria segredo em `req.url`, que o logger registra sempre.
+      const parametros = [...rota.matchAll(/:([A-Za-z0-9_]+)/gu)].map((a) => a[1]);
+      expect(parametros.filter((nome) => nome !== "id"), rota).toEqual([]);
     }
   });
 });

@@ -27,6 +27,7 @@ import { erro } from "@padaria/shared/api";
 import { exigirAutenticacao } from "./auth/guards.js";
 import { registrarRotasAdmissoes } from "./admissoes/admissoes.controller.js";
 import { registrarRotasAdmissoesConvites } from "./admissoes/convites.controller.js";
+import { registrarRotasAdmissaoDependentes } from "./admissoes/dependentes.controller.js";
 import { registrarRotasAdmissaoFicha } from "./admissoes/ficha.controller.js";
 import { registrarRotasAdmissoesProcessos } from "./admissoes/processos.controller.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
@@ -67,7 +68,12 @@ const rotasComAutenticacaoPropria = new Set([
   // `x-admissao-convite`, cujo hash mora em `admissoes_convites`. Uma entrada por rota
   // porque a comparacao e exata; e GET e PUT dividem a mesma entrada, porque o Set e por url.
   "/api/admissao/ficha",
-  "/api/admissao/ficha/enviar"
+  "/api/admissao/ficha/enviar",
+  // ADM-003 V4: dependentes, pela mesma porta. Duas entradas para quatro rotas — GET e POST
+  // dividem a primeira, PUT e DELETE dividem a segunda, porque a comparacao e pela url
+  // DECLARADA da rota, com o `:id` literal, e nao pelo caminho ja resolvido.
+  "/api/admissao/dependentes",
+  "/api/admissao/dependentes/:id"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -241,6 +247,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasAdmissoesProcessos(app);
   await registrarRotasAdmissoesConvites(app);
   await registrarRotasAdmissaoFicha(app);
+  await registrarRotasAdmissaoDependentes(app);
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
   await registrarRotasSociosGestores(app);

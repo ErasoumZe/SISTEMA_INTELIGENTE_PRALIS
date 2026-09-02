@@ -70,10 +70,13 @@ describe("a pagina do candidato nao deixa o token vazar", () => {
   });
 
   it("Deve_UsarOMesmoNomeDeCabecalhoDoServidor", () => {
-    const controller = readFileSync(
-      join(import.meta.dirname, "..", "..", "api", "src", "admissoes", "ficha.controller.ts"),
+    // O nome do cabecalho saiu de `ficha.controller.ts` na V4: as rotas de dependente usam o
+    // mesmo, e duas declaracoes divergentes nao quebrariam teste nenhum — so parariam de
+    // autenticar. Este teste segue a fonte unica para onde ela foi.
+    const servidor = readFileSync(
+      join(import.meta.dirname, "..", "..", "api", "src", "admissoes", "convite-http.ts"),
       "utf8"
     );
-    expect(controller).toContain(`"${CABECALHO_DO_CONVITE}"`);
+    expect(servidor).toContain(`"${CABECALHO_DO_CONVITE}"`);
   });
 });

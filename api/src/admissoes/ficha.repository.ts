@@ -98,6 +98,9 @@ export async function bloquearFichaRepository(processoId: string, empresaId: str
       id: admissoesProcessosFicha.id,
       situacao: admissoesProcessosFicha.situacao,
       versao: admissoesProcessosFicha.versao,
+      // ADM-003 V4: quem trava a ficha para mexer em dependente precisa saber a declaracao
+      // atual para decidir se ela muda. Ler de novo fora do lock leria outra coisa.
+      semDependentes: admissoesProcessosFicha.semDependentes,
       enviadoEm: admissoesProcessosFicha.enviadoEm
     })
     .from(admissoesProcessosFicha)
@@ -142,7 +145,9 @@ export async function atualizarFichaRepository(
     revisadoEm?: Date | null;
     revisadoPor?: string | null;
     revisaoPendencias?: string | null;
-    semDependentes?: boolean;
+    // `null` e valor de verdade aqui, e nao ausencia: e como a declaracao volta a ser
+    // "nao respondeu" quando o candidato apaga o ultimo dependente.
+    semDependentes?: boolean | null;
     avisoPrivacidadeVersao?: string;
     avisoAceitoEm?: Date;
   },

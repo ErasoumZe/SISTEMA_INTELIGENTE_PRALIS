@@ -1,10 +1,11 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { processoParamsSchema } from "@padaria/shared/admissoes";
 import type { DadosExternos } from "@padaria/shared/api";
 import { erro, ok, semConteudo } from "@padaria/shared/api";
 import { exigirPermissao } from "../auth/guards.js";
 import { mensagemDominioOuRelancar } from "../erros.js";
 import { statusErroValidacao } from "../utils.js";
+import { TETO_PUBLICO, tokenDoCabecalho } from "./convite-http.js";
 import {
   aprovarFicha,
   devolverFicha,
@@ -26,27 +27,11 @@ import {
  * O token NUNCA aparece em caminho nem em query. So no header — porque `req.url` vai para o log do
  * servidor, para o historico do navegador e para o `Referer`, e o proprio repositorio ja registrou
  * esse defeito no link de recuperacao de senha.
+ *
+ * O nome do cabecalho, a leitura dele e o teto de requisicoes moram em `convite-http.ts`: as
+ * rotas de dependente da V4 usam exatamente os mesmos, e uma copia divergente nao quebraria
+ * teste nenhum — so pararia de autenticar.
  */
-
-const CABECALHO_DO_CONVITE = "x-admissao-convite";
-
-/** Teto por LINK, com queda para IP: um link e de uma pessoa, nao de uma populacao. */
-const TETO_PUBLICO = {
-  config: {
-    rateLimit: {
-      max: 60,
-      timeWindow: "1 minute",
-      keyGenerator: (request: FastifyRequest) => tokenDoCabecalho(request) ?? request.ip
-    }
-  }
-};
-
-function tokenDoCabecalho(request: FastifyRequest): string | null {
-  const valor = request.headers[CABECALHO_DO_CONVITE];
-  if (typeof valor !== "string") return null;
-  const limpo = valor.trim();
-  return limpo === "" ? null : limpo;
-}
 
 function responderErro(reply: FastifyReply, error: DadosExternos) {
   const mensagem = mensagemDominioOuRelancar(error);

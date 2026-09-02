@@ -76,6 +76,15 @@ const camposDaFicha = {
 
 export const fichaRascunhoPayloadSchema = z.object({
   versao: z.number().int().positive(),
+  /**
+   * A declaracao de dependentes viaja no RASCUNHO, e nao numa rota propria: ela e coluna da
+   * ficha, e responder a pergunta e parte de preencher o formulario. Aqui ela e opcional —
+   * `null`/ausente significa "ainda nao respondeu", que e estado legitimo enquanto se rascunha.
+   *
+   * `false` com zero dependentes tambem e legitimo no rascunho: o candidato marca que TEM antes
+   * de cadastrar quem sao. A coerencia entre a resposta e a lista so e cobrada no envio.
+   */
+  semDependentes: z.boolean().nullish(),
   ...camposDaFicha
 });
 
@@ -118,10 +127,12 @@ export const fichaEnviarPayloadSchema = fichaRascunhoPayloadSchema
      * ZERO dependente precisa ser DECLARADO. Tabela vazia tambem significa "nao respondeu", e o
      * CHECK de coerencia do banco recusa envio sem esta resposta.
      *
-     * Na V3 o unico valor aceito e `true`: cadastrar dependente e a V4, e oferecer `false` sem ter
-     * onde cadastrar deixaria o candidato preso — ele declararia que tem e nao teria como dizer quem.
+     * Na V3 o unico valor aceito era `true`, porque nao havia onde cadastrar dependente e oferecer
+     * `false` deixaria o candidato preso. A V4 abriu as duas respostas — mas o Zod nao consegue
+     * conferir a COERENCIA entre a resposta e a lista, porque ele nao ve o banco: `true` com
+     * dependentes cadastrados, e `false` sem nenhum, sao recusados no servico, dentro do lock.
      */
-    semDependentes: z.literal(true),
+    semDependentes: z.boolean(),
     avisoPrivacidadeVersao: z.string().trim().min(1)
   })
   .superRefine((dados, ctx) => {
@@ -145,6 +156,8 @@ export type SituacaoFicha = z.infer<typeof situacaoFichaSchema>;
 export const fichaPublicaDtoSchema = z.object({
   situacao: situacaoFichaSchema,
   versao: z.number().int().positive(),
+  /** `null` e resposta ausente, nao "tem dependentes". A tela precisa distinguir as tres. */
+  semDependentes: z.boolean().nullable(),
   /** Pendencias escritas pelo DP ao devolver. Vazio quando nao houve devolucao. */
   revisaoPendencias: z.string().nullable(),
   avisoPrivacidadeVersao: z.string().nullable(),
@@ -169,6 +182,7 @@ export type FichaPublicaDto = z.infer<typeof fichaPublicaDtoSchema>;
 export const fichaRevisaoDtoSchema = z.object({
   situacao: situacaoFichaSchema,
   versao: z.number().int().positive(),
+  semDependentes: z.boolean().nullable(),
   enviadoEm: z.string().nullable(),
   revisadoEm: z.string().nullable(),
   revisadoPorNome: z.string().nullable(),
