@@ -14,6 +14,8 @@ import {
 } from "~/utils/admissoes";
 import ProcessoInternosBloco from "~/components/admissoes/ProcessoInternosBloco.vue";
 import { formatarDataHora, mascararCpf } from "~/utils/formatacao";
+import { linkDoConvite } from "~/utils/convite-token";
+import { copiarTexto } from "~/utils/copiar-texto";
 
 /**
  * O detalhe do processo de admissao — MODAL CENTRAL, e o unico caminho de detalhe.
@@ -140,6 +142,44 @@ watch(
 
 // Enquanto o GET nao volta, `processo` e nulo. Mostrar o card vazio seria uma caixa em branco no
 // meio da tela; o drawer disfarcava isso porque encostava na borda.
+/**
+ * O link que o DP entrega ao candidato, montado a partir da origem do PROPRIO navegador.
+ *
+ * Nao vem do servidor e nao ha configuracao para ele: em producao o app e servido na raiz do
+ * dominio atras do proxy, e o build nao sabe qual e o dominio publico. Quem sabe e a aba aberta.
+ *
+ * O token cru nunca e exibido sozinho — o DP nao tem o que fazer com um hexadecimal de 64
+ * caracteres, e repassar isso a mao era o convite a erro que esta tela criava.
+ */
+const linkDoCandidato = computed(() =>
+  props.tokenEmitido ? linkDoConvite(window.location.origin, props.tokenEmitido) : ""
+);
+
+const avisoDaCopia = ref("");
+
+/**
+ * A copia acontece no proprio handler do clique, ANTES de qualquer `await`: a autorizacao do gesto
+ * do usuario expira quando se espera por rede, e ai a Clipboard API rejeita.
+ *
+ * Falha nao vira sucesso silencioso. Se nenhum caminho copiar, a mensagem diz o que fazer — o link
+ * continua na tela, selecionavel.
+ */
+async function copiarLink() {
+  avisoDaCopia.value = "";
+  const copiou = await copiarTexto(linkDoCandidato.value);
+  avisoDaCopia.value = copiou
+    ? "Link copiado."
+    : "Não foi possível copiar automaticamente. Selecione o link acima e copie.";
+}
+
+// Convite novo e link novo: o aviso da copia anterior nao pode ficar valendo para outro link.
+watch(
+  () => props.tokenEmitido,
+  () => {
+    avisoDaCopia.value = "";
+  }
+);
+
 const carregandoDetalhe = computed(() => props.carregando === true || props.processo === null);
 
 // Pausado TAMBEM cancela — e a mesma regra do servidor, que recusa so `cancelado`. Esconder o
@@ -343,11 +383,44 @@ function confirmarCancelar() {
                 </div>
               </dl>
 
-              <!-- O token aparece UMA vez. Nao ha rota que o devolva: fechado o modal, ele some. -->
-              <v-alert v-if="tokenEmitido" type="success" variant="tonal" density="compact" class="mt-3">
-                <p class="mb-2"><strong>Copie agora.</strong> Este link não aparece de novo.</p>
-                <code class="detalhe-convite__token">{{ tokenEmitido }}</code>
-              </v-alert>
+              <!--
+                O link aparece UMA vez. Nao ha rota que o devolva: fechado o modal, ele some.
+
+                O `v-alert` carrega SO a instrucao, nunca o link. O Vuetify emite `role="alert"`
+                fixo nesse componente, e alerta e regiao assertiva: se o link estivesse dentro, o
+                leitor de tela interromperia tudo para soletrar a URL inteira com o token.
+              -->
+              <template v-if="linkDoCandidato">
+                <v-alert type="success" variant="tonal" density="compact" class="mt-3">
+                  <strong>Copie agora.</strong> Este link não aparece de novo.
+                </v-alert>
+
+                <div class="detalhe-convite__entrega">
+                  <!--
+                    `code`, e nao `input`: campo de formulario com `readonly` continua sendo
+                    submetido, restaurado pelo navegador e oferecido ao autofill. E nao `a href`:
+                    o endereco iria para a barra de status, para o menu de contexto e para o
+                    historico do DP se ele clicasse.
+                  -->
+                  <code class="detalhe-convite__link">{{ linkDoCandidato }}</code>
+                  <v-btn
+                    variant="tonal"
+                    size="small"
+                    prepend-icon="mdi-content-copy"
+                    class="detalhe-convite__copiar"
+                    @click="copiarLink"
+                  >
+                    Copiar link
+                  </v-btn>
+                </div>
+
+                <!--
+                  Live region SEMPRE montada, e nao `v-if` — a mesma doutrina do aviso do CPF acima:
+                  regiao que nasce junto com o texto costuma nao ser anunciada. Ela diz o RESULTADO
+                  da copia, nunca o link.
+                -->
+                <p class="detalhe-convite__copia" role="status">{{ avisoDaCopia }}</p>
+              </template>
 
               <div v-if="podeConvidar" class="detalhe-convite__acoes">
                 <v-btn
@@ -474,10 +547,37 @@ function confirmarCancelar() {
   margin-top: var(--cx-sp-3);
 }
 
-.detalhe-convite__token {
-  display: block;
+.detalhe-convite__entrega {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  margin-top: var(--cx-sp-2);
+  min-width: 0;
+}
+
+/* O link e longo e nao pode empurrar o modal: quebra dentro da propria celula. `min-width: 0` e
+   obrigatorio junto, senao o filho flex se recusa a encolher abaixo do conteudo. */
+.detalhe-convite__link {
+  flex: 1 1 16rem;
+  min-width: 0;
   overflow-wrap: anywhere;
   font-size: 0.8rem;
+  padding: var(--cx-sp-2);
+  border-radius: var(--cx-r-sm);
+  background: var(--cx-surface-sunken);
+}
+
+/* Alvo de toque: 40px de piso pelo `67` §9, 44px no celular pelo §13.4. Escopado a esta secao. */
+.detalhe-convite__copiar {
+  min-height: 40px;
+}
+
+.detalhe-convite__copia {
+  margin: var(--cx-sp-2) 0 0;
+  min-height: 1.25rem;
+  font-size: var(--cx-fs-caption);
+  color: var(--cx-texto-suave);
 }
 
 .detalhe-autoria {
@@ -539,6 +639,16 @@ function confirmarCancelar() {
 
   .estado-rotulo {
     min-width: 0;
+  }
+
+  /* No celular o link ocupa a linha inteira e o botao vem abaixo, com alvo de 44px (`67` §13.4).
+     Lado a lado, o link espremeria a ponto de virar tres letras por linha. */
+  .detalhe-convite__link {
+    flex: 1 1 100%;
+  }
+
+  .detalhe-convite__copiar {
+    min-height: 44px;
   }
 }
 </style>

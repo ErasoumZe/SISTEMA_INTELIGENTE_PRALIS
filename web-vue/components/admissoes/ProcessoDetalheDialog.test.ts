@@ -136,6 +136,7 @@ type Cenario = {
   convite?: PainelConviteDto | null;
   podeConvidar?: boolean;
   tokenEmitido?: string | null;
+  convitePendente?: boolean;
 };
 
 function montar(cenario: Cenario = {}) {
@@ -161,7 +162,7 @@ function montar(cenario: Cenario = {}) {
       convite: cenario.convite ?? null,
       podeConvidar: cenario.podeConvidar ?? false,
       tokenEmitido: cenario.tokenEmitido ?? null,
-      convitePendente: false
+      convitePendente: cenario.convitePendente ?? false
     }
   });
 }
@@ -590,5 +591,201 @@ describe("o painel lateral saiu de verdade", () => {
     // `persistent` bloquearia Escape e clique fora. Ele existe nos modais de FORMULARIO deste
     // modulo, que seguram dado nao salvo; um detalhe de leitura nao tem o que segurar.
     expect(codigo).not.toContain("persistent");
+  });
+});
+
+describe("o convite sai como LINK, e o token cru nunca aparece sozinho", () => {
+  const TOKEN = "b".repeat(64);
+
+  /** Painel de convite vigente — o estado em que o link recem-emitido aparece. */
+  function painelVigente(): PainelConviteDto {
+    return {
+      situacao: "vigente",
+      motivo: "",
+      convite: {
+        id: "11111111-1111-4111-8111-111111111111",
+        expiraEm: "2026-09-17T12:00:00.000Z",
+        criadoEm: "2026-09-03T12:00:00.000Z",
+        criadoPorNome: "DP",
+        avisoPrivacidadeVersao: "AVISO-TESTE-ADMISSAO-V1",
+        expirado: false,
+        primeiroAcessoEm: null,
+        ultimoAcessoEm: null
+      }
+    };
+  }
+
+  function comLink(token: string | null = TOKEN) {
+    return montar({ convite: painelVigente(), podeConvidar: true, tokenEmitido: token });
+  }
+
+  /**
+   * Troca SO `navigator.clipboard`. Stubar o `navigator` inteiro derruba o proprio Vuetify, que le
+   * `navigator.userAgent` ao montar — o teste morreria antes de chegar na copia.
+   */
+  function definirClipboard(valor: { writeText: (texto: string) => Promise<void> } | undefined) {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: valor });
+  }
+
+  function linkNaTela(): string {
+    return overlay()?.querySelector(".detalhe-convite__link")?.textContent?.trim() ?? "";
+  }
+
+  function avisoDaCopia(): string {
+    return overlay()?.querySelector(".detalhe-convite__copia")?.textContent?.trim() ?? "";
+  }
+
+  it("Deve_MostrarOLinkCompleto_E_NuncaOTokenSozinho", async () => {
+    const tela = comLink();
+    await assentar();
+
+    const link = linkNaTela();
+    // A origem e a do navegador do DP — nao ha configuracao, e nao deve haver.
+    expect(link).toBe(`${window.location.origin}/admissao#t=${TOKEN}`);
+    expect(link).toContain("/admissao#t=");
+
+    // O token cru, isolado, nao pode estar em lugar nenhum do modal: era so isso que a tela dava.
+    const texto = textoDoModal();
+    expect(texto).toContain(link);
+    expect(texto.replace(link, "")).not.toContain(TOKEN);
+
+    tela.unmount();
+  });
+
+  it("Deve_ManterOLinkForaDoAlerta_Porque_AlertaEhRegiaoAssertiva", async () => {
+    // O `v-alert` do Vuetify emite `role="alert"` fixo. Link dentro dele faria o leitor de tela
+    // interromper tudo para soletrar a URL inteira, com o token.
+    const tela = comLink();
+    await assentar();
+
+    const alerta = overlay()?.querySelector(".v-alert[role='alert']");
+    expect(alerta?.textContent).toContain("Copie agora.");
+    expect(alerta?.textContent ?? "").not.toContain(TOKEN);
+
+    tela.unmount();
+  });
+
+  it("Deve_ExibirOLinkSemVirarCampoDeFormulario_Nem_Ancora", async () => {
+    // `input readonly` continua sendo submetido e oferecido ao autofill; `a href` levaria o
+    // endereco para a barra de status, o menu de contexto e o historico do DP.
+    const tela = comLink();
+    await assentar();
+
+    const caixa = overlay()?.querySelector(".detalhe-convite__link");
+    expect(caixa?.tagName).toBe("CODE");
+    expect(overlay()?.querySelector("input[value]")).toBeNull();
+    expect(overlay()?.querySelector(`a[href*="${TOKEN}"]`)).toBeNull();
+
+    tela.unmount();
+  });
+
+  it("Deve_CopiarOLinkInteiro_E_Anunciar_Quando_A_CopiaFunciona", async () => {
+    const escritas: string[] = [];
+    definirClipboard({
+      writeText: async (texto: string) => {
+        escritas.push(texto);
+      }
+    });
+
+    const tela = comLink();
+    await assentar();
+    botaoPorTexto("Copiar link")?.click();
+    await assentar();
+
+    // O que vai para a area de transferencia e o LINK, nao o token.
+    expect(escritas).toEqual([`${window.location.origin}/admissao#t=${TOKEN}`]);
+    expect(avisoDaCopia()).toBe("Link copiado.");
+
+    definirClipboard(undefined);
+    tela.unmount();
+  });
+
+  it("Deve_DizerQueNaoCopiou_E_MandarCopiarAMao_Quando_A_CopiaFalha", async () => {
+    // Fora de contexto seguro `navigator.clipboard` nem existe, e `execCommand` some nos
+    // navegadores novos. O que nao pode e a tela dizer que copiou.
+    definirClipboard(undefined);
+
+    const tela = comLink();
+    await assentar();
+    botaoPorTexto("Copiar link")?.click();
+    await assentar();
+
+    expect(avisoDaCopia()).toBe("Não foi possível copiar automaticamente. Selecione o link acima e copie.");
+    expect(avisoDaCopia()).not.toContain("copiado");
+    // E o link continua na tela para a copia manual ser possivel de verdade.
+    expect(linkNaTela()).toContain("/admissao#t=");
+
+    definirClipboard(undefined);
+    tela.unmount();
+  });
+
+  it("Deve_AnunciarORresultadoEmRegiaoViva_Sem_MudarORotuloDoBotao", async () => {
+    // O rotulo do botao fica estavel: nome acessivel que muda quebra comando de voz, e o resultado
+    // tem lugar proprio. A regiao nasce montada, senao o anuncio nao sai (mesma doutrina do CPF).
+    const tela = comLink();
+    await assentar();
+
+    const regiao = overlay()?.querySelector(".detalhe-convite__copia");
+    expect(regiao?.getAttribute("role")).toBe("status");
+    expect(regiao?.textContent?.trim()).toBe("");
+    expect(botaoPorTexto("Copiar link")).toBeTruthy();
+
+    tela.unmount();
+  });
+
+  it("Deve_TrocarOLinkExibido_Quando_UmNovoConviteEhGerado", async () => {
+    // Rotacao: o backend revoga o anterior ao emitir. A tela tem de mostrar o novo, e nao pode
+    // deixar o aviso da copia do link velho valendo para o novo.
+    definirClipboard({ writeText: async () => {} });
+    const tela = comLink();
+    await assentar();
+    botaoPorTexto("Copiar link")?.click();
+    await assentar();
+    expect(avisoDaCopia()).toBe("Link copiado.");
+
+    const novo = "c".repeat(64);
+    await tela.setProps({ tokenEmitido: novo });
+    await assentar();
+
+    expect(linkNaTela()).toBe(`${window.location.origin}/admissao#t=${novo}`);
+    expect(linkNaTela()).not.toContain(TOKEN);
+    expect(avisoDaCopia()).toBe("");
+
+    definirClipboard(undefined);
+    tela.unmount();
+  });
+
+  it("Deve_NaoMostrarLinkNemBotao_Quando_NaoHaTokenNaMemoria", async () => {
+    // Reabrir o modal nao devolve o link: nao existe rota que o recupere.
+    const tela = comLink(null);
+    await assentar();
+
+    expect(overlay()?.querySelector(".detalhe-convite__link")).toBeNull();
+    expect(botaoPorTexto("Copiar link")).toBeFalsy();
+    expect(textoDoModal()).toContain("Convite ao candidato");
+
+    tela.unmount();
+  });
+
+  it("Deve_A_TelaDoDpNaoGuardarNemLogarOLink", () => {
+    // Ate aqui NENHUMA varredura protegia o lado do DP — so a tela do candidato tinha. Agora o que
+    // vive nessa tela e um link pronto para colar, e um `console.log` dele nao quebraria nada.
+    for (const arquivo of ["ProcessoDetalheDialog.vue", "AdmissoesProcessosPage.vue"]) {
+      const codigo = semComentarios(readFileSync(join(PASTA, arquivo), "utf8"));
+      const linhas = codigo.split("\n").filter((linha) => /token|linkDoCandidato|linkDoConvite/iu.test(linha));
+      expect(linhas.length, arquivo).toBeGreaterThan(0);
+      for (const fuga of ["localStorage", "sessionStorage", "useState", "document.cookie", "console."]) {
+        expect(linhas.filter((linha) => linha.includes(fuga)), `${arquivo} ${fuga}`).toEqual([]);
+      }
+    }
+  });
+
+  it("Deve_O_SnackbarDaPaginaNuncaCarregarOLink", () => {
+    // `notificar` recebe texto fixo — a mesma regra que ja vale para o CPF. O snackbar e uma
+    // regiao viva: passar o link para ele seria mandar o leitor de tela soletrar o segredo.
+    const pagina = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+    // Texto fixo com a palavra "link" e legitimo ("Copie o link agora."). O que nao pode e o
+    // VALOR entrar: identificador do segredo ou interpolacao dentro da chamada.
+    expect(pagina).not.toMatch(/notificar\([^)]*(?:tokenEmitido|linkDoCandidato|\$\{)/u);
   });
 });
