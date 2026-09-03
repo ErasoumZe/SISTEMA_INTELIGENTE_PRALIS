@@ -20,6 +20,7 @@ import { rotaRevisaoDaFicha } from "~/utils/admissoes";
 import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
+import ProcessosFiltros, { type FiltrosProcessos } from "~/components/admissoes/ProcessosFiltros.vue";
 import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
 
 /**
@@ -59,6 +60,15 @@ const carregando = ref(false);
 const erro = ref("");
 const bloqueio = ref("");
 const snackbar = reactive({ show: false, text: "", color: "success" });
+
+/**
+ * O recorte APLICADO — nunca o que esta digitado no filtro.
+ *
+ * Se a tela lesse o estado do componente de filtro, a frase do estado vazio falaria de um recorte
+ * que o servidor ainda nao recebeu, e diria "nada neste recorte" para quem so mexeu no select.
+ */
+const filtros = ref<FiltrosProcessos>({ ficha: "" });
+const temFiltro = computed(() => filtros.value.ficha !== "");
 
 const funcoes = ref<FuncaoOpcaoDto[]>([]);
 const turnos = ref<TurnoOpcaoDto[]>([]);
@@ -116,13 +126,23 @@ function tratarErro(error: unknown, notificando = true) {
   else erro.value = mensagemErro(error);
 }
 
+/**
+ * O recorte vai para o SERVIDOR. Filtrar no cliente filtraria so a pagina carregada — e a lista e
+ * paginada de dez em dez, entao a fila apareceria truncada sem ninguem perceber.
+ *
+ * Nenhum documento entra aqui, e nao ha busca por nome: a query string vai para o log de acesso.
+ */
+function queryListagem() {
+  const params = new URLSearchParams({ page: String(pagina.value), pageSize: String(itensPorPagina) });
+  if (filtros.value.ficha) params.set("ficha", filtros.value.ficha);
+  return `?${params.toString()}`;
+}
+
 async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    const resposta = await apiGetPaginado<ProcessoListaDto>(
-      `/api/admissoes/processos?page=${pagina.value}&pageSize=${itensPorPagina}`
-    );
+    const resposta = await apiGetPaginado<ProcessoListaDto>(`/api/admissoes/processos${queryListagem()}`);
     linhas.value = resposta.itens;
     total.value = resposta.total;
   } catch (error) {
@@ -130,6 +150,13 @@ async function carregar() {
   } finally {
     carregando.value = false;
   }
+}
+
+/** Trocar o recorte volta para a pagina 1: senao ficaria na pagina 3 de uma lista que encolheu. */
+function aplicarFiltros(novos: FiltrosProcessos) {
+  filtros.value = novos;
+  pagina.value = 1;
+  void carregar();
 }
 
 /**
@@ -383,11 +410,18 @@ onMounted(async () => {
 
     <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mb-4">{{ erro }}</v-alert>
 
+    <!-- O recorte da lista, e a fila do DP. Nao ha tela separada de fila: seria a segunda lista dos
+         mesmos processos, com a mesma permissao, capaz de divergir da primeira. -->
+    <ProcessosFiltros :carregando="carregando" @aplicar="aplicarFiltros" />
+
     <ProcessosTabela
       :linhas="linhas"
       :carregando="carregando"
       :pagina="pagina"
       :total-paginas="totalPaginas"
+      :total="total"
+      :por-pagina="itensPorPagina"
+      :filtrado="temFiltro"
       @abrir="abrirDetalhe"
       @trocar-pagina="trocarPagina"
     />

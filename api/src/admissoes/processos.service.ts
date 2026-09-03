@@ -322,6 +322,8 @@ export async function listarProcessos(query: DadosExternos, perfil?: PerfilUsuar
       : null,
     dataAdmissao: linha.internosDataAdmissao,
     exameSituacao: linha.exameSituacao,
+    // Situacao, e so ela. Nenhum campo da ficha e nenhum dependente passam por aqui.
+    fichaSituacao: linha.fichaSituacao,
     criadoEm: linha.criadoEm.toISOString()
   }));
   return { ...pagina, itens };

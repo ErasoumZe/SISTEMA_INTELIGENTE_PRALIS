@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   admissoesProcessos,
+  admissoesProcessosFicha,
   admissoesProcessosHistorico,
   admissoesProcessosInternos,
   admissoesTestes
@@ -13,6 +14,8 @@ import type {
   OrigemProcesso,
   ProcessosQuery,
   SituacaoExame,
+  SituacaoFicha,
+  SituacaoProcesso,
   StatusProcesso
 } from "@padaria/shared/admissoes";
 import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
@@ -65,6 +68,9 @@ export type ProcessoLinha = {
   exameSituacao: SituacaoExame;
   exameAtualizadoPorNome: string | null;
   exameAtualizadoEm: Date | null;
+  /** ADM-003 V6 — a situacao da ficha, ou `null` quando o candidato ainda nao abriu o link. */
+  fichaSituacao: SituacaoFicha | null;
+  fichaEnviadoEm: Date | null;
 };
 
 /**
@@ -463,7 +469,18 @@ function selecaoProcesso() {
     observacoesRh: admissoesProcessosInternos.observacoesRh,
     exameSituacao: admissoesProcessosInternos.exameSituacao,
     exameAtualizadoPorNome: perfilExame.nome,
-    exameAtualizadoEm: admissoesProcessosInternos.exameAtualizadoEm
+    exameAtualizadoEm: admissoesProcessosInternos.exameAtualizadoEm,
+    /**
+     * ADM-003 V6 — a situacao da ficha, so isto. Nenhum campo dela entra aqui: a lista nao mostra
+     * ficha, e o detalhe do processo nao a carrega. Quem le a ficha e a tela de revisao, pela rota
+     * dela, com a permissao dela.
+     *
+     * `left join` porque processo sem ficha e o estado normal de quem ainda nao abriu o link, e a
+     * unicidade por processo garante que ele nao multiplica linha.
+     */
+    fichaSituacao: sql<SituacaoFicha | null>`${admissoesProcessosFicha.situacao}`,
+    /** So para ORDENAR a fila. Nao vai para o contrato: a lista nao mostra data de envio. */
+    fichaEnviadoEm: admissoesProcessosFicha.enviadoEm
   };
 }
 
@@ -491,6 +508,13 @@ function consultaProcesso() {
       and(
         eq(funcaoDoProcesso.id, admissoesProcessos.funcaoId),
         eq(funcaoDoProcesso.empresaId, admissoesProcessos.empresaId)
+      )
+    )
+    .leftJoin(
+      admissoesProcessosFicha,
+      and(
+        eq(admissoesProcessosFicha.processoId, admissoesProcessos.id),
+        eq(admissoesProcessosFicha.empresaId, admissoesProcessos.empresaId)
       )
     )
     .leftJoin(
@@ -542,25 +566,63 @@ export async function obterProcessoRepository(id: string, empresaId: string): Pr
  * Sem busca por nome e SEM busca por CPF: documento nunca entra em query string (D-4 do
  * PROJECT_BRAIN/31), e no processo direto o nome so existe depois da resposta do candidato.
  */
+const STATUS_DA_SITUACAO: Record<SituacaoProcesso, StatusProcesso> = {
+  ativo: "iniciado",
+  // CORRECAO (V6): este mapa era um ternario `situacao === "ativo" ? "iniciado" : "cancelado"`, e
+  // por isso filtrar por PAUSADO devolvia os CANCELADOS — os dois casos que nao eram "ativo" caiam
+  // no mesmo galho. Um mapa fechado nao tem esse defeito: cada situacao aponta para o seu status, e
+  // uma situacao nova quebra o typecheck em vez de cair no `else`.
+  pausado: "pausado",
+  inativo: "cancelado"
+};
+
 export async function listarProcessosRepository(
   empresaId: string,
   query: ProcessosQuery
 ): Promise<ResultadoPaginado<ProcessoLinha>> {
   const filtros: SQL[] = [eq(admissoesProcessos.empresaId, empresaId)];
   if (query.origem) filtros.push(eq(admissoesProcessos.origem, query.origem));
-  if (query.situacao) {
-    filtros.push(eq(admissoesProcessos.status, query.situacao === "ativo" ? "iniciado" : "cancelado"));
-  }
+  if (query.situacao) filtros.push(eq(admissoesProcessos.status, STATUS_DA_SITUACAO[query.situacao]));
+  if (query.ficha) filtros.push(eq(admissoesProcessosFicha.situacao, query.ficha));
   const where = and(...filtros);
 
+  /**
+   * A contagem repete o join da ficha porque um dos filtros mora nela. Sem o join aqui, filtrar por
+   * `ficha` devolveria a pagina certa e um total errado — a paginacao passaria a mentir, que e o
+   * jeito silencioso de esconder registro.
+   *
+   * O join nao infla a contagem: `admissoes_processos_ficha` tem unique por `processo_id`.
+   */
   const [{ total } = { total: 0 }] = await banco
     .select({ total: count() })
     .from(admissoesProcessos)
+    .leftJoin(
+      admissoesProcessosFicha,
+      and(
+        eq(admissoesProcessosFicha.processoId, admissoesProcessos.id),
+        eq(admissoesProcessosFicha.empresaId, admissoesProcessos.empresaId)
+      )
+    )
     .where(where);
+
+  /**
+   * FILA e LISTA ordenam ao contrario, e de proposito.
+   *
+   * A lista geral mostra o mais recente primeiro, que e o que se espera de um cadastro. Mas uma FILA
+   * ordenada pelo mais recente faz quem esperou mais ficar por ultimo — entao, quando o filtro de
+   * ficha esta ativo, a ordem passa a ser a da espera: quem enviou primeiro aparece primeiro.
+   *
+   * `asc` resolve o nulo sozinho: no Postgres, ordem ascendente ja poe NULL por ULTIMO. Rascunho nao
+   * tem envio, e um nulo no topo poria quem nem enviou na frente de quem espera decisao — o que o
+   * padrao do banco evita sem precisar de SQL cru, que o gate de arquitetura veta nesta camada.
+   */
+  const ordem = query.ficha
+    ? [asc(admissoesProcessosFicha.enviadoEm), asc(admissoesProcessos.id)]
+    : [desc(admissoesProcessos.criadoEm), desc(admissoesProcessos.id)];
 
   const itens = await consultaProcesso()
     .where(where)
-    .orderBy(desc(admissoesProcessos.criadoEm), desc(admissoesProcessos.id))
+    .orderBy(...ordem)
     .limit(query.pageSize)
     .offset((query.page - 1) * query.pageSize);
 

@@ -317,6 +317,30 @@ export function rotuloDeclaracaoDependentes(semDependentes: boolean | null): str
 }
 
 /**
+ * ADM-003 V6 — a ficha PEDE ACAO do DP? So estes dois estados pedem.
+ *
+ * A lista mostra sinal apenas para eles, pelo mesmo criterio do prazo do teste: alerta so onde ha
+ * decisao humana pendente. `aprovada`, `rascunho` e sem-ficha ficam silenciosos, porque repetir o
+ * normal em toda linha vira ruido — e ruido esconde justamente a excecao.
+ *
+ * Quem quiser ver os outros estados usa o filtro, que aceita os quatro.
+ */
+export function fichaPedeAtencao(situacao: SituacaoFicha | null): boolean {
+  return situacao === "enviada" || situacao === "devolvida";
+}
+
+/**
+ * O icone do sinal. TERCEIRO canal, alem da forma (chip) e do texto — nunca a cor sozinha, que e o
+ * que a WCAG 1.4.1 proibe. Quem nao distingue cor le o rotulo; quem le rapido reconhece a forma.
+ */
+export const iconeSituacaoFicha: Record<SituacaoFicha, string> = {
+  rascunho: "mdi-pencil-outline",
+  enviada: "mdi-clock-alert-outline",
+  devolvida: "mdi-undo-variant",
+  aprovada: "mdi-check-circle-outline"
+};
+
+/**
  * O caminho da tela de revisao. UM lugar monta a rota: o modal do processo leva para ca, e a
  * pagina e alcancada so por ele — nao ha item de menu, e nao deve haver.
  */

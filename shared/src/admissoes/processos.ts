@@ -3,6 +3,8 @@ import { apiIdParamsSchema, paginationQuerySchema } from "../api/index.js";
 // Da FONTE, nunca do barril: `./index.js` reexporta este arquivo, e o ciclo deixaria o schema
 // indefinido em tempo de montagem sob a condicao `development`.
 import { cpfTesteSchema } from "./cpf.js";
+// Idem: da fonte. `ficha.ts` nao importa este arquivo, entao nao ha ciclo.
+import { situacaoFichaSchema } from "./ficha.js";
 
 /**
  * ADM-002 V0 — o PROCESSO DE ADMISSAO.
@@ -215,12 +217,20 @@ export const processoParamsSchema = apiIdParamsSchema;
 export const historicoProcessoQuerySchema = paginationQuerySchema;
 
 /**
- * Filtro da lista. So `situacao` e paginacao — sem busca por nome e SEM BUSCA POR CPF, pela mesma
+ * Filtro da lista. So estado e paginacao — sem busca por nome e SEM BUSCA POR CPF, pela mesma
  * razao da ADM-001: documento nunca entra em query string.
+ *
+ * `ficha` (ADM-003 V6) e a fila do DP: filtrar por `enviada` e "o que espera decisao". Aceita so as
+ * quatro situacoes que existem — nao ha valor para "sem ficha", porque ausencia nao e situacao, e um
+ * quinto valor aqui viraria estado inventado no contrato. Quem quer ver tudo nao manda o filtro.
+ *
+ * O filtro e do SERVIDOR, e nao da tela: a lista e paginada, e filtrar no cliente filtraria apenas a
+ * pagina carregada — o defeito que a listagem de produtos ja pagou uma vez.
  */
 export const processosQuerySchema = paginationQuerySchema.extend({
   situacao: situacaoProcessoSchema.optional(),
-  origem: origemProcessoSchema.optional()
+  origem: origemProcessoSchema.optional(),
+  ficha: situacaoFichaSchema.optional()
 });
 
 // --- Saidas ---------------------------------------------------------------------------------------
@@ -247,6 +257,16 @@ export const processoListaDtoSchema = z.object({
   turnoResumo: z.string().nullable(),
   dataAdmissao: z.string().nullable(),
   exameSituacao: situacaoExameSchema,
+  /**
+   * ADM-003 V6 — a situacao da FICHA, para o DP achar o que espera decisao sem abrir um por um.
+   *
+   * `null` significa que a ficha nao existe: o candidato ainda nao abriu o link. Ausencia e um dos
+   * quatro estados que a tela precisa distinguir, e por isso viaja como nulo em vez de virar um
+   * valor do enum — o enum descreve fichas, e aqui nao ha ficha.
+   *
+   * DERIVADO: nada e gravado no processo. Sai da propria linha da ficha, por join.
+   */
+  fichaSituacao: situacaoFichaSchema.nullable(),
   criadoEm: z.string()
 });
 
