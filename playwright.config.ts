@@ -49,7 +49,9 @@ export default defineConfig({
       // Roda contra um banco ISOLADO com dados sinteticos (E2E_BASE_URL / E2E_API_URL), nunca em
       // producao: os testes criam processo, convite e ficha por API a cada rodada.
       name: "admissoes",
-      testMatch: /admissoes-.*\.spec\.ts/u,
+      // Duas familias no mesmo projeto: a admissao e o catalogo que ela consome. Sao a mesma stack,
+      // o mesmo banco isolado e o mesmo navegador — separar em dois projetos so dobraria o setup.
+      testMatch: /(admissoes|funcoes)-.*\.spec\.ts/u,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
     }
   ]

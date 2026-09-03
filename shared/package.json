@@ -41,6 +41,11 @@
       "development": "./src/caixa/index.ts",
       "default": "./dist/caixa/index.js"
     },
+    "./funcoes": {
+      "types": "./dist/funcoes/index.d.ts",
+      "development": "./src/funcoes/index.ts",
+      "default": "./dist/funcoes/index.js"
+    },
     "./turnos": {
       "types": "./dist/turnos/index.d.ts",
       "development": "./src/turnos/index.ts",

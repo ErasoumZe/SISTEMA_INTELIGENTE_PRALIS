@@ -69,6 +69,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "produtos",
       "grupos",
       "unidades",
+      "funcoes_operacionais",
       "turnos",
       "formas_pagamento",
       "fornecedores",

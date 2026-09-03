@@ -164,6 +164,15 @@ export const permissoes = [
   "cadastro_turnos_criar",
   "cadastro_turnos_editar",
   "cadastro_turnos_excluir",
+  // Catalogo de FUNCOES OPERACIONAIS — o que a pessoa faz. Nao confundir com `cargos`, que e o
+  // catalogo de ACESSO. Sao TRES chaves, e nao quatro: nao existe `_excluir` porque nao existe
+  // exclusao. Funcao sai de circulacao por `ativo = false` e volta pelo mesmo campo — apagar
+  // levaria embora a leitura do periodo de teste e do processo que apontam para ela. Conceder uma
+  // permissao para um ato que nao existe seria abrir a porta hoje para quem criasse a rota amanha
+  // sem reabrir a decisao.
+  "cadastro_funcoes_visualizar",
+  "cadastro_funcoes_criar",
+  "cadastro_funcoes_editar",
   "cadastro_formas_pagamento_visualizar",
   "cadastro_formas_pagamento_criar",
   "cadastro_formas_pagamento_editar",
@@ -272,6 +281,8 @@ export const permissoes = [
   "menu_pdv_desabilitado",
   "menu_turnos_mostrar",
   "menu_turnos_desabilitado",
+  "menu_funcoes_operacionais_mostrar",
+  "menu_funcoes_operacionais_desabilitado",
   "menu_formas_pagamento_mostrar",
   "menu_formas_pagamento_desabilitado",
   "menu_integracoes_mostrar",

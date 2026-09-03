@@ -34,7 +34,13 @@ const RAIZ = resolve(import.meta.dirname, "..", "..");
 const CAMINHOS_DA_ADM001 = [
   "shared/src/admissoes",
   "api/src/admissoes",
-  "web-vue/components/admissoes"
+  "web-vue/components/admissoes",
+  // O catalogo virou editavel (03/09/2026), e a fronteira precisa valer TAMBEM onde se escreve
+  // nele. Sem estes tres, a guarda ficaria com um buraco exatamente no lugar onde alguem seria
+  // tentado a "ligar funcao a cargo" — que e o defeito que este arquivo existe para impedir.
+  "shared/src/funcoes",
+  "api/src/funcoes",
+  "web-vue/components/funcoes"
 ];
 
 function arquivosDe(diretorio: string, encontrados: string[] = []): string[] {

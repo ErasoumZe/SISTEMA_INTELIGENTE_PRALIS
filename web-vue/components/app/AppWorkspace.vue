@@ -112,6 +112,10 @@ type TipoPagina =
   | "cadastro"
   | "admissoes_testes"
   | "admissoes_processos"
+  // Catalogo de funcoes operacionais: entra na uniao so para o `telaInicial` casar. NAO ganha ramo
+  // em lugar nenhum — o componente proprio faz as proprias chamadas, e o seletor de empresa
+  // continua valendo, ao contrario das duas telas de admissao logo acima.
+  | "funcoes_operacionais"
   | "placeholder";
 
 const props = withDefaults(

@@ -15,6 +15,9 @@ const telasSomenteCaixaAberto = new Set<string>([
 ]);
 
 const permissaoAcessoPorTela = {
+  // Catalogo de funcoes operacionais: tela de CADASTRO, ao lado de Turnos. Nao pertence a
+  // Admissoes — a mesma lista responde ao cadastro de colaboradores quando ele chegar.
+  funcoes_operacionais: "cadastro_funcoes_visualizar",
   entradas: "entradas_visualizar",
   transferencias: "transferencias_visualizar",
   despesas: "despesas_visualizar",
@@ -182,6 +185,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   }),
   Gerencia: permissoesDoCargo({
     ativas: [
+      // Catalogo de funcoes operacionais. Em `ativas`, e nao em `extras`, porque e TELA: assim
+      // `permissoesDoCargo` deriva a permissao de acesso e a de menu de uma vez so.
+      "funcoes_operacionais",
       "caixa",
       "entradas",
       "transferencias",
@@ -253,7 +259,10 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargo({
-    ativas: ["despesas", "colaboradores", "folha_ponto", "admissoes_testes", "admissoes_processos"],
+    ativas: [
+      // Catalogo de funcoes operacionais. Em `ativas`, e nao em `extras`, porque e TELA: assim
+      // `permissoesDoCargo` deriva a permissao de acesso e a de menu de uma vez so.
+      "funcoes_operacionais","despesas", "colaboradores", "folha_ponto", "admissoes_testes", "admissoes_processos"],
     // ADM-001: o DP opera o periodo de teste por inteiro. As quatro acoes sao PROPRIAS da
     // admissao — `cadastro_colaboradores_*` continua sem abrir nada aqui, e vice-versa.
     extras: [
@@ -281,6 +290,16 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.
       "cadastro_turnos_visualizar",
       "cadastro_turnos_criar",
+      // Funcoes operacionais: o DP ADMINISTRA o catalogo — ve, cria e edita (decisao de Marco,
+      // 03/09/2026). `editar` cobre renomear, trocar o CBO e DESATIVAR/REATIVAR: sao a mesma
+      // escrita na mesma linha, e tres permissoes para um `UPDATE` so seriam tres nomes para o
+      // mesmo direito. Nao existe `_excluir` porque nao existe exclusao.
+      //
+      // E o INVERSO de Turnos logo acima, de proposito: la a Gerencia tem o ciclo completo e o DP
+      // so ve e cria; aqui quem administra e o DP, porque e ele que descobre a funcao faltando no
+      // meio de uma admissao.
+      "cadastro_funcoes_criar",
+      "cadastro_funcoes_editar",
     ]
   }),
   RH: permissoesDoCargo({

@@ -277,6 +277,14 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_turnos_visualizar",
     icone: "mdi-clock-outline"
   },
+  // Catalogo do que a pessoa FAZ. Vizinho de Turnos no menu porque os dois sao catalogo da empresa
+  // que a admissao consome — e longe de "Colaboradores", que e gente, nao lista.
+  funcoes_operacionais: {
+    id: "funcoes_operacionais",
+    titulo: "Funções operacionais",
+    permissao: "cadastro_funcoes_visualizar",
+    icone: "mdi-badge-account-horizontal-outline"
+  },
   areas_setores: {
     id: "areas_setores",
     titulo: "Áreas e setores",

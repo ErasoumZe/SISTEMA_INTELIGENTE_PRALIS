@@ -10,6 +10,7 @@ export * from "./colaboradores/index.js";
 export * from "./contas/index.js";
 export * from "./empresas/index.js";
 export * from "./fornecedores/index.js";
+export * from "./funcoes/index.js";
 export * from "./socios-gestores/index.js";
 export * from "./formas-pagamento/index.js";
 export * from "./grupos/index.js";
