@@ -83,6 +83,25 @@ export const dependenteDtoSchema = z.object({
 export type DependenteDto = z.infer<typeof dependenteDtoSchema>;
 
 /**
+ * ADM-003 V5 — o dependente como o DP o ve na REVISAO. Mesmos campos da tela do candidato, MENOS o
+ * CPF: sai so `cpfInformado`.
+ *
+ * O DP confere se o candidato informou o documento do terceiro — para isso nao precisa do numero.
+ * Nem mascara parcial: mascara e um jeito de o numero SAIR do servidor, e o CPF de dependente nao
+ * tem revelacao auditada por dependente. Enquanto essa decisao nao existir, o numero nao sai.
+ */
+export const dependenteRevisaoDtoSchema = z.object({
+  id: z.string().uuid(),
+  nomeCompleto: z.string(),
+  nascimento: z.string(),
+  parentesco: z.string(),
+  cpfInformado: z.boolean(),
+  finalidades: z.array(z.string())
+});
+
+export type DependenteRevisaoDto = z.infer<typeof dependenteRevisaoDtoSchema>;
+
+/**
  * A resposta de TODA operacao de dependente devolve o estado inteiro: a lista, a declaracao e a
  * versao da ficha. Cadastrar um dependente move `sem_dependentes`, e mover `sem_dependentes` sobe a
  * versao da ficha — devolver so o item criado deixaria o formulario aberto com versao velha, e o

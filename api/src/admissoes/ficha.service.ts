@@ -17,7 +17,10 @@ import { conflito, erroValidacao, foiEmbora, naoAutorizado, naoEncontrado } from
 import { env } from "../env.js";
 import { atorDoPerfil, empresaDoAtor } from "./ator.js";
 import { hashTokenConvite } from "./convites.service.js";
-import { contarDependentesRepository } from "./dependentes.repository.js";
+import {
+  contarDependentesRepository,
+  listarDependentesParaRevisaoRepository
+} from "./dependentes.repository.js";
 import {
   atualizarFichaRepository,
   bloquearFichaRepository,
@@ -331,13 +334,26 @@ async function exigirFichaEditavel(convite: Convite, versaoCliente: number, tx: 
 
 // --- Lado do DP ----------------------------------------------------------------------------------
 
+/**
+ * A ficha como o DP a revisa. `null` quando o processo existe nesta empresa e o candidato ainda nao
+ * abriu o link — a tela diz isso. Processo de OUTRA empresa (ou inexistente) e 404, a mesma resposta
+ * que o detalhe do processo da: antes desta conferencia os dois casos respondiam `null`, e "ainda
+ * nao ha ficha" para um processo alheio confirmava de graca que ele existia.
+ *
+ * ADM-003 V5: a lista de dependentes vem junto, SEM o CPF de nenhum deles — a projecao do
+ * repositorio ja nao seleciona a coluna, entao nao ha o que este servico possa deixar vazar.
+ */
 export async function obterFichaParaRevisao(
   processoId: string,
   perfil?: PerfilUsuario
 ): Promise<FichaRevisaoDto | null> {
   const empresaId = empresaDoAtor(perfil);
+  const processo = await obterProcessoRepository(processoId, empresaId);
+  if (!processo) throw naoEncontrado("Processo de admissao nao encontrado");
+
   const ficha = await obterFichaRepository(processoId, empresaId);
   if (!ficha) return null;
+  const dependentes = await listarDependentesParaRevisaoRepository(processoId, empresaId);
   return {
     situacao: ficha.situacao as FichaRevisaoDto["situacao"],
     versao: ficha.versao,
@@ -348,7 +364,17 @@ export async function obterFichaParaRevisao(
     revisaoPendencias: ficha.revisaoPendencias,
     avisoPrivacidadeVersao: ficha.avisoPrivacidadeVersao,
     avisoAceitoEm: ficha.avisoAceitoEm?.toISOString() ?? null,
-    campos: camposDaLinha(ficha)
+    campos: camposDaLinha(ficha),
+    // Copia campo a campo, como `camposDaLinha`: sem cast, um `cpf` que alguem acrescentasse a
+    // selecao do repositorio nao passaria por aqui em silencio.
+    dependentes: dependentes.map((dependente) => ({
+      id: dependente.id,
+      nomeCompleto: dependente.nomeCompleto,
+      nascimento: dependente.nascimento,
+      parentesco: dependente.parentesco,
+      cpfInformado: dependente.cpfInformado,
+      finalidades: dependente.finalidades
+    }))
   };
 }
 

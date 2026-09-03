@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { admissoesProcessosDependentes } from "@padaria/db/schema";
 import type { TransacaoBanco } from "../banco/conexao.js";
 import { banco } from "../banco/conexao.js";
@@ -39,6 +39,32 @@ export async function listarDependentesRepository(
     .from(admissoesProcessosDependentes)
     // Ordem estavel: sem ela a lista embaralha a cada gravacao e o candidato perde o lugar. `id`
     // desempata o mesmo instante, que acontece quando duas abas gravam junto.
+    .orderBy(asc(admissoesProcessosDependentes.criadoEm), asc(admissoesProcessosDependentes.id))
+    .where(doProcesso(processoId, empresaId));
+}
+
+/**
+ * ADM-003 V5 — a lista para a REVISAO do DP. Nao seleciona `cpf`: sai `cpf is not null`, resolvido
+ * pelo banco. O numero do terceiro nao chega a memoria da API, nao chega a resposta e nao chega ao
+ * navegador do DP — nao ha o que mascarar, porque nada saiu. Mesma disciplina da contagem abaixo.
+ */
+export async function listarDependentesParaRevisaoRepository(
+  processoId: string,
+  empresaId: string,
+  db: TransacaoBanco | typeof banco = banco
+) {
+  return db
+    .select({
+      id: admissoesProcessosDependentes.id,
+      nomeCompleto: admissoesProcessosDependentes.nomeCompleto,
+      nascimento: admissoesProcessosDependentes.nascimento,
+      parentesco: admissoesProcessosDependentes.parentesco,
+      cpfInformado: isNotNull(admissoesProcessosDependentes.cpf).mapWith(Boolean),
+      finalidades: admissoesProcessosDependentes.finalidades
+    })
+    .from(admissoesProcessosDependentes)
+    // A mesma ordem da tela do candidato: o DP e o candidato precisam falar do "primeiro dependente"
+    // e estar olhando para a mesma pessoa.
     .orderBy(asc(admissoesProcessosDependentes.criadoEm), asc(admissoesProcessosDependentes.id))
     .where(doProcesso(processoId, empresaId));
 }

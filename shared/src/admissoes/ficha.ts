@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dependenteRevisaoDtoSchema } from "./dependentes.js";
 
 /**
  * ADM-003 V3 — a ficha que o candidato preenche pelo link.
@@ -178,7 +179,14 @@ export const fichaPublicaDtoSchema = z.object({
 
 export type FichaPublicaDto = z.infer<typeof fichaPublicaDtoSchema>;
 
-/** O que o DP ve na revisao. Mesma ficha, mais quem revisou. */
+/**
+ * O que o DP ve na revisao. Mesma ficha, mais quem revisou — e, desde a V5, a lista de dependentes.
+ *
+ * A lista viaja DENTRO da ficha, e nao numa rota propria do DP: revisar e ler a ficha inteira de uma
+ * vez, e a permissao que abre a ficha (`admissoes_processos_ver_ficha`) e a mesma que deve abrir
+ * quem foi declarado nela. Uma segunda rota seria um segundo lugar para conceder o mesmo acesso.
+ * O CPF do dependente nao vem — ver `dependenteRevisaoDtoSchema`.
+ */
 export const fichaRevisaoDtoSchema = z.object({
   situacao: situacaoFichaSchema,
   versao: z.number().int().positive(),
@@ -189,7 +197,8 @@ export const fichaRevisaoDtoSchema = z.object({
   revisaoPendencias: z.string().nullable(),
   avisoPrivacidadeVersao: z.string().nullable(),
   avisoAceitoEm: z.string().nullable(),
-  campos: z.object(camposDaFicha)
+  campos: z.object(camposDaFicha),
+  dependentes: z.array(dependenteRevisaoDtoSchema)
 });
 
 export type FichaRevisaoDto = z.infer<typeof fichaRevisaoDtoSchema>;

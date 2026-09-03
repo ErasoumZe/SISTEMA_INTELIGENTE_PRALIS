@@ -340,6 +340,153 @@ describe("admissoes ficha publica integration", () => {
     expect(linha?.revisado_em).toBeNull();
   });
 
+  it("P0-V5 Deve_ListarDependentesSemCpf_Quando_DpRevisa", async () => {
+    // ADM-003 V5: o DP passa a ver QUEM foi declarado, e o CPF do dependente nao sai — nem em claro,
+    // nem mascarado. Sai so `cpfInformado`. A prova e pelo CORPO da resposta, e nao so pelas chaves:
+    // um serializador que incluisse o numero em outro campo passaria numa checagem de chaves.
+    const { token, processoId } = await processoComToken();
+    const aberta = await abrirFicha(token);
+    assertOk(aberta, 200);
+
+    const cpfDoDependente = proximoCpf();
+    for (const dependente of [
+      {
+        nomeCompleto: "Dependente Com Documento",
+        nascimento: "2015-03-01",
+        parentesco: "Filho(a)",
+        cpf: cpfDoDependente,
+        finalidades: ["Imposto de renda"]
+      },
+      { nomeCompleto: "Dependente Sem Documento", nascimento: "2024-11-20", parentesco: "Filho(a)", finalidades: [] }
+    ]) {
+      const criado = await contexto.app.inject({
+        method: "POST",
+        url: "/api/admissao/dependentes",
+        headers: { [CABECALHO]: token },
+        payload: dependente
+      });
+      assertOk(criado, 200);
+    }
+
+    const depois = await abrirFicha(token);
+    const enviar = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissao/ficha/enviar",
+      headers: { [CABECALHO]: token },
+      payload: { ...fichaCompleta(depois.json().data.versao as number), semDependentes: false }
+    });
+    expect(enviar.statusCode, enviar.body).toBe(204);
+
+    const paraRevisar = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoId}/ficha`,
+      headers: { cookie: cookieDpReal }
+    });
+    assertOk(paraRevisar, 200);
+    const ficha = paraRevisar.json().data as {
+      situacao: string;
+      semDependentes: boolean | null;
+      dependentes: Array<Record<string, unknown>>;
+    };
+    expect(ficha.situacao).toBe("enviada");
+    expect(ficha.semDependentes).toBe(false);
+    expect(ficha.dependentes).toHaveLength(2);
+    // Na ordem em que foram cadastrados: o DP e o candidato falam do "primeiro dependente" olhando
+    // para a mesma pessoa.
+    expect(ficha.dependentes.map((d) => d["nomeCompleto"])).toEqual([
+      "Dependente Com Documento",
+      "Dependente Sem Documento"
+    ]);
+    expect(ficha.dependentes.map((d) => d["cpfInformado"])).toEqual([true, false]);
+    for (const dependente of ficha.dependentes) {
+      expect(Object.keys(dependente).sort()).toEqual([
+        "cpfInformado",
+        "finalidades",
+        "id",
+        "nascimento",
+        "nomeCompleto",
+        "parentesco"
+      ]);
+    }
+    // O numero nao esta em lugar nenhum do corpo — nem cru, nem pontuado, nem em parte.
+    expect(paraRevisar.body).not.toContain(cpfDoDependente);
+    expect(paraRevisar.body).not.toContain(cpfDoDependente.slice(0, 9));
+    expect(paraRevisar.body).not.toContain(`"cpf"`);
+  });
+
+  it("P0-V5 Deve_Responder404_Quando_DpRevisaProcessoDeOutraEmpresa", async () => {
+    // Mesma direcao do P0-1 de processos: o alvo e montado direto na empresa B, e quem le e o DP da
+    // empresa A. Antes, o servico respondia 200 com `null` para processo alheio — o que confirmava
+    // de graca que o processo existia. Agora e a MESMA resposta de inexistente.
+    // Origem por TESTE efetivado, como no P0-1 de processos: e a fixture que o CHECK de coerencia
+    // aceita sem turno nem retrato. A origem nao importa para o que se prova aqui — a empresa.
+    const funcaoB = "33333333-3333-4333-8333-333333330501";
+    const testeB = "33333333-3333-4333-8333-333333330502";
+    const processoB = "33333333-3333-4333-8333-333333330503";
+    await executarSql(
+      "insert into funcoes_operacionais (id, empresa_id, nome) values ($1, $2, $3) on conflict do nothing",
+      [funcaoB, idsTeste.empresaB, "Funcao Ficha B"]
+    );
+    await executarSql(
+      `insert into admissoes_testes
+         (id, empresa_id, nome_completo, cpf, funcao_id, jornada_horario, inicio_em, fim_combinado_em,
+          criado_por, atualizado_por)
+       select $1, $2, 'Pessoa da Empresa B', $3, $4, 'seg a sex, 08:00 as 17:00',
+              now(), now() + interval '30 days', p.usuario_id, p.usuario_id
+         from perfis_usuarios p limit 1
+       on conflict do nothing`,
+      [testeB, idsTeste.empresaB, proximoCpf(), funcaoB]
+    );
+    await executarSql(
+      `insert into admissoes_processos (id, empresa_id, teste_id, criado_por, atualizado_por)
+       select $1, $2, $3, p.usuario_id, p.usuario_id from perfis_usuarios p limit 1
+       on conflict do nothing`,
+      [processoB, idsTeste.empresaB, testeB]
+    );
+    await executarSql(
+      `insert into admissoes_processos_ficha (processo_id, empresa_id) values ($1, $2) on conflict do nothing`,
+      [processoB, idsTeste.empresaB]
+    );
+
+    const alheia = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${processoB}/ficha`,
+      headers: { cookie: cookieDpReal }
+    });
+    expect(alheia.statusCode, alheia.body).toBe(404);
+    expect(alheia.body).not.toContain("Pessoa da Empresa B");
+
+    const inexistente = await contexto.app.inject({
+      method: "GET",
+      url: "/api/admissoes/processos/00000000-0000-4000-8000-000000000000/ficha",
+      headers: { cookie: cookieDpReal }
+    });
+    expect(inexistente.statusCode).toBe(404);
+
+    // Processo DESTA empresa sem ficha continua respondendo `null`, que e "o candidato ainda nao
+    // abriu o link" — estado legitimo, e a tela de revisao diz isso.
+    const criado = await contexto.app.inject({
+      method: "POST",
+      url: "/api/admissoes/processos",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        nomeCompleto: "Pessoa Sem Ficha",
+        cpf: proximoCpf(),
+        funcaoId: idsTeste.funcaoOperacionalA,
+        turnoId,
+        dataAdmissao: "2026-09-15"
+      }
+    });
+    assertOk(criado, 201);
+    const semFicha = await contexto.app.inject({
+      method: "GET",
+      url: `/api/admissoes/processos/${criado.json().data.id as string}/ficha`,
+      headers: { cookie: cookieDpReal }
+    });
+    assertOk(semFicha, 200);
+    expect(semFicha.json().data).toBeNull();
+  });
+
   it("P0-V3 Deve_RecusarRevisao_Quando_CARGO_NaoEhDp", async () => {
     const { processoId } = await processoComToken();
     for (const [rota, payload] of [
