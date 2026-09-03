@@ -19,6 +19,20 @@ import { CABECALHO_DO_CONVITE, tokenDoFragmento } from "~/utils/convite-token";
  * carregar o segredo. Nao vai para `localStorage`, nao vai para a URL e nao vai para o console.
  */
 
+/**
+ * `scrollToTop: false` NAO e preferencia de rolagem — e o que impede o segredo de vazar.
+ *
+ * O `scrollBehavior` padrao do Nuxt entrega `to.hash` CRU como seletor de elemento. O vue-router,
+ * em desenvolvimento, tenta `document.querySelector("#t=<token>")` so para diagnosticar; o `=` e
+ * invalido em CSS, aquilo lanca, e o `catch` imprime o SELETOR INTEIRO — ou seja, o token — no
+ * console do navegador. Apagar o hash no `onMounted` nao resolve: o aviso sai antes da montagem.
+ *
+ * Esta e a unica saida sancionada que ataca a causa: o `router.options` do Nuxt sai com `false`
+ * ANTES de resolver o hash quando a rota declara isto. Nao silencia console, nao mexe no roteador
+ * global e nao tira o token do fragmento.
+ */
+definePageMeta({ scrollToTop: false });
+
 const { apiUrl } = useApi();
 
 const token = ref("");
@@ -134,6 +148,8 @@ const declaracao = ref<boolean | null>(null);
 const dependentes = ref<LinhaDependente[]>([]);
 const salvandoDependente = ref("");
 const botaoAdicionar = ref<{ $el?: HTMLElement } | null>(null);
+/** Destino do foco quando o ultimo dependente sai e a secao inteira some. Ver `devolverOFoco`. */
+const grupoDeclaracao = ref<{ $el?: HTMLElement } | null>(null);
 
 let sequencia = 0;
 
@@ -156,6 +172,16 @@ function erroDoCpf(linha: LinhaDependente): string {
   const valor = linha.cpf.trim();
   if (valor === "") return "";
   return cpfValido(valor) ? "" : "CPF inválido — confira os números.";
+}
+
+/**
+ * O texto do botao muda quando a linha passa a existir no servidor. O `aria-label` e montado a
+ * partir DAQUI, e nao com um texto proprio: WCAG 2.5.3 exige que o nome acessivel contenha o
+ * rotulo visivel. Antes o botao mostrava "Salvar alteracoes" e o leitor de tela ouvia "Salvar
+ * dependente 1" — quem usa comando de voz dizia o que via e nada acontecia.
+ */
+function rotuloSalvar(linha: LinhaDependente): string {
+  return linha.id ? "Salvar alterações" : "Salvar dependente";
 }
 
 function erroDaLinha(linha: LinhaDependente): string {
@@ -252,10 +278,27 @@ async function removerDependente(linha: LinhaDependente) {
 /**
  * Depois de remover, o foco do teclado ficaria num botao que deixou de existir — e o navegador o
  * devolve para o `body`, jogando quem usa teclado ou leitor de tela para o comeco da pagina.
+ *
+ * Sao DOIS destinos, porque sao dois desfechos. Removendo um dependente entre outros, o botao de
+ * adicionar continua na tela e recebe o foco. Removendo o ULTIMO, o servidor devolve a declaracao
+ * para `null`, a secao inteira desaparece — e com ela o botao de adicionar. Ate aqui o `focus()`
+ * virava no-op silencioso e o foco caia no corpo da pagina.
+ *
+ * Nesse caso o destino certo e a PERGUNTA que voltou a ficar sem resposta: focar o grupo de radios
+ * leva a pessoa exatamente para o que ela precisa responder de novo, e o leitor de tela anuncia o
+ * rotulo do grupo, que e como ela descobre que o estado mudou.
+ *
+ * O `v-radio-group` do Vuetify nao expoe `focus()` — nem ele, nem `VInput`, nem `VRadio`. O que da
+ * para alcancar e o `input[type=radio]` de dentro, pelo `$el` do grupo.
  */
 async function devolverOFoco() {
   await nextTick();
-  botaoAdicionar.value?.$el?.focus();
+  const adicionar = botaoAdicionar.value?.$el;
+  if (adicionar) {
+    adicionar.focus();
+    return;
+  }
+  grupoDeclaracao.value?.$el?.querySelector<HTMLElement>('input[type="radio"]')?.focus();
 }
 
 async function carregarDependentes() {
@@ -402,6 +445,7 @@ onMounted(async () => {
             <!-- A coluna guardada e `sem_dependentes`, entao "tenho" e false e "nao tenho" e true.
                  A inversao mora aqui, num lugar so, em vez de virar um segundo campo na tela. -->
             <v-radio-group
+              ref="grupoDeclaracao"
               v-model="declaracao"
               :disabled="somenteLeitura"
               density="compact"
@@ -487,10 +531,10 @@ onMounted(async () => {
                       variant="tonal"
                       :loading="salvandoDependente === linha.chave"
                       :disabled="!porGravar(linha) || erroDaLinha(linha) !== ''"
-                      :aria-label="`Salvar dependente ${indice + 1}`"
+                      :aria-label="`${rotuloSalvar(linha)} — dependente ${indice + 1}`"
                       @click="salvarDependente(linha)"
                     >
-                      {{ linha.id ? "Salvar alterações" : "Salvar dependente" }}
+                      {{ rotuloSalvar(linha) }}
                     </v-btn>
                   </footer>
                 </fieldset>
@@ -707,6 +751,22 @@ onMounted(async () => {
   justify-self: start;
 }
 
+/* --- Alvo de toque -------------------------------------------------------------------------- */
+
+/* O `67` §9 pede 40px de piso e o §13.4 pede 44px em primarias e no mobile. O default do Vuetify
+   entrega 36px no botao e 28px em radio/checkbox — medido em navegador real, esta ficha reprovava
+   nos quatro. Cresce a AREA CLICAVEL, nao o desenho: so `min-height`, sem mexer em fonte ou padding.
+
+   Regra ESCOPADA a esta ficha, como o bloco de Produtos em `main.css` ja faz para aquela tela.
+   Nada global muda. `:deep()` porque o alvo e o no interno de um componente filho. */
+.ficha :deep(.v-btn) {
+  min-height: 40px;
+}
+
+.ficha :deep(.v-selection-control) {
+  min-height: 40px;
+}
+
 /* Entrada e saida assimetricas: quem chega desliza para o lugar, quem sai apenas recolhe — sem
    promessa de movimento onde ja nao ha nada para olhar. So `opacity` e `transform`, que o
    compositor resolve sem relayout. */
@@ -746,6 +806,13 @@ onMounted(async () => {
   .ficha__conferencia,
   .dep__campos {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* No celular o dedo nao tem a precisao do ponteiro: 44px, como o `67` §13.4 exige. Vale para
+     todos os controles da ficha — adicionar, salvar, remover, enviar, os radios e o aceite. */
+  .ficha :deep(.v-btn),
+  .ficha :deep(.v-selection-control) {
+    min-height: 44px;
   }
 }
 </style>

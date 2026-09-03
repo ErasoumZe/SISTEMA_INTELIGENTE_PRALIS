@@ -83,6 +83,16 @@ describe("ficha publica — contrato de layout", () => {
     }
   });
 
+  it("Deve_TerAlvoDeToqueDe44px_No_Celular", () => {
+    // Medido em navegador real: o default do Vuetify entrega 36px no botao e 28px em radio e
+    // checkbox. O `67` §9 pede 40px de piso e o §13.4 pede 44px no mobile — a ficha reprovava nas
+    // quatro larguras. A regra e escopada a `.ficha`: nada global muda.
+    expect(estilo).toContain(".ficha :deep(.v-btn)");
+    expect(estilo).toContain(".ficha :deep(.v-selection-control)");
+    expect(estilo).toContain("min-height: 40px");
+    expect(noCelular).toContain("min-height: 44px");
+  });
+
   it("Deve_DesligarOMovimento_Quando_APessoaPedirMenosMovimento", () => {
     // Quem marcou "reduzir movimento" no sistema muitas vezes o fez por enjoo ou vertigem. Nao e
     // preferencia estetica, e a lista de dependentes anima justamente quando ela muda de tamanho.

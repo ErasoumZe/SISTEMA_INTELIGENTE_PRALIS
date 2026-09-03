@@ -63,6 +63,14 @@ describe("a pagina do candidato nao deixa o token vazar", () => {
     expect(pagina).not.toContain('credentials: "include"');
   });
 
+  it("Deve_ImpedirORoteadorDeTratarOFragmentoComoSeletor", () => {
+    // O `scrollBehavior` padrao do Nuxt entrega `to.hash` cru como seletor de elemento, e o
+    // vue-router, em desenvolvimento, tenta `querySelector("#t=<token>")` so para diagnosticar.
+    // O `=` e invalido em CSS, aquilo lanca, e o `catch` imprime o seletor INTEIRO — o segredo — no
+    // console do navegador, antes mesmo de a pagina montar. Apagar o hash depois nao alcanca.
+    expect(pagina).toContain("scrollToTop: false");
+  });
+
   it("Deve_NaoMontarOWorkspace_Nem_LerSessao", () => {
     for (const proibido of ["AppWorkspace", "carregarSessao", "usePermissoes"]) {
       expect(pagina, proibido).not.toContain(proibido);
