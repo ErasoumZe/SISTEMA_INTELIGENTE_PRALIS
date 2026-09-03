@@ -75,6 +75,15 @@ const props = defineProps<{
   /** O token em claro, que existe UMA vez. Mora na pagina; o modal so exibe enquanto aberto. */
   tokenEmitido: string | null;
   convitePendente: boolean;
+  /**
+   * ADM-003 V5 — se ESTA tela leva a ficha do candidato. E permissao E caminho, como `podeVerTeste`:
+   * a pagina de Processos passa `admissoes_processos_ver_ficha`; a de Testes passa `false`, porque
+   * dali o processo e so leitura e a revisao e um ato, que mora na tela dona.
+   *
+   * Obrigatoria pelo mesmo motivo de `podeVerTeste`: com default, uma terceira tela montaria o modal
+   * com a porta aberta para o vazio sem ninguem perceber.
+   */
+  podeRevisarFicha: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -87,6 +96,9 @@ const emit = defineEmits<{
   (event: "revelarCpf"): void;
   (event: "emitirConvite"): void;
   (event: "revogarConvite"): void;
+  // A UNICA porta para a tela de revisao. O modal nao carrega ficha nem dependente, e nao aprova
+  // nem devolve: quem navega e a pagina, para onde este evento vai.
+  (event: "revisarFicha"): void;
 }>();
 
 const dialogCancelar = ref(false);
@@ -446,6 +458,28 @@ function confirmarCancelar() {
             </template>
           </section>
 
+          <!--
+            ADM-003 V5: a ficha do candidato mora em TELA PROPRIA. Aqui so a porta — nenhum campo da
+            ficha, nenhum dependente, nenhum aprovar/devolver. Um segundo lugar para o mesmo ato e o
+            que a regra-mae proibe, e o modal ja passa de 600 linhas.
+          -->
+          <section v-if="podeRevisarFicha" class="detalhe-ficha">
+            <h3>Ficha do candidato</h3>
+            <p class="detalhe-derivacao">
+              Os dados enviados pelo link, a declaração de dependentes e a decisão de aprovar ou devolver ficam
+              em tela própria.
+            </p>
+            <v-btn
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-file-account-outline"
+              class="detalhe-ficha__abrir"
+              @click="emit('revisarFicha')"
+            >
+              Abrir ficha do candidato
+            </v-btn>
+          </section>
+
           <p class="detalhe-autoria">
             Iniciado por {{ processo.criadoPorNome ?? "—" }} · {{ formatarDataHora(processo.criadoEm) }}<br />
             Alterado por {{ processo.atualizadoPorNome ?? "—" }} · {{ formatarDataHora(processo.atualizadoEm) }}
@@ -534,10 +568,23 @@ function confirmarCancelar() {
   min-width: 132px;
 }
 
+/* `--cx-ink-soft`, e nao `--cx-texto-suave`: este ultimo nunca existiu no `main.css`, e as frases
+   herdavam a cor do texto normal — a derivacao parecia campo. */
 .detalhe-derivacao,
 .detalhe-convite__vazio {
   margin: 0;
-  color: var(--cx-texto-suave);
+  color: var(--cx-ink-soft);
+}
+
+.detalhe-ficha {
+  display: grid;
+  gap: var(--cx-sp-2);
+  justify-items: start;
+}
+
+/* Alvo de toque: 40px de piso (`67` §9), 44px no celular (`67` §13.4). */
+.detalhe-ficha__abrir {
+  min-height: 40px;
 }
 
 .detalhe-convite__acoes {
@@ -577,7 +624,7 @@ function confirmarCancelar() {
   margin: var(--cx-sp-2) 0 0;
   min-height: 1.25rem;
   font-size: var(--cx-fs-caption);
-  color: var(--cx-texto-suave);
+  color: var(--cx-ink-soft);
 }
 
 .detalhe-autoria {
@@ -647,7 +694,8 @@ function confirmarCancelar() {
     flex: 1 1 100%;
   }
 
-  .detalhe-convite__copiar {
+  .detalhe-convite__copiar,
+  .detalhe-ficha__abrir {
     min-height: 44px;
   }
 }

@@ -134,9 +134,15 @@ describe("a V0 nao cresce para fora do escopo", () => {
     const menu = semComentarios(readFileSync(join(RAIZ, "web-vue", "utils", "menu.ts"), "utf8"));
     expect([...menu.matchAll(/"admissoes_processos"/gu)]).toHaveLength(1);
 
-    // E uma pagina so. Duas rotas para a mesma tela seria o defeito que a regra-mae proibe.
+    // E uma pagina so para a LISTA. Duas rotas para a mesma tela seria o defeito que a regra-mae
+    // proibe — uma rota por ATO, nao. A pasta existe desde a V5: a revisao da ficha e sub-rota do
+    // processo (`/admissoes_processos/:id/ficha`), tela de outro ato, alcancada so pelo modal de
+    // detalhe. `index.vue` e a lista de sempre; qualquer terceiro arquivo aqui e um segundo caminho.
     const paginas = readdirSync(join(RAIZ, "web-vue", "pages")).filter((n) => n.includes("admissoes_processos"));
-    expect(paginas).toEqual(["admissoes_processos.vue"]);
+    expect(paginas).toEqual(["admissoes_processos"]);
+    const pasta = join(RAIZ, "web-vue", "pages", "admissoes_processos");
+    expect(readdirSync(pasta).sort()).toEqual(["[id]", "index.vue"]);
+    expect(readdirSync(join(pasta, "[id]"))).toEqual(["ficha.vue"]);
   });
 });
 

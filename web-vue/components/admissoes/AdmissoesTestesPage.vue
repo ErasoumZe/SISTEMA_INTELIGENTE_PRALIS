@@ -483,6 +483,9 @@ onMounted(async () => {
     TESTE, e esse nao tem CPF proprio: a coluna e nula por CHECK, o documento mora no teste, e o
     painel do teste ja o revela com a trilha da ADM-001. Oferecer aqui seria um botao que o
     servidor recusa com 400 — e um segundo lugar para o mesmo ato.
+
+    `pode-revisar-ficha` e falso pela mesma logica: revisar a ficha e um ato, e o ato mora na tela
+    "Processos de admissao", que e a dona. Daqui o processo e so leitura.
   -->
   <ProcessoDetalheDialog
     :aberto="processoAberto"
@@ -500,6 +503,7 @@ onMounted(async () => {
     :pode-convidar="false"
     :token-emitido="null"
     :convite-pendente="false"
+    :pode-revisar-ficha="false"
     @cancelar="cancelarProcessoAdmissao"
     @fechar="processoAberto = false"
     @ver-teste="voltarAoTeste"

@@ -5,6 +5,7 @@ import type {
   PrazoTeste,
   ResultadoTeste,
   SituacaoExame,
+  SituacaoFicha,
   SituacaoProcesso,
   SituacaoTeste,
   StatusProcesso,
@@ -265,4 +266,60 @@ export const mensagemDiagnosticoTurnos: Record<Exclude<DiagnosticoTurnos, "ok">,
 export function motivoTurnoIndisponivel(turno: { ativo: boolean; completo: boolean }): string | null {
   if (turno.completo) return null;
   return turno.ativo ? "incompleto" : "inativo";
+}
+
+// =================================================================================================
+// ADM-003 V5 — a ficha do candidato, vista pelo DP. Mesma disciplina: o servidor grava a situacao,
+// a tela so a nomeia. Nao existe quinto estado, e nao existe "em revisao" gravado — revisar e ler.
+// =================================================================================================
+
+export const rotuloSituacaoFicha: Record<SituacaoFicha, string> = {
+  rascunho: "Em preenchimento",
+  enviada: "Enviada — aguardando revisão",
+  devolvida: "Devolvida para correção",
+  aprovada: "Aprovada"
+};
+
+/** O que cada situacao significa para quem revisa, dito na tela para a chip nao virar enigma. */
+export const explicacaoSituacaoFicha: Record<SituacaoFicha, string> = {
+  rascunho: "O candidato abriu o link e ainda não enviou a ficha.",
+  enviada: "O candidato enviou a ficha. Confira os dados e decida: aprovar ou devolver.",
+  devolvida: "O DP devolveu a ficha; o candidato corrige pelo mesmo link e envia de novo.",
+  aprovada: "A ficha foi aprovada. Ela não volta a ser editada pelo candidato."
+};
+
+/**
+ * Cor da chip da ficha. `enviada` e a unica que pede acao do DP, e por isso e a unica em destaque
+ * — o mesmo criterio do exame (`corSituacaoExame`): cor forte so onde ha decisao humana pendente.
+ */
+export function corSituacaoFicha(situacao: SituacaoFicha) {
+  if (situacao === "enviada") return "primary";
+  if (situacao === "aprovada") return "success";
+  return situacao === "devolvida" ? "warning" : undefined;
+}
+
+/**
+ * Aprovar e devolver so valem de `enviada`. E a regra do servidor (`FICHA_NAO_REVISAVEL`); aqui ela
+ * decide se os botoes existem. Botao que o servidor recusa com 409 e o botao morto da D-8.1.
+ */
+export function fichaRevisavel(situacao: SituacaoFicha): boolean {
+  return situacao === "enviada";
+}
+
+/**
+ * A declaracao de dependentes tem TRES estados, e a tela do DP mostra os tres. `null` NAO e "nao
+ * tem": e "nao respondeu" — o servidor recusa o envio nesse estado, entao numa ficha enviada ele so
+ * aparece se alguem gravou por fora. Dizer "nao respondeu" e mais honesto que esconder.
+ */
+export function rotuloDeclaracaoDependentes(semDependentes: boolean | null): string {
+  if (semDependentes === null) return "Não respondeu";
+  return semDependentes ? "Declarou que não tem dependentes" : "Declarou que tem dependentes";
+}
+
+/**
+ * O caminho da tela de revisao. UM lugar monta a rota: o modal do processo leva para ca, e a
+ * pagina e alcancada so por ele — nao ha item de menu, e nao deve haver.
+ */
+export function rotaRevisaoDaFicha(processoId: string): string {
+  return `/admissoes_processos/${encodeURIComponent(processoId)}/ficha`;
 }

@@ -137,6 +137,8 @@ type Cenario = {
   podeConvidar?: boolean;
   tokenEmitido?: string | null;
   convitePendente?: boolean;
+  /** O default e a tela de Testes, que NAO leva a ficha. A de Processos passa a permissao. */
+  podeRevisarFicha?: boolean;
 };
 
 function montar(cenario: Cenario = {}) {
@@ -162,7 +164,8 @@ function montar(cenario: Cenario = {}) {
       convite: cenario.convite ?? null,
       podeConvidar: cenario.podeConvidar ?? false,
       tokenEmitido: cenario.tokenEmitido ?? null,
-      convitePendente: cenario.convitePendente ?? false
+      convitePendente: cenario.convitePendente ?? false,
+      podeRevisarFicha: cenario.podeRevisarFicha ?? false
     }
   });
 }
@@ -591,6 +594,79 @@ describe("o painel lateral saiu de verdade", () => {
     // `persistent` bloquearia Escape e clique fora. Ele existe nos modais de FORMULARIO deste
     // modulo, que seguram dado nao salvo; um detalhe de leitura nao tem o que segurar.
     expect(codigo).not.toContain("persistent");
+  });
+});
+
+// ===== a ficha tem UMA porta, e ela leva para fora do modal ======================================
+
+describe("a ficha do candidato tem uma porta so, e ela leva para a tela propria", () => {
+  const PORTA = "Abrir ficha do candidato";
+
+  it("Deve_NaoMostrarAPorta_Quando_ATelaNaoLevaAFicha", () => {
+    // `false` e o que a tela de Testes passa: dali o processo e so leitura, e a revisao e um ato que
+    // mora na tela dona. Sem a porta, nao ha caminho — e nao ha botao que emita para o vazio.
+    montar({ podeRevisarFicha: false });
+    expect(botaoPorTexto(PORTA)).toBeUndefined();
+    expect(textoDoModal()).not.toContain("Ficha do candidato");
+  });
+
+  it("Deve_MostrarAPorta_E_EmitirRevisarFicha_Quando_ATelaLeva", async () => {
+    const wrapper = montar({ podeRevisarFicha: true });
+    const porta = botaoPorTexto(PORTA);
+    expect(porta).toBeDefined();
+    porta?.click();
+    await nextTick();
+    expect(wrapper.emitted("revisarFicha")).toHaveLength(1);
+  });
+
+  it("Deve_OModalNaoCarregarAFicha_NemDependente_NemDecidir", () => {
+    // A porta e a UNICA coisa da ficha que o modal conhece. Campo da ficha, lista de dependentes e
+    // aprovar/devolver moram na tela de revisao; se algum voltar para ca, existem dois lugares para
+    // o mesmo ato — e o modal, que ja passa de 600 linhas, vira o componente que o §4.5 proibe.
+    // Por IDENTIFICADOR, nao por palavra: a frase da porta pode dizer "aprovar ou devolver" — o que
+    // nao pode existir aqui e o contrato, o componente, a rota ou o campo da ficha.
+    const codigo = semComentarios(readFileSync(join(PASTA, "ProcessoDetalheDialog.vue"), "utf8")).toLowerCase();
+    for (const proibido of [
+      "ficharevisao",
+      "dependenterevisao",
+      "ficha/aprovar",
+      "ficha/devolver",
+      "revisaopendencias",
+      "semdependentes",
+      "cpfinformado",
+      "emit('aprovar')",
+      "emit('devolver'"
+    ]) {
+      expect(codigo, proibido).not.toContain(proibido);
+    }
+  });
+
+  it("Deve_CadaTelaDeclararSeLevaAFicha_E_SoAquelaQueLevaEscutar", () => {
+    // Mesma guarda do `pode-ver-teste`, pelo mesmo motivo: a prop e obrigatoria, mas o VALOR e o que
+    // separa a tela dona (Processos) da tela de leitura (Testes). Por contagem e sem comentarios.
+    const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+    const testes = semComentarios(readFileSync(join(PASTA, "AdmissoesTestesPage.vue"), "utf8"));
+
+    expect([...processos.matchAll(/:pode-revisar-ficha="podeRevisarFicha"/gu)]).toHaveLength(1);
+    expect([...processos.matchAll(/:pode-revisar-ficha="false"/gu)]).toHaveLength(0);
+    expect([...testes.matchAll(/:pode-revisar-ficha="false"/gu)]).toHaveLength(1);
+    expect([...testes.matchAll(/:pode-revisar-ficha="podeRevisarFicha"/gu)]).toHaveLength(0);
+
+    // Quem leva escuta; quem nao leva nao tem listener morto. As quatro grafias de listener.
+    const ESCUTA = /(?:@|v-on:)revisar-?[Ff]icha/u;
+    expect(processos).toMatch(ESCUTA);
+    expect(testes).not.toMatch(ESCUTA);
+
+    // E a tela dona deriva a prop da permissao de VER a ficha, nao inventa uma quarta chave.
+    expect(processos).toContain('"admissoes_processos_ver_ficha"');
+  });
+
+  it("Deve_ATelaDonaNavegarPeloUnicoMontadorDeRota", () => {
+    // A rota da revisao e montada num lugar so (`rotaRevisaoDaFicha`). Uma string solta na pagina
+    // continuaria apontando para a rota velha no dia em que ela mudasse.
+    const processos = semComentarios(readFileSync(join(PASTA, "AdmissoesProcessosPage.vue"), "utf8"));
+    expect(processos).toContain("rotaRevisaoDaFicha(");
+    expect(processos).not.toMatch(/["'`]\/admissoes_processos\/\$\{/u);
   });
 });
 

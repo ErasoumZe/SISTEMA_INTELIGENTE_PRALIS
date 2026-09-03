@@ -16,6 +16,7 @@ import { mascararCnpj } from "~/utils/formatacao";
 import { ErroApiCliente } from "~/composables/useApi";
 import { mensagemErro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
+import { rotaRevisaoDaFicha } from "~/utils/admissoes";
 import ProcessoDetalheDialog from "~/components/admissoes/ProcessoDetalheDialog.vue";
 import ProcessoInternosDialog from "~/components/admissoes/ProcessoInternosDialog.vue";
 import ProcessoNovoDialog from "~/components/admissoes/ProcessoNovoDialog.vue";
@@ -31,6 +32,7 @@ import ProcessosTabela from "~/components/admissoes/ProcessosTabela.vue";
  * Nenhum `empresaId` sai daqui: a empresa e derivada no servidor a partir do perfil autorizado.
  */
 const { apiGet, apiGetPaginado, apiPost, apiPut, apiDelete } = useApi();
+const router = useRouter();
 
 const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
 const permissoes = computed(() => sessao.value?.perfil?.permissoes ?? []);
@@ -44,6 +46,8 @@ const podeEditarInternos = computed(() =>
 const podeVerCpf = computed(() => temPermissao(permissoes.value, "admissoes_processos_visualizar"));
 // ADM-003 V2. Emitir e revogar sao o MESMO direito: quem abre precisa poder fechar.
 const podeConvidar = computed(() => temPermissao(permissoes.value, "admissoes_processos_convidar"));
+// ADM-003 V5. Ver a ficha abre a tela de revisao; DECIDIR e outra permissao, conferida la.
+const podeRevisarFicha = computed(() => temPermissao(permissoes.value, "admissoes_processos_ver_ficha"));
 
 const CODIGOS_BLOQUEIO = new Set(["PROFILE_COMPANY_NOT_SET", "PROFILE_COMPANY_OUT_OF_SCOPE"]);
 
@@ -327,6 +331,17 @@ async function revelarCpf() {
   }
 }
 
+/**
+ * A revisao da ficha e TELA PROPRIA (ADM-003 V5), e esta e a unica porta. O modal fecha ao navegar
+ * — e fechar limpa CPF revelado e token, como sempre: nada do processo viaja para a outra tela.
+ */
+function revisarFicha() {
+  if (!processo.value) return;
+  const destino = rotaRevisaoDaFicha(processo.value.id);
+  fecharDetalhe();
+  void router.push(destino);
+}
+
 async function cancelarProcesso() {
   if (!processo.value) return;
   processando.value = true;
@@ -423,8 +438,10 @@ onMounted(async () => {
     :pode-convidar="podeConvidar"
     :token-emitido="tokenEmitido"
     :convite-pendente="convitePendente"
+    :pode-revisar-ficha="podeRevisarFicha"
     @emitir-convite="emitirConvite"
     @revogar-convite="revogarConvite"
+    @revisar-ficha="revisarFicha"
     @fechar="fecharDetalhe"
     @cancelar="cancelarProcesso"
     @revelar-cpf="revelarCpf"

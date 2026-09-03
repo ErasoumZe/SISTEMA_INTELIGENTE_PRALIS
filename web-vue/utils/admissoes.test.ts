@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  corSituacaoFicha,
   diagnosticoTurnos,
+  fichaRevisavel,
   mensagemDiagnosticoTurnos,
   motivoTurnoIndisponivel,
-  processoCancelavel
+  processoCancelavel,
+  rotaRevisaoDaFicha,
+  rotuloDeclaracaoDependentes
 } from "./admissoes";
 
 // Estas quatro regras moravam dentro de componentes e cada uma escondia um defeito de tela:
@@ -64,5 +68,50 @@ describe("motivoTurnoIndisponivel", () => {
     expect(motivoTurnoIndisponivel({ ativo: true, completo: false })).toBe("incompleto");
     // Etiqueta e dias podem estar preenchidos: o que falta e o turno estar ativo.
     expect(motivoTurnoIndisponivel({ ativo: false, completo: false })).toBe("inativo");
+  });
+});
+
+// ADM-003 V5 — a ficha vista pelo DP. Regras puras, fora dos componentes, pelo mesmo motivo das
+// quatro acima: cada uma decide se um botao existe ou o que uma frase diz.
+
+describe("fichaRevisavel", () => {
+  it("Deve_PermitirDecidir_So_Quando_Enviada", () => {
+    // E a regra do servidor (`FICHA_NAO_REVISAVEL`): aprovar e devolver so valem de `enviada`.
+    // Oferecer o botao em outro estado seria o botao morto que a D-8.1 tirou do modal.
+    expect(fichaRevisavel("enviada")).toBe(true);
+    expect(fichaRevisavel("rascunho")).toBe(false);
+    expect(fichaRevisavel("devolvida")).toBe(false);
+    expect(fichaRevisavel("aprovada")).toBe(false);
+  });
+});
+
+describe("rotuloDeclaracaoDependentes", () => {
+  it("Deve_DistinguirOsTresEstados", () => {
+    // `null` NAO e "nao tem": e "nao respondeu". Confundir os dois poria na tela do DP uma
+    // declaracao que o candidato nunca fez.
+    expect(rotuloDeclaracaoDependentes(null)).toBe("Não respondeu");
+    expect(rotuloDeclaracaoDependentes(true)).toBe("Declarou que não tem dependentes");
+    expect(rotuloDeclaracaoDependentes(false)).toBe("Declarou que tem dependentes");
+  });
+});
+
+describe("corSituacaoFicha", () => {
+  it("Deve_DestacarSoOQuePedeDecisao", () => {
+    // Cor forte so onde ha decisao humana pendente — mesmo criterio do exame.
+    expect(corSituacaoFicha("enviada")).toBe("primary");
+    expect(corSituacaoFicha("aprovada")).toBe("success");
+    expect(corSituacaoFicha("devolvida")).toBe("warning");
+    expect(corSituacaoFicha("rascunho")).toBeUndefined();
+  });
+});
+
+describe("rotaRevisaoDaFicha", () => {
+  it("Deve_SerSubRotaDoProcesso_E_NaoLevarNadaAlemDoId", () => {
+    // A ficha e DE um processo, entao a rota e filha da rota do processo. So o id viaja: nem
+    // token, nem CPF, nem versao — nada que o historico do navegador possa guardar.
+    expect(rotaRevisaoDaFicha("01a06746-d313-7f5c-b860-915d5ecb69f0")).toBe(
+      "/admissoes_processos/01a06746-d313-7f5c-b860-915d5ecb69f0/ficha"
+    );
+    expect(rotaRevisaoDaFicha("a/b")).toBe("/admissoes_processos/a%2Fb/ficha");
   });
 });
