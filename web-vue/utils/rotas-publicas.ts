@@ -9,14 +9,20 @@
 // A correcao normaliza SO o pathname usado na comparacao. Nao se amplia a allowlist por prefixo:
 // `/reset-password/qualquer-coisa` continua protegida, porque so a barra FINAL e removida.
 
+// ADM-003 V3: a ficha do candidato. Nao e tela de autenticacao — e a unica tela do sistema aberta
+// a quem NAO tem conta. O acesso e provado pelo token do convite, no header, e a pagina nao monta
+// AppWorkspace nem le sessao.
+//
+// Constante nomeada porque agora ha DOIS leitores: esta allowlist e o montador do link que o DP
+// entrega ao candidato (`linkDoConvite`). Se o caminho mudar, os dois mudam juntos — com a string
+// solta em cada lugar, o link continuaria apontando para a rota velha sem ninguem perceber.
+export const ROTA_ADMISSAO = "/admissao";
+
 export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   "/login",
   "/forgot-password",
   "/reset-password",
-  // ADM-003 V3: a ficha do candidato. Nao e tela de autenticacao — e a unica tela do sistema
-  // aberta a quem NAO tem conta. O acesso e provado pelo token do convite, no header, e a
-  // pagina nao monta AppWorkspace nem le sessao.
-  "/admissao"
+  ROTA_ADMISSAO
 ]);
 
 // Remove barras finais, preservando a raiz. `/reset-password/` e `/reset-password//` viram

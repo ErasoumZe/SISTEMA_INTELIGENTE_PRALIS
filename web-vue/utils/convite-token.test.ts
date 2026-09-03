@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CABECALHO_DO_CONVITE, tokenDoFragmento } from "./convite-token";
+import { CABECALHO_DO_CONVITE, linkDoConvite, tokenDoFragmento } from "./convite-token";
+import { ROTA_ADMISSAO } from "./rotas-publicas";
 
 /**
  * O token do candidato nao pode escapar do fragmento e da memoria da aba. Estes testes travam as
@@ -24,6 +25,45 @@ describe("tokenDoFragmento", () => {
   it("Deve_IgnorarEspacos_E_ConviverComOutrosParametros", () => {
     expect(tokenDoFragmento("#t=%20abc%20")).toBe("abc");
     expect(tokenDoFragmento("#a=1&t=abc&b=2")).toBe("abc");
+  });
+});
+
+describe("linkDoConvite", () => {
+  const TOKEN = "a".repeat(64);
+
+  it("Deve_MontarOLinkComOrigemDoNavegador_E_TokenNoFragmento", () => {
+    expect(linkDoConvite("http://localhost:5185", TOKEN)).toBe(`http://localhost:5185/admissao#t=${TOKEN}`);
+    // Producao serve na raiz do dominio, atras do proxy: a origem que vale e a do navegador do DP.
+    expect(linkDoConvite("https://sistema.exemplo", TOKEN)).toBe(`https://sistema.exemplo/admissao#t=${TOKEN}`);
+  });
+
+  it("Deve_UsarAConstanteDaRota_E_NaoUmCaminhoEscritoAMao", () => {
+    // Se alguem mudar a rota publica, o link tem de acompanhar sozinho.
+    expect(linkDoConvite("https://x.exemplo", TOKEN)).toContain(`${ROTA_ADMISSAO}#t=`);
+  });
+
+  it("Deve_PorOTokenSoNoFragmento_Nunca_Em_QueryOuCaminho", () => {
+    const link = new URL(linkDoConvite("https://x.exemplo", TOKEN));
+    expect(link.pathname).toBe(ROTA_ADMISSAO);
+    expect(link.search).toBe("");
+    expect(link.hash).toBe(`#t=${TOKEN}`);
+  });
+
+  it("Deve_TolerarBarraFinalNaOrigem", () => {
+    expect(linkDoConvite("https://x.exemplo/", TOKEN)).toBe(`https://x.exemplo/admissao#t=${TOKEN}`);
+  });
+
+  it("Deve_DevolverVazio_Quando_FaltaOrigemOuToken", () => {
+    // Vazio e melhor que um link quebrado: quem chama decide o que mostrar, e nao ha meia-entrega.
+    expect(linkDoConvite("", TOKEN)).toBe("");
+    expect(linkDoConvite("https://x.exemplo", "")).toBe("");
+    expect(linkDoConvite("https://x.exemplo", "   ")).toBe("");
+  });
+
+  it("Deve_SobreviverAoIdaEVolta_Com_TokenDoFragmento", () => {
+    // O escritor e o leitor moram no mesmo arquivo justamente para isto valer sempre.
+    const link = new URL(linkDoConvite("https://x.exemplo", TOKEN));
+    expect(tokenDoFragmento(link.hash)).toBe(TOKEN);
   });
 });
 
