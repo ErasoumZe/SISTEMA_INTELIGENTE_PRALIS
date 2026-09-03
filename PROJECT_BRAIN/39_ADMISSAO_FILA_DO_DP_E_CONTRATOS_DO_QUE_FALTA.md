@@ -159,7 +159,13 @@ rotas de ficha. Há teste de integração e de navegador para as duas coisas.
 
 ---
 
-# §2 — Catálogo de funções operacionais · PARADO, AGUARDANDO UMA DECISÃO
+# §2 — Catálogo de funções operacionais · ~~PARADO~~ **RESPONDIDO em 03/09/2026**
+
+> **A decisão saiu, e a vertical foi entregue.** Marco escolheu a opção **(a)**: o DP administra —
+> vê, cria, edita, desativa e reativa —, a Gerência apenas visualiza, e não existe exclusão física.
+> O registro completo, com as decisões técnicas e um achado aberto sobre renomear, está no **`40`**.
+>
+> O texto abaixo fica como estava, porque é o levantamento que sustentou a escolha.
 
 ## O que já está decidido, e é bastante
 

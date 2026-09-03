@@ -53,13 +53,14 @@ a necessidade.
 | [36](36_CADASTRO_COLABORADORES_PRE_CADASTRO_E_SITUACOES.md) | **Pre-cadastro e situacoes** | de onde vem quem ja trabalha: ficha contabil nao e carga, a fila de pre-cadastro, e os dois vocabularios de situacao |
 | [37](37_ADMISSAO_FICHA_PUBLICA_E_DEPENDENTES.md) | **Ficha publica e dependentes** | ADM-003 V3/V4 implementadas: link sem login, token so no fragmento e no cabecalho, dependentes com CPF conferido tambem pelo BANCO (D-7) |
 | [38](38_ADMISSAO_REVISAO_DA_FICHA_PELO_DP.md) | **Revisao da ficha pelo DP** | ADM-003 V5 implementada: tela propria com uma porta so, dependentes sem CPF (nao e mascara: a coluna nao e lida), processo alheio virou 404 |
-| [39](39_ADMISSAO_FILA_DO_DP_E_CONTRATOS_DO_QUE_FALTA.md) | **Fila do DP e contratos do que falta** | ADM-003 V6 implementada: fila e recorte da lista, situacao da ficha derivada, sem estado novo — e os contratos das 6 verticais restantes, com o que trava cada uma |
+| [39](39_ADMISSAO_FILA_DO_DP_E_CONTRATOS_DO_QUE_FALTA.md) | **Fila do DP e contratos do que falta** | ADM-003 V6 implementada: fila e recorte da lista, situacao da ficha derivada, sem estado novo — e os contratos das 6 verticais restantes, com o que trava cada uma ⚠️ _a §2 (funcoes) foi respondida pelo `40`_ |
+| [40](40_CATALOGO_DE_FUNCOES_OPERACIONAIS.md) | **Catalogo de funcoes operacionais** | quem administra: DP ve/cria/edita/desativa, Gerencia so visualiza, e NAO existe exclusao — nem rota, nem botao, nem permissao |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **40**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **41**.
 
 ## Regra de ouro deste brain
 
