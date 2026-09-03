@@ -4,10 +4,56 @@
 > **Documento de mapeamento e proposta.** Sucede a `31` (ADM-001), a `33` (ADM-002 V0) e a `34`
 > (ADM-003 V1A/V1B), e não revoga nenhuma decisão delas.
 >
-> **Do mapa saiu uma correção, e só ela.** O achado A-1 (seção 12) virou a migration **0036** e a
-> mudança em `revelarCpfDoProcesso`, aprovadas por Marco em 31/08/2026. **Nada mais deste documento
-> foi implementado**: o SQL da seção 6 segue proposta, e **nenhuma migration foi aplicada em banco
-> nenhum** — nem a 0036.
+> **⚠️ ESTE DOCUMENTO ENVELHECEU EM PARTE. Leia a seção 0.1 antes de qualquer coisa.**
+>
+> Quando foi escrito, nada além do achado A-1 tinha sido implementado. Desde então saíram as
+> verticais **V2, V3, V4** (documentadas na `37`) e **V5** (na `38`), e boa parte do que aqui está
+> marcado **PROPOSTA** virou código — com **desvios**, que a 0.1 lista. O que continua valendo é o
+> **mapa**, os **quatro bloqueios** e as propostas **P-4** e **P-5**.
+
+## 0.1 Correção de estado — 03/09/2026
+
+Escrito por quem entregou a V5, sobre o HEAD `cb77d5d`. **Nada abaixo é opinião: é o que o código
+diz hoje.** Onde este documento e a realidade divergirem, vale esta seção e os documentos `37` e `38`.
+
+| O que o 35 diz | O que é verdade hoje | Onde está a verdade |
+| --- | --- | --- |
+| "Nada mais foi implementado" (cabeçalho) | V2, V3, V4 e V5 saíram. Existem as migrations **0037** e **0038** | `37`, `38` |
+| §2: convite, formulário e dependentes "não existem" | **existem os três** | `37` §1 e §2 |
+| §3: E2, E3, E4 e E6 "faltam" | **as quatro existem**. Faltam E5, E7 e E8 | `37`, `38` |
+| §4: etapa derivada (`etapaDoProcesso`) | **não foi implementada, e não foi decidida.** `situacaoDoProcesso` segue com três valores. O que saiu foi o ciclo **da ficha** (`rascunho·enviada·devolvida·aprovada`) | — decisão ainda aberta |
+| §6: "nada foi gerado como migration" | vale só para **P-4** e **P-5**. P-1, P-2 e P-3 viraram a **0037**, com desvios (§0.1.1) | `db/migrations/0037_awesome_maximus.sql` |
+| §7.1: permissões `admissoes_processos_revisar` e `_efetivar` | os nomes reais são **`admissoes_processos_ver_ficha`** e **`admissoes_processos_revisar_ficha`**. `_efetivar` **não existe** | `shared/src/autenticacao/index.ts` |
+| §7.1: revogar convite por `POST .../convite/revogar` | é **`DELETE /api/admissoes/processos/:id/convite`**. E existe um `GET` do painel, que o 35 não previa | `api/src/admissoes/convites.controller.ts` |
+| §7.1: "A CONFIRMAR" se a Gerência convida | **respondido: não.** As três permissões da ficha e do convite são só do DP | `db/src/referencia-permissoes.ts` |
+| §7.2: rotas públicas em `/api/admissoes/convite/*` | o prefixo real é **`/api/admissao/`** (singular): `ficha`, `ficha/enviar`, `dependentes` | `api/src/app.ts` (allowlist) |
+| §7.2: "teto por IP **e** por token" | saiu **um** teto só, por token com queda para IP | `api/src/admissoes/convite-http.ts` |
+| §7.3: o índice parcial exclui "apenas `cpf_revelado`" | a **0037** ampliou para **seis** ações | `db/migrations/0037_awesome_maximus.sql` |
+| §7.3: a ação `efetivado` entra no CHECK | **não entrou.** Entraram as cinco de convite e ficha; `efetivado` fica para a V6 | idem |
+| §7.3: a trilha "sempre teve autor humano" | mudou: `ator_usuario_id` virou anulável e ganhou `convite_id`, com **XOR** entre os dois | `37` §1.5 |
+| §8: nada sobre aviso de teste | existe `AVISO-TESTE-ADMISSAO-V1` e as guardas **G-1/G-2/G-3** | `36` §6, `37` §6 |
+| §9: bloqueio 1 trava "E3 e E4" | trava a **saída de ambiente de teste**. E3 e E4 estão no ar sob aviso de teste | `36` §6 |
+| §10: V2, V3, V4 pendentes | **entregues.** Restam V5-documentos, V6-efetivação e V7-Conplus. Atenção: o "V5" desta tabela é **documentos**; a `38` chama de V5 a **revisão do DP**, que aqui era parte da V3 | `38` |
+| §12 A-3 (comentário desatualizado em `shared`) | **RESOLVIDO** | `shared/src/admissoes/processos.ts` |
+
+### 0.1.1 Os desvios da 0037 em relação ao SQL da seção 6
+
+Registrados porque quem ler o §6 como se fosse a migration vai errar nome de coluna:
+
+- `data_nascimento` → **`nascimento`** · `rg_emitido_em` → **`rg_emissao`** ·
+  `naturalidade_municipio` + `naturalidade_uf` → **uma** coluna `naturalidade`;
+- **não** foram criados: `primeiro_emprego`, os três campos de contato de emergência, o CHECK de
+  telefone e o de UF de naturalidade;
+- **foram** criados sem constar da proposta: título de eleitor (3 colunas), dados bancários (5
+  colunas), e o índice parcial `..._aviso_teste_idx`;
+- `admissoes_convites` ganhou **`aviso_privacidade_versao NOT NULL`**, que amarra o convite à versão
+  do aviso — é o mecanismo da guarda G-2, e o §6 não o tinha;
+- **a decisão do §6 sobre o aceite foi invertida.** O 35 dizia que exigir aceite no envio moraria no
+  serviço, "porque um CHECK em `enviada` travaria uma devolução legítima". A 0037 faz o contrário: o
+  ramo `enviada` do CHECK exige aceite, versão e declaração de dependentes. Funciona porque **reenviar
+  zera o carimbo do revisor**, não o aceite.
+
+---
 
 ## 0. Como ler
 
@@ -30,8 +76,10 @@ Duas coisas **não** são inventadas aqui, em nenhuma seção: o **texto do avis
 > DP registra a pessoa → o exame manda no andamento → **ASO apto** libera o convite → link de **14
 > dias** → candidato preenche → DP revisa → vira **colaborador** → Conplus.
 
-Das oito estações, **três existem** hoje e **cinco não existem** — e duas das cinco estão bloqueadas
-por decisão que não é técnica.
+Das oito estações, **seis existem** hoje e **três não existem** — e as três estão bloqueadas por
+decisão que não é técnica.
+
+*(Escrito quando eram três e cinco. Corrigido em 03/09/2026; ver §0.1.)*
 
 ---
 
@@ -51,19 +99,21 @@ por decisão que não é técnica.
 | CPF mascarado + revelação auditada | `POST .../:id/cpf` · trilha `cpf_revelado` | completo |
 | Trilha append-only | `admissoes_*_historico`, só nomes de campo | completo |
 | Lista e detalhe (modal central) | `web-vue/components/admissoes/` | completo |
-| **Convite ao candidato** | placeholder desabilitado em `ProcessoDetalheDialog.vue:291` | **não existe** |
-| **Formulário do candidato** | — | **não existe** |
+| ~~**Convite ao candidato**~~ | `admissoes_convites` · `convites.controller.ts` · painel no modal | **existe** (V2) |
+| ~~**Formulário do candidato**~~ | `web-vue/pages/admissao.vue` · `ficha.controller.ts` | **existe** (V3) |
 | **Documentos e anexos** | — | **não existe** (BLOQUEIO) |
-| **Dependentes** | — | **não existe** |
+| ~~**Dependentes**~~ | `admissoes_processos_dependentes` · `dependentes.controller.ts` | **existe** (V4) |
+| **Revisão do DP** | `GET/POST .../:id/ficha*` · tela `/admissoes_processos/:id/ficha` | **existe** (V5, `38`) |
 | **Vínculo com `colaboradores`** | não há `colaborador_id` no processo | **não existe** |
 | **Conplus** | zero ocorrências no repositório inteiro | **não especificado** |
 
 Estados gravados hoje, e só eles: `iniciado` · `pausado` · `cancelado`.
 Situações derivadas: Ativo · Pausado · Inativo (`situacaoDoProcesso`, em `shared`).
 
-> **FATO relevante para qualquer plano:** a migration **0035 não foi aplicada em banco nenhum** — nem
-> em `padaria_adm001`, nem em produção (`PROJECT_BRAIN/34`). O código desta branch pressupõe um schema
-> que ainda não existe em lugar nenhum.
+> **FATO relevante para qualquer plano, e ele piorou:** a **0035** nunca foi aplicada em banco
+> persistente, e depois dela vieram **0036, 0037 e 0038**. São **quatro** migrations empilhadas que só
+> existem em arquivo e em bancos descartáveis. `padaria_adm001` continua com a linha legada que fará a
+> 0035 falhar de propósito. Aplicar isso em produção é decisão de Marco, e continua não tomada.
 
 ---
 
@@ -73,11 +123,11 @@ Situações derivadas: Ativo · Pausado · Inativo (`situacaoDoProcesso`, em `sh
 | --- | --- | --- | --- | --- | --- |
 | E0 | Pré-cadastro | DP / Gerência | efetivar teste **ou** "+ Novo cadastro" | nasce `iniciado` | **existe** |
 | E1 | Exame admissional | DP | registrar situação | `aso_nao_apto` → `pausado`; `aso_apto` → retoma | **existe** |
-| E2 | Liberação do convite | sistema | `exame = aso_apto` **e** `status = iniciado` | nenhum (é uma guarda) | **falta** |
-| E3 | Convite | DP | gerar link | passa a existir convite ativo | **falta** (BLOQUEIO 1) |
-| E4 | Formulário | **candidato** | abrir o link | rascunho → enviado | **falta** |
+| E2 | Liberação do convite | sistema | `exame = aso_apto` **e** `status = iniciado` | nenhum (é uma guarda) | **existe** |
+| E3 | Convite | DP | gerar link | passa a existir convite ativo | **existe** (só em ambiente de teste) |
+| E4 | Formulário | **candidato** | abrir o link | rascunho → enviado | **existe** |
 | E5 | Documentos | candidato | anexar | — | **falta** (BLOQUEIO 2) |
-| E6 | Revisão | DP | aprovar ou devolver | devolver reabre o link | **falta** |
+| E6 | Revisão | DP | aprovar ou devolver | devolver reabre o link | **existe** (`38`) |
 | E7 | Efetivação | DP | criar/vincular colaborador | `colaborador_id` preenchido | **falta** (BLOQUEIO 3) |
 | E8 | Conplus | ? | ? | ? | **não especificado** (BLOQUEIO 4) |
 
@@ -92,9 +142,11 @@ na tela é conveniência; a regra mora na rota — o mesmo desenho do turno inco
 
 ### E4/E6 — o vaivém
 
-**PROPOSTA.** Devolver para correção **não** cria um segundo convite: reabre o mesmo, com prazo
-recontado ou mantido (**A CONFIRMAR** com o DP — recomendo **recontar**, porque quem devolve espera
-resposta a partir de agora). O candidato nunca vê "reprovado": vê o que falta.
+**IMPLEMENTADO** (V3 e V5). Devolver **não** cria um segundo convite: reabre o mesmo. O candidato
+nunca vê "reprovado" — vê o texto que o DP escreveu.
+
+O prazo **não é recontado**: continua o da emissão, 14 dias gravados na linha. A proposta de recontar
+foi descartada na prática, e a saída para o link vencido é o DP emitir outro, o que revoga o anterior.
 
 ---
 
@@ -555,10 +607,10 @@ terceiro que não é usuário do sistema.
 | Rota | Permissão | Resposta | Guarda |
 | --- | --- | --- | --- |
 | `POST /api/admissoes/processos/:id/convite` | `admissoes_processos_convidar` | **201** `{ link, expiraEm }` | exige `exame = aso_apto` e `status = iniciado` |
-| `POST /api/admissoes/processos/:id/convite/revogar` | `admissoes_processos_convidar` | 204 | — |
-| `GET /api/admissoes/processos/:id/ficha` | `admissoes_processos_visualizar` | 200 | CPF **mascarado**, como no resto do módulo |
-| `POST /api/admissoes/processos/:id/ficha/aprovar` | `admissoes_processos_revisar` | 204 | só de `enviada` |
-| `POST /api/admissoes/processos/:id/ficha/devolver` | `admissoes_processos_revisar` | 204 | pendências **obrigatórias** |
+| `DELETE /api/admissoes/processos/:id/convite` | `admissoes_processos_convidar` | 204 | — |
+| `GET /api/admissoes/processos/:id/ficha` | `admissoes_processos_ver_ficha` | 200 | sem CPF do candidato; dependentes com `cpfInformado` (`38` D-4) |
+| `POST /api/admissoes/processos/:id/ficha/aprovar` | `admissoes_processos_revisar_ficha` | 204 | só de `enviada` |
+| `POST /api/admissoes/processos/:id/ficha/devolver` | `admissoes_processos_revisar_ficha` | 204 | pendências **obrigatórias** |
 | `POST /api/admissoes/processos/:id/efetivar` | `admissoes_processos_efetivar` | **201** `{ colaboradorId }` | só de `ficha = aprovada` |
 
 O `POST .../convite` é a **única** rota que devolve o link, e devolve **uma vez** — reler o processo
@@ -570,9 +622,10 @@ mapeia chave de **menu**, e nenhuma destas é menu):
 
 | Permissão | DP | Gerência | Por quê |
 | --- | --- | --- | --- |
-| `admissoes_processos_convidar` | ✔ | **A CONFIRMAR** | quem segura o ASO decide quando convidar |
-| `admissoes_processos_revisar` | ✔ | ✘ | mesma fronteira do bloco interno (`34` D-7) |
-| `admissoes_processos_efetivar` | ✔ | **A CONFIRMAR** | é o ato que cria cadastro operacional |
+| `admissoes_processos_convidar` | ✔ | **✘** (respondido) | o DP é quem conversa com o candidato |
+| `admissoes_processos_ver_ficha` | ✔ | ✘ | mesma fronteira do bloco interno (`34` D-7) |
+| `admissoes_processos_revisar_ficha` | ✔ | ✘ | idem — e ver e decidir são chaves **separadas** |
+| `admissoes_processos_efetivar` | — | — | **não existe**. Fica para a V6 |
 
 `usuario_admin` herda tudo por `permissoesAcessoTotal` — não há o que conceder.
 
@@ -583,12 +636,15 @@ Duas allowlists precisam ser tocadas, as duas *default-deny*:
 ([web-vue/utils/rotas-publicas.ts](web-vue/utils/rotas-publicas.ts)). Rota nova nasce protegida nos
 dois lados — abrir é ato deliberado, e deve ser revisado como tal.
 
-| Rota | O que devolve/faz |
+> **Os caminhos abaixo NÃO são os que saíram.** O prefixo real é `/api/admissao/` (singular), sem a
+> palavra `convite`. A tabela fica como registro do desenho; a lista verdadeira está na `37`.
+
+| Rota proposta | Rota real |
 | --- | --- |
-| `GET /api/admissoes/convite` | nome, empresa, **CPF mascarado**, o que falta preencher, versão do aviso |
-| `PUT /api/admissoes/convite/ficha` | salva rascunho (idempotente, com `versao`) |
-| `POST /api/admissoes/convite/dependentes` · `PUT`/`DELETE .../:id` | lista de dependentes |
-| `POST /api/admissoes/convite/enviar` | fecha a ficha: `rascunho`/`devolvida` → `enviada` |
+| `GET /api/admissoes/convite` | **`GET /api/admissao/ficha`** |
+| `PUT /api/admissoes/convite/ficha` | **`PUT /api/admissao/ficha`** |
+| `POST /api/admissoes/convite/dependentes` · `PUT`/`DELETE .../:id` | **`GET`/`POST /api/admissao/dependentes`** · `PUT`/`DELETE .../:id` |
+| `POST /api/admissoes/convite/enviar` | **`POST /api/admissao/ficha/enviar`** |
 
 **PROPOSTA — o token não vai no caminho da rota, e não vai na query.** Ele viaja em header
 (`x-admissao-convite`). A razão está escrita no próprio repositório: o `api/src/auth/email.ts:9-12`
@@ -614,9 +670,12 @@ de um limite por token — o link é de uma pessoa, não de uma população.
 
 ### 7.3 Trilha — decisão tomada em 31/08/2026
 
-As ações novas (`convite_gerado`, `convite_revogado`, `ficha_enviada`, `ficha_devolvida`,
-`ficha_aprovada`, `efetivado`) ampliam o CHECK de `admissoes_processos_historico_acao_check`. Aditivo,
-barato.
+As ações novas ampliam o CHECK de `admissoes_processos_historico_acao_check`. Aditivo, barato.
+
+> **Correção (03/09/2026):** a 0037 entrou com **cinco** — `convite_gerado`, `convite_revogado`,
+> `ficha_enviada`, `ficha_devolvida`, `ficha_aprovada`. **`efetivado` não entrou**, porque a
+> efetivação não existe. E o índice parcial passou a excluir as **seis** ações que não consomem versão
+> do processo, não "apenas `cpf_revelado`" como o parágrafo abaixo diz.
 
 **O que não era barato já foi resolvido.** `admissoes_processos_historico_evento_unico` nasceu único em
 `(processo_id, versao)` **sem cláusula parcial** ([0033](db/migrations/0033_blue_trauma.sql#L48)),
@@ -685,18 +744,23 @@ antes do BLOQUEIO 1 cair. Construir a estrutura não é inventar o texto.
 
 ## 10. Ordem de execução sugerida
 
-| Fatia | Conteúdo | Depende de |
+| Fatia | Conteúdo | Estado |
 | --- | --- | --- |
-| **V2** | Convite: tabela, geração, revogação, guarda de ASO apto, tela do DP | BLOQUEIO 1 para **publicar** |
-| **V3** | Ficha do candidato + **revisão do DP**, juntas | V2 |
-| **V4** | Dependentes | V3 |
-| **V5** | Documentos e anexos | BLOQUEIO 2 |
-| **V6** | Efetivação → `colaboradores` | BLOQUEIO 3 |
-| **V7** | Conplus | BLOQUEIO 4 |
+| **V2** | Convite: tabela, geração, revogação, guarda de ASO apto, tela do DP | **entregue** (`37`) |
+| **V3** | Ficha do candidato | **entregue** (`37`) — a revisão do DP saiu depois, ver abaixo |
+| **V4** | Dependentes | **entregue** (`37`) |
+| **V5 (doc `38`)** | **Revisão do DP**: tela própria, dependentes sem CPF | **entregue** (`38`) |
+| **Documentos e anexos** | era o "V5" desta tabela | **falta** — BLOQUEIO 2 |
+| **V6** | Efetivação → `colaboradores` | **falta** — BLOQUEIO 3 |
+| **V7** | Conplus | **falta** — BLOQUEIO 4 |
 
-**V3 e a revisão vão na mesma fatia, e não em duas.** Formulário que o candidato preenche e ninguém
-lê é meia entrega — a `AGENTS.md` §4.3 chama isso pelo nome. Se não couber, o corte é por **bloco de
-campos** (identificação primeiro, endereço depois), nunca por metade do caminho.
+> **Cuidado com o número.** Esta tabela chamava de "V5" os **documentos**; a `38` chama de V5 a
+> **revisão do DP**, que aqui estava dentro da V3. Quem citar "V5" precisa dizer qual das duas.
+
+**V3 e a revisão iam na mesma fatia, e não foram.** Formulário que o candidato preenche e ninguém lê
+é meia entrega — a `AGENTS.md` §4.3 chama isso pelo nome, e foi exatamente o que aconteceu: a V3
+entregou as três rotas do DP **sem tela que as chamasse**, e elas ficaram dois dias sem call-site
+nenhum. A `38` fechou o buraco. Fica registrado como o erro que foi, e não como plano.
 
 ---
 
@@ -769,7 +833,7 @@ produzia o A-1.
 **Resolvido pela 0036**, com o processo convergindo para o teste. As duas trilhas agora respondem
 igual, e a decisão está registrada na seção 7.3.
 
-### A-3 · Comentário desatualizado em `shared`
+### A-3 · Comentário desatualizado em `shared` — **RESOLVIDO**
 
 **FATO.** [processos.ts:225](shared/src/admissoes/processos.ts#L225) ainda diz que `nomeCompleto` "é
 NULO no processo direto até o candidato responder". Desde a V1B o nome é **obrigatório** na admissão
@@ -778,18 +842,21 @@ por `coalesce` ([processos.repository.ts:438](api/src/admissoes/processos.reposi
 campo, na prática, nunca vem nulo. Cosmético, mas é comentário que descreve uma regra que não existe
 mais, e é exatamente o tipo de coisa que a próxima pessoa lê como verdade.
 
-### A-4 · A base ainda não existe em lugar nenhum
+### A-4 · A base ainda não existe em lugar nenhum — **ABERTO, e maior**
 
 **FATO** (`PROJECT_BRAIN/34`): a migration **0035 não foi aplicada em banco nenhum**, e `padaria_adm001`
-tem **1 linha legada** que a fará falhar de propósito. Qualquer plano que comece pela V2 precisa
-resolver isso antes — e é uma decisão de Marco, não uma etapa técnica.
+tem **1 linha legada** que a fará falhar de propósito. Desde então empilharam-se **0036, 0037 e 0038**.
+São quatro migrations que só existem em arquivo e em banco descartável — e um erro na 0035 só
+apareceria quando as quatro fossem aplicadas juntas. É uma decisão de Marco, não uma etapa técnica.
 
 ---
 
 ## 13. O que este documento **não** fez
 
 - Não aplicou migration em banco nenhum — **inclusive a 0036**, que existe em arquivo e nunca rodou.
-- Não gerou nenhuma outra migration: o SQL da seção 6 (convite, ficha, dependentes, vínculo) segue proposta.
+  *(03/09: continua verdade para banco persistente; 0035–0038 já rodaram em bancos descartáveis.)*
+- Não gerou nenhuma outra migration: o SQL da seção 6 seguia proposta.
+  *(03/09: P-1, P-2 e P-3 viraram a **0037**; **P-4 e P-5 continuam proposta**.)*
 - Não leu o banco de produção — a checagem de CPF duplicado em `colaboradores` (BLOQUEIO 3) continua **não feita**.
 - Não escreveu, sugeriu ou parafraseou o texto do aviso de privacidade.
 - Não definiu a política de documentos, retenção ou descarte.
