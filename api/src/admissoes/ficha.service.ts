@@ -124,7 +124,7 @@ export async function conviteDoToken(token: string | undefined): Promise<Convite
   if (!convite) throw naoEncontrado("Link invalido", "CONVITE_INVALIDO");
   if (convite.revogadoEm !== null) throw foiEmbora("Este link foi cancelado.", "CONVITE_REVOGADO");
   if (convite.expiraEm.getTime() <= Date.now()) {
-    throw foiEmbora("Este link expirou. Peca um novo ao RH.", "CONVITE_EXPIRADO");
+    throw foiEmbora("Este link expirou. Peça um novo ao RH.", "CONVITE_EXPIRADO");
   }
   return convite;
 }
