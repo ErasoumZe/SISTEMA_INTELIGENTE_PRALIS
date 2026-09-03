@@ -9,7 +9,11 @@ export const USUARIOS = {
   /** Enxerga e edita tudo — `usuario_admin` do seed de desenvolvimento. */
   admin: { email: "diretor@email.com", senha: "123456" },
   /** Opera caixa e mercadorias, mas NAO tem `cadastro_produtos_visualizar`. */
-  semProdutos: { email: "caixa@email.com", senha: "123456" }
+  semProdutos: { email: "caixa@email.com", senha: "123456" },
+  /** ADM-003: cargo DP do seed — ve, convida e REVISA a ficha do candidato. */
+  dp: { email: "dp@email.com", senha: "123456" },
+  /** Gerencia: abre o processo, mas NAO tem `admissoes_processos_ver_ficha`. */
+  gerencia: { email: "gerencia@email.com", senha: "123456" }
 } as const;
 
 /** Larguras do Definition of Done (`16` §3) e do `67` §13.7. */

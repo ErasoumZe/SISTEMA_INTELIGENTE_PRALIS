@@ -34,6 +34,7 @@ export default defineConfig({
   projects: [
     {
       name: "produtos",
+      testMatch: /produtos-.*\.spec\.ts/u,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
@@ -42,6 +43,14 @@ export default defineConfig({
         permissions: ["camera"],
         launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] }
       }
+    },
+    {
+      // ADM-003 V5: a revisao da ficha pelo DP. Sem camera, sem permissao extra — e so navegador.
+      // Roda contra um banco ISOLADO com dados sinteticos (E2E_BASE_URL / E2E_API_URL), nunca em
+      // producao: os testes criam processo, convite e ficha por API a cada rodada.
+      name: "admissoes",
+      testMatch: /admissoes-.*\.spec\.ts/u,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
     }
   ]
 });
