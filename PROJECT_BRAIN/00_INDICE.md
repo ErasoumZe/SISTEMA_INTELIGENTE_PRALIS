@@ -32,8 +32,8 @@ a necessidade.
 | [15](15_DECISOES_27_07.md)                | Decisões 27/07                 | sem seletor de mês · um só Sair · lacre inline · contas do usuário                       |
 | [16](16_DEFINITION_OF_DONE.md)            | **Definition of Done**         | o contrato de qualidade: quando uma entrega pode ser chamada de pronta                   |
 | [17](17_REGRAS_LANCAMENTOS_FINAIS.md)     | Regras de Lançamentos          | a spec vigente ⚠️ _§3 (seeding) desatualizada — vale o quadro do `20`_                   |
-| [18](18_DIVIDAS_TECNICAS.md)              | **Dívidas técnicas**           | D-01 a D-23: o que foi achado e adiado de propósito                                      |
-| [19](19_REGISTRO_DE_REGRAS.md)            | **Registro de regras**         | **a fonte única.** R-001 a R-151, contradições C-01 a C-09, regras revogadas             |
+| [18](18_DIVIDAS_TECNICAS.md)              | **Dívidas técnicas**           | D-01 a D-24: o que foi achado e adiado de propósito                                      |
+| [19](19_REGISTRO_DE_REGRAS.md)            | **Registro de regras**         | **a fonte única.** R-001 a R-165, contradições C-01 a C-09, regras revogadas             |
 | [20](20_ESTADO_DA_ENTREGA.md)             | **Estado da entrega**          | onde a entrega parou, o que trava, e os comandos de validação                            |
 | [21](21_DECISOES_04_08.md)                | **Reunião 04/08 (Marco)**      | escopo de Compras/Estoque/Relatórios, 8 bugs ao vivo, 11 perguntas em aberto             |
 | [22](22_AUDITORIA_STACK_2026_08_05.md)    | **Auditoria de stack (05/08)** | stack real, 20 riscos com arquivo:linha, ferramental e plano priorizado                  |
@@ -53,12 +53,13 @@ a necessidade.
 | [36](36_CADASTRO_COLABORADORES_PRE_CADASTRO_E_SITUACOES.md) | **Pre-cadastro e situacoes** | de onde vem quem ja trabalha: ficha contabil nao e carga, a fila de pre-cadastro, e os dois vocabularios de situacao |
 | [37](37_ADMISSAO_FICHA_PUBLICA_E_DEPENDENTES.md) | **Ficha publica e dependentes** | ADM-003 V3/V4 implementadas: link sem login, token so no fragmento e no cabecalho, dependentes com CPF conferido tambem pelo BANCO (D-7) |
 | [38](38_ADMISSAO_REVISAO_DA_FICHA_PELO_DP.md) | **Revisao da ficha pelo DP** | ADM-003 V5 implementada: tela propria com uma porta so, dependentes sem CPF (nao e mascara: a coluna nao e lida), processo alheio virou 404 |
+| [39](39_ADMISSAO_FILA_DO_DP_E_CONTRATOS_DO_QUE_FALTA.md) | **Fila do DP e contratos do que falta** | ADM-003 V6 implementada: fila e recorte da lista, situacao da ficha derivada, sem estado novo — e os contratos das 6 verticais restantes, com o que trava cada uma |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **39**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **40**.
 
 ## Regra de ouro deste brain
 

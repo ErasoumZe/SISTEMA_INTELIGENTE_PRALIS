@@ -181,8 +181,9 @@ Registrado para não parecer esquecimento:
 - **não revela CPF** de ninguém: nem do candidato (D-5), nem de dependente (D-4);
 - **não edita a ficha** — quem corrige é o candidato, pelo mesmo link, depois da devolução;
 - **não edita o bloco interno** nem o exame: isso continua no modal próprio da tela de Processos;
-- **não filtra nem lista fichas** — não há "fila de revisão". A listagem de processos não ganhou coluna
-  de ficha, e ganhar uma exigiria `left join` na projeção da lista, que é decisão própria (ver §6);
+- ~~**não filtra nem lista fichas**~~ — **superado em 03/09/2026 pela `39` §1.** A fila passou a
+  existir como recorte da própria listagem, com a situação da ficha derivada por `left join`. Era a
+  vertical própria que a §6.1 previa, e ela foi feita;
 - **não toca no Caixa**, em Conplus, em importação CSV nem em status trabalhista.
 
 ---
@@ -236,10 +237,9 @@ sem câmera e sem permissão extra: aqui é só navegador.
 
 ## 6. Pendências e o que ficou decidido não fazer
 
-1. **Não há fila de revisão.** O DP chega à ficha pelo processo, e a listagem não diz quais fichas
-   estão aguardando. Resolver isso é acrescentar situação da ficha à projeção da lista — `left join` na
-   query de listagem — e é **vertical própria**, não carona. Enquanto não existir, o DP descobre pela
-   trilha do processo ou abrindo.
+1. ~~**Não há fila de revisão.**~~ **RESOLVIDO em 03/09/2026** pela `39` §1, exatamente como esta
+   linha previa: situação da ficha na projeção da lista, por `left join`, em vertical própria. O que
+   continua faltando é **aviso**: a fila não notifica ninguém, e o DP descobre ao abrir a tela.
 2. **`ficha/aprovar` não tinha teste de 403 por cargo** antes desta fatia; o teste de permissão cobria
    `ficha` e `ficha/devolver`. O E2E fecha o buraco pelo navegador; um caso de integração para a
    terceira rota continua valendo.
