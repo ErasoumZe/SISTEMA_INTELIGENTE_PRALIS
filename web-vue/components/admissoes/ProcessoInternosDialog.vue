@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Importado de `vue` em vez de contar com o auto-import do Nuxt, como o `ProcessoDetalheDialog`
+// ao lado ja faz: sem isto o componente nao monta fora do runtime do Nuxt, e portanto nao tem
+// como ser testado — foi por isso que o defeito do select passou batido ate o teste em navegador.
+import { computed, reactive, watch } from "vue";
 import type { DadosInternosDto, SituacaoExame } from "@padaria/shared";
 import { situacoesExame } from "@padaria/shared";
 import { rotuloSituacaoExame } from "~/utils/admissoes";
@@ -74,6 +78,22 @@ const pisErro = computed(() =>
 );
 const invalido = computed(() => Boolean(ufErro.value || pisErro.value));
 
+/**
+ * O `v-select` precisa de `item-title` E `item-value`, e por isso as opcoes vem como objeto.
+ *
+ * Com itens PRIMITIVOS e `item-title` FUNCAO — que era como isto estava — o Vuetify grava o
+ * ROTULO no `v-model`: o formulario mandava `"ASO apto"` e o servidor devolvia 400, porque o
+ * contrato so aceita `aso_apto`. Na pratica o DP nao conseguia mudar o exame por esta tela, e
+ * como o convite exige ASO apto, o fluxo inteiro de admissao ficava inalcancavel pela interface.
+ * Nenhum teste pegava: os de integracao batem na API ja com o valor certo do enum.
+ *
+ * O mesmo defeito calava o `avisoExame` abaixo, que compara com `aso_apto`/`aso_nao_apto` e nunca
+ * casava depois de o usuario escolher.
+ *
+ * Este e o formato usado pelos outros selects de enum do projeto (ver `CadastroCamposTurno.vue`).
+ */
+const opcoesExame = situacoesExame.map((valor) => ({ valor, titulo: rotuloSituacaoExame[valor] }));
+
 const exameMudou = computed(() => formulario.exameSituacao !== props.internos?.exameSituacao);
 
 // O aviso é o que faz a consequência aparecer ANTES do clique. `aso_nao_apto` pausa o processo e
@@ -140,8 +160,9 @@ function salvar() {
         <form class="formulario" @submit.prevent="salvar">
           <v-select
             v-model="formulario.exameSituacao"
-            :items="[...situacoesExame]"
-            :item-title="(valor) => rotuloSituacaoExame[valor as SituacaoExame]"
+            :items="opcoesExame"
+            item-title="titulo"
+            item-value="valor"
             label="Exame admissional"
             density="comfortable"
             class="campo-largo"
