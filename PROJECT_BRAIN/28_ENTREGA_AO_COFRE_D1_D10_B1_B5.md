@@ -427,3 +427,71 @@ proíbe transformá-lo em quebra positiva.
 O desenho completo — schema, CHECKs, SQL forward e rollback, contratos, endpoints, tela e plano
 RED/GREEN — está no relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, **PARTE 4**.
 Migration continua dependendo de autorização explícita de Marco.
+
+---
+
+## §11 · Fatia 3 — o legado "Programar entrega ao cofre" foi removido (09/09/2026)
+
+O §2-A e a **R-179** diziam onde o legado estava e mandavam removê-lo "na entrega apropriada".
+Esta é a entrega. O que saiu é o fluxo **D4** inteiro — a retaguarda programava uma ordem
+`agendada` no painel de Transferências e o operador a executava na tela do Caixa.
+
+**Por que ele era o segundo caminho.** A ordem executada virava exatamente a mesma linha que
+`POST /api/caixa/:id/transferencia-cofre` cria: mesma tabela, mesmo tipo `sangria`/`retorno`,
+mesma conta de origem, mesma conta de cofre, mesmo lacre, mesma conferência. Dois botões, um ato.
+
+### §11.1 · O que deixou de existir
+
+| Camada            | Removido                                                                                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tela (retaguarda) | `SolicitacoesCofrePainel.vue`, `utils/solicitacoes-cofre.ts` e o bloco em `pages/transferencias.vue`                                                                                                            |
+| Tela (Caixa)      | bloco "Entregas solicitadas pela Tesouraria" e `executarSolicitacaoCofre` de `utils/caixa-acoes.ts`                                                                                                             |
+| Estado            | `caixasAbertos`, `caixaSolicitacoes`, `solicitacoesCofreRetaguarda`, `caixaSolicitacaoId`, `podeProgramarEntregaCofre` no `AppWorkspace`                                                                        |
+| Rotas             | `GET /api/caixa/abertos`, `POST`/`GET /api/caixa/:caixaId/solicitacoes-cofre`, `.../:id/cancelar`, `.../:id/executar`                                                                                           |
+| Serviço           | `programarSolicitacaoCofre`, `executarSolicitacaoCofre`, `cancelarSolicitacaoCofre`, `listarSolicitacoesCofre`, `listarCaixasAbertos`                                                                           |
+| Repositório       | `listarCaixasAbertosRepository` e as cinco consultas ancoradas em `solicitacao_cofre_em`                                                                                                                        |
+| Contratos         | `programarSolicitacaoCofrePayloadSchema`, `executarSolicitacaoCofrePayloadSchema`, `cancelarSolicitacaoCofrePayloadSchema`, `solicitacaoCofreParamsSchema`, `solicitacaoCofreSchema`, `caixaAbertoResumoSchema` |
+
+`/api/caixa/abertos` saiu junto porque **só existia** para a retaguarda escolher o caixa da ordem.
+
+### §11.2 · As decisões D4/D10/D11/D12 que morrem com o caminho
+
+**D4, D10 e D11 deixam de ter objeto** — não há mais programação, execução nem valor programado
+imutável. **D12 é revogada de fato**: sem produtor de ordem `agendada`, mantê-la seria pior que
+inútil. Uma linha legada prenderia o turno para sempre, porque não existe mais rota de executar
+nem de cancelar para soltá-la. A linha não move saldo (`transferenciaContaComoSaida` não conta
+`agendada`) e o cron de agendamento não a alcança (`agendada_para` nasce NULL nessas linhas).
+
+**D9, D13 e as demais continuam inteiras.** A trava do fechamento por entrega `pendente`
+(G1/R-171) e os quatro desfechos da R-183 não foram tocados.
+
+### §11.3 · O que ficou no banco, e por quê
+
+Três objetos ficaram **sem escritor** e continuam no schema, anotados como tal:
+
+| Objeto                                          | Situação                                                                                                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transferencias.solicitacao_cofre_em`           | nenhum código a preenche; linhas históricas preservadas                                                                                              |
+| `transferencias.executado_por` / `executado_em` | idem — e a conferência continua **lendo** `executado_por`, senão quem entregou pelo fluxo antigo passaria a poder conferir a própria entrega (R-028) |
+| `transferencias_solicitacao_cofre_idx`          | índice parcial que para de crescer                                                                                                                   |
+
+Derrubá-los é **migration**, ato separado com autorização própria. Nada foi apagado, cancelado,
+reclassificado ou reprocessado — a **R-182** continua pendente e independente desta fatia.
+
+> ⚠️ **Ordem `agendada` legada.** Se o banco tiver linhas D4 `agendada`, elas continuarão lá,
+> sem efeito financeiro e sem travar mais nada. Encerrá-las com auditoria é ato separado, junto
+> com a reclassificação da R-182 — nunca consequência automática desta remoção.
+
+### §11.4 · O que prova que a porta fechou
+
+- `entrega-cofre-caminho-unico.test.ts` **RED-5**: as cinco chamadas do fluxo antigo respondem
+  **404**, feitas pelo **admin** (que passaria em qualquer gate) — 403 provaria que a rota continua
+  registrada e só mudou de dono; e nenhuma delas grava linha.
+- `entrega-cofre-caminho-unico.test.ts` **RED-6**: turno com ordem `agendada` legada, montada em
+  SQL porque nenhuma API a produz mais, **fecha** — e a linha continua intacta.
+- `caixa-idempotencia-cofre.test.ts` cai de 31 para 15 casos: B2 e a decisão 7 ficam; o caso do
+  "único responsável sendo o próprio criador" passa a usar a entrega avulsa.
+- `divergencia-entrega-ao-cofre.test.ts`: o **RED-7b** prova a R-028 pelo caminho único (o gerente
+  entrega, não encerra a própria entrega, e a Tesouraria encerra); o **RED-8** sai, porque a
+  checagem de elegibilidade tem uma cópia só.
+- `conferencia-recusa-cofre.test.ts`: a notificação passa a ser provada por **quem entregou**.
