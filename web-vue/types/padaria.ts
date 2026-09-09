@@ -258,9 +258,9 @@ export type CaixaOperacional = {
   status: string;
 };
 
-// G1/R-171: uma entrega ao cofre que JA SAIU e ainda espera conferencia. Nao confundir com
-// SolicitacaoCofre, que e ordem `agendada` — dinheiro que ainda NAO saiu. As duas travam o
-// fechamento, por motivos opostos.
+// G1/R-171: uma entrega ao cofre que JA SAIU e ainda espera conferencia. Depois da R-179/Fatia 3
+// e a UNICA coisa que trava o fechamento — a ordem `agendada` da Tesouraria deixou de existir
+// junto com o painel "Programar entrega ao cofre".
 export type EntregaCofrePendente = {
   id: string;
   tipo: "sangria" | "retorno";
@@ -279,27 +279,6 @@ export type CaixaStatus = {
   // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];
-};
-
-// D4: a entrega ao cofre que a retaguarda PROGRAMOU para este caixa. Enquanto esta aqui ela e so
-// um pedido — nao movimentou dinheiro nenhum (nasce 'agendada', que o saldo nao conta). Vira
-// movimento de verdade quando o operador executa.
-export type SolicitacaoCofre = {
-  id: string;
-  tipo: "sangria" | "retorno";
-  valor: number;
-  observacao: string | null;
-  criadoPor: string | null;
-  criadoEm: string;
-};
-
-// D4: o minimo que a retaguarda precisa para escolher PARA QUAL caixa aberto vai programar.
-export type CaixaAbertoResumo = {
-  id: string;
-  pdvNome: string;
-  usuarioCaixaNome: string | null;
-  dataMovimento: string;
-  dataHoraAbertura: string | null;
 };
 
 export type ItemMenu = {

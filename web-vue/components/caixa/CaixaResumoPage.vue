@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CaixaStatus, Opcao, ResumoCaixa, SolicitacaoCofre } from "~/types/padaria";
+import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
@@ -13,8 +13,6 @@ const props = defineProps<{
   pdvs: Opcao[];
   turnos?: Opcao[];
   maquininhas?: Opcao[];
-  // D4: o que a retaguarda programou para este caixa. Lista vazia = nada pendente.
-  solicitacoes?: SolicitacaoCofre[];
   empresaId: string;
   permissoes: string[];
   usuarioId: string;
@@ -46,17 +44,6 @@ const emit = defineEmits<{
       lacre: string | null;
       observacao: string | null;
       idempotenciaChave: string;
-      aoConcluir: (sucesso: boolean) => void;
-    }
-  ): void;
-  // D10: a execucao entrega o valor PROGRAMADO. Nao vai valor nem observacao daqui, e nao vai
-  // chave: a chave e da programacao e nunca e sobrescrita. So o lacre do envelope e proprio do ato.
-  (
-    event: "executarSolicitacao",
-    payload: {
-      caixaId: string;
-      solicitacaoId: string;
-      lacre: string | null;
       aoConcluir: (sucesso: boolean) => void;
     }
   ): void;
@@ -133,14 +120,11 @@ const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fecham
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
 const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
 
-// Sao DUAS travas, e ate agora so uma delas aparecia na tela — nenhuma delas desabilitava o botao.
-// A ordem programada (`agendada`, dinheiro que ainda NAO saiu) ja bloqueava o fechamento na API
-// desde a decisao 5, mas o operador so descobria clicando e levando 400. Agora as duas dizem a
-// mesma coisa no mesmo lugar: uma computada, um motivo, e o botao para antes.
+// A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
+// Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
 const motivoTravado = computed(() =>
   motivoFechamentoTravado(
     entregasPendentes.value.length,
-    (props.solicitacoes ?? []).length,
     entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
   )
 );
@@ -246,27 +230,6 @@ function retornarSaldo() {
     // chave — que e o que impede a segunda entrega do mesmo envelope.
     aoConcluir: (sucesso: boolean) => {
       if (sucesso) limparEntrega();
-    }
-  });
-}
-
-// D4/D10: executa o que a retaguarda programou — pelo valor programado, sempre. O operador nao
-// escolhe valor aqui: se tiver menos, a solicitacao nao e executada; se tiver mais, o excedente
-// sai por uma entrega avulsa, com chave e lacre proprios. O unico campo dele e o lacre do envelope.
-//
-// Sem chave de idempotencia: a identidade do ato e o `solicitacaoId`, e o servidor resolve a
-// repeticao pela transicao atomica de `agendada` para `pendente`.
-function executarSolicitacao(solicitacao: SolicitacaoCofre) {
-  const caixa = caixaAberto.value;
-  if (!caixa || props.salvando) return;
-  emit("executarSolicitacao", {
-    caixaId: caixa.id,
-    solicitacaoId: solicitacao.id,
-    lacre: entrega.lacre || null,
-    // So o lacre e limpo no sucesso: o valor digitado, se houver, pertence a uma entrega avulsa
-    // que o operador pode ainda querer lancar.
-    aoConcluir: (sucesso: boolean) => {
-      if (sucesso) entrega.lacre = "";
     }
   });
 }
@@ -439,48 +402,12 @@ function fechar() {
           >, e a Tesouraria será notificada. A observação abaixo é obrigatória e será registrada junto com a quebra.
         </v-alert>
 
-        <!-- G1/R-171: o que ja saiu e ninguem conferiu. Vem ANTES das ordens programadas porque e
-           dinheiro na rua, nao um pedido: e a unica coisa que trava o fechamento agora. -->
+        <!-- G1/R-171 · o que ja saiu e ninguem conferiu: a unica coisa que trava o fechamento.
+             R-179/Fatia 3: o bloco "Entregas solicitadas pela Tesouraria" saiu daqui junto com o
+             painel que o alimentava. Executar uma ordem era um SEGUNDO caminho para o mesmo ato do
+             botao de entregar abaixo — mesmo dinheiro, mesmas contas, outra porta. -->
         <div ref="blocoTravas" tabindex="-1">
           <EntregasAguardandoConferencia :entregas="entregasPendentes" />
-
-          <!-- D4/D10: o que a retaguarda PROGRAMOU. Ainda nao movimentou dinheiro — nasce 'agendada'.
-           O valor e IMUTAVEL: o operador entrega exatamente o programado, usando o campo de lacre
-           abaixo. Enquanto houver solicitacao aqui, o caixa nao fecha (decisao 5). -->
-          <template v-if="(solicitacoes ?? []).length">
-            <div class="text-subtitle-2 mb-2">Entregas solicitadas pela Tesouraria</div>
-            <v-alert
-              v-for="solicitacao in solicitacoes ?? []"
-              :key="solicitacao.id"
-              type="info"
-              variant="tonal"
-              class="mb-3"
-              data-teste="solicitacao-cofre"
-            >
-              <div class="d-flex flex-wrap align-center ga-3">
-                <div class="flex-grow-1">
-                  <strong>{{ dinheiro(solicitacao.valor) }}</strong>
-                  · {{ solicitacao.tipo === "sangria" ? "Sangria" : "Retorno" }}
-                  <div v-if="solicitacao.observacao" class="text-caption">{{ solicitacao.observacao }}</div>
-                  <div v-if="saldoAtual < solicitacao.valor" class="text-caption text-error">
-                    Saldo em espécie insuficiente ({{ dinheiro(saldoAtual) }}) — a entrega não pode ser executada
-                    parcialmente.
-                  </div>
-                </div>
-                <v-btn
-                  color="warning"
-                  variant="flat"
-                  prepend-icon="mdi-check-bold"
-                  :disabled="salvando || saldoAtual < solicitacao.valor"
-                  :loading="salvando"
-                  data-teste="botao-executar-solicitacao"
-                  @click="executarSolicitacao(solicitacao)"
-                >
-                  Executar {{ dinheiro(solicitacao.valor) }}
-                </v-btn>
-              </div>
-            </v-alert>
-          </template>
         </div>
 
         <v-row dense>

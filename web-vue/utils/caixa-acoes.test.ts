@@ -137,51 +137,10 @@ describe("retornarSaldoOperacional", () => {
   });
 });
 
-// D4/D10: o operador executa o que a retaguarda programou, pelo valor programado. Endpoint
-// proprio, mesma entidade.
-describe("executarSolicitacaoCofre", () => {
-  const payload = { caixaId: "cx-1", solicitacaoId: "sol-7", lacre: "LAC-77" };
-
-  // O payload carrega SO o lacre. Este teste e a trava de contrato do bloqueador de idempotencia:
-  // se alguem reintroduzir `idempotenciaChave` (ou `valor`/`observacao`) na execucao, ele quebra.
-  // A chave pertence a programacao e sobrescreve-la apagava a ancora do retry dela.
-  it("posta apenas o lacre — sem valor, sem observacao e sem chave de idempotencia", async () => {
-    const deps = montarDeps();
-    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre(payload);
-
-    expect(ok).toBe(true);
-    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/solicitacoes-cofre/sol-7/executar", {
-      lacre: "LAC-77"
-    });
-    expect(deps.notificar).toHaveBeenCalledWith("Entrega ao cofre executada com sucesso.");
-  });
-
-  it("sem lacre manda null explicito (R-026: lacre e opcional)", async () => {
-    const deps = montarDeps();
-    await criarAcoesCaixa(deps).executarSolicitacaoCofre({ caixaId: "cx-1", solicitacaoId: "sol-7" });
-
-    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/solicitacoes-cofre/sol-7/executar", { lacre: null });
-  });
-
-  it("aborta sem chamar a API se a confirmacao for negada", async () => {
-    const deps = montarDeps({ confirmar: async () => false });
-    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre(payload);
-
-    expect(ok).toBe(false);
-    expect(deps.api.post).not.toHaveBeenCalled();
-  });
-
-  it("em erro avisa aoConcluir(false) e reseta salvando", async () => {
-    const aoConcluir = vi.fn();
-    const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
-    const ok = await criarAcoesCaixa(deps).executarSolicitacaoCofre({ ...payload, aoConcluir });
-
-    expect(ok).toBe(false);
-    expect(aoConcluir).toHaveBeenCalledWith(false);
-    expect(deps.setSalvando).toHaveBeenLastCalledWith(false);
-  });
-});
-
+// R-179/Fatia 3 · aqui existia `executarSolicitacaoCofre`, o POST de
+// `/api/caixa/:id/solicitacoes-cofre/:id/executar`. Ele era o SEGUNDO caminho para o mesmo ato de
+// `retornarSaldoOperacional` acima — mesmo dinheiro, mesmas contas, outra porta. A factory nao
+// expoe mais essa acao, e a rota nao existe: ver `entrega-cofre-caminho-unico.test.ts`.
 describe("fecharCaixaOperacional", () => {
   it("posta em /:id/fechar com o lacre do retorno final, re-busca status e recarrega tela", async () => {
     const deps = montarDeps();
