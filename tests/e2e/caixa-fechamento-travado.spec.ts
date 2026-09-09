@@ -30,11 +30,17 @@ async function entrarNaApi(usuario: { email: string; senha: string }): Promise<A
   return contexto;
 }
 
+// O perfil expoe a empresa ATIVA em `empresaId` e o conjunto acessivel em `empresaIds` — nao existe
+// `empresas` com objetos. Ler o campo errado devolvia `undefined` e o `beforeAll` inteiro morria em
+// "Cannot read properties of undefined", antes de qualquer asserção sobre a tela. Mesma leitura de
+// `produtos-permissoes.spec.ts`.
 async function sessao(contexto: APIRequestContext): Promise<Sessao> {
   const resposta = await contexto.get("/api/sessao");
   expect(resposta.status(), await resposta.text()).toBe(200);
-  const corpo = (await resposta.json()) as { data: { perfil: { usuarioId: string; empresas: { id: string }[] } } };
-  const empresaId = corpo.data.perfil.empresas[0]?.id;
+  const corpo = (await resposta.json()) as {
+    data: { perfil: { usuarioId: string; empresaId?: string; empresaIds?: string[] } };
+  };
+  const empresaId = corpo.data.perfil.empresaId ?? corpo.data.perfil.empresaIds?.[0];
   if (!empresaId) throw new Error("Perfil sem empresa — o seed de desenvolvimento nao esta pronto");
   return { usuarioId: corpo.data.perfil.usuarioId, empresaId };
 }
@@ -102,9 +108,13 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
 
     // Travado, mas FOCAVEL: `aria-disabled`, nunca `disabled` — botao morto sai da navegacao por
     // teclado e o leitor de tela nunca chega ao motivo.
+    //
+    // A prova e o atributo `disabled` AUSENTE mais o foco, e nao `toBeEnabled()`: o Playwright
+    // passou a tratar `aria-disabled="true"` como desabilitado, entao aquela asserção reprovaria
+    // justamente o markup correto que esta decisao exige.
     const fechar = page.locator(porTeste("botao-fechar"));
     await expect(fechar).toHaveAttribute("aria-disabled", "true");
-    await expect(fechar).toBeEnabled();
+    expect(await fechar.getAttribute("disabled")).toBeNull();
     await fechar.focus();
     await expect(fechar).toBeFocused();
   });

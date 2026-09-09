@@ -24,6 +24,7 @@ import {
   colaboradoresJornadas,
   clientes,
   contas,
+  contasUsuarios,
   ajustesFechamentoCaixa,
   debitosColaboradores,
   despesas,
@@ -796,6 +797,20 @@ const pdv = (
   await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", contaId: contaCaixa.id }).returning({ id: pdvs.id })
 )[0];
 if (!pdv) throw new Error("PDV nao foi criado");
+
+// D13/decisao 7 · sem CONFIRMADOR ELEGIVEL no Cofre, nada que entregue dinheiro acontece: nem
+// sangria, nem retorno, nem fechamento com sobra. "Elegivel" e vinculo em `contas_usuarios` + a
+// permissao `transferencias_conferir` + ser diferente de quem criou o movimento (R-028).
+//
+// O DEV nascia com a conta Cofre SEM vinculo nenhum, e o efeito era total: qualquer entrega ao
+// cofre respondia 400 e o modulo Caixa nao podia ser demonstrado nem testado ponta a ponta neste
+// ambiente. Sao DOIS vinculos, e nao um, porque quem entrega nao confere a propria entrega — com um
+// so, a entrega feita por ele mesmo continuaria bloqueada.
+for (const email of ["tesouraria@email.com", "gerencia@email.com"]) {
+  const usuarioId = usuarioIds.get(email);
+  if (!usuarioId) throw new Error(`Usuario ${email} nao foi criado`);
+  await banco.insert(contasUsuarios).values({ empresaId, contaId: contaCofre.id, usuarioId }).onConflictDoNothing();
+}
 
 await banco
   .update(empresas)
