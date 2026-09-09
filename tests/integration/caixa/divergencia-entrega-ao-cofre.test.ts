@@ -69,9 +69,11 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
-  // Caminho canonico: o unico escritor de `sangria`/`retorno`.
-  async function entregarAoCofre(caixaId: string, valor: number, lacre: string) {
-    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieCaixa, {
+  // Caminho canonico: o unico escritor de `sangria`/`retorno`. `cookie` e parametrizavel porque
+  // `podeOperarCaixa` aceita tambem quem tem `caixas_gerenciar` — e um dos casos abaixo precisa que
+  // quem ENTREGA nao seja o operador.
+  async function entregarAoCofre(caixaId: string, valor: number, lacre: string, cookie = cookieCaixa) {
+    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookie, {
       tipo: "sangria",
       valor,
       lacre,
@@ -285,43 +287,28 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   // ------------------------------------------------------------------------------------------
   // RED-7b · a OUTRA metade da elegibilidade (R-028): quem ENTREGOU nao encerra a propria entrega.
   //
-  // A fixture precisa de cuidado, e a versao anterior deste caso nao tinha: usar o operador de caixa
-  // fazia a requisicao morrer no guard da rota (o cargo Caixa nao tem `transferencias_conferir`), e
-  // o teste ficava verde sem nunca chegar a regra. Provava a ausencia de permissao, nao a R-028.
+  // A fixture precisa de cuidado, e uma versao anterior deste caso nao tinha: usar o operador de
+  // caixa fazia a requisicao morrer no guard da rota (o cargo Caixa nao tem
+  // `transferencias_conferir`), e o teste ficava verde sem nunca chegar a regra. Provava a ausencia
+  // de permissao, nao a R-028.
   //
-  // Aqui o ator TEM a permissao e TEM vinculo com o cofre — e mesmo assim e recusado, porque foi ele
-  // quem entregou. Montagem: o ADMIN programa (nao e vinculado ao cofre, entao o portao da D7 passa
-  // deixando tesouraria e gerente elegiveis) e o GERENTE executa. Ao tentar encerrar, ele cai em
-  // `candidatoConfirmacao` pelo ramo `executado_por` — 400 de dominio, nao 403 de permissao.
+  // Aqui o ator TEM a permissao e TEM vinculo com o cofre — e mesmo assim e recusado, porque foi
+  // ele quem entregou. Montagem depois da R-179/Fatia 3: quem entrega e o GERENTE, pelo caminho
+  // unico (`podeOperarCaixa` aceita `caixas_gerenciar`), e a Tesouraria continua elegivel, entao o
+  // portao da D7 passa. Ao tentar encerrar, o gerente cai em `candidatoConfirmacao` pelo ramo
+  // `criado_por` — 400 de dominio, nao 403 de permissao.
   // ------------------------------------------------------------------------------------------
   it("Deve_RecusarOEncerramento_Quando_QuemEntregouTentaEncerrarAPropriaEntrega", async () => {
     const fx = await novoCaixa("R183 auto encerramento");
     await venda(500);
 
-    const programacao = await inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre`, cookieAdmin, {
-      tipo: "sangria",
-      valor: 200,
-      idempotenciaChave: randomUUID()
-    });
-    expect(programacao.statusCode, programacao.body).toBe(200);
-    const solicitacao = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and solicitacao_cofre_em is not null order by criado_em desc limit 1",
-      [fx.caixaId]
-    );
-
-    const execucao = await inject(
-      "POST",
-      `/api/caixa/${fx.caixaId}/solicitacoes-cofre/${solicitacao!.id}/executar`,
-      cookieGerente,
-      { lacre: `R183-AUTO-${sequencia}` }
-    );
-    expect(execucao.statusCode, execucao.body).toBe(200);
+    const entrega = await entregarAoCofre(fx.caixaId, 200, `R183-AUTO-${sequencia}`, cookieGerente);
     // O dinheiro saiu, e quem entregou foi o gerente.
-    expect(await linha(solicitacao!.id)).toMatchObject({ status: "pendente" });
+    expect(await linha(entrega)).toMatchObject({ status: "pendente" });
 
     const encerramentoProprio = await inject(
       "POST",
-      `/api/transferencias/${solicitacao!.id}/recusar-conferencia`,
+      `/api/transferencias/${entrega}/recusar-conferencia`,
       cookieGerente,
       {
         contaDestinoId: idsTeste.contaCofre,
@@ -333,13 +320,13 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     // 400 de DOMINIO — se viesse 403, a requisicao teria morrido no guard e o caso nao provaria nada.
     assertProblem(encerramentoProprio, 400);
     expect(encerramentoProprio.body).toMatch(/conta destino/iu);
-    expect((await linha(solicitacao!.id))?.status).toBe("pendente");
+    expect((await linha(entrega))?.status).toBe("pendente");
 
     // E o contraste que fecha o caso: quem NAO entregou encerra normalmente. Sem isto, a recusa
     // acima poderia ser qualquer outra coisa quebrada no caminho.
     const encerramentoDeTerceiro = await inject(
       "POST",
-      `/api/transferencias/${solicitacao!.id}/recusar-conferencia`,
+      `/api/transferencias/${entrega}/recusar-conferencia`,
       cookieTesouraria,
       {
         contaDestinoId: idsTeste.contaCofre,
@@ -349,7 +336,7 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
       }
     );
     expect(encerramentoDeTerceiro.statusCode, encerramentoDeTerceiro.body).toBe(200);
-    expect((await linha(solicitacao!.id))?.status).toBe("divergente");
+    expect((await linha(entrega))?.status).toBe("divergente");
   });
 
   // ------------------------------------------------------------------------------------------
@@ -387,39 +374,9 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(quebras.filter((q) => q.transferencia_id === null)).toHaveLength(1);
   });
 
-  // ------------------------------------------------------------------------------------------
-  // RED-8 · elegibilidade nas DUAS copias. Numa solicitacao D4, quem programa e quem executa ficam
-  // os dois fora da conferencia (R-028). Se isso nao deixar ninguem elegivel, a EXECUCAO tem de ser
-  // recusada — antes de o dinheiro sair. Corrigir so uma das copias produzia o oposto: entrega que
-  // ninguem pode conferir e caixa que nunca mais fecha.
-  // ------------------------------------------------------------------------------------------
-  it("Deve_RecusarAExecucao_Quando_ProgramadorEExecutorSaoOsUnicosVinculadosAoCofre", async () => {
-    const fx = await novoCaixa("R183 elegibilidade");
-    await venda(500);
-
-    // Tesouraria PROGRAMA; gerente EXECUTA. Os dois sao os unicos vinculados a conta do cofre no
-    // seed, entao a exclusao dos dois nao deixa confirmador possivel.
-    const programacao = await inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre`, cookieTesouraria, {
-      tipo: "sangria",
-      valor: 100,
-      idempotenciaChave: randomUUID()
-    });
-    expect(programacao.statusCode, programacao.body).toBe(200);
-    const solicitacao = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and solicitacao_cofre_em is not null order by criado_em desc limit 1",
-      [fx.caixaId]
-    );
-
-    const execucao = await inject(
-      "POST",
-      `/api/caixa/${fx.caixaId}/solicitacoes-cofre/${solicitacao!.id}/executar`,
-      cookieGerente,
-      { lacre: `R183-D4-${sequencia}` }
-    );
-
-    assertProblem(execucao, 400);
-    expect(execucao.body).toMatch(/elegivel|eleg[ií]vel/iu);
-    // O dinheiro NAO saiu: a solicitacao continua agendada.
-    expect((await linha(solicitacao!.id))?.status).toBe("agendada");
-  });
+  // R-179/Fatia 3 · aqui ficava o RED-8, que exigia a checagem de elegibilidade nas DUAS copias:
+  // na programacao e na execucao da ordem D4, porque programador e executor eram pessoas
+  // diferentes e as duas ficavam impedidas de conferir. Com um caminho unico existe uma copia so,
+  // em `criarTransferenciaCofreCaixa`, e ela e coberta por "unico responsavel do Cofre sendo o
+  // proprio criador bloqueia a entrega" em `caixa-idempotencia-cofre.test.ts`.
 });

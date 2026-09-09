@@ -14,14 +14,14 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 //   - a divergencia tem endpoint proprio, e o registro dela precisa ser COMMITADO — se fosse
 //     sinalizada por excecao dentro do confirmar, o rollback apagaria a propria trilha;
 //   - cada tentativa gera OUTRA linha de auditoria e reabre a notificacao;
-//   - quem e notificado e quem ENTREGOU (o executor real), nao quem programou;
+//   - quem e notificado e quem ENTREGOU o malote;
 //   - e a transferencia GENERICA nao muda de comportamento por causa de nada disso.
 describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofre)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieTesouraria: string;
   // O gerente tambem e responsavel pelo cofre no seed. Ele existe aqui porque quem CRIA um
-  // movimento nunca pode conferi-lo (R-028): quando a Tesouraria programa, quem confere e ele.
+  // movimento nunca pode conferi-lo (R-028): a entrega sai pela mao do admin, e quem confere e ele.
   let cookieGerente: string;
 
   beforeAll(async () => {
@@ -205,48 +205,18 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     expect(await recusas(movimentoId)).toHaveLength(2);
   });
 
-  it("a recusa notifica quem EXECUTOU a solicitacao, nao quem a programou", async () => {
-    // Solicitacao programada pela Tesouraria e executada pelo admin: sao pessoas diferentes.
-    const contaId = await criar("/api/contas", { empresaId, nome: "Conta recusa-executor" });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: "PDV recusa-executor", contaId, ativo: true });
+  // R-179/Fatia 3 · o caso original montava uma ordem programada pela Tesouraria e executada pelo
+  // admin, para provar que a notificacao ia ao EXECUTOR e nao ao programador. Com o caminho unico
+  // as duas pessoas sao uma so: quem entrega e quem cria. O fio que este caso protege continua o
+  // mesmo — `atual.executadoPor ?? atual.criadoPor` em `transferencias.service.ts` —, e o `??`
+  // segue necessario para as linhas HISTORICAS, que tem `executado_por` preenchido.
+  it("a recusa notifica quem ENTREGOU o malote", async () => {
     const adminId = await usuarioPorEmail(usuariosTeste.admin.email);
-    const caixaId = await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: adminId,
-      dataHoraAbertura: "2026-07-04T08:00"
-    });
-    await criar("/api/vendas", {
-      empresaId,
-      dataReferencia: "2026-07-04",
-      dataPagamento: "2026-07-04",
-      descricao: "Venda recusa-executor",
-      valorOriginal: 70,
-      contaOrigemId: contaId,
-      pdvId,
-      colaboradorId: idsTeste.colaboradorAdmin,
-      itensVenda: [
-        { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 70, valorTotal: 70 }
-      ],
-      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 70 }]
-    });
+    const { movimentoId } = await entregaPendente("recusa-entregador", "2026-07-04T08:00", 70, "REC-EXEC-1");
 
-    const programar = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      { tipo: "retorno", valor: 70, idempotenciaChave: randomUUID() },
-      cookieTesouraria
-    );
-    expect(programar.statusCode, programar.body).toBe(200);
-    const solicitacaoId = json<{ data: { id: string }[] }>(programar).data[0]!.id;
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${solicitacaoId}/executar`, { lacre: "REC-EXEC-1" }))
-        .statusCode
-    ).toBe(200);
-
-    // Quem recusa e o GERENTE: a Tesouraria criou a solicitacao e por isso nao pode confirmar nem
-    // recusar o proprio pedido (R-028).
+    // Quem recusa e o GERENTE: quem entregou nao confere a propria entrega (R-028).
     const recusa = await post(
-      `/api/transferencias/${solicitacaoId}/recusar-conferencia`,
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
       { contaDestinoId: idsTeste.contaCofre, motivo: "Lacre violado", nLacreDoc: "REC-EXEC-1", valorRecebido: 70 },
       cookieGerente
     );
@@ -254,11 +224,11 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
 
     const destinatarios = await consultarTodos<{ destinatario_usuario_id: string }>(
       "select destinatario_usuario_id from notificacoes where referencia_id = $1 and tipo = 'transferencia_divergencia'",
-      [solicitacaoId]
+      [movimentoId]
     );
     const ids = destinatarios.map((linha) => linha.destinatario_usuario_id);
-    // O EXECUTOR (admin) foi avisado. Se o codigo usasse `criado_por`, so a Tesouraria — que
-    // programou e ja sabe do problema — seria notificada, e o operador ficaria no escuro.
+    // Quem entregou (admin) foi avisado. Sem isso a divergencia so chegaria a Tesouraria, e quem
+    // pos o dinheiro no envelope ficaria no escuro.
     expect(ids).toContain(adminId);
   });
 

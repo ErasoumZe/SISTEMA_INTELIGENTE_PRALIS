@@ -4,21 +4,16 @@ import type {
   AbrirCaixaPayload,
   AlterarHorarioCaixaPayload,
   AlterarHorarioCaixaResponse,
-  CaixaAbertoResumo,
   CaixaOperacional,
   CaixaStatus,
-  CancelarSolicitacaoCofrePayload,
   CategoriaLancamentosCaixa,
   DetalheCaixaResponse,
   EditarAberturaCaixaPayload,
   EntregaCofrePendente,
-  ExecutarSolicitacaoCofrePayload,
   FecharCaixaPayload,
   HistoricoCaixaQuery,
   LinhaHistoricoCaixa,
-  ProgramarSolicitacaoCofrePayload,
   ResumoCaixa,
-  SolicitacaoCofre,
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
   TransferenciaCofrePayload,
@@ -74,14 +69,8 @@ import {
   totaisHistoricoCaixaRepository,
   travarCaixaCompartilhadoRepository,
   travarCaixaRepository,
-  buscarSolicitacaoCofreRepository,
   buscarTransferenciaPorIdempotenciaRepository,
-  cancelarSolicitacaoCofreRepository,
-  listarCaixasAbertosRepository,
-  executarSolicitacaoCofreRepository,
-  existeSolicitacaoAgendadaRepository,
   listarCandidatosConfirmacaoRepository,
-  listarSolicitacoesCofreRepository,
   type FiltrosHistoricoCaixa,
   type IntencaoEntregaCofre
 } from "./caixa.repository.js";
@@ -91,7 +80,6 @@ import {
 } from "../transferencias/entrega-cofre.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
-import { podeLancarSemCaixa } from "@padaria/shared/autenticacao";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
@@ -673,19 +661,18 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       throw new Error("Fechamento precisa ser posterior a abertura");
     }
 
-    // Decisao 5: ordem da retaguarda nao se perde no fechamento. Enquanto houver solicitacao
-    // `agendada`, o caixa nao fecha — ela precisa ser executada ou cancelada com motivo. Fechar por
-    // cima dela deixaria a Tesouraria esperando um dinheiro que ninguem mais vai entregar.
-    if (await existeSolicitacaoAgendadaRepository(caixa.id, tx)) {
-      throw new Error("Existe solicitacao de entrega ao cofre pendente: execute ou cancele antes de fechar");
-    }
-
-    // G1/R-171 · dinheiro que JA SAIU tambem trava o fechamento comum.
+    // G1/R-171 · dinheiro que JA SAIU trava o fechamento comum.
     //
-    // A guarda acima cobre a ordem que ainda NAO virou dinheiro na rua. Esta cobre o oposto: o
-    // malote entregue de verdade e ainda nao conferido no cofre. Antes disto o caixa fechava por
-    // cima dele — o operador ia embora, e se o cofre encontrasse falta depois a divergencia nao
-    // tinha mais turno aberto onde cair. A saida do operador e uma so: conferencia no cofre.
+    // R-179/Fatia 3 · aqui vinha antes a guarda da D12, que barrava a ordem `agendada` criada pelo
+    // painel "Programar entrega ao cofre". O painel e as quatro rotas dele sairam, entao ninguem
+    // mais produz essa ordem — e manter a guarda seria pior que inutil: uma linha legada `agendada`
+    // prenderia o turno para sempre, sem rota de executar nem de cancelar para solta-la. Ela nao
+    // move saldo (`transferenciaContaComoSaida` nao conta `agendada`) e o cron de agendamento nao a
+    // alcanca (`agendada_para` nasce NULL nessas linhas).
+    //
+    // O que fica e o malote entregue de verdade e ainda nao conferido no cofre. Antes da Fatia 1 o
+    // caixa fechava por cima dele — o operador ia embora, e se o cofre encontrasse falta depois a
+    // divergencia nao tinha mais turno aberto onde cair. A saida e uma so: conferencia no cofre.
     //
     // Lida DEPOIS da trava e ANTES do retorno final (D6/D7), entao o proprio ato do fechamento nao
     // se auto-bloqueia. Corrida: a linha do caixa ja esta em FOR UPDATE aqui e `confirmarTransferencia`
@@ -710,7 +697,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       // Decisao 7: o retorno final TAMBEM entrega dinheiro fisico, entao exige responsavel no
       // cofre. A checagem fica DENTRO deste `if` de proposito: fechamento sem sobra nao gera
       // entrega nenhuma e nao pode ser bloqueado por falta de quem conferir.
-      await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
+      await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
       await registrarEntregaAoCofre(
         {
           caixa: { ...caixa, pdvContaId: caixa.pdvContaId },
@@ -719,7 +706,6 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
           lacre: dados.lacreRetorno ?? null,
           observacao: dados.observacao ?? null,
           criadoPor: perfil.usuarioId,
-          status: "pendente",
           // D6/B2: sem chave de proposito. Este ato ja e irrepetivel por construcao — roda sob a
           // trava da linha do caixa e o UPDATE so acerta caixa 'aberto', entao um retry encontra o
           // caixa fechado e nao chega ate aqui.
@@ -786,19 +772,16 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
 // entrega de dinheiro em silencio. Por isso o conflito e explicito, e nao um 200 conveniente.
 function conferirIntencaoEntrega(
   existente: IntencaoEntregaCofre,
-  pretendida: { caixaId: string; tipo: string; valorCentavos: number; lacre: string | null; observacao: string | null },
-  // O lacre so faz parte da intencao quando ele existe DESDE A CRIACAO — que e o caso da entrega
-  // avulsa. Na PROGRAMACAO nao: la o lacre nasce depois, na execucao, e comparar com ele faria o
-  // retry legitimo da programacao (que nunca manda lacre) responder 409 assim que alguem
-  // executasse. Pelo mesmo motivo o `status` nunca entra: ele muda por atos posteriores e nao
-  // descreve o que foi pedido.
-  intencaoIncluiLacre = true
+  pretendida: { caixaId: string; tipo: string; valorCentavos: number; lacre: string | null; observacao: string | null }
 ): void {
+  // O lacre faz parte da intencao porque na entrega ao cofre ele existe DESDE A CRIACAO. O `status`
+  // nunca entra: ele muda por atos posteriores (conferencia, divergencia) e nao descreve o que foi
+  // pedido — compara-lo faria um retry legitimo responder 409 depois que o cofre agisse.
   const divergencias: string[] = [];
   if (existente.caixaId !== pretendida.caixaId) divergencias.push("caixa");
   if (existente.tipo !== pretendida.tipo) divergencias.push("tipo");
   if (existente.valorCentavos !== pretendida.valorCentavos) divergencias.push("valor");
-  if (intencaoIncluiLacre && (existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
+  if ((existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
   if ((existente.observacao ?? null) !== pretendida.observacao) divergencias.push("observacao");
   if (divergencias.length > 0) {
     throw new ErroDominio(
@@ -824,7 +807,7 @@ function conferirIntencaoEntrega(
 // A (3) e resolvida aqui, e nao no SQL, para usar exatamente a mesma resolucao do guard das rotas.
 // Duas regras de permissao para a mesma pergunta divergem no primeiro ajuste.
 async function existeConfirmadorElegivel(
-  input: { contaId: string; empresaId: string; excluirUsuarioIds: Array<string | null> },
+  input: { contaId: string; empresaId: string; excluirUsuarioId: string },
   tx: ExecutorBanco
 ): Promise<boolean> {
   const candidatos = await listarCandidatosConfirmacaoRepository(input, tx);
@@ -835,34 +818,29 @@ async function existeConfirmadorElegivel(
   return false;
 }
 
-// Bloqueio ANTES do ato, valendo para todos os que entregam dinheiro — avulsa, execucao de
-// solicitacao e retorno final do fechamento — alem da propria programacao, que nao faz sentido
-// criar se ninguem podera receber. O fechamento SEM retorno fisico nao e bloqueado: nao ha entrega,
+// Bloqueio ANTES do ato, valendo para os dois atos que entregam dinheiro: a entrega avulsa do turno
+// e o retorno final do fechamento. O fechamento SEM retorno fisico nao e bloqueado — nao ha entrega,
 // entao nao ha o que conferir.
 //
 // `criadoPor` e quem VAI criar o movimento: se o unico vinculado ao cofre for ele mesmo, nao existe
 // confirmador — e e melhor descobrir isso agora do que com o dinheiro fora do caixa.
-async function exigirConfirmadorDoCofre(
-  empresaId: string,
-  // R-183 · TODOS os impedidos, nao so o criador. Numa solicitacao D4 quem programa e quem entrega
-  // sao pessoas diferentes e as duas ficam fora da conferencia (R-028) — se a exclusao das duas nao
-  // deixar ninguem elegivel, a entrega precisa ser recusada AQUI, antes de o dinheiro sair. Deixar
-  // sair produzia o pior estado possivel: malote sem conferente e caixa que nao fecha mais.
-  excluirUsuarioIds: Array<string | null>,
-  tx: ExecutorBanco
-): Promise<void> {
+//
+// R-179/Fatia 3 · o parametro era uma LISTA de impedidos porque na solicitacao D4 quem programava e
+// quem entregava eram pessoas diferentes, e as duas ficavam fora da conferencia (R-028). Com um
+// unico caminho de entrega existe um unico autor. Quem continua lendo `executado_por` e a
+// conferencia, para as linhas HISTORICAS que nasceram do fluxo antigo.
+async function exigirConfirmadorDoCofre(empresaId: string, criadoPor: string, tx: ExecutorBanco): Promise<void> {
   const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
-  if (!(await existeConfirmadorElegivel({ contaId: contaCofreId, empresaId, excluirUsuarioIds }, tx))) {
+  if (!(await existeConfirmadorElegivel({ contaId: contaCofreId, empresaId, excluirUsuarioId: criadoPor }, tx))) {
     throw new Error("Conta do cofre sem responsavel elegivel para conferir a entrega");
   }
 }
 
-// D5/D9: cada entrega fisica ao cofre e um movimento IMUTAVEL, com valor e lacre proprios. Este e
-// o UNICO lugar do sistema que cria a transferencia caixa -> cofre — o retorno avulso, a sangria do
-// turno, a solicitacao programada (D4) e o retorno final do fechamento passam todos por aqui.
-// Diferenca em relacao ao valor programado nunca edita um movimento executado: gera um segundo
-// movimento, com outro lacre.
+// D5/D9/R-179: cada entrega fisica ao cofre e um movimento IMUTAVEL, com valor e lacre proprios.
+// Este e o UNICO lugar do sistema que cria a transferencia caixa -> cofre — a sangria do turno, o
+// retorno avulso e o retorno final do fechamento passam todos por aqui. Corrigir um valor nunca
+// edita um movimento ja feito: gera um segundo movimento, com outro lacre.
 async function registrarEntregaAoCofre(
   input: {
     caixa: { id: string; empresaId: string; pdvContaId: string; dataMovimento: string | null };
@@ -871,17 +849,12 @@ async function registrarEntregaAoCofre(
     lacre: string | null;
     observacao: string | null;
     criadoPor: string;
-    // D2/D3 'pendente' (entrega fisica ja feita) · D4 'agendada' (so a solicitacao, sem dinheiro).
-    status: "pendente" | "agendada";
     // B2: null SOMENTE no retorno final do fechamento (D6) — la a trava da linha do caixa e a
     // guarda `status = 'aberto'` do UPDATE ja tornam o ato irrepetivel, e o valor e a sobra inteira.
     idempotenciaChave: string | null;
   },
   tx: ExecutorBanco
 ): Promise<{ id: string; duplicada: boolean }> {
-  // D4: so a PROGRAMACAO carimba o marcador de origem. Avulsa e retorno final ficam NULL — e e
-  // esse NULL que mantem as consultas D4 cegas para elas.
-  const solicitacaoCofreEm = input.status === "agendada" ? new Date() : null;
   const lacre = input.lacre?.trim() || null;
   const observacao = input.observacao?.trim() || null;
   const intencao = {
@@ -896,10 +869,6 @@ async function registrarEntregaAoCofre(
   // carrega o MESMO lacre; se a checagem do lacre viesse primeiro, o retry morreria com
   // "Lacre ja utilizado em outro movimento" — mensagem errada para um ato que ja deu certo, e que
   // levaria o operador a lancar de novo com outro lacre, duplicando a entrega.
-  // A PROGRAMACAO nasce sem lacre e ganha um so na execucao; comparar lacre num retry dela daria
-  // 409 indevido. Ver `conferirIntencaoEntrega`.
-  const intencaoIncluiLacre = input.status !== "agendada";
-
   if (input.idempotenciaChave) {
     const existente = await buscarTransferenciaPorIdempotenciaRepository(
       input.caixa.empresaId,
@@ -907,7 +876,7 @@ async function registrarEntregaAoCofre(
       tx
     );
     if (existente) {
-      conferirIntencaoEntrega(existente, intencao, intencaoIncluiLacre);
+      conferirIntencaoEntrega(existente, intencao);
       return { id: existente.id, duplicada: true };
     }
   }
@@ -939,12 +908,7 @@ async function registrarEntregaAoCofre(
       descricao: input.tipo === "retorno" ? "Retorno de fechamento" : "Sangria",
       observacao,
       criadoPor: input.criadoPor,
-      // D2/D3: a entrega do operador nasce PENDENTE. Ja abate o saldo fisico do caixa
-      // (transferenciaContaComoSaida aceita 'pendente'), mas so entra no cofre quando quem opera
-      // a conta de destino conferir o dinheiro (R-028/R-036).
-      status: input.status,
-      idempotenciaChave: input.idempotenciaChave,
-      solicitacaoCofreEm
+      idempotenciaChave: input.idempotenciaChave
     },
     tx
   );
@@ -961,7 +925,7 @@ async function registrarEntregaAoCofre(
     if (!vencedora) throw new Error("Transferencia de cofre nao criada");
     // Item 8: a MESMA regra da leitura anterior. Comparar o lacre aqui faria o retry legitimo de
     // uma PROGRAMACAO responder 409 assim que alguem a executasse — o lacre nasce na execucao.
-    conferirIntencaoEntrega(vencedora, intencao, intencaoIncluiLacre);
+    conferirIntencaoEntrega(vencedora, intencao);
     return { id: vencedora.id, duplicada: true };
   }
 
@@ -1018,7 +982,7 @@ export async function criarTransferenciaCofreCaixa(
     }
 
     // Decisao 7: entrega avulsa tambem entrega dinheiro — sem quem conferir, nao sai.
-    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
+    await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
 
     // D1: retorno/sangria parcial e permitido, mas NUNCA acima do que existe em especie. Sem este
     // teto, dois cliques levavam o saldo a negativo e o fechamento gravava quebra falsa no nome do
@@ -1039,7 +1003,6 @@ export async function criarTransferenciaCofreCaixa(
         lacre: dados.lacre ?? null,
         observacao: dados.observacao ?? null,
         criadoPor: perfil.usuarioId,
-        status: "pendente",
         idempotenciaChave: dados.idempotenciaChave
       },
       tx
@@ -1051,266 +1014,12 @@ export async function criarTransferenciaCofreCaixa(
   });
 }
 
-// --- D4 · solicitacao programada -------------------------------------------------------------
-// A Tesouraria/Gestao PROGRAMA a entrega ligada ao caixa aberto; o operador EXECUTA. Sao dois atos
-// de duas pessoas, e so o segundo movimenta dinheiro.
-//
-// Reusa integralmente a transferencia caixa -> cofre: a solicitacao e a MESMA linha, nascida
-// 'agendada'. Nao existe tabela de solicitacao, nem endpoint generico paralelo — a regra-mae do
-// 16_DEFINITION_OF_DONE proibe o segundo caminho para o mesmo ato.
-
-async function carregarCaixaParaSolicitacao(caixaId: string, perfil: PerfilUsuario, tx: ExecutorBanco) {
-  const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-  if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-  if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
-  return { ...caixa, pdvContaId: caixa.pdvContaId };
-}
-
-// Quem programa e a RETAGUARDA (tesouraria, gerencia, financeiro, diretor, admin) — a mesma
-// definicao unica de `podeLancarSemCaixa`, para que "quem e livre" nao ganhe uma segunda definicao
-// que diverge com o tempo. O operador do caixa NAO programa para si mesmo.
-export async function programarSolicitacaoCofre(
-  caixaId: string,
-  dados: ProgramarSolicitacaoCofrePayload,
-  perfil: PerfilUsuario
-): Promise<SolicitacaoCofre[]> {
-  return executarEmTransacao(async (tx) => {
-    if (!podeLancarSemCaixa(perfil)) throw new Error("Programar entrega ao cofre e exclusivo da retaguarda");
-    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
-    const caixa = await carregarCaixaParaSolicitacao(caixaId, perfil, tx);
-
-    const valorCentavos = paraCentavos(dados.valor);
-    if (valorCentavos <= 0) throw new Error("Valor da solicitacao deve ser positivo");
-
-    // Decisao 7: nao faz sentido programar uma entrega que ninguem podera receber.
-    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId], tx);
-
-    // D4: SEM teto de saldo aqui, e de proposito. Programar nao movimenta dinheiro; a Tesouraria
-    // pode pedir de manha o que so existira no caixa a tarde. O teto vale na EXECUCAO, que e onde
-    // o dinheiro sai de verdade.
-    await registrarEntregaAoCofre(
-      {
-        caixa,
-        tipo: dados.tipo,
-        valorCentavos,
-        // D5: solicitacao nao tem lacre. Lacre e do envelope fisico, e o fisico so existe quando
-        // o operador executa.
-        lacre: null,
-        observacao: dados.observacao ?? null,
-        criadoPor: perfil.usuarioId,
-        status: "agendada",
-        idempotenciaChave: dados.idempotenciaChave
-      },
-      tx
-    );
-
-    return serializarSolicitacoes(await listarSolicitacoesCofreRepository(caixaId, tx));
-  });
-}
-
-// D4: quais caixas estao abertos agora, para a retaguarda escolher o destino da solicitacao.
-//
-// Exige o PAPEL de retaguarda, e nao so a permissao do preHandler. O operador de Caixa tambem tem
-// `transferencias_criar`, entao sem esta checagem ele passaria pelo gate e receberia a lista de
-// TODOS os caixas abertos da empresa — informacao que nao lhe diz respeito e que so existe para
-// programar entrega, ato que ele nao pode praticar.
-export async function listarCaixasAbertos(empresaId: string, perfil: PerfilUsuario): Promise<CaixaAbertoResumo[]> {
-  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
-  if (!podeLancarSemCaixa(perfil)) throw new Error("Programar entrega ao cofre e exclusivo da retaguarda");
-  const linhas = await listarCaixasAbertosRepository(empresaId);
-  return linhas.map((linha) => ({
-    id: linha.id,
-    pdvNome: linha.pdvNome,
-    usuarioCaixaNome: linha.usuarioCaixaNome,
-    dataMovimento: linha.dataMovimento,
-    dataHoraAbertura: linha.dataHoraAbertura ? new Date(linha.dataHoraAbertura).toISOString() : null
-  }));
-}
-
-export async function listarSolicitacoesCofre(caixaId: string, perfil: PerfilUsuario): Promise<SolicitacaoCofre[]> {
-  const caixa = await buscarCaixaPorIdRepository(caixaId);
-  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-  return serializarSolicitacoes(await listarSolicitacoesCofreRepository(caixaId));
-}
-
-function serializarSolicitacoes(
-  linhas: Array<{
-    id: string;
-    tipo: string;
-    valorOriginal: string;
-    observacao: string | null;
-    criadoPor: string | null;
-    criadoEm: Date | null;
-  }>
-): SolicitacaoCofre[] {
-  return linhas.map((linha) => ({
-    id: linha.id,
-    tipo: linha.tipo === "sangria" ? "sangria" : "retorno",
-    valor: deCentavos(paraCentavos(linha.valorOriginal)),
-    observacao: linha.observacao,
-    criadoPor: linha.criadoPor,
-    criadoEm: (linha.criadoEm ?? new Date()).toISOString()
-  }));
-}
-
-// D4: o operador executa. A solicitacao 'agendada' vira o movimento 'pendente' — a MESMA linha,
-// nao uma copia. O dinheiro sai do caixa neste instante e fica aguardando a conferencia de quem
-// opera a conta do cofre (R-028/R-036).
-export async function executarSolicitacaoCofre(
-  caixaId: string,
-  solicitacaoId: string,
-  dados: ExecutarSolicitacaoCofrePayload,
-  perfil: PerfilUsuario
-): Promise<CaixaStatus> {
-  return executarEmTransacao(async (tx) => {
-    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
-    const caixa = await carregarCaixaParaSolicitacao(caixaId, perfil, tx);
-    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-
-    const status = () => statusDoCaixaAberto(caixa, tx);
-
-    const lacre = dados.lacre?.trim() || null;
-    const solicitacao = await buscarSolicitacaoCofreRepository(solicitacaoId, caixaId, tx);
-    if (!solicitacao) throw new Error("Solicitacao nao encontrada");
-
-    // Decisao 2: cancelada e um estado FINAL. Responder 200 aqui seria dizer "entreguei" para um
-    // pedido que a retaguarda revogou — nunca sucesso silencioso.
-    if (solicitacao.status === "cancelada") {
-      throw new ErroDominio("Solicitacao cancelada nao pode ser executada", 409, "SOLICITACAO_CANCELADA");
-    }
-
-    // Idempotencia da EXECUCAO, sem chave nenhuma: a identidade do ato e o proprio `solicitacaoId`.
-    // Ja saiu de 'agendada' => alguem ja executou. O unico conteudo proprio deste ato e o lacre do
-    // envelope, entao e ele que decide:
-    //   - mesmo lacre (ou ambos sem lacre) => retry, 200, nada acontece de novo;
-    //   - lacre diferente => nao e retry, e outro envelope fisico sobre uma ordem ja cumprida. 409.
-    if (solicitacao.status !== "agendada") {
-      if ((solicitacao.lacre ?? null) !== lacre) {
-        throw new ErroDominio(
-          "Solicitacao ja executada com outro lacre — use um movimento avulso para a entrega adicional",
-          409,
-          "EXECUCAO_CONFLITO"
-        );
-      }
-      return status();
-    }
-
-    // Decisao 7: sem responsavel no Cofre nao existe quem confira a entrega. Bloqueia ANTES de o
-    // dinheiro sair do caixa — senao ele fica `pendente` para sempre, fora do caixa e fora do cofre.
-    //
-    // R-183 · aqui sao DUAS pessoas impedidas, nao uma: quem PROGRAMOU (`solicitacao.criadoPor`) e
-    // quem esta EXECUTANDO agora. As duas ficam fora da conferencia pela R-028, entao as duas
-    // precisam sair da conta de elegiveis ANTES de o malote sair. Excluir so o executor deixaria
-    // passar uma entrega que ninguem poderia conferir depois — e caixa que nunca fecha.
-    await exigirConfirmadorDoCofre(caixa.empresaId, [perfil.usuarioId, solicitacao.criadoPor], tx);
-
-    // D10 · o valor e o PROGRAMADO, ponto. A Tesouraria pediu R$ 100 => saem R$ 100. O payload nem
-    // carrega valor, entao nao ha o que divergir aqui.
-    const valorCentavos = solicitacao.valorCentavos;
-
-    // Decisao 1: menos que o programado NAO executa. Executar parcialmente reescreveria o valor da
-    // ordem — e o que a retaguarda conferiria depois nao seria o que ela pediu. O excedente, no
-    // caminho oposto, tem saida propria: um movimento avulso, com chave e lacre novos.
-    const saldoDisponivelCentavos = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
-    if (valorCentavos > saldoDisponivelCentavos) {
-      throw new Error(
-        `Saldo insuficiente para executar a solicitacao: programado R$ ${deCentavos(valorCentavos).toFixed(2)}, ` +
-          `disponivel R$ ${deCentavos(saldoDisponivelCentavos).toFixed(2)}`
-      );
-    }
-
-    // D5: o lacre nasce na execucao, e e deste movimento. R-027: numero novo, nunca reutilizado.
-    if (lacre && (await existeNumeroLacreRepository(caixa.empresaId, lacre, tx))) {
-      throw new Error("Lacre já utilizado em outro movimento");
-    }
-
-    const ordem = await proximaOrdemTransferenciaRepository(caixa.id, solicitacao.tipo, tx);
-    const executada = await executarSolicitacaoCofreRepository(
-      {
-        solicitacaoId,
-        caixaId,
-        lacre,
-        ordem,
-        dataTransferencia: diaNegocio(new Date()),
-        // Quem esta executando AGORA — nao quem programou. `podeOperarCaixa` aceita gerente, quem
-        // abriu o caixa ou o operador designado, entao sem isto a recusa notificaria a pessoa errada.
-        executadoPor: perfil.usuarioId
-      },
-      tx
-    );
-    // Zero linhas: outra execucao venceu a transicao. Na pratica a trava da linha do caixa ja
-    // serializa as duas (a perdedora entra aqui depois do commit e cai no ramo de retry acima);
-    // isto e a rede de seguranca para o caso de a trava ser contornada por outro caminho.
-    // Nao devolve sucesso as cegas: reavalia com a MESMA regra do retry.
-    if (!executada) {
-      const atual = await buscarSolicitacaoCofreRepository(solicitacaoId, caixaId, tx);
-      if (atual && (atual.lacre ?? null) === lacre) return status();
-      throw new ErroDominio("Solicitacao executada por outro usuario neste instante", 409, "EXECUCAO_CONFLITO");
-    }
-
-    if (lacre) {
-      await criarLacreRetornoRepository(
-        { empresaId: caixa.empresaId, numero: lacre, transferenciaId: executada.id },
-        tx
-      );
-    }
-
-    const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
-    if (!atualizado) throw new Error("Caixa nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
-  });
-}
-
-// D4/decisao 2: a retaguarda CANCELA uma solicitacao ainda `agendada`, com motivo obrigatorio.
-//
-// Cancelar nao apaga: a linha continua, com K1, valor, observacao e o marcador da programacao
-// intactos, e ganha autoria + data + motivo. Uma ordem de dinheiro revogada tem de continuar
-// visivel no historico — apagar seria destruir a trilha com outro nome.
-//
-// So `agendada` pode ser cancelada. `pendente`/`recebido` ja moveram dinheiro e sao imutaveis; o
-// CHECK `transferencias_solicitacao_cofre_check` torna isso impossivel no banco, nao so aqui.
-export async function cancelarSolicitacaoCofre(
-  caixaId: string,
-  solicitacaoId: string,
-  dados: CancelarSolicitacaoCofrePayload,
-  perfil: PerfilUsuario
-): Promise<SolicitacaoCofre[]> {
-  return executarEmTransacao(async (tx) => {
-    if (!podeLancarSemCaixa(perfil)) throw new Error("Cancelar entrega ao cofre e exclusivo da retaguarda");
-    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
-    // Chamada pelo efeito, nao pelo retorno: valida empresa permitida, caixa ainda aberto e PDV com
-    // conta. Cancelar num caixa de outra empresa, ou ja fechado, tem de parar aqui.
-    await carregarCaixaParaSolicitacao(caixaId, perfil, tx);
-
-    const solicitacao = await buscarSolicitacaoCofreRepository(solicitacaoId, caixaId, tx);
-    // O filtro D4 ja exclui transferencia generica: para ela isto e 404, e nao "nao pode cancelar".
-    if (!solicitacao) throw new Error("Solicitacao nao encontrada");
-
-    // Retry do MESMO cancelamento: a linha ja esta 'cancelada'. Nao e erro nem duplica auditoria —
-    // o UPDATE guardado por `status = 'agendada'` acertaria zero linhas de qualquer forma.
-    if (solicitacao.status === "cancelada") {
-      return serializarSolicitacoes(await listarSolicitacoesCofreRepository(caixaId, tx));
-    }
-    if (solicitacao.status !== "agendada") {
-      throw new ErroDominio("Solicitacao ja executada nao pode ser cancelada", 409, "SOLICITACAO_EXECUTADA");
-    }
-
-    const cancelada = await cancelarSolicitacaoCofreRepository(
-      { solicitacaoId, caixaId, canceladoPor: perfil.usuarioId, motivo: dados.motivo.trim() },
-      tx
-    );
-    // Perdeu a corrida para outro cancelamento (ou para uma execucao). Reavalia em vez de mentir.
-    if (!cancelada) {
-      const atual = await buscarSolicitacaoCofreRepository(solicitacaoId, caixaId, tx);
-      if (atual?.status !== "cancelada") {
-        throw new ErroDominio("Solicitacao alterada por outro usuario neste instante", 409, "SOLICITACAO_CONFLITO");
-      }
-    }
-
-    return serializarSolicitacoes(await listarSolicitacoesCofreRepository(caixaId, tx));
-  });
-}
+// R-179/Fatia 3 · aqui viviam `programarSolicitacaoCofre`, `executarSolicitacaoCofre`,
+// `cancelarSolicitacaoCofre`, `listarSolicitacoesCofre` e `listarCaixasAbertos` — o fluxo D4
+// "Programar entrega ao cofre". A retaguarda programava uma ordem `agendada` e o operador a
+// executava; era um SEGUNDO caminho para o mesmo ato de `criarTransferenciaCofreCaixa`, com a mesma
+// entidade e as mesmas contas. Removido inteiro, junto com as rotas — nao escondido atras de
+// permissao. A entrega ao cofre acontece dentro do turno, por quem tem a gaveta.
 
 // M2 (consultas, item 4): a "aba TRANSFERENCIAS" por caixa+dia — os movimentos com ordem 1a/2a/3a/4a
 // e os totais na OTICA DO COFRE: SAIDA = cofre->caixa (abertura/suprimento); ENTRADA = caixa->cofre

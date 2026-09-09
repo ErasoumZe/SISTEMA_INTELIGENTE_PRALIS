@@ -22,10 +22,14 @@ import {
 // fechava, o operador ia embora e, se o cofre encontrasse falta depois, a divergencia nao tinha mais
 // dono — o turno estava encerrado.
 //
+// R-179/Fatia 3 · a guarda da D12 nao existe mais: o painel que criava a ordem `agendada` e as
+// rotas dele foram removidos, e sem produtor manter a guarda prenderia qualquer linha legada para
+// sempre. Esta aqui e a UNICA trava do fechamento agora, e continua inteira.
+//
 // O ESCOPO e o predicado canonico de entrega Caixa -> Cofre (`ehEntregaCaixaParaCofre`): caixa
 // vinculado, tipo sangria/retorno e destino = conta cofre da empresa. Transferencia generica NAO
 // entra, e isso e verificado aqui de proposito — bloquear alem do malote fisico travaria operacao
-// que a R-171 nunca mencionou, e sem valvula de escape enquanto a Fatia 2 nao existe.
+// que a R-171 nunca mencionou.
 //
 // O retorno final do proprio fechamento tambem nasce `pendente` (D6/D7) e NAO se auto-bloqueia: a
 // guarda le o estado ANTERIOR ao ato. O caso 2 prova isso junto com a liberacao.

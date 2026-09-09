@@ -588,17 +588,8 @@ export async function criarTransferenciaCofreRepository(
     descricao: string;
     observacao: string | null;
     criadoPor: string;
-    // D2/D3: a entrega do operador nasce 'pendente' — quem opera a conta do cofre confere depois
-    // (R-028/R-036). D4: a solicitacao programada pela tesouraria nasce 'agendada', que NAO conta
-    // como saida (shared/caixa/regras.ts) — programar nao movimenta dinheiro.
-    status: "pendente" | "agendada";
     // B2: null so no retorno final do fechamento, que e protegido pela trava + guarda de status.
     idempotenciaChave: string | null;
-    // D4: carimbado SO quando a linha nasce de uma solicitacao programada. E o marcador que separa
-    // este fluxo do generico e da entrega avulsa — sem ele, uma transferencia generica `agendada`
-    // ligada ao caixa apareceria como solicitacao, bloquearia o fechamento e poderia ser executada
-    // pelo endpoint D4. Null em todo o resto.
-    solicitacaoCofreEm: Date | null;
   },
   db: ExecutorBanco = banco
 ): Promise<{ id: string; criada: boolean }> {
@@ -617,9 +608,12 @@ export async function criarTransferenciaCofreRepository(
       nLacreDoc: input.nLacreDoc,
       tipo: input.tipo,
       ordem: input.ordem,
-      status: input.status,
+      // D2/D3/R-179 · a entrega ao cofre nasce SEMPRE 'pendente': o dinheiro ja saiu do caixa
+      // (`transferenciaContaComoSaida` conta 'pendente'), mas so entra no cofre quando quem opera
+      // a conta de destino conferir (R-028/R-036). Nao existe mais o ramo 'agendada' — ele era da
+      // ordem programada pela retaguarda, removida na Fatia 3.
+      status: "pendente",
       idempotenciaChave: input.idempotenciaChave,
-      solicitacaoCofreEm: input.solicitacaoCofreEm,
       criadoPor: input.criadoPor
     })
     // B2: quem resolve a corrida e o BANCO, e resolve sem abortar a transacao. Com um INSERT cru,
@@ -645,190 +639,15 @@ export async function criarTransferenciaCofreRepository(
   return { id: transferencia.id, criada: true };
 }
 
-// D4: os caixas ABERTOS da empresa, com o minimo para a retaguarda escolher um destino.
+// R-179/Fatia 3 · aqui viviam `listarCaixasAbertosRepository` e as cinco consultas da ordem
+// programada (D4): `listarSolicitacoesCofreRepository`, `buscarSolicitacaoCofreRepository`,
+// `executarSolicitacaoCofreRepository`, `cancelarSolicitacaoCofreRepository` e
+// `existeSolicitacaoAgendadaRepository`, todas ancoradas no marcador `solicitacao_cofre_em`.
 //
-// Existe separado de `/api/caixa/historico` porque aquele e gated por `caixas_gerenciar`, que a
-// Tesouraria nao tem (e nao deve ter — ela nao opera caixa). Ampliar o gate do historico abriria
-// o historico inteiro para quem so precisa saber "quais caixas estao abertos agora".
-export async function listarCaixasAbertosRepository(empresaId: string, db: ExecutorBanco = banco) {
-  return db
-    .select({
-      id: fechamentosCaixa.id,
-      pdvNome: pdvs.nome,
-      usuarioCaixaNome: perfisUsuarios.nome,
-      dataMovimento: fechamentosCaixa.dataMovimento,
-      dataHoraAbertura: fechamentosCaixa.dataHoraAbertura
-    })
-    .from(fechamentosCaixa)
-    .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
-    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
-    .where(and(eq(fechamentosCaixa.empresaId, empresaId), eq(fechamentosCaixa.status, "aberto")))
-    .orderBy(asc(pdvs.nome));
-}
-
-// --- D4 · solicitacao programada -------------------------------------------------------------
-// TODA consulta D4 exige o marcador `solicitacao_cofre_em`. Filtrar so por caixa + status era um
-// vazamento entre fluxos: `criarTransferencia` (generica) grava `caixa_id` quando a transferencia
-// envolve a conta do PDV, e nasce 'agendada' se tiver `agendadaPara`. Sem o marcador, essa linha
-// aparecia como solicitacao, bloqueava o fechamento e podia ser executada pelo endpoint D4 —
-// corrompendo uma transferencia que nunca foi uma ordem de entrega ao cofre.
-//
-// Tipo e destino nao bastam: depois de executada, a solicitacao vira 'pendente'/'sangria' para o
-// mesmo cofre, indistinguivel de uma entrega avulsa. So um marcador de ORIGEM resolve.
-const daSolicitacaoCofre = isNotNull(transferencias.solicitacaoCofreEm);
-
-// As solicitacoes 'agendada' de um caixa. Nao movimentam saldo (regras.ts nao as conta como saida);
-// existem para o operador saber o que a Tesouraria pediu que ele entregasse.
-export async function listarSolicitacoesCofreRepository(caixaId: string, db: ExecutorBanco = banco) {
-  return db
-    .select({
-      id: transferencias.id,
-      tipo: transferencias.tipo,
-      valorOriginal: transferencias.valorOriginal,
-      observacao: transferencias.observacao,
-      criadoPor: transferencias.criadoPor,
-      criadoEm: transferencias.criadoEm
-    })
-    .from(transferencias)
-    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), daSolicitacaoCofre))
-    .orderBy(asc(transferencias.criadoEm));
-}
-
-// D4: uma solicitacao especifica, em QUALQUER status. Quem chama precisa distinguir "nao existe"
-// (404) de "existe e ja foi executada" (repeticao, responde sem duplicar).
-export async function buscarSolicitacaoCofreRepository(
-  solicitacaoId: string,
-  caixaId: string,
-  db: ExecutorBanco = banco
-): Promise<{
-  id: string;
-  tipo: string;
-  valorCentavos: number;
-  status: string;
-  observacao: string | null;
-  // Lacre gravado NA EXECUCAO. E o unico conteudo proprio do ato fisico, e por isso e ele que
-  // distingue "retry da mesma execucao" (200) de "execucao com outro envelope" (409).
-  lacre: string | null;
-  // Quem entregou o dinheiro. Null enquanto 'agendada'. Preservado apos a confirmacao.
-  executadoPor: string | null;
-  // R-183 · quem PROGRAMOU. Sai daqui para o portao do confirmador excluir as duas pessoas de uma
-  // vez — o programador e o executor —, e nao so quem esta executando agora.
-  criadoPor: string | null;
-} | null> {
-  const [linha] = await db
-    .select({
-      id: transferencias.id,
-      tipo: transferencias.tipo,
-      valorOriginal: transferencias.valorOriginal,
-      status: transferencias.status,
-      observacao: transferencias.observacao,
-      criadoPor: transferencias.criadoPor,
-      lacre: transferencias.nLacreDoc,
-      executadoPor: transferencias.executadoPor
-    })
-    .from(transferencias)
-    .where(and(eq(transferencias.id, solicitacaoId), eq(transferencias.caixaId, caixaId), daSolicitacaoCofre))
-    .limit(1);
-  if (!linha) return null;
-  const { valorOriginal, ...resto } = linha;
-  return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
-}
-
-// D4: a EXECUCAO da solicitacao. A mesma linha vira 'pendente' — a mesma transicao que o cron
-// generico aplica (efetivarTransferenciaAgendadaRepository), nao um segundo mecanismo.
-//
-// `status = 'agendada'` no WHERE e a TRANSICAO ATOMICA que serve de idempotencia: duas execucoes
-// concorrentes disputam a mesma linha e so uma acerta uma linha. A perdedora recebe zero e
-// responde com o estado atual, sem criar movimento nem segundo lacre.
-//
-// D10 · o que este UPDATE NAO toca, e por que:
-//   - `valorOriginal` e `observacao`: sao da PROGRAMACAO e imutaveis. A retaguarda pediu R$ 100,
-//     entao a execucao movimenta R$ 100. Excedente vira movimento avulso proprio.
-//   - `idempotenciaChave`: e a ancora da CRIACAO. Sobrescreve-la aqui apagava a chave da
-//     programacao — e um retry da programacao, nao encontrando mais a linha, criava OUTRA
-//     solicitacao. Era esse o bug.
-// Sobra o que e do ato fisico: status, lacre do envelope, ordinal, a data real do movimento e a
-// IDENTIDADE de quem executou — `criado_por` responde quem PROGRAMOU, e quem executa costuma ser
-// outra pessoa (`podeOperarCaixa` aceita gerente, quem abriu o caixa ou o operador designado).
-// Como o WHERE exige 'agendada', so um chamador acerta a linha: retry e corrida jamais reescrevem
-// `executado_por`/`executado_em`.
-export async function executarSolicitacaoCofreRepository(
-  input: {
-    solicitacaoId: string;
-    caixaId: string;
-    lacre: string | null;
-    ordem: number;
-    dataTransferencia: string;
-    executadoPor: string;
-  },
-  db: ExecutorBanco = banco
-): Promise<{ id: string } | null> {
-  const [linha] = await db
-    .update(transferencias)
-    .set({
-      status: "pendente",
-      nLacreDoc: input.lacre,
-      ordem: input.ordem,
-      dataTransferencia: input.dataTransferencia,
-      executadoPor: input.executadoPor,
-      executadoEm: new Date(),
-      atualizadoEm: new Date()
-    })
-    .where(
-      and(
-        eq(transferencias.id, input.solicitacaoId),
-        eq(transferencias.caixaId, input.caixaId),
-        eq(transferencias.status, "agendada"),
-        daSolicitacaoCofre
-      )
-    )
-    .returning({ id: transferencias.id });
-  return linha ?? null;
-}
-
-// D4/decisao 2: cancela uma solicitacao ainda `agendada`. NAO apaga a linha — grava autoria, data e
-// motivo, e o CHECK do banco exige os tres. `WHERE status = 'agendada'` e a guarda: cancelar duas
-// vezes acerta zero linhas na segunda, entao o retry nao duplica auditoria; e `pendente`/`recebido`
-// (ja executadas) sao imutaveis por construcao.
-// K1, valor, observacao e o marcador da programacao ficam intactos.
-export async function cancelarSolicitacaoCofreRepository(
-  input: { solicitacaoId: string; caixaId: string; canceladoPor: string; motivo: string },
-  db: ExecutorBanco = banco
-): Promise<{ id: string } | null> {
-  const [linha] = await db
-    .update(transferencias)
-    .set({
-      status: "cancelada",
-      canceladoPor: input.canceladoPor,
-      canceladoEm: new Date(),
-      motivoCancelamento: input.motivo,
-      atualizadoEm: new Date()
-    })
-    .where(
-      and(
-        eq(transferencias.id, input.solicitacaoId),
-        eq(transferencias.caixaId, input.caixaId),
-        eq(transferencias.status, "agendada"),
-        daSolicitacaoCofre
-      )
-    )
-    .returning({ id: transferencias.id });
-  return linha ?? null;
-}
-
-// D4/decisao 5: existe solicitacao ainda `agendada` neste caixa? Enquanto existir, o caixa nao
-// fecha — a ordem da retaguarda precisa ser executada ou cancelada, nunca esquecida no fechamento.
-export async function existeSolicitacaoAgendadaRepository(
-  caixaId: string,
-  db: ExecutorBanco = banco
-): Promise<boolean> {
-  const [linha] = await db
-    .select({ id: transferencias.id })
-    .from(transferencias)
-    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), daSolicitacaoCofre))
-    .limit(1);
-  return Boolean(linha);
-}
+// As rotas que as usavam foram removidas: entrega ao cofre tem UM caminho, e ele nasce dentro do
+// turno. As colunas `solicitacao_cofre_em`, `executado_por` e `executado_em` continuam no schema e
+// ficam sem escritor — remove-las e migration, ato separado com autorizacao propria. As linhas
+// legadas que as preenchem seguem intactas e continuam legiveis pela conferencia.
 
 // Decisao 7 (revisada): quem esta VINCULADO a esta conta e poderia conferir?
 //
@@ -837,19 +656,20 @@ export async function existeSolicitacaoAgendadaRepository(
 // NAO e resolvida aqui de proposito: a permissao efetiva vem de setor + cargos + usuario e e
 // computada por `resolverPermissoesEfetivas`. Reproduzir isso em SQL criaria uma segunda regra de
 // permissao, que divergiria da do guard no primeiro ajuste. O servico fecha a conta.
+// R-179/Fatia 3 · o parametro era uma LISTA de excluidos porque na ordem programada (D4) quem
+// programava e quem entregava eram pessoas diferentes, e as duas ficavam impedidas de conferir. Com
+// um unico caminho de entrega existe um unico autor. Este portao roda ANTES de o dinheiro sair: se
+// a exclusao do autor nao deixar ninguem elegivel, a entrega nao acontece — melhor recusar agora do
+// que descobrir depois que o malote nao tem conferente e o caixa nao fecha mais.
 export async function listarCandidatosConfirmacaoRepository(
-  // R-183 · uma LISTA de excluidos, e nao so o criador. Numa solicitacao D4 quem programa e quem
-  // entrega sao pessoas diferentes, e as duas ficam impedidas de conferir (R-028). Este portao roda
-  // ANTES de o dinheiro sair: se a exclusao das duas nao deixar ninguem elegivel, a entrega nao
-  // acontece — melhor recusar a execucao do que descobrir depois que o malote nao tem conferente e
-  // o caixa nao fecha mais.
-  input: { contaId: string; empresaId: string; excluirUsuarioIds: Array<string | null> },
+  input: { contaId: string; empresaId: string; excluirUsuarioId: string },
   db: ExecutorBanco = banco
 ): Promise<string[]> {
-  const filtros = [eq(contasUsuarios.contaId, input.contaId), eq(contasUsuarios.empresaId, input.empresaId)];
-  for (const usuarioId of input.excluirUsuarioIds) {
-    if (usuarioId) filtros.push(ne(contasUsuarios.usuarioId, usuarioId));
-  }
+  const filtros = [
+    eq(contasUsuarios.contaId, input.contaId),
+    eq(contasUsuarios.empresaId, input.empresaId),
+    ne(contasUsuarios.usuarioId, input.excluirUsuarioId)
+  ];
 
   const linhas = await db
     .select({ usuarioId: contasUsuarios.usuarioId })

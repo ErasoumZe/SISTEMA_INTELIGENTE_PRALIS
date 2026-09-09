@@ -258,64 +258,18 @@ export const transferenciaCofrePayloadSchema = z.object({
   idempotenciaChave: idempotenciaChaveSchema
 });
 
-// D4 — a Tesouraria/Gestao PROGRAMA a entrega ligada ao caixa aberto. Nasce 'agendada', que
-// `transferenciaContaComoSaida` NAO conta: programar nao movimenta dinheiro nenhum. Sem lacre aqui
-// de proposito — o lacre e do movimento fisico (D5), e o fisico so acontece quando o operador
-// executa. Reusa a mesma entidade transferencia caixa -> cofre; nao existe tabela paralela.
-export const programarSolicitacaoCofrePayloadSchema = z.object({
-  tipo: z.enum(["sangria", "retorno"]),
-  valor: z.coerce.number().positive(),
-  observacao: z.string().trim().max(500).optional().nullable(),
-  idempotenciaChave: idempotenciaChaveSchema
-});
-
-// D4/D10 — o operador EXECUTA a solicitacao programada, e executa EXATAMENTE o que foi programado.
-// O valor e a observacao NAO viajam neste payload: quem os definiu foi a retaguarda, e a execucao
-// nao os reescreve. Se o operador tem mais do que o programado, o excedente vira um movimento
-// avulso proprio (chave e lacre novos); se tem menos, a solicitacao simplesmente nao e executada.
-//
-// Tambem NAO ha `idempotenciaChave` aqui, e a ausencia e deliberada. A chave e da CRIACAO: ela
-// ancora a programacao e nunca pode ser sobrescrita. Gravar uma chave nova na execucao apagava a
-// ancora original — um retry da programacao deixava de encontrar a linha e criava outra
-// solicitacao. A execucao e idempotente pelo `solicitacaoId` mais a transicao atomica
-// `status = 'agendada'`, que so um chamador vence.
-//
-// Sobra o que e proprio do ato FISICO: o lacre do envelope (opcional, R-026).
-export const executarSolicitacaoCofrePayloadSchema = z.object({
-  lacre: z.string().trim().min(1).optional().nullable()
-});
-
-export const solicitacaoCofreParamsSchema = z.object({
-  caixaId: uuidSchema,
-  solicitacaoId: uuidSchema
-});
-
-// D4: o minimo para a retaguarda escolher para QUAL caixa aberto vai programar a entrega.
-export const caixaAbertoResumoSchema = z.object({
-  id: uuidSchema,
-  pdvNome: z.string(),
-  usuarioCaixaNome: z.string().nullable(),
-  dataMovimento: z.string(),
-  dataHoraAbertura: z.string().nullable()
-});
-
-// Uma solicitacao programada, como a tela do operador a enxerga. `valor` e o valor PROGRAMADO e
-// imutavel: e exatamente o que a execucao vai movimentar.
-export const solicitacaoCofreSchema = z.object({
-  id: uuidSchema,
-  tipo: z.enum(["sangria", "retorno"]),
-  valor: z.number(),
-  observacao: z.string().nullable(),
-  criadoPor: z.string().nullable(),
-  criadoEm: z.string()
-});
+// R-179/Fatia 3 · aqui viviam `programarSolicitacaoCofrePayloadSchema`,
+// `executarSolicitacaoCofrePayloadSchema`, `solicitacaoCofreParamsSchema` e
+// `caixaAbertoResumoSchema` — os contratos de "Programar entrega ao cofre" (D4). A retaguarda
+// programava uma ordem `agendada` e o operador a executava: um segundo caminho para o mesmo ato
+// de `transferenciaCofrePayloadSchema` acima. Rotas, servico e tela sairam juntos.
 
 // G1/R-171 — uma entrega ao cofre que JA SAIU do caixa e ainda nao foi conferida. Enquanto existir
 // uma destas, o caixa nao fecha pelo caminho comum: o dinheiro esta na rua e a divergencia futura
 // precisa de um turno aberto para ter dono.
 //
-// Nao confundir com `solicitacaoCofreSchema`: aquela e ordem `agendada`, dinheiro que AINDA NAO
-// saiu. As duas travam o fechamento, por motivos opostos.
+// Depois da R-179/Fatia 3 esta e a UNICA coisa que trava o fechamento: a ordem `agendada` da
+// retaguarda deixou de existir junto com o painel que a criava.
 export const entregaCofrePendenteSchema = z.object({
   id: uuidSchema,
   tipo: z.enum(["sangria", "retorno"]),
@@ -331,13 +285,6 @@ export const entregaCofrePendenteSchema = z.object({
   // A recusa que produziu esse numero. Serve de referencia estavel para a tela e para o suporte —
   // "a ultima" e uma leitura dependente de ordem, e este id nao e.
   recusaId: uuidSchema.nullable()
-});
-
-// D4/decisao 2: cancelamento de solicitacao ainda `agendada`. Motivo obrigatorio — cancelar uma
-// ordem de dinheiro sem dizer por que nao e auditoria, e apagar rastro com outro nome. O banco
-// tambem exige (transferencias_cancelamento_check), entao a regra nao depende so desta validacao.
-export const cancelarSolicitacaoCofrePayloadSchema = z.object({
-  motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500)
 });
 
 // M2 — visao "aba TRANSFERENCIAS" da planilha: por caixa+dia, os movimentos com ordem 1a/2a/3a/4a e
@@ -419,13 +366,7 @@ export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoC
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
-export type ProgramarSolicitacaoCofrePayload = z.infer<typeof programarSolicitacaoCofrePayloadSchema>;
-export type ExecutarSolicitacaoCofrePayload = z.infer<typeof executarSolicitacaoCofrePayloadSchema>;
-export type CancelarSolicitacaoCofrePayload = z.infer<typeof cancelarSolicitacaoCofrePayloadSchema>;
-export type SolicitacaoCofreParams = z.infer<typeof solicitacaoCofreParamsSchema>;
-export type SolicitacaoCofre = z.infer<typeof solicitacaoCofreSchema>;
 export type EntregaCofrePendente = z.infer<typeof entregaCofrePendenteSchema>;
-export type CaixaAbertoResumo = z.infer<typeof caixaAbertoResumoSchema>;
 export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;
 export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;
 export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;

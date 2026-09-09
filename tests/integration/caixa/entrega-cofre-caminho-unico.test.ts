@@ -5,7 +5,7 @@ import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { abrirCaixaDoOperador } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // P1 da #101 — o caminho antigo que sobreviveu a Fatia 1.
 //
@@ -26,6 +26,10 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 // aberto, destino = conta cofre da empresa) e nada mais. Transferencia comum continua passando —
 // inclusive a que sai da conta do PDV para OUTRA conta, e a que traz dinheiro do cofre PARA o
 // caixa. Bloquear alem do par exato prenderia operacao legitima.
+//
+// Fatia 3 · e fixa tambem a OUTRA porta, que era interna: as rotas de "Programar entrega ao cofre"
+// (D4). Elas nao foram escondidas atras de permissao — foram removidas, e os casos RED-5/RED-6
+// provam o 404. Um caminho antigo que responde 403 continua existindo; um que responde 404, nao.
 describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
@@ -170,5 +174,81 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
       [json<{ data: { id: string } }>(resposta).data.id]
     );
     expect(criada?.conta_destino_id).toBe(fx.contaId);
+  });
+
+  // ------------------------------------------------------------------------------------------
+  // RED-5 · Fatia 3: as quatro rotas de "Programar entrega ao cofre" nao existem mais.
+  //
+  // Nao basta o painel sumir da tela: enquanto a rota responder, o caminho antigo continua vivo
+  // para qualquer cliente que saiba a URL — e a regra-mae do `16_DEFINITION_OF_DONE` fala em
+  // REMOVER, nao esconder. 404 e a unica resposta que prova remocao: 403 provaria que a rota
+  // continua registrada e so mudou de dono.
+  //
+  // O ator e o ADMIN de proposito. Ele tem todas as permissoes e e retaguarda, entao passaria em
+  // qualquer gate — se ele leva 404, ninguem alcanca a rota.
+  // ------------------------------------------------------------------------------------------
+  it("Deve_Responder404_Quando_AlguemChamaAsRotasDeProgramarEntregaAoCofre", async () => {
+    const fx = await novoCaixa("F3 rotas removidas");
+    const solicitacaoId = randomUUID();
+
+    const respostas = await Promise.all([
+      inject("GET", `/api/caixa/abertos?empresaId=${empresaId}`, cookieAdmin),
+      inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre`, cookieAdmin, {
+        tipo: "sangria",
+        valor: 10,
+        idempotenciaChave: randomUUID()
+      }),
+      inject("GET", `/api/caixa/${fx.caixaId}/solicitacoes-cofre`, cookieAdmin),
+      inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre/${solicitacaoId}/executar`, cookieAdmin, {
+        lacre: "F3-NAO-EXISTE"
+      }),
+      inject("POST", `/api/caixa/${fx.caixaId}/solicitacoes-cofre/${solicitacaoId}/cancelar`, cookieAdmin, {
+        motivo: "nao deveria existir"
+      })
+    ]);
+
+    for (const resposta of respostas) {
+      expect(resposta.statusCode, resposta.body).toBe(404);
+    }
+    // E nenhuma delas deixou rastro: rota removida nao grava linha nem meia linha.
+    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([]);
+  });
+
+  // ------------------------------------------------------------------------------------------
+  // RED-6 · Fatia 3: sem produtor de ordem `agendada`, o fechamento nao pode mais ser travado por
+  // ela. A guarda da D12 saiu junto com as rotas — mante-la transformaria qualquer linha legada
+  // numa armadilha: turno que nao fecha e nao tem rota para executar nem para cancelar.
+  //
+  // A linha legada e montada em SQL de proposito. Nao existe mais API que a produza, e este e
+  // exatamente o estado que um banco ja em uso pode ter.
+  // ------------------------------------------------------------------------------------------
+  it("Deve_FecharOTurno_Quando_RestaOrdemAgendadaLegadaDoCaminhoRemovido", async () => {
+    const fx = await novoCaixa("F3 legado agendada");
+    await venda(200);
+
+    await executarSql(
+      `insert into transferencias (
+         empresa_id, caixa_id, data_referencia, data_transferencia, descricao, valor_original,
+         conta_origem_id, conta_destino_id, tipo, status, solicitacao_cofre_em, criado_por
+       )
+       values ($1, $2, $3, $3, 'Ordem legada da retaguarda', 100, $4, $5, 'sangria', 'agendada', now(),
+               (select id from "user" where lower(email) = lower($6)))`,
+      [empresaId, fx.caixaId, DIA, fx.contaId, idsTeste.contaCofre, usuariosTeste.tesouraria.email]
+    );
+
+    // `agendada` nunca contou como saida (`transferenciaContaComoSaida`), entao o saldo do turno
+    // ignora a linha e o fechamento apura os R$ 200 da venda como sobra a devolver.
+    const fechar = await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, {
+      observacao: "Turno com ordem legada"
+    });
+    expect(fechar.statusCode, fechar.body).toBe(204);
+
+    // A linha legada continua intacta: remover o caminho nao reescreve o passado.
+    const legada = await consultarUm<{ status: string; solicitacao_cofre_em: string | null }>(
+      "select status, solicitacao_cofre_em from transferencias where caixa_id = $1 and status = 'agendada'",
+      [fx.caixaId]
+    );
+    expect(legada?.status).toBe("agendada");
+    expect(legada?.solicitacao_cofre_em).not.toBeNull();
   });
 });

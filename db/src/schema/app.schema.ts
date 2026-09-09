@@ -1632,16 +1632,20 @@ export const transferencias = pgTable(
     // parcial o ignora e nenhum backfill e necessario (D8). O retorno final do fechamento nao usa
     // chave — ele nasce dentro da transacao ja protegida pela trava e pela guarda de status (B1).
     idempotenciaChave: uuid("idempotencia_chave"),
-    // D4: marca que esta linha nasceu de uma SOLICITACAO Caixa -> Cofre. Nullable e sem default —
-    // historico, entrega avulsa e retorno final do fechamento ficam NULL, e e esse NULL que separa
-    // os dois fluxos. Preenchido SO na criacao D4; preservado na execucao e no cancelamento.
-    // Nao reusa `agendada_para` (que e QUANDO efetivar, do fluxo generico) nem descricao/observacao.
+    // D4: marcava que a linha nasceu de uma SOLICITACAO Caixa -> Cofre, o fluxo "Programar entrega
+    // ao cofre".
+    //
+    // R-179/Fatia 3 · esse caminho foi REMOVIDO (painel, rotas, servico e consultas). Esta coluna
+    // ficou SEM ESCRITOR: nada no codigo a preenche mais. Ela continua aqui porque as linhas
+    // historicas que a usam sao fatos ocorridos, e apaga-la e migration — ato separado, com
+    // autorizacao propria. O mesmo vale para `executado_por`/`executado_em` abaixo.
     solicitacaoCofreEm: timestamp("solicitacao_cofre_em", { withTimezone: true }),
-    // Quem ENTREGOU o dinheiro, e quando. Nao da para deduzir de `criado_por`: aquele e quem
-    // PROGRAMOU (Tesouraria/Gestao), e a execucao pode ser feita pelo gerente, por quem abriu o
-    // caixa ou pelo operador designado (`podeOperarCaixa`). A recusa notifica esta pessoa.
-    // Gravados na transicao atomica 'agendada' -> 'pendente'; como so um chamador acerta a linha,
-    // retry e execucao concorrente nunca os sobrescrevem.
+    // Quem ENTREGOU o dinheiro, e quando. No fluxo D4 nao dava para deduzir de `criado_por`:
+    // aquele era quem PROGRAMOU (Tesouraria/Gestao), e a execucao podia ser de outra pessoa.
+    //
+    // R-179/Fatia 3 · sem o fluxo D4 nao ha mais escritor: na entrega unica quem cria e quem
+    // entrega. As colunas ficam para as linhas historicas, e a conferencia continua LENDO
+    // `executado_por` para nao deixar quem entregou conferir a propria entrega (R-028).
     executadoPor: text("executado_por").references(() => perfisUsuarios.usuarioId),
     executadoEm: timestamp("executado_em", { withTimezone: true }),
     // Auditoria de cancelamento (decisao 2): os tres andam juntos — ver o CHECK.
@@ -1744,7 +1748,9 @@ export const transferencias = pgTable(
     uniqueIndex("transferencias_idempotencia_unica")
       .on(table.empresaId, table.idempotenciaChave)
       .where(sql`${table.idempotenciaChave} is not null`),
-    // Parcial pelo mesmo motivo: so indexa o fluxo D4, entao nao cresce com o historico.
+    // Parcial pelo mesmo motivo: so indexava o fluxo D4. R-179/Fatia 3 · sem escritor para
+    // `solicitacao_cofre_em`, o indice para de crescer e cobre apenas as linhas legadas. Derruba-lo
+    // e migration, ato separado.
     index("transferencias_solicitacao_cofre_idx")
       .on(table.caixaId, table.status)
       .where(sql`${table.solicitacaoCofreEm} is not null`)
