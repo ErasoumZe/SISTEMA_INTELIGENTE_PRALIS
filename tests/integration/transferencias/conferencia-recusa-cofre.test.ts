@@ -243,8 +243,10 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
   //   2. a quebra por falta nasce contra quem entregou, nao contra quem programou;
   //   3. a notificacao de divergencia vai para quem entregou.
   //
-  // Sem este caso os tres `executadoPor ?? criadoPor` do servico viram codigo sem rede: apagar
-  // qualquer um deles deixa a suite inteira verde e, em producao, a falta de dinheiro passa a ser
+  // Sao tres DECISOES em DUAS expressoes: `executadoPor ?? criadoPor` (`transferencias.service.ts`,
+  // no dono da quebra e no destinatario da notificacao) e `permitida.executadoPor === usuarioId`
+  // (`transferencias.repository.ts`, na elegibilidade). Sem este caso as tres viram codigo sem rede:
+  // apagar qualquer uma deixa a suite inteira verde e, em producao, a falta de dinheiro passa a ser
   // cobrada da pessoa errada. A linha e montada em SQL porque nenhuma API a produz mais — e este e
   // exatamente o estado que o banco real tem.
   it("na linha legada, quem ENTREGOU nao confere, responde pela quebra e e notificado", async () => {
@@ -277,6 +279,10 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       cookieGerente
     );
     assertProblem(proprioExecutor, 400);
+    // A MENSAGEM tambem e fixada, como nos casos vizinhos: hoje este e o unico 400 alcancavel nesta
+    // chamada, mas mover qualquer validacao de dominio para antes da elegibilidade deixaria o caso
+    // verde pelo motivo errado — provando uma recusa que nao e a da R-028.
+    expect(proprioExecutor.body).toMatch(/operador de uma conta destino/iu);
     expect(await recusas(movimentoId)).toHaveLength(0);
 
     // (2) e (3) Quem nao entregou encerra: a Tesouraria conta R$ 70 dos R$ 90 declarados.
