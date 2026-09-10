@@ -6,8 +6,13 @@
 // NAO depende de caixa aberto.
 //
 // A lista recebe da API o trajeto nominal, lacre, estado e data de recebimento.
-import { transferenciaContaComoEntrada, transferenciaContaComoSaida, valorEntradaCentavos } from "@padaria/shared";
-import { statusTransferenciaSchema, type StatusTransferencia } from "@padaria/shared/transferencias";
+import {
+  statusTransferenciaSchema,
+  transferenciaContaComoEntrada,
+  transferenciaContaComoSaida,
+  valorEntradaCentavos,
+  type StatusTransferencia
+} from "@padaria/shared";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
