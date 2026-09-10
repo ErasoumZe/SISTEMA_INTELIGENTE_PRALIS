@@ -315,6 +315,7 @@ const saldo = computed(() => entrada.value - saida.value);
              vazia, que o schema recusaria e deixaria a conferencia impossivel. -->
         <v-text-field
           v-model="campos.lacre"
+          class="mb-2"
           :label="entregaTemLacre ? 'Nº do lacre (obrigatório para esta entrega)' : 'Nº do lacre (vazio se não houver)'"
           :error="lacrePendente"
           :messages="lacrePendente ? 'Confira e informe o lacre registrado na entrega ou use Não bateu.' : undefined"
@@ -324,6 +325,7 @@ const saldo = computed(() => entrada.value - saida.value);
              ele continua opcional, e vazio significa "nao informei" — o payload omite o campo. -->
         <v-text-field
           v-model="campos.valorRecebido"
+          class="mb-2"
           type="number"
           min="0"
           :label="ehCaixaParaCofre ? 'Valor recebido (obrigatório)' : 'Valor recebido (opcional)'"
