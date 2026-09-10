@@ -42,7 +42,7 @@ a necessidade.
 | [25](25_BACKLOG_2026_08_05.md)                      | **Backlog (05/08)**                       | as 98 tarefas que fecham tudo o que as auditorias acharam, divididas entre os tres              |
 | [26](26_PLANO_CAIXA_100.md)                         | **Plano do Caixa (05/08)**                | causa raiz dos bugs de acesso, plano em 3 blocos, Resend+Cloudflare, 6 decisoes                 |
 | [27](27_AVALIACAO_FINAL_CAIXA.md)                   | **Avaliacao final (05/08)**               | reconciliacao das tres leituras, 2 correcoes minhas, plano em ondas com gate                    |
-| [28](28_ENTREGA_AO_COFRE_D1_D10_B1_B5.md)           | **Entrega ao cofre (06/08)**              | D1-D10 e B1-B5: parcial, atomico, idempotente, solicitacao programada (#101 reescrita)          |
+| [28](28_ENTREGA_AO_COFRE_D1_D10_B1_B5.md)           | **Entrega ao cofre (06/08)**              | D1-D10 e B1-B5: parcial, atomico, idempotente. §11: a Fatia 3 removeu o caminho D4 (R-179)      |
 | [29](29_RUNBOOK_ROTACAO_ADMIN.md)                   | **Runbook do admin (R-162)**              | primeira instalacao, rotacao explicita e prova de que redeploy preserva credencial              |
 | [30](30_PRODUTOS_PRALIS_X_ERP.md)                   | **Produtos: Pralis × ERP**                | mapa de campos, o que falta trazer do app antigo e em que ordem                                 |
 | [29](29_PLANILHAS_DA_OPERACAO.md)                   | **Planilhas da operacao**                 | contas reais, taxas de cartao, conciliacao, dominio de producao e 9 regras novas                |
@@ -53,7 +53,7 @@ a necessidade.
 | [34](34_GOVERNANCA_CAIXA_MARCO_2026_08_24.md)       | **Governança atual do Caixa (24/08)**     | Marco é o único executor atual; gates de revisão, merge e autorizações separadas                |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)                 | Linguagem visual Cicluz                   | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**            |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md)           | Relatório da rodada visual                | o que mudou por arquivo em 01/08 e o que ficou aberto                                           |
-| [69](69_PLANO_DESIGN_2026_08.md)              | Plano do design novo (ago/26)             | fila, decisões (D-01 a D-08), etapas até o fim e regras de convivência entre as frentes  |
+| [69](69_PLANO_DESIGN_2026_08.md)                    | Plano do design novo (ago/26)             | fila, decisões (D-01 a D-08), etapas até o fim e regras de convivência entre as frentes         |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.

@@ -4,7 +4,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // Decisao 5 e 8 · conferencia ESTRITA e recusa auditavel — exclusivas do fluxo Caixa -> Cofre.
 //
@@ -14,7 +14,8 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 //   - a divergencia tem endpoint proprio, e o registro dela precisa ser COMMITADO — se fosse
 //     sinalizada por excecao dentro do confirmar, o rollback apagaria a propria trilha;
 //   - cada tentativa gera OUTRA linha de auditoria e reabre a notificacao;
-//   - quem e notificado e quem ENTREGOU o malote;
+//   - quem e notificado e quem ENTREGOU o malote — e "quem entregou" continua sendo lido de
+//     `executado_por` nas linhas HISTORICAS, que e o unico lugar onde essa coluna ainda existe;
 //   - e a transferencia GENERICA nao muda de comportamento por causa de nada disso.
 describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofre)", () => {
   let contexto: ContextoApiTeste;
@@ -230,6 +231,83 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     // Quem entregou (admin) foi avisado. Sem isso a divergencia so chegaria a Tesouraria, e quem
     // pos o dinheiro no envelope ficaria no escuro.
     expect(ids).toContain(adminId);
+  });
+
+  // R-179/Fatia 3 · A LINHA LEGADA, e os tres leitores de `executado_por` que ela mantem vivos.
+  //
+  // O fluxo D4 foi removido, entao nenhum codigo ESCREVE mais `executado_por`. Mas a coluna ficou
+  // (remove-la e migration) e um banco em uso tem linhas onde ela esta preenchida: quem PROGRAMOU
+  // e quem ENTREGOU sao pessoas diferentes. Tres decisoes ainda dependem dessa distincao:
+  //
+  //   1. `candidatoConfirmacao` exclui quem entregou (R-028: nao se confere a propria entrega);
+  //   2. a quebra por falta nasce contra quem entregou, nao contra quem programou;
+  //   3. a notificacao de divergencia vai para quem entregou.
+  //
+  // Sem este caso os tres `executadoPor ?? criadoPor` do servico viram codigo sem rede: apagar
+  // qualquer um deles deixa a suite inteira verde e, em producao, a falta de dinheiro passa a ser
+  // cobrada da pessoa errada. A linha e montada em SQL porque nenhuma API a produz mais — e este e
+  // exatamente o estado que o banco real tem.
+  it("na linha legada, quem ENTREGOU nao confere, responde pela quebra e e notificado", async () => {
+    const gerenteId = await usuarioPorEmail(usuariosTeste.gerente.email);
+    const adminId = await usuarioPorEmail(usuariosTeste.admin.email);
+    const { caixaId, movimentoId } = await entregaPendente("legado-executor", "2026-07-11T08:00", 90, "REC-LEG-1");
+
+    // Vira uma entrega do fluxo antigo: o admin PROGRAMOU (`criado_por`, ja gravado) e o gerente
+    // EXECUTOU. Satisfaz `transferencias_solicitacao_cofre_check` — marcador + caixa + tipo
+    // sangria/retorno + status `pendente` com executor preenchido.
+    await executarSql(
+      `update transferencias
+          set solicitacao_cofre_em = now(), executado_por = $2, executado_em = now()
+        where id = $1`,
+      [movimentoId, gerenteId]
+    );
+    const legada = await consultarUm<{ criado_por: string; executado_por: string }>(
+      "select criado_por, executado_por from transferencias where id = $1",
+      [movimentoId]
+    );
+    expect(legada?.criado_por).toBe(adminId);
+    expect(legada?.executado_por).toBe(gerenteId);
+
+    // (1) O gerente TEM `transferencias_conferir` e TEM vinculo com o cofre — e mesmo assim e
+    // recusado, porque foi ele quem entregou. 400 de dominio, nao 403 de guard: se viesse 403 a
+    // requisicao teria morrido antes da regra e o caso nao provaria nada.
+    const proprioExecutor = await post(
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
+      { contaDestinoId: idsTeste.contaCofre, motivo: "conferindo o proprio envio", valorRecebido: 70 },
+      cookieGerente
+    );
+    assertProblem(proprioExecutor, 400);
+    expect(await recusas(movimentoId)).toHaveLength(0);
+
+    // (2) e (3) Quem nao entregou encerra: a Tesouraria conta R$ 70 dos R$ 90 declarados.
+    const encerramento = await post(
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
+      { contaDestinoId: idsTeste.contaCofre, motivo: "faltou no malote", valorRecebido: 70, encerrar: true },
+      cookieTesouraria
+    );
+    expect(encerramento.statusCode, encerramento.body).toBe(200);
+
+    // A quebra e do GERENTE (quem entregou), nunca do admin (quem programou).
+    const quebras = await consultarTodos<{ usuario_id: string; valor: string }>(
+      "select usuario_id, valor from quebras_caixa where transferencia_id = $1",
+      [movimentoId]
+    );
+    expect(quebras).toEqual([{ usuario_id: gerenteId, valor: "-20.00" }]);
+    expect(quebras.map((q) => q.usuario_id)).not.toContain(adminId);
+    // A quebra pertence ao fechamento a que a ENTREGA pertence.
+    const vinculo = await consultarUm<{ fechamento_caixa_id: string }>(
+      "select fechamento_caixa_id from quebras_caixa where transferencia_id = $1",
+      [movimentoId]
+    );
+    expect(vinculo?.fechamento_caixa_id).toBe(caixaId);
+
+    // E a divergencia chega a quem entregou. Se o servico usasse so `criado_por`, o gerente — que
+    // pos o dinheiro no envelope e vai responder pela falta — nao seria avisado.
+    const avisados = await consultarTodos<{ destinatario_usuario_id: string }>(
+      "select destinatario_usuario_id from notificacoes where referencia_id = $1 and tipo = 'transferencia_divergencia'",
+      [movimentoId]
+    );
+    expect(avisados.map((linha) => linha.destinatario_usuario_id)).toContain(gerenteId);
   });
 
   it("recusa nao existe para transferencia generica (404) e o comportamento dela e preservado", async () => {

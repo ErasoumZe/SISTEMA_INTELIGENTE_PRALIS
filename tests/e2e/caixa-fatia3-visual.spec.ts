@@ -96,7 +96,12 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     await entrar(page, USUARIOS.admin);
     await page.goto("/transferencias");
 
-    // A tela carregou de verdade (o cockpit e o conteudo que fica), e mesmo assim o painel sumiu.
+    // ANCORA POSITIVA PRIMEIRO. As assercoes abaixo sao todas negativas, e `toHaveCount(0)` resolve
+    // no primeiro tick — numa tela em branco (erro de hidratacao, 500 na API, redirect) as quatro
+    // passariam, e `semRolagemHorizontal` tambem, porque pagina vazia nunca rola. O cockpit e o
+    // conteudo que FICA nesta tela: se ele nao aparecer, o caso reprova antes de afirmar ausencia.
+    await expect(page.getByRole("table", { name: "Transferências do período" })).toBeVisible();
+
     await expect(page.getByText("Programar entrega ao cofre")).toHaveCount(0);
     await expect(page.locator(porTeste("solicitacao-programar"))).toHaveCount(0);
     await expect(page.locator(porTeste("solicitacao-caixa"))).toHaveCount(0);

@@ -165,9 +165,11 @@ export function numeroDecimal(valor: string | number | null | undefined): number
 // modulo e a porta historica dela: mover sem reexportar quebraria os importadores sem ganho nenhum.
 // A definicao continua UNICA; o que existe aqui e um apontamento, nao uma segunda copia.
 //
-// Foi para `shared` (e nao para um modulo da API) porque a TELA precisa da mesma resposta: o painel
-// de programar entrega ao cofre so existe para a retaguarda, e o servico so aceita a retaguarda.
-// Copiar a lista de cargos no front criaria duas verdades que divergem no primeiro ajuste.
+// Foi para `shared` (e nao para um modulo da API) porque a TELA precisa da mesma resposta que o
+// servico. O exemplo original era o painel "Programar entrega ao cofre", removido na R-179/Fatia 3;
+// a razao continua valendo para os usos vivos — quem lanca saida sem caixa aberto, e quem cria
+// transferencia livre (`transferencias.service.ts`). Copiar a lista de cargos no front criaria duas
+// verdades que divergem no primeiro ajuste.
 export { podeLancarSemCaixa };
 
 // R-121: o operador de Caixa lanca TODA saida (despesa, mercadoria, retirada) — desde que saia da
