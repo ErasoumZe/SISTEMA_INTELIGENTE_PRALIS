@@ -24,6 +24,7 @@ import {
   montarPayloadRecusa,
   valorConferenciaValido
 } from "~/utils/conferencia-transferencia";
+import { CONFIRMAR_ACAO_KEY, type ConfirmarAcao } from "~/utils/confirmacao-acao";
 
 const props = withDefaults(
   defineProps<{
@@ -52,6 +53,9 @@ const emit = defineEmits<{
   (event: "recarregar"): void;
 }>();
 const { apiPost } = useApi();
+// O provider vive no AppWorkspace e garante a mesma janela de confirmação para Caixa e Tesouraria.
+// Sem ele (por exemplo, em um mount isolado de teste) a ação é cancelada por segurança.
+const confirmarAcao = inject<ConfirmarAcao>(CONFIRMAR_ACAO_KEY, async () => false);
 const confirmando = ref<OperacaoResumo | null>(null);
 // Um unico objeto de campos, zerado a cada abertura: antes eram quatro refs soltas que
 // sobreviviam ao fechamento do dialogo, e a segunda conferencia comecava com o valor da primeira
@@ -115,6 +119,54 @@ const sobraPendenteDeConsentimento = computed(() =>
   })
 );
 
+function textoConfirmacaoConferencia(operacao: OperacaoResumo): { titulo: string; mensagem: string; botao: string } {
+  const declarado = dinheiro(Number(operacao.valorOriginal));
+  const informouValor = valorConferenciaValido(campos.valorRecebido);
+  const contado = informouValor ? dinheiro(Number(campos.valorRecebido)) : null;
+
+  if (!modoRecusa.value) {
+    return {
+      titulo: "Confirmar recebimento",
+      mensagem: contado
+        ? `Confirma o recebimento de ${contado} para uma entrega declarada em ${declarado}?`
+        : "Confirma o recebimento sem informar valor contado?",
+      botao: "Confirmar recebimento"
+    };
+  }
+
+  if (!encerrarDivergencia.value) {
+    return {
+      titulo: "Registrar divergência",
+      mensagem:
+        "Confirma registrar a divergência? A transferência continuará pendente e o fechamento do Caixa seguirá travado.",
+      botao: "Registrar divergência"
+    };
+  }
+
+  if (contadoAcimaDoDeclarado.value) {
+    const sobra = dinheiro(Number(campos.valorRecebido) - Number(operacao.valorOriginal));
+    return {
+      titulo: "Encerrar divergência com sobra",
+      mensagem: `Confirma encerrar a divergência? O Cofre receberá ${contado}, ${sobra} a mais que os ${declarado} declarados, sem criar quebra.`,
+      botao: "Encerrar divergência"
+    };
+  }
+
+  if (Number(campos.valorRecebido) === Number(operacao.valorOriginal)) {
+    return {
+      titulo: "Encerrar divergência",
+      mensagem: `Confirma encerrar a divergência? O Cofre receberá os ${contado} contados; não haverá quebra financeira.`,
+      botao: "Encerrar divergência"
+    };
+  }
+
+  return {
+    titulo: "Encerrar divergência",
+    mensagem: `Confirma encerrar a divergência? O Cofre receberá ${contado}; a diferença para ${declarado} será registrada como quebra auditada.`,
+    botao: "Encerrar divergência"
+  };
+}
+
 // Voltar para "Conferir" desfaz a ESCOLHA de encerrar, e nao so esconde a caixa: escolha que
 // sobrevive escondida e a origem de botao travado sem causa visivel.
 function alternarModoRecusa() {
@@ -131,6 +183,9 @@ async function enviarConferencia() {
   if (valorPendente.value) return;
   if (modoRecusa.value && (!podeRecusar.value || !motivoValido.value)) return;
   if (sobraPendenteDeConsentimento.value) return;
+
+  const confirmacao = textoConfirmacaoConferencia(operacao);
+  if (!(await confirmarAcao(confirmacao.mensagem, confirmacao.titulo, confirmacao.botao))) return;
 
   erroConferencia.value = "";
   salvandoConferencia.value = true;

@@ -18,7 +18,7 @@ export type DepsAcoesCaixa = {
   carregarDadosTela: (tela: string, idEmpresa: string) => Promise<void>;
   notificar: (mensagem: string, tipo?: string) => void;
   mensagemErro: (error: DadosExternos) => string;
-  confirmar: (mensagem: string) => Promise<boolean>;
+  confirmar: (mensagem: string, titulo?: string, textoConfirmar?: string) => Promise<boolean>;
 };
 
 export type AberturaCaixaPayload = {
@@ -54,6 +54,11 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function abrirCaixaOperacional(payload: AberturaCaixaPayload): Promise<boolean> {
+    if (
+      !(await deps.confirmar("Confirma a abertura deste caixa para o turno informado?", "Abrir caixa", "Abrir caixa"))
+    ) {
+      return false;
+    }
     deps.setSalvando(true);
     try {
       // /abrir responde o id criado (nao CaixaStatus); re-busca o status canonico.
@@ -84,7 +89,13 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function postarRetorno(payload: RetornoSaldoPayload): Promise<boolean> {
-    if (!(await deps.confirmar(`Lançar retorno de ${dinheiro(payload.valor)} para o cofre principal?`))) {
+    if (
+      !(await deps.confirmar(
+        `Confirma a entrega de ${dinheiro(payload.valor)} ao cofre principal?`,
+        "Entregar ao cofre",
+        "Entregar ao cofre"
+      ))
+    ) {
       return false;
     }
     deps.setSalvando(true);
@@ -110,6 +121,15 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<boolean> {
+    if (
+      !(await deps.confirmar(
+        "Confirma o fechamento deste caixa? Se ainda houver dinheiro físico, o retorno ao Cofre será registrado no mesmo ato.",
+        "Fechar caixa",
+        "Fechar caixa"
+      ))
+    ) {
+      return false;
+    }
     deps.setSalvando(true);
     try {
       // /fechar responde 204; re-busca o status canonico (evita crash em .resumo).

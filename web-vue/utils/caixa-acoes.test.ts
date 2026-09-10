@@ -14,7 +14,7 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
     carregarDadosTela: vi.fn().mockResolvedValue(undefined),
     notificar: vi.fn(),
     mensagemErro: (error) => `erro:${String((error as Error).message ?? error)}`,
-    confirmar: async () => true,
+    confirmar: vi.fn().mockResolvedValue(true),
     ...over
   };
   return deps;
@@ -39,6 +39,16 @@ describe("abrirCaixaOperacional", () => {
     expect(deps.notificar).toHaveBeenCalledWith("Caixa aberto com sucesso.");
     expect(deps.setSalvando).toHaveBeenNthCalledWith(1, true);
     expect(deps.setSalvando).toHaveBeenLastCalledWith(false);
+    expect(deps.confirmar).toHaveBeenCalledWith(expect.stringContaining("abertura"), "Abrir caixa", "Abrir caixa");
+  });
+
+  it("não abre nem altera o loading quando a confirmação é negada", async () => {
+    const deps = montarDeps({ confirmar: async () => false });
+    const ok = await criarAcoesCaixa(deps).abrirCaixaOperacional(payload);
+
+    expect(ok).toBe(false);
+    expect(deps.api.post).not.toHaveBeenCalled();
+    expect(deps.setSalvando).not.toHaveBeenCalled();
   });
 
   it("em erro notifica erro, retorna false e reseta salvando", async () => {
@@ -160,6 +170,16 @@ describe("fecharCaixaOperacional", () => {
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.notificar).toHaveBeenCalledWith("Caixa fechado com sucesso.");
     expect(deps.carregarDadosTela).toHaveBeenCalledWith("caixa", "emp-1");
+    expect(deps.confirmar).toHaveBeenCalledWith(expect.stringContaining("fechamento"), "Fechar caixa", "Fechar caixa");
+  });
+
+  it("não fecha se a confirmação for negada", async () => {
+    const deps = montarDeps({ confirmar: async () => false });
+    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
+
+    expect(ok).toBe(false);
+    expect(deps.api.post).not.toHaveBeenCalled();
+    expect(deps.setSalvando).not.toHaveBeenCalled();
   });
 
   it("sem lacre informado manda null (R-026: opcional)", async () => {

@@ -84,6 +84,7 @@ import type { StatusTransferencia } from "@padaria/shared/transferencias";
 import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
+import { CONFIRMAR_ACAO_KEY } from "~/utils/confirmacao-acao";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
 import {
@@ -161,6 +162,8 @@ function responderConfirmacao(confirmou: boolean) {
   resolverConfirmacao?.(confirmou);
   resolverConfirmacao = null;
 }
+
+provide(CONFIRMAR_ACAO_KEY, confirmarAcao);
 
 const modalOperacaoAberto = ref(false);
 const modalCadastroAberto = ref(false);
@@ -1601,7 +1604,7 @@ const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional 
   carregarDadosTela,
   notificar,
   mensagemErro,
-  confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
+  confirmar: confirmarAcao
 });
 
 function abrirImportacao(tela = telaAtiva.value) {
