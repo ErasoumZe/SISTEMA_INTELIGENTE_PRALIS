@@ -96,6 +96,14 @@ const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === 
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
+// Na entrega Caixa -> Cofre, "Confirmar" significa que lacre e valor bateram. A API ja impede
+// que R$ 90 confirme uma entrega de R$ 100; espelhar a regra aqui evita abrir uma segunda
+// confirmação para uma ação que inevitavelmente será recusada e deixa claro que o caminho é
+// "Não bateu".
+const valorDivergenteNaConferencia = computed(() => {
+  if (modoRecusa.value || !ehCaixaParaCofre.value || !valorValido.value || !confirmando.value) return false;
+  return Number(campos.valorRecebido) !== Number(confirmando.value.valorOriginal);
+});
 // Sem este bloqueio, deixar o campo vazio em uma entrega lacrada chegava ao servidor como
 // `null` e recebia um 409 que parecia ser divergencia de valor. No modo de recusa, lacre
 // diferente e uma evidencia valida e deve poder seguir junto do motivo.
@@ -450,9 +458,11 @@ function atualizarStatusFiltro(status: unknown) {
           type="number"
           min="0"
           :label="ehCaixaParaCofre ? 'Valor recebido (obrigatório)' : 'Valor recebido (opcional)'"
-          :error="valorPendente"
+          :error="valorPendente || valorDivergenteNaConferencia"
           :messages="
-            ehCaixaParaCofre
+            valorDivergenteNaConferencia
+              ? 'O valor contado é diferente do declarado. Use Não bateu para registrar a divergência.'
+              : ehCaixaParaCofre
               ? 'Informe o valor contado. Zero é um valor válido.'
               : 'Deixe em branco se não for conferir o valor.'
           "
@@ -511,6 +521,7 @@ function atualizarStatusFiltro(status: unknown) {
             :color="modoRecusa ? 'warning' : 'primary'"
             :disabled="
               valorPendente ||
+              valorDivergenteNaConferencia ||
               lacrePendente ||
               (modoRecusa && !motivoValido) ||
               sobraPendenteDeConsentimento ||
