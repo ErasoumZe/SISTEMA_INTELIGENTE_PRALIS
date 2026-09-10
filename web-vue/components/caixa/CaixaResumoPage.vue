@@ -412,13 +412,20 @@ function fechar() {
 
         <v-row dense>
           <v-col v-if="temSobra" cols="12" md="4">
-            <CampoDinheiro
-              v-model="entrega.valor"
-              label="Valor a entregar (vazio = tudo)"
-              :error="entregaAcimaDoSaldo"
-              :messages="entregaAcimaDoSaldo ? `Máximo disponível: ${dinheiro(saldoAtual)}` : ''"
-              data-teste="valor-entrega"
-            />
+            <label class="caixa-valor-entrega">
+              <span class="caixa-valor-entrega__rotulo">Valor a entregar (vazio = tudo)</span>
+              <CampoDinheiro
+                v-model="entrega.valor"
+                class="caixa-valor-entrega__input"
+                :class="{ 'caixa-valor-entrega__input--erro': entregaAcimaDoSaldo }"
+                :aria-invalid="entregaAcimaDoSaldo ? 'true' : undefined"
+                :aria-describedby="entregaAcimaDoSaldo ? 'erro-valor-entrega' : undefined"
+                data-teste="valor-entrega"
+              />
+              <span v-if="entregaAcimaDoSaldo" id="erro-valor-entrega" class="caixa-valor-entrega__erro">
+                Máximo disponível: {{ dinheiro(saldoAtual) }}
+              </span>
+            </label>
           </v-col>
           <v-col v-if="temSobra" cols="12" md="4">
             <v-text-field v-model="entrega.lacre" label="N° do lacre (opcional)" data-teste="lacre-entrega" />
@@ -489,6 +496,60 @@ function fechar() {
 .botao-travado {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* CampoDinheiro e um input nativo para preservar a digitacao monetaria brasileira. Aqui ele era
+   usado sem a moldura que os outros formularios fornecem e, no tema escuro, sobrava apenas o
+   placeholder `0,00`. O rotulo, a borda e o estado de erro pertencem a este formulario do Caixa. */
+.caixa-valor-entrega {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.caixa-valor-entrega__rotulo {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  left: 12px;
+  padding-inline: 4px;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+.caixa-valor-entrega__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.58);
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+}
+
+.caixa-valor-entrega__input:hover {
+  border-color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.caixa-valor-entrega__input:focus {
+  border-width: 2px;
+  border-color: rgb(var(--v-theme-primary));
+}
+
+.caixa-valor-entrega__input--erro {
+  border-color: rgb(var(--v-theme-error));
+}
+
+.caixa-valor-entrega__erro {
+  padding-inline: 16px;
+  color: rgb(var(--v-theme-error));
+  font-size: 12px;
 }
 
 /* Grade auto-responsiva: cada card tem largura minima confortavel e quebra sozinho — nunca aperta
