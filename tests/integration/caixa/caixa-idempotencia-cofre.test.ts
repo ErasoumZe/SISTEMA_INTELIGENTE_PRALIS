@@ -411,6 +411,48 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     expect(await saldoDoCaixa()).toBe(0);
   });
 
+  // B2 · o `status` NAO faz parte da intencao, e este e o caso que prova.
+  //
+  // `conferirIntencaoEntrega` compara caixa, tipo, valor, lacre e observacao — nunca o status, que
+  // muda por atos POSTERIORES (conferencia, divergencia) e nao descreve o que foi pedido. E
+  // `buscarTransferenciaPorIdempotenciaRepository` nao filtra status: acha a linha em qualquer um.
+  //
+  // O cenario real: o operador lanca a entrega, o POST estoura no cliente, o cofre confere (a linha
+  // vira `recebido`) e o navegador reenvia com a MESMA chave. Tem de responder 200 sem duplicar. Se
+  // alguem "endurecer" a comparacao incluindo status, este retry passaria a levar 409 — e o
+  // operador, achando que falhou, lancaria de novo com outro lacre. Duas entregas, um envelope: o
+  // modo de falha que este arquivo inteiro existe para impedir.
+  it("retry da MESMA chave depois de o cofre confirmar continua 200, e nao duplica", async () => {
+    const { caixaId } = await abrirCaixaComSaldo("b2-retry-pos-conferencia", "2026-07-15T08:00", 80);
+    const entrega = {
+      tipo: "retorno",
+      valor: 80,
+      lacre: "B2-POS-CONF-1",
+      idempotenciaChave: randomUUID()
+    };
+
+    const primeira = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
+    expect(primeira.statusCode, primeira.body).toBe(200);
+    const movimento = (await movimentosDoCaixa(caixaId))[0]!;
+
+    // O cofre age: a linha sai de `pendente`.
+    const confirmar = await post(
+      `/api/transferencias/${movimento.id}/confirmar`,
+      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "B2-POS-CONF-1", valorRecebido: 80 },
+      cookieTesouraria
+    );
+    expect(confirmar.statusCode, confirmar.body).toBe(200);
+    expect((await chaveGravada(movimento.id))?.status).toBe("recebido");
+
+    // O retry chega depois. Mesma chave, mesma intencao: 200, e nada de novo no caixa.
+    const retry = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
+    expect(retry.statusCode, retry.body).toBe(200);
+    const depois = await movimentosDoCaixa(caixaId);
+    expect(depois).toHaveLength(1);
+    expect(depois[0]?.id).toBe(movimento.id);
+    expect((await chaveGravada(movimento.id))?.status).toBe("recebido");
+  });
+
   // Teste obrigatorio 12 — decisao 7. O bloqueio e por ATO, nao global: fechamento SEM retorno
   // fisico nao entrega nada e por isso nao pode ser barrado por falta de quem conferir.
   it("sem responsavel no Cofre bloqueia so os atos que entregariam dinheiro", async () => {

@@ -236,12 +236,32 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
       [empresaId, fx.caixaId, DIA, fx.contaId, idsTeste.contaCofre, usuariosTeste.tesouraria.email]
     );
 
+    // PRE-CONDICAO ASSERIDA, e nao presumida: o turno precisa ter sobra de verdade, senao o 204
+    // abaixo nao prova nada — um caixa sem venda tambem fecha. A venda e postada sem `pdvId` e o
+    // servidor a resolve pelo caixa aberto do operador; se ela tivesse caido em outro caixa, este
+    // `expect` reprova aqui em vez de deixar o caso verde por acidente.
+    const saldoAntes = await consultarUm<{ saldo: string }>(
+      "select coalesce(sum(valor_original), 0)::text as saldo from vendas where caixa_id = $1",
+      [fx.caixaId]
+    );
+    expect(saldoAntes?.saldo).toBe("200.00");
+
     // `agendada` nunca contou como saida (`transferenciaContaComoSaida`), entao o saldo do turno
     // ignora a linha e o fechamento apura os R$ 200 da venda como sobra a devolver.
     const fechar = await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, {
       observacao: "Turno com ordem legada"
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
+
+    // O retorno final saiu pelos R$ 200 INTEIROS. Sem esta assercao, incluir `agendada` em
+    // `transferenciaContaComoSaida` faria a sobra virar 100 — R$ 100 sumindo do turno — e o caso
+    // continuaria verde, porque o fechamento responderia 204 do mesmo jeito.
+    const retornoFinal = await consultarUm<{ valor_original: string; status: string }>(
+      `select valor_original, status from transferencias
+        where caixa_id = $1 and tipo = 'retorno' and solicitacao_cofre_em is null`,
+      [fx.caixaId]
+    );
+    expect(retornoFinal).toMatchObject({ valor_original: "200.00", status: "pendente" });
 
     // A linha legada continua intacta: remover o caminho nao reescreve o passado.
     const legada = await consultarUm<{ status: string; solicitacao_cofre_em: string | null }>(
