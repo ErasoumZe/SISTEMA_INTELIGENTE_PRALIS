@@ -27,8 +27,13 @@ export function useCadastroView(params: {
         nome: item.nome,
         // Fundo e Saldo atual vem de /api/contas/saldos (D8). O saldo NAO e coluna: e derivado dos
         // movimentos a cada carga — por isso nao ha "atualizar saldo" em lugar nenhum.
+        //
+        // #172 · As chaves EXIBIDAS sao as que `chaveColuna` deriva do rotulo da coluna, nao o nome
+        // do campo da API. "Saldo atual" deriva `saldo_atual`; gravar `saldoAtual` aqui fazia a
+        // celula cair no travessao com o numero certo ja carregado. `saldoInicial` cru continua
+        // camelCase de proposito: e o campo do FORMULARIO de edicao, nao uma coluna da tabela.
         fundo: dinheiro(item.saldoInicial ?? 0),
-        saldoAtual: dinheiro(item.saldoAtual ?? 0),
+        saldo_atual: dinheiro(item.saldoAtual ?? 0),
         saldoInicial: item.saldoInicial != null ? String(item.saldoInicial) : "",
         usuariosIds: (item.usuariosIds ?? []).join(",")
       }));

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { valorLinha } from "~/utils/tabela-cadastro";
+
 const props = withDefaults(
   defineProps<{
     titulo: string;
@@ -93,18 +95,6 @@ const temAcoes = computed(
 watch(totalPaginas, (total) => {
   if (!props.modoServidor && pagina.value > total) pagina.value = total;
 });
-
-function chaveColuna(coluna: string) {
-  return coluna
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replaceAll(" ", "_");
-}
-
-function valorLinha(linha: Record<string, string | undefined>, coluna: string) {
-  return linha[chaveColuna(coluna)] || "-";
-}
 
 function paginaAnterior() {
   const proxima = Math.max(1, paginaAtual.value - 1);
