@@ -42,7 +42,10 @@ export const transferenciaDtoSchema = z.object({
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),
-  status: z.enum(["pendente", "recebido", "agendada", "cancelada"]),
+  status: z.enum(["pendente", "recebido", "agendada", "cancelada", "divergente"]),
+  // R-183: o que o cofre contou. Null em tudo que nao e `divergente` — quem soma ENTRADA usa
+  // este numero, senao o cockpit exibiria como recebido um valor que nunca chegou.
+  valorRecebido: z.number().nullable(),
   contaOrigemId: z.string(),
   contaDestinoId: z.string(),
   contaOrigemNome: z.string(),
@@ -85,11 +88,22 @@ export type ConfirmarTransferenciaPayload = z.infer<typeof confirmarTransferenci
 //
 // `motivo` obrigatorio: recusar dinheiro sem dizer por que nao e conferencia, e sumico com laudo.
 // `valorRecebido`/`nLacreDoc` sao o que a pessoa CONTOU e LEU — guardados como divergiram.
+//
+// R-183 · `encerrar` transforma a recusa no DESFECHO. Sem ele (o default), o comportamento e o de
+// sempre: registra a tentativa e mantem `pendente` para reconferencia. Com ele, a entrega vai para
+// `divergente`, o cofre credita o contado e a falta vira quebra. Uma flag, e nao uma terceira rota:
+// quem conta e o mesmo ator, o fato e o mesmo fato, e a trilha continua na mesma tabela.
+//
+// `sobraConfirmada` e o consentimento explicito do caso C > D. A D7 proibe transformar sobra em
+// quebra positiva, entao o unico contrapeso possivel e alguem assumir por escrito que contou mais
+// do que foi declarado — creditar o cofre a mais sem isso seria dinheiro entrando sem dono.
 export const recusarConferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
   motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
-  valorRecebido: dinheiroSchema.optional()
+  valorRecebido: dinheiroSchema.optional(),
+  encerrar: z.boolean().optional().default(false),
+  sobraConfirmada: z.boolean().optional().default(false)
 });
 
 export type RecusarConferenciaPayload = z.infer<typeof recusarConferenciaPayloadSchema>;
@@ -120,6 +134,8 @@ export type TransferenciaPayload = z.infer<typeof transferenciaPayloadSchema>;
 export type TransferenciaDetalheDto = TransferenciaPayload & {
   id: string;
   status: string;
+  // R-183: o valor contado no cofre. Null em tudo que nao e `divergente`.
+  valorRecebido: number | null;
   caixaId: string | null;
   prazoConfirmacaoEm: string | null;
   dataRecebimento: string | null;

@@ -46,16 +46,6 @@ export type RetornoSaldoPayload = {
   idempotenciaChave: string;
   aoConcluir?: (sucesso: boolean) => void;
 };
-// D4/D10: a execucao entrega EXATAMENTE o valor programado. Nao ha `valor` nem `observacao` aqui —
-// eles sao da programacao e imutaveis — nem `idempotenciaChave`: a chave e da criacao e nunca e
-// sobrescrita. A identidade do ato e o proprio `solicitacaoId`; o unico dado proprio do ato fisico
-// e o lacre do envelope (opcional, R-026).
-export type ExecucaoSolicitacaoPayload = {
-  caixaId: string;
-  solicitacaoId: string;
-  lacre?: string | null;
-  aoConcluir?: (sucesso: boolean) => void;
-};
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function recarregarTela() {
@@ -119,33 +109,6 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  // D4: o operador executa o que a retaguarda programou. O servidor e idempotente pela chave e
-  // pela guarda `status = 'agendada'`, entao um clique repetido nao cria um segundo movimento.
-  async function executarSolicitacaoCofre(payload: ExecucaoSolicitacaoPayload): Promise<boolean> {
-    const sucesso = await postarExecucao(payload);
-    payload.aoConcluir?.(sucesso);
-    return sucesso;
-  }
-
-  async function postarExecucao(payload: ExecucaoSolicitacaoPayload): Promise<boolean> {
-    if (!(await deps.confirmar("Confirmar a entrega do valor programado ao cofre principal?"))) return false;
-    deps.setSalvando(true);
-    try {
-      await deps.api.post(`/api/caixa/${payload.caixaId}/solicitacoes-cofre/${payload.solicitacaoId}/executar`, {
-        lacre: payload.lacre ?? null
-      });
-      deps.notificar("Entrega ao cofre executada com sucesso.");
-      await deps.carregarStatusCaixa(deps.empresaId());
-      await recarregarTela();
-      return true;
-    } catch (error) {
-      deps.notificar(deps.mensagemErro(error), "error");
-      return false;
-    } finally {
-      deps.setSalvando(false);
-    }
-  }
-
   async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<boolean> {
     deps.setSalvando(true);
     try {
@@ -168,5 +131,5 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  return { abrirCaixaOperacional, retornarSaldoOperacional, executarSolicitacaoCofre, fecharCaixaOperacional };
+  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional };
 }

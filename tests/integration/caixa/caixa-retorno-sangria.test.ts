@@ -164,6 +164,24 @@ describe("caixa - retorno/sangria (M2)", () => {
     expect(retorno.statusCode, retorno.body).toBe(200);
     expect(await resumoAtual()).toMatchObject({ saldo: 0, propostaRetorno: 0 });
 
+    // G1/R-171: zerar o saldo nao basta mais. O retorno saiu do caixa e esta `pendente` — dinheiro
+    // na rua trava o fechamento comum ate o cofre conferir. O que libera e a conferencia.
+    const travado = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento com retorno" });
+    expect(travado.statusCode, travado.body).toBe(400);
+    expect(travado.body).toMatch(/aguardando confer[eê]ncia/iu);
+
+    const entregue = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and status = 'pendente' order by criado_em desc limit 1",
+      [caixaId]
+    );
+    const conferencia = await contexto.app.inject({
+      method: "POST",
+      url: `/api/transferencias/${entregue!.id}/confirmar`,
+      headers: { cookie: cookieTesouraria },
+      payload: { contaDestinoId: idsTeste.contaCofre, valorRecebido: 300 }
+    });
+    expect(conferencia.statusCode, conferencia.body).toBe(200);
+
     const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento com retorno" });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });

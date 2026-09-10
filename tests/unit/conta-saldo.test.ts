@@ -6,6 +6,7 @@ import {
   saldoPendenteContaCentavos,
   transferenciaContaComoEntrada,
   transferenciaContaComoSaida,
+  valorEntradaCentavos,
   type TotaisContaCentavos
 } from "@padaria/shared/caixa";
 import { deCentavos, paraCentavos } from "@padaria/shared/dinheiro";
@@ -61,6 +62,25 @@ describe("saldoContaCentavos (D8)", () => {
     expect(transferenciaContaComoSaida("pendente")).toBe(true);
     expect(transferenciaContaComoEntrada("pendente")).toBe(false);
     expect(transferenciaContaComoEntrada("recebido")).toBe(true);
+  });
+
+  // R-183 · o guardiao barato dos predicados. A prova cara desta regra esta na integracao do Caixa,
+  // que exige janela exclusiva; estas tres linhas rodam em segundos e matam a mutacao mais perigosa
+  // — tirar `divergente` da SAIDA devolveria ao caixa um dinheiro que ja saiu.
+  it("R-183: divergente sai do caixa, entra no destino, e cancelada nao conta em nenhum lado", () => {
+    expect(transferenciaContaComoSaida("divergente")).toBe(true);
+    expect(transferenciaContaComoEntrada("divergente")).toBe(true);
+    expect(transferenciaContaComoSaida("cancelada")).toBe(false);
+    expect(transferenciaContaComoEntrada("cancelada")).toBe(false);
+  });
+
+  // O QUANTO e outra pergunta: a saida e sempre o declarado, a entrada e o contado quando existe.
+  // Um valor so para as duas pontas devolveria a diferenca ao caixa.
+  it("R-183: a entrada usa o contado, e cai no declarado quando nao ha contagem", () => {
+    expect(valorEntradaCentavos({ valorOriginalCentavos: 20_000, valorRecebidoCentavos: 18_000 })).toBe(18_000);
+    expect(valorEntradaCentavos({ valorOriginalCentavos: 20_000, valorRecebidoCentavos: 0 })).toBe(0);
+    expect(valorEntradaCentavos({ valorOriginalCentavos: 20_000, valorRecebidoCentavos: 22_000 })).toBe(22_000);
+    expect(valorEntradaCentavos({ valorOriginalCentavos: 20_000, valorRecebidoCentavos: null })).toBe(20_000);
   });
   // O exemplo que o Jose escreveu na spec, em teste: se este quebrar, a regra mudou.
   it("exemplo do Jose: cofre 10.000, transferencia de 500 -> exibe 9.500", () => {

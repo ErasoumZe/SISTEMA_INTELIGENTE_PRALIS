@@ -5,8 +5,6 @@ import {
   // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
   ehAdministradorTotal,
   paraCentavos,
-  // Mesma regra que o servico usa para decidir quem e retaguarda. Importada, nunca copiada.
-  podeLancarSemCaixa,
   somarCentavos,
   valorTotalCentavos,
   type AuthSession,
@@ -23,9 +21,7 @@ import type {
   Opcao,
   Opcoes,
   PermissoesPaginadas,
-  ResumoCaixa,
-  CaixaAbertoResumo,
-  SolicitacaoCofre
+  ResumoCaixa
 } from "~/types/padaria";
 import type { Notificacao } from "@padaria/shared/notificacoes";
 import AppShell from "~/components/app/AppShell.vue";
@@ -87,7 +83,6 @@ import {
 import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
-import { criarAcoesSolicitacoesCofre } from "~/utils/solicitacoes-cofre";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
 import {
@@ -140,17 +135,6 @@ const empresas = useState<Opcao[]>("padaria.workspace.empresas", () => []);
 const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () => []);
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
-// D4: o que a retaguarda programou para o caixa aberto. Vazio quando nao ha caixa aberto.
-const caixaSolicitacoes = useState<SolicitacaoCofre[]>("padaria.workspace.caixaSolicitacoes", () => []);
-// D4 (lado da RETAGUARDA): os caixas abertos da empresa e as solicitacoes do caixa escolhido.
-// Estado separado do de cima de proposito: aquele e o do operador (o proprio caixa aberto dele),
-// este e o da Tesouraria olhando o caixa de outra pessoa.
-const caixasAbertos = useState<CaixaAbertoResumo[]>("padaria.workspace.caixasAbertos", () => []);
-const caixaSolicitacaoId = useState("padaria.workspace.caixaSolicitacaoId", () => "");
-const solicitacoesCofreRetaguarda = useState<SolicitacaoCofre[]>(
-  "padaria.workspace.solicitacoesCofreRetaguarda",
-  () => []
-);
 const notificacoes = ref<Notificacao[]>([]);
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
@@ -586,8 +570,6 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
       await carregarDadosPagina(idEmpresa, tela);
     }
     await carregarOperacoes(idEmpresa);
-    // D4: os caixas abertos so interessam a tela de Transferencias (painel da retaguarda).
-    if (tela === "transferencias") await carregarCaixasAbertos();
   } finally {
     empresaCarregando.value = false;
   }
@@ -1021,15 +1003,10 @@ async function carregarStatusCaixa(idEmpresa = empresaId.value) {
   if (!temPermissao("caixa_operar")) {
     caixaStatus.value = null;
     resumo.value = null;
-    caixaSolicitacoes.value = [];
     return;
   }
   caixaStatus.value = await apiGet<CaixaStatus>(`/api/caixa/status?empresaId=${idEmpresa}`);
   resumo.value = caixaStatus.value?.resumo ?? null;
-  // D4: as solicitacoes da retaguarda viajam junto com o status porque e o mesmo instante de
-  // decisao do operador — ele olha o saldo e o que pediram dele na mesma tela, nao em duas.
-  const caixaId = caixaStatus.value?.caixaAberto?.id;
-  caixaSolicitacoes.value = caixaId ? await apiGet<SolicitacaoCofre[]>(`/api/caixa/${caixaId}/solicitacoes-cofre`) : [];
 }
 
 async function atualizarOperacoesAutomaticamente() {
@@ -1607,90 +1584,19 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, retornarSaldoOperacional, executarSolicitacaoCofre, fecharCaixaOperacional } =
-  criarAcoesCaixa({
-    api: { post: apiPost },
-    empresaId: () => empresaId.value,
-    telaAtiva: () => telaAtiva.value,
-    setSalvando: (valor) => {
-      caixaSalvando.value = valor;
-    },
-    carregarStatusCaixa,
-    carregarDadosTela,
-    notificar,
-    mensagemErro,
-    confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
-  });
-
-// D4 · lado da RETAGUARDA. Usa a factory testavel de `utils/solicitacoes-cofre.ts`; aqui so entram
-// as dependencias reais (API, notificacao, confirmacao).
-const acoesSolicitacoes = criarAcoesSolicitacoesCofre({
-  api: { get: apiGet, post: apiPost },
+const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
+  api: { post: apiPost },
+  empresaId: () => empresaId.value,
+  telaAtiva: () => telaAtiva.value,
+  setSalvando: (valor) => {
+    caixaSalvando.value = valor;
+  },
+  carregarStatusCaixa,
+  carregarDadosTela,
   notificar,
-  mensagemErro
+  mensagemErro,
+  confirmar: (mensagem) => confirmarAcao(mensagem, "Confirmar retorno", "Lançar retorno")
 });
-
-// Programar entrega ao cofre exige DUAS coisas, e a tela precisa das duas para nao oferecer um
-// painel que a API recusa: a permissao tecnica e o PAPEL de retaguarda. A regra do papel vem de
-// `@padaria/shared` — a mesma funcao que o servico usa, nao uma copia da lista de cargos.
-const podeProgramarEntregaCofre = computed(() => {
-  const perfil = sessao.value?.perfil;
-  return Boolean(perfil) && temPermissao("transferencias_criar") && podeLancarSemCaixa(perfil!);
-});
-
-async function carregarCaixasAbertos() {
-  // Perfil de Caixa nao ve o painel nem carrega a lista de todos os caixas abertos da empresa.
-  if (!empresaId.value || !podeProgramarEntregaCofre.value) {
-    caixasAbertos.value = [];
-    solicitacoesCofreRetaguarda.value = [];
-    return;
-  }
-  caixasAbertos.value = await apiGet<CaixaAbertoResumo[]>(`/api/caixa/abertos?empresaId=${empresaId.value}`);
-  // Mantem a selecao se o caixa continuar aberto; senao escolhe o primeiro (ou nenhum).
-  const aindaAberto = caixasAbertos.value.some((caixa) => caixa.id === caixaSolicitacaoId.value);
-  const escolhido = aindaAberto ? caixaSolicitacaoId.value : (caixasAbertos.value[0]?.id ?? "");
-  await selecionarCaixaSolicitacao(escolhido);
-}
-
-async function selecionarCaixaSolicitacao(caixaId: string) {
-  caixaSolicitacaoId.value = caixaId;
-  solicitacoesCofreRetaguarda.value = caixaId ? await acoesSolicitacoes.listar(caixaId) : [];
-}
-
-async function programarSolicitacaoCofre(payload: {
-  caixaId: string;
-  tipo: "sangria" | "retorno";
-  valor: number;
-  observacao: string | null;
-  idempotenciaChave: string;
-  aoConcluir?: (sucesso: boolean) => void;
-}) {
-  caixaSalvando.value = true;
-  try {
-    const lista = await acoesSolicitacoes.programar(payload);
-    payload.aoConcluir?.(lista !== null);
-    if (lista) solicitacoesCofreRetaguarda.value = lista;
-  } finally {
-    caixaSalvando.value = false;
-  }
-}
-
-async function cancelarSolicitacaoCofre(payload: {
-  caixaId: string;
-  solicitacaoId: string;
-  motivo: string;
-  aoConcluir?: (sucesso: boolean) => void;
-}) {
-  caixaSalvando.value = true;
-  try {
-    const lista = await acoesSolicitacoes.cancelar(payload.caixaId, payload.solicitacaoId, payload.motivo);
-    // Só o sucesso fecha o diálogo e limpa o motivo — em erro o operador reenvia com um clique.
-    payload.aoConcluir?.(lista !== null);
-    if (lista) solicitacoesCofreRetaguarda.value = lista;
-  } finally {
-    caixaSalvando.value = false;
-  }
-}
 
 function abrirImportacao(tela = telaAtiva.value) {
   copiaModo.value = "importar";
@@ -1988,17 +1894,7 @@ const pageContext = computed(() => ({
   atualizarDiaEntradas,
   abrirCaixaOperacional,
   retornarSaldoOperacional,
-  caixaSolicitacoes: caixaSolicitacoes.value,
-  executarSolicitacaoCofre,
-  // D4 · lado da retaguarda (tela de Transferencias).
-  podeProgramarEntregaCofre: podeProgramarEntregaCofre.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
-  caixasAbertos: caixasAbertos.value,
-  caixaSolicitacaoId: caixaSolicitacaoId.value,
-  solicitacoesCofreRetaguarda: solicitacoesCofreRetaguarda.value,
-  selecionarCaixaSolicitacao,
-  programarSolicitacaoCofre,
-  cancelarSolicitacaoCofre,
   notificacoes: notificacoes.value,
   verificarNotificacao,
   fecharCaixaOperacional,

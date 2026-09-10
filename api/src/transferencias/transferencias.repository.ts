@@ -18,29 +18,9 @@ import {
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { ehEntregaCaixaParaCofre } from "./entrega-cofre.repository.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
-
-// Predicado CANONICO de "esta transferencia e uma entrega do Caixa para o Cofre".
-//
-// Fonte unica, usada pela listagem (para a tela saber qual regra aplicar) e pela conferencia (para
-// o servidor decidir entre o fluxo estrito e o generico). Duas copias divergiriam, e a tela
-// passaria a oferecer uma acao que a API recusa — que foi exatamente o defeito corrigido aqui.
-//
-// Os tres criterios sao necessarios juntos: nenhum sozinho distingue os fluxos.
-export function ehEntregaCaixaParaCofre(linha: {
-  caixaId: string | null;
-  tipo: string;
-  contaDestinoId: string;
-  contaCofreId: string | null;
-}): boolean {
-  return (
-    linha.caixaId !== null &&
-    (linha.tipo === "sangria" || linha.tipo === "retorno") &&
-    linha.contaCofreId !== null &&
-    linha.contaDestinoId === linha.contaCofreId
-  );
-}
 
 export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
@@ -57,6 +37,7 @@ export async function listarTransferenciasRepository(
       dataReferencia: transferencias.dataReferencia,
       descricao: textoDoMovimento(transferencias),
       valorOriginal: transferencias.valorOriginal,
+      valorRecebido: transferencias.valorRecebido,
       computar: transferencias.computar,
       status: transferencias.status,
       contaOrigemId: transferencias.contaOrigemId,
@@ -81,6 +62,7 @@ export async function listarTransferenciasRepository(
   return linhas.map(({ caixaId, tipo, contaCofreId, ...linha }) => ({
     ...linha,
     status: linha.status as TransferenciaDto["status"],
+    valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
     ehCaixaParaCofre: ehEntregaCaixaParaCofre({
@@ -162,6 +144,7 @@ export async function buscarTransferenciaDetalheRepository(
       contaOrigemId: transferencias.contaOrigemId,
       contaDestinoId: transferencias.contaDestinoId,
       nLacreDoc: transferencias.nLacreDoc,
+      valorRecebido: transferencias.valorRecebido,
       agendadaPara: transferencias.agendadaPara,
       tempoConfirmacao: transferencias.tempoConfirmacao,
       prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
@@ -183,6 +166,8 @@ export async function buscarTransferenciaDetalheRepository(
     valorOriginal: numeroDecimal(transferencia.valorOriginal),
     valorAcrescimo: numeroDecimal(transferencia.valorAcrescimo),
     valorDesconto: numeroDecimal(transferencia.valorDesconto),
+    // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
+    valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
     contasDestinoIds: candidatos.map((item) => item.contaId),
     tempoConfirmacao: (transferencia.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
@@ -207,6 +192,12 @@ export type ContextoConferencia = {
   // Quem entregou fisicamente (solicitacao D4 executada). Null em avulsa e retorno final — nesses
   // casos o operador e o `criadoPor`.
   executadoPor: string | null;
+  // P1/#101: a conferencia REESCREVE `conta_destino_id` com a candidata vencedora, entao ela e o
+  // terceiro escritor do destino — e tambem consegue fabricar um movimento Caixa -> Cofre. Os dois
+  // campos ja vinham no SELECT; ficam expostos para a guarda do servico decidir sem segunda ida ao
+  // banco.
+  caixaId: string | null;
+  contaCofreId: string | null;
   ehCaixaParaCofre: boolean;
 };
 
@@ -244,6 +235,8 @@ export async function buscarContextoConferenciaRepository(
     lacre: linha.lacre,
     criadoPor: linha.criadoPor,
     executadoPor: linha.executadoPor,
+    caixaId: linha.caixaId,
+    contaCofreId: linha.contaCofreId,
     ehCaixaParaCofre
   };
 }
@@ -283,6 +276,58 @@ export async function registrarRecusaConferenciaRepository(
   return { id: recusa.id, tentativas: Number(total?.total ?? 1) };
 }
 
+// R-183 · o DESFECHO da divergencia: `pendente -> divergente`, com o valor que o cofre contou.
+//
+// A amarra que faz o trabalho e `status = 'pendente'`: ela torna o ato irrepetivel — quem perder a
+// corrida acerta zero linhas e recebe erro de dominio, nunca um segundo encerramento. O `caixa_id`
+// vem junto como redundancia barata, e nao como protecao: o chamador o le da MESMA linha que o
+// UPDATE vai acertar, entao ele nunca pode falhar sozinho. Fica escrito assim para ninguem confiar
+// nele como escopo — o escopo real de "so este caixa" e do chamador.
+//
+// O selo e rompido aqui, como no `/confirmar`: entrega conferida com lacre intacto para sempre
+// mentiria no relatorio de lacres.
+export async function encerrarDivergenciaRepository(
+  input: {
+    transferenciaId: string;
+    caixaId: string;
+    valorRecebidoCentavos: number;
+    lacreDoMovimento: string | null;
+  },
+  db: ExecutorBanco = banco
+): Promise<{ id: string; empresaId: string } | null> {
+  const [vencedora] = await db
+    .update(transferencias)
+    .set({
+      status: "divergente",
+      valorRecebido: centavosParaDecimalBanco(input.valorRecebidoCentavos),
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.transferenciaId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "pendente")
+      )
+    )
+    .returning({ id: transferencias.id, empresaId: transferencias.empresaId });
+  if (!vencedora) return null;
+
+  if (!input.lacreDoMovimento) return vencedora;
+  const [lacre] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(
+      and(
+        eq(lacres.transferenciaId, input.transferenciaId),
+        eq(lacres.numero, input.lacreDoMovimento),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  if (!lacre) throw new Error("Lacre invalido, ja rompido ou pertencente a outra transferencia");
+  return vencedora;
+}
+
 export async function contasPertencemEmpresaRepository(
   contaIds: string[],
   empresaId: string,
@@ -309,7 +354,15 @@ async function candidatoConfirmacao(
   db: ExecutorBanco
 ) {
   const [permitida] = await db
-    .select({ id: transferencias.id, criadoPor: transferencias.criadoPor, nLacreDoc: transferencias.nLacreDoc })
+    .select({
+      id: transferencias.id,
+      criadoPor: transferencias.criadoPor,
+      // R-028 aplicada ao fluxo D4: numa solicitacao, `criado_por` e quem PROGRAMOU (retaguarda) e
+      // `executado_por` e quem ENTREGOU o malote. Excluir so o primeiro deixava o entregador
+      // conferir a propria entrega — e, com o encerramento da R-183, escolher o numero da quebra.
+      executadoPor: transferencias.executadoPor,
+      nLacreDoc: transferencias.nLacreDoc
+    })
     .from(transferenciasDestinosCandidatos)
     .innerJoin(transferencias, eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId))
     .innerJoin(
@@ -323,7 +376,7 @@ async function candidatoConfirmacao(
       )
     )
     .limit(1);
-  if (!permitida || permitida.criadoPor === usuarioId) return null;
+  if (!permitida || permitida.criadoPor === usuarioId || permitida.executadoPor === usuarioId) return null;
   return permitida;
 }
 

@@ -24,6 +24,7 @@ import {
   colaboradoresJornadas,
   clientes,
   contas,
+  contasUsuarios,
   ajustesFechamentoCaixa,
   debitosColaboradores,
   despesas,
@@ -54,10 +55,12 @@ import {
   permissoesUsuarios,
   perfisUsuarios,
   produtos,
+  quebrasCaixa,
   retiradas,
   sessaoAutenticacao,
   setores,
   transferencias,
+  transferenciasConferenciasRecusadas,
   unidadesMedida,
   usuarioAutenticacao,
   usuariosEmpresas,
@@ -642,6 +645,24 @@ await banco.delete(debitosColaboradores).where(eq(debitosColaboradores.empresaId
 await banco.delete(despesas).where(eq(despesas.empresaId, empresaId));
 await banco.delete(mercadorias).where(eq(mercadorias.empresaId, empresaId));
 await banco.delete(retiradas).where(eq(retiradas.empresaId, empresaId));
+// R-183 · as duas dependentes de `transferencias` com `ON DELETE RESTRICT` saem PRIMEIRO. A
+// auditoria financeira nao some junto com o movimento — foi assim que a FK foi desenhada —, e o
+// preco disso e que o reset precisa apaga-la explicitamente. Sem estas duas linhas, a partir da
+// primeira divergencia encerrada o `seed:dev` estoura 23503 e o reset morre no meio.
+//
+// `fechamentos_caixa` continua DEPOIS: `transferencias.caixa_id` e NO ACTION, entao inverter a
+// ordem so troca um 23503 por outro.
+const transferenciasEmpresa = await banco
+  .select({ id: transferencias.id })
+  .from(transferencias)
+  .where(eq(transferencias.empresaId, empresaId));
+const transferenciaIds = transferenciasEmpresa.map((transferencia) => transferencia.id);
+if (transferenciaIds.length) {
+  await banco
+    .delete(transferenciasConferenciasRecusadas)
+    .where(inArray(transferenciasConferenciasRecusadas.transferenciaId, transferenciaIds));
+}
+await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
@@ -776,6 +797,20 @@ const pdv = (
   await banco.insert(pdvs).values({ empresaId, nome: "PDV 01", contaId: contaCaixa.id }).returning({ id: pdvs.id })
 )[0];
 if (!pdv) throw new Error("PDV nao foi criado");
+
+// D13/decisao 7 · sem CONFIRMADOR ELEGIVEL no Cofre, nada que entregue dinheiro acontece: nem
+// sangria, nem retorno, nem fechamento com sobra. "Elegivel" e vinculo em `contas_usuarios` + a
+// permissao `transferencias_conferir` + ser diferente de quem criou o movimento (R-028).
+//
+// O DEV nascia com a conta Cofre SEM vinculo nenhum, e o efeito era total: qualquer entrega ao
+// cofre respondia 400 e o modulo Caixa nao podia ser demonstrado nem testado ponta a ponta neste
+// ambiente. Sao DOIS vinculos, e nao um, porque quem entrega nao confere a propria entrega — com um
+// so, a entrega feita por ele mesmo continuaria bloqueada.
+for (const email of ["tesouraria@email.com", "gerencia@email.com"]) {
+  const usuarioId = usuarioIds.get(email);
+  if (!usuarioId) throw new Error(`Usuario ${email} nao foi criado`);
+  await banco.insert(contasUsuarios).values({ empresaId, contaId: contaCofre.id, usuarioId }).onConflictDoNothing();
+}
 
 await banco
   .update(empresas)

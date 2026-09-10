@@ -97,6 +97,11 @@
      fundo com texto branco e seguem outra regra de contraste (3:1). */
   --cx-positive: #157f3c;
   --cx-negative: #c62828;
+  /* Terceiro estado, que faltava: nem bom nem ruim — ATENCAO, uma etapa ainda aberta.
+     Sem ele, "pendente" so podia ser pintado de vermelho, e vermelho quer dizer que algo
+     deu errado. Dinheiro a caminho do cofre nao deu errado; ele so ainda nao chegou.
+     5,4:1 sobre a superficie clara. */
+  --cx-attention: #9a5b00;
 
   /* ---- Espaco: escala de 4px ---- */
   --cx-sp-1: 4px;
@@ -178,6 +183,7 @@
 
   --cx-positive: #4ade80;
   --cx-negative: #ff8a80;
+  --cx-attention: #f0b45f;
   /* Marca clareada para servir de tinta/grafico sobre superficie escura (6,9:1). */
   --cx-brand-text: color-mix(in srgb, var(--cx-brand) 45%, #ffffff);
   --cx-focus: var(--cx-brand-text);

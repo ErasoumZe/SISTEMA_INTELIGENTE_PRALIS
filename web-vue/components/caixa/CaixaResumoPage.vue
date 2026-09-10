@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import type { CaixaStatus, Opcao, ResumoCaixa, SolicitacaoCofre } from "~/types/padaria";
+import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
+import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
+import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
 const props = defineProps<{
@@ -11,8 +13,6 @@ const props = defineProps<{
   pdvs: Opcao[];
   turnos?: Opcao[];
   maquininhas?: Opcao[];
-  // D4: o que a retaguarda programou para este caixa. Lista vazia = nada pendente.
-  solicitacoes?: SolicitacaoCofre[];
   empresaId: string;
   permissoes: string[];
   usuarioId: string;
@@ -44,17 +44,6 @@ const emit = defineEmits<{
       lacre: string | null;
       observacao: string | null;
       idempotenciaChave: string;
-      aoConcluir: (sucesso: boolean) => void;
-    }
-  ): void;
-  // D10: a execucao entrega o valor PROGRAMADO. Nao vai valor nem observacao daqui, e nao vai
-  // chave: a chave e da programacao e nunca e sobrescrita. So o lacre do envelope e proprio do ato.
-  (
-    event: "executarSolicitacao",
-    payload: {
-      caixaId: string;
-      solicitacaoId: string;
-      lacre: string | null;
       aoConcluir: (sucesso: boolean) => void;
     }
   ): void;
@@ -126,6 +115,21 @@ const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
 const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fechamento.observacao.trim());
+
+// G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
+// o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
+const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
+
+// A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
+// Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
+const motivoTravado = computed(() =>
+  motivoFechamentoTravado(
+    entregasPendentes.value.length,
+    entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
+  )
+);
+const fechamentoTravado = computed(() => motivoTravado.value !== null);
+const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
 const maquininhasSelect = computed(() =>
   (props.maquininhas ?? []).map((item) => ({
     ...item,
@@ -230,31 +234,17 @@ function retornarSaldo() {
   });
 }
 
-// D4/D10: executa o que a retaguarda programou — pelo valor programado, sempre. O operador nao
-// escolhe valor aqui: se tiver menos, a solicitacao nao e executada; se tiver mais, o excedente
-// sai por uma entrega avulsa, com chave e lacre proprios. O unico campo dele e o lacre do envelope.
-//
-// Sem chave de idempotencia: a identidade do ato e o `solicitacaoId`, e o servidor resolve a
-// repeticao pela transicao atomica de `agendada` para `pendente`.
-function executarSolicitacao(solicitacao: SolicitacaoCofre) {
-  const caixa = caixaAberto.value;
-  if (!caixa || props.salvando) return;
-  emit("executarSolicitacao", {
-    caixaId: caixa.id,
-    solicitacaoId: solicitacao.id,
-    lacre: entrega.lacre || null,
-    // So o lacre e limpo no sucesso: o valor digitado, se houver, pertence a uma entrega avulsa
-    // que o operador pode ainda querer lancar.
-    aoConcluir: (sucesso: boolean) => {
-      if (sucesso) entrega.lacre = "";
-    }
-  });
-}
-
 // D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
 // transacao do fechamento; se o saldo ja e zero, apenas fecha. Nao existe segundo botao.
 function fechar() {
   const caixa = caixaAberto.value;
+  // Travado por entrega em transito: o botao continua focavel de proposito (`aria-disabled`, nao
+  // `disabled`), porque botao morto nao entra na navegacao por teclado e o leitor de tela nunca
+  // chega ao motivo. Clicar leva ao motivo, que e a unica coisa util a fazer aqui.
+  if (fechamentoTravado.value) {
+    blocoTravas.value?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
   if (!caixa || props.salvando || observacaoObrigatoriaPendente.value) return;
   emit("fecharCaixa", {
@@ -412,43 +402,13 @@ function fechar() {
           >, e a Tesouraria será notificada. A observação abaixo é obrigatória e será registrada junto com a quebra.
         </v-alert>
 
-        <!-- D4/D10: o que a retaguarda PROGRAMOU. Ainda nao movimentou dinheiro — nasce 'agendada'.
-           O valor e IMUTAVEL: o operador entrega exatamente o programado, usando o campo de lacre
-           abaixo. Enquanto houver solicitacao aqui, o caixa nao fecha (decisao 5). -->
-        <template v-if="(solicitacoes ?? []).length">
-          <div class="text-subtitle-2 mb-2">Entregas solicitadas pela Tesouraria</div>
-          <v-alert
-            v-for="solicitacao in solicitacoes ?? []"
-            :key="solicitacao.id"
-            type="info"
-            variant="tonal"
-            class="mb-3"
-            data-teste="solicitacao-cofre"
-          >
-            <div class="d-flex flex-wrap align-center ga-3">
-              <div class="flex-grow-1">
-                <strong>{{ dinheiro(solicitacao.valor) }}</strong>
-                · {{ solicitacao.tipo === "sangria" ? "Sangria" : "Retorno" }}
-                <div v-if="solicitacao.observacao" class="text-caption">{{ solicitacao.observacao }}</div>
-                <div v-if="saldoAtual < solicitacao.valor" class="text-caption text-error">
-                  Saldo em espécie insuficiente ({{ dinheiro(saldoAtual) }}) — a entrega não pode ser executada
-                  parcialmente.
-                </div>
-              </div>
-              <v-btn
-                color="warning"
-                variant="flat"
-                prepend-icon="mdi-check-bold"
-                :disabled="salvando || saldoAtual < solicitacao.valor"
-                :loading="salvando"
-                data-teste="botao-executar-solicitacao"
-                @click="executarSolicitacao(solicitacao)"
-              >
-                Executar {{ dinheiro(solicitacao.valor) }}
-              </v-btn>
-            </div>
-          </v-alert>
-        </template>
+        <!-- G1/R-171 · o que ja saiu e ninguem conferiu: a unica coisa que trava o fechamento.
+             R-179/Fatia 3: o bloco "Entregas solicitadas pela Tesouraria" saiu daqui junto com o
+             painel que o alimentava. Executar uma ordem era um SEGUNDO caminho para o mesmo ato do
+             botao de entregar abaixo — mesmo dinheiro, mesmas contas, outra porta. -->
+        <div ref="blocoTravas" tabindex="-1">
+          <EntregasAguardandoConferencia :entregas="entregasPendentes" />
+        </div>
 
         <v-row dense>
           <v-col v-if="temSobra" cols="12" md="4">
@@ -499,12 +459,23 @@ function fechar() {
               :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
               :disabled="observacaoObrigatoriaPendente"
+              :aria-disabled="fechamentoTravado ? 'true' : undefined"
+              :class="{ 'botao-travado': fechamentoTravado }"
               :loading="salvando"
+              :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
               data-teste="botao-fechar"
               @click="fechar"
             >
               {{ temDeficit ? "Fechar com quebra" : "Fechar caixa" }}
             </v-btn>
+            <p
+              v-if="fechamentoTravado"
+              id="motivo-fechamento-travado"
+              class="text-caption mt-2 mb-0"
+              data-teste="motivo-fechamento-travado"
+            >
+              Fechamento travado: {{ motivoTravado }}
+            </p>
           </v-col>
         </v-row>
       </template>
@@ -513,6 +484,13 @@ function fechar() {
 </template>
 
 <style scoped>
+/* Travado, mas vivo: fica cinza e com cursor de recusa, e continua focavel — quem chega por
+   teclado precisa poder alcancar o botao para descobrir por que ele nao fecha. */
+.botao-travado {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Grade auto-responsiva: cada card tem largura minima confortavel e quebra sozinho — nunca aperta
    como no cockpit "fiel ao mockup" que foi revertido no contexto real. */
 .cat-grid {

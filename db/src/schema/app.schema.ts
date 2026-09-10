@@ -1618,22 +1618,34 @@ export const transferencias = pgTable(
     ordem: integer("ordem"),
     computar: boolean("computar").notNull().default(true),
     status: text("status").notNull().default("recebido"),
+    // R-183 · o valor FISICAMENTE CONTADO no cofre. Preenchido SO no estado `divergente`, e por
+    // isso o CHECK amarra os dois: `valor_original` continua sendo o que SAIU do caixa e nunca e
+    // reescrito; este e o que ENTROU no cofre. Nullable e sem default — todo o historico fica NULL e
+    // o `coalesce(valor_recebido, valor_original)` do credito devolve o comportamento de sempre.
+    // Coluna, e nao derivacao da ultima recusa, por tres motivos: `valor_informado` la e nullable
+    // (entao C = 0 seria indistinguivel de "nao contou"), "a ultima" depende de ordem, e o caminho
+    // do saldo e quente demais para um lateral correlacionado por transferencia.
+    valorRecebido: valorMonetario("valor_recebido"),
     // B2: ancora de idempotencia do fluxo do Caixa, no mesmo padrao de notas_fiscais (empresa +
     // chave). O cliente carimba a INTENCAO; um retry repete a chave e o UNIQUE parcial recusa a
     // segunda linha. Nullable e sem default de proposito: todo o historico fica NULL, o indice
     // parcial o ignora e nenhum backfill e necessario (D8). O retorno final do fechamento nao usa
     // chave — ele nasce dentro da transacao ja protegida pela trava e pela guarda de status (B1).
     idempotenciaChave: uuid("idempotencia_chave"),
-    // D4: marca que esta linha nasceu de uma SOLICITACAO Caixa -> Cofre. Nullable e sem default —
-    // historico, entrega avulsa e retorno final do fechamento ficam NULL, e e esse NULL que separa
-    // os dois fluxos. Preenchido SO na criacao D4; preservado na execucao e no cancelamento.
-    // Nao reusa `agendada_para` (que e QUANDO efetivar, do fluxo generico) nem descricao/observacao.
+    // D4: marcava que a linha nasceu de uma SOLICITACAO Caixa -> Cofre, o fluxo "Programar entrega
+    // ao cofre".
+    //
+    // R-179/Fatia 3 · esse caminho foi REMOVIDO (painel, rotas, servico e consultas). Esta coluna
+    // ficou SEM ESCRITOR: nada no codigo a preenche mais. Ela continua aqui porque as linhas
+    // historicas que a usam sao fatos ocorridos, e apaga-la e migration — ato separado, com
+    // autorizacao propria. O mesmo vale para `executado_por`/`executado_em` abaixo.
     solicitacaoCofreEm: timestamp("solicitacao_cofre_em", { withTimezone: true }),
-    // Quem ENTREGOU o dinheiro, e quando. Nao da para deduzir de `criado_por`: aquele e quem
-    // PROGRAMOU (Tesouraria/Gestao), e a execucao pode ser feita pelo gerente, por quem abriu o
-    // caixa ou pelo operador designado (`podeOperarCaixa`). A recusa notifica esta pessoa.
-    // Gravados na transicao atomica 'agendada' -> 'pendente'; como so um chamador acerta a linha,
-    // retry e execucao concorrente nunca os sobrescrevem.
+    // Quem ENTREGOU o dinheiro, e quando. No fluxo D4 nao dava para deduzir de `criado_por`:
+    // aquele era quem PROGRAMOU (Tesouraria/Gestao), e a execucao podia ser de outra pessoa.
+    //
+    // R-179/Fatia 3 · sem o fluxo D4 nao ha mais escritor: na entrega unica quem cria e quem
+    // entrega. As colunas ficam para as linhas historicas, e a conferencia continua LENDO
+    // `executado_por` para nao deixar quem entregou conferir a propria entrega (R-028).
     executadoPor: text("executado_por").references(() => perfisUsuarios.usuarioId),
     executadoEm: timestamp("executado_em", { withTimezone: true }),
     // Auditoria de cancelamento (decisao 2): os tres andam juntos — ver o CHECK.
@@ -1645,7 +1657,13 @@ export const transferencias = pgTable(
     atualizadoEm
   },
   (table) => [
-    check("transferencias_status_check", sql`${table.status} in ('pendente', 'recebido', 'agendada', 'cancelada')`),
+    // R-183: `divergente` e o quinto estado — terminal, para entrega conferida que NAO bateu.
+    // Ele existe porque nenhum dos quatro servia: `recebido` afirmaria que bateu e `cancelada`
+    // devolveria o dinheiro ao Caixa (`transferenciaContaComoSaida` nao conta cancelada).
+    check(
+      "transferencias_status_check",
+      sql`${table.status} in ('pendente', 'recebido', 'agendada', 'cancelada', 'divergente')`
+    ),
     // `motivoCancelamento is not null` e explicito: sem ele, length(btrim(null)) > 0 avalia para
     // NULL, o OR inteiro vira NULL e o Postgres ACEITA a linha — a constraint existiria sem
     // proteger o caso mais obvio, que e cancelar sem dizer por que.
@@ -1679,7 +1697,7 @@ export const transferencias = pgTable(
              and ((${table.status} in ('agendada', 'cancelada')
                      and ${table.executadoPor} is null
                      and ${table.executadoEm} is null)
-               or (${table.status} in ('pendente', 'recebido')
+               or (${table.status} in ('pendente', 'recebido', 'divergente')
                      and ${table.executadoPor} is not null
                      and ${table.executadoEm} is not null)))`
     ),
@@ -1699,6 +1717,30 @@ export const transferencias = pgTable(
     check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
+    // R-183 · o contado so existe no estado que o justifica, e existe SEMPRE nele. Sem o segundo
+    // ramo, uma linha comum poderia carregar um valor recebido que ninguem le; sem o primeiro, uma
+    // divergencia poderia ficar sem o numero que define quanto o cofre recebeu.
+    check(
+      "transferencias_valor_recebido_check",
+      sql`(${table.status} = 'divergente'
+             and ${table.valorRecebido} is not null
+             and ${table.valorRecebido} >= 0)
+        or (${table.status} <> 'divergente' and ${table.valorRecebido} is null)`
+    ),
+    // R-183 · `divergente` e EXCLUSIVO do malote Caixa -> Cofre. Sem esta amarra um `suprimento`
+    // divergente com destino na conta do PDV passaria a contar como ENTRADA do caixa — porque
+    // `transferenciaContaComoEntrada` olha status e e cega para direcao — e a FK da quebra, que
+    // exige `caixa_id`, nunca casaria: o INSERT estouraria 23503 dentro do fechamento.
+    check(
+      "transferencias_divergente_escopo_check",
+      sql`${table.status} <> 'divergente'
+        or (${table.caixaId} is not null and ${table.tipo} in ('sangria', 'retorno'))`
+    ),
+    // Alvo da FK composta de `quebras_caixa`. TRES colunas, e nao duas: `caixa_id` e FK de coluna
+    // unica para `fechamentos_caixa`, entao o par (id, caixa_id) sozinho deixaria a quebra da
+    // empresa A apontar entrega da empresa B. Com `empresa_id` na chave, o cruzamento de tenant
+    // fica impossivel por construcao, no mesmo padrao da R-021.
+    unique("transferencias_id_caixa_empresa_unica").on(table.id, table.caixaId, table.empresaId),
     index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
     index("transferencias_caixa_idx").on(table.caixaId),
     // Parcial: so indexa o fluxo novo, entao nao cresce com o historico (todo NULL). Escopado por
@@ -1706,7 +1748,9 @@ export const transferencias = pgTable(
     uniqueIndex("transferencias_idempotencia_unica")
       .on(table.empresaId, table.idempotenciaChave)
       .where(sql`${table.idempotenciaChave} is not null`),
-    // Parcial pelo mesmo motivo: so indexa o fluxo D4, entao nao cresce com o historico.
+    // Parcial pelo mesmo motivo: so indexava o fluxo D4. R-179/Fatia 3 · sem escritor para
+    // `solicitacao_cofre_em`, o indice para de crescer e cobre apenas as linhas legadas. Derruba-lo
+    // e migration, ato separado.
     index("transferencias_solicitacao_cofre_idx")
       .on(table.caixaId, table.status)
       .where(sql`${table.solicitacaoCofreEm} is not null`)
@@ -1913,6 +1957,10 @@ export const quebrasCaixa = pgTable(
       .references(() => perfisUsuarios.usuarioId),
     valor: valorMonetario("valor").notNull(),
     observacao: text("observacao").notNull(),
+    // R-183 · quando a quebra nasce de uma entrega ao cofre conferida a menos, ela aponta QUAL
+    // entrega. NULL e a quebra de CONTAGEM do turno, que e a unica que existia ate aqui — por isso
+    // todo o historico fica NULL e nenhum backfill e necessario.
+    transferenciaId: uuid("transferencia_id"),
     criadoEm
   },
   (table) => [
@@ -1921,9 +1969,38 @@ export const quebrasCaixa = pgTable(
       foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
       name: "quebras_caixa_fechamento_empresa_fk"
     }).onDelete("cascade"),
-    unique("quebras_caixa_fechamento_unico").on(table.fechamentoCaixaId),
+    // TRES colunas: amarra a quebra a uma entrega DAQUELE fechamento e DAQUELA empresa. Com duas
+    // (id, caixa_id) a quebra de terca poderia apontar o malote de segunda de outra empresa, porque
+    // `transferencias.caixa_id` e FK de coluna unica. `transferencia_id` NULL desliga a checagem
+    // inteira (MATCH SIMPLE), que e o que mantem a quebra de contagem livre.
+    foreignKey({
+      columns: [table.transferenciaId, table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [transferencias.id, transferencias.caixaId, transferencias.empresaId],
+      name: "quebras_caixa_transferencia_fk"
+    }).onDelete("restrict"),
+    // A quebra de CONTAGEM continua sendo no maximo uma por fechamento — o unique antigo, agora
+    // parcial. E cada entrega divergente rende no maximo uma quebra, em qualquer fechamento: o
+    // segundo indice e mais forte que um composto por fechamento e ainda serve de indice para a
+    // coluna lider da FK.
+    uniqueIndex("quebras_caixa_contagem_unica")
+      .on(table.fechamentoCaixaId)
+      .where(sql`${table.transferenciaId} is null`),
+    uniqueIndex("quebras_caixa_transferencia_unica")
+      .on(table.transferenciaId)
+      .where(sql`${table.transferenciaId} is not null`),
+    // O unique antigo por fechamento era um indice COMPLETO nesta coluna, e a R-183 o trocou por um
+    // parcial. "As quebras deste fechamento" virou consulta inevitavel — agora um fechamento pode
+    // ter varias — e o parcial nao a serve (o planner nao tem como provar `transferencia_id is
+    // null`). Este indice devolve o que o unique dava de graca, e serve tambem a RI do CASCADE.
+    index("quebras_caixa_fechamento_idx").on(table.fechamentoCaixaId),
     index("quebras_caixa_empresa_usuario_idx").on(table.empresaId, table.usuarioId),
     check("quebras_caixa_valor_nao_zero_check", sql`${table.valor} <> 0`),
+    // R-183/D7 no BANCO: quebra de divergencia so pode ser NEGATIVA. A sobra nunca vira quebra
+    // positiva, e ate aqui isso vivia so no `if` do servico — um insert de suporte ou um escritor
+    // futuro transformaria a divida do operador em credito sem nada reclamar. A quebra de CONTAGEM
+    // (`transferencia_id is null`) fica de fora: a semantica antiga dela ("positivo = sobrou") e
+    // historico e nao muda aqui.
+    check("quebras_caixa_divergencia_negativa_check", sql`${table.transferenciaId} is null or ${table.valor} < 0`),
     check("quebras_caixa_observacao_nao_vazia_check", sql`length(btrim(${table.observacao})) > 0`)
   ]
 );

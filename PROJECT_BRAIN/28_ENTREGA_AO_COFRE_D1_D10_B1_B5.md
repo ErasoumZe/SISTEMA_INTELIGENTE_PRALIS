@@ -26,22 +26,52 @@ anterior caiu na rede".** Dois cliques entregavam o dinheiro duas vezes, com um 
 
 ## §2 · As decisões (D1–D10)
 
-| Id      | Decisão                                                                                                                                                                                                                                                                                                                                           | Onde vive                                                   |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **D1**  | Entrega **parcial** é permitida durante o turno, **nunca acima do saldo em espécie**. O teto é recalculado no servidor, sob trava — o número que a tela viu não é prova.                                                                                                                                                                          | `caixa.service.ts` · `criarTransferenciaCofreCaixa`         |
-| **D2**  | A entrega do operador **já abate o saldo físico** do caixa no instante em que é lançada.                                                                                                                                                                                                                                                          | `shared/caixa/regras.ts` · `transferenciaContaComoSaida`    |
-| **D3**  | Mas nasce **`pendente`**: só entra no cofre quando quem opera a conta de destino conferir (R-028/R-036).                                                                                                                                                                                                                                          | `caixa.repository.ts` · `criarTransferenciaCofreRepository` |
-| **D4**  | A **retaguarda programa** (`agendada`, não movimenta saldo); **o operador executa** (vira `pendente`). Dois atos, duas pessoas, só o segundo mexe em dinheiro.                                                                                                                                                                                    | `programarSolicitacaoCofre` / `executarSolicitacaoCofre`    |
-| **D5**  | **Cada movimento tem o seu próprio lacre** (opcional, R-026; número novo, R-027). Movimento executado **nunca** é editado.                                                                                                                                                                                                                        | `registrarEntregaAoCofre`                                   |
-| **D6**  | **Retorno final + fechamento são UM ato atômico.** O cliente não manda o valor: o servidor usa a sobra que ele mesmo apurou sob trava. Saldo já zero → só fecha.                                                                                                                                                                                  | `fecharCaixa`                                               |
-| **D7**  | **Sobra ≠ déficit.** Sobra volta ao cofre e nunca vira quebra positiva. Déficit vira quebra nominal, com **observação obrigatória** e aviso na tela **antes** do clique.                                                                                                                                                                          | `fecharCaixa` + `CaixaResumoPage.vue`                       |
-| **D8**  | `idempotencia_chave` é **nullable e sem default**: todo o histórico fica NULL, o índice parcial o ignora, **nenhum backfill** é necessário.                                                                                                                                                                                                       | migration `0030`                                            |
-| **D9**  | A criação de retorno/sangria tem **um único caminho**. O `OperacaoTransferenciaModal` não cria mais — o componente que existia só para isso foi **removido**.                                                                                                                                                                                     | `OperacaoTransferenciaModal.vue`                            |
-| **D10** | **O valor programado é IMUTÁVEL.** A Tesouraria pediu R$ 100 → a execução movimenta exatamente R$ 100, e não reescreve nem valor nem observação da programação. Mais que o programado sai por um movimento **avulso** próprio (chave e lacre novos); **menos** que o programado **não executa** a solicitação.                                    | `executarSolicitacaoCofre`                                  |
-| **D11** | A **execução não tem chave de idempotência própria.** Ela é idempotente pelo `solicitacaoId` mais a transição atômica `status = 'agendada' → 'pendente'`. O único dado próprio do ato físico é o lacre.                                                                                                                                           | `executarSolicitacaoCofreRepository`                        |
-| **D12** | **Solicitação `agendada` bloqueia o fechamento** até ser executada ou cancelada.                                                                                                                                                                                                                                                                  | `fecharCaixa` · `existeSolicitacaoAgendadaRepository`       |
-| **D13** | **Sem CONFIRMADOR ELEGÍVEL no Cofre, nada que entregue dinheiro acontece** — avulsa, programação, execução e retorno final. Elegível = vinculado à conta em `contas_usuarios` **+** empresa certa **+** diferente do criador (R-028) **+** com `transferencias_conferir` na permissão efetiva. Fechamento **sem** retorno físico não é bloqueado. | `exigirConfirmadorDoCofre`                                  |
-| **D14** | **Lacre é opcional na conferência (R-026).** Se o movimento tem lacre, a confirmação exige o mesmo e o rompe; se não tem, confirma-se sem inventar um.                                                                                                                                                                                            | `confirmarTransferenciaRepository`                          |
+> 🚫 **D4, D10, D11 e D12 foram REVOGADAS na Fatia 3 (09/09/2026)** — o caminho "Programar entrega
+> ao cofre" que elas descrevem não existe mais, e as funções citadas na coluna "Onde vive" foram
+> removidas. Elas ficam aqui com a redação original porque decisão não some em silêncio; o que as
+> substitui está na **§11**. Não reimplemente nada desta tabela sem ler a §11 antes.
+
+| Id         | Decisão                                                                                                                                                                                                                                                                                                                                                                      | Onde vive                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **D1**     | Entrega **parcial** é permitida durante o turno, **nunca acima do saldo em espécie**. O teto é recalculado no servidor, sob trava — o número que a tela viu não é prova.                                                                                                                                                                                                     | `caixa.service.ts` · `criarTransferenciaCofreCaixa`         |
+| **D2**     | A entrega do operador **já abate o saldo físico** do caixa no instante em que é lançada.                                                                                                                                                                                                                                                                                     | `shared/caixa/regras.ts` · `transferenciaContaComoSaida`    |
+| **D3**     | Mas nasce **`pendente`**: só entra no cofre quando quem opera a conta de destino conferir (R-028/R-036).                                                                                                                                                                                                                                                                     | `caixa.repository.ts` · `criarTransferenciaCofreRepository` |
+| **D4** 🚫  | A **retaguarda programa** (`agendada`, não movimenta saldo); **o operador executa** (vira `pendente`). Dois atos, duas pessoas, só o segundo mexe em dinheiro.                                                                                                                                                                                                               | `programarSolicitacaoCofre` / `executarSolicitacaoCofre`    |
+| **D5**     | **Cada movimento tem o seu próprio lacre** (opcional, R-026; número novo, R-027). Movimento executado **nunca** é editado.                                                                                                                                                                                                                                                   | `registrarEntregaAoCofre`                                   |
+| **D6**     | **Retorno final + fechamento são UM ato atômico.** O cliente não manda o valor: o servidor usa a sobra que ele mesmo apurou sob trava. Saldo já zero → só fecha.                                                                                                                                                                                                             | `fecharCaixa`                                               |
+| **D7**     | **Sobra ≠ déficit.** Sobra volta ao cofre e nunca vira quebra positiva. Déficit vira quebra nominal, com **observação obrigatória** e aviso na tela **antes** do clique.                                                                                                                                                                                                     | `fecharCaixa` + `CaixaResumoPage.vue`                       |
+| **D8**     | `idempotencia_chave` é **nullable e sem default**: todo o histórico fica NULL, o índice parcial o ignora, **nenhum backfill** é necessário.                                                                                                                                                                                                                                  | migration `0030`                                            |
+| **D9**     | A criação de retorno/sangria tem **um único caminho**. O `OperacaoTransferenciaModal` não cria mais — o componente que existia só para isso foi **removido**.                                                                                                                                                                                                                | `OperacaoTransferenciaModal.vue`                            |
+| **D10** 🚫 | **O valor programado é IMUTÁVEL.** A Tesouraria pediu R$ 100 → a execução movimenta exatamente R$ 100, e não reescreve nem valor nem observação da programação. Mais que o programado sai por um movimento **avulso** próprio (chave e lacre novos); **menos** que o programado **não executa** a solicitação.                                                               | `executarSolicitacaoCofre`                                  |
+| **D11** 🚫 | A **execução não tem chave de idempotência própria.** Ela é idempotente pelo `solicitacaoId` mais a transição atômica `status = 'agendada' → 'pendente'`. O único dado próprio do ato físico é o lacre.                                                                                                                                                                      | `executarSolicitacaoCofreRepository`                        |
+| **D12** 🚫 | **Solicitação `agendada` bloqueia o fechamento** até ser executada ou cancelada.                                                                                                                                                                                                                                                                                             | `fecharCaixa` · `existeSolicitacaoAgendadaRepository`       |
+| **D13**    | **Sem CONFIRMADOR ELEGÍVEL no Cofre, nada que entregue dinheiro acontece** — avulsa, ~~programação, execução~~ (revogadas na Fatia 3) e retorno final. Elegível = vinculado à conta em `contas_usuarios` **+** empresa certa **+** diferente do criador (R-028) **+** com `transferencias_conferir` na permissão efetiva. Fechamento **sem** retorno físico não é bloqueado. | `exigirConfirmadorDoCofre`                                  |
+| **D14**    | **Lacre é opcional na conferência (R-026).** Se o movimento tem lacre, a confirmação exige o mesmo e o rompe; se não tem, confirma-se sem inventar um.                                                                                                                                                                                                                       | `confirmarTransferenciaRepository`                          |
+
+---
+
+## §2-A · A D9 foi confirmada, e o texto da #101 estava desatualizado (27/08/2026)
+
+Ao preparar a **#101**, o texto da issue pedia o contrário da **D9**: recolocar a marcação
+**Transferência de Retorno / Sangria** dentro do modal **“+ Nova transferência”**. As duas leituras
+queriam **um** caminho único e discordavam sobre **qual**.
+
+**Marco decidiu em 27/08: vale a D9.** Virou a **R-179**.
+
+> `Caixa aberto → registrar sangria/retorno no próprio Caixa → entrega ao cofre → fechamento`
+
+O motivo é operacional: **quem faz sangria é o operador de caixa, de dentro do Caixa** — não a
+Tesouraria pelo cockpit. Recolocar o bloco no modal criaria de novo o segundo caminho que a D9
+removeu de propósito.
+
+**O legado a remover continua sendo a tela/caminho “Programar entrega ao cofre”**
+(`SolicitacoesCofrePainel` e as rotas `/api/caixa/:id/solicitacoes-cofre*`), na entrega apropriada da
+#101 — e **nunca** o fluxo do Caixa. `TransferenciaRetornoCampos` **não** será recriado.
+
+> ✅ **Executado na Fatia 3, em 09/09/2026.** O parágrafo acima está no passado: painel, rotas,
+> serviço, repositório e contratos foram removidos. Ver **§11**.
+
+O texto da issue #101 foi atualizado para não contradizer esta decisão.
 
 ---
 
@@ -209,3 +239,312 @@ preservada; sete totais congelados; fechamento concorrente; rollback.
 
 **Não provado:** responsividade em 1440/1024/768/390 — o markup é mobile-first e foi revisado, mas
 **a tela não foi aberta em nenhuma das quatro larguras**.
+
+---
+
+## §9 · G1 da #101 — dinheiro que JÁ SAIU também trava o fechamento (27/08/2026)
+
+A **D12** acima resolveu metade da R-171: enquanto houver solicitação **`agendada`** — dinheiro que
+**ainda não saiu** — o caixa não fecha. A outra metade ficou aberta por engano de escopo: uma
+entrega **feita de verdade** e ainda não conferida no cofre **não impedia nada**.
+
+O caixa fechava por cima dela. O operador ia embora. Se o cofre encontrasse falta depois, **a
+divergência não tinha mais turno aberto onde cair**.
+
+### A guarda
+
+Em `fecharCaixa`, logo depois da guarda da D12:
+
+- lida **depois da trava** da linha do caixa e **antes** do retorno final (D6/D7). Por isso o próprio
+  ato de fechar **não se auto-bloqueia**: a guarda enxerga o estado anterior ao ato;
+- **corrida resolvida por construção**: o fechamento já segura a linha do caixa em `FOR UPDATE` e
+  `confirmarTransferencia` pede `FOR SHARE` na **mesma** linha antes de mudar o status. As duas
+  serializam, então este `SELECT` nunca decide sobre um retrato velho;
+- a mensagem **nomeia** as entregas (tipo, valor, lacre), até três e depois "e mais N". "Não pode
+  fechar" sozinho manda o operador adivinhar entre as entregas do turno.
+
+### Escopo — e a porta lateral que continua aberta
+
+O escopo é o **predicado canônico** de entrega Caixa → Cofre: caixa vinculado, tipo
+`sangria`/`retorno`, destino = conta cofre da empresa.
+
+> ⚠️ **Sabidamente incompleto.** O operador ainda pode mandar dinheiro da conta do PDV para o cofre
+> pela rota **genérica** `POST /api/transferencias`: lá o `tipo` não está no payload e nasce
+> `suprimento`, então a linha não é entrega canônica e **não trava** — embora fisicamente seja o
+> mesmo ato. Fechar essa porta significaria alargar a guarda para além do predicado canônico, e é
+> **exatamente** o caminho duplicado que a fatia de remoção do legado existe para eliminar.
+> Nenhum teste fixa esse comportamento: pinar um furo é transformá-lo em contrato.
+
+### `entrega-cofre.repository.ts` — a regra ganhou casa
+
+A consulta nasceu colada a `ehEntregaCaixaParaCofre`, mas o `lint:deps` cobrou o ciclo
+`caixa.service → transferencias.repository → lancamentos.dominio → caixa.service`.
+
+A saída **não** foi duplicar o predicado. Os dois dialetos da mesma regra — TS e SQL — passaram a
+morar num módulo que só conhece Drizzle, o schema e a conexão. Qualquer camada pode depender dele.
+
+### `entregasPendentes` viaja dentro do status
+
+`caixaStatusSchema` ganhou o campo, **obrigatório e nunca opcional**: ausente teria de significar
+"não há", e um dia significaria "a rota esqueceu de mandar". Para garantir isso, o literal que
+montava o status — repetido em **oito** lugares — virou uma porta só, `statusDoCaixaAberto`.
+
+### A tela
+
+Bloco próprio (`EntregasAguardandoConferencia.vue`), lido como manifesto de transporte: um trilho
+vertical liga as entregas em trânsito, cada uma com **valor, tipo, lacre e hora**. Não é vermelho —
+dinheiro a caminho do cofre não deu errado, só ainda não chegou; foi criado o token
+**`--cx-attention`**, que faltava na camada.
+
+**O botão de fechar continua focável.** Travado, recebe `aria-disabled` e **não** `disabled`: botão
+morto sai da navegação por teclado e o leitor de tela nunca chega ao motivo. Clicar leva ao bloco da
+trava.
+
+**Um caminho duplicado foi fechado de passagem:** a D12 vivia **só no servidor** — a tela mostrava a
+solicitação e **não** desabilitava o botão, então o operador clicava e levava um 400 previsível.
+Agora as duas travas têm **uma** computada e **um** motivo, em `utils/fechamento-travas.ts`.
+
+### O que está provado
+
+`tests/integration/caixa/fechamento-transferencia-pendente.test.ts`, **8 casos**: recusa citando a
+operação; conferência libera e o retorno final nasce `pendente` sem se auto-bloquear; recusa de
+conferência **não** libera; pendência de outro caixa não trava; escopo pelo tipo e escopo pelo
+destino; nada gravado pela metade; corrida com a conferência em voo, por `pg_blocking_pids`.
+
+**Mutação:** apagar a guarda mata 4 casos. Apagar o critério do destino **sobreviveu** na primeira
+tentativa — e o achado foi um **falso verde**: a transferência genérica era criada pela retaguarda e
+nascia com `caixa_id` nulo, então os casos de escopo passavam sem exercitar escopo nenhum. Corrigido
+(lançada pelo operador, com asserção de `caixa_id`), a mutação morre.
+
+**Quatro testes existentes** fixavam o comportamento antigo e foram atualizados incluindo a
+conferência antes do fechamento. O de idempotência ficou mais forte: prova que executar a ordem da
+Tesouraria **troca uma trava pela outra**.
+
+### O que ainda não está resolvido
+
+**Não existe válvula de escape.** A R-171 manda bloquear o fechamento comum **e** concluir o turno
+por um fluxo especial auditado. Esta entrega traz só o bloqueio. Até o fluxo especial existir, um
+caixa com entrega não conferida **não fecha** — se o responsável pelo cofre já foi embora, o turno
+fica aberto. **Implantar esta fatia sozinha não é recomendado.**
+
+**Assimetria conhecida:** o retorno final criado pelo **próprio fechamento** também nasce `pendente`
+e não trava. A diferença é de auditoria — ele nasce dentro do ato de fechar, com autor, horário e
+valor amarrados ao fechamento; uma sangria de quatro horas atrás não tem esse vínculo. É o fluxo
+especial auditado que resolve isso de vez.
+
+---
+
+## §10 · A saída da R-171 e o legado — decisões de Rodrigo (01/09/2026)
+
+O §9 fechou dizendo que **não existe válvula de escape** e que implantar aquela fatia sozinha não
+era recomendado. Rodrigo respondeu as duas perguntas que faltavam. Elas estão no `19` como
+**R-181** e **R-182**; aqui fica o que o código já sustenta e o que ainda não.
+
+### §10.1 · Recusa no cofre termina em quebra auditada (R-181)
+
+Quando o cofre confere e **não bate**, o dinheiro não volta: ele saiu do caixa de verdade. O
+caminho oficial passa a ser registrar a **diferença como quebra auditada** — valor, responsável e
+justificativa — e fechar o turno. Três não-caminhos ficam explícitos:
+
+- **não cancelar** a transferência: `cancelada` não conta como saída
+  (`shared/src/caixa/regras.ts:101`), então cancelar faria o dinheiro **reaparecer** no caixa;
+- **não confirmar** um valor que ninguém contou — era o único destravamento existente, e ele
+  premiava a mentira;
+- **não deixar o turno aberto**, que é o que acontece hoje e pode travar o PDV no dia seguinte
+  (`fechamentos_caixa_pdv_aberto_unico_idx`).
+
+### §10.2 · O legado da rota antiga é reclassificado (R-182)
+
+As linhas que nasceram `tipo = 'suprimento'` indo da conta do PDV para a conta cofre — a porta que
+a #101 fechou em `e0a5b2c`, `8c491f0` e `5ce948d` — são **reclassificadas para `retorno`/`sangria`**,
+preservando integralmente a auditoria. Reclassificar é corrigir o **rótulo** de um fato ocorrido, e
+não reescrever o fato: valor, contas, datas, lacre, autoria e `criado_em` ficam intactos.
+
+### §10.3 · O que o modelo atual já sustenta (leitura, sem inventar campo)
+
+| Precisa de…                                          | Já existe                                                                                                                                                                                                             | Onde                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| trilha do "conferi e não bateu"                      | `transferencias_conferencias_recusadas` — `motivo` NOT NULL, `valor_informado`, `lacre_informado`, `recusado_por`, `criado_em`, **uma linha por tentativa**, FK `RESTRICT`                                            | `db/src/schema/app.schema.ts:1721`                      |
+| diferença com valor, dono e justificativa            | `quebras_caixa` — `valor <> 0`, `observacao` não vazia, FK composta com o fechamento                                                                                                                                  | `db/src/schema/app.schema.ts:1905`                      |
+| distinguir os dois fluxos de entrega                 | `tipo` + `caixa_id` + destino = conta cofre (predicado canônico)                                                                                                                                                      | `api/src/transferencias/entrega-cofre.repository.ts:22` |
+| cancelamento auditável (para o que **é** cancelável) | `transferencias_cancelamento_check` exige autor, data e motivo juntos                                                                                                                                                 | `app.schema.ts:1651`                                    |
+| reclassificar `tipo` sem violar constraint           | legado tem `solicitacao_cofre_em is null`, então cai no **primeiro ramo** do `transferencias_solicitacao_cofre_check`, que não olha `tipo`; e `transferencias_recebimento_check` já é satisfeito por linha `pendente` | `app.schema.ts:1668` e `:1692`                          |
+
+### §10.4 · As três lacunas — o modelo **não** cobre isto hoje
+
+1. **`quebras_caixa` não sabe de onde veio a diferença.** Não há coluna apontando a transferência
+   divergente nem distinguindo "faltou na contagem do caixa" de "faltou no malote conferido no
+   cofre". Pior: `quebras_caixa_fechamento_unico` (`app.schema.ts:1924`) permite **uma quebra por
+   fechamento** — um turno com diferença de contagem **e** divergência no cofre não é representável.
+2. **Falta o estado terminal da entrega recusada.** Os quatro status são `pendente`, `recebido`,
+   `agendada`, `cancelada` (`app.schema.ts:1648`). `pendente` eterniza, `recebido` afirma que bateu,
+   `cancelada` devolve o dinheiro ao caixa. Nenhum diz "saiu, não chegou inteiro, a diferença virou
+   quebra".
+3. **A quebra só nasce dentro do fechamento.** `criarQuebraCaixaRepository`
+   (`api/src/caixa/caixa.repository.ts:306`) tem um único chamador, `fecharCaixa`, e o valor vem do
+   saldo apurado sob trava — não de uma divergência informada. Uma recusa que chegue **depois** do
+   fechamento não tem onde cair.
+
+Nenhuma das três se resolve com leitura: são decisão de modelagem da Fatia 2, e ficam registradas
+aqui para não serem redescobertas.
+
+### §10.5 · Critério técnico da linha legada
+
+Uma linha entra na população da R-182 quando **todos** valem:
+
+- `t.caixa_id is not null` — está amarrada a um turno;
+- `t.conta_origem_id = p.conta_id`, com `p` = PDV do caixa (`fechamentos_caixa.pdv_id → pdvs.conta_id`)
+  — é o mesmo critério que os totais usam para dizer "saiu do caixa"
+  (`api/src/caixa/caixa.repository.ts:1189`);
+- `t.conta_destino_id = e.conta_cofre_id` — chegou ao cofre configurado da empresa;
+- `t.tipo = 'suprimento'` — não é entrega canônica (que já nasce `sangria`/`retorno`);
+- `t.solicitacao_cofre_em is null` — não é solicitação D4;
+- `t.status = 'pendente'` — o escopo é o dinheiro **em trânsito**. Linha já `recebido` é histórico
+  fechado e **não** é tocada.
+
+### §10.6 · O que esta rodada NÃO fez
+
+Descoberta e registro apenas. Sem Fatia 2, sem migration, sem `.sql`, sem tocar dado real e sem
+acesso a produção. A consulta somente leitura, a proposta de migration e o rollback estão no
+relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, e dependem de aprovação
+explícita depois que Marco vir SQL, impacto e amostra.
+
+### §10.7 · A decisão final fecha o modelo (R-183, 01/09/2026)
+
+O §10.4 listou três lacunas e a proposta que saiu delas foi **derrubada** por dois revisores
+read-only: creditar o cofre pelo valor declarado fabricava crédito que nenhuma contagem futura
+corrige (`api/src/contas/contas.repository.ts:292`), e `quebras_caixa` tem **um escritor e zero
+leitores** — a diferença sumiria de todo número consultável. A decisão de Rodrigo/Marco corrige a
+rota e fecha as três lacunas de uma vez:
+
+- **o cofre credita o CONTADO**, sempre. Falta vira quebra auditada (negativa); sobra é sobra e
+  **nunca** quebra positiva, mantendo a D7; recusa sem contagem registra **R$ 0,00** contado e o
+  declarado inteiro vira quebra;
+- **divergência não termina em `recebido`.** A transferência ganha estado terminal próprio,
+  auditável, que **continua contando como saída do Caixa** — devolver dinheiro ao Caixa está
+  proibido em todos os casos.
+
+Uma fórmula cobre os quatro desfechos, com `D` = declarado e `C` = contado:
+**quebra = −(D − C) quando D > C; nenhuma quebra quando C ≥ D.** O caso "sem contagem" é o extremo
+`C = 0`, não um ramo à parte.
+
+Consequência aceita e registrada: com sobra, o Caixa lança saída `D` e o Cofre entrada `C > D`. Os
+dois lados deixam de somar zero **de propósito** — foi dinheiro físico encontrado a mais, e a D7
+proíbe transformá-lo em quebra positiva.
+
+O desenho completo — schema, CHECKs, SQL forward e rollback, contratos, endpoints, tela e plano
+RED/GREEN — está no relatório externo `RELATORIO-101-FATIA2-DESCOBERTA-2026-09-01.md`, **PARTE 4**.
+Migration continua dependendo de autorização explícita de Marco.
+
+---
+
+## §11 · Fatia 3 — o legado "Programar entrega ao cofre" foi removido (09/09/2026)
+
+O §2-A e a **R-179** diziam onde o legado estava e mandavam removê-lo "na entrega apropriada".
+Esta é a entrega. O que saiu é o fluxo **D4** inteiro — a retaguarda programava uma ordem
+`agendada` no painel de Transferências e o operador a executava na tela do Caixa.
+
+**Por que ele era o segundo caminho.** A ordem executada virava exatamente a mesma linha que
+`POST /api/caixa/:id/transferencia-cofre` cria: mesma tabela, mesmo tipo `sangria`/`retorno`,
+mesma conta de origem, mesma conta de cofre, mesmo lacre, mesma conferência. Dois botões, um ato.
+
+### §11.1 · O que deixou de existir
+
+| Camada            | Removido                                                                                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tela (retaguarda) | `SolicitacoesCofrePainel.vue`, `utils/solicitacoes-cofre.ts` e o bloco em `pages/transferencias.vue`                                                                                                            |
+| Tela (Caixa)      | bloco "Entregas solicitadas pela Tesouraria" e `executarSolicitacaoCofre` de `utils/caixa-acoes.ts`                                                                                                             |
+| Estado            | `caixasAbertos`, `caixaSolicitacoes`, `solicitacoesCofreRetaguarda`, `caixaSolicitacaoId`, `podeProgramarEntregaCofre` no `AppWorkspace`                                                                        |
+| Rotas             | `GET /api/caixa/abertos`, `POST`/`GET /api/caixa/:caixaId/solicitacoes-cofre`, `.../:id/cancelar`, `.../:id/executar`                                                                                           |
+| Serviço           | `programarSolicitacaoCofre`, `executarSolicitacaoCofre`, `cancelarSolicitacaoCofre`, `listarSolicitacoesCofre`, `listarCaixasAbertos`                                                                           |
+| Repositório       | `listarCaixasAbertosRepository` e as cinco consultas ancoradas em `solicitacao_cofre_em`                                                                                                                        |
+| Contratos         | `programarSolicitacaoCofrePayloadSchema`, `executarSolicitacaoCofrePayloadSchema`, `cancelarSolicitacaoCofrePayloadSchema`, `solicitacaoCofreParamsSchema`, `solicitacaoCofreSchema`, `caixaAbertoResumoSchema` |
+
+`/api/caixa/abertos` saiu junto porque **só existia** para a retaguarda escolher o caixa da ordem.
+
+### §11.2 · As decisões D4/D10/D11/D12 que morrem com o caminho
+
+**D4, D10 e D11 deixam de ter objeto** — não há mais programação, execução nem valor programado
+imutável. **D12 é revogada de fato**: sem produtor de ordem `agendada`, mantê-la seria pior que
+inútil. Uma linha legada prenderia o turno para sempre, porque não existe mais rota de executar
+nem de cancelar para soltá-la. A linha não move saldo (`transferenciaContaComoSaida` não conta
+`agendada`) e o cron de agendamento não a alcança (`agendada_para` nasce NULL nessas linhas).
+
+**D9, D13 e as demais continuam inteiras.** A trava do fechamento por entrega `pendente`
+(G1/R-171) e os quatro desfechos da R-183 não foram tocados.
+
+### §11.3 · O que ficou no banco, e por quê
+
+**Seis linhas**, nove objetos nomeáveis, ficaram sem escritor e continuam no schema. A lista completa
+importa porque é ela que a migration futura vai usar como checklist — e checklist com número errado
+deixa objeto para trás:
+
+| Objeto                                                                  | Situação                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `transferencias.solicitacao_cofre_em`                                   | sem escritor **e sem leitor** na aplicação; só o índice e o CHECK a referenciam                                                                                                                                                                                                |
+| `transferencias.executado_por` / `executado_em`                         | sem escritor, **com leitor** — a conferência lê `executado_por`. Sem ela, quem entregou pelo fluxo antigo passaria a poder conferir a própria entrega (R-028), a quebra cairia na pessoa errada e a notificação iria para quem programou. Derrubá-las **quebraria regra viva** |
+| `transferencias.cancelado_por` / `cancelado_em` / `motivo_cancelamento` | sem escritor e sem leitor — quem escrevia era `cancelarSolicitacaoCofreRepository`                                                                                                                                                                                             |
+| status `'cancelada'` de `transferencias`                                | sem produtor. Restam **três** leituras defensivas — `caixa.repository.ts:705`, `:837` e `lancamentos.dominio.ts:1038` —, corretas para o histórico                                                                                                                             |
+| `transferencias_cancelamento_check`                                     | o ramo `status = 'cancelada'` ficou **inalcançável para escrita nova**. Não é risco — nenhum caminho pode violá-lo                                                                                                                                                             |
+| `transferencias_solicitacao_cofre_idx`                                  | índice parcial que para de crescer                                                                                                                                                                                                                                             |
+
+Nenhum deles pode passar a ser violado: linha nova sempre satisfaz o primeiro ramo do
+`transferencias_solicitacao_cofre_check`, e a linha legada que vira `divergente` pelo encerramento da
+R-183 cai no ramo que a própria migration da R-183 já contemplou.
+
+Derrubá-los é **migration**, ato separado com autorização própria. Nada foi apagado, cancelado,
+reclassificado ou reprocessado — a **R-182** continua pendente e independente desta fatia.
+
+> ⚠️ **Ordem `agendada` legada — o que ela faz e o que NÃO faz.** Se o banco tiver linhas D4
+> `agendada`, elas continuam lá e **não afetam dinheiro**: não contam como saída nem como entrada
+> (`transferenciaContaComoSaida`), não entram no saldo pendente, não travam mais o fechamento, e o
+> cron de agendamento não as alcança — `agendada_para` e `tempo_confirmacao` nascem NULL nessas
+> linhas, o que é exclusão dupla.
+>
+> **Mas elas distorcem dois relatórios**, e isso precisa estar escrito.
+> `listarTransferenciasCaixaRepository` (`caixa.repository.ts:697-707`) e a consulta de detalhe
+> (`:832-838`) filtram apenas `computar = true` e `status <> 'cancelada'` — **não** filtram por
+> status de saída. A linha legada aparece como ENTRADA na aba TRANSFERÊNCIAS e desloca o
+> `liquidoTransferencias` do detalhe, enquanto os totais que o fechamento grava
+> (`caixa.repository.ts:1030-1037`, que passam pelas funções de regra) a ignoram. Detalhe e total
+> deixam de bater.
+>
+> Isso **já era verdade antes** desta fatia. O que mudou é a duração: com a D12 no lugar, a ordem
+> tinha de ser executada ou cancelada antes de fechar, e a divergência era transitória. Sem D12 e
+> sem rota de cancelar, ela **fica congelada num turno fechado, sem caminho de tela que a limpe**.
+>
+> A limpeza pertence ao **mesmo ato de migration da R-182** — e o escopo dela precisa incluir as
+> linhas `agendada`, não só as `suprimento` que a R-182 descreve hoje.
+
+> ⚠️ **Linha histórica sem conferente possível.** Uma linha legada `pendente` tem `criado_por` (quem
+> programou) **e** `executado_por` (quem entregou), e a R-028 exclui as duas da conferência. Se o
+> Cofre da empresa tiver exatamente essas duas pessoas vinculadas, ninguém pode conferir nem recusar,
+> e a guarda da R-171 trava aquele turno. O portão pré-voo que existia era **preventivo**, nunca
+> curativo — ele nunca soltou linha já criada, então removê-lo não causa isto. A saída não exige
+> migration: **vincular um terceiro usuário ao Cofre** em `contas_usuarios` resolve.
+
+### §11.4 · O que prova que a porta fechou
+
+- `entrega-cofre-caminho-unico.test.ts` **RED-5**: as cinco chamadas do fluxo antigo respondem
+  **404**, feitas pelo **admin** (que passaria em qualquer gate) — 403 provaria que a rota continua
+  registrada e só mudou de dono; e nenhuma delas grava linha.
+- `entrega-cofre-caminho-unico.test.ts` **RED-6**: turno com ordem `agendada` legada, montada em
+  SQL porque nenhuma API a produz mais, **fecha** — e a linha continua intacta.
+- `caixa-idempotencia-cofre.test.ts` cai de 31 para **16** casos: B2 e a decisão 7 ficam; o caso do
+  "único responsável sendo o próprio criador" passa a usar a entrega avulsa.
+- `divergencia-entrega-ao-cofre.test.ts`: o **RED-7b** prova a R-028 pelo caminho único (o gerente
+  entrega, não encerra a própria entrega, e a Tesouraria encerra); o **RED-8** sai, porque a
+  checagem de elegibilidade tem uma cópia só.
+- `conferencia-recusa-cofre.test.ts`: a notificação passa a ser provada por **quem entregou** — e um
+  caso novo monta em SQL a **linha legada** (com `executado_por` preenchido) para provar os três
+  leitores que sobraram dela: quem entregou não confere (R-028), a quebra nasce contra ele, e a
+  divergência o notifica. São três DECISÕES em DUAS expressões: `executadoPor ?? criadoPor` em
+  `transferencias.service.ts:407` e `:449`, mais `permitida.executadoPor === usuarioId` em
+  `transferencias.repository.ts:379`. Sem esse caso, apagar qualquer uma delas deixaria a suíte
+  inteira verde e cobraria a falta da pessoa errada.
+- `caixa-idempotencia-cofre.test.ts`: um caso novo prova que o `status` **não** entra na intenção da
+  chave — retry depois de o cofre confirmar responde 200 e não duplica. Era o que o caso D4 removido
+  cobria de lado, e sem ele "endurecer" a comparação passaria despercebido.
+
+Os dois casos acima e a âncora positiva do E2E entraram **depois** da revisão read-only do HEAD
+`19a80ea`, que apontou exatamente esses buracos de cobertura.

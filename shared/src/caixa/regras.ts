@@ -98,10 +98,29 @@ export function saldoPendenteContaCentavos(totais: TotaisContaCentavos): number 
   return totais.transferenciasPendentes ?? 0;
 }
 
+// R-183 · `divergente` conta como saida junto com `pendente` e `recebido`: o dinheiro SAIU do caixa
+// e nao volta. E o oposto de `cancelada`, que nao conta — foi por isso que cancelar ficou proibido
+// como desfecho de divergencia: cancelar faria o valor reaparecer no caixa.
 export function transferenciaContaComoSaida(status: string): boolean {
-  return status === "pendente" || status === "recebido";
+  return status === "pendente" || status === "recebido" || status === "divergente";
 }
 
+// R-183 · `divergente` tambem credita o destino — mas pelo valor CONTADO, nao pelo declarado. Quem
+// chama e responsavel por usar `valorEntradaCentavos` abaixo; esta funcao responde SE credita, nunca
+// QUANTO. Separar as duas perguntas e o que impede o erro de usar um valor so para as duas pontas.
 export function transferenciaContaComoEntrada(status: string): boolean {
-  return status === "recebido";
+  return status === "recebido" || status === "divergente";
+}
+
+// R-183 · QUANTO entra no destino. `valor_recebido` so existe em `divergente` (o CHECK do banco
+// garante), entao o coalesce devolve o comportamento de sempre para todo o resto — inclusive para
+// todo o historico, que fica NULL.
+//
+// A SAIDA nunca passa por aqui: ela e sempre `valor_original`. Usar este numero nas duas pontas
+// devolveria a diferenca ao caixa, que e exatamente o que a R-183 proibe.
+export function valorEntradaCentavos(movimento: {
+  valorOriginalCentavos: number;
+  valorRecebidoCentavos: number | null;
+}): number {
+  return movimento.valorRecebidoCentavos ?? movimento.valorOriginalCentavos;
 }

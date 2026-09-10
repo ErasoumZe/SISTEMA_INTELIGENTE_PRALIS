@@ -19,10 +19,16 @@ const PAGO_EM = diaNegocio(new Date());
 describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transferencia/mercadoria + fechamento)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  // G1/R-171: quem confere a entrega no cofre nunca e quem a criou (R-028). O admin lanca; a
+  // tesouraria, vinculada a conta do cofre no seed, confere.
+  let cookieTesouraria: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "tesouraria")
+    ]);
   }, 120_000);
 
   afterAll(async () => {
@@ -227,6 +233,24 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     expect(acimaDoSaldo.body).toMatch(/R\$ 60\.00/);
     expect((await resumoDoCaixa()).resumo).toMatchObject({ saldo: 60 });
 
+    // G1/R-171: o retorno parcial ja saiu do caixa e esta `pendente`. Dinheiro na rua trava o
+    // fechamento comum ate o cofre conferir — antes disto o turno fechava por cima dele.
+    const travado = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa" });
+    assertProblem(travado, 400);
+    expect(travado.body).toMatch(/aguardando confer[eê]ncia/iu);
+
+    const parcialId = await consultarUm<{ id: string }>(
+      "select id from transferencias where caixa_id = $1 and n_lacre_doc = $2",
+      [caixaId, "RET-PARCIAL-1"]
+    );
+    const conferencia = await contexto.app.inject({
+      method: "POST",
+      url: `/api/transferencias/${parcialId!.id}/confirmar`,
+      headers: { cookie: cookieTesouraria },
+      payload: { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "RET-PARCIAL-1", valorRecebido: 40 }
+    });
+    expect(conferencia.statusCode, conferencia.body).toBe(200);
+
     // D6: fechar com saldo positivo NAO e mais barrado. O retorno final do restante sai no MESMO
     // ato e na mesma transacao do fechamento; nao existe segundo botao.
     const fechar = await post(`/api/caixa/${caixaId}/fechar`, {
@@ -242,14 +266,16 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
 
     // D5: duas entregas fisicas, cada uma com seu valor e seu lacre. O parcial nao foi editado
     // para absorver a diferenca — nasceu um segundo movimento.
-    // D3: ambas nascem PENDENTES (aguardam conferencia de quem opera o cofre) e mesmo assim ja
-    // abateram o saldo fisico, que e o que permitiu o caixa fechar zerado.
+    // D3: ambas nascem PENDENTES e mesmo assim ja abateram o saldo fisico, que e o que permitiu o
+    // caixa fechar zerado. O parcial esta `recebido` porque a G1/R-171 exigiu a conferencia dele
+    // antes do fechamento; o retorno FINAL nasce dentro do proprio ato de fechar e continua
+    // `pendente` — a guarda le o estado anterior ao ato e nao se auto-bloqueia.
     const movimentos = await consultarTodos<{ valor_original: string; status: string; n_lacre_doc: string }>(
       "select valor_original, status, n_lacre_doc from transferencias where caixa_id = $1 and tipo = 'retorno' order by valor_original",
       [caixaId]
     );
     expect(movimentos).toEqual([
-      { valor_original: "40.00", status: "pendente", n_lacre_doc: "RET-PARCIAL-1" },
+      { valor_original: "40.00", status: "recebido", n_lacre_doc: "RET-PARCIAL-1" },
       { valor_original: "60.00", status: "pendente", n_lacre_doc: "RET-FINAL-1" }
     ]);
   });

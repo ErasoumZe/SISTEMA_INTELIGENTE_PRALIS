@@ -6,7 +6,7 @@ import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
-// B2 · idempotencia da entrega ao cofre, e D4 · solicitacao programada.
+// B2 · idempotencia da entrega ao cofre.
 //
 // Por que este arquivo existe: a trava da linha do caixa (B1) e o teto do saldo (D1) NAO resolvem
 // repeticao. Com saldo 300, dois POSTs identicos de 100 passam os dois — o segundo ainda encontra
@@ -14,20 +14,23 @@ import { consultarTodos, consultarUm, executarSql, json } from "../../setup/inte
 // diferenca e o operador, na quebra do fechamento.
 //
 // A unica coisa que separa "intencao nova" de "retry" e uma chave carimbada pelo CLIENTE e
-// protegida por UNIQUE parcial no banco. Estes testes provam os cinco comportamentos que essa
-// chave tem de garantir, e provam a execucao programada em cima da mesma entidade.
-describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada (D4)", () => {
+// protegida por UNIQUE parcial no banco. Estes testes provam os comportamentos que essa chave tem
+// de garantir, e as guardas da decisao 7 (sem quem conferir, o dinheiro nao sai).
+//
+// R-179/Fatia 3 · este arquivo tambem cobria a ordem programada (D4): programar, executar,
+// cancelar, o isolamento contra a transferencia generica e a auditoria separada de programador e
+// executor. O painel "Programar entrega ao cofre" e as quatro rotas dele foram removidos, e os
+// casos sairam junto — pinar rota que nao existe transforma o gate num teatro. A prova de que a
+// porta esta fechada esta em `entrega-cofre-caminho-unico.test.ts`.
+describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieTesouraria: string;
-  let cookieCaixa: string;
-
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieTesouraria, cookieCaixa] = await Promise.all([
+    [cookieAdmin, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "tesouraria"),
-      cookieSessao(contexto.app, "caixa")
+      cookieSessao(contexto.app, "tesouraria")
     ]);
   }, 120_000);
 
@@ -340,191 +343,12 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
     expect(fechado).toMatchObject({ status: "fechado", saldo: "0.00", total_entradas: "70.00" });
   });
 
-  // --- D4 ------------------------------------------------------------------------------------
-
-  // Helper: programa uma solicitacao e devolve id + a chave K1 usada. K1 e a ancora da CRIACAO.
-  async function programar(caixaId: string, corpo: { tipo: string; valor: number; observacao?: string }) {
-    const chave = randomUUID();
-    const resposta = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      { ...corpo, idempotenciaChave: chave },
-      cookieTesouraria
-    );
-    expect(resposta.statusCode, resposta.body).toBe(200);
-    const lista = json<{ data: { id: string; valor: number }[] }>(resposta).data;
-    return { chave, lista, id: lista[lista.length - 1]!.id };
-  }
-
   function chaveGravada(id: string) {
     return consultarUm<{ idempotencia_chave: string | null; status: string; valor_original: string }>(
       "select idempotencia_chave, status, valor_original from transferencias where id = $1",
       [id]
     );
   }
-
-  it("a retaguarda programa, o saldo NAO se move, e o operador executa o valor programado", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-fluxo", "2026-06-08T08:00", 200);
-    const { id, lista } = await programar(caixaId, {
-      tipo: "sangria",
-      valor: 120,
-      observacao: "Recolher antes do pico"
-    });
-    expect(lista).toHaveLength(1);
-    expect(lista[0]?.valor).toBe(120);
-
-    // "Programada nao movimenta saldo": nasce 'agendada', que a formula do saldo nao conta.
-    expect(await saldoDoCaixa()).toBe(200);
-    expect((await chaveGravada(id))?.status).toBe("agendada");
-
-    // O operador executa: a MESMA linha vira 'pendente'. Sem valor, sem observacao e sem chave no
-    // payload — so o lacre do envelope.
-    const executar = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-EXEC-1" });
-    expect(executar.statusCode, executar.body).toBe(200);
-    expect(await saldoDoCaixa()).toBe(80);
-
-    const movimentos = await movimentosDoCaixa(caixaId);
-    expect(movimentos).toHaveLength(1);
-    expect(movimentos[0]).toMatchObject({ valor_original: "120.00", status: "pendente", n_lacre_doc: "D4-EXEC-1" });
-  });
-
-  // Teste obrigatorio 1 e 2 — o BLOQUEADOR. A execucao nao pode carimbar chave propria: se ela
-  // sobrescrevesse K1, o retry da programacao nao encontraria mais a linha e criaria OUTRA
-  // solicitacao. Uma ordem de dinheiro duplicada por um retry de rede.
-  it("programar K1 -> executar -> repetir K1: uma unica linha, e K1 continua gravada", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-retry-programacao", "2026-06-17T08:00", 300);
-    const { chave, id } = await programar(caixaId, { tipo: "sangria", valor: 100, observacao: "Ordem 1" });
-
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-RETRY-1" })).statusCode
-    ).toBe(200);
-
-    // Teste 2: a chave da CRIACAO sobrevive a execucao.
-    expect((await chaveGravada(id))?.idempotencia_chave).toBe(chave);
-    expect((await chaveGravada(id))?.status).toBe("pendente");
-
-    // Teste 1: o retry da programacao reencontra a MESMA solicitacao. Nem 409 (o lacre e o status
-    // vieram depois e nao fazem parte da intencao original), nem linha nova.
-    const retry = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      { tipo: "sangria", valor: 100, observacao: "Ordem 1", idempotenciaChave: chave },
-      cookieTesouraria
-    );
-    expect(retry.statusCode, retry.body).toBe(200);
-
-    const doCaixa = await movimentosDoCaixa(caixaId);
-    expect(doCaixa).toHaveLength(1);
-    expect(doCaixa[0]!.id).toBe(id);
-    expect(await saldoDoCaixa()).toBe(200);
-  });
-
-  // Teste obrigatorio 3.
-  it("K1 com intencao diferente depois da execucao retorna 409", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-k1-divergente", "2026-06-18T08:00", 300);
-    const { chave, id } = await programar(caixaId, { tipo: "sangria", valor: 100, observacao: "Ordem A" });
-    expect((await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, {})).statusCode).toBe(200);
-
-    for (const divergente of [
-      { tipo: "sangria", valor: 150, observacao: "Ordem A" },
-      { tipo: "retorno", valor: 100, observacao: "Ordem A" },
-      { tipo: "sangria", valor: 100, observacao: "Outra ordem" }
-    ]) {
-      const resposta = await post(
-        `/api/caixa/${caixaId}/solicitacoes-cofre`,
-        { ...divergente, idempotenciaChave: chave },
-        cookieTesouraria
-      );
-      assertProblem(resposta, 409);
-    }
-    expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
-  });
-
-  // Testes obrigatorios 4 e 5 — a execucao e idempotente por `solicitacaoId`, e o unico conteudo
-  // proprio do ato fisico e o lacre.
-  it("execucao repetida: mesmo lacre 200 sem duplicar, lacre diferente 409", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-repeticao", "2026-06-09T08:00", 200);
-    const { id } = await programar(caixaId, { tipo: "retorno", valor: 50 });
-
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-REP-1" })).statusCode
-    ).toBe(200);
-
-    const mesmoLacre = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-REP-1" });
-    expect(mesmoLacre.statusCode, mesmoLacre.body).toBe(200);
-
-    const outroLacre = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-REP-2" });
-    assertProblem(outroLacre, 409);
-
-    expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
-    expect(await saldoDoCaixa()).toBe(150);
-  });
-
-  // Teste obrigatorio 6.
-  it("duas execucoes concorrentes produzem UMA transicao e UM lacre", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-corrida", "2026-06-19T08:00", 200);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 80 });
-
-    const respostas = await Promise.all([
-      post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-CORRIDA-1" }),
-      post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-CORRIDA-1" })
-    ]);
-    for (const resposta of respostas) expect(resposta.statusCode, resposta.body).toBe(200);
-
-    expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
-    const lacres = await consultarTodos<{ numero: string }>(
-      "select numero from lacres where empresa_id = $1 and numero = $2",
-      [empresaId, "D4-CORRIDA-1"]
-    );
-    expect(lacres).toHaveLength(1);
-    expect(await saldoDoCaixa()).toBe(120);
-  });
-
-  // Testes obrigatorios 7 e 8 — decisao 1: o valor programado e imutavel.
-  it("valor e observacao programados permanecem imutaveis, e o extra vira movimento avulso", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-imutavel", "2026-06-10T08:00", 300);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 200, observacao: "Ordem da tesouraria" });
-
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-IMUT-1" })).statusCode
-    ).toBe(200);
-
-    const executada = await consultarUm<{ valor_original: string; observacao: string | null }>(
-      "select valor_original, observacao from transferencias where id = $1",
-      [id]
-    );
-    // A execucao nao reescreveu nem o valor nem a observacao da ordem.
-    expect(executada).toMatchObject({ valor_original: "200.00", observacao: "Ordem da tesouraria" });
-
-    // O que sobra sai por um movimento AVULSO proprio, com chave e lacre novos.
-    const avulso = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "sangria",
-      valor: 50,
-      lacre: "D4-IMUT-2",
-      idempotenciaChave: randomUUID()
-    });
-    expect(avulso.statusCode, avulso.body).toBe(200);
-
-    const movimentos = await movimentosDoCaixa(caixaId);
-    expect(movimentos.map((m) => [m.valor_original, m.n_lacre_doc])).toEqual([
-      ["200.00", "D4-IMUT-1"],
-      ["50.00", "D4-IMUT-2"]
-    ]);
-    expect(await saldoDoCaixa()).toBe(50);
-  });
-
-  // Teste obrigatorio 9 — decisao 1: menos que o programado NAO executa (nem parcialmente).
-  it("saldo insuficiente nao executa a solicitacao e nao a consome", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-insuficiente", "2026-06-11T08:00", 50);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 500 });
-
-    const executar = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, {});
-    assertProblem(executar, 400);
-    expect(executar.body).toMatch(/insuficiente/iu);
-
-    // Rollback integral: continua 'agendada', com o valor original, e o saldo intacto.
-    const depois = await chaveGravada(id);
-    expect(depois).toMatchObject({ status: "agendada", valor_original: "500.00" });
-    expect(await saldoDoCaixa()).toBe(50);
-  });
 
   // R-028/R-036: a entrega nasce 'pendente' e so entra no cofre quando quem OPERA a conta de
   // destino conferir. Isso depende de `contas_usuarios` — sem vinculo nao existe quem confirme, e
@@ -587,26 +411,46 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
     expect(await saldoDoCaixa()).toBe(0);
   });
 
-  // Teste obrigatorio 11 — decisao 5.
-  it("solicitacao agendada bloqueia o fechamento ate ser executada", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-bloqueia-fechamento", "2026-06-20T08:00", 150);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 100 });
+  // B2 · o `status` NAO faz parte da intencao, e este e o caso que prova.
+  //
+  // `conferirIntencaoEntrega` compara caixa, tipo, valor, lacre e observacao — nunca o status, que
+  // muda por atos POSTERIORES (conferencia, divergencia) e nao descreve o que foi pedido. E
+  // `buscarTransferenciaPorIdempotenciaRepository` nao filtra status: acha a linha em qualquer um.
+  //
+  // O cenario real: o operador lanca a entrega, o POST estoura no cliente, o cofre confere (a linha
+  // vira `recebido`) e o navegador reenvia com a MESMA chave. Tem de responder 200 sem duplicar. Se
+  // alguem "endurecer" a comparacao incluindo status, este retry passaria a levar 409 — e o
+  // operador, achando que falhou, lancaria de novo com outro lacre. Duas entregas, um envelope: o
+  // modo de falha que este arquivo inteiro existe para impedir.
+  it("retry da MESMA chave depois de o cofre confirmar continua 200, e nao duplica", async () => {
+    const { caixaId } = await abrirCaixaComSaldo("b2-retry-pos-conferencia", "2026-07-15T08:00", 80);
+    const entrega = {
+      tipo: "retorno",
+      valor: 80,
+      lacre: "B2-POS-CONF-1",
+      idempotenciaChave: randomUUID()
+    };
 
-    const bloqueado = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Tentativa" });
-    assertProblem(bloqueado, 400);
-    expect(bloqueado.body).toMatch(/execute ou cancele/iu);
+    const primeira = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
+    expect(primeira.statusCode, primeira.body).toBe(200);
+    const movimento = (await movimentosDoCaixa(caixaId))[0]!;
 
-    // Nada foi criado nem fechado: a ordem da retaguarda continua de pe.
-    expect((await chaveGravada(id))?.status).toBe("agendada");
-    const caixa = await consultarUm<{ status: string }>("select status from fechamentos_caixa where id = $1", [
-      caixaId
-    ]);
-    expect(caixa?.status).toBe("aberto");
+    // O cofre age: a linha sai de `pendente`.
+    const confirmar = await post(
+      `/api/transferencias/${movimento.id}/confirmar`,
+      { contaDestinoId: idsTeste.contaCofre, nLacreDoc: "B2-POS-CONF-1", valorRecebido: 80 },
+      cookieTesouraria
+    );
+    expect(confirmar.statusCode, confirmar.body).toBe(200);
+    expect((await chaveGravada(movimento.id))?.status).toBe("recebido");
 
-    // Executada a ordem, o fechamento passa e devolve a sobra no mesmo ato (D6).
-    expect((await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, {})).statusCode).toBe(200);
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento" });
-    expect(fechar.statusCode, fechar.body).toBe(204);
+    // O retry chega depois. Mesma chave, mesma intencao: 200, e nada de novo no caixa.
+    const retry = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
+    expect(retry.statusCode, retry.body).toBe(200);
+    const depois = await movimentosDoCaixa(caixaId);
+    expect(depois).toHaveLength(1);
+    expect(depois[0]?.id).toBe(movimento.id);
+    expect((await chaveGravada(movimento.id))?.status).toBe("recebido");
   });
 
   // Teste obrigatorio 12 — decisao 7. O bloqueio e por ATO, nao global: fechamento SEM retorno
@@ -624,13 +468,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
       assertProblem(avulsa, 400);
       expect(avulsa.body).toMatch(/responsavel/iu);
 
-      const programacao = await post(
-        `/api/caixa/${caixaId}/solicitacoes-cofre`,
-        { tipo: "sangria", valor: 10, idempotenciaChave: randomUUID() },
-        cookieTesouraria
-      );
-      assertProblem(programacao, 400);
-
       // Fechamento COM sobra entrega dinheiro -> bloqueado.
       const comSobra = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Com sobra" });
       assertProblem(comSobra, 400);
@@ -644,23 +481,27 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
   // Decisao 7 · o caso que so a elegibilidade REAL pega: existe vinculo, mas o unico vinculado e
   // quem esta criando o movimento — e ele nao pode confirmar o proprio envio (R-028). Checar so a
   // existencia do vinculo liberaria a entrega e a confirmacao depois seria impossivel.
+  //
+  // R-179/Fatia 3 · o ator era a Tesouraria programando pelo painel. Com um caminho unico quem
+  // entrega e quem tem a gaveta, entao o ator aqui e o ADMIN, que abriu o caixa: deixa-se so ele
+  // vinculado ao cofre e a propria entrega dele fica sem conferente possivel.
   it("unico responsavel do Cofre sendo o proprio criador bloqueia a entrega", async () => {
     const { caixaId } = await abrirCaixaComSaldo("d7-criador-unico", "2026-07-09T08:00", 100);
-    // Deixa SO a Tesouraria vinculada, e e ela quem vai programar.
+    await executarSql("delete from contas_usuarios where conta_id = $1", [idsTeste.contaCofre]);
     await executarSql(
-      `delete from contas_usuarios
-        where conta_id = $1
-          and usuario_id <> (select id from "user" where lower(email) = lower($2))`,
-      [idsTeste.contaCofre, usuariosTeste.tesouraria.email]
+      `insert into contas_usuarios (empresa_id, conta_id, usuario_id)
+       select $1, $2, id from "user" where lower(email) = lower($3)
+       on conflict do nothing`,
+      [empresaId, idsTeste.contaCofre, usuariosTeste.admin.email]
     );
     try {
-      const programacao = await post(
-        `/api/caixa/${caixaId}/solicitacoes-cofre`,
-        { tipo: "sangria", valor: 20, idempotenciaChave: randomUUID() },
-        cookieTesouraria
-      );
-      assertProblem(programacao, 400);
-      expect(programacao.body).toMatch(/elegivel/iu);
+      const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
+        tipo: "sangria",
+        valor: 20,
+        idempotenciaChave: randomUUID()
+      });
+      assertProblem(entrega, 400);
+      expect(entrega.body).toMatch(/elegivel/iu);
       expect(await movimentosDoCaixa(caixaId)).toHaveLength(0);
 
       // E o vinculo continua la — o bloqueio nao e "falta vinculo", e "falta quem POSSA conferir".
@@ -670,6 +511,12 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
       );
       expect(vinculos).toHaveLength(1);
     } finally {
+      await executarSql(
+        `delete from contas_usuarios
+          where conta_id = $1
+            and usuario_id = (select id from "user" where lower(email) = lower($2))`,
+        [idsTeste.contaCofre, usuariosTeste.admin.email]
+      );
       await restaurarResponsaveisDoCofre();
     }
   });
@@ -757,266 +604,5 @@ describe("caixa - idempotencia da entrega ao cofre (B2) e solicitacao programada
       cookieTesouraria
     );
     expect(correta.statusCode, correta.body).toBe(200);
-  });
-
-  // O gate de permissao sozinho NAO protege isto: o operador de caixa tambem tem
-  // `transferencias_criar`. Quem barra e a segunda camada, no servico (`podeLancarSemCaixa`) — e e
-  // por isso que ela existe. Se alguem um dia trocar as duas por uma so, este teste cai.
-  it("o operador do caixa passa no gate de permissao mas nao pode programar (403 pelo papel)", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-papel", "2026-06-12T08:00", 100);
-
-    const resposta = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      { tipo: "sangria", valor: 10, idempotenciaChave: randomUUID() },
-      cookieCaixa
-    );
-    assertProblem(resposta, 403);
-    expect(resposta.body).toMatch(/retaguarda/iu);
-    expect(await movimentosDoCaixa(caixaId)).toHaveLength(0);
-  });
-
-  // --- Isolamento entre o fluxo D4 e a transferencia GENERICA ---------------------------------
-  //
-  // `criarTransferencia` grava `caixa_id` quando a transferencia envolve a conta do PDV, e nasce
-  // 'agendada' se tiver `agendadaPara`. Antes do marcador `solicitacao_cofre_em`, essa linha
-  // aparecia como solicitacao, bloqueava o fechamento e podia ser executada pelo endpoint D4 —
-  // corrompendo uma transferencia que nunca foi ordem de entrega ao cofre.
-  it("transferencia generica agendada no mesmo caixa nao vaza para o fluxo D4", async () => {
-    const { caixaId, contaId } = await abrirCaixaComSaldo("d4-isolamento", "2026-06-25T08:00", 200);
-
-    // Generica AGENDADA envolvendo a conta do PDV: e o vetor exato do vazamento.
-    //
-    // Criada pelo ADMIN, e nao pela Tesouraria, de proposito: `criarTransferencia` so grava
-    // `caixa_id` quando quem cria TEM caixa aberto e a transferencia envolve a conta do PDV. A
-    // Tesouraria nao opera caixa, entao pela mao dela a linha nasceria com `caixa_id` nulo e o
-    // vazamento que este teste precisa provar nem existiria.
-    const generica = await post("/api/transferencias", {
-      empresaId,
-      dataReferencia: "2026-06-25",
-      descricao: "Deposito programado no banco",
-      valorOriginal: 30,
-      contaOrigemId: contaId,
-      contaDestinoId: idsTeste.contaBanco,
-      nLacreDoc: "GEN-AGENDADA-1",
-      agendadaPara: "2099-01-01T10:00:00.000Z",
-      tempoConfirmacao: "1dia"
-    });
-    expect(generica.statusCode, generica.body).toBe(201);
-    const genericaId = json<{ data: { id: string } }>(generica).data.id;
-    const comoFicou = await consultarUm<{
-      status: string;
-      caixa_id: string | null;
-      solicitacao_cofre_em: string | null;
-    }>("select status, caixa_id, solicitacao_cofre_em from transferencias where id = $1", [genericaId]);
-    // Precondicao do teste: se ela nao ficasse 'agendada' e ligada ao caixa, nao haveria vazamento
-    // a provar e o teste passaria por acidente.
-    expect(comoFicou).toMatchObject({ status: "agendada", caixa_id: caixaId, solicitacao_cofre_em: null });
-
-    // 1) Nao aparece na lista D4.
-    const lista = await contexto.app.inject({
-      method: "GET",
-      url: `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      headers: { cookie: cookieAdmin }
-    });
-    assertOk(lista);
-    expect(json<{ data: { id: string }[] }>(lista).data).toHaveLength(0);
-
-    // 2) Nao e executavel pelo endpoint D4 (404, e nao "executei sua transferencia generica").
-    const executar = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${genericaId}/executar`, {});
-    assertProblem(executar, 404);
-
-    // 3) Nao e cancelavel pelo endpoint D4.
-    const cancelar = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre/${genericaId}/cancelar`,
-      { motivo: "tentativa indevida" },
-      cookieTesouraria
-    );
-    assertProblem(cancelar, 404);
-
-    // 4) Nao bloqueia o fechamento.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fecha mesmo com generica agendada" });
-    expect(fechar.statusCode, fechar.body).toBe(204);
-
-    // E continua intacta: nada do D4 a tocou.
-    const depois = await consultarUm<{ status: string; solicitacao_cofre_em: string | null }>(
-      "select status, solicitacao_cofre_em from transferencias where id = $1",
-      [genericaId]
-    );
-    expect(depois).toMatchObject({ status: "agendada", solicitacao_cofre_em: null });
-  });
-
-  // --- Identidade do executor -----------------------------------------------------------------
-  it("programador e executor diferentes ficam auditados separadamente", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-executor", "2026-06-26T08:00", 200);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 60 });
-
-    const tesourariaId = (await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.tesouraria.email
-    ]))!.id;
-    const adminId = await usuarioAdminId();
-
-    // Quem programou foi a Tesouraria; quem executa e o admin (gerente do caixa neste fixture).
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-EXEC-AUD" })).statusCode
-    ).toBe(200);
-
-    const auditoria = await consultarUm<{ criado_por: string; executado_por: string; executado_em: string | null }>(
-      "select criado_por, executado_por, executado_em from transferencias where id = $1",
-      [id]
-    );
-    expect(auditoria?.criado_por).toBe(tesourariaId);
-    // O executor REAL — nao quem programou. Sem esta coluna, a recusa notificaria a pessoa errada.
-    expect(auditoria?.executado_por).toBe(adminId);
-    expect(auditoria?.executado_em).not.toBeNull();
-  });
-
-  it("retry e corrida nao trocam executado_por nem executado_em", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-executor-retry", "2026-06-27T08:00", 200);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 40 });
-
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-RETRY-EXEC" })).statusCode
-    ).toBe(200);
-    const primeira = await consultarUm<{ executado_por: string; executado_em: string }>(
-      "select executado_por, executado_em from transferencias where id = $1",
-      [id]
-    );
-
-    // Retry com o mesmo lacre, e duas execucoes concorrentes por cima: nada pode reescrever.
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-RETRY-EXEC" })).statusCode
-    ).toBe(200);
-    await Promise.all([
-      post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-RETRY-EXEC" }),
-      post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, { lacre: "D4-RETRY-EXEC" })
-    ]);
-
-    const depois = await consultarUm<{ executado_por: string; executado_em: string }>(
-      "select executado_por, executado_em from transferencias where id = $1",
-      [id]
-    );
-    expect(depois).toEqual(primeira);
-    expect(await movimentosDoCaixa(caixaId)).toHaveLength(1);
-  });
-
-  // --- Cancelamento (decisao 2) ---------------------------------------------------------------
-  it("cancelar agendada grava auditoria, mantem K1 e libera o fechamento", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-cancelar", "2026-06-28T08:00", 150);
-    const { chave, id } = await programar(caixaId, { tipo: "sangria", valor: 90, observacao: "Ordem a revogar" });
-
-    // Com solicitacao agendada, o caixa nao fecha.
-    assertProblem(await post(`/api/caixa/${caixaId}/fechar`, { observacao: "x" }), 400);
-
-    const cancelar = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre/${id}/cancelar`,
-      { motivo: "Rodrigo pediu para nao recolher hoje" },
-      cookieTesouraria
-    );
-    expect(cancelar.statusCode, cancelar.body).toBe(200);
-    // Some da lista de agendadas...
-    expect(json<{ data: unknown[] }>(cancelar).data).toHaveLength(0);
-
-    // ...mas NAO some do banco: continua no historico auditavel, com autoria, data e motivo, e
-    // preservando K1, valor, observacao, o marcador e os campos de execucao vazios.
-    const linha = await consultarUm<{
-      status: string;
-      cancelado_por: string | null;
-      cancelado_em: string | null;
-      motivo_cancelamento: string | null;
-      idempotencia_chave: string | null;
-      valor_original: string;
-      observacao: string | null;
-      solicitacao_cofre_em: string | null;
-      executado_por: string | null;
-      executado_em: string | null;
-    }>(
-      `select status, cancelado_por, cancelado_em, motivo_cancelamento, idempotencia_chave, valor_original,
-              observacao, solicitacao_cofre_em, executado_por, executado_em
-         from transferencias where id = $1`,
-      [id]
-    );
-    expect(linha).toMatchObject({
-      status: "cancelada",
-      motivo_cancelamento: "Rodrigo pediu para nao recolher hoje",
-      idempotencia_chave: chave,
-      valor_original: "90.00",
-      observacao: "Ordem a revogar",
-      executado_por: null,
-      executado_em: null
-    });
-    expect(linha?.cancelado_por).not.toBeNull();
-    expect(linha?.cancelado_em).not.toBeNull();
-    expect(linha?.solicitacao_cofre_em).not.toBeNull();
-
-    // Cancelada nao movimenta saldo e nao aparece como movimento ativo na aba do caixa.
-    expect(await saldoDoCaixa()).toBe(150);
-    const aba = await contexto.app.inject({
-      method: "GET",
-      url: `/api/caixa/${caixaId}/transferencias`,
-      headers: { cookie: cookieAdmin }
-    });
-    assertOk(aba);
-    expect(json<{ data: { itens: { id: string }[] } }>(aba).data.itens.some((item) => item.id === id)).toBe(false);
-
-    // E o fechamento passa a ser permitido.
-    const fechar = await post(`/api/caixa/${caixaId}/fechar`, { observacao: "Fechamento apos cancelar" });
-    expect(fechar.statusCode, fechar.body).toBe(204);
-  });
-
-  it("retry do cancelamento nao duplica auditoria, e executada nao pode ser cancelada", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-cancelar-limites", "2026-06-29T08:00", 200);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 30 });
-
-    const corpo = { motivo: "primeiro motivo" };
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/cancelar`, corpo, cookieTesouraria)).statusCode
-    ).toBe(200);
-    const primeira = await consultarUm<{ cancelado_em: string; motivo_cancelamento: string }>(
-      "select cancelado_em, motivo_cancelamento from transferencias where id = $1",
-      [id]
-    );
-
-    // Retry: idempotente, e nao reescreve a auditoria com o motivo novo.
-    const retry = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre/${id}/cancelar`,
-      { motivo: "outro motivo" },
-      cookieTesouraria
-    );
-    expect(retry.statusCode, retry.body).toBe(200);
-    expect(
-      await consultarUm<{ cancelado_em: string; motivo_cancelamento: string }>(
-        "select cancelado_em, motivo_cancelamento from transferencias where id = $1",
-        [id]
-      )
-    ).toEqual(primeira);
-
-    // Ja executada nao pode ser cancelada.
-    const outra = await programar(caixaId, { tipo: "sangria", valor: 20 });
-    expect((await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${outra.id}/executar`, {})).statusCode).toBe(200);
-    const tardio = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre/${outra.id}/cancelar`,
-      { motivo: "tarde demais" },
-      cookieTesouraria
-    );
-    assertProblem(tardio, 409);
-
-    // E cancelada nao pode ser executada (nunca sucesso silencioso).
-    const executarCancelada = await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/executar`, {});
-    assertProblem(executarCancelada, 409);
-  });
-
-  it("cancelar exige motivo e e exclusivo da retaguarda", async () => {
-    const { caixaId } = await abrirCaixaComSaldo("d4-cancelar-guardas", "2026-06-30T08:00", 100);
-    const { id } = await programar(caixaId, { tipo: "sangria", valor: 10 });
-
-    assertProblem(
-      await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/cancelar`, { motivo: "   " }, cookieTesouraria),
-      400
-    );
-    assertProblem(
-      await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${id}/cancelar`, { motivo: "pelo operador" }, cookieCaixa),
-      403
-    );
-    expect((await chaveGravada(id))?.status).toBe("agendada");
   });
 });

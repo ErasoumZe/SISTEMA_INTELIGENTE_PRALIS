@@ -13,9 +13,12 @@ import { ErroDominio, erroValidacao } from "../erros.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
+  buscarContaCofreEmpresaRepository,
+  criarQuebraCaixaRepository,
   listarUsuariosTesourariaRepository,
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
+import { ehMovimentoDoCaixaParaOCofre } from "./entrega-cofre.repository.js";
 import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
@@ -45,6 +48,7 @@ import {
   buscarTransferenciaDetalheRepository,
   travarTransferenciaRepository,
   confirmarTransferenciaRepository,
+  encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
   efetivarTransferenciaAgendadaRepository,
@@ -84,6 +88,41 @@ export async function listarTransferencias(
   return listarTransferenciasRepository(query, empresasPermitidasIds);
 }
 
+// P1/#101 · a entrega ao cofre tem UM caminho, e nao e a transferencia comum.
+//
+// Esta rota nunca escreve `tipo`: a linha nasce `suprimento`. Lancada pelo operador, ela nascia
+// `pendente` e vinculada ao caixa dele — logo, contava como saida — mas o predicado da guarda de
+// fechamento (R-171) procura `sangria`/`retorno` e nao a via. O dinheiro saia do caixa para o cofre
+// e o turno fechava por cima dele: o defeito exato que a Fatia 1 existe para eliminar, entrando por
+// outra porta.
+//
+// Alargar a guarda seria tratar o sintoma. O que estava errado e a porta existir: pela D9/R-179
+// quem leva dinheiro do Caixa ao Cofre e o proprio Caixa, por
+// `POST /api/caixa/:id/transferencia-cofre` — o unico escritor de `sangria`/`retorno`, que exige
+// confirmador elegivel, numera a ordem, controla o lacre e e idempotente. Nada disso existe aqui, e
+// malote sem conferencia e a diferenca entre dinheiro rastreado e dinheiro sumido.
+//
+// A funcao e PURA: quem chama ja resolveu a conta cofre. Assim a criacao paga a consulta so quando
+// a origem e a conta do PDV, e a edicao — que precisa da mesma conta para a outra trava — paga uma
+// vez so.
+//
+// A mensagem e uma constante porque os TRES escritores de `conta_destino_id` (criacao, edicao e
+// conferencia) recusam pelo mesmo motivo: quem quer levar dinheiro do Caixa ao Cofre usa o Caixa.
+// Tres copias divergiriam no primeiro ajuste de texto, e a terceira porta ja provou que escritor
+// esquecido e o modo de falha desta area.
+const CAMINHO_UNICO_DA_ENTREGA_AO_COFRE =
+  "Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa";
+
+function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
+  contaOrigemId: string;
+  contaDestinoId: string;
+  pdvContaId: string | null;
+  contaCofreId: string | null;
+}): void {
+  if (!ehMovimentoDoCaixaParaOCofre(movimento)) return;
+  throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
+}
+
 export async function criarTransferencia(
   dados: TransferenciaPayload,
   perfil: PerfilUsuario
@@ -115,6 +154,24 @@ export async function criarTransferencia(
         caixa && (dados.contaOrigemId === caixa.pdvContaId || dados.contaDestinoId === caixa.pdvContaId);
       if (!transferenciaLivre && !envolveContaPdv) {
         throw new Error("Transferencia do operador Caixa precisa envolver a conta do PDV aberto");
+      }
+      // A consulta ao cofre so acontece quando a origem E a conta do PDV: transferencia comum e
+      // suprimento (cofre -> caixa) nao pagam por esta guarda.
+      //
+      // TODA conta que pode virar destino entra na verificacao — a ancora E as candidatas de
+      // `contasDestinoIds`. A conferencia reescreve `conta_destino_id` com a candidata vencedora,
+      // entao olhar so a ancora seria fechar a porta e deixar a janela ao lado aberta: bastava
+      // listar o cofre como candidato para montar o mesmo malote em dois tempos.
+      if (caixa && dados.contaOrigemId === caixa.pdvContaId) {
+        const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+        for (const contaDestinoId of [dados.contaDestinoId, ...dados.contasDestinoIds]) {
+          exigirCaminhoUnicoDaEntregaAoCofre({
+            contaOrigemId: dados.contaOrigemId,
+            contaDestinoId,
+            pdvContaId: caixa.pdvContaId,
+            contaCofreId
+          });
+        }
       }
 
       // R-143 literal ("nao existe transferencia sem fundo na conta de origem"), agora com teste.
@@ -187,6 +244,22 @@ export async function confirmarTransferencia(
     // Transferencia generica NAO entra neste ramo: la o comportamento vigente e preservado
     // (valor opcional, divergencia confirma e notifica).
     const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
+
+    // P1/#101 · a conferencia e o TERCEIRO escritor de `conta_destino_id`, e a autoridade final.
+    //
+    // `confirmarTransferenciaRepository` grava a conta candidata vencedora. Sem esta guarda, uma
+    // transferencia comum do caixa — criada com o cofre entre as `contasDestinoIds` — virava
+    // malote Caixa -> Cofre no ato da conferencia, depois do fechamento e sem nenhuma das amarras
+    // do fluxo canonico: sem confirmador exigido na criacao, sem ordem, sem idempotencia e sem
+    // recusa auditavel, porque `tipo` continua `suprimento` e `/recusar-conferencia` responde 404.
+    //
+    // A criacao ja nao deixa mais essa linha nascer. Esta trava alcanca as que JA existem: sem ela,
+    // o legado do banco continuaria com o atalho aberto. `ehCaixaParaCofre` sai de fora porque a
+    // entrega canonica confirma exatamente assim — e ela e o caminho que deve funcionar.
+    if (contexto && !contexto.ehCaixaParaCofre && contexto.caixaId && dados.contaDestinoId === contexto.contaCofreId) {
+      throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
+    }
+
     if (contexto?.ehCaixaParaCofre) {
       if (dados.valorRecebido == null) {
         throw erroValidacao(
@@ -247,7 +320,7 @@ export async function recusarConferencia(
   transferenciaId: string,
   dados: RecusarConferenciaPayload,
   perfil: PerfilUsuario
-): Promise<{ registrada: true; transferenciaId: string; tentativas: number }> {
+): Promise<{ registrada: true; transferenciaId: string; tentativas: number; encerrada: boolean }> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
   return executarEmTransacao(async (tx) => {
     const contexto = await buscarContextoConferenciaRepository(transferenciaId, tx);
@@ -255,7 +328,17 @@ export async function recusarConferencia(
     // Generica nao tem recusa auditavel: para ela isto e 404, e nao "nao pode" — o caminho dela
     // continua sendo o `/confirmar` com a regra vigente.
     if (!contexto.ehCaixaParaCofre) throw new Error("Registro nao encontrado");
-    if (contexto.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+
+    // R-183 · a linha do caixa vem TRAVADA (FOR SHARE) antes de qualquer decisao, exatamente como no
+    // `/confirmar`. Ate aqui a recusa nao travava nada porque nao movia dinheiro; agora ela pode
+    // encerrar a entrega e gravar quebra, entao precisa serializar com o fechamento em voo — senao
+    // duas verdades sobre o mesmo turno commitam em paralelo.
+    if (contexto.caixaId) await travarCaixaCompartilhadoRepository(contexto.caixaId, tx);
+
+    // Releitura SOB a trava: entre a leitura acima e o lock, um `/confirmar` ou outro encerramento
+    // pode ter mudado o desfecho. Sem isto a decisao sairia de um retrato velho.
+    const atual = await buscarContextoConferenciaRepository(transferenciaId, tx);
+    if (!atual || atual.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
 
     // Mesma elegibilidade da confirmacao: vinculado a conta destino, e nunca quem criou o movimento
     // (R-028). Sem isso, quem enviou o dinheiro poderia "recusar" a propria entrega.
@@ -265,33 +348,117 @@ export async function recusarConferencia(
     );
     if (!elegivel) throw new Error("Somente operador de uma conta destino pode conferir esta transferencia");
 
+    // R-183 · o que o cofre CONTOU. Quando a recusa vai encerrar, o numero e obrigatorio e pode ser
+    // ZERO — "lacre violado, nao abro e nao conto" e uma contagem valida de R$ 0,00, e e ela que faz
+    // o declarado inteiro virar quebra. Por isso `null` (nao informado) e recusado no encerramento:
+    // sem numero nao ha o que creditar nem o que quebrar.
+    const contadoCentavos = dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido);
+    if (dados.encerrar) {
+      if (contadoCentavos === null) {
+        throw erroValidacao(
+          "Informe o valor contado para encerrar a divergencia — use 0 quando o malote nao foi aberto",
+          "VALOR_CONTADO_OBRIGATORIO"
+        );
+      }
+      // C > D: a D7 proibe transformar sobra em quebra positiva, entao o unico contrapeso possivel e
+      // alguem assumir por escrito que contou MAIS do que foi declarado. Sem isso o cofre seria
+      // creditado a mais sem dono.
+      if (contadoCentavos > atual.valorCentavos && !dados.sobraConfirmada) {
+        throw new ErroDominio(
+          "Contagem acima do declarado: confirme a sobra para encerrar a divergencia",
+          409,
+          "SOBRA_NAO_CONFIRMADA"
+        );
+      }
+    }
+
     const registro = await registrarRecusaConferenciaRepository(
       {
         transferenciaId,
         recusadoPor: perfil.usuarioId,
         motivo: dados.motivo.trim(),
         lacreInformado: dados.nLacreDoc?.trim() || null,
-        valorInformadoCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido)
+        valorInformadoCentavos: contadoCentavos
       },
       tx
     );
 
+    // R-183 · o DESFECHO. Sem `encerrar`, nada muda: a entrega continua `pendente`, o fechamento
+    // continua travado e o cofre pode reconferir — que e o comportamento de sempre.
+    if (dados.encerrar && contadoCentavos !== null) {
+      if (!atual.caixaId) throw new Error("Entrega ao cofre sem caixa vinculado");
+      const encerrada = await encerrarDivergenciaRepository(
+        {
+          transferenciaId,
+          caixaId: atual.caixaId,
+          valorRecebidoCentavos: contadoCentavos,
+          lacreDoMovimento: atual.lacre
+        },
+        tx
+      );
+      // Zero linhas = a entrega deixou de ser `pendente` entre a trava e o UPDATE, ou nao e deste
+      // caixa. Erro de dominio, nunca um segundo encerramento silencioso.
+      if (!encerrada) throw new Error("Transferencia nao esta pendente de confirmacao");
+
+      // A falta vira quebra; a sobra nao (D7). A quebra nasce contra o fechamento a que a ENTREGA
+      // pertence — aberto ou fechado —, e e isso que faz o retorno final do fechamento ter desfecho.
+      const faltaCentavos = atual.valorCentavos - contadoCentavos;
+      if (faltaCentavos > 0) {
+        const dono = atual.executadoPor ?? atual.criadoPor;
+        if (!dono) throw new Error("Entrega sem responsavel para responder pela quebra");
+        const quebra = await criarQuebraCaixaRepository(
+          {
+            empresaId: atual.empresaId,
+            fechamentoCaixaId: atual.caixaId,
+            usuarioId: dono,
+            // Negativo, na mesma convencao do escritor que ja existia: negativo = faltou.
+            valorCentavos: -faltaCentavos,
+            observacao: dados.motivo.trim(),
+            transferenciaId
+          },
+          tx
+        );
+
+        // A quebra emite o MESMO sinal que a quebra de contagem ja emitia (`caixa.service`, no
+        // fechamento): tipo `quebra_caixa` e `referenciaId` da propria quebra. Sem isto a maior
+        // consequencia financeira do ato chegaria ao dono como "conferencia recusada", indistinguivel
+        // de uma recusa que ele ainda pode resolver — e `quebras_caixa` nao tem leitor nenhum no
+        // sistema, entao esta notificacao e a unica superficie que existe.
+        const tesourariaDaQuebra = await listarUsuariosTesourariaRepository(atual.empresaId, tx);
+        await criarNotificacoesRepository(
+          {
+            empresaId: atual.empresaId,
+            tipo: "quebra_caixa",
+            destinatariosUsuarioIds: [
+              ...new Set(
+                [dono, ...tesourariaDaQuebra.map((item) => item.usuarioId)].filter((id): id is string => Boolean(id))
+              )
+            ],
+            referenciaId: quebra.id,
+            titulo: `Quebra por divergencia no cofre - ${atual.lacre ?? transferenciaId}`,
+            valorCentavos: -faltaCentavos
+          },
+          tx
+        );
+      }
+    }
+
     // Quem precisa saber: quem ENTREGOU (o executor real da solicitacao D4, ou o criador quando a
     // entrega foi avulsa/retorno final) mais a Tesouraria/Gestao. Usar so `criado_por` numa
     // solicitacao programada avisaria quem programou e deixaria o operador no escuro.
-    const operador = contexto.executadoPor ?? contexto.criadoPor;
-    const tesouraria = await listarUsuariosTesourariaRepository(contexto.empresaId, tx);
+    const operador = atual.executadoPor ?? atual.criadoPor;
+    const tesouraria = await listarUsuariosTesourariaRepository(atual.empresaId, tx);
     const destinatarios = [
       ...new Set([operador, ...tesouraria.map((item) => item.usuarioId)].filter((id): id is string => Boolean(id)))
     ];
     await criarNotificacoesRepository(
       {
-        empresaId: contexto.empresaId,
+        empresaId: atual.empresaId,
         tipo: "transferencia_divergencia",
         destinatariosUsuarioIds: destinatarios,
         referenciaId: transferenciaId,
-        titulo: `Conferencia recusada (${registro.tentativas}a tentativa) - ${contexto.lacre ?? transferenciaId}`,
-        valorCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido) - contexto.valorCentavos,
+        titulo: `Conferencia recusada (${registro.tentativas}a tentativa) - ${atual.lacre ?? transferenciaId}`,
+        valorCentavos: dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido) - atual.valorCentavos,
         // Cada nova tentativa reabre a pendencia: sem isto, quem ja tinha marcado a primeira
         // recusa como vista nunca seria avisado da segunda.
         reabrir: true
@@ -299,7 +466,7 @@ export async function recusarConferencia(
       tx
     );
 
-    return { registrada: true, transferenciaId, tentativas: registro.tentativas };
+    return { registrada: true, transferenciaId, tentativas: registro.tentativas, encerrada: Boolean(dados.encerrar) };
   });
 }
 
@@ -457,6 +624,47 @@ export async function atualizarTransferencia(
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {
       throw new Error("Transferencia precisa envolver a conta do PDV aberto");
     }
+
+    // P1/#101 · o PUT nao desmancha o que o fluxo do Caixa montou.
+    //
+    // Duas travas, e as duas guardam a MESMA guarda de fechamento (R-171), que reconhece a entrega
+    // pelo destino ser a conta cofre:
+    //
+    //  1. a entrega ao cofre ja gravada e IMUTAVEL (D5/D9). Sem isto, apontar o destino dela para
+    //     outra conta fazia o predicado parar de casar: o fechamento liberava e o malote continuava
+    //     na rua, sem turno aberto onde a divergencia do cofre pudesse cair;
+    //  2. o payload nao pode TRANSFORMAR uma transferencia comum do caixa em Caixa -> Cofre —
+    //     a mesma porta que a criacao ja fechou, alcancada por edicao.
+    //
+    // Lido do retrato SOB a trava (`existente`), nunca da pre-leitura: entre uma e outra a linha
+    // pode ter mudado de caixa.
+    //
+    // O que NAO entra aqui, de proposito: proibir toda troca de destino em linha com `caixa_id`.
+    // Corrigir a conta de destino de uma transferencia comum e edicao legitima e ja tem invariante
+    // provada em `caixa-portas-s3-s8` (S6). As duas travas acima fecham os dois bypasses sem
+    // alcancar esse caso. `status` tambem nao entra: `valoresBaseEdicao` nao o escreve — o PUT
+    // nunca pode mudar status, e uma trava para isso seria codigo morto fingindo protecao.
+    if (existente) {
+      const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+      const pdvContaId = caixa.pdvContaId;
+      if (
+        ehMovimentoDoCaixaParaOCofre({
+          contaOrigemId: existente.contaOrigemId,
+          contaDestinoId: existente.contaDestinoId,
+          pdvContaId,
+          contaCofreId
+        })
+      ) {
+        throw new Error("Entrega ao cofre e movimento imutavel: confira ou recuse a conferencia no cofre");
+      }
+      exigirCaminhoUnicoDaEntregaAoCofre({
+        contaOrigemId: dados.contaOrigemId,
+        contaDestinoId: dados.contaDestinoId,
+        pdvContaId,
+        contaCofreId
+      });
+    }
+
     // R-165 na EDICAO: delta real sobre a conta de ORIGEM. `jaReservado` so devolve o valor gravado
     // quando a origem NAO muda — senao o reenvio identico cobraria o valor duas vezes.
     await exigirSaldoSuficienteNaConta(

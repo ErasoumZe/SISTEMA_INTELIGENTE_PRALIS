@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   camposConferenciaVazios,
   montarPayloadConfirmacao,
+  bloqueiaEnvioPorSobra,
   montarPayloadRecusa,
   valorConferenciaValido
 } from "./conferencia-transferencia";
@@ -80,7 +81,51 @@ describe("montarPayloadConfirmacao · transferencia GENERICA", () => {
   });
 });
 
+// R-183 · o envio so pode ficar travado por sobra ENQUANTO a pessoa esta recusando e escolheu
+// encerrar. Fora disso o botao volta a funcionar, senao ele fica morto sem causa visivel — a caixa
+// de consentimento so aparece no modo recusa, entao o motivo do bloqueio estaria escondido.
+describe("bloqueiaEnvioPorSobra", () => {
+  it("bloqueia quando esta recusando, escolheu encerrar, contou a mais e nao confirmou", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: true, confirmou: false })).toBe(true);
+  });
+
+  it("libera assim que a sobra e confirmada", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: true, confirmou: true })).toBe(false);
+  });
+
+  it("nao bloqueia fora do modo recusa — e o caso do botao morto ao voltar para Conferir", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: false, encerrar: true, contouAMais: true, confirmou: false })).toBe(
+      false
+    );
+  });
+
+  it("nao bloqueia quando o encerramento nao foi escolhido, nem quando o contado nao passou", () => {
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: false, contouAMais: true, confirmou: false })).toBe(
+      false
+    );
+    expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: false, confirmou: false })).toBe(
+      false
+    );
+  });
+});
+
 describe("montarPayloadRecusa", () => {
+  // R-183 · sem a flag, a rota so registra a tentativa e o caixa continua travado. O default e
+  // deliberado: encerrar e uma escolha da pessoa que contou, nunca um efeito colateral.
+  it("nao manda encerrar quando o desfecho nao foi escolhido", () => {
+    const campos = { contaDestinoId: "", lacre: "L1", valorRecebido: "180", motivo: "faltou" };
+    expect(montarPayloadRecusa(campos, "conta-padrao")).not.toHaveProperty("encerrar");
+  });
+
+  it("manda encerrar e o consentimento da sobra quando escolhidos", () => {
+    const campos = { contaDestinoId: "", lacre: "L1", valorRecebido: "220", motivo: "sobrou" };
+    expect(montarPayloadRecusa(campos, "conta-padrao", { encerrar: true, sobraConfirmada: true })).toMatchObject({
+      encerrar: true,
+      sobraConfirmada: true,
+      valorRecebido: 220
+    });
+  });
+
   it("carrega o motivo aparado junto com valor e lacre conferidos", () => {
     const campos = { contaDestinoId: "", lacre: "LAC-9", valorRecebido: "80", motivo: "  faltou dinheiro  " };
     expect(montarPayloadRecusa(campos, "conta-padrao")).toEqual({

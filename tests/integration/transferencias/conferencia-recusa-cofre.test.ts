@@ -4,7 +4,7 @@ import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplica
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // Decisao 5 e 8 · conferencia ESTRITA e recusa auditavel — exclusivas do fluxo Caixa -> Cofre.
 //
@@ -14,14 +14,15 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 //   - a divergencia tem endpoint proprio, e o registro dela precisa ser COMMITADO — se fosse
 //     sinalizada por excecao dentro do confirmar, o rollback apagaria a propria trilha;
 //   - cada tentativa gera OUTRA linha de auditoria e reabre a notificacao;
-//   - quem e notificado e quem ENTREGOU (o executor real), nao quem programou;
+//   - quem e notificado e quem ENTREGOU o malote — e "quem entregou" continua sendo lido de
+//     `executado_por` nas linhas HISTORICAS, que e o unico lugar onde essa coluna ainda existe;
 //   - e a transferencia GENERICA nao muda de comportamento por causa de nada disso.
 describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofre)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieTesouraria: string;
   // O gerente tambem e responsavel pelo cofre no seed. Ele existe aqui porque quem CRIA um
-  // movimento nunca pode conferi-lo (R-028): quando a Tesouraria programa, quem confere e ele.
+  // movimento nunca pode conferi-lo (R-028): a entrega sai pela mao do admin, e quem confere e ele.
   let cookieGerente: string;
 
   beforeAll(async () => {
@@ -205,48 +206,18 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     expect(await recusas(movimentoId)).toHaveLength(2);
   });
 
-  it("a recusa notifica quem EXECUTOU a solicitacao, nao quem a programou", async () => {
-    // Solicitacao programada pela Tesouraria e executada pelo admin: sao pessoas diferentes.
-    const contaId = await criar("/api/contas", { empresaId, nome: "Conta recusa-executor" });
-    const pdvId = await criar("/api/pdvs", { empresaId, nome: "PDV recusa-executor", contaId, ativo: true });
+  // R-179/Fatia 3 · o caso original montava uma ordem programada pela Tesouraria e executada pelo
+  // admin, para provar que a notificacao ia ao EXECUTOR e nao ao programador. Com o caminho unico
+  // as duas pessoas sao uma so: quem entrega e quem cria. O fio que este caso protege continua o
+  // mesmo — `atual.executadoPor ?? atual.criadoPor` em `transferencias.service.ts` —, e o `??`
+  // segue necessario para as linhas HISTORICAS, que tem `executado_por` preenchido.
+  it("a recusa notifica quem ENTREGOU o malote", async () => {
     const adminId = await usuarioPorEmail(usuariosTeste.admin.email);
-    const caixaId = await criar("/api/caixa/abrir", {
-      empresaId,
-      pdvId,
-      usuarioCaixaId: adminId,
-      dataHoraAbertura: "2026-07-04T08:00"
-    });
-    await criar("/api/vendas", {
-      empresaId,
-      dataReferencia: "2026-07-04",
-      dataPagamento: "2026-07-04",
-      descricao: "Venda recusa-executor",
-      valorOriginal: 70,
-      contaOrigemId: contaId,
-      pdvId,
-      colaboradorId: idsTeste.colaboradorAdmin,
-      itensVenda: [
-        { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 70, valorTotal: 70 }
-      ],
-      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 70 }]
-    });
+    const { movimentoId } = await entregaPendente("recusa-entregador", "2026-07-04T08:00", 70, "REC-EXEC-1");
 
-    const programar = await post(
-      `/api/caixa/${caixaId}/solicitacoes-cofre`,
-      { tipo: "retorno", valor: 70, idempotenciaChave: randomUUID() },
-      cookieTesouraria
-    );
-    expect(programar.statusCode, programar.body).toBe(200);
-    const solicitacaoId = json<{ data: { id: string }[] }>(programar).data[0]!.id;
-    expect(
-      (await post(`/api/caixa/${caixaId}/solicitacoes-cofre/${solicitacaoId}/executar`, { lacre: "REC-EXEC-1" }))
-        .statusCode
-    ).toBe(200);
-
-    // Quem recusa e o GERENTE: a Tesouraria criou a solicitacao e por isso nao pode confirmar nem
-    // recusar o proprio pedido (R-028).
+    // Quem recusa e o GERENTE: quem entregou nao confere a propria entrega (R-028).
     const recusa = await post(
-      `/api/transferencias/${solicitacaoId}/recusar-conferencia`,
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
       { contaDestinoId: idsTeste.contaCofre, motivo: "Lacre violado", nLacreDoc: "REC-EXEC-1", valorRecebido: 70 },
       cookieGerente
     );
@@ -254,12 +225,95 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
 
     const destinatarios = await consultarTodos<{ destinatario_usuario_id: string }>(
       "select destinatario_usuario_id from notificacoes where referencia_id = $1 and tipo = 'transferencia_divergencia'",
-      [solicitacaoId]
+      [movimentoId]
     );
     const ids = destinatarios.map((linha) => linha.destinatario_usuario_id);
-    // O EXECUTOR (admin) foi avisado. Se o codigo usasse `criado_por`, so a Tesouraria — que
-    // programou e ja sabe do problema — seria notificada, e o operador ficaria no escuro.
+    // Quem entregou (admin) foi avisado. Sem isso a divergencia so chegaria a Tesouraria, e quem
+    // pos o dinheiro no envelope ficaria no escuro.
     expect(ids).toContain(adminId);
+  });
+
+  // R-179/Fatia 3 · A LINHA LEGADA, e os tres leitores de `executado_por` que ela mantem vivos.
+  //
+  // O fluxo D4 foi removido, entao nenhum codigo ESCREVE mais `executado_por`. Mas a coluna ficou
+  // (remove-la e migration) e um banco em uso tem linhas onde ela esta preenchida: quem PROGRAMOU
+  // e quem ENTREGOU sao pessoas diferentes. Tres decisoes ainda dependem dessa distincao:
+  //
+  //   1. `candidatoConfirmacao` exclui quem entregou (R-028: nao se confere a propria entrega);
+  //   2. a quebra por falta nasce contra quem entregou, nao contra quem programou;
+  //   3. a notificacao de divergencia vai para quem entregou.
+  //
+  // Sao tres DECISOES em DUAS expressoes: `executadoPor ?? criadoPor` (`transferencias.service.ts`,
+  // no dono da quebra e no destinatario da notificacao) e `permitida.executadoPor === usuarioId`
+  // (`transferencias.repository.ts`, na elegibilidade). Sem este caso as tres viram codigo sem rede:
+  // apagar qualquer uma deixa a suite inteira verde e, em producao, a falta de dinheiro passa a ser
+  // cobrada da pessoa errada. A linha e montada em SQL porque nenhuma API a produz mais — e este e
+  // exatamente o estado que o banco real tem.
+  it("na linha legada, quem ENTREGOU nao confere, responde pela quebra e e notificado", async () => {
+    const gerenteId = await usuarioPorEmail(usuariosTeste.gerente.email);
+    const adminId = await usuarioPorEmail(usuariosTeste.admin.email);
+    const { caixaId, movimentoId } = await entregaPendente("legado-executor", "2026-07-11T08:00", 90, "REC-LEG-1");
+
+    // Vira uma entrega do fluxo antigo: o admin PROGRAMOU (`criado_por`, ja gravado) e o gerente
+    // EXECUTOU. Satisfaz `transferencias_solicitacao_cofre_check` — marcador + caixa + tipo
+    // sangria/retorno + status `pendente` com executor preenchido.
+    await executarSql(
+      `update transferencias
+          set solicitacao_cofre_em = now(), executado_por = $2, executado_em = now()
+        where id = $1`,
+      [movimentoId, gerenteId]
+    );
+    const legada = await consultarUm<{ criado_por: string; executado_por: string }>(
+      "select criado_por, executado_por from transferencias where id = $1",
+      [movimentoId]
+    );
+    expect(legada?.criado_por).toBe(adminId);
+    expect(legada?.executado_por).toBe(gerenteId);
+
+    // (1) O gerente TEM `transferencias_conferir` e TEM vinculo com o cofre — e mesmo assim e
+    // recusado, porque foi ele quem entregou. 400 de dominio, nao 403 de guard: se viesse 403 a
+    // requisicao teria morrido antes da regra e o caso nao provaria nada.
+    const proprioExecutor = await post(
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
+      { contaDestinoId: idsTeste.contaCofre, motivo: "conferindo o proprio envio", valorRecebido: 70 },
+      cookieGerente
+    );
+    assertProblem(proprioExecutor, 400);
+    // A MENSAGEM tambem e fixada, como nos casos vizinhos: hoje este e o unico 400 alcancavel nesta
+    // chamada, mas mover qualquer validacao de dominio para antes da elegibilidade deixaria o caso
+    // verde pelo motivo errado — provando uma recusa que nao e a da R-028.
+    expect(proprioExecutor.body).toMatch(/operador de uma conta destino/iu);
+    expect(await recusas(movimentoId)).toHaveLength(0);
+
+    // (2) e (3) Quem nao entregou encerra: a Tesouraria conta R$ 70 dos R$ 90 declarados.
+    const encerramento = await post(
+      `/api/transferencias/${movimentoId}/recusar-conferencia`,
+      { contaDestinoId: idsTeste.contaCofre, motivo: "faltou no malote", valorRecebido: 70, encerrar: true },
+      cookieTesouraria
+    );
+    expect(encerramento.statusCode, encerramento.body).toBe(200);
+
+    // A quebra e do GERENTE (quem entregou), nunca do admin (quem programou).
+    const quebras = await consultarTodos<{ usuario_id: string; valor: string }>(
+      "select usuario_id, valor from quebras_caixa where transferencia_id = $1",
+      [movimentoId]
+    );
+    expect(quebras).toEqual([{ usuario_id: gerenteId, valor: "-20.00" }]);
+    expect(quebras.map((q) => q.usuario_id)).not.toContain(adminId);
+    // A quebra pertence ao fechamento a que a ENTREGA pertence.
+    const vinculo = await consultarUm<{ fechamento_caixa_id: string }>(
+      "select fechamento_caixa_id from quebras_caixa where transferencia_id = $1",
+      [movimentoId]
+    );
+    expect(vinculo?.fechamento_caixa_id).toBe(caixaId);
+
+    // E a divergencia chega a quem entregou. Se o servico usasse so `criado_por`, o gerente — que
+    // pos o dinheiro no envelope e vai responder pela falta — nao seria avisado.
+    const avisados = await consultarTodos<{ destinatario_usuario_id: string }>(
+      "select destinatario_usuario_id from notificacoes where referencia_id = $1 and tipo = 'transferencia_divergencia'",
+      [movimentoId]
+    );
+    expect(avisados.map((linha) => linha.destinatario_usuario_id)).toContain(gerenteId);
   });
 
   it("recusa nao existe para transferencia generica (404) e o comportamento dela e preservado", async () => {

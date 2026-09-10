@@ -63,11 +63,48 @@ export function montarPayloadConfirmacao(
   return { ...base, valorRecebido: Number(campos.valorRecebido) };
 }
 
-export type PayloadRecusa = PayloadConfirmacao & { motivo: string; valorRecebido?: number };
+// R-183 · quando o envio fica bloqueado pela sobra nao confirmada.
+//
+// `modoRecusa` entra na conta, e nao e detalhe: a caixa de consentimento so existe DENTRO do modo
+// recusa. Sem essa condicao, quem marcasse "encerrar", digitasse um valor acima do declarado e
+// voltasse para "Conferir" ficava com o botao morto e o motivo escondido — sem acao possivel a nao
+// ser fechar e reabrir o modal.
+//
+// Funcao pura, fora do SFC, pelo mesmo motivo de `fechamento-travas.ts`: dentro do componente esta
+// regra so seria exercitada montando a tela inteira com Vuetify, e regra que so o olho testa acaba
+// divergindo do servidor — que aqui responde 409 exatamente nesta condicao.
+export function bloqueiaEnvioPorSobra(estado: {
+  modoRecusa: boolean;
+  encerrar: boolean;
+  contouAMais: boolean;
+  confirmou: boolean;
+}): boolean {
+  return estado.modoRecusa && estado.encerrar && estado.contouAMais && !estado.confirmou;
+}
 
-// Decisao 8: a recusa exige motivo e SO existe no fluxo Caixa -> Cofre (na generica a rota responde
-// 404). Ela nao confirma nem cancela — o movimento segue `pendente`, e o registro auditavel e
-// commitado do outro lado.
-export function montarPayloadRecusa(campos: CamposConferencia, contaDestinoPadrao: string): PayloadRecusa {
-  return { ...montarPayloadConfirmacao(campos, contaDestinoPadrao, true), motivo: campos.motivo.trim() };
+export type PayloadRecusa = PayloadConfirmacao & {
+  motivo: string;
+  valorRecebido?: number;
+  encerrar?: boolean;
+  sobraConfirmada?: boolean;
+};
+
+// Decisao 8 + R-183: a recusa exige motivo e SO existe no fluxo Caixa -> Cofre (na generica a rota
+// responde 404). Ela tem DOIS desfechos, e a diferenca e quem paga:
+//
+//  - sem `encerrar`: registra a tentativa e o movimento segue `pendente`, para reconferir depois;
+//  - com `encerrar`: e o DESFECHO — o cofre credita o contado, a falta vira quebra e o caixa
+//    destrava. Sem esta flag chegar ao servidor, a rota existe e o caixa fica travado do mesmo
+//    jeito, que era o estado que a Fatia 2 existe para eliminar.
+//
+// `sobraConfirmada` acompanha `encerrar` porque o servidor recusa (409) contagem acima do declarado
+// sem consentimento explicito — a D7 proibe virar quebra positiva, entao o contrapeso e assumir.
+export function montarPayloadRecusa(
+  campos: CamposConferencia,
+  contaDestinoPadrao: string,
+  desfecho: { encerrar: boolean; sobraConfirmada: boolean } = { encerrar: false, sobraConfirmada: false }
+): PayloadRecusa {
+  const base = { ...montarPayloadConfirmacao(campos, contaDestinoPadrao, true), motivo: campos.motivo.trim() };
+  if (!desfecho.encerrar) return base;
+  return { ...base, encerrar: true, sobraConfirmada: desfecho.sobraConfirmada };
 }
