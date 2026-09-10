@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   camposConferenciaVazios,
+  lacreConfereEntrega,
   montarPayloadConfirmacao,
   bloqueiaEnvioPorSobra,
   montarPayloadRecusa,
@@ -84,6 +85,22 @@ describe("montarPayloadConfirmacao · transferencia GENERICA", () => {
 // R-183 · o envio so pode ficar travado por sobra ENQUANTO a pessoa esta recusando e escolheu
 // encerrar. Fora disso o botao volta a funcionar, senao ele fica morto sem causa visivel — a caixa
 // de consentimento so aparece no modo recusa, entao o motivo do bloqueio estaria escondido.
+describe("lacreConfereEntrega", () => {
+  it("aceita ausencia dos dois lados", () => {
+    expect(lacreConfereEntrega("   ", null)).toBe(true);
+  });
+
+  it("exige o lacre da entrega para a confirmacao normal", () => {
+    expect(lacreConfereEntrega("", "E2E-AUTO-101-LACRE")).toBe(false);
+    expect(lacreConfereEntrega("  E2E-AUTO-101-LACRE  ", "E2E-AUTO-101-LACRE")).toBe(true);
+  });
+
+  it("deixa o lacre diferente ser tratado como divergencia", () => {
+    expect(lacreConfereEntrega("OUTRO-LACRE", "E2E-AUTO-101-LACRE")).toBe(false);
+    expect(lacreConfereEntrega("LACRE-NAO-EXISTE", null)).toBe(false);
+  });
+});
+
 describe("bloqueiaEnvioPorSobra", () => {
   it("bloqueia quando esta recusando, escolheu encerrar, contou a mais e nao confirmou", () => {
     expect(bloqueiaEnvioPorSobra({ modoRecusa: true, encerrar: true, contouAMais: true, confirmou: false })).toBe(true);

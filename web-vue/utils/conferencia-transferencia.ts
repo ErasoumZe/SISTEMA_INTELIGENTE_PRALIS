@@ -35,6 +35,12 @@ function lacreOuNulo(lacre: string): string | null {
   return lacre.trim() || null;
 }
 
+// Confirmar significa que valor e lacre conferidos batem com a entrega. A recusa continua
+// aceitando um lacre ausente ou diferente, pois essa e justamente uma divergencia auditavel.
+export function lacreConfereEntrega(lacreInformado: string, lacreDaEntrega?: string | null): boolean {
+  return lacreOuNulo(lacreInformado) === (lacreDaEntrega?.trim() || null);
+}
+
 export type PayloadConfirmacao = {
   contaDestinoId: string;
   nLacreDoc: string | null;

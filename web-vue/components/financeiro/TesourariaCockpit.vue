@@ -12,6 +12,7 @@ import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
 import {
   camposConferenciaVazios,
+  lacreConfereEntrega,
   montarPayloadConfirmacao,
   bloqueiaEnvioPorSobra,
   montarPayloadRecusa,
@@ -82,6 +83,13 @@ const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === 
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
+// Sem este bloqueio, deixar o campo vazio em uma entrega lacrada chegava ao servidor como
+// `null` e recebia um 409 que parecia ser divergencia de valor. No modo de recusa, lacre
+// diferente e uma evidencia valida e deve poder seguir junto do motivo.
+const lacrePendente = computed(
+  () => !modoRecusa.value && !lacreConfereEntrega(campos.lacre, confirmando.value?.nLacreDoc)
+);
+const entregaTemLacre = computed(() => Boolean(confirmando.value?.nLacreDoc?.trim()));
 const motivoValido = computed(() => Boolean(campos.motivo.trim()));
 // A sobra so aparece quando o contado passa do declarado — e ai o consentimento vira obrigatorio,
 // senao o servidor recusa com 409. Mostrar a caixa sempre treinaria a pessoa a marcar sem ler.
@@ -305,7 +313,13 @@ const saldo = computed(() => entrada.value - saida.value);
         />
         <!-- R-026: movimento pode nao ter lacre. Vazio vira `null` no payload — nunca string
              vazia, que o schema recusaria e deixaria a conferencia impossivel. -->
-        <v-text-field v-model="campos.lacre" label="Nº do lacre (vazio se não houver)" data-teste="conferencia-lacre" />
+        <v-text-field
+          v-model="campos.lacre"
+          :label="entregaTemLacre ? 'Nº do lacre (obrigatório para esta entrega)' : 'Nº do lacre (vazio se não houver)'"
+          :error="lacrePendente"
+          :messages="lacrePendente ? 'Confira e informe o lacre registrado na entrega ou use Não bateu.' : undefined"
+          data-teste="conferencia-lacre"
+        />
         <!-- Decisao 5: no Caixa -> Cofre o valor contado e obrigatorio (0 e valido). Na generica
              ele continua opcional, e vazio significa "nao informei" — o payload omite o campo. -->
         <v-text-field
@@ -373,7 +387,11 @@ const saldo = computed(() => entrada.value - saida.value);
           <v-btn
             :color="modoRecusa ? 'warning' : 'primary'"
             :disabled="
-              valorPendente || (modoRecusa && !motivoValido) || sobraPendenteDeConsentimento || salvandoConferencia
+              valorPendente ||
+              lacrePendente ||
+              (modoRecusa && !motivoValido) ||
+              sobraPendenteDeConsentimento ||
+              salvandoConferencia
             "
             :loading="salvandoConferencia"
             data-teste="conferencia-enviar"
