@@ -28,6 +28,7 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       @update:pagina="ctx.atualizarPaginaOperacoes"
       @update:status-filtro="ctx.atualizarFiltroStatusTransferencia"
       @recarregar="ctx.recarregarOperacoes"
+      @notificar="ctx.notificar"
     />
   </AppWorkspace>
 </template>

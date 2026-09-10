@@ -51,6 +51,7 @@ const emit = defineEmits<{
   (event: "update:pagina", pagina: number): void;
   (event: "update:status-filtro", status: StatusTransferencia | ""): void;
   (event: "recarregar"): void;
+  (event: "notificar", mensagem: string, tipo?: string): void;
 }>();
 const { apiPost } = useApi();
 // O provider vive no AppWorkspace e garante a mesma janela de confirmação para Caixa e Tesouraria.
@@ -200,6 +201,13 @@ async function enviarConferencia() {
         })
       : montarPayloadConfirmacao(campos, operacao.contaDestinoId ?? "", ehCaixaParaCofre.value);
     await apiPost(`/api/transferencias/${operacao.id}/${rota}`, corpo);
+    if (!modoRecusa.value) {
+      emit("notificar", "Recebimento confirmado.");
+    } else if (encerrarDivergencia.value) {
+      emit("notificar", "Divergência encerrada e registrada.");
+    } else {
+      emit("notificar", "Divergência registrada; a entrega continua pendente.", "warning");
+    }
     fecharConferencia();
     emit("recarregar");
   } catch (error) {
@@ -412,6 +420,14 @@ function atualizarStatusFiltro(status: unknown) {
     >
       <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
         <v-text-field
+          v-if="ehCaixaParaCofre"
+          :model-value="confirmando?.contaDestinoNome || 'Cofre'"
+          label="Conta que recebe"
+          readonly
+          data-teste="conferencia-conta"
+        />
+        <v-text-field
+          v-else
           v-model="campos.contaDestinoId"
           label="ID da conta que recebeu (vazio = conta de destino)"
           data-teste="conferencia-conta"

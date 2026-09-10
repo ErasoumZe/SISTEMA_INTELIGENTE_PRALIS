@@ -1909,6 +1909,7 @@ const pageContext = computed(() => ({
   },
   atualizarPaginaOperacoes,
   recarregarOperacoes: carregarOperacoes,
+  notificar,
   atualizarDiaEntradas,
   abrirCaixaOperacional,
   retornarSaldoOperacional,
