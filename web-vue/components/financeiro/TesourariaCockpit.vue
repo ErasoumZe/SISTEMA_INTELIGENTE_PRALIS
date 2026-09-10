@@ -579,12 +579,14 @@ function atualizarStatusFiltro(status: unknown) {
   border-bottom: 0;
 }
 .tes-row-head {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 800;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.55px;
   text-transform: uppercase;
-  color: var(--shell-ink-soft, #64748b);
-  background: color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 5%, #fff);
+  color: #111827;
+  background: #f8fafc;
+  border-top: 1px solid #d7dde5;
+  border-bottom-color: #cbd5e1;
 }
 .tes-status-chip {
   display: inline-flex;
@@ -617,10 +619,10 @@ function atualizarStatusFiltro(status: unknown) {
 .tes-filtros {
   display: flex;
   justify-content: flex-end;
-  padding: 14px 16px 4px;
+  padding: 18px 16px 14px;
 }
 .tes-filtros :deep(.v-input) {
-  width: min(100%, 270px);
+  width: 100%;
 }
 .tes-data {
   font-size: 13px;
@@ -716,6 +718,9 @@ function atualizarStatusFiltro(status: unknown) {
   }
 }
 @media (width <= 768px) {
+  .tes-filtros {
+    padding: 14px 12px 12px;
+  }
   .tes-cards {
     grid-template-columns: 1fr;
   }
