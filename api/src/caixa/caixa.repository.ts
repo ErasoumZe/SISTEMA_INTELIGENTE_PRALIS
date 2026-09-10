@@ -290,7 +290,8 @@ export async function criarCaixaRepository(
       turnoId: input.turnoId,
       dataMovimento: diaNegocio(input.dataHoraAbertura),
       dataHoraAbertura: input.dataHoraAbertura,
-      abertoEm: new Date(),
+      // R-184: horario operacional e carimbo de auditoria usam o mesmo instante do servidor.
+      abertoEm: input.dataHoraAbertura,
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
       lacreAbertura: input.lacreAbertura ?? null,

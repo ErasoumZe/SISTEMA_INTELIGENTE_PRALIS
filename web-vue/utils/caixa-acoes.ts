@@ -3,7 +3,6 @@
 // testavel com fakes, sem runtime Nuxt. O componente injeta as dependencias reais.
 import type { DadosExternos } from "@padaria/shared";
 import { dinheiro } from "~/utils/domain";
-import { dataHoraParaUtc } from "~/utils/formatacao";
 
 type PortApi = {
   post: <T>(rota: string, body: DadosExternos) => Promise<T>;
@@ -26,7 +25,6 @@ export type AberturaCaixaPayload = {
   usuarioCaixaId: string;
   turnoId?: string | null;
   maquininhaId?: string | null;
-  dataHoraAbertura: string;
   observacao: string | null;
 };
 // D6: `lacreRetorno` e o lacre do retorno FINAL, criado pelo proprio fechamento quando ainda ha
@@ -64,8 +62,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       // /abrir responde o id criado (nao CaixaStatus); re-busca o status canonico.
       await deps.api.post("/api/caixa/abrir", {
         empresaId: deps.empresaId(),
-        ...payload,
-        dataHoraAbertura: dataHoraParaUtc(payload.dataHoraAbertura)
+        ...payload
       });
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();

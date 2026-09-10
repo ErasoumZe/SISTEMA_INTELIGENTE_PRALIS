@@ -300,7 +300,7 @@ describe("caixa integration", () => {
     assertProblem(abrir, 403);
   });
 
-  it("Deve_AbrirEEditarCaixa_Quando_PdvDisponivel", async () => {
+  it("Deve_AbrirComHorarioDoServidorEEditarCaixa_Quando_PdvDisponivel", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
     const conta = await contexto.app.inject({
       method: "POST",
@@ -319,6 +319,7 @@ describe("caixa integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
+    const antesDaAbertura = new Date();
     const abrir = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -327,10 +328,13 @@ describe("caixa integration", () => {
         empresaId: idsTeste.empresaA,
         pdvId,
         usuarioCaixaId: usuarioAdminId,
+        // R-184: tentativa deliberada de forjar uma abertura antiga. O schema descarta este campo
+        // legado e o servico precisa persistir o instante atual do servidor.
         dataHoraAbertura: "2026-01-15T10:43",
         observacao: "Caixa aberto por teste"
       }
     });
+    const depoisDaAbertura = new Date();
     expect(abrir.statusCode).toBe(201);
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
     const statusAposAbertura = await contexto.app.inject({
@@ -339,15 +343,16 @@ describe("caixa integration", () => {
       headers: { cookie: cookieAdmin }
     });
     assertOk(statusAposAbertura);
-    expect(statusAposAbertura.json()).toMatchObject({
-      data: { caixaAberto: { id: caixaId, dataHoraAbertura: "2026-01-15T10:43:00.000Z" } }
-    });
-    const token = await consultarUm<{ token_edicao: string; data_hora_abertura: Date }>(
-      "select token_edicao, data_hora_abertura from fechamentos_caixa where id = $1",
+    expect(statusAposAbertura.json()).toMatchObject({ data: { caixaAberto: { id: caixaId } } });
+    const token = await consultarUm<{ token_edicao: string; data_hora_abertura: Date; aberto_em: Date }>(
+      "select token_edicao, data_hora_abertura, aberto_em from fechamentos_caixa where id = $1",
       [caixaId]
     );
     expect(token?.token_edicao).toBeTruthy();
-    expect(new Date(token?.data_hora_abertura ?? 0).toISOString()).toBe("2026-01-15T10:43:00.000Z");
+    const instantePersistido = new Date(token?.data_hora_abertura ?? 0);
+    expect(instantePersistido.getTime()).toBeGreaterThanOrEqual(antesDaAbertura.getTime());
+    expect(instantePersistido.getTime()).toBeLessThanOrEqual(depoisDaAbertura.getTime());
+    expect(new Date(token?.aberto_em ?? 0).getTime()).toBe(instantePersistido.getTime());
 
     const editar = await contexto.app.inject({
       method: "PUT",

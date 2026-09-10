@@ -320,7 +320,9 @@ export async function resolverEscopoEntradasDoDia(
 
 export async function abrirCaixa(dados: AbrirCaixaPayload, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, dados.empresaId)) throw new Error("Empresa nao permitida");
-  const dataHoraAbertura = dataObrigatoria(dados.dataHoraAbertura, "Data de abertura");
+  // R-184: o instante nasce no servidor. Aceitar um horario do navegador permitiria ao operador
+  // abrir o Caixa fora da janela real do CREARE e mudaria quais vendas pertencem ao turno.
+  const dataHoraAbertura = new Date();
 
   try {
     return await abrirCaixaEmTransacao(dados, perfil, dataHoraAbertura);

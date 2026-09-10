@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { criarAcoesCaixa, type DepsAcoesCaixa } from "./caixa-acoes";
-import { dataHoraParaUtc } from "./formatacao";
 
 // Fakes das dependencias injetadas: a factory nao toca Nuxt/refs, entao testa-se so a orquestracao
 // (endpoint certo, re-fetch de status, notificacao, reset do "salvando", confirmacao do acerto).
@@ -21,7 +20,7 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
 }
 
 describe("abrirCaixaOperacional", () => {
-  const payload = { pdvId: "pdv-1", usuarioCaixaId: "u-1", dataHoraAbertura: "2026-07-03T08:00", observacao: null };
+  const payload = { pdvId: "pdv-1", usuarioCaixaId: "u-1", observacao: null };
 
   it("posta em /abrir com empresaId, re-busca status, recarrega tela, notifica e retorna true", async () => {
     const deps = montarDeps();
@@ -31,8 +30,7 @@ describe("abrirCaixaOperacional", () => {
     expect(ok).toBe(true);
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/abrir", {
       empresaId: "emp-1",
-      ...payload,
-      dataHoraAbertura: dataHoraParaUtc(payload.dataHoraAbertura)
+      ...payload
     });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.carregarDadosTela).toHaveBeenCalledWith("caixa", "emp-1");

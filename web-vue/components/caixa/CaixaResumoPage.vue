@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
-import { dataHoraLocal, formatarDataHora } from "~/utils/formatacao";
+import { formatarDataHora } from "~/utils/formatacao";
 import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
@@ -29,7 +29,6 @@ const emit = defineEmits<{
       turnoId?: string | null;
       maquininhaId?: string | null;
       lacreAbertura?: string | null;
-      dataHoraAbertura: string;
       observacao: string | null;
     }
   ): void;
@@ -53,8 +52,7 @@ const emit = defineEmits<{
 
 const abertura = reactive({
   pdvId: "",
-  turnoId: "",
-  dataHoraAbertura: dataHoraLocal()
+  turnoId: ""
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
@@ -192,7 +190,6 @@ function abrir() {
     turnoId: abertura.turnoId || null,
     maquininhaId: aberturaExtra.maquininhaId || null,
     lacreAbertura: aberturaExtra.numeroLacre || null,
-    dataHoraAbertura: abertura.dataHoraAbertura,
     observacao: null
   });
 }
@@ -312,13 +309,15 @@ function fechar() {
           </v-col>
         </v-row>
 
-        <!-- Campos que o backend exige para abrir (fora do desenho enxuto): data/hora + usuário. -->
+        <!-- R-184: o operador nao escolhe o instante. A API registra o relogio do servidor no
+             clique; mostrar um datetime editavel aqui criava duas verdades para a abertura. -->
         <v-row dense class="mt-2">
           <v-col cols="12" md="6">
             <v-text-field
-              v-model="abertura.dataHoraAbertura"
-              type="datetime-local"
+              model-value="Registrada automaticamente ao abrir"
               label="Data e hora de abertura"
+              prepend-inner-icon="mdi-clock-check-outline"
+              readonly
               density="comfortable"
             />
           </v-col>

@@ -17,7 +17,8 @@ export const abrirCaixaPayloadSchema = z.object({
   empresaId: uuidSchema,
   pdvId: uuidSchema,
   usuarioCaixaId: z.string().min(1),
-  dataHoraAbertura: dataHoraSchema,
+  // R-184: a abertura usa exclusivamente o relogio do servidor no instante do POST. O cliente
+  // nao envia data/hora e, por isso, nao consegue retroagir ou antecipar o inicio do turno.
   // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
   turnoId: uuidSchema.optional().nullable(),
   // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
