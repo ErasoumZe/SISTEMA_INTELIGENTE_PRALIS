@@ -28,6 +28,7 @@ export async function listarTransferenciasRepository(
 ): Promise<TransferenciaDto[]> {
   const filtros = filtrosEmpresa(transferencias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(transferencias.caixaId, query.caixaId));
+  if (query.status) filtros.push(eq(transferencias.status, query.status));
   const origem = alias(contas, "conta_origem");
   const destino = alias(contas, "conta_destino");
   const linhas = await banco

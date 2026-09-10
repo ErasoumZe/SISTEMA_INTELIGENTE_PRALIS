@@ -4,6 +4,7 @@
 // aqui so ha funcao PURA — quem guarda estado e o componente. O que estas funcoes decidem e o
 // recorte da consulta: qual dia, qual pagina e quem pode trocar de dia.
 import { temPermissao, type Permissao } from "@padaria/shared";
+import type { StatusTransferencia } from "@padaria/shared/transferencias";
 import { permissaoMenuSomenteCaixaAberto } from "~/utils/domain";
 
 // 50 por pagina. A paginacao virou consulta de verdade (servidor) e nao mais um slice em memoria,
@@ -64,6 +65,8 @@ export type FiltroListagemOperacoes = {
   caixaId?: string;
   /** Dia "yyyy-MM-dd" da tela de Entradas. Vazio nas demais telas, que nao recortam por dia. */
   dia?: string;
+  /** Estado da Tesouraria. E aplicado pela API antes de paginar, nunca em memoria. */
+  statusTransferencia?: StatusTransferencia | "";
   tamanhoPagina?: number;
 };
 
@@ -85,6 +88,7 @@ export function paramsListagemOperacoes(filtro: FiltroListagemOperacoes): URLSea
     params.set("dataInicio", filtro.dia);
     params.set("dataFim", filtro.dia);
   }
+  if (filtro.statusTransferencia) params.set("status", filtro.statusTransferencia);
   params.set("page", String(Math.max(1, filtro.pagina)));
   params.set("pageSize", String(filtro.tamanhoPagina ?? TAMANHO_PAGINA_OPERACOES));
   return params;

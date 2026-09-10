@@ -80,6 +80,7 @@ import {
   podeConsultarOutrosDias,
   totalPaginasOperacoes as calcularTotalPaginasOperacoes
 } from "~/utils/entradas";
+import type { StatusTransferencia } from "@padaria/shared/transferencias";
 import { corMenuTela } from "~/utils/tema";
 import { criarAcoesTema } from "~/utils/tema-acoes";
 import { criarAcoesCaixa } from "~/utils/caixa-acoes";
@@ -239,6 +240,9 @@ const copiaEmpresaDestinoId = ref("");
 const copiaSalvando = ref(false);
 
 const paginaOperacoes = ref(1);
+// O filtro pertence so a Transferencias. O servidor o recebe para que o total, a paginacao e as
+// linhas sejam do mesmo conjunto — nao uma pagina filtrada pela metade no navegador.
+const filtroStatusTransferencia = ref<StatusTransferencia | "">("");
 const totalOperacoes = ref(0);
 // Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda — so Entradas manda.
 const totalLiquidoOperacoes = ref<number | null>(null);
@@ -443,6 +447,7 @@ watch(filtroPendentesDiscriminacao, () => {
 });
 watch(telaAtiva, () => {
   filtroPendentesDiscriminacao.value = false;
+  if (telaAtiva.value !== "transferencias") filtroStatusTransferencia.value = "";
   mostrarAprovacaoMercadorias.value = false;
 });
 // Ao abrir a fila de aprovacao de NF-e, busca os cabecalhos aguardando (visao independente do caixa).
@@ -939,7 +944,8 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
     pagina: paginaOperacoes.value,
     pendenteDiscriminacao: pendentes,
     caixaId,
-    dia: telaAtiva.value === "entradas" ? diaEntradas.value : ""
+    dia: telaAtiva.value === "entradas" ? diaEntradas.value : "",
+    statusTransferencia: telaAtiva.value === "transferencias" ? filtroStatusTransferencia.value : ""
   });
   const pagina = await apiGetPaginado<OperacaoResumo, { totalLiquido?: number }>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
@@ -1786,6 +1792,13 @@ function atualizarPaginaOperacoes(pagina: number) {
   void carregarOperacoes();
 }
 
+function atualizarFiltroStatusTransferencia(status: StatusTransferencia | "") {
+  if (status === filtroStatusTransferencia.value) return;
+  filtroStatusTransferencia.value = status;
+  paginaOperacoes.value = 1;
+  void carregarOperacoes();
+}
+
 // Filtro de data das Entradas (S6). Trocar o dia recomeca na pagina 1: a pagina 4 do dia anterior
 // nao tem relacao com o dia novo e voltaria uma lista vazia.
 function atualizarDiaEntradas(dia: string) {
@@ -1825,12 +1838,14 @@ const pageContext = computed(() => ({
   // do topo e o controle de paginas usam. Antes era operacoesDaTela.length, que com a paginacao
   // falsa dava sempre no maximo 10.
   totalOperacoes: totalOperacoes.value,
+  filtroStatusTransferencia: filtroStatusTransferencia.value,
   totalLiquidoOperacoes: totalLiquidoOperacoes.value,
   // Filtro de data das Entradas (S6): o dia listado e se o perfil pode trocar de dia.
   diaEntradas: diaEntradas.value,
   podeConsultarOutrosDiasEntradas: podeConsultarOutrosDiasEntradas.value,
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
+  atualizarFiltroStatusTransferencia,
   descricao: descricaoTela(telaAtiva.value),
   // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
   podeCriarTransferencia: temPermissao("transferencias_criar"),

@@ -17,6 +17,7 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       :operacoes-paginadas="ctx.operacoesPaginadas"
       :operacoes-tela="ctx.operacoesTela"
       :total-operacoes="ctx.totalOperacoes"
+      :status-filtro="ctx.filtroStatusTransferencia"
       :pagina="ctx.paginaOperacoes"
       :total-paginas="ctx.totalPaginasOperacoes"
       :pode-criar="ctx.podeCriarTransferencia"
@@ -25,6 +26,7 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       @nova="ctx.abrirOperacao('transferencia')"
       @editar="(op) => ctx.abrirOperacao('transferencia', op)"
       @update:pagina="ctx.atualizarPaginaOperacoes"
+      @update:status-filtro="ctx.atualizarFiltroStatusTransferencia"
       @recarregar="ctx.recarregarOperacoes"
     />
   </AppWorkspace>

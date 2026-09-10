@@ -109,6 +109,27 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
     );
   }
 
+  it("filtra transferencias por status no banco antes de paginar", async () => {
+    const { movimentoId } = await entregaPendente("filtro-status", "2026-07-01T08:00", 100, "FILTRO-STATUS");
+
+    const pendentes = await contexto.app.inject({
+      method: "GET",
+      url: `/api/transferencias?empresaId=${empresaId}&status=pendente&pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(pendentes);
+    const itensPendentes = json<{ data: { id: string; status: string }[] }>(pendentes).data;
+    expect(itensPendentes).toContainEqual(expect.objectContaining({ id: movimentoId, status: "pendente" }));
+
+    const recebidas = await contexto.app.inject({
+      method: "GET",
+      url: `/api/transferencias?empresaId=${empresaId}&status=recebido&pageSize=100`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(recebidas);
+    expect(json<{ data: { id: string }[] }>(recebidas).data.map((item) => item.id)).not.toContain(movimentoId);
+  });
+
   it("confirmar entrega do Caixa sem informar o valor recebido e recusado", async () => {
     const { movimentoId } = await entregaPendente("conf-sem-valor", "2026-07-01T08:00", 100, "REC-SEM-VALOR");
 

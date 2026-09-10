@@ -5,11 +5,19 @@ const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
 export const tempoConfirmacaoSchema = z.enum(["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"]);
 export type TempoConfirmacao = z.infer<typeof tempoConfirmacaoSchema>;
+// Um unico vocabulario para estado gravado, consulta e apresentacao. A lista de filtros da
+// Tesouraria nao pode aceitar um status que o banco nunca devolvera (nem deixar de oferecer um
+// status novo quando ele for acrescentado aqui).
+export const statusTransferenciaSchema = z.enum(["pendente", "recebido", "agendada", "cancelada", "divergente"]);
+export type StatusTransferencia = z.infer<typeof statusTransferenciaSchema>;
 
 export const transferenciasQuerySchema = z
   .object({
     empresaId: uuidSchema.optional(),
-    caixaId: uuidSchema.optional()
+    caixaId: uuidSchema.optional(),
+    // Filtro aplicado no banco antes da paginacao. Filtrar so as linhas ja visiveis esconderia
+    // resultados das outras paginas e daria ao operador uma lista incompleta.
+    status: statusTransferenciaSchema.optional()
   })
   .merge(paginationQuerySchema);
 
@@ -42,7 +50,7 @@ export const transferenciaDtoSchema = z.object({
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),
-  status: z.enum(["pendente", "recebido", "agendada", "cancelada", "divergente"]),
+  status: statusTransferenciaSchema,
   // R-183: o que o cofre contou. Null em tudo que nao e `divergente` — quem soma ENTRADA usa
   // este numero, senao o cockpit exibiria como recebido um valor que nunca chegou.
   valorRecebido: z.number().nullable(),

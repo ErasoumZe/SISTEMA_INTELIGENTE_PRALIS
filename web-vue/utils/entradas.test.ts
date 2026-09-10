@@ -114,6 +114,12 @@ describe("paramsListagemOperacoes", () => {
     expect(params.get("caixaId")).toBe("c1");
   });
 
+  it("manda o status da Tesouraria para o servidor antes da paginacao", () => {
+    const params = paramsListagemOperacoes({ empresaId: "e1", pagina: 2, statusTransferencia: "divergente" });
+    expect(params.get("status")).toBe("divergente");
+    expect(params.get("page")).toBe("2");
+  });
+
   it("a fila de pendencias ignora caixa E dia — e visao de retaguarda", () => {
     const params = paramsListagemOperacoes({
       empresaId: "e1",

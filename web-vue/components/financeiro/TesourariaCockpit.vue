@@ -7,6 +7,7 @@
 //
 // A lista recebe da API o trajeto nominal, lacre, estado e data de recebimento.
 import { transferenciaContaComoEntrada, transferenciaContaComoSaida, valorEntradaCentavos } from "@padaria/shared";
+import { statusTransferenciaSchema, type StatusTransferencia } from "@padaria/shared/transferencias";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
@@ -27,6 +28,7 @@ const props = withDefaults(
     operacoesPaginadas: OperacaoResumo[];
     operacoesTela: OperacaoResumo[];
     totalOperacoes: number;
+    statusFiltro: StatusTransferencia | "";
     pagina: number;
     totalPaginas: number;
     podeCriar?: boolean;
@@ -41,6 +43,7 @@ const emit = defineEmits<{
   (event: "nova"): void;
   (event: "editar", operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
+  (event: "update:status-filtro", status: StatusTransferencia | ""): void;
   (event: "recarregar"): void;
 }>();
 const { apiPost } = useApi();
@@ -176,6 +179,35 @@ const entrada = computed(() =>
     .reduce((total, op) => total + valorQueEntrou(op), 0)
 );
 const saldo = computed(() => entrada.value - saida.value);
+
+const rotulosStatus: Record<StatusTransferencia, string> = {
+  pendente: "Pendente",
+  recebido: "Recebido",
+  agendada: "Agendada",
+  cancelada: "Cancelada",
+  divergente: "Divergente"
+};
+const opcoesStatus = [
+  { title: "Todos os status", value: "" },
+  ...statusTransferenciaSchema.options.map((status) => ({ title: rotulosStatus[status], value: status }))
+];
+
+function rotuloStatus(status: string): string {
+  return rotulosStatus[status as StatusTransferencia] ?? status;
+}
+
+function iconeStatus(status: string): string {
+  if (status === "recebido") return "mdi-check-circle-outline";
+  if (status === "divergente") return "mdi-alert-circle-outline";
+  if (status === "cancelada") return "mdi-close-circle-outline";
+  if (status === "agendada") return "mdi-calendar-clock-outline";
+  return "mdi-clock-outline";
+}
+
+function atualizarStatusFiltro(status: unknown) {
+  const resultado = statusTransferenciaSchema.safeParse(status);
+  emit("update:status-filtro", resultado.success ? resultado.data : "");
+}
 </script>
 
 <template>
@@ -225,6 +257,19 @@ const saldo = computed(() => entrada.value - saida.value);
 
     <!-- Lista limpa das transferencias do periodo -->
     <v-card class="tes-list-card" rounded="lg" elevation="1">
+      <div class="tes-filtros">
+        <v-select
+          :model-value="statusFiltro"
+          :items="opcoesStatus"
+          label="Filtrar por status"
+          density="compact"
+          variant="outlined"
+          hide-details
+          prepend-inner-icon="mdi-filter-variant"
+          aria-label="Filtrar transferências por status"
+          @update:model-value="atualizarStatusFiltro"
+        />
+      </div>
       <div class="tes-list" role="table" aria-label="Transferências do período">
         <div class="tes-row tes-row-head" role="row">
           <span>Confirmação</span>
@@ -239,9 +284,9 @@ const saldo = computed(() => entrada.value - saida.value);
         <div v-for="op in operacoesPaginadas" :key="op.id" class="tes-row" role="row">
           <!-- Confirmacao: sem backend de confirmacao nesta branch -> somente leitura + regra. -->
           <span class="tes-conf" data-col="Confirmação">
-            <span class="tes-status-chip">
-              <v-icon :icon="op.status === 'recebido' ? 'mdi-check-circle-outline' : 'mdi-clock-outline'" size="13" />
-              {{ op.status }}
+            <span class="tes-status-chip" :data-status="op.status">
+              <v-icon :icon="iconeStatus(op.status)" size="13" />
+              {{ rotuloStatus(op.status) }}
             </span>
           </span>
           <span class="tes-data" data-col="Data">{{ formatarDataSomenteDia(op.dataReferencia) }}</span>
@@ -544,8 +589,33 @@ const saldo = computed(() => entrada.value - saida.value);
   padding: 3px 9px;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--shell-ink-soft, #64748b);
-  background: #f1f5f9;
+  /* Os chips tem fundo claro inclusive no modo escuro: texto escuro e a unica combinacao legivel. */
+  color: #111827;
+  background: #e2e8f0;
+}
+.tes-status-chip[data-status="pendente"] {
+  background: #fde68a;
+}
+.tes-status-chip[data-status="recebido"] {
+  background: #bbf7d0;
+}
+.tes-status-chip[data-status="agendada"] {
+  background: #bfdbfe;
+}
+.tes-status-chip[data-status="cancelada"] {
+  background: #fecaca;
+}
+.tes-status-chip[data-status="divergente"] {
+  color: #111827;
+  background: #fdba74;
+}
+.tes-filtros {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 16px 4px;
+}
+.tes-filtros :deep(.v-input) {
+  width: min(100%, 270px);
 }
 .tes-data {
   font-size: 13px;
