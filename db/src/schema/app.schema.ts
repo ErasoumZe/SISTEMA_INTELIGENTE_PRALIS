@@ -1937,6 +1937,9 @@ export const fechamentosCaixa = pgTable(
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)
       .where(sql`${table.status} = 'aberto'`),
+    uniqueIndex("fechamentos_caixa_operador_aberto_unico_idx")
+      .on(table.empresaId, table.usuarioCaixaId)
+      .where(sql`${table.status} = 'aberto' and ${table.usuarioCaixaId} is not null`),
     index("fechamentos_caixa_empresa_data_idx").on(table.empresaId, table.dataMovimento)
   ]
 );

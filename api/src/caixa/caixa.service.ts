@@ -78,23 +78,29 @@ import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
-const indiceCaixaAbertoUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
+const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
+const indiceCaixaAbertoPdvUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
+const indiceCaixaAbertoOperadorUnico = "fechamentos_caixa_operador_aberto_unico_idx";
 
 type CaixaLinha = NonNullable<Awaited<ReturnType<typeof buscarCaixaPorIdRepository>>>;
 
 // Duas aberturas simultaneas do mesmo PDV podem passar pelos pre-checks; o indice unico
 // parcial do banco decide o vencedor e o perdedor recebe o mesmo erro do caminho sequencial.
-function ehViolacaoCaixaAbertoUnico(error: Error): boolean {
+function indiceUnicoViolado(error: Error): string | undefined {
   const candidatos = [error, error.cause instanceof Error ? error.cause : null];
-  return candidatos.some((atual) => {
-    if (!atual) return false;
+  for (const atual of candidatos) {
+    if (!atual) continue;
     const detalhes = atual as Error & { code?: string; constraint?: string };
-    return detalhes.code === "23505" && detalhes.constraint === indiceCaixaAbertoUnico;
-  });
+    if (detalhes.code === "23505") return detalhes.constraint;
+  }
+  return undefined;
 }
 
 function traduzirErroAberturaCaixa(error: Error): Error {
-  return ehViolacaoCaixaAbertoUnico(error) ? new Error(erroPeriodo) : error;
+  const indice = indiceUnicoViolado(error);
+  if (indice === indiceCaixaAbertoOperadorUnico) return new Error(erroOperadorComCaixaAberto);
+  if (indice === indiceCaixaAbertoPdvUnico) return new Error(erroPeriodo);
+  return error;
 }
 
 function gerarTokenEdicao() {
@@ -403,6 +409,13 @@ async function abrirCaixaEmTransacao(
     if (!usuarioCaixa) throw new Error("Usuario do caixa nao encontrado");
     const colaborador = await buscarColaboradorPorUsuarioRepository(dados.usuarioCaixaId, dados.empresaId, tx);
     if (!colaborador) throw new Error("Usuario do caixa precisa estar vinculado a colaborador da empresa");
+    // Um operador representa uma unica gaveta sob responsabilidade. Sem esta guarda, o status
+    // escolhia o caixa aberto mais recente e, ao fecha-lo, parecia "abrir" silenciosamente outro
+    // caixa antigo do mesmo usuario. O indice parcial no banco e a barreira contra concorrencia;
+    // esta leitura antecipa uma mensagem operacional clara no fluxo comum.
+    if (await buscarCaixaAbertoUsuarioRepository(dados.empresaId, dados.usuarioCaixaId, tx)) {
+      throw new Error(erroOperadorComCaixaAberto);
+    }
     if (await existeCaixaAbertoPdvRepository(dados.pdvId, undefined, tx)) throw new Error(erroPeriodo);
     if (await existePeriodoCaixaRepository(dados.pdvId, dataHoraAbertura, undefined, tx)) throw new Error(erroPeriodo);
     if (dados.maquininhaId && !(await buscarMaquininhaEmpresaRepository(dados.maquininhaId, dados.empresaId, tx))) {

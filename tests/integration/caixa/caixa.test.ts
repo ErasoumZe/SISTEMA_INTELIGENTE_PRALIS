@@ -28,10 +28,14 @@ async function usuarioIdPorEmail(email: string) {
 describe("caixa integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieCaixa: string;
+  let cookieMultiempresa: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieCaixa = await cookieSessao(contexto.app, "caixa");
+    cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
   }, 120_000);
 
   afterAll(async () => {
@@ -47,6 +51,36 @@ describe("caixa integration", () => {
 
     assertOk(resposta);
     expect(resposta.json()).toMatchObject({ data: { caixaAberto: { id: idsTeste.caixaAberto, status: "aberto" } } });
+  });
+
+  it("Deve_RecusarSegundoCaixaAberto_Quando_OperadorJaTemOutroPdv", async () => {
+    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        pdvId: idsTeste.pdvLivre,
+        usuarioCaixaId: usuarioAdminId,
+        observacao: "Segundo caixa do mesmo operador"
+      }
+    });
+
+    assertProblem(resposta, 400);
+    expect(resposta.json()).toMatchObject({ title: "Usuário do caixa ja possui um caixa aberto" });
+
+    const violacao = await executarSql(
+      `insert into fechamentos_caixa
+         (id, empresa_id, pdv_id, usuario_id, usuario_caixa_id, colaborador_id, data_movimento, status)
+       values ($1, $2, $3, $4, $4, $5, '2026-09-11', 'aberto')`,
+      [randomUUID(), idsTeste.empresaA, idsTeste.pdvLivre, usuarioAdminId, idsTeste.colaboradorAdmin]
+    )
+      .then(() => null)
+      .catch((error: Error & { code?: string; constraint?: string }) => error);
+
+    expect(violacao?.code).toBe("23505");
+    expect(violacao?.constraint).toBe("fechamentos_caixa_operador_aberto_unico_idx");
   });
 
   it("Deve_ListarHistoricoEFechamentoSeedado_Quando_UsuarioPodeGerenciar", async () => {
@@ -301,7 +335,7 @@ describe("caixa integration", () => {
   });
 
   it("Deve_AbrirComHorarioDoServidorERecusarRotaLegada_Quando_PdvDisponivel", async () => {
-    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+    const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
@@ -327,7 +361,7 @@ describe("caixa integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId,
-        usuarioCaixaId: usuarioAdminId,
+        usuarioCaixaId,
         // R-184: tentativa deliberada de forjar uma abertura antiga. O schema descarta este campo
         // legado e o servico precisa persistir o instante atual do servidor.
         dataHoraAbertura: "2026-01-15T10:43",
@@ -340,7 +374,7 @@ describe("caixa integration", () => {
     const statusAposAbertura = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
-      headers: { cookie: cookieAdmin }
+      headers: { cookie: cookieCaixa }
     });
     assertOk(statusAposAbertura);
     expect(statusAposAbertura.json()).toMatchObject({ data: { caixaAberto: { id: caixaId } } });
@@ -404,8 +438,8 @@ describe("caixa integration", () => {
     assertProblem(fecharFechado, 400);
   });
 
-  it("Deve_Retornar400_Quando_AbrirCaixaComPdvInvalidoOuPeriodoIndisponivel", async () => {
-    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+  it("Deve_Retornar400_Quando_AbrirCaixaComPdvInvalidoOuOcupado", async () => {
+    const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
     const pdvInvalido = await contexto.app.inject({
       method: "POST",
       url: "/api/caixa/abrir",
@@ -413,7 +447,7 @@ describe("caixa integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId: "99999999-9999-4999-8999-999999999999",
-        usuarioCaixaId: usuarioAdminId,
+        usuarioCaixaId,
         dataHoraAbertura: "2026-07-03T08:00"
       }
     });
@@ -424,29 +458,20 @@ describe("caixa integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId: idsTeste.pdvA,
-        usuarioCaixaId: usuarioAdminId,
+        usuarioCaixaId,
         dataHoraAbertura: "2026-07-03T08:00"
-      }
-    });
-    const periodoSobreposto = await contexto.app.inject({
-      method: "POST",
-      url: "/api/caixa/abrir",
-      headers: { cookie: cookieAdmin },
-      payload: {
-        empresaId: idsTeste.empresaA,
-        pdvId: idsTeste.pdvLivre,
-        usuarioCaixaId: usuarioAdminId,
-        dataHoraAbertura: "2026-06-29T10:00"
       }
     });
 
     assertProblem(pdvInvalido, 400);
     assertProblem(pdvJaAberto, 400);
-    assertProblem(periodoSobreposto, 400);
+    expect(json<{ title: string }>(pdvInvalido).title).toMatch(/PDV.*encontrado/i);
+    expect(json<{ title: string }>(pdvJaAberto).title).toMatch(/abertura.*outro caixa/i);
   });
 
   it("Deve_AbrirApenasUmCaixa_Quando_AberturasConcorremNoMesmoPdv", async () => {
-    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+    const usuarioCaixaId = await usuarioIdPorEmail(usuariosTeste.caixa.email);
+    const usuarioGerenteId = await usuarioIdPorEmail(usuariosTeste.gerente.email);
     const conta = await contexto.app.inject({
       method: "POST",
       url: "/api/contas",
@@ -464,7 +489,7 @@ describe("caixa integration", () => {
     expect(pdv.statusCode).toBe(201);
     const pdvId = json<{ data: { id: string } }>(pdv).data.id;
 
-    const abertura = (observacao: string) =>
+    const abertura = (usuarioCaixaId: string, observacao: string) =>
       contexto.app.inject({
         method: "POST",
         url: "/api/caixa/abrir",
@@ -472,13 +497,16 @@ describe("caixa integration", () => {
         payload: {
           empresaId: idsTeste.empresaA,
           pdvId,
-          usuarioCaixaId: usuarioAdminId,
+          usuarioCaixaId,
           dataHoraAbertura: "2026-02-10T08:00",
           observacao
         }
       });
 
-    const [primeira, segunda] = await Promise.all([abertura("Abertura A"), abertura("Abertura B")]);
+    const [primeira, segunda] = await Promise.all([
+      abertura(usuarioCaixaId, "Abertura A"),
+      abertura(usuarioGerenteId, "Abertura B")
+    ]);
 
     const statuses = [primeira.statusCode, segunda.statusCode].sort();
     expect(statuses).toEqual([201, 400]);
@@ -498,6 +526,70 @@ describe("caixa integration", () => {
       .catch((error: Error & { code?: string; constraint?: string }) => error);
     expect(violacao?.code).toBe("23505");
     expect(violacao?.constraint).toBe("fechamentos_caixa_pdv_aberto_unico_idx");
+
+    const caixaAberto = await consultarUm<{ id: string }>(
+      "select id from fechamentos_caixa where pdv_id = $1 and status = 'aberto'",
+      [pdvId]
+    );
+    const fechar = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixaAberto?.id}/fechar`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Limpeza do teste de concorrencia por PDV" }
+    });
+    expect(fechar.statusCode, fechar.body).toBe(204);
+  });
+
+  it("Deve_AbrirApenasUmCaixa_Quando_MesmoOperadorConcorreEmPdvsDiferentes", async () => {
+    const usuarioGerenteId = await usuarioIdPorEmail(usuariosTeste.gerente.email);
+
+    const criarPdv = async (sufixo: string) => {
+      const conta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/contas",
+        headers: { cookie: cookieAdmin },
+        payload: { empresaId: idsTeste.empresaA, nome: `Conta operador concorrente ${sufixo}` }
+      });
+      expect(conta.statusCode, conta.body).toBe(201);
+      const contaId = json<{ data: { id: string } }>(conta).data.id;
+      const pdv = await contexto.app.inject({
+        method: "POST",
+        url: "/api/pdvs",
+        headers: { cookie: cookieAdmin },
+        payload: { empresaId: idsTeste.empresaA, nome: `PDV operador concorrente ${sufixo}`, contaId, ativo: true }
+      });
+      expect(pdv.statusCode, pdv.body).toBe(201);
+      return json<{ data: { id: string } }>(pdv).data.id;
+    };
+
+    const [pdvA, pdvB] = await Promise.all([criarPdv("A"), criarPdv("B")]);
+    const abrir = (pdvId: string) =>
+      contexto.app.inject({
+        method: "POST",
+        url: "/api/caixa/abrir",
+        headers: { cookie: cookieAdmin },
+        payload: { empresaId: idsTeste.empresaA, pdvId, usuarioCaixaId: usuarioGerenteId }
+      });
+
+    const respostas = await Promise.all([abrir(pdvA), abrir(pdvB)]);
+    expect(respostas.map((resposta) => resposta.statusCode).sort()).toEqual([201, 400]);
+    const perdedor = respostas.find((resposta) => resposta.statusCode === 400);
+    expect(perdedor?.json()).toMatchObject({ title: "Usuário do caixa ja possui um caixa aberto" });
+
+    const aberto = await consultarUm<{ id: string; total: number }>(
+      `select min(id::text) as id, count(*)::int as total
+       from fechamentos_caixa
+       where empresa_id = $1 and usuario_caixa_id = $2 and status = 'aberto'`,
+      [idsTeste.empresaA, usuarioGerenteId]
+    );
+    expect(aberto?.total).toBe(1);
+    const fechar = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${aberto?.id}/fechar`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Limpeza do teste de concorrencia por operador" }
+    });
+    expect(fechar.statusCode, fechar.body).toBe(204);
   });
 
   // D6 substituiu a regra antiga ("fechar com saldo positivo e barrado, 400"): hoje o fechamento
@@ -540,6 +632,7 @@ describe("caixa integration", () => {
   });
 
   it("Deve_CalcularSaldoRetornarAoCofreEFechar_Quando_CicloOperacionalCompleto", async () => {
+    const usuarioOperadorId = await usuarioIdPorEmail(usuariosTeste.multiempresa.email);
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
 
     const conta = await contexto.app.inject({
@@ -566,7 +659,7 @@ describe("caixa integration", () => {
       payload: {
         empresaId: idsTeste.empresaA,
         pdvId,
-        usuarioCaixaId: usuarioAdminId,
+        usuarioCaixaId: usuarioOperadorId,
         dataHoraAbertura: "2026-03-01T08:00",
         observacao: "Ciclo operacional"
       }
@@ -590,7 +683,7 @@ describe("caixa integration", () => {
           valorOriginal: 100,
           contaOrigemId: contaPdvId,
           pdvId,
-          colaboradorId: idsTeste.colaboradorAdmin,
+          colaboradorId: idsTeste.colaboradorMultiempresa,
           itensVenda: [
             {
               produtoId: idsTeste.produto,
@@ -675,7 +768,7 @@ describe("caixa integration", () => {
       const resposta = await contexto.app.inject({
         method: "POST",
         url: lancamento.url,
-        headers: { cookie: cookieAdmin },
+        headers: { cookie: cookieMultiempresa },
         payload: lancamento.payload
       });
       expect(resposta.statusCode, `${lancamento.url}: ${resposta.body}`).toBe(201);
@@ -688,7 +781,7 @@ describe("caixa integration", () => {
     const statusAntes = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
-      headers: { cookie: cookieAdmin }
+      headers: { cookie: cookieMultiempresa }
     });
     assertOk(statusAntes);
     expect(statusAntes.json()).toMatchObject({
@@ -709,7 +802,7 @@ describe("caixa integration", () => {
     const retorno = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/transferencia-cofre`,
-      headers: { cookie: cookieAdmin },
+      headers: { cookie: cookieMultiempresa },
       payload: {
         tipo: "retorno",
         valor: 75,
@@ -724,7 +817,7 @@ describe("caixa integration", () => {
     const statusDepois = await contexto.app.inject({
       method: "GET",
       url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
-      headers: { cookie: cookieAdmin }
+      headers: { cookie: cookieMultiempresa }
     });
     assertOk(statusDepois);
     expect(statusDepois.json()).toMatchObject({
@@ -739,7 +832,7 @@ describe("caixa integration", () => {
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
-      headers: { cookie: cookieAdmin },
+      headers: { cookie: cookieMultiempresa },
       payload: { observacao: "Fechado apos retorno" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);

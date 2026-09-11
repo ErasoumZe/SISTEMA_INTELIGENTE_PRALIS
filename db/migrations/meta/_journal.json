@@ -253,6 +253,13 @@
       "when": 1789092671291,
       "tag": "0035_complex_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789146768836,
+      "tag": "0036_caixa_unico_por_operador",
+      "breakpoints": true
     }
   ]
 }

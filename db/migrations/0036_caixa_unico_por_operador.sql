@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "fechamentos_caixa_operador_aberto_unico_idx" ON "fechamentos_caixa" USING btree ("empresa_id","usuario_caixa_id") WHERE "fechamentos_caixa"."status" = 'aberto' and "fechamentos_caixa"."usuario_caixa_id" is not null;--> statement-breakpoint
