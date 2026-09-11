@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, universoDoCaixa } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, universoDoCaixa } from "../../setup/caixa.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -40,6 +40,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieCaixa, cookieGerente] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa"),

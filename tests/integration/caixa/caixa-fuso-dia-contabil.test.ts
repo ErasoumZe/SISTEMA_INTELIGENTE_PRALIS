@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -16,6 +17,7 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
   }, 120_000);
 
@@ -61,6 +63,7 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
       dataHoraAbertura: INSTANTE_22H_BRT
     });
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
 
     const caixa = await consultarUm<{ data_movimento: string }>(
       "select to_char(data_movimento, 'YYYY-MM-DD') as data_movimento from fechamentos_caixa where id = $1",
@@ -78,6 +81,7 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
       dataHoraAbertura: "2026-07-16T11:00"
     });
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
 
     // Venda em dinheiro -> saldo positivo, exige acerto.
     await criar("/api/vendas", {

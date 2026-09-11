@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, universoDoCaixa } from "../../setup/caixa.js";
+import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, universoDoCaixa } from "../../setup/caixa.js";
 import { sql } from "drizzle-orm";
 import { executarEmTransacao } from "../../../api/src/banco/conexao.js";
 import {
@@ -41,6 +41,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieCaixa, cookieGerente] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa"),

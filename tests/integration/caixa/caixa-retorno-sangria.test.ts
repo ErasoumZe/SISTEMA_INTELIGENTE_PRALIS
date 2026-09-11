@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, json } from "../../setup/integracao.js";
 
@@ -16,6 +17,7 @@ describe("caixa - retorno/sangria (M2)", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "tesouraria")
@@ -77,7 +79,9 @@ describe("caixa - retorno/sangria (M2)", () => {
       ...(fundo ? { lacreAbertura: fundo.lacre } : {})
     });
     expect(abrirResp.statusCode, abrirResp.body).toBe(201);
-    return { contaId, pdvId, caixaId: json<{ data: { id: string } }>(abrirResp).data.id };
+    const caixaId = json<{ data: { id: string } }>(abrirResp).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
+    return { contaId, pdvId, caixaId };
   }
 
   async function venda(contaId: string, pdvId: string, dataReferencia: string, valor: number) {

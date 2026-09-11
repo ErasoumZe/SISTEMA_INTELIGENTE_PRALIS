@@ -38,14 +38,16 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   let cookieAdmin = "";
   let cookieCaixa = "";
   let cookieGerente = "";
+  let cookieMultiempresa = "";
   let sequencia = 0;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieCaixa, cookieGerente] = await Promise.all([
+    [cookieAdmin, cookieCaixa, cookieGerente, cookieMultiempresa] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "caixa"),
-      cookieSessao(contexto.app, "gerente")
+      cookieSessao(contexto.app, "gerente"),
+      cookieSessao(contexto.app, "multiempresa")
     ]);
   }, 180_000);
 
@@ -61,20 +63,21 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
 
   // Caixa proprio por caso: `fechamentos_caixa_pdv_aberto_unico_idx` proibe dois abertos no mesmo
   // PDV, e fechar um caixa compartilhado quebraria os outros arquivos.
-  async function novoCaixa(nome: string) {
+  async function novoCaixa(nome: string, operador: "caixa" | "multiempresa" = "caixa") {
     sequencia += 1;
+    const cookieOperador = operador === "caixa" ? cookieCaixa : cookieMultiempresa;
     return abrirCaixaDoOperador(contexto.app, {
       cookieAdmin,
-      cookieOperador: cookieCaixa,
-      emailOperador: usuariosTeste.caixa.email,
+      cookieOperador,
+      emailOperador: usuariosTeste[operador].email,
       nome: `${nome} ${sequencia}`
     });
   }
 
   // Dinheiro de verdade no caixa: sem venda nao ha o que entregar ao cofre. Lancada PELO operador e
   // sem conta/PDV no payload — o servidor resolve pelo caixa aberto dele, que e o caminho real.
-  async function venda(valor: number) {
-    const resposta = await inject("POST", "/api/vendas", cookieCaixa, {
+  async function venda(valor: number, cookieOperador = cookieCaixa) {
+    const resposta = await inject("POST", "/api/vendas", cookieOperador, {
       empresaId,
       dataReferencia: DIA,
       descricao: "Venda do turno",
@@ -83,8 +86,14 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
-  async function entregarAoCofre(caixaId: string, tipo: "sangria" | "retorno", valor: number, lacre?: string) {
-    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieCaixa, {
+  async function entregarAoCofre(
+    caixaId: string,
+    tipo: "sangria" | "retorno",
+    valor: number,
+    lacre?: string,
+    cookieOperador = cookieCaixa
+  ) {
+    const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieOperador, {
       tipo,
       valor,
       ...(lacre ? { lacre } : {}),
@@ -196,12 +205,12 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   // RED-4 · a trava e do caixa, nao da empresa. Pendencia do vizinho nao prende este turno.
   // ------------------------------------------------------------------------------------------
   it("Deve_IgnorarPendencia_Quando_ElaEhDeOutroCaixa", async () => {
-    const vizinho = await novoCaixa("G1 vizinho");
-    await venda(500);
-    await entregarAoCofre(vizinho.caixaId, "sangria", 200, "G1-VIZINHO");
+    const vizinho = await novoCaixa("G1 vizinho", "multiempresa");
+    await venda(500, cookieMultiempresa);
+    await entregarAoCofre(vizinho.caixaId, "sangria", 200, "G1-VIZINHO", cookieMultiempresa);
 
-    // Segundo caixa do MESMO operador: `buscarCaixaAbertoUsuarioRepository` pega o mais novo, e o
-    // fechamento aqui e por id, entao os dois convivem.
+    // Outro operador abre o caixa proprio. A pendencia do vizinho continua sem prender este turno,
+    // e a R-186 permanece respeitada: cada pessoa responde por uma unica gaveta.
     const proprio = await novoCaixa("G1 proprio");
     await venda(300);
 

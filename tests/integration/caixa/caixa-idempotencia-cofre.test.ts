@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -28,6 +29,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   let cookieTesouraria: string;
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "tesouraria")
@@ -69,6 +71,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       usuarioCaixaId: await usuarioAdminId(),
       dataHoraAbertura
     });
+    registrarEncerramentoCaixaParaTeste(caixaId);
     const dataReferencia = dataHoraAbertura.slice(0, 10);
     await criar("/api/vendas", {
       empresaId,

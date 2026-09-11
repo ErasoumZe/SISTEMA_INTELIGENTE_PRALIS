@@ -25,6 +25,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -78,6 +79,7 @@ describe("#41 · reenvio depois de trocar a chave da integracao", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
 
     const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [

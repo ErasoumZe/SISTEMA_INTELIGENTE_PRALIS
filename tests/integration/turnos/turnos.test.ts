@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -11,6 +12,7 @@ describe("turnos: CRUD + turno padrao na abertura do caixa", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
     adminId = (await consultarUm<{ usuario_id: string }>("select usuario_id from perfis_usuarios where email = $1", [
       usuariosTeste.admin.email

@@ -4,6 +4,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { confirmarTransferenciaPorLacreDireto, consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -25,6 +26,7 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "tesouraria")
@@ -72,7 +74,9 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
       dataHoraAbertura,
       observacao: `Caixa ${nome}`
     });
-    return { caixaId: json<{ data: { id: string } }>(abrir).data.id, contaId, pdvId };
+    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
+    return { caixaId, contaId, pdvId };
   }
 
   async function resumoDoCaixa() {

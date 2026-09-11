@@ -1,7 +1,42 @@
-import { expect } from "vitest";
+import { expect, onTestFinished } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { idsTeste } from "./contexto.js";
-import { consultarUm, json } from "./integracao.js";
+import { consultarUm, executarSql, json } from "./integracao.js";
+
+// Alguns arquivos exercitam um ciclo completo com o admin como OPERADOR. O seed, por outro lado,
+// tambem mantem um caixa aberto do admin para os testes de status/historico. Esses dois cenarios nao
+// podem coexistir sob a R-186; o arquivo que nao testa o caixa seed deve libera-lo explicitamente.
+export async function encerrarCaixaSeedAdminParaTeste() {
+  await executarSql(
+    `update fechamentos_caixa
+     set status = 'fechado',
+         data_hora_fechamento = coalesce(data_hora_fechamento, now()),
+         fechado_em = coalesce(fechado_em, now()),
+         fechado_por = coalesce(fechado_por, usuario_caixa_id)
+     where id = $1 and status = 'aberto'`,
+    [idsTeste.caixaAberto]
+  );
+}
+
+export function registrarEncerramentoCaixaParaTeste(caixaId: string) {
+  if (caixaId === idsTeste.caixaAberto || caixaId === idsTeste.caixaAbertoEntradas) {
+    throw new Error("Caixa seed compartilhado nao pode ser registrado como fixture descartavel");
+  }
+  onTestFinished(async () => {
+    // Isolamento da fixture, nao caminho de negocio: alguns testes terminam deliberadamente com
+    // lock/pendencia e nao conseguiriam usar a rota de fechamento. O proximo `it` nao pode herdar
+    // um caixa aberto que existe apenas para o caso anterior (R-186).
+    await executarSql(
+      `update fechamentos_caixa
+       set status = 'fechado',
+           data_hora_fechamento = coalesce(data_hora_fechamento, now()),
+           fechado_em = coalesce(fechado_em, now()),
+           fechado_por = coalesce(fechado_por, usuario_caixa_id)
+       where id = $1 and status = 'aberto'`,
+      [caixaId]
+    );
+  });
+}
 
 // Fixture de caixa PROPRIO por caso, extraida do padrao que ja vivia copiado em quatro arquivos
 // (caixa-edicao-concorrente, retaguarda-sem-caixa, retaguarda-pos-fechamento, caixa-venda-integrada).
@@ -11,8 +46,8 @@ import { consultarUm, json } from "./integracao.js";
 //    um caso quebra todos os arquivos que dependem dele;
 //  - `fechamentos_caixa_pdv_aberto_unico_idx` proibe segundo caixa aberto no mesmo PDV, entao cada
 //    caso cria conta + PDV proprios (o `pdvLivre` e reservado aos testes que ABREM caixa nele);
-//  - `buscarCaixaAbertoUsuarioRepository` pega o caixa aberto MAIS NOVO do usuario — o caixa criado
-//    aqui vence o do seed para o mesmo operador, o que e o comportamento desejado.
+//  - R-186 proibe segundo caixa aberto do mesmo operador. A fixture registra uma limpeza restrita
+//    ao ID que criou para o caso seguinte nao herdar estado operacional artificial.
 export async function abrirCaixaDoOperador(
   app: FastifyInstance,
   entrada: {
@@ -65,6 +100,7 @@ export async function abrirCaixaDoOperador(
   });
   expect(abertura.statusCode, abertura.body).toBe(201);
   const caixaId = json<{ data: { id: string } }>(abertura).data.id;
+  registrarEncerramentoCaixaParaTeste(caixaId);
 
   return { caixaId, contaId, pdvId, usuarioId: usuario.id };
 }

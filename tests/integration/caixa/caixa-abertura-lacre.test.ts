@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -18,6 +19,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
+    await encerrarCaixaSeedAdminParaTeste();
     [cookieAdmin, cookieTesouraria] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "tesouraria")
@@ -72,14 +74,18 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
-  function abrir(pdvId: string, dataHoraAbertura: string, lacreAbertura?: string) {
-    return request(cookieAdmin, "POST", "/api/caixa/abrir", {
+  async function abrir(pdvId: string, dataHoraAbertura: string, lacreAbertura?: string) {
+    const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,
       usuarioCaixaId: adminId,
       dataHoraAbertura,
       ...(lacreAbertura ? { lacreAbertura } : {})
     });
+    if (resposta.statusCode === 201) {
+      registrarEncerramentoCaixaParaTeste(json<{ data: { id: string } }>(resposta).data.id);
+    }
+    return resposta;
   }
 
   async function saldoConta(contaId: string) {
