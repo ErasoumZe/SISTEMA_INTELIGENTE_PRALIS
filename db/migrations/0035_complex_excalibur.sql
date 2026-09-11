@@ -20,4 +20,4 @@ ALTER TABLE "transferencias" ADD CONSTRAINT "transferencias_solicitacao_cofre_ch
                      and "transferencias"."executado_em" is null)
                or ("transferencias"."status" in ('pendente', 'recebido', 'divergente')
                      and "transferencias"."executado_por" is not null
-                     and "transferencias"."executado_em" is not null))));
+                     and "transferencias"."executado_em" is not null)))));
