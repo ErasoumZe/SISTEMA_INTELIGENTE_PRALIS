@@ -2,8 +2,6 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type {
   AbrirCaixaPayload,
-  AlterarHorarioCaixaPayload,
-  AlterarHorarioCaixaResponse,
   CancelarPlanejamentoRetornoPayload,
   CaixaOperacional,
   CaixaStatus,
@@ -27,15 +25,9 @@ import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } 
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
-import { ErroDominio, erroValidacao, naoEncontrado } from "../erros.js";
-import { hashTokenAutorizacao } from "./autorizacoes.service.js";
-import {
-  atualizarStatusAutorizacaoRepository,
-  buscarAutorizacaoPorTokenRepository
-} from "./autorizacoes.repository.js";
+import { ErroDominio } from "../erros.js";
 import {
   atualizarFechamentoCaixaRepository,
-  atualizarHorarioCaixaRepository,
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
@@ -68,7 +60,6 @@ import {
   listarUsuariosTesourariaRepository,
   listarTransferenciasCaixaRepository,
   proximaOrdemTransferenciaRepository,
-  registrarEdicaoCaixaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
   travarCaixaCompartilhadoRepository,
@@ -108,14 +99,6 @@ function traduzirErroAberturaCaixa(error: Error): Error {
 
 function gerarTokenEdicao() {
   return randomBytes(6).toString("hex").toUpperCase();
-}
-
-function dataObrigatoria(valor: string, campo: string) {
-  const valorNormalizado = valor.trim();
-  const temFusoExplicito = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(valorNormalizado);
-  const data = new Date(temFusoExplicito ? valorNormalizado : `${valorNormalizado}Z`);
-  if (Number.isNaN(data.getTime())) throw new Error(`${campo} invalida`);
-  return data;
 }
 
 function numero(valor: string | number | null | undefined) {
@@ -168,8 +151,8 @@ async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco
   return calcularTotaisCaixaOperacionalRepository(caixa.id, caixa.pdvContaId, db);
 }
 
-// Revincula as vendas integradas ORFAS ao caixa apos qualquer mudanca de horario (ou na abertura
-// retroativa). Nunca move venda de outro caixa nem venda manual â€” ver revincularVendasAoCaixaRepository.
+// Anexa as vendas integradas orfas que chegaram desde a abertura registrada pelo servidor. Nunca
+// move venda de outro caixa nem venda manual â€” ver revincularVendasAoCaixaRepository.
 export async function revincularVendasAoCaixa(
   caixa: CaixaLinha,
   db: ExecutorBanco
@@ -480,122 +463,10 @@ async function abrirCaixaEmTransacao(
 
     const aberto = await buscarCaixaPorIdRepository(caixa.id, tx);
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
-    // Abertura retroativa (ex.: abriu 12:53 informando 08:00): puxa as vendas orfas do periodo.
+    // Abertura e auditavel pelo relogio do servidor; por enquanto so puxa vendas posteriores a ela.
     await revincularVendasAoCaixa(aberto, tx);
     return statusDoCaixaAberto(aberto, tx);
   });
-}
-
-// Valida e CONSOME (uso unico) o token de autorizacao do proprio solicitante para este caixa.
-// Invalido -> 400; ja usado / indisponivel / expirado -> 410 (nunca 200). Compara so o hash.
-async function consumirTokenAutorizacao(
-  caixaId: string,
-  solicitanteId: string,
-  token: string | undefined,
-  tx: ExecutorBanco
-): Promise<string> {
-  const tokenLimpo = token?.trim();
-  if (!tokenLimpo) throw erroValidacao("Token obrigatorio", "TOKEN_OBRIGATORIO");
-  const autorizacao = await buscarAutorizacaoPorTokenRepository(
-    { caixaId, solicitanteId, tokenHash: hashTokenAutorizacao(tokenLimpo) },
-    tx
-  );
-  if (!autorizacao) throw erroValidacao("Token invalido", "TOKEN_INVALIDO");
-  if (autorizacao.status === "usada") throw new ErroDominio("Token ja utilizado", 410, "TOKEN_JA_UTILIZADO");
-  if (autorizacao.status !== "pendente") throw new ErroDominio("Token indisponivel", 410, "TOKEN_INDISPONIVEL");
-  if (!autorizacao.expiraEm || new Date(autorizacao.expiraEm) <= new Date()) {
-    throw new ErroDominio("Token expirado", 410, "TOKEN_EXPIRADO");
-  }
-  await atualizarStatusAutorizacaoRepository({ id: autorizacao.id, status: "usada" }, tx);
-  return autorizacao.autorizadorId;
-}
-
-// Altera o horario de ABERTURA do caixa: gerente/admin (caixa_alterar_horario) direto; operador via
-// token de autorizacao. Observacao SEMPRE obrigatoria. Ao final, revincula as vendas integradas
-// (anexa/desanexa) e audita em edicoes_caixa com o autorizador, a observacao e as contagens.
-export async function alterarHorarioCaixa(
-  caixaId: string,
-  payload: AlterarHorarioCaixaPayload,
-  perfil: PerfilUsuario
-): Promise<AlterarHorarioCaixaResponse> {
-  const observacao = payload.observacao.trim();
-  if (!observacao) throw erroValidacao("Observacao obrigatoria", "OBSERVACAO_OBRIGATORIA");
-  const novaAbertura = payload.dataHoraAbertura
-    ? dataObrigatoria(payload.dataHoraAbertura, "Data de abertura")
-    : undefined;
-  const novoFechamento = payload.dataHoraFechamento
-    ? dataObrigatoria(payload.dataHoraFechamento, "Data de fechamento")
-    : undefined;
-  if (!novaAbertura && !novoFechamento) throw erroValidacao("Informe abertura e/ou fechamento");
-
-  try {
-    return await executarEmTransacao(async (tx) => {
-      const previa = await buscarCaixaPorIdRepository(caixaId, tx);
-      if (!previa || !podeAcessarEmpresa(perfil, previa.empresaId)) throw naoEncontrado("Caixa nao encontrado");
-      if (previa.status !== "aberto") throw erroValidacao("Caixa ja fechado");
-      // P0 â€” mesmo contrato de editarAberturaCaixa: lock exclusivo antes de qualquer escrita
-      // (inclusive o consumo do token), depois das checagens de empresa; e o retrato SOB a trava
-      // e quem alimenta validacoes e auditoria (`valoresAntigos`), nunca o previo.
-      const trava = await travarCaixaRepository(caixaId, tx);
-      if (!trava) throw naoEncontrado("Caixa nao encontrado");
-      if (trava.status !== "aberto") throw erroValidacao("Caixa ja fechado");
-      const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-      if (!caixa) throw naoEncontrado("Caixa nao encontrado");
-      if (!caixa.pdvId) throw new Error("Caixa operacional invalido");
-
-      const aberturaFinal = novaAbertura ?? (caixa.dataHoraAbertura ? new Date(caixa.dataHoraAbertura) : undefined);
-      const fechamentoFinal = novoFechamento ?? (caixa.dataHoraFechamento ? new Date(caixa.dataHoraFechamento) : null);
-      if (aberturaFinal && fechamentoFinal && fechamentoFinal <= aberturaFinal) {
-        throw erroValidacao("Fechamento precisa ser posterior a abertura");
-      }
-
-      const autorizadorId = temPermissao(perfil.permissoes, "caixa_alterar_horario")
-        ? perfil.usuarioId
-        : await consumirTokenAutorizacao(caixaId, perfil.usuarioId, payload.token, tx);
-
-      if (novaAbertura && (await existePeriodoCaixaRepository(caixa.pdvId, novaAbertura, caixa.id, tx))) {
-        throw erroValidacao(erroPeriodo);
-      }
-
-      const valoresAntigos = {
-        dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
-        dataHoraFechamento: serializarData(caixa.dataHoraFechamento)
-      };
-      await atualizarHorarioCaixaRepository(
-        { caixaId: caixa.id, dataHoraAbertura: novaAbertura, dataHoraFechamento: novoFechamento },
-        tx
-      );
-      const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
-      if (!atualizado) throw naoEncontrado("Caixa nao encontrado");
-      const revinculacao = await revincularVendasAoCaixa(atualizado, tx);
-
-      await registrarEdicaoCaixaRepository(
-        {
-          caixaId: caixa.id,
-          tokenUsado: null,
-          autorizadorId,
-          observacao,
-          editadoPor: perfil.usuarioId,
-          valoresAntigos,
-          valoresNovos: {
-            dataHoraAbertura: serializarData(atualizado.dataHoraAbertura),
-            dataHoraFechamento: serializarData(atualizado.dataHoraFechamento),
-            vendasAnexadas: revinculacao.anexadas,
-            vendasDesanexadas: revinculacao.desanexadas
-          }
-        },
-        tx
-      );
-
-      return {
-        ...(await statusDoCaixaAberto(atualizado, tx)),
-        revinculacao
-      };
-    });
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof ErroDominio)) throw traduzirErroAberturaCaixa(error);
-    throw error;
-  }
 }
 
 export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, perfil: PerfilUsuario) {

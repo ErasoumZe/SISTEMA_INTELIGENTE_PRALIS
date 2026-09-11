@@ -999,24 +999,8 @@ export async function buscarAjusteCaixaRepository(caixaId: string, db: ExecutorB
 
 // Atualiza o horario de abertura e/ou fechamento (nao mexe em PDV/usuario/token) — usado pelo novo
 // fluxo de alteracao por token/permissao. O tokenEdicao do gerente (fluxo antigo) fica intacto.
-export async function atualizarHorarioCaixaRepository(
-  input: { caixaId: string; dataHoraAbertura?: Date | undefined; dataHoraFechamento?: Date | undefined },
-  db: ExecutorBanco = banco
-) {
-  const campos = {
-    ...(input.dataHoraAbertura
-      ? {
-          dataHoraAbertura: input.dataHoraAbertura,
-          dataMovimento: diaNegocio(input.dataHoraAbertura)
-        }
-      : {}),
-    ...(input.dataHoraFechamento ? { dataHoraFechamento: input.dataHoraFechamento } : {})
-  };
-  if (Object.keys(campos).length === 0) return;
-  await db.update(fechamentosCaixa).set(campos).where(eq(fechamentosCaixa.id, input.caixaId));
-}
 
-// Revinculacao retroativa das vendas INTEGRADAS ao caixa apos qualquer mudanca de horario.
+// Vinculacao das vendas INTEGRADAS orfas dentro da janela do Caixa Pralis.
 // ANEXAR: vendas orfas (caixa_id NULL) do mesmo empresa+PDV com data_venda dentro do periodo.
 // DESANEXAR: vendas DESTE caixa que ficaram fora do periodo voltam a orfas.
 // Garantias: nunca toca venda de OUTRO caixa (anexar exige caixa_id NULL; desanexar filtra caixa_id

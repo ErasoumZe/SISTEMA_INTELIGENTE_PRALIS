@@ -2,7 +2,6 @@
 import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
-import CaixaAutorizacoes from "~/components/caixa/CaixaAutorizacoes.vue";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
@@ -13,8 +12,6 @@ const props = defineProps<{
   pdvs: Opcao[];
   turnos?: Opcao[];
   maquininhas?: Opcao[];
-  empresaId: string;
-  permissoes: string[];
   usuarioId: string;
   usuarioNome: string;
   salvando?: boolean;
@@ -263,17 +260,6 @@ function fechar() {
         Cadastre um PDV com conta vinculada antes de abrir caixa.
       </v-alert>
 
-      <!-- Sem caixa aberto o autorizador ainda precisa da fila de autorizacoes: o proprio
-           CaixaAutorizacoes decide o que mostrar (so o botao Autorizacoes, neste caso). -->
-      <div v-if="!caixaAberto" class="mb-4">
-        <CaixaAutorizacoes
-          :empresa-id="empresaId"
-          :caixa-aberto="null"
-          :permissoes="permissoes"
-          @alterado="emit('recarregar')"
-        />
-      </div>
-
       <!-- Abertura de Caixa fiel ao desenho do Rodrigo (FOTO 5): enxuta, 4 campos em 2x2. -->
       <template v-if="!caixaAberto">
         <v-row dense>
@@ -349,12 +335,6 @@ function fechar() {
               Maquininha: {{ caixaAberto.maquininhaApelido }} · {{ caixaAberto.maquininhaNumeroSerie }}.
             </span>
           </v-alert>
-          <CaixaAutorizacoes
-            :empresa-id="empresaId"
-            :caixa-aberto="caixaAberto"
-            :permissoes="permissoes"
-            @alterado="emit('recarregar')"
-          />
         </div>
 
         <!-- Cockpit por categoria: cor como acento (barra/chip/total), fundo do card neutro.
