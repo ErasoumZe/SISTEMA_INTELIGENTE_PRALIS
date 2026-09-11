@@ -1593,19 +1593,20 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional } = criarAcoesCaixa({
-  api: { post: apiPost },
-  empresaId: () => empresaId.value,
-  telaAtiva: () => telaAtiva.value,
-  setSalvando: (valor) => {
-    caixaSalvando.value = valor;
-  },
-  carregarStatusCaixa,
-  carregarDadosTela,
-  notificar,
-  mensagemErro,
-  confirmar: confirmarAcao
-});
+const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional, executarPlanejamentoRetorno } =
+  criarAcoesCaixa({
+    api: { post: apiPost },
+    empresaId: () => empresaId.value,
+    telaAtiva: () => telaAtiva.value,
+    setSalvando: (valor) => {
+      caixaSalvando.value = valor;
+    },
+    carregarStatusCaixa,
+    carregarDadosTela,
+    notificar,
+    mensagemErro,
+    confirmar: confirmarAcao
+  });
 
 function abrirImportacao(tela = telaAtiva.value) {
   copiaModo.value = "importar";
@@ -1913,6 +1914,7 @@ const pageContext = computed(() => ({
   atualizarDiaEntradas,
   abrirCaixaOperacional,
   retornarSaldoOperacional,
+  executarPlanejamentoRetorno,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
   notificacoes: notificacoes.value,
   verificarNotificacao,

@@ -22,6 +22,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
       :salvando="ctx.caixaSalvando"
       @abrir-caixa="ctx.abrirCaixaOperacional"
       @retornar-saldo="ctx.retornarSaldoOperacional"
+      @executar-planejamento="ctx.executarPlanejamentoRetorno"
       @fechar-caixa="ctx.fecharCaixaOperacional"
       @recarregar="ctx.recarregarCaixa"
     />

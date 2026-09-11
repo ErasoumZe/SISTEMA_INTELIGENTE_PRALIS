@@ -167,14 +167,13 @@ O isolamento multiempresa e logico, por `empresa_id` e vinculos em `usuarios_emp
 
 O caixa e aberto e fechado por usuario e PDV. Rotas principais em `api/src/caixa/caixa.controller.ts`:
 
-| Rota                          | Permissao               | O que faz                                                 |
-| ----------------------------- | ----------------------- | --------------------------------------------------------- |
-| `GET /api/caixa/status`       | `caixa_operar`          | caixa aberto do usuario e resumo                          |
-| `POST /api/caixa/abrir`       | `caixa_operar`          | abre por PDV, turno e lacre                               |
-| `PUT /api/caixa/:id/abertura` | `caixa_operar`          | edita a abertura com token, auditando em `edicoes_caixa`  |
-| `POST /api/caixa/:id/fechar`  | `caixa_operar`          | fecha; recusa saldo positivo e exige observacao em quebra |
-| `GET /api/caixa/historico`    | `caixas_gerenciar`      | historico com token de edicao                             |
-| alteracao de horario          | `caixa_alterar_horario` | revincula as vendas do periodo, auditando                 |
+| Rota                         | Permissao               | O que faz                                                 |
+| ---------------------------- | ----------------------- | --------------------------------------------------------- |
+| `GET /api/caixa/status`      | `caixa_operar`          | caixa aberto do usuario e resumo                          |
+| `POST /api/caixa/abrir`      | `caixa_operar`          | abre por PDV, turno e lacre                               |
+| `POST /api/caixa/:id/fechar` | `caixa_operar`          | fecha; recusa saldo positivo e exige observacao em quebra |
+| `GET /api/caixa/historico`   | `caixas_gerenciar`      | historico com token de edicao                             |
+| alteracao de horario         | `caixa_alterar_horario` | revincula as vendas do periodo, auditando                 |
 
 **Abrir informando o lacre e confirmar o recebimento da transferencia** (R-040): numa unica
 transacao o sistema confirma, credita e rompe o lacre. Sem lacre, o caixa abre zerado (R-033).

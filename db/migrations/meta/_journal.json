@@ -246,6 +246,13 @@
       "when": 1788372087165,
       "tag": "0034_divergencia_entrega_ao_cofre",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789092671291,
+      "tag": "0035_complex_excalibur",
+      "breakpoints": true
     }
   ]
 }

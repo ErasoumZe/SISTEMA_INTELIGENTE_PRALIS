@@ -44,6 +44,7 @@ export type RetornoSaldoPayload = {
   idempotenciaChave: string;
   aoConcluir?: (sucesso: boolean) => void;
 };
+export type ExecutarPlanejamentoPayload = { caixaId: string; planejamentoId: string };
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function recarregarTela() {
@@ -148,5 +149,30 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional };
+  async function executarPlanejamentoRetorno(payload: ExecutarPlanejamentoPayload): Promise<boolean> {
+    if (
+      !(await deps.confirmar(
+        "Confirma a execução deste retorno/sangria programado? O valor e o lacre reservados serão usados.",
+        "Executar retorno/sangria",
+        "Executar"
+      ))
+    ) {
+      return false;
+    }
+    deps.setSalvando(true);
+    try {
+      await deps.api.post(`/api/caixa/${payload.caixaId}/planejamentos-retorno/${payload.planejamentoId}/executar`, {});
+      await deps.carregarStatusCaixa(deps.empresaId());
+      await recarregarTela();
+      deps.notificar("Retorno/sangria executado e aguardando conferência.");
+      return true;
+    } catch (error) {
+      deps.notificar(deps.mensagemErro(error), "error");
+      return false;
+    } finally {
+      deps.setSalvando(false);
+    }
+  }
+
+  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional, executarPlanejamentoRetorno };
 }

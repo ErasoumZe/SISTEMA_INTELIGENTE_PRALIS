@@ -3,11 +3,12 @@ import type { FastifyInstance } from "fastify";
 import {
   abrirCaixaPayloadSchema,
   alterarHorarioCaixaPayloadSchema,
+  cancelarPlanejamentoRetornoPayloadSchema,
   autorizacaoCaixaParamsSchema,
   autorizacoesCaixaQuerySchema,
   caixaParamsSchema,
   caixaStatusQuerySchema,
-  editarAberturaCaixaPayloadSchema,
+  planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
   historicoCaixaQuerySchema,
   solicitarAutorizacaoCaixaPayloadSchema,
@@ -19,9 +20,11 @@ import {
   abrirCaixa,
   alterarHorarioCaixa,
   criarTransferenciaCofreCaixa,
-  editarAberturaCaixa,
+  cancelarPlanejamentoRetorno,
+  executarPlanejamentoRetorno,
   fecharCaixa,
   listarHistoricoCaixa,
+  listarPlanejamentosRetorno,
   obterDetalheCaixa,
   obterStatusCaixa,
   obterTransferenciasCaixa
@@ -61,18 +64,6 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put("/api/caixa/:caixaId/abertura", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
-    const { caixaId } = caixaParamsSchema.parse(request.params);
-    const body = editarAberturaCaixaPayloadSchema.parse(request.body);
-    try {
-      await editarAberturaCaixa(caixaId, body, request.perfilUsuario!);
-      return semConteudo(reply);
-    } catch (error) {
-      const mensagem = mensagemDominioOuRelancar(error);
-      return erro(reply, statusErro(mensagem), mensagem);
-    }
-  });
-
   app.post("/api/caixa/:caixaId/fechar", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     const body = fecharCaixaPayloadSchema.parse(request.body);
@@ -97,6 +88,44 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/caixa/:caixaId/planejamentos-retorno",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await listarPlanejamentosRetorno(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        return erro(reply, statusErro(mensagemDominioOuRelancar(error)), mensagemDominioOuRelancar(error));
+      }
+    }
+  );
+  app.post(
+    "/api/caixa/:caixaId/planejamentos-retorno/:planejamentoId/executar",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId, planejamentoId } = planejamentoRetornoParamsSchema.parse(request.params);
+      try {
+        return ok(await executarPlanejamentoRetorno(caixaId, planejamentoId, request.perfilUsuario!));
+      } catch (error) {
+        return erro(reply, statusErro(mensagemDominioOuRelancar(error)), mensagemDominioOuRelancar(error));
+      }
+    }
+  );
+  app.post(
+    "/api/caixa/:caixaId/planejamentos-retorno/:planejamentoId/cancelar",
+    { preHandler: exigirPermissao("transferencias_criar") },
+    async (request, reply) => {
+      const { caixaId, planejamentoId } = planejamentoRetornoParamsSchema.parse(request.params);
+      const body = cancelarPlanejamentoRetornoPayloadSchema.parse(request.body);
+      try {
+        return ok(await cancelarPlanejamentoRetorno(caixaId, planejamentoId, body, request.perfilUsuario!));
+      } catch (error) {
+        return erro(reply, statusErro(mensagemDominioOuRelancar(error)), mensagemDominioOuRelancar(error));
       }
     }
   );

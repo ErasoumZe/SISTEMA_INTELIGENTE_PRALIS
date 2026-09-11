@@ -1,6 +1,6 @@
-import { and, count, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { contas, contasUsuarios, empresas } from "@padaria/db/schema/cadastro";
+import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
 import {
   lacres,
   transferencias,
@@ -105,16 +105,87 @@ export async function criarTransferenciaRepository(
       empresaId: dados.empresaId,
       numero: dados.nLacreDoc,
       transferenciaId: transferencia.id,
-      origem: "saida"
+      origem: "retorno"
     });
   }
   return transferencia;
 }
 
+// R-185: as filhas nascem no MESMO commit da transferencia inicial. `agendada` nao entra no
+// saldo; o Caixa sera ligado ao plano somente quando o lacre da ida abrir o turno.
+export async function criarRetornosPlanejadosRepository(
+  input: {
+    empresaId: string;
+    transferenciaOrigemId: string;
+    dataReferencia: string;
+    contaOrigemId: string;
+    planos: { valor: number; nLacreDoc: string; contaDestinoId: string }[];
+    tempoConfirmacao: TempoConfirmacao;
+    computar: boolean;
+    criadoPor: string;
+    observacao: string | null;
+  },
+  db: ExecutorBanco = banco
+): Promise<void> {
+  if (!input.planos.length) return;
+  const agora = new Date();
+  const criadas = await db
+    .insert(transferencias)
+    .values(
+      input.planos.map((plano) => ({
+        empresaId: input.empresaId,
+        planejamentoOrigemTransferenciaId: input.transferenciaOrigemId,
+        dataReferencia: input.dataReferencia,
+        descricao: "Retorno/Sangria planejada",
+        observacao: input.observacao,
+        valorOriginal: centavosParaDecimalBanco(paraCentavos(plano.valor)),
+        valorAcrescimo: centavosParaDecimalBanco(0),
+        valorDesconto: centavosParaDecimalBanco(0),
+        contaOrigemId: input.contaOrigemId,
+        contaDestinoId: plano.contaDestinoId,
+        nLacreDoc: plano.nLacreDoc,
+        tempoConfirmacao: input.tempoConfirmacao,
+        status: "agendada",
+        tipo: "sangria",
+        computar: input.computar,
+        solicitacaoCofreEm: agora,
+        criadoPor: input.criadoPor
+      }))
+    )
+    .returning({ id: transferencias.id });
+  await db.insert(transferenciasDestinosCandidatos).values(
+    criadas.map((transferencia, indice) => ({
+      empresaId: input.empresaId,
+      transferenciaId: transferencia.id,
+      contaId: input.planos[indice]!.contaDestinoId
+    }))
+  );
+  await db.insert(lacres).values(
+    criadas.map((transferencia, indice) => ({
+      empresaId: input.empresaId,
+      numero: input.planos[indice]!.nLacreDoc,
+      transferenciaId: transferencia.id,
+      origem: "saida"
+    }))
+  );
+}
 // P0 (CX-M06 estendida): a linha da transferencia sob `FOR NO KEY UPDATE` durante a edicao — ela
 // nao tinha trava nenhuma e o PUT reescreve valor, computar e as DUAS contas (o sinal do total).
 // Espelho de `travarDespesaRepository`: escopo de empresa no where e `TransacaoBanco` obrigatorio.
 // Ordem unica do P0: o chamador ja segurou o caixa (FOR SHARE) ANTES desta trava.
+export async function contaEhPdvDaEmpresaRepository(
+  empresaId: string,
+  contaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [pdv] = await db
+    .select({ id: pdvs.id })
+    .from(pdvs)
+    .where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.contaId, contaId), eq(pdvs.ativo, true)))
+    .limit(1);
+  return Boolean(pdv);
+}
+
 export async function travarTransferenciaRepository(transferenciaId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
     .select({ id: transferencias.id })
@@ -122,6 +193,28 @@ export async function travarTransferenciaRepository(transferenciaId: string, emp
     .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.empresaId, empresaId)))
     .for("no key update");
   return linha ?? null;
+}
+
+// Pai e filhas planejadas sao imutaveis no editor generico: mudar valor, contas ou lacres depois
+// de reservar o retorno quebraria o vinculo auditavel e o fechamento do Caixa.
+export async function transferenciaTemPlanejamentoRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(
+      and(
+        isNotNull(transferencias.planejamentoOrigemTransferenciaId),
+        or(
+          eq(transferencias.id, transferenciaId),
+          eq(transferencias.planejamentoOrigemTransferenciaId, transferenciaId)
+        )
+      )
+    )
+    .limit(1);
+  return Boolean(linha);
 }
 
 export async function buscarTransferenciaDetalheRepository(
@@ -170,6 +263,7 @@ export async function buscarTransferenciaDetalheRepository(
     // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
     valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
     contasDestinoIds: candidatos.map((item) => item.contaId),
+    retornosPlanejados: [],
     tempoConfirmacao: (transferencia.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
     prazoConfirmacaoEm: transferencia.prazoConfirmacaoEm?.toISOString() ?? null,

@@ -273,12 +273,24 @@ export type EntregaCofrePendente = {
   recusaId: string | null;
 };
 
+export type PlanejamentoRetorno = {
+  id: string;
+  tipo: "sangria" | "retorno";
+  valor: number;
+  lacre: string;
+  contaDestinoId: string;
+  contaDestinoNome: string;
+  observacao: string | null;
+  criadoEm: string;
+};
+
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
   // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];
+  planejamentosPendentes: PlanejamentoRetorno[];
 };
 
 export type ItemMenu = {
@@ -357,6 +369,7 @@ export type OperacaoForm = {
   dataRecebimento: string;
   tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias";
   contasDestinoIds: string[];
+  retornosPlanejados: Array<{ valor: string; nLacreDoc: string; contaDestinoId: string }>;
   recorrenciaId: string;
   documento: string;
   numeroNotaFiscal: string;

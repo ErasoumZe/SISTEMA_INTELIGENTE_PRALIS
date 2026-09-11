@@ -300,7 +300,7 @@ describe("caixa integration", () => {
     assertProblem(abrir, 403);
   });
 
-  it("Deve_AbrirComHorarioDoServidorEEditarCaixa_Quando_PdvDisponivel", async () => {
+  it("Deve_AbrirComHorarioDoServidorERecusarRotaLegada_Quando_PdvDisponivel", async () => {
     const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
     const conta = await contexto.app.inject({
       method: "POST",
@@ -354,24 +354,13 @@ describe("caixa integration", () => {
     expect(instantePersistido.getTime()).toBeLessThanOrEqual(depoisDaAbertura.getTime());
     expect(new Date(token?.aberto_em ?? 0).getTime()).toBe(instantePersistido.getTime());
 
-    const editar = await contexto.app.inject({
+    const rotaLegada = await contexto.app.inject({
       method: "PUT",
       url: `/api/caixa/${caixaId}/abertura`,
       headers: { cookie: cookieAdmin },
-      payload: {
-        tokenEdicao: token?.token_edicao,
-        pdvId,
-        usuarioCaixaId: usuarioAdminId,
-        dataHoraAbertura: "2026-01-15T11:00",
-        observacao: "Caixa editado por teste"
-      }
+      payload: {}
     });
-    expect(editar.statusCode).toBe(204);
-
-    const linha = await consultarUm<{ observacao: string }>("select observacao from fechamentos_caixa where id = $1", [
-      caixaId
-    ]);
-    expect(linha?.observacao).toBe("Caixa editado por teste");
+    expect(rotaLegada.statusCode).toBe(404);
 
     const fechar = await contexto.app.inject({
       method: "POST",
@@ -385,22 +374,15 @@ describe("caixa integration", () => {
     ).resolves.toBeTruthy();
   });
 
-  it("Deve_Retornar400_Quando_EditarAberturaComTokenInvalido", async () => {
-    const usuarioAdminId = await usuarioIdPorEmail(usuariosTeste.admin.email);
+  it("Deve_Retornar404_Quando_UsarRotaLegadaDeEdicaoDaAbertura", async () => {
     const resposta = await contexto.app.inject({
       method: "PUT",
       url: `/api/caixa/${idsTeste.caixaAberto}/abertura`,
       headers: { cookie: cookieAdmin },
-      payload: {
-        tokenEdicao: "TOKEN-INVALIDO",
-        pdvId: idsTeste.pdvA,
-        usuarioCaixaId: usuarioAdminId,
-        dataHoraAbertura: "2026-06-30T08:00",
-        observacao: "Token invalido"
-      }
+      payload: {}
     });
 
-    assertProblem(resposta, 400);
+    expect(resposta.statusCode).toBe(404);
   });
 
   it("Deve_RetornarErro_Quando_CaixaForInexistenteOuFechado", async () => {

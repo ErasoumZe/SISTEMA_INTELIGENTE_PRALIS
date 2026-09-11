@@ -51,6 +51,9 @@ import {
   encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
+  criarRetornosPlanejadosRepository,
+  contaEhPdvDaEmpresaRepository,
+  transferenciaTemPlanejamentoRepository,
   efetivarTransferenciaAgendadaRepository,
   listarAgendadasVencidasRepository,
   ehConfirmadorElegivelRepository,
@@ -69,6 +72,22 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   }
   if (dados.agendadaPara && new Date(dados.agendadaPara).getTime() <= Date.now()) {
     throw new Error("Agendamento precisa estar no futuro");
+  }
+  if (dados.retornosPlanejados.length) {
+    if (dados.agendadaPara) throw new Error("Transferencia com planejamento nao pode ser agendada");
+    if (dados.contasDestinoIds.length) throw new Error("Planejamento de retorno nao aceita multiplo destino");
+    const totalPlanejadoCentavos = dados.retornosPlanejados.reduce(
+      (total, plano) => total + paraCentavos(plano.valor),
+      0
+    );
+    if (totalPlanejadoCentavos > paraCentavos(dados.valorOriginal)) {
+      throw new Error("Total planejado nao pode ultrapassar a transferencia inicial");
+    }
+    const lacres = [dados.nLacreDoc, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)];
+    if (new Set(lacres).size !== lacres.length) throw new Error("Cada transferencia planejada precisa de lacre unico");
+    if (dados.retornosPlanejados.some((plano) => plano.contaDestinoId === dados.contaDestinoId)) {
+      throw new Error("Destino do retorno planejado deve ser diferente da conta do Caixa");
+    }
   }
 }
 
@@ -132,16 +151,33 @@ export async function criarTransferencia(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   try {
     return await executarEmTransacao(async (tx) => {
-      const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, dados.nLacreDoc!, tx);
-      if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
+      for (const lacre of [dados.nLacreDoc!, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)]) {
+        const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, lacre, tx);
+        if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
+      }
       const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
       if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
       const contasValidas = await contasPertencemEmpresaRepository(
-        [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
+        [
+          dados.contaOrigemId,
+          dados.contaDestinoId,
+          ...dados.contasDestinoIds,
+          ...dados.retornosPlanejados.map((plano) => plano.contaDestinoId)
+        ],
         dados.empresaId,
         tx
       );
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+
+      if (dados.retornosPlanejados.length) {
+        const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+        if (!contaCofreId || dados.contaOrigemId !== contaCofreId) {
+          throw new Error("Planejamento de retorno exige transferencia inicial do Cofre");
+        }
+        if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
+          throw new Error("Planejamento de retorno exige conta de PDV como destino inicial");
+        }
+      }
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
       // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
@@ -192,6 +228,20 @@ export async function criarTransferencia(
         computar,
         perfil.usuarioId,
         envolveContaPdv ? caixa.id : null,
+        tx
+      );
+      await criarRetornosPlanejadosRepository(
+        {
+          empresaId: dados.empresaId,
+          transferenciaOrigemId: transferencia.id,
+          dataReferencia: dados.dataReferencia,
+          contaOrigemId: dados.contaDestinoId,
+          planos: dados.retornosPlanejados,
+          tempoConfirmacao: dados.tempoConfirmacao,
+          computar,
+          criadoPor: perfil.usuarioId,
+          observacao: dados.observacao?.trim() || dados.descricao?.trim() || null
+        },
         tx
       );
       return { id: transferencia.id, computar };
@@ -597,6 +647,9 @@ export async function atualizarTransferencia(
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
+    if (dados.retornosPlanejados.length || (await transferenciaTemPlanejamentoRepository(transferenciaId, tx))) {
+      throw new Error("Transferencia com retorno/sangria planejado nao pode ser editada");
+    }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     // P0 — ordem unica: caixa (FOR SHARE, dentro da validacao) ANTES da linha da transferencia.

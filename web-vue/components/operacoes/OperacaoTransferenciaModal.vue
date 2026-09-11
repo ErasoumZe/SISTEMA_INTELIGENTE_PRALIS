@@ -35,6 +35,7 @@ const agendamento = computed({
 // viravam transferencia nao pedida na proxima).
 const multiploDestino = ref(false);
 const tempoConfirmacaoAberto = ref(false);
+const retornoSangriaAtivo = ref(false);
 
 // FOTO 1: o padrao da tela e "se ☑ abre esse campo" — as tres checkboxes ficam sempre visiveis e
 // cada uma REVELA o seu campo. Ao abrir, elas espelham o que ja esta no formulario: sem isto uma
@@ -44,6 +45,7 @@ watch(aberto, (estaAberto) => {
   if (!estaAberto) return;
   multiploDestino.value = form.value.contasDestinoIds.length > 0;
   tempoConfirmacaoAberto.value = form.value.tempoConfirmacao !== "1dia";
+  retornoSangriaAtivo.value = form.value.retornosPlanejados.length > 0;
 });
 
 // Desmarcar LIMPA: candidato fantasma nao pode viajar para o backend.
@@ -57,9 +59,69 @@ watch(tempoConfirmacaoAberto, (ativo) => {
   if (!ativo) form.value.tempoConfirmacao = "1dia";
 });
 
+watch(retornoSangriaAtivo, (ativo) => {
+  if (!ativo) {
+    form.value.retornosPlanejados = [];
+    return;
+  }
+  // A programacao sai sempre da conta que recebe a abertura. Destino padrao: a conta de origem
+  // da transferencia inicial (normalmente o Cofre); a pessoa pode escolher outra conta permitida.
+  if (!form.value.retornosPlanejados.length) adicionarRetornoPlanejado();
+  multiploDestino.value = false;
+  form.value.contasDestinoIds = [];
+  agendamento.value = false;
+});
+
+function adicionarRetornoPlanejado() {
+  form.value.retornosPlanejados.push({
+    valor: "",
+    nLacreDoc: "",
+    contaDestinoId: form.value.contaOrigemId
+  });
+}
+
+function removerRetornoPlanejado(indice: number) {
+  form.value.retornosPlanejados.splice(indice, 1);
+  if (!form.value.retornosPlanejados.length) retornoSangriaAtivo.value = false;
+}
+
+const erroPlanejamento = ref("");
+function planejamentosValidos() {
+  const planos = form.value.retornosPlanejados;
+  if (!planos.length) return true;
+  const lacres = new Set<string>();
+  const totalPlanejado = planos.reduce((total, plano) => total + Number(plano.valor.replace(",", ".") || 0), 0);
+  if (
+    planos.some(
+      (plano) =>
+        !plano.valor || Number(plano.valor.replace(",", ".")) <= 0 || !plano.nLacreDoc.trim() || !plano.contaDestinoId
+    )
+  ) {
+    erroPlanejamento.value = "Informe valor, lacre e destino em cada retorno/sangria.";
+    return false;
+  }
+  for (const plano of planos) {
+    const lacre = plano.nLacreDoc.trim().toLowerCase();
+    if (lacre === form.value.nLacreDoc.trim().toLowerCase() || lacres.has(lacre)) {
+      erroPlanejamento.value = "Cada transferência precisa de um lacre diferente.";
+      return false;
+    }
+    lacres.add(lacre);
+  }
+  if (totalPlanejado > Number(form.value.valorOriginal.replace(",", ".") || 0)) {
+    erroPlanejamento.value = "O total programado não pode ser maior que a transferência inicial.";
+    return false;
+  }
+  erroPlanejamento.value = "";
+  return true;
+}
+
 // R-030: a origem nunca e candidata a receber o proprio envio.
 const contasCandidatas = computed(() =>
   opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaOrigemId)
+);
+const contasDestinoPlanejamento = computed(() =>
+  opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaDestinoId)
 );
 
 // Com Multiplo Destino a escolha acontece no PROPRIO campo Destino. As duas colunas do formulario
@@ -138,7 +200,7 @@ function destinoValido() {
 // tratados, entao a falha subia como Promise rejeitada sem handler DEPOIS de o modal ja ter fechado
 // e mostrado "salvo com sucesso" — movimento de dinheiro inexistente com snackbar verde.
 async function salvarTransferenciaCompleta() {
-  if (!destinoValido()) return;
+  if (!destinoValido() || !planejamentosValidos()) return;
   await salvarOperacao();
 }
 
@@ -278,7 +340,7 @@ const hojeISO = computed(() => dataISO(0));
            parte daquele bloco — sao recursos legitimos da transferencia generica e continuam. -->
         <div class="tr-opcoes">
           <label class="tr-check">
-            <input v-model="multiploDestino" type="checkbox" />
+            <input v-model="multiploDestino" type="checkbox" :disabled="retornoSangriaAtivo" />
             <span>Múltiplo Destino</span>
           </label>
           <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
@@ -302,6 +364,46 @@ const hojeISO = computed(() => dataISO(0));
               <option value="30dias">30 dias</option>
             </select>
           </label>
+          <label v-if="!operacaoEditandoId" class="tr-check">
+            <input v-model="retornoSangriaAtivo" type="checkbox" />
+            <span>Transferência de retorno / Sangria</span>
+          </label>
+          <section v-if="retornoSangriaAtivo" class="tr-planejamento" aria-label="Retornos e sangrias programados">
+            <p class="tr-planejamento-ajuda">
+              As linhas ficam preparadas para o Caixa e não alteram saldo até a execução.
+            </p>
+            <div v-for="(retorno, indice) in form.retornosPlanejados" :key="indice" class="tr-planejamento-linha">
+              <label class="tr-campo">
+                <span class="tr-campo-lbl">Valor</span>
+                <CampoDinheiro v-model="retorno.valor" class="tr-input" />
+              </label>
+              <label class="tr-campo">
+                <span class="tr-campo-lbl">Lacre</span>
+                <input v-model="retorno.nLacreDoc" class="tr-input" placeholder="Ex.: 002" />
+              </label>
+              <label class="tr-campo tr-planejamento-destino">
+                <span class="tr-campo-lbl">Destino</span>
+                <select v-model="retorno.contaDestinoId" class="tr-input">
+                  <option value="">—</option>
+                  <option v-for="conta in contasDestinoPlanejamento" :key="conta.id" :value="conta.id">
+                    {{ conta.nome }}
+                  </option>
+                </select>
+              </label>
+              <button
+                type="button"
+                class="tr-remover-retorno"
+                :aria-label="`Remover retorno ${indice + 1}`"
+                @click="removerRetornoPlanejado(indice)"
+              >
+                <v-icon size="16">mdi-close</v-icon>
+              </button>
+            </div>
+            <span v-if="erroPlanejamento" class="tr-erro" role="alert">{{ erroPlanejamento }}</span>
+            <button type="button" class="tr-adicionar-retorno" @click="adicionarRetornoPlanejado">
+              <v-icon size="16">mdi-plus</v-icon> Adicionar retorno/sangria
+            </button>
+          </section>
         </div>
 
         <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->
@@ -684,6 +786,44 @@ const hojeISO = computed(() => dataISO(0));
   opacity: 0.6;
   cursor: default;
 }
+.tr-planejamento {
+  margin: 4px 0 12px 22px;
+  padding: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+.tr-planejamento-ajuda {
+  margin: 0 0 9px;
+  color: #9a3412;
+  font-size: 11px;
+}
+.tr-planejamento-linha {
+  display: grid;
+  grid-template-columns: minmax(84px, 1fr) minmax(84px, 1fr) minmax(130px, 1.5fr) 28px;
+  gap: 7px;
+  align-items: end;
+}
+.tr-planejamento-linha .tr-campo {
+  margin-bottom: 8px;
+}
+.tr-remover-retorno,
+.tr-adicionar-retorno {
+  border: 0;
+  background: transparent;
+  color: var(--cat-transferencias-base, #c2410c);
+  cursor: pointer;
+}
+.tr-remover-retorno {
+  height: 34px;
+}
+.tr-adicionar-retorno {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
 
 /* --- Responsividade (560) — so layout. Campos EMPILHAM, o Resumo continua visivel. --- */
 @media (width <= 560px) {
@@ -731,6 +871,12 @@ const hojeISO = computed(() => dataISO(0));
   }
   .tr-retorno-valor {
     max-width: none;
+  }
+  .tr-planejamento-linha {
+    grid-template-columns: 1fr 1fr 28px;
+  }
+  .tr-planejamento-destino {
+    grid-column: 1 / -1;
   }
   /* Modal fullscreen (casca 100dvh via main.css). O rodape fixo ja vem da regra base; aqui so
      ampliamos a altura e respeitamos a safe-area do iOS. */

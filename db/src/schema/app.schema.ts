@@ -1578,6 +1578,9 @@ export const transferencias = pgTable(
     id: idUuid,
     empresaId,
     caixaId: uuid("caixa_id").references((): AnyPgColumn => fechamentosCaixa.id),
+    // R-185: retorno/sangria preparado junto da transferencia que abastece o Caixa. Antes da
+    // abertura ainda nao ha caixa_id; a FK composta abaixo impede ligar plano a outra empresa.
+    planejamentoOrigemTransferenciaId: uuid("planejamento_origem_transferencia_id"),
     dataReferencia: date("data_referencia").notNull(),
     // R-127: o texto do movimento vive em `observacao`. `descricao` e LEGADO — deixou de ser
     // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
@@ -1688,18 +1691,30 @@ export const transferencias = pgTable(
     // ramo (as colunas nascem NULL), por isso valida sem backfill.
     check(
       "transferencias_solicitacao_cofre_check",
-      sql`(${table.solicitacaoCofreEm} is null
+      sql`(${table.agendadaPara} is null or ${table.planejamentoOrigemTransferenciaId} is null)
+        and ((${table.solicitacaoCofreEm} is null
              and ${table.executadoPor} is null
-             and ${table.executadoEm} is null)
+             and ${table.executadoEm} is null
+             and ${table.planejamentoOrigemTransferenciaId} is null)
         or (${table.solicitacaoCofreEm} is not null
-             and ${table.caixaId} is not null
+             and (${table.caixaId} is not null or (${table.status} in ('agendada', 'cancelada') and ${table.planejamentoOrigemTransferenciaId} is not null))
              and ${table.tipo} in ('sangria', 'retorno')
              and ((${table.status} in ('agendada', 'cancelada')
                      and ${table.executadoPor} is null
                      and ${table.executadoEm} is null)
                or (${table.status} in ('pendente', 'recebido', 'divergente')
                      and ${table.executadoPor} is not null
-                     and ${table.executadoEm} is not null)))`
+                     and ${table.executadoEm} is not null))))`
+    ),
+    check(
+      "transferencias_planejamento_lacre_check",
+      sql`${table.planejamentoOrigemTransferenciaId} is null
+        or (${table.nLacreDoc} is not null and length(btrim(${table.nLacreDoc})) > 0)`
+    ),
+    check(
+      "transferencias_planejamento_nao_autorreferente_check",
+      sql`${table.planejamentoOrigemTransferenciaId} is null
+        or ${table.planejamentoOrigemTransferenciaId} <> ${table.id}`
     ),
     check(
       "transferencias_prazo_check",
@@ -1742,6 +1757,15 @@ export const transferencias = pgTable(
     // fica impossivel por construcao, no mesmo padrao da R-021.
     unique("transferencias_id_caixa_empresa_unica").on(table.id, table.caixaId, table.empresaId),
     index("transferencias_empresa_data_idx").on(table.empresaId, table.dataReferencia),
+    unique("transferencias_id_empresa_unica").on(table.id, table.empresaId),
+    foreignKey({
+      columns: [table.planejamentoOrigemTransferenciaId, table.empresaId],
+      foreignColumns: [table.id, table.empresaId],
+      name: "transferencias_planejamento_origem_empresa_fk"
+    })
+      .onDelete("restrict")
+      .onUpdate("no action"),
+
     index("transferencias_caixa_idx").on(table.caixaId),
     // Parcial: so indexa o fluxo novo, entao nao cresce com o historico (todo NULL). Escopado por
     // empresa para que a chave de uma nunca colida com a de outra.
@@ -1753,7 +1777,10 @@ export const transferencias = pgTable(
     // e migration, ato separado.
     index("transferencias_solicitacao_cofre_idx")
       .on(table.caixaId, table.status)
-      .where(sql`${table.solicitacaoCofreEm} is not null`)
+      .where(sql`${table.solicitacaoCofreEm} is not null`),
+    index("transferencias_planejamento_origem_idx")
+      .on(table.planejamentoOrigemTransferenciaId)
+      .where(sql`${table.planejamentoOrigemTransferenciaId} is not null`)
   ]
 );
 

@@ -22,6 +22,7 @@ import {
   colaboradores,
   colaboradoresCargos,
   cargos,
+  contas,
   contasUsuarios,
   empresas,
   maquininhas,
@@ -454,6 +455,27 @@ export async function confirmarTransferenciaAberturaRepository(
 // enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o
 // teto do retorno e a guarda do fechamento conseguem ser reavaliados sobre o saldo REAL.
 // Sem join de proposito: FOR UPDATE nao pode ser aplicado ao lado nulavel de um outer join.
+
+// R-185: a abertura que confirma a ida tambem vincula todas as sangrias planejadas. A condicao
+// `caixa_id is null` impede que outro lacre/turno se aproprie delas numa corrida.
+export async function vincularPlanejamentosDaTransferenciaAoCaixaRepository(
+  input: { transferenciaOrigemId: string; caixaId: string; empresaId: string; agora: Date },
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const vinculadas = await db
+    .update(transferencias)
+    .set({ caixaId: input.caixaId, atualizadoEm: input.agora })
+    .where(
+      and(
+        eq(transferencias.empresaId, input.empresaId),
+        eq(transferencias.planejamentoOrigemTransferenciaId, input.transferenciaOrigemId),
+        eq(transferencias.status, "agendada"),
+        isNull(transferencias.caixaId)
+      )
+    )
+    .returning({ id: transferencias.id });
+  return vinculadas.length;
+}
 export async function travarCaixaRepository(
   caixaId: string,
   db: ExecutorBanco = banco
@@ -640,6 +662,112 @@ export async function criarTransferenciaCofreRepository(
   return { id: transferencia.id, criada: true };
 }
 
+// R-185: linhas ja criadas com a ida. Nao ha produtor neste modulo; so leitura e transicoes
+// protegidas da propria linha planejada.
+const ehPlanejamentoDeRetorno = and(
+  isNotNull(transferencias.planejamentoOrigemTransferenciaId),
+  isNotNull(transferencias.solicitacaoCofreEm)
+);
+
+export async function listarPlanejamentosRetornoRepository(caixaId: string, db: ExecutorBanco = banco) {
+  return db
+    .select({
+      id: transferencias.id,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      nLacreDoc: transferencias.nLacreDoc,
+      contaDestinoId: transferencias.contaDestinoId,
+      contaDestinoNome: contas.nome,
+      observacao: transferencias.observacao,
+      criadoEm: transferencias.criadoEm
+    })
+    .from(transferencias)
+    .innerJoin(contas, eq(contas.id, transferencias.contaDestinoId))
+    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), ehPlanejamentoDeRetorno))
+    .orderBy(asc(transferencias.criadoEm));
+}
+
+export async function buscarPlanejamentoRetornoRepository(
+  planejamentoId: string,
+  caixaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .select({
+      id: transferencias.id,
+      tipo: transferencias.tipo,
+      valorOriginal: transferencias.valorOriginal,
+      status: transferencias.status,
+      nLacreDoc: transferencias.nLacreDoc,
+      contaDestinoId: transferencias.contaDestinoId,
+      criadoPor: transferencias.criadoPor
+    })
+    .from(transferencias)
+    .where(and(eq(transferencias.id, planejamentoId), eq(transferencias.caixaId, caixaId), ehPlanejamentoDeRetorno))
+    .limit(1);
+  return linha ? { ...linha, valorCentavos: paraCentavos(linha.valorOriginal) } : null;
+}
+
+export async function executarPlanejamentoRetornoRepository(
+  input: { planejamentoId: string; caixaId: string; ordem: number; dataTransferencia: string; executadoPor: string },
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "pendente",
+      ordem: input.ordem,
+      dataTransferencia: input.dataTransferencia,
+      executadoPor: input.executadoPor,
+      executadoEm: new Date(),
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.planejamentoId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "agendada"),
+        ehPlanejamentoDeRetorno
+      )
+    )
+    .returning({ id: transferencias.id });
+  return linha ?? null;
+}
+
+export async function cancelarPlanejamentoRetornoRepository(
+  input: { planejamentoId: string; caixaId: string; canceladoPor: string; motivo: string },
+  db: ExecutorBanco = banco
+) {
+  const [linha] = await db
+    .update(transferencias)
+    .set({
+      status: "cancelada",
+      canceladoPor: input.canceladoPor,
+      canceladoEm: new Date(),
+      motivoCancelamento: input.motivo,
+      atualizadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(transferencias.id, input.planejamentoId),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "agendada"),
+        ehPlanejamentoDeRetorno
+      )
+    )
+    .returning({ id: transferencias.id });
+  return linha ?? null;
+}
+
+export async function existePlanejamentoRetornoAgendadoRepository(caixaId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.status, "agendada"), ehPlanejamentoDeRetorno))
+    .limit(1);
+  return Boolean(linha);
+}
+
 // R-179/Fatia 3 · aqui viviam `listarCaixasAbertosRepository` e as cinco consultas da ordem
 // programada (D4): `listarSolicitacoesCofreRepository`, `buscarSolicitacaoCofreRepository`,
 // `executarSolicitacaoCofreRepository`, `cancelarSolicitacaoCofreRepository` e
@@ -709,32 +837,6 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
       // Cronologico: a "aba" numera 1a/2a/3a por ordem de acontecimento (abertura sem ordem entra 1a).
       .orderBy(asc(transferencias.criadoEm))
   );
-}
-
-export async function atualizarAberturaCaixaRepository(
-  input: {
-    caixaId: string;
-    pdvId: string;
-    usuarioCaixaId: string;
-    colaboradorId: string;
-    dataHoraAbertura: Date;
-    observacao: string | null;
-    tokenEdicao: string;
-  },
-  db: ExecutorBanco = banco
-) {
-  await db
-    .update(fechamentosCaixa)
-    .set({
-      pdvId: input.pdvId,
-      usuarioCaixaId: input.usuarioCaixaId,
-      colaboradorId: input.colaboradorId,
-      dataMovimento: diaNegocio(input.dataHoraAbertura),
-      dataHoraAbertura: input.dataHoraAbertura,
-      observacao: input.observacao,
-      tokenEdicao: input.tokenEdicao
-    })
-    .where(eq(fechamentosCaixa.id, input.caixaId));
 }
 
 export async function registrarEdicaoCaixaRepository(

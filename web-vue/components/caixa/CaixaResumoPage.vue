@@ -32,6 +32,7 @@ const emit = defineEmits<{
       observacao: string | null;
     }
   ): void;
+  (event: "executarPlanejamento", payload: { caixaId: string; planejamentoId: string }): void;
   // D5: lacre por movimento (opcional, R-026). D6: `lacreRetorno` e o do retorno final que o
   // proprio fechamento cria quando ainda ha sobra. B2: `idempotenciaChave` identifica a INTENCAO;
   // `aoConcluir` traz o desfecho de volta, porque `emit` nao devolve o retorno do handler.
@@ -117,15 +118,17 @@ const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fecham
 // G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
 const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
+const planejamentosPendentes = computed(() => props.status?.planejamentosPendentes ?? []);
 
 // A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
 // Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
-const motivoTravado = computed(() =>
-  motivoFechamentoTravado(
+const motivoTravado = computed(() => {
+  if (planejamentosPendentes.value.length) return "há retorno/sangria planejado aguardando execução ou cancelamento";
+  return motivoFechamentoTravado(
     entregasPendentes.value.length,
     entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
-  )
-);
+  );
+});
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
 const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
 const maquininhasSelect = computed(() =>
@@ -406,6 +409,35 @@ function fechar() {
              painel que o alimentava. Executar uma ordem era um SEGUNDO caminho para o mesmo ato do
              botao de entregar abaixo — mesmo dinheiro, mesmas contas, outra porta. -->
         <div ref="blocoTravas" tabindex="-1">
+          <v-alert
+            v-if="planejamentosPendentes.length"
+            type="warning"
+            variant="tonal"
+            class="mb-4"
+            data-teste="planejamentos-retorno"
+          >
+            <div class="text-subtitle-2 mb-2">Retornos/Sangrias programados</div>
+            <div
+              v-for="planejamento in planejamentosPendentes"
+              :key="planejamento.id"
+              class="d-flex align-center flex-wrap ga-2 mb-2"
+            >
+              <span
+                >{{ dinheiro(planejamento.valor) }} · lacre {{ planejamento.lacre }} ·
+                {{ planejamento.contaDestinoNome }}</span
+              >
+              <v-btn
+                size="small"
+                color="warning"
+                :loading="salvando"
+                @click="emit('executarPlanejamento', { caixaId: caixaAberto!.id, planejamentoId: planejamento.id })"
+              >
+                Executar agora
+              </v-btn>
+            </div>
+            Execute cada linha quando o dinheiro sair da gaveta. Enquanto houver linha programada, o fechamento fica
+            bloqueado.
+          </v-alert>
           <EntregasAguardandoConferencia :entregas="entregasPendentes" />
         </div>
 

@@ -34,14 +34,6 @@ export const caixaParamsSchema = z.object({
   caixaId: uuidSchema
 });
 
-export const editarAberturaCaixaPayloadSchema = z.object({
-  tokenEdicao: z.string().min(1),
-  pdvId: uuidSchema,
-  usuarioCaixaId: z.string().min(1),
-  dataHoraAbertura: dataHoraSchema,
-  observacao: z.string().optional().nullable()
-});
-
 // D6: o retorno final e o fechamento sao UM ato atomico. O cliente nao manda o VALOR do retorno —
 // o servidor usa a sobra que ele mesmo apurou sob trava, para que nao exista janela entre o que a
 // tela viu e o que o banco tem. O lacre e por movimento (D5) e continua opcional (R-026).
@@ -259,6 +251,23 @@ export const transferenciaCofrePayloadSchema = z.object({
   idempotenciaChave: idempotenciaChaveSchema
 });
 
+// R-185: estas rotas nao criam ordens; apenas operam linhas que ja nasceram junto da transferencia inicial.
+export const planejamentoRetornoSchema = z.object({
+  id: uuidSchema,
+  tipo: z.enum(["sangria", "retorno"]),
+  valor: z.number(),
+  lacre: z.string(),
+  contaDestinoId: uuidSchema,
+  contaDestinoNome: z.string(),
+  observacao: z.string().nullable(),
+  criadoEm: z.string()
+});
+export const planejamentoRetornoParamsSchema = z.object({ caixaId: uuidSchema, planejamentoId: uuidSchema });
+export const cancelarPlanejamentoRetornoPayloadSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500)
+});
+export const executarPlanejamentoRetornoPayloadSchema = z.object({});
+
 // R-179/Fatia 3 · aqui viviam `programarSolicitacaoCofrePayloadSchema`,
 // `executarSolicitacaoCofrePayloadSchema`, `solicitacaoCofreParamsSchema` e
 // `caixaAbertoResumoSchema` — os contratos de "Programar entrega ao cofre" (D4). A retaguarda
@@ -342,7 +351,8 @@ export const caixaStatusSchema = z.object({
   // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado
   // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
   // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".
-  entregasPendentes: entregaCofrePendenteSchema.array()
+  entregasPendentes: entregaCofrePendenteSchema.array(),
+  planejamentosPendentes: planejamentoRetornoSchema.array()
 });
 
 export const alterarHorarioCaixaResponseSchema = caixaStatusSchema.extend({
@@ -352,7 +362,6 @@ export const alterarHorarioCaixaResponseSchema = caixaStatusSchema.extend({
 export type CaixaStatusQuery = z.infer<typeof caixaStatusQuerySchema>;
 export type AbrirCaixaPayload = z.infer<typeof abrirCaixaPayloadSchema>;
 export type CaixaParams = z.infer<typeof caixaParamsSchema>;
-export type EditarAberturaCaixaPayload = z.infer<typeof editarAberturaCaixaPayloadSchema>;
 export type FecharCaixaPayload = z.infer<typeof fecharCaixaPayloadSchema>;
 export type HistoricoCaixaQuery = z.infer<typeof historicoCaixaQuerySchema>;
 export type StatusCaixa = z.infer<typeof statusCaixaSchema>;
@@ -367,6 +376,9 @@ export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoC
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
+export type PlanejamentoRetorno = z.infer<typeof planejamentoRetornoSchema>;
+export type PlanejamentoRetornoParams = z.infer<typeof planejamentoRetornoParamsSchema>;
+export type CancelarPlanejamentoRetornoPayload = z.infer<typeof cancelarPlanejamentoRetornoPayloadSchema>;
 export type EntregaCofrePendente = z.infer<typeof entregaCofrePendenteSchema>;
 export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;
 export type TransferenciasCaixaResponse = z.infer<typeof transferenciasCaixaResponseSchema>;
