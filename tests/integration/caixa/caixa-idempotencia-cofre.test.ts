@@ -180,7 +180,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // antes da idempotencia, este caso responderia "Caixa sem saldo" para um ato que DEU CERTO.
   it("retry que zerou o saldo continua respondendo 200, e nao 'sem saldo'", async () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-saldo-zero", "2026-06-03T08:00", 80);
-    const entrega = { tipo: "retorno", valor: 80, idempotenciaChave: randomUUID() };
+    const entrega = { valor: 80, idempotenciaChave: randomUUID() };
 
     expect((await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega)).statusCode).toBe(200);
     expect(await saldoDoCaixa()).toBe(0);
@@ -194,7 +194,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-conflito", "2026-06-04T08:00", 400);
     const chave = randomUUID();
     const original = {
-      tipo: "retorno",
       valor: 100,
       lacre: "IDEM-CONF-1",
       observacao: "Original",
@@ -205,7 +204,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     // Cada campo da intencao, sozinho, tem de derrubar a reutilizacao da chave.
     const divergentes = [
       { ...original, valor: 120 },
-      { ...original, tipo: "sangria" },
       { ...original, lacre: "IDEM-CONF-2" },
       { ...original, observacao: "Outra coisa" }
     ];
@@ -227,7 +225,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
       [40, "IDEM-MULTI-2"]
     ] as const) {
       const resposta = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-        tipo: "retorno",
         valor,
         lacre,
         idempotenciaChave: randomUUID()
@@ -499,7 +496,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     );
     try {
       const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-        tipo: "sangria",
         valor: 20,
         idempotenciaChave: randomUUID()
       });

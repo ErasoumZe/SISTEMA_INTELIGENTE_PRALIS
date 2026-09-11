@@ -174,14 +174,13 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
     const lacre = `P1-CANON-CONF-${sequencia}`;
 
     const entrega = await inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
-      tipo: "sangria",
       valor: 200,
       lacre,
       idempotenciaChave: randomUUID()
     });
     expect(entrega.statusCode, entrega.body).toBe(200);
     const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = 'sangria' order by criado_em desc limit 1",
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [fx.caixaId]
     );
 
@@ -192,6 +191,6 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
     });
 
     expect(conferencia.statusCode, conferencia.body).toBe(200);
-    expect(await linhaDaTransferencia(movimento!.id)).toMatchObject({ status: "recebido", tipo: "sangria" });
+    expect(await linhaDaTransferencia(movimento!.id)).toMatchObject({ status: "recebido", tipo: "retorno" });
   });
 });

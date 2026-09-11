@@ -69,19 +69,18 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
-  // Caminho canonico: o unico escritor de `sangria`/`retorno`. `cookie` e parametrizavel porque
+  // Caminho canonico: o unico escritor de `retorno`. `cookie` e parametrizavel porque
   // `podeOperarCaixa` aceita tambem quem tem `caixas_gerenciar` — e um dos casos abaixo precisa que
   // quem ENTREGA nao seja o operador.
   async function entregarAoCofre(caixaId: string, valor: number, lacre: string, cookie = cookieCaixa) {
     const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookie, {
-      tipo: "sangria",
       valor,
       lacre,
       idempotenciaChave: randomUUID()
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = 'sangria' order by criado_em desc limit 1",
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [caixaId]
     );
     if (!movimento) throw new Error("Entrega ao cofre nao encontrada");

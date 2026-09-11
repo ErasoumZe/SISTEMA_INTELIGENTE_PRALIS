@@ -1,5 +1,4 @@
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import { empresas } from "@padaria/db/schema/cadastro";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { transferencias, transferenciasConferenciasRecusadas } from "@padaria/db/schema/transferencia";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -19,18 +18,8 @@ import { banco, type ExecutorBanco } from "../banco/conexao.js";
  *
  * Os tres criterios sao necessarios JUNTOS: nenhum sozinho distingue os fluxos.
  */
-export function ehEntregaCaixaParaCofre(linha: {
-  caixaId: string | null;
-  tipo: string;
-  contaDestinoId: string;
-  contaCofreId: string | null;
-}): boolean {
-  return (
-    linha.caixaId !== null &&
-    (linha.tipo === "sangria" || linha.tipo === "retorno") &&
-    linha.contaCofreId !== null &&
-    linha.contaDestinoId === linha.contaCofreId
-  );
+export function ehRetornoDoCaixa(linha: { caixaId: string | null; tipo: string }): boolean {
+  return linha.caixaId !== null && (linha.tipo === "sangria" || linha.tipo === "retorno");
 }
 
 /**
@@ -70,7 +59,7 @@ export function ehMovimentoDoCaixaParaOCofre(movimento: {
  * escrito assim de proposito: apagar um dos criterios daqui faria o par divergir sem nenhum teste
  * ficar vermelho.
  */
-export async function listarEntregasAoCofrePendentesRepository(
+export async function listarRetornosPendentesRepository(
   caixaId: string,
   db: ExecutorBanco = banco
 ): Promise<Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>> {
@@ -83,14 +72,11 @@ export async function listarEntregasAoCofrePendentesRepository(
       criadoEm: transferencias.criadoEm
     })
     .from(transferencias)
-    .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
     .where(
       and(
         eq(transferencias.caixaId, caixaId),
         eq(transferencias.status, "pendente"),
-        inArray(transferencias.tipo, ["sangria", "retorno"]),
-        isNotNull(empresas.contaCofreId),
-        eq(transferencias.contaDestinoId, empresas.contaCofreId)
+        inArray(transferencias.tipo, ["sangria", "retorno"])
       )
     )
     .orderBy(asc(transferencias.criadoEm));

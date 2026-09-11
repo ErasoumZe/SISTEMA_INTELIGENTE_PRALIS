@@ -3,6 +3,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
+import { registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarUm, executarSql, json } from "../../setup/integracao.js";
 
@@ -70,7 +71,9 @@ describe("permissoes - ciclo de vida do lancamento (pagar / D-Pago / visualizar_
       dataHoraAbertura: dataHora
     });
     expect(abrir.statusCode, abrir.body).toBe(201);
-    return { contaId, caixaId: json<{ data: { id: string } }>(abrir).data.id };
+    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
+    return { contaId, caixaId };
   }
 
   function despesaPayload(contaId: string, extra: Record<string, unknown> = {}) {

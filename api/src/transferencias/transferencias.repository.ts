@@ -18,7 +18,7 @@ import {
 } from "@padaria/shared/transferencias";
 import { centavosParaDecimalBanco, paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
-import { ehEntregaCaixaParaCofre } from "./entrega-cofre.repository.js";
+import { ehRetornoDoCaixa } from "./entrega-cofre.repository.js";
 import { filtrosEmpresa, numeroDecimal, valoresBase, valoresBaseEdicao } from "../lancamentos/lancamentos.dominio.js";
 import { textoDoMovimento } from "../lancamentos/texto-movimento.js";
 
@@ -52,25 +52,22 @@ export async function listarTransferenciasRepository(
       // Os tres ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,
-      tipo: transferencias.tipo,
-      contaCofreId: empresas.contaCofreId
+      tipo: transferencias.tipo
     })
     .from(transferencias)
     .innerJoin(origem, eq(origem.id, transferencias.contaOrigemId))
     .innerJoin(destino, eq(destino.id, transferencias.contaDestinoId))
     .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
     .where(filtros.length ? and(...filtros) : undefined);
-  return linhas.map(({ caixaId, tipo, contaCofreId, ...linha }) => ({
+  return linhas.map(({ caixaId, tipo, ...linha }) => ({
     ...linha,
     status: linha.status as TransferenciaDto["status"],
     valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
-    ehCaixaParaCofre: ehEntregaCaixaParaCofre({
+    ehCaixaParaCofre: ehRetornoDoCaixa({
       caixaId,
-      tipo,
-      contaDestinoId: linha.contaDestinoId,
-      contaCofreId
+      tipo
     })
   }));
 }
@@ -105,7 +102,9 @@ export async function criarTransferenciaRepository(
       empresaId: dados.empresaId,
       numero: dados.nLacreDoc,
       transferenciaId: transferencia.id,
-      origem: "retorno"
+      // O lacre da transferencia inicial sela a SAIDA do malote. A abertura do Caixa procura
+      // exatamente esta ponta para reivindicar e romper o lacre no mesmo ato (R-027/R-040).
+      origem: "saida"
     });
   }
   return transferencia;
@@ -136,7 +135,7 @@ export async function criarRetornosPlanejadosRepository(
         empresaId: input.empresaId,
         planejamentoOrigemTransferenciaId: input.transferenciaOrigemId,
         dataReferencia: input.dataReferencia,
-        descricao: "Retorno/Sangria planejada",
+        descricao: "Transferencia de retorno programada",
         observacao: input.observacao,
         valorOriginal: centavosParaDecimalBanco(paraCentavos(plano.valor)),
         valorAcrescimo: centavosParaDecimalBanco(0),
@@ -146,7 +145,7 @@ export async function criarRetornosPlanejadosRepository(
         nLacreDoc: plano.nLacreDoc,
         tempoConfirmacao: input.tempoConfirmacao,
         status: "agendada",
-        tipo: "sangria",
+        tipo: "retorno",
         computar: input.computar,
         solicitacaoCofreEm: agora,
         criadoPor: input.criadoPor
@@ -165,7 +164,8 @@ export async function criarRetornosPlanejadosRepository(
       empresaId: input.empresaId,
       numero: input.planos[indice]!.nLacreDoc,
       transferenciaId: transferencia.id,
-      origem: "saida"
+      // As filhas planejadas representam a VOLTA do dinheiro ao Cofre.
+      origem: "retorno"
     }))
   );
 }
@@ -293,7 +293,7 @@ export type ContextoConferencia = {
   // banco.
   caixaId: string | null;
   contaCofreId: string | null;
-  ehCaixaParaCofre: boolean;
+  ehRetornoDoCaixa: boolean;
 };
 
 export async function buscarContextoConferenciaRepository(
@@ -320,7 +320,7 @@ export async function buscarContextoConferenciaRepository(
     .limit(1);
   if (!linha) return null;
 
-  const ehCaixaParaCofre = ehEntregaCaixaParaCofre(linha);
+  const retornoDoCaixa = ehRetornoDoCaixa(linha);
 
   return {
     id: linha.id,
@@ -332,7 +332,7 @@ export async function buscarContextoConferenciaRepository(
     executadoPor: linha.executadoPor,
     caixaId: linha.caixaId,
     contaCofreId: linha.contaCofreId,
-    ehCaixaParaCofre
+    ehRetornoDoCaixa: retornoDoCaixa
   };
 }
 

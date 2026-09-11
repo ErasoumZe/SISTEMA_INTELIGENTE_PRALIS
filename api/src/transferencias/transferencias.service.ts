@@ -130,7 +130,7 @@ export async function listarTransferencias(
 // Tres copias divergiriam no primeiro ajuste de texto, e a terceira porta ja provou que escritor
 // esquecido e o modo de falha desta area.
 const CAMINHO_UNICO_DA_ENTREGA_AO_COFRE =
-  "Entrega ao cofre nao sai por transferencia comum: registre a sangria ou o retorno no proprio Caixa";
+  "Entrega ao cofre nao sai por transferencia comum: registre a transferencia de retorno no proprio Caixa";
 
 function exigirCaminhoUnicoDaEntregaAoCofre(movimento: {
   contaOrigemId: string;
@@ -306,11 +306,11 @@ export async function confirmarTransferencia(
     // A criacao ja nao deixa mais essa linha nascer. Esta trava alcanca as que JA existem: sem ela,
     // o legado do banco continuaria com o atalho aberto. `ehCaixaParaCofre` sai de fora porque a
     // entrega canonica confirma exatamente assim — e ela e o caminho que deve funcionar.
-    if (contexto && !contexto.ehCaixaParaCofre && contexto.caixaId && dados.contaDestinoId === contexto.contaCofreId) {
+    if (contexto && !contexto.ehRetornoDoCaixa && contexto.caixaId && dados.contaDestinoId === contexto.contaCofreId) {
       throw new Error(CAMINHO_UNICO_DA_ENTREGA_AO_COFRE);
     }
 
-    if (contexto?.ehCaixaParaCofre) {
+    if (contexto?.ehRetornoDoCaixa) {
       if (dados.valorRecebido == null) {
         throw erroValidacao(
           "Informe o valor recebido para conferir uma entrega do Caixa",
@@ -377,7 +377,7 @@ export async function recusarConferencia(
     if (!contexto || !podeAcessarEmpresa(perfil, contexto.empresaId)) throw new Error("Registro nao encontrado");
     // Generica nao tem recusa auditavel: para ela isto e 404, e nao "nao pode" — o caminho dela
     // continua sendo o `/confirmar` com a regra vigente.
-    if (!contexto.ehCaixaParaCofre) throw new Error("Registro nao encontrado");
+    if (!contexto.ehRetornoDoCaixa) throw new Error("Registro nao encontrado");
 
     // R-183 · a linha do caixa vem TRAVADA (FOR SHARE) antes de qualquer decisao, exatamente como no
     // `/confirmar`. Ate aqui a recusa nao travava nada porque nao movia dinheiro; agora ela pode
@@ -648,7 +648,7 @@ export async function atualizarTransferencia(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
     if (dados.retornosPlanejados.length || (await transferenciaTemPlanejamentoRepository(transferenciaId, tx))) {
-      throw new Error("Transferencia com retorno/sangria planejado nao pode ser editada");
+      throw new Error("Transferencia com retorno planejado nao pode ser editada");
     }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);

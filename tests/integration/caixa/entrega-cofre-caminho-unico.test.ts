@@ -131,13 +131,12 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
     // manda. E este o contraste do caso: fechar a porta nao some com a operacao, devolve ela para
     // o fluxo que tem conferencia, lacre e ordem.
     const entrega = await inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
-      tipo: "sangria",
       valor: 200,
       lacre: `P1-CANONICO-${sequencia}`,
       idempotenciaChave: randomUUID()
     });
     expect(entrega.statusCode, entrega.body).toBe(200);
-    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([{ tipo: "sangria", status: "pendente" }]);
+    expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([{ tipo: "retorno", status: "pendente" }]);
 
     assertProblem(await inject("POST", `/api/caixa/${fx.caixaId}/fechar`, cookieCaixa, { observacao: "Turno" }), 400);
   });

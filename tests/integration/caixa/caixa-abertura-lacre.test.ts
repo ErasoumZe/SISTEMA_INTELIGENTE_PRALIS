@@ -4,7 +4,7 @@ import { assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 // R-040 — abrir o caixa informando o lacre E o ato de confirmar o recebimento da transferencia.
 // Nao sao dois passos: o lacre identifica a transferencia pendente, o caixa que abre vence a
@@ -15,20 +15,27 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieTesouraria: string;
+  let cookieMultiempresa: string;
   let adminId: string;
+  let multiempresaId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     await encerrarCaixaSeedAdminParaTeste();
-    [cookieAdmin, cookieTesouraria] = await Promise.all([
+    [cookieAdmin, cookieTesouraria, cookieMultiempresa] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
-      cookieSessao(contexto.app, "tesouraria")
+      cookieSessao(contexto.app, "tesouraria"),
+      cookieSessao(contexto.app, "multiempresa")
     ]);
-    const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
+    const [admin, multiempresa] = await Promise.all([
+      consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [usuariosTeste.admin.email]),
+      consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+        usuariosTeste.multiempresa.email
+      ])
     ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
-    adminId = usuario.id;
+    if (!admin || !multiempresa) throw new Error("Operadores de teste nao encontrados");
+    adminId = admin.id;
+    multiempresaId = multiempresa.id;
   }, 120_000);
 
   afterAll(async () => contexto.fechar());
@@ -74,11 +81,16 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
-  async function abrir(pdvId: string, dataHoraAbertura: string, lacreAbertura?: string) {
-    const resposta = await request(cookieAdmin, "POST", "/api/caixa/abrir", {
+  async function abrir(
+    pdvId: string,
+    dataHoraAbertura: string,
+    lacreAbertura?: string,
+    ator = { cookie: cookieAdmin, usuarioId: adminId }
+  ) {
+    const resposta = await request(ator.cookie, "POST", "/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,
-      usuarioCaixaId: adminId,
+      usuarioCaixaId: ator.usuarioId,
       dataHoraAbertura,
       ...(lacreAbertura ? { lacreAbertura } : {})
     });
@@ -157,7 +169,10 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const primeira = await abrir(a.pdvId, "2026-06-02T08:00", "R040-REUSO");
     expect(primeira.statusCode, primeira.body).toBe(201);
 
-    const segunda = await abrir(b.pdvId, "2026-06-02T09:00", "R040-REUSO");
+    const segunda = await abrir(b.pdvId, "2026-06-02T09:00", "R040-REUSO", {
+      cookie: cookieMultiempresa,
+      usuarioId: multiempresaId
+    });
     assertProblem(segunda, 400);
     expect(segunda.body).toMatch(/rompido|já utilizado/i);
 
@@ -172,7 +187,10 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
 
     const [primeira, segunda] = await Promise.all([
       abrir(a.pdvId, "2026-06-03T08:00", "R040-CORRIDA"),
-      abrir(b.pdvId, "2026-06-03T08:00", "R040-CORRIDA")
+      abrir(b.pdvId, "2026-06-03T08:00", "R040-CORRIDA", {
+        cookie: cookieMultiempresa,
+        usuarioId: multiempresaId
+      })
     ]);
     expect([primeira.statusCode, segunda.statusCode].sort()).toEqual([201, 400]);
 
@@ -242,6 +260,90 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     expect(caixa).toMatchObject({ lacre_abertura: null, divida_cofre: "0.00" });
     expect(await consultarUm("select id from transferencias where caixa_id = $1", [caixaId])).toBeNull();
     expect((await saldoConta(contaId)).saldoAtual).toBe(0);
+  });
+
+  it("Deve criar, vincular e executar transferencias de retorno planejadas sem antecipar o saldo (R-185/R-187)", async () => {
+    const { contaId, pdvId } = await criarContaEPdv("r185-retornos");
+    const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
+      empresaId: idsTeste.empresaA,
+      dataReferencia: "2026-07-31",
+      descricao: "Fundo com retornos preparados",
+      valorOriginal: 1_000,
+      contaOrigemId: idsTeste.contaCofre,
+      contaDestinoId: contaId,
+      nLacreDoc: "R185-IDA-001",
+      tempoConfirmacao: "1dia",
+      retornosPlanejados: [
+        { valor: 300, nLacreDoc: "R185-RET-002", contaDestinoId: idsTeste.contaCofre },
+        { valor: 700, nLacreDoc: "R185-RET-003", contaDestinoId: idsTeste.contaCofre }
+      ]
+    });
+    expect(inicial.statusCode, inicial.body).toBe(201);
+    const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
+
+    const antesDaAbertura = await consultarTodos<{
+      id: string;
+      tipo: string;
+      status: string;
+      valor_original: string;
+      caixa_id: string | null;
+      origem_lacre: string;
+    }>(
+      `select t.id, t.tipo, t.status, t.valor_original, t.caixa_id, l.origem as origem_lacre
+         from transferencias t
+         join lacres l on l.transferencia_id = t.id
+        where t.planejamento_origem_transferencia_id = $1
+        order by t.valor_original`,
+      [transferenciaInicialId]
+    );
+    expect(antesDaAbertura).toEqual([
+      expect.objectContaining({ tipo: "retorno", status: "agendada", valor_original: "300.00", caixa_id: null }),
+      expect.objectContaining({ tipo: "retorno", status: "agendada", valor_original: "700.00", caixa_id: null })
+    ]);
+    expect(antesDaAbertura.map((linha) => linha.origem_lacre)).toEqual(["retorno", "retorno"]);
+
+    const aberta = await abrir(pdvId, "2020-01-01T00:00", "R185-IDA-001");
+    expect(aberta.statusCode, aberta.body).toBe(201);
+    const caixaId = json<{ data: { id: string } }>(aberta).data.id;
+    const status = await request(cookieAdmin, "GET", `/api/caixa/status?empresaId=${idsTeste.empresaA}`);
+    expect(status.statusCode, status.body).toBe(200);
+    const statusAberto = json<{
+      data: { caixaAberto: { id: string }; resumo: { saldo: number }; planejamentosPendentes: Array<{ id: string }> };
+    }>(status).data;
+    expect(statusAberto.caixaAberto.id).toBe(caixaId);
+    expect(statusAberto.resumo.saldo).toBe(1_000);
+    expect(statusAberto.planejamentosPendentes).toHaveLength(2);
+
+    const vinculadas = await consultarTodos<{ id: string; caixa_id: string | null }>(
+      "select id, caixa_id from transferencias where planejamento_origem_transferencia_id = $1 order by valor_original",
+      [transferenciaInicialId]
+    );
+    expect(vinculadas.every((linha) => linha.caixa_id === statusAberto.caixaAberto.id)).toBe(true);
+
+    const executada = await request(
+      cookieAdmin,
+      "POST",
+      `/api/caixa/${caixaId}/planejamentos-retorno/${vinculadas[0]!.id}/executar`,
+      {}
+    );
+    expect(executada.statusCode, executada.body).toBe(200);
+    expect(
+      json<{ data: { resumo: { saldo: number }; planejamentosPendentes: unknown[] } }>(executada).data
+    ).toMatchObject({
+      resumo: { saldo: 700 },
+      planejamentosPendentes: expect.arrayContaining([expect.objectContaining({ id: vinculadas[1]!.id })])
+    });
+    expect(
+      await consultarUm<{ tipo: string; status: string }>("select tipo, status from transferencias where id = $1", [
+        vinculadas[0]!.id
+      ])
+    ).toEqual({ tipo: "retorno", status: "pendente" });
+
+    const fecharComPlanejamento = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
+      observacao: "nao deve fechar"
+    });
+    assertProblem(fecharComPlanejamento, 400);
+    expect(fecharComPlanejamento.body).toMatch(/retorno planejada/iu);
   });
 
   it("Deve recusar o lacre de uma transferencia AGENDADA ainda nao liberada", async () => {

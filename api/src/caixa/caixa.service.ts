@@ -70,7 +70,7 @@ import {
   type IntencaoEntregaCofre
 } from "./caixa.repository.js";
 import {
-  listarEntregasAoCofrePendentesRepository,
+  listarRetornosPendentesRepository,
   ultimasRecusasPorTransferenciaRepository
 } from "../transferencias/entrega-cofre.repository.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
@@ -206,7 +206,7 @@ function serializarPlanejamentos(
 ): PlanejamentoRetorno[] {
   return linhas.map((linha) => ({
     id: linha.id,
-    tipo: linha.tipo === "retorno" ? "retorno" : "sangria",
+    tipo: "retorno",
     valor: deCentavos(paraCentavos(linha.valorOriginal)),
     lacre: linha.nLacreDoc ?? "",
     contaDestinoId: linha.contaDestinoId,
@@ -221,7 +221,7 @@ function serializarPlanejamentos(
 // fechamento e nao tem saida nenhuma; entrega ja recusada trava tambem, mas a saida existe e esta
 // no cofre. Sem o numero, o operador leria "travado" nos dois casos.
 async function entregasPendentesDoCaixa(caixaId: string, db?: ExecutorBanco): Promise<EntregaCofrePendente[]> {
-  const linhas = await listarEntregasAoCofrePendentesRepository(caixaId, db);
+  const linhas = await listarRetornosPendentesRepository(caixaId, db);
   const ultimas = await ultimasRecusasPorTransferenciaRepository(
     linhas.map((linha) => linha.id),
     db
@@ -237,7 +237,7 @@ function serializarEntregasPendentes(
     const recusa = ultimas.get(linha.id);
     return {
       id: linha.id,
-      tipo: linha.tipo === "sangria" ? "sangria" : "retorno",
+      tipo: "retorno",
       valor: deCentavos(linha.valorCentavos),
       lacre: linha.lacre,
       criadoEm: serializarData(linha.criadoEm) ?? "",
@@ -254,7 +254,7 @@ function serializarEntregasPendentes(
 function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
   const VISIVEIS = 3;
   const descritas = entregas.slice(0, VISIVEIS).map((entrega) => {
-    const nome = entrega.tipo === "sangria" ? "Sangria" : "Retorno";
+    const nome = "Retorno";
     const lacre = entrega.lacre ? `, lacre ${entrega.lacre}` : "";
     return `${nome} de R$ ${entrega.valor.toFixed(2)}${lacre}`;
   });
@@ -378,7 +378,7 @@ async function prepararAberturaPorLacre(
   // outro caixa migraria o movimento em silencio e tiraria a saida dos totais do primeiro.
   if (achado.caixaId) throw new Error("TransferÃªncia deste lacre jÃ¡ pertence a outro caixa");
   // R-030: so um dos destinos CANDIDATOS pode reivindicar. Caixa fora da lista nao disputa.
-  if (!achado.candidatoId) throw new Error("A conta deste caixa nÃ£o Ã© destino desta transferÃªncia");
+  if (!achado.candidatoId) throw new Error("A conta deste caixa não é destino desta transferência");
   // R-028: quem envia nao confirma o proprio envio.
   if (achado.criadoPor === usuarioId) throw new Error("Quem enviou a transferÃªncia nÃ£o pode confirmar o recebimento");
   if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem nÃ£o pode ser a mesma do caixa");
@@ -520,9 +520,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // pendente nao entra â€” travar alem do que a R-171 descreve prenderia operacao que hoje nao tem
     // valvula de escape (o fluxo especial auditado e a fatia seguinte da #101).
     if (await existePlanejamentoRetornoAgendadoRepository(caixa.id, tx)) {
-      throw new Error(
-        "Existem transferencias de retorno/sangria planejadas: execute ou cancele antes de fechar o caixa"
-      );
+      throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
     const entregasPendentes = await entregasPendentesDoCaixa(caixa.id, tx);
     if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
@@ -543,7 +541,6 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       await registrarEntregaAoCofre(
         {
           caixa: { ...caixa, pdvContaId: caixa.pdvContaId },
-          tipo: "retorno",
           valorCentavos: saldoCentavos,
           lacre: dados.lacreRetorno ?? null,
           observacao: dados.observacao ?? null,
@@ -621,7 +618,8 @@ function conferirIntencaoEntrega(
   // pedido â€” compara-lo faria um retry legitimo responder 409 depois que o cofre agisse.
   const divergencias: string[] = [];
   if (existente.caixaId !== pretendida.caixaId) divergencias.push("caixa");
-  if (existente.tipo !== pretendida.tipo) divergencias.push("tipo");
+  const tipoExistente = existente.tipo === "sangria" ? "retorno" : existente.tipo;
+  if (tipoExistente !== pretendida.tipo) divergencias.push("tipo");
   if (existente.valorCentavos !== pretendida.valorCentavos) divergencias.push("valor");
   if ((existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
   if ((existente.observacao ?? null) !== pretendida.observacao) divergencias.push("observacao");
@@ -674,8 +672,18 @@ async function existeConfirmadorElegivel(
 async function exigirConfirmadorDoCofre(empresaId: string, criadoPor: string, tx: ExecutorBanco): Promise<void> {
   const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
-  if (!(await existeConfirmadorElegivel({ contaId: contaCofreId, empresaId, excluirUsuarioId: criadoPor }, tx))) {
-    throw new Error("Conta do cofre sem responsavel elegivel para conferir a entrega");
+  await exigirConfirmadorDaConta(contaCofreId, empresaId, criadoPor, tx, "Conta do cofre");
+}
+
+async function exigirConfirmadorDaConta(
+  contaId: string,
+  empresaId: string,
+  criadoPor: string,
+  tx: ExecutorBanco,
+  nomeDaConta = "Conta de destino"
+): Promise<void> {
+  if (!(await existeConfirmadorElegivel({ contaId, empresaId, excluirUsuarioId: criadoPor }, tx))) {
+    throw new Error(`${nomeDaConta} sem responsavel elegivel para conferir a transferencia de retorno`);
   }
 }
 
@@ -686,7 +694,6 @@ async function exigirConfirmadorDoCofre(empresaId: string, criadoPor: string, tx
 async function registrarEntregaAoCofre(
   input: {
     caixa: { id: string; empresaId: string; pdvContaId: string; dataMovimento: string | null };
-    tipo: "sangria" | "retorno";
     valorCentavos: number;
     lacre: string | null;
     observacao: string | null;
@@ -701,7 +708,7 @@ async function registrarEntregaAoCofre(
   const observacao = input.observacao?.trim() || null;
   const intencao = {
     caixaId: input.caixa.id,
-    tipo: input.tipo,
+    tipo: "retorno",
     valorCentavos: input.valorCentavos,
     lacre,
     observacao
@@ -734,7 +741,7 @@ async function registrarEntregaAoCofre(
     throw new Error("Lacre jÃ¡ utilizado em outro movimento");
   }
 
-  const ordem = await proximaOrdemTransferenciaRepository(input.caixa.id, input.tipo, tx);
+  const ordem = await proximaOrdemTransferenciaRepository(input.caixa.id, "retorno", tx);
   const transferencia = await criarTransferenciaCofreRepository(
     {
       empresaId: input.caixa.empresaId,
@@ -742,12 +749,11 @@ async function registrarEntregaAoCofre(
       contaCaixaId: input.caixa.pdvContaId,
       contaCofreId,
       valorCentavos: input.valorCentavos,
-      tipo: input.tipo,
       ordem,
       dataReferencia: input.caixa.dataMovimento ?? diaNegocio(new Date()),
       dataTransferencia: diaNegocio(new Date()),
       nLacreDoc: lacre,
-      descricao: input.tipo === "retorno" ? "Retorno de fechamento" : "Sangria",
+      descricao: "Transferencia de retorno",
       observacao,
       criadoPor: input.criadoPor,
       idempotenciaChave: input.idempotenciaChave
@@ -815,7 +821,7 @@ export async function criarTransferenciaCofreCaixa(
     if (jaRegistrada) {
       conferirIntencaoEntrega(jaRegistrada, {
         caixaId: caixa.id,
-        tipo: dados.tipo,
+        tipo: "retorno",
         valorCentavos,
         lacre: dados.lacre?.trim() || null,
         observacao: dados.observacao?.trim() || null
@@ -840,7 +846,6 @@ export async function criarTransferenciaCofreCaixa(
     await registrarEntregaAoCofre(
       {
         caixa,
-        tipo: dados.tipo,
         valorCentavos,
         lacre: dados.lacre ?? null,
         observacao: dados.observacao ?? null,
@@ -898,10 +903,7 @@ export async function executarPlanejamentoRetorno(
         `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
       );
     }
-    const contaCofreId = await buscarContaCofreEmpresaRepository(caixa.empresaId, tx);
-    if (planejamento.contaDestinoId === contaCofreId) {
-      await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
-    }
+    await exigirConfirmadorDaConta(planejamento.contaDestinoId, caixa.empresaId, perfil.usuarioId, tx);
     const ordem = await proximaOrdemTransferenciaRepository(caixa.id, planejamento.tipo, tx);
     const executada = await executarPlanejamentoRetornoRepository(
       { planejamentoId, caixaId, ordem, dataTransferencia: diaNegocio(new Date()), executadoPor: perfil.usuarioId },

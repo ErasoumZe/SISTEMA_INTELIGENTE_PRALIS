@@ -84,7 +84,7 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
 
     // A entrega que trava: sai do caixa e fica `pendente` ate o cofre conferir.
     const entrega = await caixa.post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      data: { tipo: "sangria", valor: 100, lacre: `${MARCA}-LACRE`, idempotenciaChave: randomUUID() }
+      data: { valor: 100, lacre: `${MARCA}-LACRE`, idempotenciaChave: randomUUID() }
     });
     expect(entrega.status(), await entrega.text()).toBe(200);
   });
@@ -101,7 +101,7 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
     const bloco = page.locator(porTeste("entregas-aguardando-conferencia"));
     await expect(bloco).toBeVisible();
     await expect(bloco).toContainText(`${MARCA}-LACRE`);
-    await expect(bloco).toContainText("Sangria");
+    await expect(bloco).toContainText("Retorno");
 
     // O motivo fica escrito, e nao escondido em tooltip: quem le a tela sabe o que resolver.
     await expect(page.locator(porTeste("motivo-fechamento-travado"))).toContainText("conferência no cofre");

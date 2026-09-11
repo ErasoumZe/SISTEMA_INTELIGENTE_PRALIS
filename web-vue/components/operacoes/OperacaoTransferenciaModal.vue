@@ -35,7 +35,7 @@ const agendamento = computed({
 // viravam transferencia nao pedida na proxima).
 const multiploDestino = ref(false);
 const tempoConfirmacaoAberto = ref(false);
-const retornoSangriaAtivo = ref(false);
+const retornoAtivo = ref(false);
 
 // FOTO 1: o padrao da tela e "se ☑ abre esse campo" — as tres checkboxes ficam sempre visiveis e
 // cada uma REVELA o seu campo. Ao abrir, elas espelham o que ja esta no formulario: sem isto uma
@@ -45,7 +45,7 @@ watch(aberto, (estaAberto) => {
   if (!estaAberto) return;
   multiploDestino.value = form.value.contasDestinoIds.length > 0;
   tempoConfirmacaoAberto.value = form.value.tempoConfirmacao !== "1dia";
-  retornoSangriaAtivo.value = form.value.retornosPlanejados.length > 0;
+  retornoAtivo.value = form.value.retornosPlanejados.length > 0;
 });
 
 // Desmarcar LIMPA: candidato fantasma nao pode viajar para o backend.
@@ -59,7 +59,7 @@ watch(tempoConfirmacaoAberto, (ativo) => {
   if (!ativo) form.value.tempoConfirmacao = "1dia";
 });
 
-watch(retornoSangriaAtivo, (ativo) => {
+watch(retornoAtivo, (ativo) => {
   if (!ativo) {
     form.value.retornosPlanejados = [];
     return;
@@ -82,7 +82,7 @@ function adicionarRetornoPlanejado() {
 
 function removerRetornoPlanejado(indice: number) {
   form.value.retornosPlanejados.splice(indice, 1);
-  if (!form.value.retornosPlanejados.length) retornoSangriaAtivo.value = false;
+  if (!form.value.retornosPlanejados.length) retornoAtivo.value = false;
 }
 
 const erroPlanejamento = ref("");
@@ -97,7 +97,7 @@ function planejamentosValidos() {
         !plano.valor || Number(plano.valor.replace(",", ".")) <= 0 || !plano.nLacreDoc.trim() || !plano.contaDestinoId
     )
   ) {
-    erroPlanejamento.value = "Informe valor, lacre e destino em cada retorno/sangria.";
+    erroPlanejamento.value = "Informe valor, lacre e destino em cada transferencia de retorno.";
     return false;
   }
   for (const plano of planos) {
@@ -340,7 +340,7 @@ const hojeISO = computed(() => dataISO(0));
            parte daquele bloco — sao recursos legitimos da transferencia generica e continuam. -->
         <div class="tr-opcoes">
           <label class="tr-check">
-            <input v-model="multiploDestino" type="checkbox" :disabled="retornoSangriaAtivo" />
+            <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo" />
             <span>Múltiplo Destino</span>
           </label>
           <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
@@ -365,10 +365,15 @@ const hojeISO = computed(() => dataISO(0));
             </select>
           </label>
           <label v-if="!operacaoEditandoId" class="tr-check">
-            <input v-model="retornoSangriaAtivo" type="checkbox" />
-            <span>Transferência de retorno / Sangria</span>
+            <input v-model="retornoAtivo" type="checkbox" data-teste="opcao-transferencia-retorno" />
+            <span>Transferência de retorno</span>
           </label>
-          <section v-if="retornoSangriaAtivo" class="tr-planejamento" aria-label="Retornos e sangrias programados">
+          <section
+            v-if="retornoAtivo"
+            class="tr-planejamento"
+            aria-label="Transferências de retorno programadas"
+            data-teste="transferencias-retorno-programadas"
+          >
             <p class="tr-planejamento-ajuda">
               As linhas ficam preparadas para o Caixa e não alteram saldo até a execução.
             </p>
@@ -401,7 +406,7 @@ const hojeISO = computed(() => dataISO(0));
             </div>
             <span v-if="erroPlanejamento" class="tr-erro" role="alert">{{ erroPlanejamento }}</span>
             <button type="button" class="tr-adicionar-retorno" @click="adicionarRetornoPlanejado">
-              <v-icon size="16">mdi-plus</v-icon> Adicionar retorno/sangria
+              <v-icon size="16">mdi-plus</v-icon> Adicionar retorno
             </button>
           </section>
         </div>

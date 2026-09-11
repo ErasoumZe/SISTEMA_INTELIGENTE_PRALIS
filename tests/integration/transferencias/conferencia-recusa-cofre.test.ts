@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { diaNegocio } from "@padaria/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
@@ -41,6 +42,7 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
   });
 
   const empresaId = idsTeste.empresaA;
+  const hoje = diaNegocio(new Date());
 
   function post(url: string, payload: object, cookie = cookieAdmin) {
     return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
@@ -70,7 +72,7 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       dataHoraAbertura: dataHora
     });
     registrarEncerramentoCaixaParaTeste(caixaId);
-    const dataReferencia = dataHora.slice(0, 10);
+    const dataReferencia = hoje;
     await criar("/api/vendas", {
       empresaId,
       dataReferencia,
@@ -430,7 +432,7 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
 
     const lista = await contexto.app.inject({
       method: "GET",
-      url: `/api/transferencias?empresaId=${empresaId}`,
+      url: `/api/transferencias?empresaId=${empresaId}&pageSize=100`,
       headers: { cookie: cookieAdmin }
     });
     assertOk(lista);

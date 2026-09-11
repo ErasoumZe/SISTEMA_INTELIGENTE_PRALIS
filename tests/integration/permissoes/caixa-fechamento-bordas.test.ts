@@ -173,8 +173,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
         fx.caixaId
       ]);
 
-      const sangria = inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
-        tipo: "sangria",
+      const retorno = inject("POST", `/api/caixa/${fx.caixaId}/transferencia-cofre`, cookieCaixa, {
         valor: 10,
         idempotenciaChave: randomUUID()
       });
@@ -188,18 +187,18 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
       );
       await bloqueador.cliente.query("commit");
 
-      const resposta = await sangria;
+      const resposta = await retorno;
       expect(resposta.statusCode, resposta.body).toBe(400);
       expect(resposta.body).toMatch(/Caixa j[aá] fechado/);
     } finally {
       await fecharBloqueador(bloqueador);
     }
 
-    const sangrias = await consultarUm<{ total: string }>(
-      "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'sangria'",
+    const retornos = await consultarUm<{ total: string }>(
+      "select count(*) as total from transferencias where caixa_id = $1 and tipo = 'retorno'",
       [fx.caixaId]
     );
-    expect(Number(sangrias?.total ?? "0")).toBe(0);
+    expect(Number(retornos?.total ?? "0")).toBe(0);
   });
 
   // ------------------------------------------------------------------------------------------
@@ -212,6 +211,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
   it("Deve_VincularComTrilha_Quando_AVendaCreareChegaDuranteOFechamento", async () => {
     const fx = await novaFixture("C1 creare");
     const idExterno = `P0-C1-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-P0-${sequencia}`, fx.pdvId);
     await vendaManual(cookieCaixa, 100, `${idExterno}-venda-fixture`);
 
@@ -221,7 +221,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
       expect(await esperarBloqueioPor(bloqueador)).toBe(true);
 
       const integracao = enviarVendaIntegrada(
-        payloadVendaIntegrada(idExterno, `PDV-P0-${sequencia}`, VALOR_INJETADO, "2026-08-01T12:00:00.000Z")
+        payloadVendaIntegrada(idExterno, `PDV-P0-${sequencia}`, VALOR_INJETADO, dataVendaDentroDoCaixa)
       );
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
 
@@ -251,13 +251,14 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
   it("Deve_VincularComTrilha_Quando_AVendaCreareChegaDepoisDoFechamento", async () => {
     const fx = await novaFixture("C2 creare");
     const idExterno = `P0-C2-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-P0-${sequencia}`, fx.pdvId);
     await vendaManual(cookieCaixa, 100, `${idExterno}-venda-fixture`);
     const fechamento = await fecharCaixaInject(fx.caixaId, cookieCaixa);
     expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const resposta = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-P0-${sequencia}`, 30, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-P0-${sequencia}`, 30, dataVendaDentroDoCaixa)
     );
     expect(resposta.statusCode, resposta.body).toBe(200);
 

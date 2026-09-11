@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { abrirCaixaDoOperador, encerrarCaixaSeedAdminParaTeste, universoDoCaixa } from "../../setup/caixa.js";
+import {
+  abrirCaixaDoOperador,
+  encerrarCaixaSeedAdminParaTeste,
+  registrarEncerramentoCaixaParaTeste,
+  universoDoCaixa
+} from "../../setup/caixa.js";
 import {
   abrirBloqueador,
   consultarUm,
@@ -413,6 +418,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       lacreAbertura: lacre
     });
     expect(abertura.statusCode, abertura.body).toBe(201);
+    registrarEncerramentoCaixaParaTeste(json<{ data: { id: string } }>(abertura).data.id);
   });
 
   // ------------------------------------------------------------------------------------------
@@ -693,11 +699,12 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   it("Deve_RegistrarTrilhaNoCaixaQuePerdeu_Quando_OReenvioMoveAVendaParaForaDoCaixaFechado", async () => {
     const fx = await novaFixture("S8a creare");
     const idExterno = `P0-S8A-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-S8-${sequencia}`, fx.pdvId);
 
     // Venda dentro do periodo do caixa A.
     const criada = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, dataVendaDentroDoCaixa)
     );
     expect(criada.statusCode, criada.body).toBe(200);
     const fechamento = await fecharCaixaInject(fx.caixaId, cookieCaixa);
@@ -707,7 +714,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
 
     // Re-envio identico nao muda nada (idempotencia preservada).
     const reenvioIgual = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, dataVendaDentroDoCaixa)
     );
     expect(reenvioIgual.statusCode, reenvioIgual.body).toBe(200);
     expect(reenvioIgual.body).toContain("sem_novidade");
@@ -738,9 +745,10 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   it("Deve_CongelarSemAVenda_Quando_OReenvioQueMoveVenceOFechamento", async () => {
     const fx = await novaFixture("S8b creare");
     const idExterno = `P0-S8B-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-S8-${sequencia}`, fx.pdvId);
     const criada = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, dataVendaDentroDoCaixa)
     );
     expect(criada.statusCode, criada.body).toBe(200);
     const vendaId = (
@@ -782,9 +790,10 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   it("Deve_EsperarERegistrarTrilha_Quando_OFechamentoVenceOReenvioQueMove", async () => {
     const fx = await novaFixture("S8c creare");
     const idExterno = `P0-S8C-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-S8-${sequencia}`, fx.pdvId);
     const criada = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, dataVendaDentroDoCaixa)
     );
     expect(criada.statusCode, criada.body).toBe(200);
 
@@ -826,9 +835,10 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
   it("Deve_RecusarRetriavelSemPerderVendaNemTrilha_Quando_AOrigemRealMudaDuranteOReenvio", async () => {
     const fxA = await novaFixture("S8d origem");
     const idExterno = `P0-S8D-${sequencia}`;
+    const dataVendaDentroDoCaixa = new Date().toISOString();
     await vincularPdvExterno(`PDV-S8-${sequencia}`, fxA.pdvId);
     const criada = await enviarVendaIntegrada(
-      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, "2026-08-01T12:00:00.000Z")
+      payloadVendaIntegrada(idExterno, `PDV-S8-${sequencia}`, 100, dataVendaDentroDoCaixa)
     );
     expect(criada.statusCode, criada.body).toBe(200);
     const vendaId = (

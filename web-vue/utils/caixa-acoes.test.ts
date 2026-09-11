@@ -85,7 +85,6 @@ describe("retornarSaldoOperacional", () => {
     expect(ok).toBe(true);
     expect(deps.confirmar).toHaveBeenCalledOnce();
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/transferencia-cofre", {
-      tipo: "retorno",
       valor: 15,
       lacre: "LAC-9",
       observacao: null,

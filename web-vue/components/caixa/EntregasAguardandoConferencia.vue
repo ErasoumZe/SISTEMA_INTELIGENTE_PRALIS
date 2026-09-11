@@ -19,7 +19,7 @@ const total = computed(() => props.entregas.reduce((soma, entrega) => soma + ent
 // R-183 · quantas ja foram contadas pelo cofre e esperam so o encerramento. Muda o texto do bloco:
 // "confira no cofre" e instrucao errada para quem ja conferiu.
 const jaContadas = computed(() => props.entregas.filter((entrega) => entrega.valorContado !== null).length);
-const rotulo = (tipo: EntregaCofrePendente["tipo"]) => (tipo === "sangria" ? "Sangria" : "Retorno");
+const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
 </script>
 
 <template>

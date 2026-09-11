@@ -99,7 +99,6 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     deps.setSalvando(true);
     try {
       await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {
-        tipo: "retorno",
         valor: payload.valor,
         // D5: cada entrega fisica leva o proprio lacre. Opcional pela R-026.
         lacre: payload.lacre ?? null,
@@ -152,8 +151,8 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function executarPlanejamentoRetorno(payload: ExecutarPlanejamentoPayload): Promise<boolean> {
     if (
       !(await deps.confirmar(
-        "Confirma a execução deste retorno/sangria programado? O valor e o lacre reservados serão usados.",
-        "Executar retorno/sangria",
+        "Confirma a execução desta transferência de retorno programada? O valor e o lacre reservados serão usados.",
+        "Executar retorno",
         "Executar"
       ))
     ) {
@@ -164,7 +163,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       await deps.api.post(`/api/caixa/${payload.caixaId}/planejamentos-retorno/${payload.planejamentoId}/executar`, {});
       await deps.carregarStatusCaixa(deps.empresaId());
       await recarregarTela();
-      deps.notificar("Retorno/sangria executado e aguardando conferência.");
+      deps.notificar("Transferência de retorno executada e aguardando conferência.");
       return true;
     } catch (error) {
       deps.notificar(deps.mensagemErro(error), "error");

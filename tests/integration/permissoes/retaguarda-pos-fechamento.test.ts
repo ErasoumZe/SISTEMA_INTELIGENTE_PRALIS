@@ -22,6 +22,7 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
   let contexto: ContextoApiTeste;
   let cookieAdmin = "";
   let cookieGerente = "";
+  let cookieMultiempresa = "";
   let caixaFechado = "";
   let contaDoPdv = "";
   // POSTERIOR ao caixa aberto do seed (2026-06-30): o desempate de `buscarCaixaAbertoUsuario` e por
@@ -65,7 +66,10 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    cookieAdmin = await cookieSessao(contexto.app, "admin");
+    [cookieAdmin, cookieMultiempresa] = await Promise.all([
+      cookieSessao(contexto.app, "admin"),
+      cookieSessao(contexto.app, "multiempresa")
+    ]);
 
     // O gerente e retaguarda pelo NOME do cargo, mas o cargo Gerencia do seed nao carrega as
     // permissoes das tres saidas. Sem a concessao, o PUT dele morreria no 403 de PERMISSAO antes de
@@ -101,14 +105,15 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
     expect([200, 201]).toContain(concessao.statusCode);
     cookieGerente = await cookieSessao(contexto.app, "gerente");
 
-    // Caixa proprio do ATOR (admin): conta + PDV novos, abertura pela rota real.
+    // Caixa proprio de um segundo operador: o admin conserva o caixa seed aberto para o contraste
+    // de retaguarda abaixo, enquanto este ciclo temporario e aberto e fechado pela rota real.
     const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-      usuariosTeste.admin.email
+      usuariosTeste.multiempresa.email
     ]);
-    if (!usuario) throw new Error("Usuario admin nao encontrado");
+    if (!usuario) throw new Error("Usuario multiempresa nao encontrado");
 
-    const criar = async (url: string, payload: object) => {
-      const resposta = await contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
+    const criar = async (url: string, payload: object, cookie = cookieAdmin) => {
+      const resposta = await contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
       expect(resposta.statusCode, `${url} -> ${resposta.body}`).toBe(201);
       return json<{ data: { id: string } }>(resposta).data.id;
     };
@@ -120,44 +125,56 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
       contaId: contaDoPdv,
       ativo: true
     });
-    caixaFechado = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: usuario.id,
-      dataHoraAbertura: `${dataReferencia}T08:00`
-    });
+    caixaFechado = await criar(
+      "/api/caixa/abrir",
+      {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: usuario.id,
+        dataHoraAbertura: `${dataReferencia}T08:00`
+      },
+      cookieMultiempresa
+    );
 
     // Uma VENDA de 85 equilibra as tres saidas (40+15+30) para o caixa fechar com saldo zero — sem
     // quebra e sem retorno, que nao sao o assunto deste arquivo.
-    await criar("/api/vendas", {
-      empresaId: idsTeste.empresaA,
-      dataReferencia,
-      dataPagamento: pagoEm,
-      descricao: "Venda pos-fechamento",
-      valorOriginal: 85,
-      contaOrigemId: contaDoPdv,
-      pdvId,
-      colaboradorId: idsTeste.colaboradorAdmin,
-      itensVenda: [
-        { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 85, valorTotal: 85 }
-      ],
-      tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 85 }]
-    });
+    await criar(
+      "/api/vendas",
+      {
+        empresaId: idsTeste.empresaA,
+        dataReferencia,
+        dataPagamento: pagoEm,
+        descricao: "Venda pos-fechamento",
+        valorOriginal: 85,
+        contaOrigemId: contaDoPdv,
+        pdvId,
+        colaboradorId: idsTeste.colaboradorMultiempresa,
+        itensVenda: [
+          { produtoId: idsTeste.produto, descricaoProduto: "Pao", quantidade: 1, valorUnitario: 85, valorTotal: 85 }
+        ],
+        tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 85 }]
+      },
+      cookieMultiempresa
+    );
 
     // As TRES saidas pela conta do PDV — o `caixa_id` tem de nascer preenchido (e o que o fechamento
     // vai congelar nos totais).
     const valores: Record<string, number> = { despesa: 40, mercadoria: 15, retirada: 30 };
     for (const [nome, rota, extras] of rotas) {
-      const id = await criar(rota, {
-        empresaId: idsTeste.empresaA,
-        dataReferencia,
-        dataVencimento: dataReferencia,
-        dataPagamento: pagoEm,
-        descricao: `CX-M06 pos-fechamento ${nome}`,
-        valorOriginal: valores[nome],
-        contaOrigemId: contaDoPdv,
-        ...extras
-      });
+      const id = await criar(
+        rota,
+        {
+          empresaId: idsTeste.empresaA,
+          dataReferencia,
+          dataVencimento: dataReferencia,
+          dataPagamento: pagoEm,
+          descricao: `CX-M06 pos-fechamento ${nome}`,
+          valorOriginal: valores[nome],
+          contaOrigemId: contaDoPdv,
+          ...extras
+        },
+        cookieMultiempresa
+      );
       lancamentos[nome] = id;
       expect(
         await consultarUm<{ caixa_id: string | null }>(`select caixa_id from ${nome}s where id = $1`, [id]),
@@ -169,7 +186,7 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaFechado}/fechar`,
-      headers: { cookie: cookieAdmin },
+      headers: { cookie: cookieMultiempresa },
       payload: { observacao: "Fechamento do cenario pos-fechamento" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);

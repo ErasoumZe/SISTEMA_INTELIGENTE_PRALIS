@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
@@ -55,15 +55,21 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
   const DIA_LOCAL = "2026-07-16";
 
   it("Deve gravar data_movimento no dia LOCAL quando o caixa abre as 22:00 BRT (01:00Z)", async () => {
-    const { pdvId } = await criarContaEPdv("fuso-abertura");
-    const abrir = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura: INSTANTE_22H_BRT
-    });
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(INSTANTE_22H_BRT));
+    let caixaId: string;
+    try {
+      const { pdvId } = await criarContaEPdv("fuso-abertura");
+      const abrir = await criar("/api/caixa/abrir", {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: await usuarioAdminId()
+      });
+      caixaId = json<{ data: { id: string } }>(abrir).data.id;
+      registrarEncerramentoCaixaParaTeste(caixaId);
+    } finally {
+      vi.useRealTimers();
+    }
 
     const caixa = await consultarUm<{ data_movimento: string }>(
       "select to_char(data_movimento, 'YYYY-MM-DD') as data_movimento from fechamentos_caixa where id = $1",
@@ -73,15 +79,23 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
   });
 
   it("Deve usar o dia LOCAL de hoje (Sao Paulo) na data do acerto de saldo", async () => {
-    const { contaId, pdvId } = await criarContaEPdv("fuso-acerto");
-    const abrir = await criar("/api/caixa/abrir", {
-      empresaId: idsTeste.empresaA,
-      pdvId,
-      usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura: "2026-07-16T11:00"
-    });
-    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
-    registrarEncerramentoCaixaParaTeste(caixaId);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(INSTANTE_22H_BRT));
+    let contaId: string;
+    let pdvId: string;
+    let caixaId: string;
+    try {
+      ({ contaId, pdvId } = await criarContaEPdv("fuso-acerto"));
+      const abrir = await criar("/api/caixa/abrir", {
+        empresaId: idsTeste.empresaA,
+        pdvId,
+        usuarioCaixaId: await usuarioAdminId()
+      });
+      caixaId = json<{ data: { id: string } }>(abrir).data.id;
+      registrarEncerramentoCaixaParaTeste(caixaId);
+    } finally {
+      vi.useRealTimers();
+    }
 
     // Venda em dinheiro -> saldo positivo, exige acerto.
     await criar("/api/vendas", {

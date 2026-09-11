@@ -135,7 +135,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
   // continua parando o botao, com o motivo escrito antes do clique.
   test("a trava por entrega aguardando conferencia sobreviveu a remocao", async ({ page }) => {
     const entrega = await caixa.post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      data: { tipo: "sangria", valor: 100, lacre: `${MARCA}-LACRE`, idempotenciaChave: randomUUID() }
+      data: { valor: 100, lacre: `${MARCA}-LACRE`, idempotenciaChave: randomUUID() }
     });
     expect(entrega.status(), await entrega.text()).toBe(200);
 

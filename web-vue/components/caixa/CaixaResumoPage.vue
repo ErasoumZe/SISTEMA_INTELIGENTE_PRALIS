@@ -120,7 +120,8 @@ const planejamentosPendentes = computed(() => props.status?.planejamentosPendent
 // A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
 // Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
 const motivoTravado = computed(() => {
-  if (planejamentosPendentes.value.length) return "há retorno/sangria planejado aguardando execução ou cancelamento";
+  if (planejamentosPendentes.value.length)
+    return "há transferencia de retorno planejada aguardando execucao ou cancelamento";
   return motivoFechamentoTravado(
     entregasPendentes.value.length,
     entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
@@ -396,7 +397,7 @@ function fechar() {
             class="mb-4"
             data-teste="planejamentos-retorno"
           >
-            <div class="text-subtitle-2 mb-2">Retornos/Sangrias programados</div>
+            <div class="text-subtitle-2 mb-2">Transferências de retorno programadas</div>
             <div
               v-for="planejamento in planejamentosPendentes"
               :key="planejamento.id"

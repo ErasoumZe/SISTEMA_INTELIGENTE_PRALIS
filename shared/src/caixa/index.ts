@@ -203,7 +203,6 @@ const idempotenciaChaveSchema = uuidSchema;
 // M2 — sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade (R4): transferencia
 // caixa -> cofre. O servidor resolve a conta do cofre, a ordem e (opcional, D5) consome o lacre.
 export const transferenciaCofrePayloadSchema = z.object({
-  tipo: z.enum(["sangria", "retorno"]),
   valor: z.coerce.number().positive(),
   lacre: z.string().trim().min(1).optional().nullable(),
   observacao: z.string().trim().max(500).optional().nullable(),

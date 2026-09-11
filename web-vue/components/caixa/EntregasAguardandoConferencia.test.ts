@@ -31,7 +31,8 @@ describe("EntregasAguardandoConferencia", () => {
 
     const linhas = tela.findAll('[data-teste="entrega-pendente"]');
     expect(linhas).toHaveLength(2);
-    expect(linhas[0]?.text()).toContain("Sangria");
+    // Registros historicos `sangria` continuam legiveis, mas usam a nomenclatura unica R-187.
+    expect(linhas[0]?.text()).toContain("Retorno");
     expect(linhas[0]?.text()).toContain("LAC-9");
     expect(linhas[1]?.text()).toContain("Retorno");
     expect(linhas[1]?.text()).toContain("LAC-10");

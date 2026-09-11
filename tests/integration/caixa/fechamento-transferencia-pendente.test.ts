@@ -18,7 +18,7 @@ import {
 // G1 da #101 (R-171) — dinheiro que JA SAIU nao deixa o caixa fechar pelo caminho comum.
 //
 // O que existia antes: o fechamento so barrava solicitacao `agendada` (D12 — dinheiro que AINDA NAO
-// saiu). Uma sangria entregue de verdade e ainda nao conferida no cofre nao impedia nada: o caixa
+// saiu). Um retorno entregue de verdade e ainda nao conferido no destino nao impedia nada: o caixa
 // fechava, o operador ia embora e, se o cofre encontrasse falta depois, a divergencia nao tinha mais
 // dono — o turno estava encerrado.
 //
@@ -27,7 +27,7 @@ import {
 // sempre. Esta aqui e a UNICA trava do fechamento agora, e continua inteira.
 //
 // O ESCOPO e o predicado canonico de entrega Caixa -> Cofre (`ehEntregaCaixaParaCofre`): caixa
-// vinculado, tipo sangria/retorno e destino = conta cofre da empresa. Transferencia generica NAO
+// vinculado e tipo retorno (ou sangria historica). Transferencia generica NAO
 // entra, e isso e verificado aqui de proposito — bloquear alem do malote fisico travaria operacao
 // que a R-171 nunca mencionou.
 //
@@ -86,23 +86,16 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     expect(resposta.statusCode, resposta.body).toBe(201);
   }
 
-  async function entregarAoCofre(
-    caixaId: string,
-    tipo: "sangria" | "retorno",
-    valor: number,
-    lacre?: string,
-    cookieOperador = cookieCaixa
-  ) {
+  async function entregarAoCofre(caixaId: string, valor: number, lacre?: string, cookieOperador = cookieCaixa) {
     const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieOperador, {
-      tipo,
       valor,
       ...(lacre ? { lacre } : {}),
       idempotenciaChave: randomUUID()
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = $2 order by criado_em desc limit 1",
-      [caixaId, tipo]
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
+      [caixaId]
     );
     if (!movimento) throw new Error("Entrega ao cofre nao encontrada");
     return movimento.id;
@@ -139,10 +132,10 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   // ------------------------------------------------------------------------------------------
   // RED-1 · o caso que a #101 abriu: dinheiro entregue e nao conferido nao pode ser esquecido.
   // ------------------------------------------------------------------------------------------
-  it("Deve_RecusarOFechamento_Quando_HaSangriaEntregueAguardandoConferencia", async () => {
-    const fx = await novoCaixa("G1 sangria");
+  it("Deve_RecusarOFechamento_Quando_HaRetornoEntregueAguardandoConferencia", async () => {
+    const fx = await novoCaixa("G1 retorno");
     await venda(500);
-    await entregarAoCofre(fx.caixaId, "sangria", 200, "G1-SANGRIA");
+    await entregarAoCofre(fx.caixaId, 200, "G1-RETORNO");
 
     const resposta = await fechar(fx.caixaId);
 
@@ -150,7 +143,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     // A mensagem precisa dizer QUAL operacao trava — "nao pode fechar" sozinho manda o operador
     // adivinhar entre as entregas do turno.
     expect(resposta.body).toMatch(/aguardando confer[eê]ncia/iu);
-    expect(resposta.body).toMatch(/sangria/iu);
+    expect(resposta.body).toMatch(/retorno/iu);
     expect(resposta.body).toMatch(/200/u);
   });
 
@@ -161,7 +154,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   it("Deve_LiberarOFechamento_Quando_OCofreConfereAEntrega", async () => {
     const fx = await novoCaixa("G1 conferida");
     await venda(500);
-    const entrega = await entregarAoCofre(fx.caixaId, "sangria", 200, "G1-CONFERIDA");
+    const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-CONFERIDA");
 
     assertProblem(await fechar(fx.caixaId), 400);
 
@@ -174,7 +167,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
     // D6/D7: a sobra virou retorno final DENTRO do fechamento, e ele fica `pendente` — prova de que
     // a guarda le o estado anterior ao ato e nao se auto-bloqueia.
     expect(await transferenciasDoCaixa(fx.caixaId)).toEqual([
-      { tipo: "sangria", status: "recebido" },
+      { tipo: "retorno", status: "recebido" },
       { tipo: "retorno", status: "pendente" }
     ]);
   });
@@ -186,7 +179,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   it("Deve_ManterOFechamentoTravado_Quando_AConferenciaEhRecusada", async () => {
     const fx = await novoCaixa("G1 recusada");
     await venda(500);
-    const entrega = await entregarAoCofre(fx.caixaId, "sangria", 200, "G1-RECUSADA");
+    const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-RECUSADA");
 
     const recusa = await inject("POST", `/api/transferencias/${entrega}/recusar-conferencia`, cookieGerente, {
       contaDestinoId: idsTeste.contaCofre,
@@ -207,7 +200,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   it("Deve_IgnorarPendencia_Quando_ElaEhDeOutroCaixa", async () => {
     const vizinho = await novoCaixa("G1 vizinho", "multiempresa");
     await venda(500, cookieMultiempresa);
-    await entregarAoCofre(vizinho.caixaId, "sangria", 200, "G1-VIZINHO", cookieMultiempresa);
+    await entregarAoCofre(vizinho.caixaId, 200, "G1-VIZINHO", cookieMultiempresa);
 
     // Outro operador abre o caixa proprio. A pendencia do vizinho continua sem prender este turno,
     // e a R-186 permanece respeitada: cada pessoa responde por uma unica gaveta.
@@ -313,7 +306,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   it("Deve_NaoGravarNada_Quando_OFechamentoEhRecusadoPelaPendencia", async () => {
     const fx = await novoCaixa("G1 atomico");
     await venda(500);
-    await entregarAoCofre(fx.caixaId, "sangria", 200, "G1-ATOMICO");
+    await entregarAoCofre(fx.caixaId, 200, "G1-ATOMICO");
 
     const congelado = await universoDoCaixa(fx.caixaId);
 
@@ -332,7 +325,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   it("Deve_SerializarComAConferencia_Quando_ElaEstaEmVoo", async () => {
     const fx = await novoCaixa("G1 corrida");
     await venda(500);
-    const entrega = await entregarAoCofre(fx.caixaId, "sangria", 200, "G1-CORRIDA");
+    const entrega = await entregarAoCofre(fx.caixaId, 200, "G1-CORRIDA");
 
     const bloqueador = await abrirBloqueador();
     try {

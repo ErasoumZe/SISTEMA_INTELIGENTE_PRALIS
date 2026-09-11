@@ -75,17 +75,16 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
     return json<{ data: { id: string } }>(resposta).data.id;
   }
 
-  // Caminho canonico: o unico que grava `sangria`/`retorno`.
+  // Caminho canonico: o unico que grava `retorno`.
   async function entregarAoCofre(caixaId: string, valor: number, lacre: string) {
     const resposta = await inject("POST", `/api/caixa/${caixaId}/transferencia-cofre`, cookieAdmin, {
-      tipo: "sangria",
       valor,
       lacre,
       idempotenciaChave: randomUUID()
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     const movimento = await consultarUm<{ id: string }>(
-      "select id from transferencias where caixa_id = $1 and tipo = 'sangria' order by criado_em desc limit 1",
+      "select id from transferencias where caixa_id = $1 and tipo = 'retorno' order by criado_em desc limit 1",
       [caixaId]
     );
     if (!movimento) throw new Error("Entrega ao cofre nao encontrada");

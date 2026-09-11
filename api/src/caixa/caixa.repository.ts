@@ -603,7 +603,6 @@ export async function criarTransferenciaCofreRepository(
     contaCaixaId: string;
     contaCofreId: string;
     valorCentavos: number;
-    tipo: string;
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
@@ -629,7 +628,7 @@ export async function criarTransferenciaCofreRepository(
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
       nLacreDoc: input.nLacreDoc,
-      tipo: input.tipo,
+      tipo: "retorno",
       ordem: input.ordem,
       // D2/D3/R-179 · a entrega ao cofre nasce SEMPRE 'pendente': o dinheiro ja saiu do caixa
       // (`transferenciaContaComoSaida` conta 'pendente'), mas so entra no cofre quando quem opera
