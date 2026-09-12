@@ -51,7 +51,13 @@ function montarModal(podePlanejar = true) {
 }
 
 describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
-  it("mostra uma unica opcao Retorno e permite varias linhas de valor, lacre e destino", async () => {
+  function opcao(wrapper: ReturnType<typeof montarModal>["wrapper"], texto: string) {
+    const label = wrapper.findAll("label.tr-check").find((item) => item.text().includes(texto));
+    if (!label) throw new Error(`Opcao nao encontrada: ${texto}`);
+    return label.get('input[type="checkbox"]');
+  }
+
+  it("mostra uma unica opcao Retorno e permite varias linhas somente de valor e lacre", async () => {
     const { wrapper, form } = montarModal();
 
     expect(wrapper.text()).toContain("Transferência de retorno");
@@ -63,10 +69,9 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     expect(wrapper.get('[data-teste="opcao-agendamento"]').attributes("disabled")).toBeDefined();
     expect(wrapper.findAll(".tr-planejamento-linha")).toHaveLength(1);
     expect(form.value.retornosPlanejados).toHaveLength(1);
-    expect(form.value.retornosPlanejados[0]).toMatchObject({
+    expect(form.value.retornosPlanejados[0]).toEqual({
       valor: "",
-      nLacreDoc: "",
-      contaDestinoId: "cofre-1"
+      nLacreDoc: ""
     });
 
     await wrapper.get(".tr-adicionar-retorno").trigger("click");
@@ -75,8 +80,29 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     for (const linha of wrapper.findAll(".tr-planejamento-linha")) {
       expect(linha.text()).toContain("Valor");
       expect(linha.text()).toContain("Lacre");
-      expect(linha.text()).toContain("Destino");
+      expect(linha.text()).not.toContain("Destino");
+      expect(linha.find("select").exists()).toBe(false);
     }
+  });
+
+  it("torna Retorno, Multiplo Destino e Tempo de confirmacao mutuamente exclusivos", async () => {
+    const retorno = montarModal();
+    await retorno.wrapper.get('[data-teste="opcao-transferencia-retorno"]').setValue(true);
+    expect(opcao(retorno.wrapper, "Múltiplo Destino").attributes("disabled")).toBeDefined();
+    expect(opcao(retorno.wrapper, "Tempo de confirmação").attributes("disabled")).toBeDefined();
+    expect(retorno.form.value.tempoConfirmacao).toBeNull();
+
+    const multiplo = montarModal();
+    await opcao(multiplo.wrapper, "Múltiplo Destino").setValue(true);
+    expect(opcao(multiplo.wrapper, "Tempo de confirmação").attributes("disabled")).toBeDefined();
+    expect(multiplo.wrapper.get('[data-teste="opcao-transferencia-retorno"]').attributes("disabled")).toBeDefined();
+    expect(multiplo.form.value.tempoConfirmacao).toBeNull();
+
+    const prazo = montarModal();
+    await opcao(prazo.wrapper, "Tempo de confirmação").setValue(true);
+    expect(opcao(prazo.wrapper, "Múltiplo Destino").attributes("disabled")).toBeDefined();
+    expect(prazo.wrapper.get('[data-teste="opcao-transferencia-retorno"]').attributes("disabled")).toBeDefined();
+    expect(prazo.form.value.tempoConfirmacao).toBe("1dia");
   });
 
   it("nao oferece planejamento ao operador e desabilita fora da rota Cofre para PDV", async () => {
@@ -96,14 +122,12 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     await wrapper.get('[data-teste="opcao-transferencia-retorno"]').setValue(true);
     form.value.retornosPlanejados[0] = {
       valor: "0,10",
-      nLacreDoc: "RET-010",
-      contaDestinoId: "cofre-1"
+      nLacreDoc: "RET-010"
     };
     await wrapper.get(".tr-adicionar-retorno").trigger("click");
     form.value.retornosPlanejados[1] = {
       valor: "0,20",
-      nLacreDoc: "RET-020",
-      contaDestinoId: "banco-1"
+      nLacreDoc: "RET-020"
     };
     await wrapper.get(".tr-salvar").trigger("click");
     expect(salvarOperacao).toHaveBeenCalledOnce();

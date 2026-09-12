@@ -100,7 +100,8 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       "POST",
       "/api/transferencias",
       payloadTransferencia("QA-DISPUTA-001", idsTeste.contaCofre, idsTeste.contaCaixa, {
-        contasDestinoIds: [idsTeste.contaLivre]
+        contasDestinoIds: [idsTeste.contaLivre],
+        tempoConfirmacao: null
       })
     );
     expect(criada.statusCode, criada.body).toBe(201);
@@ -147,6 +148,37 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       confirmado.find((item) => item.id === destinoVencedor)!.saldoAtual -
         antes.find((item) => item.id === destinoVencedor)!.saldoAtual
     ).toBe(100);
+  });
+
+  it("permite prazo apenas na transferencia direta e persiste ausencia de prazo como null", async () => {
+    const diretaSemPrazo = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-DIRETA-SEM-PRAZO", idsTeste.contaBanco, idsTeste.contaLivre, {
+        tempoConfirmacao: null
+      })
+    );
+    expect(diretaSemPrazo.statusCode, diretaSemPrazo.body).toBe(201);
+    const diretaId = json<{ data: { id: string } }>(diretaSemPrazo).data.id;
+    expect(
+      await consultarUm<{ tempo_confirmacao: string | null; prazo_confirmacao_em: Date | null }>(
+        "select tempo_confirmacao, prazo_confirmacao_em from transferencias where id = $1",
+        [diretaId]
+      )
+    ).toEqual({ tempo_confirmacao: null, prazo_confirmacao_em: null });
+
+    const multiplaComPrazo = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-DISPUTA-COM-PRAZO", idsTeste.contaCofre, idsTeste.contaCaixa, {
+        contasDestinoIds: [idsTeste.contaLivre],
+        tempoConfirmacao: "5min"
+      })
+    );
+    expect(multiplaComPrazo.statusCode, multiplaComPrazo.body).toBe(400);
+    expect(multiplaComPrazo.body).toMatch(/tempo de confirma[cÃ§][aÃ£]o.*direta/iu);
   });
 
   it("notifica os dois lados, trava mutacoes vencidas e Tesouraria libera", async () => {

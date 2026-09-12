@@ -150,7 +150,7 @@ describe("montarPayloadOperacao", () => {
     expect(payload.dataPagamento).toBeNull();
   });
 
-  it("envia varias transferencias de retorno com valor, lacre e destino", () => {
+  it("envia varias transferencias de retorno somente com valor e lacre", () => {
     const form = {
       ...formOperacaoVazio(),
       valorOriginal: "1000,00",
@@ -158,14 +158,14 @@ describe("montarPayloadOperacao", () => {
       contaDestinoId: "caixa-1",
       nLacreDoc: "LACRE-001",
       retornosPlanejados: [
-        { valor: "300,00", nLacreDoc: "LACRE-002", contaDestinoId: "cofre-1" },
-        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "banco-1" }
+        { valor: "300,00", nLacreDoc: "LACRE-002", contaDestinoId: "destino-residual-ignorado" },
+        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "outro-residual-ignorado" }
       ]
     };
 
     expect(montarPayloadOperacao("transferencia", { ...base, form }).retornosPlanejados).toEqual([
-      { valor: 300, nLacreDoc: "LACRE-002", contaDestinoId: "cofre-1" },
-      { valor: 700, nLacreDoc: "LACRE-003", contaDestinoId: "banco-1" }
+      { valor: 300, nLacreDoc: "LACRE-002" },
+      { valor: 700, nLacreDoc: "LACRE-003" }
     ]);
   });
 
