@@ -116,6 +116,22 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     await page.locator(porTeste("opcao-transferencia-retorno")).check();
     await page.getByRole("button", { name: "Adicionar transferência de retorno" }).click();
     await expect(page.locator(".tr-planejamento-linha")).toHaveCount(2);
+    await expect(
+      page.locator(porTeste("transferencias-retorno-programadas")).getByText("Destino", { exact: true })
+    ).toHaveCount(0);
+    await expect(page.getByRole("checkbox", { name: "Múltiplo Destino" })).toBeDisabled();
+    await expect(page.getByRole("checkbox", { name: "Tempo de confirmação" })).toBeDisabled();
+
+    await page.locator(porTeste("opcao-transferencia-retorno")).uncheck();
+    await page.getByRole("checkbox", { name: "Múltiplo Destino" }).check();
+    await expect(page.getByRole("checkbox", { name: "Tempo de confirmação" })).toBeDisabled();
+    await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toBeDisabled();
+    await page.getByRole("checkbox", { name: "Múltiplo Destino" }).uncheck();
+    await page.getByRole("checkbox", { name: "Tempo de confirmação" }).check();
+    await expect(page.getByRole("checkbox", { name: "Múltiplo Destino" })).toBeDisabled();
+    await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toBeDisabled();
+    await page.getByRole("checkbox", { name: "Tempo de confirmação" }).uncheck();
+    await page.locator(porTeste("opcao-transferencia-retorno")).check();
 
     for (const largura of LARGURAS) {
       await page.setViewportSize({ width: largura.largura, height: largura.altura });

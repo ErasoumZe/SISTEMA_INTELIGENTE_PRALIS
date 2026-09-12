@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
 import {
@@ -103,7 +103,10 @@ export async function criarTransferenciaRepository(
       nLacreDoc: dados.nLacreDoc ?? null,
       agendadaPara: dados.agendadaPara ? new Date(dados.agendadaPara) : null,
       tempoConfirmacao: dados.tempoConfirmacao,
-      prazoConfirmacaoEm: dados.agendadaPara ? null : calcularPrazoConfirmacao(new Date(), dados.tempoConfirmacao),
+      prazoConfirmacaoEm:
+        dados.agendadaPara || !dados.tempoConfirmacao
+          ? null
+          : calcularPrazoConfirmacao(new Date(), dados.tempoConfirmacao),
       status: dados.agendadaPara ? "agendada" : "pendente"
     })
     .returning({ id: transferencias.id });
@@ -133,8 +136,8 @@ export async function criarRetornosPlanejadosRepository(
     transferenciaOrigemId: string;
     dataReferencia: string;
     contaOrigemId: string;
-    planos: { valor: number; nLacreDoc: string; contaDestinoId: string }[];
-    tempoConfirmacao: TempoConfirmacao;
+    contaDestinoId: string;
+    planos: { valor: number; nLacreDoc: string }[];
     computar: boolean;
     criadoPor: string;
     observacao: string | null;
@@ -156,9 +159,10 @@ export async function criarRetornosPlanejadosRepository(
         valorAcrescimo: centavosParaDecimalBanco(0),
         valorDesconto: centavosParaDecimalBanco(0),
         contaOrigemId: input.contaOrigemId,
-        contaDestinoId: plano.contaDestinoId,
+        contaDestinoId: input.contaDestinoId,
         nLacreDoc: plano.nLacreDoc,
-        tempoConfirmacao: input.tempoConfirmacao,
+        tempoConfirmacao: null,
+        prazoConfirmacaoEm: null,
         status: "agendada",
         tipo: "retorno",
         computar: input.computar,
@@ -168,10 +172,10 @@ export async function criarRetornosPlanejadosRepository(
     )
     .returning({ id: transferencias.id });
   await db.insert(transferenciasDestinosCandidatos).values(
-    criadas.map((transferencia, indice) => ({
+    criadas.map((transferencia) => ({
       empresaId: input.empresaId,
       transferenciaId: transferencia.id,
-      contaId: input.planos[indice]!.contaDestinoId
+      contaId: input.contaDestinoId
     }))
   );
   await db.insert(lacres).values(
@@ -197,21 +201,6 @@ export async function contaEhPdvDaEmpresaRepository(
     .select({ id: pdvs.id })
     .from(pdvs)
     .where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.contaId, contaId), eq(pdvs.ativo, true)))
-    .limit(1);
-  return Boolean(pdv);
-}
-
-// Destino planejado nao pode pertencer a nenhum PDV, inclusive inativo. A conta continua com essa
-// identidade operacional e pode voltar a representar uma gaveta se o PDV for reativado.
-export async function contaPertencePdvDaEmpresaRepository(
-  empresaId: string,
-  contaId: string,
-  db: ExecutorBanco = banco
-): Promise<boolean> {
-  const [pdv] = await db
-    .select({ id: pdvs.id })
-    .from(pdvs)
-    .where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.contaId, contaId)))
     .limit(1);
   return Boolean(pdv);
 }
@@ -307,9 +296,11 @@ export async function buscarTransferenciaDetalheRepository(
     valorDesconto: numeroDecimal(transferencia.valorDesconto),
     // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
     valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
-    contasDestinoIds: candidatos.map((item) => item.contaId),
+    contasDestinoIds: candidatos
+      .map((item) => item.contaId)
+      .filter((contaId) => contaId !== transferencia.contaDestinoId),
     retornosPlanejados: [],
-    tempoConfirmacao: (transferencia.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
+    tempoConfirmacao: transferencia.tempoConfirmacao as TempoConfirmacao | null,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
     prazoConfirmacaoEm: transferencia.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: transferencia.dataRecebimento?.toISOString() ?? null
@@ -503,10 +494,20 @@ async function candidatoConfirmacao(
       nLacreDoc: transferencias.nLacreDoc
     })
     .from(transferenciasDestinosCandidatos)
-    .innerJoin(transferencias, eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId))
+    .innerJoin(
+      transferencias,
+      and(
+        eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId),
+        eq(transferencias.empresaId, transferenciasDestinosCandidatos.empresaId)
+      )
+    )
     .innerJoin(
       contasUsuarios,
-      and(eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId), eq(contasUsuarios.usuarioId, usuarioId))
+      and(
+        eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId),
+        eq(contasUsuarios.empresaId, transferencias.empresaId),
+        eq(contasUsuarios.usuarioId, usuarioId)
+      )
     )
     .where(
       and(
@@ -582,8 +583,6 @@ export async function confirmarTransferenciaRepository(
 // entao o cron deixou de efetivar em massa e passou a decidir POR LINHA, sob a porta do caixa.
 // A lista sai em ordem deterministica (caixa_id, id): quem trava varios caixas na mesma transacao
 // adquire os FOR SHARE sempre na mesma ordem, e o fechamento so trava UM caixa — sem ciclo.
-const PRAZOS_CONFIRMACAO: TempoConfirmacao[] = ["5min", "10min", "30min", "1h", "1dia", "10dias", "30dias"];
-
 export async function listarAgendadasVencidasRepository(agora = new Date(), db: ExecutorBanco = banco) {
   return db
     .select({
@@ -599,19 +598,13 @@ export async function listarAgendadasVencidasRepository(agora = new Date(), db: 
       computar: transferencias.computar
     })
     .from(transferencias)
-    .where(
-      and(
-        eq(transferencias.status, "agendada"),
-        inArray(transferencias.tempoConfirmacao, PRAZOS_CONFIRMACAO),
-        lt(transferencias.agendadaPara, agora)
-      )
-    )
+    .where(and(eq(transferencias.status, "agendada"), lt(transferencias.agendadaPara, agora)))
     .orderBy(transferencias.caixaId, transferencias.id);
 }
 
 export async function efetivarTransferenciaAgendadaRepository(
   transferenciaId: string,
-  prazo: TempoConfirmacao,
+  prazo: TempoConfirmacao | null,
   agora: Date,
   db: TransacaoBanco
 ) {
@@ -619,7 +612,7 @@ export async function efetivarTransferenciaAgendadaRepository(
     .update(transferencias)
     .set({
       status: "pendente",
-      prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, prazo),
+      prazoConfirmacaoEm: prazo ? calcularPrazoConfirmacao(agora, prazo) : null,
       atualizadoEm: agora
     })
     .where(and(eq(transferencias.id, transferenciaId), eq(transferencias.status, "agendada")))
@@ -645,30 +638,83 @@ export async function listarTransferenciasVencidasRepository(agora = new Date(),
     );
 }
 
+export async function transferenciaAdmitePrazoRepository(transferenciaId: string, db: ExecutorBanco = banco) {
+  const [transferencia] = await db
+    .select({ tipo: transferencias.tipo, empresaId: transferencias.empresaId })
+    .from(transferencias)
+    .where(eq(transferencias.id, transferenciaId))
+    .limit(1);
+  if (!transferencia || transferencia.tipo === "retorno" || transferencia.tipo === "sangria") return false;
+  const [destinos] = await db
+    .select({ total: count() })
+    .from(transferenciasDestinosCandidatos)
+    .where(
+      and(
+        eq(transferenciasDestinosCandidatos.transferenciaId, transferenciaId),
+        eq(transferenciasDestinosCandidatos.empresaId, transferencia.empresaId)
+      )
+    );
+  return Number(destinos?.total ?? 0) <= 1;
+}
+
 export async function listarDestinatariosTransferenciaRepository(transferenciaId: string, db: ExecutorBanco = banco) {
   return db
-    .selectDistinct({ usuarioId: contasUsuarios.usuarioId })
+    .selectDistinct({ usuarioId: contasUsuarios.usuarioId, contaId: transferenciasDestinosCandidatos.contaId })
     .from(transferenciasDestinosCandidatos)
-    .innerJoin(contasUsuarios, eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId))
+    .innerJoin(
+      transferencias,
+      and(
+        eq(transferencias.id, transferenciasDestinosCandidatos.transferenciaId),
+        eq(transferencias.empresaId, transferenciasDestinosCandidatos.empresaId)
+      )
+    )
+    .innerJoin(
+      contasUsuarios,
+      and(
+        eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId),
+        eq(contasUsuarios.empresaId, transferencias.empresaId)
+      )
+    )
     .where(eq(transferenciasDestinosCandidatos.transferenciaId, transferenciaId));
 }
 
-export async function usuarioEstaTravadoRepository(usuarioId: string, db: ExecutorBanco = banco) {
-  const [linha] = await db
-    .select({ id: transferencias.id })
+export async function listarTravamentosTransferenciaDoUsuarioRepository(
+  input: { usuarioId: string; podeConferir: boolean },
+  db: ExecutorBanco = banco
+) {
+  return db
+    .selectDistinct({ id: transferencias.id, empresaId: transferencias.empresaId })
     .from(transferencias)
-    .leftJoin(transferenciasDestinosCandidatos, eq(transferenciasDestinosCandidatos.transferenciaId, transferencias.id))
-    .leftJoin(contasUsuarios, eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId))
+    .leftJoin(
+      transferenciasDestinosCandidatos,
+      and(
+        eq(transferenciasDestinosCandidatos.transferenciaId, transferencias.id),
+        eq(transferenciasDestinosCandidatos.empresaId, transferencias.empresaId)
+      )
+    )
+    .leftJoin(
+      contasUsuarios,
+      and(
+        eq(contasUsuarios.contaId, transferenciasDestinosCandidatos.contaId),
+        eq(contasUsuarios.empresaId, transferencias.empresaId)
+      )
+    )
     .where(
       and(
         eq(transferencias.status, "pendente"),
         lt(transferencias.prazoConfirmacaoEm, new Date()),
         isNull(transferencias.travaLiberadaEm),
-        or(eq(transferencias.criadoPor, usuarioId), eq(contasUsuarios.usuarioId, usuarioId))
+        input.podeConferir
+          ? or(
+              eq(transferencias.criadoPor, input.usuarioId),
+              and(
+                eq(contasUsuarios.usuarioId, input.usuarioId),
+                or(isNull(transferencias.executadoPor), ne(transferencias.executadoPor, input.usuarioId))
+              )
+            )
+          : eq(transferencias.criadoPor, input.usuarioId)
       )
-    )
-    .limit(1);
-  return Boolean(linha);
+    );
 }
 
 export async function liberarTravaTransferenciaRepository(
@@ -705,4 +751,15 @@ export async function atualizarTransferenciaRepository(
       nLacreDoc: dados.nLacreDoc ?? null
     })
     .where(eq(transferencias.id, transferenciaId));
+  const destinos = [...new Set([dados.contaDestinoId, ...dados.contasDestinoIds])];
+  await db
+    .delete(transferenciasDestinosCandidatos)
+    .where(eq(transferenciasDestinosCandidatos.transferenciaId, transferenciaId));
+  await db.insert(transferenciasDestinosCandidatos).values(
+    destinos.map((contaId) => ({
+      empresaId: dados.empresaId,
+      transferenciaId,
+      contaId
+    }))
+  );
 }

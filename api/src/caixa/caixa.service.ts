@@ -23,7 +23,6 @@ import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
-import { calcularPrazoConfirmacao, type TempoConfirmacao } from "@padaria/shared/transferencias";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio } from "../erros.js";
@@ -938,7 +937,7 @@ export async function executarPlanejamentoRetorno(
         caixaId,
         ordem,
         dataTransferencia: diaNegocio(agora),
-        prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, planejamento.tempoConfirmacao as TempoConfirmacao),
+        prazoConfirmacaoEm: null,
         executadoPor: perfil.usuarioId,
         agora
       },

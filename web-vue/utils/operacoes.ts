@@ -303,7 +303,7 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     nLacreDoc: detalhe.nLacreDoc ?? "",
     agendadaPara: detalhe.agendadaPara?.slice(0, 16) ?? "",
     dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
-    tempoConfirmacao: detalhe.tempoConfirmacao ?? "1dia",
+    tempoConfirmacao: detalhe.tempoConfirmacao ?? null,
     contasDestinoIds: detalhe.contasDestinoIds ?? [],
     recorrenciaId: detalhe.recorrenciaId ?? "",
     temNotaFiscal: detalhe.temNotaFiscal ?? false,
@@ -492,8 +492,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
           contasDestinoIds: dados.form.contasDestinoIds,
           retornosPlanejados: dados.form.retornosPlanejados.map((retorno) => ({
             valor: deCentavos(paraCentavos(retorno.valor)),
-            nLacreDoc: retorno.nLacreDoc.trim(),
-            contaDestinoId: retorno.contaDestinoId
+            nLacreDoc: retorno.nLacreDoc.trim()
           }))
         }
       : {}),

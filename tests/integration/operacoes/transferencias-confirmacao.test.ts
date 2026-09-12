@@ -12,28 +12,38 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
   let cookieAdmin: string;
   let cookieGerente: string;
   let cookieTesouraria: string;
+  let cookieSemPermissao: string;
   let gerenteId: string;
   let tesourariaId: string;
+  let semPermissaoId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
-    [cookieAdmin, cookieGerente, cookieTesouraria] = await Promise.all([
+    [cookieAdmin, cookieGerente, cookieTesouraria, cookieSemPermissao] = await Promise.all([
       cookieSessao(contexto.app, "admin"),
       cookieSessao(contexto.app, "gerente"),
-      cookieSessao(contexto.app, "tesouraria")
+      cookieSessao(contexto.app, "tesouraria"),
+      cookieSessao(contexto.app, "semPermissao")
     ]);
     const usuarios = await consultarTodos<{ id: string; email: string }>(
-      'select id, email from "user" where lower(email) in (lower($1), lower($2))',
-      [usuariosTeste.gerente.email, usuariosTeste.tesouraria.email]
+      'select id, email from "user" where lower(email) in (lower($1), lower($2), lower($3))',
+      [usuariosTeste.gerente.email, usuariosTeste.tesouraria.email, usuariosTeste.semPermissao.email]
     );
     gerenteId = usuarios.find((item) => item.email.toLowerCase() === usuariosTeste.gerente.email)?.id ?? "";
     tesourariaId = usuarios.find((item) => item.email.toLowerCase() === usuariosTeste.tesouraria.email)?.id ?? "";
-    if (!gerenteId || !tesourariaId) throw new Error("Usuarios de confirmacao nao encontrados");
+    semPermissaoId = usuarios.find((item) => item.email.toLowerCase() === usuariosTeste.semPermissao.email)?.id ?? "";
+    if (!gerenteId || !tesourariaId || !semPermissaoId) throw new Error("Usuarios de confirmacao nao encontrados");
     await executarSql(
       `insert into contas_usuarios (empresa_id, conta_id, usuario_id)
        values ($1, $2, $3), ($1, $4, $5)
        on conflict (conta_id, usuario_id) do nothing`,
       [idsTeste.empresaA, idsTeste.contaCaixa, gerenteId, idsTeste.contaLivre, tesourariaId]
+    );
+    await executarSql(
+      `insert into contas_usuarios (empresa_id, conta_id, usuario_id)
+       values ($1, $2, $3)
+       on conflict (conta_id, usuario_id) do nothing`,
+      [idsTeste.empresaA, idsTeste.contaLivre, semPermissaoId]
     );
   }, 120_000);
 
@@ -156,7 +166,7 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       "POST",
       "/api/transferencias",
       payloadTransferencia("QA-DIRETA-SEM-PRAZO", idsTeste.contaBanco, idsTeste.contaLivre, {
-        tempoConfirmacao: null
+        tempoConfirmacao: undefined
       })
     );
     expect(diretaSemPrazo.statusCode, diretaSemPrazo.body).toBe(201);
@@ -178,7 +188,45 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       })
     );
     expect(multiplaComPrazo.statusCode, multiplaComPrazo.body).toBe(400);
-    expect(multiplaComPrazo.body).toMatch(/tempo de confirma[cÃ§][aÃ£]o.*direta/iu);
+    expect(multiplaComPrazo.body).toMatch(/tempo de confirma.*direta/iu);
+
+    const multiplaSemPrazo = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-MULTIPLA-SEM-PRAZO", idsTeste.contaBanco, idsTeste.contaCaixa, {
+        contasDestinoIds: [idsTeste.contaLivre],
+        tempoConfirmacao: null
+      })
+    );
+    expect(multiplaSemPrazo.statusCode, multiplaSemPrazo.body).toBe(201);
+    const multiplaId = json<{ data: { id: string } }>(multiplaSemPrazo).data.id;
+    expect(
+      await consultarUm<{ tempo_confirmacao: string | null; prazo_confirmacao_em: Date | null }>(
+        "select tempo_confirmacao, prazo_confirmacao_em from transferencias where id = $1",
+        [multiplaId]
+      )
+    ).toEqual({ tempo_confirmacao: null, prazo_confirmacao_em: null });
+
+    // Defesa para dado historico: um prazo residual em modalidade multipla nao volta a travar ninguem.
+    await executarSql("update transferencias set prazo_confirmacao_em = now() - interval '1 minute' where id = $1", [
+      multiplaId
+    ]);
+    await processarTransferenciasTemporais(new Date());
+    const notificacoesAdmin = await request(cookieAdmin, "GET", `/api/notificacoes?empresaId=${idsTeste.empresaA}`);
+    expect(notificacoesAdmin.statusCode, notificacoesAdmin.body).toBe(200);
+    expect(json<{ data: Array<{ referenciaId: string }> }>(notificacoesAdmin).data).not.toContainEqual(
+      expect.objectContaining({ referenciaId: multiplaId })
+    );
+    const adminNaoTrava = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-MULTIPLA-HISTORICA-IGNORADA", idsTeste.contaBanco, idsTeste.contaCaixa, {
+        tempoConfirmacao: null
+      })
+    );
+    expect(adminNaoTrava.statusCode, adminNaoTrava.body).toBe(201);
   });
 
   it("notifica os dois lados, trava mutacoes vencidas e Tesouraria libera", async () => {
@@ -194,6 +242,25 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       transferenciaId
     ]);
     await processarTransferenciasTemporais(new Date());
+
+    const notificacoesSemPermissao = await request(
+      cookieSemPermissao,
+      "GET",
+      `/api/notificacoes?empresaId=${idsTeste.empresaA}`
+    );
+    expect(notificacoesSemPermissao.statusCode, notificacoesSemPermissao.body).toBe(200);
+    expect(
+      json<{ data: Array<{ referenciaId: string; tipo: string }> }>(notificacoesSemPermissao).data
+    ).not.toContainEqual(
+      expect.objectContaining({ referenciaId: transferenciaId, tipo: "transferencia_prazo_confirmacao" })
+    );
+    const semPermissaoNaoTrava = await request(
+      cookieSemPermissao,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-SEM-PERMISSAO-NAO-TRAVA", idsTeste.contaBanco, idsTeste.contaCaixa)
+    );
+    expect(semPermissaoNaoTrava.statusCode, semPermissaoNaoTrava.body).toBe(403);
 
     for (const [cookie, usuarioId] of [
       [cookieGerente, gerenteId],
@@ -234,5 +301,35 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
       payloadTransferencia("QA-DESTRAVADA-001", idsTeste.contaBanco, idsTeste.contaCaixa)
     );
     expect(destravada.statusCode, destravada.body).toBe(201);
+
+    const executadaPeloDestino = await request(
+      cookieGerente,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-EXECUTOR-NAO-CONFIRMA", idsTeste.contaBanco, idsTeste.contaLivre)
+    );
+    expect(executadaPeloDestino.statusCode, executadaPeloDestino.body).toBe(201);
+    const executadaPeloDestinoId = json<{ data: { id: string } }>(executadaPeloDestino).data.id;
+    await executarSql(
+      `update transferencias
+          set tipo = 'retorno', solicitacao_cofre_em = now(), caixa_id = $1,
+              executado_por = $2, executado_em = now(), prazo_confirmacao_em = now() - interval '1 minute'
+        where id = $3`,
+      [idsTeste.caixaAberto, tesourariaId, executadaPeloDestinoId]
+    );
+    await processarTransferenciasTemporais(new Date());
+
+    const listaExecutor = await request(cookieTesouraria, "GET", `/api/notificacoes?empresaId=${idsTeste.empresaA}`);
+    expect(listaExecutor.statusCode, listaExecutor.body).toBe(200);
+    expect(json<{ data: Array<{ referenciaId: string }> }>(listaExecutor).data).not.toContainEqual(
+      expect.objectContaining({ referenciaId: executadaPeloDestinoId })
+    );
+    const executorNaoTrava = await request(
+      cookieTesouraria,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-EXECUTOR-LIVRE", idsTeste.contaBanco, idsTeste.contaCaixa)
+    );
+    expect(executorNaoTrava.statusCode, executorNaoTrava.body).toBe(201);
   });
 });

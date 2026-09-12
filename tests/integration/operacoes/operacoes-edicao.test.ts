@@ -4,7 +4,7 @@ import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
-import { consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
 
 async function usuarioAdminId() {
   const usuario = await consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
@@ -230,9 +230,33 @@ describe("operacoes edicao integration", () => {
       descricao: "Transferencia editada",
       valorOriginal: 9,
       contaOrigemId: contaPdvId,
-      contaDestinoId: idsTeste.contaBanco,
+      contaDestinoId: idsTeste.contaLivre,
       nLacreDoc: "EDICAO-TR-001"
     });
+    expect(
+      await consultarTodos<{ conta_id: string }>(
+        "select conta_id from transferencias_destinos_candidatos where transferencia_id = $1",
+        [transferenciaId]
+      )
+    ).toEqual([{ conta_id: idsTeste.contaLivre }]);
+
+    const alterarPrazo = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/transferencias/${transferenciaId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: dataRef,
+        descricao: "Prazo nao pode mudar na edicao",
+        valorOriginal: 9,
+        contaOrigemId: contaPdvId,
+        contaDestinoId: idsTeste.contaLivre,
+        nLacreDoc: "EDICAO-TR-001",
+        tempoConfirmacao: "5min"
+      }
+    });
+    assertProblem(alterarPrazo, 400);
+    expect(alterarPrazo.body).toMatch(/tempo de confirma.*depois da cria/iu);
 
     await atualizar(`/api/mercadorias/${mercadoriaId}`, {
       empresaId: idsTeste.empresaA,

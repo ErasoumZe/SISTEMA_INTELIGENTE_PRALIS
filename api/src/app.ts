@@ -46,7 +46,7 @@ import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
 import { registrarRotasRecorrencias } from "./lancamentos/recorrencias.controller.js";
-import { usuarioEstaTravadoRepository } from "./transferencias/transferencias.repository.js";
+import { usuarioEstaTravado } from "./transferencias/transferencias.service.js";
 
 // Rotas que gerenciam a propria autenticacao: better-auth, sondagem de sessao
 // (respondem 401 com payload proprio), healthcheck e ingestao por chave de API.
@@ -188,7 +188,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     ) {
       return;
     }
-    if (await usuarioEstaTravadoRepository(request.perfilUsuario.usuarioId)) {
+    if (await usuarioEstaTravado(request.perfilUsuario)) {
       return erro(
         reply,
         423,

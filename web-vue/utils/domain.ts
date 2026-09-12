@@ -534,7 +534,7 @@ export function formOperacaoVazio(): OperacaoForm {
     nLacreDoc: "",
     agendadaPara: "",
     dataRecebimento: "",
-    tempoConfirmacao: "1dia",
+    tempoConfirmacao: null,
     contasDestinoIds: [],
     retornosPlanejados: [],
     recorrenciaId: "",

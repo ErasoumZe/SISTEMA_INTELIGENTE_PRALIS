@@ -42,6 +42,7 @@ import {
 // nenhum passaria a ser aceita, que e o oposto do que a regra pediu.
 import { resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
+import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 import {
   atualizarTransferenciaRepository,
   buscarContextoConferenciaRepository,
@@ -53,7 +54,6 @@ import {
   criarTransferenciaRepository,
   criarRetornosPlanejadosRepository,
   contaEhPdvDaEmpresaRepository,
-  contaPertencePdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
   transferenciaPossuiRetornosPlanejadosRepository,
   efetivarTransferenciaAgendadaRepository,
@@ -61,6 +61,8 @@ import {
   ehConfirmadorElegivelRepository,
   liberarTravaTransferenciaRepository,
   listarDestinatariosTransferenciaRepository,
+  listarTravamentosTransferenciaDoUsuarioRepository,
+  transferenciaAdmitePrazoRepository,
   listarTransferenciasVencidasRepository,
   listarTransferenciasRepository,
   registrarRecusaConferenciaRepository
@@ -75,9 +77,13 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.agendadaPara && new Date(dados.agendadaPara).getTime() <= Date.now()) {
     throw new Error("Agendamento precisa estar no futuro");
   }
+  if (dados.contasDestinoIds.length && dados.tempoConfirmacao) {
+    throw new Error("Tempo de confirmacao e valido somente para transferencia direta");
+  }
   if (dados.retornosPlanejados.length) {
     if (dados.agendadaPara) throw new Error("Transferencia com planejamento nao pode ser agendada");
     if (dados.contasDestinoIds.length) throw new Error("Planejamento de retorno nao aceita multiplo destino");
+    if (dados.tempoConfirmacao) throw new Error("Planejamento de retorno nao aceita tempo de confirmacao");
     const totalPlanejadoCentavos = dados.retornosPlanejados.reduce(
       (total, plano) => total + paraCentavos(plano.valor),
       0
@@ -87,9 +93,6 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
     }
     const lacres = [dados.nLacreDoc, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)];
     if (new Set(lacres).size !== lacres.length) throw new Error("Cada transferencia planejada precisa de lacre unico");
-    if (dados.retornosPlanejados.some((plano) => plano.contaDestinoId === dados.contaDestinoId)) {
-      throw new Error("Destino do retorno planejado deve ser diferente da conta do Caixa");
-    }
   }
 }
 
@@ -163,12 +166,7 @@ export async function criarTransferencia(
       const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
       if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
       const contasValidas = await contasPertencemEmpresaRepository(
-        [
-          dados.contaOrigemId,
-          dados.contaDestinoId,
-          ...dados.contasDestinoIds,
-          ...dados.retornosPlanejados.map((plano) => plano.contaDestinoId)
-        ],
+        [dados.contaOrigemId, dados.contaDestinoId, ...dados.contasDestinoIds],
         dados.empresaId,
         tx
       );
@@ -181,11 +179,6 @@ export async function criarTransferencia(
         }
         if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
           throw new Error("Planejamento de retorno exige conta de PDV como destino inicial");
-        }
-        for (const plano of dados.retornosPlanejados) {
-          if (await contaPertencePdvDaEmpresaRepository(dados.empresaId, plano.contaDestinoId, tx)) {
-            throw new Error("Destino de retorno planejado nao pode ser conta de PDV");
-          }
         }
       }
 
@@ -246,8 +239,8 @@ export async function criarTransferencia(
           transferenciaOrigemId: transferencia.id,
           dataReferencia: dados.dataReferencia,
           contaOrigemId: dados.contaDestinoId,
+          contaDestinoId: dados.contaOrigemId,
           planos: dados.retornosPlanejados,
-          tempoConfirmacao: dados.tempoConfirmacao,
           computar,
           criadoPor: perfil.usuarioId,
           observacao: dados.observacao?.trim() || dados.descricao?.trim() || null
@@ -591,7 +584,7 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
       }
       await efetivarTransferenciaAgendadaRepository(
         agendada.id,
-        (agendada.tempoConfirmacao ?? "1dia") as TempoConfirmacao,
+        agendada.tempoConfirmacao as TempoConfirmacao | null,
         agora,
         tx
       );
@@ -601,17 +594,37 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
   await executarEmTransacao(async (tx) => {
     const vencidas = await listarTransferenciasVencidasRepository(agora, tx);
     for (const transferencia of vencidas) {
-      const destinatarios = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
+      if (!(await transferenciaAdmitePrazoRepository(transferencia.id, tx))) continue;
+      const candidatos = await listarDestinatariosTransferenciaRepository(transferencia.id, tx);
+      const destinatarios = (
+        await Promise.all(
+          candidatos.map(async (candidato) => {
+            const perfil = await buscarPerfilUsuario(candidato.usuarioId);
+            if (
+              !perfil ||
+              !podeAcessarEmpresa(perfil, transferencia.empresaId) ||
+              !temPermissao(perfil.permissoes, "transferencias_conferir")
+            ) {
+              return null;
+            }
+            const elegivel = await ehConfirmadorElegivelRepository(
+              {
+                transferenciaId: transferencia.id,
+                contaId: candidato.contaId,
+                usuarioId: candidato.usuarioId
+              },
+              tx
+            );
+            return elegivel ? candidato.usuarioId : null;
+          })
+        )
+      ).filter((usuarioId): usuarioId is string => Boolean(usuarioId));
       await criarNotificacoesRepository(
         {
           empresaId: transferencia.empresaId,
           tipo: "transferencia_prazo_confirmacao",
           destinatariosUsuarioIds: [
-            ...new Set(
-              [transferencia.criadoPor, ...destinatarios.map((item) => item.usuarioId)].filter((id): id is string =>
-                Boolean(id)
-              )
-            )
+            ...new Set([transferencia.criadoPor, ...destinatarios].filter((id): id is string => Boolean(id)))
           ],
           referenciaId: transferencia.id,
           titulo: "Prazo de confirmacao de transferencia estourado",
@@ -621,6 +634,22 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
       );
     }
   });
+}
+
+export async function usuarioEstaTravado(perfil: PerfilUsuario): Promise<boolean> {
+  const travamentos = await listarTravamentosTransferenciaDoUsuarioRepository({
+    usuarioId: perfil.usuarioId,
+    podeConferir: temPermissao(perfil.permissoes, "transferencias_conferir")
+  });
+  for (const transferencia of travamentos) {
+    if (
+      podeAcessarEmpresa(perfil, transferencia.empresaId) &&
+      (await transferenciaAdmitePrazoRepository(transferencia.id))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function podeLiberarTravaTransferencia(perfil: PerfilUsuario) {
@@ -685,6 +714,16 @@ export async function atualizarTransferencia(
     // PUT sempre aceitou editar transferencia recebida/agendada, e mudar isso e outra decisao).
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     await validarEdicaoNoCaixaAberto(existente, dados, perfil, tx, caixa);
+    if (existente) {
+      if (existente.tempoConfirmacao !== dados.tempoConfirmacao) {
+        throw new Error("Tempo de confirmacao nao pode ser alterado depois da criacao");
+      }
+      const agendamentoExistente = existente.agendadaPara ? new Date(existente.agendadaPara).getTime() : null;
+      const agendamentoNovo = dados.agendadaPara ? new Date(dados.agendadaPara).getTime() : null;
+      if (agendamentoExistente !== agendamentoNovo) {
+        throw new Error("Agendamento nao pode ser alterado depois da criacao");
+      }
+    }
     const referenciaInvalida = await validarReferenciasTransferencia(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     if (dados.contaOrigemId !== caixa.pdvContaId && dados.contaDestinoId !== caixa.pdvContaId) {

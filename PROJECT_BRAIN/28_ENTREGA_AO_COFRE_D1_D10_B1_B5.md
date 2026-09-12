@@ -24,21 +24,22 @@ anterior caiu na rede".** Dois cliques entregavam o dinheiro duas vezes, com um 
 
 ---
 
-## §1-A · Estado vigente após R-185/R-187 (11/09/2026)
+## §1-A · Estado vigente após R-185/R-187/R-188 (12/09/2026)
 
 A Fatia 3 continua correta ao remover o painel paralelo **“Programar entrega ao cofre”** e suas
 rotas antigas. O que mudou depois foi a forma de preparar o turno: o modal genérico de nova
 transferência pode declarar, atomicamente com a ida, várias **Transferências de retorno**.
 
-- cada linha tem valor, lacre obrigatório e destino próprio;
+- cada linha tem somente valor e lacre obrigatório;
 - a soma planejada pode ser menor ou igual à ida, nunca maior;
 - a linha nasce `agendada`, sem efeito no saldo;
 - ao abrir o Caixa pelo lacre da ida, os planos são vinculados ao turno;
 - o dinheiro só sai quando o operador executa a linha dentro do Caixa;
 - planejado ou executado aguardando conferência bloqueia o fechamento;
-- destino não precisa ser o Cofre; a conta escolhida é quem confere e recebe. Outra conta de PDV
-  não é aceita neste contrato porque uma transferência não pode pertencer simultaneamente a dois
-  Caixas; entre PDVs exige fluxo próprio de suprimento/recebimento;
+- o destino não é selecionável: toda linha retorna automaticamente à conta de origem da ida
+  (Cofre no fluxo de abertura);
+- retorno não tem tempo de confirmação. Prazo é opcional somente na transferência direta;
+  retorno, múltiplo destino e prazo são opções mutuamente exclusivas;
 - todo escritor novo usa `tipo = 'retorno'`; `sangria` existe apenas em leitura histórica;
 - cancelamento é exclusivo da retaguarda, pode ocorrer antes ou depois do vínculo com o Caixa e
   preserva linha, motivo, autor e horário.
@@ -67,9 +68,9 @@ painel antigo foi removido, não para orientar implementação nova.
 | **D8**  | `idempotencia_chave` é **nullable e sem default**: todo o histórico fica NULL, o índice parcial o ignora, **nenhum backfill** é necessário.                                                                                      | migration `0030`                                                    |
 | **D9**  | Há um único ato financeiro de retorno: execução dentro do Caixa. O modal apenas declara o planejamento; o painel paralelo antigo não volta.                                                                                      | `OperacaoTransferenciaModal.vue` / `CaixaResumoPage.vue`            |
 | **D10** | **O valor planejado é imutável.** A execução movimenta exatamente o valor da linha; excedente sai por movimento avulso/final próprio.                                                                                            | `executarPlanejamentoRetorno`                                       |
-| **D11** | A execução é idempotente pela identidade do planejamento e pela transição atômica `agendada → pendente`; valor, lacre e destino já foram definidos na declaração.                                                                | `executarPlanejamentoRetornoRepository`                             |
+| **D11** | A execução é idempotente pela identidade do planejamento e pela transição atômica `agendada → pendente`; valor e lacre foram declarados e o destino foi fixado automaticamente na origem da ida.                                 | `executarPlanejamentoRetornoRepository`                             |
 | **D12** | **Planejamento `agendada` bloqueia o fechamento** até ser executado ou cancelado pela retaguarda; o cancelamento auditado também existe antes da abertura. Executado bloqueia até a conta destino conferir/encerrar divergência. | `fecharCaixa` / `cancelarPlanejamentoRetorno`                       |
-| **D13** | Sem confirmador elegível na conta destino, o retorno não é executado. Elegível = vínculo em `contas_usuarios`, empresa certa, permissão `transferencias_conferir` e pessoa diferente de quem planejou e executou.                | `exigirConfirmadorDaConta`                                          |
+| **D13** | Sem confirmador elegível na conta de origem da ida, o retorno não é executado. Elegível = vínculo em `contas_usuarios`, empresa certa, permissão `transferencias_conferir` e pessoa diferente de quem planejou e executou.       | `exigirConfirmadorDaConta`                                          |
 | **D14** | Se o movimento tem lacre, a confirmação exige o mesmo e o rompe; retorno planejado sempre tem lacre, enquanto avulso/final pode não ter (R-026).                                                                                 | `confirmarTransferenciaRepository`                                  |
 
 ---

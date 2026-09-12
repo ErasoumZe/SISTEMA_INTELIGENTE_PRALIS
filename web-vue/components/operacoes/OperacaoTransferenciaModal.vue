@@ -47,20 +47,35 @@ const erroPlanejamento = ref("");
 watch(aberto, (estaAberto) => {
   if (!estaAberto) return;
   erroPlanejamento.value = "";
-  multiploDestino.value = form.value.contasDestinoIds.length > 0;
-  tempoConfirmacaoAberto.value = form.value.tempoConfirmacao !== "1dia";
   retornoAtivo.value = form.value.retornosPlanejados.length > 0;
+  multiploDestino.value = !retornoAtivo.value && form.value.contasDestinoIds.length > 0;
+  tempoConfirmacaoAberto.value = !retornoAtivo.value && !multiploDestino.value && Boolean(form.value.tempoConfirmacao);
+  if (retornoAtivo.value || multiploDestino.value) form.value.tempoConfirmacao = null;
 });
 
 // Desmarcar LIMPA: candidato fantasma nao pode viajar para o backend.
 watch(multiploDestino, (ativo) => {
-  if (!ativo) form.value.contasDestinoIds = [];
+  if (!ativo) {
+    form.value.contasDestinoIds = [];
+    return;
+  }
+  retornoAtivo.value = false;
+  form.value.retornosPlanejados = [];
+  tempoConfirmacaoAberto.value = false;
+  form.value.tempoConfirmacao = null;
 });
-// R-035/R-037: a checkbox escolhe OUTRO prazo, nao a ausencia de prazo. Desmarcada, volta ao "1dia"
-// que o servidor ja aplica por default — sem prazo, a R-037 ficaria sem gatilho e a transferencia
-// pendente viveria para sempre.
+// R-188: prazo e opcional e exclusivo da transferencia direta. Desmarcar limpa o prazo por
+// completo; retorno e multiplo destino nunca carregam prazo escondido.
 watch(tempoConfirmacaoAberto, (ativo) => {
-  if (!ativo) form.value.tempoConfirmacao = "1dia";
+  if (!ativo) {
+    form.value.tempoConfirmacao = null;
+    return;
+  }
+  multiploDestino.value = false;
+  form.value.contasDestinoIds = [];
+  retornoAtivo.value = false;
+  form.value.retornosPlanejados = [];
+  form.value.tempoConfirmacao ??= "1dia";
 });
 
 watch(retornoAtivo, (ativo) => {
@@ -74,6 +89,8 @@ watch(retornoAtivo, (ativo) => {
   if (!form.value.retornosPlanejados.length) adicionarRetornoPlanejado();
   multiploDestino.value = false;
   form.value.contasDestinoIds = [];
+  tempoConfirmacaoAberto.value = false;
+  form.value.tempoConfirmacao = null;
   agendamento.value = false;
 });
 
@@ -81,8 +98,7 @@ function adicionarRetornoPlanejado() {
   if (form.value.retornosPlanejados.length >= 20) return;
   form.value.retornosPlanejados.push({
     valor: "",
-    nLacreDoc: "",
-    contaDestinoId: form.value.contaOrigemId
+    nLacreDoc: ""
   });
 }
 
@@ -96,12 +112,8 @@ function planejamentosValidos() {
   if (!planos.length) return true;
   const lacres = new Set<string>();
   const totalPlanejadoCentavos = planos.reduce((total, plano) => total + paraCentavos(plano.valor), 0);
-  if (
-    planos.some(
-      (plano) => !plano.valor || paraCentavos(plano.valor) <= 0 || !plano.nLacreDoc.trim() || !plano.contaDestinoId
-    )
-  ) {
-    erroPlanejamento.value = "Informe valor, lacre e destino em cada transferencia de retorno.";
+  if (planos.some((plano) => !plano.valor || paraCentavos(plano.valor) <= 0 || !plano.nLacreDoc.trim())) {
+    erroPlanejamento.value = "Informe valor e lacre em cada transferencia de retorno.";
     return false;
   }
   for (const plano of planos) {
@@ -127,7 +139,6 @@ const contasCandidatas = computed(() =>
 const contasPdvAtivas = computed(
   () => new Set(opcoesEmpresa.value.pdvs.filter((pdv) => pdv.ativo !== false).map((pdv) => pdv.contaId))
 );
-const contasPdv = computed(() => new Set(opcoesEmpresa.value.pdvs.map((pdv) => pdv.contaId)));
 const contaCofreId = computed(
   () => opcoesEmpresa.value.empresas.find((empresa) => empresa.id === empresaId.value)?.contaCofreId ?? ""
 );
@@ -136,10 +147,8 @@ const rotaPlanejamentoElegivel = computed(
     Boolean(contaCofreId.value) &&
     form.value.contaOrigemId === contaCofreId.value &&
     contasPdvAtivas.value.has(form.value.contaDestinoId) &&
-    !multiploDestino.value
-);
-const contasDestinoPlanejamento = computed(() =>
-  opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaDestinoId && !contasPdv.value.has(conta.id))
+    !multiploDestino.value &&
+    !tempoConfirmacaoAberto.value
 );
 
 watch(rotaPlanejamentoElegivel, (elegivel) => {
@@ -296,12 +305,22 @@ const hojeISO = computed(() => dataISO(0));
         </div>
 
         <label class="tr-check">
-          <input v-model="agendamento" type="checkbox" :disabled="retornoAtivo" data-teste="opcao-agendamento" />
+          <input
+            v-model="agendamento"
+            type="checkbox"
+            :disabled="retornoAtivo || Boolean(operacaoEditandoId)"
+            data-teste="opcao-agendamento"
+          />
           <span>Agendamento</span>
         </label>
         <label v-if="agendamento" class="tr-campo tr-indent">
           <span class="tr-campo-lbl">Data Agendamento</span>
-          <input v-model="form.agendadaPara" type="datetime-local" class="tr-input" />
+          <input
+            v-model="form.agendadaPara"
+            type="datetime-local"
+            class="tr-input"
+            :disabled="Boolean(operacaoEditandoId)"
+          />
         </label>
 
         <label class="tr-campo">
@@ -349,11 +368,11 @@ const hojeISO = computed(() => dataISO(0));
           </div>
         </div>
 
-        <!-- R-185/R-187: uma unica opcao "Transferencia de retorno" declara varias linhas
-           independentes de valor+lacre+destino. A execucao financeira ocorre somente no Caixa. -->
+        <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
+           conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
         <div class="tr-opcoes">
           <label class="tr-check">
-            <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo" />
+            <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo || tempoConfirmacaoAberto" />
             <span>Múltiplo Destino</span>
           </label>
           <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
@@ -362,12 +381,16 @@ const hojeISO = computed(() => dataISO(0));
           <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
              FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
           <label class="tr-check">
-            <input v-model="tempoConfirmacaoAberto" type="checkbox" />
+            <input
+              v-model="tempoConfirmacaoAberto"
+              type="checkbox"
+              :disabled="retornoAtivo || multiploDestino || Boolean(operacaoEditandoId)"
+            />
             <span>Tempo de confirmação</span>
           </label>
           <label v-if="tempoConfirmacaoAberto" class="tr-campo tr-indent">
             <span class="tr-campo-lbl">Tempo de confirmação</span>
-            <select v-model="form.tempoConfirmacao" class="tr-input">
+            <select v-model="form.tempoConfirmacao" class="tr-input" :disabled="Boolean(operacaoEditandoId)">
               <option value="5min">5 minutos</option>
               <option value="10min">10 minutos</option>
               <option value="30min">30 minutos</option>
@@ -381,7 +404,7 @@ const hojeISO = computed(() => dataISO(0));
             <input
               v-model="retornoAtivo"
               type="checkbox"
-              :disabled="!rotaPlanejamentoElegivel"
+              :disabled="!rotaPlanejamentoElegivel || multiploDestino || tempoConfirmacaoAberto"
               data-teste="opcao-transferencia-retorno"
             />
             <span>Transferência de retorno</span>
@@ -390,7 +413,11 @@ const hojeISO = computed(() => dataISO(0));
             v-if="!operacaoEditandoId && podePlanejarRetorno && !rotaPlanejamentoElegivel"
             class="tr-planejamento-ajuda"
           >
-            Selecione Cofre como origem e uma conta de PDV ativa como destino para preparar o retorno.
+            {{
+              multiploDestino || tempoConfirmacaoAberto
+                ? "Desative Múltiplo Destino ou Tempo de confirmação para preparar o retorno."
+                : "Selecione Cofre como origem e uma conta de PDV ativa como destino para preparar o retorno."
+            }}
           </p>
           <section
             v-if="retornoAtivo"
@@ -409,15 +436,6 @@ const hojeISO = computed(() => dataISO(0));
               <label class="tr-campo">
                 <span class="tr-campo-lbl">Lacre</span>
                 <input v-model="retorno.nLacreDoc" class="tr-input" placeholder="Ex.: 002" />
-              </label>
-              <label class="tr-campo tr-planejamento-destino">
-                <span class="tr-campo-lbl">Destino</span>
-                <select v-model="retorno.contaDestinoId" class="tr-input">
-                  <option value="">—</option>
-                  <option v-for="conta in contasDestinoPlanejamento" :key="conta.id" :value="conta.id">
-                    {{ conta.nome }}
-                  </option>
-                </select>
               </label>
               <button
                 type="button"
@@ -834,7 +852,7 @@ const hojeISO = computed(() => dataISO(0));
 }
 .tr-planejamento-linha {
   display: grid;
-  grid-template-columns: minmax(84px, 1fr) minmax(84px, 1fr) minmax(130px, 1.5fr) 28px;
+  grid-template-columns: minmax(84px, 1fr) minmax(84px, 1fr) 28px;
   gap: 7px;
   align-items: end;
 }
@@ -908,9 +926,6 @@ const hojeISO = computed(() => dataISO(0));
   }
   .tr-planejamento-linha {
     grid-template-columns: 1fr 1fr 28px;
-  }
-  .tr-planejamento-destino {
-    grid-column: 1 / 3;
   }
   /* Modal fullscreen (casca 100dvh via main.css). O rodape fixo ja vem da regra base; aqui so
      ampliamos a altura e respeitamos a safe-area do iOS. */

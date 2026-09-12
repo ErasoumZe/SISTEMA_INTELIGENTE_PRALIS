@@ -709,8 +709,7 @@ export async function buscarPlanejamentoRetornoRepository(
       status: transferencias.status,
       nLacreDoc: transferencias.nLacreDoc,
       contaDestinoId: transferencias.contaDestinoId,
-      criadoPor: transferencias.criadoPor,
-      tempoConfirmacao: transferencias.tempoConfirmacao
+      criadoPor: transferencias.criadoPor
     })
     .from(transferencias)
     .where(and(eq(transferencias.id, planejamentoId), eq(transferencias.caixaId, caixaId), ehPlanejamentoDeRetorno))
@@ -738,7 +737,7 @@ export async function executarPlanejamentoRetornoRepository(
     caixaId: string;
     ordem: number;
     dataTransferencia: string;
-    prazoConfirmacaoEm: Date;
+    prazoConfirmacaoEm: Date | null;
     executadoPor: string;
     agora: Date;
   },

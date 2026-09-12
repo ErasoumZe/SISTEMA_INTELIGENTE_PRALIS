@@ -22,11 +22,12 @@ export const transferenciasQuerySchema = z
   .merge(paginationQuerySchema);
 // R-185: envelopes preparados junto da ida Cofre -> Caixa. Sao apenas planejamento: a linha
 // nasce agendada e so movimenta saldo quando o operador a executa dentro do Caixa.
-export const retornoPlanejadoSchema = z.object({
-  valor: z.coerce.number().positive(),
-  nLacreDoc: z.string().trim().min(1, "Lacre obrigatorio"),
-  contaDestinoId: uuidSchema
-});
+export const retornoPlanejadoSchema = z
+  .object({
+    valor: z.coerce.number().positive(),
+    nLacreDoc: z.string().trim().min(1, "Lacre obrigatorio")
+  })
+  .strict();
 
 export const transferenciaPayloadSchema = z.object({
   empresaId: uuidSchema,
@@ -46,7 +47,7 @@ export const transferenciaPayloadSchema = z.object({
   contasDestinoIds: z.array(uuidSchema).max(50).optional().default([]),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
   agendadaPara: z.string().datetime().optional().nullable(),
-  tempoConfirmacao: tempoConfirmacaoSchema.optional().default("1dia"),
+  tempoConfirmacao: tempoConfirmacaoSchema.nullable().optional().default(null),
   computar: z.boolean().default(true),
   retornosPlanejados: z.array(retornoPlanejadoSchema).max(20).optional().default([])
 });

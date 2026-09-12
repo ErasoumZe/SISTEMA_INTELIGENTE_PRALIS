@@ -31,6 +31,11 @@ Checkboxes ao lado de Destino:
 
 > As três são **checkboxes que revelam o campo correspondente** — nenhuma delas mostra o campo
 > antes de ser marcada. É o padrão que a anotação _"Se ☑ abre esse campo!"_ registra.
+>
+> **Regra vigente (R-188, 12/09/2026):** apesar de aparecerem juntas no desenho, **Múltiplo
+> Destino**, **Tempo de confirmação** e **Transferência de retorno** são mutuamente exclusivas.
+> Prazo é opcional somente na direta; retorno expõe apenas valor+lacre e volta automaticamente à
+> conta de origem da ida.
 
 ### Bloco B · Transf. Entrada (Retorno / Sangria)
 

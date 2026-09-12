@@ -20,8 +20,6 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   let cookieCaixa: string;
   let adminId: string;
   let multiempresaId: string;
-  let gerenteId: string;
-  let tesourariaId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -33,23 +31,15 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       cookieSessao(contexto.app, "gerente"),
       cookieSessao(contexto.app, "caixa")
     ]);
-    const [admin, multiempresa, gerente, tesouraria] = await Promise.all([
+    const [admin, multiempresa] = await Promise.all([
       consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [usuariosTeste.admin.email]),
       consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
         usuariosTeste.multiempresa.email
-      ]),
-      consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-        usuariosTeste.gerente.email
-      ]),
-      consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
-        usuariosTeste.tesouraria.email
       ])
     ]);
-    if (!admin || !multiempresa || !gerente || !tesouraria) throw new Error("Operadores de teste nao encontrados");
+    if (!admin || !multiempresa) throw new Error("Operadores de teste nao encontrados");
     adminId = admin.id;
     multiempresaId = multiempresa.id;
-    gerenteId = gerente.id;
-    tesourariaId = tesouraria.id;
   }, 120_000);
 
   afterAll(async () => contexto.fechar());
@@ -89,7 +79,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaDestinoId: destinoPrincipal,
       contasDestinoIds: demais,
       nLacreDoc: lacre,
-      tempoConfirmacao: "1dia"
+      tempoConfirmacao: null
     });
     expect(resposta.statusCode, resposta.body).toBe(201);
     return json<{ data: { id: string } }>(resposta).data.id;
@@ -305,15 +295,24 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       valorOriginal: 1_000,
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
-      tempoConfirmacao: "1dia"
+      tempoConfirmacao: null
     };
+
+    const retornoComPrazo = await request(cookieTesouraria, "POST", "/api/transferencias", {
+      ...base,
+      nLacreDoc: "R185-PRAZO-IDA",
+      tempoConfirmacao: "5min",
+      retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-PRAZO-RET" }]
+    });
+    assertProblem(retornoComPrazo, 400);
+    expect(retornoComPrazo.body).toMatch(/retorno.*tempo de confirma/iu);
 
     const menor = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-LIMITE-IDA-1",
       retornosPlanejados: [
-        { valor: 300, nLacreDoc: "R185-LIMITE-RET-1", contaDestinoId: idsTeste.contaCofre },
-        { valor: 600, nLacreDoc: "R185-LIMITE-RET-2", contaDestinoId: idsTeste.contaCofre }
+        { valor: 300, nLacreDoc: "R185-LIMITE-RET-1" },
+        { valor: 600, nLacreDoc: "R185-LIMITE-RET-2" }
       ]
     });
     expect(menor.statusCode, menor.body).toBe(201);
@@ -321,7 +320,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const operador = await request(cookieCaixa, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-OPERADOR-IDA",
-      retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-OPERADOR-RET", contaDestinoId: idsTeste.contaCofre }]
+      retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-OPERADOR-RET" }]
     });
     assertProblem(operador, 400);
     expect(operador.body).toMatch(/exclusivo da retaguarda/iu);
@@ -330,41 +329,20 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       ...base,
       nLacreDoc: "R185-LIMITE-IDA-2",
       retornosPlanejados: [
-        { valor: 400, nLacreDoc: "R185-LIMITE-RET-3", contaDestinoId: idsTeste.contaCofre },
-        { valor: 700, nLacreDoc: "R185-LIMITE-RET-4", contaDestinoId: idsTeste.contaCofre }
+        { valor: 400, nLacreDoc: "R185-LIMITE-RET-3" },
+        { valor: 700, nLacreDoc: "R185-LIMITE-RET-4" }
       ]
     });
     assertProblem(maior, 400);
-    const outroPdv = await criarContaEPdv("r185-destino-pdv-invalido");
-    const destinoPdv = await request(cookieTesouraria, "POST", "/api/transferencias", {
-      ...base,
-      nLacreDoc: "R185-DESTINO-PDV-IDA",
-      retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-DESTINO-PDV-RET", contaDestinoId: outroPdv.contaId }]
-    });
-    assertProblem(destinoPdv, 400);
-    expect(destinoPdv.body).toMatch(/n[aã]o pode ser conta de PDV/iu);
-    await executarSql("update pdvs set ativo = false where id = $1", [outroPdv.pdvId]);
-    const destinoPdvInativo = await request(cookieTesouraria, "POST", "/api/transferencias", {
-      ...base,
-      nLacreDoc: "R185-DESTINO-PDV-INATIVO-IDA",
-      retornosPlanejados: [{ valor: 300, nLacreDoc: "R185-DESTINO-PDV-INATIVO-RET", contaDestinoId: outroPdv.contaId }]
-    });
-    assertProblem(destinoPdvInativo, 400);
-    expect(destinoPdvInativo.body).toMatch(/n[aã]o pode ser conta de PDV/iu);
     expect(maior.body).toMatch(/n[aã]o pode ultrapassar/iu);
 
-    const contaOutraEmpresa = await request(cookieMultiempresa, "POST", "/api/contas", {
-      empresaId: idsTeste.empresaB,
-      nome: "Conta atomica empresa B"
-    });
-    expect(contaOutraEmpresa.statusCode, contaOutraEmpresa.body).toBe(201);
-    const contaOutraEmpresaId = json<{ data: { id: string } }>(contaOutraEmpresa).data.id;
+    // O contrato e estrito: nem um cliente antigo pode escolher o destino da volta.
     const atomica = await request(cookieTesouraria, "POST", "/api/transferencias", {
       ...base,
       nLacreDoc: "R185-ATOMICA-IDA",
       retornosPlanejados: [
-        { valor: 300, nLacreDoc: "R185-ATOMICA-RET-1", contaDestinoId: idsTeste.contaCofre },
-        { valor: 600, nLacreDoc: "R185-ATOMICA-RET-2", contaDestinoId: contaOutraEmpresaId }
+        { valor: 300, nLacreDoc: "R185-ATOMICA-RET-1" },
+        { valor: 600, nLacreDoc: "R185-ATOMICA-RET-2", contaDestinoId: idsTeste.contaBanco }
       ]
     });
     assertProblem(atomica, 400);
@@ -383,21 +361,8 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     ).toEqual({ total: "0" });
   });
 
-  it("Deve impedir executar retorno quando so o planejador poderia conferir no destino", async () => {
+  it("Deve fixar o retorno na origem inicial e manter pai e filha imutaveis", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-sem-conferente");
-    const destino = await request(cookieAdmin, "POST", "/api/contas", {
-      empresaId: idsTeste.empresaA,
-      nome: "Destino apenas do planejador"
-    });
-    expect(destino.statusCode, destino.body).toBe(201);
-    const destinoId = json<{ data: { id: string } }>(destino).data.id;
-    const vinculo = await request(cookieAdmin, "POST", "/api/contas-usuarios", {
-      empresaId: idsTeste.empresaA,
-      contaId: destinoId,
-      usuarioId: tesourariaId
-    });
-    expect(vinculo.statusCode, vinculo.body).toBe(201);
-
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
@@ -406,7 +371,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-SEM-CONF-IDA",
-      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-SEM-CONF-RET", contaDestinoId: destinoId }]
+      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-SEM-CONF-RET" }]
     });
     expect(inicial.statusCode, inicial.body).toBe(201);
     const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
@@ -437,11 +402,12 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
     const aberta = await abrir(pdvId, "R185-SEM-CONF-IDA");
     expect(aberta.statusCode, aberta.body).toBe(201);
     const caixaId = json<{ data: { id: string } }>(aberta).data.id;
-    const plano = await consultarUm<{ id: string }>(
-      "select id from transferencias where planejamento_origem_transferencia_id = $1",
+    const plano = await consultarUm<{ id: string; conta_destino_id: string }>(
+      "select id, conta_destino_id from transferencias where planejamento_origem_transferencia_id = $1",
       [transferenciaInicialId]
     );
     if (!plano) throw new Error("Planejamento de teste nao encontrado");
+    expect(plano.conta_destino_id).toBe(idsTeste.contaCofre);
 
     const executar = await request(
       cookieAdmin,
@@ -449,13 +415,26 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       `/api/caixa/${caixaId}/planejamentos-retorno/${plano.id}/executar`,
       {}
     );
-    assertProblem(executar, 400);
-    expect(executar.body).toMatch(/sem responsavel elegivel/iu);
+    expect(executar.statusCode, executar.body).toBe(200);
     expect(
-      await consultarUm<{ status: string }>("select status from transferencias where id = $1", [plano.id])
+      await consultarUm<{ status: string; prazo_confirmacao_em: Date | null }>(
+        "select status, prazo_confirmacao_em from transferencias where id = $1",
+        [plano.id]
+      )
     ).toEqual({
-      status: "agendada"
+      status: "pendente",
+      prazo_confirmacao_em: null
     });
+    const confirmada = await request(cookieGerente, "POST", `/api/transferencias/${plano.id}/confirmar`, {
+      contaDestinoId: idsTeste.contaCofre,
+      nLacreDoc: "R185-SEM-CONF-RET",
+      valorRecebido: 100
+    });
+    expect(confirmada.statusCode, confirmada.body).toBe(200);
+    const fechamento = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
+      observacao: "retorno fixo conferido"
+    });
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
   });
 
   it("Deve cancelar planejamento antes da abertura com auditoria, retry idempotente e liberar o fechamento", async () => {
@@ -468,7 +447,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CANCELA-IDA",
-      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CANCELA-RET", contaDestinoId: idsTeste.contaCofre }]
+      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CANCELA-RET" }]
     });
     expect(inicial.statusCode, inicial.body).toBe(201);
     const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
@@ -549,7 +528,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CANCELA-VINC-IDA",
-      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CANCELA-VINC-RET", contaDestinoId: idsTeste.contaCofre }]
+      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CANCELA-VINC-RET" }]
     });
     expect(inicial.statusCode, inicial.body).toBe(201);
     const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
@@ -586,7 +565,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-CORRIDA-IDA",
-      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CORRIDA-RET", contaDestinoId: idsTeste.contaCofre }]
+      retornosPlanejados: [{ valor: 100, nLacreDoc: "R185-CORRIDA-RET" }]
     });
     expect(inicial.statusCode, inicial.body).toBe(201);
     const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
@@ -629,12 +608,6 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
 
   it("Deve criar, vincular e executar transferencias de retorno planejadas sem antecipar o saldo (R-185/R-187)", async () => {
     const { contaId, pdvId } = await criarContaEPdv("r185-retornos");
-    const vinculoBanco = await request(cookieAdmin, "POST", "/api/contas-usuarios", {
-      empresaId: idsTeste.empresaA,
-      contaId: idsTeste.contaBanco,
-      usuarioId: gerenteId
-    });
-    expect(vinculoBanco.statusCode, vinculoBanco.body).toBe(201);
     const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
       empresaId: idsTeste.empresaA,
       dataReferencia: "2026-07-31",
@@ -643,10 +616,10 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       contaOrigemId: idsTeste.contaCofre,
       contaDestinoId: contaId,
       nLacreDoc: "R185-IDA-001",
-      tempoConfirmacao: "1dia",
+      tempoConfirmacao: null,
       retornosPlanejados: [
-        { valor: 300, nLacreDoc: "R185-RET-002", contaDestinoId: idsTeste.contaCofre },
-        { valor: 700, nLacreDoc: "R185-RET-003", contaDestinoId: idsTeste.contaBanco }
+        { valor: 300, nLacreDoc: "R185-RET-002" },
+        { valor: 700, nLacreDoc: "R185-RET-003" }
       ]
     });
     expect(inicial.statusCode, inicial.body).toBe(201);
@@ -668,8 +641,11 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       valor_original: string;
       caixa_id: string | null;
       origem_lacre: string;
+      tempo_confirmacao: string | null;
+      prazo_confirmacao_em: Date | null;
     }>(
-      `select t.id, t.tipo, t.status, t.valor_original, t.caixa_id, l.origem as origem_lacre
+      `select t.id, t.tipo, t.status, t.valor_original, t.caixa_id, l.origem as origem_lacre,
+              t.tempo_confirmacao, t.prazo_confirmacao_em
          from transferencias t
          join lacres l on l.transferencia_id = t.id
         where t.planejamento_origem_transferencia_id = $1
@@ -681,6 +657,9 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       expect.objectContaining({ tipo: "retorno", status: "agendada", valor_original: "700.00", caixa_id: null })
     ]);
     expect(antesDaAbertura.map((linha) => linha.origem_lacre)).toEqual(["retorno", "retorno"]);
+    expect(
+      antesDaAbertura.every((linha) => linha.tempo_confirmacao === null && linha.prazo_confirmacao_em === null)
+    ).toBe(true);
 
     const aberta = await abrir(pdvId, "R185-IDA-001");
     expect(aberta.statusCode, aberta.body).toBe(201);
@@ -750,8 +729,8 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       [transferenciaInicialId]
     );
     expect(vinculadas.every((linha) => linha.caixa_id === statusAberto.caixaAberto.id)).toBe(true);
+    expect(vinculadas.every((linha) => linha.conta_destino_id === idsTeste.contaCofre)).toBe(true);
     const saldoCofreAntesRetornos = (await saldoConta(idsTeste.contaCofre)).saldoAtual;
-    const saldoBancoAntesRetornos = (await saldoConta(idsTeste.contaBanco)).saldoAtual;
 
     const [executada, retryConcorrente] = await Promise.all([
       request(cookieAdmin, "POST", `/api/caixa/${caixaId}/planejamentos-retorno/${vinculadas[0]!.id}/executar`, {}),
@@ -787,13 +766,8 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       tipo: "retorno",
       status: "pendente",
       executado_em: expect.any(Date),
-      prazo_confirmacao_em: expect.any(Date)
+      prazo_confirmacao_em: null
     });
-    const prazoExecutado = await consultarUm<{ executado_em: Date; prazo_confirmacao_em: Date }>(
-      "select executado_em, prazo_confirmacao_em from transferencias where id = $1",
-      [vinculadas[0]!.id]
-    );
-    expect(prazoExecutado!.prazo_confirmacao_em.getTime() - prazoExecutado!.executado_em.getTime()).toBe(86_400_000);
 
     const cancelarExecutada = await request(
       cookieAdmin,
@@ -828,44 +802,48 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       observacao: "aguarda destinos"
     });
     assertProblem(aindaTravado, 400);
-    expect(aindaTravado.body).toMatch(/Cofre Integra[cç][aã]o|Banco Integra[cç][aã]o/iu);
+    expect(aindaTravado.body).toMatch(/Cofre Integra[cç][aã]o/iu);
 
-    const retornoCofre = vinculadas.find((retorno) => retorno.conta_destino_id === idsTeste.contaCofre)!;
-    const retornoBanco = vinculadas.find((retorno) => retorno.conta_destino_id === idsTeste.contaBanco)!;
-    const conferenciaCofre = await request(cookieGerente, "POST", `/api/transferencias/${retornoCofre.id}/confirmar`, {
-      contaDestinoId: retornoCofre.conta_destino_id,
-      nLacreDoc: retornoCofre.n_lacre_doc,
-      valorRecebido: 300
-    });
-    expect(conferenciaCofre.statusCode, conferenciaCofre.body).toBe(200);
-
-    const divergenciaBanco = await request(
+    const primeiroRetorno = vinculadas[0]!;
+    const segundoRetorno = vinculadas[1]!;
+    const conferenciaCofre = await request(
       cookieGerente,
       "POST",
-      `/api/transferencias/${retornoBanco.id}/recusar-conferencia`,
+      `/api/transferencias/${primeiroRetorno.id}/confirmar`,
       {
-        contaDestinoId: retornoBanco.conta_destino_id,
-        nLacreDoc: retornoBanco.n_lacre_doc,
-        motivo: "Banco contou dez reais a menos",
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: primeiroRetorno.n_lacre_doc,
+        valorRecebido: 300
+      }
+    );
+    expect(conferenciaCofre.statusCode, conferenciaCofre.body).toBe(200);
+
+    const divergenciaCofre = await request(
+      cookieGerente,
+      "POST",
+      `/api/transferencias/${segundoRetorno.id}/recusar-conferencia`,
+      {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: segundoRetorno.n_lacre_doc,
+        motivo: "Cofre contou dez reais a menos",
         valorRecebido: 690,
         encerrar: true
       }
     );
-    expect(divergenciaBanco.statusCode, divergenciaBanco.body).toBe(200);
+    expect(divergenciaCofre.statusCode, divergenciaCofre.body).toBe(200);
     expect(
       await consultarUm<{ status: string; valor_recebido: string | null }>(
         "select status, valor_recebido from transferencias where id = $1",
-        [retornoBanco.id]
+        [segundoRetorno.id]
       )
     ).toEqual({ status: "divergente", valor_recebido: "690.00" });
     expect(
       await consultarUm<{ valor: string; usuario_id: string }>(
         "select valor, usuario_id from quebras_caixa where transferencia_id = $1",
-        [retornoBanco.id]
+        [segundoRetorno.id]
       )
     ).toEqual({ valor: "-10.00", usuario_id: adminId });
-    expect((await saldoConta(idsTeste.contaCofre)).saldoAtual - saldoCofreAntesRetornos).toBe(300);
-    expect((await saldoConta(idsTeste.contaBanco)).saldoAtual - saldoBancoAntesRetornos).toBe(690);
+    expect((await saldoConta(idsTeste.contaCofre)).saldoAtual - saldoCofreAntesRetornos).toBe(990);
 
     const fechado = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
       observacao: "retornos conferidos"

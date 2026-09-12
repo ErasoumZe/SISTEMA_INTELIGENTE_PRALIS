@@ -5,7 +5,7 @@ import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransfere
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { formOperacaoVazio } from "~/utils/domain";
 
-function montarModal(podePlanejar = true) {
+function montarModal(podePlanejar = true, editando = false) {
   const form = ref({
     ...formOperacaoVazio(),
     valorOriginal: "1000,00",
@@ -17,7 +17,7 @@ function montarModal(podePlanejar = true) {
   const contexto = {
     modalOperacaoAberto: ref(true),
     entidadeNova: ref("transferencia"),
-    operacaoEditandoId: ref(""),
+    operacaoEditandoId: ref(editando ? "transferencia-1" : ""),
     empresaId: ref("empresa-1"),
     form,
     opcoesEmpresa: computed(() => ({
@@ -114,6 +114,13 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     await nextTick();
     expect(retaguarda.wrapper.get('[data-teste="opcao-transferencia-retorno"]').attributes("disabled")).toBeDefined();
     expect(retaguarda.wrapper.text()).toContain("Selecione Cofre como origem");
+  });
+
+  it("na edicao mantem prazo e agendamento somente leitura", () => {
+    const { wrapper } = montarModal(true, true);
+    expect(opcao(wrapper, "Tempo de confirmação").attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-teste="opcao-agendamento"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.find('[data-teste="opcao-transferencia-retorno"]').exists()).toBe(false);
   });
 
   it("compara valores em centavos e aceita 0,10 + 0,20 para uma ida de 0,30", async () => {

@@ -368,9 +368,9 @@ export type OperacaoForm = {
   nLacreDoc: string;
   agendadaPara: string;
   dataRecebimento: string;
-  tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias";
+  tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias" | null;
   contasDestinoIds: string[];
-  retornosPlanejados: Array<{ valor: string; nLacreDoc: string; contaDestinoId: string }>;
+  retornosPlanejados: Array<{ valor: string; nLacreDoc: string }>;
   recorrenciaId: string;
   documento: string;
   numeroNotaFiscal: string;
