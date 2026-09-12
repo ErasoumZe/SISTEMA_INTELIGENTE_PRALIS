@@ -84,8 +84,8 @@ watch(retornoAtivo, (ativo) => {
     form.value.retornosPlanejados = [];
     return;
   }
-  // A programacao sai sempre da conta que recebe a abertura. Destino padrao: a conta de origem
-  // da transferencia inicial (normalmente o Cofre); a pessoa pode escolher outra conta permitida.
+  // A programacao sai sempre da conta que recebe a abertura e volta obrigatoriamente para a conta
+  // de origem da transferencia inicial (normalmente o Cofre).
   if (!form.value.retornosPlanejados.length) adicionarRetornoPlanejado();
   multiploDestino.value = false;
   form.value.contasDestinoIds = [];

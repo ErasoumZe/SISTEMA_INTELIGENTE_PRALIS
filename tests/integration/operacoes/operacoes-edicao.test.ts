@@ -231,14 +231,16 @@ describe("operacoes edicao integration", () => {
       valorOriginal: 9,
       contaOrigemId: contaPdvId,
       contaDestinoId: idsTeste.contaLivre,
+      contasDestinoIds: [idsTeste.contaBanco],
       nLacreDoc: "EDICAO-TR-001"
     });
-    expect(
-      await consultarTodos<{ conta_id: string }>(
-        "select conta_id from transferencias_destinos_candidatos where transferencia_id = $1",
-        [transferenciaId]
-      )
-    ).toEqual([{ conta_id: idsTeste.contaLivre }]);
+    const candidatosEditados = await consultarTodos<{ conta_id: string }>(
+      "select conta_id from transferencias_destinos_candidatos where transferencia_id = $1",
+      [transferenciaId]
+    );
+    expect(candidatosEditados.map((item) => item.conta_id).sort()).toEqual(
+      [idsTeste.contaLivre, idsTeste.contaBanco].sort()
+    );
 
     const alterarPrazo = await contexto.app.inject({
       method: "PUT",
