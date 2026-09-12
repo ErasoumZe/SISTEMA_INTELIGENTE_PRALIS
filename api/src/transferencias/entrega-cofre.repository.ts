@@ -1,10 +1,11 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { contas } from "@padaria/db/schema/cadastro";
 import { transferencias, transferenciasConferenciasRecusadas } from "@padaria/db/schema/transferencia";
 import { paraCentavos } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 /**
- * A regra canonica de "esta transferencia e uma entrega do Caixa para o Cofre" — nos dois dialetos.
+ * A regra canonica de "esta transferencia pertence ao processo de retorno do Caixa".
  *
  * Modulo PROPRIO, e nao um pedaco de `transferencias.repository.ts`, por duas razoes:
  *
@@ -16,7 +17,8 @@ import { banco, type ExecutorBanco } from "../banco/conexao.js";
  *     `lancamentos.dominio`, entao o Caixa nao pode importar de la. Este arquivo so conhece Drizzle,
  *     o schema e a conexao — qualquer camada pode depender dele.
  *
- * Os tres criterios sao necessarios JUNTOS: nenhum sozinho distingue os fluxos.
+ * O vinculo com o Caixa e o tipo canonico `retorno` distinguem o fluxo novo. `sangria` e aceito
+ * apenas para que o historico continue conferivel e auditavel.
  */
 export function ehRetornoDoCaixa(linha: { caixaId: string | null; tipo: string }): boolean {
   return linha.caixaId !== null && (linha.tipo === "sangria" || linha.tipo === "retorno");
@@ -25,8 +27,8 @@ export function ehRetornoDoCaixa(linha: { caixaId: string | null; tipo: string }
 /**
  * P1/#101 · o mesmo fato visto pelo CAMINHO DO DINHEIRO, e nao pelo `tipo` da linha.
  *
- * `ehEntregaCaixaParaCofre` acima pergunta "esta linha e uma entrega ao cofre?" e responde pelo
- * `tipo`, que so o escritor unico do Caixa grava. Esta funcao pergunta outra coisa: "este movimento
+ * `ehRetornoDoCaixa` acima pergunta "esta linha pertence ao processo de retorno?" e responde pelo
+ * `tipo`. Esta funcao pergunta outra coisa: "este movimento generico
  * TIRA dinheiro do caixa e leva ao cofre?" — e responde pelas duas pontas, sem olhar `tipo`.
  *
  * A distincao existe porque foi exatamente por ela que o caminho antigo escapou: a rota generica
@@ -52,26 +54,33 @@ export function ehMovimentoDoCaixaParaOCofre(movimento: {
 }
 
 /**
- * G1/R-171 · as entregas ao cofre deste caixa que JA SAIRAM e ainda esperam conferencia.
- *
- * A metade SQL do predicado acima, com os mesmos tres criterios na mesma ordem.
- * `isNotNull(empresas.contaCofreId)` e redundante em SQL — a igualdade com NULL ja nao casa — e fica
- * escrito assim de proposito: apagar um dos criterios daqui faria o par divergir sem nenhum teste
- * ficar vermelho.
+ * G1/R-171/R-187 · retornos deste Caixa que JA SAIRAM e ainda esperam conferencia no destino.
+ * O filtro SQL reproduz `ehRetornoDoCaixa`: caixa vinculado + tipo retorno/sangria historica.
  */
 export async function listarRetornosPendentesRepository(
   caixaId: string,
   db: ExecutorBanco = banco
-): Promise<Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>> {
+): Promise<
+  Array<{
+    id: string;
+    tipo: string;
+    valorCentavos: number;
+    lacre: string | null;
+    contaDestinoNome: string;
+    criadoEm: Date | null;
+  }>
+> {
   const linhas = await db
     .select({
       id: transferencias.id,
       tipo: transferencias.tipo,
       valorOriginal: transferencias.valorOriginal,
       lacre: transferencias.nLacreDoc,
+      contaDestinoNome: contas.nome,
       criadoEm: transferencias.criadoEm
     })
     .from(transferencias)
+    .innerJoin(contas, eq(contas.id, transferencias.contaDestinoId))
     .where(
       and(
         eq(transferencias.caixaId, caixaId),
@@ -86,6 +95,7 @@ export async function listarRetornosPendentesRepository(
     tipo: linha.tipo,
     valorCentavos: paraCentavos(linha.valorOriginal),
     lacre: linha.lacre,
+    contaDestinoNome: linha.contaDestinoNome,
     criadoEm: linha.criadoEm
   }));
 }

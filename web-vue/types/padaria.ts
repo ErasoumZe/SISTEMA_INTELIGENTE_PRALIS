@@ -80,6 +80,7 @@ export type Opcao = {
   // preservar no save as permissoes que a tela esconde.
   regras?: Record<string, boolean>;
   contaId?: string;
+  contaCofreId?: string | null;
   cargoIds?: string[];
   cargos?: string[];
   conversoes?: ProdutoConversao[];
@@ -200,9 +201,11 @@ export type OperacaoResumo = {
   prazoConfirmacaoEm?: string | null;
   dataRecebimento?: string | null;
   confirmadoPor?: string | null;
-  // Transferência: esta linha está sob as regras ESTRITAS do Caixa → Cofre? Calculado pelo
-  // servidor (caixa_id + tipo + destino == conta de cofre da empresa) — a tela não conhece a conta
-  // de cofre nem o tipo, e sem este campo tratava toda transferência como se fosse do Caixa.
+  caixaId?: string | null;
+  possuiPlanejamentoRetorno?: boolean;
+  ehPlanejamentoRetorno?: boolean;
+  // Transferência: esta linha está sob as regras ESTRITAS da Transferência de retorno? Calculado
+  // pelo servidor (caixa_id + tipo retorno/sangria) — a tela não conhece o tipo.
   ehCaixaParaCofre?: boolean;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
@@ -258,17 +261,15 @@ export type CaixaOperacional = {
   status: string;
 };
 
-// G1/R-171: uma entrega ao cofre que JA SAIU e ainda espera conferencia. Depois da R-179/Fatia 3
-// e a UNICA coisa que trava o fechamento — a ordem `agendada` da Tesouraria deixou de existir
-// junto com o painel "Programar entrega ao cofre".
+// G1/R-171/R-187: retorno que JA SAIU e ainda espera conferencia na conta destino.
 export type EntregaCofrePendente = {
   id: string;
   tipo: "sangria" | "retorno";
   valor: number;
   lacre: string | null;
+  contaDestinoNome: string;
   criadoEm: string;
-  // R-183: o que o cofre CONTOU na ultima tentativa. `null` = ninguem contou ainda — e essa e a
-  // diferenca entre "confira no cofre" e "o cofre precisa encerrar a divergencia".
+  // R-183: o que o destino CONTOU na ultima tentativa. `null` = ninguem contou ainda.
   valorContado: number | null;
   recusaId: string | null;
 };

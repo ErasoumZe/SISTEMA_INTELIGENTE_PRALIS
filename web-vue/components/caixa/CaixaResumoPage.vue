@@ -5,6 +5,7 @@ import { formatarDataHora } from "~/utils/formatacao";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
+import { deCentavos, paraCentavos } from "@padaria/shared";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -116,6 +117,13 @@ const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fecham
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
 const entregasPendentes = computed(() => props.status?.entregasPendentes ?? []);
 const planejamentosPendentes = computed(() => props.status?.planejamentosPendentes ?? []);
+const totalPlanejadoCentavos = computed(() =>
+  planejamentosPendentes.value.reduce((total, planejamento) => total + paraCentavos(planejamento.valor), 0)
+);
+const saldoLivre = computed(() =>
+  deCentavos(Math.max(0, paraCentavos(saldoAtual.value) - totalPlanejadoCentavos.value))
+);
+const temSaldoLivre = computed(() => saldoLivre.value > 0);
 
 // A trava ja existia na API desde a Fatia 1, mas o operador so a descobria clicando e levando 400.
 // Uma computada, um motivo, e o botao para antes — sem uma segunda definicao da regra na tela.
@@ -199,14 +207,14 @@ function abrir() {
 // recalcula o teto sob trava — o numero que a tela viu nunca e prova de nada.
 const valorEntregaEfetivo = computed(() => {
   const digitado = Number(entrega.valor || 0);
-  return digitado > 0 ? digitado : saldoAtual.value;
+  return digitado > 0 ? digitado : saldoLivre.value;
 });
 // D1 na TELA: o servidor continua sendo a autoridade (ele recalcula sob trava), mas deixar o
 // operador disparar um valor que ja se sabe impossivel so gera 400 e desconfianca. Aqui o aviso
 // e imediato e o botao nao dispara.
-const entregaAcimaDoSaldo = computed(() => valorEntregaEfetivo.value > saldoAtual.value);
+const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > saldoLivre.value);
 const entregaBloqueada = computed(
-  () => Boolean(props.salvando) || valorEntregaEfetivo.value <= 0 || entregaAcimaDoSaldo.value
+  () => Boolean(props.salvando) || valorEntregaEfetivo.value <= 0 || entregaAcimaDoSaldoLivre.value
 );
 
 function retornarSaldo() {
@@ -372,8 +380,15 @@ function fechar() {
         <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
            fecha e o servidor devolve o restante no mesmo ato. -->
         <v-alert v-if="temSobra" type="info" variant="tonal" class="my-5">
-          Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode entregar parte agora ou fechar o caixa — ao
-          fechar, o restante volta ao cofre automaticamente, no mesmo ato.
+          <template v-if="planejamentosPendentes.length">
+            Há {{ dinheiro(saldoAtual) }} em espécie no caixa; {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão
+            reservados para as transferências de retorno programadas. Somente os {{ dinheiro(saldoLivre) }}
+            livres podem ser transferidos à parte.
+          </template>
+          <template v-else>
+            Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode transferir parte agora ou fechar o caixa — ao
+            fechar, o restante volta ao cofre automaticamente, no mesmo ato.
+          </template>
         </v-alert>
 
         <!-- D7: o deficit e o evento mais grave do modulo. O operador precisa saber ANTES de
@@ -417,32 +432,32 @@ function fechar() {
               </v-btn>
             </div>
             Execute cada linha quando o dinheiro sair da gaveta. Enquanto houver linha programada, o fechamento fica
-            bloqueado.
+            bloqueado. Cancelamentos devem ser feitos pela retaguarda.
           </v-alert>
           <EntregasAguardandoConferencia :entregas="entregasPendentes" />
         </div>
 
         <v-row dense>
-          <v-col v-if="temSobra" cols="12" md="4">
+          <v-col v-if="temSaldoLivre" cols="12" md="4">
             <label class="caixa-valor-entrega">
               <span class="caixa-valor-entrega__rotulo">Valor a entregar (vazio = tudo)</span>
               <CampoDinheiro
                 v-model="entrega.valor"
                 class="caixa-valor-entrega__input"
-                :class="{ 'caixa-valor-entrega__input--erro': entregaAcimaDoSaldo }"
-                :aria-invalid="entregaAcimaDoSaldo ? 'true' : undefined"
-                :aria-describedby="entregaAcimaDoSaldo ? 'erro-valor-entrega' : undefined"
+                :class="{ 'caixa-valor-entrega__input--erro': entregaAcimaDoSaldoLivre }"
+                :aria-invalid="entregaAcimaDoSaldoLivre ? 'true' : undefined"
+                :aria-describedby="entregaAcimaDoSaldoLivre ? 'erro-valor-entrega' : undefined"
                 data-teste="valor-entrega"
               />
-              <span v-if="entregaAcimaDoSaldo" id="erro-valor-entrega" class="caixa-valor-entrega__erro">
-                Máximo disponível: {{ dinheiro(saldoAtual) }}
+              <span v-if="entregaAcimaDoSaldoLivre" id="erro-valor-entrega" class="caixa-valor-entrega__erro">
+                Máximo livre após os retornos planejados: {{ dinheiro(saldoLivre) }}
               </span>
             </label>
           </v-col>
-          <v-col v-if="temSobra" cols="12" md="4">
+          <v-col v-if="temSaldoLivre" cols="12" md="4">
             <v-text-field v-model="entrega.lacre" label="N° do lacre (opcional)" data-teste="lacre-entrega" />
           </v-col>
-          <v-col v-if="temSobra" cols="12" md="4">
+          <v-col v-if="temSaldoLivre" cols="12" md="4">
             <v-btn
               color="warning"
               prepend-icon="mdi-bank-transfer-out"
@@ -451,13 +466,13 @@ function fechar() {
               data-teste="botao-entregar"
               @click="retornarSaldo"
             >
-              Entregar ao cofre
+              Transferência de retorno
             </v-btn>
           </v-col>
-          <v-col v-if="temSobra" cols="12">
+          <v-col v-if="temSaldoLivre" cols="12">
             <v-text-field
               v-model="entrega.observacao"
-              label="Observação da entrega (opcional)"
+              label="Observação da transferência de retorno (opcional)"
               data-teste="observacao-entrega"
             />
           </v-col>
@@ -471,7 +486,10 @@ function fechar() {
             />
           </v-col>
           <v-col v-if="temSobra" cols="12" md="4">
-            <v-text-field v-model="fechamento.lacreRetorno" label="Lacre do retorno final (opcional)" />
+            <v-text-field
+              v-model="fechamento.lacreRetorno"
+              label="Lacre da transferência de retorno final (opcional)"
+            />
           </v-col>
           <v-col cols="12">
             <v-btn

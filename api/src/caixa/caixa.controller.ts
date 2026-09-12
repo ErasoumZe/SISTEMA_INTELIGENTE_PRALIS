@@ -5,6 +5,7 @@ import {
   cancelarPlanejamentoRetornoPayloadSchema,
   caixaParamsSchema,
   caixaStatusQuerySchema,
+  planejamentoRetornoIdParamsSchema,
   planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
   historicoCaixaQuerySchema,
@@ -27,7 +28,7 @@ import {
 
 function statusErro(mensagem: string) {
   if (mensagem === "Empresa nao permitida" || mensagem === "Caixa nao permitido") return 403;
-  if (mensagem === "Caixa nao encontrado") return 404;
+  if (mensagem === "Caixa nao encontrado" || mensagem === "Planejamento nao encontrado") return 404;
   return 400;
 }
 
@@ -65,7 +66,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // M2 (R3/R4): sangria (turno) / retorno (fechamento) — caixa -> cofre, mesma entidade com tipo.
+  // R-187: Transferencia de retorno avulsa/final do Caixa para o Cofre.
   app.post(
     "/api/caixa/:caixaId/transferencia-cofre",
     { preHandler: exigirPermissao("caixa_operar") },
@@ -106,13 +107,13 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
   app.post(
-    "/api/caixa/:caixaId/planejamentos-retorno/:planejamentoId/cancelar",
+    "/api/caixa/planejamentos-retorno/:planejamentoId/cancelar",
     { preHandler: exigirPermissao("transferencias_criar") },
     async (request, reply) => {
-      const { caixaId, planejamentoId } = planejamentoRetornoParamsSchema.parse(request.params);
+      const { planejamentoId } = planejamentoRetornoIdParamsSchema.parse(request.params);
       const body = cancelarPlanejamentoRetornoPayloadSchema.parse(request.body);
       try {
-        return ok(await cancelarPlanejamentoRetorno(caixaId, planejamentoId, body, request.perfilUsuario!));
+        return ok(await cancelarPlanejamentoRetorno(planejamentoId, body, request.perfilUsuario!));
       } catch (error) {
         return erro(reply, statusErro(mensagemDominioOuRelancar(error)), mensagemDominioOuRelancar(error));
       }

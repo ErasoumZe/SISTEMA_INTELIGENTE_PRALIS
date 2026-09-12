@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, request, test, type APIRequestContext } from "@playwright/test";
-import { entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
+import { encerrarCaixaDeTeste, entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 
 /**
  * G1/R-171 (#101) — o navegador precisa MOSTRAR a trava, nao so a API recusar.
@@ -54,23 +54,24 @@ async function criar(contexto: APIRequestContext, url: string, data: object): Pr
 test.describe("Caixa - fechamento travado por entrega aguardando conferencia", () => {
   let admin: APIRequestContext;
   let caixa: APIRequestContext;
+  let empresaId = "";
+  let caixaId = "";
 
   test.beforeAll(async () => {
     admin = await entrarNaApi(USUARIOS.admin);
     caixa = await entrarNaApi(USUARIOS.semProdutos);
 
-    const { empresaId } = await sessao(admin);
+    ({ empresaId } = await sessao(admin));
     const eu = await sessao(caixa);
 
     const contaId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} conta` });
     const pdvId = await criar(admin, "/api/pdvs", { empresaId, nome: `${MARCA} PDV`, contaId, ativo: true });
 
     const hoje = new Date().toISOString().slice(0, 10);
-    const caixaId = await criar(caixa, "/api/caixa/abrir", {
+    caixaId = await criar(caixa, "/api/caixa/abrir", {
       empresaId,
       pdvId,
-      usuarioCaixaId: eu.usuarioId,
-      dataHoraAbertura: `${hoje}T06:00`
+      usuarioCaixaId: eu.usuarioId
     });
 
     // Dinheiro de verdade no caixa, lancado pelo proprio operador (o servidor resolve conta e PDV
@@ -90,6 +91,7 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
   });
 
   test.afterAll(async () => {
+    if (caixaId && empresaId) await encerrarCaixaDeTeste(caixa, empresaId, caixaId, MARCA);
     await admin?.dispose();
     await caixa?.dispose();
   });
@@ -104,7 +106,7 @@ test.describe("Caixa - fechamento travado por entrega aguardando conferencia", (
     await expect(bloco).toContainText("Retorno");
 
     // O motivo fica escrito, e nao escondido em tooltip: quem le a tela sabe o que resolver.
-    await expect(page.locator(porTeste("motivo-fechamento-travado"))).toContainText("conferência no cofre");
+    await expect(page.locator(porTeste("motivo-fechamento-travado"))).toContainText("conferência no destino");
 
     // Travado, mas FOCAVEL: `aria-disabled`, nunca `disabled` — botao morto sai da navegacao por
     // teclado e o leitor de tela nunca chega ao motivo.

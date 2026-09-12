@@ -13,7 +13,9 @@ import {
   valorEntradaCentavos,
   type StatusTransferencia
 } from "@padaria/shared";
+import { computed, inject, reactive, ref } from "vue";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
+import CancelarPlanejamentoRetornoDialog from "./CancelarPlanejamentoRetornoDialog.vue";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataSomenteDia } from "~/utils/formatacao";
 import {
@@ -39,10 +41,19 @@ const props = withDefaults(
     totalPaginas: number;
     podeCriar?: boolean;
     podeEditar?: boolean;
+    podeCancelarPlanejamento?: boolean;
+    salvando?: boolean;
     // Sem isto a tela oferecia "Conferir" para quem a API recusaria com 403.
     podeConferir?: boolean;
   }>(),
-  { podeCriar: false, podeEditar: false, podeConferir: false, operacoesTela: () => [] }
+  {
+    podeCriar: false,
+    podeEditar: false,
+    podeConferir: false,
+    podeCancelarPlanejamento: false,
+    salvando: false,
+    operacoesTela: () => []
+  }
 );
 
 const emit = defineEmits<{
@@ -52,6 +63,10 @@ const emit = defineEmits<{
   (event: "update:status-filtro", status: StatusTransferencia | ""): void;
   (event: "recarregar"): void;
   (event: "notificar", mensagem: string, tipo?: string): void;
+  (
+    event: "cancelarPlanejamento",
+    payload: { planejamentoId: string; motivo: string; aoConcluir: (sucesso: boolean) => void }
+  ): void;
 }>();
 const { apiPost } = useApi();
 // O provider vive no AppWorkspace e garante a mesma janela de confirmação para Caixa e Tesouraria.
@@ -69,6 +84,7 @@ const modoRecusa = ref(false);
 // `true` encerra: o cofre credita o contado, a falta vira quebra e o caixa destrava.
 const encerrarDivergencia = ref(false);
 const sobraConfirmada = ref(false);
+const cancelandoPlanejamento = ref<OperacaoResumo | null>(null);
 
 function abrirConferencia(operacao: OperacaoResumo) {
   Object.assign(campos, camposConferenciaVazios());
@@ -88,15 +104,15 @@ function fecharConferencia() {
   erroConferencia.value = "";
 }
 
-// O servidor e quem sabe se esta linha e uma entrega do Caixa: a tela nao conhece a conta de cofre
-// nem o tipo. Vem no DTO da listagem, calculado com o predicado canonico.
+// O servidor e quem sabe se esta linha e um retorno do Caixa: a tela nao conhece o tipo gravado.
+// Vem no DTO da listagem, calculado com o predicado canonico.
 const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === true);
 
-// Decisao 5: o valor so e OBRIGATORIO no Caixa -> Cofre (e la 0 e legitimo). Na generica ele
+// Decisao 5/R-187: o valor so e OBRIGATORIO no retorno do Caixa (e la 0 e legitimo). Na generica ele
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
-// Na entrega Caixa -> Cofre, "Confirmar" significa que lacre e valor bateram. A API ja impede
+// Na Transferencia de retorno, "Confirmar" significa que lacre e valor bateram. A API ja impede
 // que R$ 90 confirme uma entrega de R$ 100; espelhar a regra aqui evita abrir uma segunda
 // confirmação para uma ação que inevitavelmente será recusada e deixa claro que o caminho é
 // "Não bateu".
@@ -130,6 +146,7 @@ const sobraPendenteDeConsentimento = computed(() =>
 
 function textoConfirmacaoConferencia(operacao: OperacaoResumo): { titulo: string; mensagem: string; botao: string } {
   const declarado = dinheiro(Number(operacao.valorOriginal));
+  const destino = operacao.contaDestinoNome || "a conta destino";
   const informouValor = valorConferenciaValido(campos.valorRecebido);
   const contado = informouValor ? dinheiro(Number(campos.valorRecebido)) : null;
 
@@ -156,7 +173,7 @@ function textoConfirmacaoConferencia(operacao: OperacaoResumo): { titulo: string
     const sobra = dinheiro(Number(campos.valorRecebido) - Number(operacao.valorOriginal));
     return {
       titulo: "Encerrar divergência com sobra",
-      mensagem: `Confirma encerrar a divergência? O Cofre receberá ${contado}, ${sobra} a mais que os ${declarado} declarados, sem criar quebra.`,
+      mensagem: `Confirma encerrar a divergência? ${destino} receberá ${contado}, ${sobra} a mais que os ${declarado} declarados, sem criar quebra.`,
       botao: "Encerrar divergência"
     };
   }
@@ -164,14 +181,14 @@ function textoConfirmacaoConferencia(operacao: OperacaoResumo): { titulo: string
   if (Number(campos.valorRecebido) === Number(operacao.valorOriginal)) {
     return {
       titulo: "Encerrar divergência",
-      mensagem: `Confirma encerrar a divergência? O Cofre receberá os ${contado} contados; não haverá quebra financeira.`,
+      mensagem: `Confirma encerrar a divergência? ${destino} receberá os ${contado} contados; não haverá quebra financeira.`,
       botao: "Encerrar divergência"
     };
   }
 
   return {
     titulo: "Encerrar divergência",
-    mensagem: `Confirma encerrar a divergência? O Cofre receberá ${contado}; a diferença para ${declarado} será registrada como quebra auditada.`,
+    mensagem: `Confirma encerrar a divergência? ${destino} receberá ${contado}; a diferença para ${declarado} será registrada como quebra auditada.`,
     botao: "Encerrar divergência"
   };
 }
@@ -357,7 +374,7 @@ function atualizarStatusFiltro(status: unknown) {
           <span class="tes-acoes-h">Ações</span>
         </div>
 
-        <div v-for="op in operacoesPaginadas" :key="op.id" class="tes-row" role="row">
+        <div v-for="op in operacoesPaginadas" :key="op.id" class="tes-row" role="row" :data-operacao-id="op.id">
           <!-- Confirmacao: sem backend de confirmacao nesta branch -> somente leitura + regra. -->
           <span class="tes-conf" data-col="Confirmação">
             <span class="tes-status-chip" :data-status="op.status">
@@ -376,17 +393,35 @@ function atualizarStatusFiltro(status: unknown) {
             op.dataRecebimento ? formatarDataSomenteDia(op.dataRecebimento) : "—"
           }}</span>
           <span class="tes-acoes" data-col="Ações">
-            <v-btn v-if="podeEditar" size="small" variant="tonal" prepend-icon="mdi-pencil" @click="emit('editar', op)">
+            <v-btn
+              v-if="podeEditar && !op.possuiPlanejamentoRetorno && !op.ehPlanejamentoRetorno"
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-pencil"
+              data-teste="botao-editar"
+              @click="emit('editar', op)"
+            >
               Editar
             </v-btn>
             <v-btn
-              v-if="op.status === 'pendente' && podeConferir"
+              v-if="op.status === 'pendente' && podeConferir && !op.possuiPlanejamentoRetorno"
               size="small"
               variant="tonal"
               data-teste="botao-conferir"
               @click="abrirConferencia(op)"
             >
               Conferir
+            </v-btn>
+            <v-btn
+              v-if="podeCancelarPlanejamento && op.ehPlanejamentoRetorno && op.status === 'agendada'"
+              size="small"
+              variant="tonal"
+              color="error"
+              :disabled="salvando"
+              data-teste="cancelar-planejamento-retorno"
+              @click="cancelandoPlanejamento = op"
+            >
+              Cancelar
             </v-btn>
           </span>
         </div>
@@ -429,7 +464,7 @@ function atualizarStatusFiltro(status: unknown) {
       <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
         <v-text-field
           v-if="ehCaixaParaCofre"
-          :model-value="confirmando?.contaDestinoNome || 'Cofre'"
+          :model-value="confirmando?.contaDestinoNome || 'Conta de destino'"
           label="Conta que recebe"
           readonly
           data-teste="conferencia-conta"
@@ -463,8 +498,8 @@ function atualizarStatusFiltro(status: unknown) {
             valorDivergenteNaConferencia
               ? 'O valor contado é diferente do declarado. Use Não bateu para registrar a divergência.'
               : ehCaixaParaCofre
-              ? 'Informe o valor contado. Zero é um valor válido.'
-              : 'Deixe em branco se não for conferir o valor.'
+                ? 'Informe o valor contado. Zero é um valor válido.'
+                : 'Deixe em branco se não for conferir o valor.'
           "
           data-teste="conferencia-valor"
         />
@@ -506,8 +541,8 @@ function atualizarStatusFiltro(status: unknown) {
           operador e a Tesouraria são notificados.
         </v-alert>
         <v-alert v-if="modoRecusa && encerrarDivergencia" type="info" variant="tonal" density="compact" class="mb-2">
-          O cofre recebe <strong>o valor contado</strong>. Se faltou, a diferença vira quebra no nome de quem entregou —
-          e ela não tem volta. Se sobrou, o cofre recebe a mais e não há quebra.
+          A conta destino recebe <strong>o valor contado</strong>. Se faltou, a diferença vira quebra no nome de quem
+          entregou — e ela não tem volta. Se sobrou, a conta recebe a mais e não há quebra.
         </v-alert>
         <v-alert v-if="erroConferencia" type="error" variant="tonal" density="compact">{{ erroConferencia }}</v-alert>
         <v-card-actions class="flex-wrap ga-2">
@@ -536,6 +571,14 @@ function atualizarStatusFiltro(status: unknown) {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <CancelarPlanejamentoRetornoDialog
+      :model-value="Boolean(cancelandoPlanejamento)"
+      :operacao="cancelandoPlanejamento"
+      :salvando="salvando"
+      @update:model-value="(aberto: boolean) => !aberto && (cancelandoPlanejamento = null)"
+      @confirmar="emit('cancelarPlanejamento', $event)"
+    />
   </div>
 </template>
 

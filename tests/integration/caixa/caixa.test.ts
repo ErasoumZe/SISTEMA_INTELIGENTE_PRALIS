@@ -607,7 +607,7 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaAberto}/transferencia-cofre`,
       headers: { cookie: cookieAdmin },
-      payload: { tipo: "retorno", valor: 999999, idempotenciaChave: randomUUID() }
+      payload: { valor: 999999, idempotenciaChave: randomUUID() }
     });
 
     assertProblem(resposta, 400);
@@ -804,7 +804,6 @@ describe("caixa integration", () => {
       url: `/api/caixa/${caixaId}/transferencia-cofre`,
       headers: { cookie: cookieMultiempresa },
       payload: {
-        tipo: "retorno",
         valor: 75,
         lacre: "CAIXA-CICLO-RETORNO",
         observacao: "Retorno ciclo",

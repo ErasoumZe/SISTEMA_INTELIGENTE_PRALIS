@@ -199,6 +199,50 @@ describe("fecharCaixaOperacional", () => {
   });
 });
 
+describe("planejamento de Transferencia de retorno", () => {
+  it("executa a linha planejada e atualiza o retrato do Caixa", async () => {
+    const deps = montarDeps();
+    const ok = await criarAcoesCaixa(deps).executarPlanejamentoRetorno({
+      caixaId: "cx-1",
+      planejamentoId: "plano-1"
+    });
+
+    expect(ok).toBe(true);
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/planejamentos-retorno/plano-1/executar", {});
+    expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
+    expect(deps.notificar).toHaveBeenCalledWith("Transferência de retorno executada e aguardando conferência.");
+  });
+
+  it("cancela com motivo auditavel e preserva o formulario quando a API falha", async () => {
+    const aoConcluir = vi.fn();
+    const deps = montarDeps();
+    const ok = await criarAcoesCaixa(deps).cancelarPlanejamentoRetorno({
+      planejamentoId: "plano-2",
+      motivo: "  destino indisponivel  ",
+      aoConcluir
+    });
+
+    expect(ok).toBe(true);
+    expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/planejamentos-retorno/plano-2/cancelar", {
+      motivo: "destino indisponivel"
+    });
+    expect(deps.carregarStatusCaixa).not.toHaveBeenCalled();
+    expect(aoConcluir).toHaveBeenCalledWith(true);
+
+    const aoConcluirErro = vi.fn();
+    const depsErro = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("409")) } });
+    const falhou = await criarAcoesCaixa(depsErro).cancelarPlanejamentoRetorno({
+      planejamentoId: "plano-2",
+      motivo: "manter motivo",
+      aoConcluir: aoConcluirErro
+    });
+
+    expect(falhou).toBe(false);
+    expect(aoConcluirErro).toHaveBeenCalledWith(false);
+    expect(depsErro.notificar).toHaveBeenCalledWith("erro:409", "error");
+  });
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
 });

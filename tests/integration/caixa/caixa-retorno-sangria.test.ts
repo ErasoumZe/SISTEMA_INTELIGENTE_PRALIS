@@ -140,7 +140,7 @@ describe("caixa - transferencia de retorno (M2)", () => {
 
   it("Retorno apenas MOVE dinheiro: o saldo fisico cai e nao ha divida com o cofre (R-001)", async () => {
     const { contaId, pdvId, caixaId } = await abrir("retorno", {
-      lacre: "LAC-SANGRIA",
+      lacre: "LAC-RETORNO",
       valor: 490
     });
 
@@ -157,13 +157,13 @@ describe("caixa - transferencia de retorno (M2)", () => {
   });
 
   it("Retorno da sobra zera o saldo e libera o fechamento", async () => {
-    const { contaId, pdvId, caixaId } = await abrir("retorno");
+    const { contaId, pdvId, caixaId } = await abrir("retorno-fechamento");
     await venda(contaId, pdvId, hoje, 300);
 
     const resumo = await resumoAtual();
     expect(resumo).toMatchObject({ saldo: 300, propostaRetorno: 300 });
 
-    const retorno = await transferenciaCofre(caixaId, "retorno", resumo["propostaRetorno"] ?? 0);
+    const retorno = await transferenciaCofre(caixaId, resumo["propostaRetorno"] ?? 0);
     expect(retorno.statusCode, retorno.body).toBe(200);
     expect(await resumoAtual()).toMatchObject({ saldo: 0, propostaRetorno: 0 });
 

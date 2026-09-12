@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
+import { computed, onMounted, ref, watch } from "vue";
+import { paraCentavos } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 
@@ -12,7 +14,8 @@ const {
   form,
   opcoesEmpresa,
   salvandoOperacao,
-  salvarOperacao
+  salvarOperacao,
+  podePlanejarRetorno
 } = useWorkspaceContext();
 
 const aberto = computed({
@@ -22,7 +25,7 @@ const aberto = computed({
   }
 });
 
-// Campos persistidos da transferencia e linhas independentes de retorno/sangria.
+// Campos persistidos da transferencia e linhas independentes de Transferencia de retorno.
 const agendamento = computed({
   get: () => Boolean(form.value.agendadaPara),
   set: (ativo: boolean) => {
@@ -30,12 +33,12 @@ const agendamento = computed({
   }
 });
 // B5: `dataRecebimento` era estado morto — o template sempre leu `form.dataRecebimento`. Ele nunca
-// chegava a payload nenhum e sobrevivia entre aberturas do modal. Removido junto com o bloco de
-// retorno/sangria, que era a outra fonte de estado residual (linhas preenchidas em uma abertura
-// viravam transferencia nao pedida na proxima).
+// chegava a payload nenhum e sobrevivia entre aberturas do modal. O planejamento atual e sempre
+// reidratado do formulario ao abrir, evitando linhas residuais entre operacoes.
 const multiploDestino = ref(false);
 const tempoConfirmacaoAberto = ref(false);
 const retornoAtivo = ref(false);
+const erroPlanejamento = ref("");
 
 // FOTO 1: o padrao da tela e "se ☑ abre esse campo" — as tres checkboxes ficam sempre visiveis e
 // cada uma REVELA o seu campo. Ao abrir, elas espelham o que ja esta no formulario: sem isto uma
@@ -43,6 +46,7 @@ const retornoAtivo = ref(false);
 // invisiveis — e o primeiro clique na checkbox os apagaria.
 watch(aberto, (estaAberto) => {
   if (!estaAberto) return;
+  erroPlanejamento.value = "";
   multiploDestino.value = form.value.contasDestinoIds.length > 0;
   tempoConfirmacaoAberto.value = form.value.tempoConfirmacao !== "1dia";
   retornoAtivo.value = form.value.retornosPlanejados.length > 0;
@@ -60,6 +64,7 @@ watch(tempoConfirmacaoAberto, (ativo) => {
 });
 
 watch(retornoAtivo, (ativo) => {
+  erroPlanejamento.value = "";
   if (!ativo) {
     form.value.retornosPlanejados = [];
     return;
@@ -73,6 +78,7 @@ watch(retornoAtivo, (ativo) => {
 });
 
 function adicionarRetornoPlanejado() {
+  if (form.value.retornosPlanejados.length >= 20) return;
   form.value.retornosPlanejados.push({
     valor: "",
     nLacreDoc: "",
@@ -85,16 +91,14 @@ function removerRetornoPlanejado(indice: number) {
   if (!form.value.retornosPlanejados.length) retornoAtivo.value = false;
 }
 
-const erroPlanejamento = ref("");
 function planejamentosValidos() {
   const planos = form.value.retornosPlanejados;
   if (!planos.length) return true;
   const lacres = new Set<string>();
-  const totalPlanejado = planos.reduce((total, plano) => total + Number(plano.valor.replace(",", ".") || 0), 0);
+  const totalPlanejadoCentavos = planos.reduce((total, plano) => total + paraCentavos(plano.valor), 0);
   if (
     planos.some(
-      (plano) =>
-        !plano.valor || Number(plano.valor.replace(",", ".")) <= 0 || !plano.nLacreDoc.trim() || !plano.contaDestinoId
+      (plano) => !plano.valor || paraCentavos(plano.valor) <= 0 || !plano.nLacreDoc.trim() || !plano.contaDestinoId
     )
   ) {
     erroPlanejamento.value = "Informe valor, lacre e destino em cada transferencia de retorno.";
@@ -108,7 +112,7 @@ function planejamentosValidos() {
     }
     lacres.add(lacre);
   }
-  if (totalPlanejado > Number(form.value.valorOriginal.replace(",", ".") || 0)) {
+  if (totalPlanejadoCentavos > paraCentavos(form.value.valorOriginal)) {
     erroPlanejamento.value = "O total programado não pode ser maior que a transferência inicial.";
     return false;
   }
@@ -120,9 +124,27 @@ function planejamentosValidos() {
 const contasCandidatas = computed(() =>
   opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaOrigemId)
 );
-const contasDestinoPlanejamento = computed(() =>
-  opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaDestinoId)
+const contasPdvAtivas = computed(
+  () => new Set(opcoesEmpresa.value.pdvs.filter((pdv) => pdv.ativo !== false).map((pdv) => pdv.contaId))
 );
+const contasPdv = computed(() => new Set(opcoesEmpresa.value.pdvs.map((pdv) => pdv.contaId)));
+const contaCofreId = computed(
+  () => opcoesEmpresa.value.empresas.find((empresa) => empresa.id === empresaId.value)?.contaCofreId ?? ""
+);
+const rotaPlanejamentoElegivel = computed(
+  () =>
+    Boolean(contaCofreId.value) &&
+    form.value.contaOrigemId === contaCofreId.value &&
+    contasPdvAtivas.value.has(form.value.contaDestinoId) &&
+    !multiploDestino.value
+);
+const contasDestinoPlanejamento = computed(() =>
+  opcoesEmpresa.value.contas.filter((conta) => conta.id !== form.value.contaDestinoId && !contasPdv.value.has(conta.id))
+);
+
+watch(rotaPlanejamentoElegivel, (elegivel) => {
+  if (!elegivel && retornoAtivo.value) retornoAtivo.value = false;
+});
 
 // Com Multiplo Destino a escolha acontece no PROPRIO campo Destino. As duas colunas do formulario
 // viram uma so lista aqui: `contaDestinoId` e NOT NULL no banco (app.schema.ts) e serve apenas de
@@ -189,16 +211,9 @@ function destinoValido() {
   return false;
 }
 
-// D9: a criacao de retorno/sangria do Caixa NAO mora mais aqui. Ela tem um unico caminho — o fluxo
-// do proprio Caixa (POST /api/caixa/:id/transferencia-cofre), que resolve a conta do cofre, aplica
-// o teto do saldo (D1) e nasce pendente de conferencia (D3). Este modal cuida exclusivamente de
-// transferencias genericas entre contas, que continuam legitimas.
-//
-// O laco removido daqui gravava `tipo='suprimento'` com status pendente, mas reduzia o saldo do
-// caixa e liberava o fechamento igual ao caminho canonico — dois caminhos para o mesmo ato, o que a
-// regra-mae do 16_DEFINITION_OF_DONE.md proibe. Ele tambem era a origem do B4: os POSTs nao eram
-// tratados, entao a falha subia como Promise rejeitada sem handler DEPOIS de o modal ja ter fechado
-// e mostrado "salvo com sucesso" — movimento de dinheiro inexistente com snackbar verde.
+// R-185/R-187: este modal declara os retornos planejados junto da transferencia inicial. As linhas
+// nascem `agendada` e sem efeito no saldo. O ato fisico continua tendo um unico caminho: depois de
+// abrir o Caixa pelo lacre inicial, o operador executa cada retorno dentro da tela do Caixa.
 async function salvarTransferenciaCompleta() {
   if (!destinoValido() || !planejamentosValidos()) return;
   await salvarOperacao();
@@ -233,7 +248,7 @@ const hojeISO = computed(() => dataISO(0));
            usuario nao deveria ter que rolar ate o fim para ve-la. Valores sao os mesmos computed
            de sempre; nada e recalculado nem persistido. -->
         <div class="tr-cards">
-          <!-- D9: "Entrada (+)" e "Saldo (±)" so existiam por causa das linhas de retorno/sangria.
+          <!-- D9: "Entrada (+)" e "Saldo (±)" so existiam por causa das linhas de retorno.
              Sem elas, Entrada seria sempre 0 e Saldo o negativo da Saida — dois numeros que nao
              informam nada. Restou o unico que responde "o que isto faz com o meu dinheiro". -->
           <div class="tr-card">
@@ -281,7 +296,7 @@ const hojeISO = computed(() => dataISO(0));
         </div>
 
         <label class="tr-check">
-          <input v-model="agendamento" type="checkbox" />
+          <input v-model="agendamento" type="checkbox" :disabled="retornoAtivo" data-teste="opcao-agendamento" />
           <span>Agendamento</span>
         </label>
         <label v-if="agendamento" class="tr-campo tr-indent">
@@ -334,10 +349,8 @@ const hojeISO = computed(() => dataISO(0));
           </div>
         </div>
 
-        <!-- D9: o bloco "Transf. Entrada (Retorno / Sangria)" saiu daqui junto com o componente
-           TransferenciaRetornoCampos, que existia apenas para hospeda-lo. Retorno e sangria do
-           Caixa tem um unico caminho: a tela do proprio Caixa. As duas checkboxes abaixo NAO faziam
-           parte daquele bloco — sao recursos legitimos da transferencia generica e continuam. -->
+        <!-- R-185/R-187: uma unica opcao "Transferencia de retorno" declara varias linhas
+           independentes de valor+lacre+destino. A execucao financeira ocorre somente no Caixa. -->
         <div class="tr-opcoes">
           <label class="tr-check">
             <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo" />
@@ -364,10 +377,21 @@ const hojeISO = computed(() => dataISO(0));
               <option value="30dias">30 dias</option>
             </select>
           </label>
-          <label v-if="!operacaoEditandoId" class="tr-check">
-            <input v-model="retornoAtivo" type="checkbox" data-teste="opcao-transferencia-retorno" />
+          <label v-if="!operacaoEditandoId && podePlanejarRetorno" class="tr-check">
+            <input
+              v-model="retornoAtivo"
+              type="checkbox"
+              :disabled="!rotaPlanejamentoElegivel"
+              data-teste="opcao-transferencia-retorno"
+            />
             <span>Transferência de retorno</span>
           </label>
+          <p
+            v-if="!operacaoEditandoId && podePlanejarRetorno && !rotaPlanejamentoElegivel"
+            class="tr-planejamento-ajuda"
+          >
+            Selecione Cofre como origem e uma conta de PDV ativa como destino para preparar o retorno.
+          </p>
           <section
             v-if="retornoAtivo"
             class="tr-planejamento"
@@ -398,15 +422,20 @@ const hojeISO = computed(() => dataISO(0));
               <button
                 type="button"
                 class="tr-remover-retorno"
-                :aria-label="`Remover retorno ${indice + 1}`"
+                :aria-label="`Remover transferência de retorno ${indice + 1}`"
                 @click="removerRetornoPlanejado(indice)"
               >
                 <v-icon size="16">mdi-close</v-icon>
               </button>
             </div>
             <span v-if="erroPlanejamento" class="tr-erro" role="alert">{{ erroPlanejamento }}</span>
-            <button type="button" class="tr-adicionar-retorno" @click="adicionarRetornoPlanejado">
-              <v-icon size="16">mdi-plus</v-icon> Adicionar retorno
+            <button
+              type="button"
+              class="tr-adicionar-retorno"
+              :disabled="form.retornosPlanejados.length >= 20"
+              @click="adicionarRetornoPlanejado"
+            >
+              <v-icon size="16">mdi-plus</v-icon> Adicionar transferência de retorno
             </button>
           </section>
         </div>
@@ -870,7 +899,7 @@ const hojeISO = computed(() => dataISO(0));
     height: 22px;
     justify-content: flex-end;
   }
-  /* Linhas de Retorno/Sangria podem quebrar sem estourar a largura. */
+  /* Linhas de Transferencia de retorno podem quebrar sem estourar a largura. */
   .tr-retorno-linha {
     flex-wrap: wrap;
   }
@@ -881,7 +910,7 @@ const hojeISO = computed(() => dataISO(0));
     grid-template-columns: 1fr 1fr 28px;
   }
   .tr-planejamento-destino {
-    grid-column: 1 / -1;
+    grid-column: 1 / 3;
   }
   /* Modal fullscreen (casca 100dvh via main.css). O rodape fixo ja vem da regra base; aqui so
      ampliamos a altura e respeitamos a safe-area do iOS. */

@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, request, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * Apoio dos E2E de Produtos: login, dados de teste e as duas assercoes que se repetem
@@ -9,8 +9,58 @@ export const USUARIOS = {
   /** Enxerga e edita tudo — `usuario_admin` do seed de desenvolvimento. */
   admin: { email: "diretor@email.com", senha: "123456" },
   /** Opera caixa e mercadorias, mas NAO tem `cadastro_produtos_visualizar`. */
-  semProdutos: { email: "caixa@email.com", senha: "123456" }
+  semProdutos: { email: "caixa@email.com", senha: "123456" },
+  /** Confere retornos e divergencias nas contas de destino do seed de desenvolvimento. */
+  tesouraria: { email: "tesouraria@email.com", senha: "123456" }
 } as const;
+
+export async function encerrarCaixaDeTeste(
+  caixa: APIRequestContext,
+  empresaId: string,
+  caixaId: string,
+  prefixoLacre: string
+) {
+  const tesouraria = await request.newContext({ baseURL: process.env["E2E_API_URL"] ?? "http://localhost:4100" });
+  try {
+    const login = await tesouraria.post("/api/auth/sign-in/email", {
+      data: { email: USUARIOS.tesouraria.email, password: USUARIOS.tesouraria.senha }
+    });
+    expect(login.status(), await login.text()).toBe(200);
+
+    const lista = await tesouraria.get(
+      `/api/transferencias?empresaId=${empresaId}&caixaId=${caixaId}&status=pendente&pageSize=100`
+    );
+    expect(lista.status(), await lista.text()).toBe(200);
+    const itens = (await lista.json()) as {
+      data: Array<{
+        id: string;
+        contaDestinoId: string;
+        nLacreDoc: string | null;
+        valorOriginal: string;
+        ehCaixaParaCofre: boolean;
+      }>;
+    };
+    for (const item of itens.data.filter(
+      (linha) => linha.ehCaixaParaCofre && linha.nLacreDoc?.startsWith(prefixoLacre)
+    )) {
+      const conferencia = await tesouraria.post(`/api/transferencias/${item.id}/confirmar`, {
+        data: {
+          contaDestinoId: item.contaDestinoId,
+          nLacreDoc: item.nLacreDoc,
+          valorRecebido: Number(item.valorOriginal)
+        }
+      });
+      expect(conferencia.status(), await conferencia.text()).toBe(200);
+    }
+
+    const fechamento = await caixa.post(`/api/caixa/${caixaId}/fechar`, {
+      data: { observacao: "Limpeza automatica do teste E2E" }
+    });
+    expect(fechamento.status(), await fechamento.text()).toBe(204);
+  } finally {
+    await tesouraria.dispose();
+  }
+}
 
 /** Larguras do Definition of Done (`16` §3) e do `67` §13.7. */
 export const LARGURAS = [

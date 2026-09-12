@@ -178,9 +178,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.addHook("preHandler", async (request, reply) => {
     if (["GET", "HEAD", "OPTIONS"].includes(request.method) || !request.perfilUsuario) return;
     const rota = request.routeOptions.url ?? "";
+    const lacreAbertura = (request.body as { lacreAbertura?: string | null } | undefined)?.lacreAbertura;
     if (
       rota.endsWith("/confirmar") ||
       rota.endsWith("/liberar-trava") ||
+      (rota === "/api/caixa/abrir" && typeof lacreAbertura === "string" && Boolean(lacreAbertura.trim())) ||
       rota.startsWith("/api/notificacoes") ||
       rota.startsWith("/api/auth")
     ) {

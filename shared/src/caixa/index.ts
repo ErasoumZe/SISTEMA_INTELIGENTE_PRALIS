@@ -200,8 +200,8 @@ export const resumoCaixaSchema = z.object({
 // valor e a sobra INTEIRA apurada no servidor — repetir o ato encontra saldo zero e nao cria nada.
 const idempotenciaChaveSchema = uuidSchema;
 
-// M2 — sangria (durante o turno) e retorno (no fechamento) sao a MESMA entidade (R4): transferencia
-// caixa -> cofre. O servidor resolve a conta do cofre, a ordem e (opcional, D5) consome o lacre.
+// R-187 — Transferencia de retorno avulsa/final do Caixa para o Cofre. O servidor resolve a conta,
+// a ordem e, quando informado, consome o lacre opcional da R-026.
 export const transferenciaCofrePayloadSchema = z.object({
   valor: z.coerce.number().positive(),
   lacre: z.string().trim().min(1).optional().nullable(),
@@ -221,28 +221,26 @@ export const planejamentoRetornoSchema = z.object({
   criadoEm: z.string()
 });
 export const planejamentoRetornoParamsSchema = z.object({ caixaId: uuidSchema, planejamentoId: uuidSchema });
+export const planejamentoRetornoIdParamsSchema = z.object({ planejamentoId: uuidSchema });
 export const cancelarPlanejamentoRetornoPayloadSchema = z.object({
   motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500)
 });
 export const executarPlanejamentoRetornoPayloadSchema = z.object({});
 
-// R-179/Fatia 3 · aqui viviam `programarSolicitacaoCofrePayloadSchema`,
-// `executarSolicitacaoCofrePayloadSchema`, `solicitacaoCofreParamsSchema` e
-// `caixaAbertoResumoSchema` — os contratos de "Programar entrega ao cofre" (D4). A retaguarda
-// programava uma ordem `agendada` e o operador a executava: um segundo caminho para o mesmo ato
-// de `transferenciaCofrePayloadSchema` acima. Rotas, servico e tela sairam juntos.
+// R-185/R-187 · o painel paralelo "Programar entrega ao cofre" e seus contratos antigos continuam
+// removidos. O planejamento atual nasce atomicamente no modal generico e a execucao ocorre no Caixa.
 
-// G1/R-171 — uma entrega ao cofre que JA SAIU do caixa e ainda nao foi conferida. Enquanto existir
+// G1/R-171/R-187 — um retorno que JA SAIU do caixa e ainda nao foi conferido. Enquanto existir
 // uma destas, o caixa nao fecha pelo caminho comum: o dinheiro esta na rua e a divergencia futura
 // precisa de um turno aberto para ter dono.
 //
-// Depois da R-179/Fatia 3 esta e a UNICA coisa que trava o fechamento: a ordem `agendada` da
-// retaguarda deixou de existir junto com o painel que a criava.
+// O planejamento `agendada` tambem trava o fechamento, mas e exposto em `planejamentosPendentes`.
 export const entregaCofrePendenteSchema = z.object({
   id: uuidSchema,
   tipo: z.enum(["sangria", "retorno"]),
   valor: z.number(),
   lacre: z.string().nullable(),
+  contaDestinoNome: z.string(),
   criadoEm: z.string(),
   // R-183 · o que o cofre CONTOU na ultima tentativa de conferencia, quando ja houve uma. `null`
   // significa "ninguem contou ainda" — e e essa diferenca que a tela precisa mostrar: entrega sem
@@ -332,6 +330,7 @@ export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
 export type PlanejamentoRetorno = z.infer<typeof planejamentoRetornoSchema>;
 export type PlanejamentoRetornoParams = z.infer<typeof planejamentoRetornoParamsSchema>;
+export type PlanejamentoRetornoIdParams = z.infer<typeof planejamentoRetornoIdParamsSchema>;
 export type CancelarPlanejamentoRetornoPayload = z.infer<typeof cancelarPlanejamentoRetornoPayloadSchema>;
 export type EntregaCofrePendente = z.infer<typeof entregaCofrePendenteSchema>;
 export type TransferenciaCaixaLinha = z.infer<typeof transferenciaCaixaLinhaSchema>;

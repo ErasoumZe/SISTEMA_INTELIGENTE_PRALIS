@@ -8,6 +8,7 @@ export async function listarEmpresasRepository(idsPermitidos: string[]) {
       id: empresas.id,
       nome: empresas.nome,
       cnpj: empresas.cnpj,
+      contaCofreId: empresas.contaCofreId,
       configuracoesAparencia: empresas.configuracoesAparencia
     })
     .from(empresas)

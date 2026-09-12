@@ -9,8 +9,8 @@ import { consultarTodos, consultarUm, executarSql, json } from "../../setup/inte
 
 // P1 da #101 — o caminho antigo que sobreviveu a Fatia 1.
 //
-// A guarda de fechamento (R-171) reconhece a entrega ao cofre pelo predicado canonico: caixa
-// vinculado, tipo `sangria`/`retorno` e destino igual a conta cofre da empresa. Acontece que
+// A guarda de fechamento (R-171/R-187) reconhece o retorno pelo predicado canonico: caixa
+// vinculado e tipo `retorno` (ou `sangria` historica). Acontece que
 // `POST /api/transferencias` NUNCA escreve `tipo` — a linha nasce `suprimento`, o default do
 // schema — e, quando o OPERADOR a lanca, ela nasce `pendente` e vinculada ao caixa dele.
 // Resultado: o mesmo dinheiro, saindo da MESMA conta do PDV para a MESMA conta cofre, contava como
@@ -18,9 +18,9 @@ import { consultarTodos, consultarUm, executarSql, json } from "../../setup/inte
 // dele — o defeito exato que a Fatia 1 existe para eliminar.
 //
 // A correcao nao e alargar o predicado da guarda: e fechar a porta. Pela D9/R-179 existe UM caminho
-// para levar dinheiro do Caixa ao Cofre — `POST /api/caixa/:id/transferencia-cofre`, o unico
-// escritor de `sangria`/`retorno`, que exige confirmador elegivel, numera a ordem, controla lacre e
-// e idempotente. A rota generica nunca foi esse caminho; ela apenas nao dizia isso.
+// para executar retorno avulso ao Cofre — `POST /api/caixa/:id/transferencia-cofre`, que exige
+// confirmador elegivel, numera a ordem, controla lacre e e idempotente. A R-185 acrescentou um
+// escritor apenas de planejamento; a execucao continua dentro do Caixa.
 //
 // O que este arquivo fixa: a rota generica RECUSA o par exato (origem = conta do PDV do caixa
 // aberto, destino = conta cofre da empresa) e nada mais. Transferencia comum continua passando —

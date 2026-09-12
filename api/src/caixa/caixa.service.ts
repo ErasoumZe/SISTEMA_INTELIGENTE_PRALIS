@@ -23,6 +23,7 @@ import { diaNegocio } from "@padaria/shared/datas";
 import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
+import { calcularPrazoConfirmacao, type TempoConfirmacao } from "@padaria/shared/transferencias";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio } from "../erros.js";
@@ -43,6 +44,7 @@ import {
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
   buscarPlanejamentoRetornoRepository,
+  buscarPlanejamentoRetornoPorIdRepository,
   cancelarPlanejamentoRetornoRepository,
   criarLacreRetornoRepository,
   criarQuebraCaixaRepository,
@@ -230,7 +232,14 @@ async function entregasPendentesDoCaixa(caixaId: string, db?: ExecutorBanco): Pr
 }
 
 function serializarEntregasPendentes(
-  linhas: Array<{ id: string; tipo: string; valorCentavos: number; lacre: string | null; criadoEm: Date | null }>,
+  linhas: Array<{
+    id: string;
+    tipo: string;
+    valorCentavos: number;
+    lacre: string | null;
+    contaDestinoNome: string;
+    criadoEm: Date | null;
+  }>,
   ultimas: Map<string, { id: string; valorInformadoCentavos: number | null }> = new Map()
 ): EntregaCofrePendente[] {
   return linhas.map((linha) => {
@@ -240,6 +249,7 @@ function serializarEntregasPendentes(
       tipo: "retorno",
       valor: deCentavos(linha.valorCentavos),
       lacre: linha.lacre,
+      contaDestinoNome: linha.contaDestinoNome,
       criadoEm: serializarData(linha.criadoEm) ?? "",
       // R-183 Â· recusa SEM contagem vale zero contado, e nao "nao contou": e a leitura oficial do
       // "lacre violado, nao abro" â€” o cofre nao recebe credito e o declarado inteiro vira quebra.
@@ -256,7 +266,7 @@ function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
   const descritas = entregas.slice(0, VISIVEIS).map((entrega) => {
     const nome = "Retorno";
     const lacre = entrega.lacre ? `, lacre ${entrega.lacre}` : "";
-    return `${nome} de R$ ${entrega.valor.toFixed(2)}${lacre}`;
+    return `${nome} de R$ ${entrega.valor.toFixed(2)} para ${entrega.contaDestinoNome}${lacre}`;
   });
   const excedente = entregas.length - descritas.length;
   if (excedente > 0) descritas.push(`e mais ${excedente}`);
@@ -265,9 +275,9 @@ function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
   // operador ligando para a pessoa errada no fim do turno.
   const jaContadas = entregas.some((entrega) => entrega.valorContado !== null);
   const saida = jaContadas
-    ? "o cofre ja contou e precisa encerrar a divergencia antes de fechar o caixa"
-    : "confira no cofre antes de fechar o caixa";
-  return `Entrega ao cofre aguardando conferencia (${descritas.join("; ")}): ${saida}`;
+    ? "a conta destino ja contou e precisa encerrar a divergencia antes de fechar o caixa"
+    : "a conta destino precisa conferir antes de fechar o caixa";
+  return `Transferencia de retorno aguardando conferencia (${descritas.join("; ")}): ${saida}`;
 }
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
@@ -371,17 +381,17 @@ async function prepararAberturaPorLacre(
   // Motivos separados de proposito: "lacre inexistente" e "lacre ja rompido" mandam o operador para
   // acoes diferentes (redigitar x procurar a tesouraria).
   if (!achado) throw new Error("Lacre inexistente");
-  if (achado.lacreRompido) throw new Error("Lacre jÃ¡ rompido â€” nÃ£o pode ser reutilizado");
-  if (achado.status === "agendada") throw new Error("TransferÃªncia agendada ainda nÃ£o foi liberada");
-  if (achado.status !== "pendente") throw new Error("TransferÃªncia deste lacre nÃ£o estÃ¡ pendente de recebimento");
+  if (achado.lacreRompido) throw new Error("Lacre ja rompido - nao pode ser reutilizado");
+  if (achado.status === "agendada") throw new Error("Transferencia agendada ainda nao foi liberada");
+  if (achado.status !== "pendente") throw new Error("Transferencia deste lacre nao esta pendente de recebimento");
   // S4 (R-164): transferencia ja vinculada a um caixa tem a saida CONTADA la â€” reivindica-la de
   // outro caixa migraria o movimento em silencio e tiraria a saida dos totais do primeiro.
-  if (achado.caixaId) throw new Error("TransferÃªncia deste lacre jÃ¡ pertence a outro caixa");
+  if (achado.caixaId) throw new Error("Transferencia deste lacre ja pertence a outro caixa");
   // R-030: so um dos destinos CANDIDATOS pode reivindicar. Caixa fora da lista nao disputa.
   if (!achado.candidatoId) throw new Error("A conta deste caixa não é destino desta transferência");
   // R-028: quem envia nao confirma o proprio envio.
-  if (achado.criadoPor === usuarioId) throw new Error("Quem enviou a transferÃªncia nÃ£o pode confirmar o recebimento");
-  if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem nÃ£o pode ser a mesma do caixa");
+  if (achado.criadoPor === usuarioId) throw new Error("Quem enviou a transferencia nao pode confirmar o recebimento");
+  if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem nao pode ser a mesma do caixa");
 
   const valorCentavos = paraCentavos(achado.valorOriginal);
   return {
@@ -462,7 +472,7 @@ async function abrirCaixaEmTransacao(
         },
         tx
       );
-      if (!confirmada) throw new Error("Lacre jÃ¡ utilizado por outro caixa");
+      if (!confirmada) throw new Error("Lacre ja utilizado por outro caixa");
       await vincularPlanejamentosDaTransferenciaAoCaixaRepository(
         {
           transferenciaOrigemId: abertura.transferenciaId,
@@ -500,25 +510,19 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
 
     // G1/R-171 Â· dinheiro que JA SAIU trava o fechamento comum.
     //
-    // R-179/Fatia 3 Â· aqui vinha antes a guarda da D12, que barrava a ordem `agendada` criada pelo
-    // painel "Programar entrega ao cofre". O painel e as quatro rotas dele sairam, entao ninguem
-    // mais produz essa ordem â€” e manter a guarda seria pior que inutil: uma linha legada `agendada`
-    // prenderia o turno para sempre, sem rota de executar nem de cancelar para solta-la. Ela nao
-    // move saldo (`transferenciaContaComoSaida` nao conta `agendada`) e o cron de agendamento nao a
-    // alcanca (`agendada_para` nasce NULL nessas linhas).
+    // R-185/R-187 · o painel paralelo foi removido, mas o planejamento atomico voltou dentro da
+    // transferencia inicial. A linha `agendada` nao move saldo e trava ate ser executada ou cancelada.
     //
-    // O que fica e o malote entregue de verdade e ainda nao conferido no cofre. Antes da Fatia 1 o
-    // caixa fechava por cima dele â€” o operador ia embora, e se o cofre encontrasse falta depois a
-    // divergencia nao tinha mais turno aberto onde cair. A saida e uma so: conferencia no cofre.
+    // O retorno executado e ainda nao conferido na conta destino tambem trava. Antes da Fatia 1 o
+    // caixa fechava por cima dele e uma divergencia posterior ficava sem turno aberto onde cair.
     //
     // Lida DEPOIS da trava e ANTES do retorno final (D6/D7), entao o proprio ato do fechamento nao
     // se auto-bloqueia. Corrida: a linha do caixa ja esta em FOR UPDATE aqui e `confirmarTransferencia`
     // pede FOR SHARE na MESMA linha antes de mudar o status â€” as duas serializam, e este SELECT
     // nunca decide sobre um retrato velho.
     //
-    // Escopo: so o malote fisico Caixa -> Cofre, pelo predicado canonico. Transferencia generica
-    // pendente nao entra â€” travar alem do que a R-171 descreve prenderia operacao que hoje nao tem
-    // valvula de escape (o fluxo especial auditado e a fatia seguinte da #101).
+    // Escopo: somente movimentos do processo de retorno, novos (`retorno`) ou historicos
+    // (`sangria`), vinculados a este Caixa. Transferencia generica pendente nao entra.
     if (await existePlanejamentoRetornoAgendadoRepository(caixa.id, tx)) {
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
@@ -647,11 +651,18 @@ function conferirIntencaoEntrega(
 // A (3) e resolvida aqui, e nao no SQL, para usar exatamente a mesma resolucao do guard das rotas.
 // Duas regras de permissao para a mesma pergunta divergem no primeiro ajuste.
 async function existeConfirmadorElegivel(
-  input: { contaId: string; empresaId: string; excluirUsuarioId: string },
+  input: { contaId: string; empresaId: string; excluirUsuariosIds: string[] },
   tx: ExecutorBanco
 ): Promise<boolean> {
-  const candidatos = await listarCandidatosConfirmacaoRepository(input, tx);
+  const excluidos = new Set(input.excluirUsuariosIds);
+  const excluirUsuarioId = input.excluirUsuariosIds[0];
+  if (!excluirUsuarioId) return false;
+  const candidatos = await listarCandidatosConfirmacaoRepository(
+    { contaId: input.contaId, empresaId: input.empresaId, excluirUsuarioId },
+    tx
+  );
   for (const usuarioId of candidatos) {
+    if (excluidos.has(usuarioId)) continue;
     const perfil = await buscarPerfilUsuario(usuarioId);
     if (perfil && temPermissao(perfil.permissoes, "transferencias_conferir")) return true;
   }
@@ -672,17 +683,17 @@ async function existeConfirmadorElegivel(
 async function exigirConfirmadorDoCofre(empresaId: string, criadoPor: string, tx: ExecutorBanco): Promise<void> {
   const contaCofreId = await buscarContaCofreEmpresaRepository(empresaId, tx);
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
-  await exigirConfirmadorDaConta(contaCofreId, empresaId, criadoPor, tx, "Conta do cofre");
+  await exigirConfirmadorDaConta(contaCofreId, empresaId, [criadoPor], tx, "Conta do cofre");
 }
 
 async function exigirConfirmadorDaConta(
   contaId: string,
   empresaId: string,
-  criadoPor: string,
+  excluirUsuariosIds: string[],
   tx: ExecutorBanco,
   nomeDaConta = "Conta de destino"
 ): Promise<void> {
-  if (!(await existeConfirmadorElegivel({ contaId, empresaId, excluirUsuarioId: criadoPor }, tx))) {
+  if (!(await existeConfirmadorElegivel({ contaId, empresaId, excluirUsuariosIds }, tx))) {
     throw new Error(`${nomeDaConta} sem responsavel elegivel para conferir a transferencia de retorno`);
   }
 }
@@ -738,7 +749,7 @@ async function registrarEntregaAoCofre(
   // Lacre da VOLTA (R-026: opcional; R-027: numero novo, nunca reutilizado). Digitado pelo
   // operador como na ida â€” nao existe mais estoque de malote para "escolher".
   if (lacre && (await existeNumeroLacreRepository(input.caixa.empresaId, lacre, tx))) {
-    throw new Error("Lacre jÃ¡ utilizado em outro movimento");
+    throw new Error("Lacre ja utilizado em outro movimento");
   }
 
   const ordem = await proximaOrdemTransferenciaRepository(input.caixa.id, "retorno", tx);
@@ -832,15 +843,25 @@ export async function criarTransferenciaCofreCaixa(
     // Decisao 7: entrega avulsa tambem entrega dinheiro â€” sem quem conferir, nao sai.
     await exigirConfirmadorDoCofre(caixa.empresaId, perfil.usuarioId, tx);
 
-    // D1: retorno/sangria parcial e permitido, mas NUNCA acima do que existe em especie. Sem este
+    // D1: Transferencia de retorno parcial e permitida, mas NUNCA acima do que existe em especie. Sem este
     // teto, dois cliques levavam o saldo a negativo e o fechamento gravava quebra falsa no nome do
     // operador. Recalculado aqui dentro, sob a trava â€” o saldo que a tela viu nao serve de prova.
     const saldoDisponivelCentavos = saldoCaixaCentavos(await calcularTotaisCaixaCentavos(caixa, tx));
     if (saldoDisponivelCentavos <= 0) {
       throw new Error("Caixa sem saldo em especie para enviar ao cofre");
     }
-    if (valorCentavos > saldoDisponivelCentavos) {
-      throw new Error(`Valor acima do saldo do caixa: disponivel R$ ${deCentavos(saldoDisponivelCentavos).toFixed(2)}`);
+    const totalPlanejadoCentavos = (await listarPlanejamentosRetornoRepository(caixa.id, tx)).reduce(
+      (total, planejamento) => total + paraCentavos(planejamento.valorOriginal),
+      0
+    );
+    const saldoLivreCentavos = Math.max(0, saldoDisponivelCentavos - totalPlanejadoCentavos);
+    if (saldoLivreCentavos <= 0) {
+      throw new Error("Saldo disponivel reservado para transferencias de retorno planejadas");
+    }
+    if (valorCentavos > saldoLivreCentavos) {
+      throw new Error(
+        `Valor acima do saldo livre do caixa: disponivel R$ ${deCentavos(saldoLivreCentavos).toFixed(2)} apos reservar os retornos planejados`
+      );
     }
 
     await registrarEntregaAoCofre(
@@ -903,10 +924,24 @@ export async function executarPlanejamentoRetorno(
         `Saldo insuficiente para executar o planejamento: programado R$ ${deCentavos(planejamento.valorCentavos).toFixed(2)}, disponivel R$ ${deCentavos(saldoDisponivel).toFixed(2)}`
       );
     }
-    await exigirConfirmadorDaConta(planejamento.contaDestinoId, caixa.empresaId, perfil.usuarioId, tx);
+    await exigirConfirmadorDaConta(
+      planejamento.contaDestinoId,
+      caixa.empresaId,
+      [perfil.usuarioId, ...(planejamento.criadoPor ? [planejamento.criadoPor] : [])],
+      tx
+    );
     const ordem = await proximaOrdemTransferenciaRepository(caixa.id, planejamento.tipo, tx);
+    const agora = new Date();
     const executada = await executarPlanejamentoRetornoRepository(
-      { planejamentoId, caixaId, ordem, dataTransferencia: diaNegocio(new Date()), executadoPor: perfil.usuarioId },
+      {
+        planejamentoId,
+        caixaId,
+        ordem,
+        dataTransferencia: diaNegocio(agora),
+        prazoConfirmacaoEm: calcularPrazoConfirmacao(agora, planejamento.tempoConfirmacao as TempoConfirmacao),
+        executadoPor: perfil.usuarioId,
+        agora
+      },
       tx
     );
     if (!executada)
@@ -918,31 +953,28 @@ export async function executarPlanejamentoRetorno(
 }
 
 export async function cancelarPlanejamentoRetorno(
-  caixaId: string,
   planejamentoId: string,
   dados: CancelarPlanejamentoRetornoPayload,
   perfil: PerfilUsuario
-): Promise<CaixaStatus> {
+): Promise<{ id: string; status: "cancelada" }> {
   return executarEmTransacao(async (tx) => {
-    if (!podeLancarSemCaixa(perfil)) throw new Error("Cancelar planejamento e exclusivo da retaguarda");
-    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
-    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
-    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
-    const planejamento = await buscarPlanejamentoRetornoRepository(planejamentoId, caixaId, tx);
+    if (!podeLancarSemCaixa(perfil)) {
+      throw new ErroDominio("Cancelar planejamento e exclusivo da retaguarda", 403, "PLANEJAMENTO_SEM_PERMISSAO");
+    }
+    const planejamento = await buscarPlanejamentoRetornoPorIdRepository(planejamentoId, tx);
     if (!planejamento) throw new Error("Planejamento nao encontrado");
-    if (planejamento.status === "cancelada") return statusDoCaixaAberto(caixa, tx);
+    if (!podeAcessarEmpresa(perfil, planejamento.empresaId)) throw new Error("Planejamento nao encontrado");
+    if (planejamento.status === "cancelada") return { id: planejamento.id, status: "cancelada" };
     if (planejamento.status !== "agendada") {
       throw new ErroDominio("Planejamento ja executado nao pode ser cancelado", 409, "PLANEJAMENTO_EXECUTADO");
     }
     const cancelada = await cancelarPlanejamentoRetornoRepository(
-      { planejamentoId, caixaId, canceladoPor: perfil.usuarioId, motivo: dados.motivo.trim() },
+      { planejamentoId, canceladoPor: perfil.usuarioId, motivo: dados.motivo.trim() },
       tx
     );
     if (!cancelada)
       throw new ErroDominio("Planejamento alterado por outro usuario neste instante", 409, "PLANEJAMENTO_CONFLITO");
-    const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
-    if (!atualizado) throw new Error("Caixa nao encontrado");
-    return statusDoCaixaAberto(atualizado, tx);
+    return { id: planejamento.id, status: "cancelada" };
   });
 }
 
@@ -971,7 +1003,7 @@ export async function obterTransferenciasCaixa(
     else totalEntradaCentavos += valorCentavos;
     return {
       id: linha.id,
-      tipo: linha.tipo as "abertura" | "suprimento" | "sangria" | "retorno",
+      tipo: (linha.tipo === "sangria" ? "retorno" : linha.tipo) as "abertura" | "suprimento" | "retorno",
       ordem,
       valor: deCentavos(valorCentavos),
       sentido,

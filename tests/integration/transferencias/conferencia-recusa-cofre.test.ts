@@ -88,7 +88,6 @@ describe("transferencias - conferencia estrita e recusa auditavel (Caixa -> Cofr
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: valor }]
     });
     const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor,
       ...(lacre ? { lacre } : {}),
       idempotenciaChave: randomUUID()

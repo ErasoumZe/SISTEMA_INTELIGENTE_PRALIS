@@ -113,7 +113,6 @@ describe("caixa - dia contabil no fuso de Sao Paulo (nao UTC)", () => {
       tiposPagamento: [{ formaPagamentoId: idsTeste.formaPagamentoDinheiro, numeroVendas: 1, totalPago: 50 }]
     });
     const respostaRetorno = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 50,
       observacao: "Retorno fuso",
       idempotenciaChave: randomUUID()

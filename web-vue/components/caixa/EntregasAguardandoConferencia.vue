@@ -5,7 +5,7 @@ import type { EntregaCofrePendente } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 
-// G1/R-171 · o que ja saiu do caixa e ainda nao foi conferido no cofre.
+// G1/R-171/R-187 · o que ja saiu do caixa e ainda nao foi conferido na conta destino.
 //
 // Nao e um erro, e por isso nao e vermelho: o malote esta a caminho. E tambem nao e um aviso que
 // se possa ignorar — enquanto estiver aqui, o caixa nao fecha. O bloco existe para o operador ver
@@ -17,7 +17,7 @@ const props = defineProps<{ entregas: EntregaCofrePendente[] }>();
 
 const total = computed(() => props.entregas.reduce((soma, entrega) => soma + entrega.valor, 0));
 // R-183 · quantas ja foram contadas pelo cofre e esperam so o encerramento. Muda o texto do bloco:
-// "confira no cofre" e instrucao errada para quem ja conferiu.
+// Conferir no destino e instrucao errada para quem ja conferiu.
 const jaContadas = computed(() => props.entregas.filter((entrega) => entrega.valorContado !== null).length);
 const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
 </script>
@@ -31,16 +31,17 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
     data-teste="entregas-aguardando-conferencia"
   >
     <header class="transito-cabecalho">
-      <h3 id="transito-titulo" class="transito-titulo">Aguardando conferência no cofre</h3>
+      <h3 id="transito-titulo" class="transito-titulo">Aguardando conferência no destino</h3>
       <p class="transito-explica">
-        <strong class="cx-num">{{ dinheiro(total) }}</strong> saíram deste caixa e ainda não foram encerrados no cofre.
+        <strong class="cx-num">{{ dinheiro(total) }}</strong> saíram deste caixa e ainda não foram encerrados no
+        destino.
         <template v-if="jaContadas">
-          O cofre já contou {{ jaContadas === 1 ? "uma delas" : `${jaContadas} delas` }} e ainda não encerrou a
+          A conta destino já contou {{ jaContadas === 1 ? "uma delas" : `${jaContadas} delas` }} e ainda não encerrou a
           divergência — é isso que falta para este caixa fechar.
         </template>
         <template v-else>
-          O fechamento fica travado até o cofre conferir cada entrega — assim, se faltar dinheiro, a diferença tem onde
-          cair.
+          O fechamento fica travado até cada conta destino conferir o retorno — assim, se faltar dinheiro, a diferença
+          tem onde cair.
         </template>
       </p>
     </header>
@@ -56,6 +57,7 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
         <span class="transito-marca" aria-hidden="true" />
         <span class="transito-valor cx-num">{{ dinheiro(entrega.valor) }}</span>
         <span class="transito-tipo">{{ rotulo(entrega.tipo) }}</span>
+        <span class="transito-destino">para {{ entrega.contaDestinoNome }}</span>
         <span v-if="entrega.lacre" class="transito-lacre">
           <span class="transito-lacre-rotulo">lacre</span>{{ entrega.lacre }}
         </span>
@@ -63,7 +65,7 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
         <!-- R-183 · quando o cofre JA CONTOU, o numero e a informacao mais util da linha: e ele que
              diz o tamanho da diferenca e a quem cobrar. Sem contagem, a linha segue como antes. -->
         <span v-if="entrega.valorContado !== null" class="transito-contado">
-          <span class="transito-contado-rotulo">cofre contou</span>{{ dinheiro(entrega.valorContado) }}
+          <span class="transito-contado-rotulo">destino contou</span>{{ dinheiro(entrega.valorContado) }}
         </span>
         <span class="transito-hora">{{ formatarDataHora(entrega.criadoEm) }}</span>
       </li>

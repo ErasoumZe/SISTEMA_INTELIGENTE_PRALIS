@@ -45,6 +45,11 @@ export type RetornoSaldoPayload = {
   aoConcluir?: (sucesso: boolean) => void;
 };
 export type ExecutarPlanejamentoPayload = { caixaId: string; planejamentoId: string };
+export type CancelarPlanejamentoPayload = {
+  planejamentoId: string;
+  motivo: string;
+  aoConcluir?: (sucesso: boolean) => void;
+};
 
 export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   async function recarregarTela() {
@@ -90,8 +95,8 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     if (
       !(await deps.confirmar(
         `Confirma a entrega de ${dinheiro(payload.valor)} ao cofre principal?`,
-        "Entregar ao cofre",
-        "Entregar ao cofre"
+        "Transferência de retorno",
+        "Transferência de retorno"
       ))
     ) {
       return false;
@@ -173,5 +178,32 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     }
   }
 
-  return { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional, executarPlanejamentoRetorno };
+  async function cancelarPlanejamentoRetorno(payload: CancelarPlanejamentoPayload): Promise<boolean> {
+    deps.setSalvando(true);
+    try {
+      await deps.api.post(`/api/caixa/planejamentos-retorno/${payload.planejamentoId}/cancelar`, {
+        motivo: payload.motivo.trim()
+      });
+      // A Tesouraria nao opera um Caixa proprio. Recarregar `/api/caixa/status` aqui faria um
+      // cancelamento ja confirmado parecer falha para perfis sem `caixa_operar`.
+      await recarregarTela();
+      deps.notificar("Transferência de retorno programada cancelada com auditoria.");
+      payload.aoConcluir?.(true);
+      return true;
+    } catch (error) {
+      deps.notificar(deps.mensagemErro(error), "error");
+      payload.aoConcluir?.(false);
+      return false;
+    } finally {
+      deps.setSalvando(false);
+    }
+  }
+
+  return {
+    abrirCaixaOperacional,
+    retornarSaldoOperacional,
+    fecharCaixaOperacional,
+    executarPlanejamentoRetorno,
+    cancelarPlanejamentoRetorno
+  };
 }

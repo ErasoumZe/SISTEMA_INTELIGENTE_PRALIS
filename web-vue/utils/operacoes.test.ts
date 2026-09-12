@@ -159,13 +159,13 @@ describe("montarPayloadOperacao", () => {
       nLacreDoc: "LACRE-001",
       retornosPlanejados: [
         { valor: "300,00", nLacreDoc: "LACRE-002", contaDestinoId: "cofre-1" },
-        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "cofre-1" }
+        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "banco-1" }
       ]
     };
 
     expect(montarPayloadOperacao("transferencia", { ...base, form }).retornosPlanejados).toEqual([
       { valor: 300, nLacreDoc: "LACRE-002", contaDestinoId: "cofre-1" },
-      { valor: 700, nLacreDoc: "LACRE-003", contaDestinoId: "cofre-1" }
+      { valor: 700, nLacreDoc: "LACRE-003", contaDestinoId: "banco-1" }
     ]);
   });
 

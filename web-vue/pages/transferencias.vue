@@ -5,9 +5,8 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
 
 <template>
   <AppWorkspace tela-inicial="transferencias" tipo-pagina="operacoes" v-slot="ctx">
-    <!-- R-179/Fatia 3: o painel "Programar entrega ao cofre" nao existe mais. Sangria e retorno
-         tem UM caminho, e ele e o do proprio Caixa — quem faz a entrega e o operador, de dentro do
-         turno dele, nao a Tesouraria daqui. Recriar o painel recriaria o segundo caminho. -->
+    <!-- R-185/R-187: o painel paralelo "Programar entrega ao cofre" continua removido. O modal
+         generico apenas prepara Transferencias de retorno; a execucao financeira acontece no Caixa. -->
     <!-- Cockpit de tesouraria: nova/editar REUSAM o modal de transferencia do workspace
          (abrirOperacao('transferencia') nao depende de caixa aberto). -->
     <TesourariaCockpit
@@ -23,12 +22,15 @@ import TesourariaCockpit from "~/components/financeiro/TesourariaCockpit.vue";
       :pode-criar="ctx.podeCriarTransferencia"
       :pode-editar="ctx.podeEditarTransferencia"
       :pode-conferir="ctx.podeConferirTransferencia"
+      :pode-cancelar-planejamento="ctx.podeCancelarPlanejamentoRetorno"
+      :salvando="ctx.caixaSalvando"
       @nova="ctx.abrirOperacao('transferencia')"
       @editar="(op) => ctx.abrirOperacao('transferencia', op)"
       @update:pagina="ctx.atualizarPaginaOperacoes"
       @update:status-filtro="ctx.atualizarFiltroStatusTransferencia"
       @recarregar="ctx.recarregarOperacoes"
       @notificar="ctx.notificar"
+      @cancelar-planejamento="ctx.cancelarPlanejamentoRetorno"
     />
   </AppWorkspace>
 </template>

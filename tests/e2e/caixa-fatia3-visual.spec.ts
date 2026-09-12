@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, request, test, type APIRequestContext } from "@playwright/test";
-import { entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
+import { encerrarCaixaDeTeste, entrar, LARGURAS, PREFIXO, semRolagemHorizontal, USUARIOS } from "./apoio.js";
 
 /**
  * R-179 · Fatia 3 (#101) — o caminho antigo sumiu DA TELA, e o que ficou continua legivel nas
@@ -72,8 +72,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     caixaId = await criar(caixa, "/api/caixa/abrir", {
       empresaId,
       pdvId,
-      usuarioCaixaId: eu.usuarioId,
-      dataHoraAbertura: `${hoje}T06:00`
+      usuarioCaixaId: eu.usuarioId
     });
 
     // Dinheiro de verdade: sem saldo a tela do Caixa nao mostra os campos de entrega.
@@ -86,6 +85,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
   });
 
   test.afterAll(async () => {
+    if (caixaId && empresaId) await encerrarCaixaDeTeste(caixa, empresaId, caixaId, MARCA);
     await admin?.dispose();
     await caixa?.dispose();
   });
@@ -107,15 +107,26 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     await expect(page.locator(porTeste("solicitacao-caixa"))).toHaveCount(0);
     await expect(page.locator(porTeste("solicitacao-agendada"))).toHaveCount(0);
 
+    await page.getByRole("button", { name: "Nova transferência" }).click();
+    await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toHaveCount(1);
+    await expect(page.getByText("Transferência de retorno", { exact: true })).toBeVisible();
+    await expect(page.getByText(/sangria/iu)).toHaveCount(0);
+    await page.getByLabel("Origem / Saída").selectOption({ label: "Cofre" });
+    await page.getByLabel("Destino / Entrada").selectOption({ label: "Caixa loja" });
+    await page.locator(porTeste("opcao-transferencia-retorno")).check();
+    await page.getByRole("button", { name: "Adicionar transferência de retorno" }).click();
+    await expect(page.locator(".tr-planejamento-linha")).toHaveCount(2);
+
     for (const largura of LARGURAS) {
       await page.setViewportSize({ width: largura.largura, height: largura.altura });
+      await expect(page.locator(porTeste("transferencias-retorno-programadas"))).toBeVisible();
       await semRolagemHorizontal(page);
     }
   });
 
-  // Do lado do operador, o que sumiu foi o botao de EXECUTAR a ordem — o segundo caminho para o
-  // mesmo ato do botao de entregar ao cofre, que continua.
-  test("Caixa nao oferece mais a execucao de ordem, e a entrega continua", async ({ page }) => {
+  // Do lado do operador, o que sumiu foi o botao do painel antigo. A execucao do planejamento
+  // R-185 e outra acao e so aparece quando existe uma linha vinculada ao Caixa.
+  test("Caixa nao oferece o executor legado, e a entrega avulsa continua", async ({ page }) => {
     await entrar(page, USUARIOS.semProdutos);
     await page.goto("/caixa");
 
@@ -145,7 +156,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     const bloco = page.locator(porTeste("entregas-aguardando-conferencia"));
     await expect(bloco).toBeVisible();
     await expect(bloco).toContainText(`${MARCA}-LACRE`);
-    await expect(page.locator(porTeste("motivo-fechamento-travado"))).toContainText("conferência no cofre");
+    await expect(page.locator(porTeste("motivo-fechamento-travado"))).toContainText("conferência no destino");
 
     // Travado, mas FOCAVEL: `aria-disabled`, nunca `disabled`. A prova e o atributo `disabled`
     // ausente mais o foco — `toBeEnabled()` nao serve: o Playwright conta `aria-disabled="true"`

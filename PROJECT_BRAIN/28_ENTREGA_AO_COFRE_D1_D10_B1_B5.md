@@ -24,33 +24,60 @@ anterior caiu na rede".** Dois cliques entregavam o dinheiro duas vezes, com um 
 
 ---
 
-## §2 · As decisões (D1–D10)
+## §1-A · Estado vigente após R-185/R-187 (11/09/2026)
 
-> 🚫 **D4, D10, D11 e D12 foram REVOGADAS na Fatia 3 (09/09/2026)** — o caminho "Programar entrega
-> ao cofre" que elas descrevem não existe mais, e as funções citadas na coluna "Onde vive" foram
-> removidas. Elas ficam aqui com a redação original porque decisão não some em silêncio; o que as
-> substitui está na **§11**. Não reimplemente nada desta tabela sem ler a §11 antes.
+A Fatia 3 continua correta ao remover o painel paralelo **“Programar entrega ao cofre”** e suas
+rotas antigas. O que mudou depois foi a forma de preparar o turno: o modal genérico de nova
+transferência pode declarar, atomicamente com a ida, várias **Transferências de retorno**.
 
-| Id         | Decisão                                                                                                                                                                                                                                                                                                                                                                      | Onde vive                                                   |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **D1**     | Entrega **parcial** é permitida durante o turno, **nunca acima do saldo em espécie**. O teto é recalculado no servidor, sob trava — o número que a tela viu não é prova.                                                                                                                                                                                                     | `caixa.service.ts` · `criarTransferenciaCofreCaixa`         |
-| **D2**     | A entrega do operador **já abate o saldo físico** do caixa no instante em que é lançada.                                                                                                                                                                                                                                                                                     | `shared/caixa/regras.ts` · `transferenciaContaComoSaida`    |
-| **D3**     | Mas nasce **`pendente`**: só entra no cofre quando quem opera a conta de destino conferir (R-028/R-036).                                                                                                                                                                                                                                                                     | `caixa.repository.ts` · `criarTransferenciaCofreRepository` |
-| **D4** 🚫  | A **retaguarda programa** (`agendada`, não movimenta saldo); **o operador executa** (vira `pendente`). Dois atos, duas pessoas, só o segundo mexe em dinheiro.                                                                                                                                                                                                               | `programarSolicitacaoCofre` / `executarSolicitacaoCofre`    |
-| **D5**     | **Cada movimento tem o seu próprio lacre** (opcional, R-026; número novo, R-027). Movimento executado **nunca** é editado.                                                                                                                                                                                                                                                   | `registrarEntregaAoCofre`                                   |
-| **D6**     | **Retorno final + fechamento são UM ato atômico.** O cliente não manda o valor: o servidor usa a sobra que ele mesmo apurou sob trava. Saldo já zero → só fecha.                                                                                                                                                                                                             | `fecharCaixa`                                               |
-| **D7**     | **Sobra ≠ déficit.** Sobra volta ao cofre e nunca vira quebra positiva. Déficit vira quebra nominal, com **observação obrigatória** e aviso na tela **antes** do clique.                                                                                                                                                                                                     | `fecharCaixa` + `CaixaResumoPage.vue`                       |
-| **D8**     | `idempotencia_chave` é **nullable e sem default**: todo o histórico fica NULL, o índice parcial o ignora, **nenhum backfill** é necessário.                                                                                                                                                                                                                                  | migration `0030`                                            |
-| **D9**     | A criação de retorno/sangria tem **um único caminho**. O `OperacaoTransferenciaModal` não cria mais — o componente que existia só para isso foi **removido**.                                                                                                                                                                                                                | `OperacaoTransferenciaModal.vue`                            |
-| **D10** 🚫 | **O valor programado é IMUTÁVEL.** A Tesouraria pediu R$ 100 → a execução movimenta exatamente R$ 100, e não reescreve nem valor nem observação da programação. Mais que o programado sai por um movimento **avulso** próprio (chave e lacre novos); **menos** que o programado **não executa** a solicitação.                                                               | `executarSolicitacaoCofre`                                  |
-| **D11** 🚫 | A **execução não tem chave de idempotência própria.** Ela é idempotente pelo `solicitacaoId` mais a transição atômica `status = 'agendada' → 'pendente'`. O único dado próprio do ato físico é o lacre.                                                                                                                                                                      | `executarSolicitacaoCofreRepository`                        |
-| **D12** 🚫 | **Solicitação `agendada` bloqueia o fechamento** até ser executada ou cancelada.                                                                                                                                                                                                                                                                                             | `fecharCaixa` · `existeSolicitacaoAgendadaRepository`       |
-| **D13**    | **Sem CONFIRMADOR ELEGÍVEL no Cofre, nada que entregue dinheiro acontece** — avulsa, ~~programação, execução~~ (revogadas na Fatia 3) e retorno final. Elegível = vinculado à conta em `contas_usuarios` **+** empresa certa **+** diferente do criador (R-028) **+** com `transferencias_conferir` na permissão efetiva. Fechamento **sem** retorno físico não é bloqueado. | `exigirConfirmadorDoCofre`                                  |
-| **D14**    | **Lacre é opcional na conferência (R-026).** Se o movimento tem lacre, a confirmação exige o mesmo e o rompe; se não tem, confirma-se sem inventar um.                                                                                                                                                                                                                       | `confirmarTransferenciaRepository`                          |
+- cada linha tem valor, lacre obrigatório e destino próprio;
+- a soma planejada pode ser menor ou igual à ida, nunca maior;
+- a linha nasce `agendada`, sem efeito no saldo;
+- ao abrir o Caixa pelo lacre da ida, os planos são vinculados ao turno;
+- o dinheiro só sai quando o operador executa a linha dentro do Caixa;
+- planejado ou executado aguardando conferência bloqueia o fechamento;
+- destino não precisa ser o Cofre; a conta escolhida é quem confere e recebe. Outra conta de PDV
+  não é aceita neste contrato porque uma transferência não pode pertencer simultaneamente a dois
+  Caixas; entre PDVs exige fluxo próprio de suprimento/recebimento;
+- todo escritor novo usa `tipo = 'retorno'`; `sangria` existe apenas em leitura histórica;
+- cancelamento é exclusivo da retaguarda, pode ocorrer antes ou depois do vínculo com o Caixa e
+  preserva linha, motivo, autor e horário.
+
+Portanto, os trechos históricos abaixo que dizem “sem produtor de `agendada`”, “sem escritor” ou
+“o modal não planeja” estão **superados por esta seção**. Eles permanecem para documentar por que o
+painel antigo foi removido, não para orientar implementação nova.
 
 ---
 
-## §2-A · A D9 foi confirmada, e o texto da #101 estava desatualizado (27/08/2026)
+## §2 · As decisões (D1–D10)
+
+> ⚠️ A implementação antiga de D4/D10/D11/D12 foi revogada na Fatia 3. A intenção operacional
+> voltou com a R-185 por outro desenho, descrito na §1-A: declaração no modal, execução no Caixa e
+> nenhum painel paralelo.
+
+| Id      | Decisão                                                                                                                                                                                                                          | Onde vive                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **D1**  | Entrega **parcial** é permitida durante o turno, **nunca acima do saldo em espécie**. O teto é recalculado no servidor, sob trava — o número que a tela viu não é prova.                                                         | `caixa.service.ts` · `criarTransferenciaCofreCaixa`                 |
+| **D2**  | A entrega do operador **já abate o saldo físico** do caixa no instante em que é lançada.                                                                                                                                         | `shared/caixa/regras.ts` · `transferenciaContaComoSaida`            |
+| **D3**  | Mas nasce **`pendente`**: só entra no cofre quando quem opera a conta de destino conferir (R-028/R-036).                                                                                                                         | `caixa.repository.ts` · `criarTransferenciaCofreRepository`         |
+| **D4**  | A **retaguarda declara** o retorno junto da transferência inicial (`agendada`, sem saldo); **o operador executa** no Caixa (vira `pendente`). Só o segundo ato mexe em dinheiro.                                                 | `criarRetornosPlanejadosRepository` / `executarPlanejamentoRetorno` |
+| **D5**  | **Cada movimento tem o seu próprio lacre.** No retorno planejado ele é obrigatório; no avulso/final permanece opcional (R-026). Movimento executado nunca é editado.                                                             | `criarRetornosPlanejadosRepository` / `registrarEntregaAoCofre`     |
+| **D6**  | **Retorno final + fechamento são UM ato atômico.** O cliente não manda o valor: o servidor usa a sobra que ele mesmo apurou sob trava. Saldo já zero → só fecha.                                                                 | `fecharCaixa`                                                       |
+| **D7**  | **Sobra ≠ déficit.** Sobra volta ao cofre e nunca vira quebra positiva. Déficit vira quebra nominal, com **observação obrigatória** e aviso na tela **antes** do clique.                                                         | `fecharCaixa` + `CaixaResumoPage.vue`                               |
+| **D8**  | `idempotencia_chave` é **nullable e sem default**: todo o histórico fica NULL, o índice parcial o ignora, **nenhum backfill** é necessário.                                                                                      | migration `0030`                                                    |
+| **D9**  | Há um único ato financeiro de retorno: execução dentro do Caixa. O modal apenas declara o planejamento; o painel paralelo antigo não volta.                                                                                      | `OperacaoTransferenciaModal.vue` / `CaixaResumoPage.vue`            |
+| **D10** | **O valor planejado é imutável.** A execução movimenta exatamente o valor da linha; excedente sai por movimento avulso/final próprio.                                                                                            | `executarPlanejamentoRetorno`                                       |
+| **D11** | A execução é idempotente pela identidade do planejamento e pela transição atômica `agendada → pendente`; valor, lacre e destino já foram definidos na declaração.                                                                | `executarPlanejamentoRetornoRepository`                             |
+| **D12** | **Planejamento `agendada` bloqueia o fechamento** até ser executado ou cancelado pela retaguarda; o cancelamento auditado também existe antes da abertura. Executado bloqueia até a conta destino conferir/encerrar divergência. | `fecharCaixa` / `cancelarPlanejamentoRetorno`                       |
+| **D13** | Sem confirmador elegível na conta destino, o retorno não é executado. Elegível = vínculo em `contas_usuarios`, empresa certa, permissão `transferencias_conferir` e pessoa diferente de quem planejou e executou.                | `exigirConfirmadorDaConta`                                          |
+| **D14** | Se o movimento tem lacre, a confirmação exige o mesmo e o rompe; retorno planejado sempre tem lacre, enquanto avulso/final pode não ter (R-026).                                                                                 | `confirmarTransferenciaRepository`                                  |
+
+---
+
+## §2-A · Histórico: a D9 foi confirmada em 27/08 e superada parcialmente pela R-185
+
+> ⚠️ Esta seção registra a decisão de 27/08. A proibição de planejar no modal foi superada pela
+> R-185; continuam vigentes a execução financeira dentro do Caixa e a proibição do painel paralelo.
 
 Ao preparar a **#101**, o texto da issue pedia o contrário da **D9**: recolocar a marcação
 **Transferência de Retorno / Sangria** dentro do modal **“+ Nova transferência”**. As duas leituras
@@ -442,7 +469,8 @@ Migration continua dependendo de autorização explícita de Marco.
 
 O §2-A e a **R-179** diziam onde o legado estava e mandavam removê-lo "na entrega apropriada".
 Esta é a entrega. O que saiu é o fluxo **D4** inteiro — a retaguarda programava uma ordem
-`agendada` no painel de Transferências e o operador a executava na tela do Caixa.
+`agendada` no painel de Transferências e o operador a executava na tela do Caixa. Esse painel
+continua removido; o planejamento atual é o da §1-A e não reabre essa tela.
 
 **Por que ele era o segundo caminho.** A ordem executada virava exatamente a mesma linha que
 `POST /api/caixa/:id/transferencia-cofre` cria: mesma tabela, mesmo tipo `sangria`/`retorno`,
@@ -462,42 +490,36 @@ mesma conta de origem, mesma conta de cofre, mesmo lacre, mesma conferência. Do
 
 `/api/caixa/abertos` saiu junto porque **só existia** para a retaguarda escolher o caixa da ordem.
 
-### §11.2 · As decisões D4/D10/D11/D12 que morrem com o caminho
+### §11.2 · Histórico da remoção — superado pela R-185 no planejamento atual
 
-**D4, D10 e D11 deixam de ter objeto** — não há mais programação, execução nem valor programado
-imutável. **D12 é revogada de fato**: sem produtor de ordem `agendada`, mantê-la seria pior que
-inútil. Uma linha legada prenderia o turno para sempre, porque não existe mais rota de executar
-nem de cancelar para soltá-la. A linha não move saldo (`transferenciaContaComoSaida` não conta
-`agendada`) e o cron de agendamento não a alcança (`agendada_para` nasce NULL nessas linhas).
+Naquele checkpoint, D4, D10, D11 e D12 ficaram sem objeto porque o produtor antigo saiu. A R-185
+restabeleceu essas intenções no fluxo novo da §1-A: há novamente produtor de `agendada`, execução,
+cancelamento auditado e trava. Esta descrição permanece válida somente para linhas legadas do
+painel removido, identificadas sem `planejamento_origem_transferencia_id`.
 
 **D9, D13 e as demais continuam inteiras.** A trava do fechamento por entrega `pendente`
 (G1/R-171) e os quatro desfechos da R-183 não foram tocados.
 
-### §11.3 · O que ficou no banco, e por quê
+### §11.3 · Histórico do schema após a Fatia 3 — escritores reabertos pela R-185
 
-**Seis linhas**, nove objetos nomeáveis, ficaram sem escritor e continuam no schema. A lista completa
-importa porque é ela que a migration futura vai usar como checklist — e checklist com número errado
-deixa objeto para trás:
+No checkpoint de 09/09, os objetos abaixo ficaram sem escritor. A R-185 passou a reutilizá-los no
+planejamento atual; portanto, eles não são mais candidatos automáticos a remoção por migration.
 
-| Objeto                                                                  | Situação                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `transferencias.solicitacao_cofre_em`                                   | sem escritor **e sem leitor** na aplicação; só o índice e o CHECK a referenciam                                                                                                                                                                                                |
-| `transferencias.executado_por` / `executado_em`                         | sem escritor, **com leitor** — a conferência lê `executado_por`. Sem ela, quem entregou pelo fluxo antigo passaria a poder conferir a própria entrega (R-028), a quebra cairia na pessoa errada e a notificação iria para quem programou. Derrubá-las **quebraria regra viva** |
-| `transferencias.cancelado_por` / `cancelado_em` / `motivo_cancelamento` | sem escritor e sem leitor — quem escrevia era `cancelarSolicitacaoCofreRepository`                                                                                                                                                                                             |
-| status `'cancelada'` de `transferencias`                                | sem produtor. Restam **três** leituras defensivas — `caixa.repository.ts:705`, `:837` e `lancamentos.dominio.ts:1038` —, corretas para o histórico                                                                                                                             |
-| `transferencias_cancelamento_check`                                     | o ramo `status = 'cancelada'` ficou **inalcançável para escrita nova**. Não é risco — nenhum caminho pode violá-lo                                                                                                                                                             |
-| `transferencias_solicitacao_cofre_idx`                                  | índice parcial que para de crescer                                                                                                                                                                                                                                             |
+| Objeto                                                                  | Situação                                                                                     |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `transferencias.solicitacao_cofre_em`                                   | escritor e leitor ativos no planejamento R-185; marca a intenção de retorno                  |
+| `transferencias.executado_por` / `executado_em`                         | escritos na execução do plano e lidos na conferência; separam quem planejou de quem entregou |
+| `transferencias.cancelado_por` / `cancelado_em` / `motivo_cancelamento` | escritos no cancelamento auditado da retaguarda                                              |
+| status `'cancelada'` de `transferencias`                                | produzido pelo cancelamento do planejamento; não movimenta saldo                             |
+| `transferencias_cancelamento_check`                                     | protege o estado auditado novo e o histórico                                                 |
+| `transferencias_solicitacao_cofre_idx`                                  | atende a busca dos planejamentos ativos do Caixa                                             |
 
-Nenhum deles pode passar a ser violado: linha nova sempre satisfaz o primeiro ramo do
-`transferencias_solicitacao_cofre_check`, e a linha legada que vira `divergente` pelo encerramento da
-R-183 cai no ramo que a própria migration da R-183 já contemplou.
-
-Derrubá-los é **migration**, ato separado com autorização própria. Nada foi apagado, cancelado,
-reclassificado ou reprocessado — a **R-182** continua pendente e independente desta fatia.
+Esses objetos voltaram a ser regra viva e não devem ser derrubados. Não houve backfill nem
+reescrita do histórico; a R-182 continua pendente e independente desta entrega.
 
 > ⚠️ **Ordem `agendada` legada — o que ela faz e o que NÃO faz.** Se o banco tiver linhas D4
-> `agendada`, elas continuam lá e **não afetam dinheiro**: não contam como saída nem como entrada
-> (`transferenciaContaComoSaida`), não entram no saldo pendente, não travam mais o fechamento, e o
+> `agendada` sem `planejamento_origem_transferencia_id`, elas continuam lá e **não afetam dinheiro**: não contam como saída nem como entrada
+> (`transferenciaContaComoSaida`), não entram no saldo pendente e não fazem parte do planejamento R-185. O
 > cron de agendamento não as alcança — `agendada_para` e `tempo_confirmacao` nascem NULL nessas
 > linhas, o que é exclusão dupla.
 >
@@ -509,9 +531,8 @@ reclassificado ou reprocessado — a **R-182** continua pendente e independente 
 > (`caixa.repository.ts:1030-1037`, que passam pelas funções de regra) a ignoram. Detalhe e total
 > deixam de bater.
 >
-> Isso **já era verdade antes** desta fatia. O que mudou é a duração: com a D12 no lugar, a ordem
-> tinha de ser executada ou cancelada antes de fechar, e a divergência era transitória. Sem D12 e
-> sem rota de cancelar, ela **fica congelada num turno fechado, sem caminho de tela que a limpe**.
+> Isso descreve apenas a ordem do painel removido. O planejamento R-185 tem vínculo com a
+> transferência inicial, trava o fechamento e possui execução e cancelamento próprios.
 >
 > A limpeza pertence ao **mesmo ato de migration da R-182** — e o escopo dela precisa incluir as
 > linhas `agendada`, não só as `suprimento` que a R-182 descreve hoje.

@@ -49,9 +49,10 @@ export async function listarTransferenciasRepository(
       prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
       dataRecebimento: transferencias.dataRecebimento,
       confirmadoPor: transferencias.confirmadoPor,
-      // Os tres ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
+      // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,
+      planejamentoOrigemTransferenciaId: transferencias.planejamentoOrigemTransferenciaId,
       tipo: transferencias.tipo
     })
     .from(transferencias)
@@ -59,16 +60,30 @@ export async function listarTransferenciasRepository(
     .innerJoin(destino, eq(destino.id, transferencias.contaDestinoId))
     .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
     .where(filtros.length ? and(...filtros) : undefined);
-  return linhas.map(({ caixaId, tipo, ...linha }) => ({
+  const paisComPlanejamento = linhas.length
+    ? await banco
+        .select({ id: transferencias.planejamentoOrigemTransferenciaId })
+        .from(transferencias)
+        .where(
+          inArray(
+            transferencias.planejamentoOrigemTransferenciaId,
+            linhas.map((linha) => linha.id)
+          )
+        )
+    : [];
+  const idsPaisComPlanejamento = new Set(paisComPlanejamento.map((linha) => linha.id).filter(Boolean));
+  return linhas.map(({ tipo, planejamentoOrigemTransferenciaId, ...linha }) => ({
     ...linha,
     status: linha.status as TransferenciaDto["status"],
     valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
     ehCaixaParaCofre: ehRetornoDoCaixa({
-      caixaId,
+      caixaId: linha.caixaId,
       tipo
-    })
+    }),
+    ehPlanejamentoRetorno: planejamentoOrigemTransferenciaId !== null,
+    possuiPlanejamentoRetorno: idsPaisComPlanejamento.has(linha.id)
   }));
 }
 
@@ -186,6 +201,21 @@ export async function contaEhPdvDaEmpresaRepository(
   return Boolean(pdv);
 }
 
+// Destino planejado nao pode pertencer a nenhum PDV, inclusive inativo. A conta continua com essa
+// identidade operacional e pode voltar a representar uma gaveta se o PDV for reativado.
+export async function contaPertencePdvDaEmpresaRepository(
+  empresaId: string,
+  contaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [pdv] = await db
+    .select({ id: pdvs.id })
+    .from(pdvs)
+    .where(and(eq(pdvs.empresaId, empresaId), eq(pdvs.contaId, contaId)))
+    .limit(1);
+  return Boolean(pdv);
+}
+
 export async function travarTransferenciaRepository(transferenciaId: string, empresaId: string, db: TransacaoBanco) {
   const [linha] = await db
     .select({ id: transferencias.id })
@@ -213,6 +243,21 @@ export async function transferenciaTemPlanejamentoRepository(
         )
       )
     )
+    .limit(1);
+  return Boolean(linha);
+}
+
+// A confirmacao generica deve bloquear somente a transferencia PAI. A filha executada precisa
+// continuar confirmavel no destino; `transferenciaTemPlanejamentoRepository` inclui ambas porque
+// pai e filha sao imutaveis no editor.
+export async function transferenciaPossuiRetornosPlanejadosRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [linha] = await db
+    .select({ id: transferencias.id })
+    .from(transferencias)
+    .where(eq(transferencias.planejamentoOrigemTransferenciaId, transferenciaId))
     .limit(1);
   return Boolean(linha);
 }
@@ -271,12 +316,11 @@ export async function buscarTransferenciaDetalheRepository(
   };
 }
 
-// --- Conferencia Caixa -> Cofre -------------------------------------------------------------
-// O contexto que decide se esta transferencia esta sob as regras ESTRITAS do Caixa -> Cofre
+// --- Conferencia da Transferencia de retorno ------------------------------------------------
+// O contexto que decide se esta transferencia esta sob as regras ESTRITAS do retorno do Caixa
 // (valor obrigatorio, divergencia vira recusa auditavel) ou sob o comportamento generico vigente.
 //
-// Os tres criterios sao os que o Jose fixou: ligada ao caixa, tipo de entrega, e destino igual a
-// conta de cofre configurada NA EMPRESA. Nenhum deles sozinho basta.
+// O fluxo novo exige caixa vinculado e tipo `retorno`; `sangria` permanece somente para historico.
 export type ContextoConferencia = {
   id: string;
   empresaId: string;

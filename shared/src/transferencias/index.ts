@@ -66,16 +66,19 @@ export const transferenciaDtoSchema = z.object({
   contaDestinoId: z.string(),
   contaOrigemNome: z.string(),
   contaDestinoNome: z.string(),
+  caixaId: z.string().nullable(),
   nLacreDoc: z.string().nullable(),
   prazoConfirmacaoEm: z.string().nullable(),
   dataRecebimento: z.string().nullable(),
   confirmadoPor: z.string().nullable(),
-  // Esta linha esta sob as regras ESTRITAS do Caixa -> Cofre (valor obrigatorio na conferencia,
+  possuiPlanejamentoRetorno: z.boolean(),
+  ehPlanejamentoRetorno: z.boolean(),
+  // Esta linha esta sob as regras ESTRITAS da Transferencia de retorno (valor obrigatorio na conferencia,
   // divergencia vira recusa auditavel) ou sob o comportamento generico?
   //
   // Calculado pelo SERVIDOR, com o mesmo predicado canonico do `buscarContextoConferenciaRepository`
-  // (caixa_id + tipo + destino == conta de cofre da empresa). A tela nao tem como deduzir isso: ela
-  // nao conhece a conta de cofre nem o tipo. Sem este campo a tela tratava TODA transferencia como
+  // (caixa_id + tipo retorno/sangria). A tela nao tem como deduzir isso: ela nao conhece o tipo.
+  // Sem este campo a tela tratava TODA transferencia como
   // se fosse do Caixa — exigia valor sempre e oferecia "Nao bateu" numa generica, onde a rota de
   // recusa responde 404.
   ehCaixaParaCofre: z.boolean()

@@ -3,21 +3,21 @@ import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 
 // G1/R-171 · a tela precisa dizer POR QUE nao fecha, e o texto muda conforme o que falta.
 //
-// R-179/Fatia 3 · havia uma segunda trava aqui, a da ordem `agendada` que a Tesouraria programava
-// pelo painel "Programar entrega ao cofre". O painel e as rotas dele sairam; sem produtor de ordem,
-// o segundo argumento deixou de existir em vez de virar um `0` fixo que ninguem mais explica.
+// R-185/R-187 · planejamentos nascem no modal de transferencia e retornos executados continuam
+// travando ate a conta destino encerrar a conferencia.
 describe("fechamento - motivo da trava", () => {
   it("sem entrega em transito, nada trava", () => {
     expect(motivoFechamentoTravado(0)).toBeNull();
   });
 
-  it("entrega aguardando conferencia trava e cita o cofre", () => {
+  it("retorno aguardando conferencia trava e cita o destino", () => {
     const motivo = motivoFechamentoTravado(2);
-    expect(motivo).toMatch(/confer[eê]ncia no cofre/u);
+    expect(motivo).toMatch(/transfer[eê]ncia de retorno/iu);
+    expect(motivo).toMatch(/confer[eê]ncia no destino/iu);
     expect(motivo).not.toMatch(/Tesouraria/u);
   });
 
-  // R-183 · entrega ja contada pelo cofre manda o operador para OUTRO lugar: nao adianta pedir
+  // R-183 · entrega ja contada pelo destino manda o operador para OUTRO lugar: nao adianta pedir
   // conferencia de novo, o que falta e o cofre encerrar a divergencia.
   it("entrega ja contada cobra o encerramento, e nao uma nova conferencia", () => {
     const motivo = motivoFechamentoTravado(1, 1);

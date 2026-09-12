@@ -22,12 +22,11 @@ import {
 // fechava, o operador ia embora e, se o cofre encontrasse falta depois, a divergencia nao tinha mais
 // dono — o turno estava encerrado.
 //
-// R-179/Fatia 3 · a guarda da D12 nao existe mais: o painel que criava a ordem `agendada` e as
-// rotas dele foram removidos, e sem produtor manter a guarda prenderia qualquer linha legada para
-// sempre. Esta aqui e a UNICA trava do fechamento agora, e continua inteira.
+// R-185/R-187 · o painel antigo continua removido. O planejamento atual nasce na transferencia
+// inicial e tambem trava; este arquivo concentra a outra metade: retorno ja executado em transito.
 //
-// O ESCOPO e o predicado canonico de entrega Caixa -> Cofre (`ehEntregaCaixaParaCofre`): caixa
-// vinculado e tipo retorno (ou sangria historica). Transferencia generica NAO
+// O ESCOPO e o predicado canonico de retorno do Caixa (`ehRetornoDoCaixa`): caixa vinculado e tipo
+// retorno (ou sangria historica), independentemente do destino. Transferencia generica NAO
 // entra, e isso e verificado aqui de proposito — bloquear alem do malote fisico travaria operacao
 // que a R-171 nunca mencionou.
 //
@@ -212,7 +211,7 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   });
 
   // ------------------------------------------------------------------------------------------
-  // RED-5 · escopo: so o malote fisico Caixa -> Cofre trava. Transferencia generica pendente,
+  // RED-5 · escopo: so o retorno fisico do Caixa trava. Transferencia generica pendente,
   // mesmo saindo da conta do PDV, segue o caminho dela.
   // ------------------------------------------------------------------------------------------
   it("Deve_IgnorarPendencia_Quando_ATransferenciaNaoEhEntregaAoCofre", async () => {
@@ -252,15 +251,13 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   });
 
   // ------------------------------------------------------------------------------------------
-  // RED-5b · o OUTRO criterio do escopo: destino fora do cofre nao trava, nem com tipo `sangria`.
+  // RED-5b/R-187 · retorno para destino alternativo tambem deixa dinheiro em transito e trava.
   //
   // Hoje a API nao consegue produzir essa linha — `tipo` nao esta no payload da transferencia
-  // generica (nasce `suprimento`) e so o escritor unico do cofre grava `sangria`/`retorno`, sempre
-  // para a conta cofre. Sem este caso, apagar `contaDestinoId = contaCofreId` da consulta nao
-  // deixaria nenhum teste vermelho, e o par SQL/TS divergiria em silencio na primeira vez que
-  // alguem permitisse escolher o tipo. O UPDATE direto e o unico jeito de exercitar o criterio.
+  // generica (nasce `suprimento`). O UPDATE direto simula uma linha historica `sangria`, que deve
+  // obedecer a mesma trava do `retorno` novo independentemente da conta escolhida como destino.
   // ------------------------------------------------------------------------------------------
-  it("Deve_IgnorarPendencia_Quando_OTipoEhSangriaMasODestinoNaoEhOCofre", async () => {
+  it("Deve_RecusarFechamento_Quando_ORetornoHistoricoTemDestinoForaDoCofre", async () => {
     const fx = await novoCaixa("G1 destino fora");
     await venda(500);
 
@@ -291,12 +288,12 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
       "select tipo, status, caixa_id from transferencias where id = $1",
       [genericaId]
     );
-    // Os tres juntos, senao o caso provaria o nada: e a linha que passa por caixa, status e tipo e
-    // e barrada SO pelo destino.
+    // Os tres juntos provam que e um retorno historico pendente do caixa para destino alternativo.
     expect(linha).toMatchObject({ tipo: "sangria", status: "pendente", caixa_id: fx.caixaId });
 
     const fechamento = await fechar(fx.caixaId);
-    expect(fechamento.statusCode, fechamento.body).toBe(204);
+    assertProblem(fechamento, 400);
+    expect(fechamento.body).toMatch(/retorno/iu);
   });
 
   // ------------------------------------------------------------------------------------------
@@ -314,7 +311,9 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
 
     expect(await universoDoCaixa(fx.caixaId)).toEqual(congelado);
     expect(await statusDoCaixa(fx.caixaId)).toBe("aberto");
-    expect((await transferenciasDoCaixa(fx.caixaId)).filter((linha) => linha.tipo === "retorno")).toEqual([]);
+    expect((await transferenciasDoCaixa(fx.caixaId)).filter((linha) => linha.tipo === "retorno")).toEqual([
+      { tipo: "retorno", status: "pendente" }
+    ]);
   });
 
   // ------------------------------------------------------------------------------------------

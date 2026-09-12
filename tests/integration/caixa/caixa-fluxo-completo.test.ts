@@ -216,7 +216,6 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
 
     // D1: retorno PARCIAL durante o turno — o saldo cai, mas nao zera.
     const parcial = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 40,
       lacre: "RET-PARCIAL-1",
       observacao: "Retorno parcial",
@@ -228,7 +227,6 @@ describe("caixa - fluxo operacional completo (entrada/despesa/retirada/transfere
     // D1: acima do saldo restante o servidor recusa — sem este teto, o excedente virava saldo
     // negativo e o fechamento gravava quebra falsa no nome do operador.
     const acimaDoSaldo = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 61,
       lacre: "RET-ACIMA",
       idempotenciaChave: randomUUID()

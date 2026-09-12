@@ -130,7 +130,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-repeticao", "2026-06-01T08:00", 300);
     const chave = randomUUID();
     const entrega = {
-      tipo: "retorno",
       valor: 100,
       lacre: "IDEM-REP-1",
       observacao: "Primeira",
@@ -164,7 +163,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   it("retry com o mesmo lacre nao e confundido com lacre reutilizado", async () => {
     const { caixaId } = await abrirCaixaComSaldo("idem-lacre", "2026-06-02T08:00", 150);
     const chave = randomUUID();
-    const entrega = { tipo: "retorno", valor: 50, lacre: "IDEM-LACRE-1", idempotenciaChave: chave };
+    const entrega = { valor: 50, lacre: "IDEM-LACRE-1", idempotenciaChave: chave };
 
     expect((await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega)).statusCode).toBe(200);
     const retry = await post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega);
@@ -249,7 +248,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     const chave = randomUUID();
 
     const resposta = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 30,
       idempotenciaChave: chave
     });
@@ -303,7 +301,7 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   // responde 200. Com INSERT cru os dois teriam sucesso (a trava sozinha nao distingue retry).
   it("duas entregas SIMULTANEAS com a mesma chave criam um movimento so", async () => {
     const { caixaId } = await abrirCaixaComSaldo("b2-corrida", "2026-06-16T08:00", 300);
-    const entrega = { tipo: "retorno", valor: 100, idempotenciaChave: randomUUID() };
+    const entrega = { valor: 100, idempotenciaChave: randomUUID() };
 
     const respostas = await Promise.all([
       post(`/api/caixa/${caixaId}/transferencia-cofre`, entrega),
@@ -357,7 +355,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     const { caixaId } = await abrirCaixaComSaldo("cofre-confirmacao", "2026-06-14T08:00", 120);
 
     const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 120,
       lacre: "CONF-COFRE-1",
       idempotenciaChave: randomUUID()
@@ -425,7 +422,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   it("retry da MESMA chave depois de o cofre confirmar continua 200, e nao duplica", async () => {
     const { caixaId } = await abrirCaixaComSaldo("b2-retry-pos-conferencia", "2026-07-15T08:00", 80);
     const entrega = {
-      tipo: "retorno",
       valor: 80,
       lacre: "B2-POS-CONF-1",
       idempotenciaChave: randomUUID()
@@ -461,7 +457,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
     await executarSql("delete from contas_usuarios where conta_id = $1", [idsTeste.contaCofre]);
     try {
       const avulsa = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-        tipo: "retorno",
         valor: 10,
         idempotenciaChave: randomUUID()
       });
@@ -546,7 +541,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   it("movimento sem lacre pode ser confirmado sem inventar um", async () => {
     const { caixaId } = await abrirCaixaComSaldo("conf-sem-lacre", "2026-06-23T08:00", 60);
     const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 60,
       idempotenciaChave: randomUUID()
     });
@@ -568,7 +562,6 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   it("lacre divergente na conferencia mantem o movimento pendente", async () => {
     const { caixaId } = await abrirCaixaComSaldo("conf-lacre-divergente", "2026-06-24T08:00", 70);
     const entrega = await post(`/api/caixa/${caixaId}/transferencia-cofre`, {
-      tipo: "retorno",
       valor: 70,
       lacre: "CONF-DIV-1",
       idempotenciaChave: randomUUID()

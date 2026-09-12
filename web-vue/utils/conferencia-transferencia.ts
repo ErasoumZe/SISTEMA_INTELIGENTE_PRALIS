@@ -48,7 +48,7 @@ export type PayloadConfirmacao = {
   valorRecebido?: number;
 };
 
-// Decisao 5, com o recorte que importa: o valor so e obrigatorio no fluxo Caixa -> Cofre.
+// Decisao 5/R-187: o valor so e obrigatorio no fluxo de Transferencia de retorno do Caixa.
 //
 // Na transferencia GENERICA o campo continua opcional, e vazio significa "nao informei" — nao
 // "recebi zero". Mandar 0 ali mudaria o comportamento vigente: o servidor entenderia divergencia
@@ -64,7 +64,7 @@ export function montarPayloadConfirmacao(
     nLacreDoc: lacreOuNulo(campos.lacre)
   };
   const informou = valorConferenciaValido(campos.valorRecebido);
-  // No Caixa -> Cofre a tela ja bloqueia o envio sem valor valido, entao aqui ele sempre existe.
+  // No retorno do Caixa a tela ja bloqueia o envio sem valor valido, entao aqui ele sempre existe.
   if (!ehCaixaParaCofre && !informou) return base;
   return { ...base, valorRecebido: Number(campos.valorRecebido) };
 }
@@ -95,11 +95,11 @@ export type PayloadRecusa = PayloadConfirmacao & {
   sobraConfirmada?: boolean;
 };
 
-// Decisao 8 + R-183: a recusa exige motivo e SO existe no fluxo Caixa -> Cofre (na generica a rota
+// Decisao 8 + R-183/R-187: a recusa exige motivo e SO existe no retorno do Caixa (na generica a rota
 // responde 404). Ela tem DOIS desfechos, e a diferenca e quem paga:
 //
 //  - sem `encerrar`: registra a tentativa e o movimento segue `pendente`, para reconferir depois;
-//  - com `encerrar`: e o DESFECHO — o cofre credita o contado, a falta vira quebra e o caixa
+//  - com `encerrar`: e o DESFECHO — a conta destino credita o contado, a falta vira quebra e o caixa
 //    destrava. Sem esta flag chegar ao servidor, a rota existe e o caixa fica travado do mesmo
 //    jeito, que era o estado que a Fatia 2 existe para eliminar.
 //

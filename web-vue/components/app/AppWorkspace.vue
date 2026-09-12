@@ -4,6 +4,7 @@ import {
   deCentavos,
   // Mesma regra que o servidor usa para decidir quem e administrador total. Importada, nunca copiada.
   ehAdministradorTotal,
+  podeLancarSemCaixa,
   paraCentavos,
   somarCentavos,
   valorTotalCentavos,
@@ -294,6 +295,11 @@ const {
 const podeConfigurarTema = computed(() => temPermissao("aparencia_editar"));
 // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
 const podeUsarRecorrencia = computed(() => temPermissao("lancamentos_recorrencia_criar"));
+const podeCancelarPlanejamentoRetorno = computed(() => {
+  const perfil = sessao.value?.perfil;
+  return Boolean(perfil && podeLancarSemCaixa(perfil) && temPermissao("transferencias_criar"));
+});
+const podePlanejarRetorno = computed(() => podeCancelarPlanejamentoRetorno.value);
 // R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
 //
@@ -1325,6 +1331,7 @@ async function salvarOperacao() {
     // Montagem do corpo, pre-validacao e a decisao POST vs PUT vivem em `utils/lancamento-acoes`,
     // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
     // discriminacao, que dependem do DOM e do estado da tela.
+    const possuiRetornosPlanejados = entidadeNova.value === "transferencia" && form.value.retornosPlanejados.length > 0;
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
@@ -1344,12 +1351,16 @@ async function salvarOperacao() {
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
       if (indice >= 0) operacoes.value.splice(indice, 1, { ...operacoes.value[indice], ...linhaAtualizada });
-    } else {
+    } else if (!possuiRetornosPlanejados) {
       operacoes.value.unshift(linhaAtualizada);
     }
     modalOperacaoAberto.value = false;
     notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
+    // O POST devolve o pai, mas as linhas planejadas nascem junto no servidor. Um `unshift` local
+    // deixaria as filhas invisíveis e o pai editável até o próximo refresh; a lista oficial é a
+    // única fonte capaz de trazer os marcadores das duas pontas do conjunto.
+    if (possuiRetornosPlanejados) await carregarDadosTela(telaAtiva.value, empresaId.value);
     return { id: operacaoSalva.id };
   } catch (error) {
     if (error instanceof ErroApiCliente && error.status === 422 && error.details && typeof error.details === "object") {
@@ -1593,20 +1604,25 @@ watch(
 
 // Acoes de caixa: orquestracao extraida para utils/caixa-acoes.ts (factory testavel). O componente
 // injeta as dependencias reais (API, refs reativos, callbacks); a logica de cada acao vive na factory.
-const { abrirCaixaOperacional, retornarSaldoOperacional, fecharCaixaOperacional, executarPlanejamentoRetorno } =
-  criarAcoesCaixa({
-    api: { post: apiPost },
-    empresaId: () => empresaId.value,
-    telaAtiva: () => telaAtiva.value,
-    setSalvando: (valor) => {
-      caixaSalvando.value = valor;
-    },
-    carregarStatusCaixa,
-    carregarDadosTela,
-    notificar,
-    mensagemErro,
-    confirmar: confirmarAcao
-  });
+const {
+  abrirCaixaOperacional,
+  retornarSaldoOperacional,
+  fecharCaixaOperacional,
+  executarPlanejamentoRetorno,
+  cancelarPlanejamentoRetorno
+} = criarAcoesCaixa({
+  api: { post: apiPost },
+  empresaId: () => empresaId.value,
+  telaAtiva: () => telaAtiva.value,
+  setSalvando: (valor) => {
+    caixaSalvando.value = valor;
+  },
+  carregarStatusCaixa,
+  carregarDadosTela,
+  notificar,
+  mensagemErro,
+  confirmar: confirmarAcao
+});
 
 function abrirImportacao(tela = telaAtiva.value) {
   copiaModo.value = "importar";
@@ -1743,6 +1759,7 @@ provide(WORKSPACE_CONTEXT, {
   erroDiscriminacaoCampo,
   salvandoOperacao,
   salvarOperacao,
+  podePlanejarRetorno,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
   contaTravadaDoCaixaNota,
@@ -1915,6 +1932,8 @@ const pageContext = computed(() => ({
   abrirCaixaOperacional,
   retornarSaldoOperacional,
   executarPlanejamentoRetorno,
+  cancelarPlanejamentoRetorno,
+  podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
   notificacoes: notificacoes.value,
   verificarNotificacao,

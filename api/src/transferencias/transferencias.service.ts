@@ -53,7 +53,9 @@ import {
   criarTransferenciaRepository,
   criarRetornosPlanejadosRepository,
   contaEhPdvDaEmpresaRepository,
+  contaPertencePdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
+  transferenciaPossuiRetornosPlanejadosRepository,
   efetivarTransferenciaAgendadaRepository,
   listarAgendadasVencidasRepository,
   ehConfirmadorElegivelRepository,
@@ -149,6 +151,9 @@ export async function criarTransferencia(
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
+  if (dados.retornosPlanejados.length && !podeLancarSemCaixa(perfil)) {
+    throw new Error("Planejamento de retorno e exclusivo da retaguarda");
+  }
   try {
     return await executarEmTransacao(async (tx) => {
       for (const lacre of [dados.nLacreDoc!, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)]) {
@@ -176,6 +181,11 @@ export async function criarTransferencia(
         }
         if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
           throw new Error("Planejamento de retorno exige conta de PDV como destino inicial");
+        }
+        for (const plano of dados.retornosPlanejados) {
+          if (await contaPertencePdvDaEmpresaRepository(dados.empresaId, plano.contaDestinoId, tx)) {
+            throw new Error("Destino de retorno planejado nao pode ser conta de PDV");
+          }
         }
       }
 
@@ -227,7 +237,7 @@ export async function criarTransferencia(
         resolverObservacaoDoLancamento(dados),
         computar,
         perfil.usuarioId,
-        envolveContaPdv ? caixa.id : null,
+        dados.retornosPlanejados.length ? null : envolveContaPdv ? caixa.id : null,
         tx
       );
       await criarRetornosPlanejadosRepository(
@@ -265,6 +275,9 @@ export async function confirmarTransferencia(
     const existente = await buscarTransferenciaDetalheRepository(transferenciaId, tx);
     if (!existente || !podeAcessarEmpresa(perfil, existente.empresaId)) throw new Error("Registro nao encontrado");
     if (existente.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
+    if (await transferenciaPossuiRetornosPlanejadosRepository(transferenciaId, tx)) {
+      throw new Error("Transferencia com retorno planejado deve ser recebida pela abertura do Caixa usando o lacre");
+    }
 
     // Q4 (Jose, 11/08/2026): confirmacao que ALTERARIA entrada ou saida de caixa ja fechado e
     // bloqueada imediatamente; fluxo auditado futuro e outra OS. Mecanica: confirmar muda

@@ -11,6 +11,7 @@ function entrega(parcial: Partial<EntregaCofrePendente> = {}): EntregaCofrePende
     tipo: "sangria",
     valor: 200,
     lacre: "LAC-9",
+    contaDestinoNome: "Cofre Integracao",
     criadoEm: "2026-08-01T10:00:00.000Z",
     valorContado: null,
     recusaId: null,
@@ -38,7 +39,7 @@ describe("EntregasAguardandoConferencia", () => {
     expect(linhas[1]?.text()).toContain("LAC-10");
   });
 
-  it("soma o total em transito — e o numero que o operador precisa cobrar do cofre", () => {
+  it("soma o total em transito — e o numero que o operador precisa cobrar no destino", () => {
     const tela = mount(EntregasAguardandoConferencia, {
       props: { entregas: [entrega({ valor: 200 }), entrega({ id: "e-2", valor: 55.5 })] }
     });
@@ -50,9 +51,8 @@ describe("EntregasAguardandoConferencia", () => {
     expect(tela.get('[data-teste="entrega-pendente"]').text()).toContain("sem lacre");
   });
 
-  // R-183 · a entrega que o cofre JA CONTOU e outra situacao: o fechamento continua travado, mas a
-  // saida existe e esta no cofre. O numero contado e o que diz o tamanho da diferenca.
-  it("mostra o valor contado quando o cofre ja conferiu e ainda nao encerrou", () => {
+  // R-183 · a entrega que o destino JA CONTOU e outra situacao: o fechamento continua travado.
+  it("mostra o valor contado quando o destino ja conferiu e ainda nao encerrou", () => {
     const tela = mount(EntregasAguardandoConferencia, {
       props: { entregas: [entrega({ valor: 200, valorContado: 180, recusaId: "r-1" })] }
     });
@@ -60,10 +60,10 @@ describe("EntregasAguardandoConferencia", () => {
     expect(tela.get(".transito-explica").text()).toMatch(/ainda n[aã]o encerrou/iu);
   });
 
-  it("sem contagem, o texto continua mandando conferir no cofre", () => {
+  it("sem contagem, o texto continua mandando conferir no destino", () => {
     const tela = mount(EntregasAguardandoConferencia, { props: { entregas: [entrega()] } });
-    expect(tela.get(".transito-explica").text()).toMatch(/at[eé] o cofre conferir/iu);
-    expect(tela.get('[data-teste="entrega-pendente"]').text()).not.toContain("cofre contou");
+    expect(tela.get(".transito-explica").text()).toMatch(/conta destino conferir/iu);
+    expect(tela.get('[data-teste="entrega-pendente"]').text()).not.toContain("destino contou");
   });
 
   it("e um grupo rotulado: leitor de tela chega ao bloco pelo titulo, nao por um card anonimo", () => {
@@ -71,6 +71,6 @@ describe("EntregasAguardandoConferencia", () => {
     const bloco = tela.get('[data-teste="entregas-aguardando-conferencia"]');
     expect(bloco.attributes("role")).toBe("group");
     expect(bloco.attributes("aria-labelledby")).toBe("transito-titulo");
-    expect(tela.get("#transito-titulo").text()).toMatch(/confer[eê]ncia no cofre/iu);
+    expect(tela.get("#transito-titulo").text()).toMatch(/confer[eê]ncia no destino/iu);
   });
 });

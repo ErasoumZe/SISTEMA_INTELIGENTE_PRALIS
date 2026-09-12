@@ -351,7 +351,7 @@ export async function listarUsuariosTesourariaRepository(empresaId: string, db: 
 }
 
 // --- Abertura por LACRE (R-040) e retorno ao cofre ---------------------------------------------
-// Conta contabil do cofre da empresa: DESTINO do retorno/sangria do caixa (R-008b). Regra 5:
+// Conta contabil do cofre da empresa: destino padrao da Transferencia de retorno do Caixa (R-008b). Regra 5:
 // mapeamento explicito; null quando a empresa nao configurou (o retorno falha com mensagem clara).
 export async function buscarContaCofreEmpresaRepository(
   empresaId: string,
@@ -456,7 +456,7 @@ export async function confirmarTransferenciaAberturaRepository(
 // teto do retorno e a guarda do fechamento conseguem ser reavaliados sobre o saldo REAL.
 // Sem join de proposito: FOR UPDATE nao pode ser aplicado ao lado nulavel de um outer join.
 
-// R-185: a abertura que confirma a ida tambem vincula todas as sangrias planejadas. A condicao
+// R-185/R-187: a abertura que confirma a ida tambem vincula todos os retornos planejados. A condicao
 // `caixa_id is null` impede que outro lacre/turno se aproprie delas numa corrida.
 export async function vincularPlanejamentosDaTransferenciaAoCaixaRepository(
   input: { transferenciaOrigemId: string; caixaId: string; empresaId: string; agora: Date },
@@ -527,21 +527,31 @@ export async function travarCaixaCompartilhadoRepository(
   return linha ?? null;
 }
 
-// --- Retorno / sangria (M2, R3/R4/R6) ---------------------------------------------------------
+// --- Transferencia de retorno (M2, R3/R4/R6/R-187) --------------------------------------------
 // Proxima ordem (1a/2a/3a/4a) das transferencias de um caixa por tipo (R6). App-managed.
 export async function proximaOrdemTransferenciaRepository(
   caixaId: string,
   tipo: string,
   db: ExecutorBanco = banco
 ): Promise<number> {
+  const tiposDaMesmaSequencia = tipo === "retorno" || tipo === "sangria" ? ["sangria", "retorno"] : [tipo];
   const [linha] = await db
     .select({ total: count() })
     .from(transferencias)
-    .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.tipo, tipo)));
+    .where(
+      and(
+        eq(transferencias.caixaId, caixaId),
+        inArray(transferencias.tipo, tiposDaMesmaSequencia),
+        // Planejamento ainda nao executado nao ganhou ordem operacional. Cancelamento tambem nao
+        // consome ordinal: a sequencia representa somente dinheiro que efetivamente saiu do Caixa.
+        ne(transferencias.status, "agendada"),
+        ne(transferencias.status, "cancelada")
+      )
+    );
   return Number(linha?.total ?? 0) + 1;
 }
 
-// Lacre do RETORNO/sangria (R-026: opcional; R-027: numero novo a cada movimento). Nasce nao
+// Lacre da Transferencia de retorno avulsa/final (R-026: opcional; R-027: numero novo). Nasce nao
 // rompido — a volta so e "recebida" quando a tesouraria confere o dinheiro no cofre.
 export async function criarLacreRetornoRepository(
   input: { empresaId: string; numero: string; transferenciaId: string },
@@ -595,7 +605,7 @@ export async function buscarTransferenciaPorIdempotenciaRepository(
   return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
 }
 
-// Transferencia caixa -> cofre (retorno no fechamento / sangria no turno — R4, mesma entidade).
+// Transferencia de retorno avulsa/final do Caixa para o Cofre.
 export async function criarTransferenciaCofreRepository(
   input: {
     empresaId: string;
@@ -630,10 +640,10 @@ export async function criarTransferenciaCofreRepository(
       nLacreDoc: input.nLacreDoc,
       tipo: "retorno",
       ordem: input.ordem,
-      // D2/D3/R-179 · a entrega ao cofre nasce SEMPRE 'pendente': o dinheiro ja saiu do caixa
+      // D2/D3/R-187 · o retorno avulso/final nasce SEMPRE 'pendente': o dinheiro ja saiu do caixa
       // (`transferenciaContaComoSaida` conta 'pendente'), mas so entra no cofre quando quem opera
-      // a conta de destino conferir (R-028/R-036). Nao existe mais o ramo 'agendada' — ele era da
-      // ordem programada pela retaguarda, removida na Fatia 3.
+      // a conta de destino conferir (R-028/R-036). O planejamento R-185 usa escritor proprio e
+      // somente ele nasce `agendada`.
       status: "pendente",
       idempotenciaChave: input.idempotenciaChave,
       criadoPor: input.criadoPor
@@ -699,7 +709,8 @@ export async function buscarPlanejamentoRetornoRepository(
       status: transferencias.status,
       nLacreDoc: transferencias.nLacreDoc,
       contaDestinoId: transferencias.contaDestinoId,
-      criadoPor: transferencias.criadoPor
+      criadoPor: transferencias.criadoPor,
+      tempoConfirmacao: transferencias.tempoConfirmacao
     })
     .from(transferencias)
     .where(and(eq(transferencias.id, planejamentoId), eq(transferencias.caixaId, caixaId), ehPlanejamentoDeRetorno))
@@ -707,8 +718,30 @@ export async function buscarPlanejamentoRetornoRepository(
   return linha ? { ...linha, valorCentavos: paraCentavos(linha.valorOriginal) } : null;
 }
 
+export async function buscarPlanejamentoRetornoPorIdRepository(planejamentoId: string, db: ExecutorBanco = banco) {
+  const [linha] = await db
+    .select({
+      id: transferencias.id,
+      empresaId: transferencias.empresaId,
+      caixaId: transferencias.caixaId,
+      status: transferencias.status
+    })
+    .from(transferencias)
+    .where(and(eq(transferencias.id, planejamentoId), ehPlanejamentoDeRetorno))
+    .limit(1);
+  return linha ?? null;
+}
+
 export async function executarPlanejamentoRetornoRepository(
-  input: { planejamentoId: string; caixaId: string; ordem: number; dataTransferencia: string; executadoPor: string },
+  input: {
+    planejamentoId: string;
+    caixaId: string;
+    ordem: number;
+    dataTransferencia: string;
+    prazoConfirmacaoEm: Date;
+    executadoPor: string;
+    agora: Date;
+  },
   db: ExecutorBanco = banco
 ) {
   const [linha] = await db
@@ -717,9 +750,10 @@ export async function executarPlanejamentoRetornoRepository(
       status: "pendente",
       ordem: input.ordem,
       dataTransferencia: input.dataTransferencia,
+      prazoConfirmacaoEm: input.prazoConfirmacaoEm,
       executadoPor: input.executadoPor,
-      executadoEm: new Date(),
-      atualizadoEm: new Date()
+      executadoEm: input.agora,
+      atualizadoEm: input.agora
     })
     .where(
       and(
@@ -734,7 +768,7 @@ export async function executarPlanejamentoRetornoRepository(
 }
 
 export async function cancelarPlanejamentoRetornoRepository(
-  input: { planejamentoId: string; caixaId: string; canceladoPor: string; motivo: string },
+  input: { planejamentoId: string; canceladoPor: string; motivo: string },
   db: ExecutorBanco = banco
 ) {
   const [linha] = await db
@@ -747,12 +781,7 @@ export async function cancelarPlanejamentoRetornoRepository(
       atualizadoEm: new Date()
     })
     .where(
-      and(
-        eq(transferencias.id, input.planejamentoId),
-        eq(transferencias.caixaId, input.caixaId),
-        eq(transferencias.status, "agendada"),
-        ehPlanejamentoDeRetorno
-      )
+      and(eq(transferencias.id, input.planejamentoId), eq(transferencias.status, "agendada"), ehPlanejamentoDeRetorno)
     )
     .returning({ id: transferencias.id });
   return linha ?? null;
@@ -830,7 +859,10 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
           // usava 'cancelado' (masculino, que so existe em vendas/despesas/retiradas/mercadorias) e
           // por isso nunca casava — inocuo enquanto nada era cancelado, e um vazamento assim que o
           // cancelamento passou a existir de verdade.
-          ne(transferencias.status, "cancelada")
+          ne(transferencias.status, "cancelada"),
+          // R-185: a linha planejada e apenas intencao. Ela so entra nesta aba quando a execucao
+          // atomica muda `agendada` para `pendente` e o dinheiro realmente sai do Caixa.
+          ne(transferencias.status, "agendada")
         )
       )
       // Cronologico: a "aba" numera 1a/2a/3a por ordem de acontecimento (abertura sem ordem entra 1a).
@@ -936,7 +968,9 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
           eq(transferencias.caixaId, caixaId),
           eq(transferencias.computar, true),
           // 'cancelada' (feminino) — ver a nota em listarTransferenciasCaixaRepository.
-          ne(transferencias.status, "cancelada")
+          ne(transferencias.status, "cancelada"),
+          // O detalhe segue a mesma fronteira do resumo: planejamento `agendada` nao e lancamento.
+          ne(transferencias.status, "agendada")
         )
       )
       .orderBy(desc(transferencias.dataReferencia)),
