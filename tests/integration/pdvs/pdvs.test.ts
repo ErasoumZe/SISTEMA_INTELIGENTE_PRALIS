@@ -8,10 +8,12 @@ import { consultarUm, json } from "../../setup/integracao.js";
 describe("pdvs integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let cookieTesouraria: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
+    cookieTesouraria = await cookieSessao(contexto.app, "tesouraria");
   }, 120_000);
 
   afterAll(async () => {
@@ -45,5 +47,15 @@ describe("pdvs integration", () => {
       corpo.data.id
     ]);
     expect(pdv).toMatchObject({ nome: "PDV criado por integracao", conta_id: idsTeste.contaBanco });
+  });
+
+  it("Deve_ListarPdvs_Quando_TesourariaPodeCriarTransferencia", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/pdvs?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieTesouraria }
+    });
+    assertOk(resposta);
+    expect(JSON.stringify(resposta.json())).toContain("PDV Integracao");
   });
 });
