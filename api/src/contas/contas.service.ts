@@ -5,6 +5,8 @@ import {
   type ImportarContasPayload as ImportarPayload
 } from "@padaria/shared/contas";
 import { empresasPermitidas, filtrarPorEmpresas, type PerfilComEmpresa } from "../auth/empresa.js";
+import { executarEmTransacao } from "../banco/conexao.js";
+import { exigirContaAlvoDaEmpresa, exigirUsuarioDaEmpresa } from "../contas-usuarios/contas-usuarios.validacao.js";
 import { validarExportacaoParaEmpresa, validarImportacaoEntreEmpresas } from "../utils.js";
 import {
   copiarContasRepository,
@@ -26,12 +28,25 @@ export async function listarContasComSaldo(escopoDados: string[]) {
 
 export async function salvarConta(id: string | null, body: DadosExternos) {
   const dados = contaPayloadSchema.parse(body);
-  return salvarContaRepository({
-    ...(id ? { id } : {}),
-    empresaId: dados.empresaId,
-    nome: dados.nome.trim(),
-    ...(dados.saldoInicial === undefined ? {} : { saldoInicial: dados.saldoInicial }),
-    ...(dados.usuariosIds === undefined ? {} : { usuariosIds: dados.usuariosIds })
+  return executarEmTransacao(async (tx) => {
+    if (id) await exigirContaAlvoDaEmpresa(id, dados.empresaId, tx);
+
+    if (dados.usuariosIds !== undefined) {
+      for (const usuarioId of new Set(dados.usuariosIds)) {
+        await exigirUsuarioDaEmpresa(usuarioId, dados.empresaId, tx);
+      }
+    }
+
+    return salvarContaRepository(
+      {
+        ...(id ? { id } : {}),
+        empresaId: dados.empresaId,
+        nome: dados.nome.trim(),
+        ...(dados.saldoInicial === undefined ? {} : { saldoInicial: dados.saldoInicial }),
+        ...(dados.usuariosIds === undefined ? {} : { usuariosIds: dados.usuariosIds })
+      },
+      tx
+    );
   });
 }
 

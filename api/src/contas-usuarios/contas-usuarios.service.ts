@@ -1,8 +1,7 @@
 import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
-import { buscarContaEmpresaRepository } from "../contas/contas.repository.js";
+import { executarEmTransacao } from "../banco/conexao.js";
 import { listarContas } from "../contas/contas.service.js";
-import { listarEmpresasUsuarioRepository } from "../usuarios/usuarios.repository.js";
 import {
   buscarContaUsuarioRepository,
   criarContaUsuarioRepository,
@@ -11,6 +10,7 @@ import {
   listarContasDoUsuarioRepository,
   listarContasUsuariosRepository
 } from "./contas-usuarios.repository.js";
+import { exigirContaDaEmpresa, exigirUsuarioDaEmpresa } from "./contas-usuarios.validacao.js";
 
 // Perfil minimo para as decisoes de escopo (usuarioId + role). O role "usuario_admin" e o unico
 // com short-circuit (ve todas as contas), espelhando exatamente a regra de permissoes.
@@ -46,20 +46,16 @@ export async function listarContasUsuarios(filtro: {
 export async function criarContaUsuario(payload: ContaUsuarioPayload) {
   // A conta tem de existir e pertencer a MESMA empresa do vinculo — evita ligar usuario a conta de
   // outra empresa (o FK garante existencia, nao a empresa).
-  const conta = await buscarContaEmpresaRepository(payload.contaId);
-  if (!conta) throw naoEncontrado("Conta nao encontrada", "CONTA_NAO_ENCONTRADA");
-  if (conta.empresaId !== payload.empresaId) throw erroValidacao("Conta de outra empresa", "CONTA_EMPRESA_DIVERGENTE");
+  return executarEmTransacao(async (tx) => {
+    await exigirContaDaEmpresa(payload.contaId, payload.empresaId, tx);
+    await exigirUsuarioDaEmpresa(payload.usuarioId, payload.empresaId, tx);
 
-  const empresasDoUsuario = await listarEmpresasUsuarioRepository(payload.usuarioId);
-  if (!empresasDoUsuario.some((empresa) => empresa.empresaId === payload.empresaId)) {
-    throw erroValidacao("Usuario de outra empresa", "USUARIO_EMPRESA_DIVERGENTE");
-  }
+    const existente = await existeVinculoRepository(payload.contaId, payload.usuarioId, tx);
+    if (existente) throw erroValidacao("Usuario ja vinculado a esta conta", "VINCULO_DUPLICADO");
 
-  const existente = await existeVinculoRepository(payload.contaId, payload.usuarioId);
-  if (existente) throw erroValidacao("Usuario ja vinculado a esta conta", "VINCULO_DUPLICADO");
-
-  const criado = await criarContaUsuarioRepository(payload);
-  return { id: criado?.id ?? "contas-usuarios", ...payload };
+    const criado = await criarContaUsuarioRepository(payload, tx);
+    return { id: criado?.id ?? "contas-usuarios", ...payload };
+  });
 }
 
 // Retorna a empresa do vinculo para o controller validar o escopo antes de excluir; null se nao existe.

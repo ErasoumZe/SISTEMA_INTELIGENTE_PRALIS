@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk, assertProblem } from "../../setup/asserts.js";
@@ -9,15 +10,41 @@ describe("contas integration", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let cookieMultiempresa: string;
+  const contaAtaqueEmpresaAId = randomUUID();
+  const contaVitimaEmpresaBId = randomUUID();
+  const usuarioEmpresaBId = `usuario-conta-cross-${randomUUID()}`;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
     cookieAdmin = await cookieSessao(contexto.app, "admin");
     cookieMultiempresa = await cookieSessao(contexto.app, "multiempresa");
+    await executarSql(
+      `insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role)
+       values ($1, $2, 'Usuario Conta Empresa B', $3, 'usuario_comum')`,
+      [usuarioEmpresaBId, idsTeste.empresaB, `${usuarioEmpresaBId}@teste.local`]
+    );
+    await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+      usuarioEmpresaBId,
+      idsTeste.empresaB
+    ]);
+    await executarSql("insert into contas (id, empresa_id, nome) values ($1, $2, 'Conta vitima B')", [
+      contaVitimaEmpresaBId,
+      idsTeste.empresaB
+    ]);
+    await executarSql("insert into contas_usuarios (empresa_id, conta_id, usuario_id) values ($1, $2, $3)", [
+      idsTeste.empresaB,
+      contaVitimaEmpresaBId,
+      usuarioEmpresaBId
+    ]);
   }, 120_000);
 
   afterAll(async () => {
-    await contexto.fechar();
+    try {
+      await executarSql("delete from contas where id in ($1, $2)", [contaAtaqueEmpresaAId, contaVitimaEmpresaBId]);
+      await executarSql("delete from perfis_usuarios where usuario_id = $1", [usuarioEmpresaBId]);
+    } finally {
+      await contexto.fechar();
+    }
   });
 
   it("Deve_ListarECriarConta_Quando_EmpresaPermitida", async () => {
@@ -60,6 +87,77 @@ describe("contas integration", () => {
 
     assertProblem(listar, 403, "FORBIDDEN_COMPANY");
     assertProblem(criar, 403, "FORBIDDEN_COMPANY");
+  });
+
+  it("Deve_RecusarSemCriar_Quando_PostDaEmpresaARecebeUsuarioExclusivoDaEmpresaB", async () => {
+    const nome = `Conta cross-tenant ${randomUUID()}`;
+    const resposta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome,
+        usuariosIds: [usuarioEmpresaBId]
+      }
+    });
+
+    assertProblem(resposta, 400, "USUARIO_EMPRESA_DIVERGENTE");
+    await expect(consultarUm("select id from contas where nome = $1", [nome])).resolves.toBeNull();
+  });
+
+  it("Deve_RecusarSemAlterar_Quando_PutDaContaARecebeUsuarioExclusivoDaEmpresaB", async () => {
+    await executarSql("insert into contas (id, empresa_id, nome) values ($1, $2, 'Conta ataque A')", [
+      contaAtaqueEmpresaAId,
+      idsTeste.empresaA
+    ]);
+
+    try {
+      const resposta = await contexto.app.inject({
+        method: "PUT",
+        url: `/api/contas/${contaAtaqueEmpresaAId}`,
+        headers: { cookie: cookieAdmin },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          nome: "Conta ataque A alterada",
+          usuariosIds: [usuarioEmpresaBId]
+        }
+      });
+
+      assertProblem(resposta, 400, "USUARIO_EMPRESA_DIVERGENTE");
+      await expect(
+        consultarUm<{ nome: string }>("select nome from contas where id = $1", [contaAtaqueEmpresaAId])
+      ).resolves.toMatchObject({ nome: "Conta ataque A" });
+      await expect(
+        consultarUm("select id from contas_usuarios where conta_id = $1", [contaAtaqueEmpresaAId])
+      ).resolves.toBeNull();
+    } finally {
+      await executarSql("delete from contas where id = $1", [contaAtaqueEmpresaAId]);
+    }
+  });
+
+  it("Deve_Retornar404SemApagarVinculo_Quando_PutDisfarcaContaDaEmpresaBComoEmpresaA", async () => {
+    const resposta = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/contas/${contaVitimaEmpresaBId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId: idsTeste.empresaA,
+        nome: "Conta vitima adulterada",
+        usuariosIds: []
+      }
+    });
+
+    assertProblem(resposta, 404, "CONTA_NAO_ENCONTRADA");
+    await expect(
+      consultarUm<{ empresa_id: string; usuario_id: string }>(
+        "select empresa_id, usuario_id from contas_usuarios where conta_id = $1",
+        [contaVitimaEmpresaBId]
+      )
+    ).resolves.toMatchObject({ empresa_id: idsTeste.empresaB, usuario_id: usuarioEmpresaBId });
+    await expect(
+      consultarUm<{ nome: string }>("select nome from contas where id = $1", [contaVitimaEmpresaBId])
+    ).resolves.toMatchObject({ nome: "Conta vitima B" });
   });
 
   it("Deve_Retornar403_Quando_UsuarioNaoTemPermissaoDeListagem", async () => {
