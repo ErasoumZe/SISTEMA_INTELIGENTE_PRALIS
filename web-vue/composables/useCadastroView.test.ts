@@ -9,13 +9,16 @@ import type { Opcao, PermissoesPaginadas } from "~/types/padaria";
 // `saldoAtual` e a tabela procurava `saldo_atual` — a chave que ela DERIVA do rotulo "Saldo atual".
 // Nenhum dos dois lados errava sozinho: a divergencia so aparece com os dois no mesmo teste, que e
 // por isso que a derivacao virou `utils/tabela-cadastro`.
-function vista(contas: Opcao[]) {
+function vista(
+  contas: Opcao[],
+  permissoesPagina: PermissoesPaginadas = { itens: [], total: 0, page: 1, pageSize: 10 }
+) {
   const opcoes = { ...opcoesVazias(), contas };
   return useCadastroView({
     opcoes,
     opcoesEmpresa: opcoes,
     empresas: [],
-    permissoesPagina: { itens: [], total: 0, page: 1, pageSize: 10 } satisfies PermissoesPaginadas,
+    permissoesPagina,
     formCadastro: ref(formCadastroVazio())
   });
 }
@@ -78,5 +81,64 @@ describe("useCadastroView · tela de Contas (#172)", () => {
   it("a chave gravada na linha e exatamente a que a tabela deriva do rotulo", () => {
     const { dadosCadastro } = vista([CONTA_COFRE]);
     expect(Object.keys(dadosCadastro("contas")[0]!)).toContain(chaveColuna("Saldo atual"));
+  });
+});
+
+describe("useCadastroView · usuários e acessos", () => {
+  it("mostra o perfil com nome humano e inclui setor na lista de usuarios", () => {
+    const opcoes = opcoesVazias();
+    opcoes.usuarios = [
+      {
+        id: "u-1",
+        usuarioId: "u-1",
+        nome: "Peterson Teste",
+        email: "peterson.teste@local",
+        role: "usuario_comum",
+        descricao: "Tesouraria",
+        cargos: ["Tesouraria"]
+      }
+    ];
+    const cadastro = useCadastroView({
+      opcoes,
+      opcoesEmpresa: opcoes,
+      empresas: [],
+      permissoesPagina: { itens: [], total: 0, page: 1, pageSize: 10 },
+      formCadastro: ref(formCadastroVazio())
+    });
+
+    expect(cadastro.colunasCadastro("usuarios")).toEqual(["Nome", "Email", "Perfil", "Setor", "Cargos"]);
+    expect(cadastro.dadosCadastro("usuarios")[0]).toMatchObject({
+      perfil: "Usuário comum",
+      setor: "Tesouraria",
+      cargos: "Tesouraria"
+    });
+  });
+
+  it("remove usuario da tela generica porque a porta individual fica em Usuarios", () => {
+    const permissoesPagina: PermissoesPaginadas = {
+      itens: [
+        {
+          id: "cargo:c-1",
+          tipo: "cargo",
+          tipoPermissao: "cargo",
+          alvo: "Tesouraria",
+          regrasJson: '{"transferencias_visualizar":true}'
+        },
+        {
+          id: "usuario:u-1",
+          tipo: "usuario",
+          tipoPermissao: "usuario",
+          alvo: "Peterson Teste",
+          regrasJson: '{"transferencias_visualizar":true}'
+        }
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 10
+    };
+
+    expect(vista([], permissoesPagina).dadosCadastro("permissoes")).toEqual([
+      expect.objectContaining({ id: "cargo:c-1", tipoPermissao: "cargo" })
+    ]);
   });
 });

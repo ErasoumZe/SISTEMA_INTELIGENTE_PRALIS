@@ -365,16 +365,22 @@ export function temAcessoTela(permissoesUsuario: readonly Permissao[], item: Ite
 
 export type AcaoCadastro = "visualizar" | "criar" | "editar" | "excluir";
 
+function codigoEhPermissao(codigo: string): codigo is Permissao {
+  return permissoesCompartilhadas.some((permissao) => permissao === codigo);
+}
+
 // A mesma permissao que protege a API deve decidir se a acao aparece. Antes, as paginas de
 // cadastro liberavam Novo/Editar para qualquer pessoa que conseguisse abrir a listagem; o clique
 // terminava em 403 e fazia a interface prometer uma operacao que o usuario nao podia executar.
 export function podeExecutarAcaoCadastro(permissoesUsuario: readonly Permissao[], item: ItemMenu, acao: AcaoCadastro) {
   const codigosTela = [item.permissao, ...(item.permissoesAlternativas ?? [])];
-  const permissoesDaAcao = codigosTela.flatMap((codigo) => {
-    const encontrado = codigo.match(/_(visualizar|criar|editar|excluir)$/);
-    if (!encontrado) return [];
-    return [codigo.replace(/_(visualizar|criar|editar|excluir)$/, `_${acao}`)];
-  });
+  const permissoesDaAcao = codigosTela
+    .flatMap((codigo) => {
+      const encontrado = codigo.match(/_(visualizar|criar|editar|excluir)$/);
+      if (!encontrado) return [];
+      return [codigo.replace(/_(visualizar|criar|editar|excluir)$/, `_${acao}`)];
+    })
+    .filter(codigoEhPermissao);
   return temAlgumaPermissao(permissoesUsuario, permissoesDaAcao);
 }
 

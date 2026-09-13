@@ -13,6 +13,7 @@ type UsuarioResposta = {
   nome: string;
   colaboradorId: string;
   setorId: string | null;
+  setorNome: string | null;
   cargoIds: string[];
   cargos: string[];
 };
@@ -303,6 +304,7 @@ describe("metadados de usuario cross-tenant integration", () => {
       empresaIds: [idsTeste.empresaA],
       colaboradorId: "",
       setorId: null,
+      setorNome: null,
       cargoIds: [],
       cargos: []
     });
@@ -327,6 +329,7 @@ describe("metadados de usuario cross-tenant integration", () => {
       empresaIds: [idsTeste.empresaA],
       colaboradorId: idsTeste.colaboradorMultiempresa,
       setorId: idsTeste.setorA,
+      setorNome: "Loja",
       cargoIds: [idsTeste.cargoMultiempresa],
       cargos: [usuariosTeste.multiempresa.nome]
     });
@@ -366,6 +369,7 @@ describe("metadados de usuario cross-tenant integration", () => {
       empresaIds: [idsTeste.empresaA],
       colaboradorId: colaboradorSetorCruzado,
       setorId: null,
+      setorNome: null,
       cargoIds: [cargoSetorCruzado],
       cargos: [nomeCargoSetorCruzado]
     });
@@ -386,7 +390,8 @@ describe("metadados de usuario cross-tenant integration", () => {
     assertOk(resposta);
     expect(linhaDoUsuario(resposta, usuariosTeste.gerente.nome)).toMatchObject({
       colaboradorId: idsTeste.colaboradorGerente,
-      setorId: idsTeste.setorA
+      setorId: idsTeste.setorA,
+      setorNome: "Loja"
     });
   });
 
@@ -404,7 +409,8 @@ describe("metadados de usuario cross-tenant integration", () => {
     expect(linhaDoUsuario(resposta, nomeUsuarioColaboradorNaB)).toMatchObject({
       empresaIds: [idsTeste.empresaA],
       colaboradorId: "",
-      setorId: null
+      setorId: null,
+      setorNome: null
     });
     esperarNenhumMetadadoDaEmpresaB(resposta);
   });
@@ -423,7 +429,8 @@ describe("metadados de usuario cross-tenant integration", () => {
     expect(linhaDoUsuario(resposta, nomeUsuarioSemSetor)).toMatchObject({
       empresaIds: [idsTeste.empresaA],
       colaboradorId: colaboradorSemSetor,
-      setorId: null
+      setorId: null,
+      setorNome: null
     });
   });
 

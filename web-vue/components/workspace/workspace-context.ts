@@ -45,6 +45,7 @@ export type WorkspaceContext = {
   erroDiscriminacaoCampo: Ref<string | null>;
   salvandoOperacao: Ref<boolean>;
   salvarOperacao: () => Promise<{ id: string } | void>;
+  abrirOperacao: (entidade: EntidadeOperacional, operacao?: { id: string }) => Promise<void>;
   // Somente a retaguarda pode preparar retornos junto com a transferencia inicial.
   podePlanejarRetorno: ComputedRef<boolean>;
   // R-121: conta do PDV quando o usuario e operador de caixa; "" para perfis de retaguarda, que

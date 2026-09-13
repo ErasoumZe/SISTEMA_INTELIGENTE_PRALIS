@@ -21,6 +21,7 @@ export type UsuarioLinha = {
   email: string;
   colaboradorId: string;
   setorId: string | null;
+  setorNome: string | null;
   cargoIds: string[];
   cargos: string[];
   role: string;
@@ -64,6 +65,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
         id: colaboradores.id,
         usuarioId: colaboradores.usuarioId,
         setorId: colaboradores.setorId,
+        setorNome: setores.nome,
         empresaId: colaboradores.empresaId,
         // A empresa do SETOR, e nao a do colaborador. `colaboradores.setor_id` e FK simples para
         // `setores`, sem CHECK de mesma empresa, e a rota de colaboradores grava o setor sem validar
@@ -100,6 +102,7 @@ export async function listarUsuariosRepository(): Promise<UsuarioLinhaComEmpresa
       colaboradorId: colaborador?.id ?? "",
       colaboradorEmpresaId: colaborador?.empresaId ?? null,
       setorId: colaborador?.setorId ?? null,
+      setorNome: colaborador?.setorNome ?? null,
       setorEmpresaId: colaborador?.setorEmpresaId ?? null,
       cargosComEmpresa: cargosDoUsuario.map((cargo) => ({
         id: cargo.cargoId,

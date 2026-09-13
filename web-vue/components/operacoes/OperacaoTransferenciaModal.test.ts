@@ -13,7 +13,8 @@ function montarModal(podePlanejar = true, editando = false) {
     contaDestinoId: "caixa-1",
     nLacreDoc: "001"
   });
-  const salvarOperacao = vi.fn(async () => undefined);
+  const salvarOperacao = vi.fn(async () => ({ id: "transferencia-nova" }));
+  const abrirOperacao = vi.fn(async () => undefined);
   const contexto = {
     modalOperacaoAberto: ref(true),
     entidadeNova: ref("transferencia"),
@@ -31,6 +32,7 @@ function montarModal(podePlanejar = true, editando = false) {
     })),
     salvandoOperacao: ref(false),
     salvarOperacao,
+    abrirOperacao,
     podePlanejarRetorno: computed(() => podePlanejar)
   };
   const Workspace = defineComponent({
@@ -47,7 +49,7 @@ function montarModal(podePlanejar = true, editando = false) {
       }
     }
   });
-  return { wrapper, form, salvarOperacao };
+  return { wrapper, form, salvarOperacao, abrirOperacao };
 }
 
 describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
@@ -132,6 +134,37 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     );
   });
 
+  it("nao apaga agendamento ao bloquear o planejamento de retorno", async () => {
+    const { wrapper, form } = montarModal();
+    await wrapper.get('[data-teste="opcao-agendamento"]').setValue(true);
+    const agendadaPara = form.value.agendadaPara;
+
+    expect(agendadaPara).not.toBe("");
+    expect(wrapper.get('[data-teste="opcao-transferencia-retorno"]').attributes("disabled")).toBeDefined();
+    expect(wrapper.get('[data-teste="ajuda-retorno"]').text()).toBe(
+      "Transferência de retorno indisponível enquanto Agendamento estiver ativo."
+    );
+    expect(form.value.agendadaPara).toBe(agendadaPara);
+  });
+
+  it("preserva o rascunho do retorno quando a rota fica temporariamente inelegivel", async () => {
+    const { wrapper, form } = montarModal();
+    await wrapper.get('[data-teste="opcao-transferencia-retorno"]').setValue(true);
+    form.value.retornosPlanejados[0] = { valor: "300,00", nLacreDoc: "002" };
+
+    form.value.contaDestinoId = "banco-1";
+    await nextTick();
+
+    expect((wrapper.get('[data-teste="opcao-transferencia-retorno"]').element as HTMLInputElement).checked).toBe(false);
+    expect(form.value.retornosPlanejados).toEqual([]);
+
+    form.value.contaDestinoId = "caixa-1";
+    await nextTick();
+    await wrapper.get('[data-teste="opcao-transferencia-retorno"]').setValue(true);
+
+    expect(form.value.retornosPlanejados).toEqual([{ valor: "300,00", nLacreDoc: "002" }]);
+  });
+
   it("exige pelo menos duas contas quando Multiplo Destino estiver marcado", async () => {
     const { wrapper, salvarOperacao } = montarModal();
     await opcao(wrapper, "Múltiplo Destino").setValue(true);
@@ -175,6 +208,25 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     expect(opcao(wrapper, "Tempo de confirmação").attributes("disabled")).toBeDefined();
     expect(wrapper.get('[data-teste="opcao-agendamento"]').attributes("disabled")).toBeDefined();
     expect(wrapper.find('[data-teste="opcao-transferencia-retorno"]').exists()).toBe(false);
+  });
+
+  it("nao oferece a propria origem como destino direto", () => {
+    const { wrapper } = montarModal();
+    const destino = wrapper.get('select[aria-label="Destino / Entrada"]');
+    expect(destino.find('option[value="cofre-1"]').exists()).toBe(false);
+    expect(destino.find('option[value="caixa-1"]').exists()).toBe(true);
+  });
+
+  it("Salvar e criar nova reabre um formulario novo e Salvar comum nao reabre", async () => {
+    const continuar = montarModal();
+    await continuar.wrapper.get(".tr-salvar-nova").trigger("click");
+    expect(continuar.salvarOperacao).toHaveBeenCalledOnce();
+    expect(continuar.abrirOperacao).toHaveBeenCalledWith("transferencia");
+
+    const finalizar = montarModal();
+    await finalizar.wrapper.get(".tr-salvar").trigger("click");
+    expect(finalizar.salvarOperacao).toHaveBeenCalledOnce();
+    expect(finalizar.abrirOperacao).not.toHaveBeenCalled();
   });
 
   it("compara valores em centavos e aceita 0,10 + 0,20 para uma ida de 0,30", async () => {

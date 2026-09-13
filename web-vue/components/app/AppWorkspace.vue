@@ -92,6 +92,7 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { CONFIRMAR_ACAO_KEY } from "~/utils/confirmacao-acao";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
+import { criarAcoesAcessosUsuario } from "~/utils/acessos-usuario";
 import {
   contaTravadaDeCaixa,
   nomeDaContaDoLancamento,
@@ -216,13 +217,13 @@ const cadastroSalvando = ref(false);
 const formCadastro = ref<CadastroForm>(formCadastroVazio());
 const permissoesFiltros = reactive({
   q: "",
-  tipoPermissao: "",
+  tipoPermissao: "cargo",
   alvoId: "",
   permissao: ""
 });
 const permissoesFiltrosAplicados = reactive({
   q: "",
-  tipoPermissao: "",
+  tipoPermissao: "cargo",
   alvoId: "",
   permissao: ""
 });
@@ -428,18 +429,9 @@ const alvosFiltroPermissoes = computed(() => {
   const tipo = permissoesFiltros.tipoPermissao;
   if (tipo === "cargo") return opcoesEmpresa.value.cargos.map((item) => ({ id: item.id, nome: item.nome ?? item.id }));
   if (tipo === "setor") return opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: item.nome ?? item.id }));
-  if (tipo === "usuario")
-    return opcoesEmpresa.value.usuarios.map((item) => ({
-      id: item.usuarioId ?? item.id,
-      nome: item.nome ?? item.email ?? item.usuarioId ?? item.id
-    }));
   return [
     ...opcoesEmpresa.value.cargos.map((item) => ({ id: item.id, nome: `Cargo: ${item.nome ?? item.id}` })),
-    ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` })),
-    ...opcoesEmpresa.value.usuarios.map((item) => ({
-      id: item.usuarioId ?? item.id,
-      nome: `Usuário: ${item.nome ?? item.email ?? item.usuarioId ?? item.id}`
-    }))
+    ...opcoesEmpresa.value.setores.map((item) => ({ id: item.id, nome: `Setor: ${item.nome ?? item.id}` }))
   ];
 });
 
@@ -1450,6 +1442,17 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
   modalCadastroAberto.value = true;
 }
 
+const { abrirAcessosUsuario } = criarAcoesAcessosUsuario({
+  empresaId,
+  opcoes,
+  cadastroTela,
+  cadastroEditandoId,
+  formCadastro,
+  modalCadastroAberto,
+  apiGet,
+  notificar
+});
+
 // Trava do rebaixamento silencioso: a linha da listagem pode chegar sem `role`, e ai o formulario de
 // edicao fica com o papel DESCONHECIDO. Salvar assim mandava "usuario_comum" e rebaixava o alvo. A
 // mensagem pede recarregar porque e exatamente isso que repovoa a linha.
@@ -1549,8 +1552,8 @@ async function buscarPermissoes(page = 1, aplicarFiltros = false) {
 }
 
 function limparFiltrosPermissoes() {
-  Object.assign(permissoesFiltros, { q: "", tipoPermissao: "", alvoId: "", permissao: "" });
-  Object.assign(permissoesFiltrosAplicados, { q: "", tipoPermissao: "", alvoId: "", permissao: "" });
+  Object.assign(permissoesFiltros, { q: "", tipoPermissao: "cargo", alvoId: "", permissao: "" });
+  Object.assign(permissoesFiltrosAplicados, { q: "", tipoPermissao: "cargo", alvoId: "", permissao: "" });
   permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
   permissoesBuscou.value = false;
 }
@@ -1763,6 +1766,7 @@ function fecharRoteamentoDaForma() {
 
 function lidarExtraCadastro(payload: { event: string; linha: Record<string, string | undefined> }) {
   if (payload.event === "restaurarPadraoCargo") void restaurarPadraoCargo(payload.linha);
+  if (payload.event === "gerenciarAcessosUsuario") void abrirAcessosUsuario(payload.linha);
   if (payload.event === "roteamentoFinanceiro" && payload.linha.id) {
     abrirRoteamentoDaForma({ id: payload.linha.id, nome: payload.linha.nome ?? "" });
   }
@@ -1788,6 +1792,7 @@ provide(WORKSPACE_CONTEXT, {
   erroDiscriminacaoCampo,
   salvandoOperacao,
   salvarOperacao,
+  abrirOperacao,
   podePlanejarRetorno,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,

@@ -5,16 +5,7 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import OperacaoLancamentoModal from "~/components/operacoes/OperacaoLancamentoModal.vue";
 import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransferenciaModal.vue";
-import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
-
-// Telas operacionais que a grade (PermissoesGrade) cobre — escondidas da lista abaixo p/ nao duplicar.
-const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferências", "Vendas"];
-
-const perfisAcessoUsuario = [
-  { title: "Usuário comum (permissões por cargo, setor e usuário)", value: "usuario_comum" },
-  { title: "Administrador total", value: "usuario_admin" },
-  { title: "Admin legado (permissoes por cargo, setor e usuario)", value: "admin" }
-];
+import EditorPermissoes from "~/components/permissoes/EditorPermissoes.vue";
 
 const workspace = useWorkspaceContext();
 
@@ -34,9 +25,6 @@ const {
   atualizarColaboradorUsuario,
   empresasDisponiveis,
   dadosCadastro,
-  permissoesDaSecao,
-  estadoRegraPermissao,
-  definirRegraPermissao,
   cadastroSalvando,
   bloqueioCadastro,
   salvarCadastro,
@@ -55,6 +43,17 @@ const {
   copiaSalvando,
   executarCopia
 } = workspace;
+
+const editandoAcessoUsuario = computed(
+  () => cadastroTela.value === "permissoes" && cadastroEditandoId.value.startsWith("usuario:")
+);
+const perfisAcessoUsuario = computed(() => [
+  { title: "Usuário comum — acesso definido por setor e cargo", value: "usuario_comum" },
+  { title: "Administrador total", value: "usuario_admin" },
+  ...(cadastroEditandoId.value && formCadastro.value.role === "admin"
+    ? [{ title: "Admin legado — mantenha apenas para contas antigas", value: "admin" }]
+    : [])
+]);
 
 // --- Usuarios que operam a CONTA (D8) --------------------------------------------------------
 // Os vinculos viajam no proprio formulario da conta (formCadastro.usuariosIds) e sao gravados na
@@ -88,8 +87,14 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
 
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
     <v-card>
-      <v-card-title>{{ cadastroEditandoId ? "Editar cadastro" : "Novo cadastro" }}</v-card-title>
-      <v-card-subtitle>{{ itemPorTela[cadastroTela]?.titulo ?? "Cadastro operacional" }}</v-card-subtitle>
+      <v-card-title>{{
+        editandoAcessoUsuario ? "Acessos do usuário" : cadastroEditandoId ? "Editar cadastro" : "Novo cadastro"
+      }}</v-card-title>
+      <v-card-subtitle>{{
+        editandoAcessoUsuario
+          ? "Confira o acesso efetivo e ajuste somente as exceções necessárias."
+          : (itemPorTela[cadastroTela]?.titulo ?? "Cadastro operacional")
+      }}</v-card-subtitle>
       <v-card-text>
         <v-row dense>
           <v-col v-if="cadastroTela === 'grupos'" cols="12">
@@ -151,6 +156,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
             />
           </v-col>
           <v-col
+            v-if="cadastroTela !== 'permissoes'"
             cols="12"
             :md="
               ['unidades', 'pdv', 'empresas', 'fornecedores', 'clientes', 'contas', 'maquininhas'].includes(
@@ -467,71 +473,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
               }}</v-chip>
             </v-chip-group>
           </v-col>
-          <template v-if="cadastroTela === 'permissoes'">
-            <v-col cols="12" md="4"
-              ><v-select
-                v-model="formCadastro.tipoPermissao"
-                :items="['cargo', 'setor', 'usuario']"
-                label="Tipo de permissão"
-            /></v-col>
-            <v-col v-if="formCadastro.tipoPermissao === 'cargo'" cols="12" md="8">
-              <v-select
-                v-model="formCadastro.cargoId"
-                :items="opcoesEmpresa.cargos"
-                item-title="nome"
-                item-value="id"
-                label="Cargo"
-              />
-            </v-col>
-            <v-col v-if="formCadastro.tipoPermissao === 'setor'" cols="12" md="8"
-              ><v-select
-                v-model="formCadastro.setorId"
-                :items="opcoesEmpresa.setores"
-                item-title="nome"
-                item-value="id"
-                label="Setor"
-            /></v-col>
-            <v-col v-if="formCadastro.tipoPermissao === 'usuario'" cols="12" md="8"
-              ><v-select
-                v-model="formCadastro.usuarioId"
-                :items="opcoesEmpresa.usuarios"
-                item-title="nome"
-                item-value="usuarioId"
-                label="Usuário"
-            /></v-col>
-            <v-col cols="12">
-              <div class="text-body-2 font-weight-bold mb-2">Operacoes (telas x acoes)</div>
-              <PermissoesGrade />
-            </v-col>
-            <template v-for="secao in secoesPermissoes" :key="secao.titulo">
-              <v-col v-if="permissoesDaSecao(secao).length && !secoesOperacionais.includes(secao.titulo)" cols="12">
-                <v-sheet class="pa-3 rounded-lg soft-bg">
-                  <div class="text-body-2 font-weight-bold mb-2">{{ secao.titulo }}</div>
-                  <div class="text-caption text-muted mb-3">
-                    Herdar não concede acesso sozinho; a permissão precisa estar como Permitir em alguma camada efetiva.
-                  </div>
-                  <v-row dense>
-                    <v-col v-for="permissao in permissoesDaSecao(secao)" :key="permissao" cols="12">
-                      <div class="permission-rule-row">
-                        <span class="permission-rule-label">{{ permissao.replaceAll("_", " ") }}</span>
-                        <v-btn-toggle
-                          :model-value="estadoRegraPermissao(permissao)"
-                          density="compact"
-                          divided
-                          mandatory
-                          @update:model-value="definirRegraPermissao(permissao, String($event || 'herdar'))"
-                        >
-                          <v-btn size="small" value="herdar">Herdar</v-btn>
-                          <v-btn size="small" value="permitir">Permitir</v-btn>
-                          <v-btn size="small" value="negar">Negar</v-btn>
-                        </v-btn-toggle>
-                      </div>
-                    </v-col>
-                  </v-row>
-                </v-sheet>
-              </v-col>
-            </template>
-          </template>
+          <EditorPermissoes v-if="cadastroTela === 'permissoes'" />
         </v-row>
       </v-card-text>
       <v-card-actions>
@@ -629,25 +571,3 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
     </v-card>
   </v-dialog>
 </template>
-
-<style scoped>
-.permission-rule-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
-}
-
-.permission-rule-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 600px) {
-  .permission-rule-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-</style>

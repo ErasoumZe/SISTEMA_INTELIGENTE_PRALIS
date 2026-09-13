@@ -21,13 +21,19 @@ function proximoEstado(codigo: string) {
   definirRegraPermissao(codigo, ESTADOS[(i + 1) % ESTADOS.length] ?? "herdar");
 }
 
+function rotuloAcessivel(tela: string, indice: number, codigo: string) {
+  const acao = COLUNAS[indice]?.nome ?? codigo;
+  const estado = icone(codigo).titulo;
+  return `${tela} — ${acao}: ${estado}`;
+}
+
 // Icone/cor por estado (mockup: check verde = permite, x vermelho = nega, traco = herdado).
 function icone(codigo: string | null) {
-  if (!codigo) return { i: "mdi-minus", cor: "#cbd2dc", titulo: "sem esta ação" };
+  if (!codigo) return { i: "mdi-minus", cor: "rgba(var(--v-theme-on-surface), 0.28)", titulo: "sem esta ação" };
   const estado = estadoRegraPermissao(codigo);
-  if (estado === "permitir") return { i: "mdi-check", cor: "#16a34a", titulo: "permite" };
-  if (estado === "negar") return { i: "mdi-close", cor: "#c0392b", titulo: "nega" };
-  return { i: "mdi-minus", cor: "#94a3b8", titulo: "herdado" };
+  if (estado === "permitir") return { i: "mdi-check", cor: "rgb(var(--v-theme-success))", titulo: "permite" };
+  if (estado === "negar") return { i: "mdi-close", cor: "rgb(var(--v-theme-error))", titulo: "nega" };
+  return { i: "mdi-minus", cor: "rgba(var(--v-theme-on-surface), 0.55)", titulo: "herdado" };
 }
 </script>
 
@@ -49,18 +55,19 @@ function icone(codigo: string | null) {
             type="button"
             class="pg-btn"
             :title="icone(cel.codigo).titulo"
+            :aria-label="rotuloAcessivel(linha.tela, i, cel.codigo)"
             @click="proximoEstado(cel.codigo)"
           >
             <v-icon size="17" :color="icone(cel.codigo).cor">{{ icone(cel.codigo).i }}</v-icon>
           </button>
-          <v-icon v-else size="15" color="#cbd2dc">mdi-minus</v-icon>
+          <v-icon v-else size="15" color="rgba(var(--v-theme-on-surface), 0.28)">mdi-minus</v-icon>
         </div>
       </div>
     </div>
     <div class="pg-legenda">
-      <span><v-icon size="14" color="#16a34a">mdi-check</v-icon> permite</span>
-      <span><v-icon size="14" color="#94a3b8">mdi-minus</v-icon> herdado</span>
-      <span><v-icon size="14" color="#c0392b">mdi-close</v-icon> nega</span>
+      <span><v-icon size="14" color="success">mdi-check</v-icon> permite</span>
+      <span><v-icon size="14" color="rgba(var(--v-theme-on-surface), 0.55)">mdi-minus</v-icon> herdado</span>
+      <span><v-icon size="14" color="error">mdi-close</v-icon> nega</span>
       <span class="pg-legenda-fim">$ = sobre lançamento já pago (D/Pago) · clique para alternar</span>
     </div>
   </div>
@@ -73,28 +80,28 @@ function icone(codigo: string | null) {
 }
 .pg-grid {
   overflow: hidden;
-  border: 0.5px solid #e4e8ef;
+  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.14);
   border-radius: 12px;
   font-size: 12px;
 }
 .pg-linha {
   display: grid;
   grid-template-columns: 112px repeat(12, minmax(44px, 1fr));
-  border-bottom: 0.5px solid #e4e8ef;
+  border-bottom: 0.5px solid rgba(var(--v-theme-on-surface), 0.14);
 }
 .pg-linha:last-child {
   border-bottom: 0;
 }
 .pg-cabecalho {
-  background: #f4f6fa;
+  background: rgb(var(--v-theme-surface-variant));
 }
 .pg-tela-cel {
   padding: 10px 8px;
   font-weight: 500;
-  color: #1f2733;
+  color: rgb(var(--v-theme-on-surface));
 }
 .pg-cabecalho .pg-tela-cel {
-  color: #1f2733;
+  color: rgb(var(--v-theme-on-surface));
 }
 .pg-tela-nome {
   display: flex;
@@ -105,7 +112,7 @@ function icone(codigo: string | null) {
   align-items: center;
   justify-content: center;
   padding: 8px 2px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.68);
   text-align: center;
 }
 .pg-cabecalho .pg-acao-cel {
@@ -118,11 +125,13 @@ function icone(codigo: string | null) {
   border: 0;
   background: none;
   padding: 4px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 6px;
   cursor: pointer;
 }
 .pg-btn:hover {
-  background: #f4f6fa;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 /* Rotulo por celula: so aparece no modo card (mobile); na grade larga o cabecalho ja mostra. */
 .pg-acao-rotulo {
@@ -145,15 +154,15 @@ function icone(codigo: string | null) {
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
     padding: 10px 12px;
-    border: 0.5px solid #e4e8ef;
+    border: 0.5px solid rgba(var(--v-theme-on-surface), 0.14);
     border-radius: 12px;
-    background: #fff;
+    background: rgb(var(--v-theme-surface));
   }
   .pg-tela-cel {
     grid-column: 1 / -1;
     padding: 0 0 6px;
     font-weight: 600;
-    border-bottom: 0.5px solid #e4e8ef;
+    border-bottom: 0.5px solid rgba(var(--v-theme-on-surface), 0.14);
   }
   .pg-acao-cel {
     justify-content: space-between;
@@ -161,13 +170,13 @@ function icone(codigo: string | null) {
     min-height: 44px;
     padding: 6px 8px;
     border-radius: 8px;
-    background: #f8fafc;
+    background: rgba(var(--v-theme-on-surface), 0.05);
   }
   .pg-acao-rotulo {
     display: block;
     overflow: hidden;
     font-size: 11px;
-    color: #64748b;
+    color: rgba(var(--v-theme-on-surface), 0.68);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -183,7 +192,7 @@ function icone(codigo: string | null) {
   gap: 16px;
   margin-top: 10px;
   font-size: 11px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.58);
 }
 .pg-legenda span {
   display: inline-flex;

@@ -2,6 +2,7 @@ import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
 import { permissoesQuerySchema as empresaQuerySchema } from "@padaria/shared/permissoes";
 import { apiIdParamsSchema, criadoId, erro, ok, paginadoDeResultado, semConteudo } from "@padaria/shared/api";
+import { z } from "zod";
 import { exigirPermissao } from "../auth/guards.js";
 import { escopoEmpresaAtiva, empresasPermitidas } from "../auth/empresa.js";
 import { statusErroValidacao } from "../utils.js";
@@ -9,11 +10,15 @@ import {
   excluirPermissao,
   listarPermissoes,
   listarPermissoesPaginadas,
+  resumirAcessoEfetivoUsuario,
   restaurarPadraoCargo,
   salvarPermissao
 } from "./permissoes.service.js";
 
 export async function registrarRotasPermissoes(app: FastifyInstance): Promise<void> {
+  // IDs de usuario pertencem ao Better Auth e sao TEXT, nao UUID. Ainda assim, validamos o
+  // parametro antes de consultar para impedir vazio ou entrada desproporcional.
+  const usuarioIdParamsSchema = z.object({ id: z.string().trim().min(1).max(255) });
   app.get(
     "/api/permissoes",
     { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
@@ -41,6 +46,15 @@ export async function registrarRotasPermissoes(app: FastifyInstance): Promise<vo
     "/api/permissoes/regras",
     { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
     async (request) => paginadoDeResultado(await listarPermissoesPaginadas(request.query, request.perfilUsuario))
+  );
+
+  app.get(
+    "/api/permissoes/usuarios/:id/efetivas",
+    { preHandler: exigirPermissao("cadastro_permissoes_visualizar") },
+    async (request) => {
+      const { id } = usuarioIdParamsSchema.parse(request.params);
+      return ok(await resumirAcessoEfetivoUsuario(id, request.perfilUsuario));
+    }
   );
 
   app.delete(

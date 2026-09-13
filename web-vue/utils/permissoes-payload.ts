@@ -61,7 +61,10 @@ export function aplicarRegrasDoAlvoNasListas(
 }
 
 /** Regras hoje gravadas para o alvo escolhido NO FORM, ou `{}` se ele ainda nao tem nenhuma. */
-function regrasGravadasDoAlvo(form: AlvoPermissaoDoForm, listas: ListasPermissoesPersistidas): Record<string, boolean> {
+export function regrasGravadasDoAlvo(
+  form: AlvoPermissaoDoForm,
+  listas: ListasPermissoesPersistidas
+): Record<string, boolean> {
   const encontrada =
     form.tipoPermissao === "cargo"
       ? form.cargoId && listas.cargosPermissoes.find((item) => item.cargoId === form.cargoId)

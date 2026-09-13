@@ -84,6 +84,7 @@ export function recortarUsuariosPorEmpresas(
         email: usuario.email,
         colaboradorId: colaboradorVisivel ? usuario.colaboradorId : "",
         setorId: setorVisivel ? usuario.setorId : null,
+        setorNome: setorVisivel ? usuario.setorNome : null,
         cargoIds: cargosVisiveis.map((cargo) => cargo.id),
         cargos: cargosVisiveis.map((cargo) => cargo.nome),
         role: usuario.role

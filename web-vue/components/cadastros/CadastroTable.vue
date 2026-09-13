@@ -148,13 +148,11 @@ function proximaPagina() {
           :model-value="tipoPermissaoFiltro"
           :items="[
             { title: 'Cargo', value: 'cargo' },
-            { title: 'Setor', value: 'setor' },
-            { title: 'Usuário', value: 'usuario' }
+            { title: 'Setor', value: 'setor' }
           ]"
           label="Tipo"
           density="compact"
           hide-details
-          clearable
           @update:model-value="emit('update:tipoPermissaoFiltro', String($event || ''))"
         />
         <v-select

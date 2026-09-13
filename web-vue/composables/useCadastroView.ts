@@ -82,7 +82,7 @@ export function useCadastroView(params: {
         id: item.id,
         nome: item.nome,
         cpf: item.cpf,
-        setor: item.descricao,
+        setor: item.setorNome ?? item.descricao,
         setorId: item.setorId ?? undefined,
         turnoPadraoId: item.turnoPadraoId ?? undefined,
         cargo: item.cargos?.[0] ?? item.cargoNome ?? "",
@@ -130,6 +130,12 @@ export function useCadastroView(params: {
         nome: item.nome,
         email: item.email,
         role: item.role,
+        perfil:
+          item.role === "usuario_admin"
+            ? "Administrador total"
+            : item.role === "admin"
+              ? "Admin legado"
+              : "Usuário comum",
         // `empresaIds` NAO e projetado de proposito. O `GET /api/usuarios` recorta esse campo ao
         // escopo da TELA (usuarios.service.ts, `recortarUsuariosPorEmpresas`), entao para um usuario
         // A+B visto na empresa A ele vale `["A"]` — e o contrato de isolamento exige que seja assim
@@ -141,13 +147,13 @@ export function useCadastroView(params: {
         // (shared/src/cadastros/index.ts) — o servidor entao PRESERVA os vinculos gravados.
         colaboradorId: item.colaboradorId,
         cargos: item.cargos?.join(", ") ?? "",
-        setor: item.descricao,
+        setor: item.setorNome ?? item.descricao,
         setorId: item.setorId ?? undefined
       }));
     if (tela === "permissoes")
       return toValue(params.permissoesPagina)
         .itens.map(removerPermissoesOcultasDaLinha)
-        .filter((linha): linha is LinhaCadastro => Boolean(linha));
+        .filter((linha): linha is LinhaCadastro => Boolean(linha) && linha?.tipoPermissao !== "usuario");
     if (tela === "grupos") {
       return [
         ...listas.gruposDespesas.map((item) => ({
@@ -207,7 +213,7 @@ export function useCadastroView(params: {
       turnos: "Turnos de trabalho (ex.: Manhã 06:00-14:00). Pré-selecionam o turno na abertura do caixa.",
       areas_setores: "Áreas e setores organizacionais.",
       usuarios: "Usuários e acessos do sistema.",
-      permissoes: "Permissões por cargo, setor ou usuário.",
+      permissoes: "Perfis de acesso compartilhados por cargo ou setor.",
       colaboradores: "Cadastro de colaboradores.",
       fornecedores: "Cadastro de fornecedores.",
       socios_gestores: "Cadastro de sócios e gestores que podem ser credores de retiradas.",
@@ -231,7 +237,7 @@ export function useCadastroView(params: {
       patrimonio: ["Tipo", "Sigla", "Nome", "Marca", "Setor"],
       turnos: ["Nome", "Inicio", "Fim", "Ativo"],
       areas_setores: ["Nome", "Tipo"],
-      usuarios: ["Nome", "Email", "Role", "Cargos"],
+      usuarios: ["Nome", "Email", "Perfil", "Setor", "Cargos"],
       permissoes: ["Tipo", "Alvo", "Regras"],
       colaboradores: ["Nome", "CPF", "Cargo", "Setor"],
       fornecedores: ["Nome", "Documento"],

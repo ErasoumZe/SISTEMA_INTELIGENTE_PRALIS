@@ -6,7 +6,12 @@ import {
   type ExcluirPermissaoQuery,
   type PermissoesPaginadasQuery
 } from "@padaria/shared/permissoes";
-import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import {
+  permissoesAcessoTotal,
+  resolverPermissoesEfetivas,
+  type Permissao,
+  type RegrasPermissoes
+} from "@padaria/shared";
 import {
   permissoesPadraoDoCargo,
   regrasPermissoes as regrasPermissoesReferencia
@@ -19,7 +24,8 @@ import {
   type PerfilComEmpresa
 } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
-import { proibido } from "../erros.js";
+import { naoEncontrado, proibido } from "../erros.js";
+import { obterPerfilPorUsuarioId } from "../auth/perfil.repository.js";
 import { normalizarBusca, falharValidacao } from "../utils.js";
 import {
   buscarCargoEmpresaRepository,
@@ -183,6 +189,61 @@ export async function listarPermissoesPaginadas(body: DadosExternos, perfil?: Pe
   const total = linhas.length;
   const inicio = (query.page - 1) * query.pageSize;
   return { itens: linhas.slice(inicio, inicio + query.pageSize), total, page: query.page, pageSize: query.pageSize };
+}
+
+export async function resumirAcessoEfetivoUsuario(usuarioId: string, perfil?: PerfilComEmpresa) {
+  // Esta leitura e uma rota autenticada. A assinatura ainda aceita `undefined` porque o tipo do
+  // Fastify nao e refinado pelo preHandler, mas o service falha fechado para qualquer chamador novo.
+  if (!perfil) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+
+  const dados = await listarPermissoesRepository();
+  const alvoBruto = dados.usuarios.find((usuario) => usuario.usuarioId === usuarioId);
+  if (!alvoBruto) throw naoEncontrado("Usuario nao encontrado", "USUARIO_NAO_ENCONTRADO");
+
+  // As tres ancoras de empresa nao sao amarradas pelo banco em dados legados. Autorizar apenas
+  // `usuarios_empresas` permitiria que um link A revelasse cargo/setor de um colaborador na B.
+  const empresaIds = Array.from(
+    new Set(
+      [
+        ...alvoBruto.empresaIds,
+        alvoBruto.empresaId,
+        alvoBruto.colaboradorEmpresaId,
+        alvoBruto.setorEmpresaId,
+        ...alvoBruto.cargosComEmpresa.map((cargo) => cargo.empresaId)
+      ].filter((empresaId): empresaId is string => Boolean(empresaId))
+    )
+  );
+  if (!empresaIds.length) throw naoEncontrado("Usuario nao encontrado", "USUARIO_NAO_ENCONTRADO");
+  if (!todasEmpresasNoEscopo(perfil, empresaIds)) throw proibido("Empresa nao permitida", "FORBIDDEN_COMPANY");
+
+  // Perfil sem colaborador e um estado legado real e continua editavel: nesse caso nao existe
+  // heranca de setor/cargo, mas as excecoes diretas do usuario ainda precisam aparecer.
+  const alvo = alvoBruto.colaboradorId ? await obterPerfilPorUsuarioId(usuarioId) : null;
+  const regrasUsuario =
+    alvo?.regras_permissoes.usuario ?? dados.usuariosPermissoes.find((item) => item.usuarioId === usuarioId)?.regras;
+  const role = alvoBruto.role;
+
+  const permissoesHerdadas =
+    role === "usuario_admin"
+      ? [...permissoesAcessoTotal]
+      : resolverPermissoesEfetivas([[alvo?.regras_permissoes.setor], alvo?.regras_permissoes.cargos ?? []]);
+  const permissoesEfetivas =
+    role === "usuario_admin"
+      ? [...permissoesAcessoTotal]
+      : resolverPermissoesEfetivas([
+          [alvo?.regras_permissoes.setor],
+          alvo?.regras_permissoes.cargos ?? [],
+          [regrasUsuario]
+        ]);
+
+  return {
+    usuarioId: alvoBruto.usuarioId,
+    nome: alvoBruto.nome,
+    email: alvoBruto.email,
+    role,
+    permissoesHerdadas,
+    permissoesEfetivas
+  };
 }
 
 export async function excluirPermissao(body: DadosExternos, perfil?: PerfilComEmpresa) {

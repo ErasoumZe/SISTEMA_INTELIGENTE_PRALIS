@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AuthSession } from "@padaria/shared";
+import { temPermissao as possuiPermissao, type AuthSession } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import CadastroTable from "~/components/cadastros/CadastroTable.vue";
 import { podeExecutarAcaoCadastro } from "~/utils/domain";
@@ -65,6 +65,13 @@ const acoesExtras = computed(() => {
         condicao: (linha: Record<string, string | undefined>) => linha.tipo === "cargo"
       }
     ];
+  if (
+    props.tela === "usuarios" &&
+    possuiPermissao(permissoesUsuario.value, "cadastro_permissoes_visualizar") &&
+    possuiPermissao(permissoesUsuario.value, "cadastro_permissoes_editar")
+  ) {
+    return [{ label: "Acessos", event: "gerenciarAcessosUsuario", condicao: () => true }];
+  }
   // #152: decidir PARA ONDE vai o dinheiro de uma forma e outro ato, com outra permissao — por isso
   // e uma acao propria na linha, e nao mais um campo no formulario generico de cadastro. Continua
   // sendo UM caminho: e a unica rota para rotear.

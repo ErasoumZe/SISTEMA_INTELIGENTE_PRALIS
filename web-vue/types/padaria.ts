@@ -71,6 +71,7 @@ export type Opcao = {
   areaId?: string | null;
   setorPaiId?: string | null;
   setorId?: string | null;
+  setorNome?: string | null;
   salario?: string;
   usuarioId?: string;
   colaboradorId?: string;
@@ -79,6 +80,10 @@ export type Opcao = {
   // (`permissoes.repository.ts`). O servidor sempre mandou; faltava declarar. Usado pela S-06 para
   // preservar no save as permissoes que a tela esconde.
   regras?: Record<string, boolean>;
+  // Resumo calculado pelo servidor sobre o perfil completo do usuario. Diferente de `regras`,
+  // estas listas nao sao editaveis nem recortadas pela empresa selecionada na tela.
+  permissoesHerdadas?: Permissao[];
+  permissoesEfetivas?: Permissao[];
   contaId?: string;
   contaCofreId?: string | null;
   cargoIds?: string[];
