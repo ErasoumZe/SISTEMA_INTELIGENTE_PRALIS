@@ -8,7 +8,7 @@ import OperacaoTransferenciaModal from "~/components/operacoes/OperacaoTransfere
 import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
 
 // Telas operacionais que a grade (PermissoesGrade) cobre — escondidas da lista abaixo p/ nao duplicar.
-const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferencias"];
+const secoesOperacionais = ["Despesas", "Mercadorias", "Retiradas", "Transferências", "Vendas"];
 
 const perfisAcessoUsuario = [
   { title: "Usuário comum (permissões por cargo, setor e usuário)", value: "usuario_comum" },

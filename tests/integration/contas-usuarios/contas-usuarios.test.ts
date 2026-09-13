@@ -99,6 +99,47 @@ describe("contas-usuarios integration", () => {
     assertProblem(resposta, 404, "CONTA_NAO_ENCONTRADA");
   });
 
+  it("Deve_RecusarVinculo_Quando_UsuarioPertenceAOutraEmpresa", async () => {
+    const usuarioOutraEmpresaId = "usuario-conta-empresa-b";
+    await executarSql(
+      `insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+       values ($1, 'Usuario Empresa B', 'usuario-conta-b@teste.local', false, now(), now())`,
+      [usuarioOutraEmpresaId]
+    );
+    await executarSql(
+      `insert into perfis_usuarios (usuario_id, empresa_id, nome, email, role)
+       values ($1, $2, 'Usuario Empresa B', 'usuario-conta-b@teste.local', 'usuario_comum')`,
+      [usuarioOutraEmpresaId, idsTeste.empresaB]
+    );
+    await executarSql("insert into usuarios_empresas (usuario_id, empresa_id) values ($1, $2)", [
+      usuarioOutraEmpresaId,
+      idsTeste.empresaB
+    ]);
+
+    try {
+      const resposta = await contexto.app.inject({
+        method: "POST",
+        url: "/api/contas-usuarios",
+        headers: { cookie: cookieGerente },
+        payload: {
+          empresaId: idsTeste.empresaA,
+          contaId: idsTeste.contaLivre,
+          usuarioId: usuarioOutraEmpresaId
+        }
+      });
+
+      assertProblem(resposta, 400, "USUARIO_EMPRESA_DIVERGENTE");
+      await expect(
+        consultarUm("select id from contas_usuarios where conta_id = $1 and usuario_id = $2", [
+          idsTeste.contaLivre,
+          usuarioOutraEmpresaId
+        ])
+      ).resolves.toBeNull();
+    } finally {
+      await executarSql('delete from "user" where id = $1', [usuarioOutraEmpresaId]);
+    }
+  });
+
   it("Deve_Retornar403_Quando_UsuarioSemPermissaoDeVinculo", async () => {
     const cookie = await cookieSessao(contexto.app, "caixa");
 

@@ -3,6 +3,8 @@ import { bloqueioCadastroUsuario, cadastroPayload } from "@padaria/shared";
 import {
   formCadastroDeLinha,
   formCadastroVazio,
+  itemPorTela,
+  podeExecutarAcaoCadastro,
   permissaoPertenceASecao,
   permissoes,
   secoesPermissoes
@@ -97,5 +99,20 @@ describe("secoes de permissoes", () => {
         permissao
       ).toHaveLength(1);
     }
+  });
+});
+
+describe("acoes de cadastro por permissao", () => {
+  it("nao exibe criar ou editar para quem so pode visualizar usuarios", () => {
+    const permissoesUsuario = ["cadastro_usuarios_visualizar"] as const;
+
+    expect(podeExecutarAcaoCadastro(permissoesUsuario, itemPorTela.usuarios!, "visualizar")).toBe(true);
+    expect(podeExecutarAcaoCadastro(permissoesUsuario, itemPorTela.usuarios!, "criar")).toBe(false);
+    expect(podeExecutarAcaoCadastro(permissoesUsuario, itemPorTela.usuarios!, "editar")).toBe(false);
+  });
+
+  it("respeita permissoes alternativas da tela", () => {
+    expect(podeExecutarAcaoCadastro(["cadastro_pdv_editar"], itemPorTela.maquininhas!, "editar")).toBe(true);
+    expect(podeExecutarAcaoCadastro(["cadastro_pdv_editar"], itemPorTela.maquininhas!, "criar")).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { buscarContaEmpresaRepository } from "../contas/contas.repository.js";
 import { listarContas } from "../contas/contas.service.js";
+import { listarEmpresasUsuarioRepository } from "../usuarios/usuarios.repository.js";
 import {
   buscarContaUsuarioRepository,
   criarContaUsuarioRepository,
@@ -48,6 +49,11 @@ export async function criarContaUsuario(payload: ContaUsuarioPayload) {
   const conta = await buscarContaEmpresaRepository(payload.contaId);
   if (!conta) throw naoEncontrado("Conta nao encontrada", "CONTA_NAO_ENCONTRADA");
   if (conta.empresaId !== payload.empresaId) throw erroValidacao("Conta de outra empresa", "CONTA_EMPRESA_DIVERGENTE");
+
+  const empresasDoUsuario = await listarEmpresasUsuarioRepository(payload.usuarioId);
+  if (!empresasDoUsuario.some((empresa) => empresa.empresaId === payload.empresaId)) {
+    throw erroValidacao("Usuario de outra empresa", "USUARIO_EMPRESA_DIVERGENTE");
+  }
 
   const existente = await existeVinculoRepository(payload.contaId, payload.usuarioId);
   if (existente) throw erroValidacao("Usuario ja vinculado a esta conta", "VINCULO_DUPLICADO");

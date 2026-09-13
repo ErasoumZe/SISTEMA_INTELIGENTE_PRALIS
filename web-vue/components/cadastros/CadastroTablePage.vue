@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import type { AuthSession } from "@padaria/shared";
 import type { ItemMenu } from "~/types/padaria";
 import CadastroTable from "~/components/cadastros/CadastroTable.vue";
+import { podeExecutarAcaoCadastro } from "~/utils/domain";
 
 const props = defineProps<{
   tela: string;
@@ -44,11 +46,18 @@ const emit = defineEmits<{
 }>();
 
 const acao = "Novo cadastro";
-const podeEditar = computed(() => true);
+const sessao = useState<AuthSession | null>("padaria.workspace.sessao");
+const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? []);
+const podeAdicionar = computed(() =>
+  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "criar") : false
+);
+const podeEditar = computed(() =>
+  props.telaAtual ? podeExecutarAcaoCadastro(permissoesUsuario.value, props.telaAtual, "editar") : false
+);
 const podeCopia = computed(() => !["permissoes", "socios_gestores"].includes(props.tela));
 const acoesExtras = computed(() => {
   // So faz sentido restaurar o padrao de CARGO (setor/usuario nao tem referencia).
-  if (props.tela === "permissoes")
+  if (props.tela === "permissoes" && podeEditar.value)
     return [
       {
         label: "Restaurar padrão",
@@ -75,9 +84,10 @@ const acoesExtras = computed(() => {
     :colunas="colunas"
     :linhas="linhas"
     :acao="acao"
+    :pode-adicionar="podeAdicionar"
     :pode-editar="podeEditar"
     :pode-exportar="podeCopia"
-    :pode-importar="podeCopia"
+    :pode-importar="podeCopia && podeAdicionar"
     :editar-carregando-id="editarCarregandoId"
     :modo-servidor="modoServidor"
     :busca="busca"
