@@ -190,6 +190,23 @@ describe("Etapa 10 - transferencia com disputa, saldo pendente e prazo", () => {
     expect(multiplaComPrazo.statusCode, multiplaComPrazo.body).toBe(400);
     expect(multiplaComPrazo.body).toMatch(/tempo de confirma.*direta/iu);
 
+    const multiplaComDestinoDuplicado = await request(
+      cookieAdmin,
+      "POST",
+      "/api/transferencias",
+      payloadTransferencia("QA-MULTIPLA-DUPLICADA", idsTeste.contaBanco, idsTeste.contaCaixa, {
+        contasDestinoIds: [idsTeste.contaCaixa],
+        tempoConfirmacao: null
+      })
+    );
+    expect(multiplaComDestinoDuplicado.statusCode, multiplaComDestinoDuplicado.body).toBe(400);
+    expect(multiplaComDestinoDuplicado.body).toMatch(/duas contas.*distintas/iu);
+    expect(
+      await consultarUm<{ total: number }>(
+        "select count(*)::int as total from transferencias where n_lacre_doc = 'QA-MULTIPLA-DUPLICADA'"
+      )
+    ).toEqual({ total: 0 });
+
     const multiplaSemPrazo = await request(
       cookieAdmin,
       "POST",

@@ -145,6 +145,20 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     expect(salvarOperacao).toHaveBeenCalledOnce();
   });
 
+  it("remove o erro de Multiplo Destino quando a modalidade for desmarcada", async () => {
+    const { wrapper, form } = montarModal();
+    form.value.contaDestinoId = "";
+    await nextTick();
+    await opcao(wrapper, "Múltiplo Destino").setValue(true);
+    await wrapper.get(".tr-salvar").trigger("click");
+    expect(wrapper.get(".tr-erro").text()).toBe("Selecione ao menos duas contas de destino.");
+
+    await opcao(wrapper, "Múltiplo Destino").setValue(false);
+    expect(wrapper.find(".tr-erro").exists()).toBe(false);
+    await opcao(wrapper, "Tempo de confirmação").setValue(true);
+    expect(wrapper.find(".tr-erro").exists()).toBe(false);
+  });
+
   it("nao oferece planejamento ao operador e desabilita fora da rota Cofre para PDV", async () => {
     const operador = montarModal(false);
     expect(operador.wrapper.find('[data-teste="opcao-transferencia-retorno"]').exists()).toBe(false);
