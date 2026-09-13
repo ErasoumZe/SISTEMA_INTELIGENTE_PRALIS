@@ -1,47 +1,18 @@
 <script setup lang="ts">
 // Permissoes em grade fiel ao mockup (docs/mockups/TODAS-AS-TELAS-mockup.html, tela 5): telas
-// operacionais x 9 acoes. SEGURO: cada celula so aparece se o codigo de permissao REALMENTE existe
+// operacionais x acoes. SEGURO: cada celula so aparece se o codigo de permissao REALMENTE existe
 // (permissoesDaSecao); coluna sem codigo vira traco — NUNCA mostra "permite" falso. Reusa
 // estadoRegraPermissao/definirRegraPermissao do alvo ja carregado (mesma gravacao de sempre).
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
+import { COLUNAS_GRADE_PERMISSOES as COLUNAS, montarGradePermissoes } from "~/utils/grade-permissoes";
 
 const { permissoesDaSecao, estadoRegraPermissao, definirRegraPermissao } = useWorkspaceContext();
-
-// Telas operacionais do mockup (por prefixo de permissao).
-const TELAS = [
-  { rotulo: "Despesas", prefixo: "despesas" },
-  { rotulo: "Mercadorias", prefixo: "mercadorias" },
-  { rotulo: "Retiradas", prefixo: "retiradas" },
-  { rotulo: "Transferências", prefixo: "transferencias" },
-  { rotulo: "Entradas", prefixo: "entradas" }
-];
-
-// 9 colunas do mockup -> sufixos candidatos do codigo real. "$" = variantes sobre valor / D-Pago.
-// `nome` = rotulo completo, so para tooltip (o rotulo abreviado continua sendo o exibido).
-const COLUNAS = [
-  { rotulo: "Lanç", nome: "Lançar", sufixos: ["criar", "lancar"] },
-  { rotulo: "Pagar", nome: "Pagar", sufixos: ["pagar"] },
-  { rotulo: "Discr", nome: "Discriminar", sufixos: ["discriminar"] },
-  { rotulo: "Ver", nome: "Visualizar", sufixos: ["visualizar"] },
-  { rotulo: "Ver$", nome: "Visualizar valor / pago", sufixos: ["visualizar_valor", "visualizar_pago", "ver_pago"] },
-  { rotulo: "Edit", nome: "Editar", sufixos: ["editar"] },
-  { rotulo: "Edit$", nome: "Editar valor / pago", sufixos: ["editar_valor", "editar_pago"] },
-  { rotulo: "Excl", nome: "Excluir", sufixos: ["excluir"] },
-  { rotulo: "Excl$", nome: "Excluir valor / pago", sufixos: ["excluir_valor", "excluir_pago"] }
-];
 
 const ESTADOS = ["herdar", "permitir", "negar"] as const;
 
 // Grade resolvida: para cada tela x coluna, o codigo real que existe (ou null).
 const grade = computed(() =>
-  TELAS.map((tela) => {
-    const codigos = permissoesDaSecao({ titulo: tela.rotulo, prefixos: [tela.prefixo] });
-    const celulas = COLUNAS.map((coluna) => {
-      const codigo = coluna.sufixos.map((s) => `${tela.prefixo}_${s}`).find((c) => codigos.includes(c)) ?? null;
-      return { codigo };
-    });
-    return { tela: tela.rotulo, celulas };
-  })
+  montarGradePermissoes((tela) => permissoesDaSecao({ titulo: tela.rotulo, prefixos: [tela.prefixo] }))
 );
 
 function proximoEstado(codigo: string) {
@@ -96,7 +67,7 @@ function icone(codigo: string | null) {
 </template>
 
 <style scoped>
-/* Mockup tela 5. Grade telas x 9 acoes. */
+/* Grade de telas x acoes operacionais. */
 .pg-wrap {
   margin-bottom: 16px;
 }
@@ -108,7 +79,7 @@ function icone(codigo: string | null) {
 }
 .pg-linha {
   display: grid;
-  grid-template-columns: 120px repeat(9, 1fr);
+  grid-template-columns: 112px repeat(12, minmax(44px, 1fr));
   border-bottom: 0.5px solid #e4e8ef;
 }
 .pg-linha:last-child {
@@ -158,8 +129,8 @@ function icone(codigo: string | null) {
   display: none;
 }
 
-/* <=768px: a matriz de 10 colunas nao cabe num modal estreito -> vira CARDS (um por tela), com as
-   9 acoes em grid 3x3 e o rotulo de cada acao ao lado do toggle. Empilha, sem scroll horizontal. */
+/* <=768px: a matriz larga vira cards (um por tela), com as acoes em grid e o rotulo de cada acao
+   ao lado do toggle. Empilha, sem scroll horizontal. */
 @media (width <= 768px) {
   .pg-grid {
     display: grid;
