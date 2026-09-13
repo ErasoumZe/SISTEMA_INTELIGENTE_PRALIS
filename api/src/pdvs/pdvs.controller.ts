@@ -10,7 +10,7 @@ import { listarPdvs, salvarPdv } from "./pdvs.service.js";
 export async function registrarRotasPdvs(app: FastifyInstance): Promise<void> {
   app.get(
     "/api/pdvs",
-    { preHandler: exigirAlgumaPermissao(["cadastro_pdv_visualizar", "caixa_operar"]) },
+    { preHandler: exigirAlgumaPermissao(["cadastro_pdv_visualizar", "caixa_operar", "transferencias_criar"]) },
     async (request, reply) => {
       const query = empresaQuerySchema.parse(request.query);
       try {

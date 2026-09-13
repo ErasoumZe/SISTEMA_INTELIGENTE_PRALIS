@@ -57,6 +57,7 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
   let caixa: APIRequestContext;
   let empresaId = "";
   let caixaId = "";
+  let contaPdvId = "";
 
   test.beforeAll(async () => {
     admin = await entrarNaApi(USUARIOS.admin);
@@ -65,8 +66,13 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     ({ empresaId } = await sessao(admin));
     const eu = await sessao(caixa);
 
-    const contaId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} conta` });
-    const pdvId = await criar(admin, "/api/pdvs", { empresaId, nome: `${MARCA} PDV`, contaId, ativo: true });
+    contaPdvId = await criar(admin, "/api/contas", { empresaId, nome: `${MARCA} conta` });
+    const pdvId = await criar(admin, "/api/pdvs", {
+      empresaId,
+      nome: `${MARCA} PDV`,
+      contaId: contaPdvId,
+      ativo: true
+    });
 
     const hoje = new Date().toISOString().slice(0, 10);
     caixaId = await criar(caixa, "/api/caixa/abrir", {
@@ -92,6 +98,21 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
 
   // O painel vivia acima do cockpit de Tesouraria, e so para quem e retaguarda — por isso o ator
   // aqui e o ADMIN: se ele nao ve, ninguem ve.
+  test("Novo global carrega os PDVs sem depender da tela de Transferencias", async ({ page }) => {
+    await entrar(page, USUARIOS.admin);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Novo lançamento" }).click();
+    await page.locator(".fab-novo-list .v-list-item").filter({ hasText: "Transferências" }).click();
+    await expect(page.getByText("Nova transferência", { exact: true })).toBeVisible();
+
+    await page.getByLabel("Origem / Saída").selectOption({ label: "Cofre" });
+    await expect(page.getByLabel("Destino / Entrada").locator(`option[value="${contaPdvId}"]`)).toHaveCount(1);
+    await page.getByLabel("Destino / Entrada").selectOption(contaPdvId);
+    await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toBeEnabled();
+    await expect(page.locator(porTeste("ajuda-retorno"))).toHaveCount(0);
+  });
+
   test("Transferencias nao oferece mais o painel de programar entrega", async ({ page }) => {
     await entrar(page, USUARIOS.admin);
     await page.goto("/transferencias");
@@ -112,7 +133,8 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
     await expect(page.getByText("Transferência de retorno", { exact: true })).toBeVisible();
     await expect(page.getByText(/sangria/iu)).toHaveCount(0);
     await page.getByLabel("Origem / Saída").selectOption({ label: "Cofre" });
-    await page.getByLabel("Destino / Entrada").selectOption({ label: "Caixa loja" });
+    await expect(page.getByLabel("Destino / Entrada").locator(`option[value="${contaPdvId}"]`)).toHaveCount(1);
+    await page.getByLabel("Destino / Entrada").selectOption(contaPdvId);
     await page.locator(porTeste("opcao-transferencia-retorno")).check();
     await page.getByRole("button", { name: "Adicionar transferência de retorno" }).click();
     await expect(page.locator(".tr-planejamento-linha")).toHaveCount(2);
@@ -124,13 +146,25 @@ test.describe("Caixa - o caminho 'Programar entrega ao cofre' sumiu da tela", ()
 
     await page.locator(porTeste("opcao-transferencia-retorno")).uncheck();
     await page.getByRole("checkbox", { name: "Múltiplo Destino" }).check();
+    await expect(page.getByRole("checkbox", { name: "Múltiplo Destino" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "Tempo de confirmação" })).toBeDisabled();
+    await expect(page.getByRole("checkbox", { name: "Tempo de confirmação" })).not.toBeChecked();
     await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toBeDisabled();
+    await expect(page.locator(porTeste("ajuda-retorno"))).toHaveText(
+      "Transferência de retorno indisponível enquanto Múltiplo Destino estiver ativo."
+    );
     await page.getByRole("checkbox", { name: "Múltiplo Destino" }).uncheck();
+    await expect(page.locator(porTeste("ajuda-retorno"))).toHaveCount(0);
     await page.getByRole("checkbox", { name: "Tempo de confirmação" }).check();
+    await expect(page.getByRole("checkbox", { name: "Tempo de confirmação" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "Múltiplo Destino" })).toBeDisabled();
+    await expect(page.getByRole("checkbox", { name: "Múltiplo Destino" })).not.toBeChecked();
     await expect(page.locator(porTeste("opcao-transferencia-retorno"))).toBeDisabled();
+    await expect(page.locator(porTeste("ajuda-retorno"))).toHaveText(
+      "Transferência de retorno indisponível enquanto Tempo de confirmação estiver ativo."
+    );
     await page.getByRole("checkbox", { name: "Tempo de confirmação" }).uncheck();
+    await expect(page.locator(porTeste("ajuda-retorno"))).toHaveCount(0);
     await page.locator(porTeste("opcao-transferencia-retorno")).check();
 
     for (const largura of LARGURAS) {

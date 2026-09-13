@@ -19,6 +19,31 @@ export async function carregarOpcaoOpcional<T>(
   }
 }
 
+type PaginaDeOpcoes<T> = {
+  itens: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+// Select de formulario nao e listagem paginada: precisa conhecer TODAS as opcoes validas. Percorre
+// as paginas da API para que a opcao 11+ nao desapareca silenciosamente do dominio do formulario.
+export async function carregarTodasPaginas<T>(
+  carregar: (page: number, pageSize: number) => Promise<PaginaDeOpcoes<T>>,
+  pageSize = 100
+): Promise<T[]> {
+  const primeira = await carregar(1, pageSize);
+  const itens = [...primeira.itens];
+  const totalPaginas = Math.max(1, Math.ceil(primeira.total / Math.max(1, primeira.pageSize)));
+
+  for (let page = 2; page <= totalPaginas; page += 1) {
+    const pagina = await carregar(page, pageSize);
+    itens.push(...pagina.itens);
+  }
+
+  return itens;
+}
+
 // Mensagem discreta (deduplicada) com as listas que nao carregaram. "" quando nada faltou.
 export function avisoOpcoesIndisponiveis(faltas: string[]): string {
   const listas = Array.from(new Set(faltas));

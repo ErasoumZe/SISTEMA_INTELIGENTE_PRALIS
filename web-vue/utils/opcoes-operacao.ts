@@ -50,7 +50,7 @@ export const opcoesPorEntidade: Record<EntidadeOperacional, ChaveOpcaoOperacao[]
   // carregar a lista, o caminho normal da retirada abria um select vazio. `colaboradores` fica para o
   // credor LEGADO reabrir com nome, nao para lancamento novo.
   retirada: ["contas", "fornecedores", "colaboradores", "sociosGestores", "grupos"],
-  transferencia: ["contas"]
+  transferencia: ["contas", "pdvs"]
 };
 
 // Rotulo humano de cada lista, usado no aviso discreto de `avisoOpcoesIndisponiveis`.

@@ -32,7 +32,7 @@ import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { ErroApiCliente } from "~/composables/useApi";
-import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional } from "~/utils/opcoes-formulario";
+import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional, carregarTodasPaginas } from "~/utils/opcoes-formulario";
 import {
   dataHoraLocal,
   documentoEhCpf,
@@ -566,6 +566,15 @@ async function carregarEmpresas() {
   if (empresas.value.length && !empresaSelecionadaId.value) empresaSelecionadaId.value = empresas.value[0]?.id ?? "";
 }
 
+async function carregarPdvsCompletos(idEmpresa = empresaId.value) {
+  const instante = String(Date.now());
+  return carregarTodasPaginas((page, pageSize) => {
+    const params = new URLSearchParams({ t: instante, page: String(page), pageSize: String(pageSize) });
+    if (idEmpresa) params.set("empresaId", idEmpresa);
+    return apiGetPaginado<Opcao>(`/api/pdvs?${params.toString()}`);
+  });
+}
+
 async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
@@ -648,14 +657,14 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
-      carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), [])
     ]);
   } else if (tela === "fechamento") {
     dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
   } else if (tela === "caixa") {
     [dados.pdvs, dados.turnos, dados.maquininhas] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(
         faltas,
         "Turnos",
@@ -673,7 +682,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Opcoes dos filtros da retaguarda (PDV/turno/operador). A listagem em si e paginada e
     // filtrada pelo servidor dentro da propria tela.
     [dados.pdvs, dados.turnos, dados.colaboradores] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(
         faltas,
         "Turnos",
@@ -685,17 +694,17 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   } else if (tela === "pdv") {
     [dados.contas, dados.pdvs] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
-      carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), [])
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
     ]);
   } else if (tela === "transferencias") {
     // Origem/Destino: SO as contas que o usuario opera (contas_usuarios; admin ve todas). Ver
     // /api/contas-usuarios/minhas-contas. Sem vinculo => vazio (o modal mostra o aviso).
-    dados.contas = await carregarOpcaoOpcional(
-      faltas,
-      "Contas",
-      () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`),
-      []
-    );
+    // A lista de PDVs e carregada junto: sem ela o modal nao consegue reconhecer Cofre -> PDV e
+    // a opcao de retorno dependia, por acidente, de o usuario ter visitado outra tela antes.
+    [dados.contas, dados.pdvs] = await Promise.all([
+      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
+    ]);
   } else if (tela === "despesas") {
     Object.assign(
       dados,
@@ -740,7 +749,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         )
       ]);
   } else if (tela === "contas_pagar") {
-    dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []);
+    dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []);
   } else if (tela === "mercadorias" || tela === "pedidos") {
     Object.assign(
       dados,
@@ -864,7 +873,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     }
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "Clientes", () => apiGet<Opcao[]>(`/api/clientes${query}`), []),
       carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), []),
@@ -878,7 +887,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
   }
 
   if (temPermissao("caixa_operar") && idEmpresa && !dados.pdvs.length) {
-    dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => apiGet<Opcao[]>(`/api/pdvs${query}`), []);
+    dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []);
   }
 
   const aviso = avisoOpcoesIndisponiveis(faltas);
@@ -1075,7 +1084,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.formasPagamento = await apiGet<Opcao[]>(`/api/formas_pagamento${query}`);
     },
     pdvs: async () => {
-      alvo.pdvs = await apiGet<Opcao[]>(`/api/pdvs${query}`);
+      alvo.pdvs = await carregarPdvsCompletos(idEmpresa);
     },
     unidadesMedida: async () => {
       alvo.unidadesMedida = await apiGet<Opcao[]>(`/api/unidades_medida${query}`);

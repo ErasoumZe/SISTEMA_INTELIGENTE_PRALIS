@@ -74,6 +74,9 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contasDestinoIds.includes(dados.contaOrigemId)) {
     throw new Error("A conta de origem nao pode ser destino candidato");
   }
+  if (dados.contasDestinoIds.length > 0 && new Set([dados.contaDestinoId, ...dados.contasDestinoIds]).size < 2) {
+    throw new Error("Multiplo destino exige ao menos duas contas de destino distintas");
+  }
   if (dados.agendadaPara && new Date(dados.agendadaPara).getTime() <= Date.now()) {
     throw new Error("Agendamento precisa estar no futuro");
   }

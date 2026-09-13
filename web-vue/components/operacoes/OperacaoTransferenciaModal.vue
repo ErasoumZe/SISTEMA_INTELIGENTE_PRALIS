@@ -150,6 +150,18 @@ const rotaPlanejamentoElegivel = computed(
     !multiploDestino.value &&
     !tempoConfirmacaoAberto.value
 );
+const ajudaRetorno = computed(() => {
+  if (tempoConfirmacaoAberto.value) {
+    return "Transferência de retorno indisponível enquanto Tempo de confirmação estiver ativo.";
+  }
+  if (multiploDestino.value) {
+    return "Transferência de retorno indisponível enquanto Múltiplo Destino estiver ativo.";
+  }
+  if (!rotaPlanejamentoElegivel.value) {
+    return "Selecione Cofre como origem e uma conta de PDV ativa como destino para preparar o retorno.";
+  }
+  return "";
+});
 
 watch(rotaPlanejamentoElegivel, (elegivel) => {
   if (!elegivel && retornoAtivo.value) retornoAtivo.value = false;
@@ -185,8 +197,13 @@ watch(
 );
 
 const erroDestino = ref("");
+watch(multiploDestino, () => {
+  erroDestino.value = "";
+});
 watch(destinosSelecionados, (ids) => {
-  if (ids.length) erroDestino.value = "";
+  if ((multiploDestino.value && ids.length >= 2) || (!multiploDestino.value && ids.length >= 1)) {
+    erroDestino.value = "";
+  }
 });
 // --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
@@ -210,6 +227,10 @@ function valorResumo(n: number) {
 // `contaDestinoId` vazio passaria batido aqui e estouraria no backend com erro cru. Barra antes,
 // no campo, dizendo o que fazer.
 function destinoValido() {
+  if (multiploDestino.value && destinosSelecionados.value.length < 2) {
+    erroDestino.value = "Selecione ao menos duas contas de destino.";
+    return false;
+  }
   if (form.value.contaDestinoId) {
     erroDestino.value = "";
     return true;
@@ -371,7 +392,7 @@ const hojeISO = computed(() => dataISO(0));
         <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
            conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
         <div class="tr-opcoes">
-          <label class="tr-check">
+          <label class="tr-check" :class="{ 'tr-check-desabilitado': retornoAtivo || tempoConfirmacaoAberto }">
             <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo || tempoConfirmacaoAberto" />
             <span>Múltiplo Destino</span>
           </label>
@@ -380,7 +401,10 @@ const hojeISO = computed(() => dataISO(0));
 
           <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
              FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
-          <label class="tr-check">
+          <label
+            class="tr-check"
+            :class="{ 'tr-check-desabilitado': retornoAtivo || multiploDestino || Boolean(operacaoEditandoId) }"
+          >
             <input
               v-model="tempoConfirmacaoAberto"
               type="checkbox"
@@ -400,7 +424,11 @@ const hojeISO = computed(() => dataISO(0));
               <option value="30dias">30 dias</option>
             </select>
           </label>
-          <label v-if="!operacaoEditandoId && podePlanejarRetorno" class="tr-check">
+          <label
+            v-if="!operacaoEditandoId && podePlanejarRetorno"
+            class="tr-check"
+            :class="{ 'tr-check-desabilitado': !rotaPlanejamentoElegivel || multiploDestino || tempoConfirmacaoAberto }"
+          >
             <input
               v-model="retornoAtivo"
               type="checkbox"
@@ -410,14 +438,12 @@ const hojeISO = computed(() => dataISO(0));
             <span>Transferência de retorno</span>
           </label>
           <p
-            v-if="!operacaoEditandoId && podePlanejarRetorno && !rotaPlanejamentoElegivel"
+            v-if="!operacaoEditandoId && podePlanejarRetorno && ajudaRetorno"
             class="tr-planejamento-ajuda"
+            data-teste="ajuda-retorno"
+            role="status"
           >
-            {{
-              multiploDestino || tempoConfirmacaoAberto
-                ? "Desative Múltiplo Destino ou Tempo de confirmação para preparar o retorno."
-                : "Selecione Cofre como origem e uma conta de PDV ativa como destino para preparar o retorno."
-            }}
+            {{ ajudaRetorno }}
           </p>
           <section
             v-if="retornoAtivo"
@@ -651,6 +677,14 @@ const hojeISO = computed(() => dataISO(0));
   height: 16px;
   accent-color: var(--cat-transferencias-base, #c2410c);
 }
+.tr-check-desabilitado {
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+.tr-check-desabilitado input {
+  cursor: not-allowed;
+}
 .tr-aviso-contas {
   display: flex;
   align-items: center;
@@ -847,7 +881,7 @@ const hojeISO = computed(() => dataISO(0));
 }
 .tr-planejamento-ajuda {
   margin: 0 0 9px;
-  color: #9a3412;
+  color: #64748b;
   font-size: 11px;
 }
 .tr-planejamento-linha {

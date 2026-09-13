@@ -40,6 +40,12 @@ transferência pode declarar, atomicamente com a ida, várias **Transferências 
   (Cofre no fluxo de abertura);
 - retorno não tem tempo de confirmação. Prazo é opcional somente na transferência direta;
   retorno, múltiplo destino e prazo são opções mutuamente exclusivas;
+- múltiplo destino só se caracteriza com duas ou mais contas candidatas; com uma conta, a
+  transferência é direta;
+- a tela de Transferências e o `+ NOVO` global carregam as contas e **todos** os PDVs no próprio
+  acesso, percorrendo a paginação; o reconhecimento da rota Cofre → PDV não pode depender de outra
+  tela ter sido visitada antes nem da posição do PDV na lista. Quem possui `transferencias_criar`
+  pode consultar a lista enxuta de PDVs necessária ao formulário;
 - todo escritor novo usa `tipo = 'retorno'`; `sangria` existe apenas em leitura histórica;
 - cancelamento é exclusivo da retaguarda, pode ocorrer antes ou depois do vínculo com o Caixa e
   preserva linha, motivo, autor e horário.

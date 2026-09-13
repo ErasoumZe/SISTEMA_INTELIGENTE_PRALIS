@@ -241,7 +241,6 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       valorOriginal: 35,
       contaOrigemId: idsTeste.contaBanco,
       contaDestinoId: contaCId,
-      contasDestinoIds: [contaCId],
       nLacreDoc: lacre
     });
     expect(criada.statusCode, criada.body).toBe(201);
@@ -329,7 +328,6 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       valorOriginal: 40,
       contaOrigemId: fx.contaId,
       contaDestinoId: contaBId,
-      contasDestinoIds: [contaBId],
       nLacreDoc: lacre
     });
     expect(criada.statusCode, criada.body).toBe(201);
@@ -397,7 +395,6 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       valorOriginal: 25,
       contaOrigemId: idsTeste.contaBanco,
       contaDestinoId: contaId,
-      contasDestinoIds: [contaId],
       nLacreDoc: lacre
     });
     expect(criada.statusCode, criada.body).toBe(201);
@@ -599,7 +596,6 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       valorOriginal: 15,
       contaOrigemId: fxA.contaId,
       contaDestinoId: fxB.contaId,
-      contasDestinoIds: [fxB.contaId],
       nLacreDoc: marcador
     });
     expect(criada.statusCode, criada.body).toBe(201);
