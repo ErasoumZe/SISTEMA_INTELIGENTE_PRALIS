@@ -83,6 +83,10 @@ describe("opcoesPorEntidade", () => {
     }
   );
 
+  it("Deve_PedirPdvs_Quando_ATransferenciaPodePrepararRetorno", () => {
+    expect(opcoesPorEntidade.transferencia).toContain("pdvs");
+  });
+
   // Nenhuma lista pedida duas vezes: duplicata vira duas requisicoes a mesma rota ao abrir o modal.
   it.each(Object.keys(opcoesPorEntidade) as (keyof typeof opcoesPorEntidade)[])(
     "Deve_NaoRepetirChave_Quando_AOperacaoE_%s",

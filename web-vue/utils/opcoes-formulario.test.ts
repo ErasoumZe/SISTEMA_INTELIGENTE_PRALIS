@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional } from "./opcoes-formulario";
+import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional, carregarTodasPaginas } from "./opcoes-formulario";
 
 describe("carregarOpcaoOpcional", () => {
   it("devolve o valor carregado e nao registra falta quando a carga tem sucesso", async () => {
@@ -56,6 +56,24 @@ describe("carregarOpcaoOpcional", () => {
     );
     expect(valor).toBe(vazio);
     expect(faltas).toEqual(["Grupos"]);
+  });
+});
+
+describe("carregarTodasPaginas", () => {
+  it("carrega todos os itens quando a lista ultrapassa uma pagina", async () => {
+    const paginasPedidas: number[] = [];
+    const itens = await carregarTodasPaginas(async (page, pageSize) => {
+      paginasPedidas.push(page);
+      return {
+        itens: page === 1 ? [{ id: "pdv-1" }, { id: "pdv-2" }] : [{ id: "pdv-3" }],
+        total: 3,
+        page,
+        pageSize
+      };
+    }, 2);
+
+    expect(paginasPedidas).toEqual([1, 2]);
+    expect(itens).toEqual([{ id: "pdv-1" }, { id: "pdv-2" }, { id: "pdv-3" }]);
   });
 });
 
