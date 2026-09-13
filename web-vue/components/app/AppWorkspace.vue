@@ -32,7 +32,11 @@ import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { ErroApiCliente } from "~/composables/useApi";
-import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional, carregarTodasPaginas } from "~/utils/opcoes-formulario";
+import {
+  avisoOpcoesIndisponiveis,
+  carregarOpcaoOpcional,
+  carregarTodasOpcoesPaginadas
+} from "~/utils/opcoes-formulario";
 import {
   dataHoraLocal,
   documentoEhCpf,
@@ -566,13 +570,14 @@ async function carregarEmpresas() {
   if (empresas.value.length && !empresaSelecionadaId.value) empresaSelecionadaId.value = empresas.value[0]?.id ?? "";
 }
 
+async function carregarOpcoesCompletas(rota: string, idEmpresa = empresaId.value) {
+  const parametros: Record<string, string> = { t: String(Date.now()) };
+  if (idEmpresa) parametros.empresaId = idEmpresa;
+  return carregarTodasOpcoesPaginadas<Opcao>(rota, parametros, (url) => apiGetPaginado<Opcao>(url));
+}
+
 async function carregarPdvsCompletos(idEmpresa = empresaId.value) {
-  const instante = String(Date.now());
-  return carregarTodasPaginas((page, pageSize) => {
-    const params = new URLSearchParams({ t: instante, page: String(page), pageSize: String(pageSize) });
-    if (idEmpresa) params.set("empresaId", idEmpresa);
-    return apiGetPaginado<Opcao>(`/api/pdvs?${params.toString()}`);
-  });
+  return carregarOpcoesCompletas("/api/pdvs", idEmpresa);
 }
 
 async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
@@ -651,7 +656,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Os usuarios alimentam a grade "quem pode movimentar" do formulario.
     [dados.contas, dados.usuarios] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas/saldos${query}`), []),
-      carregarOpcaoOpcional(faltas, "Usuários", () => apiGet<Opcao[]>(`/api/usuarios${query}`), [])
+      carregarOpcaoOpcional(faltas, "Usuários", () => carregarOpcoesCompletas("/api/usuarios", idEmpresa), [])
     ]);
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
@@ -689,7 +694,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         () => apiGetPaginado<Opcao>(`/api/turnos${query}`).then((r) => r.itens),
         []
       ),
-      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Colaboradores", () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa), [])
     ]);
   } else if (tela === "pdv") {
     [dados.contas, dados.pdvs] = await Promise.all([
@@ -730,7 +735,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         // E6: colaboradores sao a SEGUNDA origem do item na discriminacao de despesa (a primeira e
         // patrimonio). A tela de despesas nao os carregava — o select ficava so com "—" e nao havia
         // como discriminar, ja que a descricao livre saiu.
-        carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+        carregarOpcaoOpcional(
+          faltas,
+          "Colaboradores",
+          () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
+          []
+        ),
         carregarOpcaoOpcional(
           faltas,
           "Grupos de patrimônio",
@@ -796,7 +806,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     [dados.contas, dados.fornecedores, dados.colaboradores, dados.sociosGestores] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
-      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Colaboradores",
+        () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
+        []
+      ),
       carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
     ]);
   } else if (tela === "grupos") {
@@ -808,7 +823,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Uma chamada traz grupos + itens; os setores alimentam o select do item.
     const [patrimonio, setores] = await Promise.all([
       apiGet<Pick<Opcoes, "gruposPatrimonio" | "patrimonioItens">>(`/api/patrimonio${query}`),
-      carregarOpcaoOpcional(faltas, "Setores", () => apiGet<Opcao[]>(`/api/setores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Setores", () => carregarOpcoesCompletas("/api/setores", idEmpresa), [])
     ]);
     Object.assign(dados, patrimonio);
     dados.setores = setores;
@@ -820,10 +835,10 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     Object.assign(dados, await apiGet<Pick<Opcoes, "areas" | "setores">>(`/api/areas_setores${query}`));
   } else if (tela === "usuarios") {
     [dados.usuarios, dados.colaboradores, dados.setores, dados.cargos] = await Promise.all([
-      apiGet<Opcao[]>(`/api/usuarios${query}`),
-      apiGet<Opcao[]>(`/api/colaboradores${query}`),
-      apiGet<Opcao[]>(`/api/setores${query}`),
-      apiGet<Opcao[]>(`/api/cargos${query}`)
+      carregarOpcoesCompletas("/api/usuarios", idEmpresa),
+      carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
+      carregarOpcoesCompletas("/api/setores", idEmpresa),
+      carregarOpcoesCompletas("/api/cargos", idEmpresa)
     ]);
   } else if (tela === "permissoes") {
     Object.assign(
@@ -845,9 +860,9 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     permissoesPagina.value = { itens: [], total: 0, page: 1, pageSize: permissoesPagina.value.pageSize };
   } else if (tela === "colaboradores") {
     [dados.colaboradores, dados.cargos, dados.setores] = await Promise.all([
-      apiGet<Opcao[]>(`/api/colaboradores${query}`),
-      apiGet<Opcao[]>(`/api/cargos${query}`),
-      apiGet<Opcao[]>(`/api/setores${query}`)
+      carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
+      carregarOpcoesCompletas("/api/cargos", idEmpresa),
+      carregarOpcoesCompletas("/api/setores", idEmpresa)
     ]);
     dados.turnos = (await apiGetPaginado<Opcao>(`/api/turnos${query}`)).itens;
   } else if (tela === "fornecedores") {
@@ -875,7 +890,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "Clientes", () => apiGet<Opcao[]>(`/api/clientes${query}`), []),
-      carregarOpcaoOpcional(faltas, "Colaboradores", () => apiGet<Opcao[]>(`/api/colaboradores${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Colaboradores",
+        () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
+        []
+      ),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), []),
       carregarOpcaoOpcional(
         faltas,
@@ -1072,7 +1092,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.fornecedores = await apiGet<Opcao[]>(`/api/fornecedores${query}`);
     },
     colaboradores: async () => {
-      alvo.colaboradores = await apiGet<Opcao[]>(`/api/colaboradores${query}`);
+      alvo.colaboradores = await carregarOpcoesCompletas("/api/colaboradores", idEmpresa);
     },
     sociosGestores: async () => {
       alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);

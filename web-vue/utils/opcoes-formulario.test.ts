@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { avisoOpcoesIndisponiveis, carregarOpcaoOpcional, carregarTodasPaginas } from "./opcoes-formulario";
+import {
+  avisoOpcoesIndisponiveis,
+  carregarOpcaoOpcional,
+  carregarTodasOpcoesPaginadas,
+  carregarTodasPaginas
+} from "./opcoes-formulario";
 
 describe("carregarOpcaoOpcional", () => {
   it("devolve o valor carregado e nao registra falta quando a carga tem sucesso", async () => {
@@ -74,6 +79,31 @@ describe("carregarTodasPaginas", () => {
 
     expect(paginasPedidas).toEqual([1, 2]);
     expect(itens).toEqual([{ id: "pdv-1" }, { id: "pdv-2" }, { id: "pdv-3" }]);
+  });
+
+  it("preserva os filtros e percorre todas as paginas de um endpoint de opcoes", async () => {
+    const urls: string[] = [];
+    const itens = await carregarTodasOpcoesPaginadas(
+      "/api/usuarios",
+      { empresaId: "empresa-1", t: "123" },
+      async (url) => {
+        urls.push(url);
+        const page = Number(new URL(url, "http://local").searchParams.get("page"));
+        return {
+          itens: page === 1 ? [{ id: "usuario-1" }, { id: "usuario-2" }] : [{ id: "usuario-3" }],
+          total: 3,
+          page,
+          pageSize: 2
+        };
+      },
+      2
+    );
+
+    expect(urls).toEqual([
+      "/api/usuarios?empresaId=empresa-1&t=123&page=1&pageSize=2",
+      "/api/usuarios?empresaId=empresa-1&t=123&page=2&pageSize=2"
+    ]);
+    expect(itens).toEqual([{ id: "usuario-1" }, { id: "usuario-2" }, { id: "usuario-3" }]);
   });
 });
 

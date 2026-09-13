@@ -13,6 +13,7 @@ import type { CaixaStatus, Opcao } from "~/types/padaria";
 import AppShell from "~/components/app/AppShell.vue";
 import { usePermissoes } from "~/composables/usePermissoes";
 import { itemPorTela, mensagemErro } from "~/utils/domain";
+import { carregarTodasOpcoesPaginadas } from "~/utils/opcoes-formulario";
 
 type IntegracoesResposta = {
   integracoes: Array<{ tipo: TipoIntegracao; nome: string }>;
@@ -27,7 +28,7 @@ type DicionarioResposta = {
 type TipoRegistroManual = Exclude<TipoRegistroIntegracao, "venda">;
 
 const router = useRouter();
-const { apiGet, apiPost, apiPut, carregarSessao } = useApi();
+const { apiGet, apiGetPaginado, apiPost, apiPut, carregarSessao } = useApi();
 
 const sessao = ref<AuthSession | null>(null);
 const empresas = ref<Opcao[]>([]);
@@ -173,7 +174,9 @@ async function carregarOpcoesVinculo() {
     apiGet<Opcao[]>(`/api/clientes${query}`),
     apiGet<Opcao[]>(`/api/produtos/opcoes${query}`),
     apiGet<Opcao[]>(`/api/formas_pagamento${query}`),
-    apiGet<Opcao[]>(`/api/colaboradores${query}`)
+    carregarTodasOpcoesPaginadas<Opcao>("/api/colaboradores", { empresaId: empresaId.value }, (url) =>
+      apiGetPaginado<Opcao>(url)
+    )
   ]);
 }
 

@@ -44,6 +44,23 @@ export async function carregarTodasPaginas<T>(
   return itens;
 }
 
+// Adaptador para endpoints paginados usados como fonte de SELECT/grade local. Centraliza a
+// montagem de `page`/`pageSize` para que cada consumidor nao volte a chamar `apiGet` e descartar
+// `meta.pagination`, que foi a causa de usuarios/colaboradores/setores/cargos pararem no item 10.
+export async function carregarTodasOpcoesPaginadas<T>(
+  rota: string,
+  parametros: Record<string, string>,
+  carregar: (url: string) => Promise<PaginaDeOpcoes<T>>,
+  pageSize = 100
+): Promise<T[]> {
+  return carregarTodasPaginas((page, tamanhoPagina) => {
+    const query = new URLSearchParams(parametros);
+    query.set("page", String(page));
+    query.set("pageSize", String(tamanhoPagina));
+    return carregar(`${rota}?${query.toString()}`);
+  }, pageSize);
+}
+
 // Mensagem discreta (deduplicada) com as listas que nao carregaram. "" quando nada faltou.
 export function avisoOpcoesIndisponiveis(faltas: string[]): string {
   const listas = Array.from(new Set(faltas));
