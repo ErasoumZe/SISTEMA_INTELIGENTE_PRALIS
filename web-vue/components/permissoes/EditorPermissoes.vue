@@ -9,6 +9,7 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { permissaoPertenceASecao, secoesPermissoes } from "~/utils/domain";
 import { regrasGravadasDoAlvo } from "~/utils/permissoes-payload";
 import PermissoesGrade from "~/components/permissoes/PermissoesGrade.vue";
+import PermissoesMenuOperacional from "~/components/permissoes/PermissoesMenuOperacional.vue";
 
 const {
   opcoesEmpresa,
@@ -190,6 +191,14 @@ watch(
         Clique em cada ação para alternar entre herdado, permitido e negado.
       </div>
       <PermissoesGrade />
+    </v-col>
+
+    <v-col cols="12">
+      <div class="text-body-2 font-weight-bold mb-1">Comportamento do menu operacional</div>
+      <div class="text-caption text-medium-emphasis mb-3">
+        Defina se cada módulo aparece, fica desabilitado ou exige um caixa aberto. Clique no estado para alternar.
+      </div>
+      <PermissoesMenuOperacional />
     </v-col>
 
     <v-col cols="12">
