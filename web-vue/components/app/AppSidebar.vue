@@ -24,10 +24,7 @@ const props = defineProps<{
   escuro: boolean;
   aberto: boolean;
   rail: boolean;
-  recolhido: boolean;
   mobile: boolean;
-  /** Acima de 1024px, onde recolher e escolha do usuario e nao imposicao do viewport. */
-  podeRecolher: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -125,39 +122,9 @@ useItemAtivoVisivel();
     <div class="drawer-shell">
       <div class="drawer-top">
         <div class="sidebar-logo-row">
-          <!-- A MARCA ALTERNA O MENU, junto com o chevron. Duas coisas se encontram aqui e as duas
-               ficam: o COMPONENTE animado (que substituiu o PNG estatico) e o comportamento de
-               recolher (que o `.sidebar-logo-alvo` trouxe).
-
-               UM SUBARVORE SO, com `<component :is>`, em vez de duas copias da marca sob `v-if`.
-               Duplicar a marca para so trocar a casca em volta seria garantir que as duas versoes
-               divergissem no primeiro ajuste de tamanho ou de brilho.
-
-               O NOME VIVE NA CASCA, e o miolo e sempre `aria-hidden`. Sem isso a marca seria
-               anunciada DUAS vezes: o `AppMarcaCicluz` ja carrega `role="img"` com o nome dela por
-               dentro. Com a casca nomeada e o miolo escondido, quem usa leitor de tela ouve uma
-               coisa so, e ouve a coisa certa em cada caso.
-
-               ACIMA DE 1024px a casca e `<button>` e o nome diz a marca E a acao — "Cicluz Gestao
-               Profissional — recolher menu". O chevron ao lado diz so "Recolher menu". Os dois
-               fazem a MESMA coisa (afordancia redundante, nao defeito), e e por os nomes serem
-               DIFERENTES que quem navega por leitor de tela consegue distinguir um do outro.
-               O nome comeca pelo texto da marca, que e o rotulo visivel, como pede a WCAG 2.5.3.
-
-               E SEMPRE BOTAO, nas tres faixas. A versao anterior so o tornava clicavel acima de
-               1024px, com o argumento de que abaixo disso recolher nao seria escolha do usuario.
-               O argumento estava errado, e o teste mostrou: `drawerRail` e apenas `drawerRecolhido`
-               (AppShell.vue:75) — o rail NAO e imposto pelo viewport, entao `alternar` funciona nas
-               tres faixas. Medido antes do conserto: a 1000px o alvo era `<div>` e nao havia como
-               reabrir o menu; no celular, idem.
-               E na faixa do rail e justamente onde ele mais importa, porque ali os rotulos nao
-               aparecem e o simbolo e o unico caminho de volta.
-               No celular isto tambem fecha o A-03 do roteiro: a gaveta aberta nao tinha NENHUM
-               controle visivel para fechar — so o scrim e o Esc, os dois invisiveis.
-
-               O NOME ACOMPANHA A ACAO REAL de cada faixa: no celular a gaveta FECHA, no desktop o
-               menu recolhe ou expande. Dizer "recolher" onde a acao e "fechar" seria mentir para
-               quem so ouve o nome. -->
+          <!-- Um unico controle reune marca e indicador da acao. A versao anterior tinha dois
+               botoes vizinhos emitindo o mesmo evento; agora foco, rotulo e breakpoint vivem no
+               mesmo alvo. No rail permanece o simbolo oficial e, no mobile, ele fecha a gaveta. -->
           <button
             type="button"
             class="sidebar-logo-alvo"
@@ -177,33 +144,12 @@ useItemAtivoVisivel();
               largura-palavra="136px"
               aria-hidden="true"
             />
-          </button>
-          <!-- O MESMO BOTAO SERVE AS DUAS FAIXAS, e isso e deliberado: no celular ele nao e um
-               controle novo, e o mesmo controle aparecendo onde ele faltava. A acao e a mesma
-               (`alternar`), entao nao nasce um segundo caminho para fechar a gaveta — nascer um
-               segundo seria a origem de os dois divergirem depois.
-
-               NO CELULAR A GAVETA JA FECHAVA pelo simbolo (VIS-F15), e continua fechando. O que
-               faltava era AFORDANCIA: nada na tela dizia que dava para tocar ali. A seta diz.
-
-               O NOME E PROPRIO E DIFERENTE do da marca — "Fechar menu" contra "Cicluz Gestao
-               Profissional — fechar menu". Dois controles vizinhos com o mesmo nome fazem quem usa
-               leitor de tela ouvir a mesma coisa duas vezes sem saber distinguir; e o defeito que
-               o VIS-F14 corrigiu no desktop, e ele nao pode voltar pela porta do celular.
-
-               O ICONE MUDA COM A FAIXA porque a ACAO muda: no celular a gaveta FECHA (seta de
-               voltar), no desktop o menu recolhe ou expande (chevron). Acima de 1024px nada muda. -->
-          <button
-            v-if="podeRecolher || mobile"
-            type="button"
-            class="sidebar-recolher"
-            :class="{ 'sidebar-fechar': mobile }"
-            :aria-expanded="mobile ? aberto : !rail"
-            :title="mobile ? 'Fechar menu' : rail ? 'Expandir menu' : 'Recolher menu'"
-            :aria-label="mobile ? 'Fechar menu' : rail ? 'Expandir menu' : 'Recolher menu'"
-            @click="emit('alternar')"
-          >
-            <v-icon :icon="mobile ? 'mdi-arrow-left' : 'mdi-chevron-left'" size="20" />
+            <v-icon
+              class="sidebar-toggle-icon"
+              :icon="mobile ? 'mdi-arrow-left' : rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+              size="20"
+              aria-hidden="true"
+            />
           </button>
         </div>
 

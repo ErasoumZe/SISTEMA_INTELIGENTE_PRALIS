@@ -3374,83 +3374,15 @@ body {
 }
 /* ===================== FIM VIS-E7e ===================== */
 
-/* ===================== INICIO VIS-E7h — O TOPO DA SIDEBAR ENCOLHE (28/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   O topo comia 345px antes do primeiro item do menu, medido a 1440. As parcelas, medidas e nao
-   estimadas: logo-row 54 · "+ NOVO" 44 (+10 de margem) · card do caixa 143.
-
-   O "+ NOVO" NAO E TOCADO: medido em 44px/14px/600, ja esta na escala unica do VIS-E6e. Bloco que
-   nao muda nada e divida.
-
-   1. O LOGO DEIXA DE SER BOTAO. Ele era o gatilho de recolher/expandir — um alvo de 300px de
-      largura para uma acao que nao se anuncia. Vira imagem, e o controle vira um chevron proprio,
-      com `aria-expanded`, que diz o que faz.
-
-      O CHEVRON SO EXISTE ACIMA DE 1024px, e a razao esta no proprio codigo: de 769 a 1024 o
-      `AppShell.vue` faz `drawerRecolhido.value = mediaRail.matches`, entao o rail e imposto pelo
-      viewport e o proximo resize desfaz qualquer alternancia. Controle que nao controla e
-      decoracao. Em <=768px nao existe recolher — a gaveta abre e fecha.
-
-      A ARMADILHA: `rail` fica `true` nos DOIS casos — o rail automatico de 769-1024 e o rail que o
-      usuario escolheu acima de 1024. Condicionar o chevron a `!rail` o faria sumir justamente
-      quando ele e o unico jeito de expandir de volta. Por isso o sinal e `podeRecolher`, que nasce
-      de `!mobile && !mediaRail.matches` no AppShell, e nao de `rail`.
-
-   2. O ATALHO DO LOGO SAI, e isso tinha um custo escondido. Em <=768px o clique no logo FECHAVA a
-      gaveta. Medido antes de remover: dos tres caminhos de saida, o botao da topbar fica COBERTO
-      pela propria gaveta e o Esc nao fazia nada — sobrava o scrim, e para teclado, nada. Por isso o
-      Esc foi consertado ANTES, no VIS-E7g. Agora sobram dois caminhos independentes do logo.
-
-   3. O ROTULO DE GRUPO vai de 10px para 11px (`--cx-fs-micro`). Ele virou <button> no VIS-E7c: um
-      controle em 10px com `letter-spacing` de 1.4px e pequeno demais para o que ele agora faz.
-   ================================================================================================ */
-
-/* 1. A linha do logo nao e mais controle: some o cursor, o fundo de hover e o alvo de foco. */
+/* O topo preserva a marca e usa um unico controle para recolher, expandir ou fechar a gaveta. */
 .sidebar-logo-row {
   justify-content: center;
-  gap: var(--cx-sp-2);
   cursor: default;
 }
 .sidebar-logo-row:hover {
   background: none;
 }
-
-/* 2. O chevron, na borda direita. `flex: none` para nao encolher quando o logo cresce. */
-.sidebar-recolher {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 32px;
-  min-height: 32px;
-  border: 0;
-  border-radius: var(--cx-r-sm);
-  background: none;
-  color: var(--marca-tinta-suave);
-  cursor: pointer;
-  transition:
-    background var(--cx-dur-1) var(--cx-ease),
-    transform var(--cx-dur-2) var(--cx-ease);
-}
-.sidebar-recolher:hover {
-  background: var(--cx-hover);
-  color: var(--marca-tinta);
-}
-/* Recolhido, o chevron aponta para o outro lado: o mesmo icone girando, como o da categoria. Aqui
-   o `transform` E O ESTADO, entao ele fica fora da lista de excecoes do reduced-motion pelo mesmo
-   criterio do VIS-E7c — neutraliza-lo apontaria a seta para o lado errado. */
-.sidebar-recolher[aria-expanded="false"] {
-  transform: rotate(180deg);
-}
-
-/* 3. Recolhido acima de 1024px a coluna tem 72px, e logo (52) + chevron (32) nao cabem lado a lado.
-      Nesse estado — e SO nele, que e escolha do usuario — os dois empilham. */
-.padaria-sidebar.rail .sidebar-logo-row {
-  flex-direction: column;
-  gap: var(--cx-sp-1);
-}
-
-/* 4. O rotulo de grupo cresce: virou controle no VIS-E7c e 10px era pequeno demais para isso. */
+/* O rotulo de grupo cresce: virou controle no VIS-E7c e 10px era pequeno demais para isso. */
 .sidebar-group-label {
   font-size: var(--cx-fs-micro);
 }
@@ -4007,8 +3939,10 @@ body {
    40px. A altura vinha da imagem escalada, nao de uma regra — e altura que ninguem declarou e
    altura que ninguem defende. Este alvo so existe acima de 1024px, onde o piso e 40 e nao 44. */
 .sidebar-logo-alvo {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
+  gap: var(--cx-sp-2);
   width: 100%;
   min-height: 40px;
   padding: 0;
@@ -4016,6 +3950,27 @@ body {
   background: none;
   cursor: pointer;
   text-align: inherit;
+}
+
+.sidebar-toggle-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-height: 40px;
+  border-radius: var(--cx-r-sm);
+  color: var(--marca-tinta-suave);
+}
+
+/* No rail, simbolo e seta dividem verticalmente o mesmo alvo — ambos permanecem visiveis sem
+   ultrapassar os 72px da coluna. */
+.padaria-sidebar.rail .sidebar-logo-alvo {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--cx-sp-1);
+}
+.padaria-sidebar.rail .sidebar-toggle-icon {
+  width: 32px;
+  min-height: 32px;
 }
 
 .padaria-sidebar.rail .drawer-top .sidebar-actions {
@@ -4031,38 +3986,7 @@ body {
 }
 /* ===================== FIM VIS-F9 ===================== */
 
-/* ===================== INICIO VIS-F14 — O TOPO DA SIDEBAR FECHA OS FUROS DE ALVO E DE FEEDBACK (28/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   O `.sidebar-recolher` computava 32x32. Ele nasceu assim no VIS-E7h (`main.css:3419` declara
-   `width: 32px` e `min-height: 32px`), e o bloco de la NAO e tocado aqui — este seletor tem a mesma
-   especificidade e vem depois, entao vence por ordem.
-
-   A REGUA QUE FALHA NAO E A WCAG. O minimo da 2.5.8 e 24x24, e 32 passa nele com folga. O que 32
-   nao cumpre e o piso de 40px do PROPRIO PROJETO, no 67 §9 — e essa e a mesma regra que, meia hora
-   antes neste lote, pegou os 223x38 do `.sidebar-logo-alvo` e obrigou o `min-height: 40px` de la.
-
-   DUAS MEDIDAS, O MESMO PISO, NO MESMO LOTE: consertar uma e deixar a outra e a incoerencia que nao
-   pode subir — ainda mais num merge que adiciona um guardiao ao build. Foi por isso que ele entrou,
-   e nao porque a WCAG exigisse.
-
-   Eu tinha classificado isto como "pre-existente, nao e desta mudanca". Estava errado pela metade:
-   nao veio do F8 nem do F9, mas veio do VIS-E7h, que E ancestral do HEAD e sobe no mesmo merge.
-   Pre-existente em relacao ao commit nao quer dizer pre-existente em relacao ao que a frente entrega.
-   ========================================================================================================= */
-.sidebar-recolher {
-  width: 40px;
-  min-height: 40px;
-}
-
-/* 2 · O FEEDBACK VAI PARA O ALVO, e nao para a faixa inteira.
-   MEDIDO no navegador: passar o mouse na marca acendia `.sidebar-logo-row` INTEIRA (264px,
-   chevron e vao morto incluidos), e o `.sidebar-logo-alvo` — que e o botao de verdade — nao tinha
-   fundo proprio nenhum. Passar o mouse no CHEVRON acendia a faixa junto com ele.
-   Com dois controles vizinhos que fazem a mesma coisa, uma resposta visual so e pior que duas:
-   o alvo mente sobre o proprio tamanho, e nada distingue um do outro. Cada um acende a si.
-   A regra da faixa vem do bloco SHELL, que e congelado — ela nao e editada, e neutralizada aqui
-   com a mesma especificidade e ordem posterior. */
+/* O feedback pertence ao unico alvo, e nao a faixa inteira que o contem. */
 .shell-mobills .sidebar-logo-row:hover,
 .shell-mobills .sidebar-logo-row:active {
   background: none;
@@ -4075,12 +3999,6 @@ body {
   background: var(--cx-pressed);
 }
 
-/* 3 · MAO SO NO QUE CLICA. Abaixo de 1024px a casca vira `<div role="img">` de proposito, porque
-   recolher nao e escolha do usuario ali — mas o `cursor: pointer` ficava, e tablet com mouse
-   mostrava mao sobre uma marca inerte. O seletor de elemento resolve sem `v-if` no template. */
-.sidebar-logo-alvo {
-  cursor: default;
-}
 button.sidebar-logo-alvo {
   cursor: pointer;
   /* O anel do `:focus-visible` global desenhava um retangulo vivo dentro de uma faixa arredondada. */
@@ -4253,27 +4171,16 @@ button.sidebar-logo-alvo {
 }
 /* ===================== FIM VIS-F19 ===================== */
 
-/* ===================== INICIO VIS-F20 — A SETA DE FECHAR NA GAVETA DO CELULAR (29/08/2026) =====================
-   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
-
-   A gaveta do celular JA FECHAVA pelo simbolo desde o VIS-F15, e o clique estava correto. O que
-   faltava era AFORDANCIA: nada na tela dizia que dava para tocar ali — o usuario via uma logo, nao
-   um controle. Agora ha uma seta, e ela dispara a MESMA acao, sem criar segundo caminho.
-
-   44x44 E O PISO DO 67 §9 NO CELULAR, e por isso ele sobe de 40 (o valor do VIS-F14, que vale para
-   o desktop, onde o piso e 40).
-
-   `sidebar-fechar` existe para o botao poder ser DIFERENTE no celular sem que a regra do desktop
-   precise saber disso: la ele continua sendo o chevron de recolher, com o mesmo tamanho e o mesmo
-   nome de sempre.
-   ================================================================================================== */
+/* No celular a seta de fechar ocupa o piso tactil de 44px, dentro do mesmo botao da marca. */
 @media (width <= 768px) {
-  .sidebar-recolher.sidebar-fechar {
+  .sidebar-logo-alvo {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .sidebar-toggle-icon {
     width: 44px;
     min-height: 44px;
   }
 }
-/* ===================== FIM VIS-F20 ===================== */
 
 /* ===================== INICIO VIS-F21 — A LINHA DECORATIVA NO CELULAR (29/08/2026) =====================
    Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
