@@ -83,7 +83,7 @@ test("diretor gerencia o acesso individual pela propria lista de usuarios", asyn
   await expect(linhaTesouraria).toContainText("Usuário comum");
   await linhaTesouraria.getByRole("button", { name: "Acessos" }).click();
 
-  await expect(page.getByText("Acessos do usuário", { exact: true })).toBeVisible();
+  await expect(page.getByText("Configurar acessos", { exact: true })).toBeVisible();
   await expect(page.getByText(/combina setor, cargos ativos e exceções individuais/i)).toBeVisible();
   await expect(page.getByText(/permissões efetivas/i)).toBeVisible();
 
@@ -122,7 +122,7 @@ test("excecao individual salva passa a valer no novo login sem liberar outra rot
     await linhaPermissao.getByRole("button", { name: "Permitir", exact: true }).click();
     await page.getByRole("button", { name: "Salvar", exact: true }).click();
     await expect(page.getByText("Cadastro atualizado com sucesso.", { exact: true })).toBeVisible();
-    await expect(page.getByText("Acessos do usuário", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Configurar acessos", { exact: true })).toHaveCount(0);
 
     // O perfil e calculado no login. Sair pela interface tambem limpa o estado Nuxt do Diretor,
     // impedindo um falso positivo em que o alvo herdaria o menu mantido no cliente.
@@ -159,4 +159,84 @@ test("excecao individual salva passa a valer no novo login sem liberar outra rot
     if (cenario) await salvarRegras(api, cenario.usuarioId, cenario.regrasOriginais);
     await api.dispose();
   }
+});
+
+test("usuario comum recem-criado segue direto para configurar acessos", async ({ page }) => {
+  test.setTimeout(120_000);
+  const usuarioId = `e2e-usuario-guiado-${Date.now()}`;
+  const email = `${usuarioId}@teste.local`;
+  let payloadCriacao: Record<string, unknown> | null = null;
+  let usuarioCriado = false;
+
+  // A API nao possui DELETE de usuario. Interceptar somente o POST evita deixar conta ficticia no
+  // banco real de desenvolvimento; as leituras seguintes preservam o contrato atual e acrescentam
+  // apenas o usuario retornado por esse POST simulado.
+  await page.route("**/api/usuarios", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    payloadCriacao = route.request().postDataJSON() as Record<string, unknown>;
+    usuarioCriado = true;
+    return route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, data: { id: usuarioId } })
+    });
+  });
+  await page.route("**/api/permissoes**", async (route) => {
+    if (!usuarioCriado || route.request().method() !== "GET") return route.continue();
+    const url = new URL(route.request().url());
+    if (url.pathname === `/api/permissoes/usuarios/${usuarioId}/efetivas`) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          data: {
+            usuarioId,
+            nome: "Usuario E2E guiado",
+            email,
+            role: "usuario_comum",
+            permissoesHerdadas: [],
+            permissoesEfetivas: []
+          }
+        })
+      });
+    }
+    if (url.pathname !== "/api/permissoes") return route.continue();
+
+    const resposta = await route.fetch();
+    const corpo = (await resposta.json()) as RespostaApi<{
+      usuarios: Array<Record<string, unknown>>;
+      usuariosPermissoes: Array<Record<string, unknown>>;
+    }>;
+    const referencia = corpo.data.usuarios[0] ?? {};
+    corpo.data.usuarios.push({
+      id: usuarioId,
+      usuarioId,
+      nome: "Usuario E2E guiado",
+      email,
+      role: "usuario_comum",
+      empresaId: referencia["empresaId"],
+      empresaIds: referencia["empresaIds"]
+    });
+    return route.fulfill({ response: resposta, json: corpo });
+  });
+
+  await entrar(page, USUARIOS.admin);
+  await page.goto("/usuarios");
+  await page.getByRole("button", { name: "Novo cadastro" }).click();
+  await page.getByRole("textbox", { name: "Nome", exact: true }).fill("Usuario E2E guiado");
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
+  await page.getByRole("textbox", { name: "Senha", exact: true }).fill("12345678");
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
+
+  await expect(page.getByText("Usuário criado. Agora configure os acessos.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Configurar acessos", { exact: true })).toBeVisible();
+  await expect(page.getByText("Usuario E2E guiado", { exact: true })).toBeVisible();
+  expect(payloadCriacao).toMatchObject({
+    nome: "Usuario E2E guiado",
+    email,
+    role: "usuario_comum"
+  });
+
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
 });

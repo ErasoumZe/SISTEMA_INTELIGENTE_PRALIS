@@ -88,7 +88,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
   <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
     <v-card>
       <v-card-title>{{
-        editandoAcessoUsuario ? "Acessos do usuário" : cadastroEditandoId ? "Editar cadastro" : "Novo cadastro"
+        editandoAcessoUsuario ? "Configurar acessos" : cadastroEditandoId ? "Editar cadastro" : "Novo cadastro"
       }}</v-card-title>
       <v-card-subtitle>{{
         editandoAcessoUsuario

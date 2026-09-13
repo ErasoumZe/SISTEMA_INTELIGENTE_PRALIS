@@ -53,4 +53,71 @@ describe("acoes de acesso individual", () => {
     expect(opcoes.value.usuarios[0]?.permissoesHerdadas).toEqual(["transferencias_visualizar"]);
     expect(modalCadastroAberto.value).toBe(true);
   });
+
+  it("encadeia o usuario comum recem-criado no mesmo editor", async () => {
+    const opcoes = ref(opcoesVazias());
+    const cadastroTela = ref("");
+    const cadastroEditandoId = ref("");
+    const formCadastro = ref(formCadastroVazio());
+    const modalCadastroAberto = ref(false);
+    const notificar = vi.fn();
+    const apiGetMock = vi.fn(async (rota: string) =>
+      rota.includes("/efetivas")
+        ? {
+            usuarioId: "usuario-novo",
+            nome: "Usuario novo",
+            email: "novo@teste.local",
+            role: "usuario_comum",
+            permissoesHerdadas: [],
+            permissoesEfetivas: []
+          }
+        : {
+            permissoes: [],
+            cargos: [],
+            cargosPermissoes: [],
+            setores: [],
+            setoresPermissoes: [],
+            usuarios: [{ id: "usuario-novo", nome: "Usuario novo" }],
+            usuariosPermissoes: []
+          }
+    );
+    const apiGet = async <T>(rota: string): Promise<T> => (await apiGetMock(rota)) as T;
+
+    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
+      empresaId: ref("empresa-1"),
+      opcoes,
+      cadastroTela,
+      cadastroEditandoId,
+      formCadastro,
+      modalCadastroAberto,
+      apiGet,
+      notificar
+    });
+
+    await expect(iniciarConfiguracaoDoUsuarioCriado("usuario-novo", "usuario_comum")).resolves.toBe(true);
+    expect(notificar).toHaveBeenCalledWith("Usuário criado. Agora configure os acessos.");
+    expect(apiGetMock).toHaveBeenCalledTimes(2);
+    expect(cadastroTela.value).toBe("permissoes");
+    expect(cadastroEditandoId.value).toBe("usuario:usuario-novo");
+    expect(modalCadastroAberto.value).toBe(true);
+  });
+
+  it("nao abre configuracao automatica para administrador total", async () => {
+    const apiGet = vi.fn();
+    const notificar = vi.fn();
+    const { iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
+      empresaId: ref("empresa-1"),
+      opcoes: ref(opcoesVazias()),
+      cadastroTela: ref("usuarios"),
+      cadastroEditandoId: ref(""),
+      formCadastro: ref(formCadastroVazio()),
+      modalCadastroAberto: ref(false),
+      apiGet,
+      notificar
+    });
+
+    await expect(iniciarConfiguracaoDoUsuarioCriado("admin-novo", "usuario_admin")).resolves.toBeNull();
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(notificar).not.toHaveBeenCalled();
+  });
 });

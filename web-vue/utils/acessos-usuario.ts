@@ -36,7 +36,7 @@ type DadosEditor = Pick<
 export function criarAcoesAcessosUsuario(deps: DependenciasAcessosUsuario) {
   async function abrirAcessosUsuario(linha: Record<string, string | undefined>) {
     const usuarioId = linha.usuarioId ?? linha.id;
-    if (!usuarioId) return;
+    if (!usuarioId) return false;
     try {
       const query = deps.empresaId.value ? `?empresaId=${encodeURIComponent(deps.empresaId.value)}` : "";
       const [dados, resumoEfetivo] = await Promise.all([
@@ -57,10 +57,21 @@ export function criarAcoesAcessosUsuario(deps: DependenciasAcessosUsuario) {
         regras: { ...regras }
       };
       deps.modalCadastroAberto.value = true;
+      return true;
     } catch (error) {
       deps.notificar(mensagemErro(error), "error");
+      return false;
     }
   }
 
-  return { abrirAcessosUsuario };
+  async function iniciarConfiguracaoDoUsuarioCriado(usuarioId: string | undefined, role: string) {
+    // O administrador total nao precisa de excecoes: ele ja recebe o catalogo completo pelo role.
+    // O passo guiado existe somente no cadastro de usuario comum e reutiliza o MESMO editor da
+    // manutencao futura, sem criar outra rota, payload ou forma de conceder acesso.
+    if (!usuarioId || role !== "usuario_comum") return null;
+    deps.notificar("Usuário criado. Agora configure os acessos.");
+    return abrirAcessosUsuario({ id: usuarioId });
+  }
+
+  return { abrirAcessosUsuario, iniciarConfiguracaoDoUsuarioCriado };
 }

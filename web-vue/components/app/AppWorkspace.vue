@@ -1442,7 +1442,7 @@ function abrirCadastroEditar(linha: Record<string, string | undefined>) {
   modalCadastroAberto.value = true;
 }
 
-const { abrirAcessosUsuario } = criarAcoesAcessosUsuario({
+const { abrirAcessosUsuario, iniciarConfiguracaoDoUsuarioCriado } = criarAcoesAcessosUsuario({
   empresaId,
   opcoes,
   cadastroTela,
@@ -1507,11 +1507,19 @@ async function salvarCadastro() {
       opcoes.value = aplicarRegrasDoAlvoNasListas(opcoes.value, formSnapshot, formSnapshot.regras) as Opcoes;
     }
     modalCadastroAberto.value = false;
-    notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     const idSalvo = idEditando || resultado?.id;
     if (!atualizarCadastroLocal(cadastroTela.value || telaAtiva.value, formSnapshot, idSalvo)) {
       const empresaParaRecarregar = cadastroTela.value === "empresas" && resultado?.id ? resultado.id : empresaId.value;
       await carregarDadosTela(cadastroTela.value || telaAtiva.value, empresaParaRecarregar);
+    }
+    const configuracaoGuiada = idEditando
+      ? null
+      : await iniciarConfiguracaoDoUsuarioCriado(resultado?.id, formSnapshot.role);
+    // `false` significa que o passo era aplicavel, mas o editor nao carregou; nesse caso ele ja
+    // exibiu o erro especifico e uma mensagem generica aqui esconderia a causa. `null` e o fluxo
+    // normal dos demais cadastros (e do administrador total).
+    if (configuracaoGuiada === null) {
+      notificar(idEditando ? "Cadastro atualizado com sucesso." : "Cadastro criado com sucesso.");
     }
   } catch (error) {
     notificar(mensagemErro(error), "error");
