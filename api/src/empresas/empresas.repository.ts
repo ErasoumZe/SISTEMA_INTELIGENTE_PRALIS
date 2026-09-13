@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { empresas } from "@padaria/db/schema/cadastro";
+import { empresas, usuariosEmpresas } from "@padaria/db/schema/cadastro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 export async function listarEmpresasRepository(idsPermitidos: string[]) {
@@ -29,4 +29,12 @@ export async function salvarEmpresaRepository(
     .values({ nome: input.nome, cnpj: input.cnpj })
     .returning({ id: empresas.id });
   return criada;
+}
+
+export async function vincularUsuarioEmpresaRepository(
+  usuarioId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  await db.insert(usuariosEmpresas).values({ usuarioId, empresaId }).onConflictDoNothing();
 }

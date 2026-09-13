@@ -15,7 +15,7 @@ export async function registrarRotasEmpresas(app: FastifyInstance): Promise<void
 
   app.post("/api/empresas", { preHandler: exigirPermissao("cadastro_empresas_criar") }, async (request, reply) => {
     try {
-      const salvo = await salvarEmpresa(null, request.body);
+      const salvo = await salvarEmpresa(null, request.body, request.usuarioId);
       return criadoId(reply, salvo?.id ?? "empresas");
     } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
