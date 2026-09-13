@@ -105,6 +105,46 @@ describe("OperacaoTransferenciaModal - transferencia de retorno", () => {
     expect(prazo.form.value.tempoConfirmacao).toBe("1dia");
   });
 
+  it("explica qual modo bloqueia o retorno e distingue visualmente as opcoes desabilitadas", async () => {
+    const prazo = montarModal();
+    await opcao(prazo.wrapper, "Tempo de confirmação").setValue(true);
+
+    expect((opcao(prazo.wrapper, "Tempo de confirmação").element as HTMLInputElement).checked).toBe(true);
+    expect((opcao(prazo.wrapper, "Múltiplo Destino").element as HTMLInputElement).checked).toBe(false);
+    expect(opcao(prazo.wrapper, "Múltiplo Destino").attributes("disabled")).toBeDefined();
+    expect(opcao(prazo.wrapper, "Múltiplo Destino").element.closest("label")?.classList).toContain(
+      "tr-check-desabilitado"
+    );
+    expect(prazo.wrapper.get('[data-teste="ajuda-retorno"]').text()).toBe(
+      "Transferência de retorno indisponível enquanto Tempo de confirmação estiver ativo."
+    );
+
+    await opcao(prazo.wrapper, "Tempo de confirmação").setValue(false);
+    expect(prazo.wrapper.find('[data-teste="ajuda-retorno"]').exists()).toBe(false);
+    expect(prazo.wrapper.get('[data-teste="opcao-transferencia-retorno"]').attributes("disabled")).toBeUndefined();
+
+    const multiplo = montarModal();
+    await opcao(multiplo.wrapper, "Múltiplo Destino").setValue(true);
+    expect((opcao(multiplo.wrapper, "Múltiplo Destino").element as HTMLInputElement).checked).toBe(true);
+    expect((opcao(multiplo.wrapper, "Tempo de confirmação").element as HTMLInputElement).checked).toBe(false);
+    expect(multiplo.wrapper.get('[data-teste="ajuda-retorno"]').text()).toBe(
+      "Transferência de retorno indisponível enquanto Múltiplo Destino estiver ativo."
+    );
+  });
+
+  it("exige pelo menos duas contas quando Multiplo Destino estiver marcado", async () => {
+    const { wrapper, salvarOperacao } = montarModal();
+    await opcao(wrapper, "Múltiplo Destino").setValue(true);
+
+    await wrapper.get(".tr-salvar").trigger("click");
+    expect(salvarOperacao).not.toHaveBeenCalled();
+    expect(wrapper.get(".tr-erro").text()).toBe("Selecione ao menos duas contas de destino.");
+
+    await wrapper.get('input[value="banco-1"]').setValue(true);
+    await wrapper.get(".tr-salvar").trigger("click");
+    expect(salvarOperacao).toHaveBeenCalledOnce();
+  });
+
   it("nao oferece planejamento ao operador e desabilita fora da rota Cofre para PDV", async () => {
     const operador = montarModal(false);
     expect(operador.wrapper.find('[data-teste="opcao-transferencia-retorno"]').exists()).toBe(false);
