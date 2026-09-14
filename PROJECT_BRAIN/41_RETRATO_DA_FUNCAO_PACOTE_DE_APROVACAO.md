@@ -10,16 +10,18 @@
 > arquivo nascer — e o schema não foi alterado de propósito: o gate de paridade `migrate` × `push`
 > reprova assim que o schema e as migrations divergem.
 >
-> **A decisão de produto já está tomada** (Marco, 03/09/2026); o que falta é aprovar **o SQL**.
+> **A decisão de produto já estava tomada** (Marco, 03/09/2026), e **o SQL foi aprovado em
+> 14/09/2026**, com a §4.2 mantida. O que falta agora é **executar** — na ordem da §8. Continua
+> valendo que nada aqui foi implementado.
 
 > **Nota de 14/09/2026 — o número da migration mudou, o SQL não.** Este pacote foi escrito
 > propondo a `0039`. Depois disso a branch alcançou a `main`, que já tinha gravado uma `0032` e uma
 > `0033` próprias do Caixa, e as sete migrações de Admissões desceram dois números — `0032`–`0038`
 > viraram `0034`–`0040`. A `0039` passou a ser a antiga `0037` (convite, ficha e dependentes).
 >
-> **Quando o SQL abaixo for aprovado, ele nasce `0041`.** O conteúdo não muda: nada nele depende do
-> número, e ele continua puramente aditivo com a única exceção declarada na §4.2. As referências
-> internas deste documento já foram atualizadas.
+> **A migration nasce `0041`.** O conteúdo não muda: nada nele depende do número, e ele continua
+> aditivo com a única exceção declarada na §4.2. As referências internas deste documento já foram
+> atualizadas.
 
 ## A decisão que este pacote implementa
 
@@ -162,6 +164,13 @@ por `coalesce`, então o teste venceria em silêncio e ninguém descobriria a di
 >  where origem = 'teste_efetivado' and (funcao_nome is not null or funcao_cbo is not null);
 > -- Precisa devolver 0. Devolveu outra coisa? PARE: alguém gravou retrato onde não devia.
 > ```
+
+> **DECIDIDO em 14/09/2026 — a §4.2 FICA.** Marco escolheu manter o CHECK. A razão registrada é a
+> do projeto inteiro: o errado não deve ser representável, e depender só do serviço deixaria a
+> segunda fonte possível. A conferência do quadro acima é **obrigatória** antes de aplicar, em cada
+> banco.
+>
+> O parágrafo abaixo fica como estava, porque é a alternativa que foi pesada e recusada.
 
 **Se você preferir NÃO mexer no CHECK**, a §4.2 inteira pode cair: a migration vira puramente aditiva
 e segue o precedente do turno, cujas colunas de retrato também não estão em CHECK nenhum. O preço é
@@ -313,6 +322,6 @@ sentido para quem está preenchendo a própria ficha. O candidato vê o nome; o 
 
 - Não gerou migration, não tocou no schema, não alterou contrato, serviço nem tela.
 - Não aplicou nada em banco nenhum.
-- Não decidiu por você entre manter e derrubar a §4.2 — recomendei, e a escolha é sua.
+- ~~Não decidiu por você entre manter e derrubar a §4.2~~ — **respondido em 14/09/2026: a §4.2 fica.**
 - Não propôs backfill: a decisão de 03/09 já disse que legado fica sem retrato.
 - Não mexeu na questão de maiúsculas do nome (`40`, pendência 2), que é outra decisão.
