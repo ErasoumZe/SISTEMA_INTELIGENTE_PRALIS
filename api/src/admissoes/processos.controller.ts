@@ -139,7 +139,7 @@ export async function registrarRotasAdmissoesProcessos(app: FastifyInstance) {
 
   /**
    * REVELAR o CPF. POST, e nao GET: documento nunca entra em URL, e o ato grava trilha — as duas
-   * coisas que a ADM-001 ja decidiu, no D-4 do PROJECT_BRAIN/31.
+   * coisas que a ADM-001 ja decidiu, no D-4 do PROJECT_BRAIN/42.
    *
    * A permissao e a de VISUALIZAR: quem pode abrir o processo pode ver o documento de quem esta
    * sendo admitido; o que muda e que agora fica registrado quem viu e quando.

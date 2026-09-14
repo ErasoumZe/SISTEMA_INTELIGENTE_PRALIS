@@ -554,7 +554,7 @@ describe("o painel lateral saiu de verdade", () => {
 
   it("Deve_A_ListagemNuncaTocarEmCpf", () => {
     // A tabela nao tem coluna de CPF, nem mascarada. O documento so existe no detalhe, e so depois
-    // de um pedido explicito — PROJECT_BRAIN/31 D-4.
+    // de um pedido explicito — PROJECT_BRAIN/42 D-4.
     const tabela = semComentarios(readFileSync(join(PASTA, "ProcessosTabela.vue"), "utf8"));
     expect(tabela.toLowerCase()).not.toContain("cpf");
   });

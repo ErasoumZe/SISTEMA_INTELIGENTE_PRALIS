@@ -38,7 +38,7 @@ export const situacaoProcessoSchema = z.enum(situacoesProcesso);
 export type SituacaoProcesso = z.infer<typeof situacaoProcessoSchema>;
 
 /**
- * Situacao DERIVADA do status. Mesma regra da D-2 do PROJECT_BRAIN/31: nao existe coluna, campo de
+ * Situacao DERIVADA do status. Mesma regra da D-2 do PROJECT_BRAIN/42: nao existe coluna, campo de
  * formulario nem filtro paralelo de ativo/inativo, e nao pode passar a existir.
  */
 export function situacaoDoProcesso(status: StatusProcesso): SituacaoProcesso {

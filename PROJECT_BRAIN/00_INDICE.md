@@ -46,21 +46,38 @@ a necessidade.
 | [29](29_RUNBOOK_ROTACAO_ADMIN.md)         | **Runbook do admin (R-162)**   | primeira instalacao, rotacao explicita e prova de que redeploy preserva credencial       |
 | [30](30_PRODUTOS_PRALIS_X_ERP.md)         | **Produtos: Pralis × ERP**     | mapa de campos, o que falta trazer do app antigo e em que ordem                          |
 | [29](29_PLANILHAS_DA_OPERACAO.md)         | **Planilhas da operacao**      | contas reais, taxas de cartao, conciliacao, dominio de producao e 9 regras novas         |
-| [31](31_ADMISSAO_PERIODO_DE_TESTE.md)     | **Admissao: periodo de teste** | ADM-001: empresa derivada, Ativo/Inativo derivado, "excluir" = arquivar, CPF fora de GET   |
-| [33](33_ADMISSAO_PROCESSO_INICIADO.md)    | **Admissao: processo iniciado** | ADM-002 V0: nasce da efetivacao, sem botao de iniciar, dois estados, idempotencia simetrica |
-| [34](34_ADMISSAO_DIRETA_TURNO_ASO.md)     | **Admissao direta, turno e ASO** | ADM-003 V1B: pre-cadastro do DP, turno por catalogo com retrato, CPF por lock, ASO pausa e retoma |
 | [35](35_ADMISSAO_FLUXO_COMPLETO.md)       | **Admissao: fluxo completo (mapa)** | ADM-003: as 8 estacoes ate o colaborador, matriz de campos, SQL proposto e os 4 bloqueios ⚠️ _envelheceu: V2-V5 sairam; ler a §0.1 antes_ |
 | [36](36_CADASTRO_COLABORADORES_PRE_CADASTRO_E_SITUACOES.md) | **Pre-cadastro e situacoes** | de onde vem quem ja trabalha: ficha contabil nao e carga, a fila de pre-cadastro, e os dois vocabularios de situacao |
 | [37](37_ADMISSAO_FICHA_PUBLICA_E_DEPENDENTES.md) | **Ficha publica e dependentes** | ADM-003 V3/V4 implementadas: link sem login, token so no fragmento e no cabecalho, dependentes com CPF conferido tambem pelo BANCO (D-7) |
 | [38](38_ADMISSAO_REVISAO_DA_FICHA_PELO_DP.md) | **Revisao da ficha pelo DP** | ADM-003 V5 implementada: tela propria com uma porta so, dependentes sem CPF (nao e mascara: a coluna nao e lida), processo alheio virou 404 |
 | [39](39_ADMISSAO_FILA_DO_DP_E_CONTRATOS_DO_QUE_FALTA.md) | **Fila do DP e contratos do que falta** | ADM-003 V6 implementada: fila e recorte da lista, situacao da ficha derivada, sem estado novo — e os contratos das 6 verticais restantes, com o que trava cada uma ⚠️ _a §2 (funcoes) foi respondida pelo `40`_ |
 | [40](40_CATALOGO_DE_FUNCOES_OPERACIONAIS.md) | **Catalogo de funcoes operacionais** | quem administra: DP ve/cria/edita/desativa, Gerencia so visualiza, e NAO existe exclusao — nem rota, nem botao, nem permissao |
+| [41](41_RETRATO_DA_FUNCAO_PACOTE_DE_APROVACAO.md) | **Retrato da funcao (pacote)** | ⛔ NADA IMPLEMENTADO: o SQL da migration `0039` escrito para ser lido e aprovado antes de qualquer arquivo nascer — renomear funcao hoje reescreve o historico |
+| [42](42_ADMISSAO_PERIODO_DE_TESTE.md)     | **Admissao: periodo de teste** | ADM-001: empresa derivada, Ativo/Inativo derivado, "excluir" = arquivar, CPF fora de GET   |
+| [43](43_ADMISSAO_PROCESSO_INICIADO.md)    | **Admissao: processo iniciado** | ADM-002 V0: nasce da efetivacao, sem botao de iniciar, dois estados, idempotencia simetrica |
+| [44](44_ADMISSAO_DIRETA_TURNO_ASO.md)     | **Admissao direta, turno e ASO** | ADM-003 V1B: pre-cadastro do DP, turno por catalogo com retrato, CPF por lock, ASO pausa e retoma |
+| [45](45_ROBO_CARTOGRAFO_PLANILHAS.md) | **Robo Cartografo das planilhas** | analise tecnica do extrator somente-leitura das planilhas PraLis: onde mora, scopes minimos, segredos fora do Git e criterios do piloto |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)       | Linguagem visual Cicluz        | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**     |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md) | Relatório da rodada visual     | o que mudou por arquivo em 01/08 e o que ficou aberto                                    |
 
 > **Por que 20 pula para 67:** `67` e `68` não pertencem à série do brain de produto — continuam a
 > numeração da série de **design system**, que vive em `design-system/PROJECT_BRAIN/` e vai de 61 a 66. Quem os escreveu pegou o próximo número da série visual e gravou na pasta do brain de produto.
-> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **41**.
+> **Não existe e nunca existiu arquivo 11.** Próximo número livre para o brain de produto: **46**.
+
+> **Por que a série de Admissões começa no 35 e termina no 44.** Ela foi escrita numa branch que
+> ficou 118 commits atrás da `main`, e nesse intervalo a `main` gravou documentos próprios do Caixa
+> nos números **31, 32, 33 e 34**. Dois documentos diferentes com o mesmo número não é conflito que o
+> git acuse — os nomes de arquivo diferem, o merge passa, e o brain fica ambíguo em silêncio. Como a
+> `main` é o tronco, e os documentos dela já estão empurrados e citados por PRs e issues, **quem
+> cedeu foi a branch**: `31` → `42`, `33` → `43`, `34` → `44`, e o Robô Cartógrafo nasceu `45` em
+> vez de `32`. As 35 referências cruzadas nos documentos e as 10 em comentário de código foram
+> reescritas junto.
+>
+> **Ordem de leitura de Admissões** (a numérica não serve, e é por isso):
+> **42** (ADM-001, período de teste) → **43** (ADM-002 V0, processo) → **44** (ADM-003 V1B, admissão
+> direta) → **35** (o mapa das 8 estações) → **36** (pré-cadastro) → **37** (V3/V4, ficha pública e
+> dependentes) → **38** (V5, revisão do DP) → **39** (V6, fila — e os contratos do que falta) →
+> **40** (catálogo de funções) → **41** (retrato da função, ⛔ esperando aprovação do SQL).
 
 ## Regra de ouro deste brain
 

@@ -240,7 +240,7 @@ async function recusarSeCpfJaEstaEmUso(cpf: string, empresaId: string, tx: Trans
 
 /**
  * REVELAR o CPF do processo. Ato explicito e auditado, na mesma transacao da leitura: se a auditoria
- * falhar, o CPF nao sai. Mesma disciplina do D-4 do PROJECT_BRAIN/31.
+ * falhar, o CPF nao sai. Mesma disciplina do D-4 do PROJECT_BRAIN/42.
  *
  * O evento NAO incrementa a versao — nada mudou no processo. Revelar e LEITURA, e leitura nao pode
  * escrever na linha raiz: `avancarVersaoProcessoRepository` gravava `atualizado_por` e disparava a

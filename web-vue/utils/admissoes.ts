@@ -38,7 +38,7 @@ export const rotuloSituacaoTeste: Record<SituacaoTeste, string> = {
  *
  * Sem isto, "Ativo" ao lado de "Em teste" parece um segundo campo que alguem escolheu — e o passo
  * seguinte e alguem pedir para "mudar para Inativo sem encerrar", que e o estado paralelo que a
- * D-2 do PROJECT_BRAIN/31 proibe.
+ * D-2 do PROJECT_BRAIN/42 proibe.
  */
 export const explicacaoSituacaoTeste: Record<SituacaoTeste, string> = {
   ativo: "Ativo porque o teste está em andamento",

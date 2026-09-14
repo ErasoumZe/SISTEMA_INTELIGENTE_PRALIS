@@ -1,7 +1,7 @@
-# 34 — Admissão direta, turno e ASO (ADM-003 V1B)
+# 44 — Admissão direta, turno e ASO (ADM-003 V1B)
 
 > Aberto em 28/08/2026, branch `feat/admissoes-testes-tnp`. Piloto na **TNP**.
-> Terceira fatia do módulo de Admissões, sobre a `31` e a `33`. **Nada aqui cria colaborador
+> Terceira fatia do módulo de Admissões, sobre a `42` e a `43`. **Nada aqui cria colaborador
 > operacional.**
 
 ## O que é, em uma linha
@@ -22,7 +22,7 @@ candidato.
 
 ### D-1 · Uma identidade, escolhida pela origem
 
-A `33` dizia que o processo não teria nome nem CPF. **Mudou por decisão de Marco em 27/08/2026:** a
+A `43` dizia que o processo não teria nome nem CPF. **Mudou por decisão de Marco em 27/08/2026:** a
 admissão direta precisa deles no ato, e o candidato não redigita o que o DP já preencheu.
 
 O que **não** mudou é a regra que sustenta tudo: **uma fonte só**. O CHECK

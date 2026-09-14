@@ -330,7 +330,7 @@ async function revogarConvite() {
 
 /**
  * Revelar o CPF — POST, nunca GET: documento nao entra em URL, e o ato grava trilha na mesma
- * transacao da leitura (PROJECT_BRAIN/31 D-4).
+ * transacao da leitura (PROJECT_BRAIN/42 D-4).
  *
  * A guarda de reentrancia e SINCRONA e mora aqui tambem, alem do modal: duas chamadas seriam dois
  * eventos `cpf_revelado` para a mesma intencao.

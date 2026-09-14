@@ -56,7 +56,7 @@ A tela segue o precedente que o repositório já tem para **detalhe que virou p�
 O modal ganhou **uma seção e um botão**: "Abrir ficha do candidato". Ele **não carrega ficha, não
 carrega dependente e não aprova nem devolve** — emite um evento, e quem navega é a página.
 
-`podeRevisarFicha` é **prop obrigatória**, pelo mesmo motivo de `podeVerTeste` (`34` D-8.1): o modal é
+`podeRevisarFicha` é **prop obrigatória**, pelo mesmo motivo de `podeVerTeste` (`44` D-8.1): o modal é
 montado por **duas** telas, e só a de Processos leva à ficha. Com prop opcional, o botão morto
 voltaria em silêncio no dia em que uma terceira tela montasse o modal. A tela de **Testes** passa
 `false` — de lá o processo é leitura, e revisar é um ato, que mora na tela dona.
@@ -96,7 +96,7 @@ tela mostra apenas se foi informado."* Sem a frase, alguém procuraria o botão 
 ### D-5 · O CPF do candidato continua com UMA entrada auditada
 
 A tela de revisão **não revela CPF**. A única leitura auditada do documento do candidato continua
-sendo a do detalhe do processo (`POST .../:id/cpf`, evento `cpf_revelado`, `31` D-4 e `34` D-1).
+sendo a do detalhe do processo (`POST .../:id/cpf`, evento `cpf_revelado`, `42` D-4 e `44` D-1).
 
 Criar uma segunda revelação aqui daria **duas portas para o mesmo dado**, cada uma com sua trilha — e
 a pergunta "quem viu o CPF desta pessoa?" passaria a ter duas respostas que ninguém junta. O
@@ -124,7 +124,7 @@ mostrar uma caixa vazia.
 
 Fora disso o rodapé não existe. Não é conveniência: o servidor recusa revisão de ficha que não está
 `enviada` com **409 `FICHA_NAO_REVISAVEL`**, e oferecer o botão que só pode falhar é o botão morto que
-a `34` D-8.1 tirou do modal.
+a `44` D-8.1 tirou do modal.
 
 **Ver e decidir são permissões distintas, e a tela respeita as duas.** Quem tem `ver_ficha` e não tem
 `revisar_ficha` lê a ficha inteira e não vê botão nenhum — a Gerência não tem nenhuma das duas, e

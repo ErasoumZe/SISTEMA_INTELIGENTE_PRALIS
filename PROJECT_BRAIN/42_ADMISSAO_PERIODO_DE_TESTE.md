@@ -1,4 +1,4 @@
-# 31 — Admissão: período de teste (ADM-001)
+# 42 — Admissão: período de teste (ADM-001)
 
 > Aberto em 25/08/2026. Issue #161, branch `feat/admissoes-testes-tnp`. Piloto na **TNP**.
 > Primeira fatia do módulo de Admissões. **Nada aqui cria colaborador operacional.**

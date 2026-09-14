@@ -1,7 +1,7 @@
 # 40 — Catálogo de funções operacionais
 
 > Aberto em 03/09/2026, branch `feat/admissoes-testes-tnp`, sobre o HEAD `3679696`. Piloto na **TNP**.
-> Fecha a decisão que a `39` §2 deixou aberta, e a vertical que a `31` D-8 previu.
+> Fecha a decisão que a `39` §2 deixou aberta, e a vertical que a `42` D-8 previu.
 >
 > Como a `37`, a `38` e a `39` §1, **este documento descreve código que existe**: contrato, rotas,
 > permissões, tela e testes. **Nenhuma migration foi gerada** — a tabela já tinha tudo.
@@ -150,7 +150,7 @@ nessa camada pelo gate de arquitetura, e duas listas curtas custam menos que a l
 - **não tem concorrência otimista**: dois editores simultâneos, o último vence. O catálogo tem
   dezenas de linhas e um administrador por empresa; travar isso agora seria resolver um problema que
   ninguém teve;
-- **não toca no catálogo de jornada**, que a `31` D-6 deixou aberto.
+- **não toca no catálogo de jornada**, que a `42` D-6 deixou aberto.
 
 ---
 
@@ -178,5 +178,5 @@ nessa camada pelo gate de arquitetura, e duas listas curtas custam menos que a l
 1. **Retrato do nome da função** — o achado acima. É a única que muda dado.
 2. **Normalizar caixa no nome** — hoje `"Padeiro"` e `"PADEIRO"` convivem.
 3. **Autoria de quem alterou o catálogo** — exigiria coluna nova.
-4. **Catálogo de jornada** (`31` D-6) continua aberto.
+4. **Catálogo de jornada** (`42` D-6) continua aberto.
 5. **Povoar o catálogo da TNP** continua sendo ato de quem opera, agora pela tela em vez de por SQL.

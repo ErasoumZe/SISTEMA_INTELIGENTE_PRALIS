@@ -1,7 +1,7 @@
 # 35 — Admissão: o fluxo completo, ponta a ponta (mapa e proposta)
 
 > Aberto em 31/08/2026, branch `feat/admissoes-testes-tnp`, sobre o HEAD `683ab97`. Piloto na **TNP**.
-> **Documento de mapeamento e proposta.** Sucede a `31` (ADM-001), a `33` (ADM-002 V0) e a `34`
+> **Documento de mapeamento e proposta.** Sucede a `42` (ADM-001), a `43` (ADM-002 V0) e a `44`
 > (ADM-003 V1A/V1B), e não revoga nenhuma decisão delas.
 >
 > **⚠️ ESTE DOCUMENTO ENVELHECEU EM PARTE. Leia a seção 0.1 antes de qualquer coisa.**
@@ -138,7 +138,7 @@ do aviso de privacidade e da política de documentos.
 
 **PROPOSTA.** A guarda é do **servidor**, não do botão. Gerar convite com processo `pausado`,
 `cancelado` ou com exame diferente de `aso_apto` responde **409**, com o motivo. O botão desabilitado
-na tela é conveniência; a regra mora na rota — o mesmo desenho do turno incompleto na D-3 da `34`.
+na tela é conveniência; a regra mora na rota — o mesmo desenho do turno incompleto na D-3 da `44`.
 
 ### E4/E6 — o vaivém
 
@@ -153,7 +153,7 @@ foi descartada na prática, e a saída para o link vencido é o DP emitir outro,
 ## 4. A decisão mais cara: estado gravado × etapa derivada
 
 O fluxo completo tem etapas que hoje não têm nome: *aguardando candidato*, *em revisão*, *efetivado*.
-A `33` (C-3) **recusou reservá-las** — e recusou pelo motivo certo: nome gravado antes da regra vira
+A `43` (C-3) **recusou reservá-las** — e recusou pelo motivo certo: nome gravado antes da regra vira
 vocabulário que ninguém confirmou. Agora a regra existe, e a escolha volta à mesa. São dois caminhos.
 
 ### Caminho A — três status novos (`aguardando_candidato`, `em_revisao_dp`, `efetivado`)
@@ -179,8 +179,8 @@ etapaDoProcesso(status, convite, submissao, colaboradorId):
   senão                              -> "Em pré-cadastro"
 ```
 
-É a mesma disciplina que o módulo já aplica três vezes — situação Ativo/Inativo (`31` D-2), alerta de
-exame (`34` D-5) e alerta de prazo (`31` D-5): **derivar, nunca gravar em paralelo**. Estado incoerente
+É a mesma disciplina que o módulo já aplica três vezes — situação Ativo/Inativo (`42` D-2), alerta de
+exame (`44` D-5) e alerta de prazo (`42` D-5): **derivar, nunca gravar em paralelo**. Estado incoerente
 deixa de ser representável porque não há o que ficar incoerente.
 
 **O preço, dito na cara:** a listagem passa a precisar de um `left join` no convite e um `exists` na
@@ -214,7 +214,7 @@ Legenda da coluna **Situação**: **EXISTE** (implementado) · **PROPOSTO** (des
 | Função operacional | `funcao_id` | DP | é decisão da empresa, não do candidato |
 | Turno + retrato | `turno_id` + `turno_*` | DP | idem |
 | Data de admissão | `internos.data_admissao` | DP | idem |
-| CTPS nº/série/UF | `internos.ctps_*` | **só DP** | `34` D-7: bloco interno é exclusivo do DP |
+| CTPS nº/série/UF | `internos.ctps_*` | **só DP** | `44` D-7: bloco interno é exclusivo do DP |
 | PIS/PASEP/NIT | `internos.pis_pasep_nit` | **só DP** | idem |
 | Exame/ASO | `internos.exame_situacao` | **só DP** | idem |
 | Observações RH | `internos.observacoes_rh` | **só DP** | idem |
@@ -222,10 +222,10 @@ Legenda da coluna **Situação**: **EXISTE** (implementado) · **PROPOSTO** (des
 > **PROPOSTA.** Se o candidato disser que o nome ou o CPF está errado, ele **não corrige** — aponta.
 > Um campo "há algo errado nestes dados" grava observação e marca a ficha para revisão. Deixar o
 > candidato sobrescrever o CPF derrubaria o índice de duplicidade e o lock de `(empresa, CPF)` da
-> `34` D-2, que são a única garantia de que a mesma pessoa não está em dois processos.
+> `44` D-2, que são a única garantia de que a mesma pessoa não está em dois processos.
 >
 > **A CONFIRMAR:** o DP quer que a CTPS digital seja informada pelo candidato? Hoje a decisão vigente
-> (`34` D-7) é que CTPS é do DP. Se mudar, muda a fronteira do link, não só um campo.
+> (`44` D-7) é que CTPS é do DP. Se mudar, muda a fronteira do link, não só um campo.
 
 ### 5.2 Identificação civil — o candidato preenche
 
@@ -244,7 +244,7 @@ Legenda da coluna **Situação**: **EXISTE** (implementado) · **PROPOSTO** (des
 | Primeiro emprego | sim | booleano | A CONFIRMAR |
 
 > Toda lista fechada acima vira **CHECK no banco**, e é por isso que os valores precisam vir do DP
-> **antes** e não depois: renomear valor já gravado é caro, e a `33` (C-4) já pagou essa lição.
+> **antes** e não depois: renomear valor já gravado é caro, e a `43` (C-4) já pagou essa lição.
 
 ### 5.3 Endereço
 
@@ -293,7 +293,7 @@ sabe se pode revisar.
 
 ### 5.7 Dados bancários
 
-A `34` os deixou de fora com um argumento específico: *dado sensível sem finalidade antes de haver
+A `44` os deixou de fora com um argumento específico: *dado sensível sem finalidade antes de haver
 candidato*. Na E4 a finalidade passa a existir (pagar salário). **PROPOSTA**, com a ressalva abaixo.
 
 | Campo | Obrigatório | Situação |
@@ -320,7 +320,7 @@ lugar apaga exatamente isso.
 
 ### 5.9 O que fica **fora** do formulário, de propósito
 
-Área · setor · CBO digitado · salário — mesma razão da `34`: dependem de `unique (id, empresa_id)` em
+Área · setor · CBO digitado · salário — mesma razão da `44`: dependem de `unique (id, empresa_id)` em
 `areas`/`setores`, que **não existe**, e sem ele não há FK composta. Salário não é dado do candidato.
 
 ---
@@ -476,7 +476,7 @@ create table "admissoes_processos_ficha" (
     check ("telefone" is null or "telefone" ~ '^[0-9]{10,11}$'),
   constraint "admissoes_processos_ficha_aviso_check"
     check (("aviso_privacidade_versao" is null) = ("aviso_aceito_em" is null)),
-  -- Um CHECK único para o ciclo, como o da `31`: ficha em estado pela metade deixa de ser
+  -- Um CHECK único para o ciclo, como o da `42`: ficha em estado pela metade deixa de ser
   -- representável. Devolver sem dizer o que falta é o defeito mais provável, e fica impedido aqui.
   constraint "admissoes_processos_ficha_coerencia_check"
     check (
@@ -587,7 +587,7 @@ não há como o processo dizer que efetivou sem ter para quem apontar.
 
 Não proponho DDL aprovável aqui. Antes de existir tabela, seis coisas precisam de resposta escrita, e
 nenhuma delas é técnica: **tipos aceitos**, **tamanho máximo**, **quem pode baixar**, **retenção**,
-**descarte** e **antimalware** — que, como a `31` já registrava, **não existe no sistema hoje**.
+**descarte** e **antimalware** — que, como a `42` já registrava, **não existe no sistema hoje**.
 
 O que existe e serve de base quando destravar: `@fastify/multipart` limitado a 10 MB e 1 arquivo
 ([app.ts:153](api/src/app.ts#L153)) e o padrão de `vendas_comprovantes` — `nome_original`,
@@ -615,7 +615,7 @@ terceiro que não é usuário do sistema.
 
 O `POST .../convite` é a **única** rota que devolve o link, e devolve **uma vez** — reler o processo
 nunca traz o token. É o mesmo desenho do `{ processoId }` devolvido pelo encerramento do teste
-(`33` C-1): a única escrita que tem o que devolver.
+(`43` C-1): a única escrita que tem o que devolver.
 
 **PROPOSTA de permissões**, no mesmo mecanismo do catálogo, em `extras` e nunca em `ativas` (`ativas`
 mapeia chave de **menu**, e nenhuma destas é menu):
@@ -623,7 +623,7 @@ mapeia chave de **menu**, e nenhuma destas é menu):
 | Permissão | DP | Gerência | Por quê |
 | --- | --- | --- | --- |
 | `admissoes_processos_convidar` | ✔ | **✘** (respondido) | o DP é quem conversa com o candidato |
-| `admissoes_processos_ver_ficha` | ✔ | ✘ | mesma fronteira do bloco interno (`34` D-7) |
+| `admissoes_processos_ver_ficha` | ✔ | ✘ | mesma fronteira do bloco interno (`44` D-7) |
 | `admissoes_processos_revisar_ficha` | ✔ | ✘ | idem — e ver e decidir são chaves **separadas** |
 | `admissoes_processos_efetivar` | — | — | **não existe**. Fica para a V6 |
 

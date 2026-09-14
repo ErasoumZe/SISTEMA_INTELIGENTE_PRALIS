@@ -47,7 +47,7 @@ nova, não há índice novo, não há estado de fila em lugar nenhum.
 
 Gravar "aguardando revisão" no processo permitiria o estado **mentir**: um processo marcado como
 aguardando sem ficha enviada seria representável, e só apareceria meses depois num relatório. É a
-mesma disciplina da `31` D-2, da `33` C-3 e da `34` D-6 — derivar, nunca gravar em paralelo.
+mesma disciplina da `42` D-2, da `43` C-3 e da `44` D-6 — derivar, nunca gravar em paralelo.
 
 > **`null` continua significando uma coisa só:** a ficha não existe porque o candidato não abriu o
 > link. Ausência não virou um quinto valor do enum, porque o enum descreve fichas — e aqui não há
@@ -169,7 +169,7 @@ rotas de ficha. Há teste de integração e de navegador para as duas coisas.
 
 ## O que já está decidido, e é bastante
 
-Da `31` D-8, decisão de Marco em 26/08/2026:
+Da `42` D-8, decisão de Marco em 26/08/2026:
 
 - **função operacional não é cargo de acesso** — `cargos` responde o que a pessoa pode ver,
   `funcoes_operacionais` responde o que ela faz;
@@ -196,7 +196,7 @@ Da `31` D-8, decisão de Marco em 26/08/2026:
 
 ## A decisão que falta, e é uma só
 
-A `31` registra a lacuna com todas as letras: *"Escrever ainda não tem permissão definida, porque não
+A `42` registra a lacuna com todas as letras: *"Escrever ainda não tem permissão definida, porque não
 há escrita."* Sem ela, qualquer permissão que eu concedesse seria inventada.
 
 > **DECISÃO NECESSÁRIA — quem administra o catálogo de funções operacionais?**
@@ -215,7 +215,7 @@ e desativa; sem delete físico; Gerência visualiza. É a opção **(a)**.
 brain é onde ela vira oficial. A recomendação está aqui para virar decisão num commit próprio — não
 para ser executada por interpretação.
 
-**O que segue junto, quando destravar:** o catálogo de jornada (`31` D-6) continua em aberto, e a
+**O que segue junto, quando destravar:** o catálogo de jornada (`42` D-6) continua em aberto, e a
 tela precisará traduzir o `23503` das **duas** FKs em 409, ou o DP verá 500 ao tentar remover uma
 função em uso.
 
@@ -328,7 +328,7 @@ Hoje a resposta por omissão é guardar para sempre, e é a pior delas.
 ## §4 — Pendências que esta fatia deixa
 
 1. **A fila não avisa.** Não há notificação quando uma ficha é enviada; o DP descobre ao abrir a tela.
-   O módulo tem precedente contrário a notificar (`31` D-5: o prazo avisa na tela, e o sistema não
+   O módulo tem precedente contrário a notificar (`42` D-5: o prazo avisa na tela, e o sistema não
    notifica ninguém), então criar notificação é decisão, não consequência.
 2. **`ficha/aprovar` continua sem caso de integração de 403 por cargo** — o de `ficha` e
    `ficha/devolver` existe, e o navegador cobre o resto.

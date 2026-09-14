@@ -8,7 +8,7 @@ import { fichaRevisavel } from "~/utils/admissoes";
  *
  * Os botoes so existem quando ha decisao a tomar: ficha `enviada` E permissao de revisar. Fora
  * disso o componente nao renderiza nada — botao que o servidor recusaria com 409 e o botao morto
- * que a D-8.1 do PROJECT_BRAIN/34 tirou do modal, e nao volta aqui.
+ * que a D-8.1 do PROJECT_BRAIN/44 tirou do modal, e nao volta aqui.
  *
  * Devolver exige texto: e o que o candidato vai ler ao reabrir o link. O servidor tambem recusa
  * pendencia vazia (`PENDENCIA_OBRIGATORIA`); a barreira aqui e para o DP nao descobrir isso depois

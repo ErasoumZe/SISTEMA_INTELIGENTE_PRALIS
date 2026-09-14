@@ -1,7 +1,7 @@
-# 33 — Admissão: processo iniciado (ADM-002 V0)
+# 43 — Admissão: processo iniciado (ADM-002 V0)
 
 > Aberto em 26/08/2026, branch `feat/admissoes-testes-tnp`. Piloto na **TNP**.
-> Segunda fatia do módulo de Admissões, direto sobre a `31`. **Nada aqui cria colaborador operacional.**
+> Segunda fatia do módulo de Admissões, direto sobre a `42`. **Nada aqui cria colaborador operacional.**
 
 ## O que é, em uma linha
 
@@ -65,7 +65,7 @@ e aponta para o processo depois. Sem ele, o link só funcionaria no instante da 
 ### C-3 · Dois estados, e nenhum antecipado
 
 `iniciado` e `cancelado`. Só. A situação exibida é derivada por `situacaoDoProcesso`, em `shared` —
-mesma disciplina do D-2 da `31`, e pelo mesmo motivo: **não existe coluna, enum, índice nem filtro
+mesma disciplina do D-2 da `42`, e pelo mesmo motivo: **não existe coluna, enum, índice nem filtro
 paralelo de ativo/inativo.**
 
 | Estado técnico | Situação |
@@ -102,7 +102,7 @@ decidiu não ter.
 
 ### C-6 · Isolamento por empresa, com a mesma resposta de inexistente
 
-Empresa derivada do perfil, nunca do cliente — idêntico ao D-1 da `31`. Processo de outra empresa
+Empresa derivada do perfil, nunca do cliente — idêntico ao D-1 da `42`. Processo de outra empresa
 responde **404**, o mesmo que um id que não existe: distinguir entregaria a existência de graça.
 Vale para leitura, histórico **e** cancelamento.
 
@@ -150,6 +150,6 @@ própria migration. O histórico não recebe (C-7).
   duplicados — não feita.
 - Motivo estruturado de cancelamento (C-4), aguardando o DP.
 - Documentos, anexos e dependentes seguem sem decisão — inclusive porque **antimalware não existe no
-  sistema hoje**, como a `31` já registrava.
+  sistema hoje**, como a `42` já registrava.
 - Momento e regra da efetivação operacional, recontratação e CPF já existente como colaborador —
-  herdadas da `31`, ainda abertas.
+  herdadas da `42`, ainda abertas.

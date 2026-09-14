@@ -20,7 +20,7 @@ import {
  *   2. que apareca DELETE fisico. O historico referencia a raiz com `on delete cascade`; apagar a
  *      linha apagaria a propria auditoria junto.
  *   3. que Ativo/Inativo vire campo. Eles sao DERIVADOS de `status` por `situacaoDoTeste`, e um
- *      campo manual seria a segunda fonte de verdade que a D-2 do PROJECT_BRAIN/31 proibe.
+ *      campo manual seria a segunda fonte de verdade que a D-2 do PROJECT_BRAIN/42 proibe.
  *
  * Roda sem banco: le o contrato Zod, a definicao Drizzle e o proprio codigo-fonte.
  */

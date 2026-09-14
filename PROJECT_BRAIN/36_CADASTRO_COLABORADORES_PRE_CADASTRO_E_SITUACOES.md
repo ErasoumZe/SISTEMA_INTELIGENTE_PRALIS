@@ -140,7 +140,7 @@ Registro como pendência, e **não como fato**: nada aqui virou enum, coluna ou 
 - **LGPD de saúde.** Atestado e INSS são **dado sensível**. Guardar o *motivo* do afastamento é
   diferente de guardar que existe afastamento — e a segunda forma resolve escala sem carregar
   diagnóstico. A decisão precisa ser explícita antes de existir coluna.
-- **Derivação vs coluna.** Pela disciplina da `31` (D-2) e da `33` (C-3), situação é **derivada** e
+- **Derivação vs coluna.** Pela disciplina da `42` (D-2) e da `43` (C-3), situação é **derivada** e
   não tem coluna, índice nem filtro paralelo. Se a disponibilidade for derivada de períodos, ela
   segue a regra; se virar coluna gravada, contradiz as duas verticais anteriores.
 
