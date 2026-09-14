@@ -1279,8 +1279,8 @@ describe("admissoes processos integration", () => {
     }
   });
 
-  // ============================================================ ADM-003 P0 / migration 0036
-  // Revelar CPF e LEITURA. Ate a 0036 ela consumia uma versao do processo, e consumir versao e
+  // ============================================================ ADM-003 P0 / migration 0038
+  // Revelar CPF e LEITURA. Ate a 0038 ela consumia uma versao do processo, e consumir versao e
   // UPDATE na linha raiz: gravava `atualizado_por` e disparava a trigger de `atualizado_em`. O
   // detalhe passava a mostrar como "Alterado por" quem apenas tinha lido o documento.
   //
@@ -1304,7 +1304,7 @@ describe("admissoes processos integration", () => {
     });
   }
 
-  it("P0-0036 Deve_NaoContaminarVersaoNemAutoria_Quando_RevelarCpf", async () => {
+  it("P0-0038 Deve_NaoContaminarVersaoNemAutoria_Quando_RevelarCpf", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;
@@ -1322,12 +1322,12 @@ describe("admissoes processos integration", () => {
     expect(depois?.atualizado_em?.toISOString()).toBe(antes?.atualizado_em?.toISOString());
   });
 
-  it("P0-0036 Deve_AuditarVariasRevelacoes_NaMesmaVersaoFuncional", async () => {
+  it("P0-0038 Deve_AuditarVariasRevelacoes_NaMesmaVersaoFuncional", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;
 
-    // Tres leituras, tres linhas de trilha. Antes da 0036 cada uma exigia uma versao nova; com o
+    // Tres leituras, tres linhas de trilha. Antes da 0038 cada uma exigia uma versao nova; com o
     // indice unico simples, duas na mesma versao teriam violado a constraint e virado 500.
     assertOk(await revelar(cookieDp, id));
     assertOk(await revelar(cookieDpReal, id));
@@ -1344,7 +1344,7 @@ describe("admissoes processos integration", () => {
     expect(new Set(revelacoes.map((linha) => linha.versao))).toEqual(new Set([raiz?.versao]));
   });
 
-  it("P0-0036 Deve_CancelarSemConflito_Quando_OutroAtorRevelouOCpf", async () => {
+  it("P0-0038 Deve_CancelarSemConflito_Quando_OutroAtorRevelouOCpf", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;
@@ -1371,7 +1371,7 @@ describe("admissoes processos integration", () => {
     expect(cancelado.statusCode).toBe(200);
   });
 
-  it("P0-0036 Deve_EditarInternosEExameSemConflito_E_GravarNaVersaoSeguinte", async () => {
+  it("P0-0038 Deve_EditarInternosEExameSemConflito_E_GravarNaVersaoSeguinte", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;
@@ -1411,7 +1411,7 @@ describe("admissoes processos integration", () => {
     expect(eventos.map((evento) => evento.versao)).toEqual([1, 1, 2, 3]);
   });
 
-  it("P0-0036 Deve_ManterAcoesFuncionaisUnicas_Quando_TransicaoRepetida", async () => {
+  it("P0-0038 Deve_ManterAcoesFuncionaisUnicas_Quando_TransicaoRepetida", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;
@@ -1441,7 +1441,7 @@ describe("admissoes processos integration", () => {
     expect(contar("cpf_revelado")).toBe(2);
   });
 
-  it("P0-0036 Deve_ManterRevelacaoComoPostAuditado_E_RecusarGetEQuemNaoPodeVer", async () => {
+  it("P0-0038 Deve_ManterRevelacaoComoPostAuditado_E_RecusarGetEQuemNaoPodeVer", async () => {
     const criado = await criarDireta(cookieDp);
     assertOk(criado, 201);
     const id = criado.json().data.id as string;

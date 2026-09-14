@@ -531,7 +531,7 @@ function consultaProcesso() {
 }
 
 /**
- * O bloco interno nasce junto do processo. O `??` cobre a linha da ADM-002 criada antes da 0034 —
+ * O bloco interno nasce junto do processo. O `??` cobre a linha da ADM-002 criada antes da 0036 —
  * sem ele, um processo antigo chegaria a tela com versao nula.
  */
 type LinhaConsultada = Omit<ProcessoLinha, "internosVersao" | "exameSituacao"> & {

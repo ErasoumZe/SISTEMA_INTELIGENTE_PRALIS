@@ -346,7 +346,7 @@ async function revelarCpf() {
     // do modal e carregado junto com o detalhe. Sem ela, o DP so veria a propria consulta
     // registrada na proxima vez que abrisse o processo.
     //
-    // Ela NAO existe mais para corrigir versao. Ate a migration 0036 a revelacao avancava a versao
+    // Ela NAO existe mais para corrigir versao. Ate a migration 0038 a revelacao avancava a versao
     // do processo, e reler era o que impedia o cancelamento seguinte de levar 409; hoje revelar nao
     // escreve nada na linha raiz — nem versao, nem `atualizado_por`, nem `atualizado_em`.
     await abrirDetalhe(id);

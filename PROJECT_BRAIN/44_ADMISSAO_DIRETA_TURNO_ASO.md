@@ -196,7 +196,7 @@ o que a própria D-8 já tinha decidido.
 
 ## Banco
 
-Migration **0035**. Altera `turnos` (aditivo), `admissoes_processos`, `_internos` e `_historico`.
+Migration **0037**. Altera `turnos` (aditivo), `admissoes_processos`, `_internos` e `_historico`.
 Nenhum `INSERT`, `UPDATE`, `DELETE`, `DROP COLUMN` ou carga.
 
 O CHECK entra **estrito**. `NOT VALID` foi recusado por Marco, e a razão de recusar é melhor que a de
@@ -234,5 +234,5 @@ storage · área, setor, CBO digitado, salário, dados bancários · vínculo co
   convivem hoje.
 - **Fragilidade pré-existente no Caixa**, achada na revisão de impacto e **não corrigida** aqui:
   `fechamentos_caixa.turno_id` é gravado sem validar a empresa do turno, e o join do histórico não
-  casa `empresa_id`. A 0035 cria o `unique (id, empresa_id)` que permitiria fechar isso com FK
+  casa `empresa_id`. A 0037 cria o `unique (id, empresa_id)` que permitiria fechar isso com FK
   composta — e não usa.

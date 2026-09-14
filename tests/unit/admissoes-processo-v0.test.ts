@@ -270,10 +270,10 @@ describe("a V0 e puramente aditiva", () => {
   });
 
   it("a migration nova nao altera tabela existente", () => {
-    // Enquanto a 0033 nao existir, o teste passa por ausencia — e volta a valer no minuto em que ela
+    // Enquanto a 0035 nao existir, o teste passa por ausencia — e volta a valer no minuto em que ela
     // aparecer. E de proposito: o guarda precisa estar pronto ANTES da migration.
     const dir = join(RAIZ, "db", "migrations");
-    const nova = readdirSync(dir).filter((n) => n.startsWith("0033_") && n.endsWith(".sql"));
+    const nova = readdirSync(dir).filter((n) => n.startsWith("0035_") && n.endsWith(".sql"));
     for (const arquivo of nova) {
       const sql = readFileSync(join(dir, arquivo), "utf8");
       const alterados = [...sql.matchAll(/ALTER TABLE "([a-z0-9_]+)"/gi)].map((m) => m[1]);

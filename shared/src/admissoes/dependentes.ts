@@ -11,7 +11,7 @@ import { cpfTesteSchema } from "./cpf.js";
  *    e a fronteira entre empresas morreria em silencio.
  * 2. O CPF e OPCIONAL. Sao dados de terceiros, muitas vezes criancas, que costumam nao ter CPF;
  *    exigir criaria dado falso. Mas quando vem, vem valido por digito verificador — a mesma conta
- *    do `cpfTesteSchema`, que o banco tambem refaz desde a migration 0038 (decisao D-7).
+ *    do `cpfTesteSchema`, que o banco tambem refaz desde a migration 0040 (decisao D-7).
  * 3. `parentesco` e `finalidades` sao TEXTO, com sugestao de tela e sem enum. A coluna no banco nao
  *    tem CHECK, e inventar um enum agora congelaria uma lista que o DP nunca aprovou.
  */
@@ -36,7 +36,7 @@ export const parentescosSugeridos: readonly string[] = [
 ] as const;
 
 /**
- * Para que cada dependente foi informado. A coluna `finalidades` existe desde a 0037 exatamente para
+ * Para que cada dependente foi informado. A coluna `finalidades` existe desde a 0039 exatamente para
  * isso: coletar dado de menor sem finalidade declarada e o defeito que ela previne.
  */
 export const finalidadesSugeridas: readonly string[] = [

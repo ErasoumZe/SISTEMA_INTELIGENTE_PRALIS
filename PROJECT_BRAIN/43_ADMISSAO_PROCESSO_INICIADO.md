@@ -124,8 +124,8 @@ Todas continuam verticais futuras, e nenhuma teve estado, coluna ou rota reserva
 
 ## Banco
 
-Migration **0033**, puramente aditiva: cria `admissoes_processos` e `admissoes_processos_historico` e
-**não altera nenhuma tabela existente**. Provado comparando o banco vivo contra o snapshot 0032,
+Migration **0035**, puramente aditiva: cria `admissoes_processos` e `admissoes_processos_historico` e
+**não altera nenhuma tabela existente**. Provado comparando o banco vivo contra o snapshot 0034,
 tabela a tabela e coluna a coluna: 74 → 76, nenhuma perdeu ou ganhou coluna.
 
 `atualizado_em` é mantido por trigger neste sistema, e a 0002 instala percorrendo um **array literal**

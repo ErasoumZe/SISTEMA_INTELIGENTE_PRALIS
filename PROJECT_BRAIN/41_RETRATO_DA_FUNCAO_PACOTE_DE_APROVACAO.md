@@ -12,6 +12,15 @@
 >
 > **A decisão de produto já está tomada** (Marco, 03/09/2026); o que falta é aprovar **o SQL**.
 
+> **Nota de 14/09/2026 — o número da migration mudou, o SQL não.** Este pacote foi escrito
+> propondo a `0039`. Depois disso a branch alcançou a `main`, que já tinha gravado uma `0032` e uma
+> `0033` próprias do Caixa, e as sete migrações de Admissões desceram dois números — `0032`–`0038`
+> viraram `0034`–`0040`. A `0039` passou a ser a antiga `0037` (convite, ficha e dependentes).
+>
+> **Quando o SQL abaixo for aprovado, ele nasce `0041`.** O conteúdo não muda: nada nele depende do
+> número, e ele continua puramente aditivo com a única exceção declarada na §4.2. As referências
+> internas deste documento já foram atualizadas.
+
 ## A decisão que este pacote implementa
 
 **Decisão de Marco, 03/09/2026**, respondendo à pergunta que a `40` deixou aberta:
@@ -82,7 +91,7 @@ mesma forma, sem criar uma segunda fonte.
 
 ---
 
-## 4. SQL COMPLETO — migration `0039`, para aprovação
+## 4. SQL COMPLETO — migration `0041`, para aprovação
 
 > Puramente **aditiva**, com **uma** exceção declarada: a §4.2 refaz um CHECK existente. Nenhum
 > `INSERT`, `UPDATE`, `DELETE`, `DROP COLUMN` ou carga.
@@ -145,7 +154,7 @@ por `coalesce`, então o teste venceria em silêncio e ninguém descobriria a di
 
 > **Este DROP/ADD é seguro, e a razão é verificável antes de rodar:** as duas colunas acabaram de
 > nascer, então **toda linha existente tem `funcao_nome` e `funcao_cbo` nulos** e satisfaz o predicado
-> novo. Não é o caso da `0035`, que refez um CHECK e encontrou uma linha legada que não o satisfazia.
+> novo. Não é o caso da `0037`, que refez um CHECK e encontrou uma linha legada que não o satisfazia.
 >
 > Conferência obrigatória antes de aplicar, em cada banco:
 > ```sql
@@ -289,7 +298,7 @@ sentido para quem está preenchendo a própria ficha. O candidato vê o nome; o 
 ## 8. Ordem de execução, quando o SQL for aprovado
 
 1. alterar `db/src/schema/app.schema.ts`;
-2. gerar a migration (`0039`), **ler o SQL gerado linha a linha** e conferir contra a §4 — o gerador
+2. gerar a migration (`0041`), **ler o SQL gerado linha a linha** e conferir contra a §4 — o gerador
    pode ordenar diferente, e o que vale é o que ele emitiu;
 3. rodar a conferência da §4.2 em cada banco antes de aplicar;
 4. contrato, repositórios, serviços e telas;

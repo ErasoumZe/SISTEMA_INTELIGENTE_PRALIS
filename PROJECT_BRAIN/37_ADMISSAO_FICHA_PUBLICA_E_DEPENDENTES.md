@@ -2,7 +2,7 @@
 
 > Aberto em 02/09/2026, branch `feat/admissoes-testes-tnp`. Piloto na **TNP**.
 > Continua a `35` (mapa do fluxo) e o pacote de aprovação V2–V4. Diferente da `35` e da `36`, que são
-> registro de decisão, **este documento descreve código que existe**: migrations `0037` e `0038`,
+> registro de decisão, **este documento descreve código que existe**: migrations `0039` e `0040`,
 > rotas, telas e testes.
 >
 > Ambiente de teste. O aviso de privacidade em vigor é o de **teste** (`AVISO-TESTE-ADMISSAO-V1`), e
@@ -101,7 +101,7 @@ costuma não ter CPF, e exigir criaria dado falso — que é pior que dado ausen
 vem **válido**.
 
 A coluna `finalidades` registra **para que** cada dependente foi informado (imposto de renda,
-salário-família, plano de saúde). Ela existia desde a `0037` e ninguém a preenchia: coletar dado de
+salário-família, plano de saúde). Ela existia desde a `0039` e ninguém a preenchia: coletar dado de
 menor sem finalidade declarada é exatamente o defeito que a coluna previne.
 
 ### 2.3 A declaração: cinco estados, e só três são válidos
@@ -161,7 +161,7 @@ O banco conferia **formato**: `cpf ~ '^[0-9]{11}$'`. Onze dígitos quaisquer ent
 verdade vivia só no Zod, e um caminho novo que esquecesse o contrato gravaria CPF inválido de um
 terceiro — possivelmente uma criança — sem ninguém descobrir até alguém precisar do dado.
 
-### 3.2 Como o banco recusa (migration `0038`)
+### 3.2 Como o banco recusa (migration `0040`)
 
 Ele **refaz a conta da Receita**, dígito por dígito:
 
@@ -209,7 +209,7 @@ exige recusa.
 | Tela | `web-vue/pages/admissao.vue` | erro imediato, antes de sair da máquina |
 | Contrato | `shared/src/admissoes/cpf.ts` | `cpfValido` — a conta canônica, uma só |
 | Servidor | `shared/src/admissoes/dependentes.ts` | `cpfTesteSchema` opcional; vazio vira `NULL` |
-| Banco | migration `0038` | a mesma conta, para **qualquer** caminho |
+| Banco | migration `0040` | a mesma conta, para **qualquer** caminho |
 
 A tela **não tem cópia do algoritmo**: importa `cpfValido` da raiz de `@padaria/shared`. Uma cópia
 seria o defeito — e neste repositório já foi, quando a matriz de cargos vivia duplicada no seed.
@@ -265,7 +265,7 @@ reconhece pelo **prefixo** da string gravada — não por coluna, flag ou memór
 
 ## 8. Como isto foi provado
 
-- **`0038` por `migrate`, nunca em banco persistente.** A migration foi gerada, lida e exercitada em
+- **`0040` por `migrate`, nunca em banco persistente.** A migration foi gerada, lida e exercitada em
   banco descartável; a expressão foi conferida contra o Postgres real em tabela temporária, com CPF
   válido, CPF de dígito errado, sequência repetida, valor com letra, valor curto e `NULL`.
 - **Dígito verificador e duplicidade provados duas vezes**, pela API e por SQL direto — um teste que

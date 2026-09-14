@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
  * provisiona por `drizzle-kit migrate` recebe esses blocos de graca — eles estao no SQL.
  *
  * Quem provisiona por `drizzle-kit push` (dev e Testcontainers) NAO recebe: o push aplica o schema
- * Drizzle, que nao conhece trigger. Ate a 0032 isso nao aparecia, porque a 0002 aplicada depois do
+ * Drizzle, que nao conhece trigger. Ate a 0034 isso nao aparecia, porque a 0002 aplicada depois do
  * push cobria tudo que existia. A partir dali, dev e teste passaram a rodar com tabelas sem o
  * trigger que producao tem.
  *

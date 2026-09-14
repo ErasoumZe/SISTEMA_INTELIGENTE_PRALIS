@@ -27,7 +27,7 @@ export async function salvarTurno(id: string | null, body: DadosExternos) {
 
 /**
  * O turno usado numa ADMISSAO nao se apaga: a FK `admissoes_processos_turno_empresa_fk` e
- * `on delete restrict` (migration 0035), e apagar levaria embora, em silencio, o que foi combinado
+ * `on delete restrict` (migration 0037), e apagar levaria embora, em silencio, o que foi combinado
  * com uma pessoa.
  *
  * O banco so sabe recusar — quem traduz e este servico. Sem a traducao, o DP veria 500.

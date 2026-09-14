@@ -2659,7 +2659,7 @@ export const admissoesProcessosHistorico = pgTable(
     check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
     // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
     //
-    // PARCIAL, como o irmao de `admissoes_testes_historico` (0032). Ele nasceu simples na 0033, e a
+    // PARCIAL, como o irmao de `admissoes_testes_historico` (0034). Ele nasceu simples na 0035, e a
     // diferenca custava caro: sem versao nova o segundo evento colidia com o primeiro, entao revelar
     // um CPF precisava AVANCAR a versao — e avancar a versao e um UPDATE na linha raiz, que grava
     // `atualizado_por` e dispara a trigger de `atualizado_em`. O detalhe passava a mostrar como

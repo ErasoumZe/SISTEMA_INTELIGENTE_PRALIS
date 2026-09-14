@@ -337,7 +337,7 @@ describe("admissoes dependentes publicos integration", () => {
     const pelaApi = await criar(token, { ...NOVO_DEPENDENTE, cpf: invalido });
     expect(pelaApi.statusCode, pelaApi.body).toBe(400);
 
-    // E agora SEM passar pela API: o CHECK da migration 0038 refaz a conta do modulo 11. Antes da
+    // E agora SEM passar pela API: o CHECK da migration 0040 refaz a conta do modulo 11. Antes da
     // D-7 esta linha entrava, porque o banco so conferia "onze digitos".
     await expect(
       executarSql(

@@ -94,7 +94,7 @@ export type FichaRascunhoPayload = z.infer<typeof fichaRascunhoPayloadSchema>;
 /**
  * Os campos que o documento 35 marca como obrigatorios E que existem como coluna hoje.
  *
- * Ficaram DE FORA por nao terem coluna na 0037, e cada um e decisao pendente, nao esquecimento:
+ * Ficaram DE FORA por nao terem coluna na 0039, e cada um e decisao pendente, nao esquecimento:
  * primeiro emprego, contato de emergencia, reservista, CNH, PIX e vale-transporte. Coletar
  * qualquer um deles exige migration, e a V3 foi aprovada sem eles.
  */

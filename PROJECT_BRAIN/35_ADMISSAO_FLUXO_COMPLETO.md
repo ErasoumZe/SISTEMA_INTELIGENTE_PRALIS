@@ -18,17 +18,17 @@ diz hoje.** Onde este documento e a realidade divergirem, vale esta seção e os
 
 | O que o 35 diz | O que é verdade hoje | Onde está a verdade |
 | --- | --- | --- |
-| "Nada mais foi implementado" (cabeçalho) | V2, V3, V4 e V5 saíram. Existem as migrations **0037** e **0038** | `37`, `38` |
+| "Nada mais foi implementado" (cabeçalho) | V2, V3, V4 e V5 saíram. Existem as migrations **0039** e **0040** | `37`, `38` |
 | §2: convite, formulário e dependentes "não existem" | **existem os três** | `37` §1 e §2 |
 | §3: E2, E3, E4 e E6 "faltam" | **as quatro existem**. Faltam E5, E7 e E8 | `37`, `38` |
 | §4: etapa derivada (`etapaDoProcesso`) | **não foi implementada, e não foi decidida.** `situacaoDoProcesso` segue com três valores. O que saiu foi o ciclo **da ficha** (`rascunho·enviada·devolvida·aprovada`) | — decisão ainda aberta |
-| §6: "nada foi gerado como migration" | vale só para **P-4** e **P-5**. P-1, P-2 e P-3 viraram a **0037**, com desvios (§0.1.1) | `db/migrations/0037_awesome_maximus.sql` |
+| §6: "nada foi gerado como migration" | vale só para **P-4** e **P-5**. P-1, P-2 e P-3 viraram a **0039**, com desvios (§0.1.1) | `db/migrations/0039_awesome_maximus.sql` |
 | §7.1: permissões `admissoes_processos_revisar` e `_efetivar` | os nomes reais são **`admissoes_processos_ver_ficha`** e **`admissoes_processos_revisar_ficha`**. `_efetivar` **não existe** | `shared/src/autenticacao/index.ts` |
 | §7.1: revogar convite por `POST .../convite/revogar` | é **`DELETE /api/admissoes/processos/:id/convite`**. E existe um `GET` do painel, que o 35 não previa | `api/src/admissoes/convites.controller.ts` |
 | §7.1: "A CONFIRMAR" se a Gerência convida | **respondido: não.** As três permissões da ficha e do convite são só do DP | `db/src/referencia-permissoes.ts` |
 | §7.2: rotas públicas em `/api/admissoes/convite/*` | o prefixo real é **`/api/admissao/`** (singular): `ficha`, `ficha/enviar`, `dependentes` | `api/src/app.ts` (allowlist) |
 | §7.2: "teto por IP **e** por token" | saiu **um** teto só, por token com queda para IP | `api/src/admissoes/convite-http.ts` |
-| §7.3: o índice parcial exclui "apenas `cpf_revelado`" | a **0037** ampliou para **seis** ações | `db/migrations/0037_awesome_maximus.sql` |
+| §7.3: o índice parcial exclui "apenas `cpf_revelado`" | a **0039** ampliou para **seis** ações | `db/migrations/0039_awesome_maximus.sql` |
 | §7.3: a ação `efetivado` entra no CHECK | **não entrou.** Entraram as cinco de convite e ficha; `efetivado` fica para a V6 | idem |
 | §7.3: a trilha "sempre teve autor humano" | mudou: `ator_usuario_id` virou anulável e ganhou `convite_id`, com **XOR** entre os dois | `37` §1.5 |
 | §8: nada sobre aviso de teste | existe `AVISO-TESTE-ADMISSAO-V1` e as guardas **G-1/G-2/G-3** | `36` §6, `37` §6 |
@@ -36,7 +36,7 @@ diz hoje.** Onde este documento e a realidade divergirem, vale esta seção e os
 | §10: V2, V3, V4 pendentes | **entregues.** Restam V5-documentos, V6-efetivação e V7-Conplus. Atenção: o "V5" desta tabela é **documentos**; a `38` chama de V5 a **revisão do DP**, que aqui era parte da V3 | `38` |
 | §12 A-3 (comentário desatualizado em `shared`) | **RESOLVIDO** | `shared/src/admissoes/processos.ts` |
 
-### 0.1.1 Os desvios da 0037 em relação ao SQL da seção 6
+### 0.1.1 Os desvios da 0039 em relação ao SQL da seção 6
 
 Registrados porque quem ler o §6 como se fosse a migration vai errar nome de coluna:
 
@@ -49,7 +49,7 @@ Registrados porque quem ler o §6 como se fosse a migration vai errar nome de co
 - `admissoes_convites` ganhou **`aviso_privacidade_versao NOT NULL`**, que amarra o convite à versão
   do aviso — é o mecanismo da guarda G-2, e o §6 não o tinha;
 - **a decisão do §6 sobre o aceite foi invertida.** O 35 dizia que exigir aceite no envio moraria no
-  serviço, "porque um CHECK em `enviada` travaria uma devolução legítima". A 0037 faz o contrário: o
+  serviço, "porque um CHECK em `enviada` travaria uma devolução legítima". A 0039 faz o contrário: o
   ramo `enviada` do CHECK exige aceite, versão e declaração de dependentes. Funciona porque **reenviar
   zera o carimbo do revisor**, não o aceite.
 
@@ -110,10 +110,10 @@ decisão que não é técnica.
 Estados gravados hoje, e só eles: `iniciado` · `pausado` · `cancelado`.
 Situações derivadas: Ativo · Pausado · Inativo (`situacaoDoProcesso`, em `shared`).
 
-> **FATO relevante para qualquer plano, e ele piorou:** a **0035** nunca foi aplicada em banco
-> persistente, e depois dela vieram **0036, 0037 e 0038**. São **quatro** migrations empilhadas que só
+> **FATO relevante para qualquer plano, e ele piorou:** a **0037** nunca foi aplicada em banco
+> persistente, e depois dela vieram **0038, 0039 e 0040**. São **quatro** migrations empilhadas que só
 > existem em arquivo e em bancos descartáveis. `padaria_adm001` continua com a linha legada que fará a
-> 0035 falhar de propósito. Aplicar isso em produção é decisão de Marco, e continua não tomada.
+> 0037 falhar de propósito. Aplicar isso em produção é decisão de Marco, e continua não tomada.
 
 ---
 
@@ -501,7 +501,7 @@ create trigger "admissoes_processos_ficha_set_atualizado_em"
   for each row execute function set_atualizado_em();
 ```
 
-> A trigger vai **escrita à mão**, como a da `0033`: a `0002` instala percorrendo um array literal
+> A trigger vai **escrita à mão**, como a da `0035`: a `0002` instala percorrendo um array literal
 > que não conhece tabelas novas, e editar a `0002` criaria divergência produção × dev.
 
 **Enviar exige o aceite do aviso.** `aprovada` já o exige por CHECK; a exigência no envio mora no
@@ -672,19 +672,19 @@ de um limite por token — o link é de uma pessoa, não de uma população.
 
 As ações novas ampliam o CHECK de `admissoes_processos_historico_acao_check`. Aditivo, barato.
 
-> **Correção (03/09/2026):** a 0037 entrou com **cinco** — `convite_gerado`, `convite_revogado`,
+> **Correção (03/09/2026):** a 0039 entrou com **cinco** — `convite_gerado`, `convite_revogado`,
 > `ficha_enviada`, `ficha_devolvida`, `ficha_aprovada`. **`efetivado` não entrou**, porque a
 > efetivação não existe. E o índice parcial passou a excluir as **seis** ações que não consomem versão
 > do processo, não "apenas `cpf_revelado`" como o parágrafo abaixo diz.
 
 **O que não era barato já foi resolvido.** `admissoes_processos_historico_evento_unico` nasceu único em
-`(processo_id, versao)` **sem cláusula parcial** ([0033](db/migrations/0033_blue_trauma.sql#L48)),
+`(processo_id, versao)` **sem cláusula parcial** ([0035](db/migrations/0035_blue_trauma.sql#L48)),
 diferente do histórico do teste. Isso obrigava **toda** ação a consumir uma versão — e consumir versão
 é UPDATE na linha raiz.
 
-> **Decisão de Marco, 31/08/2026: o índice vira parcial** (migration **0036**), excluindo apenas
-> `cpf_revelado`, sem tabela separada e sem tocar na 0033. É a mesma resposta que a ADM-001 deu na
-> 0032 — o processo convergiu para o teste, e não o contrário.
+> **Decisão de Marco, 31/08/2026: o índice vira parcial** (migration **0038**), excluindo apenas
+> `cpf_revelado`, sem tabela separada e sem tocar na 0035. É a mesma resposta que a ADM-001 deu na
+> 0034 — o processo convergiu para o teste, e não o contrário.
 >
 > As alternativas foram descartadas com o motivo escrito: manter o status quo deixaria a autoria
 > contaminada de pé; uma tabela separada de acessos reabriria a decisão da ADM-001 registrada em
@@ -698,7 +698,7 @@ respondida, e a regra é a que vale para `cpf_revelado`.
 
 > **Achado de gate, aberto:** [migracoes.test.ts:188-192](tests/integration/migracoes/migracoes.test.ts#L188-L192)
 > compara `indexname` entre `migrate` e `push`, **não `indexdef`**. Um índice parcial num caminho e
-> total no outro passaria despercebido, porque o nome é o mesmo. A 0036 fecha esse buraco só para o
+> total no outro passaria despercebido, porque o nome é o mesmo. A 0038 fecha esse buraco só para o
 > índice que ela toca; ampliar a comparação para todos é vertical própria — e pode revelar drift
 > preexistente em outros índices, que é justamente por que não entrou de carona aqui.
 
@@ -804,7 +804,7 @@ Dois foram **corrigidos** em 31/08/2026 (A-1 e A-2, abaixo). Dois seguem **abert
 **O defeito.** `revelarCpfDoProcesso` chamava `avancarVersaoProcessoRepository`, que faz
 `set({ versao: versaoAtual + 1, atualizadoPor: ator })`
 ([processos.repository.ts:328](api/src/admissoes/processos.repository.ts#L328)), e o UPDATE disparava a
-trigger `admissoes_processos_set_atualizado_em` da `0033`. **Revelar um CPF era a única leitura do
+trigger `admissoes_processos_set_atualizado_em` da `0035`. **Revelar um CPF era a única leitura do
 módulo que escrevia na tabela raiz** — `versao`, `atualizado_por` e `atualizado_em`.
 
 O sintoma direto: o rodapé do detalhe mostrava como **"Alterado por … · data"** quem apenas *leu* o
@@ -816,7 +816,7 @@ O sintoma derivado, que existia mas não foi observado: em concorrência real (d
 tela de Testes — que cancela o processo e nem oferece o botão de revelar), a versão mudava sem
 alteração de negócio e o cancelamento seguinte levava 409.
 
-**A correção.** Migration **0036** torna o índice do histórico parcial, e o serviço grava o evento com
+**A correção.** Migration **0038** torna o índice do histórico parcial, e o serviço grava o evento com
 a versão vigente lida sob o lock, sem tocar na linha. O lock ficou — não para escrever, mas para a
 versão ser estável na transação e para manter a ordem de aquisição das demais escritas.
 
@@ -826,11 +826,11 @@ a revelação não tocava. Por isso o 409 de "salvar internos/exame" nunca veio 
 ### A-2 · As duas trilhas divergiam no mesmo ato — **RESOLVIDO**
 
 **Era o seguinte.** No teste, `cpf_revelado` não incrementa versão e o índice do histórico é parcial
-desde a 0032. No processo, a mesma ação incrementava a versão, e o índice era simples. Duas respostas
+desde a 0034. No processo, a mesma ação incrementava a versão, e o índice era simples. Duas respostas
 para a mesma pergunta dentro do mesmo módulo — o que a `AGENTS.md` §4.1 proíbe — e era a segunda que
 produzia o A-1.
 
-**Resolvido pela 0036**, com o processo convergindo para o teste. As duas trilhas agora respondem
+**Resolvido pela 0038**, com o processo convergindo para o teste. As duas trilhas agora respondem
 igual, e a decisão está registrada na seção 7.3.
 
 ### A-3 · Comentário desatualizado em `shared` — **RESOLVIDO**
@@ -844,23 +844,23 @@ mais, e é exatamente o tipo de coisa que a próxima pessoa lê como verdade.
 
 ### A-4 · A base ainda não existe em lugar nenhum — **ABERTO, e maior**
 
-**FATO** (`PROJECT_BRAIN/34`): a migration **0035 não foi aplicada em banco nenhum**, e `padaria_adm001`
-tem **1 linha legada** que a fará falhar de propósito. Desde então empilharam-se **0036, 0037 e 0038**.
-São quatro migrations que só existem em arquivo e em banco descartável — e um erro na 0035 só
+**FATO** (`PROJECT_BRAIN/34`): a migration **0037 não foi aplicada em banco nenhum**, e `padaria_adm001`
+tem **1 linha legada** que a fará falhar de propósito. Desde então empilharam-se **0038, 0039 e 0040**.
+São quatro migrations que só existem em arquivo e em banco descartável — e um erro na 0037 só
 apareceria quando as quatro fossem aplicadas juntas. É uma decisão de Marco, não uma etapa técnica.
 
 ---
 
 ## 13. O que este documento **não** fez
 
-- Não aplicou migration em banco nenhum — **inclusive a 0036**, que existe em arquivo e nunca rodou.
-  *(03/09: continua verdade para banco persistente; 0035–0038 já rodaram em bancos descartáveis.)*
+- Não aplicou migration em banco nenhum — **inclusive a 0038**, que existe em arquivo e nunca rodou.
+  *(03/09: continua verdade para banco persistente; 0037–0040 já rodaram em bancos descartáveis.)*
 - Não gerou nenhuma outra migration: o SQL da seção 6 seguia proposta.
-  *(03/09: P-1, P-2 e P-3 viraram a **0037**; **P-4 e P-5 continuam proposta**.)*
+  *(03/09: P-1, P-2 e P-3 viraram a **0039**; **P-4 e P-5 continuam proposta**.)*
 - Não leu o banco de produção — a checagem de CPF duplicado em `colaboradores` (BLOQUEIO 3) continua **não feita**.
 - Não escreveu, sugeriu ou parafraseou o texto do aviso de privacidade.
 - Não definiu a política de documentos, retenção ou descarte.
 - Não inventou nada sobre o Conplus: listou as seis perguntas e parou.
 - Não tocou em `web-vue/components/admissoes/TesteFormDialog.vue`, em `PROJECT_BRAIN/32_ROBO_CARTOGRAFO_PLANILHAS.md` nem em `PROJECT_BRAIN/panilhas/`.
 - Não corrigiu os achados **A-3** e **A-4** da seção 12: eles seguem abertos. A-1 e A-2 foram corrigidos, e é a única mudança de código que saiu daqui.
-- Não ampliou a comparação `migrate` × `push` para todos os índices (achado de gate na seção 7.3): a 0036 fecha só o índice que ela toca.
+- Não ampliou a comparação `migrate` × `push` para todos os índices (achado de gate na seção 7.3): a 0038 fecha só o índice que ela toca.

@@ -20,13 +20,13 @@ const totalMigracoesEsperado = journalMigracoes.entries.length;
 // --- triggers de `atualizado_em` ----------------------------------------------------------------
 //
 // O conjunto esperado e DERIVADO das migrations, nao digitado. Um numero fixo aqui envelhece a cada
-// tabela nova: era `21`, virou mentira quando a 0032 e a 0033 entraram, e o gate so acusou muito
+// tabela nova: era `21`, virou mentira quando a 0034 e a 0035 entraram, e o gate so acusou muito
 // depois do commit.
 //
 // Duas origens, e o teste precisa cobrir as duas:
 //   - a 0002 instala percorrendo um ARRAY LITERAL de nomes de tabela;
 //   - toda tabela criada DEPOIS precisa do `create trigger` escrito a mao na propria migration, porque
-//     a 0002 nao volta atras. Foi assim na 0032 (funcoes_operacionais, admissoes_testes) e na 0033
+//     a 0002 nao volta atras. Foi assim na 0034 (funcoes_operacionais, admissoes_testes) e na 0035
 //     (admissoes_processos).
 //
 // A segunda metade vem de `lerTriggersManuais`, o MESMO modulo que o provisionamento de dev e o de
@@ -79,7 +79,7 @@ const sqlIndices = `
  * O PREDICADO dos indices, e nao so o nome.
  *
  * `sqlIndices` compara `indexname`, e nome nao carrega clausula parcial: um indice `WHERE ...` num
- * caminho e total no outro passa despercebido, porque os dois se chamam igual. A migration 0036
+ * caminho e total no outro passa despercebido, porque os dois se chamam igual. A migration 0038
  * trocou exatamente o predicado de `admissoes_processos_historico_evento_unico`, entao ela precisa
  * de uma comparacao que enxergue isso.
  *
@@ -217,7 +217,7 @@ describe("migracoes integration", () => {
     expect(constraintsMigrate).toEqual(constraintsPush);
   });
 
-  it("P0-0036 Deve_TerOMesmoPredicadoDeIndice_Quando_ProvisionarViaMigrate", async () => {
+  it("P0-0038 Deve_TerOMesmoPredicadoDeIndice_Quando_ProvisionarViaMigrate", async () => {
     const [defsMigrate, defsPush] = await Promise.all([
       bancoMigrado
         .query<{ indexname: string; indexdef: string }>(sqlIndicesAdmissoes)
@@ -226,8 +226,8 @@ describe("migracoes integration", () => {
     ]);
     expect(defsMigrate).toEqual(defsPush);
 
-    // E o predicado tem de ser o da 0036, nos DOIS caminhos: o schema Drizzle e o arquivo .sql
-    // podem divergir em silencio, e foi essa divergencia que criou o defeito que a 0036 corrige.
+    // E o predicado tem de ser o da 0038, nos DOIS caminhos: o schema Drizzle e o arquivo .sql
+    // podem divergir em silencio, e foi essa divergencia que criou o defeito que a 0038 corrige.
     const alvo = "admissoes_processos_historico_evento_unico";
     for (const [origem, linhas] of [
       ["migrate", defsMigrate],
@@ -258,7 +258,7 @@ describe("migracoes integration", () => {
     // diz QUAL tabela ficou sem — a 0002 nao cobre nenhuma delas.
     //
     // Esta lista CRESCE a cada tabela nova com `atualizado_em`, e e assim que tem de ser: o gate
-    // disparou quando a 0034 chegou, e acrescentar o nome aqui e a decisao consciente que ele
+    // disparou quando a 0036 chegou, e acrescentar o nome aqui e a decisao consciente que ele
     // cobra. Trocar por uma contagem seria voltar ao `21` que envelheceu em silencio.
     expect(aMao.map((achado) => achado.tabela).sort()).toEqual([
       "admissoes_processos",

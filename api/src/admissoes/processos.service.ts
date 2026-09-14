@@ -248,8 +248,8 @@ async function recusarSeCpfJaEstaEmUso(cpf: string, empresaId: string, tx: Trans
  * tinha lido o documento. Nao havia como resolver so a autoria: a trigger e BEFORE UPDATE em
  * qualquer coluna.
  *
- * Por isso o evento pode repetir, e o indice unico do historico e PARCIAL (migration 0036) —
- * exatamente como o do periodo de teste desde a 0032. Sem ele, a segunda revelacao colidiria com o
+ * Por isso o evento pode repetir, e o indice unico do historico e PARCIAL (migration 0038) —
+ * exatamente como o do periodo de teste desde a 0034. Sem ele, a segunda revelacao colidiria com o
  * primeiro evento da mesma versao.
  *
  * O LOCK fica. Ele nao existe para escrever: existe para a versao lida ser a mesma durante a

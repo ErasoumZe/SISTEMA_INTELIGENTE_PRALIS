@@ -334,5 +334,5 @@ Hoje a resposta por omissão é guardar para sempre, e é a pior delas.
    `ficha/devolver` existe, e o navegador cobre o resto.
 3. **O `sticky` da coluna de ações não funciona** — §1, achado aberto. Vale para todas as tabelas com
    a casca da casa.
-4. **Quatro migrations empilhadas** (0035–0038) seguem só em arquivo e em bancos descartáveis.
+4. **Quatro migrations empilhadas** (0037–0040) seguem só em arquivo e em bancos descartáveis.
 5. **Retenção** e **duplicidade de dependente sem CPF** continuam como a `38` §6 registrou.

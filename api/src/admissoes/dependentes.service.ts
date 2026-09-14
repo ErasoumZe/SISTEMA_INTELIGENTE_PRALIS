@@ -76,7 +76,7 @@ function codigoDoPostgres(falha: DadosExternos): string | undefined {
  *
  * - `23505` e o indice unico parcial `(processo_id, cpf)`: o mesmo CPF duas vezes no mesmo processo.
  *   E o que segura a corrida entre duas abas, onde a checagem em aplicacao chegaria tarde.
- * - `23514` e o CHECK de digito verificador da migration 0038. O Zod ja recusa antes; este ramo
+ * - `23514` e o CHECK de digito verificador da migration 0040. O Zod ja recusa antes; este ramo
  *   existe porque o banco e a ultima linha, e cair em 500 aqui esconderia exatamente o caso em que
  *   ele foi a unica linha que funcionou.
  *
