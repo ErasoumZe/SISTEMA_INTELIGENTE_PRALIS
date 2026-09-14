@@ -24,7 +24,11 @@ const painel = ref<InstanceType<typeof PendenciasRoteamentoPainel> | null>(null)
            abaixo continua onde estava: ele nomeia a SECAO, nao a tela. -->
       <AppCabecalhoTela :titulo="ctx.telaAtual?.titulo ?? ''" />
 
-      <NotificacoesPendentesPage :notificacoes="ctx.notificacoes" @verificar="ctx.verificarNotificacao" />
+      <NotificacoesPendentesPage
+        :notificacoes="ctx.notificacoes"
+        :notificacoes-com-historico="ctx.notificacoesComHistorico"
+        @verificar="ctx.verificarNotificacao"
+      />
 
       <section class="secao-financeira" aria-labelledby="titulo-pendencias-financeiras">
         <h2 id="titulo-pendencias-financeiras" class="text-h6 mb-1">Roteamento financeiro</h2>

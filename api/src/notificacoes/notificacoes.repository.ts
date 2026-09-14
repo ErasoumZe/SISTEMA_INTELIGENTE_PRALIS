@@ -7,6 +7,7 @@ import { banco, type ExecutorBanco } from "../banco/conexao.js";
 export function listarNotificacoesRepository(
   empresaId: string,
   destinatarioUsuarioId: string,
+  incluirVerificadas = false,
   db: ExecutorBanco = banco
 ) {
   return db
@@ -16,7 +17,7 @@ export function listarNotificacoesRepository(
       and(
         eq(notificacoes.empresaId, empresaId),
         eq(notificacoes.destinatarioUsuarioId, destinatarioUsuarioId),
-        eq(notificacoes.verificado, false)
+        ...(incluirVerificadas ? [] : [eq(notificacoes.verificado, false)])
       )
     )
     .orderBy(desc(notificacoes.criadoEm));

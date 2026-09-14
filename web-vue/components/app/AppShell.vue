@@ -22,7 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
-  (event: "verificarNotificacao", id: string): void;
+  (event: "abrirPendencias"): void;
 }>();
 
 const drawerRecolhido = ref(false);
@@ -293,18 +293,24 @@ onMounted(() => {
             <v-card min-width="320" max-width="420">
               <v-card-title class="text-subtitle-1">Pendências</v-card-title>
               <v-list v-if="notificacoes?.length" lines="three">
-                <v-list-item v-for="item in notificacoes" :key="item.id" :title="item.titulo">
+                <v-list-item
+                  v-for="item in notificacoes"
+                  :key="item.id"
+                  :title="item.titulo"
+                  class="notificacao-item"
+                  @click="emit('abrirPendencias')"
+                >
                   <template #subtitle>
                     <span v-if="item.valor != null">{{ dinheiro(item.valor) }} · </span>
                     {{ new Date(item.criadoEm).toLocaleString("pt-BR") }}
                   </template>
                   <template #append>
                     <v-btn
-                      icon="mdi-check"
+                      icon="mdi-open-in-new"
                       size="small"
                       variant="text"
-                      title="Marcar como verificada"
-                      @click="emit('verificarNotificacao', item.id)"
+                      title="Abrir pendência"
+                      @click.stop="emit('abrirPendencias')"
                     />
                   </template>
                 </v-list-item>

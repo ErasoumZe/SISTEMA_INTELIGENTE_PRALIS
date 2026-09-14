@@ -192,6 +192,26 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
         [notificacao!.id]
       )
     ).toBeTruthy();
+
+    // O sino segue mostrando somente o que pede acao. A central de Pendencias tambem consulta o
+    // historico, para que uma quebra nao desapareca da operacao logo depois de ser verificada.
+    const pendentesAposVerificacao = await request(
+      cookieTesouraria,
+      "GET",
+      `/api/notificacoes?empresaId=${idsTeste.empresaA}`
+    );
+    expect(json<{ data: Array<{ id: string }> }>(pendentesAposVerificacao).data).not.toContainEqual(
+      expect.objectContaining({ id: notificacao!.id })
+    );
+    const historico = await request(
+      cookieTesouraria,
+      "GET",
+      `/api/notificacoes?empresaId=${idsTeste.empresaA}&incluirVerificadas=true`
+    );
+    expect(historico.statusCode, historico.body).toBe(200);
+    expect(
+      json<{ data: Array<{ id: string; verificado: boolean; referenciaId: string }> }>(historico).data
+    ).toContainEqual(expect.objectContaining({ id: notificacao!.id, verificado: true, referenciaId: quebra?.id }));
   });
 
   it("registra o gerente que fechou e mantem a quebra atribuida ao operador", async () => {

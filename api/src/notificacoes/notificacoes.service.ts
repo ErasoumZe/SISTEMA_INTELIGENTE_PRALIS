@@ -3,9 +3,9 @@ import { podeAcessarEmpresa } from "../auth/empresa.js";
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { listarNotificacoesRepository, verificarNotificacaoRepository } from "./notificacoes.repository.js";
 
-export async function listarNotificacoes(empresaId: string, perfil: PerfilUsuario) {
+export async function listarNotificacoes(empresaId: string, perfil: PerfilUsuario, incluirVerificadas = false) {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
-  const itens = await listarNotificacoesRepository(empresaId, perfil.usuarioId);
+  const itens = await listarNotificacoesRepository(empresaId, perfil.usuarioId, incluirVerificadas);
   return itens.map((item) => ({
     ...item,
     valor: item.valor == null ? null : deCentavos(paraCentavos(item.valor)),

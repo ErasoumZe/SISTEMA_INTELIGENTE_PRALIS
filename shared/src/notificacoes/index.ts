@@ -6,7 +6,13 @@ export const tipoNotificacaoSchema = z.enum([
   "transferencia_prazo_confirmacao"
 ]);
 
-export const notificacoesQuerySchema = z.object({ empresaId: z.string().uuid() });
+// O sino continua recebendo apenas o que ainda pede acao. A central de Pendencias, por outro
+// lado, tambem precisa mostrar o que acabou de ser verificado: sem essa opcao, um clique no
+// "verificar" fazia uma quebra registrada desaparecer por completo da tela que deveria explica-la.
+export const notificacoesQuerySchema = z.object({
+  empresaId: z.string().uuid(),
+  incluirVerificadas: z.coerce.boolean().optional().default(false)
+});
 export const notificacaoParamsSchema = z.object({ notificacaoId: z.string().uuid() });
 
 export const notificacaoSchema = z.object({

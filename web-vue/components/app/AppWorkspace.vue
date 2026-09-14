@@ -144,6 +144,7 @@ const operacoes = useState<OperacaoResumo[]>("padaria.workspace.operacoes", () =
 const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => null);
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
 const notificacoes = ref<Notificacao[]>([]);
+const notificacoesComHistorico = ref<Notificacao[]>([]);
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
@@ -606,13 +607,25 @@ async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
 async function carregarNotificacoes(idEmpresa = empresaId.value) {
   if (!idEmpresa) {
     notificacoes.value.splice(0);
+    notificacoesComHistorico.value.splice(0);
     return;
   }
-  const itens = await apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${encodeURIComponent(idEmpresa)}`);
-  notificacoes.value.splice(0, notificacoes.value.length, ...itens);
+  const empresaQuery = encodeURIComponent(idEmpresa);
+  const [itensPendentes, itensComHistorico] = await Promise.all([
+    apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${empresaQuery}`),
+    apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${empresaQuery}&incluirVerificadas=true`)
+  ]);
+  notificacoes.value.splice(0, notificacoes.value.length, ...itensPendentes);
+  notificacoesComHistorico.value.splice(0, notificacoesComHistorico.value.length, ...itensComHistorico);
 }
 
 async function verificarNotificacao(notificacaoId: string) {
+  const confirmou = await confirmarAcao(
+    "Confirma que esta pendencia foi apurada? Ela sairá do sino e ficará registrada no histórico.",
+    "Concluir verificação",
+    "Marcar como verificada"
+  );
+  if (!confirmou) return;
   try {
     await apiPut(`/api/notificacoes/${notificacaoId}/verificar?empresaId=${encodeURIComponent(empresaId.value)}`, {});
     await carregarNotificacoes();
@@ -1992,6 +2005,7 @@ const pageContext = computed(() => ({
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
   notificacoes: notificacoes.value,
+  notificacoesComHistorico: notificacoesComHistorico.value,
   verificarNotificacao,
   fecharCaixaOperacional,
   recarregarCaixa: async () => {
@@ -2074,7 +2088,7 @@ onBeforeUnmount(() => {
     :motivos-telas-desabilitadas="motivosTelasDesabilitadas"
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="selecionarEmpresa"
-    @verificar-notificacao="verificarNotificacao"
+    @abrir-pendencias="router.push('/pendencias')"
   >
     <template #caixa>
       <!-- O AVISO DE CAIXA MUDOU DE LUGAR (28/08/2026), por decisao do Marco: saiu do topo da

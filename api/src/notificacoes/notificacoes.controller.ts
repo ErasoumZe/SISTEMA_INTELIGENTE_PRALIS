@@ -6,9 +6,9 @@ import { listarNotificacoes, verificarNotificacao } from "./notificacoes.service
 
 export async function registrarRotasNotificacoes(app: FastifyInstance) {
   app.get("/api/notificacoes", async (request, reply) => {
-    const { empresaId } = notificacoesQuerySchema.parse(request.query);
+    const { empresaId, incluirVerificadas } = notificacoesQuerySchema.parse(request.query);
     try {
-      return ok(await listarNotificacoes(empresaId, request.perfilUsuario!));
+      return ok(await listarNotificacoes(empresaId, request.perfilUsuario!, incluirVerificadas));
     } catch (error) {
       return erro(reply, 403, mensagemDominioOuRelancar(error));
     }
