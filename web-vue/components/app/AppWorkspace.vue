@@ -572,6 +572,14 @@ async function carregarPdvsCompletos(idEmpresa = empresaId.value) {
   return carregarOpcoesCompletas("/api/pdvs", idEmpresa);
 }
 
+// GET /api/contas e paginado. Formularios nao podem receber so a primeira pagina: uma conta
+// existente ficava invisivel no PDV, nas Entradas, no Fechamento e no roteamento de pagamentos.
+// A permissao/escopo continuam sendo decididos pela API; aqui so percorremos todas as paginas que
+// aquele usuario ja pode ler.
+async function carregarContasCompletas(idEmpresa = empresaId.value) {
+  return carregarOpcoesCompletas("/api/contas", idEmpresa);
+}
+
 async function carregarDadosTela(tela: string, idEmpresa = empresaId.value) {
   if (!idEmpresa && tela !== "empresas") return;
   empresaCarregando.value = true;
@@ -652,13 +660,13 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     ]);
   } else if (tela === "entradas") {
     [dados.contas, dados.produtos, dados.pdvs, dados.formasPagamento] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => carregarContasCompletas(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "Produtos", () => apiGet<Opcao[]>(`/api/produtos/opcoes${query}`), []),
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "Formas de pagamento", () => apiGet<Opcao[]>(`/api/formas_pagamento${query}`), [])
     ]);
   } else if (tela === "fechamento") {
-    dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
+    dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => carregarContasCompletas(idEmpresa), []);
   } else if (tela === "caixa") {
     [dados.pdvs, dados.turnos, dados.maquininhas] = await Promise.all([
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []),
@@ -690,7 +698,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     ]);
   } else if (tela === "pdv") {
     [dados.contas, dados.pdvs] = await Promise.all([
-      carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []),
+      carregarOpcaoOpcional(faltas, "Contas", () => carregarContasCompletas(idEmpresa), []),
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
     ]);
   } else if (tela === "transferencias") {
@@ -876,7 +884,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // So carrega para quem tem a permissao dedicada — quem nao configura roteamento nao precisa da
     // lista de contas, e `carregarOpcaoOpcional` degrada para [] sem derrubar a tela.
     if (temPermissao("cadastro_formas_pagamento_roteamento")) {
-      dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas${query}`), []);
+      dados.contas = await carregarOpcaoOpcional(faltas, "Contas", () => carregarContasCompletas(idEmpresa), []);
     }
   } else if (tela === "relatorio_vendas") {
     [dados.pdvs, dados.clientes, dados.colaboradores, dados.formasPagamento, dados.turnos] = await Promise.all([
