@@ -644,7 +644,7 @@ function conferirIntencaoEntrega(
 // "Poder conferir" sao tres coisas juntas, e checar so o vinculo era insuficiente â€” o gate liberava
 // a entrega e a confirmacao depois se revelava impossivel:
 //   1. estar vinculado a conta do cofre da empresa (`contas_usuarios`);
-//   2. nao ser quem criou o movimento (R-028: quem envia nao confirma o proprio envio);
+//   2. nao ser quem criou/executou o movimento (R-028), exceto Tesouraria (R-189);
 //   3. ter `transferencias_conferir` na permissao EFETIVA (setor + cargos + usuario).
 //
 // A (3) e resolvida aqui, e nao no SQL, para usar exatamente a mesma resolucao do guard das rotas.
@@ -654,16 +654,22 @@ async function existeConfirmadorElegivel(
   tx: ExecutorBanco
 ): Promise<boolean> {
   const excluidos = new Set(input.excluirUsuariosIds);
-  const excluirUsuarioId = input.excluirUsuariosIds[0];
-  if (!excluirUsuarioId) return false;
   const candidatos = await listarCandidatosConfirmacaoRepository(
-    { contaId: input.contaId, empresaId: input.empresaId, excluirUsuarioId },
+    { contaId: input.contaId, empresaId: input.empresaId },
     tx
   );
   for (const usuarioId of candidatos) {
-    if (excluidos.has(usuarioId)) continue;
     const perfil = await buscarPerfilUsuario(usuarioId);
-    if (perfil && temPermissao(perfil.permissoes, "transferencias_conferir")) return true;
+    if (!perfil || !temPermissao(perfil.permissoes, "transferencias_conferir")) continue;
+    const ehTesouraria = perfil.cargos.some((cargo) =>
+      cargo.nome
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/gu, "")
+        .trim()
+        .toLowerCase()
+        .startsWith("tesouraria")
+    );
+    if (!excluidos.has(usuarioId) || ehTesouraria) return true;
   }
   return false;
 }

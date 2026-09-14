@@ -20,6 +20,7 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   let cookieCaixa: string;
   let adminId: string;
   let multiempresaId: string;
+  let tesourariaId: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -31,15 +32,19 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       cookieSessao(contexto.app, "gerente"),
       cookieSessao(contexto.app, "caixa")
     ]);
-    const [admin, multiempresa] = await Promise.all([
+    const [admin, multiempresa, tesouraria] = await Promise.all([
       consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [usuariosTeste.admin.email]),
       consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
         usuariosTeste.multiempresa.email
+      ]),
+      consultarUm<{ id: string }>('select id from "user" where lower(email) = lower($1)', [
+        usuariosTeste.tesouraria.email
       ])
     ]);
-    if (!admin || !multiempresa) throw new Error("Operadores de teste nao encontrados");
+    if (!admin || !multiempresa || !tesouraria) throw new Error("Operadores de teste nao encontrados");
     adminId = admin.id;
     multiempresaId = multiempresa.id;
+    tesourariaId = tesouraria.id;
   }, 120_000);
 
   afterAll(async () => contexto.fechar());
@@ -435,6 +440,86 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
       observacao: "retorno fixo conferido"
     });
     expect(fechamento.statusCode, fechamento.body).toBe(204);
+  });
+
+  it("R-189: Tesouraria vinculada confirma o retorno que ela propria planejou", async () => {
+    // O fluxo oficial exige que a ida saia do Cofre configurado. Durante este cenario, ele tem UMA
+    // unica pessoa apta: Tesouraria. O teste cobre tambem o portao antes da execucao: sem R-189 ele
+    // excluiria a planejadora e impediria o dinheiro de sair do caixa. Os vinculos sao restaurados
+    // no fim para os demais cenarios deste mesmo arquivo.
+    const vinculosOriginais = await consultarTodos<{ usuario_id: string }>(
+      "select usuario_id from contas_usuarios where empresa_id = $1 and conta_id = $2",
+      [idsTeste.empresaA, idsTeste.contaCofre]
+    );
+    expect(vinculosOriginais.map((vinculo) => vinculo.usuario_id)).toContain(tesourariaId);
+    await executarSql("delete from contas_usuarios where empresa_id = $1 and conta_id = $2 and usuario_id <> $3", [
+      idsTeste.empresaA,
+      idsTeste.contaCofre,
+      tesourariaId
+    ]);
+
+    try {
+      const { contaId: contaPdvId, pdvId } = await criarContaEPdv("r189-tesouraria");
+      const inicial = await request(cookieTesouraria, "POST", "/api/transferencias", {
+        empresaId: idsTeste.empresaA,
+        dataReferencia: "2026-07-31",
+        descricao: "Fundo com retorno para conferencia da tesouraria",
+        valorOriginal: 100,
+        contaOrigemId: idsTeste.contaCofre,
+        contaDestinoId: contaPdvId,
+        nLacreDoc: "R189-IDA",
+        retornosPlanejados: [{ valor: 100, nLacreDoc: "R189-RET" }]
+      });
+      expect(inicial.statusCode, inicial.body).toBe(201);
+      const transferenciaInicialId = json<{ data: { id: string } }>(inicial).data.id;
+
+      const abertura = await abrir(pdvId, "R189-IDA");
+      expect(abertura.statusCode, abertura.body).toBe(201);
+      const caixaId = json<{ data: { id: string } }>(abertura).data.id;
+      const plano = await consultarUm<{ id: string }>(
+        "select id from transferencias where planejamento_origem_transferencia_id = $1",
+        [transferenciaInicialId]
+      );
+      if (!plano) throw new Error("Planejamento R-189 nao encontrado");
+
+      const executada = await request(
+        cookieAdmin,
+        "POST",
+        `/api/caixa/${caixaId}/planejamentos-retorno/${plano.id}/executar`,
+        {}
+      );
+      expect(executada.statusCode, executada.body).toBe(200);
+
+      const confirmada = await request(cookieTesouraria, "POST", `/api/transferencias/${plano.id}/confirmar`, {
+        contaDestinoId: idsTeste.contaCofre,
+        nLacreDoc: "R189-RET",
+        valorRecebido: 100
+      });
+      expect(confirmada.statusCode, confirmada.body).toBe(200);
+      expect(
+        await consultarUm<{ status: string; confirmado_por: string; executado_por: string | null }>(
+          "select status, confirmado_por, executado_por from transferencias where id = $1",
+          [plano.id]
+        )
+      ).toMatchObject({ status: "recebido", confirmado_por: tesourariaId, executado_por: adminId });
+
+      const fechamento = await request(cookieAdmin, "POST", `/api/caixa/${caixaId}/fechar`, {
+        observacao: "retorno confirmado pela tesouraria vinculada"
+      });
+      expect(fechamento.statusCode, fechamento.body).toBe(204);
+    } finally {
+      await executarSql("delete from contas_usuarios where empresa_id = $1 and conta_id = $2", [
+        idsTeste.empresaA,
+        idsTeste.contaCofre
+      ]);
+      for (const vinculo of vinculosOriginais) {
+        await executarSql("insert into contas_usuarios (empresa_id, conta_id, usuario_id) values ($1, $2, $3)", [
+          idsTeste.empresaA,
+          idsTeste.contaCofre,
+          vinculo.usuario_id
+        ]);
+      }
+    }
   });
 
   it("Deve cancelar planejamento antes da abertura com auditoria, retry idempotente e liberar o fechamento", async () => {

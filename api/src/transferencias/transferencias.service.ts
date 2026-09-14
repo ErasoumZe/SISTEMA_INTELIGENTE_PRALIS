@@ -107,6 +107,13 @@ function normalizarCargo(nome: string) {
     .toLowerCase();
 }
 
+// R-189: Tesouraria pode conferir a transferencia que planejou ou executou, desde que continue
+// vinculada a conta de destino e tenha a permissao efetiva. A excecao e deliberadamente por cargo
+// (nao por "admin") para nao liberar auto-conferencia para os demais perfis.
+function ehTesouraria(perfil: PerfilUsuario): boolean {
+  return perfil.cargos.some((cargo) => normalizarCargo(cargo.nome).startsWith("tesouraria"));
+}
+
 export async function listarTransferencias(
   query: TransferenciasQuery,
   empresasPermitidasIds: string[] | null
@@ -337,7 +344,13 @@ export async function confirmarTransferencia(
       }
     }
 
-    const confirmada = await confirmarTransferenciaRepository(transferenciaId, dados, perfil.usuarioId, tx);
+    const confirmada = await confirmarTransferenciaRepository(
+      transferenciaId,
+      dados,
+      perfil.usuarioId,
+      ehTesouraria(perfil),
+      tx
+    );
     if (!confirmada) throw new Error("Somente operador de uma conta destino pode confirmar uma unica vez");
 
     // Caminho GENERICO preservado: divergencia de valor confirma e notifica, como sempre foi.
@@ -399,10 +412,15 @@ export async function recusarConferencia(
     const atual = await buscarContextoConferenciaRepository(transferenciaId, tx);
     if (!atual || atual.status !== "pendente") throw new Error("Transferencia nao esta pendente de confirmacao");
 
-    // Mesma elegibilidade da confirmacao: vinculado a conta destino, e nunca quem criou o movimento
-    // (R-028). Sem isso, quem enviou o dinheiro poderia "recusar" a propria entrega.
+    // Mesma elegibilidade da confirmacao: vinculado a conta destino e, exceto Tesouraria (R-189),
+    // diferente de quem criou/executou. Sem isso, um operador comum poderia recusar a propria entrega.
     const elegivel = await ehConfirmadorElegivelRepository(
-      { transferenciaId, contaId: dados.contaDestinoId, usuarioId: perfil.usuarioId },
+      {
+        transferenciaId,
+        contaId: dados.contaDestinoId,
+        usuarioId: perfil.usuarioId,
+        permitirAutoconferenciaTesouraria: ehTesouraria(perfil)
+      },
       tx
     );
     if (!elegivel) throw new Error("Somente operador de uma conta destino pode conferir esta transferencia");
@@ -614,7 +632,8 @@ export async function processarTransferenciasTemporais(agora = new Date()) {
               {
                 transferenciaId: transferencia.id,
                 contaId: candidato.contaId,
-                usuarioId: candidato.usuarioId
+                usuarioId: candidato.usuarioId,
+                permitirAutoconferenciaTesouraria: ehTesouraria(perfil)
               },
               tx
             );

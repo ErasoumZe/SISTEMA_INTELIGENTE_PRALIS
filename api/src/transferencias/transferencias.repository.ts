@@ -473,7 +473,9 @@ export async function contasPertencemEmpresaRepository(
 }
 
 // Quem pode conferir ESTA transferencia por ESTA conta: precisa operar uma conta candidata ao
-// destino e nao pode ser quem criou o movimento (R-028 — quem envia nao confirma o proprio envio).
+// destino e, como regra, nao pode ser quem criou ou executou o movimento (R-028). A Tesouraria
+// recebe a excecao operacional R-189 no SERVICO; ela ainda precisa deste vinculo, da empresa e da
+// permissao efetiva. Este repositorio apenas recebe a decisao de perfil ja tomada acima.
 //
 // Extraida para ser a fonte unica de `confirmar` e `recusar-conferencia`: duas copias da mesma
 // pergunta divergiriam, e a recusa passaria a aceitar quem a confirmacao recusa.
@@ -481,6 +483,7 @@ async function candidatoConfirmacao(
   transferenciaId: string,
   contaDestinoId: string,
   usuarioId: string,
+  permitirAutoconferenciaTesouraria: boolean,
   db: ExecutorBanco
 ) {
   const [permitida] = await db
@@ -516,24 +519,49 @@ async function candidatoConfirmacao(
       )
     )
     .limit(1);
-  if (!permitida || permitida.criadoPor === usuarioId || permitida.executadoPor === usuarioId) return null;
+  if (
+    !permitida ||
+    (!permitirAutoconferenciaTesouraria && (permitida.criadoPor === usuarioId || permitida.executadoPor === usuarioId))
+  ) {
+    return null;
+  }
   return permitida;
 }
 
 export async function ehConfirmadorElegivelRepository(
-  input: { transferenciaId: string; contaId: string; usuarioId: string },
+  input: {
+    transferenciaId: string;
+    contaId: string;
+    usuarioId: string;
+    permitirAutoconferenciaTesouraria?: boolean;
+  },
   db: ExecutorBanco = banco
 ): Promise<boolean> {
-  return Boolean(await candidatoConfirmacao(input.transferenciaId, input.contaId, input.usuarioId, db));
+  return Boolean(
+    await candidatoConfirmacao(
+      input.transferenciaId,
+      input.contaId,
+      input.usuarioId,
+      input.permitirAutoconferenciaTesouraria ?? false,
+      db
+    )
+  );
 }
 
 export async function confirmarTransferenciaRepository(
   transferenciaId: string,
   dados: ConfirmarTransferenciaPayload,
   usuarioId: string,
+  permitirAutoconferenciaTesouraria = false,
   db: ExecutorBanco = banco
 ) {
-  const permitida = await candidatoConfirmacao(transferenciaId, dados.contaDestinoId, usuarioId, db);
+  const permitida = await candidatoConfirmacao(
+    transferenciaId,
+    dados.contaDestinoId,
+    usuarioId,
+    permitirAutoconferenciaTesouraria,
+    db
+  );
   if (!permitida) return null;
 
   // Decisao 9 · o lacre so e exigido quando o MOVIMENTO tem um. A checagem vem antes do UPDATE de

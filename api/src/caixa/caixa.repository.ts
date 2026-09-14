@@ -807,9 +807,10 @@ export async function existePlanejamentoRetornoAgendadoRepository(caixaId: strin
 
 // Decisao 7 (revisada): quem esta VINCULADO a esta conta e poderia conferir?
 //
-// Devolve so os candidatos estruturais — vinculo com a conta, empresa certa e diferente do criador
-// (R-028: quem envia nao confirma o proprio envio). A ultima condicao, ter `transferencias_conferir`,
-// NAO e resolvida aqui de proposito: a permissao efetiva vem de setor + cargos + usuario e e
+// Devolve so os candidatos estruturais — vinculo com a conta e empresa certa. A autoria (R-028/R-189)
+// e a permissao efetiva `transferencias_conferir` sao resolvidas no servico: elas dependem de setor,
+// cargos e usuario e reproduzi-las em SQL criaria uma segunda regra de permissao que divergiria do guard.
+// A ultima condicao, ter `transferencias_conferir`, NAO e resolvida aqui de proposito: a permissao efetiva vem de setor + cargos + usuario e e
 // computada por `resolverPermissoesEfetivas`. Reproduzir isso em SQL criaria uma segunda regra de
 // permissao, que divergiria da do guard no primeiro ajuste. O servico fecha a conta.
 // R-179/Fatia 3 · o parametro era uma LISTA de excluidos porque na ordem programada (D4) quem
@@ -818,14 +819,10 @@ export async function existePlanejamentoRetornoAgendadoRepository(caixaId: strin
 // a exclusao do autor nao deixar ninguem elegivel, a entrega nao acontece — melhor recusar agora do
 // que descobrir depois que o malote nao tem conferente e o caixa nao fecha mais.
 export async function listarCandidatosConfirmacaoRepository(
-  input: { contaId: string; empresaId: string; excluirUsuarioId: string },
+  input: { contaId: string; empresaId: string },
   db: ExecutorBanco = banco
 ): Promise<string[]> {
-  const filtros = [
-    eq(contasUsuarios.contaId, input.contaId),
-    eq(contasUsuarios.empresaId, input.empresaId),
-    ne(contasUsuarios.usuarioId, input.excluirUsuarioId)
-  ];
+  const filtros = [eq(contasUsuarios.contaId, input.contaId), eq(contasUsuarios.empresaId, input.empresaId)];
 
   const linhas = await db
     .select({ usuarioId: contasUsuarios.usuarioId })
