@@ -60,8 +60,8 @@ const {
               <th>V.Unit c/Desc</th>
               <th>V.Total</th>
               <th>V.Total c/Desc</th>
-              <th>%</th>
-              <th aria-label="remover" />
+              <th class="disc-pct">%</th>
+              <th class="disc-acao" aria-label="Remover item" />
             </tr>
           </thead>
           <tbody>
@@ -147,7 +147,7 @@ const {
                 />
                 {{ brn(totalLinhaComDesc(item)) }}
               </td>
-              <td class="disc-calc">{{ brn(pctEfetivo) }}%</td>
+              <td class="disc-calc disc-pct">{{ brn(pctEfetivo) }}%</td>
               <td class="disc-acao">
                 <button
                   type="button"
@@ -166,8 +166,8 @@ const {
               <td colspan="5" class="disc-foot-lbl">V. Total geral</td>
               <td class="disc-calc disc-foot">{{ brn(totalGeralBruto) }}</td>
               <td class="disc-calc disc-foot">{{ brn(totalGeralComDesc) }}</td>
-              <td class="disc-calc disc-foot">{{ brn(pctEfetivo) }}%</td>
-              <td />
+              <td class="disc-calc disc-foot disc-pct">{{ brn(pctEfetivo) }}%</td>
+              <td class="disc-acao" />
             </tr>
           </tfoot>
         </table>

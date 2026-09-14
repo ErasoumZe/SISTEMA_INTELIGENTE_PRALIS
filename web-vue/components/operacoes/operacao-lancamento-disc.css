@@ -18,7 +18,7 @@
   /* Nove colunas não cabem em 390px. A largura mínima mantém cada célula inteira e a rolagem
      fica dentro deste bloco; sem ela o último X era comprimido sobre o valor total. */
   width: max-content;
-  min-width: 900px;
+  min-width: 940px;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -37,12 +37,17 @@
   border-bottom: 0.5px solid var(--cx-line-soft);
   vertical-align: middle;
 }
-.disc-tabela th:last-child,
-.disc-acao {
-  width: 42px;
-  min-width: 42px;
-  padding-right: 4px;
-  padding-left: 4px;
+.disc-tabela .disc-pct {
+  width: 80px;
+  min-width: 80px;
+  padding-right: 12px;
+  text-align: right;
+}
+.disc-tabela .disc-acao {
+  width: 52px;
+  min-width: 52px;
+  padding-right: 6px;
+  padding-left: 10px;
   text-align: center;
 }
 .disc-in {
