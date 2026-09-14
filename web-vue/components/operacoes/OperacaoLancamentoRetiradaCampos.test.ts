@@ -24,11 +24,12 @@ function montarBloco(categoria: "despesa" | "retirada") {
 }
 
 describe("campos da retirada", () => {
-  it("oculta somente documento fiscal e vencimento na retirada", () => {
+  it("oculta documento fiscal e toda a linha de pagamento na retirada", () => {
     const wrapper = mount(montarBloco("retirada"));
 
     expect(wrapper.text()).toContain("Data Lanç");
-    expect(wrapper.text()).toContain("Data pagamento");
+    expect(wrapper.text()).not.toContain("Pagamento");
+    expect(wrapper.text()).not.toContain("Data pagamento");
     expect(wrapper.text()).not.toContain("Data Doc. Fiscal");
     expect(wrapper.text()).not.toContain("Doc. Fiscal");
     expect(wrapper.text()).not.toContain("Data Vencimento");

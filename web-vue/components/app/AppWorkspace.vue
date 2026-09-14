@@ -31,7 +31,7 @@ import WorkspaceDialogs from "~/components/workspace/WorkspaceDialogs.vue";
 import { WORKSPACE_CONTEXT } from "~/components/workspace/workspace-context";
 import { useCadastroView } from "~/composables/useCadastroView";
 import { usePermissoes } from "~/composables/usePermissoes";
-import { ErroApiCliente } from "~/composables/useApi";
+import { ErroApiCliente, useApi } from "~/composables/useApi";
 import {
   avisoOpcoesIndisponiveis,
   carregarOpcaoOpcional,

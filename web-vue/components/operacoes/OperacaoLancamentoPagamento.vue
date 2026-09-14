@@ -8,7 +8,7 @@ const { cat, pago, form, hojeISO } = useOperacaoLancamentoBloco();
 
 <template>
   <!-- Linha 4: Pagamento (S/N) · Data pagamento · Data Vencimento -->
-  <div class="lc-tres lc-pagamento" :class="{ 'lc-dois': cat === 'retirada' }">
+  <div v-if="cat !== 'retirada'" class="lc-tres lc-pagamento">
     <label class="lc-campo lc-toggle">
       <span class="lc-campo-lbl">Pagamento</span>
       <button type="button" class="lc-sn" :class="{ sim: pago }" @click="pago = !pago">
@@ -21,7 +21,7 @@ const { cat, pago, form, hojeISO } = useOperacaoLancamentoBloco();
            quem faz valer a regra e o servidor, que recusa com 400. -->
       <input v-model="form.dataPagamento" type="date" class="lc-input" :min="hojeISO" :disabled="!pago" />
     </label>
-    <label v-if="cat !== 'retirada'" class="lc-campo">
+    <label class="lc-campo">
       <span class="lc-campo-lbl">Data Vencimento</span>
       <input v-model="form.dataVencimento" type="date" class="lc-input" />
     </label>
