@@ -8,6 +8,7 @@
 // a descricao livre saiu. Retirada NAO discrimina (R-050) e nem chega aqui (cfg.discrimina).
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
+import OperacaoLancamentoIa from "~/components/operacoes/OperacaoLancamentoIa.vue";
 import "~/components/operacoes/operacao-lancamento-disc.css";
 
 const {
@@ -47,6 +48,7 @@ const {
     </button>
 
     <div v-if="discriminando" class="disc">
+      <OperacaoLancamentoIa />
       <div class="disc-scroll">
         <table class="disc-tabela">
           <thead>

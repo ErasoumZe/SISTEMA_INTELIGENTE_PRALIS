@@ -257,8 +257,11 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
       cpf: "529.982.247-25"
     }
   });
-  expect((payloadCriacao?.["novoColaborador"] as Record<string, unknown>)?.["setorId"]).toBeTruthy();
-  expect((payloadCriacao?.["novoColaborador"] as Record<string, unknown>)?.["cargoId"]).toBeTruthy();
+  const payloadFinal: Record<string, unknown> = payloadCriacao ?? {};
+  expect(payloadFinal["novoColaborador"]).toMatchObject({
+    setorId: expect.any(String),
+    cargoId: expect.any(String)
+  });
 
   await page.getByRole("button", { name: "Cancelar", exact: true }).click();
 });

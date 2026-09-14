@@ -15,7 +15,7 @@
 | D6  | Menu: categoria **"Lançamentos" substitui** os 3 itens — mas as **listagens continuam separadas por categoria**                                                                                                                                                                                                   |
 | D7  | "+ Novo → Entradas" **navega** para a tela de Entradas; a tela lista **TODAS as entradas do dia** (paginada se precisar)                                                                                                                                                                                          |
 | D8  | **Conta com FUNDO + usuários vinculados** (regra nova, ver §2)                                                                                                                                                                                                                                                    |
-| D9  | Foto da nota = **anexo de conferência** (sem OCR). A descrição automática vem da **NF-e (EAN → cadastro)**                                                                                                                                                                                                        |
+| D9  | Foto da nota = **anexo de conferência e fonte opcional de leitura assistida por IA**. A descrição automática continua casando **EAN → cadastro** e a IA nunca salva nem confirma o lançamento                                                                                                                     |
 | D10 | **Juros entra só no Valor Total** do lançamento — não rateia no custo unitário                                                                                                                                                                                                                                    |
 | D11 | Seeding usa **a planilha que já temos** (é a atual). Fontes confirmadas na §3                                                                                                                                                                                                                                     |
 | D12 | **Retirada NÃO tem discriminação** (corrige leitura anterior do desenho)                                                                                                                                                                                                                                          |
@@ -116,6 +116,27 @@ Ambiguidades que o briefing não fechou e que o José decidiu ao revisar o S5:
 | **Filtro do saldo da conta (D8)**    | `computar = true AND status <> 'cancelado'`, e `valor_original` puro fora da venda | **igual ao ADR-001 do saldo do caixa**: duas fórmulas de dinheiro com filtros diferentes viram divergência inexplicável entre as duas telas                            |
 | **Grupo do item (§5)**               | as duas origens são **mutuamente exclusivas permitindo os dois nulos**             | item sem grupo sempre foi aceito e o histórico está cheio deles                                                                                                        |
 | **Vínculo usuário × conta**          | editado **no cadastro da CONTA**; o caminho pela tela de Usuários foi removido     | D8 põe fundo e usuários no mesmo salvar; manter os dois lados seria a segunda rota para o mesmo ato                                                                    |
+
+### R-192 — Leitura assistida da nota fiscal por IA (14/09/2026)
+
+- A leitura por IA vive no **único bloco de discriminação existente**, portanto atende Despesas e
+  Mercadorias em criação, edição e pendência. Retirada continua sem discriminação (R-050) e
+  Entradas continuam sendo vendas integradas somente para consulta (D7/R-062).
+- O preenchimento manual permanece inteiro. A IA devolve uma **sugestão revisável**; aplicar a
+  sugestão não cria, não confirma e não salva lançamento.
+- A foto analisada reutiliza a segunda foto do lançamento (`foto_nota_url`, nota com os itens) e só
+  é persistida pelo salvar já existente.
+- Fornecedor só é selecionado quando o CNPJ casa com cadastro da mesma empresa. Produto só é
+  vinculado quando o EAN casa. Em Despesa, o usuário ainda precisa relacionar cada linha a
+  Patrimônio ou Colaborador (R-135).
+- Número, emissão, itens, quantidades, valores, desconto, frete, total, série e chave da NF-e são
+  extraídos. Série, chave e frete ficam na conferência porque não há campo compatível no modal;
+  frete jamais é colocado em Juros.
+- A chave do Gemini existe somente no backend e em `.env.local` ignorado pelo Git. Imagem, prompt,
+  resposta bruta e segredos não vão para log. A chave fiscal é usada para duplicidade no backend e
+  volta apenas mascarada.
+- Falha de rede, imagem ruim, resposta incompleta ou IA indisponível não apaga valores manuais nem
+  o anexo selecionado.
 
 ## 7. Fora deste escopo (congelado)
 

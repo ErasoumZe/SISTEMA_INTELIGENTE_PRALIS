@@ -194,9 +194,11 @@ export async function criarTransferencia(
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
       // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
-      let { caixa, caixaFechadoNaCorrida } = transferenciaLivre
+      const resultadoCaixa = transferenciaLivre
         ? await travarCaixaAbertoDoAtor(dados.empresaId, perfil.usuarioId, tx)
         : { caixa: await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx), caixaFechadoNaCorrida: null };
+      let { caixa } = resultadoCaixa;
+      const { caixaFechadoNaCorrida } = resultadoCaixa;
       // A Tesouraria registra suprimento para o PDV, mas nao possui o caixa daquele operador. Para
       // uma transferencia direta sem planejamento, a conta de destino identifica o caixa que vai
       // receber o dinheiro. Sem esta busca o movimento nascia com `caixa_id` nulo e desaparecia
@@ -247,7 +249,7 @@ export async function criarTransferencia(
         resolverObservacaoDoLancamento(dados),
         computar,
         perfil.usuarioId,
-        dados.retornosPlanejados.length ? null : envolveContaPdv ? caixa.id : null,
+        dados.retornosPlanejados.length ? null : envolveContaPdv ? caixa!.id : null,
         tx
       );
       await criarRetornosPlanejadosRepository(

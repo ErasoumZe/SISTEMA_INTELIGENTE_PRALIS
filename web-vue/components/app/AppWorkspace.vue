@@ -1362,13 +1362,15 @@ async function salvarDiscriminacao() {
   const endpoint = endpointOperacaoPorEntidade[entidade];
   await apiPatch(`/api/${endpoint}/${operacaoEditandoId.value}/discriminar`, corpo);
   const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value);
+  const fotoNotaUrl = await fotoNota.enviar(apiUrl, endpoint, operacaoEditandoId.value, "foto-nota", "fotoNotaUrl");
   const indice = operacoes.value.findIndex((operacao) => operacao.id === operacaoEditandoId.value);
   const linha = operacoes.value[indice];
   if (indice >= 0 && linha) {
     operacoes.value.splice(indice, 1, {
       ...linha,
       pendenteDiscriminacao: false,
-      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {})
+      ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {}),
+      ...(fotoNotaUrl ? { fotoNotaUrl } : {})
     });
   }
   modalOperacaoAberto.value = false;

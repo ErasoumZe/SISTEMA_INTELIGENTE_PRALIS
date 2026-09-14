@@ -1,9 +1,23 @@
 import "dotenv/config";
+import { resolve } from "node:path";
+import { config as carregarEnv } from "dotenv";
 import { z } from "zod";
+
+// Segredos locais vencem os defaults de `.env`, mas nunca entram no bundle do Nuxt. O segundo
+// caminho cobre `npm --workspace api`; o primeiro cobre o servidor iniciado pela raiz.
+carregarEnv({
+  path: [...new Set([resolve(process.cwd(), ".env.local"), resolve(process.cwd(), "..", ".env.local")])],
+  override: true,
+  quiet: true
+});
 
 const segredoDev = "dev-secret-change-me-dev-secret-change-me";
 const bancoDev = "postgresql://padaria:padaria@localhost:5543/padaria";
 const segredoPlaceholderExample = "change-me-in-production-with-at-least-32-chars";
+const envOpcionalNaoVazio = z.preprocess(
+  (valor) => (typeof valor === "string" && !valor.trim() ? undefined : valor),
+  z.string().trim().min(1).optional()
+);
 
 const envSchema = z.object({
   // Enum fechado: um typo (ex.: "prod") derruba o boot em vez de desativar
@@ -17,6 +31,11 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
   SENTRY_DSN: z.string().url().optional(),
+  // Gemini roda exclusivamente no backend. Sem chave, apenas a rota de leitura assistida responde
+  // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
+  GEMINI_API_KEY: envOpcionalNaoVazio,
+  GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
   // E-mail transacional (reset de senha + verificacao). Sem chave, os e-mails so vao para o log
   // (dev). Em producao, configure ambos (conta em resend.com). EMAIL_FROM = remetente verificado.
   RESEND_API_KEY: z.string().optional(),

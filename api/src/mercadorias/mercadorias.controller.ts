@@ -127,7 +127,7 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
   // Anexo de foto do documento: upload (gerente ao lancar) e download (retaguarda ao discriminar).
   app.post(
     "/api/mercadorias/:id/foto",
-    { preHandler: exigirAlgumaPermissao(["mercadorias_criar", "mercadorias_editar"]) },
+    { preHandler: exigirAlgumaPermissao(["mercadorias_criar", "mercadorias_editar", "mercadorias_discriminar"]) },
     async (request, reply) => {
       const { id } = apiIdParamsSchema.parse(request.params);
       try {
@@ -159,7 +159,7 @@ export async function registrarRotasMercadorias(app: FastifyInstance): Promise<v
 
   app.post(
     "/api/mercadorias/:id/foto-nota",
-    { preHandler: exigirAlgumaPermissao(["mercadorias_criar", "mercadorias_editar"]) },
+    { preHandler: exigirAlgumaPermissao(["mercadorias_criar", "mercadorias_editar", "mercadorias_discriminar"]) },
     async (request, reply) => {
       const { id } = apiIdParamsSchema.parse(request.params);
       try {

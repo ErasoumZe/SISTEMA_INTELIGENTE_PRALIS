@@ -5,6 +5,8 @@ dist
 .vite
 coverage
 .env
+.env.local
+.env.*.local
 .env.producao
 *.log
 .logs/

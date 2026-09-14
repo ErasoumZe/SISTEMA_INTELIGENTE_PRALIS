@@ -586,11 +586,13 @@ export function useOperacaoLancamento() {
     dataDocFiscal,
     numeroDocFiscal,
     // fotos
+    empresaId,
     fotoDocumentoPreview,
     fotoDocumentoExistente,
     onFotoDocumento,
     fotoNotaPreview,
     fotoNotaExistente,
+    selecionarFotoNota,
     onFotoNota,
     // discriminacao
     discriminando,

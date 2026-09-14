@@ -98,7 +98,7 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
   // Anexo de foto do documento: upload (gerente ao lancar) e download (retaguarda ao discriminar).
   app.post(
     "/api/despesas/:id/foto",
-    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar"]) },
+    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar", "despesas_discriminar"]) },
     async (request, reply) => {
       const { id } = apiIdParamsSchema.parse(request.params);
       try {
@@ -126,7 +126,7 @@ export async function registrarRotasDespesas(app: FastifyInstance): Promise<void
 
   app.post(
     "/api/despesas/:id/foto-nota",
-    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar"]) },
+    { preHandler: exigirAlgumaPermissao(["despesas_criar", "despesas_editar", "despesas_discriminar"]) },
     async (request, reply) => {
       const { id } = apiIdParamsSchema.parse(request.params);
       try {

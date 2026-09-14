@@ -14,7 +14,7 @@ function montarBloco(categoria: "despesa" | "retirada") {
     pago: ref(false),
     dataDocFiscal: ref(""),
     numeroDocFiscal: ref("")
-  } as unknown as OperacaoLancamentoBloco;
+  } as Partial<OperacaoLancamentoBloco> as OperacaoLancamentoBloco;
   return defineComponent({
     setup() {
       provide(OPERACAO_LANCAMENTO_KEY, bloco);
