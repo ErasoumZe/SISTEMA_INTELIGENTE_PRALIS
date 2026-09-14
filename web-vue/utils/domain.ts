@@ -607,7 +607,11 @@ export function formCadastroVazio(): CadastroForm {
     setorId: "",
     turnoPadraoId: "",
     colaboradorId: "",
-    novoColaborador: false,
+    // Novo usuario nasce junto com a sua pessoa operacional. Antes este valor era `false` e a tela
+    // abria num beco sem saida quando ainda nao havia colaborador cadastrado: o select mostrava
+    // apenas "Novo", mas os campos de CPF/setor/cargo permaneciam escondidos. Vincular uma pessoa
+    // existente continua disponivel no mesmo formulario, como escolha explicita.
+    novoColaborador: true,
     novoColaboradorNome: "",
     novoColaboradorCpf: "",
     novoColaboradorSetorId: "",
@@ -778,6 +782,9 @@ export function formCadastroDeLinha(
     setorId: linha.setorId ?? "",
     turnoPadraoId: linha.turnoPadraoId ?? "",
     colaboradorId: linha.colaboradorId ?? "",
+    // Formulario reconstruido da grade e EDICAO. Nunca herdar o default de criacao acima, senao
+    // editar somente o e-mail tentaria fabricar e revincular outro colaborador.
+    novoColaborador: false,
     cargoId: linha.cargoId ?? "",
     empresaIds: linha.empresaIds ? String(linha.empresaIds).split(",") : [],
     usuarioId: linha.usuarioId ?? "",

@@ -54,6 +54,11 @@ const perfisAcessoUsuario = computed(() => [
     ? [{ title: "Admin legado — mantenha apenas para contas antigas", value: "admin" }]
     : [])
 ]);
+const pessoasParaSelectUsuario = computed(() =>
+  colaboradoresSelectUsuario.value.map((pessoa) =>
+    pessoa.id === "__novo__" ? { ...pessoa, nome: "Cadastrar novo colaborador" } : pessoa
+  )
+);
 
 // --- Usuarios que operam a CONTA (D8) --------------------------------------------------------
 // Os vinculos viajam no proprio formulario da conta (formCadastro.usuariosIds) e sao gravados na
@@ -330,21 +335,24 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
           <v-col v-if="cadastroTela === 'usuarios'" cols="12" md="6">
             <v-select
               :model-value="formCadastro.novoColaborador ? '__novo__' : formCadastro.colaboradorId"
-              :items="colaboradoresSelectUsuario"
+              :items="pessoasParaSelectUsuario"
               item-title="nome"
               item-value="id"
-              label="Colaborador"
+              label="Pessoa vinculada"
               @update:model-value="atualizarColaboradorUsuario(String($event || ''))"
             />
           </v-col>
           <template v-if="cadastroTela === 'usuarios' && formCadastro.novoColaborador">
-            <v-col cols="12" md="6">
-              <v-text-field v-model="formCadastro.novoColaboradorNome" label="Nome do colaborador" />
+            <v-col cols="12">
+              <v-alert type="info" variant="tonal" density="compact">
+                O login e o colaborador serão criados juntos. Setor e cargo definem os acessos herdados; depois você
+                poderá ajustar exceções individuais.
+              </v-alert>
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field
                 :model-value="formCadastro.novoColaboradorCpf"
-                label="CPF do colaborador"
+                label="CPF *"
                 maxlength="14"
                 @update:model-value="formCadastro.novoColaboradorCpf = mascararCpf(String($event || ''))"
               />
@@ -355,8 +363,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
                 :items="opcoesEmpresa.setores"
                 item-title="nome"
                 item-value="id"
-                label="Setor"
-                clearable
+                label="Setor *"
               />
             </v-col>
             <v-col cols="12" md="6">
@@ -365,7 +372,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
                 :items="opcoesEmpresa.cargos"
                 item-title="nome"
                 item-value="id"
-                label="Cargo inicial"
+                label="Cargo inicial *"
               />
             </v-col>
           </template>

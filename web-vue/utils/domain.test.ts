@@ -70,8 +70,26 @@ describe("formCadastroDeLinha", () => {
   it("mantem usuario_comum como padrao na criacao de usuario novo", () => {
     const form = formCadastroVazio();
     expect(form.role).toBe("usuario_comum");
+    expect(form.novoColaborador).toBe(true);
     expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ role: "usuario_comum" });
+    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("CPF");
+
+    form.novoColaboradorCpf = "529.982.247-25";
+    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("setor");
+    form.novoColaboradorSetorId = "setor-1";
+    expect(bloqueioCadastroUsuario("usuarios", form)).toContain("cargo");
+    form.novoColaboradorCargoId = "cargo-1";
     expect(bloqueioCadastroUsuario("usuarios", form)).toBeNull();
+  });
+
+  it("edicao de usuario nao tenta criar outro colaborador", () => {
+    const form = formCadastroDeLinha(
+      { id: "u1", nome: "Ana", email: "ana@example.com", role: "usuario_comum", colaboradorId: "col-1" },
+      {}
+    );
+    expect(form.novoColaborador).toBe(false);
+    expect(cadastroPayload("usuarios", form, "empresa-1")).toMatchObject({ colaboradorId: "col-1" });
+    expect(cadastroPayload("usuarios", form, "empresa-1")).not.toHaveProperty("novoColaborador");
   });
 
   it("nao bloqueia telas que nao sao de usuario", () => {

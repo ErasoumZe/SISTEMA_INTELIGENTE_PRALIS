@@ -96,13 +96,32 @@ export const MENSAGEM_PERFIL_ACESSO_INDISPONIVEL =
 export const MENSAGEM_SUBSTITUICAO_SEM_EMPRESA =
   "Marque ao menos uma empresa ou desmarque a substituicao para manter os vinculos atuais.";
 
+export const MENSAGEM_NOVO_USUARIO_SEM_CPF = "Informe o CPF do colaborador.";
+export const MENSAGEM_NOVO_USUARIO_SEM_SETOR = "Selecione o setor do colaborador.";
+export const MENSAGEM_NOVO_USUARIO_SEM_CARGO = "Selecione o cargo inicial do colaborador.";
+
 export function bloqueioCadastroUsuario(
   tela: string,
-  form: Pick<CadastroForm, "role" | "empresaIds" | "empresaIdsTocado">,
+  form: Pick<
+    CadastroForm,
+    | "role"
+    | "empresaIds"
+    | "empresaIdsTocado"
+    | "novoColaborador"
+    | "novoColaboradorCpf"
+    | "novoColaboradorSetorId"
+    | "novoColaboradorCargoId"
+  >,
   edicao = false
 ): string | null {
   if (tela !== "usuarios") return null;
   if (!form.role) return MENSAGEM_PERFIL_ACESSO_INDISPONIVEL;
+  // Criar o login e a pessoa operacional e um unico ato. Estes tres campos alimentam a resolucao de
+  // permissoes (setor -> cargo -> usuario) e a deduplicacao por CPF; deixar o servidor descobrir a
+  // ausencia somente depois do clique produzia uma tela que parecia salvavel, mas nunca concluia.
+  if (form.novoColaborador && !form.novoColaboradorCpf.trim()) return MENSAGEM_NOVO_USUARIO_SEM_CPF;
+  if (form.novoColaborador && !form.novoColaboradorSetorId) return MENSAGEM_NOVO_USUARIO_SEM_SETOR;
+  if (form.novoColaborador && !form.novoColaboradorCargoId) return MENSAGEM_NOVO_USUARIO_SEM_CARGO;
   // Substituicao pedida e nenhuma empresa marcada, na EDICAO: sem esta trava o payload cairia no
   // fallback `[empresaAtiva]` e apagaria os demais vinculos — o mesmo dano que a preservacao evita,
   // so que agora por um caminho que o operador nao percebe (marcar e desmarcar volta a tela ao estado
@@ -195,7 +214,9 @@ export function cadastroPayload(tela: string, form: CadastroForm, empresaId: str
     if (form.novoColaborador) {
       payload["novoColaborador"] = {
         empresaId,
-        nome: form.novoColaboradorNome || form.nome,
+        // Uma pessoa, um nome. A antiga tela repetia "Nome" e "Nome do colaborador" e permitia
+        // criar login e colaborador com nomes diferentes sem explicar qual apareceria no sistema.
+        nome: form.nome,
         cpf: form.novoColaboradorCpf || null,
         setorId: form.novoColaboradorSetorId || null,
         cargoId: form.novoColaboradorCargoId

@@ -1,5 +1,5 @@
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
-import { entrar, LARGURAS, USUARIOS } from "./apoio.js";
+import { escolherNoSelect, entrar, LARGURAS, USUARIOS } from "./apoio.js";
 
 const API_URL = process.env["E2E_API_URL"] ?? "http://localhost:4100";
 const PERMISSAO_LIBERADA = "cadastro_fornecedores_visualizar";
@@ -39,8 +39,8 @@ async function prepararCenarioIsolado(api: APIRequestContext): Promise<CenarioPe
     usuarios: Array<{ usuarioId: string; email: string }>;
     usuariosPermissoes: Array<{ usuarioId: string; regras: Record<string, boolean> }>;
   }>;
-  const alvo = dados.data.usuarios.find((usuario) => usuario.email === USUARIOS.tesouraria.email);
-  expect(alvo, `usuario E2E ${USUARIOS.tesouraria.email} nao encontrado`).toBeTruthy();
+  const alvo = dados.data.usuarios.find((usuario) => usuario.email === USUARIOS.semProdutos.email);
+  expect(alvo, `usuario E2E ${USUARIOS.semProdutos.email} nao encontrado`).toBeTruthy();
   const usuarioId = alvo?.usuarioId ?? "";
   const regrasOriginais = {
     ...(dados.data.usuariosPermissoes.find((item) => item.usuarioId === usuarioId)?.regras ?? {})
@@ -75,13 +75,18 @@ async function abrirGrupoConfiguracao(page: Page) {
 }
 
 test("diretor gerencia o acesso individual pela propria lista de usuarios", async ({ page }) => {
+  // Quatro remontagens responsivas + compilacao sob demanda do servidor Nuxt podem ultrapassar o
+  // teto global de 60s. O teto maior evita que a ultima troca (390px) seja cancelada ainda em 768px.
+  test.setTimeout(180_000);
   await entrar(page, USUARIOS.admin);
   await page.goto("/usuarios");
   await expect(page.getByRole("heading", { name: "Usuários" })).toBeVisible();
 
-  const linhaTesouraria = page.getByRole("row").filter({ hasText: "Tesouraria" }).first();
-  await expect(linhaTesouraria).toContainText("Usuário comum");
-  await linhaTesouraria.getByRole("button", { name: "Acessos" }).click();
+  // O seed possui mais de uma pagina. Caixa fica na primeira e prova o mesmo fluxo de usuario
+  // comum sem acoplar este teste responsivo a ordenacao/paginacao da linha de Tesouraria.
+  const linhaUsuarioComum = page.getByRole("row").filter({ hasText: USUARIOS.semProdutos.email }).first();
+  await expect(linhaUsuarioComum).toContainText("Usuário comum");
+  await linhaUsuarioComum.getByRole("button", { name: "Acessos" }).click();
 
   await expect(page.getByText("Configurar acessos", { exact: true })).toBeVisible();
   await expect(page.getByText(/combina setor, cargos ativos e exceções individuais/i)).toBeVisible();
@@ -112,9 +117,12 @@ test("excecao individual salva passa a valer no novo login sem liberar outra rot
 
     await entrar(page, USUARIOS.admin);
     await page.goto("/usuarios");
-    const linhaTesouraria = page.getByRole("row").filter({ hasText: USUARIOS.tesouraria.email }).first();
-    await expect(linhaTesouraria).toBeVisible();
-    await linhaTesouraria.getByRole("button", { name: "Acessos" }).click();
+    // Caixa e uma fixture de usuario comum visivel na primeira pagina. A regra sob teste e a
+    // excecao individual; depender da posicao alfabetica de Tesouraria misturava esta prova com a
+    // paginacao da grade.
+    const linhaUsuario = page.getByRole("row").filter({ hasText: USUARIOS.semProdutos.email }).first();
+    await expect(linhaUsuario).toBeVisible();
+    await linhaUsuario.getByRole("button", { name: "Acessos" }).click();
 
     await page.getByRole("textbox", { name: "Buscar acesso", exact: true }).fill(PERMISSAO_LIBERADA);
     const linhaPermissao = page.locator(".permission-rule-row").filter({ hasText: "Fornecedores" });
@@ -127,7 +135,7 @@ test("excecao individual salva passa a valer no novo login sem liberar outra rot
     // O perfil e calculado no login. Sair pela interface tambem limpa o estado Nuxt do Diretor,
     // impedindo um falso positivo em que o alvo herdaria o menu mantido no cliente.
     await sairPelaInterface(page);
-    await entrar(page, USUARIOS.tesouraria);
+    await entrar(page, USUARIOS.semProdutos);
     await abrirGrupoConfiguracao(page);
 
     const menu = page.getByRole("navigation", { name: "Menu principal" });
@@ -224,8 +232,16 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
   await entrar(page, USUARIOS.admin);
   await page.goto("/usuarios");
   await page.getByRole("button", { name: "Novo cadastro" }).click();
+  const dialogo = page.getByRole("dialog");
+  await expect(dialogo.getByLabel("Pessoa vinculada")).toHaveValue("Cadastrar novo colaborador");
+  await expect(dialogo.getByLabel("CPF *")).toBeVisible();
+  await expect(dialogo.getByLabel("Setor *")).toBeVisible();
+  await expect(dialogo.getByLabel("Cargo inicial *")).toBeVisible();
   await page.getByRole("textbox", { name: "Nome", exact: true }).fill("Usuario E2E guiado");
   await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
+  await dialogo.getByLabel("CPF *").fill("529.982.247-25");
+  await escolherNoSelect(page, "Setor *", /.+/);
+  await escolherNoSelect(page, "Cargo inicial *", /.+/);
   await page.getByRole("textbox", { name: "Senha", exact: true }).fill("12345678");
   await page.getByRole("button", { name: "Salvar", exact: true }).click();
 
@@ -235,8 +251,14 @@ test("usuario comum recem-criado segue direto para configurar acessos", async ({
   expect(payloadCriacao).toMatchObject({
     nome: "Usuario E2E guiado",
     email,
-    role: "usuario_comum"
+    role: "usuario_comum",
+    novoColaborador: {
+      nome: "Usuario E2E guiado",
+      cpf: "529.982.247-25"
+    }
   });
+  expect((payloadCriacao?.["novoColaborador"] as Record<string, unknown>)?.["setorId"]).toBeTruthy();
+  expect((payloadCriacao?.["novoColaborador"] as Record<string, unknown>)?.["cargoId"]).toBeTruthy();
 
   await page.getByRole("button", { name: "Cancelar", exact: true }).click();
 });
