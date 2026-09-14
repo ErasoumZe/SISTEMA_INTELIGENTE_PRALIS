@@ -53,7 +53,11 @@ describe("caixa - transferencia de retorno (M2)", () => {
   // R-040: o fundo chega por uma transferencia da TESOURARIA, e o caixa a confirma ao abrir
   // informando o lacre. Quem envia nunca confirma o proprio envio (R-028) — dai a tesouraria.
   async function abrir(nome: string, fundo?: { lacre: string; valor: number }) {
-    const contaId = await criar("/api/contas", { empresaId, nome: `Conta ${nome}` });
+    const contaId = await criar("/api/contas", {
+      empresaId,
+      nome: `Conta ${nome}`,
+      usuariosIds: [await usuarioAdminId()]
+    });
     const pdvId = await criar("/api/pdvs", { empresaId, nome: `PDV ${nome}`, contaId, ativo: true });
     if (fundo) {
       const envio = await contexto.app.inject({
@@ -154,6 +158,44 @@ describe("caixa - transferencia de retorno (M2)", () => {
     const retorno = await transferenciaCofre(caixaId, 200);
     expect(retorno.statusCode, retorno.body).toBe(200);
     expect(await resumoAtual()).toMatchObject({ dividaCofre: 0, saldoProprio: 490, saldo: 780 });
+  });
+
+  it("Vincula o suprimento da Tesouraria ao PDV aberto mesmo sem caixa do remetente", async () => {
+    const { contaId, caixaId } = await abrir("suprimento da tesouraria");
+    const envio = await contexto.app.inject({
+      method: "POST",
+      url: "/api/transferencias",
+      headers: { cookie: cookieTesouraria },
+      payload: {
+        empresaId,
+        dataReferencia: hoje,
+        descricao: "Suprimento direto da Tesouraria",
+        valorOriginal: 200,
+        contaOrigemId: idsTeste.contaCofre,
+        contaDestinoId: contaId,
+        nLacreDoc: "LAC-SUPRIMENTO-TESOURARIA"
+      }
+    });
+    expect(envio.statusCode, envio.body).toBe(201);
+    const transferenciaId = json<{ data: { id: string } }>(envio).data.id;
+    expect(
+      await consultarUm<{ caixa_id: string | null }>("select caixa_id from transferencias where id = $1", [
+        transferenciaId
+      ])
+    ).toEqual({ caixa_id: caixaId });
+
+    const conferencia = await contexto.app.inject({
+      method: "POST",
+      url: `/api/transferencias/${transferenciaId}/confirmar`,
+      headers: { cookie: cookieAdmin },
+      payload: { contaDestinoId: contaId, valorRecebido: 200, nLacreDoc: "LAC-SUPRIMENTO-TESOURARIA" }
+    });
+    expect(conferencia.statusCode, conferencia.body).toBe(200);
+    expect(await resumoAtual()).toMatchObject({
+      totalTransferencias: 200,
+      totalTransferenciasEntrada: 200,
+      saldo: 200
+    });
   });
 
   it("Retorno da sobra zera o saldo e libera o fechamento", async () => {

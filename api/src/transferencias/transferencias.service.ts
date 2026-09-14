@@ -19,7 +19,7 @@ import {
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
 import { ehMovimentoDoCaixaParaOCofre } from "./entrega-cofre.repository.js";
-import { travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
+import { travarCaixaAbertoDaContaPdv, travarCaixaAbertoDoAtor } from "../caixa/caixa.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { paraCentavos } from "@padaria/shared/dinheiro";
@@ -194,9 +194,16 @@ export async function criarTransferencia(
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
       // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
-      const { caixa, caixaFechadoNaCorrida } = transferenciaLivre
+      let { caixa, caixaFechadoNaCorrida } = transferenciaLivre
         ? await travarCaixaAbertoDoAtor(dados.empresaId, perfil.usuarioId, tx)
         : { caixa: await obterCaixaParaLancamento(dados.empresaId, perfil.usuarioId, tx), caixaFechadoNaCorrida: null };
+      // A Tesouraria registra suprimento para o PDV, mas nao possui o caixa daquele operador. Para
+      // uma transferencia direta sem planejamento, a conta de destino identifica o caixa que vai
+      // receber o dinheiro. Sem esta busca o movimento nascia com `caixa_id` nulo e desaparecia
+      // do resumo do PDV, embora a conferencia tenha sido concluida corretamente.
+      if (transferenciaLivre && !caixa && !dados.contasDestinoIds.length && !dados.retornosPlanejados.length) {
+        caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
+      }
       // Q2: na transferencia a conta do PDV vale como origem OU destino (dinheiro entra e sai).
       exigirContaForaDoCaixaFechadoNaCorrida(caixaFechadoNaCorrida, dados.contaOrigemId, dados.contaDestinoId);
       const envolveContaPdv =

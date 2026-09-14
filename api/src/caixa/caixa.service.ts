@@ -60,6 +60,7 @@ import {
   caixasAlteradosPosFechamentoRepository,
   listarUsuariosTesourariaRepository,
   listarTransferenciasCaixaRepository,
+  listarCaixasAbertosDaContaPdvRepository,
   proximaOrdemTransferenciaRepository,
   revincularVendasAoCaixaRepository,
   totaisHistoricoCaixaRepository,
@@ -1257,6 +1258,29 @@ export async function travarCaixaAbertoDoAtor(
   // o chamador â€” Q2 recusa se a conta em uso for a do PDV deste caixa; qualquer outra conta segue
   // como se nao houvesse caixa (A-1/R-032).
   return { caixa: null, caixaFechadoNaCorrida: caixa };
+}
+
+// Suprimento criado pela Tesouraria: ela nao tem (nem deve ter) um caixa proprio para que o
+// dinheiro entre no PDV. A conta de destino identifica o caixa aberto que recebe o malote. So a
+// transferencia direta usa esta resolucao; em multiplo destino a conta vencedora so existe na
+// conferencia, e no planejamento o vinculo nasce na abertura pelo lacre.
+export async function travarCaixaAbertoDaContaPdv(
+  empresaId: string,
+  contaId: string,
+  tx: TransacaoBanco
+): Promise<CaixaLinha | null> {
+  const caixas = await listarCaixasAbertosDaContaPdvRepository(empresaId, contaId, tx);
+  if (caixas.length > 1) {
+    throw new Error("Mais de um caixa aberto usa esta conta de PDV; corrija o cadastro antes de transferir");
+  }
+  const caixaAberto = caixas[0];
+  if (!caixaAberto) return null;
+
+  // A trava compartilha a mesma porta do fechamento. Se ele venceu a corrida, a transferencia
+  // continua um movimento entre contas, mas nao e anexada ao turno que ja encerrou.
+  const trava = await travarCaixaCompartilhadoRepository(caixaAberto.id, tx);
+  if (trava?.status !== "aberto") return null;
+  return buscarCaixaPorIdRepository(caixaAberto.id, tx);
 }
 
 export async function obterCaixaAbertoParaLancamento(empresaId: string, usuarioId: string, tx: TransacaoBanco) {

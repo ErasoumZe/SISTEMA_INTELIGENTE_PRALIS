@@ -515,6 +515,24 @@ export async function buscarCaixaAbertoDoPdvRepository(pdvId: string, db: Execut
   return linha ?? null;
 }
 
+// Uma transferencia de suprimento pode ser registrada pela Tesouraria, que nao opera o PDV. Nesse
+// caso o vinculo financeiro e definido pela CONTA de destino do PDV aberto, nunca pelo usuario que
+// criou a transferencia. A lista (em vez de `limit 1`) faz configuracao ambigua falhar de forma
+// explicita: duas gavetas abertas com a mesma conta nao podem receber o mesmo dinheiro fisico.
+export async function listarCaixasAbertosDaContaPdvRepository(
+  empresaId: string,
+  contaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({ id: fechamentosCaixa.id })
+    .from(fechamentosCaixa)
+    .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .where(
+      and(eq(fechamentosCaixa.empresaId, empresaId), eq(fechamentosCaixa.status, "aberto"), eq(pdvs.contaId, contaId))
+    );
+}
+
 export async function travarCaixaCompartilhadoRepository(
   caixaId: string,
   db: TransacaoBanco
