@@ -205,12 +205,27 @@ describe("montarPayloadOperacao", () => {
 
   it("so inclui itens de despesa quando discriminando", () => {
     const form = { ...formOperacaoVazio(), valorOriginal: "5" };
-    const itensDespesa = [{ ...itemDespesaVazio(), descricao: "Item", valor: "5", grupoDespesaId: "g1" }];
+    const itensDespesa = [
+      {
+        ...itemDespesaVazio(),
+        descricao: "Item",
+        valor: "5",
+        grupoDespesaId: "g1",
+        patrimonioItemId: "pat-1"
+      }
+    ];
     expect(montarPayloadOperacao("despesa", { ...base, form, itensDespesa }).itensDespesa).toEqual([]);
     expect(
       montarPayloadOperacao("despesa", { ...base, form, itensDespesa, discriminandoDespesa: true }).itensDespesa
     ).toEqual([
-      expect.objectContaining({ descricao: "Item", valor: 5, grupoDespesaId: "g1", grupoPatrimonioId: null })
+      expect.objectContaining({
+        descricao: "Item",
+        valor: 5,
+        grupoDespesaId: "g1",
+        grupoPatrimonioId: null,
+        patrimonioItemId: "pat-1",
+        colaboradorId: null
+      })
     ]);
   });
 

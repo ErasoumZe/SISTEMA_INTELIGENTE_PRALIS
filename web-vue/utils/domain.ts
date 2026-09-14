@@ -456,7 +456,9 @@ export const secoesPermissoes = [
   { titulo: "Contas a pagar", prefixos: ["contas_pagar", "menu_contas_pagar"] },
   { titulo: "Despesas", prefixos: ["despesas", "menu_despesas"] },
   { titulo: "Empresas", prefixos: ["cadastro_empresas", "menu_empresas"] },
-  { titulo: "Fechamento com diferença", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
+  // O código é legado, mas a pessoa configura a tela de Pendências operacionais, não um
+  // "fechamento com diferença". O nome claro também torna o acesso localizável na busca.
+  { titulo: "Pendências operacionais", prefixos: ["fechamento_com_diferenca", "menu_fechamento"] },
   { titulo: "Formas de pagamento", prefixos: ["cadastro_formas_pagamento", "menu_formas_pagamento"] },
   { titulo: "Fornecedores", prefixos: ["cadastro_fornecedores", "menu_fornecedores"] },
   { titulo: "Grupos", prefixos: ["cadastro_grupos", "menu_grupos"] },

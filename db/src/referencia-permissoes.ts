@@ -163,11 +163,16 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   Tesouraria: permissoesDoCargo({
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
-    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
+    // A Tesouraria recebe quebra/divergência pelo sino e precisa abrir a central para tratar a
+    // pendência; o código antigo ainda se chama fechamento_com_diferenca_visualizar.
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento"],
     // Lanca transferencia e CONFERE os quatro dominios (R-077), sem efetuar ou pagar. Tambem
     // gerencia os LACRES — o selo do movimento, unico registro de lacre desde a R-040.
     extras: [
       "transferencias_criar",
+      // R-191: classifica posteriormente a saída pendente, sem operar caixa nem pagar/efetuar.
+      "despesas_discriminar",
+      "mercadorias_discriminar",
       ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar",

@@ -34,7 +34,7 @@ const {
 </script>
 
 <template>
-  <v-dialog v-model="aberto" :max-width="discriminando && cat === 'mercadoria' ? 920 : 560">
+  <v-dialog v-model="aberto" :max-width="discriminando ? 920 : 560">
     <div class="lc-modal" :style="catVars">
       <!-- FAIXA do cabecalho na cor da categoria (E2). Sangra ate a borda do modal pelos margins
            negativos, do mesmo jeito que .lc-acoes ja fazia no rodape. Repinta sozinha ao trocar de

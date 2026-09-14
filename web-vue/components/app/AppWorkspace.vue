@@ -1339,6 +1339,26 @@ async function salvarDiscriminacao() {
     notificar("Informe ao menos um item para discriminar.", "error");
     return;
   }
+  // R-135: a despesa só pode ser discriminada por Patrimônio ou Colaborador. A API continua
+  // validando isso, mas apontar o select ANTES do envio evita o erro técnico quando o registro
+  // antigo mostra apenas a descrição histórica abaixo do campo vazio.
+  if (entidade === "despesa") {
+    const indiceSemVinculo = itensDespesa.value.findIndex(
+      (item) => Boolean(item.descricao || item.valor) && !item.patrimonioItemId && !item.colaboradorId
+    );
+    if (indiceSemVinculo >= 0) {
+      erroDiscriminacaoLinha.value = indiceSemVinculo + 1;
+      erroDiscriminacaoCampo.value = "item";
+      await nextTick();
+      document
+        .querySelector<HTMLElement>(
+          `[data-linha-discriminacao="${erroDiscriminacaoLinha.value}"] [data-campo-discriminacao="item"]`
+        )
+        ?.focus();
+      notificar(`Selecione um item de Patrimônio ou Colaborador na linha ${indiceSemVinculo + 1}.`, "error");
+      return;
+    }
+  }
   const endpoint = endpointOperacaoPorEntidade[entidade];
   await apiPatch(`/api/${endpoint}/${operacaoEditandoId.value}/discriminar`, corpo);
   const fotoUrl = await fotoDocumento.enviar(apiUrl, endpoint, operacaoEditandoId.value);

@@ -407,7 +407,12 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
             descontoTotalTipo: item.descontoTotalTipo || null,
             descontoTotalValor: item.descontoTotalValor ? Number(item.descontoTotalValor) : null,
             grupoDespesaId: item.grupoDespesaId || null,
-            grupoPatrimonioId: item.grupoPatrimonioId || null
+            grupoPatrimonioId: item.grupoPatrimonioId || null,
+            // A linha de despesa não é texto livre: o servidor confere o vínculo escolhido na
+            // discriminação. Sem estes dois IDs o front mostrava o item selecionado, mas enviava
+            // uma linha anônima e recebia ITEM_DISCRIMINACAO_SEM_VINCULO de volta.
+            patrimonioItemId: item.patrimonioItemId || null,
+            colaboradorId: item.colaboradorId || null
           }))
       : [];
   const itensMercadoria =

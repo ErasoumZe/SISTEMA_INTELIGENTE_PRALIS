@@ -77,6 +77,7 @@ const nomesAcoes = [
 ] as const;
 
 function rotuloRegra(codigo: string) {
+  if (codigo === "fechamento_com_diferenca_visualizar") return "Pendências operacionais — Visualizar";
   const catalogo = opcoesEmpresa.value.permissoes.find((item) => item.codigo === codigo);
   if (catalogo?.nome && !catalogo.nome.includes("_")) return catalogo.nome;
   const acao = nomesAcoes.find(([sufixo]) => codigo.endsWith(`_${sufixo}`));

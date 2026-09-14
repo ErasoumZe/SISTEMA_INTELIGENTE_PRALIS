@@ -82,6 +82,7 @@ const {
                   :value="itemVinculado(item)"
                   class="disc-in"
                   aria-label="Item"
+                  data-campo-discriminacao="item"
                   @change="escolherItemVinculado(item, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">—</option>
@@ -145,8 +146,16 @@ const {
                 {{ brn(totalLinhaComDesc(item)) }}
               </td>
               <td class="disc-calc">{{ brn(pctEfetivo) }}%</td>
-              <td>
-                <v-icon size="18" class="lc-item-del" @click="removerItemDaDiscriminacao(i)">mdi-close</v-icon>
+              <td class="disc-acao">
+                <button
+                  type="button"
+                  class="lc-item-del"
+                  :aria-label="`Remover item ${i + 1}`"
+                  :disabled="itensDaDiscriminacao.length === 1"
+                  @click="removerItemDaDiscriminacao(i)"
+                >
+                  <v-icon size="18">mdi-close</v-icon>
+                </button>
               </td>
             </tr>
           </tbody>

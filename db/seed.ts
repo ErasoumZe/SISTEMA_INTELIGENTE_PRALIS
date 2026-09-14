@@ -289,10 +289,15 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   Tesouraria: permissoesDoCargoSeed({
     // Lancamentos (despesas/mercadorias/retiradas) SEM somenteCaixaAberto: a categoria "Lancamentos"
     // e SEMPRE visivel para Tesouraria (PROJECT_BRAIN/17 §4) — ela nao opera caixa.
-    ativas: ["transferencias", "despesas", "mercadorias", "retiradas"],
+    // A Tesouraria recebe quebra/divergência pelo sino e precisa abrir a central para tratar a
+    // pendência; o código antigo ainda se chama fechamento_com_diferenca_visualizar.
+    ativas: ["transferencias", "despesas", "mercadorias", "retiradas", "fechamento"],
     // R-077: confere os quatro dominios sem efetuar/pagar; tambem gerencia os LACRES.
     extras: [
       "transferencias_criar",
+      // Paridade com db/src/referencia-permissoes.ts (R-191).
+      "despesas_discriminar",
+      "mercadorias_discriminar",
       ...acoesLancamentoPorDominio("conferir"),
       "cadastro_lacres_visualizar",
       "cadastro_lacres_criar",

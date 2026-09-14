@@ -67,4 +67,13 @@ describe("permissoes: matriz de orfaos por cargo (referencia de producao)", () =
       expect(tesouraria.has(`${dominio}_conferir`)).toBe(true);
     }
   });
+
+  it("R-191 libera a central de pendencias e a discriminacao posterior para Tesouraria", () => {
+    const tesouraria = cargo("Tesouraria");
+
+    expect(tesouraria.has("fechamento_com_diferenca_visualizar")).toBe(true);
+    expect(tesouraria.has("menu_fechamento_mostrar")).toBe(true);
+    expect(tesouraria.has("despesas_discriminar")).toBe(true);
+    expect(tesouraria.has("mercadorias_discriminar")).toBe(true);
+  });
 });

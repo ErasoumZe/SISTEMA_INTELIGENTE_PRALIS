@@ -118,6 +118,13 @@ describe("secoes de permissoes", () => {
       ).toHaveLength(1);
     }
   });
+
+  it("nomeia a permissao legada de fechamento pela tela operacional que ela libera", () => {
+    const pendencias = secoesPermissoes.find((secao) => secao.titulo === "Pendências operacionais");
+
+    expect(pendencias).toBeDefined();
+    expect(permissaoPertenceASecao("fechamento_com_diferenca_visualizar", pendencias!)).toBe(true);
+  });
 });
 
 describe("acoes de cadastro por permissao", () => {
