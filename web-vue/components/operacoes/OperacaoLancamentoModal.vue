@@ -83,7 +83,7 @@ const {
         <button type="button" class="lc-salvar-nova" :disabled="salvandoOperacao" @click="salvarOperacao(true)">
           Salvar e criar nova
         </button>
-        <button type="button" class="lc-salvar" :disabled="salvandoOperacao" @click="salvarOperacao">Salvar</button>
+        <button type="button" class="lc-salvar" :disabled="salvandoOperacao" @click="salvarOperacao()">Salvar</button>
       </div>
     </div>
   </v-dialog>
