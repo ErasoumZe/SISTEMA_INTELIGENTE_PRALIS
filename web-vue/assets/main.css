@@ -31,6 +31,26 @@
   /* Derivadas da propria superficie/tinta: seguem o tema da empresa E o modo
      escuro sem precisar ser redeclaradas em nenhum dos dois lugares. */
   --cx-surface-sunken: color-mix(in srgb, var(--cx-ink) 4%, var(--cx-surface));
+  /* ESCADA DE SUPERFICIE — o nivel que faltava (27/08/2026, inspirado no linear.app, cuja
+     profundidade vem de escada + hairline e quase nenhuma sombra no escuro).
+
+     A escada tem TRES degraus e um recesso, e a distincao importa:
+       N0 --cx-canvas          fundo da pagina
+       N1 --cx-surface         card, casca de conteudo
+       N2 --cx-surface-raised  card ELEVADO: card de total, menu suspenso, modal
+       (recesso) --cx-surface-sunken  campo recuado DENTRO do N1 — nao e degrau da escada
+
+     MEDIDO, e um numero corrigiu a premissa: no claro `canvas -> sunken` da 1,002, ou seja,
+     eles NAO sao niveis vizinhos distinguiveis. Nao sao mesmo: `sunken` e recesso dentro do
+     card, nao rung entre canvas e card. As adjacencias reais medem
+       claro   canvas->surface 1,080  ·  surface->raised 1,000 (a elevacao e que separa)
+       escuro  canvas->surface 1,123  ·  surface->raised 1,262
+
+     NO CLARO O N2 TEM A MESMA TINTA DO N1, de proposito: branco nao clareia. Ali quem levanta e
+     a elevacao (--cx-e-2), como o D-06 ja mandava. No escuro sombra preta some sobre #0f1318,
+     entao o N2 clareia 8% e o degrau vira maior que o de canvas->surface. E a mesma logica do
+     MISTURA_SOFT_ESCURO: o escuro precisa de tinta onde o claro usa sombra. */
+  --cx-surface-raised: var(--cx-surface);
   --cx-hover: color-mix(in srgb, var(--cx-ink) 6%, transparent);
   --cx-pressed: color-mix(in srgb, var(--cx-ink) 11%, transparent);
 
@@ -54,6 +74,23 @@
      teclado no modo escuro. No claro segue sendo o roxo da marca (7,8:1). */
   --cx-focus: var(--cx-brand);
   --cx-brand-ring: color-mix(in srgb, var(--cx-focus) 40%, transparent);
+  /* GRADIENTE DA MARCA (vivid glass, 27/08/2026). Um so no sistema inteiro, e so em preenchimento
+     que JA e da marca — nunca em botao que carrega a cor da categoria da tela.
+
+     A referencia do Stitch usa `linear-gradient(to right, #6515DD, #8B44F7)`. O primeiro stop E o
+     `--cx-brand`. O segundo NAO foi copiado: seria hex novo, que a §1.1 congela. Ele e derivado da
+     propria marca.
+
+     A PROPORCAO E MEDIDA, nao escolhida. O pedido original era 62% da marca sobre branco, o que da
+     #a06eea e poe o branco a 3,55:1 — reprova o minimo de 4,5:1 do 67 §11 justamente na ponta
+     clara, que e onde a tinta branca sofre. Medido em passos: 75% da 4,77 e 80% da 5,35. Ficou 80%,
+     que sobra margem e ainda cai a um fio do #8b44f7 do Stitch (que mede 4,92). */
+  --cx-brand-gradiente: linear-gradient(to right, var(--cx-brand), color-mix(in srgb, var(--cx-brand) 80%, white));
+  /* FORCA DO BRILHO de categoria no card. Muda por tema pelo mesmo motivo do MISTURA_SOFT_ESCURO
+     do `cores-categoria.ts`: tinta colorida sobre #0f1318 precisa de mais presenca para aparecer;
+     a mesma forca sobre #f4f6fa vira mancha. Medido: com estes valores o texto sobre o card fica
+     entre 13,2 e 14,0 no claro e entre 11,1 e 12,7 no escuro, nas seis categorias. */
+  --cx-brilho-forca: 8%;
 
   /* ---- Cor: semantica de TEXTO (AA >= 4.5:1 sobre canvas e superficie) ----
      Nao confundir com as cores de tema do Vuetify (success/error), que sao
@@ -92,20 +129,35 @@
   --cx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ---- Tipografia: poucos tamanhos, bem espacados entre si ---- */
+  /* ESCALA COM SALTO (27/08/2026). A anterior era 11/12/14/15/17/21/27 e o meio dela era mush:
+     body 14 -> lead 15 e um pixel, e lead 15 -> title 17 quase nao se ve. Era isso que fazia
+     titulo de pagina, titulo de bloco e corpo parecerem a mesma coisa a tres metros.
+     Micro, caption e body NAO mudam: sao lidos de perto e 14 e o que sustenta a densidade da
+     tabela. O salto entra de `lead` para cima, com a razao crescendo — 1,14 · 1,25 · 1,30 · 1,31 —
+     que e como escala de display se comporta. */
   --cx-fs-micro: 11px;
   --cx-fs-caption: 12px;
   --cx-fs-body: 14px;
-  --cx-fs-lead: 15px;
-  --cx-fs-title: 17px;
-  --cx-fs-h2: 21px;
-  --cx-fs-h1: 27px;
+  --cx-fs-lead: 16px;
+  --cx-fs-title: 20px;
+  --cx-fs-h2: 26px;
+  --cx-fs-h1: 34px;
   --cx-tracking-tight: -0.018em;
   --cx-tracking-wide: 0.08em;
 
   /* ---- Material translucido: SO no chrome (sidebar/topbar/overlay).
      Nunca em card de conteudo nem atras de texto de leitura. ---- */
-  --cx-chrome: color-mix(in srgb, var(--cx-surface) 72%, transparent);
-  --cx-chrome-blur: saturate(180%) blur(20px);
+  /* VIDRO (27/08/2026): era 72%/78% e o conteudo mal se via passando por baixo. Aberto ate o
+     ponto que a MEDICAO permite. Texto `--cx-ink-soft` sobre o chrome, por superficie real que
+     rola embaixo:
+       claro  58%: canvas 5,63 · card 5,83 · sunken 5,63
+       escuro 62%: canvas 7,88 · card 7,48 · raised 6,87
+     Um valor NAO entrou na conta de proposito: a `-faixa` de categoria, que a 72% ja media 4,06.
+     Ela nunca passa por baixo do chrome — vive em cabecalho de modal (que fica ACIMA) e no item
+     ativo do menu (que esta DENTRO da sidebar, nao atras dela). Usar cor de texto ou faixa como
+     superficie de fundo era o erro da minha primeira medicao. */
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 58%, transparent);
+  --cx-chrome-blur: saturate(180%) blur(24px);
   --cx-scrim: rgb(15 23 42 / 0.32);
 }
 
@@ -117,6 +169,8 @@
 
   --cx-canvas: #0f1318;
   --cx-surface: #191f26;
+  /* No escuro o N2 clareia, porque sombra preta sobre #0f1318 nao levanta nada. */
+  --cx-surface-raised: color-mix(in srgb, var(--cx-surface) 92%, white);
   --cx-ink: #e7e9ec;
   --cx-ink-soft: #a6afba;
   --cx-line: #2a323c;
@@ -127,12 +181,14 @@
   /* Marca clareada para servir de tinta/grafico sobre superficie escura (6,9:1). */
   --cx-brand-text: color-mix(in srgb, var(--cx-brand) 45%, #ffffff);
   --cx-focus: var(--cx-brand-text);
+  /* Ver a nota no bloco claro: o escuro precisa de mais tinta para o brilho existir. */
+  --cx-brilho-forca: 14%;
 
   --cx-e-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px -4px rgb(0 0 0 / 0.5);
   --cx-e-2: 0 1px 3px rgb(0 0 0 / 0.45), 0 12px 28px -10px rgb(0 0 0 / 0.6);
   --cx-e-3: 0 2px 6px rgb(0 0 0 / 0.5), 0 28px 60px -18px rgb(0 0 0 / 0.7);
 
-  --cx-chrome: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  --cx-chrome: color-mix(in srgb, var(--cx-surface) 62%, transparent);
   --cx-scrim: rgb(0 0 0 / 0.55);
 }
 
@@ -203,10 +259,6 @@ body {
 
 .responsive-table-shell .v-table {
   min-width: 680px;
-}
-
-.cadastro-card-title {
-  flex-wrap: wrap;
 }
 
 .cadastro-card-actions,
@@ -514,55 +566,9 @@ body {
   gap: 10px;
 }
 
-.topbar-page-id {
-  flex: 1;
-  min-width: 0;
-  color: #020617;
-  font-size: 15px;
-  font-weight: 900;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .operacoes-layout {
   display: grid;
   gap: 22px;
-}
-
-.inicio-vazio {
-  display: grid;
-  min-height: calc(100vh - 140px);
-  align-content: center;
-  justify-items: center;
-  gap: 10px;
-  color: #475569;
-  text-align: center;
-}
-
-.inicio-vazio-icon {
-  display: grid;
-  width: 68px;
-  height: 68px;
-  place-items: center;
-  border: 1px solid var(--padaria-border);
-  border-radius: 16px;
-  background: var(--padaria-card);
-  color: var(--padaria-brand, #6d28d9);
-}
-
-.inicio-vazio h1 {
-  margin: 8px 0 0;
-  color: #020617;
-  font-size: 24px;
-  font-weight: 900;
-}
-
-.inicio-vazio p {
-  max-width: 420px;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
 }
 
 .summary-grid {
@@ -631,12 +637,6 @@ body {
   margin-bottom: 18px;
 }
 
-.table-heading h2 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 900;
-}
-
 .table-heading p {
   margin: 2px 0 0;
   color: var(--cx-ink-soft);
@@ -693,7 +693,6 @@ body {
     padding: 14px 10px 20px;
   }
 
-  .cadastro-card-title,
   .cadastro-card-actions,
   .row-actions,
   .pagination-actions {
@@ -701,7 +700,6 @@ body {
     justify-content: flex-start !important;
   }
 
-  .cadastro-card-title > *,
   .cadastro-card-actions > *,
   .row-actions > *,
   .pagination-actions > * {
@@ -961,63 +959,10 @@ body {
   min-height: 64px;
   box-shadow: 0 1px 0 rgba(94, 55, 49, 0.02);
 }
-.topbar-page-id {
-  color: var(--marca-tinta);
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -0.2px;
-}
 
 /* ---- Conteudo ---- */
 .content-frame {
   padding: 26px 34px 34px;
-}
-
-/* ---- Painel (hero de boas-vindas) ---- */
-.inicio-vazio {
-  color: var(--marca-tinta-suave);
-  gap: 6px;
-}
-.inicio-hero {
-  display: grid;
-  justify-items: center;
-  gap: var(--cx-sp-2);
-  padding: var(--cx-sp-7);
-  border-radius: var(--cx-r-xl);
-  /* A luz difusa atras era laranja (residuo Pralis) e nao acompanhava tema nem
-     modo escuro. Agora e a propria marca, em 6%. */
-  background:
-    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--cx-brand) 6%, transparent) 0%, transparent 60%),
-    var(--marca-superficie);
-  border: 1px solid var(--marca-linha);
-  box-shadow: var(--marca-sombra);
-}
-.inicio-hero-logo {
-  width: clamp(160px, 40%, 200px);
-  height: auto;
-  object-fit: contain;
-}
-.inicio-vazio h1 {
-  color: var(--marca-tinta);
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-}
-.inicio-vazio p {
-  color: var(--marca-tinta-suave);
-  font-weight: 600;
-}
-.inicio-hero-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 6px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: var(--marca-acento-suave);
-  color: var(--marca-acento-forte);
-  font-size: 12.5px;
-  font-weight: 700;
 }
 
 /* ---- Menu agrupado por secoes ---- */
@@ -1119,12 +1064,6 @@ body {
     flex: 1;
   }
 }
-.cadastro-card-title .text-h6 {
-  font-weight: 800;
-  color: var(--marca-tinta);
-  letter-spacing: -0.2px;
-}
-
 /* ---- Tabela premium (cadastros / permissoes) ---- */
 .responsive-table-shell {
   border: 1px solid var(--marca-linha);
@@ -1292,12 +1231,6 @@ body {
     grid-template-columns: 44px minmax(0, 1fr) auto;
     column-gap: 8px;
   }
-  .topbar-page-id {
-    text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 /* S4 — nome de empresa longo: no maximo 2 linhas */
 .company-trigger span,
@@ -1441,19 +1374,6 @@ body {
   }
   .report-card-head > .v-btn {
     width: 100%;
-  }
-}
-/* P1 — Painel: viewport real (dvh) + hero compacto no celular */
-.inicio-vazio {
-  min-height: calc(100dvh - 140px);
-}
-@media (width <= 390px) {
-  .inicio-hero {
-    padding: 22px 18px;
-    border-radius: 20px;
-  }
-  .inicio-vazio h1 {
-    font-size: 22px;
   }
 }
 /* P2 — arvore (grupos/areas): sem indentacao que vaza no tablet */
@@ -1741,7 +1661,12 @@ body {
   min-height: 48px;
   justify-content: center;
   border-radius: var(--cx-r-pill) !important;
-  background: var(--cx-brand) !important;
+  /* Gradiente da marca (D-VIS-E5a resolvida, 27/08/2026). NAO e `!important` novo: o `!important`
+     ja estava nesta linha desde o bloco SHELL — mudou o VALOR, nao a forca. Era esta declaracao
+     que impedia o `background-image` de pegar, e por isso a Etapa 5 deixou o FAB de fora.
+     Medido, o rotulo branco sobre as duas pontas: 7,76 na cheia e 5,35 na clareada.
+     O hover em `--cx-brand-strong` continua como estava, logo abaixo. */
+  background: var(--cx-brand-gradiente) !important;
   color: var(--cx-brand-on) !important;
   font-weight: 800;
   letter-spacing: 0.4px;
@@ -1901,14 +1826,6 @@ body {
   gap: var(--cx-sp-2);
   min-width: 0;
 }
-/* Hierarquia da topbar: o titulo da pagina e o unico elemento com peso; empresa,
-   tema, sino e avatar sao satelites. Antes os cinco competiam pelo mesmo peso. */
-.shell-mobills .topbar-page-id {
-  color: var(--cx-ink);
-  font-size: var(--cx-fs-title);
-  font-weight: 700;
-  letter-spacing: var(--cx-tracking-tight);
-}
 .shell-mobills .topbar-actions {
   justify-self: end;
   gap: var(--cx-sp-1);
@@ -2023,9 +1940,6 @@ body {
   .shell-mobills .topbar-empresa {
     max-width: none;
     padding: 6px;
-  }
-  .shell-mobills .topbar-page-id {
-    font-size: 15px;
   }
 }
 @media (width <= 560px) {
@@ -2362,3 +2276,2286 @@ body {
   }
 }
 /* ===================== FIM CADASTRO DE PRODUTOS V2 ===================== */
+
+/* ===================== INICIO SHELL-01 — MENU LATERAL ANCORADO NO TOPO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Defeito: `.sidebar-nav` (linha ~411) e `display: grid` com `height: 100%`. Sem
+   `align-content`, a propriedade cai no valor inicial `normal`, que em container grid
+   se comporta como `stretch`: o espaco livre e distribuido entre as trilhas de tamanho
+   `auto`. Com poucos grupos no menu (o caso de perfil com menos permissoes), sobra muita
+   altura e cada `.sidebar-group` recebe uma fatia dela — o menu abre um vao enorme entre
+   os grupos em vez de comecar no topo.
+
+   Conserto: ancorar as trilhas no inicio. Nao ha valor de cor, espaco, raio ou duracao
+   envolvido — e so a regra de alinhamento que faltava.
+   ======================================================================================================== */
+.shell-mobills .sidebar-nav {
+  align-content: start;
+}
+/* ===================== FIM SHELL-01 ===================== */
+
+/* ===================== INICIO SHELL-02 — TRAVA DE ALVO DE TOQUE DO BOTAO DE MENU (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   LEIA ANTES DE MEXER: isto e uma TRAVA, nao um conserto. Hoje nao muda um pixel.
+   O botao de abrir menu (AppShell.vue:265) e um `v-btn` com `icon`, sem `size` e sem
+   `density`, entao cai nos padroes do Vuetify 3.12.8. Em
+   node_modules/vuetify/lib/components/VBtn/VBtn.css:
+     .v-btn--size-default                 --v-btn-height: 36px                      (l. 45)
+     .v-btn--icon.v-btn--density-default  width/height: calc(--v-btn-height + 12px) (l. 189)
+   36 + 12 = 48. O nuxt.config.ts nao mexe em `density` do VBtn, so em `rounded`.
+   MEDIDO por Marco no inspetor em 26/08/2026, a 390px: 48 x 48, nome "Abrir menu",
+   role button, focavel por teclado. O minimo de 44px do 67 §13.4 ja estava cumprido —
+   e sempre esteve. `min-*` e piso: um piso de 44 sob um elemento de 48 nunca encosta.
+   Entao para que serve: para o dia em que alguem puser `density="compact"` no botao,
+   trocar o `size`, ou o Vuetify mudar o padrao numa atualizacao. Qualquer um dos tres
+   derruba os 48px em silencio.
+   E o terceiro pode chegar SOZINHO: web-vue/package.json declara `"vuetify": "^3.11.3"` —
+   faixa com caret. Um `npm install` sobe a minor e pode mover o padrao sem ninguem editar
+   uma linha de codigo. E o cenario concreto que esta trava protege.
+   Existe precedente para prender isso em teste — tests/e2e/produtos-formulario.spec.ts:216-226
+   ja mede alvo de toque e reprova abaixo de 44px, citando o 67 §13.3. O que nao existe e
+   assercao cobrindo ESTE botao. Enquanto nao existir, a trava e o que resta.
+   A trava segura em 44 e o 67 §13.4 continua valendo.
+   A primeira versao deste comentario afirmava que o botao "reprovava os 44px". Era
+   falso, e a medicao provou. Foi corrigido em vez de apagado porque comentario que
+   mente ja custou caro aqui — ver o cabecalho de web-vue/utils/cores-categoria.ts.
+   Vizinhanca: o seletor S2 do bloco RESPONSIVIDADE OFICIAL (linha ~1286) mira
+   `.padaria-topbar > .v-btn` e esta MORTO, porque o botao e neto da topbar e o `>`
+   nao casa. Continua la porque aquele bloco e historico e congelado (67 §13).
+   Remove-lo e o SHELL-06, que tem de ir declaracao por declaracao. A metade
+   `.topbar-page-id` da S3 era a unica fonte do ellipsis do titulo no mobile e por isso estava
+   VIVA — ate 27/08, quando o VIS-10 tirou o titulo da topbar. Sem o elemento ela perdeu a
+   funcao e saiu junto; o que resta da S3 e so a metade `.padaria-topbar`, morta desde sempre.
+   ========================================================================================================= */
+@media (width <= 768px) {
+  .shell-mobills .topbar-left > .v-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* ===================== FIM SHELL-02 ===================== */
+
+/* ===================== INICIO VIS-04 — HIERARQUIA E ALVO DE BOTAO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A §5.5 da direcao pede "primaria solida em --cx-brand". ISSO NAO ENTRA, por decisao de Marco
+   em 26/08/2026: `aplicarTema` (useApi.ts:170) aponta o `primary` do Vuetify para a cor da
+   CATEGORIA DA TELA, e 20 botoes usam `color="primary"`. Cravar a marca repintaria todos de
+   roxo e mataria o acento por tela — o que a §0.1 e o 67 §3 proibem. A hierarquia entra por
+   PESO, ALVO e LAYOUT; a cor continua vindo do tema. Zero cor muda neste bloco.
+
+   Antes de escrever, li o VBtn.css do Vuetify 3.12.8 para nao repetir o erro do SHELL-02 (piso
+   que nunca encosta). O que JA EXISTE e por isso nao viraria regra nova aqui:
+     - hover e active: `.v-btn__overlay` ja tinge; somar --cx-hover/--cx-pressed por baixo
+       escureceria DUAS vezes, em vez de suprir estado que falta;
+     - foco: o `:focus-visible` global da camada de acabamento ja da o anel de 2px em --cx-focus
+       com offset 2px, em todo ponto focavel;
+     - secundaria de contorno e ghost sem borda: `.v-btn--variant-outlined` ja e
+       `background: transparent` + `border: thin solid currentColor` (l. 142), e
+       `.v-btn--variant-text` ja e transparente (l. 119).
+   Fica registrado o que NAO da para cumprir: o `cursor: not-allowed` do 67 §9 e inalcancavel,
+   porque `.v-btn--disabled` tem `pointer-events: none` (l. 226-228) e o cursor nunca chega ao
+   elemento. Mudar isso e mexer em comportamento, nao em aparencia. A opacidade, metade viva do
+   requisito, ja esta la.
+
+   Seletor com DUAS classes de proposito: o Vuetify declara `.v-btn { font-weight: 500 }` com a
+   mesma especificidade de uma classe, e o main.css nao tem ordem de carga garantida contra o CSS
+   do modulo. `.v-btn.v-btn--variant-flat` vence por especificidade, independente da ordem.
+
+   Sem `.shell-mobills`: dialogo do Vuetify e teleportado para fora da casca, e e dentro dele que
+   vivem Salvar e Cancelar. Escopar na casca deixaria justamente os botoes de formulario de fora.
+   =================================================================================================== */
+
+/* 1. Peso: a primaria e a unica que pesa. Vuetify entrega 500 para todo botao. */
+.v-btn.v-btn--variant-flat,
+.v-btn.v-btn--variant-elevated {
+  font-weight: 600;
+}
+
+/* 2. Alvo de toque. Botao comum do Vuetify tem 36px de altura
+   (`--v-btn-height: 36px` + `.v-btn--density-default { height: calc(... + 0px) }`) e NENHUM
+   min-height — o do arquivo so cobre `.v-btn--icon` e os `small` de Produtos. Cresce a area
+   clicavel, nao o desenho: fonte e padding seguem os do Vuetify.
+
+   RESSALVA (26/08/2026, achado do revisor): estas duas declaracoes fecham a PRIMARIA e o
+   mobile, nao o alvo inteiro. No desktop, `text` e `outlined` continuavam nos 36px. Quem
+   fecha essa metade e o bloco VIS-04b, no fim do arquivo. Ler os dois juntos. */
+.v-btn.v-btn--variant-flat,
+.v-btn.v-btn--variant-elevated {
+  min-height: 44px;
+}
+@media (width <= 768px) {
+  .v-btn.v-btn--density-default,
+  .v-btn.v-btn--density-comfortable,
+  .v-btn.v-btn--density-compact {
+    min-height: 44px;
+  }
+}
+
+/* 3. No XS a acao principal ocupa a linha e o grupo quebra em vez de espremer (67 §13.4).
+   `.v-card-actions` e flex sem wrap no Vuetify, entao tres botoes numa tela de 390px
+   comprimiam ate o rotulo cortar. */
+@media (width <= 600px) {
+  .v-card-actions {
+    flex-wrap: wrap;
+  }
+  .v-card-actions > .v-btn {
+    flex: 1 1 auto;
+  }
+}
+/* ===================== FIM VIS-04 ===================== */
+
+/* ===================== INICIO VIS-04b — ALVO DE TEXT E OUTLINED NO DESKTOP (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Fecha a metade que o VIS-04 deixou aberta (achado do revisor).
+
+   Provado por leitura da cascata inteira, nao por impressao. Regras de `min-height` que tocam
+   botao, no arquivo todo:
+     1152  `.row-actions .v-btn`                 40px  — escopado
+     1163  `.caixa-edit.v-btn`                   40px  — escopado
+     1288  `.padaria-topbar > .v-btn`            44px  — SELETOR MORTO (ver SHELL-02)
+     2307  `.v-btn--icon`                        40px
+     2351/2361  `size-small` de Produtos       40/44px — escopado
+     2419  `.shell-mobills .topbar-left > .v-btn` 44px — so <=768
+     2499  `variant-flat` e `variant-elevated`   44px  — VIS-04, qualquer largura
+     2505  todas as densidades                   44px  — VIS-04, so <=768
+   Conclusao: um `variant="text"` ou `variant="outlined"` no desktop, fora de `.row-actions`,
+   de `.caixa-edit` e de Produtos, nao encontra min-height NENHUM e fica nos 36px do Vuetify.
+   Sao os botoes de Cancelar, Fechar, Limpar e Filtrar — ConfirmacaoDialog.vue:21,
+   VendaDetalheDialog.vue:31, CadastroTable.vue:182, HistoricoCaixasPage.vue:211.
+
+   36px reprova o minimo GERAL de 40px do 67 §9. Piso de 40, e nao de 44: os 44 o 67 §13.4
+   reserva a primarias e ao mobile, e ambos ja estao cobertos pelo VIS-04.
+
+   Escopado em `width > 768px` de proposito. Sem isso, esta regra viria DEPOIS da de <=768px do
+   VIS-04 com a mesma especificidade e derrubaria o alvo do mobile de 44 para 40 — o conserto
+   de uma metade quebrando a outra.
+
+   `:not(.v-btn--icon)` porque botao de icone ja tem os 40px na linha 2307: incluir seria
+   escrever regra que empata consigo mesma, o tipo de no-op que esta frente ja produziu tres vezes.
+   ============================================================================================== */
+@media (width > 768px) {
+  .v-btn.v-btn--variant-text:not(.v-btn--icon),
+  .v-btn.v-btn--variant-outlined:not(.v-btn--icon) {
+    min-height: 40px;
+  }
+}
+/* ===================== FIM VIS-04b ===================== */
+
+/* ===================== INICIO VIS-02 — CARTAO: RAIO, RESPIRO E O ESCURO (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   ESCOPO ESTREITO, e o motivo importa: a camada de acabamento de 01/08 JA fez a maior parte da
+   §5.7. Reescrever seria o quarto no-op da frente. Conferido linha a linha, ja esta certo e NAO
+   foi tocado aqui:
+     2164  `.content-frame .v-card`        --cx-r-lg + --cx-e-1
+     2170  `.content-frame .card-total`    --cx-e-2
+     2225  `.v-overlay__content > .v-card` --cx-r-xl + --cx-e-3   (modal)
+     2233  `.v-menu > .v-overlay__content` --cx-r-md + --cx-e-2   (menu suspenso)
+     2182  `.responsive-table-shell`       --cx-r-lg + borda 1px
+     login.vue:134                         --cx-r-xl
+   As tres elevacoes ja sao de DUAS sombras cada (contato + ambiente), como manda o 67 §6.
+
+   O `border-radius: 14px` da `.responsive-table-shell` (linha 1131) esta MORTO: a linha 2183
+   redeclara com a mesma especificidade e vence por ordem. Tokeniza-lo seria mexer em bloco
+   congelado para nao mudar pixel nenhum. Fica registrado, nao reescrito.
+
+   Sobra pouco, e e isto:
+
+   1. `.cadastro-filter-grid` (linha 1092) tem `border-radius: 14px` VIVO — nada redeclara depois.
+      Numero magico contra a regra de ouro do 67. Vira --cx-r-lg (16px). E o unico raio do lote
+      que muda pixel: 2px a mais no painel de filtros de cadastros e permissoes.
+
+   2. Respiro. O Vuetify da `padding: 1rem` no `.v-card-text` e `0.625rem 1rem` no `.v-card-item`
+      (VCard.css l. 165 e 255) — 16px, que e --cx-sp-4. O 67 §4 reserva sp-5/sp-6 para padding de
+      card; sp-4 e espaco ENTRE CAMPOS. Sobe para --cx-sp-5.
+
+   3. Cabecalho interno separado por --cx-line-soft. `:not(:last-child)` porque so ha o que
+      separar quando existe conteudo depois: card so de cabecalho nao ganha linha solta embaixo.
+
+   ---- MODO ESCURO — implementado, e PENDENTE como D-06 ----
+   No claro o card se separa por ELEVACAO. No escuro isso nao funciona: --cx-e-1 e sombra preta
+   (`rgb(0 0 0 / 0.4)`) e some sobre --cx-canvas #0f1318. A separacao passa a ser LUMINANCIA mais
+   contorno. Medido, nos dois temas:
+     escuro  superficie x canvas  1,12:1   line-soft x canvas  1,30:1   (line x canvas  1,44:1)
+     claro   superficie x canvas  1,08:1   line-soft x canvas  1,05:1
+   POR QUE FICA PENDENTE: nenhum desses pares alcanca os 3:1 que o 67 §11 pede para borda que
+   carrega significado — e no escuro a borda deixa de ser reforco e vira a separacao PRINCIPAL,
+   porque a sombra sumiu. O mais forte disponivel e --cx-line (1,44:1), e mesmo ele nao passa.
+   Ou o 67 reconhece que contorno de card e agrupamento e nao componente — o claro sempre viveu
+   a 1,08:1 e ninguem reclamou —, ou a paleta precisa de um tom de linha novo, o que esta frente
+   nao pode inventar (§0.1). Segui a instrucao e usei --cx-line-soft. Decisao de Marco.
+   A sombra do escuro nao foi removida: tira-la exigiria `!important` novo, que o lote proibe.
+   =========================================================================================== */
+
+/* 1. Raio do painel de filtros: numero magico vira token. */
+.cadastro-filter-grid {
+  border-radius: var(--cx-r-lg);
+}
+
+/* 2. Respiro de card (67 §4: sp-5/sp-6 e padding de card; sp-4 e entre campos). */
+.content-frame .v-card > .v-card-item,
+.content-frame .v-card > .v-card-text {
+  padding: var(--cx-sp-5);
+}
+
+/* 3. Cabecalho interno separado, so quando ha conteudo depois dele. */
+.content-frame .v-card > .v-card-item:not(:last-child) {
+  border-bottom: 1px solid var(--cx-line-soft);
+}
+
+/* 4. Escuro: o contorno assume o lugar da sombra que sumiu. Ver D-06 no banner. */
+:root[data-theme="dark"] .content-frame .v-card {
+  border: 1px solid var(--cx-line-soft);
+}
+/* ===================== FIM VIS-02 ===================== */
+
+/* ===================== INICIO VIS-07 — CAPSULA DO ITEM ATIVO DO MENU (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Elemento-assinatura da Direcao C. MUDA A FORMA DO REALCE, NAO A COR.
+
+   ZERO cor aqui. O ativo continua exatamente como esta: `--item-cor-faixa` com texto branco nas
+   telas com categoria (linha 1841) e `--shell-active-bg` nas neutras (linha 1806). Este bloco so
+   mexe em raio e geometria.
+
+   O TERCEIRO SINAL CONTINUA INTEIRO. A barra de 3px do `.sidebar-item.active::before` (1850-1857)
+   vive em `left: 0`, e a capsula cresce para a DIREITA — nao a toca. Nao ha `overflow: hidden`
+   nem `z-index` neste bloco, entao ela nao e cortada nem coberta, e o `cx-barra-ativa` continua
+   animando. Os tres sinais do 67 §9 (fundo, peso, barra) seguem; a capsula e o QUARTO.
+
+   COMO ELA ALCANCA A BORDA SEM CRIAR ROLAGEM — e a parte nao obvia.
+   O respiro lateral do menu nao e do item nem da `.sidebar-nav` (que tem `padding: 12px 0`): vem
+   do `padding-inline: 12px` do `.drawer-shell` (linha 779). O caminho ingenuo — dar
+   `margin-right` negativo ao item ativo — furaria a caixa de conteudo da `.sidebar-nav`, e como
+   ela e `overflow-y: auto`, o eixo horizontal computa `auto` junto: apareceria barra de rolagem
+   horizontal dentro do menu. Em vez disso, quem perde o respiro a direita e a FAIXA INTEIRA
+   (`.sidebar-scroll-shell`). O item ativo entao alcanca a borda por largura normal, sem estourar
+   caixa nenhuma. O `.v-navigation-drawer__content` ja e `overflow: hidden` (linha 257), entao
+   nada escapa da gaveta.
+
+   NO RAIL, A CAPSULA NAO ENTRA. Escopado em `:not(.rail)`, e por classe de estado em vez de
+   largura: o rail e decidido pelo `matchMedia` do AppShell (769-1024) e a classe e a verdade.
+   No rail o item e `justify-items: center` sobre uma coluna de 28px; esticar so a direita
+   deslocaria o icone do eixo da capsula — exatamente o "vazar ou cortar o icone" que nao pode
+   acontecer. La o realce fica como hoje.
+
+   SEM MOVIMENTO NOVO. Nao animo raio nem geometria: o item ja transiciona `background` e `color`
+   em --cx-dur-1, e a barra ja entra com `cx-barra-ativa`. Como nada novo se move, tambem nao ha
+   `transform` para acrescentar as excecoes do reset de `prefers-reduced-motion` (67 §7).
+   ================================================================================================= */
+.shell-mobills .padaria-sidebar:not(.rail) .sidebar-scroll-shell {
+  margin-inline-end: calc(var(--cx-sp-3) * -1);
+}
+.shell-mobills .padaria-sidebar:not(.rail) .sidebar-item.active {
+  border-radius: var(--cx-r-md) var(--cx-r-pill) var(--cx-r-pill) var(--cx-r-md);
+}
+/* ===================== FIM VIS-07 ===================== */
+
+/* ===================== INICIO VIS-12 — RAIL SEM BARRA DE ROLAGEM (26/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   DEFEITO MEDIDO a 1024px, nos dois temas: `.sidebar-nav` com clientWidth 51 e scrollWidth 92.
+   Como ela e `overflow-y: auto`, o eixo X computa `auto` junto e a barra aparece de verdade, no
+   canto inferior esquerdo do rail.
+
+   A CAUSA NAO E O `display: block` — medi, e a trilha do rotulo JA COLAPSA certo.
+   O computado do item no rail e `grid-template-columns: 28px 0px 0px`: os `0fr` viraram 0px, como
+   deviam. Quem estoura e o SPAN, que mede 105px mesmo com `min-width: 0` e `overflow: hidden`.
+   O motivo e o `justify-items: center` da linha 2107: com `center`, o item de grade deixa de
+   esticar para a trilha e passa a ser dimensionado por MAX-CONTENT — 105px de "Lancamentos" —,
+   e so depois e centralizado numa trilha de 0px. O `overflow: hidden` do span clipa o TEXTO
+   dentro dele, mas nao encolhe a caixa dele.
+
+   A conta fecha com a medicao: as trilhas somam 28px e o `justify-content: center` as centra em
+   51px, entao a trilha do rotulo comeca em 39,5px; 39,5 + 105/2 = 92. E exatamente o scrollWidth
+   observado.
+
+   CONSERTO: clipar no item, que e onde o excesso nasce. Nao mexe no `display`, entao a animacao
+   do rail continua inteira — a transicao vive em `grid-template-columns` do item e em `opacity`
+   do span, e clipar nao interrompe nenhuma das duas.
+
+   O QUE NAO E CLIPADO, conferido pela mesma aritmetica e depois medido: o icone ocupa 15..36px
+   (trilha de 28px centrada, icone de 21px) e o chevron da categoria ocupa ~30..48px — os dois
+   inteiramente dentro dos 51px. A barra de 3px do item ativo vive em `left: 0` com 55% de altura,
+   tambem dentro da caixa. Os tres sinais do 67 §9 seguem intactos.
+
+   Bloco novo no fim do arquivo porque o SHELL (onde a linha 2107 mora) e congelado.
+   ================================================================================================ */
+.shell-mobills .padaria-sidebar.rail .sidebar-item {
+  overflow: hidden;
+}
+/* ===================== FIM VIS-12 ===================== */
+
+/* ===================== INICIO VIS-08 — ESTADO VAZIO VISIVEL EM 390px (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   Par do commit de marcacao que criou o `.tabela-vazio`; um nao serve sem o outro.
+
+   DEFEITO MEDIDO a 390px, em 5 telas (a sexta tinha dados na hora da medicao):
+
+     Entradas        texto em 216..466px   casca 324px
+     Contas a pagar  texto em 188..494px   casca 326px
+     Pedidos         texto em 243..439px   casca 326px
+     Turnos          texto em 232..450px   casca 326px
+     Notas fiscais   texto em 270..517px   casca 326px
+
+   Ou seja: o recado nao some, ele e CORTADO. Comeca perto do fim do visivel e perde de metade a
+   dois tercos do texto; o resto so aparece rolando a tabela de lado.
+
+   A causa nao e tabela larga, como o 68 §6.3 supunha. O `min-width: 680px` (linha 205) e piso de
+   TODA tabela dentro da casca, entao ate uma de 4 colunas e esticada para 680px. A celula de
+   `colspan` ocupa esses 680px e o `text-center` centra o texto nela, a ~340px — enquanto a casca
+   visivel mede ~325px. O Historico de caixas, o "caso conhecido" da premissa, nem usa
+   `.responsive-table-shell`.
+
+   POR QUE PRENDER O ELEMENTO E NAO A CELULA: a celula carrega `text-center`, utilitario do
+   Vuetify que vem com `!important`. Venc-la exigiria `!important` novo, proibido neste lote.
+   O `.tabela-vazio` e um elemento sem classe utilitaria em cima, entao basta especificidade.
+
+   COMO FUNCIONA — e as duas tentativas que a medicao reprovou antes desta:
+   1) `position: sticky; left: 0` sozinho NAO resolve. Sticky puxa de volta o que sairia pela
+      ESQUERDA; aqui o texto esta longe demais para a DIREITA e, no scroll 0, nao ha nada a
+      prender. Medido: nao mudou um pixel.
+   2) `display: block` + `width: fit-content` + sticky trouxe o texto para a esquerda, mas sem
+      quebrar linha. Medido: "Nenhuma despesa pendente encontrada." tem 306px e ficava em
+      41..347px, ainda 21px fora dos 326px visiveis. Passou em 4 telas e reprovou em 1.
+   O que funciona e `display: block` + `text-align: left` + teto de largura. Como bloco, a caixa
+   ocupa a celula inteira e o `text-align` proprio vence o `center` HERDADO da `<td>` — heranca,
+   nao cascata, entao o `!important` do utilitario nao entra na disputa. O teto forca a quebra de
+   linha quando o recado nao cabe.
+
+   SOBRE O TETO DE LARGURA, e a divida que ele carrega: a largura visivel e a da
+   `.responsive-table-shell`, e CSS nao permite a um descendente ler a largura de um ancestral que
+   nao seja seu bloco contedor. O teto e reconstruido a partir das margens conhecidas — recuo do
+   `.content-frame` mais padding do card mais borda —, o que da `100vw - sp-8 - sp-4`. Medido, bate
+   com a casca real: 326px a 390px de viewport. E acoplamento, e esta anotado: se o padding de card
+   do VIS-02 mudar, este teto precisa ser refeito. A saida definitiva e `container-type:
+   inline-size` na casca e `100cqi` aqui — nao entrou porque impoe contencao a um elemento que TODA
+   tabela usa, e isso pede validacao propria.
+
+   Escopado em <=768px: no desktop a tabela cabe e o texto centralizado esta certo.
+   O respiro vertical de sp-8 ja vem da camada de acabamento (linha 2273); aqui entra so o
+   horizontal, para o recado nao encostar na borda.
+   ======================================================================================================= */
+@media (width <= 768px) {
+  .responsive-table-shell .tabela-vazio {
+    display: block;
+    text-align: left;
+    max-width: calc(100vw - var(--cx-sp-8) - var(--cx-sp-4));
+    padding-inline: var(--cx-sp-6);
+  }
+}
+/* ===================== FIM VIS-08 ===================== */
+
+/* ===================== INICIO VIS-10 — CABECALHO DE TELA (27/08/2026) =====================
+   anchor: linear.app/DESIGN.md — hierarquia por peso e cor, hairline, zero atmosfera.
+   diverge: escala --cx-fs-* e Noto Sans, que sao decisao de marca deste sistema (67 §8, D-01).
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par do AppCabecalhoTela.vue; um nao serve sem o outro.
+
+   D-04 (26/08): o titulo da tela vive SO na pagina. O `.topbar-page-id` foi removido do
+   AppShell e as CINCO regras dele sairam do main.css junto — inclusive a metade `.topbar-page-id`
+   da S3, que era a unica fonte do ellipsis do titulo no mobile e por isso continuava viva. Sem o
+   elemento ela perdeu a funcao, e so por isso saiu. E remocao de caminho antigo (16, regra-mae),
+   nao limpeza oportunista.
+
+   Isto UNIFICA cinco cabecalhos que ja existiam — topbar, CadastroTable, PlaceholderPage,
+   OperacoesPage e TesourariaCockpit —, nao cria um sexto. O `.tes-head` da Tesouraria ja era
+   exatamente esta forma; ele virou o modelo. (O CSS do `.tes-head` foi apagado no SHELL-06, em
+   28/08/2026: sem o elemento, ele era regra morta. A frase acima descreve historia, e quem
+   procurar o seletor hoje nao vai achar.)
+
+   Sem eyebrow, sem pilula de secao, sem numero de secao em monospace: sao sinais de "cara de IA"
+   e nao existem em produto de verdade. O titulo se sustenta por tamanho e peso.
+   ========================================================================================== */
+.cabecalho-tela {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--cx-sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--cx-sp-6);
+}
+.cabecalho-tela-texto {
+  min-width: 0;
+}
+.cabecalho-tela-titulo {
+  margin: 0;
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-h1);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-tight);
+  line-height: 1.2;
+}
+.cabecalho-tela-subtitulo {
+  margin: var(--cx-sp-1) 0 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-lead);
+  line-height: 1.5;
+}
+.cabecalho-tela-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  flex-shrink: 0;
+}
+
+/* Tablet: o titulo desce um degrau para nao competir com o conteudo em tela estreita. */
+@media (width <= 1024px) {
+  .cabecalho-tela-titulo {
+    font-size: var(--cx-fs-h2);
+  }
+}
+
+/* XS: acao principal ocupa a linha, em vez de espremer ao lado do titulo (67 §13.4). */
+@media (width <= 600px) {
+  .cabecalho-tela {
+    margin-bottom: var(--cx-sp-5);
+  }
+  .cabecalho-tela-acoes {
+    width: 100%;
+  }
+  .cabecalho-tela-acoes > * {
+    flex: 1 1 auto;
+  }
+}
+/* ===================== FIM VIS-10 ===================== */
+
+/* ===================== INICIO VIS-E2a — RESPIRO DA PAGINA DO PAINEL (27/08/2026) =====================
+   Do bloco original sobrou SO isto. O resto — a grade de 32 blocos quadrados por grupo, o brilho
+   de categoria neles e a sanfona — foi apagado em 28/08/2026, quando a dashboard deixou de
+   espelhar o menu. As classes nao existem mais em template nenhum: `.atalhos-home`,
+   `.atalhos-grupo*`, `.atalhos-grade`, `.atalho-bloco*`. O caminho antigo nao fica ao lado do
+   novo (16, regra-mae).
+   ============================================================================================ */
+.inicio-painel {
+  display: grid;
+  gap: var(--cx-sp-6);
+  align-content: start;
+}
+/* ===================== FIM VIS-E2a ===================== */
+
+/* ===================== INICIO VIS-E5c — GRADIENTE SO NO QUE JA E DA MARCA (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+
+   LEIA ANTES DE "COMPLETAR" ISTO. O gradiente NAO e global, e nao e esquecimento.
+
+   O botao primario do Pralis NAO e roxo: ele carrega a cor da CATEGORIA DA TELA, injetada pelo
+   `aplicarTema` (useApi.ts:165) em `cores["primary"]`. Medido no navegador em 27/08:
+     Colaboradores (tela neutra)   --v-theme-primary = 101,21,221  -> #6515dd, a marca
+     Entradas      (tela com cor)  --v-theme-primary = 202,138,4   -> #ca8a04, entradas
+   Um `background-image` roxo pinta POR CIMA do `background-color`, entao cravar o gradiente da
+   marca em `.v-btn--variant-flat/elevated` mataria o acento de categoria em toda tela colorida.
+   E o mesmo erro que o VIS-04 ja cometeu uma vez, e a §1.1 proibe.
+
+   A referencia vivid_glass nao tem esse conflito porque foi desenhada com UMA primaria. O Pralis
+   tem seis. Por isso o gradiente fica onde a cor JA e a marca por natureza, e so ali.
+
+   ALCANCA O FAB "+ NOVO" desde 27/08/2026 (D-VIS-E5a). A `.shell-mobills .sidebar-new-button`
+   aplica `background: var(--cx-brand-gradiente) !important`, e NAO e `!important` novo: ele ja
+   estava naquela linha desde o bloco SHELL — mudou o VALOR, nao a forca. Ate 28/08 este paragrafo
+   afirmava o contrario, e citava um numero de linha que ja nao existia; ficou desatualizado.
+   Segue VERDADEIRO o fim: o `.tes-nova` da Tesouraria continua sem gradiente.
+
+   Medido, branco sobre as duas pontas: 7,76 na cheia e 5,35 na clareada — as duas acima do
+   minimo de 4,5:1 do 67 §11. O gradiente e ESTATICO: nada anima, entao nao ha o que o reset de
+   `prefers-reduced-motion` desligar.
+   ============================================================================================== */
+.shell-mobills .topbar-avatar {
+  background-image: var(--cx-brand-gradiente);
+}
+/* ===================== FIM VIS-E5c ===================== */
+
+/* ===================== INICIO VIS-E6a — ESCADA DE SUPERFICIE APLICADA (27/08/2026) =====================
+   anchor: linear.app/DESIGN.md, secao Elevation & Depth — "depth is carried by surface ladder +
+   hairline borders; the brand resists drop shadows on dark almost entirely".
+
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par do token `--cx-surface-raised` criado no topo; sem consumidor o token seria divida.
+
+   QUEM VIVE EM QUE CAMADA, agora explicito:
+     N0 canvas          fundo da pagina (.padaria-main / body)
+     N1 surface         card de conteudo, casca de tabela            <- ja era assim
+     N2 surface-raised  card de TOTAL, menu suspenso, modal          <- entra aqui
+
+   Antes os tres do N2 se distinguiam SO por sombra. No claro isso basta; no escuro nao, porque
+   sombra preta sobre #0f1318 nao levanta nada — era por isso que o card quase sumia no fundo.
+   Agora, no escuro, eles clareiam 8% e o degrau fica maior (1,262) que o de canvas->surface
+   (1,123). No claro o valor e o mesmo do N1 e quem levanta continua sendo `--cx-e-2`/`--cx-e-3`.
+
+   Nao ha `!important` novo: os seletores abaixo tem especificidade maior que a do `.v-card` do
+   Vuetify, entao vencem por conta propria.
+   ======================================================================================================= */
+.content-frame .card-total.v-card {
+  background: var(--cx-surface-raised);
+}
+.v-menu > .v-overlay__content,
+.v-menu > .v-overlay__content .v-list {
+  background: var(--cx-surface-raised);
+}
+.v-overlay__content > .v-card {
+  background: var(--cx-surface-raised);
+}
+/* ===================== FIM VIS-E6a ===================== */
+
+/* ===================== INICIO VIS-E6b — O VIDRO VIRA ASSINATURA (27/08/2026) =====================
+   Bloco aditivo e reversivel. Par do ajuste de `--cx-chrome` no topo.
+
+   O chrome ja existia a 72%/78% com blur 20px, e o conteudo mal se via passando por baixo. Os
+   tokens abriram para 58%/62% com blur 24px — ate onde a medicao permite, nao mais.
+
+   A FAIXA DE GRUPO DO MENU passa a usar o mesmo vidro, um nivel acima do fundo da sidebar, e
+   fica STICKY: e o que a torna chrome de verdade, com os itens passando por baixo. Vidro em
+   rotulo parado seria decoracao, que o 67 §10 proibe.
+
+   A FAIXA DA HOME NAO VOLTA A TER VIDRO, e isso e deliberado: Marco validou em tela na Etapa 2 e
+   REPROVOU a barra atravessando a tela; ela virou rotulo puro no commit 91d26c4. Reintroduzi-la
+   aqui seria desfazer uma decisao tomada com a tela na frente. Registrado para ele decidir.
+
+   `@supports` de fallback obrigatorio, como em todo uso de vidro no arquivo.
+   ================================================================================================== */
+.shell-mobills .sidebar-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--cx-chrome);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .sidebar-group-label {
+    background: var(--cx-surface);
+  }
+}
+/* NO RAIL nao entra regra nenhuma, e o comentario que estava aqui dizia o contrario. Ele afirmava
+   que "o rotulo vira um divisor de 1px" e desligava o vidro para esse divisor. O divisor nunca
+   aparece: a regra de tres classes que o torna `display: none` no rail vence, e nada abaixo dela
+   redeclara `display`. MEDIDO a 1024px: `display` computado = `none`, altura 0. O bloco que estava
+   aqui pintava um elemento que nao existe na tela — e usava `--marca-linha`, alias que o 67 §2
+   proibe em codigo novo. O banner do VIS-E6g le a mesma cascata corretamente; era este que estava
+   errado. Removido em 28/08/2026. */
+/* ===================== FIM VIS-E6b ===================== */
+
+/* ===================== INICIO VIS-E6c — RITMO, DENSIDADE E MARGEM (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve o estado anterior.
+   Par da escala tipografica ajustada no topo.
+
+   UM RITMO VERTICAL, e ele e um so no sistema:
+     cabecalho -> primeiro bloco   --cx-sp-6   (24px)
+     entre blocos da pagina        --cx-sp-6
+     dentro do card                --cx-sp-5   (20px)  <- ja era assim desde o VIS-02
+     entre secoes de atalho        --cx-sp-7   (32px)  <- ja era assim
+   O que muda aqui e so o que ainda estava em px solto.
+
+   MARGEM DE PAGINA: `.content-frame` usava `18px 32px 28px`, tres numeros soltos, o que a regra
+   de ouro do 67 proibe. Vira token, e a lateral abre de 32 para --cx-sp-8 (48px) no desktop
+   largo: em 1440 com a sidebar de 300px sobra 1140px de conteudo, e 32px de respiro deixava o
+   card colado na borda. Abaixo de 1280 volta a --cx-sp-6, senao come largura util.
+
+   DENSIDADE DA TABELA: a altura de 48px da linha NAO muda (67 §13.2 e VIS-02). O que aperta e o
+   padding horizontal da celula, que no Vuetify e 16px; a 12px cabe mais coluna sem espremer o
+   texto, que era a reclamacao. Ha uma tensao honesta aqui e ela fica registrada: "mais linhas
+   visiveis" pede altura menor, e a altura esta congelada — entao o ganho e de largura, nao de
+   quantidade de linhas.
+
+   E o `scroll-margin-top` do item de menu: a `web-design-guidelines` aponta que elemento sticky
+   nao pode encobrir o que esta com foco. A faixa de grupo virou sticky no VIS-E6b, entao um item
+   focado por Tab poderia deslizar para baixo dela. O `scroll-margin-top` reserva a altura da
+   faixa. Achado da skill sobre o commit anterior, consertado aqui em vez de reaberto.
+   ==================================================================================================== */
+/* ESCOPADO EM `> 1024px` — correcao de P0 em 27/08/2026 (VIS-E7e), nao era assim quando este
+   bloco nasceu. A intencao declarada aqui em cima era tokenizar a MARGEM DE PAGINA do desktop
+   ("`.content-frame` usava `18px 32px 28px`, tres numeros soltos"). Mas a regra saiu sem media
+   query, no fim do arquivo, com especificidade (0,1,0) — a mesma das anteriores. Media query nao
+   soma especificidade, entao ela vencia por ORDEM e matava a escada de mobile inteira:
+
+     linha  710  (< 1280px)  22px 16px
+     linha  737              14px 10px 20px
+     linha 1307 (<= 1024px)  20px 20px 28px
+     linha 1312 (<=  768px)  16px 14px 24px
+     linha 1317 (<=  390px)  14px 12px 20px   <- o lateral de 12px que o mobile usava
+
+   O comentario da linha 1305 diz para que a escada existe: "corrige regressao de padding no
+   mobile". Ela nao era alvo deste bloco; foi dano colateral.
+
+   O EFEITO GRAVE estava no VIS-08 (linha 2757): o teto do recado de estado vazio e
+   `100vw - sp-8 - sp-4` = `100vw - 64px`, e esses 64 foram MEDIDOS com o lateral de 12px
+   (12x2 do frame + 20x2 do card). Com 24px de lateral o espaco real cai para 302px enquanto o teto
+   continua em 326px: medido a 390, o recado estourava 37px para fora da propria casca de rolagem —
+   exatamente o defeito que o VIS-08 existe para consertar.
+
+   POR QUE ESCOPAR E NAO REFAZER O TETO: a escada de mobile e medida e sustenta o teto do VIS-08.
+   Refazer o teto seria recalcular um numero que so existe porque a escada existe, e trocaria uma
+   regressao por um acoplamento novo. Escopar devolve o estado medido e mantem o VIS-08 valido sem
+   toca-lo. */
+@media (width > 1024px) {
+  .content-frame {
+    padding: var(--cx-sp-5) var(--cx-sp-8) var(--cx-sp-7);
+  }
+}
+@media (width > 1024px) and (width <= 1280px) {
+  .content-frame {
+    padding: var(--cx-sp-5) var(--cx-sp-6) var(--cx-sp-6);
+  }
+}
+
+/* Densidade: a linha continua com 48px; o que abre e a largura util da celula.
+   O seletor repete a cadeia do Vuetify de proposito. A primeira versao era
+   `.responsive-table-shell .v-table td` e NAO pintava nada: o Vuetify usa
+   `.v-table > .v-table__wrapper > table > tbody > tr > td`, que tem as mesmas 2 classes e 4
+   elementos contra 1 — e o desempate por elemento ia para ele. Medido: a celula continuava em
+   16px. Com a cadeia repetida mais a classe da casca, sao 3 classes, e passa a valer. */
+.responsive-table-shell .v-table > .v-table__wrapper > table > tbody > tr > td,
+.responsive-table-shell .v-table > .v-table__wrapper > table > tbody > tr > th,
+.responsive-table-shell .v-table > .v-table__wrapper > table > thead > tr > th {
+  padding-inline: var(--cx-sp-3);
+}
+
+/* Sticky nao encobre foco (web-interface-guidelines). A faixa de grupo mede ~28px. */
+.shell-mobills .sidebar-item {
+  scroll-margin-top: var(--cx-sp-7);
+}
+
+/* Titulo longo quebra equilibrado em vez de deixar uma palavra orfa na segunda linha. */
+.cabecalho-tela-titulo {
+  text-wrap: balance;
+}
+
+/* Em tela estreita o h1 de 34px nao cabe; o VIS-10 ja o desce para h2, e aqui ele desce mais um
+   degrau no XS, senao titulo longo corta. */
+@media (width <= 600px) {
+  .cabecalho-tela-titulo {
+    font-size: var(--cx-fs-title);
+  }
+}
+/* ===================== FIM VIS-E6c ===================== */
+
+/* ===================== INICIO VIS-E6d — A LISTAGEM GANHA A CARA NOVA (27/08/2026) =====================
+   Bloco aditivo e reversivel. E o item que alcanca ~25 telas: Entradas, Despesas, Transferencias,
+   Mercadorias, Retiradas, Contas a pagar, Pedidos e todos os cadastros.
+
+   O QUE JA ESTAVA CERTO e por isso NAO foi reescrito (69 §1.2 — bloco que nao muda nada e divida):
+     cabecalho da tabela  ja e --cx-surface-sunken + maiuscula pequena + --cx-tracking-wide +
+                          --cx-ink-soft + --cx-fs-micro, na camada de acabamento (linha ~2212)
+     linha                ja tem divisor so horizontal, sem grade vertical, sem zebra, e hover
+                          --cx-hover em --cx-dur-1
+     paginacao            ja tem contagem a esquerda e controles a direita por
+                          `flex-sm-row justify-space-between align-center`, e quebra em coluna no XS
+   Nenhum `!important` novo entrou, e nenhum dos existentes foi tocado.
+
+   O QUE MUDA:
+
+   1. FILTROS PERDEM A MOLDURA DURA. O painel usava `--marca-fundo`, que e alias de canvas: um
+      retangulo cor-de-fundo com borda dura dentro de uma pagina da mesma cor. Passa a falar a
+      lingua do card — superficie N1, hairline, e no claro a elevacao no lugar da borda pesada.
+      A faixa propria das acoes (`grid-column: 1 / -1`) FICA: e ela que impede a sobreposicao que
+      o VIS-01 investigou.
+
+   2. A CASCA DA TABELA VIRA CARD DE VERDADE. Ela tinha borda e raio mas nenhum fundo e nenhuma
+      elevacao — o fundo vinha da `.v-table` por baixo. Agora e N1 explicito, com `--cx-e-1` no
+      claro. No escuro NAO ganha sombra: sombra preta sobre #0f1318 nao levanta nada, e quem
+      separa la e o contorno (D-06, e o linear.app pelo mesmo motivo).
+
+   3. TODA TELA GANHA BRILHO — muda so o matiz. Com categoria, a cor dela, que chega por
+      `--padaria-brand` (injetado por tela pelo `aplicarTema`). Sem categoria, cinza de
+      `--cx-ink-soft`. O sinal que distingue e a classe `.tela-com-cor`, posta pelo AppShell a
+      partir do `CATEGORIA_POR_TELA`: o `--padaria-brand` sozinho nao serve, porque em tela neutra
+      ele tambem tem valor. O brilho fica no canto superior direito e esmaece aos 60% — o
+      cabecalho da tabela e as linhas vivem abaixo disso, entao ele nunca cai sobre texto.
+
+   FICA INTOCADO (67 §13.2): `overflow-x: auto`, `min-width: 680px`, Acoes `sticky right` no
+   mobile, barra de rolagem visivel, celula longa com `max-width: 340px`. Nunca `nowrap` global.
+   Nenhuma coluna adicionada, removida ou reordenada.
+   ======================================================================================================= */
+
+/* 1 · filtros na lingua do card */
+.content-frame .cadastro-filter-grid {
+  border-color: var(--cx-line-soft);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+:root[data-theme="dark"] .content-frame .cadastro-filter-grid {
+  box-shadow: none;
+}
+
+/* 2 · a casca da tabela vira card no nivel N1 */
+.content-frame .responsive-table-shell {
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+:root[data-theme="dark"] .content-frame .responsive-table-shell {
+  box-shadow: none;
+}
+
+/* 3 · brilho: cinza por padrao, cor da categoria quando a tela tem uma */
+.content-frame .responsive-table-shell {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--cx-ink-soft) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+.content-frame.tela-com-cor .responsive-table-shell {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--padaria-brand, var(--cx-brand)) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+/* ===================== FIM VIS-E6d ===================== */
+
+/* ===================== INICIO VIS-E6h — BOTAO DO PAINEL COM ROTULO (27/08/2026) =====================
+   Bloco aditivo e reversivel. Substitui o realce que o VIS-E1b dava ao botao so-icone. (O bloco
+   VIS-E1b foi apagado em 28/08/2026: a unica regra dele era byte a byte a mesma que este bloco ja
+   traz, entao ele nao pintava nada. As mencoes a ele aqui descrevem historia.)
+
+   Casa + a palavra "Painel". E "Painel" e nao "Dashboard": a R-100 manda portugues e o sistema
+   chama assim em todo lugar — no menu, no titulo da tela e no cabecalho.
+
+   TILE ARREDONDADO, nao botao chapado: a superficie recuada e o raio dao a ele a mesma linguagem
+   dos outros tiles, em vez de mais um botao de texto solto na topbar. O raio NAO e declarado
+   aqui: medi e o computado sai 8px, que e o default `rounded="lg"` do nuxt.config e tambem o
+   `--cx-r-sm` que o 67 §5 reserva a botao. Declarar `--cx-r-md` era regra que nao pintava — e o
+   valor certo ja vinha de graca.
+
+   Em tela estreita o ROTULO recolhe e sobra a casa; o `aria-label` continua no elemento, entao
+   quem usa leitor de tela nao perde o nome. Estando no painel, `aria-current="page"` e o realce
+   da marca — nao desabilitado, que tiraria o controle da ordem de Tab (mesma decisao do VIS-E1b).
+   ==================================================================================================== */
+.shell-mobills .topbar-actions > .topbar-painel {
+  width: auto;
+  min-width: 0;
+  padding-inline: var(--cx-sp-3);
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.shell-mobills .topbar-actions > .topbar-painel:hover {
+  color: var(--cx-ink);
+}
+.shell-mobills .topbar-actions > .topbar-painel[aria-current="page"] {
+  background: var(--cx-brand-wash);
+  color: var(--cx-brand-text);
+}
+@media (width <= 768px) {
+  .shell-mobills .topbar-painel-rotulo {
+    display: none;
+  }
+  .shell-mobills .topbar-actions > .topbar-painel {
+    padding-inline: var(--cx-sp-2);
+  }
+}
+/* ===================== FIM VIS-E6h ===================== */
+
+/* ===================== INICIO VIS-E6g — IDENTIDADE DE FAIXA DE GRUPO (27/08/2026) =====================
+   O menu tem cinco secoes (SECOES_MENU) e a home repete as MESMAS cinco. Ate aqui os dois lugares
+   mostravam so o rotulo em maiuscula: cinco blocos de texto identicos, e nada dizia que a secao
+   "Entradas" do menu e a secao "Entradas" da home sao a mesma coisa.
+
+   O que entra: uma marca antes do rotulo, nos dois lugares, com a cor da categoria da secao.
+
+   QUEM TEM COR (utils/cores-categoria.ts, `CATEGORIA_POR_SECAO`):
+     Entradas -> entradas · Transferencias -> transferencias · Resultados -> resultado
+   QUEM NAO TEM, e e decisao:
+     Saidas guarda TRES categorias (despesas, mercadorias, retiradas). Escolher uma mente sobre as
+     outras duas; misturar as tres num gradiente inventa uma setima cor que a paleta nao tem. As
+     tres ja aparecem onde sao verdade — no `--item-cor` de cada item.
+     Configuracao nao tem categoria em lugar nenhum do sistema (67 §3).
+     "Geral" e uma SEXTA faixa que o menu pode renderizar sem estar em SECOES_MENU: e o balde de
+     sobra do `agruparTelasMenu` (menu.ts:140) para tela permitida que nao caiu em secao nenhuma.
+     Fica no neutro porque nao e secao desenhada, e sim rede de seguranca.
+
+   O DESEQUILIBRIO SE RESOLVE POR FORMA, nao por cor: a marca tem o MESMO tamanho, a MESMA posicao
+   e o MESMO raio nas cinco secoes. So a tinta muda. Assim o ritmo da coluna e igual para todas, e a
+   cor vira informacao a mais para quem a tem — nunca o que segura a leitura. Uma secao sem cor nao
+   parece inacabada; parece uma secao sem cor.
+
+   A cor NAO carrega significado sozinha: o rotulo em texto esta sempre do lado (WCAG 1.4.1). A
+   marca e reforco, e por isso 3px de largura bastam e nao ha exigencia de contraste sobre ela.
+
+   O valor chega por `--grupo-cor`, custom property posta pelo Vue (AppShell e AppAtalhosTelas) a
+   partir do TOKEN `--cat-*-tinta` — nunca do hex do modulo. Com hex a marca ficaria com a cor do
+   tema claro tambem no escuro; foi o defeito medido no VIS-E2a. O token e redefinido no bloco
+   escuro, entao a inversao de tema vem de graca.
+
+   O neutro e `--cx-ink-soft` a 40%: o mesmo token que `--marca-tinta-suave` ja aliasa (linha 788),
+   entao sidebar e conteudo usam a mesma tinta sem duas fontes.
+
+   NO RAIL (769-1024px) nada muda: `.padaria-sidebar.rail .sidebar-group-label` e `display: none`
+   (linha 863, 3 classes) e ganha do seletor de 1 classe daqui. O rotulo continua escondido e o
+   `::before` junto — nao existe faixa recolhida nova, porque nao existia rotulo recolhido.
+   =========================================================================================== */
+
+/* Mesma forma nos dois lugares. `flex: none` porque o rotulo do menu pode quebrar em duas linhas
+   no drawer estreito, e a marca nao pode encolher junto. */
+.sidebar-group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+}
+
+.sidebar-group-label::before {
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: var(--cx-r-pill);
+  background: var(--grupo-cor, color-mix(in srgb, var(--cx-ink-soft) 40%, transparent));
+  content: "";
+}
+/* ===================== FIM VIS-E6g ===================== */
+
+/* ===================== INICIO VIS-E6e — UMA ESCALA SO DE BOTAO, E O BLOCO NO TAMANHO CERTO (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   1) O BOTAO. O defeito e consequencia do meu proprio VIS-04, e o comentario dele confessa sem
+   perceber: "cresce a area clicavel, nao o desenho: fonte e padding seguem os do Vuetify". Isso
+   estava certo para ALVO DE TOQUE e errado como ESCALA — a caixa subiu para 40/44px e o conteudo
+   ficou onde estava. Medido a 1440x900:
+
+     "Novo cadastro"        (size-small,   elevated)  caixa 44px  texto 12px  padding 12px
+     "Importar por periodo" (size-default, elevated)  caixa 44px  texto 14px  padding 16px
+
+   Os dois sao a acao primaria da sua tela e tem a MESMA altura, com tipo e respiro diferentes. O
+   de 12px flutua dentro de uma caixa grande demais para ele — e literalmente "botao do tamanho
+   errado": a caixa cresceu, a letra nao. Mesma coisa em "Ir para o caixa" (40px/12px) e em
+   "Importar" (outlined, 40px/12px).
+
+   A regra: BOTAO COM CAIXA VISIVEL usa tipo e respiro a altura da caixa que o VIS-04/04b lhe deu.
+   `text` fica de fora porque nao tem caixa — nele o sub-preenchimento e invisivel, e mexer ali
+   mudaria 20 botoes por tela sem ganho.
+   `.row-actions` fica de fora de proposito: e a acao densa DENTRO da linha da tabela, onde 12px e
+   a densidade certa e crescer a fonte alargaria a coluna. Densidade menor ali e decisao, nao
+   descuido — e nao ha uma escala unica que sirva a um toolbar e a uma celula ao mesmo tempo.
+   `.v-btn--icon` fica de fora porque nao tem texto para escalar.
+
+   2) O BLOCO DO PAINEL. Medido: 135x135 com icone de 40px, sete por linha em 1440. Grande demais
+   para um atalho — o bloco competia com o conteudo em vez de indexa-lo. Vai para `minmax(112px)`,
+   que a 1440 rende 116px de bloco e OITO por linha (a grade tem 1041px uteis: (1041+16)/(112+16)
+   = 8,2). O pedido falava em "~9 por linha"; nove exigiria bloco de 101px, e ai o rotulo de duas
+   linhas comeca a cortar. Fica o numero que foi pedido explicitamente — 112 — e o registro de que
+   a consequencia real e oito, nao nove.
+   O icone acompanha: 40 -> 32px. Sem isso o bloco encolhe e o icone nao, e a moldura aperta.
+   O <=768 fica como esta (104px): ja estava dimensionado para o celular e encolher junto quebraria
+   a unica largura em que a grade ja cabia bem.
+
+   3) O TOPO DA COLUNA, NO LUGAR. Nada muda de posicao: o "+ NOVO" continua onde estava, o card do
+   caixa embaixo dele, e "IR PARA O CAIXA" continua existindo. O que muda e o respiro.
+   O texto do card computava 16px — o unico corpo de 16px do sistema, contra `--cx-fs-body` de 14px
+   em todo o resto. Nao e enfase: e o default do navegador nunca declarado. Passa a 14px, o card
+   perde altura por consequencia e nao por corte.
+   O "+ NOVO" NAO encolhe: medido, ele ja esta em 44px/14px/600, porque o VIS-04 (dois seletores de
+   classe) ja vencia o `min-height: 46px` e o `font-size: 15px` de `.sidebar-new-button` (um
+   seletor). Ele ja estava na escala; quem estava fora eram os outros.
+   ============================================================================================== */
+
+/* 1. Tipo e respiro a altura da caixa. Tres classes para ganhar do VIS-04, que ja usa duas.
+   `tonal` entra junto: "IR PARA O CAIXA" e tonal e sofria o mesmo (caixa 40px, texto 12px). */
+.v-btn.v-btn--variant-flat:not(.v-btn--icon),
+.v-btn.v-btn--variant-elevated:not(.v-btn--icon),
+.v-btn.v-btn--variant-tonal:not(.v-btn--icon),
+.v-btn.v-btn--variant-outlined:not(.v-btn--icon) {
+  padding-inline: var(--cx-sp-4);
+  font-size: var(--cx-fs-body);
+}
+/* A celula da tabela mantem a densidade dela. Vem DEPOIS para vencer por ordem, ja que empata em
+   especificidade com a regra de cima. */
+.row-actions .v-btn.v-btn--variant-flat,
+.row-actions .v-btn.v-btn--variant-elevated,
+.row-actions .v-btn.v-btn--variant-tonal,
+.row-actions .v-btn.v-btn--variant-outlined {
+  padding-inline: var(--cx-sp-3);
+  font-size: var(--cx-fs-caption);
+}
+
+/* 2. O bloco do painel para de competir com o conteudo.
+   ESCOPADO em `width > 768px`, e a medicao e que mandou. Sem o escopo esta regra vem DEPOIS do
+   `@media (width <= 768px)` do VIS-E2a com a MESMA especificidade e ganha por ordem — o celular
+   herdava o minmax de 112 no lugar do de 104 e caia de tres colunas para DUAS, com o bloco indo a
+   165px. Encolher o bloco no desktop engordava ele no celular. E a mesma armadilha que o VIS-04b
+   ja tinha descrito neste arquivo; anotada aqui de novo porque descrever nao impediu. */
+/* 3. O card do caixa encolhe POR RESPIRO, no lugar. Nada sai, nada se move: o titulo, a explicacao
+   e o botao continuam os mesmos, na mesma ordem.
+   DUAS tentativas foram apagadas por serem no-op, e ficam registradas para ninguem tentar de novo:
+     a) `font-size` no card — `.caixa-title` (14px) e `.caixa-meta` (12px) declaram o proprio
+        tamanho, entao a heranca nunca chega ao texto. 147px antes, 147px depois.
+     b) `margin-top` em `.caixa-card .caixa-edit` para baixar os 16px do `mt-4` — dois seletores de
+        classe contra um deveria vencer, mas os utilitarios do Vuetify sao `!important`. Derrubar
+        aquele 16 exigiria `!important` NOVO, e esta frente nao abre essa porta por 4px.
+   Ficam as duas declaracoes que movem numero de verdade: 2px do padding do topo e 2px da margem do
+   texto. Medido: o primeiro item do menu sobe de 349 para 345px. Quatro pixels — pequeno, e e o que
+   da para tirar sem mover nada de lugar nem cortar conteudo. Registro o tamanho real do ganho em
+   vez de descreve-lo como se fosse maior. */
+.caixa-card {
+  padding: var(--cx-sp-3);
+}
+.caixa-card .caixa-meta {
+  margin-top: var(--cx-sp-1);
+}
+/* ===================== FIM VIS-E6e ===================== */
+
+/* ===================== INICIO VIS-E6k — ALVO DE TOQUE DO ITEM DE MENU (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Achado da Etapa 6 pela diretriz de interface: em 390px os itens do menu mediam 42px de altura —
+   36 alvos abaixo dos 44px que o 67 §9 e o §13.4 exigem em tela de toque. Passa em WCAG 2.2 AA
+   (2.5.8 pede 24x24) e falha no piso do proprio projeto por 2px.
+
+   NAO SE MEXE na linha 481. Os 42px de la sao o valor BASE e estao certos no desktop, onde o
+   minimo geral do 67 §9 e 40. O que faltava era so o piso do mobile.
+
+   ANTES DE ESCREVER, a cascata inteira de `.sidebar-item`, para nao repetir o SHELL-02 (piso que
+   nunca encosta):
+     481  `.sidebar-item`                    min-height 42px + padding 10px 14px  <- o que vale
+     945  `.sidebar-item`                    so cor, fonte, raio e transicao — NAO toca altura
+     528  `.padaria-sidebar.rail .sidebar-item`  so grid e padding lateral (rail, 769-1024)
+   O conteudo mede 42px (icone 21 + linha de texto ~22 + 20 de padding), ou seja, esta ABAIXO do
+   piso novo — entao 44 morde de verdade. E a diferenca para o SHELL-02, onde o elemento ja tinha
+   48px e o piso de 44 nunca encostava.
+
+   Duas classes contra a uma da linha 481: ganha por especificidade, independente de ordem.
+   `.shell-mobills` esta sempre na casca (AppShell: `<v-layout class="padaria-shell shell-mobills">`),
+   e a linha 1762 ja usa este mesmo par de seletores — entao o alcance esta provado no arquivo.
+   ============================================================================================== */
+@media (width <= 768px) {
+  .shell-mobills .sidebar-item {
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-E6k ===================== */
+
+/* ===================== INICIO VIS-E7c — GRUPOS DO MENU ABREM E FECHAM (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O rotulo do grupo (ENTRADAS, SAIDAS...) era `<div>` decorativa. Vira gatilho. O mecanismo NAO e
+   inventado: e o mesmo que a categoria "Lancamentos" ja usa desde o 17/D6 — altura animada por
+   `grid-template-rows: 0fr -> 1fr`, `--cx-dur-2`, chevron que gira. O 68 registra "grupos com
+   altura animada" na camada de acabamento.
+
+   TRES ARMADILHAS DO PADRAO, mapeadas antes de escrever:
+
+   1. A saida da ordem de Tab e 100% CSS. A categoria faz isso na linha 2169 com
+      `visibility: hidden` + `transition: visibility 0s linear var(--cx-dur-2)` — o delay igual a
+      duracao derruba a visibilidade DEPOIS do colapso, senao o conteudo some antes de encolher.
+      Sem replicar isso, os itens do grupo fechado continuam focaveis com altura zero: defeito de
+      teclado que nao aparece na tela.
+
+   2. `.sidebar-group` e `flex-direction: column; gap: 3px` (linha 1063). Ao envolver os itens num
+      wrap, esse gap passa a valer entre o GATILHO e o WRAP, e o espacamento entre itens some. Por
+      isso o `.sidebar-grupo-itens` reconstroi o `gap: 3px` por dentro.
+
+   3. O rotulo e `display: none` no rail (linha 863). Se o wrap dependesse so da classe `aberto`, um
+      grupo fechado ficaria fechado no rail SEM gatilho para reabrir — o usuario perderia telas sem
+      ter como recuperar. No rail os grupos ficam SEMPRE abertos, como hoje.
+
+   ALVO DE TOQUE: o rotulo media 25px. Como `<div>` isso era irrelevante; como controle, o 67 §9
+   exige 40px (44 no mobile). Ele cresce, e para o menu nao engordar por causa disso o respiro ENTRE
+   grupos cai de 12px para `--cx-sp-1`. A conta e o ganho medido estao no relatorio.
+
+   REDUCED-MOTION: o reset global (linha 2337) ja zera duracao e delay, e e o suficiente. O
+   `rotate(90deg)` do chevron NAO entra na lista de excecoes de `transform: none` — de proposito,
+   e pelo mesmo motivo que o chevron da categoria tambem nao entra: ali o transform E O ESTADO
+   ABERTO, nao decoracao. Neutraliza-lo deixaria o chevron apontando para o lado errado com o grupo
+   aberto, e quem usa reduced-motion perderia a unica pista visual. O aviso do 67 §7 vale para
+   transform de hover, que e ruido; nao para transform que carrega significado.
+   ============================================================================================== */
+
+/* 1. O rotulo vira controle sem mudar de aparencia. As regras de tipo, cor e maiuscula continuam
+      vindo da linha 1071; aqui so entra o que um `<button>` precisa para nao parecer botao. */
+.sidebar-group-label {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar-group-texto {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-group-label:hover {
+  color: var(--marca-tinta);
+}
+/* O respiro entre grupos encolhe porque o gatilho cresceu: o proprio cabecalho ja separa. */
+.sidebar-group + .sidebar-group {
+  margin-top: var(--cx-sp-1);
+}
+
+/* 2. O chevron: um so icone que gira, igual ao da categoria. */
+.sidebar-group-chevron {
+  flex: none;
+  color: var(--marca-tinta-suave);
+  transition: transform var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-group-label.aberto .sidebar-group-chevron {
+  transform: rotate(90deg);
+}
+
+/* 3. A altura anima de verdade, sem max-height chutado. */
+.sidebar-grupo-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-grupo-wrap.aberto {
+  grid-template-rows: 1fr;
+}
+.sidebar-grupo-wrap > .sidebar-grupo-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Fechado, os itens saem da ordem do Tab. O delay = duracao faz a visibilidade cair DEPOIS do
+   colapso; sem ele o conteudo sumiria antes de encolher. Copiado do padrao da linha 2169. */
+.sidebar-grupo-wrap:not(.aberto) > .sidebar-grupo-itens {
+  visibility: hidden;
+  transition: visibility 0s linear var(--cx-dur-2);
+}
+
+/* 4. No rail nao ha rotulo, entao nao pode haver sanfona: os grupos ficam sempre abertos. */
+.padaria-sidebar.rail .sidebar-grupo-wrap {
+  grid-template-rows: 1fr;
+}
+.padaria-sidebar.rail .sidebar-grupo-wrap:not(.aberto) > .sidebar-grupo-itens {
+  visibility: visible;
+}
+
+/* 5. Mobile: o alvo sobe para 44px, como o 67 §13.4 pede em tela de toque. */
+@media (width <= 768px) {
+  .shell-mobills .sidebar-group-label {
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-E7c ===================== */
+
+/* ===================== INICIO VIS-E7e — O TETO DO ESTADO VAZIO CONTA A CELULA (27/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Achado enquanto se media o P0 do `.content-frame`, e e defeito SEPARADO daquele — mais antigo, e
+   nao causado por ele. Com a escada de padding ja devolvida, medido a 390px:
+
+     casca visivel (`.responsive-table-shell`)   326px, comeca em x=32
+     celula (`td`)                               comeca em x=33 (1px de borda)
+     recado (`.tabela-vazio`)                    comeca em x=45, largura 326, termina em x=371
+     estouro para fora da casca                  13px
+
+   Os 13px sao `1px de borda + 12px de padding lateral da celula`. O teto do VIS-08 (linha 2757) e
+   `100vw - sp-8 - sp-4`, que desconta o recuo do `.content-frame` (12x2) e o padding do card
+   (20x2) — mas NAO desconta o padding da propria celula onde o recado vive. A conta sempre esteve
+   incompleta: quando o VIS-08 nasceu a celula tinha 16px e o estouro era de 17px; o VIS-E6d baixou
+   o padding para 12px e o estouro caiu para 13 sem que ninguem percebesse a causa.
+
+   Aqui entra so o `max-width` corrigido, e NAO uma edicao do bloco VIS-08 — ele continua inteiro e
+   revertivel por delecao, como manda o 67 §13.8-2. `--cx-sp-6` e exatamente os 12px de cada lado da
+   celula. Os 2px das bordas ficam de fora de proposito: nao ha token de 1px e inventar um numero
+   solto aqui seria trocar um acoplamento por outro.
+
+   A divida de fundo continua registrada no proprio VIS-08: a saida definitiva e
+   `container-type: inline-size` na casca com `100cqi` aqui, que dispensa reconstruir margem por
+   margem. Nao entra agora porque impoe contencao a um elemento que TODA tabela usa.
+   ================================================================================================ */
+@media (width <= 768px) {
+  .responsive-table-shell .tabela-vazio {
+    max-width: calc(100vw - var(--cx-sp-8) - var(--cx-sp-4) - var(--cx-sp-6));
+  }
+}
+/* ===================== FIM VIS-E7e ===================== */
+
+/* ===================== INICIO VIS-E7h — O TOPO DA SIDEBAR ENCOLHE (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O topo comia 345px antes do primeiro item do menu, medido a 1440. As parcelas, medidas e nao
+   estimadas: logo-row 54 · "+ NOVO" 44 (+10 de margem) · card do caixa 143.
+
+   O "+ NOVO" NAO E TOCADO: medido em 44px/14px/600, ja esta na escala unica do VIS-E6e. Bloco que
+   nao muda nada e divida.
+
+   1. O LOGO DEIXA DE SER BOTAO. Ele era o gatilho de recolher/expandir — um alvo de 300px de
+      largura para uma acao que nao se anuncia. Vira imagem, e o controle vira um chevron proprio,
+      com `aria-expanded`, que diz o que faz.
+
+      O CHEVRON SO EXISTE ACIMA DE 1024px, e a razao esta no proprio codigo: de 769 a 1024 o
+      `AppShell.vue` faz `drawerRecolhido.value = mediaRail.matches`, entao o rail e imposto pelo
+      viewport e o proximo resize desfaz qualquer alternancia. Controle que nao controla e
+      decoracao. Em <=768px nao existe recolher — a gaveta abre e fecha.
+
+      A ARMADILHA: `rail` fica `true` nos DOIS casos — o rail automatico de 769-1024 e o rail que o
+      usuario escolheu acima de 1024. Condicionar o chevron a `!rail` o faria sumir justamente
+      quando ele e o unico jeito de expandir de volta. Por isso o sinal e `podeRecolher`, que nasce
+      de `!mobile && !mediaRail.matches` no AppShell, e nao de `rail`.
+
+   2. O ATALHO DO LOGO SAI, e isso tinha um custo escondido. Em <=768px o clique no logo FECHAVA a
+      gaveta. Medido antes de remover: dos tres caminhos de saida, o botao da topbar fica COBERTO
+      pela propria gaveta e o Esc nao fazia nada — sobrava o scrim, e para teclado, nada. Por isso o
+      Esc foi consertado ANTES, no VIS-E7g. Agora sobram dois caminhos independentes do logo.
+
+   3. O ROTULO DE GRUPO vai de 10px para 11px (`--cx-fs-micro`). Ele virou <button> no VIS-E7c: um
+      controle em 10px com `letter-spacing` de 1.4px e pequeno demais para o que ele agora faz.
+   ================================================================================================ */
+
+/* 1. A linha do logo nao e mais controle: some o cursor, o fundo de hover e o alvo de foco. */
+.sidebar-logo-row {
+  justify-content: center;
+  gap: var(--cx-sp-2);
+  cursor: default;
+}
+.sidebar-logo-row:hover {
+  background: none;
+}
+
+/* 2. O chevron, na borda direita. `flex: none` para nao encolher quando o logo cresce. */
+.sidebar-recolher {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--cx-r-sm);
+  background: none;
+  color: var(--marca-tinta-suave);
+  cursor: pointer;
+  transition:
+    background var(--cx-dur-1) var(--cx-ease),
+    transform var(--cx-dur-2) var(--cx-ease);
+}
+.sidebar-recolher:hover {
+  background: var(--cx-hover);
+  color: var(--marca-tinta);
+}
+/* Recolhido, o chevron aponta para o outro lado: o mesmo icone girando, como o da categoria. Aqui
+   o `transform` E O ESTADO, entao ele fica fora da lista de excecoes do reduced-motion pelo mesmo
+   criterio do VIS-E7c — neutraliza-lo apontaria a seta para o lado errado. */
+.sidebar-recolher[aria-expanded="false"] {
+  transform: rotate(180deg);
+}
+
+/* 3. Recolhido acima de 1024px a coluna tem 72px, e logo (52) + chevron (32) nao cabem lado a lado.
+      Nesse estado — e SO nele, que e escolha do usuario — os dois empilham. */
+.padaria-sidebar.rail .sidebar-logo-row {
+  flex-direction: column;
+  gap: var(--cx-sp-1);
+}
+
+/* 4. O rotulo de grupo cresce: virou controle no VIS-E7c e 10px era pequeno demais para isso. */
+.sidebar-group-label {
+  font-size: var(--cx-fs-micro);
+}
+/* ===================== FIM VIS-E7h ===================== */
+
+/* ===================== INICIO VIS-E8d — BOTAO DE ACAO DEIXA DE SER FAIXA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Marco reprovou o "+ NOVO" e o "IR PARA O CAIXA" duas vezes. A primeira medicao olhou a coisa
+   errada — mediu ALTURA (44px, dentro da escala do 67 §9) e concluiu que estava certo. O problema
+   nunca foi altura. MEDIDO agora, com a sidebar em 300px:
+
+     + NOVO            271px de largura   =  90% da sidebar
+     IR PARA O CAIXA   249px              =  83%
+     Mobills "Novo"    168px em 260px     =  65%     <- a referencia
+
+   90% nao e botao, e faixa. A causa era o atributo `block` do Vuetify (`AppWorkspace.vue:2113`
+   e nos dois botoes do card do caixa), que forca `width: 100%`.
+
+   A LARGURA E DERIVADA, nao inventada: 65% da sidebar. Como o botao nao vive na sidebar e sim
+   dentro de contentores com padding, a conta reconstroi a largura da sidebar a partir do
+   contentor mais o padding que ele tem em volta. Assim, se o padding mudar, a proporcao continua
+   valendo — o numero nao fica cravado.
+
+     .sidebar-actions   fica dentro do `.drawer-shell` (padding sp-3 de cada lado)
+     .caixa-card        fica dentro do `.drawer-shell` E tem padding sp-3 proprio
+
+   ALTURA NAO MUDA. 44px continua sendo o piso do 67 §9, e o 44 do "+ NOVO" ja vinha do VIS-04.
+   =============================================================================================== */
+
+/* 1. A acao primaria: ~65% da sidebar, centralizada. */
+.shell-mobills .sidebar-new-button {
+  width: calc(0.65 * (100% + 2 * var(--cx-sp-3)));
+  justify-self: center;
+}
+
+/* 2. A acao do card do caixa, na mesma proporcao. `display: flex` e a mesma forma que o proprio
+      `.v-btn--block` do Vuetify usa; e o que permite o `margin-inline: auto` centralizar. */
+.shell-mobills .caixa-edit {
+  display: flex;
+  width: calc(0.65 * (100% + 4 * var(--cx-sp-3)));
+  margin-inline: auto;
+}
+/* ===================== FIM VIS-E8d ===================== */
+
+/* ===================== INICIO VIS-E9a — A DASHBOARD DEIXA DE ESPELHAR O MENU (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O painel listava TODAS as telas permitidas, agrupadas por secao — 32 blocos quadrados, com
+   sanfona. Era o menu duas vezes na mesma pagina, e a D-HOME decidiu em 26/08 que nao deveria ser
+   assim. Agora sao quatro faixas, e a ultima tem CINCO atalhos.
+
+   anchor: card de numero do Mobills (Temp/mobills.txt §06): card com raio grande e elevacao 1,
+   disco chapado de 52px com icone branco de 24 dentro, rotulo em cima, valor embaixo, razao
+   valor/rotulo ~1,4x, e o rotulo da SECAO fora do card.
+
+   AS DUAS REGRAS QUE VALE COPIAR INTEIRAS:
+
+   1. O VALOR E NEUTRO; a cor vive so no DISCO. Quatro cards lado a lado com quatro cores fortes
+      continuam legiveis porque o olho le quatro numeros da mesma cor e usa o disco como etiqueta.
+      Numero colorido em card e a cor competindo com o dado.
+   2. A hierarquia vem de PESO, nao de salto de tamanho: `--cx-fs-title` (20px) sobre
+      `--cx-fs-body` (14px) da 1,43x. Nao e o "numero gigante" que a product-ui-design marca como
+      cara de IA — e o proprio Mobills nao usa: 22,4 sobre 16.
+
+   OS DOIS ERROS DELES QUE NAO SE REPETEM AQUI, e o relatorio nomeia os dois:
+   - "o circulo troca de lado" entre telas. Aqui o disco fica SEMPRE a esquerda, em todas as faixas.
+   - "alguns cards tem um › e outros nao, sem regra visivel". Aqui TODO card termina em "Ver mais".
+
+   O DISCO usa a variante `faixa`, nao a `base`: `faixa` e a unica escolhida POR MEDICAO para
+   receber branco por cima. A `base` reprova (entradas da 2,94:1 com branco, abaixo dos 3:1 que o
+   67 §11 pede para objeto grafico).
+
+   CARD SEM DADO (`valor: null`) segue a variante "dentro de card" do §05 do relatorio: travessao e
+   a saida do card, SEM acao propria. O §05 separa "nao existe ainda" — que ganha botao — de "nao
+   ha nada neste recorte" — que nao ganha. Um numero que o painel ainda nao le e o segundo caso.
+
+   GRADE: quatro por linha, duas em 900, uma em 480. As faixas de 3 e de 2 cards usam a MESMA
+   grade de 4 colunas, entao o card tem a mesma largura em todas as faixas e as reguas se alinham
+   verticalmente. Card que muda de largura de faixa para faixa e o que faz a pagina parecer
+   remendada.
+   ================================================================================================ */
+
+.painel-faixas {
+  display: grid;
+  gap: var(--cx-sp-7);
+}
+.faixa {
+  display: grid;
+  gap: var(--cx-sp-3);
+}
+/* O rotulo da secao fica FORA do card: ele orienta, nao compete. */
+.faixa-titulo {
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--cx-tracking-wide);
+  text-transform: uppercase;
+}
+.faixa-grade {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--cx-sp-4);
+}
+
+/* O card. UMA so forma de agrupamento — superficie + elevacao —, sem borda por cima (67 §6). */
+.metrica-card {
+  display: grid;
+  gap: var(--cx-sp-1);
+  padding: var(--cx-sp-5) var(--cx-sp-5) var(--cx-sp-3);
+  border-radius: var(--cx-r-lg);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+}
+/* Escuro separa por luminancia + contorno; claro por elevacao (D-06). */
+:root[data-theme="dark"] .metrica-card {
+  border: 1px solid var(--cx-line-soft);
+}
+
+.metrica-disco {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--cx-sp-2);
+  place-items: center;
+  border-radius: var(--cx-r-pill);
+  background: var(--disco-cor, var(--cx-ink-soft));
+  color: var(--cx-brand-on);
+}
+.metrica-rotulo {
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-body);
+  font-weight: 500;
+}
+.metrica-valor {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-title);
+  font-weight: 600;
+}
+.metrica-valor.vazio {
+  color: var(--cx-ink-soft);
+}
+/* "Ver mais" no rodape, separado por regua — o card termina numa saida, nao no numero. */
+.metrica-mais {
+  margin-top: var(--cx-sp-3);
+  padding-top: var(--cx-sp-2);
+  border-top: 1px solid var(--cx-line-soft);
+  color: var(--cx-brand-text);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* O hover NAO troca de cor, e isso e conserto de um defeito meu do VIS-E9a: o estado normal usa
+   `--cx-brand-text`, que CLAREIA no escuro, e o hover usava `--cx-brand-strong`, que nao tem
+   contraparte escura. O link ficava claro e ESCURECIA ao passar o mouse — o hover invertia o
+   sinal, justamente no tema em que ele fica quase invisivel (1,24:1). Sublinhado funciona nos dois
+   temas e nao depende de nenhum token novo. */
+.metrica-mais:hover {
+  text-decoration: underline;
+}
+
+/* FAIXA 4: cinco atalhos em pilula. Nao e card — atalho nao carrega dado, entao nao imita um. */
+.atalhos-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cx-sp-3);
+}
+.atalho-pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-height: 44px;
+  padding: var(--cx-sp-2) var(--cx-sp-4) var(--cx-sp-2) var(--cx-sp-2);
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-surface);
+  box-shadow: var(--cx-e-1);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 600;
+  text-decoration: none;
+  transition: box-shadow var(--cx-dur-2) var(--cx-ease);
+}
+:root[data-theme="dark"] .atalho-pilula {
+  border: 1px solid var(--cx-line-soft);
+}
+.atalho-pilula:hover {
+  box-shadow: var(--cx-e-2);
+}
+.atalho-disco {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--cx-r-pill);
+  background: var(--disco-cor, var(--cx-ink-soft));
+  color: var(--cx-brand-on);
+}
+
+@media (width <= 900px) {
+  .faixa-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width <= 480px) {
+  .faixa-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* ===================== FIM VIS-E9a ===================== */
+
+/* Atalho bloqueado: continua visivel, marcado, com o motivo no tooltip — igual ao menu. */
+.atalho-pilula.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.35);
+}
+
+/* ===================== INICIO VIS-F2 — O AVISO DE CAIXA SOBE PARA A TOPBAR (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Decisao do Marco, registrada como dele: o aviso de caixa sai do topo da sidebar e vai para a
+   topbar. A esquerda da topbar, vazia desde que o VIS-10 tirou o nome da tela de la, recebe
+   relogio + data + saudacao. O topo da sidebar fica so com logo, chevron e "+ NOVO".
+
+   ESTE BLOCO SUBSTITUI O VIS-E9b, que foi APAGADO no mesmo commit em vez de ficar ao lado deste.
+   As classes dele (`.caixa-linha`, `.caixa-ponto`, `.caixa-estado`, `.caixa-ir`) perderam a
+   marcacao quando o aviso mudou de lugar, e CSS sem marcacao e divida (16, regra-mae). Pelo mesmo
+   motivo o `.caixa-edit` do VIS-E8d ja estava morto desde o E9b e continua la — nao o toco aqui
+   porque apagar meio bloco datado quebraria a promessa de reversao dele; fica anotado.
+
+   ORDEM DE RECOLHIMENTO, definida por Marco e implementada nos tres @media do fim:
+     1o some a SAUDACAO   (gentileza)
+     2o some a DATA       (se descobre em qualquer outro lugar)
+     3o some o TEXTO do caixa, sobrando o icone com nome acessivel
+   O RELOGIO e o BOTAO DO CAIXA sao os ultimos, porque estado operacional bloqueante vale mais que
+   gentileza. Os cortes usam 1024 e 768, que sao a mesma escada do 67 §13.1; o terceiro precisou de
+   um numero proprio porque a escada nao tem degrau entre 768 e 0.
+
+   O VIDRO E O GRADIENTE, os dois, como Marco pediu: a pilula e `--cx-chrome` com
+   `--cx-chrome-blur` (o mesmo material da sidebar e da topbar, e a topbar E chrome, entao o 67 §10
+   continua valendo), e por dentro dela um `::before` pinta `--cx-brand-gradiente`. O gradiente
+   precisa de pseudo-elemento porque nao da para esmaecer um token de gradiente numa camada de
+   `background` sem opacidade propria; com `opacity` no `::before`, o vidro le por baixo dele.
+
+   `isolation: isolate` NAO E ENFEITE: sem ele o `z-index: -1` do `::before` escapa para o contexto
+   de empilhamento de cima e o gradiente vai parar ATRAS do fundo da topbar, sumindo. Com o
+   isolamento, ele pinta acima do fundo da propria pilula e abaixo do texto, que e onde deve estar.
+   ============================================================================================== */
+
+/* ---- 1. Relogio, data e saudacao ---- */
+.shell-mobills .topbar-relogio {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cx-sp-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+  white-space: nowrap;
+}
+/* A hora e o unico dado que nunca some, entao e ela que carrega o peso. `tabular-nums` para o
+   texto nao dancar de largura quando os digitos trocam a cada minuto. */
+.shell-mobills .topbar-hora {
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-body);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* `Intl` em pt-BR devolve "quinta-feira, 28 de agosto" em minuscula. */
+.shell-mobills .topbar-data::first-letter {
+  text-transform: uppercase;
+}
+
+/* ---- 2. O aviso de caixa ---- */
+.shell-mobills .topbar-caixa {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cx-sp-2);
+  min-height: 44px;
+  padding-inline: var(--cx-sp-3);
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--cx-r-pill);
+  background: var(--cx-chrome);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+  color: var(--cx-ink);
+  font-size: var(--cx-fs-caption);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.shell-mobills .topbar-caixa::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--cx-brand-gradiente);
+  opacity: 0.18;
+}
+/* Os quatro estados do 67 §9: repouso 0.18, hover 0.30, pressionado 0.42, e o foco vem do
+   `:focus-visible` global de `main.css:2000`. Sem `transform` em nenhum deles, entao este bloco nao
+   precisa entrar na lista de excecoes do `prefers-reduced-motion`. */
+.shell-mobills .topbar-caixa:hover::before {
+  opacity: 0.3;
+}
+.shell-mobills .topbar-caixa:active::before {
+  opacity: 0.42;
+}
+/* Fallback solido obrigatorio, como em todo uso de vidro neste arquivo. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-mobills .topbar-caixa {
+    background: var(--cx-surface);
+  }
+}
+
+/* ---- 3. A escada de recolhimento ---- */
+@media (width <= 1024px) {
+  .shell-mobills .topbar-saudacao {
+    display: none;
+  }
+}
+@media (width <= 768px) {
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+}
+@media (width <= 560px) {
+  .shell-mobills .topbar-caixa-texto {
+    display: none;
+  }
+  /* Sem rotulo a pilula encolheria para menos que o alvo minimo; o quadrado de 44 e o piso. */
+  .shell-mobills .topbar-caixa {
+    justify-content: center;
+    min-width: 44px;
+    padding-inline: var(--cx-sp-2);
+  }
+}
+/* ===================== FIM VIS-F2 ===================== */
+
+/* ===================== INICIO VIS-F3 — O BRILHO DA VIVID_GLASS VOLTA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Marco aprovou de novo a referencia `vivid_glass_dashboard_dark` e pediu o tratamento por cima do
+   que ja existe, LEVE. Isto NAO e invencao nova: o efeito ja existiu como VIS-E5b/E5d e morreu por
+   ARRASTO, nao por defeito — os seletores `.atalho-bloco*` perderam a marcacao quando a dashboard
+   deixou de espelhar o menu (b3d20dc), e o CSS foi varrido junto. Nenhuma linha daquele commit
+   critica o brilho. Aqui ele volta, na marcacao de hoje.
+
+   GEOMETRIA E FORCA COPIADAS DO VIS-E6d, que esta vivo em `main.css:2997`: `90% 120% at 100% 0%`,
+   `--cx-brilho-forca`, morrendo em `transparent 60%`. O E5b usava `120% 100%`; manter as duas seria
+   duas geometrias para o mesmo efeito no mesmo sistema. Vence a que ja esta em producao.
+
+   `background-image` E NAO PSEUDO-ELEMENTO: a imagem pinta acima do `background-color` e abaixo do
+   conteudo sem elemento novo, sem `z-index` e sem `position`. Foi assim no E5b e continua sendo o
+   caminho mais barato.
+
+   TODO CARD BRILHA; MUDA SO O MATIZ. Isso e a licao do VIS-E5d, que nasceu de um defeito visto em
+   tela: com so as telas de categoria brilhando, a grade virava remendo. Aqui uma regra so resolve
+   os dois casos — o `var(--brilho-cor, var(--cx-ink-soft))` cai no cinza quando a categoria nao
+   existe, entao neutro tambem brilha, e sem regra separada.
+
+   O 67 §3 continua de pe: cinza nao e cor de categoria, e a ausencia dela. Nenhum bloco neutro
+   passou a fingir que tem uma, e a lista de quem tem cor continua sendo so o `CATEGORIA_POR_TELA`.
+
+   O QUE NAO MUDA, porque ja veio medido do Mobills §06: disco de 52px na variante `-faixa`, rotulo
+   14 e valor 20 (1,43x), valor NEUTRO, cor so no disco. Este bloco nao encosta em nada disso.
+   ============================================================================================== */
+.metrica-card,
+.atalho-pilula {
+  background-image: radial-gradient(
+    90% 120% at 100% 0%,
+    color-mix(in srgb, var(--brilho-cor, var(--cx-ink-soft)) var(--cx-brilho-forca), transparent) 0%,
+    transparent 60%
+  );
+}
+
+/* A FAIXA DE GRUPO DO MENU NAO GANHA BRILHO, e isto e uma reversao pedida por Marco depois de ver
+   em tela: no menu o gradiente fica so nos BOTOES ("+ NOVO", e o aviso de caixa que subiu para a
+   topbar), e nao nas faixas. A faixa e larga e ocupa a coluna inteira, entao o brilho nela nao
+   lia como luz num controle — lia como fundo pintado atras do menu.
+   A barrinha de categoria do `::before` (VIS-E6g) CONTINUA: ela e quem diz a que grupo a secao
+   pertence, e ela nunca foi gradiente. A identidade de cor do menu nao se perdeu.
+
+   O ROTULO CRESCE de `--cx-fs-micro` (11px) para `--cx-fs-caption` (12px), tambem a pedido. Um
+   degrau da escala, nao um numero novo: o VIS-E7h ja o tinha subido de 10 para 11 quando ele virou
+   controle, e este e o proximo degrau existente. */
+.sidebar-group-label {
+  font-size: var(--cx-fs-caption);
+}
+/* ===================== FIM VIS-F3 ===================== */
+
+/* ===================== INICIO VIS-F6 — AS TRES TELAS DE ENTRADA VIRAM UMA FAMILIA (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   `forgot-password` e `reset-password` recebem o mesmo tratamento do login. Ate hoje elas nao
+   tinham UMA LINHA de CSS proprio: herdavam o `v-card` de fabrica do Vuetify, com a sombra Material
+   de tres camadas de preto — que sobre o canvas escuro nao levanta nada. Eram a porta dos fundos de
+   um sistema cuja porta da frente acabou de ser refeita.
+
+   AS CLASSES SAO COMPARTILHADAS, e isso e o ponto: `.tela-entrada` e `.cartao-entrada` valem para
+   as tres. O fundo animado saiu do `login.vue` para o `AppFundoEntrada.vue` pela mesma razao —
+   manter tres copias de duzentas linhas de CSS e de um laco de `requestAnimationFrame` seria
+   garantir que elas divergissem no primeiro ajuste.
+
+   `isolation: isolate` NAO E ENFEITE. Medido: entre o `html` e o cartao NENHUM elemento cria
+   contexto de empilhamento (`.v-application` e `.v-main` sao `static`; o `.v-application__wrap` e
+   `relative` com `z-index: auto`, que nao cria). Sem isolar, o fundo com `z-index` negativo sobe
+   ate a raiz e e pintado ABAIXO do fundo da propria tela — some por completo.
+   ================================================================================================== */
+.tela-entrada {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+}
+
+/* O VIDRO — EXCECAO REGISTRADA AO 67 §10 (D-LOGIN-VIDRO, 28/08/2026), que diz "nunca em card de
+   conteudo e nunca atras de texto de leitura". A excecao e do Marco e vale so para estas tres.
+
+   O QUE A JUSTIFICA, e nao e "ficou bonito": a regra existe porque vidro atras de texto de leitura
+   poe o contraste a merce de um fundo que o sistema NAO CONTROLA — conteudo rolando, tabela,
+   imagem. Aqui o fundo e conhecido, e nosso e nao rola: sao sete manchas cuja cor, posicao e forca
+   nos escolhemos. O risco que a regra previne nao existe nestas telas.
+
+   A OPACIDADE FOI MEDIDA em 24 INSTANTES da animacao ao longo de 120s, porque as manchas se movem e
+   um quadro so nao representa o pior caso. Pior instante, minimo 4,5:1:
+
+                     claro          escuro
+         70%          5,11           7,00
+         78%   <--    5,30           7,15
+         86%          5,50           7,25
+
+   Ficou 78%, que e o "glass mais leve" pedido, com 0,8 de folga no claro. 70% fica registrado como
+   piso conhecido. A ORDEM DA CORRECAO E FIXA: se reprovar, SOBE a opacidade do vidro; nunca clareia
+   o texto, que conserta o numero e estraga a hierarquia. */
+.cartao-entrada {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  backdrop-filter: var(--cx-chrome-blur);
+  -webkit-backdrop-filter: var(--cx-chrome-blur);
+}
+
+/* Fallback solido obrigatorio, como em todo uso de vidro neste arquivo. Sem suporte a
+   `backdrop-filter` o cartao NAO pode ficar semitransparente: as manchas apareceriam cruas e
+   nitidas atras do texto, que e exatamente o que o 67 §10 previne. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cartao-entrada {
+    background: var(--cx-surface);
+  }
+}
+
+/* D-06 nas telas de entrada. A regra existe desde o VIS-02 mas mora escopada em `.content-frame`
+   (main.css:2509), e nenhuma destas tres esta dentro dele — entao no escuro o cartao ficava so com
+   `--cx-surface` sobre `--cx-canvas`, medido em 1,12, e sem sombra util, porque sombra preta sobre
+   #0f1318 nao levanta nada. Aqui a separacao volta a existir pelo contorno, como manda a D-06. */
+:root[data-theme="dark"] .cartao-entrada {
+  border: 1px solid var(--cx-line-soft);
+}
+
+/* O `v-card` do Vuetify chega com `background: rgb(var(--v-theme-surface))` opaco e com a sombra
+   Material de tres camadas de preto. Os dois precisam sair para o vidro aparecer — e um seletor de
+   duas classes ganha do de uma sem `!important`. */
+.cartao-entrada.v-card {
+  background: color-mix(in srgb, var(--cx-surface) 78%, transparent);
+  box-shadow: var(--cx-e-3);
+}
+/* ===================== FIM VIS-F6 ===================== */
+
+/* ===================== INICIO VIS-F7 — O SIMBOLO ANIMADO (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O simbolo animado entra em DOIS lugares: o rail (52px) e o cartao do login (88px). NAO entra na
+   home: com a sidebar recolhida os dois ficariam na mesma dobra com a mesma animacao, e o do
+   cabecalho nao acrescentava identidade nenhuma. A logo COM TEXTO do menu expandido nao muda — o
+   componente e so o simbolo, e troca-la por ele apagaria a palavra CICLUZ do menu.
+
+   `line-height: 0` no wrapper do rail nao e detalhe: sem ele a caixa de linha do `span` acrescenta
+   alguns pixels abaixo do SVG e o simbolo deixa de ficar centrado na faixa do logo.
+   ========================================================================================== */
+.sidebar-logo-simbolo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+/* ===================== FIM VIS-F7 ===================== */
+
+/* ===================== INICIO VIS-F8 — A LINHA DECORATIVA DO CARD (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Uma linha da serie do card, atras do conteudo, no rodape. E DECORACAO: `aria-hidden` no SVG, sem
+   eixo, sem rotulo e sem escala — ela da a sensacao de movimento do numero, nao o dado. Quem quer o
+   dado clica em "Ver mais". Nao carrega informacao sozinha, entao nao esbarra na WCAG 1.4.1.
+
+   ATRAS DO CONTEUDO SEM `z-index` NA PILHA TODA: o `.metrica-card` ganha `position: relative` e
+   `isolation: isolate`, e a linha vai para `z-index: -1`. O isolamento e o mesmo cuidado do login —
+   sem ele o `z-index` negativo escapa para o contexto de cima e a linha some ATRAS do card.
+
+   `overflow: hidden` porque a linha encosta nas bordas por construcao (a escala e relativa a
+   propria serie, entao o maior valor toca o topo da caixa).
+
+   A COR SAI DE `--brilho-cor`, a MESMA custom property que o brilho do VIS-F3 ja usa, com o mesmo
+   fallback neutro. Duas fontes de cor para o mesmo card divergiriam no primeiro ajuste.
+   A opacidade e baixa de proposito: medido no VIS-F3, o texto do card fica entre 5,01 e 7,48 sobre
+   o brilho; a linha vive ATRAS do texto e nao pode comer essa folga.
+   ================================================================================================ */
+.metrica-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.metrica-linha {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 34px;
+  opacity: 0.28;
+}
+.metrica-linha polyline {
+  fill: none;
+  stroke: var(--brilho-cor, var(--cx-ink-soft));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* `preserveAspectRatio="none"` estica o traco junto com a caixa; sem isto ele engrossaria na
+     horizontal em card largo. */
+  vector-effect: non-scaling-stroke;
+}
+/* ===================== FIM VIS-F8 ===================== */
+
+/* ===================== INICIO VIS-F9 — A LOGO ALTERNA, E O "+" SOBREVIVE AO RAIL (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   1 · A LOGO VIRA ALVO. Ela ja ocupava a linha inteira; o que muda e que agora ha um `<button>` em
+   volta, e botao traz aparencia de fabrica (fundo, borda, padding) que precisa ser zerada. O alvo
+   fica com a altura da propria logo, que ja passa de 44px com folga.
+
+   2 · O "+ NOVO" DEIXA DE SUMIR NO RAIL. A regra historica da linha 519 poe `.sidebar-actions` em
+   `display: none` quando `.padaria-sidebar.rail`, e com isso a ACAO PRIMARIA do sistema nao existia
+   entre 769 e 1024px. Aqui ela e revertida com um seletor mais especifico, sem `!important` e sem
+   tocar no bloco historico: `.padaria-sidebar.rail .drawer-top .sidebar-actions` tem tres classes
+   contra duas, entao ganha por especificidade e nao por ordem.
+
+   O botao encolhe para um quadrado. 44px e o piso do 67 §9, e nao um numero escolhido aqui.
+   ============================================================================================== */
+/* `min-height` porque a MEDICAO pegou: a caixa da logo renderizava 223x38, e o piso do 67 §9 e
+   40px. A altura vinha da imagem escalada, nao de uma regra — e altura que ninguem declarou e
+   altura que ninguem defende. Este alvo so existe acima de 1024px, onde o piso e 40 e nao 44. */
+.sidebar-logo-alvo {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.padaria-sidebar.rail .drawer-top .sidebar-actions {
+  display: flex;
+  justify-content: center;
+}
+.shell-mobills .sidebar-new-button.rail {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+/* ===================== FIM VIS-F9 ===================== */
+
+/* ===================== INICIO VIS-F14 — O TOPO DA SIDEBAR FECHA OS FUROS DE ALVO E DE FEEDBACK (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O `.sidebar-recolher` computava 32x32. Ele nasceu assim no VIS-E7h (`main.css:3419` declara
+   `width: 32px` e `min-height: 32px`), e o bloco de la NAO e tocado aqui — este seletor tem a mesma
+   especificidade e vem depois, entao vence por ordem.
+
+   A REGUA QUE FALHA NAO E A WCAG. O minimo da 2.5.8 e 24x24, e 32 passa nele com folga. O que 32
+   nao cumpre e o piso de 40px do PROPRIO PROJETO, no 67 §9 — e essa e a mesma regra que, meia hora
+   antes neste lote, pegou os 223x38 do `.sidebar-logo-alvo` e obrigou o `min-height: 40px` de la.
+
+   DUAS MEDIDAS, O MESMO PISO, NO MESMO LOTE: consertar uma e deixar a outra e a incoerencia que nao
+   pode subir — ainda mais num merge que adiciona um guardiao ao build. Foi por isso que ele entrou,
+   e nao porque a WCAG exigisse.
+
+   Eu tinha classificado isto como "pre-existente, nao e desta mudanca". Estava errado pela metade:
+   nao veio do F8 nem do F9, mas veio do VIS-E7h, que E ancestral do HEAD e sobe no mesmo merge.
+   Pre-existente em relacao ao commit nao quer dizer pre-existente em relacao ao que a frente entrega.
+   ========================================================================================================= */
+.sidebar-recolher {
+  width: 40px;
+  min-height: 40px;
+}
+
+/* 2 · O FEEDBACK VAI PARA O ALVO, e nao para a faixa inteira.
+   MEDIDO no navegador: passar o mouse na marca acendia `.sidebar-logo-row` INTEIRA (264px,
+   chevron e vao morto incluidos), e o `.sidebar-logo-alvo` — que e o botao de verdade — nao tinha
+   fundo proprio nenhum. Passar o mouse no CHEVRON acendia a faixa junto com ele.
+   Com dois controles vizinhos que fazem a mesma coisa, uma resposta visual so e pior que duas:
+   o alvo mente sobre o proprio tamanho, e nada distingue um do outro. Cada um acende a si.
+   A regra da faixa vem do bloco SHELL, que e congelado — ela nao e editada, e neutralizada aqui
+   com a mesma especificidade e ordem posterior. */
+.shell-mobills .sidebar-logo-row:hover,
+.shell-mobills .sidebar-logo-row:active {
+  background: none;
+  transform: none;
+}
+.shell-mobills button.sidebar-logo-alvo:hover {
+  background: var(--cx-hover);
+}
+.shell-mobills button.sidebar-logo-alvo:active {
+  background: var(--cx-pressed);
+}
+
+/* 3 · MAO SO NO QUE CLICA. Abaixo de 1024px a casca vira `<div role="img">` de proposito, porque
+   recolher nao e escolha do usuario ali — mas o `cursor: pointer` ficava, e tablet com mouse
+   mostrava mao sobre uma marca inerte. O seletor de elemento resolve sem `v-if` no template. */
+.sidebar-logo-alvo {
+  cursor: default;
+}
+button.sidebar-logo-alvo {
+  cursor: pointer;
+  /* O anel do `:focus-visible` global desenhava um retangulo vivo dentro de uma faixa arredondada. */
+  border-radius: var(--cx-r-md);
+}
+/* ===================== FIM VIS-F14 ===================== */
+
+/* ===================== INICIO VIS-F16 — A HOME: RITMO, ALVO E DECORACAO QUE NAO MENTE (28/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Cinco defeitos MEDIDOS na home, e quatro deles sao meus.
+
+   1 · O AR DO TOPO ERA O DOBRO DO DOCUMENTADO. O `main.css:2845` escreve o ritmo pretendido —
+   "cabecalho -> primeiro bloco: --cx-sp-6 (24px)". Medido: 48px. Somavam o `margin-bottom` do
+   `.cabecalho-tela` (24) com o `gap` do `.inicio-painel` (24, que hoje e sp-7/32). Ninguem decidiu
+   48; ele foi o resultado de duas regras que nao se viam.
+   E havia uma DECLARACAO DUPLICADA de `.cabecalho-tela { margin-bottom }` mais adiante no arquivo,
+   identica a primeira. Por vir depois, ela ANULAVA a regra XS de `@media (width <= 600px)` —
+   medido em 390px: 24px, quando a regra manda 20. A duplicata foi apagada e a regra XS voltou a
+   valer. O zero abaixo e ESCOPADO na home: as outras ~25 telas que usam `.cabecalho-tela` nao
+   mudam de ritmo.
+
+   2 · O "VER MAIS" TINHA 27px DE ALVO. O piso do 67 §9 e 40px, 44 no celular. Sao NOVE deles, e
+   sao a unica entrada de cada card — o `<article>` nao e clicavel. Passava na WCAG 2.5.8 (24x24) e
+   reprovava a regua do proprio projeto, que e mais dura.
+
+   3 · A LINHA DECORATIVA ATRAVESSAVA O TEXTO. Defeito que eu introduzi no VIS-F8: 34px ancorados na
+   base, contra um link que vive entre 12 e 39px da base — MEDIDO, 22px dos 27 do link, ou 81,5%
+   dele. A linha passava por cima do "Ver mais" e do fio divisor. Ela encolhe e desce para caber
+   ABAIXO do link, que e onde decoracao deve ficar.
+
+   4 · O DISCO SEM CATEGORIA REPROVAVA NO ESCURO. `caixa` e `contas_pagar` nao estao no
+   `CATEGORIA_POR_TELA`, entao caem no fallback `--cx-ink-soft` com icone BRANCO por cima. Medido:
+   2,22:1 no escuro, contra os 3:1 que o proprio comentario do arquivo exige para objeto grafico.
+   No claro dava 5,81 e passava — por isso ninguem viu.
+   O conserto NAO clareia o icone: troca o par. No escuro o disco neutro passa a ser
+   `--cx-surface-sunken` com o icone em `--cx-ink`, que e a combinacao que o sistema ja usa para
+   "sem cor de categoria" no resto das telas.
+   ========================================================================================================= */
+
+/* 1 · o ar do topo, so na home */
+.inicio-painel > .cabecalho-tela {
+  margin-bottom: 0;
+}
+
+/* 2 · o alvo do "Ver mais" */
+.metrica-mais {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+@media (width <= 768px) {
+  .metrica-mais {
+    min-height: 44px;
+  }
+}
+
+/* 3 · a linha decorativa sobe para ACIMA do divisor, e nao fica na base.
+   So encolher nao resolvia: com o "Ver mais" passando a 40px de alvo, ele ocupa a base do card, e
+   qualquer linha ancorada ali continuava cruzando o texto — medido, 22px de sobreposicao viraram
+   10px, o que e menos errado e nao e certo. Agora ela vive na faixa do VALOR, acima do fio
+   divisor, onde nao ha texto por baixo dela. */
+.metrica-linha {
+  /* MEDIDO no card: o "Ver mais" vai de 12 a 52px da base. A linha comeca onde ele acaba — 54px —
+     e sobe 28. Duas tentativas anteriores erraram por estimativa: `height: 22px` na base deixou
+     10px de cruzamento, e `bottom: 44px` deixou 8. So a geometria medida fecha em zero. */
+  bottom: 54px;
+  height: 28px;
+}
+
+/* 4 · o disco sem categoria no escuro */
+:root[data-theme="dark"] .metrica-card:not([style*="--disco-cor"]) .metrica-disco,
+:root[data-theme="dark"] .atalho-pilula:not([style*="--disco-cor"]) .atalho-disco {
+  background: var(--cx-surface-sunken);
+  color: var(--cx-ink);
+}
+/* ===================== FIM VIS-F16 ===================== */
+
+/* ===================== INICIO VIS-F18 — O VIDRO DA ENTRADA ABRE (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F6, que continua intacto: este seletor repete a mesma dupla e vence por ordem.
+
+   Marco pediu ver mais o fundo colorido atraves do cartao. O valor estava em 78% desde o VIS-F4 —
+   nao foi recusado, passou batido.
+
+   O CONTRASTE NAO DECIDIU SOZINHO, e isso foi a descoberta da medicao. Varri 78 · 70 · 64 · 58 ·
+   50 · 42 · 34 · 26 · 18 · 10, com 24 instantes ao longo de 120s, nos SETE textos do cartao
+   (titulo, subtitulo, assinatura, rotulo do campo, texto digitado, "Esqueci minha senha" e o
+   slogan). NENHUM valor reprovou: de 78% a 10% o pior instante so caiu de 6,72 para 5,65, sempre
+   acima do minimo de 4,5.
+
+   O motivo e o `backdrop-filter: blur(24px)`: ele uniformiza o fundo antes de o cartao compor, e o
+   canvas da entrada ja e quase preto. A opacidade do vidro quase nao muda o contraste — logo,
+   seguir a regra "o mais aberto que passe" ao pe da letra levaria a 10%, onde o cartao deixa de
+   ser cartao.
+
+   POR ISSO 42%, e nao o extremo: e onde o fundo aparece com forca (o roxo atravessa a superficie
+   inteira) e o cartao ainda LE como superficie, com borda e volume proprios. A excecao
+   D-LOGIN-VIDRO ao 67 §10 vive dessa condicao — "glass no card MAS DEIXANDO LER TUDO" —, e um
+   cartao invisivel nao e vidro, e ausencia de cartao.
+
+   MEDIDO em 42%, pior instante de 24: titulo 11,83 · subtitulo 6,63 · assinatura 6,40 · texto
+   digitado 15,04 · rotulo do campo 6,29 · "Esqueci minha senha" 7,63 · slogan 7,77.
+   O pior de todos e 6,29:1 — 1,4x o minimo. O slogan, que era o teto previsto por ser italico e
+   mais claro, na pratica nunca foi o pior: quem chega mais perto e o rotulo do campo.
+   ============================================================================================== */
+.cartao-entrada,
+.cartao-entrada.v-card {
+  background: color-mix(in srgb, var(--cx-surface) 42%, transparent);
+}
+/* ===================== FIM VIS-F18 ===================== */
+
+/* ===================== INICIO VIS-F19 — A SAUDACAO E A DATA VOLTAM NO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F2: as regras dele continuam la, e estas vencem por ordem so na faixa do celular.
+
+   MEDIDO a 390x844: a topbar inteira dizia "17:25 | | DG". So a hora. A saudacao caia em <=1024 e a
+   data em <=768, pela escada de recolhimento do VIS-F2 — que estava certa para UMA LINHA, e essa era
+   a premissa errada.
+
+   O ORCAMENTO, medido: topbar 390 = esquerda 117 + direita 251. O hamburguer come 48 dos 117, entao
+   sobram 91px uteis. "Boa noite · 17:25 · 28 ago" pede mais de 150. Numa linha nao cabe, e nao
+   adianta espremer.
+
+   ENTAO DUAS LINHAS, e o formato encolhe em vez de a informacao sumir — que foi a instrucao:
+     linha 1   "Boa noite"        (o NOME sai; quem le a tela sabe quem e)
+     linha 2   "17:25 · 28 ago"   (a data longa vira curta)
+   Medido depois: as duas linhas cabem nos 91px, e a topbar de 64px comporta as duas alturas.
+
+   O QUE NAO ENCOLHE, porque foi pedido explicitamente: o hamburguer segue 48x48, e o tema, o sino,
+   o avatar, a empresa e o aviso de caixa continuam onde estavam, com os alvos que ja tinham.
+
+   A FAIXA 769-1024 NAO MUDA. La a escada do VIS-F2 continua valendo (hora + data, sem saudacao).
+   Fica registrado que isso deixa o celular mostrando MAIS que o tablet — e e consequencia de a
+   instrucao ser sobre o celular. Se incomodar, o conserto e trazer esta mesma forma de duas linhas
+   para a faixa do meio, e nao remover do celular.
+   ================================================================================================= */
+@media (width <= 768px) {
+  /* Duas linhas: a saudacao ocupa a primeira inteira, hora e data dividem a segunda. */
+  .shell-mobills .topbar-relogio {
+    flex-wrap: wrap;
+    gap: 0 var(--cx-sp-2);
+    row-gap: 0;
+    line-height: 1.2;
+  }
+  .shell-mobills .topbar-saudacao {
+    display: block;
+    width: 100%;
+  }
+  /* O nome cai. E a unica parte da composicao que a tela nao precisa dizer. */
+  .shell-mobills .topbar-nome {
+    display: none;
+  }
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+  .shell-mobills .topbar-data-curta {
+    display: inline;
+  }
+  /* A hora perde o peso de titulo aqui: em duas linhas curtas ela nao precisa mais se destacar do
+     resto, e o corpo maior gastaria largura que nao ha. */
+  .shell-mobills .topbar-hora {
+    font-size: var(--cx-fs-caption);
+  }
+}
+
+/* Acima do celular a data curta nao existe: quem manda e a longa. */
+.topbar-data-curta {
+  display: none;
+}
+/* ===================== FIM VIS-F19 ===================== */
+
+/* ===================== INICIO VIS-F20 — A SETA DE FECHAR NA GAVETA DO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A gaveta do celular JA FECHAVA pelo simbolo desde o VIS-F15, e o clique estava correto. O que
+   faltava era AFORDANCIA: nada na tela dizia que dava para tocar ali — o usuario via uma logo, nao
+   um controle. Agora ha uma seta, e ela dispara a MESMA acao, sem criar segundo caminho.
+
+   44x44 E O PISO DO 67 §9 NO CELULAR, e por isso ele sobe de 40 (o valor do VIS-F14, que vale para
+   o desktop, onde o piso e 40).
+
+   `sidebar-fechar` existe para o botao poder ser DIFERENTE no celular sem que a regra do desktop
+   precise saber disso: la ele continua sendo o chevron de recolher, com o mesmo tamanho e o mesmo
+   nome de sempre.
+   ================================================================================================== */
+@media (width <= 768px) {
+  .sidebar-recolher.sidebar-fechar {
+    width: 44px;
+    min-height: 44px;
+  }
+}
+/* ===================== FIM VIS-F20 ===================== */
+
+/* ===================== INICIO VIS-F21 — A LINHA DECORATIVA NO CELULAR (29/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   ESCOPADO em <=768px: no desktop a linha nao muda, e isso e requisito, nao economia.
+
+   DOIS CONSERTOS, e o segundo so apareceu porque medi.
+
+   1 · ELA ENCOSTAVA NA BORDA. Medido a 390px: recuo da linha 0px contra 20px do texto do card. Ela
+   ia de borda a borda enquanto todo o conteudo respeitava o padding, e num card de 366px isso fica
+   evidente. Agora ela recua o mesmo `--cx-sp-5` do conteudo.
+
+   2 · ELA VOLTOU A CRUZAR O "VER MAIS", e isso e regressao do que o VIS-F16 garantiu. O motivo e
+   que o alvo do link muda de faixa: 40px no desktop, 44px no celular (piso do 67 §9). Com 44, o
+   topo do link sobe de 52 para 56px da base — e a linha, fixada em 54, passou a cruzar 2px.
+   Medido antes: 2px de sobreposicao a 390px, e 0 a 1440px. O numero e pequeno e o defeito nao: a
+   polilinha voltava a passar por cima do texto.
+   O conserto NAO e um chute com folga: 58px e o topo do link (56) mais 2 de respiro, medidos.
+
+   FICA REPORTADO, sem correcao porque o desktop e intocavel nesta rodada: a 1440px o recuo lateral
+   da linha tambem e 0px contra 20px do texto — a geometria e a mesma, e o que muda e so quanto ela
+   salta a vista num card mais largo.
+   ========================================================================================================= */
+@media (width <= 768px) {
+  .metrica-linha {
+    /* A largura e CALCULADA, e nao `auto`: num elemento substituido (o SVG) `width: auto` usa o
+       tamanho INTRINSECO e ignora as ancoras `left`/`right` — medido, a linha encolheu para 100px.
+       Com o calculo ela acompanha o card e respeita o mesmo recuo do conteudo. */
+    bottom: 58px;
+    left: var(--cx-sp-5);
+    width: calc(100% - var(--cx-sp-5) * 2);
+  }
+}
+/* ===================== FIM VIS-F21 ===================== */
+
+/* ===================== INICIO VIS-F22 — O RECUO DA LINHA VALE EM TODA LARGURA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O VIS-F21 consertou o recuo lateral da linha decorativa SO no celular, e eu deixei o desktop de
+   fora por ler "a linha do desktop e intocavel" como "nao encoste". A leitura foi conservadora
+   demais: intocavel quer dizer NAO REDESENHE, e nao "deixe o defeito medido de pe". E o MESMO bug,
+   no lugar mais visto do sistema.
+
+   MEDIDO a 1440px: recuo da linha 0px contra 20px do texto do card. Ela ia de borda a borda
+   enquanto todo o conteudo respeitava o padding.
+
+   O RECUO SAI DA MEDIA QUERY e passa a valer em qualquer largura. O que CONTINUA por faixa e so o
+   `bottom`, e por um motivo medido: o alvo do "Ver mais" e 40px no desktop e 44px no celular (piso
+   do 67 §9), entao o topo do link fica em 52px da base num caso e 56 no outro. Um `bottom` unico
+   cruzaria o texto numa das duas faixas — foi exatamente esse o defeito que o VIS-F21 pegou.
+   ================================================================================================== */
+.metrica-linha {
+  left: var(--cx-sp-5);
+  width: calc(100% - var(--cx-sp-5) * 2);
+}
+/* ===================== FIM VIS-F22 ===================== */
+
+/* ===================== INICIO VIS-F23 — A ASSINATURA DO LOGIN ENGROSSA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   O slogan e italico, 12px e de traco fino — medido, `font-weight: 400`. Traco fino nao segura
+   gradiente: as cores brigam no meio da letra em vez de preencher, e o resultado le como sujeira e
+   nao como cor.
+
+   SOBE O PESO, NAO O TAMANHO. Ele continua sendo assinatura discreta no rodape do cartao: 12px de
+   `--cx-fs-caption`, italico, e a mesma tinta. 400 -> 600 e o degrau que a base ja usa para texto
+   de apoio com presenca (o `.login-link` ao lado dele e 600), entao nao nasce peso novo no sistema.
+
+   NAO HA GRADIENTE AQUI, e isso e proposital: a instrucao que o definiria nao chegou. Este bloco
+   entrega so o traco mais grosso, que e o pre-requisito — quando o gradiente vier, ele encontra a
+   letra pronta para receber, e a matriz de contraste (parada de cor x instante do fundo) se mede
+   com o traco ja no peso final, que era o pedido.
+   ================================================================================================= */
+.login-slogan {
+  font-weight: 600;
+}
+/* ===================== FIM VIS-F23 ===================== */
+
+/* ===================== INICIO VIS-F24 — A SAUDACAO CHEGA A FAIXA DO MEIO (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+   NAO edita o VIS-F19 nem o VIS-F2: estende o alcance do primeiro com um seletor proprio.
+
+   O VIS-F19 devolveu saudacao, hora e data ao celular, mas so ate 768px. Entre 769 e 1024 a escada
+   do VIS-F2 continuava valendo, e o resultado era uma tela MAIS LARGA mostrando MENOS informacao
+   que uma mais estreita. Isso e defeito, nao escolha — eu tinha registrado no VIS-F19 e a correcao
+   e trazer a forma de duas linhas para ca, nao remover do celular.
+
+   A MESMA FORMA COMPACTA da faixa do celular: saudacao na primeira linha, hora e data curta na
+   segunda, sem o nome. Ela ja estava medida e cabendo em 91px de espaco util a 390px; a faixa do
+   meio tem mais folga que isso, entao o que cabia no aperto cabe aqui com sobra.
+   ============================================================================================== */
+@media (769px <= width <= 1024px) {
+  .shell-mobills .topbar-relogio {
+    flex-wrap: wrap;
+    gap: 0 var(--cx-sp-2);
+    row-gap: 0;
+    line-height: 1.2;
+  }
+  .shell-mobills .topbar-saudacao {
+    display: block;
+    width: 100%;
+  }
+  .shell-mobills .topbar-nome {
+    display: none;
+  }
+  .shell-mobills .topbar-data {
+    display: none;
+  }
+  .shell-mobills .topbar-data-curta {
+    display: inline;
+  }
+  .shell-mobills .topbar-hora {
+    font-size: var(--cx-fs-caption);
+  }
+}
+/* ===================== FIM VIS-F24 ===================== */
+
+/* ===================== INICIO VIS-F25 — O CARD DE METRICA RESPONDE E LEVA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   Duas coisas: o card responde ao mouse, e o card INTEIRO leva ao relatorio.
+
+   O LINK NAO E NOVO — E O QUE JA EXISTIA, ESTICADO. O "Ver mais" ja e um `NuxtLink`
+   (AppDashboard.vue), entao envolver o card num segundo link ou botao criaria elemento interativo
+   ANINHADO: o leitor de tela anunciaria dois destinos para o mesmo lugar e o Tab pararia duas vezes
+   no mesmo card. E o mesmo defeito que o VIS-F14 corrigiu no topo da sidebar, e ele nao volta aqui.
+   Com o `::after` esticado ha UM elemento interativo por card, e o `aria-label` que o link ja
+   carrega continua sendo o nome do destino.
+
+   O `inset: 0` resolve contra o `.metrica-card`, que ja e `position: relative` desde o VIS-F8 — nao
+   foi preciso acrescentar posicionamento nenhum. O `overflow: hidden` do mesmo bloco RECORTA o
+   `::after` no retangulo do card, e isso e desejado: o alvo cobre o card e nao passa dele.
+
+   SO CARD COM DESTINO. Quem decide e o router, no componente, e nao uma lista aqui — ver o
+   comentario do `temDestino`. Card sem destino nao ganha alvo, nem cursor, nem hover: card que
+   levanta e nao vai a lugar nenhum promete e nao entrega.
+
+   O MOVIMENTO E SO `transform`, e por dois motivos. Um: `box-shadow`, `width` ou `top` animados
+   custam layout ou paint a cada quadro. Dois: `transform` NAO REFLUI, entao o card sobe sem
+   empurrar o vizinho — a grade fica parada, que era o requisito.
+
+   O ANEL DE FOCO VAI NO CARD, por `:focus-within`. Com o link esticado, o foco do teclado cai nas
+   duas palavras "Ver mais" e o anel desenharia so em volta delas — quem navega por teclado veria um
+   retangulo de 60px marcando um alvo de 249. O `:focus-within` devolve a moldura ao objeto que o
+   Tab de fato ativa.
+   ================================================================================================== */
+.metrica-card.clicavel {
+  transition:
+    transform var(--cx-dur-2) var(--cx-ease-out),
+    border-color var(--cx-dur-2) var(--cx-ease-out);
+}
+.metrica-card.clicavel .metrica-mais::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.metrica-card.clicavel:hover,
+.metrica-card.clicavel:focus-within {
+  transform: translateY(-2px);
+}
+/* O anel do `:focus-visible` global marca o link; aqui a moldura vai para o card inteiro, que e o
+   que o Tab realmente ativa. */
+.metrica-card.clicavel:focus-within {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+/* O `:focus-visible` do proprio link sai de cena: ele desenharia um segundo anel, menor, dentro do
+   primeiro. Um alvo, uma moldura. */
+.metrica-card.clicavel .metrica-mais:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* RESPONDER NAO E OPCIONAL; MOVER E. Sem o transform o card ainda diz que esta sob o mouse — por
+     contorno, que nao anima layout nem depende de movimento. */
+  .metrica-card.clicavel:hover,
+  .metrica-card.clicavel:focus-within {
+    transform: none;
+    border-color: var(--cx-focus);
+  }
+}
+/* ===================== FIM VIS-F25 ===================== */
+
+/* ===================== INICIO VIS-F26 — O GRADIENTE DA MARCA ATRAVESSA A ASSINATURA (30/08/2026) =====================
+   Bloco aditivo e reversivel: apagar daqui ate o FIM devolve exatamente o estado anterior.
+
+   A PALETA E A QUE JA EXISTE. Sao as seis categorias do sistema, as mesmas que pintam as manchas do
+   fundo desta tela e o brilho dos cards. Uma paleta nova divergiria do simbolo no primeiro ajuste
+   que alguem fizesse num dos dois.
+
+   A VARIANTE E `-tinta`, E NAO `-base`, pelo mesmo criterio do VIS-F3: `-tinta` e a unica que
+   inverte com o tema, e no escuro ela e a versao CLAREADA, desenhada para servir de tinta sobre
+   superficie escura. A entrada abre sempre no escuro (D-LOGIN-ESCURO), entao aqui ela resolve
+   sempre para os valores claros — que e exatamente o que um texto sobre cartao escuro precisa.
+   `-base` traria #dc2626 e #6d28d9 crus sobre um cartao escuro, e essas sao as paradas que
+   reprovariam.
+
+   O TRACO JA ESTAVA PREPARADO: o VIS-F23 subiu o peso de 400 para 600 antes disto, porque gradiente
+   em traco fino nao preenche — as cores brigam no meio da letra e o resultado le como sujeira.
+
+   TRES CAMINHOS DE SEGURANCA, e nenhum deles e teorico:
+
+   1 · `@supports` — `background-clip: text` com `color: transparent` e uma dupla que so funciona
+       junta. Onde o clip nao existe, o texto transparente ficaria INVISIVEL. Por isso a cor solida
+       e o estado BASE, declarado fora do `@supports`, e o gradiente so entra onde ha suporte. O
+       caminho sem suporte nunca passa por "texto sem cor".
+
+   2 · `forced-colors` (alto contraste do Windows) — nesses modos o sistema substitui as cores, e um
+       texto pintado por `background-clip` desaparece por completo. A frase volta a ser tinta do
+       proprio sistema (`CanvasText`), e o `-webkit-text-fill-color` precisa ser desfeito junto,
+       senao ele continua transparente e vence a `color`.
+
+   3 · `prefers-reduced-motion` — o gradiente CONGELA, nao some. Quem pede menos movimento continua
+       vendo a frase colorida, parada. Mesma logica do `pauseAnimations()` da marca animada: retirar
+       a identidade de quem pediu menos movimento seria punir pelo ajuste.
+
+   A ANIMACAO E DECLARADA NO `login.vue`, e nao aqui, e isso nao e inconsistencia: o slogan ja tem a
+   animacao de ENTRADA, que e um keyframes SCOPED — o Vue RENOMEIA keyframes do proprio arquivo
+   (medido: `login-in-e8ce220f`), entao daqui nao ha como cita-lo para compor as duas. Declarar so o
+   fluxo aqui perdia a briga de especificidade com a regra scoped, e o gradiente ficava PARADO —
+   foi o que a primeira medicao pegou. O `@keyframes slogan-fluxo` fica global, aqui embaixo, e por
+   ser global atravessa o escopo sem ser renomeado.
+
+   O MOVIMENTO E `background-position`, e essa e a unica propriedade que atravessa texto recortado —
+   nao existe caminho por `transform` aqui, porque mover o elemento moveria a frase inteira em vez
+   de a cor correr por dentro dela. Fica registrado que ela custa paint, e por isso o alvo e uma
+   frase de 12px e nao uma superficie: medido, o custo nao aparece.
+   ======================================================================================================= */
+.login-slogan {
+  /* ESTADO BASE, e ele existe para o caminho sem suporte: cor solida legivel, nunca transparente. */
+  color: var(--cx-ink-soft);
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .login-slogan {
+    background-image: linear-gradient(
+      100deg,
+      var(--cat-entradas-tinta),
+      var(--cat-transferencias-tinta),
+      var(--cat-despesas-tinta),
+      var(--cat-resultado-tinta),
+      var(--cat-retiradas-tinta),
+      var(--cat-mercadorias-tinta),
+      var(--cat-entradas-tinta)
+    );
+    /* Larga o bastante para a cor CORRER por dentro da frase em vez de piscar entre duas paradas. */
+    background-size: 300% 100%;
+    /* O `repeat` NAO E ENFEITE, e o que impede a frase de SUMIR — e isso foi medido, nao suposto.
+       O valor herdado aqui era `no-repeat`. Com a imagem em 300% da caixa, `background-position`
+       em porcentagem desloca `X% x (caixa - imagem)` = `-2 x caixa x X`: em 150% a imagem sai
+       INTEIRA para fora da caixa. Sem imagem para recortar, o `-webkit-text-fill-color:
+       transparent` deixa a frase literalmente invisivel. A medicao pegou a frase apagando a partir
+       de 100% e ZERADA de 150% a 200% — 5 instantes de 17, cerca de 4,2s de cada 14s sem frase.
+       Com `repeat` a imagem ladrilha e sempre ha cor sob o texto, em qualquer posicao. */
+    background-repeat: repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* 150% NAO E UM NUMERO ESCOLHIDO POR GOSTO — E A LARGURA EXATA DE UM LADRILHO.
+   Deslocamento = `X% x (caixa - imagem)`; com a imagem em 300% da caixa isso da `-2 x caixa x X`.
+   Um ladrilho inteiro mede 3 caixas, entao `2 x X = 3` -> X = 150%. Percorrer exatamente um
+   ladrilho e o que faz o loop FECHAR SEM SALTO: o quadro final e pixel a pixel igual ao inicial.
+   Os 200% de antes andavam 1,33 ladrilho e davam um pulo de cor a cada volta — que so nao aparecia
+   porque, aqui, a frase ja tinha sumido antes de chegar la. E a primeira e a ultima parada do
+   gradiente sao a MESMA cor (`entradas`), entao a emenda tambem nao troca de tom. */
+@keyframes slogan-fluxo {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 150% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-slogan {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .login-slogan {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+/* ===================== FIM VIS-F26 ===================== */

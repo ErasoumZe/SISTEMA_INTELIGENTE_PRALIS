@@ -57,7 +57,9 @@ describe("CX-M06 - a excecao de legado e atomica", () => {
       method: "POST",
       url: "/api/contas",
       headers: { cookie: cookieAdmin },
-      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV concorrencia" }
+      // R-165: fundo para as saidas da corrida; o que o arquivo prova e a atomicidade do
+      // reapontamento do PDV sob lock, nao o saldo.
+      payload: { empresaId: idsTeste.empresaA, nome: "Conta PDV concorrencia", saldoInicial: 100_000 }
     });
     expect(conta.statusCode, conta.body).toBe(201);
     contaDoPdv = json<{ data: { id: string } }>(conta).data.id;

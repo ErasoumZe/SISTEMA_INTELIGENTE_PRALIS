@@ -17,6 +17,22 @@
 3. **Parou no meio? Commit WIP** com o que falta escrito no corpo, e a linha aqui vira `PARCIAL`.
 4. Isto é **status**. Decisão de negócio continua indo para os documentos numerados (16, 17, 18).
 
+## Retomada corrente — 24/08/2026
+
+O conteúdo histórico abaixo continua útil como prova das verticais antigas, mas **não define mais a
+fila atual**. O estado executável está em `30_RETOMADA_CAIXA_TESTAVEL_2026_08_24.md`.
+
+- Branch: `fix/caixa-saldo-insuficiente`.
+- HEAD documentado: `0e83497596228a5546c8c2242fe40a3d2fca64ba`.
+- Base local conhecida: `origin/main` em `5127525071d655d31cf316324d3549fc24c69c45`;
+  a atualização remota ainda precisa ser comprovada com credencial.
+- R-165 implementada; testes focados registrados como verdes.
+- Bloqueio P0: venda CREARE futura não possui destino financeiro e, portanto, não alimenta saldo
+  disponível. A continuação implementa R-167–R-170 sem reescrever histórico (R-166).
+- Pendentes antes de publicar: migration apenas se tecnicamente necessária e com parada pré-aplicação,
+  mutations finais, três revisores, gates completos, Playwright focado, push/PR/CI.
+- O prompt vivo único está em `docs/prompts/RETOMADA-CAIXA-TESTAVEL-2026-08-24.md`.
+
 ---
 
 ## 1. Mapa das verticais (S) — o que só existia no prompt

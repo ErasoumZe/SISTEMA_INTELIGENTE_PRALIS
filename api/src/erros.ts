@@ -65,3 +65,45 @@ export function foiEmbora(message: string, code = "GONE", details?: JsonValue): 
 export function conflito(message: string, code = "CONFLICT", details?: JsonValue): ErroDominio {
   return new ErroDominio(message, 409, code, details);
 }
+
+/**
+ * Um erro que pode vir EMBRULHADO: o que interessa e `code` e a corrente de `cause`.
+ *
+ * Tipo proprio (e nao `unknown`) porque o lint do projeto exige tipo explicito do dominio fora das
+ * fronteiras de dados externos — e aqui a forma e conhecida: e o formato que o driver do Postgres e
+ * o Drizzle produzem.
+ */
+export type ErroEncadeado = {
+  code?: string;
+  cause?: ErroEncadeado;
+};
+
+/**
+ * O SQLSTATE do Postgres, procurado ao longo de TODA a cadeia de `cause`.
+ *
+ * A R-164 contratou que contencao transitoria vira **503 LOCK_OCUPADO**, nunca 500 opaco: o
+ * operador precisa saber que e so tentar de novo, e o agente CREARE re-tenta 5xx mas DESCARTA 4xx
+ * (R-013 proibe descartar venda). O contrato estava furado porque `app.ts` lia `error.code` so na
+ * RAIZ, e o Drizzle entrega o erro do pg EMBRULHADO — a raiz vem sem `code` e o SQLSTATE fica em
+ * `cause`. Medido na rota real, com duas transferencias opostas simultaneas:
+ *
+ *     Error(code=undefined) -> cause: error(code=40P01)  "deadlock detected"   => HTTP 500
+ *
+ * Por que o filtro de formato: `code` tambem e usado pelo Node para erros proprios
+ * (`ECONNREFUSED`, `ERR_MODULE_NOT_FOUND`). SQLSTATE e sempre 5 caracteres alfanumericos, entao o
+ * formato separa um do outro sem lista de excecoes — e a busca CONTINUA descendo quando acha um
+ * `code` que nao e SQLSTATE, senao um erro do Node por cima esconderia o do banco embaixo.
+ */
+export function codigoPostgresDoErro(erro: ErroEncadeado | null | undefined): string | undefined {
+  const vistos = new Set<ErroEncadeado>();
+  let atual = erro;
+  // Teto de profundidade alem do `vistos`: cadeia circular nao pode virar laco infinito.
+  for (let nivel = 0; nivel < 10 && atual && typeof atual === "object"; nivel += 1) {
+    if (vistos.has(atual)) break;
+    vistos.add(atual);
+    const codigo = atual.code;
+    if (typeof codigo === "string" && /^[0-9A-Z]{5}$/.test(codigo)) return codigo;
+    atual = atual.cause;
+  }
+  return undefined;
+}

@@ -103,10 +103,22 @@ function noTela<T extends ItemMenu>(tela: T): NoMenu<T> {
 
 // Cada tela permitida cai na sua secao; o que nao estiver mapeado vai para "Geral", garantindo que
 // nenhuma tela desapareca do menu. Telas de uma categoria saem da raiz e entram dentro dela.
-export function agruparTelasMenu<T extends ItemMenu>(telas: readonly T[]): GrupoMenu<T>[] {
+//
+// A ESTRUTURA VIRA PARAMETRO, com o `SECOES_MENU` como padrao. Ela deixou de ser constante para o
+// administrador poder reorganizar o menu sem alteracao de codigo — e o default e o que torna a
+// migracao segura: quem nao passa nada continua com o menu de sempre, byte a byte.
+//
+// O QUE NAO MUDA, e e o ponto: as telas que chegam aqui JA PASSARAM pelo filtro de permissao. A
+// estrutura so ORGANIZA o que a permissao liberou; ela nao mostra tela que o usuario nao pode ver,
+// porque tela sem permissao nunca chega nesta lista. A rede do "Geral" tambem continua valendo, e
+// agora vale sobre a estrutura salva em vez de sobre a constante.
+export function agruparTelasMenu<T extends ItemMenu>(
+  telas: readonly T[],
+  estrutura: readonly { titulo: string; ids: readonly string[] }[] = SECOES_MENU
+): GrupoMenu<T>[] {
   const restantes = new Map(telas.map((tela) => [tela.id, tela] as const));
   const grupos: GrupoMenu<T>[] = [];
-  for (const secao of SECOES_MENU) {
+  for (const secao of estrutura) {
     const itens: NoMenu<T>[] = [];
     for (const id of secao.ids) {
       const categoria = categoriaPorId.get(id);

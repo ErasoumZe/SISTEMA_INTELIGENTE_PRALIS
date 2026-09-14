@@ -416,7 +416,17 @@ describe("integracoes integration", () => {
     ).resolves.toBeTruthy();
   });
 
-  it("Deve_RegistrarErroERetornar422EFazerRollback_Quando_ProcessamentoFalha", async () => {
+  // #41 (25/08): este caso EXIGIA 422 — e o 422 era o defeito, cravado em teste.
+  //
+  // O `valorOriginal` de 14 digitos passa no zod (`z.coerce.number().min(0)`, sem teto) e estoura a
+  // coluna `numeric(14,2)` no INSERT: SQLSTATE `22003`. Respondendo 422, o agente CREARE classifica
+  // como PERMANENTE (`integracoes-scripts/src/retry.js`) e DESCARTA a venda — perda definitiva, por
+  // um problema que nem sequer e do agente. E a R-013 proibe recusar venda integrada.
+  //
+  // O contrato correto e 503 re-tentavel: o agente re-tenta e enfileira em disco. O rollback e o
+  // registro no historico, que este caso ja provava, continuam valendo e sao a outra metade do
+  // contrato — a venda nao entra pela metade, e o evento nao some.
+  it("Deve_RegistrarErroERetornar503RetriableEFazerRollback_Quando_BancoFalha", async () => {
     // valorOriginal com 14 digitos inteiros estoura a coluna numeric(14,2) no INSERT (passa no zod).
     const identificador = "VENDA-ERRO-PROCESSAMENTO";
     const payload = payloadVendaIntegrada(identificador);
@@ -429,7 +439,8 @@ describe("integracoes integration", () => {
       payload
     });
 
-    assertProblem(resposta, 422, "INTEGRATION_PROCESSING_ERROR");
+    assertProblem(resposta, 503, "INTEGRATION_DATABASE_ERROR");
+    expect(resposta.statusCode, "422 aqui faria o agente descartar a venda (R-013)").not.toBe(422);
     await expect(
       consultarUm(
         "select mensagem_erro from integracoes_historico where identificador_externo = $1 and status = 'erro'",

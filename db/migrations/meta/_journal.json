@@ -229,50 +229,64 @@
     {
       "idx": 32,
       "version": "7",
-      "when": 1787743813834,
-      "tag": "0032_dear_colonel_america",
+      "when": 1787662859368,
+      "tag": "0032_idempotencia_venda_integrada",
       "breakpoints": true
     },
     {
       "idx": 33,
       "version": "7",
-      "when": 1787773595696,
-      "tag": "0033_blue_trauma",
+      "when": 1787748137962,
+      "tag": "0033_roteamento_financeiro_da_venda",
       "breakpoints": true
     },
     {
       "idx": 34,
       "version": "7",
-      "when": 1787846013878,
-      "tag": "0034_little_lightspeed",
+      "when": 1787748138962,
+      "tag": "0034_dear_colonel_america",
       "breakpoints": true
     },
     {
       "idx": 35,
       "version": "7",
-      "when": 1787873811746,
-      "tag": "0035_majestic_star_brand",
+      "when": 1787773595696,
+      "tag": "0035_blue_trauma",
       "breakpoints": true
     },
     {
       "idx": 36,
       "version": "7",
-      "when": 1788210687828,
-      "tag": "0036_sweet_mandarin",
+      "when": 1787846013878,
+      "tag": "0036_little_lightspeed",
       "breakpoints": true
     },
     {
       "idx": 37,
       "version": "7",
-      "when": 1788291890991,
-      "tag": "0037_awesome_maximus",
+      "when": 1787873811746,
+      "tag": "0037_majestic_star_brand",
       "breakpoints": true
     },
     {
       "idx": 38,
       "version": "7",
+      "when": 1788210687828,
+      "tag": "0038_sweet_mandarin",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788291890991,
+      "tag": "0039_awesome_maximus",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
       "when": 1788368323821,
-      "tag": "0038_puzzling_black_bolt",
+      "tag": "0040_puzzling_black_bolt",
       "breakpoints": true
     }
   ]

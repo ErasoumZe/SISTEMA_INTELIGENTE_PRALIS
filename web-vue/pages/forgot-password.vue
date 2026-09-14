@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Tela de ENTRADA: abre sempre no escuro, pela mesma decisao do login (Marco, 28/08/2026). Le e
+// devolve a preferencia do usuario, nunca grava.
+useTemaEntrada();
+
 const { apiUrl } = useApi();
 
 const email = ref("");
@@ -38,8 +42,10 @@ async function requestReset() {
 </script>
 
 <template>
-  <v-main class="min-h-screen panel-bg d-flex align-center justify-center pa-4">
-    <v-card width="100%" max-width="448">
+  <v-main class="tela-entrada d-flex align-center justify-center pa-4">
+    <AppFundoEntrada />
+
+    <v-card class="cartao-entrada" width="100%" max-width="448">
       <v-card-title>
         <div class="text-h5">Recuperar acesso</div>
         <div class="text-body-2 text-muted">Solicite um link de redefinicao de senha.</div>

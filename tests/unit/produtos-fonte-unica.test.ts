@@ -49,14 +49,17 @@ describe("R-165 - o Pralis nao e mais fonte executavel de produto", () => {
   // O proprio teste fica de fora: ele cita os termos justamente para proibi-los.
   const arquivos = arquivosDeCodigo(RAIZ).filter((caminho) => caminho !== resolve(import.meta.filename));
 
+  // Teto proprio, e nao o padrao de 5s: este caso VARRE o repositorio inteiro e le cada arquivo de
+  // codigo. Sozinho leva ~1,3s; dentro da suite completa, com o Testcontainers disputando IO, ja
+  // chegou a 22s e estourou — falha de RELOGIO, nunca de regra. O teto generoso mantem o que ele
+  // afirma intacto e tira o falso-vermelho que derrubava a suite inteira.
   it("nenhum arquivo de codigo le o catalogo do app Pralis", () => {
     const culpados = arquivos.filter((caminho) => {
       const conteudo = readFileSync(caminho, "utf8");
       return AGULHAS.some((agulha) => conteudo.includes(agulha));
     });
     expect(culpados).toEqual([]);
-  });
-
+  }, 60_000);
   it("o script de importacao do Pralis nao existe em nenhum package.json", () => {
     const agulha = "importar" + ":pralis";
     const pacotes = [

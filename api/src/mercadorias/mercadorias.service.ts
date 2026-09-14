@@ -1,5 +1,5 @@
 import type { MultipartFile } from "@fastify/multipart";
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   AprovarMercadoriaPayload,
   DiscriminarMercadoriaPayload,
@@ -15,6 +15,7 @@ import type {
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import { travarCaixaCompartilhadoRepository } from "../caixa/caixa.repository.js";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import {
   exigirDiscriminacaoConferida,
   itemMercadoriaParaDiscriminacao,
@@ -22,6 +23,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
+  saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
   obterCaixaDaSaidaParaEdicao,
@@ -121,6 +125,20 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
       },
       tx
     );
+    // R-165: porta de saldo depois do caixa e depois do plano — a serie inteira sai da MESMA conta
+    // de uma vez (ver a nota em criarDespesa).
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: lancamento.contaOrigemId,
+        // Neutra a `computar = false` — ver a nota em criarDespesa. Na mercadoria o `computar` ja
+        // vem resolvido por `deveComputarMercadoria` (nota fiscal tambem manda no valor).
+        valorCentavos: computar ? paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1) : 0
+      },
+      tx
+    );
+
     if (!plano) {
       const mercadoria = await criarMercadoriaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: mercadoria.id, computar };
@@ -211,10 +229,19 @@ export async function atualizarMercadoria(
   return executarEmTransacao(async (tx) => {
     // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
     const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` antes da linha — ver a nota em `atualizarDespesa`. A
+    // pre-leitura so escolhe as linhas a travar; ela nao autoriza.
+    const preLeitura = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [preLeitura?.contaOrigemId, dados.contaOrigemId, caixaTravado.caixa?.pdvContaId],
+      tx
+    );
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. As tres saidas tem o mesmo contrato.
     if (!(await travarMercadoriaRepository(mercadoriaId, dados.empresaId, tx))) {
       throw new Error("Registro nao encontrado");
     }
+    // RELEITURA sob os locks: e este retrato que decide.
     const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
     const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar mercadoria JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
@@ -237,6 +264,18 @@ export async function atualizarMercadoria(
     );
     // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
     exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
+    // R-165 na EDICAO: delta real — ver a nota em `atualizarDespesa`. `computar` ja resolvido acima
+    // porque a NF-e sem nota nao computa: o que nao vai pesar no saldo nao precisa de lastro.
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: normalizados.contaOrigemId,
+        valorCentavos: computar ? paraCentavos(normalizados.valorOriginal) : 0,
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
+      },
+      tx
+    );
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarMercadoriaRepository(mercadoriaId, normalizados, computar, caixaIdDaSaida(caixa, normalizados), tx);
     return { id: mercadoriaId, computar };
@@ -299,6 +338,10 @@ async function prepararAtoDeAprovacao(
     const trava = await travarCaixaCompartilhadoRepository(previa.caixaId, tx);
     if (trava?.status !== "aberto") throw new Error("Caixa ja fechado");
   }
+  // R-165 · ORDEM GLOBAL: `contas` antes da linha, tambem na aprovacao — ligar `computar` e debito
+  // novo, entao este caminho toca conta e precisa da mesma ordem dos PUTs. A previa so escolhe a
+  // linha a travar; quem decide e o retrato relido sob a trava.
+  await travarContasDaEdicao(empresaId, [previa.contaOrigemId], tx);
   if (!(await travarMercadoriaRepository(mercadoriaId, empresaId, tx))) throw new Error("Registro nao encontrado");
   const existente = await buscarMercadoriaDetalheRepository(mercadoriaId, tx);
   if (!existente || existente.status !== "aguardando_aprovacao") {
@@ -307,6 +350,7 @@ async function prepararAtoDeAprovacao(
   if ((existente.caixaId ?? null) !== (previa.caixaId ?? null)) {
     throw new Error("Lancamento mudou de caixa durante a aprovacao: tente novamente");
   }
+  return existente;
 }
 
 // Aprova a mercadoria da NF-e definindo se computa (decisao da reuniao: nota so fiscal nao computa).
@@ -317,7 +361,20 @@ export async function aprovarMercadoria(
 ): Promise<{ id: string; computar: boolean }> {
   exigirPermissaoLancamento(perfil.permissoes, "mercadorias_aprovar");
   return executarEmTransacao(async (tx) => {
-    await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    const existente = await prepararAtoDeAprovacao(mercadoriaId, dados.empresaId, perfil, tx);
+    // R-165: aprovar LIGANDO `computar` faz o dinheiro passar a sair da conta — e um debito novo,
+    // ainda que nenhum valor mude. Sem esta porta, a NF-e criada com `computar = false` viraria a
+    // porta dos fundos do P0. Se ja computava, `jaReservado` anula a cobranca (delta zero).
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: existente.contaOrigemId,
+        valorCentavos: dados.computar ? paraCentavos(existente.valorOriginal) : 0,
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, existente.contaOrigemId)
+      },
+      tx
+    );
     const afetadas = await aprovarMercadoriaRepository(mercadoriaId, dados.empresaId, dados.computar, tx);
     if (!afetadas) throw new Error("Mercadoria nao esta aguardando aprovacao");
     return { id: mercadoriaId, computar: dados.computar };

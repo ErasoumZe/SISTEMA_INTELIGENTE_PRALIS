@@ -1,886 +1,9 @@
 {
-  "id": "ccb88b86-fd6e-4979-9f6a-6351de1cfa60",
-  "prevId": "8c1719d6-e0eb-42f9-90a9-b828347e2f73",
+  "id": "70b6b644-e980-40b2-8164-0b3e1f08be77",
+  "prevId": "1fc4f8f3-3936-4236-8083-3f5a587ded04",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.admissoes_processos": {
-      "name": "admissoes_processos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "teste_id": {
-          "name": "teste_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'iniciado'"
-        },
-        "versao": {
-          "name": "versao",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "criado_por": {
-          "name": "criado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "atualizado_por": {
-          "name": "atualizado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cancelado_por": {
-          "name": "cancelado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "cancelado_em": {
-          "name": "cancelado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "admissoes_processos_empresa_status_criado_idx": {
-          "name": "admissoes_processos_empresa_status_criado_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "criado_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admissoes_processos_empresa_id_empresas_id_fk": {
-          "name": "admissoes_processos_empresa_id_empresas_id_fk",
-          "tableFrom": "admissoes_processos",
-          "tableTo": "empresas",
-          "columnsFrom": [
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_criado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_processos_criado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_processos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "criado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_atualizado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_processos_atualizado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_processos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "atualizado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_cancelado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_processos_cancelado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_processos",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "cancelado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_teste_empresa_fk": {
-          "name": "admissoes_processos_teste_empresa_fk",
-          "tableFrom": "admissoes_processos",
-          "tableTo": "admissoes_testes",
-          "columnsFrom": [
-            "teste_id",
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id",
-            "empresa_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "admissoes_processos_teste_unico": {
-          "name": "admissoes_processos_teste_unico",
-          "nullsNotDistinct": false,
-          "columns": [
-            "teste_id"
-          ]
-        },
-        "admissoes_processos_id_empresa_unica": {
-          "name": "admissoes_processos_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "empresa_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "admissoes_processos_status_check": {
-          "name": "admissoes_processos_status_check",
-          "value": "\"admissoes_processos\".\"status\" in ('iniciado', 'cancelado')"
-        },
-        "admissoes_processos_versao_check": {
-          "name": "admissoes_processos_versao_check",
-          "value": "\"admissoes_processos\".\"versao\" > 0"
-        },
-        "admissoes_processos_coerencia_status_check": {
-          "name": "admissoes_processos_coerencia_status_check",
-          "value": "(\n        \"admissoes_processos\".\"status\" = 'iniciado'\n        and \"admissoes_processos\".\"cancelado_por\" is null and \"admissoes_processos\".\"cancelado_em\" is null\n      ) or (\n        \"admissoes_processos\".\"status\" = 'cancelado'\n        and \"admissoes_processos\".\"cancelado_por\" is not null and \"admissoes_processos\".\"cancelado_em\" is not null\n      )"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.admissoes_processos_historico": {
-      "name": "admissoes_processos_historico",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "processo_id": {
-          "name": "processo_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "versao": {
-          "name": "versao",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "acao": {
-          "name": "acao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ator_usuario_id": {
-          "name": "ator_usuario_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "campos_alterados": {
-          "name": "campos_alterados",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "ocorrido_em": {
-          "name": "ocorrido_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "admissoes_processos_historico_evento_unico": {
-          "name": "admissoes_processos_historico_evento_unico",
-          "columns": [
-            {
-              "expression": "processo_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "versao",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "admissoes_processos_historico_processo_idx": {
-          "name": "admissoes_processos_historico_processo_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "processo_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ocorrido_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admissoes_processos_historico_empresa_id_empresas_id_fk": {
-          "name": "admissoes_processos_historico_empresa_id_empresas_id_fk",
-          "tableFrom": "admissoes_processos_historico",
-          "tableTo": "empresas",
-          "columnsFrom": [
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_historico_ator_usuario_id_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_processos_historico_ator_usuario_id_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_processos_historico",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "ator_usuario_id"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_processos_historico_processo_empresa_fk": {
-          "name": "admissoes_processos_historico_processo_empresa_fk",
-          "tableFrom": "admissoes_processos_historico",
-          "tableTo": "admissoes_processos",
-          "columnsFrom": [
-            "processo_id",
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id",
-            "empresa_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "admissoes_processos_historico_acao_check": {
-          "name": "admissoes_processos_historico_acao_check",
-          "value": "\"admissoes_processos_historico\".\"acao\" in ('criado', 'cancelado')"
-        },
-        "admissoes_processos_historico_versao_check": {
-          "name": "admissoes_processos_historico_versao_check",
-          "value": "\"admissoes_processos_historico\".\"versao\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.admissoes_testes": {
-      "name": "admissoes_testes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'em_teste'"
-        },
-        "versao": {
-          "name": "versao",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "nome_completo": {
-          "name": "nome_completo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cpf": {
-          "name": "cpf",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "funcao_id": {
-          "name": "funcao_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "jornada_horario": {
-          "name": "jornada_horario",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "inicio_em": {
-          "name": "inicio_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fim_combinado_em": {
-          "name": "fim_combinado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resultado": {
-          "name": "resultado",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "motivo_cancelamento": {
-          "name": "motivo_cancelamento",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_por": {
-          "name": "criado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "atualizado_por": {
-          "name": "atualizado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "encerrado_por": {
-          "name": "encerrado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelado_por": {
-          "name": "cancelado_por",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "encerrado_em": {
-          "name": "encerrado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelado_em": {
-          "name": "cancelado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "admissoes_testes_cpf_em_teste_unico": {
-          "name": "admissoes_testes_cpf_em_teste_unico",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "cpf",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"admissoes_testes\".\"status\" = 'em_teste'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "admissoes_testes_empresa_status_fim_idx": {
-          "name": "admissoes_testes_empresa_status_fim_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fim_combinado_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admissoes_testes_empresa_id_empresas_id_fk": {
-          "name": "admissoes_testes_empresa_id_empresas_id_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "empresas",
-          "columnsFrom": [
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_criado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_testes_criado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "criado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_atualizado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_testes_atualizado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "atualizado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_encerrado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_testes_encerrado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "encerrado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_cancelado_por_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_testes_cancelado_por_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "cancelado_por"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_funcao_empresa_fk": {
-          "name": "admissoes_testes_funcao_empresa_fk",
-          "tableFrom": "admissoes_testes",
-          "tableTo": "funcoes_operacionais",
-          "columnsFrom": [
-            "funcao_id",
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id",
-            "empresa_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "admissoes_testes_id_empresa_unica": {
-          "name": "admissoes_testes_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "empresa_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "admissoes_testes_status_check": {
-          "name": "admissoes_testes_status_check",
-          "value": "\"admissoes_testes\".\"status\" in ('em_teste', 'encerrado', 'cancelado')"
-        },
-        "admissoes_testes_versao_check": {
-          "name": "admissoes_testes_versao_check",
-          "value": "\"admissoes_testes\".\"versao\" > 0"
-        },
-        "admissoes_testes_cpf_check": {
-          "name": "admissoes_testes_cpf_check",
-          "value": "\"admissoes_testes\".\"cpf\" ~ '^[0-9]{11}$'"
-        },
-        "admissoes_testes_nome_check": {
-          "name": "admissoes_testes_nome_check",
-          "value": "length(btrim(\"admissoes_testes\".\"nome_completo\")) > 0"
-        },
-        "admissoes_testes_jornada_check": {
-          "name": "admissoes_testes_jornada_check",
-          "value": "length(btrim(\"admissoes_testes\".\"jornada_horario\")) > 0"
-        },
-        "admissoes_testes_periodo_check": {
-          "name": "admissoes_testes_periodo_check",
-          "value": "\"admissoes_testes\".\"fim_combinado_em\" > \"admissoes_testes\".\"inicio_em\""
-        },
-        "admissoes_testes_resultado_check": {
-          "name": "admissoes_testes_resultado_check",
-          "value": "\"admissoes_testes\".\"resultado\" is null or \"admissoes_testes\".\"resultado\" in ('aprovado_para_admissao', 'nao_prosseguir')"
-        },
-        "admissoes_testes_motivo_cancelamento_check": {
-          "name": "admissoes_testes_motivo_cancelamento_check",
-          "value": "\"admissoes_testes\".\"motivo_cancelamento\" is null or \"admissoes_testes\".\"motivo_cancelamento\" in ('nao_aprovado_no_teste', 'sem_continuidade_apos_dia_de_teste')"
-        },
-        "admissoes_testes_coerencia_status_check": {
-          "name": "admissoes_testes_coerencia_status_check",
-          "value": "(\n        \"admissoes_testes\".\"status\" = 'em_teste'\n        and \"admissoes_testes\".\"resultado\" is null\n        and \"admissoes_testes\".\"motivo_cancelamento\" is null\n        and \"admissoes_testes\".\"encerrado_por\" is null and \"admissoes_testes\".\"encerrado_em\" is null\n        and \"admissoes_testes\".\"cancelado_por\" is null and \"admissoes_testes\".\"cancelado_em\" is null\n      ) or (\n        \"admissoes_testes\".\"status\" = 'encerrado'\n        and \"admissoes_testes\".\"resultado\" is not null\n        and \"admissoes_testes\".\"motivo_cancelamento\" is null\n        and \"admissoes_testes\".\"encerrado_por\" is not null and \"admissoes_testes\".\"encerrado_em\" is not null\n        and \"admissoes_testes\".\"cancelado_por\" is null and \"admissoes_testes\".\"cancelado_em\" is null\n      ) or (\n        \"admissoes_testes\".\"status\" = 'cancelado'\n        and \"admissoes_testes\".\"resultado\" is null\n        and \"admissoes_testes\".\"motivo_cancelamento\" is not null\n        and \"admissoes_testes\".\"encerrado_por\" is null and \"admissoes_testes\".\"encerrado_em\" is null\n        and \"admissoes_testes\".\"cancelado_por\" is not null and \"admissoes_testes\".\"cancelado_em\" is not null\n      )"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.admissoes_testes_historico": {
-      "name": "admissoes_testes_historico",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "teste_id": {
-          "name": "teste_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "versao": {
-          "name": "versao",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "acao": {
-          "name": "acao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ator_usuario_id": {
-          "name": "ator_usuario_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "campos_alterados": {
-          "name": "campos_alterados",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "ocorrido_em": {
-          "name": "ocorrido_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "admissoes_testes_historico_evento_unico": {
-          "name": "admissoes_testes_historico_evento_unico",
-          "columns": [
-            {
-              "expression": "teste_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "versao",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"admissoes_testes_historico\".\"acao\" <> 'cpf_revelado'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "admissoes_testes_historico_teste_idx": {
-          "name": "admissoes_testes_historico_teste_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "teste_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ocorrido_em",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admissoes_testes_historico_empresa_id_empresas_id_fk": {
-          "name": "admissoes_testes_historico_empresa_id_empresas_id_fk",
-          "tableFrom": "admissoes_testes_historico",
-          "tableTo": "empresas",
-          "columnsFrom": [
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_historico_ator_usuario_id_perfis_usuarios_usuario_id_fk": {
-          "name": "admissoes_testes_historico_ator_usuario_id_perfis_usuarios_usuario_id_fk",
-          "tableFrom": "admissoes_testes_historico",
-          "tableTo": "perfis_usuarios",
-          "columnsFrom": [
-            "ator_usuario_id"
-          ],
-          "columnsTo": [
-            "usuario_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admissoes_testes_historico_teste_empresa_fk": {
-          "name": "admissoes_testes_historico_teste_empresa_fk",
-          "tableFrom": "admissoes_testes_historico",
-          "tableTo": "admissoes_testes",
-          "columnsFrom": [
-            "teste_id",
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id",
-            "empresa_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "admissoes_testes_historico_acao_check": {
-          "name": "admissoes_testes_historico_acao_check",
-          "value": "\"admissoes_testes_historico\".\"acao\" in ('criado', 'alterado', 'encerrado', 'cancelado', 'cpf_revelado')"
-        },
-        "admissoes_testes_historico_versao_check": {
-          "name": "admissoes_testes_historico_versao_check",
-          "value": "\"admissoes_testes_historico\".\"versao\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.ajustes_fechamento_caixa": {
       "name": "ajustes_fechamento_caixa",
       "schema": "",
@@ -2261,7 +1384,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "contas_id_empresa_unica": {
+          "name": "contas_id_empresa_unica",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "empresa_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "contas_saldo_inicial_check": {
@@ -3815,6 +2947,43 @@
           "primaryKey": false,
           "notNull": true
         },
+        "adquirente": {
+          "name": "adquirente",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "usa_conta_do_pdv": {
+          "name": "usa_conta_do_pdv",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "conta_recebivel_id": {
+          "name": "conta_recebivel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conta_final_id": {
+          "name": "conta_final_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disponibilidade": {
+          "name": "disponibilidade",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "atualizado_por": {
+          "name": "atualizado_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "criado_em": {
           "name": "criado_em",
           "type": "timestamp with time zone",
@@ -3857,6 +3026,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "formas_pagamento_atualizado_por_perfis_usuarios_usuario_id_fk": {
+          "name": "formas_pagamento_atualizado_por_perfis_usuarios_usuario_id_fk",
+          "tableFrom": "formas_pagamento",
+          "tableTo": "perfis_usuarios",
+          "columnsFrom": [
+            "atualizado_por"
+          ],
+          "columnsTo": [
+            "usuario_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "formas_pagamento_importado_de_empresas_id_fk": {
           "name": "formas_pagamento_importado_de_empresas_id_fk",
           "tableFrom": "formas_pagamento",
@@ -3868,6 +3050,36 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "formas_pagamento_conta_recebivel_empresa_fk": {
+          "name": "formas_pagamento_conta_recebivel_empresa_fk",
+          "tableFrom": "formas_pagamento",
+          "tableTo": "contas",
+          "columnsFrom": [
+            "conta_recebivel_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "formas_pagamento_conta_final_empresa_fk": {
+          "name": "formas_pagamento_conta_final_empresa_fk",
+          "tableFrom": "formas_pagamento",
+          "tableTo": "contas",
+          "columnsFrom": [
+            "conta_final_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -3883,7 +3095,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "formas_pagamento_disponibilidade_check": {
+          "name": "formas_pagamento_disponibilidade_check",
+          "value": "\"formas_pagamento\".\"disponibilidade\" is null or \"formas_pagamento\".\"disponibilidade\" in ('imediata', 'por_evento')"
+        },
+        "formas_pagamento_roteamento_check": {
+          "name": "formas_pagamento_roteamento_check",
+          "value": "(\"formas_pagamento\".\"disponibilidade\" is null and \"formas_pagamento\".\"usa_conta_do_pdv\" = false and \"formas_pagamento\".\"conta_recebivel_id\" is null and \"formas_pagamento\".\"conta_final_id\" is null)\n       or (\"formas_pagamento\".\"disponibilidade\" is not distinct from 'imediata' and \"formas_pagamento\".\"usa_conta_do_pdv\" = true and \"formas_pagamento\".\"conta_recebivel_id\" is null and \"formas_pagamento\".\"conta_final_id\" is null)\n       or (\"formas_pagamento\".\"disponibilidade\" is not distinct from 'por_evento' and \"formas_pagamento\".\"usa_conta_do_pdv\" = false and \"formas_pagamento\".\"conta_recebivel_id\" is not null and \"formas_pagamento\".\"conta_final_id\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.fornecedores": {
@@ -3968,133 +3189,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.funcoes_operacionais": {
-      "name": "funcoes_operacionais",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuid_generate_v7()"
-        },
-        "empresa_id": {
-          "name": "empresa_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nome": {
-          "name": "nome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cbo": {
-          "name": "cbo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ativo": {
-          "name": "ativo",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "criado_em": {
-          "name": "criado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "atualizado_em": {
-          "name": "atualizado_em",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "funcoes_operacionais_empresa_ativo_nome_idx": {
-          "name": "funcoes_operacionais_empresa_ativo_nome_idx",
-          "columns": [
-            {
-              "expression": "empresa_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ativo",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "nome",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "funcoes_operacionais_empresa_id_empresas_id_fk": {
-          "name": "funcoes_operacionais_empresa_id_empresas_id_fk",
-          "tableFrom": "funcoes_operacionais",
-          "tableTo": "empresas",
-          "columnsFrom": [
-            "empresa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "funcoes_operacionais_empresa_nome_unica": {
-          "name": "funcoes_operacionais_empresa_nome_unica",
-          "nullsNotDistinct": false,
-          "columns": [
-            "empresa_id",
-            "nome"
-          ]
-        },
-        "funcoes_operacionais_id_empresa_unica": {
-          "name": "funcoes_operacionais_id_empresa_unica",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "empresa_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "funcoes_operacionais_nome_check": {
-          "name": "funcoes_operacionais_nome_check",
-          "value": "length(btrim(\"funcoes_operacionais\".\"nome\")) > 0"
-        },
-        "funcoes_operacionais_cbo_check": {
-          "name": "funcoes_operacionais_cbo_check",
-          "value": "\"funcoes_operacionais\".\"cbo\" is null or \"funcoes_operacionais\".\"cbo\" ~ '^[0-9]{6}$'"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.grupos_despesas": {
@@ -10237,6 +9331,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "vendas_integracao_identificador_unico_idx": {
+          "name": "vendas_integracao_identificador_unico_idx",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "identificador_externo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"vendas\".\"integracao_chave_id\" is not null and \"vendas\".\"identificador_externo\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -10509,6 +9625,37 @@
           "notNull": true,
           "default": "'0'"
         },
+        "roteamento_status": {
+          "name": "roteamento_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'nao_aplicavel'"
+        },
+        "conta_recebivel_id": {
+          "name": "conta_recebivel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conta_final_id": {
+          "name": "conta_final_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adquirente": {
+          "name": "adquirente",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disponivel_em": {
+          "name": "disponivel_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "criado_em": {
           "name": "criado_em",
           "type": "timestamp with time zone",
@@ -10529,6 +9676,54 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vendas_pagamentos_conta_final_disponivel_idx": {
+          "name": "vendas_pagamentos_conta_final_disponivel_idx",
+          "columns": [
+            {
+              "expression": "conta_final_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"vendas_pagamentos\".\"roteamento_status\" = 'roteado' and \"vendas_pagamentos\".\"disponivel_em\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vendas_pagamentos_conta_recebivel_aberto_idx": {
+          "name": "vendas_pagamentos_conta_recebivel_aberto_idx",
+          "columns": [
+            {
+              "expression": "conta_recebivel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"vendas_pagamentos\".\"roteamento_status\" = 'roteado' and \"vendas_pagamentos\".\"disponivel_em\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vendas_pagamentos_roteamento_pendente_idx": {
+          "name": "vendas_pagamentos_roteamento_pendente_idx",
+          "columns": [
+            {
+              "expression": "forma_pagamento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"vendas_pagamentos\".\"roteamento_status\" = 'pendente'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10560,6 +9755,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "vendas_pagamentos_conta_recebivel_id_contas_id_fk": {
+          "name": "vendas_pagamentos_conta_recebivel_id_contas_id_fk",
+          "tableFrom": "vendas_pagamentos",
+          "tableTo": "contas",
+          "columnsFrom": [
+            "conta_recebivel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "vendas_pagamentos_conta_final_id_contas_id_fk": {
+          "name": "vendas_pagamentos_conta_final_id_contas_id_fk",
+          "tableFrom": "vendas_pagamentos",
+          "tableTo": "contas",
+          "columnsFrom": [
+            "conta_final_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10573,6 +9794,14 @@
         "vendas_pagamentos_total_pago_check": {
           "name": "vendas_pagamentos_total_pago_check",
           "value": "\"vendas_pagamentos\".\"total_pago\" >= 0"
+        },
+        "vendas_pagamentos_roteamento_status_check": {
+          "name": "vendas_pagamentos_roteamento_status_check",
+          "value": "\"vendas_pagamentos\".\"roteamento_status\" in ('nao_aplicavel', 'pendente', 'roteado')"
+        },
+        "vendas_pagamentos_roteamento_check": {
+          "name": "vendas_pagamentos_roteamento_check",
+          "value": "(\"vendas_pagamentos\".\"roteamento_status\" <> 'roteado' and \"vendas_pagamentos\".\"conta_recebivel_id\" is null and \"vendas_pagamentos\".\"conta_final_id\" is null and \"vendas_pagamentos\".\"disponivel_em\" is null)\n       or (\"vendas_pagamentos\".\"roteamento_status\" = 'roteado' and \"vendas_pagamentos\".\"conta_recebivel_id\" is not null and \"vendas_pagamentos\".\"conta_final_id\" is not null)"
         }
       },
       "isRLSEnabled": false

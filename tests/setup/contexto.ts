@@ -18,7 +18,12 @@ export type PerfilTeste =
   // Recorrencia (D3): lanca sem operar caixa e SEM a permissao de recorrencia.
   | "semRecorrencia"
   // Entradas do dia (D7): tem a flag de caixa aberto E um caixa aberto proprio.
-  | "operadorEntradas";
+  | "operadorEntradas"
+  // #152/R-176: CONFIGURADOR PURO. Tem a permissao dedicada de roteamento e NAO tem nenhuma
+  // permissao financeira. E a unica fixture capaz de provar que as duas metades da pendencia sao
+  // decididas em separado: sem ela, todo usuario ou e admin (tem tudo) ou leva 403 na rota inteira,
+  // e o `vendasPendentes: null` nunca e exercitado.
+  | "configuradorRoteamento";
 
 export const idsTeste = {
   empresaA: "11111111-1111-4111-8111-111111111111",
@@ -97,6 +102,10 @@ export const idsTeste = {
   // Entradas do dia (D7): operador COM a flag menu_entradas_somente_caixa_aberto e COM caixa
   // aberto — a unica combinacao que exercita o escopo da tela de Entradas. O perfil "caixa" nao
   // serve: ele nao tem a flag, e e usado por 12 testes que nao devem mudar de comportamento.
+  // #152/R-176: configurador puro — roteamento sim, financeiro nao.
+  cargoConfiguradorRoteamento: "11111111-1111-4111-8111-111111112401",
+  colaboradorConfiguradorRoteamento: "11111111-1111-4111-8111-111111112402",
+  colaboradorCargoConfiguradorRoteamento: "11111111-1111-4111-8111-111111112403",
   cargoOperadorEntradas: "11111111-1111-4111-8111-111111112301",
   colaboradorOperadorEntradas: "11111111-1111-4111-8111-111111112302",
   colaboradorCargoOperadorEntradas: "11111111-1111-4111-8111-111111112303",
@@ -146,6 +155,11 @@ export const usuariosTeste: Record<PerfilTeste, { email: string; nome: string; s
     email: "financeiro-ciclo.integracao@padaria.local",
     nome: "Financeiro Ciclo Integracao",
     senha: "Teste#2026!finciclo"
+  },
+  configuradorRoteamento: {
+    email: "configurador.integracao@padaria.local",
+    nome: "Configurador Roteamento",
+    senha: "Teste#2026!config"
   },
   semRecorrencia: {
     email: "sem-recorrencia.integracao@padaria.local",

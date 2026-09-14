@@ -58,6 +58,18 @@ export function saldoProprioCentavos(totais: TotaisCaixaCentavos, dividaCofreCen
 export type TotaisContaCentavos = {
   // Entradas: vendas com esta conta + transferencias que CHEGAM nela.
   vendas: number;
+  // R-167/R-169 (#152): pagamentos de venda integrada que foram ROTEADOS para esta conta E que ja
+  // estao DISPONIVEIS (`disponivel_em` preenchido). Termo separado de `vendas` por dois motivos:
+  //
+  //   1. a venda integrada nao tem `conta_origem_id` — ela credita pelo PAGAMENTO, nao pela venda,
+  //      e cada pagamento pode ir para uma conta diferente;
+  //   2. recebivel em aberto (cartao, Pix por evento) fica de FORA deste numero de proposito: ele
+  //      existe no financeiro, mas nao e saldo gastavel enquanto a liquidacao nao confirmar.
+  //
+  // Cada pagamento entra pelo proprio `total_pago`. Nao ha rateio nem arredondamento: a soma dos
+  // pagamentos ja foi obrigada a bater com o liquido da venda na ingestao (R-173), entao isto e a
+  // MESMA quantia da formula de sempre, apenas distribuida entre as contas.
+  vendasRoteadas: number;
   transferenciasEntrada: number;
   // Saidas: transferencias que SAEM dela + os lancamentos pagos por ela.
   transferenciasSaida: number;
@@ -73,6 +85,7 @@ export function saldoContaCentavos(saldoInicialCentavos: number, totais: TotaisC
   return (
     saldoInicialCentavos +
     totais.vendas +
+    totais.vendasRoteadas +
     totais.transferenciasEntrada -
     totais.transferenciasSaida -
     totais.despesas -

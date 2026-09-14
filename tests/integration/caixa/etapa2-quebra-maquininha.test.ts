@@ -42,9 +42,12 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
   }
 
   async function criarContaEPdv(sufixo: string) {
+    // R-165: conta de PDV precisa de fundo para pagar saida. Nao muda o que este arquivo prova —
+    // a quebra e apurada sobre o saldo do CAIXA (entradas - saidas), nao sobre o fundo da conta.
     const conta = await request(cookieAdmin, "POST", "/api/contas", {
       empresaId: idsTeste.empresaA,
-      nome: `Conta etapa2 ${sufixo}`
+      nome: `Conta etapa2 ${sufixo}`,
+      saldoInicial: 100_000
     });
     expect(conta.statusCode, conta.body).toBe(201);
     const contaId = json<{ data: { id: string } }>(conta).data.id;

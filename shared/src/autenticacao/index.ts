@@ -177,6 +177,11 @@ export const permissoes = [
   "cadastro_formas_pagamento_criar",
   "cadastro_formas_pagamento_editar",
   "cadastro_formas_pagamento_excluir",
+  // R-176 (#152): PERMISSAO DEDICADA para o roteamento financeiro. Nao reusa criar/editar de
+  // proposito — o Financeiro tem `cadastro_formas_pagamento_criar` e, sem esta separacao, o
+  // destino do dinheiro entraria de carona na criacao de uma forma. Quem renomeia forma nao
+  // decide para onde vai o dinheiro. Nasce so no acesso total (usuario_admin).
+  "cadastro_formas_pagamento_roteamento",
   "aparencia_visualizar",
   "aparencia_editar",
   "integracoes_visualizar",
@@ -442,6 +447,23 @@ function normalizarCargo(nome: string) {
 // entrega ao cofre so existe para a retaguarda, e o servico so aceita a retaguarda. Copiar a lista
 // de cargos no front criaria duas verdades, e a primeira mudanca de cargo deixaria a tela
 // oferecendo um botao que a API recusa. Foi exatamente esse o defeito corrigido.
+// Quem e DONO do sistema, e nao quem apenas opera dentro dele. Mora aqui pelo mesmo motivo que a
+// `podeLancarSemCaixa` logo abaixo: a TELA precisa da mesma resposta que o servidor, e copiar a
+// regra no front criaria duas verdades que divergem na primeira mudanca de papel.
+//
+// SO `usuario_admin`, e a diferenca para a irma abaixo e deliberada, nao esquecimento. A
+// `podeLancarSemCaixa` aceita `admin` tambem porque responde outra pergunta — "e retaguarda?" —, e
+// para aquilo o legado conta. Aqui a pergunta e "e o administrador total?", e o proprio sistema
+// responde que nao: o `perfil.service.ts:10` da API declara por escrito que o role `admin` NAO tem
+// efeito especial, e so `usuario_admin` recebe `permissoesAcessoTotal`; o legado passa por
+// `resolverPermissoesEfetivas` como qualquer outro. O rotulo que o usuario le confirma
+// (`WorkspaceDialogs.vue:14-17`): `usuario_admin` e "Administrador total", `admin` e
+// "Admin legado (permissoes por cargo, setor e usuario)".
+// Incluir o legado aqui seria vazamento: ele veria numeros do negocio inteiro por herdar um nome.
+export function ehAdministradorTotal(perfil: Pick<PerfilUsuario, "role">): boolean {
+  return perfil.role === "usuario_admin";
+}
+
 export function podeLancarSemCaixa(perfil: Pick<PerfilUsuario, "role" | "cargos">): boolean {
   if (perfil.role === "usuario_admin" || perfil.role === "admin") return true;
   const prefixosLiberados = ["tesouraria", "gerencia", "gerente", "financeiro", "diretor geral"];

@@ -1,5 +1,5 @@
 import type { MultipartFile } from "@fastify/multipart";
-import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import { temPermissao, type PerfilUsuario } from "@padaria/shared/autenticacao";
 import type {
   RetiradaCriada,
   RetiradaDetalheDto,
@@ -7,6 +7,7 @@ import type {
   RetiradaPayload,
   RetiradasQuery
 } from "@padaria/shared/retiradas";
+import { paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import {
@@ -14,6 +15,9 @@ import {
   exigirPermissaoLancamento,
   exigirPermissaoPagar,
   caixaIdDaSaida,
+  exigirSaldoSuficienteNaConta,
+  travarContasDaEdicao,
+  saldoJaReservadoNaMesmaConta,
   exigirContaForaDoCaixaFechadoNaCorrida,
   obterCaixaDaSaida,
   obterCaixaDaSaidaParaEdicao,
@@ -96,6 +100,19 @@ export async function criarRetirada(dados: RetiradaPayload, perfil: PerfilUsuari
       },
       tx
     );
+    // R-165: porta de saldo depois do caixa e depois do plano — a serie inteira sai da MESMA conta
+    // de uma vez (ver a nota em criarDespesa).
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: lancamento.contaOrigemId,
+        // Neutra a `computar = false` — ver a nota em criarDespesa.
+        valorCentavos: computar ? paraCentavos(lancamento.valorOriginal) * (plano ? plano.ocorrencias.length : 1) : 0
+      },
+      tx
+    );
+
     if (!plano) {
       const retirada = await criarRetiradaRepository(lancamento, computar, perfil.usuarioId, caixaId, tx);
       return { id: retirada.id, computar };
@@ -155,9 +172,18 @@ export async function atualizarRetirada(
   return executarEmTransacao(async (tx) => {
     // P0 — ordem unica de locks: caixa (FOR SHARE) antes da linha do lancamento.
     const caixaTravado = await obterCaixaDaSaidaParaEdicao(dados.empresaId, perfil, tx);
+    // R-165 · ORDEM GLOBAL: `contas` antes da linha — ver a nota em `atualizarDespesa`. A
+    // pre-leitura so escolhe as linhas a travar; ela nao autoriza.
+    const preLeitura = await buscarRetiradaDetalheRepository(retiradaId, tx);
+    await travarContasDaEdicao(
+      dados.empresaId,
+      [preLeitura?.contaOrigemId, dados.contaOrigemId, caixaTravado.caixa?.pdvContaId],
+      tx
+    );
     // TRAVA antes de ler — ver a nota em `atualizarDespesa`. Sem isto, duas edicoes concorrentes
     // liam o mesmo retrato e a segunda ressuscitava o credor legado E a divida do colaborador.
     if (!(await travarRetiradaRepository(retiradaId, dados.empresaId, tx))) throw new Error("Registro nao encontrado");
+    // RELEITURA sob os locks: e este retrato que decide.
     const existente = await buscarRetiradaDetalheRepository(retiradaId, tx);
     const caixa = validarEdicaoDeSaidaNoCaixa(existente, dados, perfil, caixaTravado);
     // Ciclo de vida (R7): editar retirada JA PAGA exige *_editar_dpago; alterar dataPagamento exige *_pagar.
@@ -179,6 +205,18 @@ export async function atualizarRetirada(
     );
     // Q2 tambem na edicao: a conta do PDV de um caixa que fechou na corrida nao recebe escrita.
     exigirContaForaDoCaixaFechadoNaCorrida(caixaTravado.caixaFechadoNaCorrida, normalizados.contaOrigemId);
+    // R-165 na EDICAO: delta real — ver a nota em `atualizarDespesa`.
+    await exigirSaldoSuficienteNaConta(
+      {
+        empresaId: dados.empresaId,
+        podeVerSaldo: temPermissao(perfil.permissoes, "cadastro_contas_visualizar"),
+        contaOrigemId: normalizados.contaOrigemId,
+        // Neutra a `computar = false` — ver a nota em atualizarDespesa.
+        valorCentavos: computar ? paraCentavos(normalizados.valorOriginal) : 0,
+        jaReservadoCentavos: saldoJaReservadoNaMesmaConta(existente, normalizados.contaOrigemId)
+      },
+      tx
+    );
     // A-4: `caixa_id` pela MESMA funcao do POST — ver a nota em `atualizarDespesa`.
     await atualizarRetiradaRepository(
       retiradaId,
