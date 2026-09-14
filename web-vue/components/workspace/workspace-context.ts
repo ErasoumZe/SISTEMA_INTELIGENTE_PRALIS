@@ -44,7 +44,7 @@ export type WorkspaceContext = {
   erroDiscriminacaoLinha: Ref<number | null>;
   erroDiscriminacaoCampo: Ref<string | null>;
   salvandoOperacao: Ref<boolean>;
-  salvarOperacao: () => Promise<{ id: string } | void>;
+  salvarOperacao: (criarNova?: boolean) => Promise<{ id: string } | void>;
   abrirOperacao: (entidade: EntidadeOperacional, operacao?: { id: string }) => Promise<void>;
   // Somente a retaguarda pode preparar retornos junto com a transferencia inicial.
   podePlanejarRetorno: ComputedRef<boolean>;

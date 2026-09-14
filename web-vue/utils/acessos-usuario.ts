@@ -30,6 +30,12 @@ type DadosEditor = Pick<
   "permissoes" | "cargos" | "cargosPermissoes" | "setores" | "setoresPermissoes" | "usuarios" | "usuariosPermissoes"
 >;
 
+// A configuracao guiada pertence ao cadastro de Usuario. O ID de Conta, PDV ou qualquer outro
+// cadastro nao pode ser usado como se fosse usuario na rota de permissoes efetivas.
+export function deveIniciarConfiguracaoUsuario(tela: string, idEditando: string) {
+  return tela === "usuarios" && !idEditando;
+}
+
 // Porta unica do acesso individual: a linha de Usuarios abre o editor com as regras gravadas e o
 // retrato efetivo calculado pelo servidor. AppWorkspace so orquestra; detalhes de rede e montagem
 // do formulario ficam isolados e testaveis aqui.

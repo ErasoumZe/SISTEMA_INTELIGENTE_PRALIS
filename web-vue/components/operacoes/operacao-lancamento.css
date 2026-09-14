@@ -162,6 +162,9 @@
   flex: 1 1 calc(33.333% - 6px);
   min-width: 0;
 }
+.lc-uma > .lc-campo {
+  flex-basis: 100%;
+}
 .lc-dois > .lc-campo,
 .lc-dois > .lc-foto {
   flex: 1 1 calc(50% - 4px);

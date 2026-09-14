@@ -92,7 +92,7 @@ import { criarAcoesCaixa } from "~/utils/caixa-acoes";
 import { CONFIRMAR_ACAO_KEY } from "~/utils/confirmacao-acao";
 import { criarAtualizadorCadastroLocal } from "~/utils/cadastro-local";
 import { criarGuardaAberturaOperacao } from "~/utils/abertura-operacao";
-import { criarAcoesAcessosUsuario } from "~/utils/acessos-usuario";
+import { criarAcoesAcessosUsuario, deveIniciarConfiguracaoUsuario } from "~/utils/acessos-usuario";
 import {
   contaTravadaDeCaixa,
   nomeDaContaDoLancamento,
@@ -1350,7 +1350,7 @@ function mensagemLancamentoSalvo(resultado: { serie?: number; serieLimitada?: bo
   return resultado.serieLimitada ? `${base} A serie foi limitada a 12 meses.` : base;
 }
 
-async function salvarOperacao() {
+async function salvarOperacao(criarNova = false) {
   salvandoOperacao.value = true;
   try {
     if (modoDiscriminacao.value) {
@@ -1360,7 +1360,8 @@ async function salvarOperacao() {
     // Montagem do corpo, pre-validacao e a decisao POST vs PUT vivem em `utils/lancamento-acoes`,
     // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
     // discriminacao, que dependem do DOM e do estado da tela.
-    const possuiRetornosPlanejados = entidadeNova.value === "transferencia" && form.value.retornosPlanejados.length > 0;
+    const entidadeSalva = entidadeNova.value;
+    const possuiRetornosPlanejados = entidadeSalva === "transferencia" && form.value.retornosPlanejados.length > 0;
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
@@ -1383,13 +1384,17 @@ async function salvarOperacao() {
     } else if (!possuiRetornosPlanejados) {
       operacoes.value.unshift(linhaAtualizada);
     }
-    modalOperacaoAberto.value = false;
     notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
     await carregarStatusCaixa(empresaId.value);
     // O POST devolve o pai, mas as linhas planejadas nascem junto no servidor. Um `unshift` local
     // deixaria as filhas invisíveis e o pai editável até o próximo refresh; a lista oficial é a
     // única fonte capaz de trazer os marcadores das duas pontas do conjunto.
     if (possuiRetornosPlanejados) await carregarDadosTela(telaAtiva.value, empresaId.value);
+    if (criarNova) {
+      await acoesLancamento.abrirLancamento(entidadeSalva);
+    } else {
+      modalOperacaoAberto.value = false;
+    }
     return { id: operacaoSalva.id };
   } catch (error) {
     if (error instanceof ErroApiCliente && error.status === 422 && error.details && typeof error.details === "object") {
@@ -1477,7 +1482,8 @@ async function salvarCadastro() {
   }
   cadastroSalvando.value = true;
   try {
-    const endpoint = tipoEndpointCadastro(cadastroTela.value, formCadastro.value);
+    const telaSalva = cadastroTela.value || telaAtiva.value;
+    const endpoint = tipoEndpointCadastro(telaSalva, formCadastro.value);
     const formSnapshot: CadastroForm = {
       ...formCadastro.value,
       empresaIds: [...formCadastro.value.empresaIds],
@@ -1485,12 +1491,12 @@ async function salvarCadastro() {
       // reinjetar aqui, salvar pela tela apaga o que ela mesma escondeu. A fonte e `opcoes`
       // (completa e sem paginacao), nao `permissoesPagina` (uma pagina, que nasce vazia).
       regras:
-        cadastroTela.value === "permissoes"
+        telaSalva === "permissoes"
           ? regrasComOcultasPreservadas(formCadastro.value, opcoes.value)
           : { ...formCadastro.value.regras }
     };
     const idEditando = cadastroEditandoId.value;
-    const payload = cadastroPayload(cadastroTela.value, formSnapshot, empresaId.value);
+    const payload = cadastroPayload(telaSalva, formSnapshot, empresaId.value);
     const enviar = (corpo: unknown) =>
       idEditando
         ? apiPut<{ id?: string } | undefined>(`/api/${endpoint}/${idEditando}`, corpo)
@@ -1511,16 +1517,16 @@ async function salvarCadastro() {
     // sincronizar aqui, um segundo save da sessao parte de um retrato velho. Grava-se DEPOIS do
     // 2xx e a partir do `formSnapshot` (o objeto que foi enviado), nao do `formCadastro`, cujos
     // selects seguem editaveis. O servidor persiste o `regras` literal — o Zod e tudo-ou-nada.
-    if (cadastroTela.value === "permissoes") {
+    if (telaSalva === "permissoes") {
       opcoes.value = aplicarRegrasDoAlvoNasListas(opcoes.value, formSnapshot, formSnapshot.regras) as Opcoes;
     }
     modalCadastroAberto.value = false;
     const idSalvo = idEditando || resultado?.id;
-    if (!atualizarCadastroLocal(cadastroTela.value || telaAtiva.value, formSnapshot, idSalvo)) {
-      const empresaParaRecarregar = cadastroTela.value === "empresas" && resultado?.id ? resultado.id : empresaId.value;
-      await carregarDadosTela(cadastroTela.value || telaAtiva.value, empresaParaRecarregar);
+    if (!atualizarCadastroLocal(telaSalva, formSnapshot, idSalvo)) {
+      const empresaParaRecarregar = telaSalva === "empresas" && resultado?.id ? resultado.id : empresaId.value;
+      await carregarDadosTela(telaSalva, empresaParaRecarregar);
     }
-    const configuracaoGuiada = idEditando
+    const configuracaoGuiada = !deveIniciarConfiguracaoUsuario(telaSalva, idEditando)
       ? null
       : await iniciarConfiguracaoDoUsuarioCriado(resultado?.id, formSnapshot.role);
     // `false` significa que o passo era aplicavel, mas o editor nao carregou; nesse caso ele ja

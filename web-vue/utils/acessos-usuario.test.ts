@@ -1,9 +1,16 @@
 import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { criarAcoesAcessosUsuario } from "~/utils/acessos-usuario";
+import { criarAcoesAcessosUsuario, deveIniciarConfiguracaoUsuario } from "~/utils/acessos-usuario";
 import { formCadastroVazio, opcoesVazias } from "~/utils/domain";
 
 describe("acoes de acesso individual", () => {
+  it("inicia a configuracao guiada somente para usuario novo", () => {
+    expect(deveIniciarConfiguracaoUsuario("usuarios", "")).toBe(true);
+    expect(deveIniciarConfiguracaoUsuario("usuarios", "usuario-existente")).toBe(false);
+    expect(deveIniciarConfiguracaoUsuario("contas", "")).toBe(false);
+    expect(deveIniciarConfiguracaoUsuario("pdv", "")).toBe(false);
+  });
+
   it("carrega regras e resumo efetivo antes de abrir o editor", async () => {
     const opcoes = ref(opcoesVazias());
     const cadastroTela = ref("");
