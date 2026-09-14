@@ -131,6 +131,10 @@ describe("ProcessoInternosDialog — exame admissional", () => {
     tela.unmount();
   });
 
+  // Teto proprio, e nao o padrao de 5s: este caso monta e desmonta o dialogo SEIS vezes, uma por
+  // situacao do exame, e cada volta espera o overlay do Vuetify assentar. Sozinho leva ~2s; dentro
+  // da suite completa do front, com 40 arquivos disputando CPU, estourou — falha de RELOGIO, nunca
+  // de regra. Mesmo remedio que a suite de produtos ja levou (2e1dc3a).
   it("Deve_ValerParaTodasAsSituacoes_E_NuncaEmitirRotulo", async () => {
     // Uma so situacao provaria pouco: o defeito era do binding, e valeria para qualquer opcao.
     for (const [rotulo, valor] of [
@@ -158,7 +162,7 @@ describe("ProcessoInternosDialog — exame admissional", () => {
       tela.unmount();
       document.body.innerHTML = "";
     }
-  });
+  }, 60_000);
 
   it("Deve_MostrarOAvisoDoExame_Quando_EscolherAsoApto", async () => {
     // O aviso comparava com `aso_apto` e nunca casava enquanto o model guardava o rotulo — era o
