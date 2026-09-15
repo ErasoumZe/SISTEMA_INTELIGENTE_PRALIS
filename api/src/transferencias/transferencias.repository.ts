@@ -1,6 +1,6 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
+import { contas, contasUsuarios, empresas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   lacres,
@@ -27,11 +27,19 @@ export async function listarTransferenciasRepository(
   query: TransferenciasQuery,
   empresasPermitidasIds: string[] | null
 ): Promise<TransferenciaDto[]> {
+  const origem = alias(contas, "conta_origem");
+  const destino = alias(contas, "conta_destino");
+  const criador = alias(perfisUsuarios, "perfil_criador_transferencia");
   const filtros = filtrosEmpresa(transferencias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(transferencias.caixaId, query.caixaId));
   if (query.status) filtros.push(eq(transferencias.status, query.status));
-  const origem = alias(contas, "conta_origem");
-  const destino = alias(contas, "conta_destino");
+  if (query.dataInicio) filtros.push(gte(transferencias.dataReferencia, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(transferencias.dataReferencia, query.dataFim));
+  if (query.pdvId) filtros.push(eq(fechamentosCaixa.pdvId, query.pdvId));
+  if (query.usuario) filtros.push(ilike(criador.nome, `%${query.usuario}%`));
+  if (query.contaOrigemId) filtros.push(eq(transferencias.contaOrigemId, query.contaOrigemId));
+  if (query.contaDestinoId) filtros.push(eq(transferencias.contaDestinoId, query.contaDestinoId));
+  if (query.lacre) filtros.push(ilike(transferencias.nLacreDoc, `%${query.lacre}%`));
   const linhas = await banco
     .select({
       id: transferencias.id,
@@ -50,6 +58,9 @@ export async function listarTransferenciasRepository(
       prazoConfirmacaoEm: transferencias.prazoConfirmacaoEm,
       dataRecebimento: transferencias.dataRecebimento,
       confirmadoPor: transferencias.confirmadoPor,
+      criadoPor: transferencias.criadoPor,
+      criadoPorNome: criador.nome,
+      criadoEm: transferencias.criadoEm,
       // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,
@@ -64,6 +75,7 @@ export async function listarTransferenciasRepository(
     .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
     .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, transferencias.caixaId))
     .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .leftJoin(criador, eq(criador.usuarioId, transferencias.criadoPor))
     .where(filtros.length ? and(...filtros) : undefined)
     .orderBy(sql`${transferencias.dataRecebimento} desc nulls last`, desc(transferencias.criadoEm));
   const paisComPlanejamento = linhas.length
@@ -84,6 +96,7 @@ export async function listarTransferenciasRepository(
     valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
+    criadoEm: linha.criadoEm.toISOString(),
     ehCaixaParaCofre: ehRetornoDoCaixa({
       caixaId: linha.caixaId,
       tipo

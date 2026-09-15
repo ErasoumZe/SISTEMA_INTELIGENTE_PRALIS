@@ -15,6 +15,14 @@ export const transferenciasQuerySchema = z
   .object({
     empresaId: uuidSchema.optional(),
     caixaId: uuidSchema.optional(),
+    // Filtros da Tesouraria: todos sao aplicados no banco antes da paginacao.
+    dataInicio: z.string().min(10).optional(),
+    dataFim: z.string().min(10).optional(),
+    pdvId: uuidSchema.optional(),
+    usuario: z.string().trim().min(1).max(120).optional(),
+    contaOrigemId: uuidSchema.optional(),
+    contaDestinoId: uuidSchema.optional(),
+    lacre: z.string().trim().min(1).max(100).optional(),
     // Filtro aplicado no banco antes da paginacao. Filtrar so as linhas ja visiveis esconderia
     // resultados das outras paginas e daria ao operador uma lista incompleta.
     status: statusTransferenciaSchema.optional()
@@ -74,6 +82,9 @@ export const transferenciaDtoSchema = z.object({
   prazoConfirmacaoEm: z.string().nullable(),
   dataRecebimento: z.string().nullable(),
   confirmadoPor: z.string().nullable(),
+  criadoPor: z.string().nullable(),
+  criadoPorNome: z.string().nullable(),
+  criadoEm: z.string(),
   possuiPlanejamentoRetorno: z.boolean(),
   ehPlanejamentoRetorno: z.boolean(),
   // Esta linha esta sob as regras ESTRITAS da Transferencia de retorno (valor obrigatorio na conferencia,

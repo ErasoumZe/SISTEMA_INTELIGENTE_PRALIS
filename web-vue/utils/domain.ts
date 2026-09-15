@@ -146,8 +146,7 @@ export const itemPorTela: Record<string, ItemMenu> = {
   socios_gestores: {
     id: "socios_gestores",
     titulo: "Sócios e Gestores",
-    permissao: "retiradas_visualizar",
-    permissoesAlternativas: ["retiradas_criar", "retiradas_editar"],
+    permissao: "cadastro_socios_gestores_visualizar",
     icone: "mdi-account-tie"
   },
   maquininhas: {
@@ -470,6 +469,7 @@ export const secoesPermissoes = [
   { titulo: "Produtos mais vendidos", prefixos: ["relatorio_produtos", "menu_relatorio_produtos"] },
   { titulo: "Relatório de vendas", prefixos: ["relatorio_vendas", "menu_relatorio_vendas"] },
   { titulo: "Retiradas", prefixos: ["retiradas", "menu_retiradas"] },
+  { titulo: "Sócios e Gestores", prefixos: ["cadastro_socios_gestores"] },
   { titulo: "Tema e aparência", prefixos: ["aparencia", "menu_aparencia"] },
   { titulo: "Transferências", prefixos: ["transferencias", "menu_transferencias"] },
   { titulo: "Unidades de medida", prefixos: ["cadastro_unidades_medida", "menu_unidades"] },

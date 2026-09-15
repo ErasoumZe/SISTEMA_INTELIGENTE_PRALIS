@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ehPermissaoRestricao, permissoesAcessoTotal, permissoesRestricao, type Permissao } from "@padaria/shared";
-import { acoesNovoPermitidas, categoriaInicialSaida, itemPorTela } from "./domain";
+import { acoesNovoPermitidas, categoriaInicialSaida, itemPorTela, podeExecutarAcaoCadastro } from "./domain";
 import { CATEGORIA_LANCAMENTOS, agruparTelasMenu } from "./menu";
 import { usePermissoes } from "~/composables/usePermissoes";
 
@@ -93,6 +93,23 @@ describe("item de menu do historico de caixas", () => {
   it("aparece para o autorizador mesmo sem caixa_operar", () => {
     const menu = menuDoPerfil(["caixas_gerenciar"]);
     expect(idsDaSecao(menu, "Entradas")).toEqual(["historico_caixas"]);
+  });
+});
+
+describe("Socios e Gestores", () => {
+  it("tem permissao administrativa propria e nao aparece para quem so opera retiradas", () => {
+    expect(itemPorTela.socios_gestores?.permissao).toBe("cadastro_socios_gestores_visualizar");
+    expect(idsDaSecao(menuDoPerfil(["retiradas_visualizar"]), "Configuração")).not.toContain("socios_gestores");
+  });
+
+  it("aparece em Configuracao e respeita criar/editar independentes de Retiradas", () => {
+    const item = itemPorTela.socios_gestores!;
+    expect(idsDaSecao(menuDoPerfil(["cadastro_socios_gestores_visualizar"]), "Configuração")).toContain(
+      "socios_gestores"
+    );
+    expect(podeExecutarAcaoCadastro(["cadastro_socios_gestores_criar"], item, "criar")).toBe(true);
+    expect(podeExecutarAcaoCadastro(["retiradas_criar"], item, "criar")).toBe(false);
+    expect(podeExecutarAcaoCadastro(["cadastro_socios_gestores_editar"], item, "editar")).toBe(true);
   });
 });
 

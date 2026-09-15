@@ -111,6 +111,11 @@ export const permissoes = [
   "cadastro_fornecedores_criar",
   "cadastro_fornecedores_editar",
   "cadastro_fornecedores_excluir",
+  // Cadastro de socios e gestores e administrativo e nao pode herdar permissao de Retiradas.
+  // Retiradas apenas consulta os ativos pelo endpoint operacional proprio.
+  "cadastro_socios_gestores_visualizar",
+  "cadastro_socios_gestores_criar",
+  "cadastro_socios_gestores_editar",
   "cadastro_produtos_visualizar",
   "cadastro_produtos_criar",
   "cadastro_produtos_editar",

@@ -255,6 +255,15 @@ const paginaOperacoes = ref(1);
 // O filtro pertence so a Transferencias. O servidor o recebe para que o total, a paginacao e as
 // linhas sejam do mesmo conjunto — nao uma pagina filtrada pela metade no navegador.
 const filtroStatusTransferencia = ref<StatusTransferencia | "">("");
+const filtrosTransferencias = reactive({
+  dataInicio: "",
+  dataFim: "",
+  pdvId: "",
+  usuario: "",
+  contaOrigemId: "",
+  contaDestinoId: "",
+  lacre: ""
+});
 // Filtros das telas de Saidas. Uma unica fonte no workspace garante que a API filtre antes da
 // paginacao; filtrar so as 50 linhas recebidas esconderia resultados das demais paginas.
 const filtrosSaidas = reactive({ dataInicio: "", dataFim: "", pdvId: "", status: "" });
@@ -460,6 +469,17 @@ watch(filtroPendentesDiscriminacao, () => {
 watch(telaAtiva, () => {
   filtroPendentesDiscriminacao.value = false;
   if (telaAtiva.value !== "transferencias") filtroStatusTransferencia.value = "";
+  if (telaAtiva.value !== "transferencias") {
+    Object.assign(filtrosTransferencias, {
+      dataInicio: "",
+      dataFim: "",
+      pdvId: "",
+      usuario: "",
+      contaOrigemId: "",
+      contaDestinoId: "",
+      lacre: ""
+    });
+  }
   if (!["despesas", "mercadorias", "retiradas"].includes(telaAtiva.value)) {
     Object.assign(filtrosSaidas, { dataInicio: "", dataFim: "", pdvId: "", status: "" });
   }
@@ -837,7 +857,12 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
         []
       ),
-      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), []),
+      carregarOpcaoOpcional(
+        faltas,
+        "Sócios e Gestores",
+        () => apiGet<Opcao[]>(`/api/socios-gestores/opcoes${query}`),
+        []
+      ),
       carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
     ]);
   } else if (tela === "grupos") {
@@ -1010,10 +1035,29 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
     caixaId,
     dia: telaAtiva.value === "entradas" ? diaEntradas.value : "",
     statusTransferencia: telaAtiva.value === "transferencias" ? filtroStatusTransferencia.value : "",
-    dataInicio: telaSuportaFiltrosSaidas.value ? filtrosSaidas.dataInicio : "",
-    dataFim: telaSuportaFiltrosSaidas.value ? filtrosSaidas.dataFim : "",
-    pdvId: telaSuportaFiltrosSaidas.value ? filtrosSaidas.pdvId : "",
-    statusOperacao: telaSuportaFiltrosSaidas.value ? filtrosSaidas.status : ""
+    dataInicio:
+      telaAtiva.value === "transferencias"
+        ? filtrosTransferencias.dataInicio
+        : telaSuportaFiltrosSaidas.value
+          ? filtrosSaidas.dataInicio
+          : "",
+    dataFim:
+      telaAtiva.value === "transferencias"
+        ? filtrosTransferencias.dataFim
+        : telaSuportaFiltrosSaidas.value
+          ? filtrosSaidas.dataFim
+          : "",
+    pdvId:
+      telaAtiva.value === "transferencias"
+        ? filtrosTransferencias.pdvId
+        : telaSuportaFiltrosSaidas.value
+          ? filtrosSaidas.pdvId
+          : "",
+    statusOperacao: telaSuportaFiltrosSaidas.value ? filtrosSaidas.status : "",
+    usuarioTransferencia: telaAtiva.value === "transferencias" ? filtrosTransferencias.usuario : "",
+    contaOrigemTransferenciaId: telaAtiva.value === "transferencias" ? filtrosTransferencias.contaOrigemId : "",
+    contaDestinoTransferenciaId: telaAtiva.value === "transferencias" ? filtrosTransferencias.contaDestinoId : "",
+    lacreTransferencia: telaAtiva.value === "transferencias" ? filtrosTransferencias.lacre : ""
   });
   const pagina = await apiGetPaginado<OperacaoResumo, { totalLiquido?: number }>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
@@ -1125,7 +1169,7 @@ async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpre
       alvo.colaboradores = await carregarOpcoesCompletas("/api/colaboradores", idEmpresa);
     },
     sociosGestores: async () => {
-      alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores${query}`);
+      alvo.sociosGestores = await apiGet<Opcao[]>(`/api/socios-gestores/opcoes${query}`);
     },
     produtos: async () => {
       alvo.produtos = await apiGet<Opcao[]>(`/api/produtos/opcoes${query}`);
@@ -1928,6 +1972,12 @@ function atualizarFiltroStatusTransferencia(status: StatusTransferencia | "") {
   void carregarOperacoes();
 }
 
+function atualizarFiltrosTransferencias(filtros: typeof filtrosTransferencias) {
+  Object.assign(filtrosTransferencias, filtros);
+  paginaOperacoes.value = 1;
+  void carregarOperacoes();
+}
+
 function atualizarFiltrosSaidas(filtros: { dataInicio: string; dataFim: string; pdvId: string; status: string }) {
   Object.assign(filtrosSaidas, filtros);
   paginaOperacoes.value = 1;
@@ -1974,9 +2024,11 @@ const pageContext = computed(() => ({
   // falsa dava sempre no maximo 10.
   totalOperacoes: totalOperacoes.value,
   filtroStatusTransferencia: filtroStatusTransferencia.value,
+  filtrosTransferencias: { ...filtrosTransferencias },
   filtrosSaidas: { ...filtrosSaidas },
   mostrarFiltrosSaidas: telaSuportaFiltrosSaidas.value,
   pdvs: opcoesEmpresa.value.pdvs ?? [],
+  contas: opcoesEmpresa.value.contas ?? [],
   totalLiquidoOperacoes: totalLiquidoOperacoes.value,
   // Filtro de data das Entradas (S6): o dia listado e se o perfil pode trocar de dia.
   diaEntradas: diaEntradas.value,
@@ -1984,6 +2036,7 @@ const pageContext = computed(() => ({
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   atualizarFiltroStatusTransferencia,
+  atualizarFiltrosTransferencias,
   atualizarFiltrosSaidas,
   descricao: descricaoTela(telaAtiva.value),
   // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).

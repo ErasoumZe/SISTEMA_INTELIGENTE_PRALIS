@@ -37,6 +37,17 @@ const props = withDefaults(
     operacoesTela: OperacaoResumo[];
     totalOperacoes: number;
     statusFiltro: StatusTransferencia | "";
+    filtrosTransferencias: {
+      dataInicio: string;
+      dataFim: string;
+      pdvId: string;
+      usuario: string;
+      contaOrigemId: string;
+      contaDestinoId: string;
+      lacre: string;
+    };
+    pdvs: Opcao[];
+    contas: Opcao[];
     pagina: number;
     totalPaginas: number;
     podeCriar?: boolean;
@@ -61,6 +72,7 @@ const emit = defineEmits<{
   (event: "editar", operacao: OperacaoResumo): void;
   (event: "update:pagina", pagina: number): void;
   (event: "update:status-filtro", status: StatusTransferencia | ""): void;
+  (event: "update:filtros-transferencias", filtros: typeof props.filtrosTransferencias): void;
   (event: "recarregar"): void;
   (event: "notificar", mensagem: string, tipo?: string): void;
   (
@@ -285,6 +297,15 @@ const opcoesStatus = [
   ...statusTransferenciaSchema.options.map((status) => ({ title: rotulosStatus[status], value: status }))
 ];
 
+const opcoesPdvs = computed(() => [
+  { title: "Todos os PDVs", value: "" },
+  ...props.pdvs.map((pdv) => ({ title: pdv.nome ?? pdv.id, value: pdv.id }))
+]);
+const opcoesContas = computed(() => [
+  { title: "Todas as contas", value: "" },
+  ...props.contas.map((conta) => ({ title: conta.nome ?? conta.id, value: conta.id }))
+]);
+
 function rotuloStatus(status: string): string {
   return rotulosStatus[status as StatusTransferencia] ?? status;
 }
@@ -300,6 +321,23 @@ function iconeStatus(status: string): string {
 function atualizarStatusFiltro(status: unknown) {
   const resultado = statusTransferenciaSchema.safeParse(status);
   emit("update:status-filtro", resultado.success ? resultado.data : "");
+}
+
+function atualizarFiltroTransferencia(campo: keyof typeof props.filtrosTransferencias, valor: unknown) {
+  emit("update:filtros-transferencias", { ...props.filtrosTransferencias, [campo]: String(valor ?? "") });
+}
+
+function limparFiltrosTransferencias() {
+  emit("update:status-filtro", "");
+  emit("update:filtros-transferencias", {
+    dataInicio: "",
+    dataFim: "",
+    pdvId: "",
+    usuario: "",
+    contaOrigemId: "",
+    contaDestinoId: "",
+    lacre: ""
+  });
 }
 </script>
 
@@ -354,7 +392,7 @@ function atualizarStatusFiltro(status: unknown) {
         <v-select
           :model-value="statusFiltro"
           :items="opcoesStatus"
-          label="Filtrar por status"
+          label="Status"
           density="compact"
           variant="outlined"
           hide-details
@@ -362,12 +400,79 @@ function atualizarStatusFiltro(status: unknown) {
           aria-label="Filtrar transferências por status"
           @update:model-value="atualizarStatusFiltro"
         />
+        <v-text-field
+          :model-value="filtrosTransferencias.dataInicio"
+          type="date"
+          label="Data inicial"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @update:model-value="atualizarFiltroTransferencia('dataInicio', $event)"
+        />
+        <v-text-field
+          :model-value="filtrosTransferencias.dataFim"
+          type="date"
+          label="Data final"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @update:model-value="atualizarFiltroTransferencia('dataFim', $event)"
+        />
+        <v-select
+          :model-value="filtrosTransferencias.pdvId"
+          :items="opcoesPdvs"
+          label="PDV"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @update:model-value="atualizarFiltroTransferencia('pdvId', $event)"
+        />
+        <v-text-field
+          :model-value="filtrosTransferencias.usuario"
+          label="Criado por"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          @update:model-value="atualizarFiltroTransferencia('usuario', $event)"
+        />
+        <v-select
+          :model-value="filtrosTransferencias.contaOrigemId"
+          :items="opcoesContas"
+          label="Conta de origem"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @update:model-value="atualizarFiltroTransferencia('contaOrigemId', $event)"
+        />
+        <v-select
+          :model-value="filtrosTransferencias.contaDestinoId"
+          :items="opcoesContas"
+          label="Conta de destino"
+          density="compact"
+          variant="outlined"
+          hide-details
+          @update:model-value="atualizarFiltroTransferencia('contaDestinoId', $event)"
+        />
+        <v-text-field
+          :model-value="filtrosTransferencias.lacre"
+          label="Lacre"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          @update:model-value="atualizarFiltroTransferencia('lacre', $event)"
+        />
+        <v-btn variant="text" size="small" prepend-icon="mdi-filter-off-outline" @click="limparFiltrosTransferencias"
+          >Limpar</v-btn
+        >
       </div>
       <div class="tes-list" role="table" aria-label="Transferências do período">
         <div class="tes-row tes-row-head" role="row">
           <span>Confirmação</span>
           <span>Data</span>
           <span>PDV</span>
+          <span>Criado por</span>
           <span>Origem → destino</span>
           <span>Lacre</span>
           <span class="tes-num">Valor</span>
@@ -385,6 +490,7 @@ function atualizarStatusFiltro(status: unknown) {
           </span>
           <span class="tes-data" data-col="Data">{{ formatarDataSomenteDia(op.dataReferencia) }}</span>
           <span data-col="PDV">{{ op.pdvNome || "—" }}</span>
+          <span class="tes-usuario" data-col="Criado por">{{ op.criadoPorNome || "—" }}</span>
           <span class="tes-desc" data-col="Origem → destino" :title="op.descricao">
             <v-icon icon="mdi-swap-horizontal" size="16" class="tes-desc-ic" />{{ op.contaOrigemNome }} →
             {{ op.contaDestinoNome }}
@@ -696,7 +802,7 @@ function atualizarStatusFiltro(status: unknown) {
 }
 .tes-row {
   display: grid;
-  grid-template-columns: 116px 84px 112px minmax(0, 1fr) 70px 116px 116px 104px;
+  grid-template-columns: 116px 84px 96px 118px minmax(0, 1fr) 70px 116px 116px 104px;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
@@ -744,9 +850,11 @@ function atualizarStatusFiltro(status: unknown) {
   background: #fdba74;
 }
 .tes-filtros {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  align-items: center;
   padding: 18px 16px 14px;
+  gap: 10px;
 }
 .tes-filtros :deep(.v-input) {
   width: 100%;
@@ -777,6 +885,14 @@ function atualizarStatusFiltro(status: unknown) {
   font-size: 13px;
   font-weight: 700;
   color: var(--shell-ink-soft, #94a3b8);
+}
+.tes-usuario {
+  overflow: hidden;
+  color: var(--shell-ink-soft, #64748b);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tes-valor {
   font-size: 14.5px;
@@ -834,11 +950,13 @@ function atualizarStatusFiltro(status: unknown) {
 /* ---- Responsivo (breakpoints do projeto) ---- */
 @media (width <= 1024px) {
   .tes-row {
-    grid-template-columns: 108px 76px 96px minmax(0, 1fr) 104px 96px;
+    grid-template-columns: 108px 76px 92px minmax(0, 1fr) 104px 96px;
   }
-  /* Lacre e recebimento ficam compactos para preservar a densidade. */
-  .tes-row-head > :nth-child(5),
-  .tes-row-head > :nth-child(7),
+  /* Usuário, lacre e recebimento ficam compactos para preservar a densidade. */
+  .tes-row-head > :nth-child(4),
+  .tes-row-head > :nth-child(6),
+  .tes-row-head > :nth-child(8),
+  .tes-usuario,
   .tes-lacre,
   .tes-receb {
     display: none;
@@ -846,6 +964,7 @@ function atualizarStatusFiltro(status: unknown) {
 }
 @media (width <= 768px) {
   .tes-filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 14px 12px 12px;
   }
   .tes-cards {
@@ -871,6 +990,9 @@ function atualizarStatusFiltro(status: unknown) {
   .tes-row > [data-col="PDV"] {
     display: none;
   }
+  .tes-row > [data-col="Criado por"] {
+    display: none;
+  }
   .tes-desc {
     grid-area: desc;
   }
@@ -884,6 +1006,9 @@ function atualizarStatusFiltro(status: unknown) {
   }
 }
 @media (width <= 560px) {
+  .tes-filtros {
+    grid-template-columns: 1fr;
+  }
   .tes-nova {
     width: 100%;
   }

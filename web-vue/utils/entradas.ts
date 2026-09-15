@@ -67,6 +67,11 @@ export type FiltroListagemOperacoes = {
   dia?: string;
   /** Estado da Tesouraria. E aplicado pela API antes de paginar, nunca em memoria. */
   statusTransferencia?: StatusTransferencia | "";
+  /** Filtros exclusivos da Tesouraria, sempre executados no servidor. */
+  usuarioTransferencia?: string;
+  contaOrigemTransferenciaId?: string;
+  contaDestinoTransferenciaId?: string;
+  lacreTransferencia?: string;
   /** Filtros das Saidas. O servidor os aplica antes da paginacao. */
   dataInicio?: string;
   dataFim?: string;
@@ -94,6 +99,10 @@ export function paramsListagemOperacoes(filtro: FiltroListagemOperacoes): URLSea
     params.set("dataFim", filtro.dia);
   }
   if (filtro.statusTransferencia) params.set("status", filtro.statusTransferencia);
+  if (filtro.usuarioTransferencia) params.set("usuario", filtro.usuarioTransferencia);
+  if (filtro.contaOrigemTransferenciaId) params.set("contaOrigemId", filtro.contaOrigemTransferenciaId);
+  if (filtro.contaDestinoTransferenciaId) params.set("contaDestinoId", filtro.contaDestinoTransferenciaId);
+  if (filtro.lacreTransferencia) params.set("lacre", filtro.lacreTransferencia);
   if (filtro.dataInicio) params.set("dataInicio", filtro.dataInicio);
   if (filtro.dataFim) params.set("dataFim", filtro.dataFim);
   if (filtro.pdvId) params.set("pdvId", filtro.pdvId);

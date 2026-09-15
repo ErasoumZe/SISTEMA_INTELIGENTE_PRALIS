@@ -120,6 +120,30 @@ describe("paramsListagemOperacoes", () => {
     expect(params.get("page")).toBe("2");
   });
 
+  it("manda todos os filtros da Tesouraria para o servidor antes da paginacao", () => {
+    const params = paramsListagemOperacoes({
+      empresaId: "e1",
+      pagina: 2,
+      dataInicio: "2026-09-01",
+      dataFim: "2026-09-14",
+      pdvId: "pdv-1",
+      usuarioTransferencia: "Tesouraria",
+      contaOrigemTransferenciaId: "conta-origem",
+      contaDestinoTransferenciaId: "conta-destino",
+      lacreTransferencia: "12A"
+    });
+    expect(query(params)).toMatchObject({
+      dataInicio: "2026-09-01",
+      dataFim: "2026-09-14",
+      pdvId: "pdv-1",
+      usuario: "Tesouraria",
+      contaOrigemId: "conta-origem",
+      contaDestinoId: "conta-destino",
+      lacre: "12A",
+      page: "2"
+    });
+  });
+
   it("a fila de pendencias ignora caixa E dia — e visao de retaguarda", () => {
     const params = paramsListagemOperacoes({
       empresaId: "e1",
