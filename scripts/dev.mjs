@@ -10,6 +10,13 @@ import { composeAppDev, composeDbDev, docker } from "./compose-paths.mjs";
 const cwd = fileURLToPath(new URL("..", import.meta.url));
 const isWindows = process.platform === "win32";
 const npm = "npm";
+
+// Segredos de desenvolvimento ficam apenas no `.env.local` ignorado. Carrega antes de invocar o
+// Docker Compose para que variaveis opcionais, como Gemini, cheguem ao container sem aparecer no
+// frontend ou no Git. A ausencia do arquivo continua sendo um ambiente dev valido.
+const arquivoEnvLocal = path.join(cwd, ".env.local");
+if (existsSync(arquivoEnvLocal)) process.loadEnvFile(arquivoEnvLocal);
+
 const executarUmaVez = process.argv.includes("--once");
 const executarLocal = process.argv.includes("--local");
 const forcarBuild = process.argv.includes("--build");

@@ -16,6 +16,11 @@ services:
       WATCHPACK_POLLING: "true"
       WATCHFILES_FORCE_POLLING: "true"
       TSC_WATCHFILE: FixedPollingInterval
+      # Leitura fiscal assistida: opcional no desenvolvimento e fornecida exclusivamente pelo
+      # `.env.local` ignorado. A chave nunca vai para a imagem, o front ou o Git.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-90000}
     ports:
       - "127.0.0.1:${API_PORT:-4100}:${API_PORT:-4100}"
     volumes:
