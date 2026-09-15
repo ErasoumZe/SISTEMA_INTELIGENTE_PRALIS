@@ -104,7 +104,7 @@ function moeda(valor: string | null) {
           :disabled="carregando"
           @click="galeria?.click()"
         >
-          <v-icon size="18">mdi-image-multiple</v-icon> Escolher da galeria
+          <v-icon size="18">mdi-file-document-multiple</v-icon> Escolher arquivo
         </button>
         <input
           ref="camera"
@@ -114,7 +114,13 @@ function moeda(valor: string | null) {
           capture="environment"
           @change="analisarArquivo"
         />
-        <input ref="galeria" class="ia-nota-input" type="file" accept="image/*" @change="analisarArquivo" />
+        <input
+          ref="galeria"
+          class="ia-nota-input"
+          type="file"
+          accept="image/*,.pdf,application/pdf,.xml,application/xml,text/xml"
+          @change="analisarArquivo"
+        />
       </div>
 
       <p v-if="carregando" class="ia-nota-status" role="status">
@@ -122,7 +128,7 @@ function moeda(valor: string | null) {
       </p>
       <p v-if="erro" class="ia-nota-erro" role="alert">{{ erro }}</p>
       <p v-if="fotoNotaPreview || fotoNotaExistente" class="ia-nota-anexo">
-        <v-icon size="15">mdi-paperclip</v-icon> A foto ficara anexada para auditoria somente quando voce salvar.
+        <v-icon size="15">mdi-paperclip</v-icon> O arquivo ficará anexado para auditoria somente quando você salvar.
       </p>
 
       <div v-if="resultado" class="ia-nota-resultado">

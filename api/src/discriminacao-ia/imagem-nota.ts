@@ -23,10 +23,30 @@ const tiposPorAssinatura = [
   }
 ] as const;
 
-export type ImagemNotaValidada = { dados: Buffer; mimeType: string };
+const tiposDocumento = [
+  {
+    mimeType: "application/pdf" as const,
+    confere: (b: Buffer) => b.length >= 5 && b.toString("ascii", 0, 5) === "%PDF-"
+  },
+  {
+    mimeType: "application/xml" as const,
+    confere: (b: Buffer) => {
+      const inicio = b
+        .toString("utf8", 0, Math.min(b.length, 4096))
+        .replace(/^\uFEFF/, "")
+        .trimStart();
+      return inicio.startsWith("<?xml") || /<(?:[\w-]+:)?(?:nfeProc|NFe)\b/i.test(inicio);
+    }
+  }
+] as const;
+
+export type ImagemNotaValidada = {
+  dados: Buffer;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/heic" | "application/pdf" | "application/xml";
+};
 
 export async function lerImagemNota(arquivo: MultipartFile | undefined): Promise<ImagemNotaValidada> {
-  if (!arquivo) throw erroValidacao("Selecione uma imagem da nota fiscal.", "IMAGEM_OBRIGATORIA");
+  if (!arquivo) throw erroValidacao("Selecione uma imagem, PDF ou XML da nota fiscal.", "IMAGEM_OBRIGATORIA");
   let dados: Buffer;
   try {
     dados = await arquivo.toBuffer();
@@ -37,9 +57,16 @@ export async function lerImagemNota(arquivo: MultipartFile | undefined): Promise
     throw new ErroDominio("A imagem excede o limite de 8 MB.", 413, "IMAGEM_MUITO_GRANDE");
   }
   if (!dados.length) throw erroValidacao("A imagem enviada esta vazia.", "IMAGEM_VAZIA");
-  const detectado = tiposPorAssinatura.find((tipo) => tipo.confere(dados));
+  const detectado = [...tiposPorAssinatura, ...tiposDocumento].find((tipo) => tipo.confere(dados));
   if (!detectado) {
-    throw erroValidacao("Use uma imagem JPEG, PNG, WebP, HEIC ou HEIF valida.", "IMAGEM_INVALIDA");
+    throw erroValidacao("Use uma imagem JPEG, PNG, WebP, HEIC/HEIF, PDF ou XML de NF-e valido.", "IMAGEM_INVALIDA");
+  }
+  const mimeDeclarado = arquivo.mimetype;
+  const xmlCompativel =
+    detectado.mimeType === "application/xml" && ["text/xml", "application/xml", "text/plain"].includes(mimeDeclarado);
+  const heifCompativel = detectado.mimeType === "image/heic" && mimeDeclarado === "image/heif";
+  if (mimeDeclarado && mimeDeclarado !== detectado.mimeType && !xmlCompativel && !heifCompativel) {
+    throw erroValidacao("O tipo declarado nao corresponde ao conteudo do arquivo.", "IMAGEM_INVALIDA");
   }
   return { dados, mimeType: detectado.mimeType };
 }

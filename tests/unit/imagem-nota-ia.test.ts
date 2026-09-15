@@ -28,4 +28,19 @@ describe("validacao da imagem enviada para IA", () => {
       code: "IMAGEM_MUITO_GRANDE"
     });
   });
+
+  it("aceita PDF e XML pela assinatura real", async () => {
+    const pdf = await lerImagemNota(arquivo(Buffer.from("%PDF-1.7\n"), "application/pdf"));
+    expect(pdf.mimeType).toBe("application/pdf");
+    const xml = await lerImagemNota(
+      arquivo(Buffer.from('<?xml version="1.0"?><nfeProc><NFe><infNFe /></NFe></nfeProc>'), "text/xml")
+    );
+    expect(xml.mimeType).toBe("application/xml");
+  });
+
+  it("recusa MIME incompatível com a assinatura", async () => {
+    await expect(lerImagemNota(arquivo(Buffer.from("%PDF-1.7\n"), "image/jpeg"))).rejects.toMatchObject({
+      code: "IMAGEM_INVALIDA"
+    });
+  });
 });

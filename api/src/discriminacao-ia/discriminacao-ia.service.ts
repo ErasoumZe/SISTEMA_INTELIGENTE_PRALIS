@@ -8,9 +8,10 @@ import {
 } from "@padaria/shared";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
 import { env } from "../env.js";
-import { ErroDominio, proibido } from "../erros.js";
+import { ErroDominio, erroValidacao, proibido } from "../erros.js";
 import type { ImagemNotaValidada } from "./imagem-nota.js";
-import { extrairNotaFiscalComGemini } from "./gemini-nota-fiscal.js";
+import { extrairNotaFiscalComGemini, type NotaFiscalExtraida } from "./gemini-nota-fiscal.js";
+import { extrairNotaFiscalDoXml } from "./xml-nota-fiscal.js";
 import { buscarFornecedorIa, buscarProdutosIa, verificarDuplicidadeIa } from "./discriminacao-ia.repository.js";
 import { apenasDigitos } from "../utils.js";
 
@@ -48,15 +49,24 @@ export async function analisarNotaFiscalIa(
   if (!temAlgumaPermissao(perfil.permissoes, permissoesDaCategoria(entrada.categoria))) {
     throw proibido("Permissao insuficiente", "INSUFFICIENT_PERMISSION");
   }
-  if (!env.GEMINI_API_KEY) {
+  if (!env.GEMINI_API_KEY && entrada.imagem.mimeType !== "application/xml") {
     throw new ErroDominio("A leitura por IA ainda nao foi configurada.", 503, "IA_NAO_CONFIGURADA");
   }
 
-  const extraida = await extrairNotaFiscalComGemini(entrada.imagem, {
-    chave: env.GEMINI_API_KEY,
-    modelo: env.GEMINI_MODEL,
-    timeoutMs: env.GEMINI_TIMEOUT_MS
-  });
+  let extraida: NotaFiscalExtraida;
+  if (entrada.imagem.mimeType === "application/xml") {
+    try {
+      extraida = extrairNotaFiscalDoXml(entrada.imagem.dados.toString("utf8"));
+    } catch {
+      throw erroValidacao("O XML enviado nao e uma NF-e valida.", "XML_NFE_INVALIDO");
+    }
+  } else {
+    extraida = await extrairNotaFiscalComGemini(entrada.imagem, {
+      chave: env.GEMINI_API_KEY!,
+      modelo: env.GEMINI_MODEL,
+      timeoutMs: env.GEMINI_TIMEOUT_MS
+    });
+  }
   const cnpj = apenasDigitos(extraida.fornecedorCnpj);
   const fornecedorCnpj = cnpj?.length === 14 ? cnpj : null;
   const chave = apenasDigitos(extraida.chaveAcesso);
@@ -93,10 +103,18 @@ export async function analisarNotaFiscalIa(
     if (item.valorTotal) return total + paraCentavos(item.valorTotal);
     return total + Math.round(Number(item.quantidade ?? 0) * Number(item.valorUnitario ?? 0) * 100);
   }, 0);
-  const valorProdutos = normalizarDecimal(extraida.valorProdutos);
+  const valorProdutosLido = normalizarDecimal(extraida.valorProdutos);
   const valorDesconto = normalizarDecimal(extraida.valorDesconto);
   const valorFrete = normalizarDecimal(extraida.valorFrete);
-  const valorTotal = normalizarDecimal(extraida.valorTotal);
+  // Alguns modelos devolvem null em campos de total do PDF mesmo quando os itens foram lidos.
+  // Nesse caso, a soma dos itens e uma derivacao deterministica e auditavel (nao uma nova leitura).
+  const valorProdutos = valorProdutosLido ?? (somaItensCentavos > 0 ? decimalCentavos(somaItensCentavos) : null);
+  const valorTotalLido = normalizarDecimal(extraida.valorTotal);
+  const valorTotal =
+    valorTotalLido ??
+    (valorProdutos !== null
+      ? decimalCentavos(paraCentavos(valorProdutos) - paraCentavos(valorDesconto) + paraCentavos(valorFrete))
+      : null);
   const totalCalculadoCentavos =
     paraCentavos(valorProdutos ?? decimalCentavos(somaItensCentavos)) -
     paraCentavos(valorDesconto) +
@@ -117,6 +135,17 @@ export async function analisarNotaFiscalIa(
   if (extraida.confiancas.dataEmissao < LIMIAR_DUVIDOSO) camposDuvidosos.push("dataEmissao");
 
   const avisos = [...extraida.observacoes];
+  if (!valorProdutosLido && valorProdutos) {
+    avisos.push("O valor dos produtos foi calculado pela soma dos itens lidos, pois o PDF nao devolveu esse campo.");
+  }
+  if (!valorTotalLido && valorTotal) {
+    avisos.push("O total da nota foi calculado com produtos, desconto e frete lidos; confira antes de salvar.");
+  }
+  if (entrada.imagem.mimeType === "application/pdf" && itens.some((item) => !item.ean)) {
+    avisos.push(
+      "O DANFE em PDF normalmente nao exibe o EAN; envie o XML para vincular automaticamente os produtos pelo codigo de barras."
+    );
+  }
   if (entrada.categoria === "despesa" && itens.length) {
     avisos.push("Em despesas, relacione cada item a um Patrimonio ou Colaborador antes de salvar.");
   }

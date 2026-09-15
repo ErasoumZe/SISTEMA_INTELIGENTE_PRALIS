@@ -149,11 +149,13 @@ const schemaResposta = {
   ]
 } as const;
 
-const prompt = `Leia esta nota fiscal brasileira (DANFE/NF-e) para auxiliar uma discriminacao manual.
+const prompt = `Leia esta nota fiscal brasileira (DANFE/NF-e), que pode ser uma imagem ou um PDF com varias paginas, para auxiliar uma discriminacao manual.
 Extraia somente o que estiver visivel. Nao suponha nem complete texto ilegivel.
 O fornecedor e o EMITENTE, nunca o destinatario ou a transportadora.
 Use ponto como separador decimal e data no formato YYYY-MM-DD.
 Valores monetarios nao podem ter simbolo nem separador de milhar.
+Em DANFE, leia explicitamente os campos "VALOR TOTAL DOS PRODUTOS", "VALOR TOTAL DA NOTA", "DESCONTO" e "VALOR DO FRETE"; quando o documento estiver legivel, esses campos devem ser numeros e nao null.
+Leia todos os itens em todas as paginas do PDF; nao pare na primeira pagina.
 Marque em camposDuvidosos todo campo ilegivel, ambiguo ou com confianca abaixo de 0.8.
 Se a imagem nao for uma nota fiscal legivel, retorne documentoLegivel=false e valores null.
 Nunca inclua explicacoes fora do JSON.`;

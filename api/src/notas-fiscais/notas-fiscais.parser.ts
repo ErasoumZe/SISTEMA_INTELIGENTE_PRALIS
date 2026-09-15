@@ -53,6 +53,7 @@ function subRegistro(registro: DadosExternos, chave: string): DadosExternos {
 
 export interface NfeItemParseado {
   numeroItem: number;
+  codigo: string | null;
   ean: string | null;
   ncm: string | null;
   cfop: string | null;
@@ -61,6 +62,8 @@ export interface NfeItemParseado {
   unidadeComercial: string | null;
   quantidade: string | null;
   valorUnitario: string | null;
+  desconto: string | null;
+  valorTotal: string | null;
 }
 
 export interface NfeParseada {
@@ -110,6 +113,7 @@ export function parseNfe(xmlContent: string): NfeParseada {
     const numeroItem = ler(item, "nItem");
     return {
       numeroItem: numeroItem ? Number(numeroItem) : indice + 1,
+      codigo: ler(prod, "cProd"),
       ean: ler(prod, "cEAN"),
       ncm: ler(prod, "NCM"),
       cfop: ler(prod, "CFOP"),
@@ -117,7 +121,9 @@ export function parseNfe(xmlContent: string): NfeParseada {
       descricao: ler(prod, "xProd"),
       unidadeComercial: ler(prod, "uCom"),
       quantidade: ler(prod, "qCom"),
-      valorUnitario: ler(prod, "vUnCom")
+      valorUnitario: ler(prod, "vUnCom"),
+      desconto: ler(prod, "vDesc"),
+      valorTotal: ler(prod, "vProd")
     };
   });
 

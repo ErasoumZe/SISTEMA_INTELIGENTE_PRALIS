@@ -13,6 +13,17 @@ const tiposPermitidos = [
     confere: (b: Buffer) => b.length >= 5 && b.toString("ascii", 0, 5) === "%PDF-"
   },
   {
+    mimeType: "application/xml",
+    extensao: ".xml",
+    confere: (b: Buffer) => {
+      const inicio = b
+        .toString("utf8", 0, Math.min(b.length, 4096))
+        .replace(/^\uFEFF/, "")
+        .trimStart();
+      return inicio.startsWith("<?xml") || /<(?:[\w-]+:)?(?:nfeProc|NFe)\b/i.test(inicio);
+    }
+  },
+  {
     mimeType: "image/jpeg",
     extensao: ".jpg",
     confere: (b: Buffer) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
@@ -93,7 +104,8 @@ const mimePorExtensao: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".heic": "image/heic",
-  ".heif": "image/heif"
+  ".heif": "image/heif",
+  ".xml": "application/xml"
 };
 
 export function mimePorCaminho(caminhoRelativo: string): string {
