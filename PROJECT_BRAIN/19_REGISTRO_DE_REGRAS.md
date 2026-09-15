@@ -1080,6 +1080,15 @@ impede a abertura do caixa, pois campanha continua sendo informativa e não alte
 financeiro. Teste de integração cobre abertura posterior, idempotência, PDV não participante,
 empresa diferente e data fora da vigência.
 
+### R-202 — Regras de recebimento começam somente como referência testável (Marco, 15/09/2026)
+
+Taxa, prazo, parcelas, vigência e fonte de uma forma de pagamento pertencem à forma e à empresa,
+mas nesta etapa são **cadastro de referência/simulação**. Nenhuma regra pode alterar venda, saldo,
+Caixa, conta, liquidação, DRE, folha ou lançamento enquanto a integração não trouxer os fatos
+necessários (adquirente/terminal, parcela, NSU e liquidação). Cartão, Pix, voucher e crediário
+continuam recebíveis, nunca dinheiro físico por inferência. Referência de mercado ou contrato
+incompleto fica em `rascunho` e exige confirmação antes de qualquer efeito financeiro futuro.
+
 ---
 
 ## §4 · Como isto deixa de ser mais um documento
