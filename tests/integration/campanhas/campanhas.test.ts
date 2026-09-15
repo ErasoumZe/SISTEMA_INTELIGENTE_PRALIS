@@ -4,7 +4,10 @@ import { assertOk, assertProblem } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
 import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
 import { idsTeste } from "../../setup/contexto.js";
-import { executarSql, json } from "../../setup/integracao.js";
+import { consultarTodos, consultarUm, executarSql, json } from "../../setup/integracao.js";
+import { diaNegocio } from "@padaria/shared/datas";
+import { notificarCampanhasNaAberturaDeCaixa } from "../../../api/src/campanhas/campanhas.service.js";
+import { banco } from "../../../api/src/banco/conexao.js";
 
 type CampanhaResposta = {
   id: string;
@@ -244,5 +247,113 @@ describe("campanhas de bonificacao", () => {
       }
     });
     assertProblem(criacao, 403);
+  });
+
+  it("avisa uma vez quem abre depois, apenas para campanha ativa do seu PDV, empresa e periodo", async () => {
+    const hoje = diaNegocio(new Date());
+    const campanhaId = await criarCampanha({ titulo: "Campanha para abertura posterior", inicio: hoje, fim: hoje });
+    const ativacao = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/campanhas/${campanhaId}/status?empresaId=${empresaId}`,
+      headers: { cookie: cookieAdmin },
+      payload: { status: "ativa" }
+    });
+    expect(ativacao.statusCode, ativacao.body).toBe(204);
+
+    const usuarioCaixa = await consultarUm<{ id: string }>(
+      'select id from "user" where lower(email) = lower($1)',
+      ["caixa.integracao@padaria.local"]
+    );
+    if (!usuarioCaixa) throw new Error("operador de caixa nao encontrado na fixture");
+    const usuarioCaixaId = usuarioCaixa.id;
+
+    // A abertura real e a prova do caminho de producao: a campanha ja estava ativa e o operador
+    // ainda nao tinha caixa aberto quando ela foi ativada.
+    const conta = await contexto.app.inject({
+      method: "POST",
+      url: "/api/contas",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId, nome: "Conta campanha abertura posterior", saldoInicial: 0 }
+    });
+    expect(conta.statusCode, conta.body).toBe(201);
+    const contaId = json<{ data: { id: string } }>(conta).data.id;
+    const pdv = await contexto.app.inject({
+      method: "POST",
+      url: "/api/pdvs",
+      headers: { cookie: cookieAdmin },
+      payload: { empresaId, nome: "PDV campanha abertura posterior", contaId, ativo: true }
+    });
+    expect(pdv.statusCode, pdv.body).toBe(201);
+    const pdvId = json<{ data: { id: string } }>(pdv).data.id;
+
+    // A campanha foi criada antes deste PDV apenas para garantir que a atualizacao de participantes
+    // tambem seja validada pelo servidor, como ocorreria na tela do administrador.
+    const atualizacao = await contexto.app.inject({
+      method: "PUT",
+      url: `/api/campanhas/${campanhaId}`,
+      headers: { cookie: cookieAdmin },
+      payload: {
+        empresaId,
+        titulo: "Campanha para abertura posterior",
+        mensagem: "Bata a meta e ganhe a bonificacao.",
+        inicio: hoje,
+        fim: hoje,
+        metaValor: 1000,
+        bonificacaoTipo: "dinheiro",
+        bonificacaoValor: 100,
+        pdvIds: [pdvId]
+      }
+    });
+    expect(atualizacao.statusCode, atualizacao.body).toBe(204);
+
+    const abertura = await contexto.app.inject({
+      method: "POST",
+      url: "/api/caixa/abrir",
+      headers: { cookie: await cookieSessao(contexto.app, "caixa") },
+      payload: { empresaId, pdvId, usuarioCaixaId }
+    });
+    expect(abertura.statusCode, abertura.body).toBe(201);
+
+    const notificacoes = await consultarTodos<{ id: string }>(
+      `select id from notificacoes
+       where empresa_id = $1 and tipo = 'campanha' and destinatario_usuario_id = $2 and referencia_id = $3`,
+      [empresaId, usuarioCaixaId, campanhaId]
+    );
+    expect(notificacoes).toHaveLength(1);
+
+    // Repetir a materializacao nao cria segunda linha; o unique e a barreira tambem sob corrida.
+    await notificarCampanhasNaAberturaDeCaixa({ empresaId, pdvId, usuarioId: usuarioCaixaId, dia: hoje }, banco);
+    const repetidas = await consultarTodos<{ id: string }>(
+      `select id from notificacoes
+       where empresa_id = $1 and tipo = 'campanha' and destinatario_usuario_id = $2 and referencia_id = $3`,
+      [empresaId, usuarioCaixaId, campanhaId]
+    );
+    expect(repetidas, "uma campanha nao duplica o sino do mesmo usuario").toHaveLength(1);
+
+    // Mesmo usuario em outro PDV, outra empresa ou fora da data da campanha nao recebe nada.
+    await notificarCampanhasNaAberturaDeCaixa({
+      empresaId,
+      pdvId: idsTeste.pdvLivre,
+      usuarioId: usuarioCaixaId,
+      dia: hoje
+    }, banco);
+    await notificarCampanhasNaAberturaDeCaixa({
+      empresaId: idsTeste.empresaB,
+      pdvId,
+      usuarioId: usuarioCaixaId,
+      dia: hoje
+    }, banco);
+    await notificarCampanhasNaAberturaDeCaixa({
+      empresaId,
+      pdvId,
+      usuarioId: usuarioCaixaId,
+      dia: "2000-01-01"
+    }, banco);
+    const foraDoEscopo = await consultarTodos<{ id: string }>(
+      `select id from notificacoes
+       where empresa_id = $1 and tipo = 'campanha' and destinatario_usuario_id = $2 and referencia_id = $3`,
+      [empresaId, usuarioCaixaId, campanhaId]
+    );
+    expect(foraDoEscopo).toHaveLength(1);
   });
 });

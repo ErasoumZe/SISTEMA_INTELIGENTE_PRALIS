@@ -109,13 +109,18 @@ export function listarPdvsDasCampanhasRepository(campanhaIds: string[], db: Exec
     .where(inArray(campanhasPdvs.campanhaId, campanhaIds));
 }
 
-/** Campanhas ATIVAS que cobrem o dia e incluem este PDV — o que o fechamento exibe. */
+/**
+ * Campanhas ATIVAS que cobrem o dia e incluem este PDV.
+ *
+ * A mesma consulta atende o resumo do fechamento e o aviso na abertura: a campanha nao pode
+ * aparecer no sino de um PDV fora do seu periodo nem de outra empresa.
+ */
 export function listarCampanhasDoPdvNoDiaRepository(
   input: { empresaId: string; pdvId: string; dia: string },
   db: ExecutorBanco = banco
 ) {
   return db
-    .select({ id: campanhas.id })
+    .select({ id: campanhas.id, titulo: campanhas.titulo })
     .from(campanhas)
     .innerJoin(campanhasPdvs, eq(campanhasPdvs.campanhaId, campanhas.id))
     .where(

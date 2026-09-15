@@ -148,10 +148,9 @@ export async function salvarCampanha(
 /**
  * Notificacao automatica aos PDVs participantes, no momento em que a campanha e ATIVADA.
  *
- * Alcanca quem esta com caixa aberto nesses PDVs agora. Quem abrir depois nao recebe sino, mas VE a
- * campanha no proprio fechamento — que e onde o resultado importa. Diferente da mensagem
- * administrativa, campanha nao tem "ciencia" a cobrar, entao nao ha alvo persistido a resolver
- * depois.
+ * Alcanca quem esta com caixa aberto nesses PDVs agora. Quem abre depois recebe pelo caminho de
+ * abertura abaixo, consultando `campanhas_pdvs` — nao existe alvo paralelo nem segunda regra de
+ * destinatario para campanha.
  */
 async function notificarPdvsDaCampanha(
   input: { empresaId: string; campanhaId: string; titulo: string; pdvIds: string[] },
@@ -172,6 +171,36 @@ async function notificarPdvsDaCampanha(
     },
     db
   );
+}
+
+/**
+ * Completa o aviso para o operador que abriu o caixa DEPOIS de a campanha ja estar ativa.
+ *
+ * A abertura usa o dia do relogio do servidor. So entram campanhas do PDV, empresa e periodo
+ * corretos; o unique (tipo, destinatario, referencia) da notificacao torna repeticoes inofensivas.
+ * Nao existe ciencia a cobrar em campanha, portanto uma linha por campanha/usuario e suficiente.
+ */
+export async function notificarCampanhasNaAberturaDeCaixa(
+  input: { empresaId: string; pdvId: string; usuarioId: string; dia: string },
+  db: ExecutorBanco
+) {
+  const campanhasAtivas = await listarCampanhasDoPdvNoDiaRepository(
+    { empresaId: input.empresaId, pdvId: input.pdvId, dia: input.dia },
+    db
+  );
+
+  for (const campanha of campanhasAtivas) {
+    await criarNotificacoesRepository(
+      {
+        empresaId: input.empresaId,
+        tipo: "campanha",
+        destinatariosUsuarioIds: [input.usuarioId],
+        referenciaId: campanha.id,
+        titulo: `Campanha ativa: ${campanha.titulo}`
+      },
+      db
+    );
+  }
 }
 
 export async function mudarStatusCampanha(

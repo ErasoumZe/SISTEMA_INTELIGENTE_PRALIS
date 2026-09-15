@@ -76,6 +76,7 @@ import {
   listarRetornosPendentesRepository,
   ultimasRecusasPorTransferenciaRepository
 } from "../transferencias/entrega-cofre.repository.js";
+import { notificarCampanhasNaAberturaDeCaixa } from "../campanhas/campanhas.service.js";
 import { materializarMensagensNaAberturaDeCaixa } from "../mensagens-admin/mensagens-admin.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
@@ -507,6 +508,23 @@ async function abrirCaixaEmTransacao(
       );
     } catch (erroMensagens) {
       console.error("[caixa] falha ao materializar mensagens administrativas na abertura", erroMensagens);
+    }
+
+    // Campanha tambem e informativa: uma falha ao criar seu sino nunca pode impedir a abertura nem
+    // misturar-se ao fluxo financeiro. Diferente da mensagem administrativa, a elegibilidade vem
+    // diretamente dos PDVs persistidos na campanha e do dia contabil desta abertura.
+    try {
+      await notificarCampanhasNaAberturaDeCaixa(
+        {
+          empresaId: dados.empresaId,
+          pdvId: dados.pdvId,
+          usuarioId: dados.usuarioCaixaId,
+          dia: diaNegocio(dataHoraAbertura)
+        },
+        tx
+      );
+    } catch (erroCampanhas) {
+      console.error("[caixa] falha ao notificar campanhas na abertura", erroCampanhas);
     }
 
     return statusDoCaixaAberto(aberto, tx);
