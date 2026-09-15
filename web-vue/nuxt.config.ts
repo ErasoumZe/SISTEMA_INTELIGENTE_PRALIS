@@ -145,7 +145,7 @@ export default defineNuxtConfig({
     tsConfig: {
       compilerOptions: {
         paths: {
-          "@padaria/shared/*": ["../shared/src/*/index.ts"]
+          "@padaria/shared/*": ["../../shared/src/*/index.ts"]
         }
       }
     }
