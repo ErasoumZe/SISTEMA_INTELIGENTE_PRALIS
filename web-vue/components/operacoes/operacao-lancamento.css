@@ -157,13 +157,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.lc-tres {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 /* 3 campos por linha no desktop; 2 no tablet (<=768) e 1 no celular (<=560) — os campos EMPILHAM. */
 .lc-tres > .lc-campo {
-  flex: 1 1 calc(33.333% - 6px);
   min-width: 0;
 }
 .lc-uma > .lc-campo {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
 }
 .lc-dois > .lc-campo,
 .lc-dois > .lc-foto {
@@ -239,9 +242,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 .lc-data-row .lc-input {
   flex: 1;
+  min-width: 0;
 }
 .lc-pill {
   border: 0.5px solid var(--cx-line);
@@ -441,12 +446,10 @@
 }
 
 /* --- Responsividade (1024/768/560) — so layout. Os campos EMPILHAM, nunca somem. --- */
-@media (width <= 768px) {
-  .lc-tres > .lc-campo {
-    flex-basis: calc(50% - 4px);
-  }
-}
 @media (width <= 560px) {
+  .lc-tres {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .lc-tres > .lc-campo,
   .lc-dois > .lc-campo,
   .lc-dois > .lc-foto,
