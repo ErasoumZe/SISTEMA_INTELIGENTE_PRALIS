@@ -1067,6 +1067,19 @@ As chaves da R-200 não repetem esse erro.
 exige chave nenhuma: a autorização é ser o destinatário daquela entrega, na própria empresa — o mesmo
 desenho que o sino já usa hoje para quebra e transferência.
 
+### R-201 — Campanha ativa também alcança abertura posterior (Marco, 15/09/2026)
+
+Uma campanha ativa notifica quem já estava com caixa aberto no momento da ativação **e** quem abre
+depois um caixa em PDV participante, desde que o dia de negócio da abertura esteja dentro do período
+da campanha. A elegibilidade vem exclusivamente de `campanhas_pdvs`, `empresa_id`, status `ativa` e
+intervalo `inicio`/`fim`; não existe lista de alvos, nova tabela ou segundo caminho de notificação.
+
+O sino mantém no máximo uma notificação por `(campanha, usuário)`: o unique existente em
+`notificacoes` torna repetições e corridas inofensivas. Falha ao criar esse aviso é registrada e não
+impede a abertura do caixa, pois campanha continua sendo informativa e não altera nenhum valor
+financeiro. Teste de integração cobre abertura posterior, idempotência, PDV não participante,
+empresa diferente e data fora da vigência.
+
 ---
 
 ## §4 · Como isto deixa de ser mais um documento
