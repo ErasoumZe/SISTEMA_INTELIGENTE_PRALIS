@@ -41,6 +41,18 @@ export const campanhaPayloadSchema = z
     path: ["bonificacaoValor"]
   });
 
+// `empresaId` obrigatorio: sem ele o escopo viraria "todas as empresas do usuario" e o progresso de
+// duas empresas apareceria somado na mesma tela.
+export const campanhasQuerySchema = z.object({ empresaId: uuidSchema });
+
+// O fechamento pergunta por UM pdv num dia de negocio. Validado como o resto: nada de ler
+// `request.query` com cast, que deixaria `dia` chegar em qualquer formato ate o SQL.
+export const campanhasFechamentoQuerySchema = z.object({
+  empresaId: uuidSchema,
+  pdvId: uuidSchema,
+  dia: dataSchema
+});
+
 export const campanhaParamsSchema = z.object({ campanhaId: uuidSchema });
 export const campanhaStatusPayloadSchema = z.object({ status: statusCampanhaSchema });
 

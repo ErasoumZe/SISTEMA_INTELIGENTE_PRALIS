@@ -9,6 +9,7 @@ import { codigoPostgresDoErro, ErroDominio, type ErroEncadeado } from "./erros.j
 import { capturarErro, iniciarObservabilidade } from "./observabilidade.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
 import { registrarRotasCaixa } from "./caixa/caixa.controller.js";
+import { registrarRotasCampanhas } from "./campanhas/campanhas.controller.js";
 import { registrarRotasColaboradores } from "./colaboradores/colaboradores.controller.js";
 import { registrarRotasDespesas } from "./despesas/despesas.controller.js";
 import { registrarRotasDiscriminacaoIa } from "./discriminacao-ia/discriminacao-ia.controller.js";
@@ -234,6 +235,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasMaquininhas(app);
   await registrarRotasNotificacoes(app);
   await registrarRotasMensagensAdmin(app);
+  await registrarRotasCampanhas(app);
   await registrarRotasTurnos(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);
