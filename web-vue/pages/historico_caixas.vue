@@ -14,6 +14,8 @@ import HistoricoCaixasPage from "~/components/caixa/HistoricoCaixasPage.vue";
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :turnos="ctx.opcoesEmpresa.turnos"
       :colaboradores="ctx.opcoesEmpresa.colaboradores"
+      :pode-ver-mensagens="ctx.podeVerMensagensAdmin"
+      :pode-enviar-mensagem="ctx.podeEnviarMensagemAdmin"
     />
   </AppWorkspace>
 </template>

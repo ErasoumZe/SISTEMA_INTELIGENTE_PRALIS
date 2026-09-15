@@ -5,12 +5,17 @@ import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import CaixaDetalhe from "~/components/caixa/CaixaDetalhe.vue";
+import CaixaMonitorAbertos from "~/components/caixa/CaixaMonitorAbertos.vue";
 
 const props = defineProps<{
   empresaId: string;
   pdvs: Opcao[];
   turnos: Opcao[];
   colaboradores: Opcao[];
+  // R-200: o painel de mensagens mora dentro deste monitor. Ver e enviar sao permissoes separadas,
+  // e as duas sao exigidas de novo no servidor — esconder o botao nunca e controle de acesso.
+  podeVerMensagens: boolean;
+  podeEnviarMensagem: boolean;
 }>();
 
 type MetaHistorico = { totais: TotaisHistoricoCaixa };
@@ -196,37 +201,15 @@ onBeforeUnmount(() => {
   <v-card>
     <!-- Titulo removido: o nome da tela ja e o cabecalho da pagina (VIS-10). -->
     <v-card-text>
-      <v-sheet class="pa-4 mb-5 rounded-lg soft-bg" data-teste="monitor-caixas-abertos">
-        <div class="d-flex flex-wrap align-center ga-3">
-          <div>
-            <div class="text-subtitle-1 font-weight-bold">Monitor de caixas abertos</div>
-            <div class="text-caption text-medium-emphasis">
-              Sincroniza a cada 15 segundos enquanto esta pagina esta aberta.
-              <template v-if="monitorAtualizadoEm">
-                Ultima atualizacao: {{ formatarDataHora(monitorAtualizadoEm) }}.</template
-              >
-            </div>
-          </div>
-          <v-spacer />
-          <v-chip color="info" variant="tonal" prepend-icon="mdi-cash-register">
-            {{ caixasAbertos.length }} {{ caixasAbertos.length === 1 ? "caixa aberto" : "caixas abertos" }}
-          </v-chip>
-        </div>
-        <div v-if="caixasAbertos.length" class="d-flex flex-wrap ga-2 mt-3">
-          <v-btn
-            v-for="caixa in caixasAbertos"
-            :key="caixa.id"
-            size="small"
-            variant="outlined"
-            prepend-icon="mdi-eye-outline"
-            @click="verCaixaAberto(caixa)"
-          >
-            {{ caixa.pdvNome }} - {{ caixa.colaboradorNome || caixa.usuarioCaixaNome || "Operador nao informado" }}
-            <template v-if="caixa.dataHoraAbertura"> (desde {{ formatarDataHora(caixa.dataHoraAbertura) }})</template>
-          </v-btn>
-        </div>
-        <div v-else class="text-body-2 text-medium-emphasis mt-3">Nenhum caixa aberto neste momento.</div>
-      </v-sheet>
+      <CaixaMonitorAbertos
+        :caixas-abertos="caixasAbertos"
+        :monitor-atualizado-em="monitorAtualizadoEm"
+        :empresa-id="empresaId"
+        :pdvs="pdvs"
+        :pode-ver-mensagens="podeVerMensagens"
+        :pode-enviar-mensagem="podeEnviarMensagem"
+        @ver="verCaixaAberto"
+      />
 
       <v-row dense>
         <v-col cols="12" md="2">

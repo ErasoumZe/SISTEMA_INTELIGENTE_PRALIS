@@ -103,6 +103,8 @@ import { carregarOpcoesDaOperacao, type ChaveOpcaoOperacao } from "~/utils/opcoe
 import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
 import { separarNotificacoes } from "~/utils/notificacoes";
+import { useFilaMensagensOperador, useMensagensAdmin } from "~/composables/useMensagensAdmin";
+import MensagemAdminPopup from "~/components/comum/MensagemAdminPopup.vue";
 
 type TipoPagina =
   | "inicio"
@@ -148,6 +150,11 @@ const resumo = useState<ResumoCaixa | null>("padaria.workspace.resumo", () => nu
 const caixaStatus = useState<CaixaStatus | null>("padaria.workspace.caixaStatus", () => null);
 const notificacoes = ref<Notificacao[]>([]);
 const notificacoesComHistorico = ref<Notificacao[]>([]);
+// R-194: o pop-up vive na casca porque o operador precisa ver a mensagem em qualquer tela, nao so
+// numa. A fila e a dispensa da sessao moram no composable; aqui fica so a conversa com a API.
+const { minhas: buscarMinhasMensagens, carimbar: carimbarMensagem } = useMensagensAdmin();
+const filaMensagens = useFilaMensagensOperador();
+const mensagemAtual = computed(() => filaMensagens.atual());
 const telaAtiva = useState("padaria.workspace.telaAtiva", () => telaInicialNormalizada.value);
 const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", () => "");
 const carregando = ref(!workspaceCarregado.value);
@@ -651,6 +658,28 @@ async function carregarNotificacoes(idEmpresa = empresaId.value) {
   const { pendentes, historico } = separarNotificacoes(itensComHistorico);
   notificacoes.value.splice(0, notificacoes.value.length, ...pendentes);
   notificacoesComHistorico.value.splice(0, notificacoesComHistorico.value.length, ...historico);
+
+  // A leitura E a entrega: esta chamada carimba `entregue_em` no servidor, uma vez so. Ela pega
+  // carona no mesmo ciclo do sino para nao criar um segundo relogio de atualizacao.
+  try {
+    filaMensagens.definir(await buscarMinhasMensagens(idEmpresa));
+  } catch (error) {
+    console.error("Falha ao carregar as mensagens da administracao", error);
+  }
+}
+
+async function responderMensagem(entregaId: string, acao: "visualizar" | "confirmar" | "fechar") {
+  try {
+    await carimbarMensagem(entregaId, empresaId.value, acao);
+  } catch (error) {
+    // Falha aqui nao pode prender o operador no pop-up: a dispensa local acontece de qualquer jeito.
+    console.error("Falha ao registrar a resposta da mensagem", error);
+  }
+  if (acao === "confirmar") {
+    filaMensagens.remover(entregaId);
+    await carregarNotificacoes();
+  }
+  if (acao === "fechar") filaMensagens.dispensar(entregaId);
 }
 
 async function verificarNotificacao(notificacaoId: string) {
@@ -2110,6 +2139,10 @@ const pageContext = computed(() => ({
   cancelarPlanejamentoRetorno,
   podeCancelarPlanejamentoRetorno: podeCancelarPlanejamentoRetorno.value,
   podeConferirTransferencia: temPermissao("transferencias_conferir"),
+  // R-200: o painel de mensagens mora no Monitor de caixas abertos e nao tem item de menu proprio.
+  // O servidor exige as mesmas chaves; isto aqui so decide o que aparece.
+  podeVerMensagensAdmin: temPermissao("mensagens_admin_visualizar"),
+  podeEnviarMensagemAdmin: temPermissao("mensagens_admin_enviar"),
   notificacoes: notificacoes.value,
   notificacoesComHistorico: notificacoesComHistorico.value,
   verificarNotificacao,
@@ -2312,6 +2345,13 @@ onBeforeUnmount(() => {
       :mensagem="confirmacao.mensagem"
       :texto-confirmar="confirmacao.textoConfirmar"
       @responder="responderConfirmacao"
+    />
+
+    <MensagemAdminPopup
+      :mensagem="mensagemAtual"
+      @visualizada="responderMensagem($event, 'visualizar')"
+      @confirmar="responderMensagem($event, 'confirmar')"
+      @fechar="responderMensagem($event, 'fechar')"
     />
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3500">{{ snackbar.text }}</v-snackbar>
