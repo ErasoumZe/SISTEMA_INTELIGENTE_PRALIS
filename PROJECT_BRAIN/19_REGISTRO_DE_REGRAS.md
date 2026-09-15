@@ -1031,6 +1031,42 @@ _"there is no unique constraint matching given keys for referenced table pdvs"_.
 reordenados à mão no `.sql` antes de aplicar. **Toda migration que cria FK composta para uma tabela
 que ainda não tem o par único precisa dessa conferência.**
 
+### R-200 — Onde cada frente mora, e quem protege (Marco, 15/09/2026)
+
+Decisão tomada depois de eu perguntar se criava as flags `menu_mensagens_*` e `menu_campanhas_*`.
+A resposta foi **não**, e a razão vale mais que a regra: **permissão de navegação e regra de acesso
+são coisas diferentes**, e misturar as duas foi o que já produziu caminho duplicado neste projeto.
+
+| Frente        | Onde mora                                                                                                     | Ver                          | Agir                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------ |
+| **Mensagens** | Dentro do **Monitor de caixas abertos**, na tela **Histórico de caixas**, como botão/painel "Enviar mensagem" | `mensagens_admin_visualizar` | `mensagens_admin_enviar`                               |
+| **Campanhas** | **Uma única tela própria**, com item de menu                                                                  | `campanhas_visualizar`       | `campanhas_gerenciar` (criar/editar/encerrar/cancelar) |
+
+**Mensagens não ganha rota nem item de menu.** Ela nasce onde o administrador já está olhando para os
+caixas abertos — que é exatamente o alvo mais comum do envio. Uma tela separada duplicaria a lista de
+caixas abertos que o monitor já mantém, e o monitor é a consulta autorizada única do histórico
+(`web-vue/components/caixa/HistoricoCaixasPage.vue:110-128`).
+
+**Nenhuma permissão `menu_*` nova.** Não é só preferência: o menu já funciona sem elas.
+`telaVisivelNoMenu` (`web-vue/utils/domain.ts:350`) decide pelo **primeiro** ramo,
+`temAcessoTela(item.permissao)`, e os ramos `menu_*` são alternativas. `permissaoMenuMostrar`
+(`:334`) monta a string com `as Permissao` — é cast, não busca no catálogo — e `temPermissao` é um
+`includes` que devolve `false` para chave inexistente. Campanhas aparece no menu para quem tem
+`campanhas_visualizar` e some para quem não tem.
+
+> **Consequência que fica registrada:** sem `menu_campanhas_desabilitado`, a tela **não tem estado
+> "cinza/indisponível"** — ou aparece, ou some. É diferente das outras telas do menu. Foi aceito.
+
+**O menu nunca é a única proteção.** As mesmas quatro permissões são exigidas no servidor, por
+`preHandler`, em toda rota das duas frentes. Esconder o botão não é controle de acesso: o próprio
+projeto já registrou em `db/src/referencia-permissoes.ts:23-27` o caso de
+`fechamento_com_diferenca_visualizar`, que é **só gate de menu** e não é validada por rota nenhuma.
+As chaves da R-200 não repetem esse erro.
+
+**Quem recebe continua sem precisar de permissão.** Ler, confirmar ou fechar a própria mensagem não
+exige chave nenhuma: a autorização é ser o destinatário daquela entrega, na própria empresa — o mesmo
+desenho que o sino já usa hoje para quebra e transferência.
+
 ---
 
 ## §4 · Como isto deixa de ser mais um documento
