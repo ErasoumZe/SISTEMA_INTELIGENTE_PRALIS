@@ -68,6 +68,8 @@ export const transferenciaDtoSchema = z.object({
   contaOrigemNome: z.string(),
   contaDestinoNome: z.string(),
   caixaId: z.string().nullable(),
+  pdvId: z.string().nullable(),
+  pdvNome: z.string().nullable(),
   nLacreDoc: z.string().nullable(),
   prazoConfirmacaoEm: z.string().nullable(),
   dataRecebimento: z.string().nullable(),

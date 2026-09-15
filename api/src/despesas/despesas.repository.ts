@@ -1,5 +1,6 @@
-import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa";
+import { pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { despesas, despesasItens } from "@padaria/db/schema/despesa";
 import type {
   DespesaDetalheDto,
@@ -75,6 +76,7 @@ export async function listarDespesasRepository(
   if (query.dataInicio) filtros.push(gte(despesas.dataVencimento, query.dataInicio));
   if (query.dataFim) filtros.push(lte(despesas.dataVencimento, query.dataFim));
   if (query.caixaId) filtros.push(eq(despesas.caixaId, query.caixaId));
+  if (query.status) filtros.push(eq(despesas.status, query.status));
   if (query.pdvId) {
     const caixas = await banco
       .select({ id: fechamentosCaixa.id })
@@ -95,10 +97,20 @@ export async function listarDespesasRepository(
       valorOriginal: despesas.valorOriginal,
       computar: despesas.computar,
       status: despesas.status,
-      fotoDocumentoUrl: despesas.fotoDocumentoUrl
+      fotoDocumentoUrl: despesas.fotoDocumentoUrl,
+      caixaId: despesas.caixaId,
+      pdvId: fechamentosCaixa.pdvId,
+      pdvNome: pdvs.nome,
+      criadoEm: despesas.criadoEm,
+      criadoPorNome: perfisUsuarios.nome,
+      observacao: despesas.observacao
     })
     .from(despesas)
-    .where(filtros.length ? and(...filtros) : undefined);
+    .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, despesas.caixaId))
+    .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, despesas.criadoPor))
+    .where(filtros.length ? and(...filtros) : undefined)
+    .orderBy(desc(despesas.criadoEm));
 
   // pendenteDiscriminacao = cabecalho sem nenhum item (derivado, sem coluna). Um so SELECT extra;
   // o resto e em memoria (a paginacao ja e feita em memoria no controller).
@@ -110,7 +122,11 @@ export async function listarDespesasRepository(
         .where(inArray(despesasItens.despesaId, ids))
     : [];
   const idsComItens = new Set(comItens.map((linha) => linha.despesaId));
-  const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
+  const resultado = linhas.map((linha) => ({
+    ...linha,
+    criadoEm: linha.criadoEm.toISOString(),
+    pendenteDiscriminacao: !idsComItens.has(linha.id)
+  }));
   return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
 }
 

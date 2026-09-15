@@ -15,12 +15,16 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       :pagina="ctx.paginaOperacoes"
       :total-paginas="ctx.totalPaginasOperacoes"
       :descricao="ctx.descricao"
+      :mostrar-filtros-saidas="ctx.mostrarFiltrosSaidas"
+      :filtros-saidas="ctx.filtrosSaidas"
+      :pdvs="ctx.pdvs"
       :mostrar-filtro-discriminacao="ctx.mostrarFiltroDiscriminacao"
       :pendentes-discriminacao-ativo="ctx.pendentesDiscriminacaoAtivo"
       :pode-discriminar="ctx.podeDiscriminar"
       @editar="ctx.abrirOperacao"
       @discriminar="ctx.abrirDiscriminacao"
       @update:pendentes="ctx.alternarFiltroPendentes"
+      @update:filtros-saidas="ctx.atualizarFiltrosSaidas"
       @update:pagina="ctx.atualizarPaginaOperacoes"
     />
   </AppWorkspace>

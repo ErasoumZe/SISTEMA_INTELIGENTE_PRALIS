@@ -1,6 +1,7 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
-import { fornecedores } from "@padaria/db/schema/cadastro";
+import { fornecedores, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import type {
   MercadoriaAprovacaoDto,
   MercadoriaDetalheDto,
@@ -68,6 +69,10 @@ export async function listarMercadoriasRepository(
 ): Promise<MercadoriaDto[]> {
   const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(mercadorias.caixaId, query.caixaId));
+  if (query.pdvId) filtros.push(eq(fechamentosCaixa.pdvId, query.pdvId));
+  if (query.dataInicio) filtros.push(gte(mercadorias.dataReferencia, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(mercadorias.dataReferencia, query.dataFim));
+  if (query.status) filtros.push(eq(mercadorias.status, query.status));
   // visualizar_dpago: sem a permissao (esconderPagos), so mercadorias NAO pagas saem da listagem.
   if (esconderPagos) filtros.push(isNull(mercadorias.dataPagamento));
   const linhas = await banco
@@ -79,10 +84,20 @@ export async function listarMercadoriasRepository(
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       status: mercadorias.status,
-      fotoDocumentoUrl: mercadorias.fotoDocumentoUrl
+      fotoDocumentoUrl: mercadorias.fotoDocumentoUrl,
+      caixaId: mercadorias.caixaId,
+      pdvId: fechamentosCaixa.pdvId,
+      pdvNome: pdvs.nome,
+      criadoEm: mercadorias.criadoEm,
+      criadoPorNome: perfisUsuarios.nome,
+      observacao: mercadorias.observacao
     })
     .from(mercadorias)
-    .where(filtros.length ? and(...filtros) : undefined);
+    .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, mercadorias.caixaId))
+    .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, mercadorias.criadoPor))
+    .where(filtros.length ? and(...filtros) : undefined)
+    .orderBy(desc(mercadorias.criadoEm));
 
   // pendenteDiscriminacao = cabecalho sem nenhum item (derivado, sem coluna). Um so SELECT para
   // saber quais tem itens; o resto e em memoria (a paginacao ja e feita em memoria no controller).
@@ -94,7 +109,11 @@ export async function listarMercadoriasRepository(
         .where(inArray(mercadoriasItens.mercadoriaId, ids))
     : [];
   const idsComItens = new Set(comItens.map((linha) => linha.mercadoriaId));
-  const resultado = linhas.map((linha) => ({ ...linha, pendenteDiscriminacao: !idsComItens.has(linha.id) }));
+  const resultado = linhas.map((linha) => ({
+    ...linha,
+    criadoEm: linha.criadoEm.toISOString(),
+    pendenteDiscriminacao: !idsComItens.has(linha.id)
+  }));
   return query.pendenteDiscriminacao ? resultado.filter((linha) => linha.pendenteDiscriminacao) : resultado;
 }
 

@@ -121,6 +121,8 @@ const props = withDefaults(
   defineProps<{
     telaInicial?: string;
     tipoPagina?: TipoPagina;
+    /** Interrompe a troca de empresa quando a pagina interna tem edicao ainda nao salva. */
+    antesSelecionarEmpresa?: () => boolean | Promise<boolean>;
   }>(),
   {
     tipoPagina: "placeholder"
@@ -253,6 +255,9 @@ const paginaOperacoes = ref(1);
 // O filtro pertence so a Transferencias. O servidor o recebe para que o total, a paginacao e as
 // linhas sejam do mesmo conjunto — nao uma pagina filtrada pela metade no navegador.
 const filtroStatusTransferencia = ref<StatusTransferencia | "">("");
+// Filtros das telas de Saidas. Uma unica fonte no workspace garante que a API filtre antes da
+// paginacao; filtrar so as 50 linhas recebidas esconderia resultados das demais paginas.
+const filtrosSaidas = reactive({ dataInicio: "", dataFim: "", pdvId: "", status: "" });
 const totalOperacoes = ref(0);
 // Soma em dinheiro do filtro inteiro (S6). null quando a listagem nao manda — so Entradas manda.
 const totalLiquidoOperacoes = ref<number | null>(null);
@@ -359,6 +364,7 @@ const motivoTelaAtivaDesabilitada = computed(
 );
 const telaAtual = computed(() => itemPorTela[telaAtiva.value] ?? telasPermitidas.value[0]);
 const telaSuportaDiscriminacao = computed(() => telaAtiva.value === "mercadorias" || telaAtiva.value === "despesas");
+const telaSuportaFiltrosSaidas = computed(() => ["despesas", "mercadorias", "retiradas"].includes(telaAtiva.value));
 const permissaoDiscriminarTela = computed(() => {
   if (telaAtiva.value === "mercadorias") return "mercadorias_discriminar" as const;
   if (telaAtiva.value === "despesas") return "despesas_discriminar" as const;
@@ -454,6 +460,9 @@ watch(filtroPendentesDiscriminacao, () => {
 watch(telaAtiva, () => {
   filtroPendentesDiscriminacao.value = false;
   if (telaAtiva.value !== "transferencias") filtroStatusTransferencia.value = "";
+  if (!["despesas", "mercadorias", "retiradas"].includes(telaAtiva.value)) {
+    Object.assign(filtrosSaidas, { dataInicio: "", dataFim: "", pdvId: "", status: "" });
+  }
   mostrarAprovacaoMercadorias.value = false;
 });
 // Ao abrir a fila de aprovacao de NF-e, busca os cabecalhos aguardando (visao independente do caixa).
@@ -553,6 +562,7 @@ function caixaIdFiltroTela(tela = telaAtiva.value) {
 
 async function selecionarEmpresa(id: string) {
   if (!id || id === empresaSelecionadaId.value) return;
+  if (props.antesSelecionarEmpresa && !(await props.antesSelecionarEmpresa())) return;
   empresaSelecionadaId.value = id;
   await trocarEmpresa(id);
 }
@@ -736,7 +746,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Conta do lancamento: escopo por usuario (contas_usuarios; admin ve todas).
     // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6). Opcional —
     // quem nao tem permissao de patrimonio segue lancando so com os grupos de despesa.
-    [dados.contas, dados.fornecedores, dados.colaboradores, dados.gruposPatrimonio, dados.patrimonioItens] =
+    [dados.contas, dados.fornecedores, dados.colaboradores, dados.gruposPatrimonio, dados.patrimonioItens, dados.pdvs] =
       await Promise.all([
         carregarOpcaoOpcional(
           faltas,
@@ -769,7 +779,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
           "Itens de patrimônio",
           () => apiGet<Opcao[]>(`/api/patrimonio/opcoes-itens${query}`),
           []
-        )
+        ),
+        carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
       ]);
   } else if (tela === "contas_pagar") {
     dados.pdvs = await carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), []);
@@ -786,7 +797,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     // Conta origem e obrigatoria no form de mercadoria (sem ela o select fica "No data available").
     // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
     // gruposPatrimonio: segunda origem do campo Grupo da discriminacao (§5, item 6).
-    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos, dados.gruposPatrimonio] =
+    [dados.contas, dados.fornecedores, dados.unidadesMedida, dados.produtos, dados.gruposPatrimonio, dados.pdvs] =
       await Promise.all([
         carregarOpcaoOpcional(
           faltas,
@@ -802,7 +813,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
           "Grupos de patrimônio",
           async () => (await apiGet<Pick<Opcoes, "gruposPatrimonio">>(`/api/patrimonio${query}`)).gruposPatrimonio,
           []
-        )
+        ),
+        carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
       ]);
   } else if (tela === "retiradas") {
     Object.assign(
@@ -816,7 +828,7 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
     );
     // Conta origem e obrigatoria no form de retirada (sem ela o select fica "No data available").
     // Conta origem: escopo por usuario (contas_usuarios; admin ve todas).
-    [dados.contas, dados.fornecedores, dados.colaboradores, dados.sociosGestores] = await Promise.all([
+    [dados.contas, dados.fornecedores, dados.colaboradores, dados.sociosGestores, dados.pdvs] = await Promise.all([
       carregarOpcaoOpcional(faltas, "Contas", () => apiGet<Opcao[]>(`/api/contas-usuarios/minhas-contas${query}`), []),
       carregarOpcaoOpcional(faltas, "Fornecedores", () => apiGet<Opcao[]>(`/api/fornecedores${query}`), []),
       carregarOpcaoOpcional(
@@ -825,7 +837,8 @@ async function carregarDadosPagina(idEmpresa = empresaId.value, tela = telaAtiva
         () => carregarOpcoesCompletas("/api/colaboradores", idEmpresa),
         []
       ),
-      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), [])
+      carregarOpcaoOpcional(faltas, "Sócios e Gestores", () => apiGet<Opcao[]>(`/api/socios-gestores${query}`), []),
+      carregarOpcaoOpcional(faltas, "PDVs", () => carregarPdvsCompletos(idEmpresa), [])
     ]);
   } else if (tela === "grupos") {
     Object.assign(
@@ -996,7 +1009,11 @@ async function carregarOperacoes(idEmpresa = empresaId.value) {
     pendenteDiscriminacao: pendentes,
     caixaId,
     dia: telaAtiva.value === "entradas" ? diaEntradas.value : "",
-    statusTransferencia: telaAtiva.value === "transferencias" ? filtroStatusTransferencia.value : ""
+    statusTransferencia: telaAtiva.value === "transferencias" ? filtroStatusTransferencia.value : "",
+    dataInicio: telaSuportaFiltrosSaidas.value ? filtrosSaidas.dataInicio : "",
+    dataFim: telaSuportaFiltrosSaidas.value ? filtrosSaidas.dataFim : "",
+    pdvId: telaSuportaFiltrosSaidas.value ? filtrosSaidas.pdvId : "",
+    statusOperacao: telaSuportaFiltrosSaidas.value ? filtrosSaidas.status : ""
   });
   const pagina = await apiGetPaginado<OperacaoResumo, { totalLiquido?: number }>(
     `/api/${endpointOperacaoPorEntidade[entidade]}?${params.toString()}`
@@ -1911,6 +1928,12 @@ function atualizarFiltroStatusTransferencia(status: StatusTransferencia | "") {
   void carregarOperacoes();
 }
 
+function atualizarFiltrosSaidas(filtros: { dataInicio: string; dataFim: string; pdvId: string; status: string }) {
+  Object.assign(filtrosSaidas, filtros);
+  paginaOperacoes.value = 1;
+  void carregarOperacoes();
+}
+
 // Filtro de data das Entradas (S6). Trocar o dia recomeca na pagina 1: a pagina 4 do dia anterior
 // nao tem relacao com o dia novo e voltaria uma lista vazia.
 function atualizarDiaEntradas(dia: string) {
@@ -1951,6 +1974,9 @@ const pageContext = computed(() => ({
   // falsa dava sempre no maximo 10.
   totalOperacoes: totalOperacoes.value,
   filtroStatusTransferencia: filtroStatusTransferencia.value,
+  filtrosSaidas: { ...filtrosSaidas },
+  mostrarFiltrosSaidas: telaSuportaFiltrosSaidas.value,
+  pdvs: opcoesEmpresa.value.pdvs ?? [],
   totalLiquidoOperacoes: totalLiquidoOperacoes.value,
   // Filtro de data das Entradas (S6): o dia listado e se o perfil pode trocar de dia.
   diaEntradas: diaEntradas.value,
@@ -1958,6 +1984,7 @@ const pageContext = computed(() => ({
   paginaOperacoes: paginaOperacoes.value,
   totalPaginasOperacoes: totalPaginasOperacoes.value,
   atualizarFiltroStatusTransferencia,
+  atualizarFiltrosSaidas,
   descricao: descricaoTela(telaAtiva.value),
   // Permissoes da Tesouraria (a de visualizar ja e o gate da rota/menu).
   podeCriarTransferencia: temPermissao("transferencias_criar"),

@@ -9,7 +9,11 @@ const dinheiroSchema = z.coerce.number().min(0);
 export const retiradasQuerySchema = z
   .object({
     empresaId: uuidSchema.optional(),
-    caixaId: uuidSchema.optional()
+    caixaId: uuidSchema.optional(),
+    pdvId: uuidSchema.optional(),
+    dataInicio: z.string().min(10).optional(),
+    dataFim: z.string().min(10).optional(),
+    status: z.enum(["aprovado", "aguardando_aprovacao", "cancelado"]).optional()
   })
   .merge(paginationQuerySchema);
 
@@ -102,7 +106,13 @@ export const retiradaDtoSchema = z.object({
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),
-  status: z.string()
+  status: z.string(),
+  caixaId: z.string().nullable(),
+  pdvId: z.string().nullable(),
+  pdvNome: z.string().nullable(),
+  criadoEm: z.string(),
+  criadoPorNome: z.string().nullable(),
+  observacao: z.string().nullable()
 });
 
 export const retiradaCriadaSchema = z.object({

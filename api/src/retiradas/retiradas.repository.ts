@@ -1,5 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { debitosColaboradores } from "@padaria/db/schema/caixa";
+import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { debitosColaboradores, fechamentosCaixa } from "@padaria/db/schema/caixa";
+import { pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { retiradas } from "@padaria/db/schema/retirada";
 import type { RetiradaDetalheDto, RetiradaDto, RetiradaPayload, RetiradasQuery } from "@padaria/shared/retiradas";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
@@ -19,9 +20,13 @@ export async function listarRetiradasRepository(
 ): Promise<RetiradaDto[]> {
   const filtros = filtrosEmpresa(retiradas, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(retiradas.caixaId, query.caixaId));
+  if (query.pdvId) filtros.push(eq(fechamentosCaixa.pdvId, query.pdvId));
+  if (query.dataInicio) filtros.push(gte(retiradas.dataReferencia, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(retiradas.dataReferencia, query.dataFim));
+  if (query.status) filtros.push(eq(retiradas.status, query.status));
   // visualizar_dpago: sem a permissao (esconderPagos), so retiradas NAO pagas saem da listagem.
   if (esconderPagos) filtros.push(isNull(retiradas.dataPagamento));
-  return banco
+  const linhas = await banco
     .select({
       id: retiradas.id,
       empresaId: retiradas.empresaId,
@@ -29,10 +34,21 @@ export async function listarRetiradasRepository(
       descricao: textoDoMovimento(retiradas),
       valorOriginal: retiradas.valorOriginal,
       computar: retiradas.computar,
-      status: retiradas.status
+      status: retiradas.status,
+      caixaId: retiradas.caixaId,
+      pdvId: fechamentosCaixa.pdvId,
+      pdvNome: pdvs.nome,
+      criadoEm: retiradas.criadoEm,
+      criadoPorNome: perfisUsuarios.nome,
+      observacao: retiradas.observacao
     })
     .from(retiradas)
-    .where(filtros.length ? and(...filtros) : undefined);
+    .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, retiradas.caixaId))
+    .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, retiradas.criadoPor))
+    .where(filtros.length ? and(...filtros) : undefined)
+    .orderBy(desc(retiradas.criadoEm));
+  return linhas.map((linha) => ({ ...linha, criadoEm: linha.criadoEm.toISOString() }));
 }
 
 export async function atualizarFotoRetiradaRepository(

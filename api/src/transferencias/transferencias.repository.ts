@@ -1,6 +1,7 @@
-import { and, count, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { contas, contasUsuarios, empresas, pdvs } from "@padaria/db/schema/cadastro";
+import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import {
   lacres,
   transferencias,
@@ -52,6 +53,8 @@ export async function listarTransferenciasRepository(
       // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,
+      pdvId: fechamentosCaixa.pdvId,
+      pdvNome: pdvs.nome,
       planejamentoOrigemTransferenciaId: transferencias.planejamentoOrigemTransferenciaId,
       tipo: transferencias.tipo
     })
@@ -59,7 +62,10 @@ export async function listarTransferenciasRepository(
     .innerJoin(origem, eq(origem.id, transferencias.contaOrigemId))
     .innerJoin(destino, eq(destino.id, transferencias.contaDestinoId))
     .innerJoin(empresas, eq(empresas.id, transferencias.empresaId))
-    .where(filtros.length ? and(...filtros) : undefined);
+    .leftJoin(fechamentosCaixa, eq(fechamentosCaixa.id, transferencias.caixaId))
+    .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .where(filtros.length ? and(...filtros) : undefined)
+    .orderBy(sql`${transferencias.dataRecebimento} desc nulls last`, desc(transferencias.criadoEm));
   const paisComPlanejamento = linhas.length
     ? await banco
         .select({ id: transferencias.planejamentoOrigemTransferenciaId })

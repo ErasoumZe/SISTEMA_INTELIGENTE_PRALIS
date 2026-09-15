@@ -17,7 +17,7 @@ import { computed, inject, reactive, ref } from "vue";
 import type { ItemMenu, OperacaoResumo, Opcao, ResumoCaixa } from "~/types/padaria";
 import CancelarPlanejamentoRetornoDialog from "./CancelarPlanejamentoRetornoDialog.vue";
 import { dinheiro } from "~/utils/domain";
-import { formatarDataSomenteDia } from "~/utils/formatacao";
+import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import {
   camposConferenciaVazios,
   lacreConfereEntrega,
@@ -367,6 +367,7 @@ function atualizarStatusFiltro(status: unknown) {
         <div class="tes-row tes-row-head" role="row">
           <span>Confirmação</span>
           <span>Data</span>
+          <span>PDV</span>
           <span>Origem → destino</span>
           <span>Lacre</span>
           <span class="tes-num">Valor</span>
@@ -383,6 +384,7 @@ function atualizarStatusFiltro(status: unknown) {
             </span>
           </span>
           <span class="tes-data" data-col="Data">{{ formatarDataSomenteDia(op.dataReferencia) }}</span>
+          <span data-col="PDV">{{ op.pdvNome || "—" }}</span>
           <span class="tes-desc" data-col="Origem → destino" :title="op.descricao">
             <v-icon icon="mdi-swap-horizontal" size="16" class="tes-desc-ic" />{{ op.contaOrigemNome }} →
             {{ op.contaDestinoNome }}
@@ -390,7 +392,7 @@ function atualizarStatusFiltro(status: unknown) {
           <span class="tes-lacre" data-col="Lacre">{{ op.nLacreDoc || "—" }}</span>
           <span class="tes-valor tes-num" data-col="Valor">{{ dinheiro(op.valorOriginal) }}</span>
           <span class="tes-receb" data-col="Recebimento">{{
-            op.dataRecebimento ? formatarDataSomenteDia(op.dataRecebimento) : "—"
+            op.dataRecebimento ? formatarDataHora(op.dataRecebimento) : "—"
           }}</span>
           <span class="tes-acoes" data-col="Ações">
             <v-btn
@@ -694,7 +696,7 @@ function atualizarStatusFiltro(status: unknown) {
 }
 .tes-row {
   display: grid;
-  grid-template-columns: 116px 84px minmax(0, 1fr) 70px 116px 116px 104px;
+  grid-template-columns: 116px 84px 112px minmax(0, 1fr) 70px 116px 116px 104px;
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
@@ -832,11 +834,11 @@ function atualizarStatusFiltro(status: unknown) {
 /* ---- Responsivo (breakpoints do projeto) ---- */
 @media (width <= 1024px) {
   .tes-row {
-    grid-template-columns: 108px 76px minmax(0, 1fr) 104px 96px;
+    grid-template-columns: 108px 76px 96px minmax(0, 1fr) 104px 96px;
   }
   /* Lacre e recebimento ficam compactos para preservar a densidade. */
-  .tes-row-head > :nth-child(4),
-  .tes-row-head > :nth-child(6),
+  .tes-row-head > :nth-child(5),
+  .tes-row-head > :nth-child(7),
   .tes-lacre,
   .tes-receb {
     display: none;
@@ -864,6 +866,9 @@ function atualizarStatusFiltro(status: unknown) {
     display: inline-flex;
   }
   .tes-data {
+    display: none;
+  }
+  .tes-row > [data-col="PDV"] {
     display: none;
   }
   .tes-desc {

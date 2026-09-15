@@ -11,6 +11,10 @@ export const mercadoriasQuerySchema = z
   .object({
     empresaId: uuidSchema.optional(),
     caixaId: uuidSchema.optional(),
+    pdvId: uuidSchema.optional(),
+    dataInicio: z.string().min(10).optional(),
+    dataFim: z.string().min(10).optional(),
+    status: z.enum(["aprovado", "aguardando_aprovacao", "cancelado"]).optional(),
     // Fila de pendencias de discriminacao: cabecalhos sem nenhum item.
     pendenteDiscriminacao: z.coerce.boolean().optional()
   })
@@ -95,6 +99,12 @@ export const mercadoriaDtoSchema = z.object({
   valorOriginal: z.string(),
   computar: z.boolean(),
   status: z.string(),
+  caixaId: z.string().nullable(),
+  pdvId: z.string().nullable(),
+  pdvNome: z.string().nullable(),
+  criadoEm: z.string(),
+  criadoPorNome: z.string().nullable(),
+  observacao: z.string().nullable(),
   // Foto do documento (nota/cupom): insumo de quem discrimina. Null quando nao anexada.
   fotoDocumentoUrl: z.string().nullable(),
   // Derivado: cabecalho sem itens ainda nao foi discriminado.

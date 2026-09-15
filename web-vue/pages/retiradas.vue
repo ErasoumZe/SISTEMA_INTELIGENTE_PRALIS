@@ -15,7 +15,11 @@ import OperacoesPage from "~/components/financeiro/OperacoesPage.vue";
       :pagina="ctx.paginaOperacoes"
       :total-paginas="ctx.totalPaginasOperacoes"
       :descricao="ctx.descricao"
+      :mostrar-filtros-saidas="ctx.mostrarFiltrosSaidas"
+      :filtros-saidas="ctx.filtrosSaidas"
+      :pdvs="ctx.pdvs"
       @editar="ctx.abrirOperacao"
+      @update:filtros-saidas="ctx.atualizarFiltrosSaidas"
       @update:pagina="ctx.atualizarPaginaOperacoes"
     />
   </AppWorkspace>

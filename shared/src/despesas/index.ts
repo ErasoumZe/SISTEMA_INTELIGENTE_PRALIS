@@ -14,6 +14,7 @@ export const despesasQuerySchema = z
     dataFim: z.string().min(10).optional(),
     caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
+    status: z.enum(["aprovado", "aguardando_aprovacao", "cancelado"]).optional(),
     // somentePendentes = pendente de PAGAMENTO (dataPagamento nula). Nao confundir com o abaixo.
     somentePendentes: z.coerce.boolean().optional().default(false),
     // Fila de pendencias de discriminacao: cabecalhos sem nenhum item.
@@ -107,6 +108,12 @@ export const despesaDtoSchema = z.object({
   valorOriginal: z.string(),
   computar: z.boolean(),
   status: z.string(),
+  caixaId: z.string().nullable(),
+  pdvId: z.string().nullable(),
+  pdvNome: z.string().nullable(),
+  criadoEm: z.string(),
+  criadoPorNome: z.string().nullable(),
+  observacao: z.string().nullable(),
   // Foto do documento (nota/cupom): insumo de quem discrimina. Null quando nao anexada.
   fotoDocumentoUrl: z.string().nullable(),
   // Derivado: cabecalho sem itens ainda nao foi discriminado.

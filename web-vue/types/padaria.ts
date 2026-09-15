@@ -216,6 +216,9 @@ export type OperacaoResumo = {
   fotoDocumentoUrl?: string | null;
   pdvId?: string | null;
   pdvNome?: string | null;
+  criadoEm?: string;
+  criadoPorNome?: string | null;
+  observacao?: string | null;
   clienteId?: string | null;
   clienteNome?: string | null;
   colaboradorId?: string | null;

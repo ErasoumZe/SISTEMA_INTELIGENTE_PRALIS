@@ -10,12 +10,12 @@ import type {
 import type { OperacaoDetalhe } from "~/utils/operacoes";
 import { ref } from "vue";
 import { dinheiro } from "~/utils/domain";
-import { formatarDataSomenteDia } from "~/utils/formatacao";
+import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import MercadoriasAprovacaoPanel from "~/components/financeiro/MercadoriasAprovacaoPanel.vue";
 import VendaDetalheDialog from "~/components/financeiro/VendaDetalheDialog.vue";
 import VendaDetalheConteudo from "~/components/financeiro/VendaDetalheConteudo.vue";
 
-defineProps<{
+const props = defineProps<{
   resumo: ResumoCaixa | null;
   telaAtual: ItemMenu | null | undefined;
   telaAtiva: string;
@@ -33,6 +33,9 @@ defineProps<{
   totalPaginas: number;
   descricao: string;
   mostrarFiltroDiscriminacao?: boolean;
+  mostrarFiltrosSaidas?: boolean;
+  filtrosSaidas?: { dataInicio: string; dataFim: string; pdvId: string; status: string };
+  pdvs?: Opcao[];
   pendentesDiscriminacaoAtivo?: boolean;
   podeDiscriminar?: boolean;
   mostrarAprovacaoMercadorias?: boolean;
@@ -53,6 +56,10 @@ const emit = defineEmits<{
   (event: "update:dia", dia: string): void;
   (event: "discriminar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
   (event: "update:pendentes", valor: boolean): void;
+  (
+    event: "update:filtrosSaidas",
+    filtros: { dataInicio: string; dataFim: string; pdvId: string; status: string }
+  ): void;
   (event: "update:aprovacao", valor: boolean): void;
   (event: "aprovar", id: string, computar: boolean): void;
   (event: "recusar", id: string): void;
@@ -79,6 +86,28 @@ function alternarDetalhe(operacao: OperacaoResumo) {
   }
   linhaExpandidaId.value = operacao.id;
   emit("detalhes", operacao);
+}
+
+function rotuloStatus(status: string) {
+  if (status === "aprovado") return "Aprovado";
+  if (status === "aguardando_aprovacao") return "Aguardando aprovacao";
+  if (status === "cancelado") return "Cancelado";
+  return status || "Nao informado";
+}
+
+function corStatus(status: string) {
+  if (status === "aprovado") return "success";
+  if (status === "aguardando_aprovacao") return "warning";
+  if (status === "cancelado") return "error";
+  return "default";
+}
+
+function atualizarFiltroSaidas(campo: "dataInicio" | "dataFim" | "pdvId" | "status", valor: unknown) {
+  emit("update:filtrosSaidas", { ...props.filtrosSaidas, [campo]: String(valor ?? "") });
+}
+
+function limparFiltrosSaidas() {
+  emit("update:filtrosSaidas", { dataInicio: "", dataFim: "", pdvId: "", status: "" });
 }
 </script>
 
@@ -182,12 +211,71 @@ function alternarDetalhe(operacao: OperacaoResumo) {
         />
 
         <template v-else>
+          <v-row v-if="mostrarFiltrosSaidas" dense class="mb-3">
+            <v-col cols="12" sm="6" md="3">
+              <v-text-field
+                :model-value="filtrosSaidas?.dataInicio ?? ''"
+                type="date"
+                label="Data inicial"
+                density="compact"
+                variant="outlined"
+                hide-details
+                @update:model-value="atualizarFiltroSaidas('dataInicio', $event)"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-text-field
+                :model-value="filtrosSaidas?.dataFim ?? ''"
+                type="date"
+                label="Data final"
+                density="compact"
+                variant="outlined"
+                hide-details
+                @update:model-value="atualizarFiltroSaidas('dataFim', $event)"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-select
+                :model-value="filtrosSaidas?.pdvId ?? ''"
+                :items="pdvs ?? []"
+                item-title="nome"
+                item-value="id"
+                label="PDV"
+                density="compact"
+                variant="outlined"
+                clearable
+                hide-details
+                @update:model-value="atualizarFiltroSaidas('pdvId', $event)"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="3" class="d-flex ga-2">
+              <v-select
+                :model-value="filtrosSaidas?.status ?? ''"
+                :items="[
+                  { title: 'Todos os status', value: '' },
+                  { title: 'Aprovado', value: 'aprovado' },
+                  { title: 'Aguardando aprovação', value: 'aguardando_aprovacao' },
+                  { title: 'Cancelado', value: 'cancelado' }
+                ]"
+                label="Status"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="flex-grow-1"
+                @update:model-value="atualizarFiltroSaidas('status', $event)"
+              />
+              <v-btn variant="text" size="small" @click="limparFiltrosSaidas">Limpar</v-btn>
+            </v-col>
+          </v-row>
           <div class="responsive-table-shell">
             <v-table class="operacoes-table">
               <thead>
                 <tr>
-                  <th>Data</th>
-                  <th>Descrição</th>
+                  <th>Data e hora</th>
+                  <th>PDV</th>
+                  <th>Para o que / observação</th>
+                  <th>Registrado por</th>
+                  <th>Status</th>
                   <th class="text-right">Valor</th>
                   <th class="text-right">Ações</th>
                 </tr>
@@ -195,7 +283,13 @@ function alternarDetalhe(operacao: OperacaoResumo) {
               <tbody>
                 <template v-for="operacao in operacoesPaginadas" :key="operacao.id">
                   <tr>
-                    <td>{{ formatarDataSomenteDia(operacao.dataReferencia) }}</td>
+                    <td>
+                      <div>{{ formatarDataSomenteDia(operacao.dataReferencia) }}</div>
+                      <div v-if="operacao.criadoEm" class="text-caption text-medium-emphasis">
+                        {{ formatarDataHora(operacao.criadoEm) }}
+                      </div>
+                    </td>
+                    <td>{{ operacao.pdvNome || "Retaguarda" }}</td>
                     <td class="font-weight-bold">
                       {{ operacao.descricao }}
                       <v-chip
@@ -214,6 +308,18 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                         class="ml-1 text-medium-emphasis"
                         title="Documento anexado"
                       />
+                      <div
+                        v-if="operacao.observacao && operacao.observacao !== operacao.descricao"
+                        class="text-caption text-medium-emphasis mt-1"
+                      >
+                        {{ operacao.observacao }}
+                      </div>
+                    </td>
+                    <td>{{ operacao.criadoPorNome || "Não informado" }}</td>
+                    <td>
+                      <v-chip :color="corStatus(operacao.status)" size="x-small" variant="tonal">
+                        {{ rotuloStatus(operacao.status) }}
+                      </v-chip>
                     </td>
                     <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
                     <td class="text-right">
@@ -249,7 +355,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                     </td>
                   </tr>
                   <tr v-if="telaAtiva === 'entradas' && linhaExpandidaId === operacao.id">
-                    <td colspan="4" class="pa-0">
+                    <td colspan="7" class="pa-0">
                       <div class="venda-detalhe-inline pa-4">
                         <VendaDetalheConteudo
                           :detalhe="vendaDetalhe ?? null"
@@ -261,7 +367,7 @@ function alternarDetalhe(operacao: OperacaoResumo) {
                   </tr>
                 </template>
                 <tr v-if="!operacoesPaginadas.length">
-                  <td colspan="4" class="text-center text-muted py-8">
+                  <td colspan="7" class="text-center text-muted py-8">
                     <span class="tabela-vazio">Nenhum lancamento encontrado.</span>
                   </td>
                 </tr>
