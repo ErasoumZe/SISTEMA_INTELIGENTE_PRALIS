@@ -37,7 +37,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
     // Entradas – Vendas / Faturamento: o caixa (onde a venda entra) + o historico + a tela de entradas.
     titulo: "Entradas",
-    ids: ["caixa", "historico_caixas", "entradas"]
+    ids: ["caixa", "historico_caixas", "entradas", "campanhas"]
   },
   {
     // Transferencias – Contas / Locais: cofre <-> caixa, o lacre do movimento e o plano de contas.

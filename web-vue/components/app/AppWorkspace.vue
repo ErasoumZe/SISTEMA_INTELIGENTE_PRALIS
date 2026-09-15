@@ -111,6 +111,7 @@ type TipoPagina =
   | "operacoes"
   | "caixa"
   | "historico_caixas"
+  | "campanhas"
   | "fechamento"
   | "relatorio_produtos"
   | "relatorio_vendas"
@@ -2143,6 +2144,7 @@ const pageContext = computed(() => ({
   // O servidor exige as mesmas chaves; isto aqui so decide o que aparece.
   podeVerMensagensAdmin: temPermissao("mensagens_admin_visualizar"),
   podeEnviarMensagemAdmin: temPermissao("mensagens_admin_enviar"),
+  podeGerenciarCampanhas: temPermissao("campanhas_gerenciar"),
   notificacoes: notificacoes.value,
   notificacoesComHistorico: notificacoesComHistorico.value,
   verificarNotificacao,

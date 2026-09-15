@@ -3,6 +3,7 @@ import type { CaixaStatus, Opcao, ResumoCaixa } from "~/types/padaria";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
+import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
@@ -376,6 +377,15 @@ function fechar() {
         </div>
 
         <v-divider class="my-5" />
+
+        <!-- R-199: bloco SOMENTE LEITURA. Fica fora do fluxo de dinheiro da tela de proposito —
+             nenhum numero daqui entra em saldo, total ou fechamento. -->
+        <CaixaCampanhasResumo
+          v-if="caixaAberto"
+          :empresa-id="caixaAberto.empresaId"
+          :pdv-id="caixaAberto.pdvId"
+          :dia="caixaAberto.dataMovimento"
+        />
 
         <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
            fecha e o servidor devolve o restante no mesmo ato. -->
