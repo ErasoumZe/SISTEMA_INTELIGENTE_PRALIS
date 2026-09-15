@@ -79,6 +79,7 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
 // Reusa o GET de detalhe ja existente via o evento "detalhes"; uma linha aberta por vez (o pai
 // mantem um unico vendaDetalhe carregado).
 const linhaExpandidaId = ref("");
+const observacaoAberta = ref<OperacaoResumo | null>(null);
 function alternarDetalhe(operacao: OperacaoResumo) {
   if (linhaExpandidaId.value === operacao.id) {
     linhaExpandidaId.value = "";
@@ -308,12 +309,20 @@ function limparFiltrosSaidas() {
                         class="ml-1 text-medium-emphasis"
                         title="Documento anexado"
                       />
-                      <div
-                        v-if="operacao.observacao && operacao.observacao !== operacao.descricao"
-                        class="text-caption text-medium-emphasis mt-1"
+                      <v-btn
+                        v-if="
+                          ['despesas', 'mercadorias', 'retiradas'].includes(telaAtiva) &&
+                          operacao.observacao &&
+                          operacao.observacao !== operacao.descricao
+                        "
+                        size="x-small"
+                        variant="text"
+                        prepend-icon="mdi-note-text-outline"
+                        class="mt-1 px-0"
+                        @click="observacaoAberta = operacao"
                       >
-                        {{ operacao.observacao }}
-                      </div>
+                        Ver observação
+                      </v-btn>
                     </td>
                     <td>{{ operacao.criadoPorNome || "Não informado" }}</td>
                     <td>
@@ -411,6 +420,24 @@ function limparFiltrosSaidas() {
       :formas-pagamento="formasPagamento"
       @update:aberto="emit('update:vendaDetalheAberto', $event)"
     />
+
+    <v-dialog
+      :model-value="Boolean(observacaoAberta)"
+      max-width="560"
+      @update:model-value="(aberto) => !aberto && (observacaoAberta = null)"
+    >
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon icon="mdi-note-text-outline" />
+          Observação
+        </v-card-title>
+        <v-card-text class="text-pre-wrap">{{ observacaoAberta?.observacao }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="observacaoAberta = null">Fechar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

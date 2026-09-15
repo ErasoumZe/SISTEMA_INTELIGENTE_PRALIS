@@ -73,8 +73,8 @@ export const totaisHistoricoCaixaSchema = z.object({
   caixas: z.number()
 });
 
-// Uma linha da listagem. Totais vem persistidos de fechamentos_caixa (nao recalculamos);
-// para caixa ainda aberto eles sao 0 ate o fechamento gravar — a UI marca isso.
+// Uma linha da listagem. Fechados usam o snapshot de fechamentos_caixa; abertos trazem o
+// retrato operacional calculado no servidor, sem persistir nenhum fechamento antecipadamente.
 export const linhaHistoricoCaixaSchema = z.object({
   id: uuidSchema,
   empresaId: uuidSchema,

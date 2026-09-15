@@ -1261,6 +1261,7 @@ export async function listarHistoricoCaixaRepository(
       dataMovimento: fechamentosCaixa.dataMovimento,
       pdvId: fechamentosCaixa.pdvId,
       pdvNome: pdvs.nome,
+      pdvContaId: pdvs.contaId,
       usuarioCaixaId: fechamentosCaixa.usuarioCaixaId,
       usuarioCaixaNome: perfisUsuarios.nome,
       colaboradorId: fechamentosCaixa.colaboradorId,
@@ -1295,6 +1296,19 @@ export async function listarHistoricoCaixaRepository(
 
   const [contagem] = await db.select({ total: count() }).from(fechamentosCaixa).where(where);
   return { itens, total: contagem?.total ?? 0 };
+}
+
+// Todos os abertos que pertencem ao MESMO filtro da listagem. O rodape precisa desta colecao
+// inteira, e nao so da pagina atual, para que "total do filtro" continue sendo verdade.
+export async function listarCaixasAbertosHistoricoRepository(
+  filtros: FiltrosHistoricoCaixa,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({ id: fechamentosCaixa.id, pdvContaId: pdvs.contaId })
+    .from(fechamentosCaixa)
+    .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
+    .where(and(condicoesHistoricoCaixa(filtros), eq(fechamentosCaixa.status, "aberto")));
 }
 
 // Totais do FILTRO INTEIRO (nao da pagina) — e o que o rodape promete. Soma as colunas ja

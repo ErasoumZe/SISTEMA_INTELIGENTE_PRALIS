@@ -55,6 +55,7 @@ import {
   listarEdicoesCaixaRepository,
   listarAlteracoesPosFechamentoRepository,
   listarHistoricoCaixaRepository,
+  listarCaixasAbertosHistoricoRepository,
   listarLancamentosCaixaRepository,
   listarPlanejamentosRetornoRepository,
   caixasAlteradosPosFechamentoRepository,
@@ -1037,48 +1038,106 @@ export async function listarHistoricoCaixa(
 
   const filtros = filtrosDoHistorico(query);
   const { itens, total } = await listarHistoricoCaixaRepository(filtros, query.page, query.pageSize);
-  // Totais do filtro inteiro (rodape) e o flag de acerto so das linhas da pagina.
-  const [totais, ajustes, alterados] = await Promise.all([
+  // Totais do filtro inteiro (rodape) e o flag de acerto so das linhas da pagina. Os fechados
+  // continuam sendo o snapshot persistido; o aberto recebe o MESMO calculo operacional que o
+  // proprio Caixa ja exibe, sem gravar nada antes do fechamento.
+  const [totais, ajustes, alterados, caixasAbertos] = await Promise.all([
     totaisHistoricoCaixaRepository(filtros),
     caixasComAjusteRepository(itens.map((caixa) => caixa.id)),
-    caixasAlteradosPosFechamentoRepository(itens.map((caixa) => caixa.id))
+    caixasAlteradosPosFechamentoRepository(itens.map((caixa) => caixa.id)),
+    listarCaixasAbertosHistoricoRepository(filtros)
   ]);
+  const totaisAbertos = new Map(
+    (
+      await Promise.all(
+        caixasAbertos.map(async (caixa) => {
+          if (!caixa.pdvContaId) return null;
+          return [
+            caixa.id,
+            totaisHistoricoAoVivo(await calcularTotaisCaixaOperacionalRepository(caixa.id, caixa.pdvContaId))
+          ] as const;
+        })
+      )
+    ).filter((item): item is readonly [string, TotaisHistoricoAoVivo] => item !== null)
+  );
   const comAjuste = new Set(ajustes.map((ajuste) => ajuste.caixaId));
   const alteradoPosFechamento = new Set(alterados.map((alteracao) => alteracao.caixaId));
 
   return {
-    itens: itens.map((caixa) => ({
-      ...caixa,
-      dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
-      dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
-      fechadoPor: caixa.fechadoPor,
-      fechadoPorNome: caixa.fechadoPorNome,
-      totalEntradas: numero(caixa.totalEntradas),
-      totalTransferencias: numero(caixa.totalTransferencias),
-      totalTransferenciasEntrada: numero(caixa.totalTransferenciasEntrada),
-      totalTransferenciasSaida: numero(caixa.totalTransferenciasSaida),
-      totalDespesas: numero(caixa.totalDespesas),
-      totalRetiradas: numero(caixa.totalRetiradas),
-      totalMercadorias: numero(caixa.totalMercadorias),
-      saldo: numero(caixa.saldo),
-      status: statusCaixaSchema.parse(caixa.status),
-      temAjuste: comAjuste.has(caixa.id),
-      alteradoAposFechamento: alteradoPosFechamento.has(caixa.id)
-    })),
+    itens: itens.map((caixa) => {
+      const aoVivo = totaisAbertos.get(caixa.id);
+      // `pdvContaId` e somente insumo interno do calculo ao vivo; o contrato do historico nunca
+      // expoe a conta do PDV junto de uma linha de caixa.
+      const { pdvContaId: _pdvContaId, ...caixaPublico } = caixa;
+      return {
+        ...caixaPublico,
+        dataHoraAbertura: serializarData(caixa.dataHoraAbertura),
+        dataHoraFechamento: serializarData(caixa.dataHoraFechamento),
+        fechadoPor: caixa.fechadoPor,
+        fechadoPorNome: caixa.fechadoPorNome,
+        totalEntradas: aoVivo?.totalEntradas ?? numero(caixa.totalEntradas),
+        totalTransferencias: aoVivo?.totalTransferencias ?? numero(caixa.totalTransferencias),
+        totalTransferenciasEntrada: aoVivo?.totalTransferenciasEntrada ?? numero(caixa.totalTransferenciasEntrada),
+        totalTransferenciasSaida: aoVivo?.totalTransferenciasSaida ?? numero(caixa.totalTransferenciasSaida),
+        totalDespesas: aoVivo?.totalDespesas ?? numero(caixa.totalDespesas),
+        totalRetiradas: aoVivo?.totalRetiradas ?? numero(caixa.totalRetiradas),
+        totalMercadorias: aoVivo?.totalMercadorias ?? numero(caixa.totalMercadorias),
+        saldo: aoVivo?.saldo ?? numero(caixa.saldo),
+        status: statusCaixaSchema.parse(caixa.status),
+        temAjuste: comAjuste.has(caixa.id),
+        alteradoAposFechamento: alteradoPosFechamento.has(caixa.id)
+      };
+    }),
     total,
     page: query.page,
     pageSize: query.pageSize,
     totais: {
-      totalEntradas: numero(totais?.totalEntradas),
-      totalTransferenciasEntrada: numero(totais?.totalTransferenciasEntrada),
-      totalTransferenciasSaida: numero(totais?.totalTransferenciasSaida),
-      totalDespesas: numero(totais?.totalDespesas),
-      totalRetiradas: numero(totais?.totalRetiradas),
-      totalMercadorias: numero(totais?.totalMercadorias),
-      saldo: numero(totais?.saldo),
+      totalEntradas: numero(totais?.totalEntradas) + somarTotaisAoVivo(totaisAbertos, "totalEntradas"),
+      totalTransferenciasEntrada:
+        numero(totais?.totalTransferenciasEntrada) + somarTotaisAoVivo(totaisAbertos, "totalTransferenciasEntrada"),
+      totalTransferenciasSaida:
+        numero(totais?.totalTransferenciasSaida) + somarTotaisAoVivo(totaisAbertos, "totalTransferenciasSaida"),
+      totalDespesas: numero(totais?.totalDespesas) + somarTotaisAoVivo(totaisAbertos, "totalDespesas"),
+      totalRetiradas: numero(totais?.totalRetiradas) + somarTotaisAoVivo(totaisAbertos, "totalRetiradas"),
+      totalMercadorias: numero(totais?.totalMercadorias) + somarTotaisAoVivo(totaisAbertos, "totalMercadorias"),
+      saldo: numero(totais?.saldo) + somarTotaisAoVivo(totaisAbertos, "saldo"),
       caixas: totais?.caixas ?? 0
     }
   };
+}
+
+type TotaisHistoricoAoVivo = Pick<
+  LinhaHistoricoCaixa,
+  | "totalEntradas"
+  | "totalTransferencias"
+  | "totalTransferenciasEntrada"
+  | "totalTransferenciasSaida"
+  | "totalDespesas"
+  | "totalRetiradas"
+  | "totalMercadorias"
+  | "saldo"
+>;
+
+// Projecao do mesmo acumulador em centavos usado pelo Caixa aberto para a forma da linha do
+// historico. A transferencia total do snapshot e liquida (entrada - saida), igual ao fechamento.
+function totaisHistoricoAoVivo(totais: TotaisCaixaCentavos): TotaisHistoricoAoVivo {
+  return {
+    totalEntradas: deCentavos(totais.entradas),
+    totalTransferencias: deCentavos(totais.transferenciasEntrada - totais.transferenciasSaida),
+    totalTransferenciasEntrada: deCentavos(totais.transferenciasEntrada),
+    totalTransferenciasSaida: deCentavos(totais.transferenciasSaida),
+    totalDespesas: deCentavos(totais.despesas),
+    totalRetiradas: deCentavos(totais.retiradas),
+    totalMercadorias: deCentavos(totais.mercadorias),
+    saldo: deCentavos(saldoCaixaCentavos(totais))
+  };
+}
+
+function somarTotaisAoVivo(
+  totais: ReadonlyMap<string, TotaisHistoricoAoVivo>,
+  campo: Exclude<keyof TotaisHistoricoAoVivo, "totalTransferencias">
+) {
+  return [...totais.values()].reduce((soma, caixa) => soma + caixa[campo], 0);
 }
 
 // Query (wire) -> filtros do repositorio: so o que veio preenchido vira condicao.

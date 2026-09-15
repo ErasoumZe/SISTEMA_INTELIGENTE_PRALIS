@@ -799,6 +799,41 @@ describe("caixa integration", () => {
       }
     });
 
+    // A retaguarda nao pode esperar o fechamento para enxergar o dinheiro que esta no caixa.
+    // O historico devolve o retrato operacional do aberto, enquanto os fechados seguem snapshot.
+    const historicoAoVivo = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&pdvId=${pdvId}&status=aberto`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(historicoAoVivo);
+    expect(historicoAoVivo.json()).toMatchObject({
+      data: [
+        {
+          id: caixaId,
+          totalEntradas: 100,
+          totalTransferenciasEntrada: 50,
+          totalTransferenciasSaida: 30,
+          totalDespesas: 20,
+          totalRetiradas: 10,
+          totalMercadorias: 15,
+          saldo: 75
+        }
+      ],
+      meta: {
+        totais: {
+          totalEntradas: 100,
+          totalTransferenciasEntrada: 50,
+          totalTransferenciasSaida: 30,
+          totalDespesas: 20,
+          totalRetiradas: 10,
+          totalMercadorias: 15,
+          saldo: 75,
+          caixas: 1
+        }
+      }
+    });
+
     const retorno = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/transferencia-cofre`,

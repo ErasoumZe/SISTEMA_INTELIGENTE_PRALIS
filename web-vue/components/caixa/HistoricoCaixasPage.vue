@@ -46,6 +46,7 @@ const erro = ref("");
 const caixasAbertos = ref<LinhaHistoricoCaixa[]>([]);
 const monitorAtualizadoEm = ref<string | null>(null);
 let monitorIntervalo: ReturnType<typeof setInterval> | null = null;
+let sincronizandoAoVivo = false;
 
 const periodoInvertido = computed(
   () => Boolean(filtros.dataInicio && filtros.dataFim) && filtros.dataInicio > filtros.dataFim
@@ -80,9 +81,9 @@ function paramsFiltro() {
   return params;
 }
 
-async function buscar() {
+async function buscar(opcoes: { preservarExpandido?: boolean; silencioso?: boolean } = {}) {
   if (!props.empresaId || periodoInvertido.value) return;
-  carregando.value = true;
+  if (!opcoes.silencioso) carregando.value = true;
   erro.value = "";
   try {
     const params = paramsFiltro();
@@ -95,14 +96,14 @@ async function buscar() {
     total.value = resultado.total;
     // Totais do FILTRO inteiro, nao da pagina: vem do meta junto da paginacao.
     totais.value = resultado.meta?.totais ?? null;
-    expandido.value = [];
+    if (!opcoes.preservarExpandido) expandido.value = [];
   } catch (error) {
     erro.value = mensagemErro(error);
     linhas.value = [];
     totais.value = null;
     total.value = 0;
   } finally {
-    carregando.value = false;
+    if (!opcoes.silencioso) carregando.value = false;
   }
 }
 
@@ -142,13 +143,18 @@ function limparFiltros() {
   void aplicarFiltros();
 }
 
-// Caixa aberto ainda nao teve os totais gravados pelo fechamento: mostrar "42,00" ali seria mentira.
-function caixaEmAberto(linha: LinhaHistoricoCaixa) {
-  return linha.status === "aberto";
+async function sincronizarAoVivo() {
+  if (sincronizandoAoVivo || document.visibilityState !== "visible") return;
+  sincronizandoAoVivo = true;
+  try {
+    await Promise.all([buscar({ preservarExpandido: true, silencioso: true }), buscarCaixasAbertos()]);
+  } finally {
+    sincronizandoAoVivo = false;
+  }
 }
 
-function valorColuna(linha: LinhaHistoricoCaixa, valor: number) {
-  return caixaEmAberto(linha) ? "--" : dinheiro(valor);
+function aoVoltarParaPagina() {
+  void sincronizarAoVivo();
 }
 
 function corStatus(linha: LinhaHistoricoCaixa) {
@@ -172,11 +178,17 @@ watch(
 );
 
 onMounted(() => {
-  monitorIntervalo = setInterval(() => void buscarCaixasAbertos(), 30_000);
+  // Sem websocket no ambiente local, a pagina faz polling somente quando esta visivel e atualiza
+  // tanto o monitor quanto a grade. O foco/retorno da aba busca imediatamente, sem esperar o ciclo.
+  monitorIntervalo = setInterval(() => void sincronizarAoVivo(), 15_000);
+  window.addEventListener("focus", aoVoltarParaPagina);
+  document.addEventListener("visibilitychange", aoVoltarParaPagina);
 });
 
 onBeforeUnmount(() => {
   if (monitorIntervalo) clearInterval(monitorIntervalo);
+  window.removeEventListener("focus", aoVoltarParaPagina);
+  document.removeEventListener("visibilitychange", aoVoltarParaPagina);
 });
 </script>
 
@@ -189,7 +201,7 @@ onBeforeUnmount(() => {
           <div>
             <div class="text-subtitle-1 font-weight-bold">Monitor de caixas abertos</div>
             <div class="text-caption text-medium-emphasis">
-              Atualiza a cada 30 segundos. Abra o historico do PDV para ver os lancamentos auditaveis.
+              Sincroniza a cada 15 segundos enquanto esta pagina esta aberta.
               <template v-if="monitorAtualizadoEm">
                 Ultima atualizacao: {{ formatarDataHora(monitorAtualizadoEm) }}.</template
               >
@@ -315,18 +327,18 @@ onBeforeUnmount(() => {
           </v-chip>
           <span v-else>--</span>
         </template>
-        <template #[`item.totalEntradas`]="{ item }">{{ valorColuna(item, item.totalEntradas) }}</template>
-        <template #[`item.totalDespesas`]="{ item }">{{ valorColuna(item, item.totalDespesas) }}</template>
-        <template #[`item.totalRetiradas`]="{ item }">{{ valorColuna(item, item.totalRetiradas) }}</template>
-        <template #[`item.totalMercadorias`]="{ item }">{{ valorColuna(item, item.totalMercadorias) }}</template>
+        <template #[`item.totalEntradas`]="{ item }">{{ dinheiro(item.totalEntradas) }}</template>
+        <template #[`item.totalDespesas`]="{ item }">{{ dinheiro(item.totalDespesas) }}</template>
+        <template #[`item.totalRetiradas`]="{ item }">{{ dinheiro(item.totalRetiradas) }}</template>
+        <template #[`item.totalMercadorias`]="{ item }">{{ dinheiro(item.totalMercadorias) }}</template>
         <template #[`item.totalTransferenciasEntrada`]="{ item }">
-          {{ valorColuna(item, item.totalTransferenciasEntrada) }}
+          {{ dinheiro(item.totalTransferenciasEntrada) }}
         </template>
         <template #[`item.totalTransferenciasSaida`]="{ item }">
-          {{ valorColuna(item, item.totalTransferenciasSaida) }}
+          {{ dinheiro(item.totalTransferenciasSaida) }}
         </template>
         <template #[`item.saldo`]="{ item }">
-          <strong>{{ valorColuna(item, item.saldo) }}</strong>
+          <strong>{{ dinheiro(item.saldo) }}</strong>
         </template>
         <template #[`item.status`]="{ item }">
           <v-chip :color="corStatus(item)" size="small" variant="tonal">{{ rotuloStatus(item) }}</v-chip>
@@ -341,8 +353,7 @@ onBeforeUnmount(() => {
         </template>
       </v-data-table>
 
-      <!-- Rodape: totais do FILTRO inteiro (todas as paginas). Caixa aberto entra com 0 nas somas
-           porque o fechamento ainda nao gravou os totais dele — por isso o aviso. -->
+      <!-- Rodape: totais do filtro inteiro. Fechados usam o snapshot; abertos, o retrato ao vivo. -->
       <v-sheet v-if="totais" class="pa-4 mt-4 rounded-lg soft-bg">
         <div class="d-flex flex-wrap ga-6 align-center">
           <div>
@@ -379,7 +390,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="text-caption mt-2 text-medium-emphasis">
-          Os totais somam os valores gravados no fechamento. Caixa ainda aberto entra como zero.
+          Caixa fechado usa o snapshot do fechamento; caixa aberto mostra o retrato operacional ao vivo.
         </div>
       </v-sheet>
 
