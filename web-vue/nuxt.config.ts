@@ -5,7 +5,10 @@ export default defineNuxtConfig({
   ssr: false,
   compatibilityDate: "2026-06-23",
   alias: {
-    "@padaria/shared": fileURLToPath(new URL("../shared/src/index.ts", import.meta.url))
+    "@padaria/shared": fileURLToPath(new URL("../shared/src/index.ts", import.meta.url)),
+    // O alias do pacote-raiz nao resolve subpaths para o Vite. Sem este prefixo, imports como
+    // `@padaria/shared/notificacoes` chegam ao navegador como modulo inexistente.
+    "@padaria/shared/": fileURLToPath(new URL("../shared/src/", import.meta.url))
   },
   vite: {
     optimizeDeps: {
