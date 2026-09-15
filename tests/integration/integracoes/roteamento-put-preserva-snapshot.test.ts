@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarContextoApiTeste, type ContextoApiTeste } from "../../setup/aplicacao.js";
 import { assertOk } from "../../setup/asserts.js";
 import { cookieSessao } from "../../setup/auth.js";
-import { encerrarCaixaSeedAdminParaTeste } from "../../setup/caixa.js";
+import { encerrarCaixaSeedAdminParaTeste, registrarEncerramentoCaixaParaTeste } from "../../setup/caixa.js";
 import { idsTeste, usuariosTeste } from "../../setup/contexto.js";
 import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 
@@ -48,7 +48,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
     await contexto.fechar();
   });
 
-  function payload(sufixo: string, idVenda: string, idCaixaExterno: string, valor: number) {
+  function payload(sufixo: string, idVenda: string, idCaixaExterno: string, valor: number, dataHoraVenda: string) {
     return {
       DadosIntegracao: { origem: `vitest-put-${sufixo}` },
       Venda: {
@@ -58,7 +58,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
         idCliente: null,
         nomeCliente: null,
         documentoCliente: null,
-        dataHoraVenda: "2026-08-12T12:00:00.000Z",
+        dataHoraVenda,
         valorOriginal: valor,
         desconto: 0,
         acrescimo: 0,
@@ -122,11 +122,15 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
         empresaId: idsTeste.empresaA,
         pdvId,
         usuarioCaixaId: await usuarioAdminId(),
-        dataHoraAbertura: "2026-08-12T08:00",
         observacao: `Caixa put ${sufixo}`
       }
     });
     expect(abrir.statusCode, abrir.body).toBe(201);
+    const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    registrarEncerramentoCaixaParaTeste(caixaId);
+    // O servidor é a autoridade da abertura. A venda precisa nascer depois dela,
+    // como acontece quando o CREARE envia uma venda do turno corrente.
+    const dataHoraVenda = new Date().toISOString();
 
     const idVenda = `PUT-${sufixo}-${carimbo}`;
     // Semente: cria a forma de pagamento.
@@ -134,7 +138,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
       method: "POST",
       url: "/api/integracoes",
       headers: { "x-api-key": idsTeste.integracaoCodigo },
-      payload: payload(sufixo, `${idVenda}-SEMENTE`, identificadorExterno, 1)
+      payload: payload(sufixo, `${idVenda}-SEMENTE`, identificadorExterno, 1, dataHoraVenda)
     });
 
     if (rotear) {
@@ -160,14 +164,14 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
       method: "POST",
       url: "/api/integracoes",
       headers: { "x-api-key": idsTeste.integracaoCodigo },
-      payload: payload(sufixo, idVenda, identificadorExterno, 250)
+      payload: payload(sufixo, idVenda, identificadorExterno, 250, dataHoraVenda)
     });
     expect(ingestao.statusCode, ingestao.body).toBe(200);
 
     const venda = await consultarUm<{ id: string }>("select id from vendas where identificador_externo = $1", [
       idVenda
     ]);
-    return { contaId, identificadorExterno, idVenda, vendaId: venda?.id ?? "" };
+    return { contaId, identificadorExterno, idVenda, vendaId: venda?.id ?? "", dataHoraVenda };
   }
 
   async function pagamentos(vendaId: string) {
@@ -290,7 +294,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
   });
 
   it("reingestao DEPOIS do PUT permitido nao reclassifica a venda como historica", async () => {
-    const { contaId, identificadorExterno, idVenda, vendaId } = await montar("reingestao", true);
+    const { contaId, identificadorExterno, idVenda, vendaId, dataHoraVenda } = await montar("reingestao", true);
 
     const resposta = await editarObservacao(vendaId, `antes do reenvio ${carimbo}`);
     expect(resposta.statusCode, resposta.body).toBe(200);
@@ -300,7 +304,7 @@ describe("#152 — PUT permitido preserva o snapshot de roteamento", () => {
       method: "POST",
       url: "/api/integracoes",
       headers: { "x-api-key": idsTeste.integracaoCodigo },
-      payload: payload("reingestao", idVenda, identificadorExterno, 400)
+      payload: payload("reingestao", idVenda, identificadorExterno, 400, dataHoraVenda)
     });
     expect(reenvio.statusCode, reenvio.body).toBe(200);
 

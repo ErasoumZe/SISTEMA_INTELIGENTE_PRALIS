@@ -111,15 +111,15 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
   // e o caso ficaria vermelho pelo motivo errado — 400 que nao prova nada. A tela reenvia o lacre
   // carregado, entao o teste faz o mesmo: le o que esta gravado e devolve.
   async function editar(transferenciaId: string, payload: Record<string, unknown>) {
-    const atual = await consultarUm<{ n_lacre_doc: string | null }>(
-      "select n_lacre_doc from transferencias where id = $1",
+    const atual = await consultarUm<{ n_lacre_doc: string | null; tempo_confirmacao: string | null }>(
+      "select n_lacre_doc, tempo_confirmacao from transferencias where id = $1",
       [transferenciaId]
     );
     return inject("PUT", `/api/transferencias/${transferenciaId}`, cookieAdmin, {
       empresaId,
       dataReferencia: DIA,
       descricao: "Transferencia editada",
-      tempoConfirmacao: "1dia",
+      tempoConfirmacao: atual?.tempo_confirmacao ?? null,
       nLacreDoc: atual?.n_lacre_doc ?? undefined,
       ...payload
     });

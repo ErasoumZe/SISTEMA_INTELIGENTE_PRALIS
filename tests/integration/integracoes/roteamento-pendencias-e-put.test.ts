@@ -154,7 +154,7 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
           idCliente: null,
           nomeCliente: null,
           documentoCliente: null,
-          dataHoraVenda: "2026-08-12T12:00:00.000Z",
+          dataHoraVenda: new Date().toISOString(),
           valorOriginal: 77,
           desconto: 0,
           acrescimo: 0,
@@ -222,7 +222,6 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
         empresaId: idsTeste.empresaA,
         pdvId,
         usuarioCaixaId: await usuarioAdminId(),
-        dataHoraAbertura: "2026-08-12T08:00",
         observacao: "Caixa R177"
       }
     });
@@ -243,7 +242,7 @@ describe("#152 — pendencias por permissao e PUT da venda integrada (R-177)", (
           idCliente: null,
           nomeCliente: null,
           documentoCliente: null,
-          dataHoraVenda: "2026-08-12T12:00:00.000Z",
+          dataHoraVenda: new Date().toISOString(),
           valorOriginal: 120,
           desconto: 0,
           acrescimo: 0,

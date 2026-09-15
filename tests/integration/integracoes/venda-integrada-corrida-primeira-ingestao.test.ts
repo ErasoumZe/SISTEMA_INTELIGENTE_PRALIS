@@ -42,7 +42,6 @@ import {
 } from "../../setup/integracao.js";
 
 const PDV_EXTERNO = "PDV-41-CORRIDA";
-const DATA_VENDA = "2026-06-30T12:00:00.000Z";
 const VENDA_AQUECIMENTO = "R41-CORRIDA-AQUECIMENTO";
 const VENDA_ORDEM_AB = "R41-CORRIDA-ORDEM-AB";
 const VENDA_ORDEM_BA = "R41-CORRIDA-ORDEM-BA";
@@ -64,7 +63,7 @@ type Resposta = { statusCode: number; body: string; json: () => unknown };
 
 // Payload IDENTICO nas duas pontas de proposito: e o cenario real de entrega em duplicidade do
 // agente (retry que cruza com a chamada original), nao dois payloads diferentes.
-function payloadVenda(idVenda: string) {
+function payloadVenda(idVenda: string, dataHoraVenda: string) {
   return {
     DadosIntegracao: { origem: "vitest-r41-corrida" },
     Venda: {
@@ -74,7 +73,7 @@ function payloadVenda(idVenda: string) {
       idCliente: null,
       nomeCliente: null,
       documentoCliente: null,
-      dataHoraVenda: DATA_VENDA,
+      dataHoraVenda,
       valorOriginal: 25,
       desconto: 0,
       acrescimo: 0,
@@ -87,7 +86,7 @@ function payloadVenda(idVenda: string) {
         idRegistro: `${idVenda}-ITEM-1`,
         idProduto: "PROD-R41",
         descricaoProduto: "Pao frances (R41)",
-        dataHoraItem: DATA_VENDA,
+        dataHoraItem: dataHoraVenda,
         quantidade: 1,
         valorUnitario: 25,
         total: 25,
@@ -99,8 +98,8 @@ function payloadVenda(idVenda: string) {
 }
 
 // Mesma venda do `payloadVenda`, mas com o rateio em tres formas — para o T-11.
-function payloadDividido(idVenda: string) {
-  const base = payloadVenda(idVenda);
+function payloadDividido(idVenda: string, dataHoraVenda: string) {
+  const base = payloadVenda(idVenda, dataHoraVenda);
   return {
     ...base,
     Venda: { ...base.Venda, valorOriginal: TOTAL_RATEIO, valorTotal: TOTAL_RATEIO },
@@ -118,6 +117,7 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
   let caixaId: string;
+  let dataHoraVenda: string;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -159,13 +159,15 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
       empresaId: idsTeste.empresaA,
       pdvId,
       usuarioCaixaId: usuario.id,
-      dataHoraAbertura: "2026-06-29T08:00",
       observacao: "Caixa R41 corrida"
     });
     caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    // A abertura é carimbada no servidor; use um instante posterior para a venda
+    // integrada poder pertencer ao turno em qualquer data em que a suíte rode.
+    dataHoraVenda = new Date().toISOString();
 
     // AQUECIMENTO: resolve produto e forma de pagamento fora da corrida.
-    const aquecimento = await enviar(payloadVenda(VENDA_AQUECIMENTO));
+    const aquecimento = await enviar(payloadVenda(VENDA_AQUECIMENTO, dataHoraVenda));
     expect(aquecimento.statusCode, aquecimento.body).toBe(200);
     expect(
       (await vendasDe(VENDA_AQUECIMENTO)).length,
@@ -214,13 +216,13 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
       await bloqueador.cliente.query("begin");
       await bloqueador.cliente.query("select id from fechamentos_caixa where id = $1 for update", [caixaId]);
 
-      primeira = enviar(payloadVenda(idVenda));
+      primeira = enviar(payloadVenda(idVenda, dataHoraVenda));
       expect(
         await esperarCadeiaDeBloqueio(bloqueador, 1),
         "a primeira ingestao deveria estar parada na trava do caixa"
       ).toBe(true);
 
-      segunda = enviar(payloadVenda(idVenda));
+      segunda = enviar(payloadVenda(idVenda, dataHoraVenda));
       expect(
         await esperarCadeiaDeBloqueio(bloqueador, 2),
         "as DUAS ingestoes deveriam estar na fila da linha do caixa"
@@ -328,9 +330,9 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
     try {
       await bloqueador.cliente.query("begin");
       await bloqueador.cliente.query("select id from fechamentos_caixa where id = $1 for update", [caixaId]);
-      primeira = enviar(payloadDividido(VENDA_DIVIDIDA));
+      primeira = enviar(payloadDividido(VENDA_DIVIDIDA, dataHoraVenda));
       expect(await esperarCadeiaDeBloqueio(bloqueador, 1)).toBe(true);
-      segunda = enviar(payloadDividido(VENDA_DIVIDIDA));
+      segunda = enviar(payloadDividido(VENDA_DIVIDIDA, dataHoraVenda));
       expect(await esperarCadeiaDeBloqueio(bloqueador, 2)).toBe(true);
     } finally {
       await fecharBloqueador(bloqueador);
@@ -400,7 +402,7 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
       ]);
 
       // `idCaixa` inedito => sem vinculo => a ingestao cria o PDV pelo `nomeCaixa`, que colide.
-      const payload = payloadVenda(VENDA_ERRO_DE_DRIVER);
+      const payload = payloadVenda(VENDA_ERRO_DE_DRIVER, dataHoraVenda);
       payload.Venda.idCaixa = "PDV-EXTERNO-R41-COLISAO";
       payload.Venda.nomeCaixa = PDV_COLIDIDO;
       requisicao = enviar(payload);
@@ -434,7 +436,7 @@ describe("#41 · corrida na primeira ingestao da venda integrada", () => {
 
   it("o reenvio depois da corrida nao pode criar uma terceira venda", async () => {
     const antes = (await vendasDe(VENDA_ORDEM_AB)).length;
-    const reenvio = await enviar(payloadVenda(VENDA_ORDEM_AB));
+    const reenvio = await enviar(payloadVenda(VENDA_ORDEM_AB, dataHoraVenda));
     expect(reenvio.statusCode, reenvio.body).toBe(200);
     const depois = await vendasDe(VENDA_ORDEM_AB);
     expect(depois.length, `o reenvio nao pode acrescentar venda: antes=${antes}, depois=${depois.length}`).toBe(antes);

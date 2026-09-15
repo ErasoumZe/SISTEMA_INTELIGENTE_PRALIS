@@ -12,6 +12,7 @@ import { confirmarTransferenciaPorLacreDireto, consultarUm, json } from "../../s
 describe("caixa + venda integrada (entrada por integracao)", () => {
   let contexto: ContextoApiTeste;
   let cookieAdmin: string;
+  let caixaDoCenarioCompleto: string | null = null;
 
   beforeAll(async () => {
     contexto = await criarContextoApiTeste();
@@ -119,7 +120,8 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     });
     expect(vinculo.statusCode, vinculo.body).toBe(204);
 
-    // Abre o caixa (fica ABERTO). Periodo: [2026-06-29 08:00, agora].
+    // A abertura usa o instante real do servidor (R-184). A venda abaixo tambem usa o relogio
+    // real, para que a prova nao envelheca quando o calendario avancar.
     const abrir = await criar("/api/caixa/abrir", {
       empresaId: idsTeste.empresaA,
       pdvId,
@@ -128,6 +130,7 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       observacao: "Caixa demo venda integrada"
     });
     const caixaId = json<{ data: { id: string } }>(abrir).data.id;
+    caixaDoCenarioCompleto = caixaId;
 
     const dataReferencia = "2026-06-30";
     // Operacoes MANUAIS (entram no caixa por caixa_id).
@@ -176,7 +179,7 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     // ENTRADA por INTEGRACAO: venda de 200 no mesmo PDV, dentro do periodo aberto.
     const venda = await post(
       "/api/integracoes",
-      payloadVendaIntegrada("VENDA-DEMO-1", "PDV-DEMO", 200, "2026-06-30T12:00:00.000Z"),
+      payloadVendaIntegrada("VENDA-DEMO-1", "PDV-DEMO", 200, new Date().toISOString()),
       { "x-api-key": idsTeste.integracaoCodigo }
     );
     assertOk(venda);
@@ -211,7 +214,7 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     // Venda cuja dataVenda e ANTES da abertura do caixa criado no teste anterior nao deve vincular.
     const antes = await post(
       "/api/integracoes",
-      payloadVendaIntegrada("VENDA-DEMO-FORA", "PDV-DEMO", 999, "2026-06-28T12:00:00.000Z"),
+      payloadVendaIntegrada("VENDA-DEMO-FORA", "PDV-DEMO", 999, new Date(Date.now() - 86_400_000).toISOString()),
       { "x-api-key": idsTeste.integracaoCodigo }
     );
     assertOk(antes);
@@ -220,6 +223,12 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       ["VENDA-DEMO-FORA"]
     );
     expect(linha?.caixa_id).toBeNull();
+
+    // R-186: o proximo caso usa o mesmo operador e precisa iniciar sem um segundo caixa aberto.
+    if (!caixaDoCenarioCompleto) throw new Error("Caixa do cenario completo nao foi criado");
+    const fechamento = await post(`/api/caixa/${caixaDoCenarioCompleto}/fechar`, {});
+    expect(fechamento.statusCode, fechamento.body).toBe(204);
+    caixaDoCenarioCompleto = null;
   });
 
   it("aceita venda tardia e marca qual venda alterou o caixa depois do fechamento (R-013)", async () => {
@@ -255,16 +264,25 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       empresaId: idsTeste.empresaA,
       pdvId,
       usuarioCaixaId: await usuarioAdminId(),
-      dataHoraAbertura: "2026-07-29T08:00:00.000Z",
       observacao: "Caixa para provar venda tardia"
     });
     const caixaId = json<{ data: { id: string } }>(abertura).data.id;
+    const caixa = await consultarUm<{ data_hora_abertura: Date }>(
+      "select data_hora_abertura from fechamentos_caixa where id = $1",
+      [caixaId]
+    );
+    if (!caixa?.data_hora_abertura) throw new Error("Caixa aberto sem horario de abertura");
     const fechamento = await post(`/api/caixa/${caixaId}/fechar`, {});
     expect(fechamento.statusCode, fechamento.body).toBe(204);
 
     const venda = await post(
       "/api/integracoes",
-      payloadVendaIntegrada("VENDA-TARDIA-R013", "PDV-VENDA-TARDIA", 37.5, "2026-07-29T12:00:00.000Z"),
+      payloadVendaIntegrada(
+        "VENDA-TARDIA-R013",
+        "PDV-VENDA-TARDIA",
+        37.5,
+        new Date(caixa.data_hora_abertura.getTime() + 1).toISOString()
+      ),
       { "x-api-key": idsTeste.integracaoCodigo }
     );
     assertOk(venda);

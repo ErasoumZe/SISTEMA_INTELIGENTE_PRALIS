@@ -19,7 +19,11 @@ import { consultarTodos, consultarUm, json } from "../../setup/integracao.js";
 // total acumulado — os quatro rodam isolados, em qualquer ordem, sem reseed por teste.
 
 const PDV_EXTERNO = "PDV-D06-DIVIDIDO";
-const DATA_VENDA = "2026-06-30T12:00:00.000Z";
+// O Caixa nasce no horario do servidor. A data da venda precisa ser obtida no momento do envio,
+// nunca fixada no calendario, para provar o vinculo real CREARE -> turno aberto.
+function dataVendaAtual() {
+  return new Date().toISOString();
+}
 
 // Um identificador externo por cenario: reusar o mesmo entre testes foi o que criou dependencia
 // de ordem (o caso de reenvio so via "sem_novidade" se outro teste ja tivesse criado a venda).
@@ -81,6 +85,7 @@ function esperado(formas: FormaPagamento[]) {
 
 function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPagamento[]) {
   const valorTotal = totalCentavos / 100;
+  const dataHoraVenda = dataVendaAtual();
   return {
     DadosIntegracao: { origem: "vitest-d06" },
     Venda: {
@@ -90,7 +95,7 @@ function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPa
       idCliente: null,
       nomeCliente: null,
       documentoCliente: null,
-      dataHoraVenda: DATA_VENDA,
+      dataHoraVenda,
       valorOriginal: valorTotal,
       desconto: 0,
       acrescimo: 0,
@@ -103,7 +108,7 @@ function payloadDividido(idVenda: string, totalCentavos: number, formas: FormaPa
         idRegistro: `${idVenda}-ITEM-1`,
         idProduto: "PROD-D06",
         descricaoProduto: "Cesta variada (D06)",
-        dataHoraItem: DATA_VENDA,
+        dataHoraItem: dataHoraVenda,
         quantidade: 1,
         valorUnitario: valorTotal,
         total: valorTotal,

@@ -90,7 +90,9 @@ describe("caixa - conferencia nao vira atalho para o cofre (P1/D9/R-179)", () =>
       contaDestinoId,
       contasDestinoIds,
       nLacreDoc: `P1-CAND-${sequencia}`,
-      tempoConfirmacao: "1dia"
+      // Transferencia com destinos candidatos não é direta; o prazo só é válido
+      // para o caminho direto e não pode mascarar a guarda do cofre deste caso.
+      ...(contasDestinoIds.length === 0 ? { tempoConfirmacao: "1dia" } : {})
     });
   }
 
