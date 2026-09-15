@@ -53,7 +53,6 @@ export type NotaFiscalExtraida = z.infer<typeof notaFiscalExtraidaSchema>;
 
 const schemaResposta = {
   type: "object",
-  additionalProperties: false,
   properties: {
     documentoLegivel: { type: "boolean" },
     fornecedorNome: { type: ["string", "null"] },
@@ -64,10 +63,8 @@ const schemaResposta = {
     chaveAcesso: { type: ["string", "null"], description: "44 digitos, sem espacos" },
     itens: {
       type: "array",
-      maxItems: 200,
       items: {
         type: "object",
-        additionalProperties: false,
         properties: {
           codigo: { type: ["string", "null"] },
           ean: { type: ["string", "null"] },
@@ -76,7 +73,7 @@ const schemaResposta = {
           valorUnitario: { type: ["string", "null"] },
           desconto: { type: ["string", "null"] },
           valorTotal: { type: ["string", "null"] },
-          confianca: { type: "number", minimum: 0, maximum: 1 },
+          confianca: { type: "number" },
           camposDuvidosos: { type: "array", items: { type: "string" } }
         },
         required: [
@@ -98,14 +95,13 @@ const schemaResposta = {
     valorTotal: { type: ["string", "null"] },
     confiancas: {
       type: "object",
-      additionalProperties: false,
       properties: {
-        fornecedor: { type: "number", minimum: 0, maximum: 1 },
-        numero: { type: "number", minimum: 0, maximum: 1 },
-        serie: { type: "number", minimum: 0, maximum: 1 },
-        dataEmissao: { type: "number", minimum: 0, maximum: 1 },
-        chaveAcesso: { type: "number", minimum: 0, maximum: 1 },
-        totais: { type: "number", minimum: 0, maximum: 1 }
+        fornecedor: { type: "number" },
+        numero: { type: "number" },
+        serie: { type: "number" },
+        dataEmissao: { type: "number" },
+        chaveAcesso: { type: "number" },
+        totais: { type: "number" }
       },
       required: ["fornecedor", "numero", "serie", "dataEmissao", "chaveAcesso", "totais"]
     },
@@ -154,30 +150,35 @@ export async function extrairNotaFiscalComGemini(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
-    const resposta = await fetchImpl(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.modelo)}:generateContent`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": config.chave },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: prompt },
-                { inlineData: { mimeType: imagem.mimeType, data: imagem.dados.toString("base64") } }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseJsonSchema: schemaResposta
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.modelo)}:generateContent`;
+    const opcoes: RequestInit = {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": config.chave },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: imagem.mimeType, data: imagem.dados.toString("base64") } }
+            ]
           }
-        })
-      }
-    );
+        ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseJsonSchema: schemaResposta
+        }
+      })
+    };
+    let resposta = await fetchImpl(url, opcoes);
+    // O Gemini pode devolver 5xx transitório mesmo com a mesma imagem válida. Uma única repetição
+    // cabe no mesmo timeout total e evita mostrar indisponibilidade por uma oscilação momentânea.
+    if (resposta.status >= 500) {
+      await resposta.body?.cancel();
+      resposta = await fetchImpl(url, opcoes);
+    }
     if (!resposta.ok) {
       const status = resposta.status === 429 ? 503 : 502;
       throw new ErroDominio(

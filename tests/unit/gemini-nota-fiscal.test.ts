@@ -53,6 +53,12 @@ describe("cliente Gemini da discriminacao", () => {
     expect(url).not.toContain("segredo-super-seguro");
     expect(typeof init?.body === "string" ? init.body : "").not.toContain("segredo-super-seguro");
     expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("segredo-super-seguro");
+    if (typeof init?.body !== "string") throw new Error("O corpo enviado ao Gemini deve ser JSON.");
+    const corpoEnviado = JSON.parse(init.body) as {
+      generationConfig: { responseJsonSchema: { additionalProperties?: boolean; properties: object } };
+    };
+    expect(corpoEnviado.generationConfig.responseJsonSchema.additionalProperties).toBeUndefined();
+    expect(corpoEnviado.generationConfig.responseJsonSchema.properties).toHaveProperty("itens");
   });
 
   it("nao devolve o corpo sensivel do provedor em erros", async () => {
@@ -64,6 +70,28 @@ describe("cliente Gemini da discriminacao", () => {
         fetchMock
       )
     ).rejects.toMatchObject({ message: "O servico de leitura da nota esta indisponivel.", code: "IA_INDISPONIVEL" });
+  });
+
+  it("repete uma vez quando o provedor oscila com erro 5xx", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("indisponivel", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(leituraValida) }] } }] }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      );
+    const resultado = await extrairNotaFiscalComGemini(
+      { dados: Buffer.from([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" },
+      { chave: "segredo", modelo: "gemini-teste", timeoutMs: 5_000 },
+      fetchMock
+    );
+    expect(resultado.numero).toBe("362");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("recusa resposta sem conteudo sem inventar campos", async () => {

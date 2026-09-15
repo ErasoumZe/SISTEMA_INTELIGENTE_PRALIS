@@ -35,7 +35,7 @@ const envSchema = z.object({
   // IA_NAO_CONFIGURADA; o restante do sistema continua funcionando normalmente.
   GEMINI_API_KEY: envOpcionalNaoVazio,
   GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
-  GEMINI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(45_000),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(90_000),
   // E-mail transacional (reset de senha + verificacao). Sem chave, os e-mails so vao para o log
   // (dev). Em producao, configure ambos (conta em resend.com). EMAIL_FROM = remetente verificado.
   RESEND_API_KEY: z.string().optional(),
