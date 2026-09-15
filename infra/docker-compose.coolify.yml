@@ -67,6 +67,11 @@ services:
       NOTAS_FISCAIS_TOKEN: ${NOTAS_FISCAIS_TOKEN:-}
       # Identificador FIXO da contabilidade no filtro (nao e o CNPJ da empresa). Default = contabilidade atual.
       NOTAS_FISCAIS_COMPANY: ${NOTAS_FISCAIS_COMPANY:-08351168000153}
+      # Leitura assistida de nota fiscal. A chave nunca entra no bundle do PWA: configure-a
+      # somente como segredo no Coolify. Sem chave, a funcionalidade informa indisponibilidade.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-90000}
     restart: unless-stopped
     expose:
       - "4100"
