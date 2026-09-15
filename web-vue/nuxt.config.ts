@@ -139,6 +139,15 @@ export default defineNuxtConfig({
   },
   typescript: {
     strict: true,
-    typeCheck: true
+    typeCheck: true,
+    // O Vite usa `alias`, mas o vue-tsc le o tsconfig gerado pelo Nuxt. Declare o coringa tambem
+    // aqui para que tipos de submodulos do shared sigam apontando para a fonte no desenvolvimento.
+    tsConfig: {
+      compilerOptions: {
+        paths: {
+          "@padaria/shared/*": ["../shared/src/*/index.ts"]
+        }
+      }
+    }
   }
 });
