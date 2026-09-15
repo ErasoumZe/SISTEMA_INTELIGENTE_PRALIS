@@ -42,6 +42,7 @@ import { registrarRotasPermissoes } from "./permissoes/permissoes.controller.js"
 import { registrarRotasProdutos } from "./produtos/produtos.controller.js";
 import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
+import { registrarRotasMensagensAdmin } from "./mensagens-admin/mensagens-admin.controller.js";
 import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controller.js";
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
@@ -185,6 +186,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       rota.endsWith("/liberar-trava") ||
       (rota === "/api/caixa/abrir" && typeof lacreAbertura === "string" && Boolean(lacreAbertura.trim())) ||
       rota.startsWith("/api/notificacoes") ||
+      rota.startsWith("/api/mensagens-admin/entregas/") ||
       rota.startsWith("/api/auth")
     ) {
       return;
@@ -231,6 +233,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasSociosGestores(app);
   await registrarRotasMaquininhas(app);
   await registrarRotasNotificacoes(app);
+  await registrarRotasMensagensAdmin(app);
   await registrarRotasTurnos(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);

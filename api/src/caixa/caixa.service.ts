@@ -76,6 +76,7 @@ import {
   listarRetornosPendentesRepository,
   ultimasRecusasPorTransferenciaRepository
 } from "../transferencias/entrega-cofre.repository.js";
+import { materializarMensagensNaAberturaDeCaixa } from "../mensagens-admin/mensagens-admin.service.js";
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
@@ -489,6 +490,25 @@ async function abrirCaixaEmTransacao(
     if (!aberto) throw new Error("Caixa nao encontrado apos abertura");
     // Abertura e auditavel pelo relogio do servidor; por enquanto so puxa vendas posteriores a ela.
     await revincularVendasAoCaixa(aberto, tx);
+
+    // R-195/R-196: quem abre caixa agora pode ser destinatario de mensagem enviada antes, e quem ja
+    // tinha entrega SEM pdv passa a ter o PDV registrado nela. As duas metades sao idempotentes e
+    // rodam na transacao da abertura. Uma mensagem administrativa nunca pode impedir a padaria de
+    // abrir o caixa: falha aqui e registrada e engolida.
+    try {
+      await materializarMensagensNaAberturaDeCaixa(
+        {
+          empresaId: dados.empresaId,
+          usuarioId: dados.usuarioCaixaId,
+          pdvId: dados.pdvId,
+          fechamentoCaixaId: caixa.id
+        },
+        tx
+      );
+    } catch (erroMensagens) {
+      console.error("[caixa] falha ao materializar mensagens administrativas na abertura", erroMensagens);
+    }
+
     return statusDoCaixaAberto(aberto, tx);
   });
 }

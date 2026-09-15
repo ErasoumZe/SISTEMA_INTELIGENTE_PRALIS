@@ -26,6 +26,10 @@ export const criarMensagemAdminPayloadSchema = z.object({
   alvos: z.array(alvoMensagemSchema).min(1)
 });
 
+// `empresaId` OBRIGATORIO, como em notificacoes: sem ele o escopo viraria "todas as empresas do
+// usuario" e um painel de mensagens de duas empresas apareceria misturado na mesma tela.
+export const mensagensAdminQuerySchema = z.object({ empresaId: uuidSchema });
+
 export const mensagemAdminParamsSchema = z.object({ mensagemId: uuidSchema });
 export const entregaParamsSchema = z.object({ entregaId: uuidSchema });
 
