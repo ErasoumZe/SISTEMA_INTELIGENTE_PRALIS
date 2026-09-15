@@ -200,7 +200,11 @@ export async function materializarMensagensNaAberturaDeCaixa(
     (entrega) => entrega.pdvId === null && entrega.confirmadaEm === null && !comEstePdv.has(entrega.mensagemId)
   );
   await promoverEntregasRepository(
-    { entregaIds: promoveveis.map((entrega) => entrega.id), pdvId: input.pdvId, fechamentoCaixaId: input.fechamentoCaixaId },
+    {
+      entregaIds: promoveveis.map((entrega) => entrega.id),
+      pdvId: input.pdvId,
+      fechamentoCaixaId: input.fechamentoCaixaId
+    },
     db
   );
 
@@ -223,9 +227,7 @@ export async function materializarMensagensNaAberturaDeCaixa(
       {
         empresaId: input.empresaId,
         mensagemId,
-        destinatarios: [
-          { usuarioId: input.usuarioId, pdvId: input.pdvId, fechamentoCaixaId: input.fechamentoCaixaId }
-        ]
+        destinatarios: [{ usuarioId: input.usuarioId, pdvId: input.pdvId, fechamentoCaixaId: input.fechamentoCaixaId }]
       },
       db
     );
