@@ -50,22 +50,21 @@ const props = defineProps<{
   vendaDetalheCarregando?: boolean;
 }>();
 
-const emit = defineEmits<{
-  (event: "editar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
-  (event: "update:pagina", pagina: number): void;
-  (event: "update:dia", dia: string): void;
-  (event: "discriminar", entidade: EntidadeOperacional, operacao: OperacaoResumo): void;
-  (event: "update:pendentes", valor: boolean): void;
-  (
-    event: "update:filtrosSaidas",
-    filtros: { dataInicio: string; dataFim: string; pdvId: string; status: string }
-  ): void;
-  (event: "update:aprovacao", valor: boolean): void;
-  (event: "aprovar", id: string, computar: boolean): void;
-  (event: "recusar", id: string): void;
-  (event: "detalhes", operacao: OperacaoResumo): void;
-  (event: "update:vendaDetalheAberto", valor: boolean): void;
-}>();
+// Esta lista e tambem o contrato de eventos de runtime. O formato por sobrecargas do macro do
+// Vue estava descartando este evento composto durante o typecheck e bloqueava a tela inteira.
+const emit = defineEmits([
+  "editar",
+  "update:pagina",
+  "update:dia",
+  "discriminar",
+  "update:pendentes",
+  "update:filtros-saidas",
+  "update:aprovacao",
+  "aprovar",
+  "recusar",
+  "detalhes",
+  "update:vendaDetalheAberto"
+]);
 
 function entidadeDaTela(tela: string): EntidadeOperacional {
   if (tela === "despesas") return "despesa";
@@ -104,11 +103,11 @@ function corStatus(status: string) {
 }
 
 function atualizarFiltroSaidas(campo: "dataInicio" | "dataFim" | "pdvId" | "status", valor: unknown) {
-  emit("update:filtrosSaidas", { ...props.filtrosSaidas, [campo]: String(valor ?? "") });
+  emit("update:filtros-saidas", { ...props.filtrosSaidas, [campo]: String(valor ?? "") });
 }
 
 function limparFiltrosSaidas() {
-  emit("update:filtrosSaidas", { dataInicio: "", dataFim: "", pdvId: "", status: "" });
+  emit("update:filtros-saidas", { dataInicio: "", dataFim: "", pdvId: "", status: "" });
 }
 </script>
 

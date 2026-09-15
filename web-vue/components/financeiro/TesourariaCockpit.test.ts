@@ -52,6 +52,17 @@ function montar(podeCancelarPlanejamento: boolean) {
       operacoesTela: operacoes,
       totalOperacoes: operacoes.length,
       statusFiltro: "",
+      filtrosTransferencias: {
+        dataInicio: "",
+        dataFim: "",
+        pdvId: "",
+        usuario: "",
+        contaOrigemId: "",
+        contaDestinoId: "",
+        lacre: ""
+      },
+      pdvs: [],
+      contas: [],
       pagina: 1,
       totalPaginas: 1,
       podeEditar: true,
