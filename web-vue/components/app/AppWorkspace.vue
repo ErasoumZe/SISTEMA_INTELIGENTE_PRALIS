@@ -102,6 +102,7 @@ import {
 import { carregarOpcoesDaOperacao, type ChaveOpcaoOperacao } from "~/utils/opcoes-operacao";
 import { criarAcoesLancamento } from "~/utils/lancamento-acoes";
 import { aplicarRegrasDoAlvoNasListas, regrasComOcultasPreservadas } from "~/utils/permissoes-payload";
+import { separarNotificacoes } from "~/utils/notificacoes";
 
 type TipoPagina =
   | "inicio"
@@ -641,12 +642,15 @@ async function carregarNotificacoes(idEmpresa = empresaId.value) {
     return;
   }
   const empresaQuery = encodeURIComponent(idEmpresa);
-  const [itensPendentes, itensComHistorico] = await Promise.all([
-    apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${empresaQuery}`),
-    apiGet<Notificacao[]>(`/api/notificacoes?empresaId=${empresaQuery}&incluirVerificadas=true`)
-  ]);
-  notificacoes.value.splice(0, notificacoes.value.length, ...itensPendentes);
-  notificacoesComHistorico.value.splice(0, notificacoesComHistorico.value.length, ...itensComHistorico);
+  // UMA leitura. `incluirVerificadas=true` so remove o filtro `verificado = false` no repositorio,
+  // entao a resposta com historico ja CONTEM as pendentes, na mesma ordem. As duas chamadas
+  // paralelas de antes pediam a mesma coisa duas vezes a cada troca de tela e a cada verificacao.
+  const itensComHistorico = await apiGet<Notificacao[]>(
+    `/api/notificacoes?empresaId=${empresaQuery}&incluirVerificadas=true`
+  );
+  const { pendentes, historico } = separarNotificacoes(itensComHistorico);
+  notificacoes.value.splice(0, notificacoes.value.length, ...pendentes);
+  notificacoesComHistorico.value.splice(0, notificacoesComHistorico.value.length, ...historico);
 }
 
 async function verificarNotificacao(notificacaoId: string) {
@@ -2139,16 +2143,39 @@ const pageContext = computed(() => ({
 }));
 
 let intervaloAtualizacaoOperacoes: ReturnType<typeof setInterval> | null = null;
+let atualizandoNotificacoesAutomaticamente = false;
+
+// O sino vive na topbar de TODAS as telas, mas `atualizarOperacoesAutomaticamente` desiste quando
+// `tipoPagina !== "operacoes"` e, mesmo na tela de operacoes, so recarrega caixa e lancamentos.
+// Resultado medido: a pendencia criada por outra pessoa (quebra, divergencia, prazo estourado) so
+// aparecia depois de trocar de tela ou dar F5. Esta funcao e a unica responsavel por manter o sino
+// vivo — nao duplica a de operacoes, que continua cuidando da grade.
+async function atualizarNotificacoesAutomaticamente() {
+  if (!sessao.value || !empresaId.value || empresaCarregando.value || atualizandoNotificacoesAutomaticamente) return;
+  atualizandoNotificacoesAutomaticamente = true;
+  try {
+    await carregarNotificacoes(empresaId.value);
+  } catch (error) {
+    // Falha transitoria nao pode limpar a ultima leitura valida do sino nem interromper a tela.
+    console.error("Falha ao atualizar as notificacoes automaticamente", error);
+  } finally {
+    atualizandoNotificacoesAutomaticamente = false;
+  }
+}
 
 function atualizarAoRetomarPagina() {
-  if (document.visibilityState === "visible") void atualizarOperacoesAutomaticamente();
+  if (document.visibilityState !== "visible") return;
+  void atualizarOperacoesAutomaticamente();
+  void atualizarNotificacoesAutomaticamente();
 }
 
 onMounted(() => {
   window.addEventListener("focus", atualizarAoRetomarPagina);
   document.addEventListener("visibilitychange", atualizarAoRetomarPagina);
   intervaloAtualizacaoOperacoes = setInterval(() => {
-    if (document.visibilityState === "visible") void atualizarOperacoesAutomaticamente();
+    if (document.visibilityState !== "visible") return;
+    void atualizarOperacoesAutomaticamente();
+    void atualizarNotificacoesAutomaticamente();
   }, 30_000);
 
   if (workspaceCarregado.value && sessao.value) {
