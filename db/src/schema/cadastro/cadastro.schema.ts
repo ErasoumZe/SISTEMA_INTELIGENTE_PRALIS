@@ -20,6 +20,7 @@ export {
   patrimonioItens,
   pdvs,
   perfisUsuarios,
+  regrasRecebimento,
   permissoesCargos,
   permissoesSetores,
   permissoesTabela,

@@ -220,6 +220,9 @@ export const formasPagamento = pgTable(
   },
   (table) => [
     unique("formas_pagamento_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo da FK composta das regras de recebimento. A regra pertence a uma forma DA MESMA
+    // empresa; este par impede que uma configuracao da empresa A seja associada a uma forma B.
+    unique("formas_pagamento_id_empresa_unica").on(table.id, table.empresaId),
     // FKs COMPOSTAS: a conta tem de ser da MESMA empresa da forma. `restrict` porque apagar uma
     // conta que e destino de dinheiro nao pode virar roteamento nulo em silencio.
     foreignKey({
@@ -245,6 +248,57 @@ export const formasPagamento = pgTable(
       sql`(${table.disponibilidade} is null and ${table.usaContaDoPdv} = false and ${table.contaRecebivelId} is null and ${table.contaFinalId} is null)
        or (${table.disponibilidade} is not distinct from 'imediata' and ${table.usaContaDoPdv} = true and ${table.contaRecebivelId} is null and ${table.contaFinalId} is null)
        or (${table.disponibilidade} is not distinct from 'por_evento' and ${table.usaContaDoPdv} = false and ${table.contaRecebivelId} is not null and ${table.contaFinalId} is not null)`
+    )
+  ]
+);
+
+// Configuracao de REFERENCIA para o recebimento de uma forma. Nesta primeira etapa ela NAO e
+// consultada pelo caixa, pelas vendas, pelos saldos nem por qualquer liquidacao: serve para o
+// administrador testar taxas, prazo e parcelas antes de existir integracao que traga esses fatos
+// do adquirente/CREARE. O status tambem nao produz efeito financeiro.
+export const regrasRecebimento = pgTable(
+  "regras_recebimento",
+  {
+    id: idUuid,
+    empresaId,
+    formaPagamentoId: uuid("forma_pagamento_id").notNull(),
+    parcelasDe: integer("parcelas_de"),
+    parcelasAte: integer("parcelas_ate"),
+    taxaPercentual: numeric("taxa_percentual", { precision: 8, scale: 4 }),
+    taxaFixa: valorMonetario("taxa_fixa"),
+    prazoDias: integer("prazo_dias"),
+    status: text("status").$type<"rascunho" | "validada" | "arquivada">().notNull().default("rascunho"),
+    fonteReferencia: text("fonte_referencia"),
+    observacao: text("observacao"),
+    vigenciaInicio: date("vigencia_inicio"),
+    vigenciaFim: date("vigencia_fim"),
+    criadoPor: text("criado_por").references(() => perfisUsuarios.usuarioId, { onDelete: "set null" }),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.formaPagamentoId, table.empresaId],
+      foreignColumns: [formasPagamento.id, formasPagamento.empresaId],
+      name: "regras_recebimento_forma_empresa_fk"
+    }).onDelete("cascade"),
+    index("regras_recebimento_empresa_forma_status_idx").on(table.empresaId, table.formaPagamentoId, table.status),
+    check("regras_recebimento_status_check", sql`${table.status} in ('rascunho', 'validada', 'arquivada')`),
+    check(
+      "regras_recebimento_parcelas_check",
+      sql`(${table.parcelasDe} is null and ${table.parcelasAte} is null)
+       or (${table.parcelasDe} is not null and ${table.parcelasAte} is not null
+           and ${table.parcelasDe} >= 1 and ${table.parcelasAte} >= ${table.parcelasDe})`
+    ),
+    check(
+      "regras_recebimento_taxa_percentual_check",
+      sql`${table.taxaPercentual} is null or (${table.taxaPercentual} >= 0 and ${table.taxaPercentual} <= 100)`
+    ),
+    check("regras_recebimento_taxa_fixa_check", sql`${table.taxaFixa} is null or ${table.taxaFixa} >= 0`),
+    check("regras_recebimento_prazo_dias_check", sql`${table.prazoDias} is null or ${table.prazoDias} >= 0`),
+    check(
+      "regras_recebimento_vigencia_check",
+      sql`${table.vigenciaInicio} is null or ${table.vigenciaFim} is null or ${table.vigenciaFim} >= ${table.vigenciaInicio}`
     )
   ]
 );

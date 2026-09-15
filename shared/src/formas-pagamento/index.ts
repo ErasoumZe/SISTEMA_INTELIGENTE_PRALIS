@@ -134,6 +134,75 @@ export const formaPagamentoPayloadSchema = z.object({
 
 export type FormaPagamentoPayload = z.infer<typeof formaPagamentoPayloadSchema>;
 
+// Etapa de preparacao: regras sao referencia administrativa para testar taxa/prazo antes de haver
+// integracao de conciliacao. Nenhum modulo financeiro pode usa-las para calcular ou movimentar valor.
+export const statusRegraRecebimento = ["rascunho", "validada", "arquivada"] as const;
+export type StatusRegraRecebimento = (typeof statusRegraRecebimento)[number];
+
+const numeroOpcional = z.number().finite().nullable().optional();
+const inteiroOpcional = z.number().int().nullable().optional();
+const dataIsoOpcional = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable()
+  .optional();
+
+export const regraRecebimentoPayloadSchema = z
+  .object({
+    empresaId: uuidSchema,
+    parcelasDe: inteiroOpcional,
+    parcelasAte: inteiroOpcional,
+    taxaPercentual: numeroOpcional,
+    taxaFixa: numeroOpcional,
+    prazoDias: inteiroOpcional,
+    status: z.enum(statusRegraRecebimento).optional(),
+    fonteReferencia: textoOpcional.optional(),
+    observacao: z
+      .string()
+      .trim()
+      .max(1000)
+      .transform((valor) => (valor === "" ? null : valor))
+      .nullable()
+      .optional(),
+    vigenciaInicio: dataIsoOpcional,
+    vigenciaFim: dataIsoOpcional
+  })
+  .superRefine((regra, ctx) => {
+    const parcelasParciais = (regra.parcelasDe == null) !== (regra.parcelasAte == null);
+    if (
+      parcelasParciais ||
+      (regra.parcelasDe != null && (regra.parcelasDe < 1 || regra.parcelasAte! < regra.parcelasDe))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parcelasAte"],
+        message: "Informe uma faixa de parcelas valida"
+      });
+    }
+    if (regra.taxaPercentual != null && (regra.taxaPercentual < 0 || regra.taxaPercentual > 100)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["taxaPercentual"],
+        message: "A taxa percentual deve estar entre 0 e 100"
+      });
+    }
+    if (regra.taxaFixa != null && regra.taxaFixa < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["taxaFixa"], message: "A taxa fixa nao pode ser negativa" });
+    }
+    if (regra.prazoDias != null && regra.prazoDias < 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["prazoDias"], message: "O prazo nao pode ser negativo" });
+    }
+    if (regra.vigenciaInicio && regra.vigenciaFim && regra.vigenciaFim < regra.vigenciaInicio) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["vigenciaFim"],
+        message: "O fim da vigencia nao pode ser anterior ao inicio"
+      });
+    }
+  });
+
+export type RegraRecebimentoPayload = z.infer<typeof regraRecebimentoPayloadSchema>;
+
 // A forma esta roteada quando o admin decidiu o destino. `disponibilidade` nula e o unico estado de
 // "nao decidido" — os CHECKs garantem que os demais campos acompanham.
 export function formaTemRoteamento(forma: Pick<RoteamentoDaForma, "disponibilidade">): boolean {

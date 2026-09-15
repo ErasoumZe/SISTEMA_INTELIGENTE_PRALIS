@@ -3,6 +3,7 @@ import {
   formaPagamentoPayloadSchema,
   mesclarRoteamento,
   mesmoRoteamento,
+  regraRecebimentoPayloadSchema,
   roteamentoCoerente,
   SEM_ROTEAMENTO
 } from "@padaria/shared/formas-pagamento";
@@ -10,7 +11,10 @@ import { erroValidacao, proibido } from "../erros.js";
 import {
   buscarRoteamentoDaFormaRepository,
   contasDaEmpresaRepository,
+  formaPagamentoExisteRepository,
   listarFormasPagamentoRepository,
+  listarRegrasRecebimentoRepository,
+  salvarRegraRecebimentoRepository,
   salvarFormaPagamentoRepository
 } from "./formas-pagamento.repository.js";
 
@@ -84,4 +88,33 @@ export async function salvarFormaPagamento(
     nome: dados.nome.trim(),
     ...(mudouRoteamento ? { roteamento: alvo, atualizadoPor: contexto.usuarioId } : {})
   });
+}
+
+// As regras pertencem ao mesmo ato de configurar o recebimento. A permissao e a mesma do
+// roteamento porque taxa/prazo revelam e orientam o destino financeiro; nao existe uma segunda
+// permissao nem uma rota publica de configuracao.
+export async function listarRegrasRecebimento(formaPagamentoId: string, empresaId: string) {
+  const existe = await formaPagamentoExisteRepository(formaPagamentoId, empresaId);
+  if (!existe) throw erroValidacao("Forma de pagamento nao encontrada nesta empresa", "FORMA_NAO_ENCONTRADA");
+  return listarRegrasRecebimentoRepository(formaPagamentoId, empresaId);
+}
+
+export async function salvarRegraRecebimento(
+  id: string | null,
+  formaPagamentoId: string,
+  body: DadosExternos,
+  usuarioId: string | null
+) {
+  const regra = regraRecebimentoPayloadSchema.parse(body);
+  const existe = await formaPagamentoExisteRepository(formaPagamentoId, regra.empresaId);
+  if (!existe) throw erroValidacao("Forma de pagamento nao encontrada nesta empresa", "FORMA_NAO_ENCONTRADA");
+  const salva = await salvarRegraRecebimentoRepository({
+    ...(id ? { id } : {}),
+    empresaId: regra.empresaId,
+    formaPagamentoId,
+    regra,
+    usuarioId
+  });
+  if (!salva) throw erroValidacao("Regra de recebimento nao encontrada nesta forma", "REGRA_NAO_ENCONTRADA");
+  return salva;
 }

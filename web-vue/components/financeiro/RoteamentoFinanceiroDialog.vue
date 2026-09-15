@@ -7,6 +7,7 @@
 // para rotear.
 import { computed, ref, watch } from "vue";
 import { useApi } from "~/composables/useApi";
+import RegrasRecebimentoTeste from "~/components/financeiro/RegrasRecebimentoTeste.vue";
 
 type Conta = { id: string; nome?: string };
 type Disponibilidade = "imediata" | "por_evento";
@@ -154,14 +155,14 @@ async function salvar() {
 <template>
   <v-dialog
     :model-value="aberto"
-    max-width="640"
+    max-width="860"
     scrollable
     aria-labelledby="titulo-roteamento-financeiro"
     @update:model-value="emit('fechar')"
   >
     <v-card>
       <v-card-title id="titulo-roteamento-financeiro" class="text-wrap">
-        Roteamento financeiro — {{ forma?.nome }}
+        Configurar recebimento — {{ forma?.nome }}
       </v-card-title>
 
       <v-card-text>
@@ -250,6 +251,12 @@ async function salvar() {
               <v-btn size="small" variant="text" :disabled="!podeSalvar" @click="salvar">Tentar de novo</v-btn>
             </template>
           </v-alert>
+
+          <RegrasRecebimentoTeste
+            :empresa-id="empresaId"
+            :forma-id="forma?.id ?? null"
+            :pode-configurar="podeConfigurar"
+          />
         </div>
       </v-card-text>
 
@@ -264,7 +271,7 @@ async function salvar() {
           :disabled="!podeSalvar"
           @click="salvar"
         >
-          Salvar roteamento
+          Salvar recebimento
         </v-btn>
       </v-card-actions>
     </v-card>

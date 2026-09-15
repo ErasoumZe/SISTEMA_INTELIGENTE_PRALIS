@@ -1,6 +1,10 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { contas, formasPagamento } from "@padaria/db/schema/cadastro";
-import type { DisponibilidadeRoteamento, RoteamentoDaForma } from "@padaria/shared/formas-pagamento";
+import { contas, formasPagamento, regrasRecebimento } from "@padaria/db/schema/cadastro";
+import type {
+  DisponibilidadeRoteamento,
+  RegraRecebimentoPayload,
+  RoteamentoDaForma
+} from "@padaria/shared/formas-pagamento";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 
 // Projecao CONDICIONAL (R-176 / doc 32 §13): as colunas de roteamento carregam id de CONTA, e a
@@ -104,6 +108,82 @@ export async function contasDaEmpresaRepository(
     .from(contas)
     .where(and(eq(contas.empresaId, empresaId), inArray(contas.id, unicas)));
   return new Set(linhas.map((linha) => linha.id));
+}
+
+export async function listarRegrasRecebimentoRepository(formaPagamentoId: string, empresaId: string) {
+  return banco
+    .select({
+      id: regrasRecebimento.id,
+      parcelasDe: regrasRecebimento.parcelasDe,
+      parcelasAte: regrasRecebimento.parcelasAte,
+      taxaPercentual: regrasRecebimento.taxaPercentual,
+      taxaFixa: regrasRecebimento.taxaFixa,
+      prazoDias: regrasRecebimento.prazoDias,
+      status: regrasRecebimento.status,
+      fonteReferencia: regrasRecebimento.fonteReferencia,
+      observacao: regrasRecebimento.observacao,
+      vigenciaInicio: regrasRecebimento.vigenciaInicio,
+      vigenciaFim: regrasRecebimento.vigenciaFim,
+      criadoEm: regrasRecebimento.criadoEm,
+      atualizadoEm: regrasRecebimento.atualizadoEm
+    })
+    .from(regrasRecebimento)
+    .where(and(eq(regrasRecebimento.formaPagamentoId, formaPagamentoId), eq(regrasRecebimento.empresaId, empresaId)))
+    .orderBy(asc(regrasRecebimento.criadoEm));
+}
+
+export async function formaPagamentoExisteRepository(id: string, empresaId: string): Promise<boolean> {
+  const [forma] = await banco
+    .select({ id: formasPagamento.id })
+    .from(formasPagamento)
+    .where(and(eq(formasPagamento.id, id), eq(formasPagamento.empresaId, empresaId)))
+    .limit(1);
+  return Boolean(forma);
+}
+
+export async function salvarRegraRecebimentoRepository(input: {
+  id?: string;
+  empresaId: string;
+  formaPagamentoId: string;
+  regra: RegraRecebimentoPayload;
+  usuarioId: string | null;
+}) {
+  const valores = {
+    parcelasDe: input.regra.parcelasDe ?? null,
+    parcelasAte: input.regra.parcelasAte ?? null,
+    taxaPercentual: input.regra.taxaPercentual == null ? null : String(input.regra.taxaPercentual),
+    taxaFixa: input.regra.taxaFixa == null ? null : String(input.regra.taxaFixa),
+    prazoDias: input.regra.prazoDias ?? null,
+    status: input.regra.status ?? "rascunho",
+    fonteReferencia: input.regra.fonteReferencia ?? null,
+    observacao: input.regra.observacao ?? null,
+    vigenciaInicio: input.regra.vigenciaInicio ?? null,
+    vigenciaFim: input.regra.vigenciaFim ?? null
+  };
+  if (input.id) {
+    const atualizadas = await banco
+      .update(regrasRecebimento)
+      .set({ ...valores, atualizadoEm: new Date() })
+      .where(
+        and(
+          eq(regrasRecebimento.id, input.id),
+          eq(regrasRecebimento.formaPagamentoId, input.formaPagamentoId),
+          eq(regrasRecebimento.empresaId, input.empresaId)
+        )
+      )
+      .returning({ id: regrasRecebimento.id });
+    return atualizadas[0] ?? null;
+  }
+  const [criada] = await banco
+    .insert(regrasRecebimento)
+    .values({
+      empresaId: input.empresaId,
+      formaPagamentoId: input.formaPagamentoId,
+      criadoPor: input.usuarioId,
+      ...valores
+    })
+    .returning({ id: regrasRecebimento.id });
+  return criada;
 }
 
 export async function salvarFormaPagamentoRepository(
