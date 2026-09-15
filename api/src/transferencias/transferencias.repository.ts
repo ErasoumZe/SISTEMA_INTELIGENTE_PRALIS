@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { contas, contasUsuarios, empresas, pdvs, perfisUsuarios } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
@@ -77,7 +77,17 @@ export async function listarTransferenciasRepository(
     .leftJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(criador, eq(criador.usuarioId, transferencias.criadoPor))
     .where(filtros.length ? and(...filtros) : undefined)
-    .orderBy(sql`${transferencias.dataRecebimento} desc nulls last`, desc(transferencias.criadoEm));
+    // O `desc nulls last` escrito a mao era a UNICA violacao de SQL cru (tagged template) em api/src
+    // (scripts/verificar-arquitetura.mjs) e derrubava `npm run check` no 3o dos 9 passos, escondendo
+    // os seis seguintes. O predicado `is null` como primeira chave reproduz o mesmo plano sem SQL
+    // cru: em Postgres `false < true`, entao a linha JA recebida (is null = false) vem primeiro e a
+    // pendente fica no fim — que e exatamente o que `nulls last` fazia. A ordenacao continua no
+    // banco, e nao virou sort em memoria.
+    .orderBy(
+      asc(isNull(transferencias.dataRecebimento)),
+      desc(transferencias.dataRecebimento),
+      desc(transferencias.criadoEm)
+    );
   const paisComPlanejamento = linhas.length
     ? await banco
         .select({ id: transferencias.planejamentoOrigemTransferenciaId })
