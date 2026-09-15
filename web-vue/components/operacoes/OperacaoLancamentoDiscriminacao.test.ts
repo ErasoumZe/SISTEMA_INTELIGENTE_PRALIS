@@ -61,6 +61,8 @@ describe("layout da discriminacao", () => {
     expect(wrapper.find("thead .disc-acao").exists()).toBe(true);
     expect(wrapper.findAll("tbody .disc-pct")).toHaveLength(2);
     expect(wrapper.findAll("tbody .disc-acao")).toHaveLength(2);
+    expect(wrapper.findAll("tbody .disc-calc-row")).toHaveLength(4);
+    expect(wrapper.findAll("tbody .disc-resultado")).toHaveLength(4);
 
     const botoesExcluir = wrapper.findAll<HTMLButtonElement>("tbody .disc-acao button");
     expect(botoesExcluir).toHaveLength(2);

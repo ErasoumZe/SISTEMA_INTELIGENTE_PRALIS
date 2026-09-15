@@ -57,9 +57,9 @@ const {
               <th>Descrição</th>
               <th>Grupo</th>
               <th>V.Unit</th>
-              <th>V.Unit c/Desc</th>
-              <th>V.Total</th>
-              <th>V.Total c/Desc</th>
+              <th class="disc-calc-editavel">V.Unit c/Desc</th>
+              <th class="disc-total">V.Total</th>
+              <th class="disc-calc-editavel">V.Total c/Desc</th>
               <th class="disc-pct">%</th>
               <th class="disc-acao" aria-label="Remover item" />
             </tr>
@@ -121,31 +121,37 @@ const {
                 </select>
               </td>
 
-              <td><CampoDinheiro v-model="item.valorUnitario" :casas="4" class="disc-in disc-num" /></td>
-              <td class="disc-calc">
-                <select v-model="item.descontoTipo" class="disc-in" aria-label="Tipo de desconto no unitário">
-                  <option value="">—</option>
-                  <option value="valor">R$</option>
-                  <option value="percentual">%</option>
-                </select>
-                <CampoDinheiro v-model="item.descontoValor" :casas="4" class="disc-in disc-num" placeholder="0,00" />
-                {{ brn(unitComDesc(item)) }}
+              <td class="disc-unitario">
+                <CampoDinheiro v-model="item.valorUnitario" :casas="4" class="disc-in disc-num" />
               </td>
-              <td class="disc-calc">{{ brn(totalLinha(item)) }}</td>
-              <td class="disc-calc">
-                <select v-model="item.descontoTotalTipo" class="disc-in" aria-label="Tipo de desconto no total">
-                  <option value="">—</option>
-                  <option value="valor">R$</option>
-                  <option value="percentual">%</option>
-                </select>
-                <CampoDinheiro
-                  v-model="item.descontoTotalValor"
-                  :casas="4"
-                  class="disc-in disc-num"
-                  placeholder="0,00"
-                  data-campo-discriminacao="valorTotal"
-                />
-                {{ brn(totalLinhaComDesc(item)) }}
+              <td class="disc-calc disc-calc-editavel">
+                <div class="disc-calc-row">
+                  <select v-model="item.descontoTipo" class="disc-in" aria-label="Tipo de desconto no unitário">
+                    <option value="">—</option>
+                    <option value="valor">R$</option>
+                    <option value="percentual">%</option>
+                  </select>
+                  <CampoDinheiro v-model="item.descontoValor" :casas="4" class="disc-in disc-num" placeholder="0,00" />
+                  <span class="disc-resultado">{{ brn(unitComDesc(item)) }}</span>
+                </div>
+              </td>
+              <td class="disc-calc disc-total">{{ brn(totalLinha(item)) }}</td>
+              <td class="disc-calc disc-calc-editavel">
+                <div class="disc-calc-row">
+                  <select v-model="item.descontoTotalTipo" class="disc-in" aria-label="Tipo de desconto no total">
+                    <option value="">—</option>
+                    <option value="valor">R$</option>
+                    <option value="percentual">%</option>
+                  </select>
+                  <CampoDinheiro
+                    v-model="item.descontoTotalValor"
+                    :casas="4"
+                    class="disc-in disc-num"
+                    placeholder="0,00"
+                    data-campo-discriminacao="valorTotal"
+                  />
+                  <span class="disc-resultado">{{ brn(totalLinhaComDesc(item)) }}</span>
+                </div>
               </td>
               <td class="disc-calc disc-pct">{{ brn(pctEfetivo) }}%</td>
               <td class="disc-acao">
