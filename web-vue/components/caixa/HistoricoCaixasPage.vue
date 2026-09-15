@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type { LinhaHistoricoCaixa, TotaisHistoricoCaixa } from "@padaria/shared";
 import type { Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
@@ -43,6 +43,9 @@ const total = ref(0);
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / itensPorPagina)));
 const carregando = ref(false);
 const erro = ref("");
+const caixasAbertos = ref<LinhaHistoricoCaixa[]>([]);
+const monitorAtualizadoEm = ref<string | null>(null);
+let monitorIntervalo: ReturnType<typeof setInterval> | null = null;
 
 const periodoInvertido = computed(
   () => Boolean(filtros.dataInicio && filtros.dataFim) && filtros.dataInicio > filtros.dataFim
@@ -103,6 +106,32 @@ async function buscar() {
   }
 }
 
+// O monitor reutiliza a consulta autorizada do historico com status=aberto. Nao calcula saldo
+// parcial nem cria uma segunda rota: os detalhes continuam na trilha auditavel ja existente.
+async function buscarCaixasAbertos() {
+  if (!props.empresaId) return;
+  try {
+    const params = new URLSearchParams({
+      empresaId: props.empresaId,
+      status: "aberto",
+      page: "1",
+      pageSize: "100"
+    });
+    const resultado = await apiGetPaginado<LinhaHistoricoCaixa>(`/api/caixa/historico?${params.toString()}`);
+    caixasAbertos.value = resultado.itens;
+    monitorAtualizadoEm.value = new Date().toISOString();
+  } catch {
+    // A tabela principal continua sendo a fonte de erro. Uma falha temporaria de atualizacao nao
+    // pode limpar a ultima leitura valida do monitor nem interromper a consulta historica.
+  }
+}
+
+function verCaixaAberto(caixa: LinhaHistoricoCaixa) {
+  Object.assign(filtros, { status: "aberto", pdvId: caixa.pdvId ?? "" });
+  pagina.value = 1;
+  void buscar();
+}
+
 async function aplicarFiltros() {
   pagina.value = 1;
   await buscar();
@@ -133,13 +162,60 @@ function rotuloStatus(linha: LinhaHistoricoCaixa) {
 }
 
 watch(pagina, () => void buscar());
-watch(() => props.empresaId, aplicarFiltros, { immediate: true });
+watch(
+  () => props.empresaId,
+  () => {
+    void aplicarFiltros();
+    void buscarCaixasAbertos();
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  monitorIntervalo = setInterval(() => void buscarCaixasAbertos(), 30_000);
+});
+
+onBeforeUnmount(() => {
+  if (monitorIntervalo) clearInterval(monitorIntervalo);
+});
 </script>
 
 <template>
   <v-card>
     <!-- Titulo removido: o nome da tela ja e o cabecalho da pagina (VIS-10). -->
     <v-card-text>
+      <v-sheet class="pa-4 mb-5 rounded-lg soft-bg" data-teste="monitor-caixas-abertos">
+        <div class="d-flex flex-wrap align-center ga-3">
+          <div>
+            <div class="text-subtitle-1 font-weight-bold">Monitor de caixas abertos</div>
+            <div class="text-caption text-medium-emphasis">
+              Atualiza a cada 30 segundos. Abra o historico do PDV para ver os lancamentos auditaveis.
+              <template v-if="monitorAtualizadoEm">
+                Ultima atualizacao: {{ formatarDataHora(monitorAtualizadoEm) }}.</template
+              >
+            </div>
+          </div>
+          <v-spacer />
+          <v-chip color="info" variant="tonal" prepend-icon="mdi-cash-register">
+            {{ caixasAbertos.length }} {{ caixasAbertos.length === 1 ? "caixa aberto" : "caixas abertos" }}
+          </v-chip>
+        </div>
+        <div v-if="caixasAbertos.length" class="d-flex flex-wrap ga-2 mt-3">
+          <v-btn
+            v-for="caixa in caixasAbertos"
+            :key="caixa.id"
+            size="small"
+            variant="outlined"
+            prepend-icon="mdi-eye-outline"
+            @click="verCaixaAberto(caixa)"
+          >
+            {{ caixa.pdvNome }} - {{ caixa.colaboradorNome || caixa.usuarioCaixaNome || "Operador nao informado" }}
+            <template v-if="caixa.dataHoraAbertura"> (desde {{ formatarDataHora(caixa.dataHoraAbertura) }})</template>
+          </v-btn>
+        </div>
+        <div v-else class="text-body-2 text-medium-emphasis mt-3">Nenhum caixa aberto neste momento.</div>
+      </v-sheet>
+
       <v-row dense>
         <v-col cols="12" md="2">
           <v-text-field
