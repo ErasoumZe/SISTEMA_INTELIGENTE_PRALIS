@@ -260,6 +260,20 @@
       "when": 1789146768836,
       "tag": "0036_caixa_unico_por_operador",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789448042441,
+      "tag": "0037_magenta_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789448078432,
+      "tag": "0038_superb_umar",
+      "breakpoints": true
     }
   ]
 }

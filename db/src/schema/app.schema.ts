@@ -265,6 +265,10 @@ export const pdvs = pgTable(
   },
   (table) => [
     unique("pdvs_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo das FKs compostas de campanhas e mensagens administrativas. Sem este par, uma linha
+    // filha poderia apontar para um PDV de OUTRA empresa sem o banco reclamar — o mesmo motivo de
+    // `vendas_id_empresa_unica` e `fechamentos_caixa_id_empresa_unica` existirem.
+    unique("pdvs_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("pdvs_empresa_codigo_unico_idx")
       .on(table.empresaId, sql`lower(${table.codigo})`)
       .where(sql`${table.codigo} is not null`)
@@ -2044,8 +2048,13 @@ export const notificacoes = pgTable(
   {
     id: idUuid,
     empresaId,
+    // `mensagem_admin` aponta `referencia_id` para `mensagens_admin_entregas.id` (UMA linha de sino
+    // por ENTREGA, entao o unique abaixo passa a permitir o mesmo usuario em dois PDVs);
+    // `campanha` aponta para `campanhas.id`.
     tipo: text("tipo")
-      .$type<"quebra_caixa" | "transferencia_divergencia" | "transferencia_prazo_confirmacao">()
+      .$type<
+        "quebra_caixa" | "transferencia_divergencia" | "transferencia_prazo_confirmacao" | "mensagem_admin" | "campanha"
+      >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
       .notNull()
@@ -2071,7 +2080,8 @@ export const notificacoes = pgTable(
     ),
     check(
       "notificacoes_tipo_check",
-      sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao')`
+      sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
+        'mensagem_admin', 'campanha')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(
@@ -2079,6 +2089,228 @@ export const notificacoes = pgTable(
       sql`(${table.verificado} = false and ${table.verificadoPor} is null and ${table.verificadoEm} is null)
         or (${table.verificado} = true and ${table.verificadoPor} is not null and ${table.verificadoEm} is not null)`
     )
+  ]
+);
+
+// --- Mensagens administrativas para PDV (R-193..R-196) -----------------------------------------
+//
+// O Administrador Geral dispara UMA mensagem; ela alcanca destinatarios que podem nem existir no
+// momento do envio (quem abre caixa depois, dentro da validade). Por isso sao tres tabelas e nao
+// uma: a MENSAGEM (conteudo), o ALVO (o que foi pedido, persistido para resolver os retardatarios)
+// e a ENTREGA (a quem de fato chegou, com o PDV em que estava operando).
+//
+// A ENTREGA e a referencia do sino: `notificacoes.referencia_id` aponta para
+// `mensagens_admin_entregas.id`, nunca para a mensagem. Isso faz o
+// `notificacoes_tipo_destinatario_referencia_unica` que ja existia passar a significar "uma linha
+// de sino por entrega" — o mesmo operador em dois PDVs ganha duas linhas sem que nada mude naquele
+// unique. Apontar para a mensagem colapsaria os dois PDVs numa linha so.
+export const mensagensAdmin = pgTable(
+  "mensagens_admin",
+  {
+    id: idUuid,
+    empresaId,
+    titulo: text("titulo").notNull(),
+    corpo: text("corpo").notNull(),
+    // Sem validade = vale ate ser encerrada. Com validade, quem abre caixa depois do prazo nao
+    // recebe mais: e assim que "entregar quando voltar" para de valer sem apagar o historico.
+    validoAte: timestamp("valido_ate", { withTimezone: true }),
+    status: text("status").$type<"ativa" | "encerrada">().notNull().default("ativa"),
+    // text, e nao uuid: `perfis_usuarios.usuario_id` e text (id do Better Auth), como toda FK de
+    // usuario neste schema.
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm
+  },
+  (table) => [
+    unique("mensagens_admin_id_empresa_unica").on(table.id, table.empresaId),
+    index("mensagens_admin_empresa_status_idx").on(table.empresaId, table.status, table.validoAte),
+    check("mensagens_admin_status_check", sql`${table.status} in ('ativa', 'encerrada')`),
+    check("mensagens_admin_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
+    check("mensagens_admin_corpo_nao_vazio_check", sql`length(btrim(${table.corpo})) > 0`)
+  ]
+);
+
+// O QUE foi pedido no envio. Fica gravado porque `pdv` e `empresa` continuam alcancando gente
+// depois: quem abre caixa as 7h recebe a mensagem enviada as 5h enquanto ela for valida.
+// `caixas_abertos` e a excecao deliberada — e foto do instante do envio e nao pega retardatario.
+export const mensagensAdminAlvos = pgTable(
+  "mensagens_admin_alvos",
+  {
+    id: idUuid,
+    empresaId,
+    mensagemId: uuid("mensagem_id").notNull(),
+    tipo: text("tipo").$type<"caixas_abertos" | "empresa" | "pdv" | "operador">().notNull(),
+    pdvId: uuid("pdv_id"),
+    usuarioId: text("usuario_id").references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.mensagemId, table.empresaId],
+      foreignColumns: [mensagensAdmin.id, mensagensAdmin.empresaId],
+      name: "mensagens_admin_alvos_mensagem_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.pdvId, table.empresaId],
+      foreignColumns: [pdvs.id, pdvs.empresaId],
+      name: "mensagens_admin_alvos_pdv_empresa_fk"
+    }),
+    // O mesmo PDV/operador nao entra duas vezes na mesma mensagem, e o alvo amplo e unico por tipo.
+    uniqueIndex("mensagens_admin_alvos_pdv_unico_idx")
+      .on(table.mensagemId, table.pdvId)
+      .where(sql`${table.pdvId} is not null`),
+    uniqueIndex("mensagens_admin_alvos_usuario_unico_idx")
+      .on(table.mensagemId, table.usuarioId)
+      .where(sql`${table.usuarioId} is not null`),
+    uniqueIndex("mensagens_admin_alvos_amplo_unico_idx")
+      .on(table.mensagemId, table.tipo)
+      .where(sql`${table.tipo} in ('caixas_abertos', 'empresa')`),
+    check("mensagens_admin_alvos_tipo_check", sql`${table.tipo} in ('caixas_abertos', 'empresa', 'pdv', 'operador')`),
+    // Cada tipo carrega exatamente a coluna que lhe pertence — e nenhuma outra.
+    check(
+      "mensagens_admin_alvos_coerencia_check",
+      sql`(${table.tipo} in ('caixas_abertos', 'empresa') and ${table.pdvId} is null and ${table.usuarioId} is null)
+        or (${table.tipo} = 'pdv' and ${table.pdvId} is not null and ${table.usuarioId} is null)
+        or (${table.tipo} = 'operador' and ${table.usuarioId} is not null and ${table.pdvId} is null)`
+    )
+  ]
+);
+
+// A QUEM chegou, por PDV. `pdv_id` nulo = alcancado sem caixa aberto (alvo empresa/operador);
+// R-195 promove essa linha quando o operador abre um PDV antes de confirmar.
+//
+// DOIS uniques parciais, e nao um: em Postgres NULL nunca e igual a NULL, entao
+// `unique(mensagem, destinatario, pdv_id)` sozinho deixaria entrar N linhas com `pdv_id` nulo para
+// a mesma pessoa. Com o par: mesmo operador em dois PDVs = duas linhas; sem PDV = exatamente uma.
+export const mensagensAdminEntregas = pgTable(
+  "mensagens_admin_entregas",
+  {
+    id: idUuid,
+    empresaId,
+    mensagemId: uuid("mensagem_id").notNull(),
+    destinatarioUsuarioId: text("destinatario_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId, { onDelete: "cascade" }),
+    pdvId: uuid("pdv_id"),
+    fechamentoCaixaId: uuid("fechamento_caixa_id"),
+    // Carimbado na PRIMEIRA leitura bem-sucedida do cliente. Nao existe push neste projeto (sem
+    // PWA, sem SSE), entao "entregar quando voltar" e exatamente isto: a linha espera no banco.
+    entregueEm: timestamp("entregue_em", { withTimezone: true }),
+    visualizadaEm: timestamp("visualizada_em", { withTimezone: true }),
+    // R-194: "Entendi" confirma e tira do sino; "Fechar" apenas dispensa o pop-up na sessao e a
+    // mensagem CONTINUA pendente. Por isso `fechada_em` nao depende de `confirmada_em`.
+    confirmadaEm: timestamp("confirmada_em", { withTimezone: true }),
+    fechadaEm: timestamp("fechada_em", { withTimezone: true }),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.mensagemId, table.empresaId],
+      foreignColumns: [mensagensAdmin.id, mensagensAdmin.empresaId],
+      name: "mensagens_admin_entregas_mensagem_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.pdvId, table.empresaId],
+      foreignColumns: [pdvs.id, pdvs.empresaId],
+      name: "mensagens_admin_entregas_pdv_empresa_fk"
+    }),
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "mensagens_admin_entregas_caixa_empresa_fk"
+    }).onDelete("set null"),
+    uniqueIndex("mensagens_admin_entregas_por_pdv_idx")
+      .on(table.mensagemId, table.destinatarioUsuarioId, table.pdvId)
+      .where(sql`${table.pdvId} is not null`),
+    uniqueIndex("mensagens_admin_entregas_sem_pdv_idx")
+      .on(table.mensagemId, table.destinatarioUsuarioId)
+      .where(sql`${table.pdvId} is null`),
+    index("mensagens_admin_entregas_painel_idx").on(table.empresaId, table.mensagemId, table.confirmadaEm),
+    // Os carimbos so avancam: nao se visualiza o que nao chegou, nem se confirma o que nao se viu.
+    check(
+      "mensagens_admin_entregas_ordem_check",
+      sql`(${table.visualizadaEm} is null or ${table.entregueEm} is not null)
+        and (${table.confirmadaEm} is null or ${table.visualizadaEm} is not null)
+        and (${table.fechadaEm} is null or ${table.entregueEm} is not null)`
+    )
+  ]
+);
+
+// --- Campanhas de bonificacao (R-197..R-199) ---------------------------------------------------
+//
+// A campanha e por PDV, nunca por vendedor (R-198). Nao existe tabela de progresso de proposito
+// (R-199): a venda do CREARE pode ser reenviada, trocar de caixa e ser cancelada depois, e qualquer
+// saldo materializado exigiria uma regra de invalidacao que este sistema nao tem. O progresso e
+// sempre uma soma ao vivo sobre `vendas`.
+//
+// A bonificacao e INFORMATIVA e auditavel: nao existe coluna de saldo aqui e nenhuma linha desta
+// tabela toca `contas`, `fechamentos_caixa`, folha ou financeiro.
+export const campanhas = pgTable(
+  "campanhas",
+  {
+    id: idUuid,
+    empresaId,
+    titulo: text("titulo").notNull(),
+    mensagem: text("mensagem").notNull(),
+    // Dia de negocio, comparado com `vendas.data_referencia` (R-197) — nunca com `data_venda`.
+    inicio: date("inicio").notNull(),
+    fim: date("fim").notNull(),
+    metaValor: valorMonetario("meta_valor").notNull(),
+    bonificacaoTipo: text("bonificacao_tipo").$type<"dinheiro" | "percentual" | "recompensa">().notNull(),
+    bonificacaoValor: valorMonetario("bonificacao_valor"),
+    bonificacaoTexto: text("bonificacao_texto"),
+    status: text("status").$type<"rascunho" | "ativa" | "encerrada" | "cancelada">().notNull().default("rascunho"),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("campanhas_id_empresa_unica").on(table.id, table.empresaId),
+    index("campanhas_empresa_status_periodo_idx").on(table.empresaId, table.status, table.inicio, table.fim),
+    check("campanhas_status_check", sql`${table.status} in ('rascunho', 'ativa', 'encerrada', 'cancelada')`),
+    check("campanhas_periodo_check", sql`${table.fim} >= ${table.inicio}`),
+    check("campanhas_meta_check", sql`${table.metaValor} > 0`),
+    check("campanhas_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
+    check("campanhas_mensagem_nao_vazia_check", sql`length(btrim(${table.mensagem})) > 0`),
+    // Dinheiro e percentual exigem numero; recompensa exige texto. Nunca os dois, nunca nenhum.
+    check(
+      "campanhas_bonificacao_check",
+      sql`(${table.bonificacaoTipo} in ('dinheiro', 'percentual') and ${table.bonificacaoValor} is not null
+          and ${table.bonificacaoValor} > 0 and ${table.bonificacaoTexto} is null)
+        or (${table.bonificacaoTipo} = 'recompensa' and ${table.bonificacaoTexto} is not null
+          and length(btrim(${table.bonificacaoTexto})) > 0 and ${table.bonificacaoValor} is null)`
+    ),
+    // Percentual e percentual: trava o dedo escorregado que digitaria 1500 no lugar de 15.
+    check(
+      "campanhas_percentual_ate_cem_check",
+      sql`${table.bonificacaoTipo} <> 'percentual' or ${table.bonificacaoValor} <= 100`
+    )
+  ]
+);
+
+export const campanhasPdvs = pgTable(
+  "campanhas_pdvs",
+  {
+    campanhaId: uuid("campanha_id").notNull(),
+    pdvId: uuid("pdv_id").notNull(),
+    empresaId,
+    criadoEm
+  },
+  (table) => [
+    primaryKey({ columns: [table.campanhaId, table.pdvId], name: "campanhas_pdvs_pk" }),
+    foreignKey({
+      columns: [table.campanhaId, table.empresaId],
+      foreignColumns: [campanhas.id, campanhas.empresaId],
+      name: "campanhas_pdvs_campanha_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.pdvId, table.empresaId],
+      foreignColumns: [pdvs.id, pdvs.empresaId],
+      name: "campanhas_pdvs_pdv_empresa_fk"
+    })
   ]
 );
 

@@ -147,6 +147,13 @@ export const permissoes = [
   "integracoes_criar",
   "integracoes_editar",
   "integracoes_excluir",
+  // Mensagens administrativas para PDV e campanhas de bonificacao. Sao permissoes de EMISSOR e de
+  // PAINEL: quem recebe a propria mensagem nao precisa de permissao nenhuma para le-la, confirmar
+  // ou fechar — a autorizacao dele e ser o destinatario daquela entrega, na propria empresa.
+  "mensagens_admin_enviar",
+  "mensagens_admin_visualizar",
+  "campanhas_gerenciar",
+  "campanhas_visualizar",
   "promocoes_visualizar",
   "relatorio_faltas_visualizar",
   "relatorio_advertencias_visualizar",

@@ -24,6 +24,16 @@
       "development": "./src/schema/cadastro/cadastro.schema.ts",
       "default": "./dist/src/schema/cadastro/cadastro.schema.js"
     },
+    "./schema/campanhas": {
+      "types": "./dist/src/schema/campanhas/campanhas.schema.d.ts",
+      "development": "./src/schema/campanhas/campanhas.schema.ts",
+      "default": "./dist/src/schema/campanhas/campanhas.schema.js"
+    },
+    "./schema/mensagens": {
+      "types": "./dist/src/schema/mensagens/mensagens.schema.d.ts",
+      "development": "./src/schema/mensagens/mensagens.schema.ts",
+      "default": "./dist/src/schema/mensagens/mensagens.schema.js"
+    },
     "./schema/caixa": {
       "types": "./dist/src/schema/caixa/caixa.schema.d.ts",
       "development": "./src/schema/caixa/caixa.schema.ts",

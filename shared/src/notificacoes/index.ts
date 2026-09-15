@@ -1,9 +1,14 @@
 import { z } from "zod";
 
+// `mensagem_admin` referencia uma ENTREGA (mensagens_admin_entregas.id), nao a mensagem: e o que
+// permite o mesmo operador ter uma linha por PDV sem mexer no unique que ja existia.
+// `campanha` referencia a propria campanha.
 export const tipoNotificacaoSchema = z.enum([
   "quebra_caixa",
   "transferencia_divergencia",
-  "transferencia_prazo_confirmacao"
+  "transferencia_prazo_confirmacao",
+  "mensagem_admin",
+  "campanha"
 ]);
 
 // O sino continua recebendo apenas o que ainda pede acao. A central de Pendencias, por outro

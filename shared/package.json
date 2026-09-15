@@ -31,6 +31,16 @@
       "development": "./src/cadastros/index.ts",
       "default": "./dist/cadastros/index.js"
     },
+    "./campanhas": {
+      "types": "./dist/campanhas/index.d.ts",
+      "development": "./src/campanhas/index.ts",
+      "default": "./dist/campanhas/index.js"
+    },
+    "./mensagens-admin": {
+      "types": "./dist/mensagens-admin/index.d.ts",
+      "development": "./src/mensagens-admin/index.ts",
+      "default": "./dist/mensagens-admin/index.js"
+    },
     "./caixa": {
       "types": "./dist/caixa/index.d.ts",
       "development": "./src/caixa/index.ts",
