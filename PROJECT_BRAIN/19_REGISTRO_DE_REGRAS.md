@@ -966,6 +966,73 @@ A confirmação operacional que encerrou o P1-A está na §10.6 daquele document
 
 ---
 
+### Mensagens administrativas para PDV e campanhas de bonificação (Marco, 15/09/2026)
+
+Duas frentes novas, decididas por Marco na rodada de 15/09. Antes delas o sistema tinha **um** canal
+de notificação com três tipos — quebra, divergência e prazo — e **nenhuma** noção de mensagem
+administrativa, campanha, meta ou bonificação em nenhuma camada do monorepo (busca por
+`campanha|meta de venda|comiss|premia|bonific|ranking|progresso` em `api/src`, `web-vue`,
+`shared/src`, `db/src` e `db/migrations`: zero ocorrências).
+
+| Id           | Regra                                                                                                                                                                                                                                                                                                                                          | Status |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **R-193** 🆕 | A mensagem administrativa é **um tipo do sino existente**, nunca um segundo sistema. `notificacoes.referencia_id` aponta para a **ENTREGA** (`mensagens_admin_entregas.id`), não para a mensagem — é isso que permite uma linha de sino por (destinatário, PDV) sem alterar o `notificacoes_tipo_destinatario_referencia_unica` que já existia | ✅     |
+| **R-194** 🆕 | O pop-up do operador tem **"Entendi"** e **"Fechar"**, e eles não são sinônimos: "Entendi" grava `confirmada_em` e **encerra** (sai do sino); "Fechar" grava `fechada_em`, dispensa o pop-up **na sessão** e a mensagem **continua pendente no sino** até ser confirmada                                                                       | ✅     |
+| **R-195** 🆕 | Operador alcançado **sem caixa aberto** gera entrega com `pdv_id` nulo. Se ele abrir um PDV enquanto a mensagem é válida e **ainda não confirmou**, a entrega existente é **promovida** (`pdv_id` e `fechamento_caixa_id` preenchidos na mesma linha). Se já confirmou, o histórico fica como está e **nada novo é criado**                    | ⏳     |
+| **R-196** 🆕 | Alvos do envio: `caixas_abertos` é **foto do instante do envio** e não alcança quem chega depois; `empresa` resolve por **permissão efetiva `caixa_operar`**, nunca por nome de cargo; `pdv` e `empresa` alcançam quem abrir caixa enquanto `valido_ate` permitir. Destinatários são **deduplicados**                                          | ⏳     |
+| **R-197** 🆕 | Apuração da campanha: data = **`vendas.data_referencia`** (dia de negócio, nunca `data_venda`); valor = **líquido** (`valor_original − valor_desconto + valor_acrescimo`); só vendas do **CREARE** (`integracao_chave_id is not null`); venda manual de retaguarda **fica fora** desta versão; **todas** as formas de pagamento contam         | ⏳     |
+| **R-198** 🆕 | A campanha é **por PDV**, nunca por vendedor. Atribuição por `vendas.pdv_id`, **sem rateio individual**. Venda sem PDV vira linha **"não atribuída"**, visível para auditoria e **fora** da meta e da bonificação                                                                                                                              | ⏳     |
+| **R-199** 🆕 | Progresso é **sempre calculado ao vivo** sobre `vendas`; **não existe** tabela, coluna ou cache de progresso. Cancelamento, reenvio do CREARE e troca de caixa refletem sozinhos. No fechamento o resultado é **somente informativo e auditável**: não altera caixa, financeiro, folha, contas nem gera bonificação automática                 | ⏳     |
+
+**Elegibilidade da venda (R-197) — divergência deliberada da convenção do dinheiro.** Todo cálculo
+financeiro deste sistema usa `computar = true AND status <> 'cancelado'` (`caixa.repository.ts`,
+`17` §6), o que **inclui** `aguardando_aprovacao`. Marco decidiu o contrário para campanha:
+**`status = 'aprovado'` estrito, além de `computar = true`**. Motivo registrado: campanha é
+acompanhamento de meta e bonificação, e não pode avançar com venda ainda pendente de aprovação.
+É a única fórmula do projeto que se afasta daquela convenção, e por isso está escrita aqui.
+
+**Por que três tabelas e não colunas novas no sino.** `mensagens_admin` guarda o conteúdo,
+`mensagens_admin_alvos` guarda **o que foi pedido** (é daí que sai a entrega de quem abre caixa
+depois) e `mensagens_admin_entregas` guarda **a quem chegou, por PDV**. Uma primeira versão pendurava
+os quatro carimbos em `notificacoes` e apontava `referencia_id` para a mensagem; Marco recusou
+porque o unique existente colapsaria o mesmo operador em dois PDVs numa linha só, e porque os alvos
+não ficariam persistidos. Com a correção, `notificacoes` recebeu **um único statement**: o `CHECK` do
+tipo aberto para `mensagem_admin` e `campanha`. Zero coluna nova, zero backfill, zero linha histórica
+tocada.
+
+**Dois uniques parciais na entrega, não um.** Em PostgreSQL `NULL` nunca é igual a `NULL`, então
+`unique(mensagem, destinatario, pdv_id)` sozinho deixaria entrar N linhas com `pdv_id` nulo para a
+mesma pessoa. O par `..._por_pdv_idx` (`where pdv_id is not null`) + `..._sem_pdv_idx`
+(`where pdv_id is null`) dá exatamente o que a R-193 pede: mesmo operador em dois PDVs = duas
+linhas; sem PDV = exatamente uma. É também o que torna entrega e leitura **idempotentes**.
+
+**Entrega offline sem push.** Não existe PWA, service worker nem SSE/WebSocket neste projeto
+(`nuxt.config.ts` carrega um módulo só; zero `EventSource`/`WebSocket` em `api/src`, `web-vue` e
+`shared/src`). Por isso "entregar quando voltar" **é** a linha esperando no banco: `entregue_em` é
+carimbado na **primeira leitura bem-sucedida do cliente**, e `valido_ate` é o que faz uma mensagem
+velha parar de alcançar gente sem apagar o histórico.
+
+**Permissões (4, e só estas).** `mensagens_admin_enviar`, `mensagens_admin_visualizar`,
+`campanhas_gerenciar`, `campanhas_visualizar` — todas de **emissor** e de **painel**. Quem recebe a
+própria mensagem **não precisa de permissão nenhuma** para lê-la, confirmar ou fechar: a autorização
+dele é ser o destinatário daquela entrega, na própria empresa. Não exigem migration (o catálogo é
+_upsert_ a partir do TS em `db/bootstrap-prod.ts`), mas exigem rodar o bootstrap para a tela de
+Permissões listar as chaves.
+
+**Estado da entrega (15/09/2026).** Migrations `0037` (mensagens) e `0038` (campanhas) geradas pelo
+fluxo normal e aplicadas **somente no banco local**, com backup antes. Schema Drizzle, contratos Zod
+e testes unitários entregues e verdes. **Backend, telas, pop-up e painel de situação ainda não
+existem** — por isso R-195 a R-199 estão ⏳. Produção, deploy e Coolify intocados.
+
+**Defeito do gerador, registrado para a próxima vez.** O `drizzle-kit generate` emitiu o
+`ALTER TABLE "pdvs" ADD CONSTRAINT "pdvs_id_empresa_unica" UNIQUE("id","empresa_id")` **depois** das
+FKs compostas que dependem dele. Aplicada como veio, a migration falharia com
+_"there is no unique constraint matching given keys for referenced table pdvs"_. Os statements foram
+reordenados à mão no `.sql` antes de aplicar. **Toda migration que cria FK composta para uma tabela
+que ainda não tem o par único precisa dessa conferência.**
+
+---
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
