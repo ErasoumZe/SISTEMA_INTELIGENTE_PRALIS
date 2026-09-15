@@ -71,9 +71,12 @@ export async function salvarFotoDocumento(
   }
   if (arquivo.file.truncated) throw new Error("Arquivo maior que o limite permitido");
   const tipoDetectado = tiposPermitidos.find((candidato) => candidato.confere(dados));
+  const xmlCompativel =
+    tipoDetectado?.mimeType === "application/xml" && ["text/xml", "text/plain"].includes(arquivo.mimetype);
   if (
     !tipoDetectado ||
     (arquivo.mimetype !== tipoDetectado.mimeType &&
+      !xmlCompativel &&
       !(arquivo.mimetype === "image/heif" && tipoDetectado.mimeType === "image/heic"))
   ) {
     throw new Error("Tipo de arquivo nao permitido");
