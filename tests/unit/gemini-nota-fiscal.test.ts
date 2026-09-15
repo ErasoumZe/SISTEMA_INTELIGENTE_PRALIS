@@ -94,6 +94,36 @@ describe("cliente Gemini da discriminacao", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("aceita os numeros do formato brasileiro que o modelo lite eventualmente devolve", async () => {
+    const leituraComNumeros = {
+      ...leituraValida,
+      numero: 362,
+      valorProdutos: "1.299,90",
+      valorDesconto: 0,
+      valorFrete: 0,
+      valorTotal: 1299.9,
+      itens: [{ ...leituraValida.itens[0], quantidade: 1, valorUnitario: 1299.9, desconto: 0, valorTotal: "1.299,90" }]
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(leituraComNumeros) }] } }] }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+    );
+    const resultado = await extrairNotaFiscalComGemini(
+      { dados: Buffer.from([0xff, 0xd8, 0xff]), mimeType: "image/jpeg" },
+      { chave: "segredo", modelo: "gemini-teste", timeoutMs: 5_000 },
+      fetchMock
+    );
+    expect(resultado.numero).toBe("362");
+    expect(resultado.valorTotal).toBe("1299.9");
+    expect(resultado.itens[0]?.valorTotal).toBe("1299.90");
+  });
+
   it("recusa resposta sem conteudo sem inventar campos", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ candidates: [] }), { status: 200 }));
     await expect(

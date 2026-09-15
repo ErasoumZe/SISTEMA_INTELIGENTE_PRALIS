@@ -2,12 +2,34 @@ import { z } from "zod";
 import type { DadosExternos } from "@padaria/shared/api";
 import { ErroDominio } from "../erros.js";
 
+function normalizarDecimalExtraido(valor: DadosExternos) {
+  if (typeof valor === "number" && Number.isFinite(valor) && valor >= 0) return String(valor);
+  if (typeof valor !== "string") return valor;
+  const texto = valor.trim();
+  // Alguns modelos devolvem numero brasileiro apesar da instrucao de usar ponto. A conversao so
+  // ocorre em formatos inequivocos; qualquer outra variacao continua invalida e vira null.
+  if (/^\d{1,3}(?:\.\d{3})+,\d{1,4}$/.test(texto)) return texto.replaceAll(".", "").replace(",", ".");
+  if (/^\d+,\d{1,4}$/.test(texto)) return texto.replace(",", ".");
+  return texto;
+}
+
 const decimalExtraidoSchema = z
-  .string()
-  .regex(/^\d+(?:\.\d{1,4})?$/)
-  .nullable()
+  .preprocess(
+    normalizarDecimalExtraido,
+    z
+      .string()
+      .regex(/^\d+(?:\.\d{1,4})?$/)
+      .nullable()
+  )
+  .catch(null)
   .default(null);
-const textoExtraidoSchema = z.string().trim().max(500).nullable().default(null);
+const textoExtraidoSchema = z
+  .preprocess(
+    (valor) => (typeof valor === "number" && Number.isFinite(valor) ? String(valor) : valor),
+    z.string().trim().max(500).nullable()
+  )
+  .catch(null)
+  .default(null);
 const confiancaSchema = z.number().min(0).max(1).catch(0);
 
 const itemExtraidoSchema = z.object({
