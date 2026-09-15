@@ -10,7 +10,8 @@
 // `caixa.repository`. Pendurar isto no dominio fecharia um ciclo de import.
 import { sql, type SQL } from "drizzle-orm";
 import type { DadosExternos } from "@padaria/shared/api";
-import { dataPagamentoNoPassado } from "@padaria/shared/datas";
+import { podeLancarSemCaixa, type PerfilUsuario } from "@padaria/shared/autenticacao";
+import { dataPagamentoNoPassado, diaNegocio } from "@padaria/shared/datas";
 
 // LEITURA: o novo campo com reserva no antigo. A 0027 ja preencheu o historico, entao o fallback e
 // rede de seguranca para o que escapou — nao a fonte do dado.
@@ -52,4 +53,27 @@ export function exigirDataPagamentoNaoRetroativa(
   const anterior = dataPagamentoAnterior?.trim().slice(0, 10) || null;
   if (anterior && anterior === nova) return;
   if (dataPagamentoNoPassado(nova)) throw new Error("Data de pagamento não pode ser anterior a hoje");
+}
+
+// R-203 — Despesa e mercadoria registradas pelo Caixa representam ato do dia. A API é a fonte de
+// verdade: limitar só o calendário deixaria qualquer cliente HTTP retroagir o caixa. O Administrador
+// Geral (`usuario_admin`) mantém a exceção aprovada; a retaguarda não retroage, mas pode programar.
+// Uma data histórica inalterada continua editável para preservar o histórico.
+export function exigirDataPagamentoDeDespesaOuMercadoria(
+  dataPagamento: string | null | undefined,
+  perfil: PerfilUsuario,
+  dataPagamentoAnterior?: string | null
+): void {
+  const nova = dataPagamento?.trim().slice(0, 10) || null;
+  if (!nova) return;
+  const anterior = dataPagamentoAnterior?.trim().slice(0, 10) || null;
+  if (anterior && anterior === nova) return;
+  // A exceção não é uma permissão herdável: somente o role de Administrador Geral
+  // (`usuario_admin`) pode registrar uma quitação retroativa. O `admin` legado segue
+  // as mesmas travas de data dos demais perfis.
+  if (perfil.role === "usuario_admin") return;
+  if (dataPagamentoNoPassado(nova)) throw new Error("Data de pagamento não pode ser anterior a hoje");
+  if (!podeLancarSemCaixa(perfil) && nova !== diaNegocio(new Date())) {
+    throw new Error("Operador de caixa só pode registrar pagamento na data de hoje");
+  }
 }

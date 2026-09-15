@@ -3,7 +3,8 @@
 // form.dataPagamento (campo suportado). Estado vem do modal via provide/inject.
 import { useOperacaoLancamentoBloco } from "~/components/operacoes/useOperacaoLancamento";
 
-const { cat, pago, form, hojeISO } = useOperacaoLancamentoBloco();
+const { cat, pago, form, limiteMinDataPagamento, limiteMaxDataPagamento, restringeDataPagamentoAoHoje } =
+  useOperacaoLancamentoBloco();
 </script>
 
 <template>
@@ -17,9 +18,17 @@ const { cat, pago, form, hojeISO } = useOperacaoLancamentoBloco();
     </label>
     <label class="lc-campo">
       <span class="lc-campo-lbl">Data pagamento</span>
-      <!-- R-129: o navegador ja barra data anterior a hoje, antes do envio. O `min` e conveniencia;
-           quem faz valer a regra e o servidor, que recusa com 400. -->
-      <input v-model="form.dataPagamento" type="date" class="lc-input" :min="hojeISO" :disabled="!pago" />
+      <input
+        v-model="form.dataPagamento"
+        type="date"
+        class="lc-input"
+        :min="limiteMinDataPagamento"
+        :max="limiteMaxDataPagamento"
+        :disabled="!pago"
+      />
+      <small v-if="restringeDataPagamentoAoHoje" class="lc-pagamento-regra">
+        Caixa registra pagamento somente na data de hoje.
+      </small>
     </label>
     <label class="lc-campo">
       <span class="lc-campo-lbl">Data Vencimento</span>

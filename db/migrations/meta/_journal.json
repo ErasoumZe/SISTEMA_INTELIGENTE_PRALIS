@@ -281,6 +281,13 @@
       "when": 1789493023232,
       "tag": "0039_cultured_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789496913001,
+      "tag": "0040_same_greymalkin",
+      "breakpoints": true
     }
   ]
 }

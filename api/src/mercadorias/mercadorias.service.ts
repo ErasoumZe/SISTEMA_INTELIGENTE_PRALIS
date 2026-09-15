@@ -32,7 +32,10 @@ import {
   podeVerLancamentosPagos,
   validarReferenciasItensMercadoria
 } from "../lancamentos/lancamentos.dominio.js";
-import { exigirDataPagamentoNaoRetroativa, resolverObservacaoDoLancamento } from "../lancamentos/texto-movimento.js";
+import {
+  exigirDataPagamentoDeDespesaOuMercadoria,
+  resolverObservacaoDoLancamento
+} from "../lancamentos/texto-movimento.js";
 import {
   exigirContaDoCaixaNoLancamento,
   exigirRecorrenciaDeRetaguarda,
@@ -88,7 +91,7 @@ export async function criarMercadoria(dados: MercadoriaPayload, perfil: PerfilUs
   // Ciclo de vida (R7): definir dataPagamento na criacao exige *_pagar (aditivo com caixas_gerenciar).
   exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento);
   // R-129: pagamento retroativo nao entra na CRIACAO (fuso do negocio, nao UTC).
-  exigirDataPagamentoNaoRetroativa(dados.dataPagamento);
+  exigirDataPagamentoDeDespesaOuMercadoria(dados.dataPagamento, perfil);
   // R-123 ANTES da permissao: para o operador de caixa a recusa precisa dizer o MOTIVO ("e ato de
   // Tesouraria/Financeiro"), nao um "permissao insuficiente" que nao explica nada.
   exigirRecorrenciaDeRetaguarda(perfil, dados.recorrencia);
@@ -248,7 +251,7 @@ export async function atualizarMercadoria(
     exigirPermissaoEditarPago(perfil.permissoes, "mercadorias", existente!.dataPagamento);
     exigirPermissaoPagar(perfil.permissoes, "mercadorias", dados.dataPagamento, existente!.dataPagamento ?? null);
     // R-129 na edicao: so vale se a data MUDOU — registro antigo continua editavel.
-    exigirDataPagamentoNaoRetroativa(dados.dataPagamento, existente!.dataPagamento);
+    exigirDataPagamentoDeDespesaOuMercadoria(dados.dataPagamento, perfil, existente!.dataPagamento);
     const referenciaInvalida = await validarReferenciasMercadoria(dados, tx);
     if (referenciaInvalida) throw new Error(`${referenciaInvalida} nao pertence a empresa informada`);
     const computar = deveComputarMercadoria(

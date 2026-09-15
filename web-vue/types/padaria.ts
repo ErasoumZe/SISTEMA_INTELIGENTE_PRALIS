@@ -214,6 +214,7 @@ export type OperacaoResumo = {
   ehCaixaParaCofre?: boolean;
   pendenteDiscriminacao?: boolean;
   fotoDocumentoUrl?: string | null;
+  fotoNotaUrl?: string | null;
   pdvId?: string | null;
   pdvNome?: string | null;
   criadoEm?: string;

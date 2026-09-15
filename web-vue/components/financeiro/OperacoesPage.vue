@@ -8,12 +8,14 @@ import type {
   ResumoCaixa
 } from "~/types/padaria";
 import type { OperacaoDetalhe } from "~/utils/operacoes";
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { diaNegocio, somarDias } from "@padaria/shared";
 import { dinheiro } from "~/utils/domain";
 import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 import MercadoriasAprovacaoPanel from "~/components/financeiro/MercadoriasAprovacaoPanel.vue";
 import VendaDetalheDialog from "~/components/financeiro/VendaDetalheDialog.vue";
 import VendaDetalheConteudo from "~/components/financeiro/VendaDetalheConteudo.vue";
+import OperacaoAnexosDialog from "~/components/financeiro/OperacaoAnexosDialog.vue";
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
@@ -79,6 +81,8 @@ function entidadeDaTela(tela: string): EntidadeOperacional {
 // mantem um unico vendaDetalhe carregado).
 const linhaExpandidaId = ref("");
 const observacaoAberta = ref<OperacaoResumo | null>(null);
+const anexosAbertos = ref<OperacaoResumo | null>(null);
+const telaComContasAPagar = computed(() => ["despesas", "mercadorias"].includes(props.telaAtiva));
 function alternarDetalhe(operacao: OperacaoResumo) {
   if (linhaExpandidaId.value === operacao.id) {
     linhaExpandidaId.value = "";
@@ -100,6 +104,22 @@ function corStatus(status: string) {
   if (status === "aguardando_aprovacao") return "warning";
   if (status === "cancelado") return "error";
   return "default";
+}
+
+function situacaoVencimento(operacao: OperacaoResumo) {
+  const vencimento = operacao.dataVencimento;
+  if (!vencimento) return { rotulo: "Não informado", cor: "default" };
+  if (operacao.dataPagamento) return { rotulo: formatarDataSomenteDia(vencimento), cor: "success" };
+  const hoje = diaNegocio(new Date());
+  if (vencimento < hoje) return { rotulo: `Vencida: ${formatarDataSomenteDia(vencimento)}`, cor: "error" };
+  if (vencimento === hoje) return { rotulo: "Vence hoje", cor: "error" };
+  if (vencimento <= somarDias(hoje, 3))
+    return { rotulo: `Vence: ${formatarDataSomenteDia(vencimento)}`, cor: "warning" };
+  return { rotulo: formatarDataSomenteDia(vencimento), cor: "default" };
+}
+
+function endpointAnexo(): "despesas" | "mercadorias" | null {
+  return props.telaAtiva === "despesas" || props.telaAtiva === "mercadorias" ? props.telaAtiva : null;
 }
 
 function atualizarFiltroSaidas(campo: "dataInicio" | "dataFim" | "pdvId" | "status", valor: unknown) {
@@ -273,8 +293,10 @@ function limparFiltrosSaidas() {
                 <tr>
                   <th>Data e hora</th>
                   <th>PDV</th>
-                  <th>Para o que / observação</th>
+                  <th>Observação</th>
                   <th>Registrado por</th>
+                  <th v-if="telaComContasAPagar">Vencimento</th>
+                  <th v-if="telaComContasAPagar">Pagamento</th>
                   <th>Status</th>
                   <th class="text-right">Valor</th>
                   <th class="text-right">Ações</th>
@@ -290,48 +312,54 @@ function limparFiltrosSaidas() {
                       </div>
                     </td>
                     <td>{{ operacao.pdvNome || "Retaguarda" }}</td>
-                    <td class="font-weight-bold">
-                      {{ operacao.descricao }}
-                      <v-chip
-                        v-if="operacao.pendenteDiscriminacao"
-                        size="x-small"
-                        color="warning"
-                        variant="tonal"
-                        class="ml-2"
-                      >
-                        Pendente de discriminacao
-                      </v-chip>
-                      <v-icon
-                        v-if="operacao.fotoDocumentoUrl"
-                        icon="mdi-paperclip"
-                        size="small"
-                        class="ml-1 text-medium-emphasis"
-                        title="Documento anexado"
-                      />
+                    <td>
                       <v-btn
-                        v-if="
-                          ['despesas', 'mercadorias', 'retiradas'].includes(telaAtiva) &&
-                          operacao.observacao &&
-                          operacao.observacao !== operacao.descricao
-                        "
+                        v-if="['despesas', 'mercadorias', 'retiradas'].includes(telaAtiva)"
                         size="x-small"
                         variant="text"
                         prepend-icon="mdi-note-text-outline"
-                        class="mt-1 px-0"
+                        class="px-0"
                         @click="observacaoAberta = operacao"
                       >
                         Ver observação
                       </v-btn>
                     </td>
                     <td>{{ operacao.criadoPorNome || "Não informado" }}</td>
-                    <td>
-                      <v-chip :color="corStatus(operacao.status)" size="x-small" variant="tonal">
-                        {{ rotuloStatus(operacao.status) }}
+                    <td v-if="telaComContasAPagar">
+                      <v-chip :color="situacaoVencimento(operacao).cor" size="x-small" variant="tonal">
+                        {{ situacaoVencimento(operacao).rotulo }}
                       </v-chip>
+                    </td>
+                    <td v-if="telaComContasAPagar">
+                      <v-chip :color="operacao.dataPagamento ? 'success' : 'error'" size="x-small" variant="tonal">
+                        {{
+                          operacao.dataPagamento
+                            ? `Pago: ${formatarDataSomenteDia(operacao.dataPagamento)}`
+                            : "Não pago"
+                        }}
+                      </v-chip>
+                    </td>
+                    <td>
+                      <div class="d-flex flex-wrap ga-1">
+                        <v-chip :color="corStatus(operacao.status)" size="x-small" variant="tonal">
+                          {{ rotuloStatus(operacao.status) }}
+                        </v-chip>
+                        <v-chip v-if="operacao.pendenteDiscriminacao" size="x-small" color="warning" variant="tonal">
+                          Pendente de discriminacao
+                        </v-chip>
+                      </div>
                     </td>
                     <td class="text-right font-weight-bold">{{ dinheiro(operacao.valorOriginal) }}</td>
                     <td class="text-right">
                       <div class="d-inline-flex ga-2 justify-end align-center">
+                        <v-btn
+                          v-if="(operacao.fotoDocumentoUrl || operacao.fotoNotaUrl) && endpointAnexo()"
+                          size="small"
+                          variant="text"
+                          icon="mdi-paperclip"
+                          title="Ver anexos"
+                          @click="anexosAbertos = operacao"
+                        />
                         <v-btn
                           v-if="operacao.pendenteDiscriminacao && podeDiscriminar"
                           size="small"
@@ -363,7 +391,7 @@ function limparFiltrosSaidas() {
                     </td>
                   </tr>
                   <tr v-if="telaAtiva === 'entradas' && linhaExpandidaId === operacao.id">
-                    <td colspan="7" class="pa-0">
+                    <td :colspan="telaComContasAPagar ? 9 : 7" class="pa-0">
                       <div class="venda-detalhe-inline pa-4">
                         <VendaDetalheConteudo
                           :detalhe="vendaDetalhe ?? null"
@@ -375,7 +403,7 @@ function limparFiltrosSaidas() {
                   </tr>
                 </template>
                 <tr v-if="!operacoesPaginadas.length">
-                  <td colspan="7" class="text-center text-muted py-8">
+                  <td :colspan="telaComContasAPagar ? 9 : 7" class="text-center text-muted py-8">
                     <span class="tabela-vazio">Nenhum lancamento encontrado.</span>
                   </td>
                 </tr>
@@ -420,6 +448,13 @@ function limparFiltrosSaidas() {
       @update:aberto="emit('update:vendaDetalheAberto', $event)"
     />
 
+    <OperacaoAnexosDialog
+      :aberto="Boolean(anexosAbertos)"
+      :operacao="anexosAbertos"
+      :endpoint="endpointAnexo()"
+      @update:aberto="(aberto) => !aberto && (anexosAbertos = null)"
+    />
+
     <v-dialog
       :model-value="Boolean(observacaoAberta)"
       max-width="560"
@@ -430,7 +465,9 @@ function limparFiltrosSaidas() {
           <v-icon icon="mdi-note-text-outline" />
           Observação
         </v-card-title>
-        <v-card-text class="text-pre-wrap">{{ observacaoAberta?.observacao }}</v-card-text>
+        <v-card-text class="text-pre-wrap">{{
+          observacaoAberta?.observacao || observacaoAberta?.descricao
+        }}</v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="observacaoAberta = null">Fechar</v-btn>

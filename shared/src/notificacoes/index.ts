@@ -8,7 +8,8 @@ export const tipoNotificacaoSchema = z.enum([
   "transferencia_divergencia",
   "transferencia_prazo_confirmacao",
   "mensagem_admin",
-  "campanha"
+  "campanha",
+  "lancamento_vencimento"
 ]);
 
 // O sino continua recebendo apenas o que ainda pede acao. A central de Pendencias, por outro

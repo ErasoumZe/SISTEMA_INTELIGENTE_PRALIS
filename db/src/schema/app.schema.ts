@@ -2104,10 +2104,15 @@ export const notificacoes = pgTable(
     empresaId,
     // `mensagem_admin` aponta `referencia_id` para `mensagens_admin_entregas.id` (UMA linha de sino
     // por ENTREGA, entao o unique abaixo passa a permitir o mesmo usuario em dois PDVs);
-    // `campanha` aponta para `campanhas.id`.
+    // `campanha` aponta para `campanhas.id`; `lancamento_vencimento` para uma despesa ou mercadoria.
     tipo: text("tipo")
       .$type<
-        "quebra_caixa" | "transferencia_divergencia" | "transferencia_prazo_confirmacao" | "mensagem_admin" | "campanha"
+        | "quebra_caixa"
+        | "transferencia_divergencia"
+        | "transferencia_prazo_confirmacao"
+        | "mensagem_admin"
+        | "campanha"
+        | "lancamento_vencimento"
       >()
       .notNull(),
     destinatarioUsuarioId: text("destinatario_usuario_id")
@@ -2135,7 +2140,7 @@ export const notificacoes = pgTable(
     check(
       "notificacoes_tipo_check",
       sql`${table.tipo} in ('quebra_caixa', 'transferencia_divergencia', 'transferencia_prazo_confirmacao',
-        'mensagem_admin', 'campanha')`
+        'mensagem_admin', 'campanha', 'lancamento_vencimento')`
     ),
     check("notificacoes_titulo_nao_vazio_check", sql`length(btrim(${table.titulo})) > 0`),
     check(

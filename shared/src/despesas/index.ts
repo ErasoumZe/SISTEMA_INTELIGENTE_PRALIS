@@ -116,6 +116,7 @@ export const despesaDtoSchema = z.object({
   observacao: z.string().nullable(),
   // Foto do documento (nota/cupom): insumo de quem discrimina. Null quando nao anexada.
   fotoDocumentoUrl: z.string().nullable(),
+  fotoNotaUrl: z.string().nullable(),
   // Derivado: cabecalho sem itens ainda nao foi discriminado.
   pendenteDiscriminacao: z.boolean()
 });

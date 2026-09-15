@@ -70,8 +70,10 @@ export async function listarMercadoriasRepository(
   const filtros = filtrosEmpresa(mercadorias, query, empresasPermitidasIds);
   if (query.caixaId) filtros.push(eq(mercadorias.caixaId, query.caixaId));
   if (query.pdvId) filtros.push(eq(fechamentosCaixa.pdvId, query.pdvId));
-  if (query.dataInicio) filtros.push(gte(mercadorias.dataReferencia, query.dataInicio));
-  if (query.dataFim) filtros.push(lte(mercadorias.dataReferencia, query.dataFim));
+  // Despesa e mercadoria representam contas a pagar; o filtro de período acompanha o vencimento
+  // exibido na grade e o campo do modal, não a data de referência.
+  if (query.dataInicio) filtros.push(gte(mercadorias.dataVencimento, query.dataInicio));
+  if (query.dataFim) filtros.push(lte(mercadorias.dataVencimento, query.dataFim));
   if (query.status) filtros.push(eq(mercadorias.status, query.status));
   // visualizar_dpago: sem a permissao (esconderPagos), so mercadorias NAO pagas saem da listagem.
   if (esconderPagos) filtros.push(isNull(mercadorias.dataPagamento));
@@ -80,11 +82,14 @@ export async function listarMercadoriasRepository(
       id: mercadorias.id,
       empresaId: mercadorias.empresaId,
       dataReferencia: mercadorias.dataReferencia,
+      dataVencimento: mercadorias.dataVencimento,
+      dataPagamento: mercadorias.dataPagamento,
       descricao: textoDoMovimento(mercadorias),
       valorOriginal: mercadorias.valorOriginal,
       computar: mercadorias.computar,
       status: mercadorias.status,
       fotoDocumentoUrl: mercadorias.fotoDocumentoUrl,
+      fotoNotaUrl: mercadorias.fotoNotaUrl,
       caixaId: mercadorias.caixaId,
       pdvId: fechamentosCaixa.pdvId,
       pdvNome: pdvs.nome,

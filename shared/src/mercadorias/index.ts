@@ -95,6 +95,8 @@ export const mercadoriaDtoSchema = z.object({
   id: z.string(),
   empresaId: z.string(),
   dataReferencia: z.string(),
+  dataVencimento: z.string().optional(),
+  dataPagamento: z.string().nullable().optional(),
   descricao: z.string(),
   valorOriginal: z.string(),
   computar: z.boolean(),
@@ -107,6 +109,7 @@ export const mercadoriaDtoSchema = z.object({
   observacao: z.string().nullable(),
   // Foto do documento (nota/cupom): insumo de quem discrimina. Null quando nao anexada.
   fotoDocumentoUrl: z.string().nullable(),
+  fotoNotaUrl: z.string().nullable(),
   // Derivado: cabecalho sem itens ainda nao foi discriminado.
   pendenteDiscriminacao: z.boolean()
 });

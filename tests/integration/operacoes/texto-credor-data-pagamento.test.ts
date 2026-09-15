@@ -290,11 +290,10 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
     expect(criada.statusCode).toBe(400);
   });
 
-  // --- R-129: data de pagamento nao pode ser retroativa -------------------------------------------
-  it("recusa criacao com data de pagamento de ontem", async () => {
+  // --- R-203: Administrador Geral pode retroagir; demais perfis sao validados no servidor. -------
+  it("permite ao Administrador Geral criar com data de pagamento retroativa", async () => {
     const criada = await criarDespesa({ observacao: "Pagamento retroativo", dataPagamento: ONTEM });
-    expect(criada.statusCode, criada.body).toBe(400);
-    expect(criada.body).toMatch(/anterior a hoje/i);
+    expect(criada.statusCode, criada.body).toBe(201);
   });
 
   it("aceita hoje e o futuro", async () => {
@@ -304,7 +303,7 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
     expect(amanha.statusCode, amanha.body).toBe(201);
   });
 
-  it("deixa editar lancamento antigo sem tocar na data de pagamento, e barra a troca por outra retroativa", async () => {
+  it("deixa o Administrador Geral editar e corrigir data de pagamento retroativa", async () => {
     // Nasce valida (paga hoje) e o tempo passa: o UPDATE direto empurra a data para ontem sem
     // recriar o registro por fora do fluxo — e essa despesa que a regra nova nao pode travar.
     const criada = await criarDespesa({ observacao: "Despesa paga ontem", dataPagamento: HOJE });
@@ -335,6 +334,38 @@ describe("R-127 / R-128 / R-129 no lancamento", () => {
       headers: { cookie: cookieAdmin },
       payload: { ...corpo, observacao: "Voltando mais ainda", dataPagamento: somarDias(HOJE, -3) }
     });
-    expect(outraRetroativa.statusCode, outraRetroativa.body).toBe(400);
+    expect(outraRetroativa.statusCode, outraRetroativa.body).toBe(200);
+  });
+
+  it("avisa o Administrador Geral tres dias antes do vencimento e remove o aviso aberto ao pagar", async () => {
+    const criada = await criarDespesa({
+      observacao: "Alerta de vencimento",
+      dataVencimento: somarDias(HOJE, 2),
+      dataPagamento: null
+    });
+    expect(criada.statusCode, criada.body).toBe(201);
+    const id = json<{ data: { id: string } }>(criada).data.id;
+
+    const sino = await contexto.app.inject({
+      method: "GET",
+      url: `/api/notificacoes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(sino.statusCode, sino.body).toBe(200);
+    expect(json<{ data: Array<{ referenciaId: string; tipo: string }> }>(sino).data).toContainEqual(
+      expect.objectContaining({ referenciaId: id, tipo: "lancamento_vencimento" })
+    );
+
+    // A quitação tira somente a pendência aberta do sino; não apaga histórico financeiro nem uma
+    // eventual ciência já registrada pelo destinatário.
+    await executarSql(`update despesas set data_pagamento = $2 where id = $1`, [id, HOJE]);
+    const depoisDePagar = await contexto.app.inject({
+      method: "GET",
+      url: `/api/notificacoes?empresaId=${idsTeste.empresaA}`,
+      headers: { cookie: cookieAdmin }
+    });
+    expect(json<{ data: Array<{ referenciaId: string; tipo: string }> }>(depoisDePagar).data).not.toContainEqual(
+      expect.objectContaining({ referenciaId: id, tipo: "lancamento_vencimento" })
+    );
   });
 });

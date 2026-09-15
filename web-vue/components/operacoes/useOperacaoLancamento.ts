@@ -71,6 +71,8 @@ export function useOperacaoLancamento() {
     contaTravadaDoCaixa,
     contaTravadaDoCaixaNome,
     contaTravadaDoCaixaNota,
+    ehAdministradorTotal,
+    restringeDataPagamentoAoHoje,
     podeUsarRecorrencia,
     recorrencia
   } = useWorkspaceContext();
@@ -553,6 +555,11 @@ export function useOperacaoLancamento() {
     return diaNegocio(d);
   }
   const hojeISO = computed(() => dataISO(0));
+  // O calendário é só a primeira barreira. A mesma regra está no servidor, para impedir que um
+  // cliente manipulado registre pagamento em outro dia. Administrador Geral mantém o calendário
+  // livre, inclusive retroativo; Caixa fica exatamente no dia contábil corrente.
+  const limiteMinDataPagamento = computed(() => (ehAdministradorTotal.value ? undefined : hojeISO.value));
+  const limiteMaxDataPagamento = computed(() => (restringeDataPagamentoAoHoje.value ? hojeISO.value : undefined));
 
   return {
     // contexto compartilhado usado pelos blocos
@@ -583,6 +590,9 @@ export function useOperacaoLancamento() {
     // pagamento / datas
     pago,
     hojeISO,
+    limiteMinDataPagamento,
+    limiteMaxDataPagamento,
+    restringeDataPagamentoAoHoje,
     dataDocFiscal,
     numeroDocFiscal,
     // fotos

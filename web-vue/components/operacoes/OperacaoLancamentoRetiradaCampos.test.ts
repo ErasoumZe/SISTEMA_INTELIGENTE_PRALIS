@@ -11,6 +11,9 @@ function montarBloco(categoria: "despesa" | "retirada") {
     cat: ref(categoria),
     form: ref(formOperacaoVazio()),
     hojeISO: ref("2026-09-14"),
+    limiteMinDataPagamento: ref("2026-09-14"),
+    limiteMaxDataPagamento: ref("2026-09-14"),
+    restringeDataPagamentoAoHoje: ref(true),
     pago: ref(false),
     dataDocFiscal: ref(""),
     numeroDocFiscal: ref("")

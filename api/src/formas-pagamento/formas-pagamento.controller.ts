@@ -88,8 +88,11 @@ export async function registrarRotasFormasPagamento(app: FastifyInstance): Promi
           request.perfilUsuario ? empresasPermitidas(request.perfilUsuario) : [],
           query.empresaId
         );
-        if (!escopo.includes(query.empresaId)) return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
-        return await listarRegrasRecebimento(id, query.empresaId);
+        const empresaId = query.empresaId;
+        if (!empresaId || !escopo.includes(empresaId)) {
+          return erro(reply, 403, "Empresa nao permitida", "FORBIDDEN_COMPANY");
+        }
+        return await listarRegrasRecebimento(id, empresaId);
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);

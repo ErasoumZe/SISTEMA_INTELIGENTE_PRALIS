@@ -54,6 +54,10 @@ export type WorkspaceContext = {
   contaTravadaDoCaixaNome: ComputedRef<string>;
   /** Texto sob o campo travado. Muda quando a conta exibida NAO e a do caixa aberto. */
   contaTravadaDoCaixaNota: ComputedRef<string>;
+  /** Só o Administrador Geral pode informar pagamento retroativo em despesa/mercadoria. */
+  ehAdministradorTotal: ComputedRef<boolean>;
+  /** Operador de Caixa registra quitação no dia contábil corrente; o servidor também impõe isto. */
+  restringeDataPagamentoAoHoje: ComputedRef<boolean>;
   // Recorrencia (D3): so Admin, Gerencia e Financeiro. Esconde o bloco; o 403 do servidor e que
   // faz valer a regra. O estado vive no workspace porque e de la que o payload e montado.
   podeUsarRecorrencia: ComputedRef<boolean>;

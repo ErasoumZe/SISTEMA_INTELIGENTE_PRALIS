@@ -302,6 +302,13 @@
   color: var(--cat-tinta);
   font-weight: 500;
 }
+.lc-pagamento-regra {
+  display: block;
+  margin-top: 4px;
+  color: var(--cat-tinta);
+  font-size: 10px;
+  line-height: 1.25;
+}
 .lc-foto {
   display: block;
   flex: 1;

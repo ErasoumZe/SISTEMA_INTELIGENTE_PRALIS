@@ -305,6 +305,10 @@ const permissoesUsuario = computed(() => sessao.value?.perfil?.permissoes ?? [])
 const ehAdministradorDoPainel = computed(() =>
   sessao.value?.perfil ? ehAdministradorTotal(sessao.value.perfil) : false
 );
+const restringeDataPagamentoAoHoje = computed(() => {
+  const perfil = sessao.value?.perfil;
+  return Boolean(perfil && !ehAdministradorTotal(perfil) && !podeLancarSemCaixa(perfil));
+});
 
 const caixaAberto = computed(() => caixaStatus.value?.caixaAberto ?? null);
 // O ESTADO E O ROTULO, e essa foi a decisao entre as duas que Marco deixou em aberto (texto ao
@@ -1501,10 +1505,14 @@ async function salvarOperacao(criarNova = false) {
       id: operacaoSalva.id,
       empresaId: empresaId.value,
       dataReferencia: form.value.dataReferencia,
-      descricao: form.value.descricao,
+      dataVencimento: form.value.dataVencimento,
+      dataPagamento: form.value.dataPagamento || null,
+      descricao: form.value.descricao || form.value.observacao,
+      observacao: form.value.observacao || null,
       valorOriginal: String(Number(form.value.valorOriginal || 0)),
       computar: operacaoSalva.computar,
       status: entidadeNova.value === "transferencia" ? (form.value.agendadaPara ? "agendada" : "pendente") : "aprovado",
+      criadoEm: new Date().toISOString(),
       ...(fotoUrl ? { fotoDocumentoUrl: fotoUrl } : {}),
       ...(fotoNotaUrl ? { fotoNotaUrl } : {})
     };
@@ -1949,6 +1957,8 @@ provide(WORKSPACE_CONTEXT, {
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
   contaTravadaDoCaixaNota,
+  ehAdministradorTotal: ehAdministradorDoPainel,
+  restringeDataPagamentoAoHoje,
   podeUsarRecorrencia,
   recorrencia,
   fotoDocumentoPreview: fotoDocumento.previewUrl,

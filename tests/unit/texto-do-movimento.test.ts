@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import { dataPagamentoNoPassado } from "@padaria/shared/datas";
 import {
+  exigirDataPagamentoDeDespesaOuMercadoria,
   exigirDataPagamentoNaoRetroativa,
   resolverObservacaoDoLancamento
 } from "../../api/src/lancamentos/texto-movimento.js";
@@ -78,6 +80,52 @@ describe("exigirDataPagamentoNaoRetroativa (R-129)", () => {
 
   it("ignora a hora que vier junto da data (timestamp do cliente)", () => {
     expect(() => exigirDataPagamentoNaoRetroativa(`${hoje}T23:59:00.000Z`)).not.toThrow();
+  });
+});
+
+// R-203 — A nova exceção é deliberadamente estreita: somente o Administrador Geral pode
+// retroagir. O Caixa registra a quitação no dia contábil corrente; a retaguarda conserva a
+// programação futura que já existia, mas também não retroage.
+describe("exigirDataPagamentoDeDespesaOuMercadoria (R-203)", () => {
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const ontem = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  })();
+  const amanha = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  })();
+  const perfil = (role: PerfilUsuario["role"], cargo: string): PerfilUsuario => ({
+    usuarioId: "usuario",
+    colaboradorId: "colaborador",
+    cargoIds: ["cargo"],
+    cargos: [{ id: "cargo", nome: cargo }],
+    role,
+    nome: "Usuário",
+    email: "usuario@teste.local",
+    permissoes: []
+  });
+
+  it("permite retroagir somente ao Administrador Geral", () => {
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(ontem, perfil("usuario_admin", "Caixa"))).not.toThrow();
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(ontem, perfil("usuario_comum", "Financeiro"))).toThrow(
+      /anterior a hoje/i
+    );
+  });
+
+  it("prende o operador de Caixa ao dia atual, inclusive contra cliente HTTP", () => {
+    const caixa = perfil("usuario_comum", "Caixa");
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(hoje, caixa)).not.toThrow();
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(amanha, caixa)).toThrow(/só pode registrar pagamento/i);
+  });
+
+  it("não prende a retaguarda ao dia, mas preserva uma data histórica que não foi alterada", () => {
+    const financeiro = perfil("usuario_comum", "Financeiro");
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(amanha, financeiro)).not.toThrow();
+    expect(() => exigirDataPagamentoDeDespesaOuMercadoria(ontem, financeiro, ontem)).not.toThrow();
   });
 });
 

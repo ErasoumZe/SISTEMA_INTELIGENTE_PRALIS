@@ -1089,6 +1089,27 @@ necessários (adquirente/terminal, parcela, NSU e liquidação). Cartão, Pix, v
 continuam recebíveis, nunca dinheiro físico por inferência. Referência de mercado ou contrato
 incompleto fica em `rascunho` e exige confirmação antes de qualquer efeito financeiro futuro.
 
+### R-203 — Pagamento de Despesa e Mercadoria, vencimento e leitura operacional (Rodrigo/Marco, 15/09/2026)
+
+**Somente o Administrador Geral** (`role = usuario_admin`) pode registrar ou corrigir pagamento com
+data anterior ao dia contábil. Para Caixa, ao marcar pagamento em uma nova Despesa ou Mercadoria,
+a data é obrigatoriamente o dia corrente; o servidor aplica a mesma trava, portanto não há como
+retroagir ou antecipar por chamada direta. Os demais perfis de retaguarda preservam o agendamento
+futuro que já existia, mas não podem retroagir. Editar um registro histórico sem modificar sua data
+de pagamento continua permitido, para não bloquear correções legítimas.
+
+Despesa e Mercadoria não pagas entram no sino para **Tesouraria, Financeiro, `admin` legado e
+Administrador Geral** a três dias do vencimento, no vencimento e diariamente depois dele, até
+pagamento, cancelamento ou alteração do vencimento para fora da janela. O aviso é operacional: não
+bloqueia quitação depois de vencida, não movimenta dinheiro e não altera histórico; ciência já
+registrada é preservada. A sincronização acontece junto da consulta do sino, sem cron paralelo ou
+segundo canal de notificação.
+
+Nas listagens de Despesas e Mercadorias, a observação não é exibida em linha: existe somente o botão
+**Ver observação**, que abre o conteúdo sob demanda. As mesmas linhas mostram data/hora, PDV,
+autor, vencimento, pagamento, status, valor e acesso aos anexos. Pago é verde; pendente/vencido é
+visualmente destacado sem mudar o estado financeiro do lançamento.
+
 ---
 
 ## §4 · Como isto deixa de ser mais um documento

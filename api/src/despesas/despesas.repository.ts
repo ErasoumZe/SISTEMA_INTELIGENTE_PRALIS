@@ -98,6 +98,7 @@ export async function listarDespesasRepository(
       computar: despesas.computar,
       status: despesas.status,
       fotoDocumentoUrl: despesas.fotoDocumentoUrl,
+      fotoNotaUrl: despesas.fotoNotaUrl,
       caixaId: despesas.caixaId,
       pdvId: fechamentosCaixa.pdvId,
       pdvNome: pdvs.nome,

@@ -1,5 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { notificacoes } from "@padaria/db/schema/caixa";
+import {
+  colaboradores,
+  colaboradoresCargos,
+  cargos,
+  perfisUsuarios,
+  usuariosEmpresas
+} from "@padaria/db/schema/cadastro";
+import { despesas } from "@padaria/db/schema/despesa";
+import { mercadorias } from "@padaria/db/schema/mercadoria";
 import type { TipoNotificacao } from "@padaria/shared/notificacoes";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -36,6 +45,10 @@ export async function criarNotificacoesRepository(
     // `unique(tipo, destinatario, referencia)` fazia o segundo aviso sumir em silencio — quem ja
     // tinha marcado como visto nunca mais era avisado.
     reabrir?: boolean;
+    // Aviso de vencimento é renovado no máximo uma vez por dia contábil. Assim, marcar o sino como
+    // lido vale pelo resto do dia, mas a pendência volta no dia seguinte enquanto não for quitada.
+    reabrirUmaVezPorDia?: boolean;
+    diaNegocio?: string;
   },
   db: ExecutorBanco = banco
 ) {
@@ -50,6 +63,37 @@ export async function criarNotificacoesRepository(
   }));
 
   if (!input.reabrir) {
+    await db.insert(notificacoes).values(linhas).onConflictDoNothing();
+    return;
+  }
+
+  if (input.reabrirUmaVezPorDia && input.diaNegocio) {
+    // `criado_em` e timestamptz. O limite e a meia-noite do negocio (BRT), e nao UTC: a mesma
+    // notificacao lida as 22h BRT nao pode reabrir de novo porque o calendario UTC virou.
+    const inicioDoDiaNegocio = new Date(`${input.diaNegocio}T00:00:00-03:00`);
+    for (const linha of linhas) {
+      await db
+        .update(notificacoes)
+        .set({
+          titulo: linha.titulo,
+          valor: linha.valor,
+          verificado: false,
+          verificadoPor: null,
+          verificadoEm: null,
+          criadoEm: new Date()
+        })
+        .where(
+          and(
+            eq(notificacoes.empresaId, linha.empresaId),
+            eq(notificacoes.tipo, linha.tipo),
+            eq(notificacoes.destinatarioUsuarioId, linha.destinatarioUsuarioId),
+            eq(notificacoes.referenciaId, linha.referenciaId),
+            lt(notificacoes.criadoEm, inicioDoDiaNegocio)
+          )
+        );
+    }
+    // Se a linha ainda nao existia, cria. Corrida entre duas abas e inofensiva pelo unique; se
+    // ja existia hoje, o UPDATE acima nao a reabre e este insert e ignorado.
     await db.insert(notificacoes).values(linhas).onConflictDoNothing();
     return;
   }
@@ -71,6 +115,96 @@ export async function criarNotificacoesRepository(
         verificadoEm: null
       }
     });
+}
+
+export async function listarLancamentosParaAvisoDeVencimento(
+  empresaId: string,
+  vencendoAte: string,
+  db: ExecutorBanco = banco
+) {
+  const [linhasDespesas, linhasMercadorias] = await Promise.all([
+    db
+      .select({ id: despesas.id, dataVencimento: despesas.dataVencimento, valor: despesas.valorOriginal })
+      .from(despesas)
+      .where(
+        and(
+          eq(despesas.empresaId, empresaId),
+          isNull(despesas.dataPagamento),
+          ne(despesas.status, "cancelado"),
+          lte(despesas.dataVencimento, vencendoAte)
+        )
+      ),
+    db
+      .select({ id: mercadorias.id, dataVencimento: mercadorias.dataVencimento, valor: mercadorias.valorOriginal })
+      .from(mercadorias)
+      .where(
+        and(
+          eq(mercadorias.empresaId, empresaId),
+          isNull(mercadorias.dataPagamento),
+          ne(mercadorias.status, "cancelado"),
+          lte(mercadorias.dataVencimento, vencendoAte)
+        )
+      )
+  ]);
+  return [
+    ...linhasDespesas.map((linha) => ({ ...linha, dominio: "despesa" as const })),
+    ...linhasMercadorias.map((linha) => ({ ...linha, dominio: "mercadoria" as const }))
+  ];
+}
+
+// Destinatários explicitamente definidos por Rodrigo: Tesouraria, Financeiro, Admin legado e
+// Administrador Geral. Cada consulta exige vínculo com a empresa para não vazar aviso entre TNP/Lisboa.
+export async function listarDestinatariosAvisoDeVencimentoRepository(
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<string[]> {
+  const [administradores, retaguarda] = await Promise.all([
+    db
+      .selectDistinct({ usuarioId: perfisUsuarios.usuarioId })
+      .from(perfisUsuarios)
+      .innerJoin(usuariosEmpresas, eq(usuariosEmpresas.usuarioId, perfisUsuarios.usuarioId))
+      .where(and(eq(usuariosEmpresas.empresaId, empresaId), inArray(perfisUsuarios.role, ["usuario_admin", "admin"]))),
+    db
+      .selectDistinct({ usuarioId: colaboradores.usuarioId })
+      .from(colaboradoresCargos)
+      .innerJoin(colaboradores, eq(colaboradores.id, colaboradoresCargos.colaboradorId))
+      .innerJoin(cargos, eq(cargos.id, colaboradoresCargos.cargoId))
+      .where(
+        and(
+          eq(colaboradoresCargos.empresaId, empresaId),
+          eq(colaboradoresCargos.ativo, true),
+          isNotNull(colaboradores.usuarioId),
+          or(ilike(cargos.nome, "%Tesouraria%"), ilike(cargos.nome, "%Financeiro%"))
+        )
+      )
+  ]);
+  return [
+    ...new Set(
+      [...administradores, ...retaguarda]
+        .map((linha) => linha.usuarioId)
+        .filter((usuarioId): usuarioId is string => usuarioId !== null)
+    )
+  ];
+}
+
+// O aviso é operacional, não lançamento financeiro: quando a pendência sai da janela (pagamento,
+// cancelamento ou novo vencimento), remove apenas a linha ainda aberta do sino. Nenhuma despesa,
+// mercadoria ou histórico financeiro é alterado.
+export async function removerAvisosDeVencimentoForaDaJanela(
+  empresaId: string,
+  referenciasAtivas: string[],
+  db: ExecutorBanco = banco
+) {
+  await db
+    .delete(notificacoes)
+    .where(
+      and(
+        eq(notificacoes.empresaId, empresaId),
+        eq(notificacoes.tipo, "lancamento_vencimento"),
+        eq(notificacoes.verificado, false),
+        ...(referenciasAtivas.length ? [notInArray(notificacoes.referenciaId, referenciasAtivas)] : [])
+      )
+    );
 }
 
 export async function verificarNotificacaoRepository(
