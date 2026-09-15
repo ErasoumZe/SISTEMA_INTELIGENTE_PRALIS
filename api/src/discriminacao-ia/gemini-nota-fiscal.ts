@@ -142,6 +142,14 @@ type RespostaGemini = {
 
 export type ConfigGemini = { chave: string; modelo: string; timeoutMs: number };
 
+type FalhaTransporte = Error & { code?: string; cause?: { code?: string } };
+
+function codigoDaFalhaDeRede(erro: Error): string | null {
+  const candidato = erro as FalhaTransporte;
+  const codigo = candidato.code ?? candidato.cause?.code;
+  return codigo && /^[A-Z_]+$/.test(codigo) ? codigo : null;
+}
+
 export async function extrairNotaFiscalComGemini(
   imagem: { dados: Buffer; mimeType: string },
   config: ConfigGemini,
@@ -180,14 +188,21 @@ export async function extrairNotaFiscalComGemini(
       resposta = await fetchImpl(url, opcoes);
     }
     if (!resposta.ok) {
+      // Nao registra corpo, imagem, prompt ou chave. O status e suficiente para diferenciar
+      // configuracao, limite e indisponibilidade externa sem vazar dado fiscal ou segredo.
+      console.warn("[gemini-nota] resposta recusada", { status: resposta.status });
+      const mensagem =
+        resposta.status === 400
+          ? "O provedor recusou a leitura desta imagem. Tente outra foto."
+          : resposta.status === 401 || resposta.status === 403
+            ? "A configuracao da leitura por IA precisa ser revisada."
+            : resposta.status === 404
+              ? "O modelo de leitura por IA nao esta disponivel."
+              : resposta.status === 429
+                ? "O limite de uso da leitura por IA foi atingido. Aguarde e tente novamente."
+                : "O servico de leitura da nota esta indisponivel.";
       const status = resposta.status === 429 ? 503 : 502;
-      throw new ErroDominio(
-        resposta.status === 429
-          ? "O servico de leitura esta ocupado. Aguarde e tente novamente."
-          : "O servico de leitura da nota esta indisponivel.",
-        status,
-        resposta.status === 429 ? "IA_LIMITE_TEMPORARIO" : "IA_INDISPONIVEL"
-      );
+      throw new ErroDominio(mensagem, status, resposta.status === 429 ? "IA_LIMITE_TEMPORARIO" : "IA_INDISPONIVEL");
     }
     const corpo = (await resposta.json()) as RespostaGemini;
     const texto = corpo.candidates?.[0]?.content?.parts?.find((parte) => parte.text)?.text;
@@ -208,6 +223,10 @@ export async function extrairNotaFiscalComGemini(
     if (erro instanceof Error && erro.name === "AbortError") {
       throw new ErroDominio("A leitura da nota demorou demais. Tente novamente.", 504, "IA_TIMEOUT");
     }
+    // So o codigo de transporte: nunca a URL, chave, corpo ou texto da nota.
+    console.warn("[gemini-nota] falha de transporte", {
+      codigo: erro instanceof Error ? codigoDaFalhaDeRede(erro) : null
+    });
     throw new ErroDominio("Sem conexao com o servico de leitura. Tente novamente.", 503, "IA_INDISPONIVEL");
   } finally {
     clearTimeout(timeout);
