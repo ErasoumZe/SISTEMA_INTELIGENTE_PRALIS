@@ -27,8 +27,9 @@ export default defineNuxtConfig({
       ],
       link: [
         { rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" },
-        { rel: "manifest", href: "/manifest.webmanifest?v=2" },
-        { rel: "apple-touch-icon", href: "/cicluz/cicluz-gestao-v2-180.png", sizes: "180x180" }
+        { rel: "manifest", href: "/manifest.webmanifest?v=3" },
+        { rel: "apple-touch-icon", href: "/cicluz/cicluz-gestao-v3-180.png?v=3", sizes: "180x180" },
+        { rel: "apple-touch-icon-precomposed", href: "/cicluz/cicluz-gestao-v3-180.png?v=3", sizes: "180x180" }
       ],
       // TEMA DAS TELAS DE ENTRADA, ANTES DO APP EXISTIR.
       //
