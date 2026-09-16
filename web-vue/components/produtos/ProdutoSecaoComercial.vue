@@ -104,6 +104,18 @@ const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "curr
         :hint="dica('estoqueMax')"
         :disabled="somenteLeitura"
       />
+      <v-text-field
+        v-model="form.localVenda1"
+        label="Local de venda 1"
+        :hint="dica('localVenda1')"
+        :disabled="somenteLeitura"
+      />
+      <v-text-field
+        v-model="form.localVenda2"
+        label="Local de venda 2"
+        :hint="dica('localVenda2')"
+        :disabled="somenteLeitura"
+      />
     </div>
 
     <template v-if="form.tipo === 'transformacao'">

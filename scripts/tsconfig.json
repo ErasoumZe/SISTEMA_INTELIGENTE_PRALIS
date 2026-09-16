@@ -10,5 +10,5 @@
       "@padaria/shared/*": ["shared/src/*/index.ts"]
     }
   },
-  "include": ["seed-planilha.ts", "../db/planilha-xlsx.ts", "../db/src/**/*.ts", "../shared/src/**/*.ts"]
+  "include": ["*.ts", "../db/planilha-xlsx.ts", "../db/src/**/*.ts", "../shared/src/**/*.ts"]
 }

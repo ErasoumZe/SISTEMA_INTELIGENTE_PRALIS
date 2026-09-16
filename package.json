@@ -48,6 +48,7 @@
     "dev:destroy": "node scripts/dev-destroy.mjs",
     "dev:down": "npm run dev:destroy",
     "seed:planilha": "tsx --conditions=development scripts/seed-planilha.ts",
+    "importar:catalogo-pralis:teste": "tsx --conditions=development scripts/importar-catalogo-pralis-teste.ts",
     "db:backup": "node scripts/backup-db.mjs",
     "db:restore": "node scripts/restore-db.mjs",
     "db:dev:up": "docker compose -p padaria-db-dev -f db/docker-compose-db.yml -f db/docker-compose-db.dev.yml up -d --wait",

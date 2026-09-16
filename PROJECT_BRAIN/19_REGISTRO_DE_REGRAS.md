@@ -1112,6 +1112,19 @@ visualmente destacado sem mudar o estado financeiro do lançamento.
 
 ---
 
+### R-202 — Catálogo histórico do Pralis só pode preencher ambiente local de teste (Marco, 16/09/2026)
+
+A R-165 continua vigente para produção: a planilha oficial é a única fonte que cria ou altera
+produtos reais. Exceção estrita: o arquivo histórico `base-products.json` do app Pralis pode ser
+importado **somente no banco local**, com comando explícito, para testar o cadastro de Produtos em
+volume. O importador recusa `NODE_ENV=production` e qualquer banco fora de `localhost`, inicia em
+dry-run e exige `--confirmar-local` para gravar.
+
+Ele nunca atualiza ou apaga produto existente, nunca escreve fiscal e não inventa foto. EAN repetido
+no próprio arquivo é ignorado e reportado, pois o ERP mantém a regra de uma leitura de código por
+produto. Esta exceção não autoriza deploy, seed de produção, integração CREARE ou mudança da fonte
+oficial.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:

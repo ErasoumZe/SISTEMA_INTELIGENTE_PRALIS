@@ -95,6 +95,27 @@ test("editar hidrata o formulario e o codigo interno fica somente leitura", asyn
   await expect(page.getByLabel("Código interno")).toHaveAttribute("readonly", "");
 });
 
+test("locais de venda salvam e reaparecem na edicao", async ({ page }) => {
+  const descricao = nomeUnico();
+  await page.goto("/produtos/novo");
+  await preencherObrigatorios(page, descricao);
+  await page.getByRole("button", { name: "Salvar produto" }).click();
+  await page.waitForURL("**/produtos");
+
+  await esperarListagem(page);
+  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
+  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
+  await page.getByLabel("Local de venda 1").fill("Gôndola 01");
+  await page.getByLabel("Local de venda 2").fill("Ponta de gôndola");
+  await page.getByRole("button", { name: "Salvar produto" }).click();
+  await page.waitForURL("**/produtos");
+
+  await page.getByPlaceholder("Buscar por nome, código, EAN ou marca...").fill(descricao);
+  await page.locator(".produto-card").first().getByRole("link", { name: "Editar" }).click();
+  await expect(page.getByLabel("Local de venda 1")).toHaveValue("Gôndola 01");
+  await expect(page.getByLabel("Local de venda 2")).toHaveValue("Ponta de gôndola");
+});
+
 test("estoque maximo menor que o minimo bloqueia o salvar com mensagem no campo", async ({ page }) => {
   await page.goto("/produtos/novo");
   await preencherObrigatorios(page, nomeUnico());
