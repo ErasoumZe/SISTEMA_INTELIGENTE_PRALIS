@@ -3,10 +3,17 @@ import type { FastifyInstance } from "fastify";
 import { vendaParamsSchema, vendaPayloadSchema, vendasQuerySchema } from "@padaria/shared/vendas";
 import { exigirPermissao } from "../auth/guards.js";
 import { empresasPermitidas, escopoEmpresaAtiva, podeAcessarEmpresa } from "../auth/empresa.js";
-import { criadoId, erro, ok, paginadoDeArray } from "@padaria/shared/api";
+import { criadoId, erro, ok, paginadoDeArray, paginadoDeResultado } from "@padaria/shared/api";
 import { deCentavos, somarCentavos } from "@padaria/shared/dinheiro";
 import { PermissaoLancamentoInsuficienteError } from "../lancamentos/lancamentos.dominio.js";
-import { atualizarVenda, criarVenda, listarVendas, obterVenda, totaisVendas } from "./vendas.service.js";
+import {
+  atualizarVenda,
+  criarVenda,
+  listarVendas,
+  listarVendasPaginadas,
+  obterVenda,
+  totaisVendas
+} from "./vendas.service.js";
 import { statusErroValidacao } from "../utils.js";
 import { resolverEscopoEntradasDoDia } from "../caixa/caixa.service.js";
 
@@ -55,7 +62,7 @@ export async function registrarRotasVendas(app: FastifyInstance): Promise<void> 
 
       // Relatorios consultam o historico da empresa inteira. A regra operacional de
       // "somente caixa aberto" pertence a /api/vendas e nao pode ocultar vendas antigas.
-      return paginadoDeArray(await listarVendas(query, escopoDados), query.page, query.pageSize);
+      return paginadoDeResultado(await listarVendasPaginadas(query, escopoDados));
     }
   );
 

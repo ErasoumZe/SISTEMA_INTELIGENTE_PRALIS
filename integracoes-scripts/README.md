@@ -22,7 +22,7 @@ Copie `.env.producao.example` para `.env.producao` (que fica fora do git) e pree
 | `USUARIO_CREARE_COMPILART` / `SENHA_CREARE_COMPILART` | credenciais do MySQL                                           |
 | `PADARIA_API_URL`                                     | `https://api-sistema.cicluzieai.com.br`                        |
 | `PADARIA_INTEGRACAO_CODIGO`                           | a chave de integracao (passo 2)                                |
-| `SYNC_INTERVALO_MINUTOS`                              | intervalo do loop (default `10`)                               |
+| `SYNC_INTERVALO_MINUTOS`                              | intervalo do loop (default `1`)                                |
 | `SYNC_DIAS_INICIAIS`                                  | 1a execucao: dias para tras (default `1`)                      |
 | `SYNC_LOCK_MAX_MINUTOS`                               | idade maxima do lock (default `30`)                            |
 | `SYNC_RETRY_TENTATIVAS` / `SYNC_RETRY_BASE_MS`        | retry de rede por venda (default `4` / `500`)                  |
@@ -49,6 +49,9 @@ Cada ciclo imprime um resumo:
 ```
 
 ## Como funciona
+
+- **Ciclo de um minuto**: o processo fica na máquina da loja, perto do MySQL do CREARE. Ele não
+  depende da tela do PDV, de planilha ou de expor o banco local à internet.
 
 - **Reprocesso do dia corrente** (fim da perda silenciosa): cada ciclo relê e reenvia o **dia
   corrente inteiro** — nao apenas o que e "novo". Assim, uma venda que o PDV sincronizou tarde (com

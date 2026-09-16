@@ -28,7 +28,10 @@ export function obterConfig() {
     // Usado so pelo modo producao (src/sincronizar.js e src/loop.js). Defaults sensatos.
     sincronizacao: {
       diasIniciais: obterNumero("SYNC_DIAS_INICIAIS", 1),
-      intervaloMinutos: obterNumero("SYNC_INTERVALO_MINUTOS", 10),
+      // Um minuto e o compromisso operacional: caixa ve a venda quase em tempo real, sem consultar
+      // o MySQL em ciclo apertado nem pressionar a API. A reexecucao idempotente captura escrita
+      // tardia do CREARE e a fila absorve quedas de rede.
+      intervaloMinutos: obterNumero("SYNC_INTERVALO_MINUTOS", 1),
       lockMaxMinutos: obterNumero("SYNC_LOCK_MAX_MINUTOS", 30),
       retryTentativas: obterNumero("SYNC_RETRY_TENTATIVAS", 4),
       retryBaseMs: obterNumero("SYNC_RETRY_BASE_MS", 500),

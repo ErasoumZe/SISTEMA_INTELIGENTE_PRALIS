@@ -1,4 +1,5 @@
 import type { PerfilUsuario } from "@padaria/shared/autenticacao";
+import type { ResultadoPaginado } from "@padaria/shared/api";
 import type {
   TotaisVendas,
   VendaCriada,
@@ -21,6 +22,7 @@ import {
   travarVendaRepository,
   criarVendaRepository,
   listarVendasRepository,
+  listarVendasPaginadasRepository,
   totaisVendasRepository,
   assinaturaDoPagamento,
   vendaEhIntegradaRepository
@@ -77,6 +79,20 @@ export function validarVenda(dados: VendaPayload): void {
 export async function listarVendas(query: VendasQuery, empresasPermitidasIds: string[] | null): Promise<VendaDto[]> {
   if (empresasPermitidasIds?.length === 0) return [];
   return listarVendasRepository(query, empresasPermitidasIds);
+}
+
+// Relatorio: pagina no banco antes de buscar pagamentos e comprovantes. A tela nao pode transformar
+// todo o historico em um array/IN gigante so para mostrar uma pagina.
+export async function listarVendasPaginadas(
+  query: VendasQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<ResultadoPaginado<VendaDto>> {
+  const page = Number(query.page);
+  const pageSize = Number(query.pageSize);
+  if (empresasPermitidasIds?.length === 0) {
+    return { itens: [], total: 0, page, pageSize };
+  }
+  return listarVendasPaginadasRepository(query, empresasPermitidasIds);
 }
 
 export async function totaisVendas(query: VendasQuery, empresasPermitidasIds: string[] | null): Promise<TotaisVendas> {

@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
+import type { ResultadoPaginado } from "@padaria/shared/api";
 import type { TotaisVendas, VendaDetalheDto, VendaDto, VendaPayload, VendasQuery } from "@padaria/shared/vendas";
 import {
   centavosParaDecimalBanco,
@@ -31,10 +32,11 @@ function ordenacaoVendas(ordem: "asc" | "desc" | undefined) {
   return [desc(vendas.dataReferencia), desc(vendas.dataVenda)];
 }
 
-export async function listarVendasRepository(
-  query: VendasQuery,
-  empresasPermitidasIds: string[] | null
-): Promise<VendaDto[]> {
+// O relatorio e paginado no BANCO. Carregar o historico inteiro e paginar depois em memoria fazia
+// as consultas das filhas receberem um `IN (...)` com uma chave por venda. Em producao, 72 mil
+// vendas ultrapassaram o limite de parametros do Postgres e a tabela falhou, embora os totais
+// (outra consulta) continuassem corretos.
+async function filtrosDasVendas(query: VendasQuery, empresasPermitidasIds: string[] | null) {
   const filtros = filtrosEmpresa(vendas, query, empresasPermitidasIds);
   if (query.dataInicio) filtros.push(gte(vendas.dataReferencia, query.dataInicio));
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
@@ -45,54 +47,74 @@ export async function listarVendasRepository(
   if (query.status) filtros.push(eq(vendas.status, query.status));
   if (query.turnoId) {
     const caixaIds = await caixaIdsPorTurno(query.turnoId);
-    if (!caixaIds.length) return [];
+    if (!caixaIds.length) return null;
     filtros.push(inArray(vendas.caixaId, caixaIds));
   }
 
-  const pagamentosFiltro = query.formaPagamentoId
-    ? await banco
-        .select({ vendaId: vendasPagamentos.vendaId })
-        .from(vendasPagamentos)
-        .where(eq(vendasPagamentos.formaPagamentoId, query.formaPagamentoId))
-    : [];
+  // A subconsulta fica no banco: materializar todos os IDs de uma forma de pagamento em JavaScript
+  // recriaria o mesmo limite de parametros que derrubou o relatorio.
   if (query.formaPagamentoId) {
-    const vendaIds = pagamentosFiltro.map((item) => item.vendaId);
-    if (!vendaIds.length) return [];
-    filtros.push(inArray(vendas.id, vendaIds));
+    const vendaIdsDaForma = banco
+      .select({ vendaId: vendasPagamentos.vendaId })
+      .from(vendasPagamentos)
+      .where(eq(vendasPagamentos.formaPagamentoId, query.formaPagamentoId));
+    filtros.push(inArray(vendas.id, vendaIdsDaForma));
   }
+  return filtros;
+}
 
-  const linhas = await banco
-    .select({
-      id: vendas.id,
-      empresaId: vendas.empresaId,
-      dataReferencia: vendas.dataReferencia,
-      // Hora real da venda (integracao). data_referencia e date-only e nao responde "que horas
-      // foi": era por isso que o relatorio nao mostrava hora.
-      dataVenda: vendas.dataVenda,
-      dataPagamento: vendas.dataPagamento,
-      descricao: vendas.descricao,
-      valorOriginal: vendas.valorOriginal,
-      valorAcrescimo: vendas.valorAcrescimo,
-      valorDesconto: vendas.valorDesconto,
-      computar: vendas.computar,
-      status: vendas.status,
-      pdvId: vendas.pdvId,
-      pdvNome: pdvs.nome,
-      clienteId: vendas.clienteId,
-      clienteNome: clientes.nome,
-      colaboradorId: vendas.colaboradorId,
-      colaboradorNome: colaboradores.nome
-    })
+const colunasResumoVenda = {
+  id: vendas.id,
+  empresaId: vendas.empresaId,
+  dataReferencia: vendas.dataReferencia,
+  dataVenda: vendas.dataVenda,
+  dataPagamento: vendas.dataPagamento,
+  descricao: vendas.descricao,
+  valorOriginal: vendas.valorOriginal,
+  valorAcrescimo: vendas.valorAcrescimo,
+  valorDesconto: vendas.valorDesconto,
+  computar: vendas.computar,
+  status: vendas.status,
+  pdvId: vendas.pdvId,
+  pdvNome: pdvs.nome,
+  clienteId: vendas.clienteId,
+  clienteNome: clientes.nome,
+  colaboradorId: vendas.colaboradorId,
+  colaboradorNome: colaboradores.nome
+};
+
+type LinhaResumoVenda = {
+  id: string;
+  empresaId: string;
+  dataReferencia: string;
+  dataVenda: Date | null;
+  dataPagamento: string | null;
+  descricao: string;
+  valorOriginal: string;
+  valorAcrescimo: string;
+  valorDesconto: string;
+  computar: boolean;
+  status: string;
+  pdvId: string | null;
+  pdvNome: string | null;
+  clienteId: string | null;
+  clienteNome: string | null;
+  colaboradorId: string | null;
+  colaboradorNome: string | null;
+};
+
+function consultaLinhasVendas(filtros: ReturnType<typeof filtrosEmpresa>, ordem: VendasQuery["ordem"]) {
+  return banco
+    .select(colunasResumoVenda)
     .from(vendas)
     .leftJoin(pdvs, eq(pdvs.id, vendas.pdvId))
     .leftJoin(clientes, eq(clientes.id, vendas.clienteId))
     .leftJoin(colaboradores, eq(colaboradores.id, vendas.colaboradorId))
     .where(filtros.length ? and(...filtros) : undefined)
-    // data_referencia e date-only: sozinha empilha o dia inteiro sem ordem interna; data_venda
-    // desempata pela hora real. `ordem` vem do Relatorio de Vendas (cabecalho clicavel); sem ela,
-    // mantem o padrao das telas operacionais (mais recente primeiro).
-    .orderBy(...ordenacaoVendas(query.ordem));
+    .orderBy(...ordenacaoVendas(ordem));
+}
 
+async function montarResumoDasVendas(linhas: LinhaResumoVenda[]): Promise<VendaDto[]> {
   const ids = linhas.map((linha) => linha.id);
   if (!ids.length) return [];
 
@@ -116,15 +138,47 @@ export async function listarVendasRepository(
 
   return linhas.map((linha) => ({
     ...linha,
-    // timestamp -> ISO no contrato (dataReferencia/dataPagamento sao date-only e ja vem string).
     dataVenda: linha.dataVenda ? new Date(linha.dataVenda).toISOString() : null,
-    // O que o cliente pagou. valorOriginal segue no DTO (subtotal) para quem precisar da decomposicao.
     valorLiquido: centavosParaDecimalBanco(liquidoCentavos(linha)),
     pagamentos: pagamentos
       .filter((pagamento) => pagamento.vendaId === linha.id)
       .map(({ vendaId: _vendaId, ...pagamento }) => pagamento),
     totalComprovantes: comprovantes.filter((comprovante) => comprovante.vendaId === linha.id).length
   }));
+}
+
+export async function listarVendasRepository(
+  query: VendasQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<VendaDto[]> {
+  const filtros = await filtrosDasVendas(query, empresasPermitidasIds);
+  if (!filtros) return [];
+  return montarResumoDasVendas(await consultaLinhasVendas(filtros, query.ordem));
+}
+
+export async function listarVendasPaginadasRepository(
+  query: VendasQuery,
+  empresasPermitidasIds: string[] | null
+): Promise<ResultadoPaginado<VendaDto>> {
+  // O schema coage os valores da query HTTP; a inferencia compartilhada os expoe como unknown.
+  // Normalizamos aqui, antes de chegar ao driver do banco e ao contrato paginado.
+  const page = Number(query.page);
+  const pageSize = Number(query.pageSize);
+  const filtros = await filtrosDasVendas(query, empresasPermitidasIds);
+  if (!filtros) return { itens: [], total: 0, page, pageSize };
+  const where = filtros.length ? and(...filtros) : undefined;
+  const [linhas, [contagem]] = await Promise.all([
+    consultaLinhasVendas(filtros, query.ordem)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    banco.select({ total: count() }).from(vendas).where(where)
+  ]);
+  return {
+    itens: await montarResumoDasVendas(linhas),
+    total: Number(contagem?.total ?? 0),
+    page,
+    pageSize
+  };
 }
 
 // Totais do relatorio sobre TODO o conjunto filtrado (mesmos filtros da listagem): total geral

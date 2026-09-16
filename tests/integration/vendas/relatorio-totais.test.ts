@@ -12,6 +12,7 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
   const DIA = "2026-08-01"; // dia isolado (sem vendas do seed)
   const DIA_LIQUIDO = "2026-08-02"; // dia isolado para desconto/acrescimo
   const DIA_MULTI = "2026-08-03"; // dia isolado para a venda multi-forma
+  const DIA_PAGINADO = "2026-08-04"; // paginação no banco, sem carregar o filtro inteiro
   const FORMA_PIX = "11111111-1111-4111-8111-111111111718";
 
   async function totaisDoDia(dia: string, formaPagamentoId?: string) {
@@ -71,6 +72,14 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
        values ($1,$2,1,'70.00'),($1,$3,1,'30.00')`,
       [multi!.id, idsTeste.formaPagamentoDinheiro, FORMA_PIX]
     );
+
+    await executarSql(
+      `insert into vendas (empresa_id, data_referencia, descricao, valor_original, status, computar)
+       values ($1,$2,'Venda paginada 1','10.00','aprovado',true),
+              ($1,$2,'Venda paginada 2','20.00','aprovado',true),
+              ($1,$2,'Venda paginada 3','30.00','aprovado',true)`,
+      [idsTeste.empresaA, DIA_PAGINADO]
+    );
   }, 120_000);
 
   afterAll(async () => {
@@ -126,5 +135,21 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
       expect(soPix.quantidade).toBe(1);
       expect(soDinheiro.quantidade).toBe(1);
     });
+  });
+
+  it("pagina a listagem no banco e preserva a contagem total do filtro", async () => {
+    const resposta = await contexto.app.inject({
+      method: "GET",
+      url: `/api/relatorios/vendas?empresaId=${idsTeste.empresaA}&dataInicio=${DIA_PAGINADO}&dataFim=${DIA_PAGINADO}&page=2&pageSize=2`,
+      headers: { cookie: cookieAdmin }
+    });
+
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const corpo = json<{ data: Array<{ descricao: string }>; meta: { pagination: { total: number; page: number } } }>(
+      resposta
+    );
+    expect(corpo.meta.pagination).toMatchObject({ total: 3, page: 2 });
+    expect(corpo.data).toHaveLength(1);
+    expect(corpo.data[0]?.descricao).toMatch(/^Venda paginada/u);
   });
 });
