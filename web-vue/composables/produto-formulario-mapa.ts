@@ -59,6 +59,8 @@ export function formularioVazio(empresaId: string) {
     estoqueMin: "",
     estoqueMax: "",
     setorEstoque: "",
+    localVenda1: "",
+    localVenda2: "",
     fotoUrl: null as string | null,
     precisao: "EXATOS",
     quantidadeTransformacao: "",
@@ -115,6 +117,8 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
     estoqueMin: detalhe.estoqueMin ?? "",
     estoqueMax: detalhe.estoqueMax ?? "",
     setorEstoque: detalhe.setorEstoque ?? "",
+    localVenda1: detalhe.localVenda1 ?? "",
+    localVenda2: detalhe.localVenda2 ?? "",
     fotoUrl: detalhe.fotoUrl,
     precisao: transformacao?.precisao ?? "EXATOS",
     quantidadeTransformacao: transformacao?.quantidade ?? "",
@@ -132,7 +136,7 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
       reducaoIcms: fiscal?.reducaoIcms ?? "",
       icms: fiscal?.icms ?? ""
     },
-    promocoes: detalhe.promocoes.map((promo) => ({
+    promocoes: (detalhe.promocoes ?? []).map((promo) => ({
       tipo: promo.tipo === "valor" ? "valor" : "desconto",
       valor: promo.valor ?? "",
       descontoPercentual: promo.descontoFracao == null ? "" : String(Number(promo.descontoFracao) * 100),
@@ -141,7 +145,7 @@ export function formularioDoDetalhe(detalhe: ProdutoDetalhe): ProdutoForm {
       dias: [promo.seg, promo.ter, promo.qua, promo.qui, promo.sex, promo.sab, promo.dom],
       validaAte: promo.validaAte ?? ""
     })),
-    conversoes: detalhe.conversoes.map((conversao) => ({
+    conversoes: (detalhe.conversoes ?? []).map((conversao) => ({
       unidadeMedidaId: conversao.unidadeMedidaId,
       quantidade: conversao.quantidade,
       unidadesIndividuais: conversao.unidadesIndividuais
@@ -175,6 +179,8 @@ export function payloadDoFormulario(form: ProdutoForm, empresaId: string, forcar
     estoqueMin: numero(form.estoqueMin),
     estoqueMax: numero(form.estoqueMax),
     setorEstoque: form.setorEstoque || null,
+    localVenda1: form.localVenda1 || null,
+    localVenda2: form.localVenda2 || null,
     fotoUrl: form.fotoUrl,
     fiscal: fiscalPreenchido
       ? {
