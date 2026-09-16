@@ -140,6 +140,8 @@ async function login() {
         <NuxtLink to="/forgot-password" class="login-link">Esqueci minha senha</NuxtLink>
       </v-form>
 
+      <PwaInstallButton />
+
       <p class="login-slogan">Clareza em cada ciclo do seu negócio</p>
     </div>
   </v-main>

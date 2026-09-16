@@ -703,6 +703,16 @@ async function verificarNotificacao(notificacaoId: string) {
   }
 }
 
+async function marcarNotificacaoComoVista(notificacaoId: string) {
+  try {
+    await apiPut(`/api/notificacoes/${notificacaoId}/verificar?empresaId=${encodeURIComponent(empresaId.value)}`, {});
+    await carregarNotificacoes();
+    notificar("Notificação marcada como vista.");
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
+}
+
 async function trocarEmpresa(idEmpresa = empresaId.value) {
   if (paginaInicialNeutra.value) {
     await carregarStatusCaixa(idEmpresa);
@@ -2263,6 +2273,7 @@ onBeforeUnmount(() => {
     :carregando-empresa="empresaCarregando"
     @selecionar-empresa="selecionarEmpresa"
     @abrir-pendencias="router.push('/pendencias')"
+    @verificar-notificacao="marcarNotificacaoComoVista"
   >
     <template #caixa>
       <!-- O AVISO DE CAIXA MUDOU DE LUGAR (28/08/2026), por decisao do Marco: saiu do topo da

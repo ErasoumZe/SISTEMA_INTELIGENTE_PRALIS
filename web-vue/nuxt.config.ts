@@ -20,7 +20,16 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "Cicluz Gestão Profissional",
-      link: [{ rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" }],
+      meta: [
+        { name: "theme-color", content: "#090b11" },
+        { name: "apple-mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-title", content: "Cicluz Gestão" }
+      ],
+      link: [
+        { rel: "icon", type: "image/png", href: "/cicluz/cicluz-favicon.png" },
+        { rel: "manifest", href: "/manifest.webmanifest" },
+        { rel: "apple-touch-icon", href: "/cicluz/cicluz-gestao-180.png", sizes: "180x180" }
+      ],
       // TEMA DAS TELAS DE ENTRADA, ANTES DO APP EXISTIR.
       //
       // Este projeto e `ssr: false` (linha 5), entao o HTML servido e uma casca vazia e o

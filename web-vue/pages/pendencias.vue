@@ -14,6 +14,7 @@ import RoteamentoFinanceiroDialog from "~/components/financeiro/RoteamentoFinanc
 // entrada — nao dois formularios.
 const formaSelecionada = ref<{ id: string; nome: string } | null>(null);
 const painel = ref<InstanceType<typeof PendenciasRoteamentoPainel> | null>(null);
+const router = useRouter();
 </script>
 
 <template>
@@ -28,6 +29,7 @@ const painel = ref<InstanceType<typeof PendenciasRoteamentoPainel> | null>(null)
         :notificacoes="ctx.notificacoes"
         :notificacoes-com-historico="ctx.notificacoesComHistorico"
         @verificar="ctx.verificarNotificacao"
+        @abrir="router.push($event)"
       />
 
       <section class="secao-financeira" aria-labelledby="titulo-pendencias-financeiras">

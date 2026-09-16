@@ -7,8 +7,8 @@ import {
   perfisUsuarios,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
-import { despesas } from "@padaria/db/schema/despesa";
-import { mercadorias } from "@padaria/db/schema/mercadoria";
+import { despesas, despesasItens } from "@padaria/db/schema/despesa";
+import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import type { TipoNotificacao } from "@padaria/shared/notificacoes";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
@@ -30,6 +30,48 @@ export function listarNotificacoesRepository(
       )
     )
     .orderBy(desc(notificacoes.criadoEm));
+}
+
+export async function listarDetalhesLancamentosNotificacaoRepository(
+  empresaId: string,
+  referencias: string[],
+  db: ExecutorBanco = banco
+): Promise<Map<string, { setor: string; descricao: string | null; dataVencimento: string | null; rota: string }>> {
+  if (!referencias.length) return new Map();
+  const [linhasDespesas, linhasMercadorias, itensMercadorias] = await Promise.all([
+    db
+      .select({ id: despesas.id, observacao: despesas.observacao, descricao: despesas.descricao, dataVencimento: despesas.dataVencimento })
+      .from(despesas)
+      .where(and(eq(despesas.empresaId, empresaId), inArray(despesas.id, referencias))),
+    db
+      .select({ id: mercadorias.id, observacao: mercadorias.observacao, descricao: mercadorias.descricao, dataVencimento: mercadorias.dataVencimento })
+      .from(mercadorias)
+      .where(and(eq(mercadorias.empresaId, empresaId), inArray(mercadorias.id, referencias))),
+    db
+      .select({ mercadoriaId: mercadoriasItens.mercadoriaId, descricao: mercadoriasItens.descricao })
+      .from(mercadoriasItens)
+      .where(inArray(mercadoriasItens.mercadoriaId, referencias))
+  ]);
+  const itensPorMercadoria = new Map<string, string[]>();
+  for (const item of itensMercadorias) {
+    const itens = itensPorMercadoria.get(item.mercadoriaId) ?? [];
+    if (itens.length < 3) itens.push(item.descricao);
+    itensPorMercadoria.set(item.mercadoriaId, itens);
+  }
+  const resultado = new Map<string, { setor: string; descricao: string | null; dataVencimento: string | null; rota: string }>();
+  for (const linha of linhasDespesas) {
+    resultado.set(linha.id, { setor: "Despesas", descricao: linha.observacao ?? linha.descricao, dataVencimento: linha.dataVencimento, rota: "/despesas" });
+  }
+  for (const linha of linhasMercadorias) {
+    const itens = itensPorMercadoria.get(linha.id);
+    resultado.set(linha.id, {
+      setor: "Mercadorias",
+      descricao: itens?.length ? itens.join(" · ") : linha.observacao ?? linha.descricao,
+      dataVencimento: linha.dataVencimento,
+      rota: "/mercadorias"
+    });
+  }
+  return resultado;
 }
 
 export async function criarNotificacoesRepository(

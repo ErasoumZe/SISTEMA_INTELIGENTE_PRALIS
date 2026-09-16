@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
   (event: "abrirPendencias"): void;
+  (event: "verificarNotificacao", id: string): void;
 }>();
 
 const drawerRecolhido = ref(false);
@@ -305,6 +306,14 @@ onMounted(() => {
                     {{ new Date(item.criadoEm).toLocaleString("pt-BR") }}
                   </template>
                   <template #append>
+                    <v-btn
+                      icon="mdi-check"
+                      size="small"
+                      variant="text"
+                      title="Marcar como visto"
+                      aria-label="Marcar como visto"
+                      @click.stop="emit('verificarNotificacao', item.id)"
+                    />
                     <v-btn
                       icon="mdi-open-in-new"
                       size="small"

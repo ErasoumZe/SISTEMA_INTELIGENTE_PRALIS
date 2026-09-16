@@ -31,7 +31,15 @@ export const notificacaoSchema = z.object({
   verificado: z.boolean(),
   verificadoPor: z.string().nullable(),
   verificadoEm: z.string().nullable(),
-  criadoEm: z.string()
+  criadoEm: z.string(),
+  detalhes: z
+    .object({
+      setor: z.string(),
+      descricao: z.string().nullable(),
+      dataVencimento: z.string().nullable(),
+      rota: z.string().nullable()
+    })
+    .optional()
 });
 
 export type TipoNotificacao = z.infer<typeof tipoNotificacaoSchema>;
