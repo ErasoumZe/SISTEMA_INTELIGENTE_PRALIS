@@ -285,10 +285,18 @@ function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
 
 export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario): Promise<CaixaStatus> {
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
-  const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId);
-  // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
-  if (!caixa) return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] };
-  return statusDoCaixaAberto(caixa);
+  return executarEmTransacao(async (tx) => {
+    const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
+    // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
+    if (!caixa) return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] };
+
+    // O CREARE pode importar uma venda depois da abertura. O refresh de um minuto
+    // precisa anexar essas vendas ao caixa antes de calcular os cards de pagamento.
+    await revincularVendasAoCaixa(caixa, tx);
+    const atualizado = await buscarCaixaPorIdRepository(caixa.id, tx);
+    if (!atualizado) throw new Error("Caixa aberto nao encontrado");
+    return statusDoCaixaAberto(atualizado, tx);
+  });
 }
 
 export interface EscopoListagemCaixa {
