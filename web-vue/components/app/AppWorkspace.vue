@@ -161,6 +161,7 @@ const empresaSelecionadaId = useState("padaria.workspace.empresaSelecionadaId", 
 const carregando = ref(!workspaceCarregado.value);
 const empresaCarregando = ref(false);
 const atualizandoOperacoesAutomaticamente = ref(false);
+const atualizandoCaixaAutomaticamente = ref(false);
 const erro = ref("");
 
 const snackbar = reactive({ show: false, text: "", color: "success" });
@@ -1199,6 +1200,30 @@ async function atualizarOperacoesAutomaticamente() {
   }
 }
 
+// O resumo do caixa precisa acompanhar as vendas que o agente CREARE entrega a cada minuto. A
+// tela /caixa nao usa `carregarOperacoes`, por isso tem um ciclo proprio e nao disputa o lock da
+// atualizacao das listas operacionais.
+async function atualizarCaixaAutomaticamente() {
+  if (
+    tipoPagina.value !== "caixa" ||
+    !sessao.value ||
+    !empresaId.value ||
+    atualizandoCaixaAutomaticamente.value ||
+    empresaCarregando.value
+  ) {
+    return;
+  }
+
+  atualizandoCaixaAutomaticamente.value = true;
+  try {
+    await carregarStatusCaixa(empresaId.value);
+  } catch (error) {
+    console.error("Falha ao atualizar o resumo do caixa automaticamente", error);
+  } finally {
+    atualizandoCaixaAutomaticamente.value = false;
+  }
+}
+
 async function carregarOpcoesParaOperacao(entidade: EntidadeOperacional, idEmpresa = empresaId.value) {
   const params = new URLSearchParams({ t: String(Date.now()) });
   if (idEmpresa) params.set("empresaId", idEmpresa);
@@ -2199,6 +2224,7 @@ const pageContext = computed(() => ({
 
 let intervaloAtualizacaoOperacoes: ReturnType<typeof setInterval> | null = null;
 let atualizandoNotificacoesAutomaticamente = false;
+let intervaloAtualizacaoCaixa: ReturnType<typeof setInterval> | null = null;
 
 // O sino vive na topbar de TODAS as telas, mas `atualizarOperacoesAutomaticamente` desiste quando
 // `tipoPagina !== "operacoes"` e, mesmo na tela de operacoes, so recarrega caixa e lancamentos.
@@ -2222,6 +2248,7 @@ function atualizarAoRetomarPagina() {
   if (document.visibilityState !== "visible") return;
   void atualizarOperacoesAutomaticamente();
   void atualizarNotificacoesAutomaticamente();
+  void atualizarCaixaAutomaticamente();
 }
 
 onMounted(() => {
@@ -2232,6 +2259,9 @@ onMounted(() => {
     void atualizarOperacoesAutomaticamente();
     void atualizarNotificacoesAutomaticamente();
   }, 30_000);
+  intervaloAtualizacaoCaixa = setInterval(() => {
+    if (document.visibilityState === "visible") void atualizarCaixaAutomaticamente();
+  }, 60_000);
 
   if (workspaceCarregado.value && sessao.value) {
     carregando.value = false;
@@ -2247,6 +2277,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("focus", atualizarAoRetomarPagina);
   document.removeEventListener("visibilitychange", atualizarAoRetomarPagina);
   if (intervaloAtualizacaoOperacoes) clearInterval(intervaloAtualizacaoOperacoes);
+  if (intervaloAtualizacaoCaixa) clearInterval(intervaloAtualizacaoCaixa);
 });
 </script>
 

@@ -149,6 +149,13 @@ const maquininhasSelect = computed(() =>
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
 // (saldo fisico) e o card-ancora. Sem card de deficit (fundo simples, PROJECT_BRAIN/12).
 type CardCategoria = { chave: string; titulo: string; icone: string; valor: number; detalhe?: string };
+type CardFormaPagamento = {
+  chave: string;
+  titulo: string;
+  icone: string;
+  valor: number;
+  quantidade: number;
+};
 
 const categorias = computed<CardCategoria[]>(() => {
   const r = resumoAtual.value;
@@ -174,6 +181,46 @@ const categorias = computed<CardCategoria[]>(() => {
     { chave: "retiradas", titulo: "Retiradas", icone: "mdi-cash-remove", valor: r.totalRetiradas }
   ];
 });
+
+const formasPagamento = computed<CardFormaPagamento[]>(() =>
+  (resumoAtual.value?.porFormaPagamento ?? []).map((item) => ({
+    chave: item.formaPagamentoId ?? item.formaPagamento,
+    titulo: item.formaPagamento,
+    icone: iconeFormaPagamento(item.formaPagamento),
+    valor: item.total,
+    quantidade: item.quantidade
+  }))
+);
+
+function nomeFormaPagamento(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function classeFormaPagamento(nome: string) {
+  const normalizado = nomeFormaPagamento(nome);
+  if (normalizado.includes("pix")) return "pagamento-pix";
+  if (normalizado.includes("credito")) return "pagamento-credito";
+  if (normalizado.includes("debito")) return "pagamento-debito";
+  if (normalizado.includes("dinheiro") || normalizado.includes("especie")) return "pagamento-dinheiro";
+  if (normalizado.includes("crediario")) return "pagamento-crediario";
+  if (normalizado.includes("voucher")) return "pagamento-voucher";
+  if (normalizado.includes("furto") || normalizado.includes("desvio")) return "pagamento-desvio";
+  return "pagamento-outros";
+}
+
+function iconeFormaPagamento(nome: string) {
+  const normalizado = nomeFormaPagamento(nome);
+  if (normalizado.includes("pix")) return "mdi-qrcode";
+  if (normalizado.includes("credito") || normalizado.includes("debito")) return "mdi-credit-card-outline";
+  if (normalizado.includes("dinheiro") || normalizado.includes("especie")) return "mdi-cash";
+  if (normalizado.includes("crediario")) return "mdi-account-clock-outline";
+  if (normalizado.includes("voucher")) return "mdi-ticket-outline";
+  if (normalizado.includes("furto") || normalizado.includes("desvio")) return "mdi-alert-outline";
+  return "mdi-cash-multiple";
+}
 
 watch(
   () => props.pdvs,
@@ -372,6 +419,28 @@ function fechar() {
               </div>
               <div class="cat-valor">{{ dinheiro(resumoAtual.saldo) }}</div>
               <div class="cat-detalhe">saldo fisico do turno</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="formasPagamento.length" class="pagamentos-resumo mt-4">
+          <div class="pagamentos-resumo__titulo">
+            <span>Vendas por forma de pagamento</span>
+            <span class="pagamentos-resumo__atualizacao">Atualização automática a cada 1 minuto</span>
+          </div>
+          <div class="pagamentos-grid">
+            <div
+              v-for="forma in formasPagamento"
+              :key="forma.chave"
+              class="pagamento-card"
+              :class="classeFormaPagamento(forma.titulo)"
+            >
+              <span class="pagamento-card__icone"><v-icon :icon="forma.icone" size="18" /></span>
+              <span class="pagamento-card__titulo">{{ forma.titulo }}</span>
+              <strong class="pagamento-card__valor">{{ dinheiro(forma.valor) }}</strong>
+              <span class="pagamento-card__quantidade">
+                {{ forma.quantidade }} {{ forma.quantidade === 1 ? "venda" : "vendas" }}
+              </span>
             </div>
           </div>
         </div>
@@ -721,6 +790,121 @@ function fechar() {
   --cat-soft: var(--cat-resultado-soft);
   --cat-tinta: var(--cat-resultado-tinta);
   --cat-faixa: var(--cat-resultado-faixa);
+}
+
+.pagamentos-resumo {
+  border-top: 1px solid rgba(127, 127, 127, 0.2);
+  padding-top: 14px;
+}
+
+.pagamentos-resumo__titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--padaria-foreground, #252525);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pagamentos-resumo__atualizacao {
+  color: var(--padaria-muted-foreground, #71717a);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pagamentos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.pagamento-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--pagamento-cor);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pagamento-cor) 10%, transparent);
+}
+
+.pagamento-card__icone {
+  display: grid;
+  grid-row: span 2;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--pagamento-cor);
+  color: #fff;
+}
+
+.pagamento-card__titulo,
+.pagamento-card__quantidade {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagamento-card__titulo {
+  color: var(--pagamento-cor);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pagamento-card__valor {
+  color: var(--pagamento-cor);
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.pagamento-card__quantidade {
+  grid-column: 2;
+  color: var(--padaria-muted-foreground, #71717a);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pagamento-pix {
+  --pagamento-cor: #008f82;
+}
+.pagamento-credito {
+  --pagamento-cor: #6d28d9;
+}
+.pagamento-debito {
+  --pagamento-cor: #2563eb;
+}
+.pagamento-dinheiro {
+  --pagamento-cor: #15803d;
+}
+.pagamento-crediario {
+  --pagamento-cor: #b45309;
+}
+.pagamento-voucher {
+  --pagamento-cor: #c2410c;
+}
+.pagamento-desvio {
+  --pagamento-cor: #dc2626;
+}
+.pagamento-outros {
+  --pagamento-cor: #64748b;
+}
+
+@media (width <= 560px) {
+  .pagamentos-resumo__titulo {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .pagamentos-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Celular: as categorias empilham em 1 coluna (a barra de cor e o total continuam visiveis). No

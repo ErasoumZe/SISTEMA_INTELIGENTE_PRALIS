@@ -100,6 +100,23 @@ describe("montarResumoCaixa", () => {
     expect(resumo.saldo).toBe(490); // saldo fisico (formula canonica intacta)
     expect(resumo.saldoProprio).toBe(0); // operacional: nao ha venda nem despesa ainda
   });
+
+  it("Deve_ConverterSubtotaisPorFormaDePagamento_ParaReais", () => {
+    const resumo = montarResumoCaixa(
+      totais({
+        entradas: 12345,
+        porFormaPagamento: [
+          { formaPagamentoId: "pix", formaPagamento: "PIX", total: 7890, quantidade: 3 },
+          { formaPagamentoId: null, formaPagamento: "Sem forma", total: 4455, quantidade: 1 }
+        ]
+      })
+    );
+
+    expect(resumo.porFormaPagamento).toEqual([
+      { formaPagamentoId: "pix", formaPagamento: "PIX", total: 78.9, quantidade: 3 },
+      { formaPagamentoId: null, formaPagamento: "Sem forma", total: 44.55, quantidade: 1 }
+    ]);
+  });
 });
 
 // `saldoProprioCentavos` continua recebendo a divida como parametro, mas desde a R-001/R-040 a

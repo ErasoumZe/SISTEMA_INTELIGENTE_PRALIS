@@ -83,7 +83,18 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
       headers: { cookie: cookieAdmin }
     });
     assertOk(resposta);
-    return json<{ data: { caixaAberto: { id: string }; resumo: Record<string, number> } }>(resposta).data;
+    return json<{
+      data: {
+        caixaAberto: { id: string };
+        resumo: Record<string, number> & {
+          porFormaPagamento?: Array<{
+            formaPagamento: string;
+            total: number;
+            quantidade: number;
+          }>;
+        };
+      };
+    }>(resposta).data;
   }
 
   it("cenario completo: 4 operacoes manuais + entrada por integracao", async () => {
@@ -206,6 +217,9 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
     // ENTRA no ENTRADAS/saldo do caixa aberto, junto com as operacoes manuais.
     expect(linhaVenda?.caixa_id).toBe(caixaId);
     expect(status.resumo["totalEntradas"]).toBe(200);
+    expect(status.resumo.porFormaPagamento).toEqual(
+      expect.arrayContaining([expect.objectContaining({ formaPagamento: "Cartao", total: 200, quantidade: 1 })])
+    );
     // saldo = 200 (entrada integrada) + 50 - 0 - 30 - 20 - 15 = 185
     expect(status.resumo["saldo"]).toBe(185);
   });

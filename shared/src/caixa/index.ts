@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
 import { deCentavos } from "../dinheiro/index.js";
-import { saldoCaixaCentavos, saldoProprioCentavos, type TotaisCaixaCentavos } from "./regras.js";
+import {
+  saldoCaixaCentavos,
+  saldoProprioCentavos,
+  type TotaisCaixaCentavos,
+  type TotaisFormaPagamentoCentavos
+} from "./regras.js";
 
 export * from "./regras.js";
 
@@ -187,7 +192,19 @@ export const resumoCaixaSchema = z.object({
   saldoProprio: z.number().optional(),
   // propostaRetorno (R3/M2): sobra em especie a devolver ao cofre no fechamento (= saldo fisico se > 0).
   propostaRetorno: z.number().optional(),
-  saldo: z.number()
+  saldo: z.number(),
+  // Subtotais informativos das vendas do turno. Ausente apenas em consumidores legados que nao
+  // calcularam a divisao; a API do caixa aberto sempre preenche.
+  porFormaPagamento: z
+    .array(
+      z.object({
+        formaPagamentoId: z.string().nullable(),
+        formaPagamento: z.string(),
+        total: z.number(),
+        quantidade: z.number().int().nonnegative()
+      })
+    )
+    .optional()
 });
 
 // B2: a chave de idempotencia da INTENCAO. Obrigatoria em toda criacao avulsa/programada porque e
@@ -340,7 +357,7 @@ export type CaixaOperacional = z.infer<typeof caixaOperacionalSchema>;
 // Converte os totais em centavos para o contrato wire (reais como number). dividaCofreCentavos vem
 // do fechamento (valor do malote da abertura; 0 sem malote) e alimenta o saldo proprio derivado.
 export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentavos = 0): ResumoCaixa {
-  return {
+  const resumo: ResumoCaixa = {
     totalEntradas: deCentavos(totais.entradas),
     totalTransferencias: deCentavos(totais.transferencias),
     totalTransferenciasEntrada: deCentavos(totais.transferenciasEntrada),
@@ -353,5 +370,14 @@ export function montarResumoCaixa(totais: TotaisCaixaCentavos, dividaCofreCentav
     propostaRetorno: deCentavos(Math.max(0, saldoCaixaCentavos(totais))),
     saldo: deCentavos(saldoCaixaCentavos(totais))
   };
+  if (totais.porFormaPagamento) {
+    resumo.porFormaPagamento = totais.porFormaPagamento.map((item: TotaisFormaPagamentoCentavos) => ({
+      formaPagamentoId: item.formaPagamentoId,
+      formaPagamento: item.formaPagamento,
+      total: deCentavos(item.total),
+      quantidade: item.quantidade
+    }));
+  }
+  return resumo;
 }
 export type CaixaStatus = z.infer<typeof caixaStatusSchema>;
