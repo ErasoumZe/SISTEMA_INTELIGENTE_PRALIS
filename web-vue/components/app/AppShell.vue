@@ -65,6 +65,9 @@ const drawerAberto = computed(() => (viewportMobile.value ? drawerMobileAberto.v
 const drawerRail = computed(() => !viewportMobile.value && drawerRecolhido.value);
 
 const telasAgrupadas = computed(() => agruparTelasMenu(props.telas));
+// O sino e um resumo. A fila completa fica em /pendencias, com filtros e paginacao,
+// para nao montar dezenas de itens no menu e travar o navegador.
+const notificacoesRecentes = computed(() => (props.notificacoes ?? []).slice(0, 5));
 
 // Categorias do menu (hoje so "Lancamentos"): abrem/fecham no clique. Fica aberta enquanto uma das
 // telas de dentro dela e a tela atual — quem esta em /despesas ve onde esta.
@@ -310,8 +313,8 @@ onMounted(() => {
             </template>
             <v-card min-width="320" max-width="420">
               <v-card-title class="text-subtitle-1">Pendências</v-card-title>
-              <v-list v-if="notificacoes?.length" lines="three">
-                <v-list-item v-for="item in notificacoes" :key="item.id" :title="item.titulo">
+              <v-list v-if="notificacoesRecentes.length" lines="three">
+                <v-list-item v-for="item in notificacoesRecentes" :key="item.id" :title="item.titulo">
                   <template #subtitle>
                     <span v-if="item.valor != null">{{ dinheiro(item.valor) }} · </span>
                     {{ new Date(item.criadoEm).toLocaleString("pt-BR") }}
@@ -329,6 +332,13 @@ onMounted(() => {
               </v-list>
               <v-card-text v-else>Nenhuma pendência.</v-card-text>
               <v-card-actions>
+                <span
+                  v-if="notificacoes && notificacoes.length > notificacoesRecentes.length"
+                  class="text-caption ml-4"
+                >
+                  Mostrando {{ notificacoesRecentes.length }} de {{ notificacoes.length }}
+                </span>
+                <v-spacer />
                 <v-btn to="/pendencias" variant="text">Ver todas</v-btn>
               </v-card-actions>
             </v-card>
