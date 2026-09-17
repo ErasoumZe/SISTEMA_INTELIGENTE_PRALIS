@@ -1,5 +1,5 @@
 import { and, asc, eq, ilike, ne } from "drizzle-orm";
-import { usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
+import { contaAutenticacao, usuarioAutenticacao } from "@padaria/db/schema/autenticacao";
 import {
   cargos,
   colaboradores,
@@ -9,6 +9,7 @@ import {
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
 import type { RoleUsuario } from "@padaria/shared";
+import { gerarUuidV7 } from "@padaria/shared/ids";
 import { banco, executarComTransacaoOpcional, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 
 // Contrato de fio: e exatamente isto que sai em GET /api/usuarios e no campo `usuarios` de
@@ -210,6 +211,40 @@ export async function atualizarUsuarioAutenticacaoRepository(
     .update(usuarioAutenticacao)
     .set({ name: input.nome, email: input.email, updatedAt: new Date() })
     .where(eq(usuarioAutenticacao.id, input.id));
+}
+
+/**
+ * Atualiza apenas a credencial do usuario. A senha chega aqui ja derivada pelo Better Auth;
+ * nunca lemos nem devolvemos o hash e nunca persistimos texto puro.
+ */
+export async function atualizarSenhaUsuarioAutenticacaoRepository(
+  input: { id: string; passwordHash: string },
+  db: ExecutorBanco = banco
+) {
+  const [conta] = await db
+    .select({ id: contaAutenticacao.id })
+    .from(contaAutenticacao)
+    .where(and(eq(contaAutenticacao.userId, input.id), eq(contaAutenticacao.providerId, "credential")))
+    .limit(1);
+
+  if (conta) {
+    await db
+      .update(contaAutenticacao)
+      .set({ password: input.passwordHash, updatedAt: new Date() })
+      .where(eq(contaAutenticacao.id, conta.id));
+    return;
+  }
+
+  // Conta sem credencial pode existir quando o usuario foi criado por um provedor externo.
+  await db.insert(contaAutenticacao).values({
+    id: gerarUuidV7(),
+    accountId: input.id,
+    providerId: "credential",
+    userId: input.id,
+    password: input.passwordHash,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  });
 }
 
 // Usuario criado por admin (fluxo confiavel, senha definida na hora) ja nasce com o e-mail

@@ -27,6 +27,7 @@ const {
   dadosCadastro,
   cadastroSalvando,
   bloqueioCadastro,
+  ehAdministradorTotal,
   salvarCadastro,
   modalTemaAberto,
   temaTelaEdicao,
@@ -376,9 +377,29 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
               />
             </v-col>
           </template>
-          <v-col v-if="cadastroTela === 'usuarios' && !cadastroEditandoId" cols="12"
-            ><v-text-field v-model="formCadastro.senha" type="password" label="Senha"
-          /></v-col>
+          <v-col v-if="cadastroTela === 'usuarios' && (!cadastroEditandoId || ehAdministradorTotal)" cols="12">
+            <v-text-field
+              v-model="formCadastro.senha"
+              type="password"
+              :label="cadastroEditandoId ? 'Nova senha (opcional)' : 'Senha'"
+              autocomplete="new-password"
+              :hint="
+                cadastroEditandoId
+                  ? 'A senha atual não pode ser visualizada. Preencha somente para redefini-la.'
+                  : undefined
+              "
+              :persistent-hint="Boolean(cadastroEditandoId)"
+            />
+          </v-col>
+          <v-col
+            v-if="cadastroTela === 'usuarios' && cadastroEditandoId && ehAdministradorTotal"
+            cols="12"
+            class="pt-0"
+          >
+            <v-alert type="info" variant="tonal" density="compact">
+              A redefinição será registrada para o Administrador Geral. Por segurança, a senha atual nunca é exibida.
+            </v-alert>
+          </v-col>
           <v-col v-if="cadastroTela === 'colaboradores'" cols="12">
             <v-select
               v-model="formCadastro.setorId"

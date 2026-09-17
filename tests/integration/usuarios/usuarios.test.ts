@@ -19,6 +19,8 @@ describe("usuarios integration", () => {
   });
 
   it("Deve_CriarEAtualizarUsuario_Quando_EmpresaPermitida", async () => {
+    const senhaInicial = "Teste#2026!crud";
+    const senhaRedefinida = "Nova#2026!senha";
     const criado = await contexto.app.inject({
       method: "POST",
       url: "/api/usuarios",
@@ -28,7 +30,7 @@ describe("usuarios integration", () => {
         nome: "Usuario criado por integracao",
         email: "usuario.crud.integracao@padaria.local",
         role: "usuario_comum",
-        senha: "Teste#2026!crud",
+        senha: senhaInicial,
         novoColaborador: {
           empresaId: idsTeste.empresaA,
           nome: "Colaborador usuario CRUD",
@@ -53,11 +55,25 @@ describe("usuarios integration", () => {
         nome: "Usuario editado por integracao",
         email: "usuario.crud.editado@padaria.local",
         role: "usuario_comum",
-        senha: "",
+        senha: senhaRedefinida,
         colaboradorId: colaborador?.id
       }
     });
     expect(editado.statusCode).toBe(204);
+
+    const loginComSenhaNova = await contexto.app.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      payload: { email: "usuario.crud.editado@padaria.local", password: senhaRedefinida }
+    });
+    expect(loginComSenhaNova.statusCode, loginComSenhaNova.body).toBe(200);
+
+    const loginComSenhaAnterior = await contexto.app.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      payload: { email: "usuario.crud.editado@padaria.local", password: senhaInicial }
+    });
+    expect(loginComSenhaAnterior.statusCode).toBe(401);
   });
 
   it("Deve_Retornar403_Quando_CriarUsuarioEmEmpresaNaoPermitida", async () => {

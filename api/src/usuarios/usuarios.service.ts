@@ -1,4 +1,5 @@
 import { APIError } from "better-auth";
+import { hashPassword } from "better-auth/crypto";
 import type { DadosExternos } from "@padaria/shared/api";
 import type { RoleUsuario } from "@padaria/shared";
 import { usuarioPayloadSchema } from "@padaria/shared/usuarios";
@@ -11,6 +12,7 @@ import { capturarErro } from "../observabilidade.js";
 import { apenasDigitos, falharValidacao } from "../utils.js";
 import {
   atualizarUsuarioAutenticacaoRepository,
+  atualizarSenhaUsuarioAutenticacaoRepository,
   bloquearAlvoUsuarioRepository,
   buscarCargoEmpresaRepository,
   bloquearColaboradorPorCpfRepository,
@@ -486,6 +488,15 @@ export async function salvarUsuario(id: string | null, body: DadosExternos, perf
       // `const` local, e nao a variavel pre-lida: e o retrato travado que manda nas escritas abaixo.
       const colaborador = await resolverColaboradorParaVinculo(tx, empresaIdsFinais);
       await atualizarUsuarioAutenticacaoRepository({ id, nome, email }, tx);
+      if (dados.senha) {
+        // Redefinicao de senha e um ato privilegiado. A senha atual nunca e recuperavel: Better Auth
+        // armazena somente um hash, portanto o administrador recebe apenas o campo de nova senha.
+        if (!atorPrivilegiado(ator)) throw privilegioInsuficiente();
+        if (dados.senha.length < senhaMinimaAutenticacao) {
+          throw erroValidacao(`Senha deve ter ao menos ${senhaMinimaAutenticacao} caracteres`, "WEAK_PASSWORD");
+        }
+        await atualizarSenhaUsuarioAutenticacaoRepository({ id, passwordHash: await hashPassword(dados.senha) }, tx);
+      }
       await upsertPerfilUsuarioRepository(
         { usuarioId: id, empresaId: empresaPrincipalFinal, nome, email, ...(role ? { role } : {}) },
         tx
