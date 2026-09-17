@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Notificacao } from "@padaria/shared/notificacoes";
-import { separarNotificacoes } from "./notificacoes";
+import { limitarNotificacoesDoSino, separarNotificacoes } from "./notificacoes";
 
 function notificacao(id: string, verificado: boolean): Notificacao {
   return {
@@ -44,5 +44,12 @@ describe("separarNotificacoes", () => {
 
     expect(pendentes).toEqual([]);
     expect(historico).toEqual([]);
+  });
+});
+
+describe("limitarNotificacoesDoSino", () => {
+  it("mantem somente as cinco mais recentes para nao travar o menu", () => {
+    const itens = Array.from({ length: 7 }, (_, indice) => notificacao(String(indice), false));
+    expect(limitarNotificacoesDoSino(itens).map((item) => item.id)).toEqual(["0", "1", "2", "3", "4"]);
   });
 });

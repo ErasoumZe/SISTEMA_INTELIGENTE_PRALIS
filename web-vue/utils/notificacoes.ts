@@ -19,3 +19,8 @@ export function separarNotificacoes(comHistorico: Notificacao[]): {
     historico: comHistorico
   };
 }
+
+/** O sino e um resumo: a tela de Pendências continua disponível para consultar o histórico inteiro. */
+export function limitarNotificacoesDoSino(itens: Notificacao[], limite = 5): Notificacao[] {
+  return itens.slice(0, Math.max(0, limite));
+}

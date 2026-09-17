@@ -6,6 +6,7 @@ import AppSidebar from "~/components/app/AppSidebar.vue";
 import { dinheiro, itemPorTela } from "~/utils/domain";
 import { lerRelogio, type Relogio } from "~/utils/saudacao";
 import { CATEGORIA_POR_TELA } from "~/utils/cores-categoria";
+import { limitarNotificacoesDoSino } from "~/utils/notificacoes";
 
 const props = defineProps<{
   sessao: AuthSession;
@@ -38,6 +39,7 @@ const rota = useRoute();
 // quem responde se ele ja esta no destino e o proprio caminho atual.
 const naHome = computed(() => rota.path === "/");
 const telaTemCategoria = computed(() => Boolean(CATEGORIA_POR_TELA[props.telaAtiva]));
+const notificacoesRecentes = computed(() => limitarNotificacoesDoSino(props.notificacoes ?? []));
 
 async function sair() {
   saindo.value = true;
@@ -293,9 +295,9 @@ onMounted(() => {
             </template>
             <v-card min-width="320" max-width="420">
               <v-card-title class="text-subtitle-1">Pendências</v-card-title>
-              <v-list v-if="notificacoes?.length" lines="three">
+              <v-list v-if="notificacoesRecentes.length" lines="three">
                 <v-list-item
-                  v-for="item in notificacoes"
+                  v-for="item in notificacoesRecentes"
                   :key="item.id"
                   :title="item.titulo"
                   class="notificacao-item"
