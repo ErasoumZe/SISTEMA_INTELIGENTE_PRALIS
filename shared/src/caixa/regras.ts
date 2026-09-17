@@ -8,6 +8,15 @@ export type TotaisCaixaCentavos = {
   despesas: number;
   retiradas: number;
   mercadorias: number;
+  /** Subtotais informativos das vendas por forma de pagamento (em centavos). */
+  porFormaPagamento?: TotaisFormaPagamentoCentavos[];
+};
+
+export type TotaisFormaPagamentoCentavos = {
+  formaPagamentoId: string | null;
+  formaPagamento: string;
+  total: number;
+  quantidade: number;
 };
 
 export function saldoCaixaCentavos(totais: TotaisCaixaCentavos): number {

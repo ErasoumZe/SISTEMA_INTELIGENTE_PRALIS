@@ -269,6 +269,12 @@ export type ResumoCaixa = {
   totalRetiradas: number;
   totalMercadorias?: number;
   saldo: number;
+  porFormaPagamento?: Array<{
+    formaPagamentoId: string | null;
+    formaPagamento: string;
+    total: number;
+    quantidade: number;
+  }>;
 };
 
 export type CaixaOperacional = {

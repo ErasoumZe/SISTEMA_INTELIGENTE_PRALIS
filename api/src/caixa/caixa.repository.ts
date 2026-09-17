@@ -24,6 +24,7 @@ import {
   cargos,
   contasUsuarios,
   empresas,
+  formasPagamento,
   maquininhas,
   pdvs,
   perfisUsuarios,
@@ -41,7 +42,7 @@ import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
-import { vendas } from "@padaria/db/schema/venda";
+import { vendas, vendasPagamentos } from "@padaria/db/schema/venda";
 import {
   transferenciaContaComoEntrada,
   transferenciaContaComoSaida,
@@ -1144,38 +1145,53 @@ export async function calcularTotaisCaixaOperacionalRepository(
     mercadorias: 0
   };
 
-  const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias] = await Promise.all([
-    db
-      // Desconto/acrescimo entram no liquido: valor_original e so o subtotal.
-      .select({
-        valorOriginal: vendas.valorOriginal,
-        valorDesconto: vendas.valorDesconto,
-        valorAcrescimo: vendas.valorAcrescimo
-      })
-      .from(vendas)
-      .where(and(eq(vendas.caixaId, caixaId), eq(vendas.computar, true), ne(vendas.status, "cancelado"))),
-    db
-      .select({
-        valorOriginal: transferencias.valorOriginal,
-        contaOrigemId: transferencias.contaOrigemId,
-        contaDestinoId: transferencias.contaDestinoId,
-        status: transferencias.status
-      })
-      .from(transferencias)
-      .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true))),
-    db
-      .select({ valorOriginal: despesas.valorOriginal })
-      .from(despesas)
-      .where(and(eq(despesas.caixaId, caixaId), eq(despesas.computar, true), ne(despesas.status, "cancelado"))),
-    db
-      .select({ valorOriginal: retiradas.valorOriginal })
-      .from(retiradas)
-      .where(and(eq(retiradas.caixaId, caixaId), eq(retiradas.computar, true), ne(retiradas.status, "cancelado"))),
-    db
-      .select({ valorOriginal: mercadorias.valorOriginal })
-      .from(mercadorias)
-      .where(and(eq(mercadorias.caixaId, caixaId), eq(mercadorias.computar, true), ne(mercadorias.status, "cancelado")))
-  ]);
+  const [linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias, linhasPagamentos] =
+    await Promise.all([
+      db
+        // Desconto/acrescimo entram no liquido: valor_original e so o subtotal.
+        .select({
+          valorOriginal: vendas.valorOriginal,
+          valorDesconto: vendas.valorDesconto,
+          valorAcrescimo: vendas.valorAcrescimo
+        })
+        .from(vendas)
+        .where(and(eq(vendas.caixaId, caixaId), eq(vendas.computar, true), ne(vendas.status, "cancelado"))),
+      db
+        .select({
+          valorOriginal: transferencias.valorOriginal,
+          contaOrigemId: transferencias.contaOrigemId,
+          contaDestinoId: transferencias.contaDestinoId,
+          status: transferencias.status
+        })
+        .from(transferencias)
+        .where(and(eq(transferencias.caixaId, caixaId), eq(transferencias.computar, true))),
+      db
+        .select({ valorOriginal: despesas.valorOriginal })
+        .from(despesas)
+        .where(and(eq(despesas.caixaId, caixaId), eq(despesas.computar, true), ne(despesas.status, "cancelado"))),
+      db
+        .select({ valorOriginal: retiradas.valorOriginal })
+        .from(retiradas)
+        .where(and(eq(retiradas.caixaId, caixaId), eq(retiradas.computar, true), ne(retiradas.status, "cancelado"))),
+      db
+        .select({ valorOriginal: mercadorias.valorOriginal })
+        .from(mercadorias)
+        .where(
+          and(eq(mercadorias.caixaId, caixaId), eq(mercadorias.computar, true), ne(mercadorias.status, "cancelado"))
+        ),
+      db
+        .select({
+          formaPagamentoId: vendasPagamentos.formaPagamentoId,
+          formaPagamento: formasPagamento.nome,
+          formaPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
+          totalPago: vendasPagamentos.totalPago,
+          numeroVendas: vendasPagamentos.numeroVendas
+        })
+        .from(vendasPagamentos)
+        .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+        .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
+        .where(and(eq(vendas.caixaId, caixaId), eq(vendas.computar, true), ne(vendas.status, "cancelado")))
+    ]);
 
   for (const movimento of linhasVendas) {
     totais.entradas += liquidoCentavos(movimento);
@@ -1200,6 +1216,30 @@ export async function calcularTotaisCaixaOperacionalRepository(
   for (const movimento of linhasMercadorias) {
     totais.mercadorias += paraCentavos(movimento.valorOriginal);
   }
+
+  // O rateio e informativo: nao participa da formula do saldo, que continua usando o liquido da
+  // venda. Quando a forma ainda nao foi vinculada pelo dicionario da integracao, preservamos o
+  // nome cru enviado pelo CREARE em vez de descartar a parcela.
+  const porFormaPagamento = new Map<
+    string,
+    { formaPagamentoId: string | null; formaPagamento: string; total: number; quantidade: number }
+  >();
+  for (const pagamento of linhasPagamentos) {
+    const formaPagamento = pagamento.formaPagamento?.trim() || pagamento.formaPagamentoAutomacao?.trim() || "Sem forma";
+    const chave = pagamento.formaPagamentoId ?? `automacao:${formaPagamento.toLocaleLowerCase("pt-BR")}`;
+    const atual = porFormaPagamento.get(chave) ?? {
+      formaPagamentoId: pagamento.formaPagamentoId ?? null,
+      formaPagamento,
+      total: 0,
+      quantidade: 0
+    };
+    atual.total += paraCentavos(pagamento.totalPago);
+    atual.quantidade += Number(pagamento.numeroVendas ?? 0);
+    porFormaPagamento.set(chave, atual);
+  }
+  totais.porFormaPagamento = [...porFormaPagamento.values()].sort(
+    (a, b) => b.total - a.total || a.formaPagamento.localeCompare(b.formaPagamento, "pt-BR")
+  );
 
   return totais;
 }
