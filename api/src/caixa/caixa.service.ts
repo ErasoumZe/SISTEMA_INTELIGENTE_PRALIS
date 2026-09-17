@@ -636,6 +636,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         dataHoraFechamento,
         observacao: observacao || caixa.observacao,
         fechadoPor: perfil.usuarioId,
+        lacreFechamento: dados.lacreFechamento,
         totais,
         saldoCentavos
       },

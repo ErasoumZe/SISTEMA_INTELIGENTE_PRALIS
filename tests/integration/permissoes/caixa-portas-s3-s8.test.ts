@@ -114,7 +114,7 @@ describe("P0 - portas S3-S8 (pivo do PDV, lacre, NF-e, contas e re-envio CREARE)
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload
+      payload: { lacreFechamento: `FCH-PORTAS-${caixaId}`, ...payload }
     });
   }
 

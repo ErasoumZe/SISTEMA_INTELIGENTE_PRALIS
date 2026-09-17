@@ -288,6 +288,13 @@
       "when": 1789496913001,
       "tag": "0040_same_greymalkin",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789669661247,
+      "tag": "0041_lacre_fechamento_obrigatorio",
+      "breakpoints": true
     }
   ]
 }

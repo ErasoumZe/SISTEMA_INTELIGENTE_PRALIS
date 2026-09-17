@@ -1975,6 +1975,10 @@ export const fechamentosCaixa = pgTable(
     // `malote_abertura_id` foi removida na 0026 (o vinculo agora e transferencias.caixa_id).
     // `divida_cofre` e legado da R8 revogada pela R-001 (o fundo nao e emprestimo): sempre 0.
     lacreAbertura: text("lacre_abertura"),
+    // R-200: o selo fisico aplicado ao encerrar a gaveta. Nao e o lacre de uma transferencia de
+    // retorno: existe mesmo quando o saldo ja e zero ou ha quebra. Historico anterior a R-200
+    // permanece nulo; o servico exige o campo em todo fechamento novo.
+    lacreFechamento: text("lacre_fechamento"),
     maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),

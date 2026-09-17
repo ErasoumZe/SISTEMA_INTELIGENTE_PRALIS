@@ -41,7 +41,8 @@ describe("caixa - transferencia de retorno (M2)", () => {
   }
 
   function post(url: string, payload: object) {
-    return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-RETORNO-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method: "POST", url, headers: { cookie: cookieAdmin }, payload: corpo });
   }
 
   async function criar(url: string, payload: object) {

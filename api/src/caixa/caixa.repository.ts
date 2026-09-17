@@ -1229,6 +1229,7 @@ export async function atualizarFechamentoCaixaRepository(
     dataHoraFechamento: Date;
     observacao: string | null;
     fechadoPor: string;
+    lacreFechamento: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
   },
@@ -1241,6 +1242,7 @@ export async function atualizarFechamentoCaixaRepository(
       fechadoEm: new Date(),
       fechadoPor: input.fechadoPor,
       observacao: input.observacao,
+      lacreFechamento: input.lacreFechamento,
       totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
       totalTransferencias: centavosParaDecimalBanco(
         input.totais.transferenciasEntrada - input.totais.transferenciasSaida
@@ -1313,6 +1315,8 @@ export async function listarHistoricoCaixaRepository(
       fechadoPor: fechamentosCaixa.fechadoPor,
       fechadoPorNome: perfilFechador.nome,
       observacao: fechamentosCaixa.observacao,
+      lacreAbertura: fechamentosCaixa.lacreAbertura,
+      lacreFechamento: fechamentosCaixa.lacreFechamento,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
       totalTransferenciasEntrada: fechamentosCaixa.totalTransferenciasEntrada,

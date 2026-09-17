@@ -38,7 +38,8 @@ describe("Etapa 2 - transferencia, retorno, quebra, notificacao e maquininha", (
   afterAll(async () => contexto.fechar());
 
   function request(cookie: string, method: "GET" | "POST" | "PUT", url: string, payload?: object) {
-    return contexto.app.inject({ method, url, headers: { cookie }, ...(payload ? { payload } : {}) });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-ETAPA2-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method, url, headers: { cookie }, ...(corpo ? { payload: corpo } : {}) });
   }
 
   async function criarContaEPdv(sufixo: string) {

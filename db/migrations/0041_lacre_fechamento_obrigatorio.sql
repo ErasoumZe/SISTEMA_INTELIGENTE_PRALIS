@@ -1,0 +1,1 @@
+ALTER TABLE "fechamentos_caixa" ADD COLUMN "lacre_fechamento" text;

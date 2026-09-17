@@ -50,7 +50,8 @@ describe("R-040 - abrir caixa por lacre confirma a transferencia", () => {
   afterAll(async () => contexto.fechar());
 
   function request(cookie: string, method: "GET" | "POST" | "PUT", url: string, payload?: object) {
-    return contexto.app.inject({ method, url, headers: { cookie }, ...(payload ? { payload } : {}) });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-R040-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method, url, headers: { cookie }, ...(corpo ? { payload: corpo } : {}) });
   }
 
   // Conta + PDV proprios por cenario: o PDV nao pode ter caixa aberto de outro teste.

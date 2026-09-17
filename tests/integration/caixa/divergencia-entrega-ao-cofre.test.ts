@@ -97,7 +97,10 @@ describe("caixa - divergencia na entrega ao cofre (R-183)", () => {
   }
 
   function fechar(caixaId: string, observacao = "Fechamento do turno") {
-    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, { observacao });
+    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, {
+      observacao,
+      lacreFechamento: `FCH-R183-${caixaId}`
+    });
   }
 
   function linha(transferenciaId: string) {

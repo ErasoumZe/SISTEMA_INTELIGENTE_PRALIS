@@ -111,7 +111,10 @@ describe("caixa - fechamento x transferencia pendente (G1/R-171)", () => {
   }
 
   function fechar(caixaId: string, observacao = "Fechamento do turno") {
-    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, { observacao });
+    return inject("POST", `/api/caixa/${caixaId}/fechar`, cookieCaixa, {
+      observacao,
+      lacreFechamento: `FCH-R171-${caixaId}`
+    });
   }
 
   async function statusDoCaixa(caixaId: string) {

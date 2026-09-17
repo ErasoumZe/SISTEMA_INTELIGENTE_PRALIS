@@ -396,16 +396,37 @@ describe("caixa integration", () => {
     });
     expect(rotaLegada.statusCode).toBe(404);
 
+    const semLacre = await contexto.app.inject({
+      method: "POST",
+      url: `/api/caixa/${caixaId}/fechar`,
+      headers: { cookie: cookieAdmin },
+      payload: { observacao: "Tentativa sem lacre" }
+    });
+    assertProblem(semLacre, 400);
+
     const fechar = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Caixa fechado por teste" }
+      payload: { observacao: "Caixa fechado por teste", lacreFechamento: "FCH-CAIXA-TESTE-001" }
     });
     expect(fechar.statusCode).toBe(204);
     await expect(
-      consultarUm("select id from fechamentos_caixa where id = $1 and status = 'fechado'", [caixaId])
-    ).resolves.toBeTruthy();
+      consultarUm<{ lacre_fechamento: string }>(
+        "select lacre_fechamento from fechamentos_caixa where id = $1 and status = 'fechado'",
+        [caixaId]
+      )
+    ).resolves.toMatchObject({ lacre_fechamento: "FCH-CAIXA-TESTE-001" });
+
+    const historico = await contexto.app.inject({
+      method: "GET",
+      url: `/api/caixa/historico?empresaId=${idsTeste.empresaA}&pdvId=${pdvId}`,
+      headers: { cookie: cookieAdmin }
+    });
+    assertOk(historico);
+    expect(json<{ data: Array<{ id: string; lacreFechamento: string | null }> }>(historico).data).toContainEqual(
+      expect.objectContaining({ id: caixaId, lacreFechamento: "FCH-CAIXA-TESTE-001" })
+    );
   });
 
   it("Deve_Retornar404_Quando_UsarRotaLegadaDeEdicaoDaAbertura", async () => {
@@ -425,13 +446,13 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${inexistente}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: {}
+      payload: { lacreFechamento: "FCH-INEXISTENTE" }
     });
     const fecharFechado = await contexto.app.inject({
       method: "POST",
       url: `/api/caixa/${idsTeste.caixaFechado}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: {}
+      payload: { lacreFechamento: "FCH-JA-FECHADO" }
     });
 
     assertProblem(fecharInexistente, 404);
@@ -535,7 +556,7 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${caixaAberto?.id}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Limpeza do teste de concorrencia por PDV" }
+      payload: { observacao: "Limpeza do teste de concorrencia por PDV", lacreFechamento: "FCH-CONC-PDV" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });
@@ -587,7 +608,7 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${aberto?.id}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Limpeza do teste de concorrencia por operador" }
+      payload: { observacao: "Limpeza do teste de concorrencia por operador", lacreFechamento: "FCH-CONC-OPERADOR" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });
@@ -867,7 +888,7 @@ describe("caixa integration", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieMultiempresa },
-      payload: { observacao: "Fechado apos retorno" }
+      payload: { observacao: "Fechado apos retorno", lacreFechamento: "FCH-CICLO-001" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
     const fechado = await consultarUm<{ status: string; saldo: string }>(

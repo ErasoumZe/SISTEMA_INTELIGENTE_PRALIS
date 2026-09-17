@@ -40,10 +40,12 @@ export const caixaParamsSchema = z.object({
 
 // D6: o retorno final e o fechamento sao UM ato atomico. O cliente nao manda o VALOR do retorno —
 // o servidor usa a sobra que ele mesmo apurou sob trava, para que nao exista janela entre o que a
-// tela viu e o que o banco tem. O lacre e por movimento (D5) e continua opcional (R-026).
-// Se a sobra ja for zero, a mesma acao apenas fecha; nao existe segundo botao.
+// tela viu e o que o banco tem. O lacre do retorno e por movimento (D5) e continua opcional
+// (R-026). O lacre do fechamento (R-200) e outro objeto fisico e sempre obrigatorio, inclusive
+// sem retorno financeiro.
 export const fecharCaixaPayloadSchema = z.object({
   observacao: z.string().optional().nullable(),
+  lacreFechamento: z.string().trim().min(1, "Lacre de fechamento obrigatorio"),
   lacreRetorno: z.string().trim().min(1).optional().nullable()
 });
 
@@ -96,6 +98,8 @@ export const linhaHistoricoCaixaSchema = z.object({
   dataHoraFechamento: z.string().nullable(),
   fechadoPor: z.string().nullable(),
   fechadoPorNome: z.string().nullable(),
+  lacreAbertura: z.string().nullable(),
+  lacreFechamento: z.string().nullable(),
   totalEntradas: z.number(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number(),

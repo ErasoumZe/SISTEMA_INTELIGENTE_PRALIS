@@ -43,7 +43,8 @@ describe("caixa - entrega ao cofre nao e editavel pelo PUT generico (P1/R-171)",
   const DIA = "2026-08-01";
 
   function inject(method: "GET" | "POST" | "PUT", url: string, cookie: string, payload?: object) {
-    return contexto.app.inject({ method, url, headers: { cookie }, ...(payload ? { payload } : {}) });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-EDICAO-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method, url, headers: { cookie }, ...(corpo ? { payload: corpo } : {}) });
   }
 
   // O ADMIN e o operador do caixa aqui: ele tem `caixa_operar` E `transferencias_editar`, que e a

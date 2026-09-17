@@ -51,7 +51,8 @@ describe("caixa - idempotencia da entrega ao cofre (B2)", () => {
   }
 
   function post(url: string, payload: object, cookie = cookieAdmin) {
-    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-IDEMP-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload: corpo });
   }
 
   async function criar(url: string, payload: object) {

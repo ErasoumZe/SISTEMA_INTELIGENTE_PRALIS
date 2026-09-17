@@ -51,7 +51,8 @@ describe("caixa - entrega ao cofre tem caminho unico (P1/D9/R-179)", () => {
   const DIA = "2026-08-01";
 
   function inject(method: "GET" | "POST" | "PUT", url: string, cookie: string, payload?: object) {
-    return contexto.app.inject({ method, url, headers: { cookie }, ...(payload ? { payload } : {}) });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-CAMINHO-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method, url, headers: { cookie }, ...(corpo ? { payload: corpo } : {}) });
   }
 
   // Caixa proprio por caso: `fechamentos_caixa_pdv_aberto_unico_idx` proibe dois abertos no mesmo

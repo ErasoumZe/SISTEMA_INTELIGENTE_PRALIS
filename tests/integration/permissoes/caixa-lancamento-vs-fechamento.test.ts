@@ -137,7 +137,7 @@ describe("P0 - lancamento x fechamento do caixa", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieCaixa },
-      payload
+      payload: { lacreFechamento: `FCH-LANCAMENTO-${caixaId}`, ...payload }
     });
   }
 

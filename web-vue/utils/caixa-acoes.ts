@@ -27,9 +27,14 @@ export type AberturaCaixaPayload = {
   maquininhaId?: string | null;
   observacao: string | null;
 };
-// D6: `lacreRetorno` e o lacre do retorno FINAL, criado pelo proprio fechamento quando ainda ha
-// sobra. Opcional pela R-026. D5: cada entrega leva o seu, e nenhum movimento executado e editado.
-export type FechamentoPayload = { caixaId: string; observacao: string | null; lacreRetorno?: string | null };
+// R-200: `lacreFechamento` sela a gaveta e e obrigatorio em todo fechamento. Ele nao se mistura
+// ao `lacreRetorno`, que identifica apenas a transferencia final ao Cofre e segue opcional (R-026).
+export type FechamentoPayload = {
+  caixaId: string;
+  observacao: string | null;
+  lacreFechamento: string;
+  lacreRetorno?: string | null;
+};
 // B2: `idempotenciaChave` e da INTENCAO, nao da requisicao. Quem a gera e a tela (uma vez, e a
 // conserva no retry); aqui ela so trafega. Sem ela o servidor nao tem como distinguir "entregar
 // outros R$ 100" de "o POST anterior caiu e o navegador reenviou".
@@ -139,6 +144,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       // do retorno nao vai daqui — o servidor usa a sobra que ele mesmo apurou sob trava.
       await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, {
         observacao: payload.observacao,
+        lacreFechamento: payload.lacreFechamento,
         lacreRetorno: payload.lacreRetorno ?? null
       });
       await deps.carregarStatusCaixa(deps.empresaId());

@@ -51,6 +51,16 @@ onMounted(carregar);
         >.
       </v-alert>
 
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Lacres do caixa</div>
+          <div class="d-flex flex-wrap ga-4 text-body-2">
+            <span><strong>Abertura:</strong> {{ caixa.lacreAbertura || "Sem lacre" }}</span>
+            <span><strong>Fechamento:</strong> {{ caixa.lacreFechamento || "Não registrado" }}</span>
+          </div>
+        </v-card-text>
+      </v-card>
+
       <v-alert
         v-if="detalhe.alteracoesPosFechamento.length"
         type="warning"

@@ -33,7 +33,8 @@ describe("caixa + venda integrada (entrada por integracao)", () => {
   }
 
   function post(url: string, payload: object, headers: Record<string, string> = { cookie: cookieAdmin }) {
-    return contexto.app.inject({ method: "POST", url, headers, payload });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-VENDA-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method: "POST", url, headers, payload: corpo });
   }
 
   async function criar(url: string, payload: object) {

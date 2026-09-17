@@ -187,7 +187,7 @@ describe("CX-M06 A-4 - caixa fechado pela rota real fica intocavel para a edicao
       method: "POST",
       url: `/api/caixa/${caixaFechado}/fechar`,
       headers: { cookie: cookieMultiempresa },
-      payload: { observacao: "Fechamento do cenario pos-fechamento" }
+      payload: { observacao: "Fechamento do cenario pos-fechamento", lacreFechamento: "FCH-RETAGUARDA-001" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
 

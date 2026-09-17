@@ -87,7 +87,7 @@ describe("P0 - bordas do fechamento (cofre, CREARE, confirmacao, Q2)", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload
+      payload: { lacreFechamento: `FCH-BORDAS-${caixaId}`, ...payload }
     });
   }
 

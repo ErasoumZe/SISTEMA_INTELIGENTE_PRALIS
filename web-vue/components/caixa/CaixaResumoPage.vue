@@ -46,7 +46,10 @@ const emit = defineEmits<{
       aoConcluir: (sucesso: boolean) => void;
     }
   ): void;
-  (event: "fecharCaixa", payload: { caixaId: string; observacao: string | null; lacreRetorno: string | null }): void;
+  (
+    event: "fecharCaixa",
+    payload: { caixaId: string; observacao: string | null; lacreFechamento: string; lacreRetorno: string | null }
+  ): void;
   (event: "recarregar"): void;
 }>();
 
@@ -56,7 +59,7 @@ const abertura = reactive({
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
-const fechamento = reactive({ observacao: "", lacreRetorno: "" });
+const fechamento = reactive({ observacao: "", lacreFechamento: "", lacreRetorno: "" });
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
@@ -113,6 +116,7 @@ const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
 const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fechamento.observacao.trim());
+const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
 
 // G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
@@ -235,6 +239,8 @@ watch(
   () => {
     if (!caixaAberto.value) {
       fechamento.observacao = "";
+      fechamento.lacreFechamento = "";
+      fechamento.lacreRetorno = "";
     }
   },
   { immediate: true }
@@ -300,10 +306,11 @@ function fechar() {
     return;
   }
   // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
-  if (!caixa || props.salvando || observacaoObrigatoriaPendente.value) return;
+  if (!caixa || props.salvando || observacaoObrigatoriaPendente.value || lacreFechamentoPendente.value) return;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
+    lacreFechamento: fechamento.lacreFechamento.trim(),
     lacreRetorno: fechamento.lacreRetorno || null
   });
 }
@@ -555,13 +562,22 @@ function fechar() {
               data-teste="observacao-entrega"
             />
           </v-col>
-          <v-col cols="12" md="8">
+          <v-col cols="12" md="4">
             <v-text-field
               v-model="fechamento.observacao"
               :label="temDeficit ? 'Observação da quebra (obrigatória)' : 'Observação do fechamento'"
               :error="observacaoObrigatoriaPendente"
               :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
               data-teste="observacao-fechamento"
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model="fechamento.lacreFechamento"
+              label="Lacre de fechamento (obrigatório)"
+              placeholder="Ex.: FCH-001"
+              required
+              data-teste="lacre-fechamento"
             />
           </v-col>
           <v-col v-if="temSobra" cols="12" md="4">
@@ -574,7 +590,7 @@ function fechar() {
             <v-btn
               :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
-              :disabled="observacaoObrigatoriaPendente"
+              :disabled="observacaoObrigatoriaPendente || lacreFechamentoPendente"
               :aria-disabled="fechamentoTravado ? 'true' : undefined"
               :class="{ 'botao-travado': fechamentoTravado }"
               :loading="salvando"

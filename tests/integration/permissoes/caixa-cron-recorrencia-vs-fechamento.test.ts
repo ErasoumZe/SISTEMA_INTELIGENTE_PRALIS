@@ -72,7 +72,7 @@ describe("P0 - cron e recorrencia x fechamento (S1/S2)", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie },
-      payload
+      payload: { lacreFechamento: `FCH-CRON-${caixaId}`, ...payload }
     });
   }
 

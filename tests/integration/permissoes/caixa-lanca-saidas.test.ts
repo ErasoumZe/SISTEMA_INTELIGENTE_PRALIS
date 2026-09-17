@@ -68,7 +68,8 @@ describe("R-121 - operador de caixa lanca saidas amarradas a conta do PDV", () =
   afterAll(async () => contexto.fechar());
 
   function post(cookie: string, url: string, payload: object) {
-    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload });
+    const corpo = url.endsWith("/fechar") ? { lacreFechamento: `FCH-SAIDAS-${url}`, ...payload } : payload;
+    return contexto.app.inject({ method: "POST", url, headers: { cookie }, payload: corpo });
   }
   function put(cookie: string, url: string, payload: object) {
     return contexto.app.inject({ method: "PUT", url, headers: { cookie }, payload });

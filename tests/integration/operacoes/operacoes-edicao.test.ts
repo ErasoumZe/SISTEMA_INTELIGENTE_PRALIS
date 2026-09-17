@@ -297,7 +297,7 @@ describe("operacoes edicao integration", () => {
       method: "POST",
       url: `/api/caixa/${caixaId}/fechar`,
       headers: { cookie: cookieAdmin },
-      payload: { observacao: "Fechado apos edicoes" }
+      payload: { observacao: "Fechado apos edicoes", lacreFechamento: "FCH-OPERACOES-001" }
     });
     expect(fechar.statusCode, fechar.body).toBe(204);
   });

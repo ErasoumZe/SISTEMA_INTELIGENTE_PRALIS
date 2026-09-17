@@ -154,6 +154,7 @@ describe("fecharCaixaOperacional", () => {
     const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
       caixaId: "cx-2",
       observacao: "fim",
+      lacreFechamento: "FCH-001",
       lacreRetorno: "LAC-FIM"
     });
 
@@ -162,6 +163,7 @@ describe("fecharCaixaOperacional", () => {
     // servidor, sob trava. Por isso o payload tem observacao e lacre, e nunca `valor`.
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: "fim",
+      lacreFechamento: "FCH-001",
       lacreRetorno: "LAC-FIM"
     });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
@@ -172,26 +174,39 @@ describe("fecharCaixaOperacional", () => {
 
   it("não fecha se a confirmação for negada", async () => {
     const deps = montarDeps({ confirmar: async () => false });
-    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
+    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
+      caixaId: "cx-2",
+      observacao: null,
+      lacreFechamento: "FCH-002"
+    });
 
     expect(ok).toBe(false);
     expect(deps.api.post).not.toHaveBeenCalled();
     expect(deps.setSalvando).not.toHaveBeenCalled();
   });
 
-  it("sem lacre informado manda null (R-026: opcional)", async () => {
+  it("manda lacre de fechamento e preserva retorno opcional (R-026/R-200)", async () => {
     const deps = montarDeps();
-    await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
+    await criarAcoesCaixa(deps).fecharCaixaOperacional({
+      caixaId: "cx-2",
+      observacao: null,
+      lacreFechamento: "FCH-003"
+    });
 
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: null,
+      lacreFechamento: "FCH-003",
       lacreRetorno: null
     });
   });
 
   it("em erro notifica, devolve false e reseta salvando", async () => {
     const deps = montarDeps({ api: { post: vi.fn().mockRejectedValue(new Error("boom")) } });
-    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({ caixaId: "cx-2", observacao: null });
+    const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
+      caixaId: "cx-2",
+      observacao: null,
+      lacreFechamento: "FCH-004"
+    });
 
     expect(ok).toBe(false);
     expect(deps.notificar).toHaveBeenCalledWith("erro:boom", "error");
