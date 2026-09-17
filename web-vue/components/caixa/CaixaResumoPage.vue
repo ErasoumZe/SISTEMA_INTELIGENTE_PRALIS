@@ -345,7 +345,7 @@ function fechar() {
               v-model="aberturaExtra.numeroLacre"
               label="Transf. Entrada / N° Lacre"
               placeholder="Ex.: 001"
-              hint="Lacre da transferencia de entrada."
+              hint="Identifica o lacre do malote que trouxe o fundo ao caixa. Não é o lacre usado no fechamento."
               persistent-hint
             />
           </v-col>
@@ -541,7 +541,13 @@ function fechar() {
             </label>
           </v-col>
           <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <v-text-field v-model="entrega.lacre" label="N° do lacre (opcional)" data-teste="lacre-entrega" />
+            <v-text-field
+              v-model="entrega.lacre"
+              label="Lacre do retorno imediato (opcional)"
+              hint="Identifica o lacre desta transferência de dinheiro do caixa para o cofre."
+              persistent-hint
+              data-teste="lacre-entrega"
+            />
           </v-col>
           <v-col v-if="temSaldoLivre" cols="12" md="4">
             <v-btn
@@ -576,6 +582,8 @@ function fechar() {
               v-model="fechamento.lacreFechamento"
               label="Lacre de fechamento (obrigatório)"
               placeholder="Ex.: FCH-001"
+              hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
+              persistent-hint
               required
               data-teste="lacre-fechamento"
             />
@@ -583,7 +591,9 @@ function fechar() {
           <v-col v-if="temSobra" cols="12" md="4">
             <v-text-field
               v-model="fechamento.lacreRetorno"
-              label="Lacre da transferência de retorno final (opcional)"
+              label="Lacre do retorno no fechamento (opcional)"
+              hint="Identifica o lacre do dinheiro devolvido ao cofre junto com o fechamento. É diferente do lacre de fechamento."
+              persistent-hint
             />
           </v-col>
           <v-col cols="12">
