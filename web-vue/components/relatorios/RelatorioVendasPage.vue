@@ -252,7 +252,14 @@ watch(
               <td>{{ formatarHora(linha.dataVenda) }}</td>
               <td>
                 <div>{{ linha.descricao }}</div>
-                <v-btn size="x-small" variant="text" prepend-icon="mdi-eye" class="px-0" @click="abrirDetalhes(linha)">
+                <v-btn
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  prepend-icon="mdi-eye"
+                  class="px-0"
+                  @click="abrirDetalhes(linha)"
+                >
                   Ver detalhes
                 </v-btn>
               </td>
