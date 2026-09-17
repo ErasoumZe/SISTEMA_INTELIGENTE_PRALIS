@@ -14,6 +14,7 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
   const DIA_MULTI = "2026-08-03"; // dia isolado para a venda multi-forma
   const DIA_PAGINADO = "2026-08-04"; // paginação no banco, sem carregar o filtro inteiro
   const FORMA_PIX = "11111111-1111-4111-8111-111111111718";
+  let vendaMultiId = "";
 
   async function totaisDoDia(dia: string, formaPagamentoId?: string) {
     const filtroForma = formaPagamentoId ? `&formaPagamentoId=${formaPagamentoId}` : "";
@@ -66,6 +67,13 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
       `insert into vendas (empresa_id, data_referencia, descricao, valor_original, status, computar)
        values ($1, $2, 'Venda multi-forma', '100.00', 'aprovado', true) returning id`,
       [idsTeste.empresaA, DIA_MULTI]
+    );
+    vendaMultiId = multi!.id;
+    await executarSql(
+      `insert into vendas_produtos (venda_id, descricao_produto, quantidade, valor_unitario, valor_total)
+       values ($1, 'Cafe coado', '2', '20.00', '40.00'),
+              ($1, 'Pao de queijo', '3', '20.00', '60.00')`,
+      [vendaMultiId]
     );
     await executarSql(
       `insert into vendas_pagamentos (venda_id, forma_pagamento_id, numero_vendas, total_pago)
@@ -134,6 +142,35 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
       // A contagem continua sendo "vendas com a forma".
       expect(soPix.quantidade).toBe(1);
       expect(soDinheiro.quantidade).toBe(1);
+    });
+
+    it("lista produtos e detalha cada parcela de uma venda dividida", async () => {
+      const resposta = await contexto.app.inject({
+        method: "GET",
+        url: `/api/relatorios/vendas?empresaId=${idsTeste.empresaA}&dataInicio=${DIA_MULTI}&dataFim=${DIA_MULTI}`,
+        headers: { cookie: cookieAdmin }
+      });
+      expect(resposta.statusCode, resposta.body).toBe(200);
+      const corpo = json<{
+        data: Array<{
+          id: string;
+          itensVenda: Array<{ descricaoProduto: string; quantidade: number; valorTotal: number }>;
+          pagamentos: Array<{ formaPagamentoNome: string | null; totalPago: string }>;
+        }>;
+      }>(resposta);
+      const venda = corpo.data.find((item) => item.id === vendaMultiId);
+      expect(venda?.itensVenda).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ descricaoProduto: "Cafe coado", quantidade: 2, valorTotal: 40 }),
+          expect.objectContaining({ descricaoProduto: "Pao de queijo", quantidade: 3, valorTotal: 60 })
+        ])
+      );
+      expect(venda?.pagamentos).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ formaPagamentoNome: "Dinheiro", totalPago: "70.00" }),
+          expect.objectContaining({ formaPagamentoNome: "PIX Manual", totalPago: "30.00" })
+        ])
+      );
     });
   });
 

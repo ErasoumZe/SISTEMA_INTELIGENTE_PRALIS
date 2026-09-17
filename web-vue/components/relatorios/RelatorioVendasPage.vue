@@ -136,6 +136,18 @@ async function enviarComprovante() {
   }
 }
 
+function nomePagamento(pagamento: NonNullable<OperacaoResumo["pagamentos"]>[number]) {
+  return pagamento.formaPagamentoNome?.trim() || pagamento.tipoPagamentoAutomacao?.trim() || "Sem forma";
+}
+
+function resumoProdutos(linha: OperacaoResumo) {
+  const itens = linha.itensVenda ?? [];
+  if (!itens.length) return "";
+  const visiveis = itens.slice(0, 2).map((item) => `${item.quantidade}x ${item.descricaoProduto}`);
+  const restante = itens.length - visiveis.length;
+  return `Produtos: ${visiveis.join(", ")}${restante > 0 ? ` +${restante}` : ""}`;
+}
+
 watch(
   () => props.empresaId,
   () => {
@@ -238,13 +250,30 @@ watch(
               <td>{{ formatarDataSomenteDia(linha.dataReferencia) }}</td>
               <!-- "-" quando nao ha dataVenda: venda manual so tem a data contabil. -->
               <td>{{ formatarHora(linha.dataVenda) }}</td>
-              <td>{{ linha.descricao }}</td>
+              <td>
+                <div>{{ linha.descricao }}</div>
+                <div v-if="resumoProdutos(linha)" class="text-caption text-medium-emphasis mt-1">
+                  {{ resumoProdutos(linha) }}
+                </div>
+              </td>
               <td>{{ linha.pdvNome ?? "-" }}</td>
               <td>{{ linha.clienteNome ?? "-" }}</td>
               <td>
-                {{
-                  linha.pagamentos?.map((pagamento) => pagamento.formaPagamentoNome ?? "Sem forma").join(", ") || "-"
-                }}
+                <template v-if="linha.pagamentos?.length">
+                  <div v-for="pagamento in linha.pagamentos" :key="pagamento.id" class="text-no-wrap">
+                    {{ nomePagamento(pagamento) }}: {{ dinheiro(pagamento.totalPago) }}
+                  </div>
+                  <v-chip
+                    v-if="linha.pagamentos.length > 1"
+                    size="x-small"
+                    color="primary"
+                    variant="tonal"
+                    class="mt-1"
+                  >
+                    Venda dividida
+                  </v-chip>
+                </template>
+                <span v-else>-</span>
               </td>
               <!-- Liquido: o subtotal (valorOriginal) nao e o que o cliente pagou e nao bateria
                    com o rodape nem com o CREARE. -->
@@ -256,7 +285,7 @@ watch(
               </td>
             </tr>
             <tr v-if="!linhas.length">
-              <td colspan="7" class="text-center text-muted py-8">Nenhuma venda encontrada.</td>
+              <td colspan="8" class="text-center text-muted py-8">Nenhuma venda encontrada.</td>
             </tr>
           </tbody>
         </v-table>

@@ -118,13 +118,15 @@ async function montarResumoDasVendas(linhas: LinhaResumoVenda[]): Promise<VendaD
   const ids = linhas.map((linha) => linha.id);
   if (!ids.length) return [];
 
-  const [pagamentos, comprovantes] = await Promise.all([
+  const [pagamentos, comprovantes, itens] = await Promise.all([
     banco
       .select({
         id: vendasPagamentos.id,
         vendaId: vendasPagamentos.vendaId,
         formaPagamentoId: vendasPagamentos.formaPagamentoId,
         formaPagamentoNome: formasPagamento.nome,
+        tipoPagamentoAutomacaoId: vendasPagamentos.tipoPagamentoAutomacaoId,
+        tipoPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
         totalPago: vendasPagamentos.totalPago
       })
       .from(vendasPagamentos)
@@ -133,7 +135,20 @@ async function montarResumoDasVendas(linhas: LinhaResumoVenda[]): Promise<VendaD
     banco
       .select({ id: vendasComprovantes.id, vendaId: vendasComprovantes.vendaId })
       .from(vendasComprovantes)
-      .where(inArray(vendasComprovantes.vendaId, ids))
+      .where(inArray(vendasComprovantes.vendaId, ids)),
+    banco
+      .select({
+        vendaId: vendasProdutos.vendaId,
+        produtoId: vendasProdutos.produtoId,
+        produtoAutomacaoId: vendasProdutos.produtoAutomacaoId,
+        produtoAutomacaoCodigo: vendasProdutos.produtoAutomacaoCodigo,
+        descricaoProduto: vendasProdutos.descricaoProduto,
+        quantidade: vendasProdutos.quantidade,
+        valorUnitario: vendasProdutos.valorUnitario,
+        valorTotal: vendasProdutos.valorTotal
+      })
+      .from(vendasProdutos)
+      .where(inArray(vendasProdutos.vendaId, ids))
   ]);
 
   return linhas.map((linha) => ({
@@ -143,6 +158,14 @@ async function montarResumoDasVendas(linhas: LinhaResumoVenda[]): Promise<VendaD
     pagamentos: pagamentos
       .filter((pagamento) => pagamento.vendaId === linha.id)
       .map(({ vendaId: _vendaId, ...pagamento }) => pagamento),
+    itensVenda: itens
+      .filter((item) => item.vendaId === linha.id)
+      .map(({ vendaId: _vendaId, ...item }) => ({
+        ...item,
+        quantidade: Number(item.quantidade),
+        valorUnitario: Number(item.valorUnitario),
+        valorTotal: numeroDecimal(item.valorTotal)
+      })),
     totalComprovantes: comprovantes.filter((comprovante) => comprovante.vendaId === linha.id).length
   }));
 }
@@ -239,6 +262,7 @@ export async function totaisVendasRepository(
     .select({
       formaPagamentoId: vendasPagamentos.formaPagamentoId,
       formaPagamento: formasPagamento.nome,
+      formaPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
       total: sum(vendasPagamentos.totalPago),
       quantidade: count()
     })
@@ -246,7 +270,25 @@ export async function totaisVendasRepository(
     .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
     .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
     .where(where)
-    .groupBy(vendasPagamentos.formaPagamentoId, formasPagamento.nome);
+    .groupBy(vendasPagamentos.formaPagamentoId, formasPagamento.nome, vendasPagamentos.tipoPagamentoAutomacao);
+
+  const porFormaAgrupada = new Map<
+    string,
+    { formaPagamentoId: string | null; formaPagamento: string; total: number; quantidade: number }
+  >();
+  for (const linha of porForma) {
+    const formaPagamento = linha.formaPagamento?.trim() || linha.formaPagamentoAutomacao?.trim() || "Sem forma";
+    const chave = linha.formaPagamentoId ?? `automacao:${formaPagamento.toLocaleLowerCase("pt-BR")}`;
+    const atual = porFormaAgrupada.get(chave) ?? {
+      formaPagamentoId: linha.formaPagamentoId,
+      formaPagamento,
+      total: 0,
+      quantidade: 0
+    };
+    atual.total += Number(linha.total ?? 0);
+    atual.quantidade += Number(linha.quantidade ?? 0);
+    porFormaAgrupada.set(chave, atual);
+  }
 
   return {
     // Sem filtro de forma: liquido das vendas (cada venda conta UMA vez, sem join com pagamentos).
@@ -255,11 +297,11 @@ export async function totaisVendasRepository(
       ? numeroDecimal(parcelaDaForma?.total ?? "0")
       : deCentavos(liquidoDeSomasCentavos(resumo ?? { somaOriginal: 0, somaDesconto: 0, somaAcrescimo: 0 })),
     quantidade: Number(resumo?.quantidade ?? 0),
-    porFormaPagamento: porForma.map((linha) => ({
+    porFormaPagamento: [...porFormaAgrupada.values()].map((linha) => ({
       formaPagamentoId: linha.formaPagamentoId,
-      formaPagamento: linha.formaPagamento ?? "Sem forma",
-      total: numeroDecimal(linha.total ?? "0"),
-      quantidade: Number(linha.quantidade)
+      formaPagamento: linha.formaPagamento,
+      total: numeroDecimal(linha.total),
+      quantidade: linha.quantidade
     }))
   };
 }

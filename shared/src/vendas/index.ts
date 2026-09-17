@@ -107,10 +107,16 @@ export const vendaDtoSchema = z.object({
         id: z.string(),
         formaPagamentoId: z.string().nullable(),
         formaPagamentoNome: z.string().nullable(),
+        tipoPagamentoAutomacaoId: z.string().nullable().optional(),
+        tipoPagamentoAutomacao: z.string().nullable().optional(),
         totalPago: z.string()
       })
     )
     .default([]),
+  // Itens vindos do CREARE (e itens de vendas manuais quando existirem). O relatório usa
+  // a mesma estrutura do detalhe, mas mantém a lista opcional para preservar vendas antigas
+  // que não possuem itens gravados.
+  itensVenda: z.array(vendaItemSchema).default([]),
   totalComprovantes: z.number().int().min(0).default(0)
 });
 

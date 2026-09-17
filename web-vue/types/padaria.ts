@@ -228,7 +228,18 @@ export type OperacaoResumo = {
     id: string;
     formaPagamentoId: string | null;
     formaPagamentoNome: string | null;
+    tipoPagamentoAutomacaoId?: string | null;
+    tipoPagamentoAutomacao?: string | null;
     totalPago: string;
+  }>;
+  itensVenda?: Array<{
+    produtoId?: string | null;
+    produtoAutomacaoId?: string | null;
+    produtoAutomacaoCodigo?: string | null;
+    descricaoProduto: string;
+    quantidade: number;
+    valorUnitario: number;
+    valorTotal: number;
   }>;
   totalComprovantes?: number;
 };
