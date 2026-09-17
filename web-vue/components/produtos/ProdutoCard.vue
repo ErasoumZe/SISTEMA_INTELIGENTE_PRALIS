@@ -15,6 +15,7 @@ const { apiUrl } = useApi();
 
 const ativo = computed(() => props.produto.status === "ativo");
 const ehRevenda = computed(() => props.produto.tipo === "revenda");
+const fotoEmTelaCheia = ref(false);
 
 /**
  * A foto vem pela rota autenticada — inclusive a legada, que a API redireciona. Baixada por fetch e
@@ -47,7 +48,16 @@ const preco = computed(() =>
   <article class="produto-card">
     <header class="produto-card__topo">
       <div class="produto-card__identidade">
-        <div class="produto-card__foto" :class="{ 'produto-card__foto--vazia': !enderecoDaFoto }">
+        <div
+          class="produto-card__foto"
+          :class="{ 'produto-card__foto--vazia': !enderecoDaFoto }"
+          :role="enderecoDaFoto ? 'button' : undefined"
+          :tabindex="enderecoDaFoto ? 0 : undefined"
+          :aria-label="enderecoDaFoto ? `Ampliar foto de ${produto.descricao}` : undefined"
+          @click="enderecoDaFoto && (fotoEmTelaCheia = true)"
+          @keydown.enter.prevent="enderecoDaFoto && (fotoEmTelaCheia = true)"
+          @keydown.space.prevent="enderecoDaFoto && (fotoEmTelaCheia = true)"
+        >
           <img v-if="enderecoDaFoto" :src="enderecoDaFoto" :alt="produto.descricao" loading="lazy" />
           <v-icon v-else icon="mdi-basket-outline" size="22" />
         </div>
@@ -104,6 +114,23 @@ const preco = computed(() =>
         Ver
       </v-btn>
     </footer>
+
+    <v-dialog v-model="fotoEmTelaCheia" max-width="900" :aria-label="`Foto ampliada de ${produto.descricao}`">
+      <v-card>
+        <v-card-title class="d-flex align-center justify-space-between ga-2">
+          {{ produto.descricao }}
+          <v-btn icon="mdi-close" variant="text" aria-label="Fechar foto ampliada" @click="fotoEmTelaCheia = false" />
+        </v-card-title>
+        <v-card-text class="produto-card__foto-ampliada-conteudo">
+          <img
+            v-if="enderecoDaFoto"
+            :src="enderecoDaFoto"
+            :alt="produto.descricao"
+            class="produto-card__foto-ampliada"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </article>
 </template>
 
@@ -155,6 +182,25 @@ const preco = computed(() =>
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.produto-card__foto[role="button"] {
+  cursor: zoom-in;
+}
+.produto-card__foto[role="button"]:focus-visible {
+  outline: 2px solid var(--cx-focus);
+  outline-offset: 2px;
+}
+.produto-card__foto-ampliada-conteudo {
+  display: grid;
+  place-items: center;
+  padding: var(--cx-sp-3);
+}
+.produto-card__foto-ampliada {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(75vh, 720px);
+  object-fit: contain;
 }
 .produto-card__titulo {
   min-width: 0;

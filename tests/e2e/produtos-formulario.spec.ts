@@ -176,6 +176,11 @@ test("upload de foto exibe a imagem e sobrevive ao recarregar", async ({ page })
   await page.locator('.produto-foto input[type="file"]').setInputFiles("tests/e2e/fixtures/foto-produto.png");
   await expect(page.locator(".produto-foto__imagem")).toBeVisible();
   await expect(page.getByRole("button", { name: "Remover" })).toBeVisible();
+  await page.locator(".produto-foto__imagem").click();
+  await expect(page.getByRole("dialog", { name: "Foto ampliada do produto" })).toBeVisible();
+  await expect(page.locator(".produto-foto__ampliada")).toBeVisible();
+  await page.getByRole("button", { name: "Fechar foto ampliada" }).click();
+  await expect(page.getByRole("dialog", { name: "Foto ampliada do produto" })).toBeHidden();
 
   // Recarrega: a foto tem de vir do SERVIDOR, nao do preview local que acabou de ser criado.
   await page.reload();
@@ -187,6 +192,15 @@ test("upload de foto exibe a imagem e sobrevive ao recarregar", async ({ page })
   await expect(imagem).toHaveAttribute("src", /^blob:/);
   const carregou = await imagem.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
   expect(carregou, "a foto foi bloqueada pelo navegador").toBe(true);
+
+  await page.goto("/produtos");
+  await esperarListagem(page);
+  await page.getByPlaceholder("Buscar por nome, cÃ³digo, EAN ou marca...").fill(descricao);
+  const fotoDoCard = page.locator(".produto-card__foto img").first();
+  await expect(fotoDoCard).toBeVisible();
+  await fotoDoCard.click();
+  await expect(page.getByRole("dialog", { name: new RegExp(`Foto ampliada de ${descricao}`) })).toBeVisible();
+  await expect(page.locator(".produto-card__foto-ampliada")).toBeVisible();
   expect(problemas).toEqual([]);
 });
 

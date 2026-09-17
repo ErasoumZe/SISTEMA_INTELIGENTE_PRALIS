@@ -20,6 +20,7 @@ const entrada = ref<HTMLInputElement | null>(null);
 const arrastando = ref(false);
 const enviando = ref(false);
 const erro = ref("");
+const fotoEmTelaCheia = ref(false);
 
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 const TETO = 8 * 1024 * 1024;
@@ -132,7 +133,17 @@ function aoSoltar(evento: DragEvent) {
       <input ref="entrada" type="file" accept="image/jpeg,image/png,image/webp" hidden @change="aoEscolher" />
 
       <template v-if="endereco">
-        <img :src="endereco" alt="Foto do produto" class="produto-foto__imagem" />
+        <img
+          :src="endereco"
+          alt="Foto do produto"
+          class="produto-foto__imagem"
+          role="button"
+          tabindex="0"
+          aria-label="Ampliar foto do produto"
+          @click.stop="fotoEmTelaCheia = true"
+          @keydown.enter.prevent.stop="fotoEmTelaCheia = true"
+          @keydown.space.prevent.stop="fotoEmTelaCheia = true"
+        />
       </template>
       <template v-else>
         <v-progress-circular v-if="enviando" indeterminate size="28" />
@@ -167,6 +178,18 @@ function aoSoltar(evento: DragEvent) {
     </div>
 
     <v-alert v-if="erro" type="error" variant="tonal" density="compact" class="mt-2">{{ erro }}</v-alert>
+
+    <v-dialog v-model="fotoEmTelaCheia" max-width="900" aria-label="Foto ampliada do produto">
+      <v-card>
+        <v-card-title class="d-flex align-center justify-space-between ga-2">
+          Foto do produto
+          <v-btn icon="mdi-close" variant="text" aria-label="Fechar foto ampliada" @click="fotoEmTelaCheia = false" />
+        </v-card-title>
+        <v-card-text class="produto-foto__ampliada-conteudo">
+          <img v-if="endereco" :src="endereco" alt="Foto ampliada do produto" class="produto-foto__ampliada" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -201,12 +224,25 @@ function aoSoltar(evento: DragEvent) {
 }
 .produto-foto__area.is-cheia {
   padding: var(--cx-sp-2);
-  cursor: default;
+  cursor: zoom-in;
 }
 .produto-foto__imagem {
   width: 100%;
   max-height: 160px;
   border-radius: var(--cx-r-sm);
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.produto-foto__ampliada-conteudo {
+  display: grid;
+  place-items: center;
+  padding: var(--cx-sp-3);
+}
+.produto-foto__ampliada {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(75vh, 720px);
   object-fit: contain;
 }
 .produto-foto__titulo {
