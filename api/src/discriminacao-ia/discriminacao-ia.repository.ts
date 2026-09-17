@@ -1,7 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { fornecedores, produtos } from "@padaria/db/schema/cadastro";
 import { despesas } from "@padaria/db/schema/despesa";
-import { mercadorias } from "@padaria/db/schema/mercadoria";
+import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import { notasFiscais } from "@padaria/db/schema/nota-fiscal";
 import { banco, type ExecutorBanco } from "../banco/conexao.js";
 import { apenasDigitos } from "../utils.js";
@@ -49,6 +49,27 @@ export async function buscarProdutosIa(
       return ean ? [[ean, linha] as const] : [];
     })
   );
+}
+
+export async function buscarUltimosCustosIa(
+  empresaId: string,
+  produtoIds: string[],
+  db: ExecutorBanco = banco
+): Promise<Map<string, { custo: string; data: string }>> {
+  if (!produtoIds.length) return new Map();
+  const linhas = await db
+    .select({ produtoId: mercadoriasItens.produtoId, custo: mercadoriasItens.valorUnitario, data: mercadorias.dataReferencia })
+    .from(mercadoriasItens)
+    .innerJoin(mercadorias, eq(mercadorias.id, mercadoriasItens.mercadoriaId))
+    .where(and(eq(mercadorias.empresaId, empresaId), ne(mercadorias.status, "cancelado"), inArray(mercadoriasItens.produtoId, produtoIds)))
+    .orderBy(desc(mercadorias.dataReferencia), desc(mercadorias.criadoEm));
+  const resultado = new Map<string, { custo: string; data: string }>();
+  for (const linha of linhas) {
+    if (linha.produtoId && !resultado.has(linha.produtoId) && linha.custo != null && Number(linha.custo) > 0) {
+      resultado.set(linha.produtoId, { custo: String(linha.custo), data: linha.data });
+    }
+  }
+  return resultado;
 }
 
 export async function verificarDuplicidadeIa(

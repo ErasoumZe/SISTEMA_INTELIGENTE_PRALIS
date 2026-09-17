@@ -22,7 +22,18 @@ export const itemNotaFiscalIaSchema = z.object({
   unidadeMedidaId: z.string().uuid().nullable(),
   cadastrado: z.boolean(),
   confianca: z.number().min(0).max(1),
-  camposDuvidosos: z.array(z.string().max(80)).max(20)
+  camposDuvidosos: z.array(z.string().max(80)).max(20),
+  alertaCusto: z
+    .object({
+      nivel: z.enum(["atencao", "critico"]),
+      direcao: z.enum(["acima", "abaixo"]),
+      percentual: z.number(),
+      custoAnterior: decimalIaSchema,
+      custoNota: decimalIaSchema,
+      mensagem: z.string().max(300)
+    })
+    .nullable()
+    .default(null)
 });
 
 export const analiseNotaFiscalIaSchema = z.object({

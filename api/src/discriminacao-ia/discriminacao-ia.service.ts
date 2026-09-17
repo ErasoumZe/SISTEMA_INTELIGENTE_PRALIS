@@ -12,7 +12,7 @@ import { ErroDominio, erroValidacao, proibido } from "../erros.js";
 import type { ImagemNotaValidada } from "./imagem-nota.js";
 import { extrairNotaFiscalComGemini, type NotaFiscalExtraida } from "./gemini-nota-fiscal.js";
 import { extrairNotaFiscalDoXml } from "./xml-nota-fiscal.js";
-import { buscarFornecedorIa, buscarProdutosIa, verificarDuplicidadeIa } from "./discriminacao-ia.repository.js";
+import { buscarFornecedorIa, buscarProdutosIa, buscarUltimosCustosIa, verificarDuplicidadeIa } from "./discriminacao-ia.repository.js";
 import { apenasDigitos } from "../utils.js";
 
 const LIMIAR_DUVIDOSO = 0.8;
@@ -77,17 +77,38 @@ export async function analisarNotaFiscalIa(
     entrada.empresaId,
     extraida.itens.flatMap((item) => (item.ean ? [item.ean] : []))
   );
+  const custosAnteriores = await buscarUltimosCustosIa(
+    entrada.empresaId,
+    [...produtos.values()].map((produto) => produto.id)
+  );
   const itens = extraida.itens.flatMap((item) => {
     if (!item.descricao) return [];
     const ean = apenasDigitos(item.ean);
     const produto = ean ? produtos.get(ean) : undefined;
+    const valorUnitario = normalizarDecimal(item.valorUnitario, 4);
+    const custoAnterior = produto?.id ? custosAnteriores.get(produto.id) : undefined;
+    const custoNotaNumero = valorUnitario == null ? null : Number(valorUnitario);
+    const custoAnteriorNumero = custoAnterior ? Number(custoAnterior.custo) : null;
+    const variacao = custoAnteriorNumero && custoNotaNumero != null ? ((custoNotaNumero - custoAnteriorNumero) / custoAnteriorNumero) * 100 : 0;
+    const percentual = Math.abs(variacao);
+    const nivel = percentual >= 25 ? "critico" : percentual >= 10 ? "atencao" : null;
+    const alertaCusto = nivel && custoAnterior && custoNotaNumero != null
+      ? {
+          nivel,
+          direcao: variacao >= 0 ? ("acima" as const) : ("abaixo" as const),
+          percentual: Number(percentual.toFixed(2)),
+          custoAnterior: normalizarDecimal(custoAnterior.custo, 4)!,
+          custoNota: valorUnitario,
+          mensagem: `Custo ${variacao >= 0 ? "acima" : "abaixo"} do último custo em ${percentual.toFixed(2)}%.`
+        }
+      : null;
     return [
       {
         descricao: produto?.descricao ?? item.descricao,
         codigo: item.codigo,
         ean,
         quantidade: normalizarDecimal(item.quantidade, 3),
-        valorUnitario: normalizarDecimal(item.valorUnitario, 4),
+        valorUnitario,
         desconto: normalizarDecimal(item.desconto),
         valorTotal: normalizarDecimal(item.valorTotal),
         produtoId: produto?.id ?? null,
@@ -95,7 +116,8 @@ export async function analisarNotaFiscalIa(
         unidadeMedidaId: produto?.unidadeMedidaId ?? null,
         cadastrado: Boolean(produto),
         confianca: item.confianca,
-        camposDuvidosos: item.camposDuvidosos
+        camposDuvidosos: item.camposDuvidosos,
+        alertaCusto
       }
     ];
   });
@@ -153,6 +175,10 @@ export async function analisarNotaFiscalIa(
     avisos.push("O frete foi extraido para conferencia e nao foi aplicado ao campo Juros.");
   }
   if (duplicidade.duplicada && duplicidade.motivo) avisos.push(duplicidade.motivo);
+  const alertasCusto = itens.filter((item) => item.alertaCusto);
+  if (alertasCusto.length) {
+    avisos.push(`${alertasCusto.length} item(ns) com variação de custo relevante. Revise antes de salvar.`);
+  }
 
   return analiseNotaFiscalIaSchema.parse({
     documentoLegivel: extraida.documentoLegivel,
