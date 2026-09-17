@@ -196,6 +196,8 @@ export type OperacaoResumo = {
   // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
   // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
   valorLiquido?: string;
+  valorDesconto?: string;
+  valorAcrescimo?: string;
   computar: boolean;
   status: string;
   contaOrigemId?: string;

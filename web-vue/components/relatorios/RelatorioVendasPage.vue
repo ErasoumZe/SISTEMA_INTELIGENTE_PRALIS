@@ -2,6 +2,7 @@
 import type { OperacaoResumo, Opcao } from "~/types/padaria";
 import { dinheiro, mensagemErro } from "~/utils/domain";
 import { formatarDataSomenteDia, formatarHora } from "~/utils/formatacao";
+import VendaDetalheDialog from "./VendaDetalheDialog.vue";
 
 const props = defineProps<{
   empresaId: string;
@@ -50,6 +51,8 @@ const carregando = ref(false);
 const erro = ref("");
 const modalAberto = ref(false);
 const vendaSelecionada = ref<OperacaoResumo | null>(null);
+const detalheVendaAberto = ref(false);
+const vendaDetalheSelecionada = ref<OperacaoResumo | null>(null);
 const comprovantes = ref<Comprovante[]>([]);
 const uploadCarregando = ref(false);
 const arquivoInput = ref<File | null>(null);
@@ -140,12 +143,9 @@ function nomePagamento(pagamento: NonNullable<OperacaoResumo["pagamentos"]>[numb
   return pagamento.formaPagamentoNome?.trim() || pagamento.tipoPagamentoAutomacao?.trim() || "Sem forma";
 }
 
-function resumoProdutos(linha: OperacaoResumo) {
-  const itens = linha.itensVenda ?? [];
-  if (!itens.length) return "";
-  const visiveis = itens.slice(0, 2).map((item) => `${item.quantidade}x ${item.descricaoProduto}`);
-  const restante = itens.length - visiveis.length;
-  return `Produtos: ${visiveis.join(", ")}${restante > 0 ? ` +${restante}` : ""}`;
+function abrirDetalhes(venda: OperacaoResumo) {
+  vendaDetalheSelecionada.value = venda;
+  detalheVendaAberto.value = true;
 }
 
 watch(
@@ -252,9 +252,9 @@ watch(
               <td>{{ formatarHora(linha.dataVenda) }}</td>
               <td>
                 <div>{{ linha.descricao }}</div>
-                <div v-if="resumoProdutos(linha)" class="text-caption text-medium-emphasis mt-1">
-                  {{ resumoProdutos(linha) }}
-                </div>
+                <v-btn size="x-small" variant="text" prepend-icon="mdi-eye" class="px-0" @click="abrirDetalhes(linha)">
+                  Ver detalhes
+                </v-btn>
               </td>
               <td>{{ linha.pdvNome ?? "-" }}</td>
               <td>{{ linha.clienteNome ?? "-" }}</td>
@@ -311,6 +311,8 @@ watch(
         <v-pagination v-model="pagina" :length="totalPaginas" :total-visible="5" @update:model-value="buscar" />
       </div>
     </v-card-text>
+
+    <VendaDetalheDialog v-model="detalheVendaAberto" :venda="vendaDetalheSelecionada" />
 
     <v-dialog v-model="modalAberto" max-width="680">
       <v-card>
