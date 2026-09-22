@@ -4,6 +4,7 @@ import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
+import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
@@ -662,6 +663,10 @@ function fechar() {
               </div>
               <div class="cat-valor">{{ dinheiro(cat.valor) }}</div>
               <div v-if="cat.detalhe" class="cat-detalhe">{{ cat.detalhe }}</div>
+              <CaixaResumoMaloteAbertura
+                v-if="cat.chave === 'transferencias' && caixaAberto"
+                :caixa-id="caixaAberto.id"
+              />
             </div>
           </div>
 
