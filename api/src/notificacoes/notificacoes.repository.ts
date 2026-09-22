@@ -287,3 +287,27 @@ export async function verificarNotificacaoRepository(
     .returning({ id: notificacoes.id });
   return item ?? null;
 }
+
+/**
+ * Marca como vistas somente as pendencias do proprio destinatario na empresa ativa. O UPDATE e
+ * unico: duas abas clicando em "Li tudo" nao criam estado intermediario, e notificacao de outro
+ * usuario ou outra empresa nunca entra no lote.
+ */
+export async function verificarTodasNotificacoesRepository(
+  empresaId: string,
+  usuarioId: string,
+  db: ExecutorBanco = banco
+): Promise<number> {
+  const linhas = await db
+    .update(notificacoes)
+    .set({ verificado: true, verificadoPor: usuarioId, verificadoEm: new Date() })
+    .where(
+      and(
+        eq(notificacoes.empresaId, empresaId),
+        eq(notificacoes.destinatarioUsuarioId, usuarioId),
+        eq(notificacoes.verificado, false)
+      )
+    )
+    .returning({ id: notificacoes.id });
+  return linhas.length;
+}

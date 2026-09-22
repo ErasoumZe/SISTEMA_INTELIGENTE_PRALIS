@@ -25,6 +25,7 @@ const emit = defineEmits<{
   (event: "selecionarEmpresa", id: string): void;
   (event: "abrirPendencias"): void;
   (event: "verificarNotificacao", id: string): void;
+  (event: "verificarTodasNotificacoes"): void;
 }>();
 
 const drawerRecolhido = ref(false);
@@ -294,7 +295,20 @@ onMounted(() => {
               </v-badge>
             </template>
             <v-card min-width="320" max-width="420">
-              <v-card-title class="text-subtitle-1">Pendências</v-card-title>
+              <v-card-title class="d-flex align-center ga-2 text-subtitle-1">
+                <span>Pendências</span>
+                <v-spacer />
+                <v-btn
+                  v-if="notificacoesRecentes.length"
+                  size="small"
+                  variant="text"
+                  prepend-icon="mdi-check-all"
+                  title="Marcar todas as pendências como lidas"
+                  @click="emit('verificarTodasNotificacoes')"
+                >
+                  Li tudo
+                </v-btn>
+              </v-card-title>
               <v-list v-if="notificacoesRecentes.length" lines="three">
                 <v-list-item
                   v-for="item in notificacoesRecentes"

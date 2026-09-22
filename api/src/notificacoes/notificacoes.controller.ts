@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { erro, ok, semConteudo } from "@padaria/shared/api";
 import { notificacaoParamsSchema, notificacoesQuerySchema } from "@padaria/shared/notificacoes";
 import { mensagemDominioOuRelancar } from "../erros.js";
-import { listarNotificacoes, verificarNotificacao } from "./notificacoes.service.js";
+import { listarNotificacoes, verificarNotificacao, verificarTodasNotificacoes } from "./notificacoes.service.js";
 
 export async function registrarRotasNotificacoes(app: FastifyInstance) {
   app.get("/api/notificacoes", async (request, reply) => {
@@ -23,6 +23,15 @@ export async function registrarRotasNotificacoes(app: FastifyInstance) {
     } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, mensagem === "Notificacao nao encontrada" ? 404 : 403, mensagem);
+    }
+  });
+
+  app.put("/api/notificacoes/verificar-todas", async (request, reply) => {
+    const { empresaId } = notificacoesQuerySchema.parse(request.query);
+    try {
+      return ok({ total: await verificarTodasNotificacoes(empresaId, request.perfilUsuario!) });
+    } catch (error) {
+      return erro(reply, 403, mensagemDominioOuRelancar(error));
     }
   });
 }

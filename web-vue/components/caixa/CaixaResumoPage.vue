@@ -584,6 +584,11 @@ function fechar() {
               placeholder="Ex.: FCH-001"
               hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
               persistent-hint
+              color="error"
+              base-color="error"
+              :error="lacreFechamentoPendente"
+              :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
+              prepend-inner-icon="mdi-lock-alert-outline"
               required
               data-teste="lacre-fechamento"
             />

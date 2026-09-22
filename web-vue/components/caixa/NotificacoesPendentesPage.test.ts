@@ -16,6 +16,39 @@ const quebraVerificada = {
 };
 
 describe("NotificacoesPendentesPage", () => {
+  it("permite marcar todas as pendencias abertas como lidas de uma vez", async () => {
+    const tela = mount(NotificacoesPendentesPage, {
+      props: {
+        notificacoes: [
+          {
+            ...quebraVerificada,
+            id: "11111111-1111-4111-8111-111111111115",
+            verificado: false,
+            verificadoPor: null,
+            verificadoEm: null
+          }
+        ],
+        notificacoesComHistorico: []
+      },
+      global: {
+        stubs: {
+          "v-alert": { template: "<div><slot /></div>" },
+          "v-card": { template: "<article><slot /></article>" },
+          "v-card-title": { template: "<h3><slot /></h3>" },
+          "v-card-text": { template: "<div><slot /></div>" },
+          "v-card-actions": { template: "<div><slot /></div>" },
+          "v-btn": { template: "<button><slot /></button>" },
+          "v-select": { template: "<select><slot /></select>" },
+          "v-text-field": { template: "<input />" }
+        }
+      }
+    });
+
+    await tela.get("button").trigger("click");
+
+    expect(tela.emitted("verificarTodas")).toHaveLength(1);
+  });
+
   it("mantem a quebra verificada consultavel sem recoloca-la como pendencia aberta", () => {
     const tela = mount(NotificacoesPendentesPage, {
       props: { notificacoes: [], notificacoesComHistorico: [quebraVerificada] },
@@ -31,7 +64,7 @@ describe("NotificacoesPendentesPage", () => {
       }
     });
 
-    expect(tela.text()).toContain("Nenhuma pendência aberta.");
+    expect(tela.text()).toContain("Nenhuma pendência corresponde aos filtros.");
     expect(tela.text()).toContain("Verificadas recentemente");
     expect(tela.text()).toContain("Quebra de caixa - Caixa");
     expect(tela.text()).toContain("R$ 50,00");

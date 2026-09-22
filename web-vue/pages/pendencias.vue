@@ -29,6 +29,7 @@ const router = useRouter();
         :notificacoes="ctx.notificacoes"
         :notificacoes-com-historico="ctx.notificacoesComHistorico"
         @verificar="ctx.verificarNotificacao"
+        @verificar-todas="ctx.marcarTodasNotificacoesComoVistas"
         @abrir="router.push($event)"
       />
 

@@ -4,7 +4,8 @@ import type { PerfilUsuario } from "@padaria/shared/autenticacao";
 import {
   listarDetalhesLancamentosNotificacaoRepository,
   listarNotificacoesRepository,
-  verificarNotificacaoRepository
+  verificarNotificacaoRepository,
+  verificarTodasNotificacoesRepository
 } from "./notificacoes.repository.js";
 import { sincronizarAvisosDeVencimento } from "./vencimentos.service.js";
 
@@ -29,4 +30,10 @@ export async function verificarNotificacao(notificacaoId: string, empresaId: str
   if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
   const item = await verificarNotificacaoRepository(notificacaoId, empresaId, perfil.usuarioId);
   if (!item) throw new Error("Notificacao nao encontrada");
+}
+
+/** "Li tudo" usa a mesma trilha auditavel da marcacao individual, sem declarar que a pendencia financeira foi resolvida. */
+export async function verificarTodasNotificacoes(empresaId: string, perfil: PerfilUsuario) {
+  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
+  return verificarTodasNotificacoesRepository(empresaId, perfil.usuarioId);
 }

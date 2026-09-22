@@ -714,6 +714,22 @@ async function marcarNotificacaoComoVista(notificacaoId: string) {
   }
 }
 
+async function marcarTodasNotificacoesComoVistas() {
+  if (!empresaId.value || !notificacoes.value.length) return;
+  try {
+    const resposta = await apiPut<{ total: number }>(
+      `/api/notificacoes/verificar-todas?empresaId=${encodeURIComponent(empresaId.value)}`,
+      {}
+    );
+    await carregarNotificacoes();
+    notificar(
+      resposta.total === 1 ? "1 pendência marcada como lida." : `${resposta.total} pendências marcadas como lidas.`
+    );
+  } catch (error) {
+    notificar(mensagemErro(error), "error");
+  }
+}
+
 async function trocarEmpresa(idEmpresa = empresaId.value) {
   if (paginaInicialNeutra.value) {
     await carregarStatusCaixa(idEmpresa);
@@ -2193,6 +2209,7 @@ const pageContext = computed(() => ({
   notificacoes: notificacoes.value,
   notificacoesComHistorico: notificacoesComHistorico.value,
   verificarNotificacao,
+  marcarTodasNotificacoesComoVistas,
   fecharCaixaOperacional,
   recarregarCaixa: async () => {
     await carregarStatusCaixa(empresaId.value);
@@ -2305,6 +2322,7 @@ onBeforeUnmount(() => {
     @selecionar-empresa="selecionarEmpresa"
     @abrir-pendencias="router.push('/pendencias')"
     @verificar-notificacao="marcarNotificacaoComoVista"
+    @verificar-todas-notificacoes="marcarTodasNotificacoesComoVistas"
   >
     <template #caixa>
       <!-- O AVISO DE CAIXA MUDOU DE LUGAR (28/08/2026), por decisao do Marco: saiu do topo da
