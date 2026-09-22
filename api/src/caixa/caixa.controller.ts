@@ -30,6 +30,7 @@ import {
   obterTransferenciasCaixa,
   listarAnexosFechamentoCaixa,
   listarConferenciasFisicasCaixa,
+  removerAnexoFechamentoCaixa,
   salvarAnexoFechamentoCaixa
 } from "./caixa.service.js";
 
@@ -101,25 +102,52 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) }, async (request, reply) => {
-    const { caixaId } = caixaParamsSchema.parse(request.params);
-    try {
-      return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
-    } catch (error) {
-      const mensagem = mensagemDominioOuRelancar(error);
-      return erro(reply, statusErro(mensagem), mensagem);
+  app.get(
+    "/api/caixa/:caixaId/anexos",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
     }
-  });
+  );
 
-  app.get("/api/caixa/:caixaId/conferencias-fisicas", { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) }, async (request, reply) => {
-    const { caixaId } = caixaParamsSchema.parse(request.params);
-    try {
-      return ok(await listarConferenciasFisicasCaixa(caixaId, request.perfilUsuario!));
-    } catch (error) {
-      const mensagem = mensagemDominioOuRelancar(error);
-      return erro(reply, statusErro(mensagem), mensagem);
+  app.delete(
+    "/api/caixa/:caixaId/anexos/:anexoId",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const anexoId = z
+        .string()
+        .uuid()
+        .parse((request.params as { anexoId?: string }).anexoId);
+      try {
+        await removerAnexoFechamentoCaixa(caixaId, anexoId, request.perfilUsuario!);
+        return semConteudo(reply);
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
     }
-  });
+  );
+
+  app.get(
+    "/api/caixa/:caixaId/conferencias-fisicas",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await listarConferenciasFisicasCaixa(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 
   app.get(
     "/api/caixa/:caixaId/anexos/:anexoId",
@@ -134,7 +162,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
         const anexo = await obterArquivoAnexoFechamentoCaixa(caixaId, anexoId, request.perfilUsuario!);
         reply.header("Content-Type", anexo.mimeType);
         const nomeSeguro = anexo.nomeOriginal.replace(/[^\w. -]/gu, "_");
-        reply.header("Content-Disposition", `inline; filename=\"${nomeSeguro || "anexo"}\"`);
+        reply.header("Content-Disposition", `inline; filename="${nomeSeguro || "anexo"}"`);
         reply.header("Cache-Control", "private, no-store");
         return reply.send(createReadStream(anexo.caminhoAbsoluto));
       } catch (error) {

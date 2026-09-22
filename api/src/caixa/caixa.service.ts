@@ -48,6 +48,7 @@ import {
   criarConferenciaFisicaTransferenciaRepository,
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
+  removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
   listarConferenciasFisicasCaixaRepository,
@@ -223,6 +224,23 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   // limitada ao caixa dele; Tesouraria e Gerência podem auditar qualquer caixa permitido.
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
+}
+
+export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
+  const removido = await executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Anexos so podem ser removidos antes do fechamento");
+    const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!anexo) throw new Error("Anexo nao encontrado");
+    return anexo;
+  });
+
+  // O vínculo no banco já foi removido sob trava. Se a limpeza física falhar, o arquivo não fica
+  // acessível pela API e poderá ser tratado pela rotina de retenção sem restaurar uma prova errada.
+  await unlink(caminhoAbsolutoDocumento(removido.caminho)).catch(() => undefined);
 }
 
 export async function listarConferenciasFisicasCaixa(caixaId: string, perfil: PerfilUsuario) {

@@ -349,15 +349,22 @@ const aberturaBloqueada = computed(
 );
 
 watch(
-  caixaAberto,
-  () => {
-    if (!caixaAberto.value) {
+  () => caixaAberto.value?.id,
+  (caixaId) => {
+    if (!caixaId) {
       fechamento.observacao = "";
       fechamento.lacreFechamento = "";
       fechamento.valorEspecie = "";
       fechamento.valorMoedas = "";
       fechamento.caixaResponsavelNome = "";
       fechamento.supervisorResponsavelNome = "";
+      return;
+    }
+
+    // A abertura identifica o operador de origem; o fechamento pode ser feito por outra pessoa.
+    // Só sugere o nome se o operador ainda não preencheu um valor próprio.
+    if (!fechamento.caixaResponsavelNome.trim()) {
+      fechamento.caixaResponsavelNome = caixaAberto.value?.caixaResponsavelNomeAbertura ?? "";
     }
   },
   { immediate: true }
@@ -848,6 +855,18 @@ function fechar() {
           <v-col cols="12" class="fechamento-caixa">
             <div class="text-h6 mb-1">Fechamento do caixa</div>
             <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
+            <div
+              v-if="caixaAberto.caixaResponsavelNomeAbertura || caixaAberto.supervisorResponsavelNomeAbertura"
+              class="fechamento-abertura-responsavel mb-4"
+            >
+              <v-icon icon="mdi-account-cash-outline" size="small" />
+              <span v-if="caixaAberto.caixaResponsavelNomeAbertura">
+                Caixa que abriu: <strong>{{ caixaAberto.caixaResponsavelNomeAbertura }}</strong>
+              </span>
+              <span v-if="caixaAberto.supervisorResponsavelNomeAbertura">
+                · Supervisor na abertura: <strong>{{ caixaAberto.supervisorResponsavelNomeAbertura }}</strong>
+              </span>
+            </div>
             <v-row dense>
               <v-col cols="12" md="4">
                 <v-text-field
@@ -1003,6 +1022,18 @@ function fechar() {
   border-radius: 12px;
   padding: 20px;
   background: color-mix(in srgb, rgb(var(--v-theme-error)) 8%, transparent);
+}
+
+.fechamento-abertura-responsavel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.9);
+  font-size: 0.875rem;
 }
 
 /* CampoDinheiro e um input nativo para preservar a digitacao monetaria brasileira. Aqui ele era

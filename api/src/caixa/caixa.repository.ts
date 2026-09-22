@@ -1406,6 +1406,27 @@ export async function buscarAnexoFechamentoCaixaRepository(
   return anexo ?? null;
 }
 
+// A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira
+// prova histórica e não pode ser retirado por esta rota.
+export async function removerAnexoFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  anexoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .delete(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.id, anexoId),
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .returning({ caminho: fechamentosCaixaAnexos.caminho });
+  return anexo ?? null;
+}
+
 export async function atualizarFechamentoCaixaRepository(
   input: {
     caixaId: string;
