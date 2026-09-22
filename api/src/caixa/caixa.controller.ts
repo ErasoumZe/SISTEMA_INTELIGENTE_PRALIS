@@ -29,6 +29,7 @@ import {
   obterArquivoAnexoFechamentoCaixa,
   obterTransferenciasCaixa,
   listarAnexosFechamentoCaixa,
+  listarConferenciasFisicasCaixa,
   salvarAnexoFechamentoCaixa
 } from "./caixa.service.js";
 
@@ -104,6 +105,16 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     try {
       return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
+    } catch (error) {
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErro(mensagem), mensagem);
+    }
+  });
+
+  app.get("/api/caixa/:caixaId/conferencias-fisicas", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
+    const { caixaId } = caixaParamsSchema.parse(request.params);
+    try {
+      return ok(await listarConferenciasFisicasCaixa(caixaId, request.perfilUsuario!));
     } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);

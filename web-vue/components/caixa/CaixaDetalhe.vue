@@ -13,19 +13,34 @@ const detalhe = ref<DetalheCaixaResponse | null>(null);
 const carregando = ref(false);
 const erro = ref("");
 const anexos = ref<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>([]);
+const conferencias = ref<
+  Array<{
+    id: string;
+    etapa: "abertura" | "retorno_sangria";
+    resultado: "convergente" | "divergente";
+    valorEspecieDeclarado: number;
+    valorMoedasDeclarado: number;
+    valorEspecieContado: number;
+    valorMoedasContado: number;
+    observacao: string | null;
+    conferidoEm: string;
+  }>
+>([]);
 
 async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    const [detalheCarregado, anexosCarregados] = await Promise.all([
+    const [detalheCarregado, anexosCarregados, conferenciasCarregadas] = await Promise.all([
       apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`),
       apiGet<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>(
         `/api/caixa/${props.caixa.id}/anexos`
-      )
+      ),
+      apiGet<typeof conferencias.value>(`/api/caixa/${props.caixa.id}/conferencias-fisicas`)
     ]);
     detalhe.value = detalheCarregado;
     anexos.value = anexosCarregados ?? [];
+    conferencias.value = conferenciasCarregadas ?? [];
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {
@@ -65,6 +80,20 @@ onMounted(carregar);
           <div class="d-flex flex-wrap ga-4 text-body-2">
             <span><strong>Abertura:</strong> {{ caixa.lacreAbertura || "Sem lacre" }}</span>
             <span><strong>Fechamento:</strong> {{ caixa.lacreFechamento || "Não registrado" }}</span>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Conferências físicas</div>
+          <p v-if="!conferencias.length" class="text-body-2 text-medium-emphasis mb-0">Nenhuma conferência física registrada.</p>
+          <div v-for="conferencia in conferencias" :key="conferencia.id" class="text-body-2 mb-2">
+            <strong>{{ conferencia.etapa === "abertura" ? "Abertura do malote" : "Retorno / sangria" }}</strong>
+            — {{ conferencia.resultado }} em {{ formatarDataHora(conferencia.conferidoEm) }}.<br>
+            Declarado: dinheiro {{ dinheiro(conferencia.valorEspecieDeclarado) }}, moedas {{ dinheiro(conferencia.valorMoedasDeclarado) }}.
+            Contado: dinheiro {{ dinheiro(conferencia.valorEspecieContado) }}, moedas {{ dinheiro(conferencia.valorMoedasContado) }}.
+            <template v-if="conferencia.observacao"> Motivo: {{ conferencia.observacao }}</template>
           </div>
         </v-card-text>
       </v-card>

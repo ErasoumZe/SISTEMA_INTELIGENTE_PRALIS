@@ -496,6 +496,33 @@ export async function criarConferenciaFisicaTransferenciaRepository(
   return conferencia!;
 }
 
+export async function listarConferenciasFisicasCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: transferenciasConferenciasFisicas.id,
+      etapa: transferenciasConferenciasFisicas.etapa,
+      resultado: transferenciasConferenciasFisicas.resultado,
+      valorEspecieDeclarado: transferenciasConferenciasFisicas.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferenciasConferenciasFisicas.valorMoedasDeclarado,
+      valorEspecieContado: transferenciasConferenciasFisicas.valorEspecieContado,
+      valorMoedasContado: transferenciasConferenciasFisicas.valorMoedasContado,
+      observacao: transferenciasConferenciasFisicas.observacao,
+      conferidoEm: transferenciasConferenciasFisicas.conferidoEm
+    })
+    .from(transferenciasConferenciasFisicas)
+    .where(
+      and(
+        eq(transferenciasConferenciasFisicas.fechamentoCaixaId, fechamentoCaixaId),
+        eq(transferenciasConferenciasFisicas.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(transferenciasConferenciasFisicas.conferidoEm));
+}
+
 // --- Concorrencia do caixa (B1/B2) ------------------------------------------------------------
 // Trava a LINHA do caixa ate o fim da transacao. Quem chegar depois espera aqui e, ao passar, ja
 // enxerga o commit do primeiro (READ COMMITTED tira snapshot novo por comando) — e so por isso o

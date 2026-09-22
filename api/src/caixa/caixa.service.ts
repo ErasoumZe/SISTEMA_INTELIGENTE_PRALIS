@@ -50,6 +50,7 @@ import {
   buscarAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
+  listarConferenciasFisicasCaixaRepository,
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
   buscarPlanejamentoRetornoRepository,
@@ -220,6 +221,20 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   // limitada ao caixa dele; Tesouraria e Gerência podem auditar qualquer caixa permitido.
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
+}
+
+export async function listarConferenciasFisicasCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  const conferencias = await listarConferenciasFisicasCaixaRepository(caixa.id, caixa.empresaId);
+  return conferencias.map((item) => ({
+    ...item,
+    valorEspecieDeclarado: numero(item.valorEspecieDeclarado),
+    valorMoedasDeclarado: numero(item.valorMoedasDeclarado),
+    valorEspecieContado: numero(item.valorEspecieContado),
+    valorMoedasContado: numero(item.valorMoedasContado),
+    conferidoEm: serializarData(item.conferidoEm) ?? ""
+  }));
 }
 
 export async function obterArquivoAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
