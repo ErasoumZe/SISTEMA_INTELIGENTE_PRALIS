@@ -849,6 +849,21 @@ function fechar() {
         </div>
 
         <v-row dense>
+          <v-col v-if="temSaldoLivre" cols="12" class="pb-5">
+            <v-divider class="mb-5" />
+            <v-btn
+              color="warning"
+              prepend-icon="mdi-bank-transfer-out"
+              class="botao-retorno-sangria"
+              data-teste="botao-entregar"
+              @click="modalRetornoSangriaAberto = true"
+            >
+              <span class="botao-retorno-sangria__conteudo">
+                <span>Transferência de retorno / sangria</span>
+                <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
+              </span>
+            </v-btn>
+          </v-col>
           <v-col cols="12" class="fechamento-caixa">
             <div class="text-h6 mb-1">Fechamento do caixa</div>
             <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
@@ -964,21 +979,6 @@ function fechar() {
                 </p>
               </v-col>
             </v-row>
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" class="pt-5">
-            <v-divider class="mb-5" />
-            <v-btn
-              color="warning"
-              prepend-icon="mdi-bank-transfer-out"
-              class="botao-retorno-sangria"
-              data-teste="botao-entregar"
-              @click="modalRetornoSangriaAberto = true"
-            >
-              <span class="botao-retorno-sangria__conteudo">
-                <span>Transferência de retorno / sangria</span>
-                <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
-              </span>
-            </v-btn>
           </v-col>
         </v-row>
 
