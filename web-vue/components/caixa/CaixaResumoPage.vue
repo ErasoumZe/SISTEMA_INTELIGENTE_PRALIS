@@ -201,6 +201,9 @@ const maquininhasSelect = computed(() =>
     nome: `${item.apelido ?? item.nome} · ${item.numeroSerie ?? "sem série"}`
   }))
 );
+// O vinculo continua suportado pela API e pelo historico, mas nao faz parte desta rodada de
+// operacao no PDV. A flag oculta somente o seletor, sem apagar valores ja existentes.
+const exibirMaquininhaNaAbertura = false;
 
 // Cockpit por categoria: a cor entra como ACENTO (barra/chip/total) via os tokens --cat-* da main,
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
@@ -583,7 +586,7 @@ function fechar() {
               </div>
             </v-col>
           </template>
-          <v-col cols="12" md="6">
+          <v-col v-if="exibirMaquininhaNaAbertura" cols="12" md="6">
             <v-select
               v-model="aberturaExtra.maquininhaId"
               :items="maquininhasSelect"
