@@ -81,9 +81,12 @@ const aberturaExtra = reactive({
 });
 const fechamento = reactive({ observacao: "", lacreFechamento: "", valorEspecie: "", valorMoedas: "" });
 const folhaFechamentoEnviada = ref(false);
-const maloteDeclarado = ref<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number } | null>(null);
+const maloteDeclarado = ref<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number } | null>(
+  null
+);
 const erroMalote = ref("");
 const carregandoMalote = ref(false);
+let consultaMaloteAtual = 0;
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
@@ -141,7 +144,9 @@ const temDeficit = computed(() => saldoAtual.value < 0);
 const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
-const totalFechamentoContado = computed(() => Number(fechamento.valorEspecie || 0) + Number(fechamento.valorMoedas || 0));
+const totalFechamentoContado = computed(
+  () => Number(fechamento.valorEspecie || 0) + Number(fechamento.valorMoedas || 0)
+);
 const fechamentoComposicaoInformada = computed(
   () => fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
 );
@@ -266,34 +271,51 @@ watch(
   { immediate: true }
 );
 
-watch(
-  [() => abertura.pdvId, () => aberturaExtra.numeroLacre],
-  async ([pdvId, lacre]) => {
-    maloteDeclarado.value = null;
-    erroMalote.value = "";
-    if (!pdvId || !lacre.trim()) return;
-    carregandoMalote.value = true;
-    try {
-      maloteDeclarado.value = await apiGet(`/api/caixa/malote?empresaId=${encodeURIComponent(props.empresaId)}&pdvId=${encodeURIComponent(pdvId)}&lacre=${encodeURIComponent(lacre.trim())}`);
-    } catch (falha) {
-      erroMalote.value = falha instanceof Error ? falha.message : "Nao foi possivel consultar o malote.";
-    } finally {
-      carregandoMalote.value = false;
-    }
+watch([() => abertura.pdvId, () => aberturaExtra.numeroLacre], async ([pdvId, lacre]) => {
+  const consultaAtual = ++consultaMaloteAtual;
+  maloteDeclarado.value = null;
+  erroMalote.value = "";
+  if (!pdvId || !lacre.trim()) return;
+  carregandoMalote.value = true;
+  try {
+    const malote = await apiGet<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number }>(
+      `/api/caixa/malote?empresaId=${encodeURIComponent(props.empresaId)}&pdvId=${encodeURIComponent(pdvId)}&lacre=${encodeURIComponent(lacre.trim())}`
+    );
+    if (consultaAtual !== consultaMaloteAtual) return;
+    maloteDeclarado.value = malote;
+  } catch (falha) {
+    if (consultaAtual !== consultaMaloteAtual) return;
+    erroMalote.value =
+      falha instanceof Error && falha.message
+        ? falha.message
+        : "Nao foi possivel consultar o malote. Confira o lacre e tente novamente.";
+  } finally {
+    if (consultaAtual === consultaMaloteAtual) carregandoMalote.value = false;
   }
-);
+});
 
+const aberturaComposicaoInformada = computed(
+  () => aberturaExtra.valorEspecie.trim() !== "" && aberturaExtra.valorMoedas.trim() !== ""
+);
 const aberturaDivergente = computed(
   () =>
     Boolean(maloteDeclarado.value) &&
+    aberturaComposicaoInformada.value &&
     (Number(aberturaExtra.valorEspecie || 0) !== maloteDeclarado.value!.valorEspecieDeclarado ||
       Number(aberturaExtra.valorMoedas || 0) !== maloteDeclarado.value!.valorMoedasDeclarado)
+);
+const aberturaComposicaoPendente = computed(() =>
+  Boolean(aberturaExtra.numeroLacre.trim() && maloteDeclarado.value && !aberturaComposicaoInformada.value)
+);
+const observacaoAberturaPendente = computed(
+  () => aberturaDivergente.value && !aberturaExtra.observacaoDivergencia.trim()
 );
 const aberturaBloqueada = computed(
   () =>
     !abertura.pdvId ||
     Boolean(aberturaExtra.numeroLacre.trim() && (!maloteDeclarado.value || carregandoMalote.value)) ||
-    (aberturaDivergente.value && !aberturaExtra.observacaoDivergencia.trim())
+    aberturaComposicaoPendente.value ||
+    observacaoAberturaPendente.value
 );
 
 watch(
@@ -310,6 +332,7 @@ watch(
 );
 
 function abrir() {
+  if (aberturaBloqueada.value) return;
   emit("abrirCaixa", {
     pdvId: abertura.pdvId,
     usuarioCaixaId: props.usuarioId,
@@ -334,8 +357,7 @@ const valorEntregaEfetivo = computed(() => {
 // e imediato e o botao nao dispara.
 const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > saldoLivre.value);
 const entregaComposicaoInvalida = computed(
-  () =>
-    Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
+  () => Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
 );
 const lacreEntregaPendente = computed(() => !entrega.lacre.trim());
 const entregaBloqueada = computed(
@@ -438,23 +460,61 @@ function fechar() {
               persistent-hint
             />
           </v-col>
-          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
-            <CampoDinheiro v-model="aberturaExtra.valorEspecie" label="Dinheiro fisico conferido" />
-          </v-col>
-          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
-            <CampoDinheiro v-model="aberturaExtra.valorMoedas" label="Moedas conferidas" />
-          </v-col>
-          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
-            <v-text-field v-model="aberturaExtra.observacaoDivergencia" label="Observacao se houver divergencia" />
-          </v-col>
           <v-col v-if="aberturaExtra.numeroLacre" cols="12">
-            <v-alert v-if="carregandoMalote" type="info" density="compact">Consultando a composição declarada do malote…</v-alert>
+            <v-alert v-if="carregandoMalote" type="info" density="compact"
+              >Consultando a composição declarada do malote…</v-alert
+            >
             <v-alert v-else-if="maloteDeclarado" :type="aberturaDivergente ? 'warning' : 'success'" density="compact">
-              Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
-              <span v-if="aberturaDivergente"> A contagem diverge; descreva o motivo para abrir com o valor contado.</span>
+              Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro
+              {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas
+              {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
+              <span v-if="aberturaDivergente">
+                A contagem diverge; descreva o motivo para abrir com o valor contado.</span
+              >
             </v-alert>
             <v-alert v-else-if="erroMalote" type="error" density="compact">{{ erroMalote }}</v-alert>
           </v-col>
+          <template v-if="maloteDeclarado">
+            <v-col cols="12">
+              <div class="abertura-conferencia">
+                <div class="abertura-conferencia__titulo">Conferência do malote recebido</div>
+                <div class="abertura-conferencia__esperado">
+                  Esperado: <strong>{{ dinheiro(maloteDeclarado.valor) }}</strong> — espécie
+                  <strong>{{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }}</strong> e moedas
+                  <strong>{{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}</strong
+                  >.
+                </div>
+                <v-row dense class="mt-1">
+                  <v-col cols="12" md="4">
+                    <CampoDinheiro v-model="aberturaExtra.valorEspecie" label="Dinheiro físico contado (obrigatório)" />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <CampoDinheiro v-model="aberturaExtra.valorMoedas" label="Moedas contadas (obrigatório)" />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      v-model="aberturaExtra.observacaoDivergencia"
+                      label="Motivo da divergência"
+                      :hint="
+                        aberturaDivergente
+                          ? 'Obrigatório: explique a diferença encontrada.'
+                          : 'Preencha somente se a conferência divergir.'
+                      "
+                      :persistent-hint="aberturaDivergente"
+                      :error="observacaoAberturaPendente"
+                      :error-messages="
+                        observacaoAberturaPendente ? 'Informe o motivo da divergência para continuar.' : ''
+                      "
+                      :required="aberturaDivergente"
+                    />
+                  </v-col>
+                </v-row>
+                <p v-if="aberturaComposicaoPendente" class="abertura-conferencia__erro mb-0">
+                  Informe espécie e moedas contadas para conferir o malote.
+                </p>
+              </div>
+            </v-col>
+          </template>
           <v-col cols="12" md="6">
             <v-select
               v-model="aberturaExtra.maquininhaId"
@@ -585,10 +645,24 @@ function fechar() {
 
         <!-- D7: o deficit e o evento mais grave do modulo. O operador precisa saber ANTES de
            confirmar que vai ficar com uma quebra no nome dele — nao descobrir por snackbar. -->
-        <v-alert v-if="fechamentoDivergente" :type="diferencaFechamento < 0 ? 'error' : 'warning'" variant="tonal" class="my-5" data-teste="alerta-quebra">
-          <div class="text-subtitle-2 mb-1">Conferência física: {{ dinheiro(totalFechamentoContado) }} contado para {{ dinheiro(saldoAtual) }} esperado</div>
-          <template v-if="diferencaFechamento < 0">A falta de <strong>{{ dinheiro(Math.abs(diferencaFechamento)) }}</strong> gera quebra de caixa e notifica a Tesouraria.</template>
-          <template v-else>Há sobra de <strong>{{ dinheiro(diferencaFechamento) }}</strong>; não há quebra positiva, mas a Tesouraria será notificada.</template>
+        <v-alert
+          v-if="fechamentoDivergente"
+          :type="diferencaFechamento < 0 ? 'error' : 'warning'"
+          variant="tonal"
+          class="my-5"
+          data-teste="alerta-quebra"
+        >
+          <div class="text-subtitle-2 mb-1">
+            Conferência física: {{ dinheiro(totalFechamentoContado) }} contado para {{ dinheiro(saldoAtual) }} esperado
+          </div>
+          <template v-if="diferencaFechamento < 0"
+            >A falta de <strong>{{ dinheiro(Math.abs(diferencaFechamento)) }}</strong> gera quebra de caixa e notifica a
+            Tesouraria.</template
+          >
+          <template v-else
+            >Há sobra de <strong>{{ dinheiro(diferencaFechamento) }}</strong
+            >; não há quebra positiva, mas a Tesouraria será notificada.</template
+          >
           A observação é obrigatória e fica registrada com o responsável e o horário do servidor.
         </v-alert>
 
@@ -688,66 +762,71 @@ function fechar() {
             <div class="text-h6 mb-1">Fechamento do caixa</div>
             <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
             <v-row dense>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.observacao"
-              :label="fechamentoDivergente ? 'Observação da divergência (obrigatória)' : 'Observação do fechamento'"
-              :error="observacaoObrigatoriaPendente"
-              :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
-              data-teste="observacao-fechamento"
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.lacreFechamento"
-              label="Lacre de fechamento (obrigatório)"
-              placeholder="Ex.: FCH-001"
-              hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
-              persistent-hint
-              color="error"
-              base-color="error"
-              :error="lacreFechamentoPendente"
-              :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
-              prepend-inner-icon="mdi-lock-alert-outline"
-              required
-              data-teste="lacre-fechamento"
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <CampoDinheiro v-model="fechamento.valorEspecie" label="Dinheiro fisico contado no fechamento" />
-          </v-col>
-          <v-col cols="12" md="4">
-            <CampoDinheiro v-model="fechamento.valorMoedas" label="Moedas contadas no fechamento" />
-          </v-col>
-          <v-col cols="12">
-            <CaixaFechamentoAnexos
-              :caixa-id="caixaAberto?.id ?? null"
-              @folha-enviada="folhaFechamentoEnviada = $event"
-            />
-          </v-col>
-          <v-col cols="12">
-            <v-btn
-              :color="temDeficit ? 'error' : 'primary'"
-              prepend-icon="mdi-lock"
-              :disabled="observacaoObrigatoriaPendente || lacreFechamentoPendente || !fechamentoComposicaoInformada || !folhaFechamentoEnviada"
-              :aria-disabled="fechamentoTravado ? 'true' : undefined"
-              :class="{ 'botao-travado': fechamentoTravado }"
-              :loading="salvando"
-              :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
-              data-teste="botao-fechar"
-              @click="fechar"
-            >
-              {{ diferencaFechamento < 0 ? "Fechar com quebra" : "Fechar caixa" }}
-            </v-btn>
-            <p
-              v-if="fechamentoTravado"
-              id="motivo-fechamento-travado"
-              class="text-caption mt-2 mb-0"
-              data-teste="motivo-fechamento-travado"
-            >
-              Fechamento travado: {{ motivoTravado }}
-            </p>
-          </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="fechamento.observacao"
+                  :label="fechamentoDivergente ? 'Observação da divergência (obrigatória)' : 'Observação do fechamento'"
+                  :error="observacaoObrigatoriaPendente"
+                  :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
+                  data-teste="observacao-fechamento"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="fechamento.lacreFechamento"
+                  label="Lacre de fechamento (obrigatório)"
+                  placeholder="Ex.: FCH-001"
+                  hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
+                  persistent-hint
+                  color="error"
+                  base-color="error"
+                  :error="lacreFechamentoPendente"
+                  :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
+                  prepend-inner-icon="mdi-lock-alert-outline"
+                  required
+                  data-teste="lacre-fechamento"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro v-model="fechamento.valorEspecie" label="Dinheiro fisico contado no fechamento" />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro v-model="fechamento.valorMoedas" label="Moedas contadas no fechamento" />
+              </v-col>
+              <v-col cols="12">
+                <CaixaFechamentoAnexos
+                  :caixa-id="caixaAberto?.id ?? null"
+                  @folha-enviada="folhaFechamentoEnviada = $event"
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-btn
+                  :color="temDeficit ? 'error' : 'primary'"
+                  prepend-icon="mdi-lock"
+                  :disabled="
+                    observacaoObrigatoriaPendente ||
+                    lacreFechamentoPendente ||
+                    !fechamentoComposicaoInformada ||
+                    !folhaFechamentoEnviada
+                  "
+                  :aria-disabled="fechamentoTravado ? 'true' : undefined"
+                  :class="{ 'botao-travado': fechamentoTravado }"
+                  :loading="salvando"
+                  :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
+                  data-teste="botao-fechar"
+                  @click="fechar"
+                >
+                  {{ diferencaFechamento < 0 ? "Fechar com quebra" : "Fechar caixa" }}
+                </v-btn>
+                <p
+                  v-if="fechamentoTravado"
+                  id="motivo-fechamento-travado"
+                  class="text-caption mt-2 mb-0"
+                  data-teste="motivo-fechamento-travado"
+                >
+                  Fechamento travado: {{ motivoTravado }}
+                </p>
+              </v-col>
             </v-row>
           </v-col>
         </v-row>
@@ -762,6 +841,31 @@ function fechar() {
 .botao-travado {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.abertura-conferencia {
+  border: 1px solid rgb(var(--v-theme-primary));
+  border-radius: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, transparent);
+}
+
+.abertura-conferencia__titulo {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.abertura-conferencia__esperado {
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  font-size: 0.875rem;
+}
+
+.abertura-conferencia__erro {
+  color: rgb(var(--v-theme-error));
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .fechamento-caixa {
