@@ -635,6 +635,14 @@ function fechar() {
         <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
           <v-alert type="success" variant="tonal" class="flex-grow-1 mb-0">
             Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
+            <span v-if="caixaAberto.caixaResponsavelNomeAbertura">
+              <v-icon icon="mdi-account-cash-outline" size="small" class="ms-2" />
+              Caixa responsável: {{ caixaAberto.caixaResponsavelNomeAbertura }}.
+            </span>
+            <span v-if="caixaAberto.supervisorResponsavelNomeAbertura">
+              <v-icon icon="mdi-account-supervisor-outline" size="small" class="ms-2" />
+              Supervisor: {{ caixaAberto.supervisorResponsavelNomeAbertura }}.
+            </span>
             <span v-if="caixaAberto.maquininhaId">
               Maquininha: {{ caixaAberto.maquininhaApelido }} · {{ caixaAberto.maquininhaNumeroSerie }}.
             </span>

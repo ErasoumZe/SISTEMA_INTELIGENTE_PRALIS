@@ -366,6 +366,9 @@ export const caixaOperacionalSchema = z.object({
   maquininhaId: uuidSchema.nullable(),
   maquininhaApelido: z.string().nullable(),
   maquininhaNumeroSerie: z.string().nullable(),
+  // Retrato dos responsáveis informados no ato da abertura. Nulo apenas para caixas legados.
+  caixaResponsavelNomeAbertura: z.string().nullable(),
+  supervisorResponsavelNomeAbertura: z.string().nullable(),
   observacao: z.string().nullable(),
   status: z.string()
 });

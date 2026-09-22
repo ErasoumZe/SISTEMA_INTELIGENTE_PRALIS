@@ -287,6 +287,8 @@ export type CaixaOperacional = {
   maquininhaId: string | null;
   maquininhaApelido: string | null;
   maquininhaNumeroSerie: string | null;
+  caixaResponsavelNomeAbertura: string | null;
+  supervisorResponsavelNomeAbertura: string | null;
   observacao: string | null;
   status: string;
 };

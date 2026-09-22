@@ -158,6 +158,8 @@ export async function buscarCaixaAbertoUsuarioRepository(
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -201,6 +203,8 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status

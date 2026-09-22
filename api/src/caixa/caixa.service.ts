@@ -156,6 +156,8 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     maquininhaId: caixa.maquininhaId ?? null,
     maquininhaApelido: caixa.maquininhaApelido ?? null,
     maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
+    caixaResponsavelNomeAbertura: caixa.caixaResponsavelNomeAbertura ?? null,
+    supervisorResponsavelNomeAbertura: caixa.supervisorResponsavelNomeAbertura ?? null,
     observacao: caixa.observacao,
     status: caixa.status
   };
