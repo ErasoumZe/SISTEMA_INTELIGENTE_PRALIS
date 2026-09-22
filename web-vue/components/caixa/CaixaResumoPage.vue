@@ -69,7 +69,13 @@ const abertura = reactive({
   turnoId: ""
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
-const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
+const aberturaExtra = reactive({
+  numeroLacre: "",
+  maquininhaId: "",
+  valorEspecie: "",
+  valorMoedas: "",
+  observacaoDivergencia: ""
+});
 const fechamento = reactive({ observacao: "", lacreFechamento: "", valorEspecie: "", valorMoedas: "" });
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
@@ -267,6 +273,9 @@ function abrir() {
     turnoId: abertura.turnoId || null,
     maquininhaId: aberturaExtra.maquininhaId || null,
     lacreAbertura: aberturaExtra.numeroLacre || null,
+    valorEspecieContado: aberturaExtra.numeroLacre ? Number(aberturaExtra.valorEspecie || 0) : undefined,
+    valorMoedasContado: aberturaExtra.numeroLacre ? Number(aberturaExtra.valorMoedas || 0) : undefined,
+    observacaoDivergencia: aberturaExtra.observacaoDivergencia || null,
     observacao: null
   });
 }
@@ -365,6 +374,15 @@ function fechar() {
               hint="Identifica o lacre do malote que trouxe o fundo ao caixa. Não é o lacre usado no fechamento."
               persistent-hint
             />
+          </v-col>
+          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
+            <CampoDinheiro v-model="aberturaExtra.valorEspecie" label="Dinheiro fisico conferido" />
+          </v-col>
+          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
+            <CampoDinheiro v-model="aberturaExtra.valorMoedas" label="Moedas conferidas" />
+          </v-col>
+          <v-col v-if="aberturaExtra.numeroLacre" cols="12" md="4">
+            <v-text-field v-model="aberturaExtra.observacaoDivergencia" label="Observacao se houver divergencia" />
           </v-col>
           <v-col cols="12" md="6">
             <v-select
