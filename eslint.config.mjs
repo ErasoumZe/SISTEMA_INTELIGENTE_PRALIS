@@ -17,6 +17,8 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/*.json",
       "**/*.jsonc",
+      // Arquivo estatico executado pelo navegador como Service Worker; nao participa do projeto TS.
+      "web-vue/public/sw.js",
       "integracoes-scripts/**"
     ]
   },

@@ -7,7 +7,7 @@ import {
   perfisUsuarios,
   usuariosEmpresas
 } from "@padaria/db/schema/cadastro";
-import { despesas, despesasItens } from "@padaria/db/schema/despesa";
+import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias, mercadoriasItens } from "@padaria/db/schema/mercadoria";
 import type { TipoNotificacao } from "@padaria/shared/notificacoes";
 import { centavosParaDecimalBanco } from "@padaria/shared/dinheiro";
@@ -40,11 +40,21 @@ export async function listarDetalhesLancamentosNotificacaoRepository(
   if (!referencias.length) return new Map();
   const [linhasDespesas, linhasMercadorias, itensMercadorias] = await Promise.all([
     db
-      .select({ id: despesas.id, observacao: despesas.observacao, descricao: despesas.descricao, dataVencimento: despesas.dataVencimento })
+      .select({
+        id: despesas.id,
+        observacao: despesas.observacao,
+        descricao: despesas.descricao,
+        dataVencimento: despesas.dataVencimento
+      })
       .from(despesas)
       .where(and(eq(despesas.empresaId, empresaId), inArray(despesas.id, referencias))),
     db
-      .select({ id: mercadorias.id, observacao: mercadorias.observacao, descricao: mercadorias.descricao, dataVencimento: mercadorias.dataVencimento })
+      .select({
+        id: mercadorias.id,
+        observacao: mercadorias.observacao,
+        descricao: mercadorias.descricao,
+        dataVencimento: mercadorias.dataVencimento
+      })
       .from(mercadorias)
       .where(and(eq(mercadorias.empresaId, empresaId), inArray(mercadorias.id, referencias))),
     db
@@ -58,15 +68,23 @@ export async function listarDetalhesLancamentosNotificacaoRepository(
     if (itens.length < 3) itens.push(item.descricao);
     itensPorMercadoria.set(item.mercadoriaId, itens);
   }
-  const resultado = new Map<string, { setor: string; descricao: string | null; dataVencimento: string | null; rota: string }>();
+  const resultado = new Map<
+    string,
+    { setor: string; descricao: string | null; dataVencimento: string | null; rota: string }
+  >();
   for (const linha of linhasDespesas) {
-    resultado.set(linha.id, { setor: "Despesas", descricao: linha.observacao ?? linha.descricao, dataVencimento: linha.dataVencimento, rota: "/despesas" });
+    resultado.set(linha.id, {
+      setor: "Despesas",
+      descricao: linha.observacao ?? linha.descricao,
+      dataVencimento: linha.dataVencimento,
+      rota: "/despesas"
+    });
   }
   for (const linha of linhasMercadorias) {
     const itens = itensPorMercadoria.get(linha.id);
     resultado.set(linha.id, {
       setor: "Mercadorias",
-      descricao: itens?.length ? itens.join(" · ") : linha.observacao ?? linha.descricao,
+      descricao: itens?.length ? itens.join(" · ") : (linha.observacao ?? linha.descricao),
       dataVencimento: linha.dataVencimento,
       rota: "/mercadorias"
     });
