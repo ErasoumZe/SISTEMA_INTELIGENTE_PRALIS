@@ -101,7 +101,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
+  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     try {
       return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
@@ -111,7 +111,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/caixa/:caixaId/conferencias-fisicas", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
+  app.get("/api/caixa/:caixaId/conferencias-fisicas", { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     try {
       return ok(await listarConferenciasFisicasCaixa(caixaId, request.perfilUsuario!));
@@ -123,7 +123,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/api/caixa/:caixaId/anexos/:anexoId",
-    { preHandler: exigirPermissao("caixa_operar") },
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const anexoId = z

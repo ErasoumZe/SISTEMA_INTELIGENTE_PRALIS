@@ -567,7 +567,6 @@ export function formOperacaoVazio(): OperacaoForm {
     dataRecebimento: "",
     tempoConfirmacao: null,
     contasDestinoIds: [],
-    retornosPlanejados: [],
     recorrenciaId: "",
     documento: "",
     numeroNotaFiscal: "",

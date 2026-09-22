@@ -53,7 +53,6 @@ import {
   encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
-  criarRetornosPlanejadosRepository,
   contaEhPdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
   transferenciaPossuiRetornosPlanejadosRepository,
@@ -95,20 +94,6 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
     ) {
       throw new Error("Especie mais moedas deve ser igual ao valor da transferencia");
     }
-  }
-  if (dados.retornosPlanejados.length) {
-    if (dados.agendadaPara) throw new Error("Transferencia com planejamento nao pode ser agendada");
-    if (dados.contasDestinoIds.length) throw new Error("Planejamento de retorno nao aceita multiplo destino");
-    if (dados.tempoConfirmacao) throw new Error("Planejamento de retorno nao aceita tempo de confirmacao");
-    const totalPlanejadoCentavos = dados.retornosPlanejados.reduce(
-      (total, plano) => total + paraCentavos(plano.valor),
-      0
-    );
-    if (totalPlanejadoCentavos > paraCentavos(dados.valorOriginal)) {
-      throw new Error("Total planejado nao pode ultrapassar a transferencia inicial");
-    }
-    const lacres = [dados.nLacreDoc, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)];
-    if (new Set(lacres).size !== lacres.length) throw new Error("Cada transferencia planejada precisa de lacre unico");
   }
 }
 
@@ -176,16 +161,10 @@ export async function criarTransferencia(
 ): Promise<TransferenciaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
-  if (dados.retornosPlanejados.length) {
-    throw new Error("Retorno / sangria deve ser registrado exclusivamente no Caixa aberto");
-  }
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  if (dados.retornosPlanejados.length && !podeLancarSemCaixa(perfil)) {
-    throw new Error("Planejamento de retorno e exclusivo da retaguarda");
-  }
   try {
     return await executarEmTransacao(async (tx) => {
-      for (const lacre of [dados.nLacreDoc!, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)]) {
+      for (const lacre of [dados.nLacreDoc!]) {
         const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, lacre, tx);
         if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
       }
@@ -211,16 +190,6 @@ export async function criarTransferencia(
         throw new Error("Informe dinheiro fisico e moedas ao preparar o malote para o Caixa");
       }
 
-      if (dados.retornosPlanejados.length) {
-        const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
-        if (!contaCofreId || dados.contaOrigemId !== contaCofreId) {
-          throw new Error("Planejamento de retorno exige transferencia inicial do Cofre");
-        }
-        if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
-          throw new Error("Planejamento de retorno exige conta de PDV como destino inicial");
-        }
-      }
-
       const transferenciaLivre = podeLancarSemCaixa(perfil);
       // P0: o caixa do ator chega TRAVADO (FOR SHARE) e revalidado — mesma porta unica das saidas.
       const resultadoCaixa = transferenciaLivre
@@ -232,7 +201,7 @@ export async function criarTransferencia(
       // uma transferencia direta sem planejamento, a conta de destino identifica o caixa que vai
       // receber o dinheiro. Sem esta busca o movimento nascia com `caixa_id` nulo e desaparecia
       // do resumo do PDV, embora a conferencia tenha sido concluida corretamente.
-      if (transferenciaLivre && !caixa && !dados.contasDestinoIds.length && !dados.retornosPlanejados.length) {
+      if (transferenciaLivre && !caixa && !dados.contasDestinoIds.length) {
         caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
       }
       // Q2: na transferencia a conta do PDV vale como origem OU destino (dinheiro entra e sai).
@@ -278,21 +247,7 @@ export async function criarTransferencia(
         resolverObservacaoDoLancamento(dados),
         computar,
         perfil.usuarioId,
-        dados.retornosPlanejados.length ? null : envolveContaPdv ? caixa!.id : null,
-        tx
-      );
-      await criarRetornosPlanejadosRepository(
-        {
-          empresaId: dados.empresaId,
-          transferenciaOrigemId: transferencia.id,
-          dataReferencia: dados.dataReferencia,
-          contaOrigemId: dados.contaDestinoId,
-          contaDestinoId: dados.contaOrigemId,
-          planos: dados.retornosPlanejados,
-          computar,
-          criadoPor: perfil.usuarioId,
-          observacao: dados.observacao?.trim() || dados.descricao?.trim() || null
-        },
+        envolveContaPdv ? caixa!.id : null,
         tx
       );
       return { id: transferencia.id, computar };
@@ -822,7 +777,7 @@ export async function atualizarTransferencia(
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
-    if (dados.retornosPlanejados.length || (await transferenciaTemPlanejamentoRepository(transferenciaId, tx))) {
+    if (await transferenciaTemPlanejamentoRepository(transferenciaId, tx)) {
       throw new Error("Transferencia com retorno planejado nao pode ser editada");
     }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.

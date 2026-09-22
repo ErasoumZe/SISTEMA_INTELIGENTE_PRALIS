@@ -334,7 +334,6 @@ export async function buscarTransferenciaDetalheRepository(
     contasDestinoIds: candidatos
       .map((item) => item.contaId)
       .filter((contaId) => contaId !== transferencia.contaDestinoId),
-    retornosPlanejados: [],
     tempoConfirmacao: transferencia.tempoConfirmacao as TempoConfirmacao | null,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
     prazoConfirmacaoEm: transferencia.prazoConfirmacaoEm?.toISOString() ?? null,
