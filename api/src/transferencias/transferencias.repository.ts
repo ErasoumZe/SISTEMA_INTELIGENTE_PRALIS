@@ -163,66 +163,6 @@ export async function criarTransferenciaRepository(
   return transferencia;
 }
 
-// R-185: as filhas nascem no MESMO commit da transferencia inicial. `agendada` nao entra no
-// saldo; o Caixa sera ligado ao plano somente quando o lacre da ida abrir o turno.
-export async function criarRetornosPlanejadosRepository(
-  input: {
-    empresaId: string;
-    transferenciaOrigemId: string;
-    dataReferencia: string;
-    contaOrigemId: string;
-    contaDestinoId: string;
-    planos: { valor: number; nLacreDoc: string }[];
-    computar: boolean;
-    criadoPor: string;
-    observacao: string | null;
-  },
-  db: ExecutorBanco = banco
-): Promise<void> {
-  if (!input.planos.length) return;
-  const agora = new Date();
-  const criadas = await db
-    .insert(transferencias)
-    .values(
-      input.planos.map((plano) => ({
-        empresaId: input.empresaId,
-        planejamentoOrigemTransferenciaId: input.transferenciaOrigemId,
-        dataReferencia: input.dataReferencia,
-        descricao: "Transferencia de retorno programada",
-        observacao: input.observacao,
-        valorOriginal: centavosParaDecimalBanco(paraCentavos(plano.valor)),
-        valorAcrescimo: centavosParaDecimalBanco(0),
-        valorDesconto: centavosParaDecimalBanco(0),
-        contaOrigemId: input.contaOrigemId,
-        contaDestinoId: input.contaDestinoId,
-        nLacreDoc: plano.nLacreDoc,
-        tempoConfirmacao: null,
-        prazoConfirmacaoEm: null,
-        status: "agendada",
-        tipo: "retorno",
-        computar: input.computar,
-        solicitacaoCofreEm: agora,
-        criadoPor: input.criadoPor
-      }))
-    )
-    .returning({ id: transferencias.id });
-  await db.insert(transferenciasDestinosCandidatos).values(
-    criadas.map((transferencia) => ({
-      empresaId: input.empresaId,
-      transferenciaId: transferencia.id,
-      contaId: input.contaDestinoId
-    }))
-  );
-  await db.insert(lacres).values(
-    criadas.map((transferencia, indice) => ({
-      empresaId: input.empresaId,
-      numero: input.planos[indice]!.nLacreDoc,
-      transferenciaId: transferencia.id,
-      // As filhas planejadas representam a VOLTA do dinheiro ao Cofre.
-      origem: "retorno"
-    }))
-  );
-}
 // P0 (CX-M06 estendida): a linha da transferencia sob `FOR NO KEY UPDATE` durante a edicao — ela
 // nao tinha trava nenhuma e o PUT reescreve valor, computar e as DUAS contas (o sinal do total).
 // Espelho de `travarDespesaRepository`: escopo de empresa no where e `TransacaoBanco` obrigatorio.

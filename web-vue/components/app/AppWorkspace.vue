@@ -333,7 +333,6 @@ const podeCancelarPlanejamentoRetorno = computed(() => {
   const perfil = sessao.value?.perfil;
   return Boolean(perfil && podeLancarSemCaixa(perfil) && temPermissao("transferencias_criar"));
 });
-const podePlanejarRetorno = computed(() => podeCancelarPlanejamentoRetorno.value);
 // R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
 //
@@ -1577,7 +1576,6 @@ async function salvarOperacao(criarNova = false) {
     // O POST devolve o pai, mas as linhas planejadas nascem junto no servidor. Um `unshift` local
     // deixaria as filhas invisíveis e o pai editável até o próximo refresh; a lista oficial é a
     // única fonte capaz de trazer os marcadores das duas pontas do conjunto.
-    if (possuiRetornosPlanejados) await carregarDadosTela(telaAtiva.value, empresaId.value);
     if (criarNova) {
       await acoesLancamento.abrirLancamento(entidadeSalva);
     } else {
@@ -2003,7 +2001,6 @@ provide(WORKSPACE_CONTEXT, {
   salvandoOperacao,
   salvarOperacao,
   abrirOperacao,
-  podePlanejarRetorno,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
   contaTravadaDoCaixaNota,

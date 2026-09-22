@@ -3,7 +3,6 @@ import type { OperacaoForm, Opcoes } from "~/types/padaria";
 
 type DependenciasTransferenciaModal = {
   aberto: Readonly<Ref<boolean>>;
-  empresaId: Readonly<Ref<string>>;
   form: Ref<OperacaoForm>;
   opcoesEmpresa: Readonly<Ref<Opcoes>>;
 };
@@ -82,9 +81,19 @@ export function useTransferenciaModal({ aberto, form, opcoesEmpresa }: Dependenc
       erroDestino.value = "";
       return true;
     }
-    erroDestino.value = multiploDestino.value ? "Selecione ao menos uma conta de destino." : "Escolha a conta de destino.";
+    erroDestino.value = multiploDestino.value
+      ? "Selecione ao menos uma conta de destino."
+      : "Escolha a conta de destino.";
     return false;
   }
 
-  return { agendamento, multiploDestino, tempoConfirmacaoAberto, contasCandidatas, destinosSelecionados, erroDestino, destinoValido };
+  return {
+    agendamento,
+    multiploDestino,
+    tempoConfirmacaoAberto,
+    contasCandidatas,
+    destinosSelecionados,
+    erroDestino,
+    destinoValido
+  };
 }

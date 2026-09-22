@@ -10,7 +10,6 @@ const {
   modalOperacaoAberto,
   entidadeNova,
   operacaoEditandoId,
-  empresaId,
   form,
   opcoesEmpresa,
   salvandoOperacao,
@@ -33,7 +32,7 @@ const {
   destinosSelecionados,
   erroDestino,
   destinoValido
-} = useTransferenciaModal({ aberto, empresaId, form, opcoesEmpresa });
+} = useTransferenciaModal({ aberto, form, opcoesEmpresa });
 
 // --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
@@ -212,10 +211,7 @@ const hojeISO = computed(() => dataISO(0));
 
           <!-- R-035: e o "tempo de confirmacao". "Sempre confirmar" foi erro de transcricao da
              FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
-          <label
-            class="tr-check"
-            :class="{ 'tr-check-desabilitado': multiploDestino || Boolean(operacaoEditandoId) }"
-          >
+          <label class="tr-check" :class="{ 'tr-check-desabilitado': multiploDestino || Boolean(operacaoEditandoId) }">
             <input
               v-model="tempoConfirmacaoAberto"
               type="checkbox"

@@ -150,25 +150,6 @@ describe("montarPayloadOperacao", () => {
     expect(payload.dataPagamento).toBeNull();
   });
 
-  it("envia varias transferencias de retorno somente com valor e lacre", () => {
-    const form = {
-      ...formOperacaoVazio(),
-      valorOriginal: "1000,00",
-      contaOrigemId: "cofre-1",
-      contaDestinoId: "caixa-1",
-      nLacreDoc: "LACRE-001",
-      retornosPlanejados: [
-        { valor: "300,00", nLacreDoc: "LACRE-002", contaDestinoId: "destino-residual-ignorado" },
-        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "outro-residual-ignorado" }
-      ]
-    };
-
-    expect(montarPayloadOperacao("transferencia", { ...base, form }).retornosPlanejados).toEqual([
-      { valor: 300, nLacreDoc: "LACRE-002" },
-      { valor: 700, nLacreDoc: "LACRE-003" }
-    ]);
-  });
-
   it("todo ID opcional em branco vira null, nao '' (o bug 'colaboradorId: Invalid UUID')", () => {
     // Form vazio: todos os IDs sao "" por padrao. O schema zod rejeita "" em campos uuid.
     const payload = montarPayloadOperacao("despesa", { ...base, form: { ...formOperacaoVazio() } });
