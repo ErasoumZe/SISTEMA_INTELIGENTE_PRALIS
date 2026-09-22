@@ -47,7 +47,9 @@ try {
 
   const login = await fetch(`${apiUrl}/api/auth/sign-in/email`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    // Better Auth valida a origem tambem no ambiente local. A fixture representa o frontend
+    // local em 5174, em vez de reduzir essa protecao na API apenas para popular o cenario.
+    headers: { "content-type": "application/json", origin: "http://localhost:5174" },
     body: JSON.stringify({ email: "tesouraria@email.com", password: "123456" })
   });
   if (!login.ok) throw new Error(`Não foi possível autenticar a Tesouraria local (${login.status}).`);
