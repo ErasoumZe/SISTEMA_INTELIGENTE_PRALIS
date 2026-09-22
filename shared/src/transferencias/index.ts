@@ -110,7 +110,9 @@ export const transferenciaDtoSchema = z.object({
 export const confirmarTransferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
-  valorRecebido: dinheiroSchema.optional()
+  valorRecebido: dinheiroSchema.optional(),
+  valorEspecieContado: dinheiroSchema.optional(),
+  valorMoedasContado: dinheiroSchema.optional()
 });
 
 export type ConfirmarTransferenciaPayload = z.infer<typeof confirmarTransferenciaPayloadSchema>;
@@ -137,6 +139,8 @@ export const recusarConferenciaPayloadSchema = z.object({
   motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
   valorRecebido: dinheiroSchema.optional(),
+  valorEspecieContado: dinheiroSchema.optional(),
+  valorMoedasContado: dinheiroSchema.optional(),
   encerrar: z.boolean().optional().default(false),
   sobraConfirmada: z.boolean().optional().default(false)
 });

@@ -348,6 +348,8 @@ export type ContextoConferencia = {
   empresaId: string;
   status: string;
   valorCentavos: number;
+  valorEspecieDeclaradoCentavos: number | null;
+  valorMoedasDeclaradoCentavos: number | null;
   lacre: string | null;
   criadoPor: string | null;
   // Quem entregou fisicamente (solicitacao D4 executada). Null em avulsa e retorno final — nesses
@@ -372,6 +374,8 @@ export async function buscarContextoConferenciaRepository(
       empresaId: transferencias.empresaId,
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       lacre: transferencias.nLacreDoc,
       criadoPor: transferencias.criadoPor,
       executadoPor: transferencias.executadoPor,
@@ -393,6 +397,9 @@ export async function buscarContextoConferenciaRepository(
     empresaId: linha.empresaId,
     status: linha.status,
     valorCentavos: paraCentavos(linha.valorOriginal),
+    valorEspecieDeclaradoCentavos:
+      linha.valorEspecieDeclarado === null ? null : paraCentavos(linha.valorEspecieDeclarado),
+    valorMoedasDeclaradoCentavos: linha.valorMoedasDeclarado === null ? null : paraCentavos(linha.valorMoedasDeclarado),
     lacre: linha.lacre,
     criadoPor: linha.criadoPor,
     executadoPor: linha.executadoPor,

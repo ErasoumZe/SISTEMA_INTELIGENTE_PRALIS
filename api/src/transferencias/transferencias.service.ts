@@ -14,6 +14,7 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
   buscarContaCofreEmpresaRepository,
+  criarConferenciaFisicaTransferenciaRepository,
   criarQuebraCaixaRepository,
   listarUsuariosTesourariaRepository,
   travarCaixaCompartilhadoRepository
@@ -348,11 +349,17 @@ export async function confirmarTransferencia(
     }
 
     if (contexto?.ehRetornoDoCaixa) {
-      if (dados.valorRecebido == null) {
+      if (dados.valorRecebido == null || dados.valorEspecieContado == null || dados.valorMoedasContado == null) {
         throw erroValidacao(
-          "Informe o valor recebido para conferir uma entrega do Caixa",
+          "Informe valor, especie e moedas para conferir uma entrega do Caixa",
           "VALOR_RECEBIDO_OBRIGATORIO"
         );
+      }
+      if (
+        paraCentavos(dados.valorEspecieContado) + paraCentavos(dados.valorMoedasContado) !==
+        paraCentavos(dados.valorRecebido)
+      ) {
+        throw erroValidacao("Especie mais moedas deve ser igual ao valor recebido", "COMPOSICAO_INVALIDA");
       }
       const divergeValor = paraCentavos(dados.valorRecebido) !== contexto.valorCentavos;
       const divergeLacre = (contexto.lacre ?? null) !== (dados.nLacreDoc?.trim() || null);
@@ -373,6 +380,31 @@ export async function confirmarTransferencia(
       tx
     );
     if (!confirmada) throw new Error("Somente operador de uma conta destino pode confirmar uma unica vez");
+    if (
+      contexto?.ehRetornoDoCaixa &&
+      contexto.caixaId &&
+      contexto.valorEspecieDeclaradoCentavos !== null &&
+      contexto.valorMoedasDeclaradoCentavos !== null
+    ) {
+      await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: contexto.empresaId,
+          transferenciaId,
+          fechamentoCaixaId: contexto.caixaId,
+          etapa: "retorno_sangria",
+          resultado: "convergente",
+          encerraConferencia: true,
+          valorEspecieDeclaradoCentavos: contexto.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: contexto.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos: paraCentavos(dados.valorEspecieContado!),
+          valorMoedasContadoCentavos: paraCentavos(dados.valorMoedasContado!),
+          observacao: null,
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: new Date()
+        },
+        tx
+      );
+    }
 
     // Caminho GENERICO preservado: divergencia de valor confirma e notifica, como sempre foi.
     // O ramo estrito acima ja saiu com 409, entao esta notificacao nunca dispara para Caixa -> Cofre.
