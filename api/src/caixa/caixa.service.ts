@@ -216,11 +216,15 @@ async function obterCaixaParaAuditoria(caixaId: string, perfil: PerfilUsuario) {
 
 export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: PerfilUsuario) {
   const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  // O operador precisa reler as provas que acabou de anexar antes de fechar. A consulta continua
+  // limitada ao caixa dele; Tesouraria e Gerência podem auditar qualquer caixa permitido.
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
 }
 
 export async function obterArquivoAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
   const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId);
   if (!anexo) throw new Error("Anexo nao encontrado");
   return { ...anexo, caminhoAbsoluto: caminhoAbsolutoDocumento(anexo.caminho) };

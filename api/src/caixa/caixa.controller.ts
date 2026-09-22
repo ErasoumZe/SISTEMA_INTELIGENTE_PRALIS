@@ -100,7 +100,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixas_gerenciar") }, async (request, reply) => {
+  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     try {
       return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
@@ -112,7 +112,7 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/api/caixa/:caixaId/anexos/:anexoId",
-    { preHandler: exigirPermissao("caixas_gerenciar") },
+    { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const anexoId = z

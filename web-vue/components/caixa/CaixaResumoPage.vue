@@ -422,12 +422,6 @@ function fechar() {
             <v-text-field :model-value="usuarioNome" label="Usuário do caixa" readonly density="comfortable" />
           </v-col>
           <v-col cols="12">
-            <CaixaFechamentoAnexos
-              :caixa-id="caixaAberto?.id ?? null"
-              @folha-enviada="folhaFechamentoEnviada = $event"
-            />
-          </v-col>
-          <v-col cols="12">
             <v-btn
               color="primary"
               prepend-icon="mdi-cash-register"
@@ -624,6 +618,11 @@ function fechar() {
               data-teste="observacao-entrega"
             />
           </v-col>
+          <v-col cols="12"><v-divider class="my-4" /></v-col>
+          <v-col cols="12" class="fechamento-caixa">
+            <div class="text-h6 mb-1">Fechamento do caixa</div>
+            <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
+            <v-row dense>
           <v-col cols="12" md="4">
             <v-text-field
               v-model="fechamento.observacao"
@@ -656,6 +655,12 @@ function fechar() {
             <CampoDinheiro v-model="fechamento.valorMoedas" label="Moedas contadas no fechamento" />
           </v-col>
           <v-col cols="12">
+            <CaixaFechamentoAnexos
+              :caixa-id="caixaAberto?.id ?? null"
+              @folha-enviada="folhaFechamentoEnviada = $event"
+            />
+          </v-col>
+          <v-col cols="12">
             <v-btn
               :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
@@ -678,6 +683,8 @@ function fechar() {
               Fechamento travado: {{ motivoTravado }}
             </p>
           </v-col>
+            </v-row>
+          </v-col>
         </v-row>
       </template>
     </v-card-text>
@@ -690,6 +697,13 @@ function fechar() {
 .botao-travado {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.fechamento-caixa {
+  border: 1px solid rgb(var(--v-theme-error));
+  border-radius: 12px;
+  padding: 20px;
+  background: color-mix(in srgb, rgb(var(--v-theme-error)) 8%, transparent);
 }
 
 /* CampoDinheiro e um input nativo para preservar a digitacao monetaria brasileira. Aqui ele era
