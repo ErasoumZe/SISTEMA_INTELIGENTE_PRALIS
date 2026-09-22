@@ -45,6 +45,7 @@ import {
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarCaixaRepository,
+  criarConferenciaFisicaTransferenciaRepository,
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
@@ -589,6 +590,40 @@ async function abrirCaixaEmTransacao(
         tx
       );
       if (!confirmada) throw new Error("Lacre ja utilizado por outro caixa");
+      const conferencia = await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: caixa.empresaId,
+          transferenciaId: abertura.transferenciaId,
+          fechamentoCaixaId: caixa.id,
+          etapa: "abertura",
+          resultado: convergente ? "convergente" : "divergente",
+          encerraConferencia: true,
+          valorEspecieDeclaradoCentavos: abertura.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: abertura.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos,
+          valorMoedasContadoCentavos,
+          observacao: convergente ? null : dados.observacaoDivergencia!.trim(),
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: dataHoraAbertura
+        },
+        tx
+      );
+      if (!convergente) {
+        const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+          .map((item) => item.usuarioId)
+          .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+        await criarNotificacoesRepository(
+          {
+            empresaId: caixa.empresaId,
+            tipo: "quebra_caixa",
+            destinatariosUsuarioIds: destinatarios,
+            referenciaId: conferencia.id,
+            titulo: `Divergencia na abertura do caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+            valorCentavos: valorContadoCentavos - abertura.valorCentavos
+          },
+          tx
+        );
+      }
       await vincularPlanejamentosDaTransferenciaAoCaixaRepository(
         {
           transferenciaOrigemId: abertura.transferenciaId,

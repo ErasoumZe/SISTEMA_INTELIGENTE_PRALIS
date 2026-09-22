@@ -38,7 +38,8 @@ import {
   edicoesCaixa,
   fechamentosCaixaAnexos,
   fechamentosCaixa,
-  quebrasCaixa
+  quebrasCaixa,
+  transferenciasConferenciasFisicas
 } from "@padaria/db/schema/caixa";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
@@ -454,6 +455,45 @@ export async function confirmarTransferenciaAberturaRepository(
     .where(and(eq(lacres.id, input.lacreId), eq(lacres.rompido, false)))
     .returning({ id: lacres.id });
   return lacre ? vencedora : null;
+}
+
+export async function criarConferenciaFisicaTransferenciaRepository(
+  input: {
+    empresaId: string;
+    transferenciaId: string;
+    fechamentoCaixaId: string;
+    etapa: "abertura" | "retorno_sangria";
+    resultado: "convergente" | "divergente";
+    encerraConferencia: boolean;
+    valorEspecieDeclaradoCentavos: number;
+    valorMoedasDeclaradoCentavos: number;
+    valorEspecieContadoCentavos: number;
+    valorMoedasContadoCentavos: number;
+    observacao: string | null;
+    conferidoPor: string;
+    conferidoEm: Date;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [conferencia] = await db
+    .insert(transferenciasConferenciasFisicas)
+    .values({
+      empresaId: input.empresaId,
+      transferenciaId: input.transferenciaId,
+      fechamentoCaixaId: input.fechamentoCaixaId,
+      etapa: input.etapa,
+      resultado: input.resultado,
+      encerraConferencia: input.encerraConferencia,
+      valorEspecieDeclarado: centavosParaDecimalBanco(input.valorEspecieDeclaradoCentavos),
+      valorMoedasDeclarado: centavosParaDecimalBanco(input.valorMoedasDeclaradoCentavos),
+      valorEspecieContado: centavosParaDecimalBanco(input.valorEspecieContadoCentavos),
+      valorMoedasContado: centavosParaDecimalBanco(input.valorMoedasContadoCentavos),
+      observacao: input.observacao,
+      conferidoPor: input.conferidoPor,
+      conferidoEm: input.conferidoEm
+    })
+    .returning({ id: transferenciasConferenciasFisicas.id });
+  return conferencia!;
 }
 
 // --- Concorrencia do caixa (B1/B2) ------------------------------------------------------------
