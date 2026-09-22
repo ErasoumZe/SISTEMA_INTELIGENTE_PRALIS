@@ -483,6 +483,16 @@ export async function recusarConferencia(
     // o declarado inteiro virar quebra. Por isso `null` (nao informado) e recusado no encerramento:
     // sem numero nao ha o que creditar nem o que quebrar.
     const contadoCentavos = dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido);
+    const especieContadaCentavos = dados.valorEspecieContado == null ? null : paraCentavos(dados.valorEspecieContado);
+    const moedasContadasCentavos = dados.valorMoedasContado == null ? null : paraCentavos(dados.valorMoedasContado);
+    if (contadoCentavos !== null || especieContadaCentavos !== null || moedasContadasCentavos !== null) {
+      if (contadoCentavos === null || especieContadaCentavos === null || moedasContadasCentavos === null) {
+        throw erroValidacao("Informe valor, especie e moedas da contagem", "COMPOSICAO_OBRIGATORIA");
+      }
+      if (especieContadaCentavos + moedasContadasCentavos !== contadoCentavos) {
+        throw erroValidacao("Especie mais moedas deve ser igual ao valor contado", "COMPOSICAO_INVALIDA");
+      }
+    }
     if (dados.encerrar) {
       if (contadoCentavos === null) {
         throw erroValidacao(
@@ -512,6 +522,32 @@ export async function recusarConferencia(
       },
       tx
     );
+    if (
+      atual.caixaId &&
+      atual.valorEspecieDeclaradoCentavos !== null &&
+      atual.valorMoedasDeclaradoCentavos !== null &&
+      especieContadaCentavos !== null &&
+      moedasContadasCentavos !== null
+    ) {
+      await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: atual.empresaId,
+          transferenciaId,
+          fechamentoCaixaId: atual.caixaId,
+          etapa: "retorno_sangria",
+          resultado: "divergente",
+          encerraConferencia: dados.encerrar,
+          valorEspecieDeclaradoCentavos: atual.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: atual.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos: especieContadaCentavos,
+          valorMoedasContadoCentavos: moedasContadasCentavos,
+          observacao: dados.motivo.trim(),
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: new Date()
+        },
+        tx
+      );
+    }
 
     // R-183 · o DESFECHO. Sem `encerrar`, nada muda: a entrega continua `pendente`, o fechamento
     // continua travado e o cofre pode reconferir — que e o comportamento de sempre.
