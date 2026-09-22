@@ -32,6 +32,7 @@ import {
   edicoesCaixa,
   empresas,
   fechamentosCaixa,
+  fechamentosCaixaAnexos,
   formasPagamento,
   fornecedores,
   gruposDespesas,
@@ -61,6 +62,7 @@ import {
   setores,
   transferencias,
   transferenciasConferenciasRecusadas,
+  transferenciasConferenciasFisicas,
   unidadesMedida,
   usuarioAutenticacao,
   usuariosEmpresas,
@@ -666,11 +668,15 @@ if (transferenciaIds.length) {
   await banco
     .delete(transferenciasConferenciasRecusadas)
     .where(inArray(transferenciasConferenciasRecusadas.transferenciaId, transferenciaIds));
+  await banco
+    .delete(transferenciasConferenciasFisicas)
+    .where(inArray(transferenciasConferenciasFisicas.transferenciaId, transferenciaIds));
 }
 await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
+if (caixaIds.length) await banco.delete(fechamentosCaixaAnexos).where(inArray(fechamentosCaixaAnexos.fechamentoCaixaId, caixaIds));
 if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
 if (setorIds.length) await banco.delete(permissoesSetores).where(inArray(permissoesSetores.setorId, setorIds));
 
