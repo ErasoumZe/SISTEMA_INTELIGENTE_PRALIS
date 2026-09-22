@@ -19,6 +19,7 @@ import {
   abrirCaixa,
   criarTransferenciaCofreCaixa,
   cancelarPlanejamentoRetorno,
+  consultarMaloteParaAbertura,
   executarPlanejamentoRetorno,
   fecharCaixa,
   listarHistoricoCaixa,
@@ -53,6 +54,18 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     try {
       const status = await abrirCaixa(body, request.perfilUsuario!);
       return criadoId(reply, status.caixaAberto?.id ?? body.pdvId);
+    } catch (error) {
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErro(mensagem), mensagem);
+    }
+  });
+
+  app.get("/api/caixa/malote", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
+    const query = z
+      .object({ empresaId: z.string().uuid(), pdvId: z.string().uuid(), lacre: z.string().trim().min(1) })
+      .parse(request.query);
+    try {
+      return ok(await consultarMaloteParaAbertura(query.empresaId, query.pdvId, query.lacre, request.perfilUsuario!));
     } catch (error) {
       const mensagem = mensagemDominioOuRelancar(error);
       return erro(reply, statusErro(mensagem), mensagem);

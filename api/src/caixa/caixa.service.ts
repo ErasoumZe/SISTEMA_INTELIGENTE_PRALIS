@@ -41,6 +41,7 @@ import {
   travarPdvDaAberturaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
+  buscarPdvEmpresaRepository,
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarCaixaRepository,
@@ -484,6 +485,26 @@ async function prepararAberturaPorLacre(
     valorCentavos,
     valorEspecieDeclaradoCentavos: paraCentavos(achado.valorEspecieDeclarado),
     valorMoedasDeclaradoCentavos: paraCentavos(achado.valorMoedasDeclarado)
+  };
+}
+
+// Leitura previa para o operador conferir o malote antes de consumi-lo na abertura. Nao muda
+// transferencia, lacre ou saldo; a confirmacao atomica continua exclusivamente em abrirCaixa.
+export async function consultarMaloteParaAbertura(
+  empresaId: string,
+  pdvId: string,
+  lacre: string,
+  perfil: PerfilUsuario
+) {
+  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
+  const pdv = await buscarPdvEmpresaRepository(pdvId, empresaId);
+  if (!pdv?.contaId) throw new Error("PDV sem conta vinculada");
+  const abertura = await prepararAberturaPorLacre(empresaId, lacre.trim(), pdv.contaId, perfil.usuarioId, banco);
+  return {
+    valor: deCentavos(abertura.valorCentavos),
+    valorEspecieDeclarado: deCentavos(abertura.valorEspecieDeclaradoCentavos),
+    valorMoedasDeclarado: deCentavos(abertura.valorMoedasDeclaradoCentavos),
+    lacre: abertura.numeroLacre
   };
 }
 
