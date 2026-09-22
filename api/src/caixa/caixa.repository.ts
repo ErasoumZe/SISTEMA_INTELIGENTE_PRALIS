@@ -36,6 +36,7 @@ import {
   ajustesFechamentoCaixa,
   debitosColaboradores,
   edicoesCaixa,
+  fechamentosCaixaAnexos,
   fechamentosCaixa,
   quebrasCaixa
 } from "@padaria/db/schema/caixa";
@@ -1238,6 +1239,47 @@ export async function calcularTotaisCaixaOperacionalRepository(
   );
 
   return totais;
+}
+
+export async function criarAnexoFechamentoCaixaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    tipo: "folha_fechamento" | "comprovante_cartao";
+    caminho: string;
+    nomeOriginal: string;
+    nomeArquivo: string;
+    mimeType: string;
+    tamanhoBytes: number;
+    sha256: string;
+    criadoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .insert(fechamentosCaixaAnexos)
+    .values({ ...input, iaStatus: "desativada" })
+    .returning({ id: fechamentosCaixaAnexos.id, tipo: fechamentosCaixaAnexos.tipo });
+  return anexo!;
+}
+
+export async function existeFolhaFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [anexo] = await db
+    .select({ id: fechamentosCaixaAnexos.id })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId),
+        eq(fechamentosCaixaAnexos.tipo, "folha_fechamento")
+      )
+    )
+    .limit(1);
+  return Boolean(anexo);
 }
 
 export async function atualizarFechamentoCaixaRepository(

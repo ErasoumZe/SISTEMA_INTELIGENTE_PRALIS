@@ -1,5 +1,6 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import {
   abrirCaixaPayloadSchema,
   cancelarPlanejamentoRetornoPayloadSchema,
@@ -23,7 +24,8 @@ import {
   listarPlanejamentosRetorno,
   obterDetalheCaixa,
   obterStatusCaixa,
-  obterTransferenciasCaixa
+  obterTransferenciasCaixa,
+  salvarAnexoFechamentoCaixa
 } from "./caixa.service.js";
 
 function statusErro(mensagem: string) {
@@ -81,6 +83,23 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       }
     }
   );
+
+  app.post("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
+    const { caixaId } = caixaParamsSchema.parse(request.params);
+    try {
+        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+        const campoTipo = arquivo?.fields["tipo"];
+        const valorTipo =
+          campoTipo && !Array.isArray(campoTipo) && "value" in campoTipo ? campoTipo.value : undefined;
+        const tipo = z.enum(["folha_fechamento", "comprovante_cartao"]).parse(valorTipo);
+      return reply
+        .status(201)
+        .send(ok(await salvarAnexoFechamentoCaixa(caixaId, tipo, arquivo, request.perfilUsuario!)));
+    } catch (error) {
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErro(mensagem), mensagem);
+    }
+  });
 
   app.get(
     "/api/caixa/:caixaId/planejamentos-retorno",

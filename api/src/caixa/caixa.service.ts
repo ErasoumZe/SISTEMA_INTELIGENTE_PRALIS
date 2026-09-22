@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import type { MultipartFile } from "@fastify/multipart";
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
+import { readFile, unlink } from "node:fs/promises";
 import type {
   AbrirCaixaPayload,
   CancelarPlanejamentoRetornoPayload,
@@ -40,6 +44,8 @@ import {
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarCaixaRepository,
+  criarAnexoFechamentoCaixaRepository,
+  existeFolhaFechamentoCaixaRepository,
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
   buscarPlanejamentoRetornoRepository,
@@ -81,6 +87,7 @@ import { materializarMensagensNaAberturaDeCaixa } from "../mensagens-admin/mensa
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
+import { caminhoAbsolutoDocumento, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
@@ -155,6 +162,46 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
     caixa.usuarioId === perfil.usuarioId ||
     caixa.usuarioCaixaId === perfil.usuarioId
   );
+}
+
+export async function salvarAnexoFechamentoCaixa(
+  caixaId: string,
+  tipo: "folha_fechamento" | "comprovante_cartao",
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+) {
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+
+    const salvo = await salvarFotoDocumento("fechamentos-caixa", `${caixa.empresaId}/${caixa.id}`, arquivo);
+    const absoluto = caminhoAbsolutoDocumento(salvo.caminhoRelativo);
+    try {
+      const dados = await readFile(absoluto);
+      return await criarAnexoFechamentoCaixaRepository(
+        {
+          empresaId: caixa.empresaId,
+          fechamentoCaixaId: caixa.id,
+          tipo,
+          caminho: salvo.caminhoRelativo,
+          nomeOriginal: arquivo.filename || "anexo",
+          nomeArquivo: basename(salvo.caminhoRelativo),
+          mimeType: salvo.mimeType,
+          tamanhoBytes: dados.byteLength,
+          sha256: createHash("sha256").update(dados).digest("hex"),
+          criadoPor: perfil.usuarioId
+        },
+        tx
+      );
+    } catch (error) {
+      await unlink(absoluto).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco): Promise<TotaisCaixaCentavos> {
@@ -567,6 +614,9 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    if (!(await existeFolhaFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx))) {
+      throw new Error("Anexe ao menos uma foto da folha de fechamento antes de fechar o caixa");
+    }
     const dataHoraFechamento = new Date();
     if (caixa.dataHoraAbertura && dataHoraFechamento <= new Date(caixa.dataHoraAbertura)) {
       throw new Error("Fechamento precisa ser posterior a abertura");
