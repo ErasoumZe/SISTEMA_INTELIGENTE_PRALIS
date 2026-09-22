@@ -25,7 +25,9 @@ export type AberturaCaixaPayload = {
   usuarioCaixaId: string;
   turnoId?: string | null;
   maquininhaId?: string | null;
-  lacreAbertura?: string | null;
+  lacreAbertura: string;
+  caixaResponsavelNome: string;
+  supervisorResponsavelNome: string;
   valorEspecieContado?: number;
   valorMoedasContado?: number;
   observacaoDivergencia?: string | null;
@@ -35,6 +37,8 @@ export type FechamentoPayload = {
   caixaId: string;
   observacao: string | null;
   lacreFechamento: string;
+  caixaResponsavelNome: string;
+  supervisorResponsavelNome: string;
   valorEspecieFechamento: number;
   valorMoedasFechamento: number;
 };
@@ -151,6 +155,8 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, {
         observacao: payload.observacao,
         lacreFechamento: payload.lacreFechamento,
+        caixaResponsavelNome: payload.caixaResponsavelNome,
+        supervisorResponsavelNome: payload.supervisorResponsavelNome,
         valorEspecieFechamento: payload.valorEspecieFechamento,
         valorMoedasFechamento: payload.valorMoedasFechamento
       });

@@ -25,6 +25,7 @@ const props = withDefaults(
     modelValue: string | number | null | undefined;
     casas?: number;
     label?: string;
+    icone?: string;
     placeholder?: string;
     disabled?: boolean;
   }>(),
@@ -71,7 +72,10 @@ function aoDigitar(evento: Event) {
 
 <template>
   <label v-if="props.label" class="campo-dinheiro__grupo">
-    <span class="campo-dinheiro__rotulo">{{ props.label }}</span>
+    <span class="campo-dinheiro__rotulo">
+      <v-icon v-if="props.icone" :icon="props.icone" size="16" aria-hidden="true" />
+      {{ props.label }}
+    </span>
     <!-- `type="text"` + inputmode="decimal": teclado numerico no celular, sem o spinner que nao faz
          sentido em dinheiro e sem a recusa do type="number" a aceitar virgula. -->
     <input
@@ -110,17 +114,18 @@ function aoDigitar(evento: Event) {
   display: grid;
   gap: 6px;
   width: 100%;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgba(var(--v-theme-on-surface), 0.74);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.1;
 }
 
 .campo-dinheiro--com-rotulo {
+  box-sizing: border-box;
   width: 100%;
   min-height: 56px;
   padding: 0 16px;
-  border: 1px solid rgb(var(--v-theme-outline));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.55);
   border-radius: 8px;
   outline: none;
   color: rgb(var(--v-theme-on-surface));
@@ -134,7 +139,18 @@ function aoDigitar(evento: Event) {
   box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
 }
 
+.campo-dinheiro--com-rotulo:hover:not(:disabled) {
+  border-color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
 .campo-dinheiro--com-rotulo:disabled {
   opacity: 0.6;
+}
+
+.campo-dinheiro__rotulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 </style>

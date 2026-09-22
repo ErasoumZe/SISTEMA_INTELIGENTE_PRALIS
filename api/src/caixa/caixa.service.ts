@@ -560,10 +560,8 @@ async function abrirCaixaEmTransacao(
 
     // R-040: o lacre e opcional (R-033 â€” sem lacre o caixa abre zerado e o fundo chega depois).
     // Informado, ele identifica a transferencia pendente que este caixa vai reivindicar.
-    const lacreInformado = dados.lacreAbertura?.trim() || null;
-    const abertura = lacreInformado
-      ? await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx)
-      : null;
+    const lacreInformado = dados.lacreAbertura.trim();
+    const abertura = await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx);
 
     const caixa = await criarCaixaRepository(
       {
@@ -577,7 +575,9 @@ async function abrirCaixaEmTransacao(
         // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
         turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
         observacao: dados.observacao?.trim() || null,
-        lacreAbertura: abertura?.numeroLacre ?? null,
+        lacreAbertura: abertura.numeroLacre,
+        caixaResponsavelNomeAbertura: dados.caixaResponsavelNome.trim(),
+        supervisorResponsavelNomeAbertura: dados.supervisorResponsavelNome.trim(),
         maquininhaId: dados.maquininhaId ?? null
       },
       tx
@@ -586,9 +586,9 @@ async function abrirCaixaEmTransacao(
     // R-040 na MESMA transacao: vence a disputa (R-030), preenche data_recebimento/confirmado_por
     // (R-028), leva o dinheiro para ESTE caixa (R-036) e rompe o lacre (R-027). Perder a disputa
     // derruba a abertura inteira â€” nao existe caixa aberto com transferencia ainda pendente.
-    if (abertura) {
-      const valorEspecieContadoCentavos = paraCentavos(dados.valorEspecieContado!);
-      const valorMoedasContadoCentavos = paraCentavos(dados.valorMoedasContado!);
+    {
+      const valorEspecieContadoCentavos = paraCentavos(dados.valorEspecieContado);
+      const valorMoedasContadoCentavos = paraCentavos(dados.valorMoedasContado);
       const valorContadoCentavos = valorEspecieContadoCentavos + valorMoedasContadoCentavos;
       const convergente =
         abertura.valorEspecieDeclaradoCentavos === valorEspecieContadoCentavos &&
@@ -748,7 +748,6 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (diferencaFisicaCentavos !== 0 && !observacao) {
       throw new Error("Observacao obrigatoria quando a contagem fisica do fechamento divergir");
     }
-    let saldoCentavos = valorFisicoEsperadoCentavos;
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final
     // sai aqui, no MESMO ato e na MESMA transacao do fechamento: se qualquer parte falhar depois,
@@ -777,8 +776,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         tx
       );
       totais = await calcularTotaisCaixaCentavos(caixa, tx);
-      saldoCentavos = saldoCaixaCentavos(totais);
-      if (saldoCentavos !== -diferencaFisicaCentavos)
+      const saldoDepoisDoRetornoCentavos = saldoCaixaCentavos(totais);
+      if (saldoDepoisDoRetornoCentavos !== -diferencaFisicaCentavos)
         throw new Error("Retorno final nao conferiu com a contagem fisica");
     }
 
@@ -833,6 +832,8 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         observacao: observacao || caixa.observacao,
         fechadoPor: perfil.usuarioId,
         lacreFechamento: dados.lacreFechamento,
+        caixaResponsavelNomeFechamento: dados.caixaResponsavelNome.trim(),
+        supervisorResponsavelNomeFechamento: dados.supervisorResponsavelNome.trim(),
         totais,
         saldoCentavos: 0,
         valorFisicoEsperadoCentavos,

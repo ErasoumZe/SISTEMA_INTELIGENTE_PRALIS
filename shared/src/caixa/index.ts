@@ -31,7 +31,10 @@ export const abrirCaixaPayloadSchema = z
     // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
     // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
     // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
-    lacreAbertura: z.string().trim().min(1).optional().nullable(),
+    lacreAbertura: z.string().trim().min(1, "Lacre de abertura obrigatorio"),
+    // R-207: nomes livres declarados na folha; a identidade autenticada permanece nos IDs do ato.
+    caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
+    supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
     // R-205: quando recebe malote, o caixa declara sua propria contagem fisica.
     valorEspecieContado: z.coerce.number().nonnegative().optional(),
     valorMoedasContado: z.coerce.number().nonnegative().optional(),
@@ -72,6 +75,8 @@ export const caixaParamsSchema = z.object({
 export const fecharCaixaPayloadSchema = z.object({
   observacao: z.string().trim().max(500).optional().nullable(),
   lacreFechamento: z.string().trim().min(1, "Lacre de fechamento obrigatorio"),
+  caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
+  supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
   valorEspecieFechamento: z.coerce.number().nonnegative(),
   valorMoedasFechamento: z.coerce.number().nonnegative()
 });
@@ -127,6 +132,10 @@ export const linhaHistoricoCaixaSchema = z.object({
   fechadoPorNome: z.string().nullable(),
   lacreAbertura: z.string().nullable(),
   lacreFechamento: z.string().nullable(),
+  caixaResponsavelNomeAbertura: z.string().nullable(),
+  supervisorResponsavelNomeAbertura: z.string().nullable(),
+  caixaResponsavelNomeFechamento: z.string().nullable(),
+  supervisorResponsavelNomeFechamento: z.string().nullable(),
   totalEntradas: z.number(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number(),

@@ -20,7 +20,14 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
 }
 
 describe("abrirCaixaOperacional", () => {
-  const payload = { pdvId: "pdv-1", usuarioCaixaId: "u-1", observacao: null };
+  const payload = {
+    pdvId: "pdv-1",
+    usuarioCaixaId: "u-1",
+    lacreAbertura: "MALOTE-001",
+    caixaResponsavelNome: "Caixa teste",
+    supervisorResponsavelNome: "Supervisor teste",
+    observacao: null
+  };
 
   it("posta em /abrir com empresaId, re-busca status, recarrega tela, notifica e retorna true", async () => {
     const deps = montarDeps();
@@ -149,6 +156,8 @@ describe("fecharCaixaOperacional", () => {
       caixaId: "cx-2",
       observacao: "fim",
       lacreFechamento: "FCH-001",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });
@@ -159,6 +168,8 @@ describe("fecharCaixaOperacional", () => {
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: "fim",
       lacreFechamento: "FCH-001",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });
@@ -174,6 +185,8 @@ describe("fecharCaixaOperacional", () => {
       caixaId: "cx-2",
       observacao: null,
       lacreFechamento: "FCH-002",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });
@@ -189,6 +202,8 @@ describe("fecharCaixaOperacional", () => {
       caixaId: "cx-2",
       observacao: null,
       lacreFechamento: "FCH-003",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });
@@ -196,6 +211,8 @@ describe("fecharCaixaOperacional", () => {
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: null,
       lacreFechamento: "FCH-003",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });
@@ -207,6 +224,8 @@ describe("fecharCaixaOperacional", () => {
       caixaId: "cx-2",
       observacao: null,
       lacreFechamento: "FCH-004",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
       valorEspecieFechamento: 0,
       valorMoedasFechamento: 0
     });

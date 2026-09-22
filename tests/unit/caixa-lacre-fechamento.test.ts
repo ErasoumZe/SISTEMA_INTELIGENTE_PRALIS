@@ -6,13 +6,21 @@ describe("contrato de lacre de fechamento do caixa", () => {
     expect(fecharCaixaPayloadSchema.safeParse({ observacao: "Turno encerrado" }).success).toBe(false);
   });
 
-  it("exige o lacre de fechamento, mas mantém retorno opcional", () => {
+  it("exige lacre e os dois responsáveis declarados", () => {
     expect(
       fecharCaixaPayloadSchema.parse({
-        lacreFechamento: "FCH-001"
+        lacreFechamento: "FCH-001",
+        caixaResponsavelNome: "Caixa teste",
+        supervisorResponsavelNome: "Supervisor teste",
+        valorEspecieFechamento: 0,
+        valorMoedasFechamento: 0
       })
     ).toEqual({
-      lacreFechamento: "FCH-001"
+      lacreFechamento: "FCH-001",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
   });
 });

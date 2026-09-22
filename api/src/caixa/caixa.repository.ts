@@ -279,6 +279,8 @@ export async function criarCaixaRepository(
     // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. R-001: o
     // fundo NAO e emprestimo, entao dividaCofre nasce zero (coluna legado, ver 18 D-08).
     lacreAbertura?: string | null;
+    caixaResponsavelNomeAbertura: string;
+    supervisorResponsavelNomeAbertura: string;
     maquininhaId?: string | null;
   },
   db: ExecutorBanco = banco
@@ -299,6 +301,8 @@ export async function criarCaixaRepository(
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
       lacreAbertura: input.lacreAbertura ?? null,
+      caixaResponsavelNomeAbertura: input.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: input.supervisorResponsavelNomeAbertura,
       maquininhaId: input.maquininhaId ?? null,
       dividaCofre: centavosParaDecimalBanco(0),
       status: "aberto",
@@ -1405,6 +1409,8 @@ export async function atualizarFechamentoCaixaRepository(
     observacao: string | null;
     fechadoPor: string;
     lacreFechamento: string;
+    caixaResponsavelNomeFechamento: string;
+    supervisorResponsavelNomeFechamento: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
     valorFisicoEsperadoCentavos: number;
@@ -1421,6 +1427,8 @@ export async function atualizarFechamentoCaixaRepository(
       fechadoPor: input.fechadoPor,
       observacao: input.observacao,
       lacreFechamento: input.lacreFechamento,
+      caixaResponsavelNomeFechamento: input.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: input.supervisorResponsavelNomeFechamento,
       totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
       totalTransferencias: centavosParaDecimalBanco(
         input.totais.transferenciasEntrada - input.totais.transferenciasSaida
@@ -1498,6 +1506,10 @@ export async function listarHistoricoCaixaRepository(
       observacao: fechamentosCaixa.observacao,
       lacreAbertura: fechamentosCaixa.lacreAbertura,
       lacreFechamento: fechamentosCaixa.lacreFechamento,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
+      caixaResponsavelNomeFechamento: fechamentosCaixa.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
       totalTransferenciasEntrada: fechamentosCaixa.totalTransferenciasEntrada,

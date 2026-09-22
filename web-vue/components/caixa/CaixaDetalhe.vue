@@ -86,13 +86,34 @@ onMounted(carregar);
 
       <v-card variant="tonal" class="mb-4">
         <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">ResponsÃ¡veis declarados</div>
+          <div class="d-flex flex-column ga-2 text-body-2">
+            <div>
+              <strong>Abertura:</strong>
+              Caixa {{ caixa.caixaResponsavelNomeAbertura || "NÃ£o registrado" }} Â· Supervisor
+              {{ caixa.supervisorResponsavelNomeAbertura || "NÃ£o registrado" }}.
+            </div>
+            <div>
+              <strong>Fechamento:</strong>
+              Caixa {{ caixa.caixaResponsavelNomeFechamento || "Ainda aberto / nÃ£o registrado" }} Â· Supervisor
+              {{ caixa.supervisorResponsavelNomeFechamento || "Ainda aberto / nÃ£o registrado" }}.
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
           <div class="text-subtitle-2 mb-2">Conferências físicas</div>
-          <p v-if="!conferencias.length" class="text-body-2 text-medium-emphasis mb-0">Nenhuma conferência física registrada.</p>
+          <p v-if="!conferencias.length" class="text-body-2 text-medium-emphasis mb-0">
+            Nenhuma conferência física registrada.
+          </p>
           <div v-for="conferencia in conferencias" :key="conferencia.id" class="text-body-2 mb-2">
             <strong>{{ conferencia.etapa === "abertura" ? "Abertura do malote" : "Retorno / sangria" }}</strong>
-            — {{ conferencia.resultado }} em {{ formatarDataHora(conferencia.conferidoEm) }}.<br>
-            Declarado: dinheiro {{ dinheiro(conferencia.valorEspecieDeclarado) }}, moedas {{ dinheiro(conferencia.valorMoedasDeclarado) }}.
-            Contado: dinheiro {{ dinheiro(conferencia.valorEspecieContado) }}, moedas {{ dinheiro(conferencia.valorMoedasContado) }}.
+            — {{ conferencia.resultado }} em {{ formatarDataHora(conferencia.conferidoEm) }}.<br />
+            Declarado: dinheiro {{ dinheiro(conferencia.valorEspecieDeclarado) }}, moedas
+            {{ dinheiro(conferencia.valorMoedasDeclarado) }}. Contado: dinheiro
+            {{ dinheiro(conferencia.valorEspecieContado) }}, moedas {{ dinheiro(conferencia.valorMoedasContado) }}.
             <template v-if="conferencia.observacao"> Motivo: {{ conferencia.observacao }}</template>
           </div>
         </v-card-text>
@@ -110,7 +131,8 @@ onMounted(carregar);
               target="_blank"
               rel="noopener"
             >
-              {{ anexo.tipo === "folha_fechamento" ? "Folha de fechamento" : "Comprovante de cartão" }} — {{ anexo.nomeOriginal }}
+              {{ anexo.tipo === "folha_fechamento" ? "Folha de fechamento" : "Comprovante de cartão" }} —
+              {{ anexo.nomeOriginal }}
             </a>
           </div>
         </v-card-text>

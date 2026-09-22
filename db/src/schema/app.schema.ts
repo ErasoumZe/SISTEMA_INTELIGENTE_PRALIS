@@ -2092,10 +2092,16 @@ export const fechamentosCaixa = pgTable(
     // `malote_abertura_id` foi removida na 0026 (o vinculo agora e transferencias.caixa_id).
     // `divida_cofre` e legado da R8 revogada pela R-001 (o fundo nao e emprestimo): sempre 0.
     lacreAbertura: text("lacre_abertura"),
+    // R-207: nomes declarados na folha da abertura. Os IDs autenticados continuam como trilha
+    // tecnica; estes textos preservam o registro operacional mesmo apos renomear cadastros.
+    caixaResponsavelNomeAbertura: text("caixa_responsavel_nome_abertura"),
+    supervisorResponsavelNomeAbertura: text("supervisor_responsavel_nome_abertura"),
     // R-200: o selo fisico aplicado ao encerrar a gaveta. Nao e o lacre de uma transferencia de
     // retorno: existe mesmo quando o saldo ja e zero ou ha quebra. Historico anterior a R-200
     // permanece nulo; o servico exige o campo em todo fechamento novo.
     lacreFechamento: text("lacre_fechamento"),
+    caixaResponsavelNomeFechamento: text("caixa_responsavel_nome_fechamento"),
+    supervisorResponsavelNomeFechamento: text("supervisor_responsavel_nome_fechamento"),
     maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
@@ -2124,6 +2130,21 @@ export const fechamentosCaixa = pgTable(
         or (${table.valorFisicoEsperadoFechamento} >= 0
             and ${table.valorEspecieFechamento} >= 0
             and ${table.valorMoedasFechamento} >= 0)`
+    ),
+    // O legado nao tem esses nomes e permanece nulo. Em atos novos, os dois responsaveis andam
+    // juntos e nunca podem ser vazios; duas colunas unicas apagariam a prova da abertura ao fechar.
+    check(
+      "fechamentos_caixa_responsaveis_abertura_check",
+      sql`(${table.caixaResponsavelNomeAbertura} is null and ${table.supervisorResponsavelNomeAbertura} is null)
+        or (length(btrim(${table.caixaResponsavelNomeAbertura})) > 0
+          and length(btrim(${table.supervisorResponsavelNomeAbertura})) > 0)`
+    ),
+    check(
+      "fechamentos_caixa_responsaveis_fechamento_check",
+      sql`(${table.caixaResponsavelNomeFechamento} is null and ${table.supervisorResponsavelNomeFechamento} is null)
+        or (${table.status} in ('fechado', 'ajustado')
+          and length(btrim(${table.caixaResponsavelNomeFechamento})) > 0
+          and length(btrim(${table.supervisorResponsavelNomeFechamento})) > 0)`
     ),
     unique("fechamentos_caixa_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
