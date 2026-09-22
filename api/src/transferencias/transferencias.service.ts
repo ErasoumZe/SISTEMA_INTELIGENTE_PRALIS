@@ -83,6 +83,18 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contasDestinoIds.length && dados.tempoConfirmacao) {
     throw new Error("Tempo de confirmacao e valido somente para transferencia direta");
   }
+  const informouComposicao = dados.valorEspecieDeclarado !== undefined || dados.valorMoedasDeclarado !== undefined;
+  if (informouComposicao) {
+    if (dados.valorEspecieDeclarado === undefined || dados.valorMoedasDeclarado === undefined) {
+      throw new Error("Informe especie e moedas do malote");
+    }
+    if (
+      paraCentavos(dados.valorEspecieDeclarado) + paraCentavos(dados.valorMoedasDeclarado) !==
+      paraCentavos(dados.valorOriginal)
+    ) {
+      throw new Error("Especie mais moedas deve ser igual ao valor da transferencia");
+    }
+  }
   if (dados.retornosPlanejados.length) {
     if (dados.agendadaPara) throw new Error("Transferencia com planejamento nao pode ser agendada");
     if (dados.contasDestinoIds.length) throw new Error("Planejamento de retorno nao aceita multiplo destino");

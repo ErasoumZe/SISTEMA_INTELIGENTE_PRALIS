@@ -46,6 +46,8 @@ export const transferenciaPayloadSchema = z.object({
   descricao: z.string().optional().nullable(),
   observacao: z.string().optional().nullable(),
   valorOriginal: dinheiroSchema,
+  valorEspecieDeclarado: dinheiroSchema.optional(),
+  valorMoedasDeclarado: dinheiroSchema.optional(),
   valorAcrescimo: dinheiroSchema.default(0),
   descricaoAcrescimo: z.string().optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),

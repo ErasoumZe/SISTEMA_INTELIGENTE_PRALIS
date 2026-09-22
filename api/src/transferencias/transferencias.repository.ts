@@ -129,6 +129,8 @@ export async function criarTransferenciaRepository(
       ...valoresBase(dados, computar, criadoPor, caixaId),
       contaOrigemId: dados.contaOrigemId,
       contaDestinoId: dados.contaDestinoId,
+      valorEspecieDeclarado: dados.valorEspecieDeclarado === undefined ? null : dados.valorEspecieDeclarado.toFixed(2),
+      valorMoedasDeclarado: dados.valorMoedasDeclarado === undefined ? null : dados.valorMoedasDeclarado.toFixed(2),
       nLacreDoc: dados.nLacreDoc ?? null,
       agendadaPara: dados.agendadaPara ? new Date(dados.agendadaPara) : null,
       tempoConfirmacao: dados.tempoConfirmacao,
