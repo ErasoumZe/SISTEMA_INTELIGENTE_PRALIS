@@ -193,6 +193,8 @@ export type OperacaoResumo = {
   valorOriginal: string;
   // R-183 (transferencia): o que o cofre CONTOU. Null em tudo que nao e `divergente`.
   valorRecebido?: number | null;
+  valorEspecieDeclarado?: number | null;
+  valorMoedasDeclarado?: number | null;
   // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
   // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
   valorLiquido?: string;

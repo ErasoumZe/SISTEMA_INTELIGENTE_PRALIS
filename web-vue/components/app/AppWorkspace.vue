@@ -1546,7 +1546,6 @@ async function salvarOperacao(criarNova = false) {
     // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
     // discriminacao, que dependem do DOM e do estado da tela.
     const entidadeSalva = entidadeNova.value;
-    const possuiRetornosPlanejados = entidadeSalva === "transferencia" && form.value.retornosPlanejados.length > 0;
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
@@ -1570,7 +1569,7 @@ async function salvarOperacao(criarNova = false) {
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
       if (indice >= 0) operacoes.value.splice(indice, 1, { ...operacoes.value[indice], ...linhaAtualizada });
-    } else if (!possuiRetornosPlanejados) {
+    } else {
       operacoes.value.unshift(linhaAtualizada);
     }
     notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));

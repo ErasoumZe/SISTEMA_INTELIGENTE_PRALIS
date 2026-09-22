@@ -15,8 +15,7 @@ const {
   opcoesEmpresa,
   salvandoOperacao,
   salvarOperacao,
-  abrirOperacao,
-  podePlanejarRetorno
+  abrirOperacao
 } = useWorkspaceContext();
 
 const aberto = computed({
@@ -30,14 +29,7 @@ const {
   agendamento,
   multiploDestino,
   tempoConfirmacaoAberto,
-  retornoAtivo,
-  erroPlanejamento,
-  adicionarRetornoPlanejado,
-  removerRetornoPlanejado,
-  planejamentosValidos,
   contasCandidatas,
-  rotaPlanejamentoElegivel,
-  ajudaRetorno,
   destinosSelecionados,
   erroDestino,
   destinoValido
@@ -62,11 +54,8 @@ function valorResumo(n: number) {
   return resumoVisivel.value ? `R$ ${br(n)}` : "R$ ••••";
 }
 
-// R-185/R-187: este modal declara os retornos planejados junto da transferencia inicial. As linhas
-// nascem `agendada` e sem efeito no saldo. O ato fisico continua tendo um unico caminho: depois de
-// abrir o Caixa pelo lacre inicial, o operador executa cada retorno dentro da tela do Caixa.
 async function salvarTransferenciaCompleta(criarNova = false) {
-  if (!destinoValido() || !planejamentosValidos()) return;
+  if (!destinoValido()) return;
   const resultado = await salvarOperacao();
   if (criarNova && resultado) await abrirOperacao("transferencia");
 }
@@ -151,7 +140,7 @@ const hojeISO = computed(() => dataISO(0));
           <input
             v-model="agendamento"
             type="checkbox"
-            :disabled="retornoAtivo || Boolean(operacaoEditandoId)"
+            :disabled="Boolean(operacaoEditandoId)"
             data-teste="opcao-agendamento"
           />
           <span>Agendamento</span>
@@ -214,8 +203,8 @@ const hojeISO = computed(() => dataISO(0));
         <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
            conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
         <div class="tr-opcoes">
-          <label class="tr-check" :class="{ 'tr-check-desabilitado': retornoAtivo || tempoConfirmacaoAberto }">
-            <input v-model="multiploDestino" type="checkbox" :disabled="retornoAtivo || tempoConfirmacaoAberto" />
+          <label class="tr-check" :class="{ 'tr-check-desabilitado': tempoConfirmacaoAberto }">
+            <input v-model="multiploDestino" type="checkbox" :disabled="tempoConfirmacaoAberto" />
             <span>Múltiplo Destino</span>
           </label>
           <!-- A escolha das contas acontece no proprio campo "Destino / Entrada" (acima), como no
@@ -225,12 +214,12 @@ const hojeISO = computed(() => dataISO(0));
              FOTO 1, ja retificado no PROJECT_BRAIN/14 — nao voltar com aquele rotulo. -->
           <label
             class="tr-check"
-            :class="{ 'tr-check-desabilitado': retornoAtivo || multiploDestino || Boolean(operacaoEditandoId) }"
+            :class="{ 'tr-check-desabilitado': multiploDestino || Boolean(operacaoEditandoId) }"
           >
             <input
               v-model="tempoConfirmacaoAberto"
               type="checkbox"
-              :disabled="retornoAtivo || multiploDestino || Boolean(operacaoEditandoId)"
+              :disabled="multiploDestino || Boolean(operacaoEditandoId)"
             />
             <span>Tempo de confirmação</span>
           </label>
@@ -246,64 +235,6 @@ const hojeISO = computed(() => dataISO(0));
               <option value="30dias">30 dias</option>
             </select>
           </label>
-          <label
-            v-if="!operacaoEditandoId && podePlanejarRetorno"
-            class="tr-check"
-            :class="{ 'tr-check-desabilitado': !rotaPlanejamentoElegivel || multiploDestino || tempoConfirmacaoAberto }"
-          >
-            <input
-              v-model="retornoAtivo"
-              type="checkbox"
-              :disabled="!rotaPlanejamentoElegivel || multiploDestino || tempoConfirmacaoAberto"
-              data-teste="opcao-transferencia-retorno"
-            />
-            <span>Transferência de retorno</span>
-          </label>
-          <p
-            v-if="!operacaoEditandoId && podePlanejarRetorno && ajudaRetorno"
-            class="tr-planejamento-ajuda"
-            data-teste="ajuda-retorno"
-            role="status"
-          >
-            {{ ajudaRetorno }}
-          </p>
-          <section
-            v-if="retornoAtivo"
-            class="tr-planejamento"
-            aria-label="Transferências de retorno programadas"
-            data-teste="transferencias-retorno-programadas"
-          >
-            <p class="tr-planejamento-ajuda">
-              As linhas ficam preparadas para o Caixa e não alteram saldo até a execução.
-            </p>
-            <div v-for="(retorno, indice) in form.retornosPlanejados" :key="indice" class="tr-planejamento-linha">
-              <label class="tr-campo">
-                <span class="tr-campo-lbl">Valor</span>
-                <CampoDinheiro v-model="retorno.valor" class="tr-input" />
-              </label>
-              <label class="tr-campo">
-                <span class="tr-campo-lbl">Lacre</span>
-                <input v-model="retorno.nLacreDoc" class="tr-input" placeholder="Ex.: 002" />
-              </label>
-              <button
-                type="button"
-                class="tr-remover-retorno"
-                :aria-label="`Remover transferência de retorno ${indice + 1}`"
-                @click="removerRetornoPlanejado(indice)"
-              >
-                <v-icon size="16">mdi-close</v-icon>
-              </button>
-            </div>
-            <span v-if="erroPlanejamento" class="tr-erro" role="alert">{{ erroPlanejamento }}</span>
-            <button
-              type="button"
-              class="tr-adicionar-retorno"
-              :disabled="form.retornosPlanejados.length >= 20"
-              @click="adicionarRetornoPlanejado"
-            >
-              <v-icon size="16">mdi-plus</v-icon> Adicionar transferência de retorno
-            </button>
-          </section>
         </div>
 
         <!-- R-127: o texto do movimento e a OBSERVACAO. Nao esta no desenho, fica discreta no rodape. -->

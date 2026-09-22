@@ -12,6 +12,7 @@ import CaixaResumoPage from "~/components/caixa/CaixaResumoPage.vue";
     <CaixaResumoPage
       :resumo="ctx.resumo"
       :status="ctx.caixaStatus"
+      :empresa-id="ctx.empresaAtiva?.id ?? ''"
       :pdvs="ctx.opcoesEmpresa.pdvs"
       :turnos="ctx.opcoesEmpresa.turnos"
       :maquininhas="ctx.opcoesEmpresa.maquininhas"

@@ -794,6 +794,22 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         tx
       );
     }
+    if (diferencaFisicaCentavos > 0) {
+      const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+        .map((item) => item.usuarioId)
+        .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+      await criarNotificacoesRepository(
+        {
+          empresaId: caixa.empresaId,
+          tipo: "transferencia_divergencia",
+          destinatariosUsuarioIds: destinatarios,
+          referenciaId: caixa.id,
+          titulo: `Sobra na conferencia de fechamento - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+          valorCentavos: diferencaFisicaCentavos
+        },
+        tx
+      );
+    }
 
     const linhasFechadas = await atualizarFechamentoCaixaRepository(
       {

@@ -176,6 +176,9 @@ export async function criarTransferencia(
 ): Promise<TransferenciaCriada> {
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
+  if (dados.retornosPlanejados.length) {
+    throw new Error("Retorno / sangria deve ser registrado exclusivamente no Caixa aberto");
+  }
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   if (dados.retornosPlanejados.length && !podeLancarSemCaixa(perfil)) {
     throw new Error("Planejamento de retorno e exclusivo da retaguarda");
@@ -194,6 +197,19 @@ export async function criarTransferencia(
         tx
       );
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
+
+      // Malote Cofre -> PDV so pode nascer com a composicao que o Caixa ira conferir. Aceitar a
+      // transferencia sem isso e deixa um pendente impossivel de abrir depois.
+      const contaCofreDaEmpresa = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+      const ehMaloteCofreParaPdv =
+        contaCofreDaEmpresa === dados.contaOrigemId &&
+        (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx));
+      if (
+        ehMaloteCofreParaPdv &&
+        (dados.valorEspecieDeclarado === undefined || dados.valorMoedasDeclarado === undefined)
+      ) {
+        throw new Error("Informe dinheiro fisico e moedas ao preparar o malote para o Caixa");
+      }
 
       if (dados.retornosPlanejados.length) {
         const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
@@ -363,7 +379,13 @@ export async function confirmarTransferencia(
       }
       const divergeValor = paraCentavos(dados.valorRecebido) !== contexto.valorCentavos;
       const divergeLacre = (contexto.lacre ?? null) !== (dados.nLacreDoc?.trim() || null);
-      if (divergeValor || divergeLacre) {
+      const divergeEspecie =
+        contexto.valorEspecieDeclaradoCentavos !== null &&
+        paraCentavos(dados.valorEspecieContado) !== contexto.valorEspecieDeclaradoCentavos;
+      const divergeMoedas =
+        contexto.valorMoedasDeclaradoCentavos !== null &&
+        paraCentavos(dados.valorMoedasContado) !== contexto.valorMoedasDeclaradoCentavos;
+      if (divergeValor || divergeLacre || divergeEspecie || divergeMoedas) {
         throw new ErroDominio(
           "Conferencia divergente: registre a recusa com o motivo em /recusar-conferencia",
           409,

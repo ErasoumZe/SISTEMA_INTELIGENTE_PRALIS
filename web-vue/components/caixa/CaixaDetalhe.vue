@@ -7,17 +7,25 @@ import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{ caixa: LinhaHistoricoCaixa; empresaId: string }>();
 
-const { apiGet } = useApi();
+const { apiGet, apiUrl } = useApi();
 
 const detalhe = ref<DetalheCaixaResponse | null>(null);
 const carregando = ref(false);
 const erro = ref("");
+const anexos = ref<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>([]);
 
 async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    detalhe.value = await apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`);
+    const [detalheCarregado, anexosCarregados] = await Promise.all([
+      apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`),
+      apiGet<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>(
+        `/api/caixa/${props.caixa.id}/anexos`
+      )
+    ]);
+    detalhe.value = detalheCarregado;
+    anexos.value = anexosCarregados ?? [];
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {
@@ -57,6 +65,24 @@ onMounted(carregar);
           <div class="d-flex flex-wrap ga-4 text-body-2">
             <span><strong>Abertura:</strong> {{ caixa.lacreAbertura || "Sem lacre" }}</span>
             <span><strong>Fechamento:</strong> {{ caixa.lacreFechamento || "Não registrado" }}</span>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Provas do fechamento</div>
+          <p v-if="!anexos.length" class="text-body-2 text-medium-emphasis mb-0">Nenhum anexo foi registrado.</p>
+          <div v-else class="d-flex flex-column ga-2">
+            <a
+              v-for="anexo in anexos"
+              :key="anexo.id"
+              :href="`${apiUrl}/api/caixa/${caixa.id}/anexos/${anexo.id}`"
+              target="_blank"
+              rel="noopener"
+            >
+              {{ anexo.tipo === "folha_fechamento" ? "Folha de fechamento" : "Comprovante de cartão" }} — {{ anexo.nomeOriginal }}
+            </a>
           </div>
         </v-card-text>
       </v-card>

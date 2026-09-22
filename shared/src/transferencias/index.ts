@@ -59,7 +59,9 @@ export const transferenciaPayloadSchema = z.object({
   agendadaPara: z.string().datetime().optional().nullable(),
   tempoConfirmacao: tempoConfirmacaoSchema.nullable().optional().default(null),
   computar: z.boolean().default(true),
-  retornosPlanejados: z.array(retornoPlanejadoSchema).max(20).optional().default([])
+  // O caminho novo de retorno/sangria e exclusivamente dentro do Caixa. Mantemos o campo vazio
+  // para leitura de contratos legados, mas recusamos qualquer criacao nova por esta rota.
+  retornosPlanejados: z.array(retornoPlanejadoSchema).max(0).optional().default([])
 });
 
 export const transferenciaDtoSchema = z.object({
@@ -73,6 +75,8 @@ export const transferenciaDtoSchema = z.object({
   // R-183: o que o cofre contou. Null em tudo que nao e `divergente` — quem soma ENTRADA usa
   // este numero, senao o cockpit exibiria como recebido um valor que nunca chegou.
   valorRecebido: z.number().nullable(),
+  valorEspecieDeclarado: z.number().nullable(),
+  valorMoedasDeclarado: z.number().nullable(),
   contaOrigemId: z.string(),
   contaDestinoId: z.string(),
   contaOrigemNome: z.string(),

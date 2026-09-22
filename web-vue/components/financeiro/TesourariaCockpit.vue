@@ -124,13 +124,26 @@ const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === 
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
+const composicaoPendente = computed(() =>
+  ehCaixaParaCofre.value &&
+  (!valorConferenciaValido(campos.valorEspecieContado) || !valorConferenciaValido(campos.valorMoedasContado))
+);
+const composicaoInvalida = computed(() =>
+  !composicaoPendente.value &&
+  ehCaixaParaCofre.value &&
+  Number(campos.valorEspecieContado) + Number(campos.valorMoedasContado) !== Number(campos.valorRecebido)
+);
 // Na Transferencia de retorno, "Confirmar" significa que lacre e valor bateram. A API ja impede
 // que R$ 90 confirme uma entrega de R$ 100; espelhar a regra aqui evita abrir uma segunda
 // confirmação para uma ação que inevitavelmente será recusada e deixa claro que o caminho é
 // "Não bateu".
 const valorDivergenteNaConferencia = computed(() => {
   if (modoRecusa.value || !ehCaixaParaCofre.value || !valorValido.value || !confirmando.value) return false;
-  return Number(campos.valorRecebido) !== Number(confirmando.value.valorOriginal);
+  return (
+    Number(campos.valorRecebido) !== Number(confirmando.value.valorOriginal) ||
+    Number(campos.valorEspecieContado) !== Number(confirmando.value.valorEspecieDeclarado ?? 0) ||
+    Number(campos.valorMoedasContado) !== Number(confirmando.value.valorMoedasDeclarado ?? 0)
+  );
 });
 // Sem este bloqueio, deixar o campo vazio em uma entrega lacrada chegava ao servidor como
 // `null` e recebia um 409 que parecia ser divergencia de valor. No modo de recusa, lacre
@@ -218,7 +231,13 @@ const podeRecusar = computed(() => ehCaixaParaCofre.value);
 async function enviarConferencia() {
   const operacao = confirmando.value;
   if (!operacao || salvandoConferencia.value) return;
-  if (valorPendente.value) return;
+  if (
+    valorPendente.value ||
+    composicaoPendente.value ||
+    composicaoInvalida.value ||
+    (!modoRecusa.value && valorDivergenteNaConferencia.value)
+  )
+    return;
   if (modoRecusa.value && (!podeRecusar.value || !motivoValido.value)) return;
   if (sobraPendenteDeConsentimento.value) return;
 
@@ -611,6 +630,35 @@ function limparFiltrosTransferencias() {
           "
           data-teste="conferencia-valor"
         />
+        <v-alert v-if="ehCaixaParaCofre" type="info" variant="tonal" density="compact" class="mb-2">
+          Declarado no malote: dinheiro {{ dinheiro(Number(confirmando?.valorEspecieDeclarado ?? 0)) }} · moedas
+          {{ dinheiro(Number(confirmando?.valorMoedasDeclarado ?? 0)) }}.
+        </v-alert>
+        <v-row v-if="ehCaixaParaCofre" dense>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="campos.valorEspecieContado"
+              type="number"
+              min="0"
+              label="Dinheiro físico contado (obrigatório)"
+              :error="composicaoPendente || composicaoInvalida"
+              data-teste="conferencia-especie"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="campos.valorMoedasContado"
+              type="number"
+              min="0"
+              label="Moedas contadas (obrigatório)"
+              :error="composicaoPendente || composicaoInvalida"
+              data-teste="conferencia-moedas"
+            />
+          </v-col>
+        </v-row>
+        <div v-if="ehCaixaParaCofre && (composicaoPendente || composicaoInvalida)" class="text-caption text-error mb-2">
+          Informe dinheiro e moedas; a soma deve ser igual ao valor recebido.
+        </div>
         <v-text-field
           v-if="modoRecusa"
           v-model="campos.motivo"
@@ -664,6 +712,8 @@ function limparFiltrosTransferencias() {
             :color="modoRecusa ? 'warning' : 'primary'"
             :disabled="
               valorPendente ||
+              composicaoPendente ||
+              composicaoInvalida ||
               valorDivergenteNaConferencia ||
               lacrePendente ||
               (modoRecusa && !motivoValido) ||

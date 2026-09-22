@@ -494,11 +494,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
           nLacreDoc: dados.form.nLacreDoc || null,
           agendadaPara: dados.form.agendadaPara ? new Date(dados.form.agendadaPara).toISOString() : null,
           tempoConfirmacao: dados.form.tempoConfirmacao,
-          contasDestinoIds: dados.form.contasDestinoIds,
-          retornosPlanejados: dados.form.retornosPlanejados.map((retorno) => ({
-            valor: deCentavos(paraCentavos(retorno.valor)),
-            nLacreDoc: retorno.nLacreDoc.trim()
-          }))
+          contasDestinoIds: dados.form.contasDestinoIds
         }
       : {}),
     valorOriginal: deCentavos(paraCentavos(dados.form.valorOriginal)),
