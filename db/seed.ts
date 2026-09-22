@@ -676,7 +676,8 @@ await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
-if (caixaIds.length) await banco.delete(fechamentosCaixaAnexos).where(inArray(fechamentosCaixaAnexos.fechamentoCaixaId, caixaIds));
+if (caixaIds.length)
+  await banco.delete(fechamentosCaixaAnexos).where(inArray(fechamentosCaixaAnexos.fechamentoCaixaId, caixaIds));
 if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
 if (setorIds.length) await banco.delete(permissoesSetores).where(inArray(permissoesSetores.setorId, setorIds));
 
@@ -752,8 +753,9 @@ await banco.delete(colaboradores).where(
   )
 );
 await banco.delete(cargos).where(and(eq(cargos.empresaId, empresaId), inArray(cargos.nome, nomesCargosSeed)));
-await banco.delete(setores).where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")));
-await banco.delete(areas).where(and(eq(areas.empresaId, empresaId), eq(areas.nome, "Operacao")));
+// Area e setor podem ser referenciados por colaboradores criados durante testes locais.
+// O seed deve ser repetivel sem apagar esses colaboradores: reutiliza os registros base em
+// vez de removê-los e recriá-los a cada execução.
 await banco.delete(unidadesMedida).where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")));
 await banco
   .delete(gruposRetiradas)
@@ -935,12 +937,29 @@ const unidade = (
 )[0];
 if (!unidade) throw new Error("Unidade de medida nao foi criada");
 
-const area = (await banco.insert(areas).values({ empresaId, nome: "Operacao" }).returning({ id: areas.id }))[0];
+const [areaExistente] = await banco
+  .select({ id: areas.id })
+  .from(areas)
+  .where(and(eq(areas.empresaId, empresaId), eq(areas.nome, "Operacao")))
+  .limit(1);
+const area =
+  areaExistente ?? (await banco.insert(areas).values({ empresaId, nome: "Operacao" }).returning({ id: areas.id }))[0];
 if (!area) throw new Error("Area nao foi criada");
 
-const setor = (
-  await banco.insert(setores).values({ empresaId, areaId: area.id, nome: "Loja" }).returning({ id: setores.id })
-)[0];
+const [setorExistente] = await banco
+  .select({ id: setores.id })
+  .from(setores)
+  .where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")))
+  .limit(1);
+const setor = setorExistente
+  ? (
+      await banco
+        .update(setores)
+        .set({ areaId: area.id })
+        .where(eq(setores.id, setorExistente.id))
+        .returning({ id: setores.id })
+    )[0]
+  : (await banco.insert(setores).values({ empresaId, areaId: area.id, nome: "Loja" }).returning({ id: setores.id }))[0];
 if (!setor) throw new Error("Setor nao foi criado");
 
 await banco
