@@ -5,9 +5,11 @@ import { formatarDataHora } from "~/utils/formatacao";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
+import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
+import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 const { apiGet } = useApi();
 
@@ -107,6 +109,9 @@ let consultaMaloteAtual = 0;
 // misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
 // correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
 const entrega = reactive({ valor: "", valorEspecie: "", valorMoedas: "", lacre: "", observacao: "" });
+const modalRetornoSangriaAberto = ref(false);
+type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
+const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
 // B2 · a chave de idempotencia da tela.
 // Regra: uma chave por INTENCAO. Ela nasce no primeiro envio, sobrevive a erro e a cancelamento
@@ -410,7 +415,25 @@ const entregaBloqueada = computed(
     lacreEntregaPendente.value
 );
 
-function retornarSaldo() {
+const entregaIniciada = computed(
+  () =>
+    entrega.valor.trim().length > 0 ||
+    entrega.valorEspecie.trim().length > 0 ||
+    entrega.valorMoedas.trim().length > 0 ||
+    entrega.lacre.trim().length > 0 ||
+    entrega.observacao.trim().length > 0
+);
+
+const mensagemErroEntrega = computed(() => {
+  if (!entregaIniciada.value) return "";
+  if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value)}.`;
+  if (entregaComposicaoInvalida.value) return "Dinheiro físico + moedas deve ser igual ao valor entregue.";
+  if (lacreEntregaPendente.value) return "Informe o lacre do retorno / sangria.";
+  if (valorEntregaEfetivo.value <= 0) return "Informe um valor para a transferência.";
+  return "";
+});
+
+function retornarSaldo(fecharModalAoSalvar = false) {
   const caixa = caixaAberto.value;
   // Guarda de duplo clique: enquanto `salvando` estiver ligado o ato nao repete. O botao tambem
   // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
@@ -432,9 +455,24 @@ function retornarSaldo() {
     // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
     // chave — que e o que impede a segunda entrega do mesmo envelope.
     aoConcluir: (sucesso: boolean) => {
-      if (sucesso) limparEntrega();
+      if (!sucesso) return;
+      limparEntrega();
+      if (fecharModalAoSalvar) modalRetornoSangriaAberto.value = false;
     }
   });
+}
+
+function categoriaTemUltimos(chave: string): chave is CategoriaComUltimos {
+  return chave === "despesas" || chave === "mercadorias" || chave === "retiradas";
+}
+
+function abrirUltimosLancamentos(chave: string, valor: number) {
+  if (!categoriaTemUltimos(chave) || valor === 0) return;
+  categoriaUltimosLancamentos.value = chave;
+}
+
+function atualizarDialogUltimosLancamentos(aberto: boolean) {
+  if (!aberto) categoriaUltimosLancamentos.value = null;
 }
 
 // D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
@@ -661,7 +699,17 @@ function fechar() {
              Grid auto-responsivo (nunca aperta) — restyle da grade real, sem o cockpit pesado
              que foi revertido. Totais vindos da API; "Resultado" e o card-ancora. -->
         <div v-if="resumoAtual" class="cat-grid">
-          <div v-for="cat in categorias" :key="cat.chave" class="cat-card" :class="`cat-${cat.chave}`">
+          <div
+            v-for="cat in categorias"
+            :key="cat.chave"
+            class="cat-card"
+            :class="[{ 'cat-card--clicavel': categoriaTemUltimos(cat.chave) && cat.valor !== 0 }, `cat-${cat.chave}`]"
+            :role="categoriaTemUltimos(cat.chave) && cat.valor !== 0 ? 'button' : undefined"
+            :tabindex="categoriaTemUltimos(cat.chave) && cat.valor !== 0 ? 0 : undefined"
+            @click="abrirUltimosLancamentos(cat.chave, cat.valor)"
+            @keydown.enter.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
+            @keydown.space.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
+          >
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
               <div class="cat-head">
@@ -670,6 +718,9 @@ function fechar() {
               </div>
               <div class="cat-valor">{{ dinheiro(cat.valor) }}</div>
               <div v-if="cat.detalhe" class="cat-detalhe">{{ cat.detalhe }}</div>
+              <div v-if="categoriaTemUltimos(cat.chave) && cat.valor !== 0" class="cat-card__acao">
+                Ver últimas movimentações <v-icon icon="mdi-chevron-right" size="14" />
+              </div>
               <CaixaResumoMaloteAbertura
                 v-if="cat.chave === 'transferencias' && caixaAberto"
                 :caixa-id="caixaAberto.id"
@@ -798,60 +849,6 @@ function fechar() {
         </div>
 
         <v-row dense>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <label class="caixa-valor-entrega">
-              <span class="caixa-valor-entrega__rotulo">Valor a entregar (vazio = tudo)</span>
-              <CampoDinheiro
-                v-model="entrega.valor"
-                class="caixa-valor-entrega__input"
-                :class="{ 'caixa-valor-entrega__input--erro': entregaAcimaDoSaldoLivre }"
-                :aria-invalid="entregaAcimaDoSaldoLivre ? 'true' : undefined"
-                :aria-describedby="entregaAcimaDoSaldoLivre ? 'erro-valor-entrega' : undefined"
-                data-teste="valor-entrega"
-              />
-              <span v-if="entregaAcimaDoSaldoLivre" id="erro-valor-entrega" class="caixa-valor-entrega__erro">
-                Máximo livre após os retornos planejados: {{ dinheiro(saldoLivre) }}
-              </span>
-              <span v-else-if="entregaComposicaoInvalida" class="caixa-valor-entrega__erro">
-                Dinheiro físico + moedas deve ser igual ao valor entregue.
-              </span>
-            </label>
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <CampoDinheiro v-model="entrega.valorEspecie" label="Dinheiro fisico" icone="mdi-cash" />
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <CampoDinheiro v-model="entrega.valorMoedas" label="Moedas" icone="mdi-circle-multiple-outline" />
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <v-text-field
-              v-model="entrega.lacre"
-              label="Lacre do retorno / sangria (obrigatorio)"
-              hint="Identifica o lacre desta transferência de dinheiro do caixa para o cofre."
-              persistent-hint
-              data-teste="lacre-entrega"
-            />
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <v-btn
-              color="warning"
-              prepend-icon="mdi-bank-transfer-out"
-              :disabled="entregaBloqueada"
-              :loading="salvando"
-              data-teste="botao-entregar"
-              @click="retornarSaldo"
-            >
-              Transferência de retorno / sangria
-            </v-btn>
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12">
-            <v-text-field
-              v-model="entrega.observacao"
-              label="Observação da transferência de retorno (opcional)"
-              data-teste="observacao-entrega"
-            />
-          </v-col>
-          <v-col cols="12"><v-divider class="my-4" /></v-col>
           <v-col cols="12" class="fechamento-caixa">
             <div class="text-h6 mb-1">Fechamento do caixa</div>
             <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
@@ -968,7 +965,52 @@ function fechar() {
               </v-col>
             </v-row>
           </v-col>
+          <v-col v-if="temSaldoLivre" cols="12" class="pt-5">
+            <v-divider class="mb-5" />
+            <v-btn
+              color="warning"
+              prepend-icon="mdi-bank-transfer-out"
+              class="botao-retorno-sangria"
+              data-teste="botao-entregar"
+              @click="modalRetornoSangriaAberto = true"
+            >
+              <span class="botao-retorno-sangria__conteudo">
+                <span>Transferência de retorno / sangria</span>
+                <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
+              </span>
+            </v-btn>
+          </v-col>
         </v-row>
+
+        <CaixaRetornoSangriaDialog
+          v-if="caixaAberto"
+          :aberto="modalRetornoSangriaAberto"
+          :saldo-livre="saldoLivre"
+          :valor="entrega.valor"
+          :valor-especie="entrega.valorEspecie"
+          :valor-moedas="entrega.valorMoedas"
+          :lacre="entrega.lacre"
+          :observacao="entrega.observacao"
+          :responsavel-nome="usuarioNome"
+          :bloqueado="entregaBloqueada"
+          :mensagem-erro="mensagemErroEntrega"
+          :salvando="salvando ?? false"
+          @update:aberto="modalRetornoSangriaAberto = $event"
+          @update:valor="entrega.valor = $event"
+          @update:valor-especie="entrega.valorEspecie = $event"
+          @update:valor-moedas="entrega.valorMoedas = $event"
+          @update:lacre="entrega.lacre = $event"
+          @update:observacao="entrega.observacao = $event"
+          @salvar="retornarSaldo($event)"
+        />
+        <CaixaUltimosLancamentosDialog
+          v-if="caixaAberto && categoriaUltimosLancamentos"
+          :aberto="true"
+          :caixa-id="caixaAberto.id"
+          :empresa-id="empresaId"
+          :categoria="categoriaUltimosLancamentos"
+          @update:aberto="atualizarDialogUltimosLancamentos"
+        />
       </template>
     </v-card-text>
   </v-card>
@@ -980,6 +1022,25 @@ function fechar() {
 .botao-travado {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.botao-retorno-sangria {
+  min-height: 52px;
+  padding-block: 8px;
+}
+
+.botao-retorno-sangria__conteudo {
+  display: grid;
+  text-align: left;
+}
+
+.botao-retorno-sangria__subtitulo {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .abertura-conferencia {
@@ -1036,60 +1097,6 @@ function fechar() {
   font-size: 0.875rem;
 }
 
-/* CampoDinheiro e um input nativo para preservar a digitacao monetaria brasileira. Aqui ele era
-   usado sem a moldura que os outros formularios fornecem e, no tema escuro, sobrava apenas o
-   placeholder `0,00`. O rotulo, a borda e o estado de erro pertencem a este formulario do Caixa. */
-.caixa-valor-entrega {
-  position: relative;
-  display: block;
-  width: 100%;
-}
-
-.caixa-valor-entrega__rotulo {
-  position: absolute;
-  z-index: 1;
-  top: -7px;
-  left: 12px;
-  padding-inline: 4px;
-  background: rgb(var(--v-theme-surface));
-  color: rgba(var(--v-theme-on-surface), 0.78);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 14px;
-}
-
-.caixa-valor-entrega__input {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 56px;
-  padding: 0 16px;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.58);
-  border-radius: 4px;
-  outline: none;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 16px;
-}
-
-.caixa-valor-entrega__input:hover {
-  border-color: rgba(var(--v-theme-on-surface), 0.72);
-}
-
-.caixa-valor-entrega__input:focus {
-  border-width: 2px;
-  border-color: rgb(var(--v-theme-primary));
-}
-
-.caixa-valor-entrega__input--erro {
-  border-color: rgb(var(--v-theme-error));
-}
-
-.caixa-valor-entrega__erro {
-  padding-inline: 16px;
-  color: rgb(var(--v-theme-error));
-  font-size: 12px;
-}
-
 /* Grade auto-responsiva: cada card tem largura minima confortavel e quebra sozinho — nunca aperta
    como no cockpit "fiel ao mockup" que foi revertido no contexto real. */
 .cat-grid {
@@ -1110,6 +1117,27 @@ function fechar() {
   border: 1px solid var(--cat);
   border-radius: 14px;
   background: var(--cat-soft);
+}
+
+.cat-card--clicavel {
+  cursor: pointer;
+}
+
+.cat-card--clicavel:hover {
+  filter: brightness(1.08);
+}
+
+.cat-card--clicavel:focus-visible {
+  outline: 3px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.cat-card__acao {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .cat-bar {
