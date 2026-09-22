@@ -164,7 +164,10 @@ const fechamentoComposicaoInformada = computed(
   () => fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
 );
 const diferencaFechamento = computed(() => totalFechamentoContado.value - saldoAtual.value);
-const fechamentoDivergente = computed(() => diferencaFechamento.value !== 0);
+// Antes da contagem, os campos vazios são apenas "ainda não informado" — não R$ 0,00.
+// A quebra e sua justificativa só existem depois que o caixa declarar espécie e moedas.
+const fechamentoDivergente = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value !== 0);
+const fechamentoComQuebra = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value < 0);
 const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
 const responsaveisFechamentoPendentes = computed(
@@ -920,7 +923,7 @@ function fechar() {
                   data-teste="botao-fechar"
                   @click="fechar"
                 >
-                  {{ diferencaFechamento < 0 ? "Fechar com quebra" : "Fechar caixa" }}
+                  {{ fechamentoComQuebra ? "Fechar com quebra" : "Fechar caixa" }}
                 </v-btn>
                 <p
                   v-if="fechamentoTravado"
