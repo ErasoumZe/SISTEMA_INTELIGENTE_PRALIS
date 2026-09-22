@@ -45,7 +45,9 @@ import {
   calcularTotaisCaixaOperacionalRepository,
   criarCaixaRepository,
   criarAnexoFechamentoCaixaRepository,
+  buscarAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
+  listarAnexosFechamentoCaixaRepository,
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
   buscarPlanejamentoRetornoRepository,
@@ -202,6 +204,24 @@ export async function salvarAnexoFechamentoCaixa(
       throw error;
     }
   });
+}
+
+async function obterCaixaParaAuditoria(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  return caixa;
+}
+
+export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
+}
+
+export async function obterArquivoAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId);
+  if (!anexo) throw new Error("Anexo nao encontrado");
+  return { ...anexo, caminhoAbsoluto: caminhoAbsolutoDocumento(anexo.caminho) };
 }
 
 async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco): Promise<TotaisCaixaCentavos> {

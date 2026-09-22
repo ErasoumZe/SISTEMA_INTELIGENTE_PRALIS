@@ -1,5 +1,6 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
+import { createReadStream } from "node:fs";
 import { z } from "zod";
 import {
   abrirCaixaPayloadSchema,
@@ -24,7 +25,9 @@ import {
   listarPlanejamentosRetorno,
   obterDetalheCaixa,
   obterStatusCaixa,
+  obterArquivoAnexoFechamentoCaixa,
   obterTransferenciasCaixa,
+  listarAnexosFechamentoCaixa,
   salvarAnexoFechamentoCaixa
 } from "./caixa.service.js";
 
@@ -84,14 +87,46 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   );
 
+  app.get("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixas_gerenciar") }, async (request, reply) => {
+    const { caixaId } = caixaParamsSchema.parse(request.params);
+    try {
+      return ok(await listarAnexosFechamentoCaixa(caixaId, request.perfilUsuario!));
+    } catch (error) {
+      const mensagem = mensagemDominioOuRelancar(error);
+      return erro(reply, statusErro(mensagem), mensagem);
+    }
+  });
+
+  app.get(
+    "/api/caixa/:caixaId/anexos/:anexoId",
+    { preHandler: exigirPermissao("caixas_gerenciar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const anexoId = z
+        .string()
+        .uuid()
+        .parse((request.params as { anexoId?: string }).anexoId);
+      try {
+        const anexo = await obterArquivoAnexoFechamentoCaixa(caixaId, anexoId, request.perfilUsuario!);
+        reply.header("Content-Type", anexo.mimeType);
+        const nomeSeguro = anexo.nomeOriginal.replace(/[^\w. -]/gu, "_");
+        reply.header("Content-Disposition", `inline; filename=\"${nomeSeguro || "anexo"}\"`);
+        reply.header("Cache-Control", "private, no-store");
+        return reply.send(createReadStream(anexo.caminhoAbsoluto));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
   app.post("/api/caixa/:caixaId/anexos", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
     const { caixaId } = caixaParamsSchema.parse(request.params);
     try {
-        const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
-        const campoTipo = arquivo?.fields["tipo"];
-        const valorTipo =
-          campoTipo && !Array.isArray(campoTipo) && "value" in campoTipo ? campoTipo.value : undefined;
-        const tipo = z.enum(["folha_fechamento", "comprovante_cartao"]).parse(valorTipo);
+      const arquivo = await request.file({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+      const campoTipo = arquivo?.fields["tipo"];
+      const valorTipo = campoTipo && !Array.isArray(campoTipo) && "value" in campoTipo ? campoTipo.value : undefined;
+      const tipo = z.enum(["folha_fechamento", "comprovante_cartao"]).parse(valorTipo);
       return reply
         .status(201)
         .send(ok(await salvarAnexoFechamentoCaixa(caixaId, tipo, arquivo, request.perfilUsuario!)));

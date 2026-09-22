@@ -1282,6 +1282,55 @@ export async function existeFolhaFechamentoCaixaRepository(
   return Boolean(anexo);
 }
 
+export async function listarAnexosFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      criadoEm: fechamentosCaixaAnexos.criadoEm
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(fechamentosCaixaAnexos.criadoEm));
+}
+
+export async function buscarAnexoFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  anexoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .select({
+      caminho: fechamentosCaixaAnexos.caminho,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.id, anexoId),
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .limit(1);
+  return anexo ?? null;
+}
+
 export async function atualizarFechamentoCaixaRepository(
   input: {
     caixaId: string;
