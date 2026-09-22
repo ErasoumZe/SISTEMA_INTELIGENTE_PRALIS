@@ -25,15 +25,18 @@ export type AberturaCaixaPayload = {
   usuarioCaixaId: string;
   turnoId?: string | null;
   maquininhaId?: string | null;
+  lacreAbertura?: string | null;
+  valorEspecieContado?: number;
+  valorMoedasContado?: number;
+  observacaoDivergencia?: string | null;
   observacao: string | null;
 };
-// R-200: `lacreFechamento` sela a gaveta e e obrigatorio em todo fechamento. Ele nao se mistura
-// ao `lacreRetorno`, que identifica apenas a transferencia final ao Cofre e segue opcional (R-026).
 export type FechamentoPayload = {
   caixaId: string;
   observacao: string | null;
   lacreFechamento: string;
-  lacreRetorno?: string | null;
+  valorEspecieFechamento: number;
+  valorMoedasFechamento: number;
 };
 // B2: `idempotenciaChave` e da INTENCAO, nao da requisicao. Quem a gera e a tela (uma vez, e a
 // conserva no retry); aqui ela so trafega. Sem ela o servidor nao tem como distinguir "entregar
@@ -44,7 +47,9 @@ export type FechamentoPayload = {
 export type RetornoSaldoPayload = {
   caixaId: string;
   valor: number;
-  lacre?: string | null;
+  valorEspecie: number;
+  valorMoedas: number;
+  lacre: string;
   observacao: string | null;
   idempotenciaChave: string;
   aoConcluir?: (sucesso: boolean) => void;
@@ -110,8 +115,9 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     try {
       await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {
         valor: payload.valor,
-        // D5: cada entrega fisica leva o proprio lacre. Opcional pela R-026.
-        lacre: payload.lacre ?? null,
+        valorEspecie: payload.valorEspecie,
+        valorMoedas: payload.valorMoedas,
+        lacre: payload.lacre,
         observacao: payload.observacao,
         idempotenciaChave: payload.idempotenciaChave
       });
@@ -145,7 +151,8 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, {
         observacao: payload.observacao,
         lacreFechamento: payload.lacreFechamento,
-        lacreRetorno: payload.lacreRetorno ?? null
+        valorEspecieFechamento: payload.valorEspecieFechamento,
+        valorMoedasFechamento: payload.valorMoedasFechamento
       });
       await deps.carregarStatusCaixa(deps.empresaId());
       deps.notificar("Caixa fechado com sucesso.");
