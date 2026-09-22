@@ -6,6 +6,7 @@ import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardando
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
+import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 
 const props = defineProps<{
@@ -77,6 +78,7 @@ const aberturaExtra = reactive({
   observacaoDivergencia: ""
 });
 const fechamento = reactive({ observacao: "", lacreFechamento: "", valorEspecie: "", valorMoedas: "" });
+const folhaFechamentoEnviada = ref(false);
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
@@ -331,7 +333,14 @@ function fechar() {
     return;
   }
   // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
-  if (!caixa || props.salvando || observacaoObrigatoriaPendente.value || lacreFechamentoPendente.value) return;
+  if (
+    !caixa ||
+    props.salvando ||
+    observacaoObrigatoriaPendente.value ||
+    lacreFechamentoPendente.value ||
+    !folhaFechamentoEnviada.value
+  )
+    return;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
@@ -411,6 +420,12 @@ function fechar() {
           </v-col>
           <v-col cols="12" md="6">
             <v-text-field :model-value="usuarioNome" label="Usuário do caixa" readonly density="comfortable" />
+          </v-col>
+          <v-col cols="12">
+            <CaixaFechamentoAnexos
+              :caixa-id="caixaAberto?.id ?? null"
+              @folha-enviada="folhaFechamentoEnviada = $event"
+            />
           </v-col>
           <v-col cols="12">
             <v-btn
@@ -644,7 +659,7 @@ function fechar() {
             <v-btn
               :color="temDeficit ? 'error' : 'primary'"
               prepend-icon="mdi-lock"
-              :disabled="observacaoObrigatoriaPendente || lacreFechamentoPendente"
+              :disabled="observacaoObrigatoriaPendente || lacreFechamentoPendente || !folhaFechamentoEnviada"
               :aria-disabled="fechamentoTravado ? 'true' : undefined"
               :class="{ 'botao-travado': fechamentoTravado }"
               :loading="salvando"
