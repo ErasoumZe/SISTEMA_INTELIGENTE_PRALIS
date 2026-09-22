@@ -5,6 +5,8 @@ export {
   debitosColaboradores,
   edicoesCaixa,
   fechamentosCaixa,
+  fechamentosCaixaAnexos,
   notificacoes,
-  quebrasCaixa
+  quebrasCaixa,
+  transferenciasConferenciasFisicas
 } from "../app.schema.js";
