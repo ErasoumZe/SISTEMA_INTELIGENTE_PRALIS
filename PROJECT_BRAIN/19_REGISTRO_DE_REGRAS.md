@@ -1127,6 +1127,22 @@ no próprio arquivo é ignorado e reportado, pois o ERP mantém a regra de uma l
 produto. Esta exceção não autoriza deploy, seed de produção, integração CREARE ou mudança da fonte
 oficial.
 
+### R-204 — Transferência de retorno / sangria só nasce e é executada dentro do Caixa (Rodrigo, 22/09/2026)
+
+Retorno e sangria são o mesmo ato operacional e aparecem exclusivamente como **Transferência de retorno / sangria** dentro de um Caixa aberto. O modal genérico de transferências não cria novos retornos nem planejamentos. Linhas históricas já planejadas permanecem fatos auditáveis e podem somente ser executadas ou canceladas pelo fluxo existente até se encerrarem; não há apagamento, cancelamento silencioso ou reescrita histórica.
+
+### R-205 — Composição e conferência física do malote na abertura (Rodrigo, 22/09/2026)
+
+Toda nova remessa Cofre → Caixa declara total, espécie e moedas, cuja soma precisa ser igual ao total. Ao abrir com lacre, o operador confere espécie e moedas. Se convergir, fica registrada a confirmação; se divergir, registra-se declarado, contado, diferença, relato obrigatório, operador e horário do servidor, notifica-se a Tesouraria e o Caixa abre com o total efetivamente contado. O valor declarado nunca é reescrito. A implementação deve definir e testar o efeito contábil antes da migration.
+
+### R-206 — Fechamento com composição física, quebra e provas (Rodrigo, 22/09/2026)
+
+No fechamento, o operador informa espécie e moedas físicas. Se o total contado divergir do saldo físico esperado, a diferença gera quebra auditada, com relato obrigatório, operador, horário do servidor e notificação à Tesouraria. Ao menos uma foto da folha física de fechamento é obrigatória; comprovantes/relatórios de cartão podem ser múltiplos. Anexos pertencem ao fechamento e aparecem no seu detalhe histórico. A futura IA apenas sugere discriminação a partir do anexo, nunca altera valores, e falha de leitura não invalida a foto.
+
+### R-207 — Lacres do retorno manual e do fechamento (Rodrigo, 22/09/2026)
+
+O lacre é obrigatório para a Transferência de retorno / sangria manual. O campo separado **Lacre do retorno no fechamento** é removido: no fechamento automático, o único lacre solicitado é o lacre obrigatório de fechamento. O histórico anterior não é alterado.
+
 ## §4 · Como isto deixa de ser mais um documento
 
 Um registro que ninguém consulta é igual a não ter registro. O que o torna real:
