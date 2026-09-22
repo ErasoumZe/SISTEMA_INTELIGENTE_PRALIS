@@ -383,6 +383,8 @@ export async function buscarTransferenciaPorLacreAberturaRepository(
       transferenciaId: transferencias.id,
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       contaOrigemId: transferencias.contaOrigemId,
       caixaId: transferencias.caixaId,
       criadoPor: transferencias.criadoPor,
@@ -413,6 +415,7 @@ export async function confirmarTransferenciaAberturaRepository(
     contaCaixaId: string;
     caixaId: string;
     usuarioId: string;
+    valorRecebidoCentavos: number;
     agora: Date;
   },
   db: ExecutorBanco = banco
@@ -428,6 +431,7 @@ export async function confirmarTransferenciaAberturaRepository(
       status: "recebido",
       confirmadoPor: input.usuarioId,
       dataRecebimento: input.agora,
+      valorRecebido: centavosParaDecimalBanco(input.valorRecebidoCentavos),
       atualizadoEm: input.agora
     })
     .where(
@@ -593,6 +597,8 @@ export type IntencaoEntregaCofre = {
   caixaId: string | null;
   tipo: string;
   valorCentavos: number;
+  valorEspecieCentavos: number | null;
+  valorMoedasCentavos: number | null;
   lacre: string | null;
   observacao: string | null;
   status: string;
@@ -612,6 +618,8 @@ export async function buscarTransferenciaPorIdempotenciaRepository(
       caixaId: transferencias.caixaId,
       tipo: transferencias.tipo,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       lacre: transferencias.nLacreDoc,
       observacao: transferencias.observacao,
       status: transferencias.status
@@ -620,8 +628,13 @@ export async function buscarTransferenciaPorIdempotenciaRepository(
     .where(and(eq(transferencias.empresaId, empresaId), eq(transferencias.idempotenciaChave, idempotenciaChave)))
     .limit(1);
   if (!linha) return null;
-  const { valorOriginal, ...resto } = linha;
-  return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
+  const { valorOriginal, valorEspecieDeclarado, valorMoedasDeclarado, ...resto } = linha;
+  return {
+    ...resto,
+    valorCentavos: paraCentavos(valorOriginal),
+    valorEspecieCentavos: valorEspecieDeclarado === null ? null : paraCentavos(valorEspecieDeclarado),
+    valorMoedasCentavos: valorMoedasDeclarado === null ? null : paraCentavos(valorMoedasDeclarado)
+  };
 }
 
 // Transferencia de retorno avulsa/final do Caixa para o Cofre.
@@ -632,6 +645,8 @@ export async function criarTransferenciaCofreRepository(
     contaCaixaId: string;
     contaCofreId: string;
     valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
@@ -654,6 +669,8 @@ export async function criarTransferenciaCofreRepository(
       descricao: input.descricao,
       observacao: input.observacao,
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
+      valorEspecieDeclarado: centavosParaDecimalBanco(input.valorEspecieCentavos),
+      valorMoedasDeclarado: centavosParaDecimalBanco(input.valorMoedasCentavos),
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
       nLacreDoc: input.nLacreDoc,
@@ -1232,6 +1249,9 @@ export async function atualizarFechamentoCaixaRepository(
     lacreFechamento: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
+    valorFisicoEsperadoCentavos: number;
+    valorEspecieFechamentoCentavos: number;
+    valorMoedasFechamentoCentavos: number;
   },
   db: ExecutorBanco = banco
 ): Promise<number> {
@@ -1253,6 +1273,9 @@ export async function atualizarFechamentoCaixaRepository(
       totalRetiradas: centavosParaDecimalBanco(input.totais.retiradas),
       totalMercadorias: centavosParaDecimalBanco(input.totais.mercadorias),
       saldo: centavosParaDecimalBanco(input.saldoCentavos),
+      valorFisicoEsperadoFechamento: centavosParaDecimalBanco(input.valorFisicoEsperadoCentavos),
+      valorEspecieFechamento: centavosParaDecimalBanco(input.valorEspecieFechamentoCentavos),
+      valorMoedasFechamento: centavosParaDecimalBanco(input.valorMoedasFechamentoCentavos),
       status: "fechado"
     })
     // B1: a guarda `status = 'aberto'` no proprio UPDATE e o que impede o segundo fechamento

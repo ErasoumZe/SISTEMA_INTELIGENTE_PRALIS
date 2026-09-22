@@ -379,6 +379,8 @@ type AberturaPorLacre = {
   lacreId: string;
   numeroLacre: string;
   valorCentavos: number;
+  valorEspecieDeclaradoCentavos: number;
+  valorMoedasDeclaradoCentavos: number;
 };
 
 async function prepararAberturaPorLacre(
@@ -405,11 +407,16 @@ async function prepararAberturaPorLacre(
   if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem nao pode ser a mesma do caixa");
 
   const valorCentavos = paraCentavos(achado.valorOriginal);
+  if (achado.valorEspecieDeclarado === null || achado.valorMoedasDeclarado === null) {
+    throw new Error("Transferencia do malote sem composicao de especie e moedas");
+  }
   return {
     transferenciaId: achado.transferenciaId,
     lacreId: achado.lacreId,
     numeroLacre,
-    valorCentavos
+    valorCentavos,
+    valorEspecieDeclaradoCentavos: paraCentavos(achado.valorEspecieDeclarado),
+    valorMoedasDeclaradoCentavos: paraCentavos(achado.valorMoedasDeclarado)
   };
 }
 
@@ -472,6 +479,15 @@ async function abrirCaixaEmTransacao(
     // (R-028), leva o dinheiro para ESTE caixa (R-036) e rompe o lacre (R-027). Perder a disputa
     // derruba a abertura inteira â€” nao existe caixa aberto com transferencia ainda pendente.
     if (abertura) {
+      const valorEspecieContadoCentavos = paraCentavos(dados.valorEspecieContado!);
+      const valorMoedasContadoCentavos = paraCentavos(dados.valorMoedasContado!);
+      const valorContadoCentavos = valorEspecieContadoCentavos + valorMoedasContadoCentavos;
+      const convergente =
+        abertura.valorEspecieDeclaradoCentavos === valorEspecieContadoCentavos &&
+        abertura.valorMoedasDeclaradoCentavos === valorMoedasContadoCentavos;
+      if (!convergente && !dados.observacaoDivergencia?.trim()) {
+        throw new Error("Observacao obrigatoria quando a conferencia do malote divergir");
+      }
       const confirmada = await confirmarTransferenciaAberturaRepository(
         {
           transferenciaId: abertura.transferenciaId,
@@ -479,6 +495,7 @@ async function abrirCaixaEmTransacao(
           contaCaixaId: pdv.contaId,
           caixaId: caixa.id,
           usuarioId: perfil.usuarioId,
+          valorRecebidoCentavos: valorContadoCentavos,
           agora: new Date()
         },
         tx
@@ -577,13 +594,22 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
 
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    let saldoCentavos = saldoCaixaCentavos(totais);
+    const valorFisicoEsperadoCentavos = saldoCaixaCentavos(totais);
+    const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
+    const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
+    const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
+    const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
+    const observacao = dados.observacao?.trim() || null;
+    if (diferencaFisicaCentavos !== 0 && !observacao) {
+      throw new Error("Observacao obrigatoria quando a contagem fisica do fechamento divergir");
+    }
+    let saldoCentavos = valorFisicoEsperadoCentavos;
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final
     // sai aqui, no MESMO ato e na MESMA transacao do fechamento: se qualquer parte falhar depois,
     // este INSERT cai junto no rollback. Se o saldo ja estiver zero (retornos parciais durante o
     // turno), nada e criado e a mesma acao apenas fecha.
-    if (saldoCentavos > 0) {
+    if (valorFisicoContadoCentavos > 0) {
       if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
       // Decisao 7: o retorno final TAMBEM entrega dinheiro fisico, entao exige responsavel no
       // cofre. A checagem fica DENTRO deste `if` de proposito: fechamento sem sobra nao gera
@@ -592,8 +618,10 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       await registrarEntregaAoCofre(
         {
           caixa: { ...caixa, pdvContaId: caixa.pdvContaId },
-          valorCentavos: saldoCentavos,
-          lacre: dados.lacreRetorno ?? null,
+          valorCentavos: valorFisicoContadoCentavos,
+          valorEspecieCentavos: valorEspecieFechamentoCentavos,
+          valorMoedasCentavos: valorMoedasFechamentoCentavos,
+          lacre: null,
           observacao: dados.observacao ?? null,
           criadoPor: perfil.usuarioId,
           // D6/B2: sem chave de proposito. Este ato ja e irrepetivel por construcao â€” roda sob a
@@ -605,20 +633,19 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       );
       totais = await calcularTotaisCaixaCentavos(caixa, tx);
       saldoCentavos = saldoCaixaCentavos(totais);
-      if (saldoCentavos > 0) throw new Error("Retorno final nao zerou o saldo do caixa");
+      if (saldoCentavos !== -diferencaFisicaCentavos)
+        throw new Error("Retorno final nao conferiu com a contagem fisica");
     }
 
-    const observacao = dados.observacao?.trim() || null;
-    if (saldoCentavos < 0) {
-      if (!observacao) throw new Error("Observacao obrigatoria para fechar caixa com quebra");
+    if (diferencaFisicaCentavos < 0) {
       if (!caixa.usuarioCaixaId) throw new Error("Caixa sem usuario responsavel");
       const quebra = await criarQuebraCaixaRepository(
         {
           empresaId: caixa.empresaId,
           fechamentoCaixaId: caixa.id,
           usuarioId: caixa.usuarioCaixaId,
-          valorCentavos: saldoCentavos,
-          observacao
+          valorCentavos: diferencaFisicaCentavos,
+          observacao: observacao!
         },
         tx
       );
@@ -632,7 +659,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
           destinatariosUsuarioIds: destinatarios,
           referenciaId: quebra.id,
           titulo: `Quebra de caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
-          valorCentavos: saldoCentavos
+          valorCentavos: diferencaFisicaCentavos
         },
         tx
       );
@@ -646,7 +673,10 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         fechadoPor: perfil.usuarioId,
         lacreFechamento: dados.lacreFechamento,
         totais,
-        saldoCentavos
+        saldoCentavos: 0,
+        valorFisicoEsperadoCentavos,
+        valorEspecieFechamentoCentavos,
+        valorMoedasFechamentoCentavos
       },
       tx
     );
@@ -663,7 +693,15 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
 // entrega de dinheiro em silencio. Por isso o conflito e explicito, e nao um 200 conveniente.
 function conferirIntencaoEntrega(
   existente: IntencaoEntregaCofre,
-  pretendida: { caixaId: string; tipo: string; valorCentavos: number; lacre: string | null; observacao: string | null }
+  pretendida: {
+    caixaId: string;
+    tipo: string;
+    valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
+    lacre: string | null;
+    observacao: string | null;
+  }
 ): void {
   // O lacre faz parte da intencao porque na entrega ao cofre ele existe DESDE A CRIACAO. O `status`
   // nunca entra: ele muda por atos posteriores (conferencia, divergencia) e nao descreve o que foi
@@ -673,6 +711,8 @@ function conferirIntencaoEntrega(
   const tipoExistente = existente.tipo === "sangria" ? "retorno" : existente.tipo;
   if (tipoExistente !== pretendida.tipo) divergencias.push("tipo");
   if (existente.valorCentavos !== pretendida.valorCentavos) divergencias.push("valor");
+  if (existente.valorEspecieCentavos !== pretendida.valorEspecieCentavos) divergencias.push("especie");
+  if (existente.valorMoedasCentavos !== pretendida.valorMoedasCentavos) divergencias.push("moedas");
   if ((existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
   if ((existente.observacao ?? null) !== pretendida.observacao) divergencias.push("observacao");
   if (divergencias.length > 0) {
@@ -760,6 +800,8 @@ async function registrarEntregaAoCofre(
   input: {
     caixa: { id: string; empresaId: string; pdvContaId: string; dataMovimento: string | null };
     valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
     lacre: string | null;
     observacao: string | null;
     criadoPor: string;
@@ -775,6 +817,8 @@ async function registrarEntregaAoCofre(
     caixaId: input.caixa.id,
     tipo: "retorno",
     valorCentavos: input.valorCentavos,
+    valorEspecieCentavos: input.valorEspecieCentavos,
+    valorMoedasCentavos: input.valorMoedasCentavos,
     lacre,
     observacao
   };
@@ -814,6 +858,8 @@ async function registrarEntregaAoCofre(
       contaCaixaId: input.caixa.pdvContaId,
       contaCofreId,
       valorCentavos: input.valorCentavos,
+      valorEspecieCentavos: input.valorEspecieCentavos,
+      valorMoedasCentavos: input.valorMoedasCentavos,
       ordem,
       dataReferencia: input.caixa.dataMovimento ?? diaNegocio(new Date()),
       dataTransferencia: diaNegocio(new Date()),
@@ -888,6 +934,8 @@ export async function criarTransferenciaCofreCaixa(
         caixaId: caixa.id,
         tipo: "retorno",
         valorCentavos,
+        valorEspecieCentavos: paraCentavos(dados.valorEspecie),
+        valorMoedasCentavos: paraCentavos(dados.valorMoedas),
         lacre: dados.lacre?.trim() || null,
         observacao: dados.observacao?.trim() || null
       });
@@ -922,6 +970,8 @@ export async function criarTransferenciaCofreCaixa(
       {
         caixa,
         valorCentavos,
+        valorEspecieCentavos: paraCentavos(dados.valorEspecie),
+        valorMoedasCentavos: paraCentavos(dados.valorMoedas),
         lacre: dados.lacre ?? null,
         observacao: dados.observacao ?? null,
         criadoPor: perfil.usuarioId,
