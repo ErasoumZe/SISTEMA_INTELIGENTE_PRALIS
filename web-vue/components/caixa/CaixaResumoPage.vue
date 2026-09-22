@@ -28,6 +28,9 @@ const emit = defineEmits<{
       turnoId?: string | null;
       maquininhaId?: string | null;
       lacreAbertura?: string | null;
+      valorEspecieContado?: number;
+      valorMoedasContado?: number;
+      observacaoDivergencia?: string | null;
       observacao: string | null;
     }
   ): void;
@@ -40,7 +43,9 @@ const emit = defineEmits<{
     payload: {
       caixaId: string;
       valor: number;
-      lacre: string | null;
+      valorEspecie: number;
+      valorMoedas: number;
+      lacre: string;
       observacao: string | null;
       idempotenciaChave: string;
       aoConcluir: (sucesso: boolean) => void;
@@ -48,7 +53,13 @@ const emit = defineEmits<{
   ): void;
   (
     event: "fecharCaixa",
-    payload: { caixaId: string; observacao: string | null; lacreFechamento: string; lacreRetorno: string | null }
+    payload: {
+      caixaId: string;
+      observacao: string | null;
+      lacreFechamento: string;
+      valorEspecieFechamento: number;
+      valorMoedasFechamento: number;
+    }
   ): void;
   (event: "recarregar"): void;
 }>();
@@ -59,13 +70,13 @@ const abertura = reactive({
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
 const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
-const fechamento = reactive({ observacao: "", lacreFechamento: "", lacreRetorno: "" });
+const fechamento = reactive({ observacao: "", lacreFechamento: "", valorEspecie: "", valorMoedas: "" });
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
 // misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
 // correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
-const entrega = reactive({ valor: "", lacre: "", observacao: "" });
+const entrega = reactive({ valor: "", valorEspecie: "", valorMoedas: "", lacre: "", observacao: "" });
 
 // B2 · a chave de idempotencia da tela.
 // Regra: uma chave por INTENCAO. Ela nasce no primeiro envio, sobrevive a erro e a cancelamento
@@ -98,6 +109,8 @@ function chaveParaIntencao(assinatura: string): string {
 
 function limparEntrega() {
   entrega.valor = "";
+  entrega.valorEspecie = "";
+  entrega.valorMoedas = "";
   entrega.lacre = "";
   entrega.observacao = "";
   chaveEntrega.value = "";
@@ -240,7 +253,8 @@ watch(
     if (!caixaAberto.value) {
       fechamento.observacao = "";
       fechamento.lacreFechamento = "";
-      fechamento.lacreRetorno = "";
+      fechamento.valorEspecie = "";
+      fechamento.valorMoedas = "";
     }
   },
   { immediate: true }
@@ -277,11 +291,13 @@ function retornarSaldo() {
   // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
   if (!caixa || entregaBloqueada.value) return;
   const valor = valorEntregaEfetivo.value;
-  const lacre = entrega.lacre || null;
+  const lacre = entrega.lacre.trim();
   const observacao = entrega.observacao || null;
   emit("retornarSaldo", {
     caixaId: caixa.id,
     valor,
+    valorEspecie: Number(entrega.valorEspecie || 0),
+    valorMoedas: Number(entrega.valorMoedas || 0),
     lacre,
     observacao,
     idempotenciaChave: chaveParaIntencao(`avulsa|${caixa.id}|${valor}|${lacre ?? ""}|${observacao ?? ""}`),
@@ -311,7 +327,8 @@ function fechar() {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
     lacreFechamento: fechamento.lacreFechamento.trim(),
-    lacreRetorno: fechamento.lacreRetorno || null
+    valorEspecieFechamento: Number(fechamento.valorEspecie || 0),
+    valorMoedasFechamento: Number(fechamento.valorMoedas || 0)
   });
 }
 </script>
@@ -541,9 +558,15 @@ function fechar() {
             </label>
           </v-col>
           <v-col v-if="temSaldoLivre" cols="12" md="4">
+            <CampoDinheiro v-model="entrega.valorEspecie" label="Dinheiro fisico" />
+          </v-col>
+          <v-col v-if="temSaldoLivre" cols="12" md="4">
+            <CampoDinheiro v-model="entrega.valorMoedas" label="Moedas" />
+          </v-col>
+          <v-col v-if="temSaldoLivre" cols="12" md="4">
             <v-text-field
               v-model="entrega.lacre"
-              label="Lacre do retorno imediato (opcional)"
+              label="Lacre do retorno / sangria (obrigatorio)"
               hint="Identifica o lacre desta transferência de dinheiro do caixa para o cofre."
               persistent-hint
               data-teste="lacre-entrega"
@@ -593,13 +616,11 @@ function fechar() {
               data-teste="lacre-fechamento"
             />
           </v-col>
-          <v-col v-if="temSobra" cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.lacreRetorno"
-              label="Lacre do retorno no fechamento (opcional)"
-              hint="Identifica o lacre do dinheiro devolvido ao cofre junto com o fechamento. É diferente do lacre de fechamento."
-              persistent-hint
-            />
+          <v-col cols="12" md="4">
+            <CampoDinheiro v-model="fechamento.valorEspecie" label="Dinheiro fisico contado no fechamento" />
+          </v-col>
+          <v-col cols="12" md="4">
+            <CampoDinheiro v-model="fechamento.valorMoedas" label="Moedas contadas no fechamento" />
           </v-col>
           <v-col cols="12">
             <v-btn
