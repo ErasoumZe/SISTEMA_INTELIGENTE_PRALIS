@@ -28,7 +28,7 @@ import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { banco, executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio } from "../erros.js";
 import {
   atualizarFechamentoCaixaRepository,
@@ -592,7 +592,7 @@ async function abrirCaixaEmTransacao(
       if (!confirmada) throw new Error("Lacre ja utilizado por outro caixa");
       const conferencia = await criarConferenciaFisicaTransferenciaRepository(
         {
-          empresaId: caixa.empresaId,
+          empresaId: dados.empresaId,
           transferenciaId: abertura.transferenciaId,
           fechamentoCaixaId: caixa.id,
           etapa: "abertura",
@@ -609,16 +609,16 @@ async function abrirCaixaEmTransacao(
         tx
       );
       if (!convergente) {
-        const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+        const destinatarios = (await listarUsuariosTesourariaRepository(dados.empresaId, tx))
           .map((item) => item.usuarioId)
           .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
         await criarNotificacoesRepository(
           {
-            empresaId: caixa.empresaId,
+            empresaId: dados.empresaId,
             tipo: "quebra_caixa",
             destinatariosUsuarioIds: destinatarios,
             referenciaId: conferencia.id,
-            titulo: `Divergencia na abertura do caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+            titulo: "Divergencia na abertura do caixa",
             valorCentavos: valorContadoCentavos - abertura.valorCentavos
           },
           tx
