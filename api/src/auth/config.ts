@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { schema } from "@padaria/db/schema";
 import { gerarUuidV7 } from "@padaria/shared/ids";
-import { env } from "../env.js";
+import { env, origensWebPermitidas } from "../env.js";
 import { banco } from "../banco/conexao.js";
 import { enviarEmail, montarHtmlEmail } from "./email.js";
 
@@ -27,7 +27,7 @@ export const auth = betterAuth({
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.AUTH_BASE_URL,
-  trustedOrigins: [env.WEB_ORIGIN],
+  trustedOrigins: origensWebPermitidas,
   advanced: {
     database: {
       generateId: () => gerarUuidV7()
