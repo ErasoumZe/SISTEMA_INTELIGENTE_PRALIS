@@ -56,6 +56,7 @@ const emit = defineEmits<{
       valorEspecie: number;
       valorMoedas: number;
       lacreId: string;
+      lacreNumero: string;
       responsavelNome: string;
       observacao: string | null;
       idempotenciaChave: string;
