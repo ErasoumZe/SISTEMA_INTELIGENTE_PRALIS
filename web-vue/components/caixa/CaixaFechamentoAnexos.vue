@@ -100,7 +100,9 @@ function sincronizarRelatorios(lista: Anexo[]) {
   const ativos = new Set(lista.filter((anexo) => anexo.tipo === "comprovante_cartao").map((anexo) => anexo.id));
   const proximos: Record<string, RelatorioMaquininhaFormulario> = {};
   for (const anexo of lista.filter((item) => item.tipo === "comprovante_cartao")) {
-    proximos[anexo.id] = relatorios.value[anexo.id] ?? relatorioFormulario(anexo.iaResultado);
+    // `carregar` so roda apos upload, leitura, salvamento ou remocao. Nesses atos, o banco e a
+    // fonte de verdade: manter o formulario vazio anterior esconderia a resposta nova da IA.
+    proximos[anexo.id] = relatorioFormulario(anexo.iaResultado);
   }
   for (const id of Object.keys(proximos)) if (!ativos.has(id)) delete proximos[id];
   relatorios.value = proximos;
