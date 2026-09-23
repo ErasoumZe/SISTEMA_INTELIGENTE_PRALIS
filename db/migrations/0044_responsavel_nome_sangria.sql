@@ -1,0 +1,1 @@
+ALTER TABLE "transferencias" ADD COLUMN "responsavel_nome" text;

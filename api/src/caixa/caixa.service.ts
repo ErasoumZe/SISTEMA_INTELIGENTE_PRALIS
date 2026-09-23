@@ -787,6 +787,7 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
           valorMoedasCentavos: valorMoedasFechamentoCentavos,
           lacre: null,
           observacao: dados.observacao ?? null,
+          responsavelNome: null,
           criadoPor: perfil.usuarioId,
           // D6/B2: sem chave de proposito. Este ato ja e irrepetivel por construcao â€” roda sob a
           // trava da linha do caixa e o UPDATE so acerta caixa 'aberto', entao um retry encontra o
@@ -883,6 +884,7 @@ function conferirIntencaoEntrega(
     valorMoedasCentavos: number;
     lacre: string | null;
     observacao: string | null;
+    responsavelNome: string | null;
   }
 ): void {
   // O lacre faz parte da intencao porque na entrega ao cofre ele existe DESDE A CRIACAO. O `status`
@@ -897,6 +899,7 @@ function conferirIntencaoEntrega(
   if (existente.valorMoedasCentavos !== pretendida.valorMoedasCentavos) divergencias.push("moedas");
   if ((existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
   if ((existente.observacao ?? null) !== pretendida.observacao) divergencias.push("observacao");
+  if ((existente.responsavelNome ?? null) !== pretendida.responsavelNome) divergencias.push("responsavel");
   if (divergencias.length > 0) {
     throw new ErroDominio(
       `Chave de idempotencia ja usada para outra intencao (${divergencias.join(", ")})`,
@@ -986,6 +989,7 @@ async function registrarEntregaAoCofre(
     valorMoedasCentavos: number;
     lacre: string | null;
     observacao: string | null;
+    responsavelNome: string | null;
     criadoPor: string;
     // B2: null SOMENTE no retorno final do fechamento (D6) â€” la a trava da linha do caixa e a
     // guarda `status = 'aberto'` do UPDATE ja tornam o ato irrepetivel, e o valor e a sobra inteira.
@@ -995,6 +999,7 @@ async function registrarEntregaAoCofre(
 ): Promise<{ id: string; duplicada: boolean }> {
   const lacre = input.lacre?.trim() || null;
   const observacao = input.observacao?.trim() || null;
+  const responsavelNome = input.responsavelNome?.trim() || null;
   const intencao = {
     caixaId: input.caixa.id,
     tipo: "retorno",
@@ -1002,7 +1007,8 @@ async function registrarEntregaAoCofre(
     valorEspecieCentavos: input.valorEspecieCentavos,
     valorMoedasCentavos: input.valorMoedasCentavos,
     lacre,
-    observacao
+    observacao,
+    responsavelNome
   };
 
   // B2: a idempotencia e resolvida ANTES da unicidade do lacre, e a ordem importa. Um retry
@@ -1048,6 +1054,7 @@ async function registrarEntregaAoCofre(
       nLacreDoc: lacre,
       descricao: "Transferencia de retorno",
       observacao,
+      responsavelNome,
       criadoPor: input.criadoPor,
       idempotenciaChave: input.idempotenciaChave
     },
@@ -1156,6 +1163,7 @@ export async function criarTransferenciaCofreCaixa(
         valorMoedasCentavos: paraCentavos(dados.valorMoedas),
         lacre: dados.lacre ?? null,
         observacao: dados.observacao ?? null,
+        responsavelNome: dados.responsavelNome ?? null,
         criadoPor: perfil.usuarioId,
         idempotenciaChave: dados.idempotenciaChave
       },

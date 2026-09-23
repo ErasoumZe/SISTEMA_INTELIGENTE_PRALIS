@@ -23,7 +23,7 @@ function nomePagamento(pagamento: NonNullable<OperacaoResumo["pagamentos"]>[numb
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="840">
+  <v-dialog v-model="aberto" max-width="840" persistent no-click-animation>
     <v-card v-if="venda">
       <v-card-title class="d-flex align-center justify-space-between ga-2">
         <span>Detalhes da venda</span>

@@ -56,7 +56,7 @@ watch(
 </script>
 
 <template>
-  <v-dialog v-model="dialogAberto" max-width="680">
+  <v-dialog v-model="dialogAberto" max-width="680" persistent no-click-animation>
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         Últimas {{ titulo.toLocaleLowerCase("pt-BR") }} deste caixa

@@ -12,10 +12,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" max-width="460" persistent>
+  <v-dialog :model-value="aberto" max-width="460" persistent no-click-animation>
     <v-card>
       <v-card-title>{{ titulo }}</v-card-title>
-      <v-card-text>{{ mensagem }}</v-card-text>
+      <v-card-text class="confirmacao-dialog__mensagem">{{ mensagem }}</v-card-text>
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="emit('responder', false)">Cancelar</v-btn>
@@ -24,3 +24,9 @@ const emit = defineEmits<{
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.confirmacao-dialog__mensagem {
+  white-space: pre-line;
+}
+</style>

@@ -265,6 +265,14 @@ export const transferenciaCofrePayloadSchema = z
     valorEspecie: z.coerce.number().nonnegative(),
     valorMoedas: z.coerce.number().nonnegative(),
     lacre: z.string().trim().min(1, "Lacre da transferencia de retorno / sangria obrigatorio"),
+    // O modal operacional exige o nome. Opcional no contrato durante a transição para manter os
+    // registros e integrações históricas compatíveis; quando informado, nunca aceita texto vazio.
+    responsavelNome: z
+      .string()
+      .trim()
+      .min(1, "Responsavel pela transferencia de retorno / sangria obrigatorio")
+      .max(120)
+      .optional(),
     observacao: z.string().trim().max(500).optional().nullable(),
     idempotenciaChave: idempotenciaChaveSchema
   })

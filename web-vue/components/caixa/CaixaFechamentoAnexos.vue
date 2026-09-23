@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
     </div>
     <v-alert v-if="erro" type="error" density="compact" class="mt-2">{{ erro }}</v-alert>
 
-    <v-dialog v-model="cameraAberta" max-width="720" @after-leave="encerrarCamera">
+    <v-dialog v-model="cameraAberta" max-width="720" persistent no-click-animation @after-leave="encerrarCamera">
       <v-card>
         <v-card-title class="d-flex align-center justify-space-between">
           Tirar foto
@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="dialogAnexoAmpliado" max-width="960">
+    <v-dialog v-model="dialogAnexoAmpliado" max-width="960" persistent no-click-animation>
       <v-card v-if="anexoAmpliado">
         <v-card-title class="d-flex align-center justify-space-between">
           Visualizar foto

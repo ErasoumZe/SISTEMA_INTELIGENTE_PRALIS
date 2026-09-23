@@ -91,7 +91,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
   <OperacaoLancamentoModal />
   <OperacaoTransferenciaModal />
 
-  <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable>
+  <v-dialog v-model="modalCadastroAberto" max-width="820" scrollable persistent no-click-animation>
     <v-card>
       <v-card-title>{{
         editandoAcessoUsuario ? "Configurar acessos" : cadastroEditandoId ? "Editar cadastro" : "Novo cadastro"
@@ -524,7 +524,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="modalTemaAberto" max-width="560">
+  <v-dialog v-model="modalTemaAberto" max-width="560" persistent no-click-animation>
     <v-card>
       <v-card-title>Aparência</v-card-title>
       <v-card-subtitle>Padrão vale para todas as telas; escolha uma tela para personalizar só ela.</v-card-subtitle>
@@ -568,7 +568,7 @@ function alternarUsuarioConta(usuarioId: string | undefined, marcar: boolean) {
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="modalCopiaAberto" max-width="560">
+  <v-dialog v-model="modalCopiaAberto" max-width="560" persistent no-click-animation>
     <v-card>
       <v-card-title>{{ copiaModo === "importar" ? "Importar dados" : "Exportar registro" }}</v-card-title>
       <v-card-text>

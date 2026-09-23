@@ -347,7 +347,7 @@ onMounted(async () => {
       </v-card>
     </div>
 
-    <v-dialog v-model="dialogDetalhe" max-width="720">
+    <v-dialog v-model="dialogDetalhe" max-width="720" persistent no-click-animation>
       <v-card v-if="detalhe">
         <v-card-title class="d-flex align-center justify-space-between">
           <span>Pedido {{ detalhe.tipo === "automatico" ? "automatico" : "manual" }}</span>

@@ -677,6 +677,7 @@ export type IntencaoEntregaCofre = {
   valorMoedasCentavos: number | null;
   lacre: string | null;
   observacao: string | null;
+  responsavelNome: string | null;
   status: string;
 };
 
@@ -698,6 +699,7 @@ export async function buscarTransferenciaPorIdempotenciaRepository(
       valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       lacre: transferencias.nLacreDoc,
       observacao: transferencias.observacao,
+      responsavelNome: transferencias.responsavelNome,
       status: transferencias.status
     })
     .from(transferencias)
@@ -729,6 +731,7 @@ export async function criarTransferenciaCofreRepository(
     nLacreDoc: string | null;
     descricao: string;
     observacao: string | null;
+    responsavelNome: string | null;
     criadoPor: string;
     // B2: null so no retorno final do fechamento, que e protegido pela trava + guarda de status.
     idempotenciaChave: string | null;
@@ -744,6 +747,7 @@ export async function criarTransferenciaCofreRepository(
       dataTransferencia: input.dataTransferencia,
       descricao: input.descricao,
       observacao: input.observacao,
+      responsavelNome: input.responsavelNome,
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
       valorEspecieDeclarado: centavosParaDecimalBanco(input.valorEspecieCentavos),
       valorMoedasDeclarado: centavosParaDecimalBanco(input.valorMoedasCentavos),

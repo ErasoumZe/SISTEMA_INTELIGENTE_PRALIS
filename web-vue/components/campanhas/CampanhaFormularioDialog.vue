@@ -87,6 +87,8 @@ function salvar() {
     :model-value="modelValue"
     max-width="640"
     scrollable
+    persistent
+    no-click-animation
     @update:model-value="emit('update:modelValue', $event)"
   >
     <v-card class="campanha-form" data-teste="campanha-formulario">

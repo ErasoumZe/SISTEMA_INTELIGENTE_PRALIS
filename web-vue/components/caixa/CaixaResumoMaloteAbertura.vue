@@ -69,7 +69,7 @@ watch(
     </template>
   </button>
 
-  <v-dialog v-model="dialogAberto" max-width="560">
+  <v-dialog v-model="dialogAberto" max-width="560" persistent no-click-animation>
     <v-card v-if="conferencia">
       <v-card-title>Resumo do malote de abertura</v-card-title>
       <v-card-text>

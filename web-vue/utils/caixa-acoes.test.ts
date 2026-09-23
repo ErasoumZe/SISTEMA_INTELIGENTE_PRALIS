@@ -83,6 +83,7 @@ describe("retornarSaldoOperacional", () => {
     valorEspecie: 10,
     valorMoedas: 5,
     lacre: "LAC-9",
+    responsavelNome: "Marina",
     observacao: null,
     idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
   };
@@ -98,6 +99,7 @@ describe("retornarSaldoOperacional", () => {
       valorEspecie: 10,
       valorMoedas: 5,
       lacre: "LAC-9",
+      responsavelNome: "Marina",
       observacao: null,
       idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
     });

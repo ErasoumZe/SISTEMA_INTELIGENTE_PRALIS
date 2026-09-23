@@ -321,7 +321,7 @@ watch(
 
     <VendaDetalheDialog v-model="detalheVendaAberto" :venda="vendaDetalheSelecionada" />
 
-    <v-dialog v-model="modalAberto" max-width="680">
+    <v-dialog v-model="modalAberto" max-width="680" persistent no-click-animation>
       <v-card>
         <v-card-title>Comprovantes</v-card-title>
         <v-card-subtitle>{{ vendaSelecionada?.descricao }}</v-card-subtitle>

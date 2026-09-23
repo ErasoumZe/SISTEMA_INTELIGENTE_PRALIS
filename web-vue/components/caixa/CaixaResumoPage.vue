@@ -54,6 +54,7 @@ const emit = defineEmits<{
       valorEspecie: number;
       valorMoedas: number;
       lacre: string;
+      responsavelNome: string;
       observacao: string | null;
       idempotenciaChave: string;
       aoConcluir: (sucesso: boolean) => void;
@@ -108,7 +109,14 @@ let consultaMaloteAtual = 0;
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
 // misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
 // correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
-const entrega = reactive({ valor: "", valorEspecie: "", valorMoedas: "", lacre: "", observacao: "" });
+const entrega = reactive({
+  valor: "",
+  valorEspecie: "",
+  valorMoedas: "",
+  lacre: "",
+  responsavelNome: props.usuarioNome,
+  observacao: ""
+});
 const modalRetornoSangriaAberto = ref(false);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
@@ -147,6 +155,7 @@ function limparEntrega() {
   entrega.valorEspecie = "";
   entrega.valorMoedas = "";
   entrega.lacre = "";
+  entrega.responsavelNome = props.usuarioNome;
   entrega.observacao = "";
   chaveEntrega.value = "";
   intencaoDaChave.value = "";
@@ -412,7 +421,8 @@ const entregaBloqueada = computed(
     valorEntregaEfetivo.value <= 0 ||
     entregaAcimaDoSaldoLivre.value ||
     entregaComposicaoInvalida.value ||
-    lacreEntregaPendente.value
+    lacreEntregaPendente.value ||
+    !entrega.responsavelNome.trim()
 );
 
 const entregaIniciada = computed(
@@ -429,6 +439,7 @@ const mensagemErroEntrega = computed(() => {
   if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value)}.`;
   if (entregaComposicaoInvalida.value) return "Dinheiro físico + moedas deve ser igual ao valor entregue.";
   if (lacreEntregaPendente.value) return "Informe o lacre do retorno / sangria.";
+  if (!entrega.responsavelNome.trim()) return "Informe o responsável pela sangria.";
   if (valorEntregaEfetivo.value <= 0) return "Informe um valor para a transferência.";
   return "";
 });
@@ -447,9 +458,10 @@ function retornarSaldo(fecharModalAoSalvar = false) {
     valorEspecie: Number(entrega.valorEspecie || 0),
     valorMoedas: Number(entrega.valorMoedas || 0),
     lacre,
+    responsavelNome: entrega.responsavelNome.trim(),
     observacao,
     idempotenciaChave: chaveParaIntencao(
-      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacre}|${observacao ?? ""}`
+      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacre}|${entrega.responsavelNome.trim()}|${observacao ?? ""}`
     ),
     // Limpa SO no sucesso confirmado. Em erro (ou confirmacao negada) valor, lacre, observacao e
     // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
@@ -991,7 +1003,7 @@ function fechar() {
           :valor-moedas="entrega.valorMoedas"
           :lacre="entrega.lacre"
           :observacao="entrega.observacao"
-          :responsavel-nome="usuarioNome"
+          :responsavel-nome="entrega.responsavelNome"
           :bloqueado="entregaBloqueada"
           :mensagem-erro="mensagemErroEntrega"
           :salvando="salvando ?? false"
@@ -1000,6 +1012,7 @@ function fechar() {
           @update:valor-especie="entrega.valorEspecie = $event"
           @update:valor-moedas="entrega.valorMoedas = $event"
           @update:lacre="entrega.lacre = $event"
+          @update:responsavel-nome="entrega.responsavelNome = $event"
           @update:observacao="entrega.observacao = $event"
           @salvar="retornarSaldo($event)"
         />

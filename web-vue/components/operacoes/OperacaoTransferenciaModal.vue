@@ -68,7 +68,7 @@ const hojeISO = computed(() => dataISO(0));
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="470">
+  <v-dialog v-model="aberto" max-width="470" persistent no-click-animation>
     <div class="tr-modal">
       <!-- FAIXA do cabecalho na cor da categoria (E2), igual aos modais de Lancamento. Sangra ate a
            borda pelo margin negativo que anula o padding do .tr-modal. Laranja fixo: a transferencia

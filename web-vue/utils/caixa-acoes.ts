@@ -54,6 +54,7 @@ export type RetornoSaldoPayload = {
   valorEspecie: number;
   valorMoedas: number;
   lacre: string;
+  responsavelNome: string;
   observacao: string | null;
   idempotenciaChave: string;
   aoConcluir?: (sucesso: boolean) => void;
@@ -106,11 +107,12 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function postarRetorno(payload: RetornoSaldoPayload): Promise<boolean> {
+    const observacao = payload.observacao ? `\nObservação: ${payload.observacao}` : "";
     if (
       !(await deps.confirmar(
-        `Confirma a entrega de ${dinheiro(payload.valor)} ao cofre principal?`,
-        "Transferência de retorno",
-        "Transferência de retorno"
+        `Confirme a saída ao cofre:\nValor total: ${dinheiro(payload.valor)}\nDinheiro físico: ${dinheiro(payload.valorEspecie)}\nMoedas: ${dinheiro(payload.valorMoedas)}\nLacre: ${payload.lacre}\nResponsável: ${payload.responsavelNome}${observacao}`,
+        "Confirmar retorno / sangria",
+        "Confirmar e salvar"
       ))
     ) {
       return false;
@@ -122,6 +124,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
         valorEspecie: payload.valorEspecie,
         valorMoedas: payload.valorMoedas,
         lacre: payload.lacre,
+        responsavelNome: payload.responsavelNome,
         observacao: payload.observacao,
         idempotenciaChave: payload.idempotenciaChave
       });

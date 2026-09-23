@@ -1644,6 +1644,9 @@ export const transferencias = pgTable(
     // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
     descricao: text("descricao"),
     observacao: text("observacao"),
+    // Nome declarado por quem faz a retirada física. É separado de `criadoPor`, que continua
+    // sendo a identidade autenticada usada para permissões e auditoria técnica.
+    responsavelNome: text("responsavel_nome"),
     valorOriginal: valorMonetario("valor_original").notNull(),
     // R-205: a Tesouraria declara a composicao fisica sem apagar o total do movimento.
     // Nulos preservam transferencia historica e movimentos que nao representam numerario.

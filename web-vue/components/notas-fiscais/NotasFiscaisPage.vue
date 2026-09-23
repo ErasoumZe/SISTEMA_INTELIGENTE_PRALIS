@@ -238,7 +238,7 @@ watch(filtroStatus, () => void buscar());
   </v-card>
 
   <!-- Dialog: importar por periodo -->
-  <v-dialog v-model="importDialog" max-width="520">
+  <v-dialog v-model="importDialog" max-width="520" persistent no-click-animation>
     <v-card>
       <v-card-title class="text-h6">Importar NF-e por período</v-card-title>
       <v-card-text>
@@ -278,7 +278,7 @@ watch(filtroStatus, () => void buscar());
   </v-dialog>
 
   <!-- Dialog: detalhe da NF-e -->
-  <v-dialog v-model="detalheAberto" max-width="900" scrollable>
+  <v-dialog v-model="detalheAberto" max-width="900" scrollable persistent no-click-animation>
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         <span class="text-h6">Detalhe da NF-e</span>

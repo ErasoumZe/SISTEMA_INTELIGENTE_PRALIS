@@ -73,7 +73,7 @@ const {
     >
       Cancelar lançamentos futuros da série
     </button>
-    <v-dialog v-model="confirmarCancelamentoSerie" max-width="420">
+    <v-dialog v-model="confirmarCancelamentoSerie" max-width="420" persistent no-click-animation>
       <v-card title="Cancelar série" text="Somente lançamentos futuros e ainda não pagos serão removidos.">
         <v-card-actions>
           <v-spacer />

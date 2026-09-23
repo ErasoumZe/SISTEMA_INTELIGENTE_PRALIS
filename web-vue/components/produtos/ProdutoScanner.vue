@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <v-dialog v-model="aberto" max-width="460" scrollable @after-leave="parar">
+  <v-dialog v-model="aberto" max-width="460" scrollable persistent no-click-animation @after-leave="parar">
     <v-card>
       <v-card-title class="d-flex align-center ga-2">
         <v-icon icon="mdi-barcode-scan" />

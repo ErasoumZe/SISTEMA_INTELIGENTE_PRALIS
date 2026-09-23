@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (event: "update:valorMoedas", valor: string): void;
   (event: "update:lacre", valor: string): void;
   (event: "update:observacao", valor: string): void;
+  (event: "update:responsavelNome", valor: string): void;
   (event: "salvar", fecharDepois: boolean): void;
 }>();
 
@@ -29,10 +30,13 @@ const dialogAberto = computed({
   get: () => props.aberto,
   set: (aberto: boolean) => emit("update:aberto", aberto)
 });
+const valorEfetivo = computed(() => Number(props.valor || props.saldoLivre));
+const valorEspecie = computed(() => Number(props.valorEspecie || 0));
+const valorMoedas = computed(() => Number(props.valorMoedas || 0));
 </script>
 
 <template>
-  <v-dialog v-model="dialogAberto" max-width="720">
+  <v-dialog v-model="dialogAberto" max-width="720" persistent no-click-animation>
     <v-card class="retorno-dialog">
       <div class="retorno-dialog__cabecalho">
         <div>
@@ -48,11 +52,22 @@ const dialogAberto = computed({
         <div class="retorno-dialog__saldo">
           Disponível para retorno: <strong>{{ dinheiro(saldoLivre) }}</strong>
         </div>
+        <div class="retorno-dialog__resumo mt-3" aria-live="polite">
+          <span
+            ><small>Valor total</small><strong>{{ dinheiro(valorEfetivo) }}</strong></span
+          >
+          <span
+            ><small>Dinheiro físico</small><strong>{{ dinheiro(valorEspecie) }}</strong></span
+          >
+          <span
+            ><small>Moedas</small><strong>{{ dinheiro(valorMoedas) }}</strong></span
+          >
+        </div>
         <v-row class="mt-2">
           <v-col cols="12" md="4">
             <CampoDinheiro
               :model-value="valor"
-              label="Valor a entregar (vazio = tudo)"
+              label="Valor total"
               icone="mdi-cash-minus"
               @update:model-value="emit('update:valor', $event)"
             />
@@ -90,11 +105,13 @@ const dialogAberto = computed({
             <v-text-field
               :model-value="responsavelNome"
               label="Responsável pela sangria (obrigatório)"
-              hint="Registrado automaticamente pelo usuário que está operando."
+              hint="Digite quem está entregando o malote; o usuário logado também fica auditado."
               persistent-hint
               prepend-inner-icon="mdi-account-cash-outline"
-              readonly
+              :error="!responsavelNome.trim()"
+              :error-messages="!responsavelNome.trim() ? 'Informe o responsável pela sangria.' : ''"
               required
+              @update:model-value="emit('update:responsavelNome', $event)"
             />
           </v-col>
           <v-col cols="12">
@@ -160,6 +177,31 @@ const dialogAberto = computed({
   padding: 10px 12px;
   border-radius: 8px;
   background: rgba(var(--v-theme-warning), 0.13);
+}
+
+.retorno-dialog__resumo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.retorno-dialog__resumo span {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 8px;
+}
+
+.retorno-dialog__resumo small {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 560px) {
+  .retorno-dialog__resumo {
+    grid-template-columns: 1fr;
+  }
 }
 
 .retorno-dialog__erro {

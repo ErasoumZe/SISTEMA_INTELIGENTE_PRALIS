@@ -124,14 +124,16 @@ const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === 
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
 const valorValido = computed(() => valorConferenciaValido(campos.valorRecebido));
 const valorPendente = computed(() => ehCaixaParaCofre.value && !valorValido.value);
-const composicaoPendente = computed(() =>
-  ehCaixaParaCofre.value &&
-  (!valorConferenciaValido(campos.valorEspecieContado) || !valorConferenciaValido(campos.valorMoedasContado))
+const composicaoPendente = computed(
+  () =>
+    ehCaixaParaCofre.value &&
+    (!valorConferenciaValido(campos.valorEspecieContado) || !valorConferenciaValido(campos.valorMoedasContado))
 );
-const composicaoInvalida = computed(() =>
-  !composicaoPendente.value &&
-  ehCaixaParaCofre.value &&
-  Number(campos.valorEspecieContado) + Number(campos.valorMoedasContado) !== Number(campos.valorRecebido)
+const composicaoInvalida = computed(
+  () =>
+    !composicaoPendente.value &&
+    ehCaixaParaCofre.value &&
+    Number(campos.valorEspecieContado) + Number(campos.valorMoedasContado) !== Number(campos.valorRecebido)
 );
 // Na Transferencia de retorno, "Confirmar" significa que lacre e valor bateram. A API ja impede
 // que R$ 90 confirme uma entrega de R$ 100; espelhar a regra aqui evita abrir uma segunda
@@ -586,6 +588,8 @@ function limparFiltrosTransferencias() {
     <v-dialog
       :model-value="Boolean(confirmando)"
       max-width="480"
+      persistent
+      no-click-animation
       @update:model-value="(v) => !v && fecharConferencia()"
     >
       <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
