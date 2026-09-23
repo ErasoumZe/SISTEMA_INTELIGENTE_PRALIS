@@ -70,6 +70,42 @@
   border-bottom: 2px solid var(--cat-transferencias-base, #c2410c);
   padding-bottom: 6px;
 }
+.tr-malote {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 36%, transparent);
+  border-radius: 10px;
+  background: var(--cat-transferencias-soft, #fff1e8);
+}
+.tr-malote strong {
+  display: block;
+  color: #7c2d12;
+  font-size: 13px;
+}
+.tr-malote strong span,
+.tr-malote p {
+  color: #9a4c20;
+}
+.tr-malote p {
+  margin: 3px 0 10px;
+  font-size: 12px;
+}
+.tr-malote :deep(.campo-dinheiro__grupo) {
+  color: #7c2d12;
+}
+.tr-ok,
+.tr-erro {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tr-ok {
+  color: #15803d;
+}
+.tr-erro {
+  color: #b42318;
+}
 .tr-cifra {
   font-size: 16px;
   color: var(--cat-transferencias-base, #c2410c);

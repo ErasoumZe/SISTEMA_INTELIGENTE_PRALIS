@@ -2,6 +2,7 @@
 // Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
 import { computed, onMounted, ref, watch } from "vue";
+import { paraCentavos } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
@@ -36,6 +37,33 @@ const {
 
 // --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
+const erroComposicao = ref("");
+const contaOrigemSelecionada = computed(() =>
+  opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaOrigemId)
+);
+const contaDestinoSelecionada = computed(() =>
+  opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaDestinoId)
+);
+const preparandoMaloteParaCaixa = computed(() => {
+  return Boolean(contaOrigemSelecionada.value?.ehCofre && contaDestinoSelecionada.value?.ehContaPdv);
+});
+const composicaoMaloteInformada = computed(
+  () => form.value.valorEspecieDeclarado.trim() !== "" && form.value.valorMoedasDeclarado.trim() !== ""
+);
+const composicaoMaloteBate = computed(
+  () =>
+    composicaoMaloteInformada.value &&
+    paraCentavos(form.value.valorEspecieDeclarado) + paraCentavos(form.value.valorMoedasDeclarado) ===
+      paraCentavos(form.value.valorOriginal)
+);
+
+watch(preparandoMaloteParaCaixa, (preparando) => {
+  erroComposicao.value = "";
+  if (!preparando) {
+    form.value.valorEspecieDeclarado = "";
+    form.value.valorMoedasDeclarado = "";
+  }
+});
 function br(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -55,6 +83,15 @@ function valorResumo(n: number) {
 
 async function salvarTransferenciaCompleta(criarNova = false) {
   if (!destinoValido()) return;
+  if (preparandoMaloteParaCaixa.value && !composicaoMaloteInformada.value) {
+    erroComposicao.value = "Informe dinheiro físico e moedas do malote.";
+    return;
+  }
+  if (preparandoMaloteParaCaixa.value && !composicaoMaloteBate.value) {
+    erroComposicao.value = "Dinheiro físico + moedas deve ser igual ao valor total.";
+    return;
+  }
+  erroComposicao.value = "";
   const resultado = await salvarOperacao();
   if (criarNova && resultado) await abrirOperacao("transferencia");
 }
@@ -113,6 +150,30 @@ const hojeISO = computed(() => dataISO(0));
           <span class="tr-cifra">R$</span>
           <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
         </div>
+
+        <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">
+          <strong>Composição do malote <span>(obrigatória)</span></strong>
+          <p>Informe o dinheiro físico e as moedas que seguem para o caixa.</p>
+          <div class="tr-dois">
+            <CampoDinheiro
+              v-model="form.valorEspecieDeclarado"
+              label="Dinheiro físico"
+              icone="mdi-cash"
+              data-teste="malote-dinheiro"
+            />
+            <CampoDinheiro
+              v-model="form.valorMoedasDeclarado"
+              label="Moedas"
+              icone="mdi-circle-multiple"
+              data-teste="malote-moedas"
+            />
+          </div>
+          <span v-if="erroComposicao" class="tr-erro" role="alert">{{ erroComposicao }}</span>
+          <span v-else-if="composicaoMaloteInformada && !composicaoMaloteBate" class="tr-erro" role="alert"
+            >Dinheiro físico + moedas deve ser igual ao valor total.</span
+          >
+          <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
+        </section>
 
         <div class="tr-dois">
           <label class="tr-campo">

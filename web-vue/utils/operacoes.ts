@@ -14,6 +14,8 @@ export type OperacaoDetalhe = {
   descricao: string;
   observacao?: string | null;
   valorOriginal: number;
+  valorEspecieDeclarado?: number | null;
+  valorMoedasDeclarado?: number | null;
   valorAcrescimo: number;
   descricaoAcrescimo?: string | null;
   jurosTipo?: "percentual" | "valor" | null;
@@ -279,6 +281,9 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     // este fallback o modal reabriria com o campo Observacao VAZIO e salvar apagaria o texto.
     observacao: detalhe.observacao ?? detalhe.descricao ?? "",
     valorOriginal: String(detalhe.valorOriginal),
+    valorEspecieDeclarado:
+      detalhe.valorEspecieDeclarado != null ? String(detalhe.valorEspecieDeclarado) : "",
+    valorMoedasDeclarado: detalhe.valorMoedasDeclarado != null ? String(detalhe.valorMoedasDeclarado) : "",
     valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
     descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
     jurosTipo: detalhe.jurosTipo ?? "",
@@ -388,6 +393,9 @@ export type DadosPayloadOperacao = {
 };
 
 export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: DadosPayloadOperacao) {
+  // Campos exclusivos da composição do malote: não podem vazar como strings vazias para uma
+  // transferência comum, pois o contrato distingue campo ausente de valor físico declarado.
+  const { valorEspecieDeclarado, valorMoedasDeclarado, ...formSemComposicaoMalote } = dados.form;
   // Os IDs opcionais do ITEM seguem a MESMA regra dos do cabecalho (ver o comentario no return):
   // "" vira null, porque o zod usa uuid().optional().nullable() e REJEITA "" com "Invalid UUID".
   // Antes o item ia por spread e levava o "" junto — discriminar sem escolher Grupo (o padrao: o
@@ -463,7 +471,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
 
   return {
     empresaId: dados.empresaId,
-    ...dados.form,
+    ...formSemComposicaoMalote,
     dataPagamento: dados.form.dataPagamento || null,
     // IDs opcionais nao selecionados vao como null (nao ""). O schema zod usa uuid().optional()
     // .nullable(): aceita UUID, null ou undefined, mas REJEITA "" com "Invalid UUID". Sem isso,
@@ -492,6 +500,12 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     ...(entidade === "transferencia"
       ? {
           nLacreDoc: dados.form.nLacreDoc || null,
+          ...(dados.form.valorEspecieDeclarado !== "" || dados.form.valorMoedasDeclarado !== ""
+            ? {
+                valorEspecieDeclarado: deCentavos(paraCentavos(dados.form.valorEspecieDeclarado)),
+                valorMoedasDeclarado: deCentavos(paraCentavos(dados.form.valorMoedasDeclarado))
+              }
+            : {}),
           agendadaPara: dados.form.agendadaPara ? new Date(dados.form.agendadaPara).toISOString() : null,
           tempoConfirmacao: dados.form.tempoConfirmacao,
           contasDestinoIds: dados.form.contasDestinoIds

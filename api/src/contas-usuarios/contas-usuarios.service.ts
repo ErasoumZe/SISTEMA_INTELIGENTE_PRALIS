@@ -2,6 +2,8 @@ import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { listarContas } from "../contas/contas.service.js";
+import { buscarContaCofreEmpresaRepository } from "../caixa/caixa.repository.js";
+import { listarPdvsRepository } from "../pdvs/pdvs.repository.js";
 import {
   buscarContaUsuarioRepository,
   criarContaUsuarioRepository,
@@ -23,9 +25,24 @@ type PerfilEscopo = { usuarioId: string; role: string };
 //   - sem nenhum vinculo -> lista VAZIA (o front mostra "peca ao administrador").
 export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas: string[]) {
   if (!escopoEmpresas.length) return [];
-  if (perfil.role === "usuario_admin") return listarContas(escopoEmpresas);
-  const contasDoUsuario = await listarContasDoUsuarioRepository(perfil.usuarioId);
-  return contasDoUsuario.filter((conta) => escopoEmpresas.includes(conta.empresaId));
+  const contas =
+    perfil.role === "usuario_admin"
+      ? await listarContas(escopoEmpresas)
+      : (await listarContasDoUsuarioRepository(perfil.usuarioId)).filter((conta) => escopoEmpresas.includes(conta.empresaId));
+  const empresasDasContas = [...new Set(contas.map((conta) => conta.empresaId))];
+  const [cofres, pdvs] = await Promise.all([
+    Promise.all(empresasDasContas.map((empresaId) => buscarContaCofreEmpresaRepository(empresaId))),
+    listarPdvsRepository()
+  ]);
+  const contasCofreIds = new Set(cofres.filter((id): id is string => Boolean(id)));
+  const contasPdvIds = new Set(
+    pdvs.filter((pdv) => empresasDasContas.includes(pdv.empresaId)).map((pdv) => pdv.contaId)
+  );
+  return contas.map((conta) => ({
+    ...conta,
+    ehCofre: contasCofreIds.has(conta.id),
+    ehContaPdv: contasPdvIds.has(conta.id)
+  }));
 }
 
 // Gancho para a ETAPA 2 (confirmacao de recebimento da transferencia): quem pode CONFIRMAR uma

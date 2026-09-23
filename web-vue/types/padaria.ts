@@ -31,6 +31,9 @@ export type Opcao = {
   saldoInicial?: number;
   saldoAtual?: number;
   usuariosIds?: string[];
+  /** Derivados da configuração da empresa; usados para orientar o malote Cofre → PDV. */
+  ehCofre?: boolean;
+  ehContaPdv?: boolean;
   // Patrimonio (D2)
   sig?: string;
   grupoPatrimonioId?: string | null;
@@ -375,6 +378,9 @@ export type OperacaoForm = {
   descricao: string;
   observacao: string;
   valorOriginal: string;
+  /** Composição física obrigatória no malote Cofre → PDV. */
+  valorEspecieDeclarado: string;
+  valorMoedasDeclarado: string;
   valorAcrescimo: string;
   descricaoAcrescimo: string;
   // R-041: juros. O tipo vazio significa "sem juros" — o payload converte para null.

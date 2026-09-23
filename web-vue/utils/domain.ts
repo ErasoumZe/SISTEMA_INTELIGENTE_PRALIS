@@ -540,6 +540,8 @@ export function formOperacaoVazio(): OperacaoForm {
     descricao: "",
     observacao: "",
     valorOriginal: "",
+    valorEspecieDeclarado: "",
+    valorMoedasDeclarado: "",
     valorAcrescimo: "",
     descricaoAcrescimo: "",
     jurosTipo: "",

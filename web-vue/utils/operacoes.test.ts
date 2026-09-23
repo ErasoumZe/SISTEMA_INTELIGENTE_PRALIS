@@ -150,6 +150,29 @@ describe("montarPayloadOperacao", () => {
     expect(payload.dataPagamento).toBeNull();
   });
 
+  it("envia a composicao fisica ao preparar o malote para o caixa", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: {
+        ...formOperacaoVazio(),
+        valorOriginal: "200",
+        valorEspecieDeclarado: "150",
+        valorMoedasDeclarado: "50"
+      }
+    });
+    expect(payload).toMatchObject({
+      valorOriginal: 200,
+      valorEspecieDeclarado: 150,
+      valorMoedasDeclarado: 50
+    });
+  });
+
+  it("nao envia composicao vazia para transferencias que nao sao malote", () => {
+    const payload = montarPayloadOperacao("transferencia", { ...base, form: formOperacaoVazio() });
+    expect(payload).not.toHaveProperty("valorEspecieDeclarado");
+    expect(payload).not.toHaveProperty("valorMoedasDeclarado");
+  });
+
   it("todo ID opcional em branco vira null, nao '' (o bug 'colaboradorId: Invalid UUID')", () => {
     // Form vazio: todos os IDs sao "" por padrao. O schema zod rejeita "" em campos uuid.
     const payload = montarPayloadOperacao("despesa", { ...base, form: { ...formOperacaoVazio() } });
