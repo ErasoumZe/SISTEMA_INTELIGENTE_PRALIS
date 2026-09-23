@@ -116,7 +116,16 @@ async function requestPaginado<T, Meta = unknown>(
 
 export function useApi() {
   const config = useRuntimeConfig();
-  const apiUrl = String(config.public.apiUrl || "http://localhost:4100");
+  const apiUrlPadrao = String(config.public.apiUrl || "http://localhost:4100");
+  const apiUrlLan = String(config.public.apiUrlLan || "");
+  const apiUrl = (() => {
+    if (!import.meta.client || !apiUrlLan) return apiUrlPadrao;
+    try {
+      return new URL(apiUrlLan).hostname === window.location.hostname ? apiUrlLan : apiUrlPadrao;
+    } catch {
+      return apiUrlPadrao;
+    }
+  })();
 
   // Tema do Vuetify — para que os componentes color="primary"/"secondary"/etc. sigam a aparencia.
   // useTheme() usa inject e so vale em setup; useApi() tambem roda em middleware (fora de setup),
