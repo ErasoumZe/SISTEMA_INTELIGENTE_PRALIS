@@ -11,6 +11,7 @@ import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
 import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
+import CaixaSangriasDialog from "~/components/caixa/CaixaSangriasDialog.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 const { apiGet } = useApi();
 
@@ -54,7 +55,7 @@ const emit = defineEmits<{
       valor: number;
       valorEspecie: number;
       valorMoedas: number;
-      lacre: string;
+      lacreId: string;
       responsavelNome: string;
       observacao: string | null;
       idempotenciaChave: string;
@@ -104,9 +105,12 @@ const anexosFechamento = ref<
   Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string; relatorio: unknown }>
 >([]);
 const revisaoFechamentoAberta = ref(false);
-const maloteDeclarado = ref<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number } | null>(
-  null
-);
+const maloteDeclarado = ref<{
+  valor: number;
+  valorEspecieDeclarado: number;
+  valorMoedasDeclarado: number;
+  lacresRetorno: Array<{ id: string; numero: string }>;
+} | null>(null);
 const erroMalote = ref("");
 const carregandoMalote = ref(false);
 let consultaMaloteAtual = 0;
@@ -119,11 +123,13 @@ const entrega = reactive({
   valor: "",
   valorEspecie: "",
   valorMoedas: "",
-  lacre: "",
+  lacreId: "",
   responsavelNome: "",
   observacao: ""
 });
 const modalRetornoSangriaAberto = ref(false);
+const modalSangriasAberto = ref(false);
+const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
@@ -160,7 +166,7 @@ function limparEntrega() {
   entrega.valor = "";
   entrega.valorEspecie = "";
   entrega.valorMoedas = "";
-  entrega.lacre = "";
+  entrega.lacreId = "";
   entrega.responsavelNome = "";
   entrega.observacao = "";
   chaveEntrega.value = "";
@@ -169,6 +175,23 @@ function limparEntrega() {
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
+watch(
+  () => caixaAberto.value?.id,
+  async (caixaId) => {
+    if (!caixaId) {
+      lacresRetornoDisponiveis.value = [];
+      return;
+    }
+    try {
+      lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
+        `/api/caixa/${encodeURIComponent(caixaId)}/lacres-retorno`
+      );
+    } catch {
+      lacresRetornoDisponiveis.value = [];
+    }
+  },
+  { immediate: true }
+);
 const saldoAtual = computed(() => Number(resumoAtual.value?.saldo ?? 0));
 // D7: sobra e deficit sao situacoes DIFERENTES e precisam de tratamento visual diferente.
 // A sobra nunca vira quebra positiva — ela volta ao cofre. O deficit vira quebra no nome do
@@ -252,8 +275,15 @@ const categorias = computed<CardCategoria[]>(() => {
       chave: "transferencias",
       titulo: "Transferencias",
       icone: "mdi-bank-transfer",
-      valor: r.totalTransferencias,
-      detalhe: `entra ${dinheiro(entrada)} · sai ${dinheiro(saida)}`
+      valor: entrada,
+      detalhe: "De entrada"
+    },
+    {
+      chave: "sangrias",
+      titulo: "Sangrias",
+      icone: "mdi-bank-transfer-out",
+      valor: saida,
+      detalhe: saida > 0 ? "Ver historico e lacres" : "Nenhuma sangria realizada"
     },
     { chave: "despesas", titulo: "Despesas", icone: "mdi-cash-minus", valor: r.totalDespesas },
     {
@@ -321,7 +351,12 @@ watch([() => abertura.pdvId, () => aberturaExtra.numeroLacre], async ([pdvId, la
   if (!pdvId || !lacre.trim()) return;
   carregandoMalote.value = true;
   try {
-    const malote = await apiGet<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number }>(
+    const malote = await apiGet<{
+      valor: number;
+      valorEspecieDeclarado: number;
+      valorMoedasDeclarado: number;
+      lacresRetorno: Array<{ id: string; numero: string }>;
+    }>(
       `/api/caixa/malote?empresaId=${encodeURIComponent(props.empresaId)}&pdvId=${encodeURIComponent(pdvId)}&lacre=${encodeURIComponent(lacre.trim())}`
     );
     if (consultaAtual !== consultaMaloteAtual) return;
@@ -420,7 +455,7 @@ const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > sald
 const entregaComposicaoInvalida = computed(
   () => Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
 );
-const lacreEntregaPendente = computed(() => !entrega.lacre.trim());
+const lacreEntregaPendente = computed(() => !entrega.lacreId);
 const entregaBloqueada = computed(
   () =>
     Boolean(props.salvando) ||
@@ -436,7 +471,7 @@ const entregaIniciada = computed(
     entrega.valor.trim().length > 0 ||
     entrega.valorEspecie.trim().length > 0 ||
     entrega.valorMoedas.trim().length > 0 ||
-    entrega.lacre.trim().length > 0 ||
+    entrega.lacreId.length > 0 ||
     entrega.observacao.trim().length > 0
 );
 
@@ -456,24 +491,27 @@ function retornarSaldo(fecharModalAoSalvar = false) {
   // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
   if (!caixa || entregaBloqueada.value) return;
   const valor = valorEntregaEfetivo.value;
-  const lacre = entrega.lacre.trim();
+  const lacreId = entrega.lacreId;
+  const lacreNumero = lacresRetornoDisponiveis.value.find((lacre) => lacre.id === lacreId)?.numero ?? "";
   const observacao = entrega.observacao || null;
   emit("retornarSaldo", {
     caixaId: caixa.id,
     valor,
     valorEspecie: Number(entrega.valorEspecie || 0),
     valorMoedas: Number(entrega.valorMoedas || 0),
-    lacre,
+    lacreId,
+    lacreNumero,
     responsavelNome: entrega.responsavelNome.trim(),
     observacao,
     idempotenciaChave: chaveParaIntencao(
-      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacre}|${entrega.responsavelNome.trim()}|${observacao ?? ""}`
+      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacreId}|${entrega.responsavelNome.trim()}|${observacao ?? ""}`
     ),
     // Limpa SO no sucesso confirmado. Em erro (ou confirmacao negada) valor, lacre, observacao e
     // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
     // chave — que e o que impede a segunda entrega do mesmo envelope.
     aoConcluir: (sucesso: boolean) => {
       if (!sucesso) return;
+      lacresRetornoDisponiveis.value = lacresRetornoDisponiveis.value.filter((lacre) => lacre.id !== lacreId);
       limparEntrega();
       if (fecharModalAoSalvar) modalRetornoSangriaAberto.value = false;
     }
@@ -485,12 +523,29 @@ function categoriaTemUltimos(chave: string): chave is CategoriaComUltimos {
 }
 
 function abrirUltimosLancamentos(chave: string, valor: number) {
+  if (chave === "sangrias") {
+    modalSangriasAberto.value = true;
+    return;
+  }
   if (!categoriaTemUltimos(chave) || valor === 0) return;
   categoriaUltimosLancamentos.value = chave;
 }
 
 function atualizarDialogUltimosLancamentos(aberto: boolean) {
   if (!aberto) categoriaUltimosLancamentos.value = null;
+}
+
+async function abrirRetornoSangria() {
+  const caixa = caixaAberto.value;
+  if (!caixa) return;
+  try {
+    lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
+      `/api/caixa/${encodeURIComponent(caixa.id)}/lacres-retorno`
+    );
+  } catch {
+    lacresRetornoDisponiveis.value = [];
+  }
+  modalRetornoSangriaAberto.value = true;
 }
 
 // D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
@@ -606,6 +661,10 @@ function confirmarFechamento() {
               Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro
               {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas
               {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
+              <span v-if="maloteDeclarado.lacresRetorno.length">
+                {{ maloteDeclarado.lacresRetorno.length }} lacre(s) de retorno:
+                {{ maloteDeclarado.lacresRetorno.map((lacre) => lacre.numero).join(", ") }}.
+              </span>
               <span v-if="aberturaDivergente">
                 A contagem diverge; descreva o motivo para abrir com o valor contado.</span
               >
@@ -718,6 +777,10 @@ function confirmarFechamento() {
             <span v-if="caixaAberto.maquininhaId">
               Maquininha: {{ caixaAberto.maquininhaApelido }} · {{ caixaAberto.maquininhaNumeroSerie }}.
             </span>
+            <span v-if="lacresRetornoDisponiveis.length">
+              · {{ lacresRetornoDisponiveis.length }} lacre(s) de sangria disponível(is):
+              {{ lacresRetornoDisponiveis.map((lacre) => lacre.numero).join(", ") }}.
+            </span>
           </v-alert>
         </div>
 
@@ -729,9 +792,14 @@ function confirmarFechamento() {
             v-for="cat in categorias"
             :key="cat.chave"
             class="cat-card"
-            :class="[{ 'cat-card--clicavel': categoriaTemUltimos(cat.chave) && cat.valor !== 0 }, `cat-${cat.chave}`]"
-            :role="categoriaTemUltimos(cat.chave) && cat.valor !== 0 ? 'button' : undefined"
-            :tabindex="categoriaTemUltimos(cat.chave) && cat.valor !== 0 ? 0 : undefined"
+            :class="[
+              { 'cat-card--clicavel': (categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' },
+              `cat-${cat.chave}`
+            ]"
+            :role="
+              (categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' ? 'button' : undefined
+            "
+            :tabindex="(categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' ? 0 : undefined"
             @click="abrirUltimosLancamentos(cat.chave, cat.valor)"
             @keydown.enter.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
             @keydown.space.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
@@ -882,7 +950,7 @@ function confirmarFechamento() {
                 prepend-icon="mdi-bank-transfer-out"
                 class="botao-retorno-sangria"
                 data-teste="botao-entregar"
-                @click="modalRetornoSangriaAberto = true"
+                @click="abrirRetornoSangria"
               >
                 <span class="botao-retorno-sangria__conteudo">
                   <span>Transferência de retorno / sangria</span>
@@ -1017,7 +1085,8 @@ function confirmarFechamento() {
           :valor="entrega.valor"
           :valor-especie="entrega.valorEspecie"
           :valor-moedas="entrega.valorMoedas"
-          :lacre="entrega.lacre"
+          :lacre-id="entrega.lacreId"
+          :lacres-disponiveis="lacresRetornoDisponiveis"
           :observacao="entrega.observacao"
           :responsavel-nome="entrega.responsavelNome"
           :bloqueado="entregaBloqueada"
@@ -1027,10 +1096,16 @@ function confirmarFechamento() {
           @update:valor="entrega.valor = $event"
           @update:valor-especie="entrega.valorEspecie = $event"
           @update:valor-moedas="entrega.valorMoedas = $event"
-          @update:lacre="entrega.lacre = $event"
+          @update:lacre-id="entrega.lacreId = $event"
           @update:responsavel-nome="entrega.responsavelNome = $event"
           @update:observacao="entrega.observacao = $event"
           @salvar="retornarSaldo($event)"
+        />
+        <CaixaSangriasDialog
+          v-if="caixaAberto"
+          :aberto="modalSangriasAberto"
+          :caixa-id="caixaAberto.id"
+          @update:aberto="modalSangriasAberto = $event"
         />
         <CaixaUltimosLancamentosDialog
           v-if="caixaAberto && categoriaUltimosLancamentos"
@@ -1271,6 +1346,12 @@ function confirmarFechamento() {
   --cat-soft: var(--cat-transferencias-soft);
   --cat-tinta: var(--cat-transferencias-tinta);
   --cat-faixa: var(--cat-transferencias-faixa);
+}
+.cat-sangrias {
+  --cat: rgb(var(--v-theme-warning));
+  --cat-soft: color-mix(in srgb, rgb(var(--v-theme-warning)) 16%, transparent);
+  --cat-tinta: rgb(var(--v-theme-warning));
+  --cat-faixa: rgb(var(--v-theme-warning));
 }
 .cat-despesas {
   --cat: var(--cat-despesas-base);

@@ -55,6 +55,7 @@ import {
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
+  listarAnexosFechamentoCaixaComCaminhoRepository,
   listarConferenciasFisicasCaixaRepository,
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
@@ -84,6 +85,10 @@ import {
   travarCaixaCompartilhadoRepository,
   travarCaixaRepository,
   buscarTransferenciaPorIdempotenciaRepository,
+  buscarLacreRetornoDoCaixaRepository,
+  consumirLacreRetornoRepository,
+  listarLacresRetornoDaDistribuicaoRepository,
+  listarLacresRetornoDisponiveisDoCaixaRepository,
   listarCandidatosConfirmacaoRepository,
   type FiltrosHistoricoCaixa,
   type IntencaoEntregaCofre
@@ -257,7 +262,7 @@ async function contextoRelatorioMaquininha(caixaId: string, perfil: PerfilUsuari
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    return { caixa, anexos: await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx) };
+    return { caixa, anexos: await listarAnexosFechamentoCaixaComCaminhoRepository(caixa.id, caixa.empresaId, tx) };
   });
 }
 
@@ -282,7 +287,11 @@ export async function analisarRelatorioMaquininhaFechamento(caixaId: string, per
   const comprovantes = anexos.filter((anexo) => anexo.tipo === "comprovante_cartao");
   validarComprovantesParaIa(comprovantes);
   if (!env.GEMINI_API_KEY) {
-    throw new ErroDominio("A leitura por IA ainda não foi configurada. As fotos continuam válidas como prova.", 503, "IA_NAO_CONFIGURADA");
+    throw new ErroDominio(
+      "A leitura por IA ainda não foi configurada. As fotos continuam válidas como prova.",
+      503,
+      "IA_NAO_CONFIGURADA"
+    );
   }
   const arquivos = await Promise.all(
     comprovantes.map(async (anexo) => ({
@@ -317,7 +326,11 @@ export async function salvarRelatorioMaquininhaFechamento(
     const atuais = comprovantes.map((anexo) => anexo.id).sort();
     const informados = [...new Set(anexosConsiderados)].sort();
     if (atuais.length !== informados.length || atuais.some((id, indice) => id !== informados[indice])) {
-      throw new ErroDominio("As fotos da maquininha mudaram. Leia e revise novamente antes de salvar.", 409, "RELATORIO_DESATUALIZADO");
+      throw new ErroDominio(
+        "As fotos da maquininha mudaram. Leia e revise novamente antes de salvar.",
+        409,
+        "RELATORIO_DESATUALIZADO"
+      );
     }
     const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
       {
@@ -655,12 +668,22 @@ export async function consultarMaloteParaAbertura(
   const pdv = await buscarPdvEmpresaRepository(pdvId, empresaId);
   if (!pdv?.contaId) throw new Error("PDV sem conta vinculada");
   const abertura = await prepararAberturaPorLacre(empresaId, lacre.trim(), pdv.contaId, perfil.usuarioId, banco);
+  const lacresRetorno = await listarLacresRetornoDaDistribuicaoRepository(abertura.transferenciaId, empresaId);
   return {
     valor: deCentavos(abertura.valorCentavos),
     valorEspecieDeclarado: deCentavos(abertura.valorEspecieDeclaradoCentavos),
     valorMoedasDeclarado: deCentavos(abertura.valorMoedasDeclaradoCentavos),
-    lacre: abertura.numeroLacre
+    lacre: abertura.numeroLacre,
+    lacresRetorno
   };
+}
+
+export async function listarLacresRetornoDisponiveisCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status !== "aberto") return [];
+  return listarLacresRetornoDisponiveisDoCaixaRepository(caixaId, caixa.empresaId);
 }
 
 async function abrirCaixaEmTransacao(
@@ -1103,6 +1126,7 @@ async function registrarEntregaAoCofre(
     valorEspecieCentavos: number;
     valorMoedasCentavos: number;
     lacre: string | null;
+    lacreReservado?: { id: string; transferenciaDistribuicaoId: string } | null;
     observacao: string | null;
     responsavelNome: string | null;
     criadoPor: string;
@@ -1147,9 +1171,9 @@ async function registrarEntregaAoCofre(
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
   if (contaCofreId === input.caixa.pdvContaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
 
-  // Lacre da VOLTA (R-026: opcional; R-027: numero novo, nunca reutilizado). Digitado pelo
-  // operador como na ida â€” nao existe mais estoque de malote para "escolher".
-  if (lacre && (await existeNumeroLacreRepository(input.caixa.empresaId, lacre, tx))) {
+  // Lacre da volta: no retorno avulso vem da bolsa pre-enviada pela Tesouraria; o retorno final
+  // continua sem bolsa de sangria porque e fechado pelo lacre proprio da gaveta.
+  if (lacre && !input.lacreReservado && (await existeNumeroLacreRepository(input.caixa.empresaId, lacre, tx))) {
     throw new Error("Lacre ja utilizado em outro movimento");
   }
 
@@ -1192,7 +1216,18 @@ async function registrarEntregaAoCofre(
     return { id: vencedora.id, duplicada: true };
   }
 
-  if (lacre) {
+  if (input.lacreReservado) {
+    const consumido = await consumirLacreRetornoRepository(
+      {
+        lacreId: input.lacreReservado.id,
+        empresaId: input.caixa.empresaId,
+        transferenciaDistribuicaoId: input.lacreReservado.transferenciaDistribuicaoId,
+        transferenciaId: transferencia.id
+      },
+      tx
+    );
+    if (!consumido) throw new Error("Lacre de retorno / sangria indisponivel ou ja utilizado");
+  } else if (lacre) {
     await criarLacreRetornoRepository(
       { empresaId: input.caixa.empresaId, numero: lacre, transferenciaId: transferencia.id },
       tx
@@ -1223,6 +1258,11 @@ export async function criarTransferenciaCofreCaixa(
     if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
     const valorCentavos = paraCentavos(dados.valor);
     if (valorCentavos <= 0) throw new Error("Valor da transferencia deve ser positivo");
+    const lacreSelecionado = await buscarLacreRetornoDoCaixaRepository(
+      { lacreId: dados.lacreId, caixaId: caixa.id, empresaId: caixa.empresaId },
+      tx
+    );
+    if (!lacreSelecionado) throw new Error("Lacre de retorno / sangria indisponivel para este caixa");
 
     // B2 x D1: a idempotencia tem de ser resolvida ANTES do teto, e este e o caso que prova por que.
     // Saldo 100, entrega de 100 com a chave K: o primeiro POST zera o caixa. O retry da MESMA chave
@@ -1234,17 +1274,23 @@ export async function criarTransferenciaCofreCaixa(
       tx
     );
     if (jaRegistrada) {
+      if (lacreSelecionado.transferenciaId !== jaRegistrada.id) {
+        throw new Error("Lacre de retorno / sangria ja utilizado em outro movimento");
+      }
       conferirIntencaoEntrega(jaRegistrada, {
         caixaId: caixa.id,
         tipo: "retorno",
         valorCentavos,
         valorEspecieCentavos: paraCentavos(dados.valorEspecie),
         valorMoedasCentavos: paraCentavos(dados.valorMoedas),
-        lacre: dados.lacre?.trim() || null,
+        lacre: lacreSelecionado.numero,
         observacao: dados.observacao?.trim() || null,
         responsavelNome: dados.responsavelNome?.trim() || null
       });
       return statusDoCaixaAberto(caixa, tx);
+    }
+    if (lacreSelecionado.transferenciaId || lacreSelecionado.rompido) {
+      throw new Error("Lacre de retorno / sangria ja utilizado");
     }
 
     // Decisao 7: entrega avulsa tambem entrega dinheiro â€” sem quem conferir, nao sai.
@@ -1277,7 +1323,11 @@ export async function criarTransferenciaCofreCaixa(
         valorCentavos,
         valorEspecieCentavos: paraCentavos(dados.valorEspecie),
         valorMoedasCentavos: paraCentavos(dados.valorMoedas),
-        lacre: dados.lacre ?? null,
+        lacre: lacreSelecionado.numero,
+        lacreReservado: {
+          id: lacreSelecionado.id,
+          transferenciaDistribuicaoId: lacreSelecionado.transferenciaDistribuicaoId
+        },
         observacao: dados.observacao ?? null,
         responsavelNome: dados.responsavelNome ?? null,
         criadoPor: perfil.usuarioId,

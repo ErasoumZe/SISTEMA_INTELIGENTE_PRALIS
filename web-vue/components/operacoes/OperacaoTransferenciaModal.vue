@@ -38,6 +38,7 @@ const {
 // --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
 const erroComposicao = ref("");
+const novoLacreRetorno = ref("");
 const contaOrigemSelecionada = computed(() =>
   opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaOrigemId)
 );
@@ -62,8 +63,22 @@ watch(preparandoMaloteParaCaixa, (preparando) => {
   if (!preparando) {
     form.value.valorEspecieDeclarado = "";
     form.value.valorMoedasDeclarado = "";
+    form.value.lacresRetorno = [];
+    novoLacreRetorno.value = "";
   }
 });
+const lacresRetornoDuplicados = computed(
+  () => new Set(form.value.lacresRetorno.map((lacre) => lacre.trim())).size !== form.value.lacresRetorno.length
+);
+function adicionarLacreRetorno() {
+  const numero = novoLacreRetorno.value.trim();
+  if (!numero || form.value.lacresRetorno.includes(numero)) return;
+  form.value.lacresRetorno.push(numero);
+  novoLacreRetorno.value = "";
+}
+function removerLacreRetorno(indice: number) {
+  form.value.lacresRetorno.splice(indice, 1);
+}
 function br(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -89,6 +104,10 @@ async function salvarTransferenciaCompleta(criarNova = false) {
   }
   if (preparandoMaloteParaCaixa.value && !composicaoMaloteBate.value) {
     erroComposicao.value = "Dinheiro físico + moedas deve ser igual ao valor total.";
+    return;
+  }
+  if (preparandoMaloteParaCaixa.value && lacresRetornoDuplicados.value) {
+    erroComposicao.value = "Cada lacre de retorno / sangria deve ser informado uma unica vez.";
     return;
   }
   erroComposicao.value = "";
@@ -173,6 +192,36 @@ const hojeISO = computed(() => dataISO(0));
             >Dinheiro físico + moedas deve ser igual ao valor total.</span
           >
           <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
+          <div class="tr-lacres-retorno">
+            <strong>Lacres para retorno / sangria <span>(opcional)</span></strong>
+            <p>As bolsas seguem abertas dentro deste malote para o operador usar nas sangrias.</p>
+            <div class="tr-lacre-adicionar">
+              <input
+                v-model="novoLacreRetorno"
+                class="tr-input"
+                placeholder="Numero do lacre da bolsa"
+                maxlength="100"
+                @keydown.enter.prevent="adicionarLacreRetorno"
+              />
+              <button
+                type="button"
+                class="tr-lacre-botao"
+                :disabled="!novoLacreRetorno.trim()"
+                @click="adicionarLacreRetorno"
+              >
+                <v-icon size="17">mdi-plus</v-icon> Adicionar lacre
+              </button>
+            </div>
+            <div v-if="form.lacresRetorno.length" class="tr-lacres-lista" aria-label="Lacres de retorno adicionados">
+              <span v-for="(lacre, indice) in form.lacresRetorno" :key="`${lacre}-${indice}`" class="tr-lacre-chip">
+                Bolsa {{ indice + 1 }}: {{ lacre }}
+                <button type="button" :aria-label="`Remover lacre ${lacre}`" @click="removerLacreRetorno(indice)">
+                  <v-icon size="15">mdi-close</v-icon>
+                </button>
+              </span>
+            </div>
+            <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
+          </div>
         </section>
 
         <div class="tr-dois">

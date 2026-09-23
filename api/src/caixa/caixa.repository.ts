@@ -669,6 +669,107 @@ export async function criarLacreRetornoRepository(
   });
 }
 
+export type LacreRetornoDisponivel = { id: string; numero: string };
+
+// Bolsas vazias entregues no malote que ESTE caixa abriu. O pai precisa estar ligado ao caixa
+// aberto; isso impede que um lacre de outra gaveta seja adivinhado por ID e consumido aqui.
+export async function listarLacresRetornoDisponiveisDoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<LacreRetornoDisponivel[]> {
+  return db
+    .select({ id: lacres.id, numero: lacres.numero })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaDistribuicaoId))
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.origem, "retorno"),
+        eq(transferencias.caixaId, caixaId),
+        eq(transferencias.status, "recebido"),
+        isNull(lacres.transferenciaId),
+        eq(lacres.rompido, false)
+      )
+    )
+    .orderBy(asc(lacres.numero));
+}
+
+export async function listarLacresRetornoDaDistribuicaoRepository(
+  transferenciaDistribuicaoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<LacreRetornoDisponivel[]> {
+  return db
+    .select({ id: lacres.id, numero: lacres.numero })
+    .from(lacres)
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.transferenciaDistribuicaoId, transferenciaDistribuicaoId),
+        eq(lacres.origem, "retorno")
+      )
+    )
+    .orderBy(asc(lacres.numero));
+}
+
+export async function buscarLacreRetornoDoCaixaRepository(
+  input: { lacreId: string; caixaId: string; empresaId: string },
+  db: ExecutorBanco = banco
+): Promise<{
+  id: string;
+  numero: string;
+  transferenciaId: string | null;
+  transferenciaDistribuicaoId: string;
+  rompido: boolean;
+} | null> {
+  const [lacre] = await db
+    .select({
+      id: lacres.id,
+      numero: lacres.numero,
+      transferenciaId: lacres.transferenciaId,
+      transferenciaDistribuicaoId: lacres.transferenciaDistribuicaoId,
+      rompido: lacres.rompido
+    })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaDistribuicaoId))
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.origem, "retorno"),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "recebido")
+      )
+    )
+    .limit(1);
+  const transferenciaDistribuicaoId = lacre?.transferenciaDistribuicaoId;
+  if (!lacre || !transferenciaDistribuicaoId) return null;
+  return { ...lacre, transferenciaDistribuicaoId };
+}
+
+// Guarda final da corrida: mesmo que dois clientes vejam a mesma bolsa antes do refresh, somente
+// uma transferencia consegue ligar o lacre ainda livre ao seu movimento.
+export async function consumirLacreRetornoRepository(
+  input: { lacreId: string; empresaId: string; transferenciaDistribuicaoId: string; transferenciaId: string },
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [consumido] = await db
+    .update(lacres)
+    .set({ transferenciaId: input.transferenciaId })
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.transferenciaDistribuicaoId, input.transferenciaDistribuicaoId),
+        isNull(lacres.transferenciaId),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  return Boolean(consumido);
+}
+
 // B2: a INTENCAO por tras de uma chave de idempotencia. E o que se compara para decidir entre
 // "retry do mesmo ato" (devolve o vencedor) e "chave reaproveitada para outra coisa" (409).
 // Valor em centavos inteiros — comparar a string decimal do banco ("100.00" vs "100.0") daria
@@ -1377,6 +1478,36 @@ export async function listarAnexosFechamentoCaixaRepository(
     .select({
       id: fechamentosCaixaAnexos.id,
       tipo: fechamentosCaixaAnexos.tipo,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado,
+      iaErro: fechamentosCaixaAnexos.iaErro,
+      criadoEm: fechamentosCaixaAnexos.criadoEm
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(fechamentosCaixaAnexos.criadoEm));
+}
+
+// Caminho interno so e necessario para a leitura de IA no servidor. A listagem publica acima nao
+// o devolve ao navegador, evitando expor a estrutura de armazenamento dos anexos.
+export async function listarAnexosFechamentoCaixaComCaminhoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
+      caminho: fechamentosCaixaAnexos.caminho,
       nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
       mimeType: fechamentosCaixaAnexos.mimeType,
       tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,

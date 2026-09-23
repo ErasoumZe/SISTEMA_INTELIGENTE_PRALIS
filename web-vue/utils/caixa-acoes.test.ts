@@ -82,13 +82,14 @@ describe("retornarSaldoOperacional", () => {
     valor: 15,
     valorEspecie: 10,
     valorMoedas: 5,
-    lacre: "LAC-9",
+    lacreId: "11111111-1111-4111-8111-111111111111",
+    lacreNumero: "LAC-9",
     responsavelNome: "Marina",
     observacao: null,
     idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
   };
 
-  it("com confirmacao posta retorno ao cofre com lacre e chave, notifica e re-busca status", async () => {
+  it("com confirmacao posta retorno ao cofre com lacre selecionado e chave, notifica e re-busca status", async () => {
     const deps = montarDeps({ confirmar: vi.fn().mockResolvedValue(true) });
     const ok = await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
@@ -98,7 +99,7 @@ describe("retornarSaldoOperacional", () => {
       valor: 15,
       valorEspecie: 10,
       valorMoedas: 5,
-      lacre: "LAC-9",
+      lacreId: "11111111-1111-4111-8111-111111111111",
       responsavelNome: "Marina",
       observacao: null,
       idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"

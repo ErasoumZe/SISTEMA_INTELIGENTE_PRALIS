@@ -56,7 +56,8 @@ export type RetornoSaldoPayload = {
   valor: number;
   valorEspecie: number;
   valorMoedas: number;
-  lacre: string;
+  lacreId: string;
+  lacreNumero: string;
   responsavelNome: string;
   observacao: string | null;
   idempotenciaChave: string;
@@ -113,7 +114,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     const observacao = payload.observacao ? `\nObservação: ${payload.observacao}` : "";
     if (
       !(await deps.confirmar(
-        `Confirme a saída ao cofre:\nValor total: ${dinheiro(payload.valor)}\nDinheiro físico: ${dinheiro(payload.valorEspecie)}\nMoedas: ${dinheiro(payload.valorMoedas)}\nLacre: ${payload.lacre}\nResponsável: ${payload.responsavelNome}${observacao}`,
+        `Confirme a saída ao cofre:\nValor total: ${dinheiro(payload.valor)}\nDinheiro físico: ${dinheiro(payload.valorEspecie)}\nMoedas: ${dinheiro(payload.valorMoedas)}\nLacre: ${payload.lacreNumero}\nResponsável: ${payload.responsavelNome}${observacao}`,
         "Confirmar retorno / sangria",
         "Confirmar e salvar"
       ))
@@ -126,7 +127,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
         valor: payload.valor,
         valorEspecie: payload.valorEspecie,
         valorMoedas: payload.valorMoedas,
-        lacre: payload.lacre,
+        lacreId: payload.lacreId,
         responsavelNome: payload.responsavelNome,
         observacao: payload.observacao,
         idempotenciaChave: payload.idempotenciaChave

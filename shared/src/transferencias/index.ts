@@ -47,6 +47,9 @@ export const transferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
   contasDestinoIds: z.array(uuidSchema).max(50).optional().default([]),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
+  // R-208: lacres das bolsas vazias que seguem DENTRO do malote Cofre -> PDV.
+  // Nao sao transferencias futuras: so passam a selar um movimento quando o Caixa faz a sangria.
+  lacresRetorno: z.array(z.string().trim().min(1).max(100)).max(50).optional().default([]),
   agendadaPara: z.string().datetime().optional().nullable(),
   tempoConfirmacao: tempoConfirmacaoSchema.nullable().optional().default(null),
   computar: z.boolean().default(true)

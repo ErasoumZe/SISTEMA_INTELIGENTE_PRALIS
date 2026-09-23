@@ -163,8 +163,17 @@ describe("montarPayloadOperacao", () => {
     expect(payload).toMatchObject({
       valorOriginal: 200,
       valorEspecieDeclarado: 150,
-      valorMoedasDeclarado: 50
+      valorMoedasDeclarado: 50,
+      lacresRetorno: []
     });
+  });
+
+  it("envia os lacres menores junto do malote", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: { ...formOperacaoVazio(), lacresRetorno: [" SANG-01 ", "SANG-02"] }
+    });
+    expect(payload).toMatchObject({ lacresRetorno: ["SANG-01", "SANG-02"] });
   });
 
   it("nao envia composicao vazia para transferencias que nao sao malote", () => {

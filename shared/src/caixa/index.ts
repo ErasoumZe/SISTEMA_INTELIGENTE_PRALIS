@@ -287,7 +287,9 @@ export const transferenciaCofrePayloadSchema = z
     valor: z.coerce.number().positive(),
     valorEspecie: z.coerce.number().nonnegative(),
     valorMoedas: z.coerce.number().nonnegative(),
-    lacre: z.string().trim().min(1, "Lacre da transferencia de retorno / sangria obrigatorio"),
+    // R-208: o Caixa nao digita um lacre novo. Ele escolhe uma bolsa que a Tesouraria mandou
+    // aberta dentro do malote recebido; o servidor confere que ela pertence a este caixa.
+    lacreId: uuidSchema,
     // O modal operacional exige o nome. Opcional no contrato durante a transição para manter os
     // registros e integrações históricas compatíveis; quando informado, nunca aceita texto vazio.
     responsavelNome: z

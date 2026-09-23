@@ -95,6 +95,13 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
       throw new Error("Especie mais moedas deve ser igual ao valor da transferencia");
     }
   }
+  const lacresRetorno = dados.lacresRetorno.map((lacre) => lacre.trim());
+  if (new Set(lacresRetorno).size !== lacresRetorno.length) {
+    throw new Error("Os lacres de retorno / sangria nao podem se repetir");
+  }
+  if (dados.nLacreDoc?.trim() && lacresRetorno.includes(dados.nLacreDoc.trim())) {
+    throw new Error("O lacre do malote nao pode se repetir como lacre de retorno / sangria");
+  }
 }
 
 function normalizarCargo(nome: string) {
@@ -164,7 +171,7 @@ export async function criarTransferencia(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   try {
     return await executarEmTransacao(async (tx) => {
-      for (const lacre of [dados.nLacreDoc!]) {
+      for (const lacre of [dados.nLacreDoc!, ...dados.lacresRetorno]) {
         const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, lacre, tx);
         if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
       }
@@ -188,6 +195,9 @@ export async function criarTransferencia(
         (dados.valorEspecieDeclarado === undefined || dados.valorMoedasDeclarado === undefined)
       ) {
         throw new Error("Informe dinheiro fisico e moedas ao preparar o malote para o Caixa");
+      }
+      if (!ehMaloteCofreParaPdv && dados.lacresRetorno.length) {
+        throw new Error("Lacres de retorno / sangria so podem seguir em um malote do Cofre para o Caixa");
       }
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);

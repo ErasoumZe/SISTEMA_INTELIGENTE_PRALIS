@@ -565,6 +565,7 @@ export function formOperacaoVazio(): OperacaoForm {
     grupoRetiradaId: "",
     numeroLacre: "",
     nLacreDoc: "",
+    lacresRetorno: [],
     agendadaPara: "",
     dataRecebimento: "",
     tempoConfirmacao: null,

@@ -405,6 +405,7 @@ export type OperacaoForm = {
   grupoRetiradaId: string;
   numeroLacre: string;
   nLacreDoc: string;
+  lacresRetorno: string[];
   agendadaPara: string;
   dataRecebimento: string;
   tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias" | null;

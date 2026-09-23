@@ -8,7 +8,8 @@ const props = defineProps<{
   valor: string;
   valorEspecie: string;
   valorMoedas: string;
-  lacre: string;
+  lacreId: string;
+  lacresDisponiveis: Array<{ id: string; numero: string }>;
   observacao: string;
   responsavelNome: string;
   bloqueado: boolean;
@@ -20,7 +21,7 @@ const emit = defineEmits<{
   (event: "update:valor", valor: string): void;
   (event: "update:valorEspecie", valor: string): void;
   (event: "update:valorMoedas", valor: string): void;
-  (event: "update:lacre", valor: string): void;
+  (event: "update:lacreId", valor: string): void;
   (event: "update:observacao", valor: string): void;
   (event: "update:responsavelNome", valor: string): void;
   (event: "salvar", fecharDepois: boolean): void;
@@ -89,17 +90,22 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
             />
           </v-col>
           <v-col cols="12" md="6">
-            <v-text-field
-              :model-value="lacre"
-              label="Lacre do retorno / sangria (obrigatório)"
-              hint="Identifica o malote que retorna do caixa ao cofre."
+            <v-select
+              :model-value="lacreId"
+              :items="lacresDisponiveis"
+              item-title="numero"
+              item-value="id"
+              label="Lacre disponível (obrigatório)"
+              hint="Confira fisicamente o número antes de fechar a bolsa."
               persistent-hint
               color="error"
               base-color="error"
               prepend-inner-icon="mdi-lock-outline"
               required
-              @update:model-value="emit('update:lacre', $event)"
-            />
+              @update:model-value="emit('update:lacreId', String($event ?? ''))"
+            >
+              <template #no-data>Nenhum lacre disponivel. Solicite a Tesouraria.</template>
+            </v-select>
           </v-col>
           <v-col cols="12" md="6">
             <v-text-field

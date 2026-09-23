@@ -103,6 +103,49 @@
 .tr-ok {
   color: #15803d;
 }
+.tr-lacres-retorno {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 45%, transparent);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 45%);
+}
+.tr-lacres-retorno > p {
+  margin: 0;
+  font-size: 12px;
+}
+.tr-lacre-adicionar {
+  display: flex;
+  gap: 8px;
+}
+.tr-lacre-botao {
+  white-space: nowrap;
+  border: 1px solid var(--cat-transferencias-base, #c2410c);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--cat-transferencias-base, #c2410c);
+  font-weight: 700;
+}
+.tr-lacres-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tr-lacre-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: rgb(124 45 18 / 10%);
+  font-size: 12px;
+}
+.tr-lacre-chip button {
+  display: inline-flex;
+  color: inherit;
+}
 .tr-erro {
   color: #b42318;
 }
@@ -123,6 +166,11 @@
 .tr-dois {
   display: flex;
   gap: 10px;
+}
+@media (max-width: 390px) {
+  .tr-lacre-adicionar {
+    flex-direction: column;
+  }
 }
 .tr-dois .tr-campo {
   flex: 1;

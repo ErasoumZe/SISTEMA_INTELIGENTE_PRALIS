@@ -281,8 +281,7 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     // este fallback o modal reabriria com o campo Observacao VAZIO e salvar apagaria o texto.
     observacao: detalhe.observacao ?? detalhe.descricao ?? "",
     valorOriginal: String(detalhe.valorOriginal),
-    valorEspecieDeclarado:
-      detalhe.valorEspecieDeclarado != null ? String(detalhe.valorEspecieDeclarado) : "",
+    valorEspecieDeclarado: detalhe.valorEspecieDeclarado != null ? String(detalhe.valorEspecieDeclarado) : "",
     valorMoedasDeclarado: detalhe.valorMoedasDeclarado != null ? String(detalhe.valorMoedasDeclarado) : "",
     valorAcrescimo: detalhe.valorAcrescimo ? String(detalhe.valorAcrescimo) : "",
     descricaoAcrescimo: detalhe.descricaoAcrescimo ?? "",
@@ -500,6 +499,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
     ...(entidade === "transferencia"
       ? {
           nLacreDoc: dados.form.nLacreDoc || null,
+          lacresRetorno: dados.form.lacresRetorno.map((lacre) => lacre.trim()).filter(Boolean),
           ...(dados.form.valorEspecieDeclarado !== "" || dados.form.valorMoedasDeclarado !== ""
             ? {
                 valorEspecieDeclarado: deCentavos(paraCentavos(dados.form.valorEspecieDeclarado)),

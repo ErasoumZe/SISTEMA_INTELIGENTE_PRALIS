@@ -160,6 +160,18 @@ export async function criarTransferenciaRepository(
       origem: "saida"
     });
   }
+  if (dados.lacresRetorno.length) {
+    await db.insert(lacres).values(
+      dados.lacresRetorno.map((numero) => ({
+        empresaId: dados.empresaId,
+        numero,
+        // A bolsa menor segue aberta dentro do malote de ida. O vinculo com a transferencia de
+        // retorno so existe quando o Caixa a escolhe e fecha fisicamente a bolsa.
+        transferenciaDistribuicaoId: transferencia.id,
+        origem: "retorno" as const
+      }))
+    );
+  }
   return transferencia;
 }
 
@@ -271,6 +283,8 @@ export async function buscarTransferenciaDetalheRepository(
     valorDesconto: numeroDecimal(transferencia.valorDesconto),
     // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
     valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
+    // Lacres internos so existem no ato de criacao do malote; edicoes nunca os reescrevem.
+    lacresRetorno: [],
     contasDestinoIds: candidatos
       .map((item) => item.contaId)
       .filter((contaId) => contaId !== transferencia.contaDestinoId),

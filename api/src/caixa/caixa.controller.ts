@@ -21,6 +21,7 @@ import {
   criarTransferenciaCofreCaixa,
   cancelarPlanejamentoRetorno,
   consultarMaloteParaAbertura,
+  listarLacresRetornoDisponiveisCaixa,
   executarPlanejamentoRetorno,
   fecharCaixa,
   listarHistoricoCaixa,
@@ -99,6 +100,20 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const body = transferenciaCofrePayloadSchema.parse(request.body);
       try {
         return ok(await criarTransferenciaCofreCaixa(caixaId, body, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/caixa/:caixaId/lacres-retorno",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await listarLacresRetornoDisponiveisCaixa(caixaId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
@@ -227,7 +242,9 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const { caixaId } = caixaParamsSchema.parse(request.params);
       const { anexosConsiderados, ...dados } = salvarRelatorioMaquininhaSchema.parse(request.body);
       try {
-        return ok(await salvarRelatorioMaquininhaFechamento(caixaId, dados, anexosConsiderados, request.perfilUsuario!));
+        return ok(
+          await salvarRelatorioMaquininhaFechamento(caixaId, dados, anexosConsiderados, request.perfilUsuario!)
+        );
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
