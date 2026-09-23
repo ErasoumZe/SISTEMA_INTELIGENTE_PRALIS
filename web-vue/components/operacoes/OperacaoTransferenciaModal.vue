@@ -39,6 +39,7 @@ const {
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
 const erroComposicao = ref("");
 const novoLacreRetorno = ref("");
+const lacresRetornoAtivos = ref(false);
 const contaOrigemSelecionada = computed(() =>
   opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaOrigemId)
 );
@@ -65,8 +66,26 @@ watch(preparandoMaloteParaCaixa, (preparando) => {
     form.value.valorMoedasDeclarado = "";
     form.value.lacresRetorno = [];
     novoLacreRetorno.value = "";
+    lacresRetornoAtivos.value = false;
   }
 });
+watch(lacresRetornoAtivos, (ativo) => {
+  if (!ativo) {
+    form.value.lacresRetorno = [];
+    novoLacreRetorno.value = "";
+  }
+});
+watch(aberto, (estaAberto) => {
+  if (!estaAberto) lacresRetornoAtivos.value = false;
+});
+// Ao reabrir uma transferência que já possui bolsas, revela a mesma área para edição.
+watch(
+  () => form.value.lacresRetorno.length,
+  (quantidade) => {
+    if (quantidade) lacresRetornoAtivos.value = true;
+  },
+  { immediate: true }
+);
 const lacresRetornoDuplicados = computed(
   () => new Set(form.value.lacresRetorno.map((lacre) => lacre.trim())).size !== form.value.lacresRetorno.length
 );
@@ -192,14 +211,17 @@ const hojeISO = computed(() => dataISO(0));
             >Dinheiro físico + moedas deve ser igual ao valor total.</span
           >
           <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
-          <div class="tr-lacres-retorno">
-            <strong>Lacres para retorno / sangria <span>(opcional)</span></strong>
-            <p>As bolsas seguem abertas dentro deste malote para o operador usar nas sangrias.</p>
+          <label class="tr-check tr-lacres-opcao">
+            <input v-model="lacresRetornoAtivos" type="checkbox" />
+            <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
+          </label>
+          <div v-if="lacresRetornoAtivos" class="tr-lacres-retorno">
+            <p>Informe os lacres das bolsas abertas que seguem dentro deste malote.</p>
             <div class="tr-lacre-adicionar">
               <input
                 v-model="novoLacreRetorno"
                 class="tr-input"
-                placeholder="Numero do lacre da bolsa"
+                placeholder="Número do lacre da bolsa"
                 maxlength="100"
                 @keydown.enter.prevent="adicionarLacreRetorno"
               />
