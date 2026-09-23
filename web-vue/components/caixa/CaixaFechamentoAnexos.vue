@@ -1,33 +1,9 @@
 <script setup lang="ts">
-const props = defineProps<{ caixaId: string | null }>();
-const emit = defineEmits<{
-  (event: "folha-enviada", valor: boolean): void;
-  (
-    event: "anexos-atualizados",
-    anexos: Array<{
-      id: string;
-      tipo: "folha_fechamento" | "comprovante_cartao";
-      nomeOriginal: string;
-      relatorio: unknown;
-    }>
-  ): void;
-}>();
-const { apiUrl, apiGet } = useApi();
-const enviando = ref(false);
-const erro = ref("");
-type Anexo = {
-  id: string;
-  tipo: "folha_fechamento" | "comprovante_cartao";
-  nomeOriginal: string;
-  mimeType: string;
-  iaStatus?: "desativada" | "processando" | "concluida" | "falhou";
-  iaResultado?: unknown;
-  iaErro?: string | null;
-};
-type RelatorioMaquininhaFormulario = {
+type TipoAnexo = "folha_fechamento" | "comprovante_cartao";
+type Anexo = { id: string; tipo: TipoAnexo; nomeOriginal: string; mimeType: string };
+type Relatorio = {
   documentoLegivel: boolean;
   numeroMaquininha: string;
-  periodo: "manha" | "tarde" | "noite" | "nao_identificado";
   dataEmissao: string;
   credito: string;
   debito: string;
@@ -39,22 +15,36 @@ type RelatorioMaquininhaFormulario = {
   camposDuvidosos: string[];
   observacoes: string[];
 };
-type TipoAnexo = Anexo["tipo"];
+type RespostaRelatorio = { turnoNome: string; relatorio: { dadosRevisados: unknown } | null };
+type RespostaAnalise = { turnoNome: string; sugestao: unknown; anexosConsiderados: string[] };
+
+const props = defineProps<{ caixaId: string | null }>();
+const emit = defineEmits<{
+  (event: "folha-enviada", valor: boolean): void;
+  (event: "anexos-atualizados", anexos: Array<{ id: string; tipo: TipoAnexo; nomeOriginal: string; relatorio: unknown }>): void;
+}>();
+const { apiUrl, apiGet, apiPost, apiPut } = useApi();
 const anexos = ref<Anexo[]>([]);
 const previas = ref<Record<string, string>>({});
-const anexoAmpliado = ref<Anexo | null>(null);
+const relatorio = ref<Relatorio>(novoRelatorio(null));
+const sugestao = ref<Relatorio | null>(null);
+const anexosConsiderados = ref<string[]>([]);
+const relatorioRegistrado = ref(false);
+const turnoNome = ref("Turno da abertura não informado");
+const erro = ref("");
+const enviando = ref(false);
+const analisando = ref(false);
+const salvandoRelatorio = ref(false);
 const removendoId = ref<string | null>(null);
-const analisandoId = ref<string | null>(null);
-const salvandoRelatorioId = ref<string | null>(null);
-const relatorios = ref<Record<string, RelatorioMaquininhaFormulario>>({});
-const folhaArquivo = useTemplateRef<HTMLInputElement>("folhaArquivo");
-const cartaoArquivo = useTemplateRef<HTMLInputElement>("cartaoArquivo");
-const videoCamera = useTemplateRef<HTMLVideoElement>("videoCamera");
+const anexoAmpliado = ref<Anexo | null>(null);
 const cameraAberta = ref(false);
 const cameraErro = ref("");
 const tipoFoto = ref<TipoAnexo>("folha_fechamento");
+const folhaArquivo = useTemplateRef<HTMLInputElement>("folhaArquivo");
+const cartaoArquivo = useTemplateRef<HTMLInputElement>("cartaoArquivo");
+const videoCamera = useTemplateRef<HTMLVideoElement>("videoCamera");
 let transmissaoCamera: MediaStream | null = null;
-let versaoPrevia = 0;
+
 const folhas = computed(() => anexos.value.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoes = computed(() => anexos.value.filter((anexo) => anexo.tipo === "comprovante_cartao"));
 const dialogAnexoAmpliado = computed({
@@ -64,10 +54,6 @@ const dialogAnexoAmpliado = computed({
   }
 });
 
-function ehImagem(anexo: Anexo) {
-  return anexo.mimeType.startsWith("image/");
-}
-
 function texto(valor: unknown) {
   return typeof valor === "string" ? valor : "";
 }
@@ -76,13 +62,11 @@ function valor(valor: unknown) {
   return typeof valor === "number" && Number.isFinite(valor) ? String(valor) : "";
 }
 
-function relatorioFormulario(resultado: unknown): RelatorioMaquininhaFormulario {
+function novoRelatorio(resultado: unknown): Relatorio {
   const dados = resultado && typeof resultado === "object" ? (resultado as Record<string, unknown>) : {};
-  const periodo = dados.periodo;
   return {
     documentoLegivel: dados.documentoLegivel === true,
     numeroMaquininha: texto(dados.numeroMaquininha),
-    periodo: periodo === "manha" || periodo === "tarde" || periodo === "noite" ? periodo : "nao_identificado",
     dataEmissao: texto(dados.dataEmissao),
     credito: valor(dados.credito),
     debito: valor(dados.debito),
@@ -96,202 +80,93 @@ function relatorioFormulario(resultado: unknown): RelatorioMaquininhaFormulario 
   };
 }
 
-function sincronizarRelatorios(lista: Anexo[]) {
-  const ativos = new Set(lista.filter((anexo) => anexo.tipo === "comprovante_cartao").map((anexo) => anexo.id));
-  const proximos: Record<string, RelatorioMaquininhaFormulario> = {};
-  for (const anexo of lista.filter((item) => item.tipo === "comprovante_cartao")) {
-    // `carregar` so roda apos upload, leitura, salvamento ou remocao. Nesses atos, o banco e a
-    // fonte de verdade: manter o formulario vazio anterior esconderia a resposta nova da IA.
-    proximos[anexo.id] = relatorioFormulario(anexo.iaResultado);
-  }
-  for (const id of Object.keys(proximos)) if (!ativos.has(id)) delete proximos[id];
-  relatorios.value = proximos;
+function dadosParaSalvar() {
+  const numero = (valorTexto: string) => {
+    const numeroLido = Number(valorTexto.replace(",", "."));
+    return valorTexto.trim() && Number.isFinite(numeroLido) && numeroLido >= 0 ? numeroLido : null;
+  };
+  return {
+    documentoLegivel: relatorio.value.documentoLegivel,
+    numeroMaquininha: relatorio.value.numeroMaquininha.trim() || null,
+    dataEmissao: relatorio.value.dataEmissao.trim() || null,
+    credito: numero(relatorio.value.credito),
+    debito: numero(relatorio.value.debito),
+    pix: numero(relatorio.value.pix),
+    voucher: numero(relatorio.value.voucher),
+    total: numero(relatorio.value.total),
+    trocaInicial: numero(relatorio.value.trocaInicial),
+    saldoFinalDinheiro: numero(relatorio.value.saldoFinalDinheiro),
+    camposDuvidosos: relatorio.value.camposDuvidosos,
+    observacoes: relatorio.value.observacoes,
+    anexosConsiderados: anexosConsiderados.value.length ? anexosConsiderados.value : cartoes.value.map((anexo) => anexo.id)
+  };
 }
 
-function urlPrevia(anexo: Anexo) {
-  return previas.value[anexo.id] ?? "";
+function atualizarEvento() {
+  const dados = relatorioRegistrado.value ? dadosParaSalvar() : null;
+  emit("folha-enviada", folhas.value.length > 0);
+  emit("anexos-atualizados", anexos.value.map((anexo) => ({ ...anexo, relatorio: anexo.tipo === "comprovante_cartao" ? dados : null })));
 }
 
-function limparPrevia(anexoId: string) {
-  const url = previas.value[anexoId];
+function ehImagem(anexo: Anexo) {
+  return anexo.mimeType.startsWith("image/");
+}
+
+function limparPrevia(id: string) {
+  const url = previas.value[id];
   if (url) URL.revokeObjectURL(url);
-  const { [anexoId]: _, ...restantes } = previas.value;
+  const { [id]: _, ...restantes } = previas.value;
   previas.value = restantes;
 }
 
 async function carregarPrevias(lista: Anexo[]) {
-  const versao = ++versaoPrevia;
-  const idsAtuais = new Set(lista.map((anexo) => anexo.id));
-  Object.keys(previas.value)
-    .filter((anexoId) => !idsAtuais.has(anexoId))
-    .forEach(limparPrevia);
-
-  await Promise.all(
-    lista
-      .filter((anexo) => ehImagem(anexo) && !previas.value[anexo.id])
-      .map(async (anexo) => {
-        try {
-          const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}`, {
-            credentials: "include"
-          });
-          if (!resposta.ok) return;
-          const url = URL.createObjectURL(await resposta.blob());
-          if (versao !== versaoPrevia || !idsAtuais.has(anexo.id)) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          previas.value = { ...previas.value, [anexo.id]: url };
-        } catch {
-          // A foto continua registrada; apenas a miniatura fica indisponível nesta sessão.
-        }
-      })
-  );
+  const ids = new Set(lista.map((anexo) => anexo.id));
+  Object.keys(previas.value).filter((id) => !ids.has(id)).forEach(limparPrevia);
+  await Promise.all(lista.filter((anexo) => ehImagem(anexo) && !previas.value[anexo.id]).map(async (anexo) => {
+    try {
+      const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}`, { credentials: "include" });
+      if (resposta.ok) previas.value = { ...previas.value, [anexo.id]: URL.createObjectURL(await resposta.blob()) };
+    } catch { /* A prova continua salva; somente a prévia desta sessão ficou indisponível. */ }
+  }));
 }
 
 async function carregar() {
   if (!props.caixaId) {
     anexos.value = [];
-    emit("folha-enviada", false);
-    emit("anexos-atualizados", []);
+    atualizarEvento();
     return;
   }
   try {
-    anexos.value = (await apiGet<Anexo[]>(`/api/caixa/${props.caixaId}/anexos`)) ?? [];
-    sincronizarRelatorios(anexos.value);
+    const [lista, respostaRelatorio] = await Promise.all([
+      apiGet<Anexo[]>(`/api/caixa/${props.caixaId}/anexos`),
+      apiGet<RespostaRelatorio>(`/api/caixa/${props.caixaId}/relatorio-maquininha`)
+    ]);
+    anexos.value = lista ?? [];
+    turnoNome.value = respostaRelatorio.turnoNome;
+    relatorio.value = novoRelatorio(respostaRelatorio.relatorio?.dadosRevisados);
+    anexosConsiderados.value = respostaRelatorio.relatorio ? cartoes.value.map((anexo) => anexo.id) : [];
+    relatorioRegistrado.value = Boolean(respostaRelatorio.relatorio);
+    sugestao.value = null;
     await carregarPrevias(anexos.value);
-    emit("folha-enviada", folhas.value.length > 0);
-    emit(
-      "anexos-atualizados",
-      anexos.value.map(({ id, tipo, nomeOriginal, iaResultado }) => ({ id, tipo, nomeOriginal, relatorio: iaResultado }))
-    );
+    atualizarEvento();
   } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Nao foi possivel carregar os anexos.";
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível carregar os anexos.";
   }
 }
 
-function numeroOuNulo(valor: string) {
-  const numero = Number(valor.replace(",", "."));
-  return valor.trim() && Number.isFinite(numero) && numero >= 0 ? numero : null;
-}
-
-function payloadRelatorio(anexoId: string) {
-  const relatorio = relatorios.value[anexoId] ?? relatorioFormulario(null);
-  return {
-    documentoLegivel: relatorio.documentoLegivel,
-    numeroMaquininha: relatorio.numeroMaquininha.trim() || null,
-    periodo: relatorio.periodo,
-    dataEmissao: relatorio.dataEmissao.trim() || null,
-    credito: numeroOuNulo(relatorio.credito),
-    debito: numeroOuNulo(relatorio.debito),
-    pix: numeroOuNulo(relatorio.pix),
-    voucher: numeroOuNulo(relatorio.voucher),
-    total: numeroOuNulo(relatorio.total),
-    trocaInicial: numeroOuNulo(relatorio.trocaInicial),
-    saldoFinalDinheiro: numeroOuNulo(relatorio.saldoFinalDinheiro),
-    camposDuvidosos: relatorio.camposDuvidosos,
-    observacoes: relatorio.observacoes
-  };
-}
-
-async function analisarComprovante(anexo: Anexo) {
-  if (!props.caixaId || analisandoId.value) return;
-  analisandoId.value = anexo.id;
-  erro.value = "";
-  try {
-    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}/analisar-comprovante`, {
-      method: "POST",
-      credentials: "include"
-    });
-    if (!resposta.ok) {
-      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
-      throw new Error(falha?.title ?? "Não foi possível ler o comprovante.");
-    }
-    await carregar();
-  } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Não foi possível ler o comprovante.";
-  } finally {
-    analisandoId.value = null;
-  }
-}
-
-async function salvarRelatorio(anexo: Anexo) {
-  if (!props.caixaId || salvandoRelatorioId.value) return;
-  salvandoRelatorioId.value = anexo.id;
-  erro.value = "";
-  try {
-    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}/relatorio-maquininha`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payloadRelatorio(anexo.id))
-    });
-    if (!resposta.ok) {
-      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
-      throw new Error(falha?.title ?? "Não foi possível salvar o relatório da maquininha.");
-    }
-    await carregar();
-  } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Não foi possível salvar o relatório da maquininha.";
-  } finally {
-    salvandoRelatorioId.value = null;
-  }
-}
-
-async function remover(anexo: Anexo) {
+async function enviarArquivo(arquivo: File, tipo: TipoAnexo) {
   if (!props.caixaId) return;
-  removendoId.value = anexo.id;
-  erro.value = "";
-  try {
-    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}`, {
-      method: "DELETE",
-      credentials: "include"
-    });
-    if (!resposta.ok) {
-      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
-      throw new Error(falha?.title ?? "Não foi possível remover o anexo.");
-    }
-    if (anexoAmpliado.value?.id === anexo.id) anexoAmpliado.value = null;
-    limparPrevia(anexo.id);
-    await carregar();
-  } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Não foi possível remover o anexo.";
-  } finally {
-    removendoId.value = null;
-  }
-}
-
-watch(
-  () => props.caixaId,
-  () => void carregar(),
-  { immediate: true }
-);
-
-async function enviarArquivo(arquivo: File, tipo: TipoAnexo): Promise<boolean> {
-  if (!props.caixaId) return false;
   enviando.value = true;
   erro.value = "";
   try {
     const corpo = new FormData();
     corpo.append("tipo", tipo);
     corpo.append("arquivo", arquivo);
-    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos`, {
-      method: "POST",
-      credentials: "include",
-      body: corpo
-    });
-    if (!resposta.ok) {
-      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
-      throw new Error(falha?.title ?? "Nao foi possivel enviar o anexo.");
-    }
+    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos`, { method: "POST", credentials: "include", body: corpo });
+    if (!resposta.ok) throw new Error("Não foi possível anexar a foto.");
     await carregar();
-    if (tipo === "comprovante_cartao") {
-      const novo = anexos.value.find((anexo) => anexo.tipo === "comprovante_cartao" && anexo.iaStatus === "desativada");
-      if (novo) void analisarComprovante(novo);
-    }
-    return true;
   } catch (falha) {
-    erro.value = falha instanceof Error ? falha.message : "Nao foi possivel enviar o anexo.";
-    return false;
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível anexar a foto.";
   } finally {
     enviando.value = false;
   }
@@ -300,9 +175,60 @@ async function enviarArquivo(arquivo: File, tipo: TipoAnexo): Promise<boolean> {
 async function enviar(evento: Event, tipo: TipoAnexo) {
   const entrada = evento.target as HTMLInputElement;
   const arquivo = entrada.files?.[0];
-  if (!arquivo) return;
-  await enviarArquivo(arquivo, tipo);
+  if (arquivo) await enviarArquivo(arquivo, tipo);
   entrada.value = "";
+}
+
+async function remover(anexo: Anexo) {
+  if (!props.caixaId) return;
+  removendoId.value = anexo.id;
+  try {
+    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}`, { method: "DELETE", credentials: "include" });
+    if (!resposta.ok) throw new Error("Não foi possível excluir o anexo.");
+    limparPrevia(anexo.id);
+    if (anexoAmpliado.value?.id === anexo.id) anexoAmpliado.value = null;
+    await carregar();
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível excluir o anexo.";
+  } finally {
+    removendoId.value = null;
+  }
+}
+
+async function lerComIa() {
+  if (!props.caixaId || !cartoes.value.length) return;
+  analisando.value = true;
+  erro.value = "";
+  try {
+    const resposta = await apiPost<RespostaAnalise>(`/api/caixa/${props.caixaId}/relatorio-maquininha/analisar`, {});
+    turnoNome.value = resposta.turnoNome;
+    sugestao.value = novoRelatorio(resposta.sugestao);
+    anexosConsiderados.value = resposta.anexosConsiderados;
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível ler as fotos.";
+  } finally {
+    analisando.value = false;
+  }
+}
+
+function usarSugestao() {
+  if (!sugestao.value) return;
+  relatorio.value = { ...sugestao.value };
+  sugestao.value = null;
+}
+
+async function salvarDadosRevisados() {
+  if (!props.caixaId || !cartoes.value.length) return;
+  salvandoRelatorio.value = true;
+  erro.value = "";
+  try {
+    await apiPut(`/api/caixa/${props.caixaId}/relatorio-maquininha`, dadosParaSalvar());
+    await carregar();
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível salvar o relatório.";
+  } finally {
+    salvandoRelatorio.value = false;
+  }
 }
 
 function encerrarCamera() {
@@ -314,16 +240,8 @@ function encerrarCamera() {
 
 async function abrirCamera(tipo: TipoAnexo) {
   cameraErro.value = "";
-  if (!globalThis.navigator.mediaDevices?.getUserMedia) {
-    cameraErro.value = "A câmera não está disponível neste navegador. Use Anexar arquivo.";
-    return;
-  }
-
   try {
-    transmissaoCamera = await globalThis.navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: "environment" } }
-    });
+    transmissaoCamera = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
     tipoFoto.value = tipo;
     cameraAberta.value = true;
     await nextTick();
@@ -332,40 +250,24 @@ async function abrirCamera(tipo: TipoAnexo) {
       await videoCamera.value.play();
     }
   } catch {
-    encerrarCamera();
-    cameraErro.value = "Não foi possível acessar a câmera. Autorize o navegador ou use Anexar arquivo.";
+    cameraErro.value = "Não foi possível acessar a câmera. Autorize o navegador ou anexe uma foto.";
   }
 }
 
 async function tirarFoto() {
   const video = videoCamera.value;
-  if (!video || !video.videoWidth || !video.videoHeight) {
-    cameraErro.value = "A câmera ainda não está pronta. Aguarde um instante e tente novamente.";
-    return;
-  }
-
+  if (!video?.videoWidth || !video.videoHeight) return;
   const quadro = document.createElement("canvas");
   quadro.width = video.videoWidth;
   quadro.height = video.videoHeight;
   quadro.getContext("2d")?.drawImage(video, 0, 0, quadro.width, quadro.height);
   const foto = await new Promise<Blob | null>((resolver) => quadro.toBlob(resolver, "image/jpeg", 0.9));
-  if (!foto) {
-    cameraErro.value = "Não foi possível registrar a foto. Tente novamente.";
-    return;
-  }
-
-  const nome = tipoFoto.value === "folha_fechamento" ? "folha-fechamento" : "comprovante-cartao";
-  const enviada = await enviarArquivo(
-    new File([foto], `${nome}-${Date.now()}.jpg`, { type: "image/jpeg" }),
-    tipoFoto.value
-  );
-  if (enviada) encerrarCamera();
+  if (!foto) return;
+  await enviarArquivo(new File([foto], `fechamento-${Date.now()}.jpg`, { type: "image/jpeg" }), tipoFoto.value);
+  encerrarCamera();
 }
 
-watch(cameraAberta, (aberta) => {
-  if (!aberta && transmissaoCamera) encerrarCamera();
-});
-
+watch(() => props.caixaId, () => void carregar(), { immediate: true });
 onBeforeUnmount(() => {
   encerrarCamera();
   Object.keys(previas.value).forEach(limparPrevia);
@@ -374,280 +276,63 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="mt-4" aria-label="Anexos do fechamento">
-    <div class="text-subtitle-2">Folha de fechamento <span class="text-error">(obrigatoria)</span></div>
+    <div class="text-subtitle-2">Folha de fechamento <span class="text-error">(obrigatória)</span></div>
     <div class="d-flex flex-wrap ga-2 mt-2">
-      <v-btn
-        variant="outlined"
-        prepend-icon="mdi-camera"
-        :loading="enviando"
-        :disabled="!caixaId"
-        @click="abrirCamera('folha_fechamento')"
-      >
-        Tirar foto
-      </v-btn>
-      <v-btn
-        variant="outlined"
-        prepend-icon="mdi-paperclip"
-        :loading="enviando"
-        :disabled="!caixaId"
-        @click="folhaArquivo?.click()"
-      >
-        Anexar arquivo
-      </v-btn>
+      <v-btn variant="outlined" prepend-icon="mdi-camera" :loading="enviando" :disabled="!caixaId" @click="abrirCamera('folha_fechamento')">Tirar foto</v-btn>
+      <v-btn variant="outlined" prepend-icon="mdi-paperclip" :loading="enviando" :disabled="!caixaId" @click="folhaArquivo?.click()">Anexar arquivo</v-btn>
     </div>
-    <input
-      ref="folhaArquivo"
-      class="d-none"
-      type="file"
-      accept="image/*,application/pdf"
-      @change="enviar($event, 'folha_fechamento')"
-    />
+    <input ref="folhaArquivo" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar($event, 'folha_fechamento')" />
     <div v-if="folhas.length" class="anexos-enviados mt-3">
       <div v-for="anexo in folhas" :key="anexo.id" class="anexo-miniatura">
-        <button
-          v-if="ehImagem(anexo)"
-          type="button"
-          class="anexo-miniatura__foto"
-          :disabled="!urlPrevia(anexo)"
-          :aria-label="`Ver foto ${anexo.nomeOriginal}`"
-          @click="anexoAmpliado = anexo"
-        >
-          <img v-if="urlPrevia(anexo)" :src="urlPrevia(anexo)" :alt="`Prévia de ${anexo.nomeOriginal}`" />
-          <v-icon v-else icon="mdi-image-outline" />
-        </button>
+        <button v-if="ehImagem(anexo)" class="anexo-miniatura__foto" type="button" :disabled="!previas[anexo.id]" @click="anexoAmpliado = anexo"><img v-if="previas[anexo.id]" :src="previas[anexo.id]" :alt="`Prévia de ${anexo.nomeOriginal}`" /><v-icon v-else icon="mdi-image-outline" /></button>
         <div v-else class="anexo-miniatura__arquivo"><v-icon icon="mdi-file-document-outline" /></div>
-        <span class="anexo-miniatura__nome" :title="anexo.nomeOriginal">{{ anexo.nomeOriginal }}</span>
-        <v-btn
-          icon="mdi-close"
-          size="x-small"
-          variant="text"
-          color="error"
-          :loading="removendoId === anexo.id"
-          :aria-label="`Remover ${anexo.nomeOriginal}`"
-          @click="remover(anexo)"
-        />
+        <span class="anexo-miniatura__nome">{{ anexo.nomeOriginal }}</span>
+        <v-btn icon="mdi-close" size="x-small" variant="text" color="error" :loading="removendoId === anexo.id" @click="remover(anexo)" />
       </div>
     </div>
-    <div class="text-subtitle-2 mt-4">Comprovantes de cartao <span class="text-medium-emphasis">(opcional)</span></div>
-    <div class="d-flex flex-wrap ga-2 mt-2">
-      <v-btn
-        variant="outlined"
-        prepend-icon="mdi-camera"
-        :loading="enviando"
-        :disabled="!caixaId"
-        @click="abrirCamera('comprovante_cartao')"
-      >
-        Tirar foto
-      </v-btn>
-      <v-btn
-        variant="outlined"
-        prepend-icon="mdi-paperclip"
-        :loading="enviando"
-        :disabled="!caixaId"
-        @click="cartaoArquivo?.click()"
-      >
-        Anexar comprovante
-      </v-btn>
-    </div>
-    <input
-      ref="cartaoArquivo"
-      class="d-none"
-      type="file"
-      accept="image/*,application/pdf"
-      @change="enviar($event, 'comprovante_cartao')"
-    />
-    <div v-if="cartoes.length" class="anexos-enviados mt-3">
-      <div v-for="anexo in cartoes" :key="anexo.id" class="anexo-miniatura">
-        <button
-          v-if="ehImagem(anexo)"
-          type="button"
-          class="anexo-miniatura__foto"
-          :disabled="!urlPrevia(anexo)"
-          :aria-label="`Ver foto ${anexo.nomeOriginal}`"
-          @click="anexoAmpliado = anexo"
-        >
-          <img v-if="urlPrevia(anexo)" :src="urlPrevia(anexo)" :alt="`Prévia de ${anexo.nomeOriginal}`" />
-          <v-icon v-else icon="mdi-image-outline" />
-        </button>
-        <div v-else class="anexo-miniatura__arquivo"><v-icon icon="mdi-file-document-outline" /></div>
-        <span class="anexo-miniatura__nome" :title="anexo.nomeOriginal">{{ anexo.nomeOriginal }}</span>
-        <v-btn
-          icon="mdi-close"
-          size="x-small"
-          variant="text"
-          color="error"
-          :loading="removendoId === anexo.id"
-          :aria-label="`Remover ${anexo.nomeOriginal}`"
-          @click="remover(anexo)"
-        />
+
+    <v-sheet class="relatorio-maquininha pa-4 mt-5" rounded="lg" border>
+      <div class="d-flex flex-wrap align-center ga-2">
+        <v-icon color="info" icon="mdi-credit-card-outline" />
+        <div><div class="text-subtitle-1 font-weight-bold">Relatório da maquininha</div><div class="text-caption">Turno da abertura: {{ turnoNome }} · Envie os dois comprovantes desta única maquininha.</div></div>
       </div>
-    </div>
-    <v-expansion-panels v-if="cartoes.length" class="mt-3" variant="accordion">
-      <v-expansion-panel v-for="(anexo, indice) in cartoes" :key="anexo.id">
-        <v-expansion-panel-title>
-          <v-icon class="mr-2" icon="mdi-credit-card-outline" />
-          Relatório da maquininha {{ indice + 1 }}
-          <v-chip v-if="anexo.iaStatus === 'concluida'" class="ml-3" color="success" size="x-small">Lido</v-chip>
-          <v-chip v-else-if="anexo.iaStatus === 'processando'" class="ml-3" color="warning" size="x-small">Lendo</v-chip>
-          <v-chip v-else-if="anexo.iaStatus === 'falhou'" class="ml-3" color="warning" size="x-small">Revisar manualmente</v-chip>
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <v-alert v-if="anexo.iaStatus === 'falhou'" type="warning" density="compact" class="mb-3">
-            {{ anexo.iaErro || 'A foto segue válida como prova; preencha ou corrija os campos manualmente.' }}
-          </v-alert>
-          <v-alert v-else-if="anexo.iaStatus === 'processando'" type="info" density="compact" class="mb-3">
-            Lendo a foto da maquininha. Você pode aguardar ou preencher manualmente.
-          </v-alert>
-          <v-row v-if="relatorios[anexo.id]" dense>
-            <v-col cols="12" md="5">
-              <v-text-field v-model="relatorios[anexo.id]!.numeroMaquininha" label="Nº maquininha" />
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-select
-                v-model="relatorios[anexo.id]!.periodo"
-                :items="[
-                  { title: 'Não identificado', value: 'nao_identificado' },
-                  { title: 'Manhã', value: 'manha' },
-                  { title: 'Tarde', value: 'tarde' },
-                  { title: 'Noite', value: 'noite' }
-                ]"
-                label="Período"
-              />
-            </v-col>
-            <v-col cols="12" md="4"><v-text-field v-model="relatorios[anexo.id]!.dataEmissao" label="Data/hora lida" /></v-col>
-            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.credito" label="Crédito" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.debito" label="Débito" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.pix" label="Pix" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.voucher" label="Voucher" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.total" label="Total" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.trocaInicial" label="Troca inicial" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.saldoFinalDinheiro" label="Saldo final dinheiro" inputmode="decimal" prefix="R$" /></v-col>
-            <v-col cols="12" class="d-flex flex-wrap ga-2">
-              <v-btn
-                color="primary"
-                variant="outlined"
-                prepend-icon="mdi-content-save-outline"
-                :loading="salvandoRelatorioId === anexo.id"
-                @click="salvarRelatorio(anexo)"
-              >
-                Salvar dados lidos
-              </v-btn>
-              <v-btn
-                variant="text"
-                prepend-icon="mdi-refresh"
-                :loading="analisandoId === anexo.id"
-                @click="analisarComprovante(anexo)"
-              >
-                Ler foto com IA
-              </v-btn>
-            </v-col>
-          </v-row>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
-    <v-alert v-if="erro" type="error" density="compact" class="mt-2">{{ erro }}</v-alert>
+      <div class="d-flex flex-wrap ga-2 mt-3">
+        <v-btn color="info" variant="flat" prepend-icon="mdi-camera" :loading="enviando" :disabled="!caixaId" @click="abrirCamera('comprovante_cartao')">Tirar foto</v-btn>
+        <v-btn color="info" variant="outlined" prepend-icon="mdi-paperclip" :loading="enviando" :disabled="!caixaId" @click="cartaoArquivo?.click()">Anexar foto</v-btn>
+        <v-btn v-if="cartoes.length" color="info" variant="tonal" prepend-icon="mdi-auto-fix" :loading="analisando" @click="lerComIa">Ler fotos com IA</v-btn>
+      </div>
+      <input ref="cartaoArquivo" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar($event, 'comprovante_cartao')" />
+      <div v-if="cartoes.length" class="anexos-enviados mt-3">
+        <div v-for="anexo in cartoes" :key="anexo.id" class="anexo-miniatura">
+          <button v-if="ehImagem(anexo)" class="anexo-miniatura__foto" type="button" :disabled="!previas[anexo.id]" @click="anexoAmpliado = anexo"><img v-if="previas[anexo.id]" :src="previas[anexo.id]" :alt="`Prévia de ${anexo.nomeOriginal}`" /><v-icon v-else icon="mdi-image-outline" /></button>
+          <div v-else class="anexo-miniatura__arquivo"><v-icon icon="mdi-file-pdf-box" /></div>
+          <span class="anexo-miniatura__nome">{{ anexo.nomeOriginal }}</span>
+          <v-btn icon="mdi-close" size="x-small" variant="text" color="error" :loading="removendoId === anexo.id" @click="remover(anexo)" />
+        </div>
+      </div>
+      <v-alert v-if="sugestao" type="info" variant="tonal" class="mt-4">Leitura sugerida pronta. Revise os dados abaixo e clique em <strong>Usar sugestão</strong>; nada é salvo automaticamente.<template #append><v-btn size="small" variant="flat" color="info" @click="usarSugestao">Usar sugestão</v-btn></template></v-alert>
+      <v-row v-if="cartoes.length" class="mt-2" dense>
+        <v-col cols="12" md="4"><v-text-field v-model="relatorio.numeroMaquininha" label="Nº da maquininha" /></v-col>
+        <v-col cols="12" md="4"><v-text-field v-model="relatorio.dataEmissao" label="Data/hora lida" /></v-col>
+        <v-col cols="12" md="4"><v-checkbox v-model="relatorio.documentoLegivel" label="Documento legível" hide-details /></v-col>
+        <v-col v-for="campo in [['credito','Crédito'],['debito','Débito'],['pix','Pix'],['voucher','Voucher'],['total','Total'],['trocaInicial','Troca inicial'],['saldoFinalDinheiro','Saldo final em dinheiro']] as const" :key="campo[0]" cols="12" sm="6" md="3"><v-text-field v-model="relatorio[campo[0]]" :label="campo[1]" inputmode="decimal" prefix="R$" /></v-col>
+        <v-col cols="12"><v-btn color="info" variant="flat" prepend-icon="mdi-content-save" :loading="salvandoRelatorio" @click="salvarDadosRevisados">Salvar dados revisados</v-btn></v-col>
+      </v-row>
+    </v-sheet>
+    <v-alert v-if="erro" type="error" density="compact" class="mt-3">{{ erro }}</v-alert>
 
-    <v-dialog v-model="cameraAberta" max-width="720" persistent no-click-animation @after-leave="encerrarCamera">
-      <v-card>
-        <v-card-title class="d-flex align-center justify-space-between">
-          Tirar foto
-          <v-btn icon="mdi-close" variant="text" aria-label="Fechar câmera" @click="encerrarCamera" />
-        </v-card-title>
-        <v-card-text>
-          <video ref="videoCamera" class="camera-preview" autoplay playsinline muted aria-label="Prévia da câmera" />
-          <v-alert v-if="cameraErro" type="error" density="compact" class="mt-3">{{ cameraErro }}</v-alert>
-        </v-card-text>
-        <v-card-actions class="px-6 pb-5">
-          <v-spacer />
-          <v-btn variant="text" @click="encerrarCamera">Cancelar</v-btn>
-          <v-btn color="primary" prepend-icon="mdi-camera" :loading="enviando" @click="tirarFoto">Usar foto</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="dialogAnexoAmpliado" max-width="960" persistent no-click-animation>
-      <v-card v-if="anexoAmpliado">
-        <v-card-title class="d-flex align-center justify-space-between">
-          Visualizar foto
-          <v-btn icon="mdi-close" variant="text" aria-label="Fechar visualização" @click="anexoAmpliado = null" />
-        </v-card-title>
-        <v-card-text>
-          <img
-            v-if="urlPrevia(anexoAmpliado)"
-            class="anexo-ampliado"
-            :src="urlPrevia(anexoAmpliado)"
-            :alt="`Foto completa de ${anexoAmpliado.nomeOriginal}`"
-          />
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+    <v-dialog v-model="cameraAberta" persistent max-width="680"><v-card><v-card-title>Tirar foto</v-card-title><v-card-text><video ref="videoCamera" class="camera-video" autoplay playsinline /><v-alert v-if="cameraErro" type="error" density="compact" class="mt-2">{{ cameraErro }}</v-alert></v-card-text><v-card-actions><v-spacer /><v-btn @click="encerrarCamera">Cancelar</v-btn><v-btn color="primary" prepend-icon="mdi-camera" @click="tirarFoto">Usar foto</v-btn></v-card-actions></v-card></v-dialog>
+    <v-dialog v-model="dialogAnexoAmpliado" persistent max-width="900"><v-card><v-card-title class="d-flex">{{ anexoAmpliado?.nomeOriginal }}<v-spacer /><v-btn icon="mdi-close" variant="text" @click="anexoAmpliado = null" /></v-card-title><v-card-text><img v-if="anexoAmpliado && ehImagem(anexoAmpliado)" class="anexo-ampliado" :src="previas[anexoAmpliado.id]" :alt="anexoAmpliado.nomeOriginal" /></v-card-text></v-card></v-dialog>
   </section>
 </template>
 
 <style scoped>
-.camera-preview {
-  display: block;
-  width: 100%;
-  max-height: min(64vh, 520px);
-  background: rgb(var(--v-theme-surface-variant));
-  border-radius: 8px;
-  object-fit: contain;
-}
-
-.anexos-enviados {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.anexo-miniatura {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 120px) auto;
-  align-items: center;
-  gap: 6px;
-  max-width: 250px;
-  padding: 6px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 8px;
-}
-
-.anexo-miniatura__foto,
-.anexo-miniatura__arquivo {
-  display: grid;
-  width: 88px;
-  height: 64px;
-  place-items: center;
-  overflow: hidden;
-  border: 0;
-  border-radius: 5px;
-  background: rgba(var(--v-theme-on-surface), 0.08);
-}
-
-.anexo-miniatura__foto {
-  cursor: zoom-in;
-}
-
-.anexo-miniatura__foto:disabled {
-  cursor: wait;
-}
-
-.anexo-miniatura__foto img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.anexo-miniatura__nome {
-  overflow: hidden;
-  font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.anexo-ampliado {
-  display: block;
-  width: 100%;
-  max-height: 75vh;
-  object-fit: contain;
-}
+.relatorio-maquininha { border-color: rgb(var(--v-theme-info)) !important; background: rgba(var(--v-theme-info), 0.1); }
+.anexos-enviados { display: flex; flex-wrap: wrap; gap: 10px; }
+.anexo-miniatura { display: flex; align-items: center; gap: 8px; min-width: 180px; max-width: 290px; padding: 6px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
+.anexo-miniatura__foto, .anexo-miniatura__arquivo { width: 78px; height: 62px; flex: 0 0 auto; overflow: hidden; border: 0; border-radius: 5px; background: rgb(var(--v-theme-surface-variant)); cursor: pointer; }
+.anexo-miniatura__foto img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.anexo-miniatura__arquivo { display: grid; place-items: center; }
+.anexo-miniatura__nome { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
+.camera-video, .anexo-ampliado { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
 </style>

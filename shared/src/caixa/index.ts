@@ -87,7 +87,6 @@ const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable(
 export const relatorioMaquininhaIaSchema = z.object({
   documentoLegivel: z.boolean(),
   numeroMaquininha: z.string().trim().max(160).nullable(),
-  periodo: z.enum(["manha", "tarde", "noite", "nao_identificado"]).default("nao_identificado"),
   dataEmissao: z.string().trim().max(32).nullable(),
   credito: valorRelatorioMaquininhaSchema,
   debito: valorRelatorioMaquininhaSchema,
@@ -100,6 +99,10 @@ export const relatorioMaquininhaIaSchema = z.object({
   observacoes: z.array(z.string().trim().max(300)).max(20).default([])
 });
 export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
+
+export const salvarRelatorioMaquininhaSchema = relatorioMaquininhaIaSchema.extend({
+  anexosConsiderados: z.array(uuidSchema).min(1).max(12)
+});
 
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
 // aceito pela constraint do banco e existe no seed, mas NENHUM fluxo o escreve — o acerto de saldo
@@ -393,6 +396,7 @@ export const caixaOperacionalSchema = z.object({
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
+  turnoNome: z.string().nullable(),
   maquininhaId: uuidSchema.nullable(),
   maquininhaApelido: z.string().nullable(),
   maquininhaNumeroSerie: z.string().nullable(),

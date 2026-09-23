@@ -33,7 +33,6 @@ import { banco, executarEmTransacao, type ExecutorBanco, type TransacaoBanco } f
 import { ErroDominio } from "../erros.js";
 import {
   atualizarFechamentoCaixaRepository,
-  atualizarAnaliseAnexoFechamentoCaixaRepository,
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
@@ -50,6 +49,9 @@ import {
   criarConferenciaFisicaTransferenciaRepository,
   criarAnexoFechamentoCaixaRepository,
   buscarAnexoFechamentoCaixaRepository,
+  buscarRelatorioMaquininhaFechamentoRepository,
+  salvarRelatorioMaquininhaFechamentoRepository,
+  invalidarRelatorioMaquininhaFechamentoRepository,
   removerAnexoFechamentoCaixaRepository,
   existeFolhaFechamentoCaixaRepository,
   listarAnexosFechamentoCaixaRepository,
@@ -158,6 +160,7 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
+    turnoNome: caixa.turnoNome ?? null,
     maquininhaId: caixa.maquininhaId ?? null,
     maquininhaApelido: caixa.maquininhaApelido ?? null,
     maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
@@ -194,7 +197,7 @@ export async function salvarAnexoFechamentoCaixa(
     const absoluto = caminhoAbsolutoDocumento(salvo.caminhoRelativo);
     try {
       const dados = await readFile(absoluto);
-      return await criarAnexoFechamentoCaixaRepository(
+      const anexo = await criarAnexoFechamentoCaixaRepository(
         {
           empresaId: caixa.empresaId,
           fechamentoCaixaId: caixa.id,
@@ -209,6 +212,10 @@ export async function salvarAnexoFechamentoCaixa(
         },
         tx
       );
+      if (tipo === "comprovante_cartao") {
+        await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+      }
+      return anexo;
     } catch (error) {
       await unlink(absoluto).catch(() => undefined);
       throw error;
@@ -230,62 +237,71 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
 }
 
-function validarComprovanteCartaoParaIa(anexo: { tipo: string; mimeType: string }) {
-  if (anexo.tipo !== "comprovante_cartao") throw new Error("A IA só lê comprovantes de cartão");
-  if (!anexo.mimeType.startsWith("image/") && anexo.mimeType !== "application/pdf") {
-    throw new Error("Envie uma imagem ou PDF para a leitura do comprovante");
+function turnoDoRelatorio(caixa: CaixaLinha) {
+  return caixa.turnoNome?.trim() || "Turno não informado na abertura";
+}
+
+function validarComprovantesParaIa(anexos: Array<{ tipo: string; mimeType: string }>) {
+  if (!anexos.length) throw new Error("Anexe ao menos uma foto ou PDF da maquininha antes de ler.");
+  for (const anexo of anexos) {
+    if (anexo.tipo !== "comprovante_cartao") throw new Error("A IA só lê comprovantes de cartão");
+    if (!anexo.mimeType.startsWith("image/") && anexo.mimeType !== "application/pdf") {
+      throw new Error("Envie imagens ou PDFs para a leitura do comprovante");
+    }
   }
 }
 
-export async function analisarComprovanteCartaoFechamento(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
-  const contexto = await executarEmTransacao(async (tx) => {
+async function contextoRelatorioMaquininha(caixaId: string, perfil: PerfilUsuario) {
+  return executarEmTransacao(async (tx) => {
     if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
     const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
-    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
-    if (!anexo) throw new Error("Anexo nao encontrado");
-    validarComprovanteCartaoParaIa(anexo);
-    await atualizarAnaliseAnexoFechamentoCaixaRepository(
-      { fechamentoCaixaId: caixa.id, anexoId, empresaId: caixa.empresaId, status: "processando" },
-      tx
-    );
-    return { empresaId: caixa.empresaId, fechamentoCaixaId: caixa.id, anexo };
+    return { caixa, anexos: await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx) };
   });
-
-  try {
-    if (!env.GEMINI_API_KEY) throw new ErroDominio("A leitura por IA ainda não foi configurada.", 503, "IA_NAO_CONFIGURADA");
-    const dados = await readFile(caminhoAbsolutoDocumento(contexto.anexo.caminho));
-    const resultado = await extrairRelatorioMaquininhaComGemini(
-      { dados, mimeType: contexto.anexo.mimeType },
-      { chave: env.GEMINI_API_KEY, modelo: env.GEMINI_MODEL, timeoutMs: env.GEMINI_TIMEOUT_MS }
-    );
-    await atualizarAnaliseAnexoFechamentoCaixaRepository({
-      fechamentoCaixaId: contexto.fechamentoCaixaId,
-      anexoId,
-      empresaId: contexto.empresaId,
-      status: "concluida",
-      resultado
-    });
-    return { iaStatus: "concluida" as const, iaResultado: resultado, iaErro: null };
-  } catch (erro) {
-    const mensagem = erro instanceof Error ? erro.message : "A leitura do comprovante falhou.";
-    await atualizarAnaliseAnexoFechamentoCaixaRepository({
-      fechamentoCaixaId: contexto.fechamentoCaixaId,
-      anexoId,
-      empresaId: contexto.empresaId,
-      status: "falhou",
-      erro: mensagem.slice(0, 500)
-    });
-    return { iaStatus: "falhou" as const, iaResultado: null, iaErro: mensagem };
-  }
 }
 
-export async function atualizarRelatorioComprovanteCartaoFechamento(
+export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
+  const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
+  return {
+    turnoNome: relatorio?.turnoNome ?? turnoDoRelatorio(caixa),
+    relatorio: relatorio
+      ? {
+          dadosRevisados: relatorio.dadosRevisados,
+          criadoEm: serializarData(relatorio.criadoEm),
+          atualizadoEm: serializarData(relatorio.atualizadoEm)
+        }
+      : null
+  };
+}
+
+export async function analisarRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const { caixa, anexos } = await contextoRelatorioMaquininha(caixaId, perfil);
+  if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+  const comprovantes = anexos.filter((anexo) => anexo.tipo === "comprovante_cartao");
+  validarComprovantesParaIa(comprovantes);
+  if (!env.GEMINI_API_KEY) {
+    throw new ErroDominio("A leitura por IA ainda não foi configurada. As fotos continuam válidas como prova.", 503, "IA_NAO_CONFIGURADA");
+  }
+  const arquivos = await Promise.all(
+    comprovantes.map(async (anexo) => ({
+      dados: await readFile(caminhoAbsolutoDocumento(anexo.caminho)),
+      mimeType: anexo.mimeType
+    }))
+  );
+  const sugestao = await extrairRelatorioMaquininhaComGemini(arquivos, {
+    chave: env.GEMINI_API_KEY,
+    modelo: env.GEMINI_MODEL,
+    timeoutMs: env.GEMINI_TIMEOUT_MS
+  });
+  return { turnoNome: turnoDoRelatorio(caixa), sugestao, anexosConsiderados: comprovantes.map((anexo) => anexo.id) };
+}
+
+export async function salvarRelatorioMaquininhaFechamento(
   caixaId: string,
-  anexoId: string,
-  resultado: RelatorioMaquininhaIa,
+  dados: RelatorioMaquininhaIa,
+  anexosConsiderados: string[],
   perfil: PerfilUsuario
 ) {
   return executarEmTransacao(async (tx) => {
@@ -294,20 +310,31 @@ export async function atualizarRelatorioComprovanteCartaoFechamento(
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
-    const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
-    if (!anexo) throw new Error("Anexo nao encontrado");
-    validarComprovanteCartaoParaIa(anexo);
-    await atualizarAnaliseAnexoFechamentoCaixaRepository(
+    const comprovantes = (await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx)).filter(
+      (anexo) => anexo.tipo === "comprovante_cartao"
+    );
+    validarComprovantesParaIa(comprovantes);
+    const atuais = comprovantes.map((anexo) => anexo.id).sort();
+    const informados = [...new Set(anexosConsiderados)].sort();
+    if (atuais.length !== informados.length || atuais.some((id, indice) => id !== informados[indice])) {
+      throw new ErroDominio("As fotos da maquininha mudaram. Leia e revise novamente antes de salvar.", 409, "RELATORIO_DESATUALIZADO");
+    }
+    const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
       {
         fechamentoCaixaId: caixa.id,
-        anexoId,
         empresaId: caixa.empresaId,
-        status: "concluida",
-        resultado
+        turnoNome: turnoDoRelatorio(caixa),
+        dadosRevisados: dados,
+        criadoPor: perfil.usuarioId
       },
       tx
     );
-    return { iaStatus: "concluida" as const, iaResultado: resultado, iaErro: null };
+    return {
+      turnoNome: relatorio.turnoNome,
+      dadosRevisados: relatorio.dadosRevisados,
+      criadoEm: serializarData(relatorio.criadoEm),
+      atualizadoEm: serializarData(relatorio.atualizadoEm)
+    };
   });
 }
 
@@ -320,6 +347,9 @@ export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: stri
     if (caixa.status !== "aberto") throw new Error("Anexos so podem ser removidos antes do fechamento");
     const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
     if (!anexo) throw new Error("Anexo nao encontrado");
+    if (anexo.tipo === "comprovante_cartao") {
+      await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+    }
     return anexo;
   });
 

@@ -8,7 +8,6 @@ const schemaResposta = {
   properties: {
     documentoLegivel: { type: "boolean" },
     numeroMaquininha: { type: ["string", "null"] },
-    periodo: { type: "string", enum: ["manha", "tarde", "noite", "nao_identificado"] },
     dataEmissao: { type: ["string", "null"] },
     credito: { type: ["number", "null"] },
     debito: { type: ["number", "null"] },
@@ -23,7 +22,6 @@ const schemaResposta = {
   required: [
     "documentoLegivel",
     "numeroMaquininha",
-    "periodo",
     "dataEmissao",
     "credito",
     "debito",
@@ -37,11 +35,11 @@ const schemaResposta = {
   ]
 } as const;
 
-const prompt = `Leia um relatório resumido de maquininha/cartão brasileiro (foto ou PDF) para conferência de fechamento.
-Extraia somente texto e valores visíveis; nunca estime números apagados, cortados ou ilegíveis.
-Os campos são: número/série da maquininha, período do relatório, data de emissão, crédito, débito, Pix, voucher, total, troca inicial e saldo final em dinheiro.
+const prompt = `Leia um relatório resumido de maquininha/cartão brasileiro para conferência de fechamento.
+Todas as fotos ou PDFs enviados pertencem ao MESMO relatório da mesma maquininha. Combine apenas dados que estejam visíveis entre eles; nunca some valores de fotos diferentes nem estime números apagados, cortados ou ilegíveis.
+Os campos são: número/série da maquininha, data de emissão, crédito, débito, Pix, voucher, total, troca inicial e saldo final em dinheiro.
 Use valores numéricos sem R$, ponto de milhar ou vírgula. Quando não estiver visível, use null.
-Período: use manha, tarde ou noite apenas se estiver escrito ou for inequivocamente definido pelo intervalo do próprio relatório; caso contrário use nao_identificado.
+O período do turno é definido pela abertura do caixa e não deve ser extraído.
 Se não for um relatório de maquininha legível, documentoLegivel=false, todos os valores null e explique em observacoes.
 Liste em camposDuvidosos todos os campos ilegíveis ou ambíguos. Não escreva nada fora do JSON.`;
 
@@ -52,10 +50,11 @@ function falha(mensagem: string, status = 502, codigo = "IA_INDISPONIVEL"): neve
 }
 
 export async function extrairRelatorioMaquininhaComGemini(
-  arquivo: { dados: Buffer; mimeType: string },
+  arquivos: Array<{ dados: Buffer; mimeType: string }>,
   config: ConfigGeminiMaquininha,
   fetchImpl: typeof fetch = fetch
 ): Promise<RelatorioMaquininhaIa> {
+  if (!arquivos.length) return falha("Envie ao menos uma foto ou PDF do relatório da maquininha.", 400, "IA_SEM_ANEXO");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
@@ -66,7 +65,17 @@ export async function extrairRelatorioMaquininhaComGemini(
         headers: { "content-type": "application/json", "x-goog-api-key": config.chave },
         signal: controller.signal,
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: arquivo.mimeType, data: arquivo.dados.toString("base64") } }] }],
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: prompt },
+                ...arquivos.map((arquivo) => ({
+                  inlineData: { mimeType: arquivo.mimeType, data: arquivo.dados.toString("base64") }
+                }))
+              ]
+            }
+          ],
           generationConfig: { temperature: 0, responseMimeType: "application/json", responseJsonSchema: schemaResposta }
         })
       }

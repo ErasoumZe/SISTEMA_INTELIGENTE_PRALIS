@@ -6,6 +6,7 @@ export {
   edicoesCaixa,
   fechamentosCaixa,
   fechamentosCaixaAnexos,
+  fechamentosCaixaRelatoriosMaquininha,
   notificacoes,
   quebrasCaixa,
   transferenciasConferenciasFisicas

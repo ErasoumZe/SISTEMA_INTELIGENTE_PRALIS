@@ -29,14 +29,15 @@ const totalContado = computed(() => props.valorEspecie + props.valorMoedas);
 const diferenca = computed(() => totalContado.value - props.saldoEsperado);
 const folhas = computed(() => props.anexos.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoes = computed(() => props.anexos.filter((anexo) => anexo.tipo === "comprovante_cartao"));
+const relatorioMaquininha = computed(() => cartoes.value.find((anexo) => anexo.relatorio)?.relatorio ?? null);
 
-function campoRelatorio(anexo: AnexoFechamento, campo: string) {
-  const dados = anexo.relatorio;
+function campoRelatorio(campo: string) {
+  const dados = relatorioMaquininha.value;
   return dados && typeof dados === "object" ? (dados as Record<string, unknown>)[campo] : null;
 }
 
-function dinheiroRelatorio(anexo: AnexoFechamento, campo: string) {
-  const valor = campoRelatorio(anexo, campo);
+function dinheiroRelatorio(campo: string) {
+  const valor = campoRelatorio(campo);
   return typeof valor === "number" && Number.isFinite(valor) ? dinheiro(valor) : "não informado";
 }
 </script>
@@ -94,15 +95,14 @@ function dinheiroRelatorio(anexo: AnexoFechamento, campo: string) {
             {{ anexo.nomeOriginal }}
           </v-chip>
         </v-chip-group>
-        <v-list v-if="cartoes.length" density="compact" class="mt-2">
-          <v-list-subheader>Dados dos comprovantes de cartão</v-list-subheader>
-          <v-list-item v-for="(cartao, indice) in cartoes" :key="cartao.id" prepend-icon="mdi-credit-card-outline">
+        <v-list v-if="relatorioMaquininha" density="compact" class="mt-2">
+          <v-list-subheader>Relatório único da maquininha</v-list-subheader>
+          <v-list-item prepend-icon="mdi-credit-card-outline">
             <v-list-item-title>
-              Comprovante {{ indice + 1 }}{{ campoRelatorio(cartao, 'numeroMaquininha') ? ` · Máquina ${campoRelatorio(cartao, 'numeroMaquininha')}` : '' }}
+              {{ campoRelatorio('numeroMaquininha') ? `Máquina ${campoRelatorio('numeroMaquininha')}` : 'Máquina não identificada' }} · {{ cartoes.length }} foto(s)
             </v-list-item-title>
             <v-list-item-subtitle>
-              Crédito {{ dinheiroRelatorio(cartao, 'credito') }} · Débito {{ dinheiroRelatorio(cartao, 'debito') }} ·
-              Pix {{ dinheiroRelatorio(cartao, 'pix') }} · Voucher {{ dinheiroRelatorio(cartao, 'voucher') }}
+              Crédito {{ dinheiroRelatorio('credito') }} · Débito {{ dinheiroRelatorio('debito') }} · Pix {{ dinheiroRelatorio('pix') }} · Voucher {{ dinheiroRelatorio('voucher') }}
             </v-list-item-subtitle>
           </v-list-item>
         </v-list>

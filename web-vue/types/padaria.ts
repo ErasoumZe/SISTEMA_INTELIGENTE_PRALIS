@@ -284,6 +284,7 @@ export type CaixaOperacional = {
   fechadoEm: string | null;
   tokenEdicao: string | null;
   turnoId: string | null;
+  turnoNome: string | null;
   maquininhaId: string | null;
   maquininhaApelido: string | null;
   maquininhaNumeroSerie: string | null;

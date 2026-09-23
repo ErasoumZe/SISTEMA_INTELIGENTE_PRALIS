@@ -37,6 +37,7 @@ import {
   debitosColaboradores,
   edicoesCaixa,
   fechamentosCaixaAnexos,
+  fechamentosCaixaRelatoriosMaquininha,
   fechamentosCaixa,
   quebrasCaixa,
   transferenciasConferenciasFisicas
@@ -155,6 +156,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      turnoNome: turnos.nome,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -168,6 +170,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
     .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
@@ -200,6 +203,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      turnoNome: turnos.nome,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
@@ -213,6 +217,7 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
     .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(eq(fechamentosCaixa.id, caixaId))
     .limit(1);
   return caixa ?? null;
@@ -1418,34 +1423,74 @@ export async function buscarAnexoFechamentoCaixaRepository(
   return anexo ?? null;
 }
 
-export async function atualizarAnaliseAnexoFechamentoCaixaRepository(
+export async function buscarRelatorioMaquininhaFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .select({
+      turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
+      criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
+      atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
+    })
+    .from(fechamentosCaixaRelatoriosMaquininha)
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosMaquininha.empresaId, empresaId)
+      )
+    )
+    .limit(1);
+  return relatorio ?? null;
+}
+
+export async function salvarRelatorioMaquininhaFechamentoRepository(
   input: {
     fechamentoCaixaId: string;
-    anexoId: string;
     empresaId: string;
-    status: "processando" | "concluida" | "falhou";
-    resultado?: Record<string, unknown> | null;
-    erro?: string | null;
+    turnoNome: string;
+    dadosRevisados: Record<string, unknown>;
+    criadoPor: string;
   },
   db: ExecutorBanco = banco
 ) {
-  const [anexo] = await db
-    .update(fechamentosCaixaAnexos)
-    .set({
-      iaStatus: input.status,
-      iaResultado: input.resultado ?? null,
-      iaErro: input.erro ?? null,
-      iaAnalisadoEm: new Date()
+  const [relatorio] = await db
+    .insert(fechamentosCaixaRelatoriosMaquininha)
+    .values(input)
+    .onConflictDoUpdate({
+      target: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
+      set: {
+        turnoNome: input.turnoNome,
+        dadosRevisados: input.dadosRevisados,
+        criadoPor: input.criadoPor,
+        atualizadoEm: new Date()
+      }
     })
+    .returning({
+      turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
+      criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
+      atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
+    });
+  if (!relatorio) throw new Error("Relatorio da maquininha nao salvo");
+  return relatorio;
+}
+
+export async function invalidarRelatorioMaquininhaFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  await db
+    .delete(fechamentosCaixaRelatoriosMaquininha)
     .where(
       and(
-        eq(fechamentosCaixaAnexos.id, input.anexoId),
-        eq(fechamentosCaixaAnexos.fechamentoCaixaId, input.fechamentoCaixaId),
-        eq(fechamentosCaixaAnexos.empresaId, input.empresaId)
+        eq(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosMaquininha.empresaId, empresaId)
       )
-    )
-    .returning({ id: fechamentosCaixaAnexos.id });
-  return anexo ?? null;
+    );
 }
 
 // A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira
@@ -1465,7 +1510,7 @@ export async function removerAnexoFechamentoCaixaRepository(
         eq(fechamentosCaixaAnexos.empresaId, empresaId)
       )
     )
-    .returning({ caminho: fechamentosCaixaAnexos.caminho });
+    .returning({ caminho: fechamentosCaixaAnexos.caminho, tipo: fechamentosCaixaAnexos.tipo });
   return anexo ?? null;
 }
 

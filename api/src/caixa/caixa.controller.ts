@@ -11,7 +11,7 @@ import {
   planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
   historicoCaixaQuerySchema,
-  relatorioMaquininhaIaSchema,
+  salvarRelatorioMaquininhaSchema,
   transferenciaCofrePayloadSchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
@@ -33,8 +33,9 @@ import {
   listarConferenciasFisicasCaixa,
   removerAnexoFechamentoCaixa,
   salvarAnexoFechamentoCaixa,
-  analisarComprovanteCartaoFechamento,
-  atualizarRelatorioComprovanteCartaoFechamento
+  analisarRelatorioMaquininhaFechamento,
+  obterRelatorioMaquininhaFechamento,
+  salvarRelatorioMaquininhaFechamento
 } from "./caixa.service.js";
 
 function statusErro(mensagem: string) {
@@ -191,14 +192,27 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post(
-    "/api/caixa/:caixaId/anexos/:anexoId/analisar-comprovante",
+  app.get(
+    "/api/caixa/:caixaId/relatorio-maquininha",
     { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
-      const anexoId = z.string().uuid().parse((request.params as { anexoId?: string }).anexoId);
       try {
-        return ok(await analisarComprovanteCartaoFechamento(caixaId, anexoId, request.perfilUsuario!));
+        return ok(await obterRelatorioMaquininhaFechamento(caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.post(
+    "/api/caixa/:caixaId/relatorio-maquininha/analisar",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await analisarRelatorioMaquininhaFechamento(caixaId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);
@@ -207,14 +221,13 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
   );
 
   app.put(
-    "/api/caixa/:caixaId/anexos/:anexoId/relatorio-maquininha",
+    "/api/caixa/:caixaId/relatorio-maquininha",
     { preHandler: exigirPermissao("caixa_operar") },
     async (request, reply) => {
       const { caixaId } = caixaParamsSchema.parse(request.params);
-      const anexoId = z.string().uuid().parse((request.params as { anexoId?: string }).anexoId);
-      const resultado = relatorioMaquininhaIaSchema.parse(request.body);
+      const { anexosConsiderados, ...dados } = salvarRelatorioMaquininhaSchema.parse(request.body);
       try {
-        return ok(await atualizarRelatorioComprovanteCartaoFechamento(caixaId, anexoId, resultado, request.perfilUsuario!));
+        return ok(await salvarRelatorioMaquininhaFechamento(caixaId, dados, anexosConsiderados, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

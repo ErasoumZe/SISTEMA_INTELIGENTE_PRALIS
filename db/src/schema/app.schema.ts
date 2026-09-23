@@ -1997,6 +1997,35 @@ export const fechamentosCaixaAnexos = pgTable(
   ]
 );
 
+// R-208: um fechamento tem UM relatorio revisado da maquininha. As fotos permanecem em
+// `fechamentos_caixa_anexos` como provas multiplas; atrelar o relatorio a uma foto faria a
+// informacao desaparecer ou ficar errada quando o operador corrigisse uma das imagens.
+export const fechamentosCaixaRelatoriosMaquininha = pgTable(
+  "fechamentos_caixa_relatorios_maquininha",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    // Retrato do turno que abriu o caixa. O servidor o preenche; a IA nunca decide esse periodo.
+    turnoNome: text("turno_nome").notNull(),
+    dadosRevisados: jsonb("dados_revisados").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_relatorios_maquininha_fechamento_empresa_fk"
+    }).onDelete("restrict"),
+    unique("fechamentos_caixa_relatorios_maquininha_fechamento_unico").on(table.fechamentoCaixaId),
+    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
 export const transferenciasDestinosCandidatos = pgTable(
   "transferencias_destinos_candidatos",
   {
