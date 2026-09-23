@@ -41,6 +41,9 @@ export type FechamentoPayload = {
   supervisorResponsavelNome: string;
   valorEspecieFechamento: number;
   valorMoedasFechamento: number;
+  // A tela do Caixa possui uma revisão própria com todos os campos e anexos. Este marcador evita
+  // um segundo popup genérico depois que a operadora já confirmou o retrato completo.
+  confirmadoPelaRevisao?: true;
 };
 // B2: `idempotenciaChave` e da INTENCAO, nao da requisicao. Quem a gera e a tela (uma vez, e a
 // conserva no retry); aqui ela so trafega. Sem ela o servidor nao tem como distinguir "entregar
@@ -142,6 +145,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
 
   async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<boolean> {
     if (
+      !payload.confirmadoPelaRevisao &&
       !(await deps.confirmar(
         "Confirma o fechamento deste caixa? Se ainda houver dinheiro físico, o retorno ao Cofre será registrado no mesmo ato.",
         "Fechar caixa",

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 const props = defineProps<{ caixaId: string | null }>();
-const emit = defineEmits<{ (event: "folha-enviada", valor: boolean): void }>();
+const emit = defineEmits<{
+  (event: "folha-enviada", valor: boolean): void;
+  (
+    event: "anexos-atualizados",
+    anexos: Array<{
+      id: string;
+      tipo: "folha_fechamento" | "comprovante_cartao";
+      nomeOriginal: string;
+      relatorio: unknown;
+    }>
+  ): void;
+}>();
 const { apiUrl, apiGet } = useApi();
 const enviando = ref(false);
 const erro = ref("");
@@ -9,12 +20,33 @@ type Anexo = {
   tipo: "folha_fechamento" | "comprovante_cartao";
   nomeOriginal: string;
   mimeType: string;
+  iaStatus?: "desativada" | "processando" | "concluida" | "falhou";
+  iaResultado?: unknown;
+  iaErro?: string | null;
+};
+type RelatorioMaquininhaFormulario = {
+  documentoLegivel: boolean;
+  numeroMaquininha: string;
+  periodo: "manha" | "tarde" | "noite" | "nao_identificado";
+  dataEmissao: string;
+  credito: string;
+  debito: string;
+  pix: string;
+  voucher: string;
+  total: string;
+  trocaInicial: string;
+  saldoFinalDinheiro: string;
+  camposDuvidosos: string[];
+  observacoes: string[];
 };
 type TipoAnexo = Anexo["tipo"];
 const anexos = ref<Anexo[]>([]);
 const previas = ref<Record<string, string>>({});
 const anexoAmpliado = ref<Anexo | null>(null);
 const removendoId = ref<string | null>(null);
+const analisandoId = ref<string | null>(null);
+const salvandoRelatorioId = ref<string | null>(null);
+const relatorios = ref<Record<string, RelatorioMaquininhaFormulario>>({});
 const folhaArquivo = useTemplateRef<HTMLInputElement>("folhaArquivo");
 const cartaoArquivo = useTemplateRef<HTMLInputElement>("cartaoArquivo");
 const videoCamera = useTemplateRef<HTMLVideoElement>("videoCamera");
@@ -34,6 +66,44 @@ const dialogAnexoAmpliado = computed({
 
 function ehImagem(anexo: Anexo) {
   return anexo.mimeType.startsWith("image/");
+}
+
+function texto(valor: unknown) {
+  return typeof valor === "string" ? valor : "";
+}
+
+function valor(valor: unknown) {
+  return typeof valor === "number" && Number.isFinite(valor) ? String(valor) : "";
+}
+
+function relatorioFormulario(resultado: unknown): RelatorioMaquininhaFormulario {
+  const dados = resultado && typeof resultado === "object" ? (resultado as Record<string, unknown>) : {};
+  const periodo = dados.periodo;
+  return {
+    documentoLegivel: dados.documentoLegivel === true,
+    numeroMaquininha: texto(dados.numeroMaquininha),
+    periodo: periodo === "manha" || periodo === "tarde" || periodo === "noite" ? periodo : "nao_identificado",
+    dataEmissao: texto(dados.dataEmissao),
+    credito: valor(dados.credito),
+    debito: valor(dados.debito),
+    pix: valor(dados.pix),
+    voucher: valor(dados.voucher),
+    total: valor(dados.total),
+    trocaInicial: valor(dados.trocaInicial),
+    saldoFinalDinheiro: valor(dados.saldoFinalDinheiro),
+    camposDuvidosos: Array.isArray(dados.camposDuvidosos) ? dados.camposDuvidosos.filter((item): item is string => typeof item === "string") : [],
+    observacoes: Array.isArray(dados.observacoes) ? dados.observacoes.filter((item): item is string => typeof item === "string") : []
+  };
+}
+
+function sincronizarRelatorios(lista: Anexo[]) {
+  const ativos = new Set(lista.filter((anexo) => anexo.tipo === "comprovante_cartao").map((anexo) => anexo.id));
+  const proximos: Record<string, RelatorioMaquininhaFormulario> = {};
+  for (const anexo of lista.filter((item) => item.tipo === "comprovante_cartao")) {
+    proximos[anexo.id] = relatorios.value[anexo.id] ?? relatorioFormulario(anexo.iaResultado);
+  }
+  for (const id of Object.keys(proximos)) if (!ativos.has(id)) delete proximos[id];
+  relatorios.value = proximos;
 }
 
 function urlPrevia(anexo: Anexo) {
@@ -80,14 +150,88 @@ async function carregar() {
   if (!props.caixaId) {
     anexos.value = [];
     emit("folha-enviada", false);
+    emit("anexos-atualizados", []);
     return;
   }
   try {
     anexos.value = (await apiGet<Anexo[]>(`/api/caixa/${props.caixaId}/anexos`)) ?? [];
+    sincronizarRelatorios(anexos.value);
     await carregarPrevias(anexos.value);
     emit("folha-enviada", folhas.value.length > 0);
+    emit(
+      "anexos-atualizados",
+      anexos.value.map(({ id, tipo, nomeOriginal, iaResultado }) => ({ id, tipo, nomeOriginal, relatorio: iaResultado }))
+    );
   } catch (falha) {
     erro.value = falha instanceof Error ? falha.message : "Nao foi possivel carregar os anexos.";
+  }
+}
+
+function numeroOuNulo(valor: string) {
+  const numero = Number(valor.replace(",", "."));
+  return valor.trim() && Number.isFinite(numero) && numero >= 0 ? numero : null;
+}
+
+function payloadRelatorio(anexoId: string) {
+  const relatorio = relatorios.value[anexoId] ?? relatorioFormulario(null);
+  return {
+    documentoLegivel: relatorio.documentoLegivel,
+    numeroMaquininha: relatorio.numeroMaquininha.trim() || null,
+    periodo: relatorio.periodo,
+    dataEmissao: relatorio.dataEmissao.trim() || null,
+    credito: numeroOuNulo(relatorio.credito),
+    debito: numeroOuNulo(relatorio.debito),
+    pix: numeroOuNulo(relatorio.pix),
+    voucher: numeroOuNulo(relatorio.voucher),
+    total: numeroOuNulo(relatorio.total),
+    trocaInicial: numeroOuNulo(relatorio.trocaInicial),
+    saldoFinalDinheiro: numeroOuNulo(relatorio.saldoFinalDinheiro),
+    camposDuvidosos: relatorio.camposDuvidosos,
+    observacoes: relatorio.observacoes
+  };
+}
+
+async function analisarComprovante(anexo: Anexo) {
+  if (!props.caixaId || analisandoId.value) return;
+  analisandoId.value = anexo.id;
+  erro.value = "";
+  try {
+    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}/analisar-comprovante`, {
+      method: "POST",
+      credentials: "include"
+    });
+    if (!resposta.ok) {
+      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
+      throw new Error(falha?.title ?? "Não foi possível ler o comprovante.");
+    }
+    await carregar();
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível ler o comprovante.";
+  } finally {
+    analisandoId.value = null;
+  }
+}
+
+async function salvarRelatorio(anexo: Anexo) {
+  if (!props.caixaId || salvandoRelatorioId.value) return;
+  salvandoRelatorioId.value = anexo.id;
+  erro.value = "";
+  try {
+    const resposta = await fetch(`${apiUrl}/api/caixa/${props.caixaId}/anexos/${anexo.id}/relatorio-maquininha`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payloadRelatorio(anexo.id))
+    });
+    if (!resposta.ok) {
+      const falha = (await resposta.json().catch(() => null)) as { title?: string } | null;
+      throw new Error(falha?.title ?? "Não foi possível salvar o relatório da maquininha.");
+    }
+    await carregar();
+  } catch (falha) {
+    erro.value = falha instanceof Error ? falha.message : "Não foi possível salvar o relatório da maquininha.";
+  } finally {
+    salvandoRelatorioId.value = null;
   }
 }
 
@@ -138,6 +282,10 @@ async function enviarArquivo(arquivo: File, tipo: TipoAnexo): Promise<boolean> {
       throw new Error(falha?.title ?? "Nao foi possivel enviar o anexo.");
     }
     await carregar();
+    if (tipo === "comprovante_cartao") {
+      const novo = anexos.value.find((anexo) => anexo.tipo === "comprovante_cartao" && anexo.iaStatus === "desativada");
+      if (novo) void analisarComprovante(novo);
+    }
     return true;
   } catch (falha) {
     erro.value = falha instanceof Error ? falha.message : "Nao foi possivel enviar o anexo.";
@@ -332,6 +480,69 @@ onBeforeUnmount(() => {
         />
       </div>
     </div>
+    <v-expansion-panels v-if="cartoes.length" class="mt-3" variant="accordion">
+      <v-expansion-panel v-for="(anexo, indice) in cartoes" :key="anexo.id">
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" icon="mdi-credit-card-outline" />
+          Relatório da maquininha {{ indice + 1 }}
+          <v-chip v-if="anexo.iaStatus === 'concluida'" class="ml-3" color="success" size="x-small">Lido</v-chip>
+          <v-chip v-else-if="anexo.iaStatus === 'processando'" class="ml-3" color="warning" size="x-small">Lendo</v-chip>
+          <v-chip v-else-if="anexo.iaStatus === 'falhou'" class="ml-3" color="warning" size="x-small">Revisar manualmente</v-chip>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-alert v-if="anexo.iaStatus === 'falhou'" type="warning" density="compact" class="mb-3">
+            {{ anexo.iaErro || 'A foto segue válida como prova; preencha ou corrija os campos manualmente.' }}
+          </v-alert>
+          <v-alert v-else-if="anexo.iaStatus === 'processando'" type="info" density="compact" class="mb-3">
+            Lendo a foto da maquininha. Você pode aguardar ou preencher manualmente.
+          </v-alert>
+          <v-row v-if="relatorios[anexo.id]" dense>
+            <v-col cols="12" md="5">
+              <v-text-field v-model="relatorios[anexo.id]!.numeroMaquininha" label="Nº maquininha" />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-select
+                v-model="relatorios[anexo.id]!.periodo"
+                :items="[
+                  { title: 'Não identificado', value: 'nao_identificado' },
+                  { title: 'Manhã', value: 'manha' },
+                  { title: 'Tarde', value: 'tarde' },
+                  { title: 'Noite', value: 'noite' }
+                ]"
+                label="Período"
+              />
+            </v-col>
+            <v-col cols="12" md="4"><v-text-field v-model="relatorios[anexo.id]!.dataEmissao" label="Data/hora lida" /></v-col>
+            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.credito" label="Crédito" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.debito" label="Débito" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.pix" label="Pix" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="3"><v-text-field v-model="relatorios[anexo.id]!.voucher" label="Voucher" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.total" label="Total" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.trocaInicial" label="Troca inicial" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" sm="6" md="4"><v-text-field v-model="relatorios[anexo.id]!.saldoFinalDinheiro" label="Saldo final dinheiro" inputmode="decimal" prefix="R$" /></v-col>
+            <v-col cols="12" class="d-flex flex-wrap ga-2">
+              <v-btn
+                color="primary"
+                variant="outlined"
+                prepend-icon="mdi-content-save-outline"
+                :loading="salvandoRelatorioId === anexo.id"
+                @click="salvarRelatorio(anexo)"
+              >
+                Salvar dados lidos
+              </v-btn>
+              <v-btn
+                variant="text"
+                prepend-icon="mdi-refresh"
+                :loading="analisandoId === anexo.id"
+                @click="analisarComprovante(anexo)"
+              >
+                Ler foto com IA
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
     <v-alert v-if="erro" type="error" density="compact" class="mt-2">{{ erro }}</v-alert>
 
     <v-dialog v-model="cameraAberta" max-width="720" persistent no-click-animation @after-leave="encerrarCamera">

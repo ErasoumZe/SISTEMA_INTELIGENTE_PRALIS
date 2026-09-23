@@ -11,6 +11,7 @@ import {
   planejamentoRetornoParamsSchema,
   fecharCaixaPayloadSchema,
   historicoCaixaQuerySchema,
+  relatorioMaquininhaIaSchema,
   transferenciaCofrePayloadSchema
 } from "@padaria/shared/caixa";
 import { exigirAlgumaPermissao, exigirPermissao } from "../auth/guards.js";
@@ -31,7 +32,9 @@ import {
   listarAnexosFechamentoCaixa,
   listarConferenciasFisicasCaixa,
   removerAnexoFechamentoCaixa,
-  salvarAnexoFechamentoCaixa
+  salvarAnexoFechamentoCaixa,
+  analisarComprovanteCartaoFechamento,
+  atualizarRelatorioComprovanteCartaoFechamento
 } from "./caixa.service.js";
 
 function statusErro(mensagem: string) {
@@ -187,6 +190,37 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
+
+  app.post(
+    "/api/caixa/:caixaId/anexos/:anexoId/analisar-comprovante",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const anexoId = z.string().uuid().parse((request.params as { anexoId?: string }).anexoId);
+      try {
+        return ok(await analisarComprovanteCartaoFechamento(caixaId, anexoId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.put(
+    "/api/caixa/:caixaId/anexos/:anexoId/relatorio-maquininha",
+    { preHandler: exigirPermissao("caixa_operar") },
+    async (request, reply) => {
+      const { caixaId } = caixaParamsSchema.parse(request.params);
+      const anexoId = z.string().uuid().parse((request.params as { anexoId?: string }).anexoId);
+      const resultado = relatorioMaquininhaIaSchema.parse(request.body);
+      try {
+        return ok(await atualizarRelatorioComprovanteCartaoFechamento(caixaId, anexoId, resultado, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 
   app.get(
     "/api/caixa/:caixaId/planejamentos-retorno",

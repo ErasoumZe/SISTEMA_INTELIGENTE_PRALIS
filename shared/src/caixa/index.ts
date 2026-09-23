@@ -81,6 +81,26 @@ export const fecharCaixaPayloadSchema = z.object({
   valorMoedasFechamento: z.coerce.number().nonnegative()
 });
 
+// Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
+// no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
+const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable();
+export const relatorioMaquininhaIaSchema = z.object({
+  documentoLegivel: z.boolean(),
+  numeroMaquininha: z.string().trim().max(160).nullable(),
+  periodo: z.enum(["manha", "tarde", "noite", "nao_identificado"]).default("nao_identificado"),
+  dataEmissao: z.string().trim().max(32).nullable(),
+  credito: valorRelatorioMaquininhaSchema,
+  debito: valorRelatorioMaquininhaSchema,
+  pix: valorRelatorioMaquininhaSchema,
+  voucher: valorRelatorioMaquininhaSchema,
+  total: valorRelatorioMaquininhaSchema,
+  trocaInicial: valorRelatorioMaquininhaSchema,
+  saldoFinalDinheiro: valorRelatorioMaquininhaSchema,
+  camposDuvidosos: z.array(z.string().trim().max(100)).max(30).default([]),
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+});
+export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
+
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
 // aceito pela constraint do banco e existe no seed, mas NENHUM fluxo o escreve — o acerto de saldo
 // cria despesa/debito/ajuste e mantem o caixa aberto. Quem quer "houve acerto" usa temAjuste.
@@ -338,6 +358,8 @@ export const transferenciaCaixaLinhaSchema = z.object({
   tipo: z.enum(["abertura", "suprimento", "sangria", "retorno"]),
   ordem: z.number().nullable(),
   valor: z.number(),
+  valorEspecie: z.number().nullable(),
+  valorMoedas: z.number().nullable(),
   sentido: z.enum(["saida", "entrada"]),
   lacre: z.string().nullable(),
   dataTransferencia: z.string().nullable()

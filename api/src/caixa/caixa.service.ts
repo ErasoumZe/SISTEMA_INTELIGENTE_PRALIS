@@ -16,6 +16,7 @@ import type {
   HistoricoCaixaQuery,
   LinhaHistoricoCaixa,
   PlanejamentoRetorno,
+  RelatorioMaquininhaIa,
   ResumoCaixa,
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
@@ -32,6 +33,7 @@ import { banco, executarEmTransacao, type ExecutorBanco, type TransacaoBanco } f
 import { ErroDominio } from "../erros.js";
 import {
   atualizarFechamentoCaixaRepository,
+  atualizarAnaliseAnexoFechamentoCaixaRepository,
   buscarCaixaAbertoUsuarioRepository,
   buscarCaixaPorIdRepository,
   buscarColaboradorPorUsuarioRepository,
@@ -94,6 +96,8 @@ import { criarNotificacoesRepository } from "../notificacoes/notificacoes.reposi
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 import { caminhoAbsolutoDocumento, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
+import { env } from "../env.js";
+import { extrairRelatorioMaquininhaComGemini } from "./gemini-relatorio-maquininha.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
@@ -224,6 +228,87 @@ export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: Perfi
   // limitada ao caixa dele; Tesouraria e Gerência podem auditar qualquer caixa permitido.
   if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
   return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
+}
+
+function validarComprovanteCartaoParaIa(anexo: { tipo: string; mimeType: string }) {
+  if (anexo.tipo !== "comprovante_cartao") throw new Error("A IA só lê comprovantes de cartão");
+  if (!anexo.mimeType.startsWith("image/") && anexo.mimeType !== "application/pdf") {
+    throw new Error("Envie uma imagem ou PDF para a leitura do comprovante");
+  }
+}
+
+export async function analisarComprovanteCartaoFechamento(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
+  const contexto = await executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!anexo) throw new Error("Anexo nao encontrado");
+    validarComprovanteCartaoParaIa(anexo);
+    await atualizarAnaliseAnexoFechamentoCaixaRepository(
+      { fechamentoCaixaId: caixa.id, anexoId, empresaId: caixa.empresaId, status: "processando" },
+      tx
+    );
+    return { empresaId: caixa.empresaId, fechamentoCaixaId: caixa.id, anexo };
+  });
+
+  try {
+    if (!env.GEMINI_API_KEY) throw new ErroDominio("A leitura por IA ainda não foi configurada.", 503, "IA_NAO_CONFIGURADA");
+    const dados = await readFile(caminhoAbsolutoDocumento(contexto.anexo.caminho));
+    const resultado = await extrairRelatorioMaquininhaComGemini(
+      { dados, mimeType: contexto.anexo.mimeType },
+      { chave: env.GEMINI_API_KEY, modelo: env.GEMINI_MODEL, timeoutMs: env.GEMINI_TIMEOUT_MS }
+    );
+    await atualizarAnaliseAnexoFechamentoCaixaRepository({
+      fechamentoCaixaId: contexto.fechamentoCaixaId,
+      anexoId,
+      empresaId: contexto.empresaId,
+      status: "concluida",
+      resultado
+    });
+    return { iaStatus: "concluida" as const, iaResultado: resultado, iaErro: null };
+  } catch (erro) {
+    const mensagem = erro instanceof Error ? erro.message : "A leitura do comprovante falhou.";
+    await atualizarAnaliseAnexoFechamentoCaixaRepository({
+      fechamentoCaixaId: contexto.fechamentoCaixaId,
+      anexoId,
+      empresaId: contexto.empresaId,
+      status: "falhou",
+      erro: mensagem.slice(0, 500)
+    });
+    return { iaStatus: "falhou" as const, iaResultado: null, iaErro: mensagem };
+  }
+}
+
+export async function atualizarRelatorioComprovanteCartaoFechamento(
+  caixaId: string,
+  anexoId: string,
+  resultado: RelatorioMaquininhaIa,
+  perfil: PerfilUsuario
+) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!anexo) throw new Error("Anexo nao encontrado");
+    validarComprovanteCartaoParaIa(anexo);
+    await atualizarAnaliseAnexoFechamentoCaixaRepository(
+      {
+        fechamentoCaixaId: caixa.id,
+        anexoId,
+        empresaId: caixa.empresaId,
+        status: "concluida",
+        resultado
+      },
+      tx
+    );
+    return { iaStatus: "concluida" as const, iaResultado: resultado, iaErro: null };
+  });
 }
 
 export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
@@ -1126,7 +1211,8 @@ export async function criarTransferenciaCofreCaixa(
         valorEspecieCentavos: paraCentavos(dados.valorEspecie),
         valorMoedasCentavos: paraCentavos(dados.valorMoedas),
         lacre: dados.lacre?.trim() || null,
-        observacao: dados.observacao?.trim() || null
+        observacao: dados.observacao?.trim() || null,
+        responsavelNome: dados.responsavelNome?.trim() || null
       });
       return statusDoCaixaAberto(caixa, tx);
     }
@@ -1300,6 +1386,8 @@ export async function obterTransferenciasCaixa(
       tipo: (linha.tipo === "sangria" ? "retorno" : linha.tipo) as "abertura" | "suprimento" | "retorno",
       ordem,
       valor: deCentavos(valorCentavos),
+      valorEspecie: linha.valorEspecieDeclarado === null ? null : deCentavos(paraCentavos(linha.valorEspecieDeclarado)),
+      valorMoedas: linha.valorMoedasDeclarado === null ? null : deCentavos(paraCentavos(linha.valorMoedasDeclarado)),
       sentido,
       lacre: linha.lacreNumero,
       dataTransferencia: linha.dataTransferencia

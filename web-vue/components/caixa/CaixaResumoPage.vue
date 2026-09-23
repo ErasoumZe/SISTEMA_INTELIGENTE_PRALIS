@@ -9,6 +9,7 @@ import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancam
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
+import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
 import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 const { apiGet } = useApi();
@@ -70,6 +71,7 @@ const emit = defineEmits<{
       supervisorResponsavelNome: string;
       valorEspecieFechamento: number;
       valorMoedasFechamento: number;
+      confirmadoPelaRevisao: true;
     }
   ): void;
   (event: "recarregar"): void;
@@ -98,6 +100,10 @@ const fechamento = reactive({
   supervisorResponsavelNome: ""
 });
 const folhaFechamentoEnviada = ref(false);
+const anexosFechamento = ref<
+  Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string; relatorio: unknown }>
+>([]);
+const revisaoFechamentoAberta = ref(false);
 const maloteDeclarado = ref<{ valor: number; valorEspecieDeclarado: number; valorMoedasDeclarado: number } | null>(
   null
 );
@@ -114,7 +120,7 @@ const entrega = reactive({
   valorEspecie: "",
   valorMoedas: "",
   lacre: "",
-  responsavelNome: props.usuarioNome,
+  responsavelNome: "",
   observacao: ""
 });
 const modalRetornoSangriaAberto = ref(false);
@@ -155,7 +161,7 @@ function limparEntrega() {
   entrega.valorEspecie = "";
   entrega.valorMoedas = "";
   entrega.lacre = "";
-  entrega.responsavelNome = props.usuarioNome;
+  entrega.responsavelNome = "";
   entrega.observacao = "";
   chaveEntrega.value = "";
   intencaoDaChave.value = "";
@@ -509,6 +515,13 @@ function fechar() {
     !folhaFechamentoEnviada.value
   )
     return;
+  revisaoFechamentoAberta.value = true;
+}
+
+function confirmarFechamento() {
+  const caixa = caixaAberto.value;
+  if (!caixa || props.salvando) return;
+  revisaoFechamentoAberta.value = false;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
@@ -516,7 +529,8 @@ function fechar() {
     caixaResponsavelNome: fechamento.caixaResponsavelNome.trim(),
     supervisorResponsavelNome: fechamento.supervisorResponsavelNome.trim(),
     valorEspecieFechamento: Number(fechamento.valorEspecie || 0),
-    valorMoedasFechamento: Number(fechamento.valorMoedas || 0)
+    valorMoedasFechamento: Number(fechamento.valorMoedas || 0),
+    confirmadoPelaRevisao: true
   });
 }
 </script>
@@ -788,7 +802,7 @@ function fechar() {
 
         <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
            fecha e o servidor devolve o restante no mesmo ato. -->
-        <v-alert v-if="temSobra" type="info" variant="tonal" class="my-5">
+        <v-alert v-if="temSobra" type="warning" variant="tonal" class="my-5">
           <template v-if="planejamentosPendentes.length">
             Há {{ dinheiro(saldoAtual) }} em espécie no caixa; {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão
             reservados para as transferências de retorno programadas. Somente os {{ dinheiro(saldoLivre) }}
@@ -861,20 +875,21 @@ function fechar() {
         </div>
 
         <v-row dense>
-          <v-col v-if="temSaldoLivre" cols="12" class="pb-5">
-            <v-divider class="mb-5" />
-            <v-btn
-              color="warning"
-              prepend-icon="mdi-bank-transfer-out"
-              class="botao-retorno-sangria"
-              data-teste="botao-entregar"
-              @click="modalRetornoSangriaAberto = true"
-            >
-              <span class="botao-retorno-sangria__conteudo">
-                <span>Transferência de retorno / sangria</span>
-                <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
-              </span>
-            </v-btn>
+          <v-col v-if="temSaldoLivre" cols="12" class="pt-0 pb-5">
+            <div class="retorno-sangria-faixa">
+              <v-btn
+                color="warning"
+                prepend-icon="mdi-bank-transfer-out"
+                class="botao-retorno-sangria"
+                data-teste="botao-entregar"
+                @click="modalRetornoSangriaAberto = true"
+              >
+                <span class="botao-retorno-sangria__conteudo">
+                  <span>Transferência de retorno / sangria</span>
+                  <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
+                </span>
+              </v-btn>
+            </div>
           </v-col>
           <v-col cols="12" class="fechamento-caixa">
             <div class="text-h6 mb-1">Fechamento do caixa</div>
@@ -908,8 +923,8 @@ function fechar() {
                   placeholder="Ex.: FCH-001"
                   hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
                   persistent-hint
-                  color="error"
-                  base-color="error"
+                  :color="lacreFechamentoPendente ? 'error' : 'primary'"
+                  :base-color="lacreFechamentoPendente ? 'error' : undefined"
                   :error="lacreFechamentoPendente"
                   :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
                   prepend-inner-icon="mdi-lock-alert-outline"
@@ -959,6 +974,7 @@ function fechar() {
                 <CaixaFechamentoAnexos
                   :caixa-id="caixaAberto?.id ?? null"
                   @folha-enviada="folhaFechamentoEnviada = $event"
+                  @anexos-atualizados="anexosFechamento = $event"
                 />
               </v-col>
               <v-col cols="12">
@@ -1024,6 +1040,19 @@ function fechar() {
           :categoria="categoriaUltimosLancamentos"
           @update:aberto="atualizarDialogUltimosLancamentos"
         />
+        <CaixaFechamentoConfirmacaoDialog
+          :aberto="revisaoFechamentoAberta"
+          :saldo-esperado="saldoAtual"
+          :observacao="fechamento.observacao"
+          :lacre-fechamento="fechamento.lacreFechamento.trim()"
+          :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
+          :supervisor-responsavel-nome="fechamento.supervisorResponsavelNome.trim()"
+          :valor-especie="Number(fechamento.valorEspecie || 0)"
+          :valor-moedas="Number(fechamento.valorMoedas || 0)"
+          :anexos="anexosFechamento"
+          @editar="revisaoFechamentoAberta = false"
+          @confirmar="confirmarFechamento"
+        />
       </template>
     </v-card-text>
   </v-card>
@@ -1040,6 +1069,12 @@ function fechar() {
 .botao-retorno-sangria {
   min-height: 52px;
   padding-block: 8px;
+}
+
+.retorno-sangria-faixa {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-warning), 0.14);
 }
 
 .botao-retorno-sangria__conteudo {

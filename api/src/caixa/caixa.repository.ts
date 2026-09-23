@@ -956,6 +956,8 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         tipo: transferencias.tipo,
         ordem: transferencias.ordem,
         valorOriginal: transferencias.valorOriginal,
+        valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+        valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
         // O lacre da linha e o numero digitado na propria transferencia (R-021: fonte externa).
@@ -1374,6 +1376,8 @@ export async function listarAnexosFechamentoCaixaRepository(
       mimeType: fechamentosCaixaAnexos.mimeType,
       tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,
       iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado,
+      iaErro: fechamentosCaixaAnexos.iaErro,
       criadoEm: fechamentosCaixaAnexos.criadoEm
     })
     .from(fechamentosCaixaAnexos)
@@ -1394,9 +1398,13 @@ export async function buscarAnexoFechamentoCaixaRepository(
 ) {
   const [anexo] = await db
     .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
       caminho: fechamentosCaixaAnexos.caminho,
       mimeType: fechamentosCaixaAnexos.mimeType,
-      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado
     })
     .from(fechamentosCaixaAnexos)
     .where(
@@ -1407,6 +1415,36 @@ export async function buscarAnexoFechamentoCaixaRepository(
       )
     )
     .limit(1);
+  return anexo ?? null;
+}
+
+export async function atualizarAnaliseAnexoFechamentoCaixaRepository(
+  input: {
+    fechamentoCaixaId: string;
+    anexoId: string;
+    empresaId: string;
+    status: "processando" | "concluida" | "falhou";
+    resultado?: Record<string, unknown> | null;
+    erro?: string | null;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .update(fechamentosCaixaAnexos)
+    .set({
+      iaStatus: input.status,
+      iaResultado: input.resultado ?? null,
+      iaErro: input.erro ?? null,
+      iaAnalisadoEm: new Date()
+    })
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.id, input.anexoId),
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, input.fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, input.empresaId)
+      )
+    )
+    .returning({ id: fechamentosCaixaAnexos.id });
   return anexo ?? null;
 }
 
