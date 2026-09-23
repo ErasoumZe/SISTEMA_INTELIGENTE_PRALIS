@@ -276,20 +276,22 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="mt-4" aria-label="Anexos do fechamento">
-    <div class="text-subtitle-2">Folha de fechamento <span class="text-error">(obrigatória)</span></div>
-    <div class="d-flex flex-wrap ga-2 mt-2">
-      <v-btn variant="outlined" prepend-icon="mdi-camera" :loading="enviando" :disabled="!caixaId" @click="abrirCamera('folha_fechamento')">Tirar foto</v-btn>
-      <v-btn variant="outlined" prepend-icon="mdi-paperclip" :loading="enviando" :disabled="!caixaId" @click="folhaArquivo?.click()">Anexar arquivo</v-btn>
-    </div>
-    <input ref="folhaArquivo" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar($event, 'folha_fechamento')" />
-    <div v-if="folhas.length" class="anexos-enviados mt-3">
-      <div v-for="anexo in folhas" :key="anexo.id" class="anexo-miniatura">
-        <button v-if="ehImagem(anexo)" class="anexo-miniatura__foto" type="button" :disabled="!previas[anexo.id]" @click="anexoAmpliado = anexo"><img v-if="previas[anexo.id]" :src="previas[anexo.id]" :alt="`Prévia de ${anexo.nomeOriginal}`" /><v-icon v-else icon="mdi-image-outline" /></button>
-        <div v-else class="anexo-miniatura__arquivo"><v-icon icon="mdi-file-document-outline" /></div>
-        <span class="anexo-miniatura__nome">{{ anexo.nomeOriginal }}</span>
-        <v-btn icon="mdi-close" size="x-small" variant="text" color="error" :loading="removendoId === anexo.id" @click="remover(anexo)" />
+    <v-sheet class="folha-fechamento pa-4" rounded="lg" border>
+      <div class="text-subtitle-2">Folha de fechamento <span class="text-error">(obrigatória)</span></div>
+      <div class="d-flex flex-wrap ga-2 mt-2">
+        <v-btn variant="outlined" prepend-icon="mdi-camera" :loading="enviando" :disabled="!caixaId" @click="abrirCamera('folha_fechamento')">Tirar foto</v-btn>
+        <v-btn variant="outlined" prepend-icon="mdi-paperclip" :loading="enviando" :disabled="!caixaId" @click="folhaArquivo?.click()">Anexar arquivo</v-btn>
       </div>
-    </div>
+      <input ref="folhaArquivo" class="d-none" type="file" accept="image/*,application/pdf" @change="enviar($event, 'folha_fechamento')" />
+      <div v-if="folhas.length" class="anexos-enviados mt-3">
+        <div v-for="anexo in folhas" :key="anexo.id" class="anexo-miniatura">
+          <button v-if="ehImagem(anexo)" class="anexo-miniatura__foto" type="button" :disabled="!previas[anexo.id]" @click="anexoAmpliado = anexo"><img v-if="previas[anexo.id]" :src="previas[anexo.id]" :alt="`Prévia de ${anexo.nomeOriginal}`" /><v-icon v-else icon="mdi-image-outline" /></button>
+          <div v-else class="anexo-miniatura__arquivo"><v-icon icon="mdi-file-document-outline" /></div>
+          <span class="anexo-miniatura__nome">{{ anexo.nomeOriginal }}</span>
+          <v-btn icon="mdi-close" size="x-small" variant="text" color="error" :loading="removendoId === anexo.id" @click="remover(anexo)" />
+        </div>
+      </div>
+    </v-sheet>
 
     <v-sheet class="relatorio-maquininha pa-4 mt-5" rounded="lg" border>
       <div class="d-flex flex-wrap align-center ga-2">
@@ -327,6 +329,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.folha-fechamento { border-color: rgb(var(--v-theme-warning)) !important; background: rgba(var(--v-theme-warning), 0.1); }
 .relatorio-maquininha { border-color: rgb(var(--v-theme-info)) !important; background: rgba(var(--v-theme-info), 0.1); }
 .anexos-enviados { display: flex; flex-wrap: wrap; gap: 10px; }
 .anexo-miniatura { display: flex; align-items: center; gap: 8px; min-width: 180px; max-width: 290px; padding: 6px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }

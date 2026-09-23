@@ -33,6 +33,7 @@ import {
   empresas,
   fechamentosCaixa,
   fechamentosCaixaAnexos,
+  fechamentosCaixaRelatoriosMaquininha,
   formasPagamento,
   fornecedores,
   gruposDespesas,
@@ -676,9 +677,13 @@ await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
-if (caixaIds.length)
+if (caixaIds.length) {
   await banco.delete(fechamentosCaixaAnexos).where(inArray(fechamentosCaixaAnexos.fechamentoCaixaId, caixaIds));
-if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+  await banco
+    .delete(fechamentosCaixaRelatoriosMaquininha)
+    .where(inArray(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, caixaIds));
+  await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+}
 if (setorIds.length) await banco.delete(permissoesSetores).where(inArray(permissoesSetores.setorId, setorIds));
 
 await banco.delete(colaboradores).where(
@@ -819,10 +824,18 @@ if (!pdv) throw new Error("PDV nao foi criado");
 // cofre respondia 400 e o modulo Caixa nao podia ser demonstrado nem testado ponta a ponta neste
 // ambiente. Sao DOIS vinculos, e nao um, porque quem entrega nao confere a propria entrega — com um
 // so, a entrega feita por ele mesmo continuaria bloqueada.
-for (const email of ["tesouraria@email.com", "gerencia@email.com"]) {
+for (const email of ["gerencia@email.com"]) {
   const usuarioId = usuarioIds.get(email);
   if (!usuarioId) throw new Error(`Usuario ${email} nao foi criado`);
   await banco.insert(contasUsuarios).values({ empresaId, contaId: contaCofre.id, usuarioId }).onConflictDoNothing();
+}
+
+// Ambiente de demonstracao: a Tesouraria precisa enxergar e operar todas as contas financeiras
+// que o seed cria para executar o fluxo completo Caixa <-> Cofre sem uma preparacao manual extra.
+const usuarioTesourariaId = usuarioIds.get("tesouraria@email.com");
+if (!usuarioTesourariaId) throw new Error("Usuario Tesouraria nao foi criado");
+for (const contaId of [contaCaixa.id, contaBanco.id, contaCofre.id]) {
+  await banco.insert(contasUsuarios).values({ empresaId, contaId, usuarioId: usuarioTesourariaId }).onConflictDoNothing();
 }
 
 await banco
