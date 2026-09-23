@@ -2086,6 +2086,11 @@ export const lacres = pgTable(
     empresaId,
     numero: text("numero").notNull(),
     transferenciaId: uuid("transferencia_id").references(() => transferencias.id, { onDelete: "set null" }),
+    // R-208: lacre menor enviado ABERTO dentro de um malote Cofre -> PDV. Enquanto
+    // `transferenciaId` e nulo ele esta disponivel somente para o Caixa que recebeu esta ida;
+    // quando a sangria acontece, `transferenciaId` passa a ser o movimento Caixa -> Cofre sem
+    // apagar a proveniencia fisica do lacre.
+    transferenciaDistribuicaoId: uuid("transferencia_distribuicao_id"),
     // Ponta do movimento que o lacre selou: 'saida' (ida da transferencia) ou 'retorno' (volta/sangria).
     origem: text("origem").notNull(),
     rompido: boolean("rompido").notNull().default(false),
@@ -2093,8 +2098,29 @@ export const lacres = pgTable(
   },
   (table) => [
     check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno')`),
+    check(
+      "lacres_distribuicao_retorno_check",
+      sql`${table.transferenciaDistribuicaoId} is null
+        or (${table.origem} = 'retorno'
+            and ${table.transferenciaDistribuicaoId} is distinct from ${table.transferenciaId}
+            and (${table.transferenciaId} is not null or ${table.rompido} = false))`
+    ),
     unique("lacres_numero_unico").on(table.empresaId, table.numero),
-    index("lacres_transf_idx").on(table.transferenciaId)
+    index("lacres_transf_idx").on(table.transferenciaId),
+    foreignKey({
+      columns: [table.transferenciaDistribuicaoId, table.empresaId],
+      foreignColumns: [transferencias.id, transferencias.empresaId],
+      name: "lacres_distribuicao_empresa_fk"
+    })
+      .onDelete("restrict")
+      .onUpdate("no action"),
+    index("lacres_distribuicao_disponivel_idx")
+      .on(table.transferenciaDistribuicaoId)
+      .where(
+        sql`${table.transferenciaDistribuicaoId} is not null
+          and ${table.transferenciaId} is null
+          and ${table.rompido} = false`
+      )
   ]
 );
 
