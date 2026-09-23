@@ -35,14 +35,13 @@ async function login() {
     });
 
     if (response.ok) {
-    // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
-    // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
-    limparEstadoWorkspace(useNuxtApp().payload.state);
-    await router.push("/");
-  } else {
-    error.value = "E-mail ou senha inválidos.";
-  }
-
+      // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
+      // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
+      limparEstadoWorkspace(useNuxtApp().payload.state);
+      await router.push("/");
+    } else {
+      error.value = "E-mail ou senha inválidos.";
+    }
   } catch {
     error.value = "Nao foi possivel conectar ao sistema. Verifique a rede e tente novamente.";
   } finally {
