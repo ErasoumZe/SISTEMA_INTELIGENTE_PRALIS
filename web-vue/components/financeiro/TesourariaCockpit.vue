@@ -215,6 +215,9 @@ const valorFechamentoConferencia = computed(() => {
   if (!fechamento) return null;
   return Number(fechamento.valorEspecieFechamento ?? 0) + Number(fechamento.valorMoedasFechamento ?? 0);
 });
+const fechamentoFoiConcluido = computed(
+  () => fechamentoConferencia.value?.status === "fechado" || fechamentoConferencia.value?.status === "ajustado"
+);
 
 // Decisao 5/R-187: o valor so e OBRIGATORIO no retorno do Caixa (e la 0 e legitimo). Na generica ele
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
@@ -751,7 +754,20 @@ function limparFiltrosTransferencias() {
           <v-alert v-else-if="erroFechamento && !fechamentoConferencia" type="info" variant="tonal" density="compact">
             {{ erroFechamento }} Os dados do fechamento aparecerão quando o operador concluir o caixa.
           </v-alert>
-          <div v-else-if="fechamentoConferencia" class="tes-fechamento-resumo__grid" data-teste="fechamento-resumo">
+          <v-alert
+            v-else-if="fechamentoConferencia && !fechamentoFoiConcluido"
+            type="info"
+            variant="tonal"
+            density="compact"
+          >
+            O Caixa ainda está aberto. Esta conferência é somente da sangria; o resumo do fechamento será liberado
+            quando o operador concluir o turno.
+          </v-alert>
+          <div
+            v-else-if="fechamentoConferencia && fechamentoFoiConcluido"
+            class="tes-fechamento-resumo__grid"
+            data-teste="fechamento-resumo"
+          >
             <div>
               <span>Valor declarado no fechamento</span><strong>{{ dinheiro(valorFechamentoConferencia ?? 0) }}</strong>
             </div>
