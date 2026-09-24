@@ -1,53 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { ref } from "vue";
 import AppLogoAnimada from "~/components/app/AppLogoAnimada.vue";
-
-interface RecognitionAlternative {
-  transcript: string;
-}
-
-interface RecognitionResult {
-  isFinal: boolean;
-  [index: number]: RecognitionAlternative;
-}
-
-interface RecognitionResultList {
-  length: number;
-  [index: number]: RecognitionResult;
-}
-
-interface RecognitionEvent extends Event {
-  resultIndex: number;
-  results: RecognitionResultList;
-}
-
-interface RecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  onend: (() => void) | null;
-  onerror: ((event: RecognitionErrorEvent) => void) | null;
-  onresult: ((event: RecognitionEvent) => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-type SpeechWindow = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructor;
-  webkitSpeechRecognition?: SpeechRecognitionConstructor;
-};
-
-type AudioWindow = Window & {
-  AudioContext?: typeof AudioContext;
-  webkitAudioContext?: typeof AudioContext;
-};
+import { useTranscricaoVoz } from "~/composables/useTranscricaoVoz";
 
 const props = withDefaults(
   defineProps<{
@@ -68,174 +22,26 @@ const props = withDefaults(
 const emit = defineEmits<{ (event: "update:modelValue", value: string): void }>();
 
 const aberto = ref(false);
-const ouvindo = ref(false);
-const erro = ref("");
-const parcial = ref("");
-const finais = ref("");
-const nivelVoz = ref(0);
-const reconhecimentoDisponivel = ref(false);
-
-let reconhecimento: SpeechRecognitionLike | null = null;
-let stream: MediaStream | null = null;
-let contextoAudio: AudioContext | null = null;
-let analisador: AnalyserNode | null = null;
-let quadroAudio: number | null = null;
 let textoInicial = "";
-let reiniciarAoTerminar = false;
-
-const textoReconhecido = computed(() => `${finais.value}${parcial.value}`.trim());
-const textoEditavel = computed({
-  get: () => textoReconhecido.value,
-  set: (value: string) => {
-    finais.value = value;
-    parcial.value = "";
-  }
-});
-
-const temTexto = computed(() => textoReconhecido.value.trim().length > 0);
-const logoGlow = computed(() => 0.28 + nivelVoz.value * 0.72);
-
-function obterReconhecimento(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const navegador = window as SpeechWindow;
-  return navegador.SpeechRecognition ?? navegador.webkitSpeechRecognition ?? null;
-}
-
-function limparAudio() {
-  if (quadroAudio !== null) cancelAnimationFrame(quadroAudio);
-  quadroAudio = null;
-  analisador = null;
-  stream?.getTracks().forEach((track) => track.stop());
-  stream = null;
-  if (contextoAudio) void contextoAudio.close();
-  contextoAudio = null;
-  nivelVoz.value = 0;
-}
-
-function medirVoz() {
-  if (!analisador || !ouvindo.value) {
-    nivelVoz.value = 0;
-    return;
-  }
-  const dados = new Uint8Array(analisador.fftSize);
-  analisador.getByteTimeDomainData(dados);
-  let soma = 0;
-  for (const amostra of dados) {
-    const distancia = (amostra - 128) / 128;
-    soma += distancia * distancia;
-  }
-  const rms = Math.sqrt(soma / dados.length);
-  nivelVoz.value = Math.min(1, rms * 5.5);
-  quadroAudio = requestAnimationFrame(medirVoz);
-}
-
-async function prepararMedidor() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-  const audioWindow = window as AudioWindow;
-  const AudioContextConstructor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
-  if (!AudioContextConstructor) return;
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  contextoAudio = new AudioContextConstructor();
-  const origem = contextoAudio.createMediaStreamSource(stream);
-  analisador = contextoAudio.createAnalyser();
-  analisador.fftSize = 256;
-  origem.connect(analisador);
-  await contextoAudio.resume();
-  medirVoz();
-}
-
-function configurarReconhecimento() {
-  const Constructor = obterReconhecimento();
-  if (!Constructor) {
-    reconhecimentoDisponivel.value = false;
-    throw new Error("Este navegador não oferece transcrição de voz. A integração Grok será adicionada depois.");
-  }
-  reconhecimentoDisponivel.value = true;
-  reconhecimento = new Constructor();
-  reconhecimento.continuous = true;
-  reconhecimento.interimResults = true;
-  reconhecimento.lang = "pt-BR";
-  reconhecimento.maxAlternatives = 1;
-  reconhecimento.onresult = (event) => {
-    let finaisNovos = "";
-    let parcialNovo = "";
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      const resultado = event.results[index];
-      if (!resultado) continue;
-      const transcricao = resultado[0]?.transcript ?? "";
-      if (resultado.isFinal) finaisNovos += `${transcricao.trim()} `;
-      else parcialNovo += transcricao;
-    }
-    finais.value = `${finais.value}${finaisNovos}`;
-    parcial.value = parcialNovo;
-  };
-  reconhecimento.onerror = (event) => {
-    if (event.error === "aborted") return;
-    erro.value =
-      event.error === "not-allowed"
-        ? "Permita o acesso ao microfone para transcrever."
-        : "Não foi possível transcrever o áudio.";
-    ouvindo.value = false;
-    reiniciarAoTerminar = false;
-    limparAudio();
-  };
-  reconhecimento.onend = () => {
-    if (reiniciarAoTerminar && ouvindo.value) {
-      try {
-        reconhecimento?.start();
-        return;
-      } catch {
-        // Alguns navegadores encerram a sessão entre duas frases; o texto já recebido permanece.
-      }
-    }
-    ouvindo.value = false;
-    limparAudio();
-  };
-}
+const {
+  erro,
+  iniciar,
+  logoGlow,
+  logoSpeed,
+  nivelVoz,
+  ouvindo,
+  parar,
+  preparar,
+  reconhecimentoDisponivel,
+  temTexto,
+  textoEditavel,
+  textoReconhecido
+} = useTranscricaoVoz();
 
 function abrir() {
   aberto.value = true;
-  erro.value = "";
   textoInicial = props.modelValue;
-  finais.value = textoInicial.trim() ? `${textoInicial.trim()} ` : "";
-  parcial.value = "";
-  reconhecimentoDisponivel.value = Boolean(obterReconhecimento());
-}
-
-async function iniciar() {
-  erro.value = "";
-  try {
-    if (!reconhecimento) configurarReconhecimento();
-    try {
-      await prepararMedidor();
-    } catch {
-      // A transcrição continua mesmo se o medidor visual não puder acessar o microfone.
-      limparAudio();
-    }
-    reiniciarAoTerminar = true;
-    ouvindo.value = true;
-    reconhecimento?.start();
-  } catch (falha) {
-    ouvindo.value = false;
-    reiniciarAoTerminar = false;
-    limparAudio();
-    erro.value = falha instanceof Error ? falha.message : "Não foi possível acessar o microfone.";
-  }
-}
-
-function pararReconhecimentoSeguro() {
-  try {
-    reconhecimento?.stop();
-  } catch {
-    // O reconhecimento pode já ter sido encerrado pelo navegador.
-  }
-}
-
-function parar() {
-  reiniciarAoTerminar = false;
-  ouvindo.value = false;
-  pararReconhecimentoSeguro();
-  limparAudio();
+  preparar(textoInicial);
 }
 
 function cancelar() {
@@ -250,12 +56,6 @@ function usarTranscricao() {
   parar();
   aberto.value = false;
 }
-
-onBeforeUnmount(() => {
-  reiniciarAoTerminar = false;
-  pararReconhecimentoSeguro();
-  limparAudio();
-});
 </script>
 
 <template>
@@ -281,19 +81,25 @@ onBeforeUnmount(() => {
           <span>Falar observação</span>
           <v-btn icon="mdi-close" variant="text" aria-label="Fechar transcrição" @click="cancelar" />
         </v-card-title>
-        <v-card-subtitle>
-          Fale a observação do fechamento. Revise o texto antes de enviar ao tesoureiro.
-        </v-card-subtitle>
+        <v-card-subtitle>Toque na logo e fale. Revise a transcrição antes de enviar ao tesoureiro.</v-card-subtitle>
 
         <v-card-text>
-          <div class="voz-orbe" :class="{ 'voz-orbe--ouvindo': ouvindo }" :style="{ '--voz-nivel': nivelVoz }">
+          <button
+            type="button"
+            class="voz-orbe"
+            :class="{ 'voz-orbe--ouvindo': ouvindo }"
+            :style="{ '--voz-nivel': nivelVoz }"
+            :disabled="ouvindo || !reconhecimentoDisponivel"
+            :aria-label="ouvindo ? 'Transcrição em andamento' : 'Iniciar transcrição por voz'"
+            @click="iniciar"
+          >
             <div class="voz-orbe__halo" />
-            <AppLogoAnimada :size="64" :glow-intensity="logoGlow" :speed="ouvindo ? 1.35 : 0.65" />
-          </div>
+            <AppLogoAnimada :size="142" :glow-intensity="logoGlow" :speed="logoSpeed" />
+          </button>
           <div class="voz-status" aria-live="polite">
             <span v-if="ouvindo">Ouvindo… fale normalmente</span>
             <span v-else-if="erro" class="text-error">{{ erro }}</span>
-            <span v-else>Toque em iniciar para falar</span>
+            <span v-else>Toque na logo para começar a falar</span>
           </div>
 
           <v-textarea
@@ -310,21 +116,12 @@ onBeforeUnmount(() => {
           />
 
           <v-alert v-if="!reconhecimentoDisponivel" type="info" variant="tonal" density="compact" class="mt-3">
-            Use Chrome ou Edge no celular. A conexão com o Grok será adicionada depois, sem alterar este fluxo.
+            Use Chrome ou Edge no celular. A conexão com a Groq será adicionada depois, sem alterar este fluxo.
           </v-alert>
         </v-card-text>
 
         <v-card-actions class="flex-wrap ga-2 px-4 pb-4">
-          <v-btn
-            v-if="!ouvindo"
-            color="primary"
-            prepend-icon="mdi-microphone"
-            :disabled="!reconhecimentoDisponivel"
-            @click="iniciar"
-          >
-            Iniciar
-          </v-btn>
-          <v-btn v-else color="error" prepend-icon="mdi-stop" @click="parar">Parar</v-btn>
+          <v-btn v-if="ouvindo" color="error" prepend-icon="mdi-stop" @click="parar">Parar gravação</v-btn>
           <v-spacer />
           <v-btn variant="text" @click="cancelar">Cancelar</v-btn>
           <v-btn color="primary" variant="flat" :disabled="!temTexto || ouvindo" @click="usarTranscricao">
@@ -349,29 +146,53 @@ onBeforeUnmount(() => {
 .voz-orbe {
   position: relative;
   display: grid;
-  width: 92px;
-  height: 92px;
-  margin: 10px auto 4px;
+  width: 184px;
+  height: 184px;
+  margin: 4px auto 10px;
+  padding: 0;
   place-items: center;
+  border: 0;
   border-radius: 50%;
+  appearance: none;
+  background: radial-gradient(circle, rgb(var(--v-theme-primary), 0.1), transparent 64%);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease;
+}
+
+.voz-orbe:not(:disabled):hover,
+.voz-orbe:not(:disabled):focus-visible {
+  filter: brightness(1.12);
+  outline: none;
+  transform: scale(1.035);
+}
+
+.voz-orbe:focus-visible {
+  box-shadow: 0 0 0 3px rgb(var(--v-theme-primary), 0.42);
+}
+
+.voz-orbe:disabled {
+  cursor: default;
 }
 
 .voz-orbe__halo {
   position: absolute;
-  inset: 10px;
-  border: 1px solid rgb(var(--v-theme-primary), 0.24);
+  inset: 12px;
+  border: 1px solid rgb(var(--v-theme-primary), 0.34);
   border-radius: 50%;
-  opacity: calc(0.45 + var(--voz-nivel) * 0.55);
-  transform: scale(calc(1 + var(--voz-nivel) * 0.22));
+  opacity: calc(0.4 + var(--voz-nivel) * 0.6);
+  transform: scale(calc(0.88 + var(--voz-nivel) * 0.26));
   transition:
-    transform 120ms ease,
-    opacity 120ms ease;
+    transform 100ms ease,
+    opacity 100ms ease;
 }
 
 .voz-orbe--ouvindo .voz-orbe__halo {
   box-shadow:
-    0 0 0 8px rgb(var(--v-theme-primary), 0.06),
-    0 0 28px rgb(var(--v-theme-primary), 0.22);
+    0 0 0 12px rgb(var(--v-theme-primary), 0.07),
+    0 0 42px rgb(var(--v-theme-primary), 0.38);
+  animation: voz-respira 1.7s ease-in-out infinite;
 }
 
 .voz-status {
@@ -382,6 +203,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 480px) {
+  .voz-orbe {
+    width: 164px;
+    height: 164px;
+  }
+
   .observacao-voz-dialog :deep(.v-card-title) {
     font-size: 1.05rem;
   }
@@ -392,6 +218,20 @@ onBeforeUnmount(() => {
 
   .observacao-voz-dialog :deep(.v-card-actions .v-btn) {
     min-width: 0;
+  }
+}
+
+@keyframes voz-respira {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voz-orbe,
+  .voz-orbe__halo {
+    animation: none;
+    transition: none;
   }
 }
 </style>
