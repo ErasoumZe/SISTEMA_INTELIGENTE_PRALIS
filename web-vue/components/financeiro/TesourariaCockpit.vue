@@ -80,11 +80,23 @@ const emit = defineEmits<{
     payload: { planejamentoId: string; motivo: string; aoConcluir: (sucesso: boolean) => void }
   ): void;
 }>();
-const { apiPost } = useApi();
+const { apiGet, apiPost, apiUrl } = useApi();
 // O provider vive no AppWorkspace e garante a mesma janela de confirmação para Caixa e Tesouraria.
 // Sem ele (por exemplo, em um mount isolado de teste) a ação é cancelada por segurança.
 const confirmarAcao = inject<ConfirmarAcao>(CONFIRMAR_ACAO_KEY, async () => false);
 const confirmando = ref<OperacaoResumo | null>(null);
+type AnexoConferencia = {
+  id: string;
+  tipo: "folha_fechamento" | "comprovante_cartao";
+  nomeOriginal: string;
+};
+const anexosConferencia = ref<AnexoConferencia[]>([]);
+const carregandoAnexos = ref(false);
+const erroAnexos = ref("");
+const folhasConferencia = computed(() => anexosConferencia.value.filter((anexo) => anexo.tipo === "folha_fechamento"));
+const cartoesConferencia = computed(() =>
+  anexosConferencia.value.filter((anexo) => anexo.tipo === "comprovante_cartao")
+);
 // Um unico objeto de campos, zerado a cada abertura: antes eram quatro refs soltas que
 // sobreviviam ao fechamento do dialogo, e a segunda conferencia comecava com o valor da primeira
 // ja preenchido — convite para confirmar sem contar.
@@ -105,10 +117,29 @@ function abrirConferencia(operacao: OperacaoResumo) {
   encerrarDivergencia.value = false;
   sobraConfirmada.value = false;
   confirmando.value = operacao;
+  anexosConferencia.value = [];
+  erroAnexos.value = "";
+  carregandoAnexos.value = Boolean(operacao.caixaId && operacao.ehCaixaParaCofre);
+  if (carregandoAnexos.value) void carregarAnexosConferencia(operacao.id);
+}
+
+async function carregarAnexosConferencia(transferenciaId: string) {
+  try {
+    const anexos = await apiGet<AnexoConferencia[]>(`/api/transferencias/${transferenciaId}/anexos-fechamento`);
+    if (confirmando.value?.id === transferenciaId) anexosConferencia.value = anexos;
+  } catch {
+    if (confirmando.value?.id === transferenciaId)
+      erroAnexos.value = "Não foi possível carregar os anexos do fechamento.";
+  } finally {
+    if (confirmando.value?.id === transferenciaId) carregandoAnexos.value = false;
+  }
 }
 
 function fecharConferencia() {
   confirmando.value = null;
+  anexosConferencia.value = [];
+  erroAnexos.value = "";
+  carregandoAnexos.value = false;
   modoRecusa.value = false;
   encerrarDivergencia.value = false;
   sobraConfirmada.value = false;
@@ -607,7 +638,7 @@ function limparFiltrosTransferencias() {
       no-click-animation
       @update:model-value="(v) => !v && fecharConferencia()"
     >
-      <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
+      <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4 tes-conferencia-card">
         <section v-if="confirmando && !modoRecusa" class="tes-conferencia-resumo" data-teste="conferencia-resumo">
           <div class="tes-conferencia-resumo__titulo">Confira a sangria antes de aceitar</div>
           <div class="tes-conferencia-resumo__linha">
@@ -1051,9 +1082,13 @@ function limparFiltrosTransferencias() {
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 35%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--cat-transferencias-soft, #fff1e8) 86%, transparent);
-  color: var(--shell-ink, #1f2733);
+  background: color-mix(in srgb, var(--cx-surface-raised) 90%, var(--cat-transferencias-base, #fb4b0b));
+  color: var(--cx-ink);
   font-size: 12px;
+}
+.tes-conferencia-card {
+  background: var(--cx-surface-raised);
+  color: var(--cx-ink);
 }
 .tes-conferencia-resumo__titulo {
   margin-bottom: 3px;
@@ -1065,13 +1100,16 @@ function limparFiltrosTransferencias() {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .tes-conferencia-resumo__linha span {
-  color: var(--shell-ink-soft, #64748b);
+  color: var(--cx-ink-soft);
 }
 .tes-conferencia-resumo__linha strong {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  color: var(--cx-ink);
+  overflow-wrap: anywhere;
 }
 .tes-conferencia-resumo__rota {
   margin-top: 3px;
