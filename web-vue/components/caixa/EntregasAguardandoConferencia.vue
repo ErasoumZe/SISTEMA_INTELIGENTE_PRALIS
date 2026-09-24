@@ -8,8 +8,7 @@ import { formatarDataHora } from "~/utils/formatacao";
 // G1/R-171/R-187 · o que ja saiu do caixa e ainda nao foi conferido na conta destino.
 //
 // Nao e um erro, e por isso nao e vermelho: o malote esta a caminho. E tambem nao e um aviso que
-// se possa ignorar — enquanto estiver aqui, o caixa nao fecha. O bloco existe para o operador ver
-// a trava ANTES de tentar fechar, com o lacre na mao para cobrar a conferencia.
+// se possa ignorar — a pendencia continua visivel para a Tesouraria, mas o caixa pode ser fechado.
 //
 // A leitura e de manifesto de transporte: um trilho vertical liga as entregas em transito, cada
 // uma com valor, tipo, lacre e hora — os quatro dados que identificam um envelope no mundo fisico.
@@ -23,13 +22,13 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
 </script>
 
 <template>
-  <section
-    v-if="entregas.length"
-    class="transito"
-    role="group"
-    aria-labelledby="transito-titulo"
-    data-teste="entregas-aguardando-conferencia"
-  >
+  <details v-if="entregas.length" class="transito" data-teste="entregas-aguardando-conferencia">
+    <summary class="transito-resumo">
+      <span
+        ><strong>{{ dinheiro(total) }}</strong> em retorno aguardando conferência da Tesouraria</span
+      >
+      <span class="transito-resumo__acao">Ver detalhes <span aria-hidden="true">⌄</span></span>
+    </summary>
     <header class="transito-cabecalho">
       <h3 id="transito-titulo" class="transito-titulo">Aguardando conferência no destino</h3>
       <p class="transito-explica">
@@ -69,7 +68,7 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
         <span class="transito-hora">{{ formatarDataHora(entrega.criadoEm) }}</span>
       </li>
     </ul>
-  </section>
+  </details>
 </template>
 
 <style scoped>
@@ -78,8 +77,54 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
   border-left: 3px solid var(--cx-attention);
   border-radius: var(--cx-r-md);
   background: var(--cx-surface-sunken);
-  padding: var(--cx-sp-5);
-  margin: var(--cx-sp-5) 0;
+  margin: var(--cx-sp-3) 0;
+}
+
+.transito-resumo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cx-sp-3);
+  min-height: 42px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--cx-ink-soft);
+  font-size: var(--cx-fs-caption);
+}
+
+.transito-resumo::-webkit-details-marker {
+  display: none;
+}
+
+.transito-resumo strong {
+  color: var(--cx-attention);
+}
+
+.transito-resumo__acao {
+  flex: 0 0 auto;
+  color: var(--cx-ink);
+  font-weight: 700;
+}
+
+.transito-resumo__acao span {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 160ms ease;
+}
+
+.transito[open] .transito-resumo__acao span {
+  transform: rotate(180deg);
+}
+
+.transito > header,
+.transito > .transito-lista {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.transito > .transito-lista {
+  padding-bottom: 12px;
 }
 
 .transito-titulo {
