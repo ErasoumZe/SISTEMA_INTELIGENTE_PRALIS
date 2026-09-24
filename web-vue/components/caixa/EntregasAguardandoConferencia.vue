@@ -37,11 +37,10 @@ const rotulo = (_tipo: EntregaCofrePendente["tipo"]) => "Retorno";
         destino.
         <template v-if="jaContadas">
           A conta destino já contou {{ jaContadas === 1 ? "uma delas" : `${jaContadas} delas` }} e ainda não encerrou a
-          divergência — é isso que falta para este caixa fechar.
+          divergência — a Tesouraria seguirá com a tratativa interna.
         </template>
         <template v-else>
-          O fechamento fica travado até cada conta destino conferir o retorno — assim, se faltar dinheiro, a diferença
-          tem onde cair.
+          A Tesouraria fará a conferência depois. Se houver diferença, ela fica registrada nesta transferência.
         </template>
       </p>
     </header>

@@ -139,6 +139,17 @@ Ambiguidades que o briefing não fechou e que o José decidiu ao revisar o S5:
 - Falha de rede, imagem ruim, resposta incompleta ou IA indisponível não apaga valores manuais nem
   o anexo selecionado.
 
+### R-208 — Retorno/sangria pendente e fechamento do caixa (24/09/2026)
+
+- Uma transferencia de retorno ou sangria ja executada permanece visivel e auditavel para a
+  Tesouraria, mas nao bloqueia o fechamento do caixa.
+- A conferencia fisica posterior e a divergencia pertencem a trilha da transferencia; a
+  Tesouraria identifica o operador que abriu o caixa e trata a ocorrencia internamente.
+- Transferencia de retorno **planejada** continua bloqueando o fechamento, porque o dinheiro
+  ainda nao saiu do caixa.
+- O responsavel declarado em uma sangria e sempre o operador registrado na abertura do caixa;
+  o cliente nao pode substitui-lo no payload.
+
 ## 7. Fora deste escopo (congelado)
 
 Transferências (regras já definidas) · Entradas (integração pronta — só a listagem do dia D7) ·

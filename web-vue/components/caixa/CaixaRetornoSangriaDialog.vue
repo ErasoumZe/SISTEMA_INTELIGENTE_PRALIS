@@ -111,13 +111,11 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
             <v-text-field
               :model-value="responsavelNome"
               label="Responsável pela sangria (obrigatório)"
-              hint="Digite quem está entregando o malote; o usuário logado também fica auditado."
+              hint="Preenchido automaticamente com o operador que abriu o caixa."
               persistent-hint
               prepend-inner-icon="mdi-account-cash-outline"
-              :error="!responsavelNome.trim()"
-              :error-messages="!responsavelNome.trim() ? 'Informe o responsável pela sangria.' : ''"
+              readonly
               required
-              @update:model-value="emit('update:responsavelNome', $event)"
             />
           </v-col>
           <v-col cols="12">
@@ -182,7 +180,9 @@ const valorMoedas = computed(() => Number(props.valorMoedas || 0));
 .retorno-dialog__saldo {
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(var(--v-theme-warning), 0.13);
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.16);
+  border: 1px solid rgba(var(--v-theme-primary), 0.34);
 }
 
 .retorno-dialog__resumo {

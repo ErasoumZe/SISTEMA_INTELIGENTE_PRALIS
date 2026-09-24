@@ -910,22 +910,12 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // R-185/R-187 · o painel paralelo foi removido, mas o planejamento atomico voltou dentro da
     // transferencia inicial. A linha `agendada` nao move saldo e trava ate ser executada ou cancelada.
     //
-    // O retorno executado e ainda nao conferido na conta destino tambem trava. Antes da Fatia 1 o
-    // caixa fechava por cima dele e uma divergencia posterior ficava sem turno aberto onde cair.
-    //
-    // Lida DEPOIS da trava e ANTES do retorno final (D6/D7), entao o proprio ato do fechamento nao
-    // se auto-bloqueia. Corrida: a linha do caixa ja esta em FOR UPDATE aqui e `confirmarTransferencia`
-    // pede FOR SHARE na MESMA linha antes de mudar o status â€” as duas serializam, e este SELECT
-    // nunca decide sobre um retrato velho.
-    //
-    // Escopo: somente movimentos do processo de retorno, novos (`retorno`) ou historicos
-    // (`sangria`), vinculados a este Caixa. Transferencia generica pendente nao entra.
+    // Retornos e sangrias em transito NAO travam mais o fechamento: a Tesouraria pode conferir em
+    // outro momento e resolver uma eventual divergencia na trilha de conferencia, mesmo depois de
+    // o operador encerrar o turno. Planejamentos ainda travam porque dinheiro ainda nao saiu.
     if (await existePlanejamentoRetornoAgendadoRepository(caixa.id, tx)) {
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
-    const entregasPendentes = await entregasPendentesDoCaixa(caixa.id, tx);
-    if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
-
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
     const valorFisicoEsperadoCentavos = saldoCaixaCentavos(totais);
     const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
@@ -1364,6 +1354,9 @@ export async function criarTransferenciaCofreCaixa(
       );
     }
 
+    const responsavelNome = caixa.caixaResponsavelNomeAbertura?.trim();
+    if (!responsavelNome) throw new Error("Caixa aberto sem responsavel declarado para a sangria");
+
     await registrarEntregaAoCofre(
       {
         caixa,
@@ -1376,7 +1369,9 @@ export async function criarTransferenciaCofreCaixa(
           transferenciaDistribuicaoId: lacreSelecionado.transferenciaDistribuicaoId
         },
         observacao: dados.observacao ?? null,
-        responsavelNome: dados.responsavelNome ?? null,
+        // O responsavel da sangria e quem abriu este caixa. O cliente pode exibir o nome, mas nao
+        // pode troca-lo no payload para deslocar a autoria da entrega.
+        responsavelNome,
         criadoPor: perfil.usuarioId,
         idempotenciaChave: dados.idempotenciaChave
       },

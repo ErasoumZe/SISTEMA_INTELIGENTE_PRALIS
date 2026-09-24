@@ -7,7 +7,6 @@ import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
 import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
 import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
-import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
@@ -97,6 +96,7 @@ const aberturaExtra = reactive({
 const fechamento = reactive({
   observacao: "",
   lacreFechamento: "",
+  valorTotal: "",
   valorEspecie: "",
   valorMoedas: "",
   caixaResponsavelNome: "",
@@ -133,6 +133,7 @@ const entrega = reactive({
 const modalRetornoSangriaAberto = ref(false);
 const modalSangriasAberto = ref(false);
 const modalVendasCanceladasAberto = ref(false);
+const vendasCanceladasQuantidade = ref(0);
 const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
@@ -184,6 +185,7 @@ watch(
   async (caixaId) => {
     if (!caixaId) {
       lacresRetornoDisponiveis.value = [];
+      vendasCanceladasQuantidade.value = 0;
       return;
     }
     try {
@@ -192,6 +194,14 @@ watch(
       );
     } catch {
       lacresRetornoDisponiveis.value = [];
+    }
+    try {
+      const vendasCanceladas = await apiGet<Array<{ id: string }>>(
+        `/api/caixa/${encodeURIComponent(caixaId)}/vendas-canceladas`
+      );
+      vendasCanceladasQuantidade.value = vendasCanceladas.length;
+    } catch {
+      vendasCanceladasQuantidade.value = 0;
     }
   },
   { immediate: true }
@@ -205,11 +215,18 @@ const temDeficit = computed(() => saldoAtual.value < 0);
 const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
-const totalFechamentoContado = computed(
+const totalFechamentoContado = computed(() => Number(fechamento.valorTotal || 0));
+const totalFechamentoPorComposicao = computed(
   () => Number(fechamento.valorEspecie || 0) + Number(fechamento.valorMoedas || 0)
 );
 const fechamentoComposicaoInformada = computed(
-  () => fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
+  () =>
+    fechamento.valorTotal.trim() !== "" && fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
+);
+const fechamentoComposicaoInvalida = computed(
+  () =>
+    fechamentoComposicaoInformada.value &&
+    paraCentavos(totalFechamentoContado.value) !== paraCentavos(totalFechamentoPorComposicao.value)
 );
 const diferencaFechamento = computed(() => totalFechamentoContado.value - saldoAtual.value);
 // Antes da contagem, os campos vazios são apenas "ainda não informado" — não R$ 0,00.
@@ -240,10 +257,7 @@ const temSaldoLivre = computed(() => saldoLivre.value > 0);
 const motivoTravado = computed(() => {
   if (planejamentosPendentes.value.length)
     return "há transferencia de retorno planejada aguardando execucao ou cancelamento";
-  return motivoFechamentoTravado(
-    entregasPendentes.value.length,
-    entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
-  );
+  return null;
 });
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
 const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
@@ -415,6 +429,7 @@ watch(
     if (!caixaId) {
       fechamento.observacao = "";
       fechamento.lacreFechamento = "";
+      fechamento.valorTotal = "";
       fechamento.valorEspecie = "";
       fechamento.valorMoedas = "";
       fechamento.caixaResponsavelNome = "";
@@ -544,6 +559,7 @@ function atualizarDialogUltimosLancamentos(aberto: boolean) {
 async function abrirRetornoSangria() {
   const caixa = caixaAberto.value;
   if (!caixa) return;
+  entrega.responsavelNome = caixa.caixaResponsavelNomeAbertura || caixa.usuarioCaixaNome;
   try {
     lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
       `/api/caixa/${encodeURIComponent(caixa.id)}/lacres-retorno`
@@ -570,6 +586,7 @@ function fechar() {
     !caixa ||
     props.salvando ||
     observacaoObrigatoriaPendente.value ||
+    fechamentoComposicaoInvalida.value ||
     lacreFechamentoPendente.value ||
     responsaveisFechamentoPendentes.value ||
     !fechamentoComposicaoInformada.value ||
@@ -836,6 +853,28 @@ function confirmarFechamento() {
             </div>
           </div>
 
+          <div
+            class="cat-card cat-canceladas cat-card--clicavel"
+            role="button"
+            tabindex="0"
+            @click="modalVendasCanceladasAberto = true"
+            @keydown.enter.prevent="modalVendasCanceladasAberto = true"
+            @keydown.space.prevent="modalVendasCanceladasAberto = true"
+          >
+            <span class="cat-bar" aria-hidden="true" />
+            <div class="cat-body">
+              <div class="cat-head">
+                <span class="cat-chip"><v-icon icon="mdi-cancel" size="18" /></span>
+                <span class="cat-titulo">Vendas canceladas</span>
+              </div>
+              <div class="cat-valor">{{ vendasCanceladasQuantidade }}</div>
+              <div class="cat-detalhe">
+                {{ vendasCanceladasQuantidade === 1 ? "venda cancelada" : "vendas canceladas" }}
+              </div>
+              <div class="cat-card__acao">Ver detalhes <v-icon icon="mdi-chevron-right" size="14" /></div>
+            </div>
+          </div>
+
           <div class="cat-card cat-resultado cat-card--ancora">
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
@@ -881,30 +920,6 @@ function confirmarFechamento() {
           :pdv-id="caixaAberto.pdvId"
           :dia="caixaAberto.dataMovimento"
         />
-
-        <v-alert v-if="caixaAberto" type="warning" variant="tonal" density="comfortable" class="my-5">
-          <div class="d-flex align-center justify-space-between flex-wrap ga-3">
-            <div>
-              <strong>Vendas canceladas</strong>
-              <div class="text-body-2">Não entram nos totais do caixa. Consulte venda, horário, valor e produtos.</div>
-            </div>
-            <v-btn variant="outlined" color="warning" @click="modalVendasCanceladasAberto = true">Consultar</v-btn>
-          </div>
-        </v-alert>
-
-        <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
-           fecha e o servidor devolve o restante no mesmo ato. -->
-        <v-alert v-if="temSobra" type="warning" variant="tonal" class="my-5">
-          <template v-if="planejamentosPendentes.length">
-            Há {{ dinheiro(saldoAtual) }} em espécie no caixa; {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão
-            reservados para as transferências de retorno programadas. Somente os {{ dinheiro(saldoLivre) }}
-            livres podem ser transferidos à parte.
-          </template>
-          <template v-else>
-            Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode transferir parte agora ou fechar o caixa — ao
-            fechar, o restante volta ao cofre automaticamente, no mesmo ato.
-          </template>
-        </v-alert>
 
         <!-- D7: o deficit e o evento mais grave do modulo. O operador precisa saber ANTES de
            confirmar que vai ficar com uma quebra no nome dele — nao descobrir por snackbar. -->
@@ -984,7 +999,22 @@ function confirmarFechamento() {
             </div>
           </v-col>
           <v-col cols="12" class="fechamento-caixa">
+            <v-alert v-if="temSobra" type="warning" variant="tonal" class="mb-4">
+              <template v-if="planejamentosPendentes.length">
+                Há {{ dinheiro(saldoAtual) }} em espécie no caixa;
+                {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão reservados para as transferências de retorno
+                programadas. Somente os {{ dinheiro(saldoLivre) }}
+                livres podem ser transferidos à parte.
+              </template>
+              <template v-else>
+                Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode transferir parte agora ou fechar o caixa —
+                ao fechar, o restante volta ao cofre automaticamente, no mesmo ato.
+              </template>
+            </v-alert>
             <div class="text-h6 mb-1">Fechamento do caixa</div>
+            <v-alert type="info" variant="tonal" density="compact" class="mb-4" data-teste="valor-esperado-fechamento">
+              Valor esperado para fechar: <strong>{{ dinheiro(saldoAtual) }}</strong>
+            </v-alert>
             <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
             <div
               v-if="caixaAberto.caixaResponsavelNomeAbertura || caixaAberto.supervisorResponsavelNomeAbertura"
@@ -1058,6 +1088,19 @@ function confirmarFechamento() {
               </v-col>
               <v-col cols="12" md="4">
                 <CampoDinheiro
+                  v-model="fechamento.valorTotal"
+                  label="Valor total contado no fechamento"
+                  icone="mdi-cash-multiple"
+                  :hint="`Esperado para fechar: ${dinheiro(saldoAtual)}`"
+                  persistent-hint
+                  :error="fechamentoComposicaoInvalida"
+                  :error-messages="
+                    fechamentoComposicaoInvalida ? 'Total deve ser igual a dinheiro físico mais moedas.' : ''
+                  "
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro
                   v-model="fechamento.valorEspecie"
                   label="Dinheiro fisico contado no fechamento"
                   icone="mdi-cash"
@@ -1083,6 +1126,7 @@ function confirmarFechamento() {
                   prepend-icon="mdi-lock"
                   :disabled="
                     observacaoObrigatoriaPendente ||
+                    fechamentoComposicaoInvalida ||
                     lacreFechamentoPendente ||
                     responsaveisFechamentoPendentes ||
                     !fechamentoComposicaoInformada ||
@@ -1160,6 +1204,7 @@ function confirmarFechamento() {
           :lacre-fechamento="fechamento.lacreFechamento.trim()"
           :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
           :supervisor-responsavel-nome="fechamento.supervisorResponsavelNome.trim()"
+          :valor-total="Number(fechamento.valorTotal || 0)"
           :valor-especie="Number(fechamento.valorEspecie || 0)"
           :valor-moedas="Number(fechamento.valorMoedas || 0)"
           :anexos="anexosFechamento"
@@ -1291,6 +1336,13 @@ function confirmarFechamento() {
 .cat-card--clicavel:focus-visible {
   outline: 3px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
+}
+
+.cat-canceladas {
+  --cat: rgb(var(--v-theme-error));
+  --cat-soft: rgba(var(--v-theme-error), 0.12);
+  --cat-faixa: rgb(var(--v-theme-error));
+  --cat-tinta: rgb(var(--v-theme-error));
 }
 
 .cat-card__acao {

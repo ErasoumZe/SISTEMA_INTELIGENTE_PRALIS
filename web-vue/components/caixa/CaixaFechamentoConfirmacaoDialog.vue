@@ -15,6 +15,7 @@ const props = defineProps<{
   lacreFechamento: string;
   caixaResponsavelNome: string;
   supervisorResponsavelNome: string;
+  valorTotal: number;
   valorEspecie: number;
   valorMoedas: number;
   anexos: AnexoFechamento[];
@@ -25,7 +26,7 @@ const emit = defineEmits<{
   (event: "confirmar"): void;
 }>();
 
-const totalContado = computed(() => props.valorEspecie + props.valorMoedas);
+const totalContado = computed(() => props.valorTotal);
 const diferenca = computed(() => totalContado.value - props.saldoEsperado);
 const folhas = computed(() => props.anexos.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoes = computed(() => props.anexos.filter((anexo) => anexo.tipo === "comprovante_cartao"));
@@ -55,10 +56,10 @@ function dinheiroRelatorio(campo: string) {
           <div class="text-overline">Conferência física</div>
           <v-row dense>
             <v-col cols="12" sm="4"><strong>Esperado:</strong> {{ dinheiro(saldoEsperado) }}</v-col>
-            <v-col cols="12" sm="4"><strong>Contado:</strong> {{ dinheiro(totalContado) }}</v-col>
+            <v-col cols="12" sm="4"><strong>Total declarado:</strong> {{ dinheiro(totalContado) }}</v-col>
             <v-col cols="12" sm="4" :class="diferenca ? 'text-error' : 'text-success'">
-              <strong>{{ diferenca ? 'Diferença:' : 'Conferência:' }}</strong>
-              {{ diferenca ? dinheiro(Math.abs(diferenca)) : 'bateu' }}
+              <strong>{{ diferenca ? "Diferença:" : "Conferência:" }}</strong>
+              {{ diferenca ? dinheiro(Math.abs(diferenca)) : "bateu" }}
             </v-col>
             <v-col cols="12" sm="6"><strong>Dinheiro físico:</strong> {{ dinheiro(valorEspecie) }}</v-col>
             <v-col cols="12" sm="6"><strong>Moedas:</strong> {{ dinheiro(valorMoedas) }}</v-col>
@@ -91,7 +92,12 @@ function dinheiroRelatorio(campo: string) {
           Folha: <strong>{{ folhas.length }}</strong> · Comprovantes de cartão: <strong>{{ cartoes.length }}</strong>
         </div>
         <v-chip-group v-if="anexos.length" class="mt-2">
-          <v-chip v-for="anexo in anexos" :key="anexo.id" size="small" :prepend-icon="anexo.tipo === 'folha_fechamento' ? 'mdi-file-document-outline' : 'mdi-credit-card-outline'">
+          <v-chip
+            v-for="anexo in anexos"
+            :key="anexo.id"
+            size="small"
+            :prepend-icon="anexo.tipo === 'folha_fechamento' ? 'mdi-file-document-outline' : 'mdi-credit-card-outline'"
+          >
             {{ anexo.nomeOriginal }}
           </v-chip>
         </v-chip-group>
@@ -99,10 +105,16 @@ function dinheiroRelatorio(campo: string) {
           <v-list-subheader>Relatório único da maquininha</v-list-subheader>
           <v-list-item prepend-icon="mdi-credit-card-outline">
             <v-list-item-title>
-              {{ campoRelatorio('numeroMaquininha') ? `Máquina ${campoRelatorio('numeroMaquininha')}` : 'Máquina não identificada' }} · {{ cartoes.length }} foto(s)
+              {{
+                campoRelatorio("numeroMaquininha")
+                  ? `Máquina ${campoRelatorio("numeroMaquininha")}`
+                  : "Máquina não identificada"
+              }}
+              · {{ cartoes.length }} foto(s)
             </v-list-item-title>
             <v-list-item-subtitle>
-              Crédito {{ dinheiroRelatorio('credito') }} · Débito {{ dinheiroRelatorio('debito') }} · Pix {{ dinheiroRelatorio('pix') }} · Voucher {{ dinheiroRelatorio('voucher') }}
+              Crédito {{ dinheiroRelatorio("credito") }} · Débito {{ dinheiroRelatorio("debito") }} · Pix
+              {{ dinheiroRelatorio("pix") }} · Voucher {{ dinheiroRelatorio("voucher") }}
             </v-list-item-subtitle>
           </v-list-item>
         </v-list>
@@ -110,7 +122,9 @@ function dinheiroRelatorio(campo: string) {
       <v-card-actions class="px-6 pb-5">
         <v-spacer />
         <v-btn variant="text" @click="emit('editar')">Voltar e editar</v-btn>
-        <v-btn color="primary" variant="flat" prepend-icon="mdi-lock" @click="emit('confirmar')">Confirmar fechamento</v-btn>
+        <v-btn color="primary" variant="flat" prepend-icon="mdi-lock" @click="emit('confirmar')"
+          >Confirmar fechamento</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>
