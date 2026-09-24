@@ -567,6 +567,7 @@ export function formOperacaoVazio(): OperacaoForm {
     numeroLacre: "",
     nLacreDoc: "",
     lacresRetorno: [],
+    lacreFechamentoPlanejado: "",
     agendadaPara: "",
     dataRecebimento: "",
     tempoConfirmacao: null,

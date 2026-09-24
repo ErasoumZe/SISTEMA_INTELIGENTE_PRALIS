@@ -211,6 +211,7 @@ export type OperacaoResumo = {
   contaOrigemNome?: string;
   contaDestinoNome?: string;
   nLacreDoc?: string | null;
+  lacreFechamentoPlanejado?: string | null;
   prazoConfirmacaoEm?: string | null;
   dataRecebimento?: string | null;
   confirmadoPor?: string | null;
@@ -325,6 +326,7 @@ export type PlanejamentoRetorno = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+  lacreFechamentoReservado: string | null;
   // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];
@@ -407,6 +409,7 @@ export type OperacaoForm = {
   numeroLacre: string;
   nLacreDoc: string;
   lacresRetorno: string[];
+  lacreFechamentoPlanejado: string;
   agendadaPara: string;
   dataRecebimento: string;
   tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias" | null;

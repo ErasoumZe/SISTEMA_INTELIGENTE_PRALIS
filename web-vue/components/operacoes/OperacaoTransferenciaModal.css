@@ -182,6 +182,17 @@
 .tr-lacres-retorno .tr-legenda {
   color: #8a4b2a;
 }
+.tr-lacre-fechamento-planejado {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 35%, transparent);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 34%);
+}
+.tr-lacre-fechamento-planejado .tr-campo-lbl {
+  color: #7c2d12;
+  font-weight: 700;
+}
 .tr-erro {
   color: #b42318;
 }

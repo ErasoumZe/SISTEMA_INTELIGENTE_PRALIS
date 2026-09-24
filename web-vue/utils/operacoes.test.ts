@@ -176,6 +176,14 @@ describe("montarPayloadOperacao", () => {
     expect(payload).toMatchObject({ lacresRetorno: ["SANG-01", "SANG-02"] });
   });
 
+  it("envia o lacre aberto reservado para o fechamento do caixa", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: { ...formOperacaoVazio(), lacreFechamentoPlanejado: "  FCH-ABERTO-01  " }
+    });
+    expect(payload).toMatchObject({ lacreFechamentoPlanejado: "FCH-ABERTO-01" });
+  });
+
   it("nao envia composicao vazia para transferencias que nao sao malote", () => {
     const payload = montarPayloadOperacao("transferencia", { ...base, form: formOperacaoVazio() });
     expect(payload).not.toHaveProperty("valorEspecieDeclarado");

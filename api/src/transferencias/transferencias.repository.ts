@@ -173,6 +173,16 @@ export async function criarTransferenciaRepository(
       }))
     );
   }
+  if (dados.lacreFechamentoPlanejado?.trim()) {
+    await db.insert(lacres).values({
+      empresaId: dados.empresaId,
+      numero: dados.lacreFechamentoPlanejado.trim(),
+      // Segue ABERTO dentro do malote principal. A abertura vincula esta transferencia ao Caixa;
+      // no fechamento o numero digitado e conferido e o lacre e rompido no mesmo commit.
+      transferenciaId: transferencia.id,
+      origem: "fechamento"
+    });
+  }
   return transferencia;
 }
 
@@ -237,6 +247,21 @@ export async function transferenciaPossuiRetornosPlanejadosRepository(
     .where(eq(transferencias.planejamentoOrigemTransferenciaId, transferenciaId))
     .limit(1);
   return Boolean(linha);
+}
+
+// O lacre de fechamento já foi separado fisicamente e segue o malote. Editar a transferencia sem
+// reescrever o lacre criaria um segundo caminho ou deixaria uma reserva órfã; por isso o malote
+// com esse selo é imutável, tal como o que possui bolsas de retorno planejadas.
+export async function transferenciaPossuiLacreFechamentoPlanejadoRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [lacre] = await db
+    .select({ id: lacres.id })
+    .from(lacres)
+    .where(and(eq(lacres.transferenciaId, transferenciaId), eq(lacres.origem, "fechamento")))
+    .limit(1);
+  return Boolean(lacre);
 }
 
 export async function buscarTransferenciaDetalheRepository(

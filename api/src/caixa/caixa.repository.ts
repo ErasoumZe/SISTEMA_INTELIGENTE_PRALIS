@@ -749,6 +749,66 @@ export async function listarLacresRetornoDaDistribuicaoRepository(
     .orderBy(asc(lacres.numero));
 }
 
+// Selo enviado aberto pela Tesouraria dentro do malote de ida. Ele pertence à transferencia que
+// abriu este Caixa, não à uma sangria: por isso usa `transferenciaId`, nunca a distribuicao.
+export async function buscarLacreFechamentoPlanejadoDoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string; numero: string; rompido: boolean } | null> {
+  const [lacre] = await db
+    .select({ id: lacres.id, numero: lacres.numero, rompido: lacres.rompido })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaId))
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.origem, "fechamento"),
+        eq(transferencias.caixaId, caixaId),
+        eq(transferencias.status, "recebido")
+      )
+    )
+    .limit(1);
+  return lacre ?? null;
+}
+
+export async function buscarLacreFechamentoPlanejadoDaTransferenciaRepository(
+  transferenciaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string; numero: string; rompido: boolean } | null> {
+  const [lacre] = await db
+    .select({ id: lacres.id, numero: lacres.numero, rompido: lacres.rompido })
+    .from(lacres)
+    .where(
+      and(eq(lacres.empresaId, empresaId), eq(lacres.transferenciaId, transferenciaId), eq(lacres.origem, "fechamento"))
+    )
+    .limit(1);
+  return lacre ?? null;
+}
+
+// A guarda `rompido = false` torna o consumo idempotente sob corrida: somente um fechamento pode
+// usar o selo reservado, e qualquer falha posterior reverte tudo com a transacao do fechamento.
+export async function consumirLacreFechamentoPlanejadoRepository(
+  input: { lacreId: string; empresaId: string; numero: string },
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [consumido] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.origem, "fechamento"),
+        eq(lacres.numero, input.numero),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  return Boolean(consumido);
+}
+
 export async function buscarLacreRetornoDoCaixaRepository(
   input: { lacreId: string; caixaId: string; empresaId: string },
   db: ExecutorBanco = banco

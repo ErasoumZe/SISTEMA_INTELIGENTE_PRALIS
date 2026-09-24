@@ -50,6 +50,9 @@ export const transferenciaPayloadSchema = z.object({
   // R-208: lacres das bolsas vazias que seguem DENTRO do malote Cofre -> PDV.
   // Nao sao transferencias futuras: so passam a selar um movimento quando o Caixa faz a sangria.
   lacresRetorno: z.array(z.string().trim().min(1).max(100)).max(50).optional().default([]),
+  // Lacre enviado aberto dentro do malote principal para selar o fechamento deste Caixa. Quando
+  // informado, o operador precisa digitá-lo manualmente e o servidor exige a correspondencia.
+  lacreFechamentoPlanejado: z.string().trim().min(1).max(100).optional().nullable(),
   agendadaPara: z.string().datetime().optional().nullable(),
   tempoConfirmacao: tempoConfirmacaoSchema.nullable().optional().default(null),
   computar: z.boolean().default(true)

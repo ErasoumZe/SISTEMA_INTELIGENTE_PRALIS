@@ -2091,13 +2091,14 @@ export const lacres = pgTable(
     // quando a sangria acontece, `transferenciaId` passa a ser o movimento Caixa -> Cofre sem
     // apagar a proveniencia fisica do lacre.
     transferenciaDistribuicaoId: uuid("transferencia_distribuicao_id"),
-    // Ponta do movimento que o lacre selou: 'saida' (ida da transferencia) ou 'retorno' (volta/sangria).
+    // Ponta do movimento que o lacre selou: 'saida' (ida), 'retorno' (volta/sangria) ou
+    // 'fechamento' (selo aberto dentro do malote de ida, reservado ao fechamento do Caixa).
     origem: text("origem").notNull(),
     rompido: boolean("rompido").notNull().default(false),
     criadoEm
   },
   (table) => [
-    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno')`),
+    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno', 'fechamento')`),
     check(
       "lacres_distribuicao_retorno_check",
       sql`${table.transferenciaDistribuicaoId} is null

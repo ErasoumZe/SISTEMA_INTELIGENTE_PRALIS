@@ -111,6 +111,7 @@ const maloteDeclarado = ref<{
   valorEspecieDeclarado: number;
   valorMoedasDeclarado: number;
   lacresRetorno: Array<{ id: string; numero: string }>;
+  lacreFechamento: { id: string; numero: string } | null;
 } | null>(null);
 const erroMalote = ref("");
 const carregandoMalote = ref(false);
@@ -215,6 +216,7 @@ const fechamentoDivergente = computed(() => fechamentoComposicaoInformada.value 
 const fechamentoComQuebra = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value < 0);
 const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
+const lacreFechamentoReservado = computed(() => props.status?.lacreFechamentoReservado ?? null);
 const responsaveisFechamentoPendentes = computed(
   () => !fechamento.caixaResponsavelNome.trim() || !fechamento.supervisorResponsavelNome.trim()
 );
@@ -357,6 +359,7 @@ watch([() => abertura.pdvId, () => aberturaExtra.numeroLacre], async ([pdvId, la
       valorEspecieDeclarado: number;
       valorMoedasDeclarado: number;
       lacresRetorno: Array<{ id: string; numero: string }>;
+      lacreFechamento: { id: string; numero: string } | null;
     }>(
       `/api/caixa/malote?empresaId=${encodeURIComponent(props.empresaId)}&pdvId=${encodeURIComponent(pdvId)}&lacre=${encodeURIComponent(lacre.trim())}`
     );
@@ -666,6 +669,10 @@ function confirmarFechamento() {
                 {{ maloteDeclarado.lacresRetorno.length }} lacre(s) de retorno:
                 {{ maloteDeclarado.lacresRetorno.map((lacre) => lacre.numero).join(", ") }}.
               </span>
+              <span v-if="maloteDeclarado.lacreFechamento">
+                Lacre reservado para fechar este caixa: <strong>{{ maloteDeclarado.lacreFechamento.numero }}</strong
+                >. Mantenha-o aberto e digite esse número ao fechar.
+              </span>
               <span v-if="aberturaDivergente">
                 A contagem diverge; descreva o motivo para abrir com o valor contado.</span
               >
@@ -781,6 +788,10 @@ function confirmarFechamento() {
             <span v-if="lacresRetornoDisponiveis.length">
               · {{ lacresRetornoDisponiveis.length }} lacre(s) de sangria disponível(is):
               {{ lacresRetornoDisponiveis.map((lacre) => lacre.numero).join(", ") }}.
+            </span>
+            <span v-if="lacreFechamentoReservado">
+              · Lacre reservado para fechamento: <strong>{{ lacreFechamentoReservado }}</strong
+              >. Confirme o número físico e digite-o no fechamento.
             </span>
           </v-alert>
         </div>
@@ -988,9 +999,17 @@ function confirmarFechamento() {
               <v-col cols="12" md="4">
                 <v-text-field
                   v-model="fechamento.lacreFechamento"
-                  label="Lacre de fechamento (obrigatório)"
+                  :label="
+                    lacreFechamentoReservado
+                      ? 'Lacre reservado para fechamento (obrigatório)'
+                      : 'Lacre de fechamento (obrigatório)'
+                  "
                   placeholder="Ex.: FCH-001"
-                  hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
+                  :hint="
+                    lacreFechamentoReservado
+                      ? 'Digite manualmente o número físico reservado no malote. Ele precisa ser exatamente igual ao informado pela Tesouraria.'
+                      : 'Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento.'
+                  "
                   persistent-hint
                   :color="lacreFechamentoPendente ? 'error' : 'primary'"
                   :base-color="lacreFechamentoPendente ? 'error' : undefined"

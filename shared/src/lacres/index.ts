@@ -4,7 +4,7 @@ import { apiIdParamsSchema, empresaQuerySchema } from "../api/index.js";
 const uuidSchema = z.string().uuid();
 
 // Ponta do movimento que o lacre selou (ver lacres.origem no schema).
-export const origemLacreSchema = z.enum(["saida", "retorno"]);
+export const origemLacreSchema = z.enum(["saida", "retorno", "fechamento"]);
 export const origensLacre = origemLacreSchema.options;
 export type OrigemLacre = z.infer<typeof origemLacreSchema>;
 

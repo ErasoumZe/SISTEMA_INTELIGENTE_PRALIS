@@ -59,6 +59,7 @@ import {
   criarTransferenciaRepository,
   contaEhPdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
+  transferenciaPossuiLacreFechamentoPlanejadoRepository,
   transferenciaPossuiRetornosPlanejadosRepository,
   efetivarTransferenciaAgendadaRepository,
   listarAgendadasVencidasRepository,
@@ -105,6 +106,13 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   }
   if (dados.nLacreDoc?.trim() && lacresRetorno.includes(dados.nLacreDoc.trim())) {
     throw new Error("O lacre do malote nao pode se repetir como lacre de retorno / sangria");
+  }
+  const lacreFechamentoPlanejado = dados.lacreFechamentoPlanejado?.trim();
+  if (lacreFechamentoPlanejado && dados.nLacreDoc?.trim() === lacreFechamentoPlanejado) {
+    throw new Error("O lacre do malote de fechamento deve ser diferente do lacre principal");
+  }
+  if (lacreFechamentoPlanejado && lacresRetorno.includes(lacreFechamentoPlanejado)) {
+    throw new Error("O lacre do malote de fechamento nao pode se repetir como lacre de retorno / sangria");
   }
 }
 
@@ -175,7 +183,9 @@ export async function criarTransferencia(
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   try {
     return await executarEmTransacao(async (tx) => {
-      for (const lacre of [dados.nLacreDoc!, ...dados.lacresRetorno]) {
+      for (const lacre of [dados.nLacreDoc!, ...dados.lacresRetorno, dados.lacreFechamentoPlanejado?.trim()].filter(
+        (numero): numero is string => Boolean(numero)
+      )) {
         const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, lacre, tx);
         if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
       }
@@ -200,8 +210,14 @@ export async function criarTransferencia(
       ) {
         throw new Error("Informe dinheiro fisico e moedas ao preparar o malote para o Caixa");
       }
+      if (ehMaloteCofreParaPdv && !dados.lacreFechamentoPlanejado?.trim()) {
+        throw new Error("Informe o lacre aberto reservado para o fechamento do Caixa");
+      }
       if (!ehMaloteCofreParaPdv && dados.lacresRetorno.length) {
         throw new Error("Lacres de retorno / sangria so podem seguir em um malote do Cofre para o Caixa");
+      }
+      if (!ehMaloteCofreParaPdv && dados.lacreFechamentoPlanejado?.trim()) {
+        throw new Error("O lacre de fechamento so pode seguir em um malote do Cofre para o Caixa");
       }
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
@@ -832,6 +848,9 @@ export async function atualizarTransferencia(
   return executarEmTransacao(async (tx) => {
     if (await transferenciaTemPlanejamentoRepository(transferenciaId, tx)) {
       throw new Error("Transferencia com retorno planejado nao pode ser editada");
+    }
+    if (await transferenciaPossuiLacreFechamentoPlanejadoRepository(transferenciaId, tx)) {
+      throw new Error("Transferencia com lacre de fechamento reservado nao pode ser editada");
     }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);

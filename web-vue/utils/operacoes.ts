@@ -305,6 +305,7 @@ export function formOperacaoDeDetalhe(entidade: EntidadeOperacional, detalhe: Op
     grupoMercadoriaId: detalhe.grupoMercadoriaId ?? "",
     grupoRetiradaId: detalhe.grupoRetiradaId ?? "",
     nLacreDoc: detalhe.nLacreDoc ?? "",
+    lacreFechamentoPlanejado: detalhe.lacreFechamentoPlanejado ?? "",
     agendadaPara: detalhe.agendadaPara?.slice(0, 16) ?? "",
     dataRecebimento: detalhe.dataRecebimento?.slice(0, 16) ?? "",
     tempoConfirmacao: detalhe.tempoConfirmacao ?? null,
@@ -500,6 +501,7 @@ export function montarPayloadOperacao(entidade: EntidadeOperacional, dados: Dado
       ? {
           nLacreDoc: dados.form.nLacreDoc || null,
           lacresRetorno: dados.form.lacresRetorno.map((lacre) => lacre.trim()).filter(Boolean),
+          lacreFechamentoPlanejado: dados.form.lacreFechamentoPlanejado.trim() || null,
           ...(dados.form.valorEspecieDeclarado !== "" || dados.form.valorMoedasDeclarado !== ""
             ? {
                 valorEspecieDeclarado: deCentavos(paraCentavos(dados.form.valorEspecieDeclarado)),

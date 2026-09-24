@@ -330,6 +330,13 @@
       "when": 1790195663704,
       "tag": "0046_old_ted_forrester",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790250348482,
+      "tag": "0047_square_excalibur",
+      "breakpoints": true
     }
   ]
 }

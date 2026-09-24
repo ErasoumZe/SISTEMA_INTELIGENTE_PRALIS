@@ -112,6 +112,7 @@ watch(preparandoMaloteParaCaixa, (preparando) => {
     form.value.valorEspecieDeclarado = "";
     form.value.valorMoedasDeclarado = "";
     form.value.lacresRetorno = [];
+    form.value.lacreFechamentoPlanejado = "";
     novoLacreRetorno.value = "";
     lacresRetornoAtivos.value = false;
   }
@@ -136,6 +137,13 @@ watch(
 const lacresRetornoDuplicados = computed(
   () => new Set(form.value.lacresRetorno.map((lacre) => lacre.trim())).size !== form.value.lacresRetorno.length
 );
+const lacreFechamentoConflita = computed(() => {
+  const lacre = form.value.lacreFechamentoPlanejado.trim();
+  return Boolean(
+    lacre &&
+    (lacre === form.value.nLacreDoc.trim() || form.value.lacresRetorno.map((item) => item.trim()).includes(lacre))
+  );
+});
 function adicionarLacreRetorno() {
   const numero = novoLacreRetorno.value.trim();
   if (!numero || form.value.lacresRetorno.includes(numero)) return;
@@ -177,6 +185,14 @@ async function revisarTransferencia(criarNova = false) {
   }
   if (preparandoMaloteParaCaixa.value && lacresRetornoDuplicados.value) {
     erroComposicao.value = "Cada lacre de retorno / sangria deve ser informado uma unica vez.";
+    return;
+  }
+  if (preparandoMaloteParaCaixa.value && !form.value.lacreFechamentoPlanejado.trim()) {
+    erroComposicao.value = "Informe o lacre aberto reservado para o fechamento do Caixa.";
+    return;
+  }
+  if (preparandoMaloteParaCaixa.value && lacreFechamentoConflita.value) {
+    erroComposicao.value = "O lacre de fechamento deve ser diferente do lacre principal e dos lacres de sangria.";
     return;
   }
   if (!(await verificarLacreDisponivel())) return;
@@ -363,6 +379,19 @@ async function confirmarTransferencia() {
             </div>
             <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
           </div>
+          <label class="tr-campo tr-lacre-fechamento-planejado">
+            <span class="tr-campo-lbl">Lacre do malote de fechamento <span class="tr-hint">(obrigatório)</span></span>
+            <input
+              v-model="form.lacreFechamentoPlanejado"
+              class="tr-input"
+              placeholder="Número do lacre enviado aberto"
+              maxlength="100"
+            />
+            <span class="tr-legenda">
+              Vai aberto dentro do malote principal. O operador verá este número ao abrir e deverá digitá-lo ao fechar o
+              caixa.
+            </span>
+          </label>
         </template>
 
         <label class="tr-check">
@@ -446,6 +475,7 @@ async function confirmarTransferencia() {
       :valor-moedas="valorMoedasDeclarado"
       :lacre-malote="form.nLacreDoc"
       :lacres-retorno="form.lacresRetorno"
+      :lacre-fechamento-planejado="form.lacreFechamentoPlanejado"
       :origem="contaOrigemSelecionada?.nome ?? 'Não informada'"
       :destinos="destinosConfirmacao"
       :agendada-para="form.agendadaPara"

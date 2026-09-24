@@ -9,6 +9,7 @@ const props = defineProps<{
   valorMoedas: number;
   lacreMalote: string;
   lacresRetorno: string[];
+  lacreFechamentoPlanejado: string;
   origem: string;
   destinos: string[];
   agendadaPara: string;
@@ -43,6 +44,9 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
           <v-col cols="12" sm="6"><strong>Origem:</strong> {{ origem }}</v-col>
           <v-col cols="12" sm="6"><strong>Destino:</strong> {{ destinos.join(" · ") }}</v-col>
           <v-col cols="12"><strong>Lacre do malote:</strong> {{ lacreMalote }}</v-col>
+          <v-col v-if="lacreFechamentoPlanejado.trim()" cols="12">
+            <strong>Lacre reservado para fechamento:</strong> {{ lacreFechamentoPlanejado.trim() }}
+          </v-col>
           <template v-if="temComposicao">
             <v-col cols="12" sm="6"><strong>Dinheiro físico:</strong> {{ dinheiro(valorEspecie) }}</v-col>
             <v-col cols="12" sm="6"><strong>Moedas:</strong> {{ dinheiro(valorMoedas) }}</v-col>

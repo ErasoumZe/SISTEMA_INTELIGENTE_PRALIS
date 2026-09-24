@@ -412,6 +412,7 @@ export const caixaOperacionalSchema = z.object({
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable(),
+  lacreFechamentoReservado: z.string().nullable(),
   // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado
   // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
   // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".

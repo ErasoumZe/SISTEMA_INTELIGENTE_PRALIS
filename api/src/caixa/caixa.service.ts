@@ -86,7 +86,10 @@ import {
   travarCaixaRepository,
   buscarTransferenciaPorIdempotenciaRepository,
   buscarLacreRetornoDoCaixaRepository,
+  buscarLacreFechamentoPlanejadoDoCaixaRepository,
+  buscarLacreFechamentoPlanejadoDaTransferenciaRepository,
   consumirLacreRetornoRepository,
+  consumirLacreFechamentoPlanejadoRepository,
   listarLacresRetornoDaDistribuicaoRepository,
   listarLacresRetornoDisponiveisDoCaixaRepository,
   listarCandidatosConfirmacaoRepository,
@@ -425,9 +428,11 @@ export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: Exe
 // travam o fechamento â€” repetir viraria dividir: bastaria uma rota esquecer o campo para a tela
 // mostrar "pode fechar" sobre um caixa que a API recusa. Aqui isso nao tem como acontecer.
 async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promise<CaixaStatus> {
+  const lacreFechamento = await buscarLacreFechamentoPlanejadoDoCaixaRepository(caixa.id, caixa.empresaId, db);
   return {
     caixaAberto: serializarCaixa(caixa),
     resumo: await calcularResumoCaixaOperacional(caixa, db),
+    lacreFechamentoReservado: lacreFechamento?.rompido ? null : (lacreFechamento?.numero ?? null),
     entregasPendentes: await entregasPendentesDoCaixa(caixa.id, db),
     planejamentosPendentes: serializarPlanejamentos(await listarPlanejamentosRetornoRepository(caixa.id, db))
   };
@@ -524,7 +529,15 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
   return executarEmTransacao(async (tx) => {
     const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
     // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
-    if (!caixa) return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] };
+    if (!caixa) {
+      return {
+        caixaAberto: null,
+        resumo: null,
+        lacreFechamentoReservado: null,
+        entregasPendentes: [],
+        planejamentosPendentes: []
+      };
+    }
 
     // O CREARE pode importar uma venda depois da abertura. O refresh de um minuto
     // precisa anexar essas vendas ao caixa antes de calcular os cards de pagamento.
@@ -669,12 +682,18 @@ export async function consultarMaloteParaAbertura(
   if (!pdv?.contaId) throw new Error("PDV sem conta vinculada");
   const abertura = await prepararAberturaPorLacre(empresaId, lacre.trim(), pdv.contaId, perfil.usuarioId, banco);
   const lacresRetorno = await listarLacresRetornoDaDistribuicaoRepository(abertura.transferenciaId, empresaId);
+  const lacreFechamento = await buscarLacreFechamentoPlanejadoDaTransferenciaRepository(
+    abertura.transferenciaId,
+    empresaId,
+    banco
+  );
   return {
     valor: deCentavos(abertura.valorCentavos),
     valorEspecieDeclarado: deCentavos(abertura.valorEspecieDeclaradoCentavos),
     valorMoedasDeclarado: deCentavos(abertura.valorMoedasDeclaradoCentavos),
     lacre: abertura.numeroLacre,
-    lacresRetorno
+    lacresRetorno,
+    lacreFechamento
   };
 }
 
@@ -867,6 +886,14 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const lacreFechamentoReservado = await buscarLacreFechamentoPlanejadoDoCaixaRepository(
+      caixa.id,
+      caixa.empresaId,
+      tx
+    );
+    if (lacreFechamentoReservado && dados.lacreFechamento.trim() !== lacreFechamentoReservado.numero) {
+      throw new Error("O lacre informado nao corresponde ao lacre de fechamento reservado no malote");
+    }
     if (!(await existeFolhaFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx))) {
       throw new Error("Anexe ao menos uma foto da folha de fechamento antes de fechar o caixa");
     }
@@ -1004,8 +1031,25 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // B1: o UPDATE so acerta caixa 'aberto'. Zero linhas significa que outro fechamento venceu a
     // corrida â€” erro de dominio (400), nunca 500 por violacao de UNIQUE da quebra.
     if (linhasFechadas === 0) throw new Error("Caixa ja fechado");
+    if (lacreFechamentoReservado) {
+      const consumido = await consumirLacreFechamentoPlanejadoRepository(
+        {
+          lacreId: lacreFechamentoReservado.id,
+          empresaId: caixa.empresaId,
+          numero: dados.lacreFechamento.trim()
+        },
+        tx
+      );
+      if (!consumido) throw new Error("Lacre de fechamento ja utilizado ou indisponivel");
+    }
 
-    return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] } satisfies CaixaStatus;
+    return {
+      caixaAberto: null,
+      resumo: null,
+      lacreFechamentoReservado: null,
+      entregasPendentes: [],
+      planejamentosPendentes: []
+    } satisfies CaixaStatus;
   });
 }
 
