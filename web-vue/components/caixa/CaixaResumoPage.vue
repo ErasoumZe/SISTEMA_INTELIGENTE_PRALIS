@@ -1242,8 +1242,14 @@ function confirmarFechamento() {
 }
 
 .botao-retorno-sangria {
+  max-width: 100%;
   min-height: 52px;
   padding-block: 8px;
+}
+
+.botao-retorno-sangria :deep(.v-btn__content) {
+  min-width: 0;
+  white-space: normal;
 }
 
 .retorno-sangria-faixa {
@@ -1254,6 +1260,7 @@ function confirmarFechamento() {
 
 .botao-retorno-sangria__conteudo {
   display: grid;
+  min-width: 0;
   text-align: left;
 }
 
@@ -1264,6 +1271,36 @@ function confirmarFechamento() {
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
+}
+
+@media (max-width: 480px) {
+  .retorno-sangria-faixa {
+    padding: 8px;
+  }
+
+  .botao-retorno-sangria {
+    width: 100%;
+    height: auto !important;
+    min-height: 58px;
+    padding: 10px 12px;
+  }
+
+  .botao-retorno-sangria :deep(.v-btn__prepend) {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    margin-right: 8px;
+  }
+
+  .botao-retorno-sangria__conteudo {
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
+    line-height: 1.25;
+  }
+
+  .botao-retorno-sangria__subtitulo {
+    font-size: 0.67rem;
+    line-height: 1.25;
+  }
 }
 
 .abertura-conferencia {
