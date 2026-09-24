@@ -86,9 +86,9 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
   overflow: hidden;
   padding: 18px 20px;
   color: #fff;
-  background: linear-gradient(125deg, rgb(194 65 12 / 88%), rgb(234 88 12 / 78%));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
-  backdrop-filter: blur(14px) saturate(135%);
+  background: linear-gradient(112deg, #9f390c 0%, #c94c0a 50%, #e1641c 100%);
+  box-shadow: inset 0 1px 0 rgb(255 166 99 / 18%);
+  backdrop-filter: blur(8px) saturate(112%);
 }
 .confirmacao-transferencia__faixa::before {
   position: absolute;
@@ -97,7 +97,7 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
   width: 190px;
   height: 112px;
   border-radius: 50%;
-  background: rgb(255 255 255 / 17%);
+  background: radial-gradient(circle, rgb(255 158 79 / 28%), transparent 68%);
   content: "";
   filter: blur(12px);
 }

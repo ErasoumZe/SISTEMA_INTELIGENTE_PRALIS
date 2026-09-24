@@ -24,10 +24,10 @@
   padding: var(--cx-sp-4) var(--cx-sp-5);
   position: relative;
   overflow: hidden;
-  background: linear-gradient(125deg, rgb(194 65 12 / 88%), rgb(234 88 12 / 78%));
+  background: linear-gradient(112deg, #9f390c 0%, #c94c0a 50%, #e1641c 100%);
   border-radius: 16px 16px 0 0;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
-  backdrop-filter: blur(14px) saturate(135%);
+  box-shadow: inset 0 1px 0 rgb(255 166 99 / 18%);
+  backdrop-filter: blur(8px) saturate(112%);
 }
 .tr-faixa::before {
   position: absolute;
@@ -36,7 +36,7 @@
   width: 190px;
   height: 110px;
   border-radius: 50%;
-  background: rgb(255 255 255 / 17%);
+  background: radial-gradient(circle, rgb(255 158 79 / 28%), transparent 68%);
   content: "";
   filter: blur(12px);
 }
