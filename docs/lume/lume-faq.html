@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lume · revisão de perguntas do Caixa</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f141b; --panel:#18212c; --panel-2:#202c38; --ink:#edf3f8; --muted:#9fb0bf; --line:#344452; --accent:#ff8a45; --accent-2:#ffc06e; --good:#5fdaa4; --warn:#ffd166; --danger:#ff7b7b; --shadow:0 18px 55px #0007; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at 15% 0%, #233246 0, transparent 36rem), var(--bg); color:var(--ink); min-height:100vh; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); color:var(--ink); padding:.65rem .9rem; }
+    button:hover { border-color:var(--accent); }
+    .app { max-width:1480px; margin:auto; padding:26px clamp(14px,3vw,40px) 60px; }
+    .hero { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:24px; }
+    h1 { margin:0 0 7px; font-size:clamp(1.5rem,3vw,2.35rem); letter-spacing:-.04em; }
+    h2 { margin:0 0 14px; font-size:1.15rem; }
+    .subtitle { margin:0; color:var(--muted); max-width:800px; line-height:1.5; }
+    .brand { color:var(--accent-2); font-weight:800; letter-spacing:.08em; white-space:nowrap; }
+    .toolbar, .stats { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .toolbar { background:#121a23cc; border:1px solid var(--line); padding:12px; border-radius:14px; margin-bottom:16px; position:sticky; top:10px; z-index:5; backdrop-filter:blur(14px); }
+    .toolbar input, .toolbar select, .field input, .field select, .field textarea { min-width:0; width:100%; color:var(--ink); background:#101820; border:1px solid var(--line); border-radius:9px; padding:.65rem .72rem; }
+    .toolbar .search { flex:1 1 270px; }
+    .toolbar select { flex:0 1 210px; }
+    .toolbar .primary { background:linear-gradient(135deg,#f36b27,#b94215); border-color:#ff9c60; font-weight:800; }
+    .toolbar .ghost { background:transparent; }
+    .stats { margin-left:auto; color:var(--muted); font-size:.88rem; }
+    .stat { border:1px solid var(--line); border-radius:999px; padding:.35rem .65rem; }
+    .stat strong { color:var(--ink); }
+    .layout { display:grid; grid-template-columns:minmax(290px, .85fr) minmax(0,1.5fr); gap:18px; align-items:start; }
+    .panel { background:#17212bcc; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; }
+    .list-head { padding:17px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .list { max-height:calc(100vh - 270px); overflow:auto; padding:8px; }
+    .item { width:100%; text-align:left; display:block; background:transparent; border:1px solid transparent; padding:13px 12px; margin:2px 0; }
+    .item:hover, .item.active { background:var(--panel-2); border-color:var(--accent); }
+    .item-top { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:6px; }
+    .item-id { color:var(--accent-2); font-weight:800; font-size:.78rem; }
+    .item p { margin:7px 0 0; line-height:1.35; color:#dbe5ed; }
+    .category { font-size:.75rem; color:var(--muted); }
+    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:.18rem .48rem; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.03em; }
+    .badge.validado { background:#164c3b; color:#a8f3cf; } .badge.a-validar { background:#5c4914; color:#ffe5a0; } .badge.rascunho { background:#3e4650; color:#d3dde6; }
+    .editor { padding:22px; }
+    .editor-empty { padding:60px 26px; text-align:center; color:var(--muted); }
+    .editor-title { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; margin-bottom:20px; }
+    .editor-title h2 { font-size:1.35rem; margin:0 0 5px; }
+    .editor-title small { color:var(--muted); }
+    .danger { color:#ffd2d2; border-color:#853f45; background:#461e25; }
+    .fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .field { display:flex; flex-direction:column; gap:6px; }
+    .field.full { grid-column:1/-1; }
+    .field label { color:#c8d5df; font-size:.84rem; font-weight:700; }
+    .field textarea { min-height:90px; resize:vertical; line-height:1.45; }
+    .field .hint { color:var(--muted); font-size:.75rem; }
+    .editor-actions { display:flex; justify-content:space-between; gap:10px; align-items:center; border-top:1px solid var(--line); margin-top:21px; padding-top:17px; }
+    .save-note { color:var(--muted); font-size:.8rem; }
+    .empty { padding:28px 14px; text-align:center; color:var(--muted); }
+    .toast { position:fixed; right:18px; bottom:18px; max-width:min(420px,calc(100vw - 36px)); padding:12px 15px; border-radius:10px; background:#0a1118; border:1px solid var(--accent); box-shadow:var(--shadow); z-index:20; }
+    .toast.error { border-color:var(--danger); color:#ffd4d4; }
+    .lume-fab { position:fixed; right:22px; bottom:22px; width:58px; height:58px; border-radius:50%; border:2px solid #ffd29f; background:linear-gradient(145deg,#ff9e5b,#c34d18); color:#fff; font-weight:900; box-shadow:0 12px 32px #0008; z-index:30; animation:lumePulse 3s ease-in-out infinite; }
+    .lume-fab img { display:block; width:25px; height:25px; margin:0 auto 1px; object-fit:contain; }
+    .lume-fab small { display:block; font-size:.55rem; letter-spacing:.08em; margin-top:2px; }
+    .lume-chat { position:fixed; right:22px; bottom:92px; width:min(360px,calc(100vw - 28px)); border:1px solid #ffad73; border-radius:18px; background:#19232eF2; box-shadow:var(--shadow); overflow:hidden; z-index:31; }
+    .lume-chat[hidden] { display:none; }
+    .lume-chat-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; background:linear-gradient(135deg,#f06a28,#b64216); color:#fff; }
+    .lume-chat-head strong { display:block; }
+    .lume-chat-head small { opacity:.85; }
+    .lume-chat-body { padding:16px; color:var(--ink); }
+    .lume-chat-body p { margin:0 0 12px; line-height:1.45; }
+    .lume-chat-body input { width:100%; color:var(--ink); background:#101820; border:1px solid var(--line); border-radius:9px; padding:.7rem; }
+    .lume-chat-note { color:var(--muted); font-size:.76rem; margin-top:10px !important; }
+    @keyframes lumePulse { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+    @media (max-width: 860px) { .hero { display:block; } .brand { display:block; margin-top:12px; } .layout { grid-template-columns:1fr; } .list { max-height:380px; } .toolbar { position:static; } }
+    @media (max-width: 560px) { .app { padding:18px 10px 40px; } .fields { grid-template-columns:1fr; } .field.full { grid-column:auto; } .editor { padding:16px; } .editor-actions { align-items:flex-start; flex-direction:column; } .editor-actions button { width:100%; } .stats { margin-left:0; width:100%; } }
+  </style>
+</head>
+<body>
+<main class="app">
+  <header class="hero">
+    <div><div class="brand">CICLUZ · LUME</div><h1>Base de ajuda do módulo Caixa</h1><p class="subtitle">Revisão editorial de perguntas e respostas. Este arquivo é local, não chama API e não publica nada no sistema.</p></div>
+  </header>
+  <section class="toolbar" aria-label="Ferramentas da base">
+    <input id="search" class="search" type="search" placeholder="Pesquisar pergunta, resposta ou fonte…" aria-label="Pesquisar">
+    <select id="categoryFilter" aria-label="Filtrar por categoria"><option value="">Todas as categorias</option></select>
+    <select id="statusFilter" aria-label="Filtrar por status"><option value="">Todos os status</option><option value="validado">Validado</option><option value="a validar">A validar</option><option value="rascunho">Rascunho</option></select>
+    <button id="newBtn" class="primary" type="button">＋ Nova pergunta</button>
+    <button id="importBtn" class="ghost" type="button">Importar JSON</button><input id="fileInput" type="file" accept="application/json,.json" hidden>
+    <button id="exportBtn" class="ghost" type="button">Exportar JSON</button>
+    <div id="stats" class="stats" aria-live="polite"></div>
+  </section>
+  <section class="layout">
+    <aside class="panel" aria-label="Lista de perguntas"><div class="list-head"><h2>Perguntas</h2><span id="resultCount" class="category"></span></div><div id="list" class="list"></div></aside>
+    <section id="editorPanel" class="panel" aria-label="Editor de pergunta"><div class="editor-empty">Selecione uma pergunta ou crie uma nova para começar.</div></section>
+  </section>
+</main>
+<button id="lumeFab" class="lume-fab" type="button" aria-label="Abrir prévia da Lume"><img src="../../web-vue/public/cicluz/cicluz-simbolo.png" alt="Cicluz"><small>LUME</small></button>
+<section id="lumeChat" class="lume-chat" hidden aria-label="Prévia do chat Lume">
+  <header class="lume-chat-head"><div><strong>Lume</strong><small>Prévia visual da ajuda</small></div><button id="lumeClose" type="button" aria-label="Fechar prévia">×</button></header>
+  <div class="lume-chat-body"><p>Olá! Esta é uma prévia do botão e do modal da Lume. O chat real só será implementado depois da revisão do catálogo.</p><input type="search" placeholder="Digite uma dúvida (prévia)" aria-label="Pergunta de prévia"><p class="lume-chat-note">Sem IA e sem envio de dados nesta etapa.</p></div>
+</section>
+<div id="toast" class="toast" hidden role="status"></div>
+<script id="seed-data" type="application/json">
+{
+  "schemaVersion": 1,
+  "produto": "Lume — base inicial de ajuda do módulo Caixa",
+  "observacao": "Use lume-faq-inicial.json como cópia editável/portável.",
+  "itens": []
+}
+</script>
+<script>
+(() => {
+  'use strict';
+  const STORAGE = 'cicluz:lume:faq:v1';
+  const fallback = [
+    { id:'CX-001', categoria:'Acesso e permissões', pergunta:'Por que não consigo abrir uma tela do Caixa?', variacoes:['Minha permissão sumiu?'], respostaCurta:'O acesso é resolvido por setor, cargos ativos e permissões individuais.', passoAPasso:['Confira usuário e empresa.','Peça a conferência das permissões.'], avisos:'Fonte demonstrativa; confirme a regra antes de publicar.', perfilAutorizado:'A validar', fonte:'PROJECT_BRAIN/23_PERMISSOES_MODELO_E_AUDITORIA.md §1', status:'a validar' },
+    { id:'CX-002', categoria:'Abertura e PDV', pergunta:'Quais informações são necessárias para abrir um caixa?', variacoes:['O que é o lacre de abertura?'], respostaCurta:'A abertura usa os campos definidos no contrato do Caixa.', passoAPasso:['Confira o PDV.','Revise operador, lacre e contagem.'], avisos:'Atenção à regra vigente.', perfilAutorizado:'Operador com caixa_operar', fonte:'shared/src/caixa/index.ts', status:'a validar' }
+  ];
+  const $ = (id) => document.getElementById(id);
+  let data = { schemaVersion:1, produto:'Lume — base inicial de ajuda do módulo Caixa', itens:[] };
+  let selected = null;
+  const statusLabel = (s) => s === 'a validar' ? 'A validar' : s.charAt(0).toUpperCase() + s.slice(1);
+  const safeArray = (value) => Array.isArray(value) ? value.filter(Boolean).map(String) : [];
+  function normalizeItem(item, index) {
+    return { id:String(item.id || `CX-${String(index + 1).padStart(3,'0')}`), categoria:String(item.categoria || 'Sem categoria'), pergunta:String(item.pergunta || ''), variacoes:safeArray(item.variacoes), respostaCurta:String(item.respostaCurta || ''), passoAPasso:safeArray(item.passoAPasso), avisos:String(item.avisos || ''), perfilAutorizado:String(item.perfilAutorizado || ''), fonte:String(item.fonte || ''), status:['rascunho','validado','a validar'].includes(item.status) ? item.status : 'a validar' };
+  }
+  function validate(payload) {
+    const items = payload && Array.isArray(payload.itens) ? payload.itens : null;
+    if (!items) return ['O JSON precisa conter um array "itens".'];
+    const errors = [], ids = new Set();
+    items.forEach((item, index) => {
+      const p = `Item ${index + 1}`;
+      if (!item || typeof item !== 'object') { errors.push(`${p}: deve ser um objeto.`); return; }
+      ['id','categoria','pergunta','respostaCurta','fonte','status'].forEach((key) => { if (!String(item[key] || '').trim()) errors.push(`${p}: campo "${key}" é obrigatório.`); });
+      if (ids.has(item.id)) errors.push(`${p}: ID duplicado "${item.id}".`); else ids.add(item.id);
+      if (!['rascunho','validado','a validar'].includes(item.status)) errors.push(`${p}: status inválido.`);
+      if (!Array.isArray(item.variacoes) || !Array.isArray(item.passoAPasso)) errors.push(`${p}: "variacoes" e "passoAPasso" devem ser listas.`);
+    });
+    return errors;
+  }
+  function save() { localStorage.setItem(STORAGE, JSON.stringify(data)); }
+  function toast(message, error = false) { const el=$('toast'); el.textContent=message; el.className=`toast${error?' error':''}`; el.hidden=false; clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.hidden=true, 3200); }
+  function populateFilters() { const current=$('categoryFilter').value; const cats=[...new Set(data.itens.map(i=>i.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')); $('categoryFilter').innerHTML='<option value="">Todas as categorias</option>'+cats.map(c=>`<option>${escapeHtml(c)}</option>`).join(''); $('categoryFilter').value=cats.includes(current)?current:''; }
+  function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
+  function filtered() { const q=$('search').value.trim().toLocaleLowerCase('pt-BR'), cat=$('categoryFilter').value, status=$('statusFilter').value; return data.itens.map((item,index)=>({item,index})).filter(({item})=> (!cat||item.categoria===cat) && (!status||item.status===status) && (!q||[item.id,item.categoria,item.pergunta,item.respostaCurta,item.fonte,...item.variacoes,...item.passoAPasso].join(' ').toLocaleLowerCase('pt-BR').includes(q))); }
+  function renderList() { populateFilters(); const rows=filtered(); $('resultCount').textContent=`${rows.length} de ${data.itens.length}`; $('stats').innerHTML=`<span class="stat"><strong>${data.itens.length}</strong> perguntas</span><span class="stat"><strong>${data.itens.filter(i=>i.status==='validado').length}</strong> validadas</span><span class="stat"><strong>${data.itens.filter(i=>i.status==='a validar').length}</strong> a validar</span>`; $('list').innerHTML=rows.length ? rows.map(({item,index})=>`<button class="item ${selected===index?'active':''}" data-index="${index}" type="button"><div class="item-top"><span class="item-id">${escapeHtml(item.id)}</span><span class="badge ${item.status.replace(' ','-')}">${statusLabel(item.status)}</span></div><span class="category">${escapeHtml(item.categoria)}</span><p>${escapeHtml(item.pergunta || 'Sem pergunta')}</p></button>`).join('') : '<div class="empty">Nenhuma pergunta encontrada.</div>'; [...document.querySelectorAll('.item')].forEach(btn=>btn.addEventListener('click',()=>{selected=Number(btn.dataset.index);renderList();renderEditor();})); }
+  function renderEditor() { const panel=$('editorPanel'); if (selected === null || !data.itens[selected]) { panel.innerHTML='<div class="editor-empty">Selecione uma pergunta ou crie uma nova para começar.</div>'; return; } const item=data.itens[selected]; panel.innerHTML=`<div class="editor"><div class="editor-title"><div><h2>Editar pergunta</h2><small>${escapeHtml(item.id)} · salvamento automático local</small></div><button id="deleteBtn" class="danger" type="button">Excluir</button></div><div class="fields"><div class="field"><label for="f-id">ID</label><input id="f-id" value="${escapeHtml(item.id)}"></div><div class="field"><label for="f-cat">Categoria</label><input id="f-cat" value="${escapeHtml(item.categoria)}"></div><div class="field full"><label for="f-question">Pergunta principal</label><textarea id="f-question">${escapeHtml(item.pergunta)}</textarea></div><div class="field full"><label for="f-variations">Formas diferentes <span class="hint">(uma por linha)</span></label><textarea id="f-variations">${escapeHtml(item.variacoes.join('\n'))}</textarea></div><div class="field full"><label for="f-short">Resposta curta</label><textarea id="f-short">${escapeHtml(item.respostaCurta)}</textarea></div><div class="field full"><label for="f-steps">Passo a passo <span class="hint">(um passo por linha)</span></label><textarea id="f-steps">${escapeHtml(item.passoAPasso.join('\n'))}</textarea></div><div class="field full"><label for="f-warnings">Avisos importantes</label><textarea id="f-warnings">${escapeHtml(item.avisos)}</textarea></div><div class="field"><label for="f-profile">Perfil autorizado</label><input id="f-profile" value="${escapeHtml(item.perfilAutorizado)}"></div><div class="field"><label for="f-status">Status</label><select id="f-status"><option value="rascunho">Rascunho</option><option value="validado">Validado</option><option value="a validar">A validar</option></select></div><div class="field full"><label for="f-source">Fonte da informação</label><textarea id="f-source">${escapeHtml(item.fonte)}</textarea><span class="hint">Use caminho e seção/linha do repositório ou escreva “A VALIDAR”.</span></div></div><div class="editor-actions"><span class="save-note">Alterações ficam neste navegador até exportar o JSON.</span><button id="saveBtn" class="primary" type="button">Salvar agora</button></div></div>`; $('f-status').value=item.status; const ids=['f-id','f-cat','f-question','f-variations','f-short','f-steps','f-warnings','f-profile','f-status','f-source']; ids.forEach(id=>$(id).addEventListener('input',()=>updateFromForm(false))); $('deleteBtn').addEventListener('click',deleteSelected); $('saveBtn').addEventListener('click',()=>{updateFromForm(true);toast('Pergunta salva localmente.');}); }
+  function updateFromForm(notify) { if(selected===null||!data.itens[selected])return; const item=data.itens[selected]; item.id=$('f-id').value.trim(); item.categoria=$('f-cat').value.trim(); item.pergunta=$('f-question').value.trim(); item.variacoes=$('f-variations').value.split('\n').map(s=>s.trim()).filter(Boolean); item.respostaCurta=$('f-short').value.trim(); item.passoAPasso=$('f-steps').value.split('\n').map(s=>s.trim()).filter(Boolean); item.avisos=$('f-warnings').value.trim(); item.perfilAutorizado=$('f-profile').value.trim(); item.status=$('f-status').value; item.fonte=$('f-source').value.trim(); save(); renderList(); if(notify)renderEditor(); }
+  function newItem() { const id=`CX-${String(data.itens.length+1).padStart(3,'0')}`; data.itens.push(normalizeItem({id,categoria:'Nova categoria',status:'rascunho'},data.itens.length)); selected=data.itens.length-1; save(); renderList(); renderEditor(); toast('Nova pergunta criada como rascunho.'); }
+  function deleteSelected() { if(selected===null)return; const item=data.itens[selected]; if(!confirm(`Excluir ${item.id}? Esta ação remove apenas a cópia local.`))return; data.itens.splice(selected,1); selected=data.itens.length?Math.min(selected,data.itens.length-1):null; save(); renderList(); renderEditor(); toast('Pergunta excluída da cópia local.'); }
+  function exportJson() { const errors=validate(data); if(errors.length){toast(`Não foi possível exportar: ${errors[0]}`,true);return;} const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download='lume-faq-revisado.json'; a.click(); URL.revokeObjectURL(url); toast('JSON validado e exportado.'); }
+  function importJson(file) { const reader=new FileReader(); reader.onload=()=>{try{const parsed=JSON.parse(reader.result); const errors=validate(parsed); if(errors.length){toast(`JSON inválido: ${errors[0]}`,true);return;} data={schemaVersion:parsed.schemaVersion||1,produto:parsed.produto||'Lume',observacao:parsed.observacao||'',itens:parsed.itens.map(normalizeItem)}; selected=null; save(); renderList();renderEditor();toast(`${data.itens.length} perguntas importadas.`);}catch(e){toast('Arquivo não é um JSON válido.',true);}}; reader.readAsText(file); }
+  $('search').addEventListener('input',renderList); $('categoryFilter').addEventListener('change',renderList); $('statusFilter').addEventListener('change',renderList); $('newBtn').addEventListener('click',newItem); $('exportBtn').addEventListener('click',exportJson); $('importBtn').addEventListener('click',()=>$('fileInput').click()); $('fileInput').addEventListener('change',(e)=>{if(e.target.files[0])importJson(e.target.files[0]);e.target.value='';});
+  $('lumeFab').addEventListener('click',()=>{ $('lumeChat').hidden=false; }); $('lumeClose').addEventListener('click',()=>{ $('lumeChat').hidden=true; });
+  try { const stored=localStorage.getItem(STORAGE); const parsed=stored?JSON.parse(stored):null; data=parsed && Array.isArray(parsed.itens) ? {schemaVersion:parsed.schemaVersion||1,produto:parsed.produto||'Lume',observacao:parsed.observacao||'',itens:parsed.itens.map(normalizeItem)} : {schemaVersion:1,itens:fallback}; } catch { data={schemaVersion:1,itens:fallback}; } data.itens=data.itens.map(normalizeItem); renderList(); renderEditor();
+})();
+</script>
+</body>
+</html>

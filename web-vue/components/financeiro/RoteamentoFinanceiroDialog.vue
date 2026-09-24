@@ -157,6 +157,8 @@ async function salvar() {
     :model-value="aberto"
     max-width="860"
     scrollable
+    persistent
+    no-click-animation
     aria-labelledby="titulo-roteamento-financeiro"
     @update:model-value="emit('fechar')"
   >

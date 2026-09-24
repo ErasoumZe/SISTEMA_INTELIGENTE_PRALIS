@@ -48,6 +48,8 @@ export async function listarTransferenciasRepository(
       descricao: textoDoMovimento(transferencias),
       valorOriginal: transferencias.valorOriginal,
       valorRecebido: transferencias.valorRecebido,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       computar: transferencias.computar,
       status: transferencias.status,
       contaOrigemId: transferencias.contaOrigemId,
@@ -61,6 +63,7 @@ export async function listarTransferenciasRepository(
       criadoPor: transferencias.criadoPor,
       criadoPorNome: criador.nome,
       criadoEm: transferencias.criadoEm,
+      observacao: transferencias.observacao,
       // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,
@@ -104,6 +107,8 @@ export async function listarTransferenciasRepository(
     ...linha,
     status: linha.status as TransferenciaDto["status"],
     valorRecebido: linha.valorRecebido === null ? null : numeroDecimal(linha.valorRecebido),
+    valorEspecieDeclarado: linha.valorEspecieDeclarado === null ? null : numeroDecimal(linha.valorEspecieDeclarado),
+    valorMoedasDeclarado: linha.valorMoedasDeclarado === null ? null : numeroDecimal(linha.valorMoedasDeclarado),
     prazoConfirmacaoEm: linha.prazoConfirmacaoEm?.toISOString() ?? null,
     dataRecebimento: linha.dataRecebimento?.toISOString() ?? null,
     criadoEm: linha.criadoEm.toISOString(),
@@ -129,6 +134,8 @@ export async function criarTransferenciaRepository(
       ...valoresBase(dados, computar, criadoPor, caixaId),
       contaOrigemId: dados.contaOrigemId,
       contaDestinoId: dados.contaDestinoId,
+      valorEspecieDeclarado: dados.valorEspecieDeclarado === undefined ? null : dados.valorEspecieDeclarado.toFixed(2),
+      valorMoedasDeclarado: dados.valorMoedasDeclarado === undefined ? null : dados.valorMoedasDeclarado.toFixed(2),
       nLacreDoc: dados.nLacreDoc ?? null,
       agendadaPara: dados.agendadaPara ? new Date(dados.agendadaPara) : null,
       tempoConfirmacao: dados.tempoConfirmacao,
@@ -154,69 +161,31 @@ export async function criarTransferenciaRepository(
       origem: "saida"
     });
   }
+  if (dados.lacresRetorno.length) {
+    await db.insert(lacres).values(
+      dados.lacresRetorno.map((numero) => ({
+        empresaId: dados.empresaId,
+        numero,
+        // A bolsa menor segue aberta dentro do malote de ida. O vinculo com a transferencia de
+        // retorno so existe quando o Caixa a escolhe e fecha fisicamente a bolsa.
+        transferenciaDistribuicaoId: transferencia.id,
+        origem: "retorno" as const
+      }))
+    );
+  }
+  if (dados.lacreFechamentoPlanejado?.trim()) {
+    await db.insert(lacres).values({
+      empresaId: dados.empresaId,
+      numero: dados.lacreFechamentoPlanejado.trim(),
+      // Segue ABERTO dentro do malote principal. A abertura vincula esta transferencia ao Caixa;
+      // no fechamento o numero digitado e conferido e o lacre e rompido no mesmo commit.
+      transferenciaId: transferencia.id,
+      origem: "fechamento"
+    });
+  }
   return transferencia;
 }
 
-// R-185: as filhas nascem no MESMO commit da transferencia inicial. `agendada` nao entra no
-// saldo; o Caixa sera ligado ao plano somente quando o lacre da ida abrir o turno.
-export async function criarRetornosPlanejadosRepository(
-  input: {
-    empresaId: string;
-    transferenciaOrigemId: string;
-    dataReferencia: string;
-    contaOrigemId: string;
-    contaDestinoId: string;
-    planos: { valor: number; nLacreDoc: string }[];
-    computar: boolean;
-    criadoPor: string;
-    observacao: string | null;
-  },
-  db: ExecutorBanco = banco
-): Promise<void> {
-  if (!input.planos.length) return;
-  const agora = new Date();
-  const criadas = await db
-    .insert(transferencias)
-    .values(
-      input.planos.map((plano) => ({
-        empresaId: input.empresaId,
-        planejamentoOrigemTransferenciaId: input.transferenciaOrigemId,
-        dataReferencia: input.dataReferencia,
-        descricao: "Transferencia de retorno programada",
-        observacao: input.observacao,
-        valorOriginal: centavosParaDecimalBanco(paraCentavos(plano.valor)),
-        valorAcrescimo: centavosParaDecimalBanco(0),
-        valorDesconto: centavosParaDecimalBanco(0),
-        contaOrigemId: input.contaOrigemId,
-        contaDestinoId: input.contaDestinoId,
-        nLacreDoc: plano.nLacreDoc,
-        tempoConfirmacao: null,
-        prazoConfirmacaoEm: null,
-        status: "agendada",
-        tipo: "retorno",
-        computar: input.computar,
-        solicitacaoCofreEm: agora,
-        criadoPor: input.criadoPor
-      }))
-    )
-    .returning({ id: transferencias.id });
-  await db.insert(transferenciasDestinosCandidatos).values(
-    criadas.map((transferencia) => ({
-      empresaId: input.empresaId,
-      transferenciaId: transferencia.id,
-      contaId: input.contaDestinoId
-    }))
-  );
-  await db.insert(lacres).values(
-    criadas.map((transferencia, indice) => ({
-      empresaId: input.empresaId,
-      numero: input.planos[indice]!.nLacreDoc,
-      transferenciaId: transferencia.id,
-      // As filhas planejadas representam a VOLTA do dinheiro ao Cofre.
-      origem: "retorno"
-    }))
-  );
-}
 // P0 (CX-M06 estendida): a linha da transferencia sob `FOR NO KEY UPDATE` durante a edicao — ela
 // nao tinha trava nenhuma e o PUT reescreve valor, computar e as DUAS contas (o sinal do total).
 // Espelho de `travarDespesaRepository`: escopo de empresa no where e `TransacaoBanco` obrigatorio.
@@ -280,6 +249,21 @@ export async function transferenciaPossuiRetornosPlanejadosRepository(
   return Boolean(linha);
 }
 
+// O lacre de fechamento já foi separado fisicamente e segue o malote. Editar a transferencia sem
+// reescrever o lacre criaria um segundo caminho ou deixaria uma reserva órfã; por isso o malote
+// com esse selo é imutável, tal como o que possui bolsas de retorno planejadas.
+export async function transferenciaPossuiLacreFechamentoPlanejadoRepository(
+  transferenciaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [lacre] = await db
+    .select({ id: lacres.id })
+    .from(lacres)
+    .where(and(eq(lacres.transferenciaId, transferenciaId), eq(lacres.origem, "fechamento")))
+    .limit(1);
+  return Boolean(lacre);
+}
+
 export async function buscarTransferenciaDetalheRepository(
   transferenciaId: string,
   db: ExecutorBanco = banco
@@ -325,10 +309,11 @@ export async function buscarTransferenciaDetalheRepository(
     valorDesconto: numeroDecimal(transferencia.valorDesconto),
     // R-183: null em tudo que nao e `divergente` — o CHECK do banco garante.
     valorRecebido: transferencia.valorRecebido === null ? null : numeroDecimal(transferencia.valorRecebido),
+    // Lacres internos so existem no ato de criacao do malote; edicoes nunca os reescrevem.
+    lacresRetorno: [],
     contasDestinoIds: candidatos
       .map((item) => item.contaId)
       .filter((contaId) => contaId !== transferencia.contaDestinoId),
-    retornosPlanejados: [],
     tempoConfirmacao: transferencia.tempoConfirmacao as TempoConfirmacao | null,
     agendadaPara: transferencia.agendadaPara?.toISOString() ?? null,
     prazoConfirmacaoEm: transferencia.prazoConfirmacaoEm?.toISOString() ?? null,
@@ -346,6 +331,8 @@ export type ContextoConferencia = {
   empresaId: string;
   status: string;
   valorCentavos: number;
+  valorEspecieDeclaradoCentavos: number | null;
+  valorMoedasDeclaradoCentavos: number | null;
   lacre: string | null;
   criadoPor: string | null;
   // Quem entregou fisicamente (solicitacao D4 executada). Null em avulsa e retorno final — nesses
@@ -370,6 +357,8 @@ export async function buscarContextoConferenciaRepository(
       empresaId: transferencias.empresaId,
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       lacre: transferencias.nLacreDoc,
       criadoPor: transferencias.criadoPor,
       executadoPor: transferencias.executadoPor,
@@ -391,6 +380,9 @@ export async function buscarContextoConferenciaRepository(
     empresaId: linha.empresaId,
     status: linha.status,
     valorCentavos: paraCentavos(linha.valorOriginal),
+    valorEspecieDeclaradoCentavos:
+      linha.valorEspecieDeclarado === null ? null : paraCentavos(linha.valorEspecieDeclarado),
+    valorMoedasDeclaradoCentavos: linha.valorMoedasDeclarado === null ? null : paraCentavos(linha.valorMoedasDeclarado),
     lacre: linha.lacre,
     criadoPor: linha.criadoPor,
     executadoPor: linha.executadoPor,

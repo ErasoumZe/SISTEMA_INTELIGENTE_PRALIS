@@ -1740,7 +1740,14 @@ export const transferencias = pgTable(
     // obrigatoria na 0027 e sai numa migration futura, depois de producao rodar estavel.
     descricao: text("descricao"),
     observacao: text("observacao"),
+    // Nome declarado por quem faz a retirada física. É separado de `criadoPor`, que continua
+    // sendo a identidade autenticada usada para permissões e auditoria técnica.
+    responsavelNome: text("responsavel_nome"),
     valorOriginal: valorMonetario("valor_original").notNull(),
+    // R-205: a Tesouraria declara a composicao fisica sem apagar o total do movimento.
+    // Nulos preservam transferencia historica e movimentos que nao representam numerario.
+    valorEspecieDeclarado: valorMonetario("valor_especie_declarado"),
+    valorMoedasDeclarado: valorMonetario("valor_moedas_declarado"),
     valorAcrescimo: valorMonetario("valor_acrescimo").notNull().default("0"),
     descricaoAcrescimo: text("descricao_acrescimo"),
     valorDesconto: valorMonetario("valor_desconto").notNull().default("0"),
@@ -1883,6 +1890,13 @@ export const transferencias = pgTable(
     check("transferencias_tipo_check", sql`${table.tipo} in ('abertura', 'suprimento', 'sangria', 'retorno')`),
     check("transferencias_ordem_check", sql`${table.ordem} is null or ${table.ordem} >= 1`),
     check("transferencias_valor_original_check", sql`${table.valorOriginal} >= 0`),
+    check(
+      "transferencias_composicao_declarada_check",
+      sql`(${table.valorEspecieDeclarado} is null and ${table.valorMoedasDeclarado} is null)
+        or (${table.valorEspecieDeclarado} >= 0
+            and ${table.valorMoedasDeclarado} >= 0
+            and ${table.valorEspecieDeclarado} + ${table.valorMoedasDeclarado} = ${table.valorOriginal})`
+    ),
     check("transferencias_valor_acrescimo_check", sql`${table.valorAcrescimo} >= 0`),
     check("transferencias_valor_desconto_check", sql`${table.valorDesconto} >= 0`),
     check("transferencias_contas_diferentes_check", sql`${table.contaOrigemId} <> ${table.contaDestinoId}`),
@@ -1894,7 +1908,11 @@ export const transferencias = pgTable(
       sql`(${table.status} = 'divergente'
              and ${table.valorRecebido} is not null
              and ${table.valorRecebido} >= 0)
-        or (${table.status} <> 'divergente' and ${table.valorRecebido} is null)`
+        or (${table.status} = 'recebido' and ${table.tipo} = 'abertura'
+            and (${table.valorRecebido} is null or ${table.valorRecebido} >= 0))
+        or (${table.status} <> 'divergente'
+            and not (${table.status} = 'recebido' and ${table.tipo} = 'abertura')
+            and ${table.valorRecebido} is null)`
     ),
     // R-183 · `divergente` e EXCLUSIVO do malote Caixa -> Cofre. Sem esta amarra um `suprimento`
     // divergente com destino na conta do PDV passaria a contar como ENTRADA do caixa — porque
@@ -1973,6 +1991,137 @@ export const transferenciasConferenciasRecusadas = pgTable(
   ]
 );
 
+// R-205: trilha append-only da contagem fisica. Ela registra tanto a conferencia que bateu
+// quanto a divergencia; nao reaproveita a tabela antiga de recusas, que nao conhece moedas.
+export const transferenciasConferenciasFisicas = pgTable(
+  "transferencias_conferencias_fisicas",
+  {
+    id: idUuid,
+    empresaId,
+    transferenciaId: uuid("transferencia_id").notNull(),
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    etapa: text("etapa").notNull().$type<"abertura" | "retorno_sangria">(),
+    resultado: text("resultado").notNull().$type<"convergente" | "divergente">(),
+    encerraConferencia: boolean("encerra_conferencia").notNull().default(false),
+    valorEspecieDeclarado: valorMonetario("valor_especie_declarado").notNull(),
+    valorMoedasDeclarado: valorMonetario("valor_moedas_declarado").notNull(),
+    valorEspecieContado: valorMonetario("valor_especie_contado").notNull(),
+    valorMoedasContado: valorMonetario("valor_moedas_contado").notNull(),
+    observacao: text("observacao"),
+    conferidoPor: text("conferido_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    conferidoEm: timestamp("conferido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.transferenciaId, table.empresaId],
+      foreignColumns: [transferencias.id, transferencias.empresaId],
+      name: "transferencias_conferencias_fisicas_transferencia_empresa_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "transferencias_conferencias_fisicas_fechamento_empresa_fk"
+    }).onDelete("restrict"),
+    check("transferencias_conferencias_fisicas_etapa_check", sql`${table.etapa} in ('abertura', 'retorno_sangria')`),
+    check(
+      "transferencias_conferencias_fisicas_resultado_check",
+      sql`${table.resultado} in ('convergente', 'divergente')`
+    ),
+    check(
+      "transferencias_conferencias_fisicas_valores_check",
+      sql`${table.valorEspecieDeclarado} >= 0 and ${table.valorMoedasDeclarado} >= 0
+        and ${table.valorEspecieContado} >= 0 and ${table.valorMoedasContado} >= 0`
+    ),
+    check(
+      "transferencias_conferencias_fisicas_resultado_observacao_check",
+      sql`(${table.resultado} = 'convergente'
+            and ${table.valorEspecieDeclarado} = ${table.valorEspecieContado}
+            and ${table.valorMoedasDeclarado} = ${table.valorMoedasContado}
+            and ${table.observacao} is null)
+        or (${table.resultado} = 'divergente'
+            and (${table.valorEspecieDeclarado} <> ${table.valorEspecieContado}
+              or ${table.valorMoedasDeclarado} <> ${table.valorMoedasContado})
+            and ${table.observacao} is not null
+            and length(btrim(${table.observacao})) > 0)`
+    ),
+    uniqueIndex("transferencias_conferencias_fisicas_desfecho_unico")
+      .on(table.transferenciaId)
+      .where(sql`${table.encerraConferencia}`),
+    index("transferencias_conferencias_fisicas_transferencia_idx").on(table.transferenciaId, table.conferidoEm)
+  ]
+);
+
+// R-206: provas pertencem ao fechamento, suportam uma ou varias folhas e varios comprovantes.
+// A IA nasce desativada; o arquivo nunca depende dela para continuar valido.
+export const fechamentosCaixaAnexos = pgTable(
+  "fechamentos_caixa_anexos",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    tipo: text("tipo").notNull().$type<"folha_fechamento" | "comprovante_cartao">(),
+    caminho: text("caminho").notNull(),
+    nomeOriginal: text("nome_original").notNull(),
+    nomeArquivo: text("nome_arquivo").notNull(),
+    mimeType: text("mime_type").notNull(),
+    tamanhoBytes: integer("tamanho_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    iaStatus: text("ia_status").notNull().default("desativada"),
+    iaResultado: jsonb("ia_resultado"),
+    iaErro: text("ia_erro"),
+    iaAnalisadoEm: timestamp("ia_analisado_em", { withTimezone: true }),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_anexos_fechamento_empresa_fk"
+    }).onDelete("restrict"),
+    check("fechamentos_caixa_anexos_tipo_check", sql`${table.tipo} in ('folha_fechamento', 'comprovante_cartao')`),
+    check("fechamentos_caixa_anexos_tamanho_check", sql`${table.tamanhoBytes} > 0`),
+    check(
+      "fechamentos_caixa_anexos_ia_status_check",
+      sql`${table.iaStatus} in ('desativada', 'pendente', 'processando', 'concluida', 'falhou')`
+    ),
+    index("fechamentos_caixa_anexos_fechamento_tipo_idx").on(table.fechamentoCaixaId, table.tipo, table.criadoEm)
+  ]
+);
+
+// R-208: um fechamento tem UM relatorio revisado da maquininha. As fotos permanecem em
+// `fechamentos_caixa_anexos` como provas multiplas; atrelar o relatorio a uma foto faria a
+// informacao desaparecer ou ficar errada quando o operador corrigisse uma das imagens.
+export const fechamentosCaixaRelatoriosMaquininha = pgTable(
+  "fechamentos_caixa_relatorios_maquininha",
+  {
+    id: idUuid,
+    empresaId,
+    fechamentoCaixaId: uuid("fechamento_caixa_id").notNull(),
+    // Retrato do turno que abriu o caixa. O servidor o preenche; a IA nunca decide esse periodo.
+    turnoNome: text("turno_nome").notNull(),
+    dadosRevisados: jsonb("dados_revisados").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.fechamentoCaixaId, table.empresaId],
+      foreignColumns: [fechamentosCaixa.id, fechamentosCaixa.empresaId],
+      name: "fechamentos_caixa_relatorios_maquininha_fechamento_empresa_fk"
+    }).onDelete("restrict"),
+    unique("fechamentos_caixa_relatorios_maquininha_fechamento_unico").on(table.fechamentoCaixaId),
+    index("fechamentos_caixa_relatorios_maquininha_empresa_idx").on(table.empresaId, table.criadoEm)
+  ]
+);
+
 export const transferenciasDestinosCandidatos = pgTable(
   "transferencias_destinos_candidatos",
   {
@@ -2033,15 +2182,42 @@ export const lacres = pgTable(
     empresaId,
     numero: text("numero").notNull(),
     transferenciaId: uuid("transferencia_id").references(() => transferencias.id, { onDelete: "set null" }),
-    // Ponta do movimento que o lacre selou: 'saida' (ida da transferencia) ou 'retorno' (volta/sangria).
+    // R-208: lacre menor enviado ABERTO dentro de um malote Cofre -> PDV. Enquanto
+    // `transferenciaId` e nulo ele esta disponivel somente para o Caixa que recebeu esta ida;
+    // quando a sangria acontece, `transferenciaId` passa a ser o movimento Caixa -> Cofre sem
+    // apagar a proveniencia fisica do lacre.
+    transferenciaDistribuicaoId: uuid("transferencia_distribuicao_id"),
+    // Ponta do movimento que o lacre selou: 'saida' (ida), 'retorno' (volta/sangria) ou
+    // 'fechamento' (selo aberto dentro do malote de ida, reservado ao fechamento do Caixa).
     origem: text("origem").notNull(),
     rompido: boolean("rompido").notNull().default(false),
     criadoEm
   },
   (table) => [
-    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno')`),
+    check("lacres_origem_check", sql`${table.origem} in ('saida', 'retorno', 'fechamento')`),
+    check(
+      "lacres_distribuicao_retorno_check",
+      sql`${table.transferenciaDistribuicaoId} is null
+        or (${table.origem} = 'retorno'
+            and ${table.transferenciaDistribuicaoId} is distinct from ${table.transferenciaId}
+            and (${table.transferenciaId} is not null or ${table.rompido} = false))`
+    ),
     unique("lacres_numero_unico").on(table.empresaId, table.numero),
-    index("lacres_transf_idx").on(table.transferenciaId)
+    index("lacres_transf_idx").on(table.transferenciaId),
+    foreignKey({
+      columns: [table.transferenciaDistribuicaoId, table.empresaId],
+      foreignColumns: [transferencias.id, transferencias.empresaId],
+      name: "lacres_distribuicao_empresa_fk"
+    })
+      .onDelete("restrict")
+      .onUpdate("no action"),
+    index("lacres_distribuicao_disponivel_idx")
+      .on(table.transferenciaDistribuicaoId)
+      .where(
+        sql`${table.transferenciaDistribuicaoId} is not null
+          and ${table.transferenciaId} is null
+          and ${table.rompido} = false`
+      )
   ]
 );
 
@@ -2071,10 +2247,16 @@ export const fechamentosCaixa = pgTable(
     // `malote_abertura_id` foi removida na 0026 (o vinculo agora e transferencias.caixa_id).
     // `divida_cofre` e legado da R8 revogada pela R-001 (o fundo nao e emprestimo): sempre 0.
     lacreAbertura: text("lacre_abertura"),
+    // R-207: nomes declarados na folha da abertura. Os IDs autenticados continuam como trilha
+    // tecnica; estes textos preservam o registro operacional mesmo apos renomear cadastros.
+    caixaResponsavelNomeAbertura: text("caixa_responsavel_nome_abertura"),
+    supervisorResponsavelNomeAbertura: text("supervisor_responsavel_nome_abertura"),
     // R-200: o selo fisico aplicado ao encerrar a gaveta. Nao e o lacre de uma transferencia de
     // retorno: existe mesmo quando o saldo ja e zero ou ha quebra. Historico anterior a R-200
     // permanece nulo; o servico exige o campo em todo fechamento novo.
     lacreFechamento: text("lacre_fechamento"),
+    caixaResponsavelNomeFechamento: text("caixa_responsavel_nome_fechamento"),
+    supervisorResponsavelNomeFechamento: text("supervisor_responsavel_nome_fechamento"),
     maquininhaId: uuid("maquininha_id").references(() => maquininhas.id, { onDelete: "set null" }),
     dividaCofre: valorMonetario("divida_cofre").notNull().default("0"),
     totalEntradas: valorMonetario("total_entradas").notNull().default("0"),
@@ -2085,12 +2267,40 @@ export const fechamentosCaixa = pgTable(
     totalRetiradas: valorMonetario("total_retiradas").notNull().default("0"),
     totalMercadorias: valorMonetario("total_mercadorias").notNull().default("0"),
     saldo: valorMonetario("saldo").notNull().default("0"),
+    // R-206: retrato fisico informado no ato de fechar. Historico anterior continua nulo.
+    valorFisicoEsperadoFechamento: valorMonetario("valor_fisico_esperado_fechamento"),
+    valorEspecieFechamento: valorMonetario("valor_especie_fechamento"),
+    valorMoedasFechamento: valorMonetario("valor_moedas_fechamento"),
     status: text("status").notNull().default("aberto"),
     criadoPor: text("criado_por"),
     criadoEm
   },
   (table) => [
     check("fechamentos_caixa_status_check", sql`${table.status} in ('aberto', 'fechado', 'ajustado')`),
+    check(
+      "fechamentos_caixa_composicao_fechamento_check",
+      sql`(${table.valorFisicoEsperadoFechamento} is null
+            and ${table.valorEspecieFechamento} is null
+            and ${table.valorMoedasFechamento} is null)
+        or (${table.valorFisicoEsperadoFechamento} >= 0
+            and ${table.valorEspecieFechamento} >= 0
+            and ${table.valorMoedasFechamento} >= 0)`
+    ),
+    // O legado nao tem esses nomes e permanece nulo. Em atos novos, os dois responsaveis andam
+    // juntos e nunca podem ser vazios; duas colunas unicas apagariam a prova da abertura ao fechar.
+    check(
+      "fechamentos_caixa_responsaveis_abertura_check",
+      sql`(${table.caixaResponsavelNomeAbertura} is null and ${table.supervisorResponsavelNomeAbertura} is null)
+        or (length(btrim(${table.caixaResponsavelNomeAbertura})) > 0
+          and length(btrim(${table.supervisorResponsavelNomeAbertura})) > 0)`
+    ),
+    check(
+      "fechamentos_caixa_responsaveis_fechamento_check",
+      sql`(${table.caixaResponsavelNomeFechamento} is null and ${table.supervisorResponsavelNomeFechamento} is null)
+        or (${table.status} in ('fechado', 'ajustado')
+          and length(btrim(${table.caixaResponsavelNomeFechamento})) > 0
+          and length(btrim(${table.supervisorResponsavelNomeFechamento})) > 0)`
+    ),
     unique("fechamentos_caixa_id_empresa_unica").on(table.id, table.empresaId),
     uniqueIndex("fechamentos_caixa_pdv_aberto_unico_idx")
       .on(table.pdvId)

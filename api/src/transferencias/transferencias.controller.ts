@@ -1,5 +1,7 @@
 import { mensagemDominioOuRelancar } from "../erros.js";
 import type { FastifyInstance } from "fastify";
+import { createReadStream } from "node:fs";
+import { z } from "zod";
 import {
   confirmarTransferenciaPayloadSchema,
   recusarConferenciaPayloadSchema,
@@ -16,6 +18,9 @@ import {
   criarTransferencia,
   liberarTravaTransferencia,
   listarTransferencias,
+  listarAnexosDaConferencia,
+  obterResumoFechamentoDaConferencia,
+  obterAnexoDaConferencia,
   obterTransferencia,
   recusarConferencia
 } from "./transferencias.service.js";
@@ -72,6 +77,57 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       const { id } = apiIdParamsSchema.parse(request.params);
       try {
         return ok(await obterTransferencia(id, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/transferencias/:id/anexos-fechamento",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        return ok(await listarAnexosDaConferencia(id, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/transferencias/:id/fechamento-conferencia",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        return ok(await obterResumoFechamentoDaConferencia(id, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/transferencias/:id/anexos-fechamento/:anexoId",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      const anexoId = z
+        .string()
+        .uuid()
+        .parse((request.params as { anexoId?: string }).anexoId);
+      try {
+        const anexo = await obterAnexoDaConferencia(id, anexoId, request.perfilUsuario!);
+        reply.header("Content-Type", anexo.mimeType);
+        const nomeSeguro = anexo.nomeOriginal.replace(/[^\w. -]/gu, "_");
+        reply.header("Content-Disposition", `inline; filename="${nomeSeguro || "anexo"}"`);
+        reply.header("Cache-Control", "private, no-store");
+        return reply.send(createReadStream(anexo.caminhoAbsoluto));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);

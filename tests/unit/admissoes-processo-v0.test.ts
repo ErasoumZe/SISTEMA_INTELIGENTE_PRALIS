@@ -273,7 +273,7 @@ describe("a V0 e puramente aditiva", () => {
     // Enquanto a migration consolidada nao existir, o teste passa por ausencia — e volta a valer no minuto em que ela
     // aparecer. E de proposito: o guarda precisa estar pronto ANTES da migration.
     const dir = join(RAIZ, "db", "migrations");
-    const nova = readdirSync(dir).filter((n) => n.startsWith("0042_") && n.endsWith(".sql"));
+    const nova = readdirSync(dir).filter((n) => n.startsWith("0048_") && n.endsWith(".sql"));
     for (const arquivo of nova) {
       const sql = readFileSync(join(dir, arquivo), "utf8");
       const alterados = [...sql.matchAll(/ALTER TABLE "([a-z0-9_]+)"/gi)].map((m) => m[1]);

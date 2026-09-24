@@ -106,16 +106,17 @@ Estratégia: script idempotente, **dry-run com contagens primeiro**, José aprov
 
 Ambiguidades que o briefing não fechou e que o José decidiu ao revisar o S5:
 
-| Ponto                                | Decisão                                                                            | Por quê                                                                                                                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **"3 em 3"** (frequência do desenho) | **trimestral** (a cada 3 meses)                                                    | leitura natural em conta a pagar: água, seguro, IPTU                                                                                                                   |
-| **Dias da semana**                   | só valem e só aparecem na frequência **semana**; descartados nas demais            | "toda terça" não significa nada numa série mensal                                                                                                                      |
-| **"Número de repetições"**           | é o **TOTAL**, já contando o lançamento sendo criado ("repetir 3" = 3 na tela)     | é como Mobills conta; quem digita 12 espera o ano fechado, não 13                                                                                                      |
-| **DOMINGO na recorrência**           | **incluído** (ISO 7), além dos 6 dias do rascunho                                  | **decisão do José, não do desenho:** o rascunho do Rodrigo tem Sg..Sa, mas a padaria abre domingo — costuma ser o dia mais forte. O banco já aceitava 7; era só a tela |
-| **Teto da série**                    | **12 meses** a partir da 1ª data, sempre                                           | protege do erro de digitação (999 diárias) e do lançamento futuro que ninguém lembra por que existe                                                                    |
-| **Filtro do saldo da conta (D8)**    | `computar = true AND status <> 'cancelado'`, e `valor_original` puro fora da venda | **igual ao ADR-001 do saldo do caixa**: duas fórmulas de dinheiro com filtros diferentes viram divergência inexplicável entre as duas telas                            |
-| **Grupo do item (§5)**               | as duas origens são **mutuamente exclusivas permitindo os dois nulos**             | item sem grupo sempre foi aceito e o histórico está cheio deles                                                                                                        |
-| **Vínculo usuário × conta**          | editado **no cadastro da CONTA**; o caminho pela tela de Usuários foi removido     | D8 põe fundo e usuários no mesmo salvar; manter os dois lados seria a segunda rota para o mesmo ato                                                                    |
+| Ponto                                    | Decisão                                                                                                                         | Por quê                                                                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **"3 em 3"** (frequência do desenho)     | **trimestral** (a cada 3 meses)                                                                                                 | leitura natural em conta a pagar: água, seguro, IPTU                                                                                                                   |
+| **Dias da semana**                       | só valem e só aparecem na frequência **semana**; descartados nas demais                                                         | "toda terça" não significa nada numa série mensal                                                                                                                      |
+| **"Número de repetições"**               | é o **TOTAL**, já contando o lançamento sendo criado ("repetir 3" = 3 na tela)                                                  | é como Mobills conta; quem digita 12 espera o ano fechado, não 13                                                                                                      |
+| **DOMINGO na recorrência**               | **incluído** (ISO 7), além dos 6 dias do rascunho                                                                               | **decisão do José, não do desenho:** o rascunho do Rodrigo tem Sg..Sa, mas a padaria abre domingo — costuma ser o dia mais forte. O banco já aceitava 7; era só a tela |
+| **Teto da série**                        | **12 meses** a partir da 1ª data, sempre                                                                                        | protege do erro de digitação (999 diárias) e do lançamento futuro que ninguém lembra por que existe                                                                    |
+| **Filtro do saldo da conta (D8)**        | `computar = true AND status <> 'cancelado'`, e `valor_original` puro fora da venda                                              | **igual ao ADR-001 do saldo do caixa**: duas fórmulas de dinheiro com filtros diferentes viram divergência inexplicável entre as duas telas                            |
+| **Auditoria de venda cancelada (R-204)** | venda com `status = cancelado` aparece separada no Caixa, com horário, valor líquido e produtos; nunca como lançamento ou total | operador e gerência precisam localizar o cancelamento que retirou uma entrada sem induzir a leitura de que o dinheiro ainda integra o malote                           |
+| **Grupo do item (§5)**                   | as duas origens são **mutuamente exclusivas permitindo os dois nulos**                                                          | item sem grupo sempre foi aceito e o histórico está cheio deles                                                                                                        |
+| **Vínculo usuário × conta**              | editado **no cadastro da CONTA**; o caminho pela tela de Usuários foi removido                                                  | D8 põe fundo e usuários no mesmo salvar; manter os dois lados seria a segunda rota para o mesmo ato                                                                    |
 
 ### R-192 — Leitura assistida da nota fiscal por IA (14/09/2026)
 
@@ -137,6 +138,17 @@ Ambiguidades que o briefing não fechou e que o José decidiu ao revisar o S5:
   volta apenas mascarada.
 - Falha de rede, imagem ruim, resposta incompleta ou IA indisponível não apaga valores manuais nem
   o anexo selecionado.
+
+### R-208 — Retorno/sangria pendente e fechamento do caixa (24/09/2026)
+
+- Uma transferencia de retorno ou sangria ja executada permanece visivel e auditavel para a
+  Tesouraria, mas nao bloqueia o fechamento do caixa.
+- A conferencia fisica posterior e a divergencia pertencem a trilha da transferencia; a
+  Tesouraria identifica o operador que abriu o caixa e trata a ocorrencia internamente.
+- Transferencia de retorno **planejada** continua bloqueando o fechamento, porque o dinheiro
+  ainda nao saiu do caixa.
+- O responsavel declarado em uma sangria e sempre o operador registrado na abertura do caixa;
+  o cliente nao pode substitui-lo no payload.
 
 ## 7. Fora deste escopo (congelado)
 

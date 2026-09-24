@@ -114,6 +114,8 @@ async function confirmar() {
     :model-value="modelValue"
     max-width="620"
     scrollable
+    persistent
+    no-click-animation
     class="envio-mensagem-dialog"
     @update:model-value="emit('update:modelValue', $event)"
   >

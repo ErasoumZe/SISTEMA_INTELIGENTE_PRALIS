@@ -354,7 +354,6 @@ const podeCancelarPlanejamentoRetorno = computed(() => {
   const perfil = sessao.value?.perfil;
   return Boolean(perfil && podeLancarSemCaixa(perfil) && temPermissao("transferencias_criar"));
 });
-const podePlanejarRetorno = computed(() => podeCancelarPlanejamentoRetorno.value);
 // R-121: para o operador de caixa a saida SEMPRE sai da conta do PDV aberto. A tela trava o campo
 // nessa conta; o servidor recusa qualquer outra. Vazio para os demais perfis, que escolhem livre.
 //
@@ -1567,7 +1566,6 @@ async function salvarOperacao(criarNova = false) {
     // onde o teste captura a requisicao inteira. Aqui ficam fotos, linha local e o 422 da
     // discriminacao, que dependem do DOM e do estado da tela.
     const entidadeSalva = entidadeNova.value;
-    const possuiRetornosPlanejados = entidadeSalva === "transferencia" && form.value.retornosPlanejados.length > 0;
     const enviada = await acoesLancamento.enviarLancamento();
     if (!enviada) return;
     const { salva: operacaoSalva, editandoId, rota: endpoint } = enviada;
@@ -1591,7 +1589,7 @@ async function salvarOperacao(criarNova = false) {
     if (editandoId) {
       const indice = operacoes.value.findIndex((operacao) => operacao.id === editandoId);
       if (indice >= 0) operacoes.value.splice(indice, 1, { ...operacoes.value[indice], ...linhaAtualizada });
-    } else if (!possuiRetornosPlanejados) {
+    } else {
       operacoes.value.unshift(linhaAtualizada);
     }
     notificar(editandoId ? "Lançamento atualizado com sucesso." : mensagemLancamentoSalvo(operacaoSalva));
@@ -1599,7 +1597,6 @@ async function salvarOperacao(criarNova = false) {
     // O POST devolve o pai, mas as linhas planejadas nascem junto no servidor. Um `unshift` local
     // deixaria as filhas invisíveis e o pai editável até o próximo refresh; a lista oficial é a
     // única fonte capaz de trazer os marcadores das duas pontas do conjunto.
-    if (possuiRetornosPlanejados) await carregarDadosTela(telaAtiva.value, empresaId.value);
     if (criarNova) {
       await acoesLancamento.abrirLancamento(entidadeSalva);
     } else {
@@ -2025,7 +2022,6 @@ provide(WORKSPACE_CONTEXT, {
   salvandoOperacao,
   salvarOperacao,
   abrirOperacao,
-  podePlanejarRetorno,
   contaTravadaDoCaixa,
   contaTravadaDoCaixaNome,
   contaTravadaDoCaixaNota,

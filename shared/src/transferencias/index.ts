@@ -28,15 +28,6 @@ export const transferenciasQuerySchema = z
     status: statusTransferenciaSchema.optional()
   })
   .merge(paginationQuerySchema);
-// R-185: envelopes preparados junto da ida Cofre -> Caixa. Sao apenas planejamento: a linha
-// nasce agendada e so movimenta saldo quando o operador a executa dentro do Caixa.
-export const retornoPlanejadoSchema = z
-  .object({
-    valor: z.coerce.number().positive(),
-    nLacreDoc: z.string().trim().min(1, "Lacre obrigatorio")
-  })
-  .strict();
-
 export const transferenciaPayloadSchema = z.object({
   empresaId: uuidSchema,
   dataReferencia: z.string().min(10),
@@ -46,6 +37,8 @@ export const transferenciaPayloadSchema = z.object({
   descricao: z.string().optional().nullable(),
   observacao: z.string().optional().nullable(),
   valorOriginal: dinheiroSchema,
+  valorEspecieDeclarado: dinheiroSchema.optional(),
+  valorMoedasDeclarado: dinheiroSchema.optional(),
   valorAcrescimo: dinheiroSchema.default(0),
   descricaoAcrescimo: z.string().optional().nullable(),
   valorDesconto: dinheiroSchema.default(0),
@@ -54,10 +47,15 @@ export const transferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
   contasDestinoIds: z.array(uuidSchema).max(50).optional().default([]),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
+  // R-208: lacres das bolsas vazias que seguem DENTRO do malote Cofre -> PDV.
+  // Nao sao transferencias futuras: so passam a selar um movimento quando o Caixa faz a sangria.
+  lacresRetorno: z.array(z.string().trim().min(1).max(100)).max(50).optional().default([]),
+  // Lacre enviado aberto dentro do malote principal para selar o fechamento deste Caixa. Quando
+  // informado, o operador precisa digitá-lo manualmente e o servidor exige a correspondencia.
+  lacreFechamentoPlanejado: z.string().trim().min(1).max(100).optional().nullable(),
   agendadaPara: z.string().datetime().optional().nullable(),
   tempoConfirmacao: tempoConfirmacaoSchema.nullable().optional().default(null),
-  computar: z.boolean().default(true),
-  retornosPlanejados: z.array(retornoPlanejadoSchema).max(20).optional().default([])
+  computar: z.boolean().default(true)
 });
 
 export const transferenciaDtoSchema = z.object({
@@ -71,6 +69,8 @@ export const transferenciaDtoSchema = z.object({
   // R-183: o que o cofre contou. Null em tudo que nao e `divergente` — quem soma ENTRADA usa
   // este numero, senao o cockpit exibiria como recebido um valor que nunca chegou.
   valorRecebido: z.number().nullable(),
+  valorEspecieDeclarado: z.number().nullable(),
+  valorMoedasDeclarado: z.number().nullable(),
   contaOrigemId: z.string(),
   contaDestinoId: z.string(),
   contaOrigemNome: z.string(),
@@ -85,6 +85,7 @@ export const transferenciaDtoSchema = z.object({
   criadoPor: z.string().nullable(),
   criadoPorNome: z.string().nullable(),
   criadoEm: z.string(),
+  observacao: z.string().nullable(),
   possuiPlanejamentoRetorno: z.boolean(),
   ehPlanejamentoRetorno: z.boolean(),
   // Esta linha esta sob as regras ESTRITAS da Transferencia de retorno (valor obrigatorio na conferencia,
@@ -108,7 +109,9 @@ export const transferenciaDtoSchema = z.object({
 export const confirmarTransferenciaPayloadSchema = z.object({
   contaDestinoId: uuidSchema,
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
-  valorRecebido: dinheiroSchema.optional()
+  valorRecebido: dinheiroSchema.optional(),
+  valorEspecieContado: dinheiroSchema.optional(),
+  valorMoedasContado: dinheiroSchema.optional()
 });
 
 export type ConfirmarTransferenciaPayload = z.infer<typeof confirmarTransferenciaPayloadSchema>;
@@ -135,6 +138,8 @@ export const recusarConferenciaPayloadSchema = z.object({
   motivo: z.string().trim().min(1, "Motivo obrigatorio").max(500),
   nLacreDoc: z.string().trim().min(1).optional().nullable(),
   valorRecebido: dinheiroSchema.optional(),
+  valorEspecieContado: dinheiroSchema.optional(),
+  valorMoedasContado: dinheiroSchema.optional(),
   encerrar: z.boolean().optional().default(false),
   sobraConfirmada: z.boolean().optional().default(false)
 });

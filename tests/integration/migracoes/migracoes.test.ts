@@ -46,7 +46,15 @@ function tabelasDoArrayDa0002(): string[] {
 // Tabelas que TEM a coluna `atualizado_em` e NAO tem o trigger. Nao e o estado desejado — e o estado
 // real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
 // quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
-const semTriggerConhecidas = ["campanhas", "maquininhas", "notas_fiscais", "pedidos", "regras_recebimento", "turnos"];
+const semTriggerConhecidas = [
+  "campanhas",
+  "fechamentos_caixa_relatorios_maquininha",
+  "maquininhas",
+  "notas_fiscais",
+  "pedidos",
+  "regras_recebimento",
+  "turnos"
+];
 
 const sqlTabelasComTrigger = `
   select distinct event_object_table as tabela

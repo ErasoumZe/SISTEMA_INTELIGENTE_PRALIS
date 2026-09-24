@@ -1,0 +1,2 @@
+ALTER TABLE "lacres" DROP CONSTRAINT "lacres_origem_check";--> statement-breakpoint
+ALTER TABLE "lacres" ADD CONSTRAINT "lacres_origem_check" CHECK ("lacres"."origem" in ('saida', 'retorno', 'fechamento'));

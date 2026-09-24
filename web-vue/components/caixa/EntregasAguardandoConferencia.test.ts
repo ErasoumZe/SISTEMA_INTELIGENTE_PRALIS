@@ -60,9 +60,9 @@ describe("EntregasAguardandoConferencia", () => {
     expect(tela.get(".transito-explica").text()).toMatch(/ainda n[aã]o encerrou/iu);
   });
 
-  it("sem contagem, o texto continua mandando conferir no destino", () => {
+  it("sem contagem, o texto informa que a Tesouraria conferira depois", () => {
     const tela = mount(EntregasAguardandoConferencia, { props: { entregas: [entrega()] } });
-    expect(tela.get(".transito-explica").text()).toMatch(/conta destino conferir/iu);
+    expect(tela.get(".transito-explica").text()).toMatch(/Tesouraria far[aá] a confer[eê]ncia depois/iu);
     expect(tela.get('[data-teste="entrega-pendente"]').text()).not.toContain("destino contou");
   });
 

@@ -150,23 +150,44 @@ describe("montarPayloadOperacao", () => {
     expect(payload.dataPagamento).toBeNull();
   });
 
-  it("envia varias transferencias de retorno somente com valor e lacre", () => {
-    const form = {
-      ...formOperacaoVazio(),
-      valorOriginal: "1000,00",
-      contaOrigemId: "cofre-1",
-      contaDestinoId: "caixa-1",
-      nLacreDoc: "LACRE-001",
-      retornosPlanejados: [
-        { valor: "300,00", nLacreDoc: "LACRE-002", contaDestinoId: "destino-residual-ignorado" },
-        { valor: "700,00", nLacreDoc: "LACRE-003", contaDestinoId: "outro-residual-ignorado" }
-      ]
-    };
+  it("envia a composicao fisica ao preparar o malote para o caixa", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: {
+        ...formOperacaoVazio(),
+        valorOriginal: "200",
+        valorEspecieDeclarado: "150",
+        valorMoedasDeclarado: "50"
+      }
+    });
+    expect(payload).toMatchObject({
+      valorOriginal: 200,
+      valorEspecieDeclarado: 150,
+      valorMoedasDeclarado: 50,
+      lacresRetorno: []
+    });
+  });
 
-    expect(montarPayloadOperacao("transferencia", { ...base, form }).retornosPlanejados).toEqual([
-      { valor: 300, nLacreDoc: "LACRE-002" },
-      { valor: 700, nLacreDoc: "LACRE-003" }
-    ]);
+  it("envia os lacres menores junto do malote", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: { ...formOperacaoVazio(), lacresRetorno: [" SANG-01 ", "SANG-02"] }
+    });
+    expect(payload).toMatchObject({ lacresRetorno: ["SANG-01", "SANG-02"] });
+  });
+
+  it("envia o lacre aberto reservado para o fechamento do caixa", () => {
+    const payload = montarPayloadOperacao("transferencia", {
+      ...base,
+      form: { ...formOperacaoVazio(), lacreFechamentoPlanejado: "  FCH-ABERTO-01  " }
+    });
+    expect(payload).toMatchObject({ lacreFechamentoPlanejado: "FCH-ABERTO-01" });
+  });
+
+  it("nao envia composicao vazia para transferencias que nao sao malote", () => {
+    const payload = montarPayloadOperacao("transferencia", { ...base, form: formOperacaoVazio() });
+    expect(payload).not.toHaveProperty("valorEspecieDeclarado");
+    expect(payload).not.toHaveProperty("valorMoedasDeclarado");
   });
 
   it("todo ID opcional em branco vira null, nao '' (o bug 'colaboradorId: Invalid UUID')", () => {

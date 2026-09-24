@@ -62,7 +62,7 @@ a necessidade.
 | [43](43_ADMISSAO_PROCESSO_INICIADO.md)                      | **Admissao: processo iniciado**           | ADM-002 V0: nasce da efetivacao, sem botao de iniciar, dois estados, idempotencia simetrica                                                                                                                     |
 | [44](44_ADMISSAO_DIRETA_TURNO_ASO.md)                       | **Admissao direta, turno e ASO**          | ADM-003 V1B: pre-cadastro do DP, turno por catalogo com retrato, CPF por lock, ASO pausa e retoma                                                                                                               |
 | [45](45_ROBO_CARTOGRAFO_PLANILHAS.md)                       | **Robo Cartografo das planilhas**         | analise tecnica do extrator somente-leitura das planilhas PraLis: onde mora, scopes minimos, segredos fora do Git e criterios do piloto                                                                         |
-| [46](46_INTEGRACAO_ADMISSOES_NA_MAIN.md)                    | **Integracao de admissoes na main**       | consolidacao das verticais de colaboradores na main, preservando o Caixa e usando a migration 0042 consolidada                                                                                                  |
+| [46](46_INTEGRACAO_ADMISSOES_NA_MAIN.md)                    | **Integracao de admissoes na main**       | consolidacao das verticais de colaboradores na main, preservando o Caixa e usando a migration 0048 consolidada                                                                                                  |
 | [67](67_LINGUAGEM_VISUAL_CICLUZ.md)                         | Linguagem visual Cicluz                   | tokens `--cx-*`, cor, espaço, raio, movimento, tipografia — **e §13 responsividade**                                                                                                                            |
 | [68](68_RELATORIO_MODERNIZACAO_VISUAL.md)                   | Relatório da rodada visual                | o que mudou por arquivo em 01/08 e o que ficou aberto                                                                                                                                                           |
 | [69](69_PLANO_DESIGN_2026_08.md)                            | Plano do design novo (ago/26)             | fila, decisões (D-01 a D-08), etapas até o fim e regras de convivência entre as frentes                                                                                                                         |
@@ -94,6 +94,10 @@ a necessidade.
 > admissão direta) → **35** (o mapa das 8 estações) → **36** (pré-cadastro) → **37** (V3/V4, ficha
 > pública e dependentes) → **38** (V5, revisão do DP) → **39** (V6, fila — e os contratos do que
 > falta) → **40** (catálogo de funções) → **41** (retrato da função, ⛔ esperando aprovação do SQL).
+
+## Documento adicional
+
+- [35 — Lume, assistente futuro do Caixa](35_LUME_ASSISTENTE_CAIXA.md): escopo futuro, governança e limites da primeira base de FAQs.
 
 ## Regra de ouro deste brain
 

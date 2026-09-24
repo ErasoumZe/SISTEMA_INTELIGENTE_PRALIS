@@ -15,11 +15,13 @@ export type CamposConferencia = {
   contaDestinoId: string;
   lacre: string;
   valorRecebido: string;
+  valorEspecieContado: string;
+  valorMoedasContado: string;
   motivo: string;
 };
 
 export function camposConferenciaVazios(): CamposConferencia {
-  return { contaDestinoId: "", lacre: "", valorRecebido: "", motivo: "" };
+  return { contaDestinoId: "", lacre: "", valorRecebido: "", valorEspecieContado: "", valorMoedasContado: "", motivo: "" };
 }
 
 // `0` e valor valido. Por isso o teste e sobre a string ser vazia, e nao sobre o numero ser
@@ -46,6 +48,8 @@ export type PayloadConfirmacao = {
   nLacreDoc: string | null;
   // Ausente na transferencia GENERICA quando nao informado. Ver abaixo por que nao vira 0.
   valorRecebido?: number;
+  valorEspecieContado?: number;
+  valorMoedasContado?: number;
 };
 
 // Decisao 5/R-187: o valor so e obrigatorio no fluxo de Transferencia de retorno do Caixa.
@@ -66,7 +70,13 @@ export function montarPayloadConfirmacao(
   const informou = valorConferenciaValido(campos.valorRecebido);
   // No retorno do Caixa a tela ja bloqueia o envio sem valor valido, entao aqui ele sempre existe.
   if (!ehCaixaParaCofre && !informou) return base;
-  return { ...base, valorRecebido: Number(campos.valorRecebido) };
+  const payload = { ...base, valorRecebido: Number(campos.valorRecebido) };
+  if (!ehCaixaParaCofre) return payload;
+  return {
+    ...payload,
+    valorEspecieContado: Number(campos.valorEspecieContado),
+    valorMoedasContado: Number(campos.valorMoedasContado)
+  };
 }
 
 // R-183 · quando o envio fica bloqueado pela sobra nao confirmada.

@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import type { MultipartFile } from "@fastify/multipart";
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
+import { readFile, unlink } from "node:fs/promises";
 import type {
   AbrirCaixaPayload,
   CancelarPlanejamentoRetornoPayload,
@@ -12,11 +16,13 @@ import type {
   HistoricoCaixaQuery,
   LinhaHistoricoCaixa,
   PlanejamentoRetorno,
+  RelatorioMaquininhaIa,
   ResumoCaixa,
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
   TransferenciaCofrePayload,
-  TransferenciasCaixaResponse
+  TransferenciasCaixaResponse,
+  VendaCanceladaCaixa
 } from "@padaria/shared/caixa";
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
@@ -24,7 +30,7 @@ import type { DadosExternos, ResultadoPaginado } from "@padaria/shared/api";
 import { podeLancarSemCaixa, temPermissao, type PerfilUsuario, type Permissao } from "@padaria/shared/autenticacao";
 import { deCentavos, liquidoCentavos, paraCentavos } from "@padaria/shared/dinheiro";
 import { podeAcessarEmpresa } from "../auth/empresa.js";
-import { executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
+import { banco, executarEmTransacao, type ExecutorBanco, type TransacaoBanco } from "../banco/conexao.js";
 import { ErroDominio } from "../erros.js";
 import {
   atualizarFechamentoCaixaRepository,
@@ -37,9 +43,21 @@ import {
   travarPdvDaAberturaRepository,
   buscarAjusteCaixaRepository,
   buscarPerfilUsuarioCaixaRepository,
+  buscarPdvEmpresaRepository,
   caixasComAjusteRepository,
   calcularTotaisCaixaOperacionalRepository,
   criarCaixaRepository,
+  criarConferenciaFisicaTransferenciaRepository,
+  criarAnexoFechamentoCaixaRepository,
+  buscarAnexoFechamentoCaixaRepository,
+  buscarRelatorioMaquininhaFechamentoRepository,
+  salvarRelatorioMaquininhaFechamentoRepository,
+  invalidarRelatorioMaquininhaFechamentoRepository,
+  removerAnexoFechamentoCaixaRepository,
+  existeFolhaFechamentoCaixaRepository,
+  listarAnexosFechamentoCaixaRepository,
+  listarAnexosFechamentoCaixaComCaminhoRepository,
+  listarConferenciasFisicasCaixaRepository,
   confirmarTransferenciaAberturaRepository,
   vincularPlanejamentosDaTransferenciaAoCaixaRepository,
   buscarPlanejamentoRetornoRepository,
@@ -57,6 +75,7 @@ import {
   listarHistoricoCaixaRepository,
   listarCaixasAbertosHistoricoRepository,
   listarLancamentosCaixaRepository,
+  listarVendasCanceladasCaixaRepository,
   listarPlanejamentosRetornoRepository,
   caixasAlteradosPosFechamentoRepository,
   listarUsuariosTesourariaRepository,
@@ -68,9 +87,17 @@ import {
   travarCaixaCompartilhadoRepository,
   travarCaixaRepository,
   buscarTransferenciaPorIdempotenciaRepository,
+  buscarLacreRetornoDoCaixaRepository,
+  buscarLacreFechamentoPlanejadoDoCaixaRepository,
+  buscarLacreFechamentoPlanejadoDaTransferenciaRepository,
+  consumirLacreRetornoRepository,
+  consumirLacreFechamentoPlanejadoRepository,
+  listarLacresRetornoDaDistribuicaoRepository,
+  listarLacresRetornoDisponiveisDoCaixaRepository,
   listarCandidatosConfirmacaoRepository,
   type FiltrosHistoricoCaixa,
-  type IntencaoEntregaCofre
+  type IntencaoEntregaCofre,
+  type VendaCanceladaCaixaLinha
 } from "./caixa.repository.js";
 import {
   listarRetornosPendentesRepository,
@@ -81,6 +108,9 @@ import { materializarMensagensNaAberturaDeCaixa } from "../mensagens-admin/mensa
 import { criarNotificacoesRepository } from "../notificacoes/notificacoes.repository.js";
 import { existeNumeroLacreRepository } from "../lacres/lacres.repository.js";
 import { buscarPerfilUsuario } from "../auth/perfil.service.js";
+import { caminhoAbsolutoDocumento, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
+import { env } from "../env.js";
+import { extrairRelatorioMaquininhaComGemini } from "./gemini-relatorio-maquininha.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
@@ -141,9 +171,12 @@ function serializarCaixa(caixa: CaixaLinha): CaixaOperacional {
     fechadoEm: serializarData(caixa.fechadoEm),
     tokenEdicao: caixa.tokenEdicao,
     turnoId: caixa.turnoId ?? null,
+    turnoNome: caixa.turnoNome ?? null,
     maquininhaId: caixa.maquininhaId ?? null,
     maquininhaApelido: caixa.maquininhaApelido ?? null,
     maquininhaNumeroSerie: caixa.maquininhaNumeroSerie ?? null,
+    caixaResponsavelNomeAbertura: caixa.caixaResponsavelNomeAbertura ?? null,
+    supervisorResponsavelNomeAbertura: caixa.supervisorResponsavelNomeAbertura ?? null,
     observacao: caixa.observacao,
     status: caixa.status
   };
@@ -155,6 +188,215 @@ function podeOperarCaixa(perfil: PerfilUsuario, caixa: CaixaLinha) {
     caixa.usuarioId === perfil.usuarioId ||
     caixa.usuarioCaixaId === perfil.usuarioId
   );
+}
+
+export async function salvarAnexoFechamentoCaixa(
+  caixaId: string,
+  tipo: "folha_fechamento" | "comprovante_cartao",
+  arquivo: MultipartFile | undefined,
+  perfil: PerfilUsuario
+) {
+  if (!arquivo) throw new Error("Arquivo obrigatorio");
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+
+    const salvo = await salvarFotoDocumento("fechamentos-caixa", `${caixa.empresaId}/${caixa.id}`, arquivo);
+    const absoluto = caminhoAbsolutoDocumento(salvo.caminhoRelativo);
+    try {
+      const dados = await readFile(absoluto);
+      const anexo = await criarAnexoFechamentoCaixaRepository(
+        {
+          empresaId: caixa.empresaId,
+          fechamentoCaixaId: caixa.id,
+          tipo,
+          caminho: salvo.caminhoRelativo,
+          nomeOriginal: arquivo.filename || "anexo",
+          nomeArquivo: basename(salvo.caminhoRelativo),
+          mimeType: salvo.mimeType,
+          tamanhoBytes: dados.byteLength,
+          sha256: createHash("sha256").update(dados).digest("hex"),
+          criadoPor: perfil.usuarioId
+        },
+        tx
+      );
+      if (tipo === "comprovante_cartao") {
+        await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+      }
+      return anexo;
+    } catch (error) {
+      await unlink(absoluto).catch(() => undefined);
+      throw error;
+    }
+  });
+}
+
+async function obterCaixaParaAuditoria(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  return caixa;
+}
+
+export async function listarAnexosFechamentoCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  // O operador precisa reler as provas que acabou de anexar antes de fechar. A consulta continua
+  // limitada ao caixa dele; Tesouraria e Gerência podem auditar qualquer caixa permitido.
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  return listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId);
+}
+
+function turnoDoRelatorio(caixa: CaixaLinha) {
+  return caixa.turnoNome?.trim() || "Turno não informado na abertura";
+}
+
+function validarComprovantesParaIa(anexos: Array<{ tipo: string; mimeType: string }>) {
+  if (!anexos.length) throw new Error("Anexe ao menos uma foto ou PDF da maquininha antes de ler.");
+  for (const anexo of anexos) {
+    if (anexo.tipo !== "comprovante_cartao") throw new Error("A IA só lê comprovantes de cartão");
+    if (!anexo.mimeType.startsWith("image/") && anexo.mimeType !== "application/pdf") {
+      throw new Error("Envie imagens ou PDFs para a leitura do comprovante");
+    }
+  }
+}
+
+async function contextoRelatorioMaquininha(caixaId: string, perfil: PerfilUsuario) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    return { caixa, anexos: await listarAnexosFechamentoCaixaComCaminhoRepository(caixa.id, caixa.empresaId, tx) };
+  });
+}
+
+export async function obterRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const { caixa } = await contextoRelatorioMaquininha(caixaId, perfil);
+  const relatorio = await buscarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId);
+  return {
+    turnoNome: relatorio?.turnoNome ?? turnoDoRelatorio(caixa),
+    relatorio: relatorio
+      ? {
+          dadosRevisados: relatorio.dadosRevisados,
+          criadoEm: serializarData(relatorio.criadoEm),
+          atualizadoEm: serializarData(relatorio.atualizadoEm)
+        }
+      : null
+  };
+}
+
+export async function analisarRelatorioMaquininhaFechamento(caixaId: string, perfil: PerfilUsuario) {
+  const { caixa, anexos } = await contextoRelatorioMaquininha(caixaId, perfil);
+  if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+  const comprovantes = anexos.filter((anexo) => anexo.tipo === "comprovante_cartao");
+  validarComprovantesParaIa(comprovantes);
+  if (!env.GEMINI_API_KEY) {
+    throw new ErroDominio(
+      "A leitura por IA ainda não foi configurada. As fotos continuam válidas como prova.",
+      503,
+      "IA_NAO_CONFIGURADA"
+    );
+  }
+  const arquivos = await Promise.all(
+    comprovantes.map(async (anexo) => ({
+      dados: await readFile(caminhoAbsolutoDocumento(anexo.caminho)),
+      mimeType: anexo.mimeType
+    }))
+  );
+  const sugestao = await extrairRelatorioMaquininhaComGemini(arquivos, {
+    chave: env.GEMINI_API_KEY,
+    modelo: env.GEMINI_MODEL,
+    timeoutMs: env.GEMINI_TIMEOUT_MS
+  });
+  return { turnoNome: turnoDoRelatorio(caixa), sugestao, anexosConsiderados: comprovantes.map((anexo) => anexo.id) };
+}
+
+export async function salvarRelatorioMaquininhaFechamento(
+  caixaId: string,
+  dados: RelatorioMaquininhaIa,
+  anexosConsiderados: string[],
+  perfil: PerfilUsuario
+) {
+  return executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const comprovantes = (await listarAnexosFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx)).filter(
+      (anexo) => anexo.tipo === "comprovante_cartao"
+    );
+    validarComprovantesParaIa(comprovantes);
+    const atuais = comprovantes.map((anexo) => anexo.id).sort();
+    const informados = [...new Set(anexosConsiderados)].sort();
+    if (atuais.length !== informados.length || atuais.some((id, indice) => id !== informados[indice])) {
+      throw new ErroDominio(
+        "As fotos da maquininha mudaram. Leia e revise novamente antes de salvar.",
+        409,
+        "RELATORIO_DESATUALIZADO"
+      );
+    }
+    const relatorio = await salvarRelatorioMaquininhaFechamentoRepository(
+      {
+        fechamentoCaixaId: caixa.id,
+        empresaId: caixa.empresaId,
+        turnoNome: turnoDoRelatorio(caixa),
+        dadosRevisados: dados,
+        criadoPor: perfil.usuarioId
+      },
+      tx
+    );
+    return {
+      turnoNome: relatorio.turnoNome,
+      dadosRevisados: relatorio.dadosRevisados,
+      criadoEm: serializarData(relatorio.criadoEm),
+      atualizadoEm: serializarData(relatorio.atualizadoEm)
+    };
+  });
+}
+
+export async function removerAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
+  const removido = await executarEmTransacao(async (tx) => {
+    if (!(await travarCaixaRepository(caixaId, tx))) throw new Error("Caixa nao encontrado");
+    const caixa = await buscarCaixaPorIdRepository(caixaId, tx);
+    if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+    if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+    if (caixa.status !== "aberto") throw new Error("Anexos so podem ser removidos antes do fechamento");
+    const anexo = await removerAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId, tx);
+    if (!anexo) throw new Error("Anexo nao encontrado");
+    if (anexo.tipo === "comprovante_cartao") {
+      await invalidarRelatorioMaquininhaFechamentoRepository(caixa.id, caixa.empresaId, tx);
+    }
+    return anexo;
+  });
+
+  // O vínculo no banco já foi removido sob trava. Se a limpeza física falhar, o arquivo não fica
+  // acessível pela API e poderá ser tratado pela rotina de retenção sem restaurar uma prova errada.
+  await unlink(caminhoAbsolutoDocumento(removido.caminho)).catch(() => undefined);
+}
+
+export async function listarConferenciasFisicasCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  const conferencias = await listarConferenciasFisicasCaixaRepository(caixa.id, caixa.empresaId);
+  return conferencias.map((item) => ({
+    ...item,
+    valorEspecieDeclarado: numero(item.valorEspecieDeclarado),
+    valorMoedasDeclarado: numero(item.valorMoedasDeclarado),
+    valorEspecieContado: numero(item.valorEspecieContado),
+    valorMoedasContado: numero(item.valorMoedasContado),
+    conferidoEm: serializarData(item.conferidoEm) ?? ""
+  }));
+}
+
+export async function obterArquivoAnexoFechamentoCaixa(caixaId: string, anexoId: string, perfil: PerfilUsuario) {
+  const caixa = await obterCaixaParaAuditoria(caixaId, perfil);
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  const anexo = await buscarAnexoFechamentoCaixaRepository(caixa.id, anexoId, caixa.empresaId);
+  if (!anexo) throw new Error("Anexo nao encontrado");
+  return { ...anexo, caminhoAbsoluto: caminhoAbsolutoDocumento(anexo.caminho) };
 }
 
 async function calcularTotaisCaixaCentavos(caixa: CaixaLinha, db?: ExecutorBanco): Promise<TotaisCaixaCentavos> {
@@ -189,9 +431,11 @@ export async function calcularResumoCaixaOperacional(caixa: CaixaLinha, db?: Exe
 // travam o fechamento â€” repetir viraria dividir: bastaria uma rota esquecer o campo para a tela
 // mostrar "pode fechar" sobre um caixa que a API recusa. Aqui isso nao tem como acontecer.
 async function statusDoCaixaAberto(caixa: CaixaLinha, db?: ExecutorBanco): Promise<CaixaStatus> {
+  const lacreFechamento = await buscarLacreFechamentoPlanejadoDoCaixaRepository(caixa.id, caixa.empresaId, db);
   return {
     caixaAberto: serializarCaixa(caixa),
     resumo: await calcularResumoCaixaOperacional(caixa, db),
+    lacreFechamentoReservado: lacreFechamento?.rompido ? null : (lacreFechamento?.numero ?? null),
     entregasPendentes: await entregasPendentesDoCaixa(caixa.id, db),
     planejamentosPendentes: serializarPlanejamentos(await listarPlanejamentosRetornoRepository(caixa.id, db))
   };
@@ -264,7 +508,7 @@ function serializarEntregasPendentes(
 
 // A recusa precisa dizer QUAL entrega trava. "Nao pode fechar" sozinho manda o operador adivinhar
 // entre as entregas do turno â€” e, no fim do expediente, adivinhar vira ligar para a Tesouraria.
-function mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
+function _mensagemEntregasPendentes(entregas: EntregaCofrePendente[]): string {
   const VISIVEIS = 3;
   const descritas = entregas.slice(0, VISIVEIS).map((entrega) => {
     const nome = "Retorno";
@@ -288,7 +532,15 @@ export async function obterStatusCaixa(empresaId: string, perfil: PerfilUsuario)
   return executarEmTransacao(async (tx) => {
     const caixa = await buscarCaixaAbertoUsuarioRepository(empresaId, perfil.usuarioId, tx);
     // Sem caixa aberto nao ha o que travar: lista VAZIA, nunca ausente.
-    if (!caixa) return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] };
+    if (!caixa) {
+      return {
+        caixaAberto: null,
+        resumo: null,
+        lacreFechamentoReservado: null,
+        entregasPendentes: [],
+        planejamentosPendentes: []
+      };
+    }
 
     // O CREARE pode importar uma venda depois da abertura. O refresh de um minuto
     // precisa anexar essas vendas ao caixa antes de calcular os cards de pagamento.
@@ -379,6 +631,8 @@ type AberturaPorLacre = {
   lacreId: string;
   numeroLacre: string;
   valorCentavos: number;
+  valorEspecieDeclaradoCentavos: number;
+  valorMoedasDeclaradoCentavos: number;
 };
 
 async function prepararAberturaPorLacre(
@@ -405,12 +659,53 @@ async function prepararAberturaPorLacre(
   if (achado.contaOrigemId === contaCaixaId) throw new Error("Conta de origem nao pode ser a mesma do caixa");
 
   const valorCentavos = paraCentavos(achado.valorOriginal);
+  if (achado.valorEspecieDeclarado === null || achado.valorMoedasDeclarado === null) {
+    throw new Error("Transferencia do malote sem composicao de especie e moedas");
+  }
   return {
     transferenciaId: achado.transferenciaId,
     lacreId: achado.lacreId,
     numeroLacre,
-    valorCentavos
+    valorCentavos,
+    valorEspecieDeclaradoCentavos: paraCentavos(achado.valorEspecieDeclarado),
+    valorMoedasDeclaradoCentavos: paraCentavos(achado.valorMoedasDeclarado)
   };
+}
+
+// Leitura previa para o operador conferir o malote antes de consumi-lo na abertura. Nao muda
+// transferencia, lacre ou saldo; a confirmacao atomica continua exclusivamente em abrirCaixa.
+export async function consultarMaloteParaAbertura(
+  empresaId: string,
+  pdvId: string,
+  lacre: string,
+  perfil: PerfilUsuario
+) {
+  if (!podeAcessarEmpresa(perfil, empresaId)) throw new Error("Empresa nao permitida");
+  const pdv = await buscarPdvEmpresaRepository(pdvId, empresaId);
+  if (!pdv?.contaId) throw new Error("PDV sem conta vinculada");
+  const abertura = await prepararAberturaPorLacre(empresaId, lacre.trim(), pdv.contaId, perfil.usuarioId, banco);
+  const lacresRetorno = await listarLacresRetornoDaDistribuicaoRepository(abertura.transferenciaId, empresaId);
+  const lacreFechamento = await buscarLacreFechamentoPlanejadoDaTransferenciaRepository(
+    abertura.transferenciaId,
+    empresaId,
+    banco
+  );
+  return {
+    valor: deCentavos(abertura.valorCentavos),
+    valorEspecieDeclarado: deCentavos(abertura.valorEspecieDeclaradoCentavos),
+    valorMoedasDeclarado: deCentavos(abertura.valorMoedasDeclaradoCentavos),
+    lacre: abertura.numeroLacre,
+    lacresRetorno,
+    lacreFechamento
+  };
+}
+
+export async function listarLacresRetornoDisponiveisCaixa(caixaId: string, perfil: PerfilUsuario) {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  if (caixa.status !== "aberto") return [];
+  return listarLacresRetornoDisponiveisDoCaixaRepository(caixaId, caixa.empresaId);
 }
 
 async function abrirCaixaEmTransacao(
@@ -445,10 +740,8 @@ async function abrirCaixaEmTransacao(
 
     // R-040: o lacre e opcional (R-033 â€” sem lacre o caixa abre zerado e o fundo chega depois).
     // Informado, ele identifica a transferencia pendente que este caixa vai reivindicar.
-    const lacreInformado = dados.lacreAbertura?.trim() || null;
-    const abertura = lacreInformado
-      ? await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx)
-      : null;
+    const lacreInformado = dados.lacreAbertura.trim();
+    const abertura = await prepararAberturaPorLacre(dados.empresaId, lacreInformado, pdv.contaId, perfil.usuarioId, tx);
 
     const caixa = await criarCaixaRepository(
       {
@@ -462,7 +755,9 @@ async function abrirCaixaEmTransacao(
         // Turno da abertura: informado no ato ou, na ausencia, o turno padrao do colaborador.
         turnoId: dados.turnoId ?? colaborador.turnoPadraoId ?? null,
         observacao: dados.observacao?.trim() || null,
-        lacreAbertura: abertura?.numeroLacre ?? null,
+        lacreAbertura: abertura.numeroLacre,
+        caixaResponsavelNomeAbertura: dados.caixaResponsavelNome.trim(),
+        supervisorResponsavelNomeAbertura: dados.supervisorResponsavelNome.trim(),
         maquininhaId: dados.maquininhaId ?? null
       },
       tx
@@ -471,7 +766,16 @@ async function abrirCaixaEmTransacao(
     // R-040 na MESMA transacao: vence a disputa (R-030), preenche data_recebimento/confirmado_por
     // (R-028), leva o dinheiro para ESTE caixa (R-036) e rompe o lacre (R-027). Perder a disputa
     // derruba a abertura inteira â€” nao existe caixa aberto com transferencia ainda pendente.
-    if (abertura) {
+    {
+      const valorEspecieContadoCentavos = paraCentavos(dados.valorEspecieContado);
+      const valorMoedasContadoCentavos = paraCentavos(dados.valorMoedasContado);
+      const valorContadoCentavos = valorEspecieContadoCentavos + valorMoedasContadoCentavos;
+      const convergente =
+        abertura.valorEspecieDeclaradoCentavos === valorEspecieContadoCentavos &&
+        abertura.valorMoedasDeclaradoCentavos === valorMoedasContadoCentavos;
+      if (!convergente && !dados.observacaoDivergencia?.trim()) {
+        throw new Error("Observacao obrigatoria quando a conferencia do malote divergir");
+      }
       const confirmada = await confirmarTransferenciaAberturaRepository(
         {
           transferenciaId: abertura.transferenciaId,
@@ -479,11 +783,46 @@ async function abrirCaixaEmTransacao(
           contaCaixaId: pdv.contaId,
           caixaId: caixa.id,
           usuarioId: perfil.usuarioId,
+          valorRecebidoCentavos: valorContadoCentavos,
           agora: new Date()
         },
         tx
       );
       if (!confirmada) throw new Error("Lacre ja utilizado por outro caixa");
+      const conferencia = await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: dados.empresaId,
+          transferenciaId: abertura.transferenciaId,
+          fechamentoCaixaId: caixa.id,
+          etapa: "abertura",
+          resultado: convergente ? "convergente" : "divergente",
+          encerraConferencia: true,
+          valorEspecieDeclaradoCentavos: abertura.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: abertura.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos,
+          valorMoedasContadoCentavos,
+          observacao: convergente ? null : dados.observacaoDivergencia!.trim(),
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: dataHoraAbertura
+        },
+        tx
+      );
+      if (!convergente) {
+        const destinatarios = (await listarUsuariosTesourariaRepository(dados.empresaId, tx))
+          .map((item) => item.usuarioId)
+          .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+        await criarNotificacoesRepository(
+          {
+            empresaId: dados.empresaId,
+            tipo: "quebra_caixa",
+            destinatariosUsuarioIds: destinatarios,
+            referenciaId: conferencia.id,
+            titulo: "Divergencia na abertura do caixa",
+            valorCentavos: valorContadoCentavos - abertura.valorCentavos
+          },
+          tx
+        );
+      }
       await vincularPlanejamentosDaTransferenciaAoCaixaRepository(
         {
           transferenciaOrigemId: abertura.transferenciaId,
@@ -550,6 +889,17 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
     if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
     if (caixa.status !== "aberto") throw new Error("Caixa ja fechado");
+    const lacreFechamentoReservado = await buscarLacreFechamentoPlanejadoDoCaixaRepository(
+      caixa.id,
+      caixa.empresaId,
+      tx
+    );
+    if (lacreFechamentoReservado && dados.lacreFechamento.trim() !== lacreFechamentoReservado.numero) {
+      throw new Error("O lacre informado nao corresponde ao lacre de fechamento reservado no malote");
+    }
+    if (!(await existeFolhaFechamentoCaixaRepository(caixa.id, caixa.empresaId, tx))) {
+      throw new Error("Anexe ao menos uma foto da folha de fechamento antes de fechar o caixa");
+    }
     const dataHoraFechamento = new Date();
     if (caixa.dataHoraAbertura && dataHoraFechamento <= new Date(caixa.dataHoraAbertura)) {
       throw new Error("Fechamento precisa ser posterior a abertura");
@@ -560,30 +910,28 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
     // R-185/R-187 · o painel paralelo foi removido, mas o planejamento atomico voltou dentro da
     // transferencia inicial. A linha `agendada` nao move saldo e trava ate ser executada ou cancelada.
     //
-    // O retorno executado e ainda nao conferido na conta destino tambem trava. Antes da Fatia 1 o
-    // caixa fechava por cima dele e uma divergencia posterior ficava sem turno aberto onde cair.
-    //
-    // Lida DEPOIS da trava e ANTES do retorno final (D6/D7), entao o proprio ato do fechamento nao
-    // se auto-bloqueia. Corrida: a linha do caixa ja esta em FOR UPDATE aqui e `confirmarTransferencia`
-    // pede FOR SHARE na MESMA linha antes de mudar o status â€” as duas serializam, e este SELECT
-    // nunca decide sobre um retrato velho.
-    //
-    // Escopo: somente movimentos do processo de retorno, novos (`retorno`) ou historicos
-    // (`sangria`), vinculados a este Caixa. Transferencia generica pendente nao entra.
+    // Retornos e sangrias em transito NAO travam mais o fechamento: a Tesouraria pode conferir em
+    // outro momento e resolver uma eventual divergencia na trilha de conferencia, mesmo depois de
+    // o operador encerrar o turno. Planejamentos ainda travam porque dinheiro ainda nao saiu.
     if (await existePlanejamentoRetornoAgendadoRepository(caixa.id, tx)) {
       throw new Error("Existem transferencias de retorno planejadas: execute ou cancele antes de fechar o caixa");
     }
-    const entregasPendentes = await entregasPendentesDoCaixa(caixa.id, tx);
-    if (entregasPendentes.length) throw new Error(mensagemEntregasPendentes(entregasPendentes));
-
     let totais = await calcularTotaisCaixaCentavos(caixa, tx);
-    let saldoCentavos = saldoCaixaCentavos(totais);
+    const valorFisicoEsperadoCentavos = saldoCaixaCentavos(totais);
+    const valorEspecieFechamentoCentavos = paraCentavos(dados.valorEspecieFechamento);
+    const valorMoedasFechamentoCentavos = paraCentavos(dados.valorMoedasFechamento);
+    const valorFisicoContadoCentavos = valorEspecieFechamentoCentavos + valorMoedasFechamentoCentavos;
+    const diferencaFisicaCentavos = valorFisicoContadoCentavos - valorFisicoEsperadoCentavos;
+    const observacao = dados.observacao?.trim() || null;
+    if (diferencaFisicaCentavos !== 0 && !observacao) {
+      throw new Error("Observacao obrigatoria quando a contagem fisica do fechamento divergir");
+    }
 
     // D6/D7: a sobra NUNCA vira quebra positiva e nunca exige um segundo botao. O retorno final
     // sai aqui, no MESMO ato e na MESMA transacao do fechamento: se qualquer parte falhar depois,
     // este INSERT cai junto no rollback. Se o saldo ja estiver zero (retornos parciais durante o
     // turno), nada e criado e a mesma acao apenas fecha.
-    if (saldoCentavos > 0) {
+    if (valorFisicoContadoCentavos > 0) {
       if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
       // Decisao 7: o retorno final TAMBEM entrega dinheiro fisico, entao exige responsavel no
       // cofre. A checagem fica DENTRO deste `if` de proposito: fechamento sem sobra nao gera
@@ -592,9 +940,12 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
       await registrarEntregaAoCofre(
         {
           caixa: { ...caixa, pdvContaId: caixa.pdvContaId },
-          valorCentavos: saldoCentavos,
-          lacre: dados.lacreRetorno ?? null,
+          valorCentavos: valorFisicoContadoCentavos,
+          valorEspecieCentavos: valorEspecieFechamentoCentavos,
+          valorMoedasCentavos: valorMoedasFechamentoCentavos,
+          lacre: null,
           observacao: dados.observacao ?? null,
+          responsavelNome: null,
           criadoPor: perfil.usuarioId,
           // D6/B2: sem chave de proposito. Este ato ja e irrepetivel por construcao â€” roda sob a
           // trava da linha do caixa e o UPDATE so acerta caixa 'aberto', entao um retry encontra o
@@ -604,21 +955,20 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         tx
       );
       totais = await calcularTotaisCaixaCentavos(caixa, tx);
-      saldoCentavos = saldoCaixaCentavos(totais);
-      if (saldoCentavos > 0) throw new Error("Retorno final nao zerou o saldo do caixa");
+      const saldoDepoisDoRetornoCentavos = saldoCaixaCentavos(totais);
+      if (saldoDepoisDoRetornoCentavos !== -diferencaFisicaCentavos)
+        throw new Error("Retorno final nao conferiu com a contagem fisica");
     }
 
-    const observacao = dados.observacao?.trim() || null;
-    if (saldoCentavos < 0) {
-      if (!observacao) throw new Error("Observacao obrigatoria para fechar caixa com quebra");
+    if (diferencaFisicaCentavos < 0) {
       if (!caixa.usuarioCaixaId) throw new Error("Caixa sem usuario responsavel");
       const quebra = await criarQuebraCaixaRepository(
         {
           empresaId: caixa.empresaId,
           fechamentoCaixaId: caixa.id,
           usuarioId: caixa.usuarioCaixaId,
-          valorCentavos: saldoCentavos,
-          observacao
+          valorCentavos: diferencaFisicaCentavos,
+          observacao: observacao!
         },
         tx
       );
@@ -632,7 +982,23 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
           destinatariosUsuarioIds: destinatarios,
           referenciaId: quebra.id,
           titulo: `Quebra de caixa - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
-          valorCentavos: saldoCentavos
+          valorCentavos: diferencaFisicaCentavos
+        },
+        tx
+      );
+    }
+    if (diferencaFisicaCentavos > 0) {
+      const destinatarios = (await listarUsuariosTesourariaRepository(caixa.empresaId, tx))
+        .map((item) => item.usuarioId)
+        .filter((usuarioId): usuarioId is string => Boolean(usuarioId));
+      await criarNotificacoesRepository(
+        {
+          empresaId: caixa.empresaId,
+          tipo: "transferencia_divergencia",
+          destinatariosUsuarioIds: destinatarios,
+          referenciaId: caixa.id,
+          titulo: `Sobra na conferencia de fechamento - ${caixa.usuarioCaixaNome ?? "Usuario"}`,
+          valorCentavos: diferencaFisicaCentavos
         },
         tx
       );
@@ -645,16 +1011,38 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
         observacao: observacao || caixa.observacao,
         fechadoPor: perfil.usuarioId,
         lacreFechamento: dados.lacreFechamento,
+        caixaResponsavelNomeFechamento: dados.caixaResponsavelNome.trim(),
+        supervisorResponsavelNomeFechamento: dados.supervisorResponsavelNome.trim(),
         totais,
-        saldoCentavos
+        saldoCentavos: 0,
+        valorFisicoEsperadoCentavos,
+        valorEspecieFechamentoCentavos,
+        valorMoedasFechamentoCentavos
       },
       tx
     );
     // B1: o UPDATE so acerta caixa 'aberto'. Zero linhas significa que outro fechamento venceu a
     // corrida â€” erro de dominio (400), nunca 500 por violacao de UNIQUE da quebra.
     if (linhasFechadas === 0) throw new Error("Caixa ja fechado");
+    if (lacreFechamentoReservado) {
+      const consumido = await consumirLacreFechamentoPlanejadoRepository(
+        {
+          lacreId: lacreFechamentoReservado.id,
+          empresaId: caixa.empresaId,
+          numero: dados.lacreFechamento.trim()
+        },
+        tx
+      );
+      if (!consumido) throw new Error("Lacre de fechamento ja utilizado ou indisponivel");
+    }
 
-    return { caixaAberto: null, resumo: null, entregasPendentes: [], planejamentosPendentes: [] } satisfies CaixaStatus;
+    return {
+      caixaAberto: null,
+      resumo: null,
+      lacreFechamentoReservado: null,
+      entregasPendentes: [],
+      planejamentosPendentes: []
+    } satisfies CaixaStatus;
   });
 }
 
@@ -663,7 +1051,16 @@ export async function fecharCaixa(caixaId: string, dados: FecharCaixaPayload, pe
 // entrega de dinheiro em silencio. Por isso o conflito e explicito, e nao um 200 conveniente.
 function conferirIntencaoEntrega(
   existente: IntencaoEntregaCofre,
-  pretendida: { caixaId: string; tipo: string; valorCentavos: number; lacre: string | null; observacao: string | null }
+  pretendida: {
+    caixaId: string;
+    tipo: string;
+    valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
+    lacre: string | null;
+    observacao: string | null;
+    responsavelNome: string | null;
+  }
 ): void {
   // O lacre faz parte da intencao porque na entrega ao cofre ele existe DESDE A CRIACAO. O `status`
   // nunca entra: ele muda por atos posteriores (conferencia, divergencia) e nao descreve o que foi
@@ -673,8 +1070,11 @@ function conferirIntencaoEntrega(
   const tipoExistente = existente.tipo === "sangria" ? "retorno" : existente.tipo;
   if (tipoExistente !== pretendida.tipo) divergencias.push("tipo");
   if (existente.valorCentavos !== pretendida.valorCentavos) divergencias.push("valor");
+  if (existente.valorEspecieCentavos !== pretendida.valorEspecieCentavos) divergencias.push("especie");
+  if (existente.valorMoedasCentavos !== pretendida.valorMoedasCentavos) divergencias.push("moedas");
   if ((existente.lacre ?? null) !== pretendida.lacre) divergencias.push("lacre");
   if ((existente.observacao ?? null) !== pretendida.observacao) divergencias.push("observacao");
+  if ((existente.responsavelNome ?? null) !== pretendida.responsavelNome) divergencias.push("responsavel");
   if (divergencias.length > 0) {
     throw new ErroDominio(
       `Chave de idempotencia ja usada para outra intencao (${divergencias.join(", ")})`,
@@ -760,8 +1160,12 @@ async function registrarEntregaAoCofre(
   input: {
     caixa: { id: string; empresaId: string; pdvContaId: string; dataMovimento: string | null };
     valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
     lacre: string | null;
+    lacreReservado?: { id: string; transferenciaDistribuicaoId: string } | null;
     observacao: string | null;
+    responsavelNome: string | null;
     criadoPor: string;
     // B2: null SOMENTE no retorno final do fechamento (D6) â€” la a trava da linha do caixa e a
     // guarda `status = 'aberto'` do UPDATE ja tornam o ato irrepetivel, e o valor e a sobra inteira.
@@ -771,12 +1175,16 @@ async function registrarEntregaAoCofre(
 ): Promise<{ id: string; duplicada: boolean }> {
   const lacre = input.lacre?.trim() || null;
   const observacao = input.observacao?.trim() || null;
+  const responsavelNome = input.responsavelNome?.trim() || null;
   const intencao = {
     caixaId: input.caixa.id,
     tipo: "retorno",
     valorCentavos: input.valorCentavos,
+    valorEspecieCentavos: input.valorEspecieCentavos,
+    valorMoedasCentavos: input.valorMoedasCentavos,
     lacre,
-    observacao
+    observacao,
+    responsavelNome
   };
 
   // B2: a idempotencia e resolvida ANTES da unicidade do lacre, e a ordem importa. Um retry
@@ -800,9 +1208,9 @@ async function registrarEntregaAoCofre(
   if (!contaCofreId) throw new Error("Empresa sem conta de cofre configurada para transferencia ao cofre");
   if (contaCofreId === input.caixa.pdvContaId) throw new Error("Conta de cofre nao pode ser a mesma do caixa");
 
-  // Lacre da VOLTA (R-026: opcional; R-027: numero novo, nunca reutilizado). Digitado pelo
-  // operador como na ida â€” nao existe mais estoque de malote para "escolher".
-  if (lacre && (await existeNumeroLacreRepository(input.caixa.empresaId, lacre, tx))) {
+  // Lacre da volta: no retorno avulso vem da bolsa pre-enviada pela Tesouraria; o retorno final
+  // continua sem bolsa de sangria porque e fechado pelo lacre proprio da gaveta.
+  if (lacre && !input.lacreReservado && (await existeNumeroLacreRepository(input.caixa.empresaId, lacre, tx))) {
     throw new Error("Lacre ja utilizado em outro movimento");
   }
 
@@ -814,12 +1222,15 @@ async function registrarEntregaAoCofre(
       contaCaixaId: input.caixa.pdvContaId,
       contaCofreId,
       valorCentavos: input.valorCentavos,
+      valorEspecieCentavos: input.valorEspecieCentavos,
+      valorMoedasCentavos: input.valorMoedasCentavos,
       ordem,
       dataReferencia: input.caixa.dataMovimento ?? diaNegocio(new Date()),
       dataTransferencia: diaNegocio(new Date()),
       nLacreDoc: lacre,
       descricao: "Transferencia de retorno",
       observacao,
+      responsavelNome,
       criadoPor: input.criadoPor,
       idempotenciaChave: input.idempotenciaChave
     },
@@ -842,7 +1253,18 @@ async function registrarEntregaAoCofre(
     return { id: vencedora.id, duplicada: true };
   }
 
-  if (lacre) {
+  if (input.lacreReservado) {
+    const consumido = await consumirLacreRetornoRepository(
+      {
+        lacreId: input.lacreReservado.id,
+        empresaId: input.caixa.empresaId,
+        transferenciaDistribuicaoId: input.lacreReservado.transferenciaDistribuicaoId,
+        transferenciaId: transferencia.id
+      },
+      tx
+    );
+    if (!consumido) throw new Error("Lacre de retorno / sangria indisponivel ou ja utilizado");
+  } else if (lacre) {
     await criarLacreRetornoRepository(
       { empresaId: input.caixa.empresaId, numero: lacre, transferenciaId: transferencia.id },
       tx
@@ -873,6 +1295,11 @@ export async function criarTransferenciaCofreCaixa(
     if (!caixa.pdvContaId) throw new Error("Caixa operacional invalido");
     const valorCentavos = paraCentavos(dados.valor);
     if (valorCentavos <= 0) throw new Error("Valor da transferencia deve ser positivo");
+    const lacreSelecionado = await buscarLacreRetornoDoCaixaRepository(
+      { lacreId: dados.lacreId, caixaId: caixa.id, empresaId: caixa.empresaId },
+      tx
+    );
+    if (!lacreSelecionado) throw new Error("Lacre de retorno / sangria indisponivel para este caixa");
 
     // B2 x D1: a idempotencia tem de ser resolvida ANTES do teto, e este e o caso que prova por que.
     // Saldo 100, entrega de 100 com a chave K: o primeiro POST zera o caixa. O retry da MESMA chave
@@ -884,14 +1311,23 @@ export async function criarTransferenciaCofreCaixa(
       tx
     );
     if (jaRegistrada) {
+      if (lacreSelecionado.transferenciaId !== jaRegistrada.id) {
+        throw new Error("Lacre de retorno / sangria ja utilizado em outro movimento");
+      }
       conferirIntencaoEntrega(jaRegistrada, {
         caixaId: caixa.id,
         tipo: "retorno",
         valorCentavos,
-        lacre: dados.lacre?.trim() || null,
-        observacao: dados.observacao?.trim() || null
+        valorEspecieCentavos: paraCentavos(dados.valorEspecie),
+        valorMoedasCentavos: paraCentavos(dados.valorMoedas),
+        lacre: lacreSelecionado.numero,
+        observacao: dados.observacao?.trim() || null,
+        responsavelNome: dados.responsavelNome?.trim() || null
       });
       return statusDoCaixaAberto(caixa, tx);
+    }
+    if (lacreSelecionado.transferenciaId || lacreSelecionado.rompido) {
+      throw new Error("Lacre de retorno / sangria ja utilizado");
     }
 
     // Decisao 7: entrega avulsa tambem entrega dinheiro â€” sem quem conferir, nao sai.
@@ -918,12 +1354,24 @@ export async function criarTransferenciaCofreCaixa(
       );
     }
 
+    const responsavelNome = caixa.caixaResponsavelNomeAbertura?.trim();
+    if (!responsavelNome) throw new Error("Caixa aberto sem responsavel declarado para a sangria");
+
     await registrarEntregaAoCofre(
       {
         caixa,
         valorCentavos,
-        lacre: dados.lacre ?? null,
+        valorEspecieCentavos: paraCentavos(dados.valorEspecie),
+        valorMoedasCentavos: paraCentavos(dados.valorMoedas),
+        lacre: lacreSelecionado.numero,
+        lacreReservado: {
+          id: lacreSelecionado.id,
+          transferenciaDistribuicaoId: lacreSelecionado.transferenciaDistribuicaoId
+        },
         observacao: dados.observacao ?? null,
+        // O responsavel da sangria e quem abriu este caixa. O cliente pode exibir o nome, mas nao
+        // pode troca-lo no payload para deslocar a autoria da entrega.
+        responsavelNome,
         criadoPor: perfil.usuarioId,
         idempotenciaChave: dados.idempotenciaChave
       },
@@ -1060,6 +1508,8 @@ export async function obterTransferenciasCaixa(
       tipo: (linha.tipo === "sangria" ? "retorno" : linha.tipo) as "abertura" | "suprimento" | "retorno",
       ordem,
       valor: deCentavos(valorCentavos),
+      valorEspecie: linha.valorEspecieDeclarado === null ? null : deCentavos(paraCentavos(linha.valorEspecieDeclarado)),
+      valorMoedas: linha.valorMoedasDeclarado === null ? null : deCentavos(paraCentavos(linha.valorMoedasDeclarado)),
       sentido,
       lacre: linha.lacreNumero,
       dataTransferencia: linha.dataTransferencia
@@ -1207,15 +1657,17 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
 
-  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento] = await Promise.all([
+  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento, vendasCanceladas] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),
     buscarAjusteCaixaRepository(caixaId),
     listarLancamentosCaixaRepository(caixaId),
-    listarAlteracoesPosFechamentoRepository(caixaId)
+    listarAlteracoesPosFechamentoRepository(caixaId),
+    listarVendasCanceladasCaixaRepository(caixaId)
   ]);
 
   return {
     lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
+    vendasCanceladas: serializarVendasCanceladas(vendasCanceladas),
     alteracoesPosFechamento: alteracoesPosFechamento.map((alteracao) => ({
       id: alteracao.id,
       vendaId: alteracao.vendaId,
@@ -1250,6 +1702,38 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
         }
       : null
   };
+}
+
+// Rota operacional do proprio caixa: a lista e leitura de auditoria, mas nao transforma o
+// operador em gerente de historico. Ele so pode consultar o caixa ao qual esta vinculado; gerencia
+// continua podendo consultar qualquer caixa permitido da empresa.
+export async function listarVendasCanceladasCaixa(
+  caixaId: string,
+  perfil: PerfilUsuario
+): Promise<VendaCanceladaCaixa[]> {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  return serializarVendasCanceladas(await listarVendasCanceladasCaixaRepository(caixaId));
+}
+
+function serializarVendasCanceladas(vendasCanceladas: VendaCanceladaCaixaLinha[]): VendaCanceladaCaixa[] {
+  return vendasCanceladas.map((venda) => ({
+    id: venda.id,
+    identificadorExterno: venda.identificadorExterno,
+    descricao: venda.descricao,
+    data: venda.data,
+    dataHora: serializarData(venda.dataHora),
+    valor: deCentavos(liquidoCentavos(venda)),
+    produtos: venda.produtos.map((produto) => ({
+      id: produto.id,
+      descricao: produto.descricao,
+      quantidade: numero(produto.quantidade),
+      valorUnitario: numero(produto.valorUnitario),
+      valorTotal: numero(produto.valorTotal),
+      cancelado: produto.cancelado
+    }))
+  }));
 }
 
 // Agrupa por categoria, na mesma ordem em que a tela do caixa apresenta os totais.

@@ -4,7 +4,7 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
-import { env } from "./env.js";
+import { origensWebPermitidas } from "./env.js";
 import { codigoPostgresDoErro, ErroDominio, type ErroEncadeado } from "./erros.js";
 import { capturarErro, iniciarObservabilidade } from "./observabilidade.js";
 import { registrarRotasAuth } from "./auth/auth.controller.js";
@@ -163,7 +163,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(cors, {
-    origin: env.WEB_ORIGIN,
+    origin: (origin, callback) => callback(null, !origin || origensWebPermitidas.includes(origin)),
     credentials: true,
     // PATCH e usado por aprovar/recusar NF-e e discriminar lancamentos. Sem ele, o preflight
     // cross-origin (front sistema. -> API api-sistema.) barra o PATCH com net::ERR_FAILED.

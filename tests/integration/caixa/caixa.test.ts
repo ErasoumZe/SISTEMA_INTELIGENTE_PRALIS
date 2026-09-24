@@ -290,6 +290,86 @@ describe("caixa integration", () => {
     await executarSql("delete from vendas where id in ($1,$2)", [ids[0], ids[1]]);
   });
 
+  it("Deve_AuditarVendaCanceladaComProdutosSemDevolveLaAosTotais", async () => {
+    const vendaId = randomUUID();
+    const produtoId = randomUUID();
+    await executarSql(
+      `insert into vendas (id, empresa_id, caixa_id, pdv_id, data_referencia, data_venda, descricao, valor_original,
+         valor_desconto, valor_acrescimo, identificador_externo, status, computar)
+       values ($1,$2,$3,$4,$5,$6,'Venda cancelada no CREARE','125.00','5.00','0','CREARE:CANCELADA-CAIXA', 'cancelado',true)`,
+      [vendaId, idsTeste.empresaA, idsTeste.caixaAberto, idsTeste.pdvA, "2026-06-30", "2026-06-30T15:45:00.000Z"]
+    );
+    await executarSql(
+      `insert into vendas_produtos (id, venda_id, descricao_produto, quantidade, valor_unitario, valor_total, cancelado)
+       values ($1,$2,'Produto cancelado de teste','2','62.50','125.00',true)`,
+      [produtoId, vendaId]
+    );
+
+    const [status, detalhe, canceladasOperacionais] = await Promise.all([
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/status?empresaId=${idsTeste.empresaA}`,
+        headers: { cookie: cookieAdmin }
+      }),
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/${idsTeste.caixaAberto}/detalhe`,
+        headers: { cookie: cookieAdmin }
+      }),
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/caixa/${idsTeste.caixaAberto}/vendas-canceladas`,
+        headers: { cookie: cookieAdmin }
+      })
+    ]);
+
+    assertOk(status);
+    assertOk(detalhe);
+    assertOk(canceladasOperacionais);
+    // A venda era R$ 120 liquidos, mas permanece fora do saldo e das entradas do caixa.
+    expect(json<{ data: { resumo: { totalEntradas: number } } }>(status).data.resumo.totalEntradas).toBe(42);
+    const corpo = json<{
+      data: {
+        lancamentos: GrupoLancamentos[];
+        vendasCanceladas: Array<{
+          id: string;
+          identificadorExterno: string | null;
+          dataHora: string | null;
+          valor: number;
+          produtos: Array<{
+            id: string;
+            descricao: string;
+            quantidade: number;
+            valorTotal: number;
+            cancelado: boolean;
+          }>;
+        }>;
+      };
+    }>(detalhe).data;
+    expect(corpo.lancamentos.find((grupo) => grupo.categoria === "entradas")?.total).toBe(42);
+    expect(corpo.vendasCanceladas).toContainEqual(
+      expect.objectContaining({
+        id: vendaId,
+        identificadorExterno: "CREARE:CANCELADA-CAIXA",
+        valor: 120,
+        produtos: [
+          expect.objectContaining({
+            id: produtoId,
+            descricao: "Produto cancelado de teste",
+            quantidade: 2,
+            valorTotal: 125,
+            cancelado: true
+          })
+        ]
+      })
+    );
+    expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(
+      vendaId
+    );
+
+    await executarSql("delete from vendas where id = $1", [vendaId]);
+  });
+
   it("Deve_TrazerLancamentosVaziosSemCruzarCaixas_Quando_CaixaNaoTemMovimento", async () => {
     // O caixa fechado do seed nao tem lancamento: as categorias vem todas zeradas — e nao podem
     // pescar a venda do OUTRO caixa (regressao do escopo por caixa).

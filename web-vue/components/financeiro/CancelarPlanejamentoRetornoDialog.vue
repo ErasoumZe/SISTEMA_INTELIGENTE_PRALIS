@@ -56,7 +56,13 @@ function confirmar() {
 </script>
 
 <template>
-  <v-dialog :model-value="modelValue" max-width="520" @update:model-value="(valor) => !valor && fechar()">
+  <v-dialog
+    :model-value="modelValue"
+    max-width="520"
+    persistent
+    no-click-animation
+    @update:model-value="(valor) => !valor && fechar()"
+  >
     <v-card title="Cancelar transferência de retorno">
       <v-card-text>
         O planejamento não será apagado. O motivo, o responsável e o horário ficarão registrados na auditoria.

@@ -4,13 +4,22 @@ import { dinheiro } from "~/utils/domain";
 import { formatarDataHora } from "~/utils/formatacao";
 import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardandoConferencia.vue";
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
-import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
+import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
+import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
+import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
+import CaixaCategoriaResumoDialog from "~/components/caixa/CaixaCategoriaResumoDialog.vue";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
+import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
+import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
+import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
+import CaixaSangriasDialog from "~/components/caixa/CaixaSangriasDialog.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
+const { apiGet } = useApi();
 
 const props = defineProps<{
   resumo: ResumoCaixa | null;
   status: CaixaStatus | null;
+  empresaId: string;
   pdvs: Opcao[];
   turnos?: Opcao[];
   maquininhas?: Opcao[];
@@ -27,7 +36,12 @@ const emit = defineEmits<{
       usuarioCaixaId: string;
       turnoId?: string | null;
       maquininhaId?: string | null;
-      lacreAbertura?: string | null;
+      lacreAbertura: string;
+      caixaResponsavelNome: string;
+      supervisorResponsavelNome: string;
+      valorEspecieContado?: number;
+      valorMoedasContado?: number;
+      observacaoDivergencia?: string | null;
       observacao: string | null;
     }
   ): void;
@@ -40,7 +54,11 @@ const emit = defineEmits<{
     payload: {
       caixaId: string;
       valor: number;
-      lacre: string | null;
+      valorEspecie: number;
+      valorMoedas: number;
+      lacreId: string;
+      lacreNumero: string;
+      responsavelNome: string;
       observacao: string | null;
       idempotenciaChave: string;
       aoConcluir: (sucesso: boolean) => void;
@@ -48,7 +66,16 @@ const emit = defineEmits<{
   ): void;
   (
     event: "fecharCaixa",
-    payload: { caixaId: string; observacao: string | null; lacreFechamento: string; lacreRetorno: string | null }
+    payload: {
+      caixaId: string;
+      observacao: string | null;
+      lacreFechamento: string;
+      caixaResponsavelNome: string;
+      supervisorResponsavelNome: string;
+      valorEspecieFechamento: number;
+      valorMoedasFechamento: number;
+      confirmadoPelaRevisao: true;
+    }
   ): void;
   (event: "recarregar"): void;
 }>();
@@ -58,14 +85,61 @@ const abertura = reactive({
   turnoId: ""
 });
 // Campos auxiliares da abertura conforme a FOTO 5.
-const aberturaExtra = reactive({ numeroLacre: "", maquininhaId: "" });
-const fechamento = reactive({ observacao: "", lacreFechamento: "", lacreRetorno: "" });
+const aberturaExtra = reactive({
+  numeroLacre: "",
+  maquininhaId: "",
+  valorEspecie: "",
+  valorMoedas: "",
+  observacaoDivergencia: "",
+  caixaResponsavelNome: "",
+  supervisorResponsavelNome: ""
+});
+const fechamento = reactive({
+  observacao: "",
+  lacreFechamento: "",
+  valorTotal: "",
+  valorEspecie: "",
+  valorMoedas: "",
+  caixaResponsavelNome: "",
+  supervisorResponsavelNome: ""
+});
+const folhaFechamentoEnviada = ref(false);
+const anexosFechamento = ref<
+  Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string; relatorio: unknown }>
+>([]);
+const revisaoFechamentoAberta = ref(false);
+const maloteDeclarado = ref<{
+  valor: number;
+  valorEspecieDeclarado: number;
+  valorMoedasDeclarado: number;
+  lacresRetorno: Array<{ id: string; numero: string }>;
+  lacreFechamento: { id: string; numero: string } | null;
+} | null>(null);
+const erroMalote = ref("");
+const carregandoMalote = ref(false);
+let consultaMaloteAtual = 0;
 // D1: o valor da entrega e digitavel. Vazio significa "a sobra inteira" — o padrao continua sendo
 // devolver tudo, mas o operador pode enviar parte agora e o resto depois (varios movimentos).
 // `observacao` e propria da entrega, separada da observacao do FECHAMENTO: sao dois atos, e
 // misturar as duas fazia a nota do fechamento virar parte da intencao da entrega — qualquer
 // correcao no texto do fechamento rodaria a chave de idempotencia e liberaria uma entrega dupla.
-const entrega = reactive({ valor: "", lacre: "", observacao: "" });
+const entrega = reactive({
+  valor: "",
+  valorEspecie: "",
+  valorMoedas: "",
+  lacreId: "",
+  responsavelNome: "",
+  observacao: ""
+});
+const modalRetornoSangriaAberto = ref(false);
+const modalSangriasAberto = ref(false);
+const modalVendasCanceladasAberto = ref(false);
+const modalCategoriaResumoAberto = ref(false);
+const categoriaResumoSelecionada = ref<CardCategoria | null>(null);
+const vendasCanceladasQuantidade = ref(0);
+const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
+type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
+const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
 
 // B2 · a chave de idempotencia da tela.
 // Regra: uma chave por INTENCAO. Ela nasce no primeiro envio, sobrevive a erro e a cancelamento
@@ -98,7 +172,10 @@ function chaveParaIntencao(assinatura: string): string {
 
 function limparEntrega() {
   entrega.valor = "";
-  entrega.lacre = "";
+  entrega.valorEspecie = "";
+  entrega.valorMoedas = "";
+  entrega.lacreId = "";
+  entrega.responsavelNome = "";
   entrega.observacao = "";
   chaveEntrega.value = "";
   intencaoDaChave.value = "";
@@ -106,6 +183,32 @@ function limparEntrega() {
 
 const caixaAberto = computed(() => props.status?.caixaAberto ?? null);
 const resumoAtual = computed(() => props.resumo ?? props.status?.resumo ?? null);
+watch(
+  () => caixaAberto.value?.id,
+  async (caixaId) => {
+    if (!caixaId) {
+      lacresRetornoDisponiveis.value = [];
+      vendasCanceladasQuantidade.value = 0;
+      return;
+    }
+    try {
+      lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
+        `/api/caixa/${encodeURIComponent(caixaId)}/lacres-retorno`
+      );
+    } catch {
+      lacresRetornoDisponiveis.value = [];
+    }
+    try {
+      const vendasCanceladas = await apiGet<Array<{ id: string }>>(
+        `/api/caixa/${encodeURIComponent(caixaId)}/vendas-canceladas`
+      );
+      vendasCanceladasQuantidade.value = vendasCanceladas.length;
+    } catch {
+      vendasCanceladasQuantidade.value = 0;
+    }
+  },
+  { immediate: true }
+);
 const saldoAtual = computed(() => Number(resumoAtual.value?.saldo ?? 0));
 // D7: sobra e deficit sao situacoes DIFERENTES e precisam de tratamento visual diferente.
 // A sobra nunca vira quebra positiva — ela volta ao cofre. O deficit vira quebra no nome do
@@ -115,8 +218,30 @@ const temDeficit = computed(() => saldoAtual.value < 0);
 const deficitAbsoluto = computed(() => Math.abs(saldoAtual.value));
 // D7: observacao e obrigatoria quando ha quebra — a mesma regra do servidor, espelhada na tela
 // para que o botao nao dispare um 400 previsivel.
-const observacaoObrigatoriaPendente = computed(() => temDeficit.value && !fechamento.observacao.trim());
+const totalFechamentoContado = computed(() => Number(fechamento.valorTotal || 0));
+const totalFechamentoPorComposicao = computed(
+  () => Number(fechamento.valorEspecie || 0) + Number(fechamento.valorMoedas || 0)
+);
+const fechamentoComposicaoInformada = computed(
+  () =>
+    fechamento.valorTotal.trim() !== "" && fechamento.valorEspecie.trim() !== "" && fechamento.valorMoedas.trim() !== ""
+);
+const fechamentoComposicaoInvalida = computed(
+  () =>
+    fechamentoComposicaoInformada.value &&
+    paraCentavos(totalFechamentoContado.value) !== paraCentavos(totalFechamentoPorComposicao.value)
+);
+const diferencaFechamento = computed(() => totalFechamentoContado.value - saldoAtual.value);
+// Antes da contagem, os campos vazios são apenas "ainda não informado" — não R$ 0,00.
+// A quebra e sua justificativa só existem depois que o caixa declarar espécie e moedas.
+const fechamentoDivergente = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value !== 0);
+const fechamentoComQuebra = computed(() => fechamentoComposicaoInformada.value && diferencaFechamento.value < 0);
+const observacaoObrigatoriaPendente = computed(() => fechamentoDivergente.value && !fechamento.observacao.trim());
 const lacreFechamentoPendente = computed(() => !fechamento.lacreFechamento.trim());
+const lacreFechamentoReservado = computed(() => props.status?.lacreFechamentoReservado ?? null);
+const responsaveisFechamentoPendentes = computed(
+  () => !fechamento.caixaResponsavelNome.trim() || !fechamento.supervisorResponsavelNome.trim()
+);
 
 // G1/R-171 · a trava vem do MESMO retrato que trouxe o saldo, e nao de uma regra recalculada aqui:
 // o servidor continua sendo a autoridade, a tela so mostra a recusa dele antes do clique.
@@ -135,10 +260,7 @@ const temSaldoLivre = computed(() => saldoLivre.value > 0);
 const motivoTravado = computed(() => {
   if (planejamentosPendentes.value.length)
     return "há transferencia de retorno planejada aguardando execucao ou cancelamento";
-  return motivoFechamentoTravado(
-    entregasPendentes.value.length,
-    entregasPendentes.value.filter((entrega) => entrega.valorContado !== null).length
-  );
+  return null;
 });
 const fechamentoTravado = computed(() => motivoTravado.value !== null);
 const blocoTravas = useTemplateRef<HTMLElement>("blocoTravas");
@@ -148,6 +270,9 @@ const maquininhasSelect = computed(() =>
     nome: `${item.apelido ?? item.nome} · ${item.numeroSerie ?? "sem série"}`
   }))
 );
+// O vinculo continua suportado pela API e pelo historico, mas nao faz parte desta rodada de
+// operacao no PDV. A flag oculta somente o seletor, sem apagar valores ja existentes.
+const exibirMaquininhaNaAbertura = false;
 
 // Cockpit por categoria: a cor entra como ACENTO (barra/chip/total) via os tokens --cat-* da main,
 // nunca como fundo de bloco. Os valores vem SEMPRE da API (nada recalculado no front). "Resultado"
@@ -172,8 +297,15 @@ const categorias = computed<CardCategoria[]>(() => {
       chave: "transferencias",
       titulo: "Transferencias",
       icone: "mdi-bank-transfer",
-      valor: r.totalTransferencias,
-      detalhe: `entra ${dinheiro(entrada)} · sai ${dinheiro(saida)}`
+      valor: entrada,
+      detalhe: "De entrada"
+    },
+    {
+      chave: "sangrias",
+      titulo: "Sangrias",
+      icone: "mdi-bank-transfer-out",
+      valor: saida,
+      detalhe: saida > 0 ? "Ver historico e lacres" : "Nenhuma sangria realizada"
     },
     { chave: "despesas", titulo: "Despesas", icone: "mdi-cash-minus", valor: r.totalDespesas },
     {
@@ -234,25 +366,102 @@ watch(
   { immediate: true }
 );
 
+watch([() => abertura.pdvId, () => aberturaExtra.numeroLacre], async ([pdvId, lacre]) => {
+  const consultaAtual = ++consultaMaloteAtual;
+  maloteDeclarado.value = null;
+  erroMalote.value = "";
+  if (!pdvId || !lacre.trim()) return;
+  carregandoMalote.value = true;
+  try {
+    const malote = await apiGet<{
+      valor: number;
+      valorEspecieDeclarado: number;
+      valorMoedasDeclarado: number;
+      lacresRetorno: Array<{ id: string; numero: string }>;
+      lacreFechamento: { id: string; numero: string } | null;
+    }>(
+      `/api/caixa/malote?empresaId=${encodeURIComponent(props.empresaId)}&pdvId=${encodeURIComponent(pdvId)}&lacre=${encodeURIComponent(lacre.trim())}`
+    );
+    if (consultaAtual !== consultaMaloteAtual) return;
+    maloteDeclarado.value = malote;
+  } catch (falha) {
+    if (consultaAtual !== consultaMaloteAtual) return;
+    erroMalote.value =
+      falha instanceof Error && falha.message
+        ? falha.message
+        : "Nao foi possivel consultar o malote. Confira o lacre e tente novamente.";
+  } finally {
+    if (consultaAtual === consultaMaloteAtual) carregandoMalote.value = false;
+  }
+});
+
+const aberturaComposicaoInformada = computed(
+  () => aberturaExtra.valorEspecie.trim() !== "" && aberturaExtra.valorMoedas.trim() !== ""
+);
+const aberturaDivergente = computed(
+  () =>
+    Boolean(maloteDeclarado.value) &&
+    aberturaComposicaoInformada.value &&
+    (Number(aberturaExtra.valorEspecie || 0) !== maloteDeclarado.value!.valorEspecieDeclarado ||
+      Number(aberturaExtra.valorMoedas || 0) !== maloteDeclarado.value!.valorMoedasDeclarado)
+);
+const aberturaComposicaoPendente = computed(() =>
+  Boolean(aberturaExtra.numeroLacre.trim() && maloteDeclarado.value && !aberturaComposicaoInformada.value)
+);
+const observacaoAberturaPendente = computed(
+  () => aberturaDivergente.value && !aberturaExtra.observacaoDivergencia.trim()
+);
+const lacreAberturaPendente = computed(() => !aberturaExtra.numeroLacre.trim());
+const responsaveisAberturaPendentes = computed(
+  () => !aberturaExtra.caixaResponsavelNome.trim() || !aberturaExtra.supervisorResponsavelNome.trim()
+);
+const aberturaBloqueada = computed(
+  () =>
+    !abertura.pdvId ||
+    lacreAberturaPendente.value ||
+    responsaveisAberturaPendentes.value ||
+    !maloteDeclarado.value ||
+    carregandoMalote.value ||
+    aberturaComposicaoPendente.value ||
+    observacaoAberturaPendente.value
+);
+
 watch(
-  caixaAberto,
-  () => {
-    if (!caixaAberto.value) {
+  () => caixaAberto.value?.id,
+  (caixaId) => {
+    if (!caixaId) {
       fechamento.observacao = "";
       fechamento.lacreFechamento = "";
-      fechamento.lacreRetorno = "";
+      fechamento.valorTotal = "";
+      fechamento.valorEspecie = "";
+      fechamento.valorMoedas = "";
+      fechamento.caixaResponsavelNome = "";
+      fechamento.supervisorResponsavelNome = "";
+      return;
+    }
+
+    // A abertura identifica o operador de origem; o fechamento pode ser feito por outra pessoa.
+    // Só sugere o nome se o operador ainda não preencheu um valor próprio.
+    if (!fechamento.caixaResponsavelNome.trim()) {
+      fechamento.caixaResponsavelNome = caixaAberto.value?.caixaResponsavelNomeAbertura ?? "";
     }
   },
   { immediate: true }
 );
 
 function abrir() {
+  if (aberturaBloqueada.value) return;
   emit("abrirCaixa", {
     pdvId: abertura.pdvId,
     usuarioCaixaId: props.usuarioId,
     turnoId: abertura.turnoId || null,
     maquininhaId: aberturaExtra.maquininhaId || null,
-    lacreAbertura: aberturaExtra.numeroLacre || null,
+    lacreAbertura: aberturaExtra.numeroLacre.trim(),
+    caixaResponsavelNome: aberturaExtra.caixaResponsavelNome.trim(),
+    supervisorResponsavelNome: aberturaExtra.supervisorResponsavelNome.trim(),
+    valorEspecieContado: Number(aberturaExtra.valorEspecie || 0),
+    valorMoedasContado: Number(aberturaExtra.valorMoedas || 0),
+    observacaoDivergencia: aberturaExtra.observacaoDivergencia || null,
     observacao: null
   });
 }
@@ -267,31 +476,110 @@ const valorEntregaEfetivo = computed(() => {
 // operador disparar um valor que ja se sabe impossivel so gera 400 e desconfianca. Aqui o aviso
 // e imediato e o botao nao dispara.
 const entregaAcimaDoSaldoLivre = computed(() => valorEntregaEfetivo.value > saldoLivre.value);
+const entregaComposicaoInvalida = computed(
+  () => Number(entrega.valorEspecie || 0) + Number(entrega.valorMoedas || 0) !== valorEntregaEfetivo.value
+);
+const lacreEntregaPendente = computed(() => !entrega.lacreId);
 const entregaBloqueada = computed(
-  () => Boolean(props.salvando) || valorEntregaEfetivo.value <= 0 || entregaAcimaDoSaldoLivre.value
+  () =>
+    Boolean(props.salvando) ||
+    valorEntregaEfetivo.value <= 0 ||
+    entregaAcimaDoSaldoLivre.value ||
+    entregaComposicaoInvalida.value ||
+    lacreEntregaPendente.value ||
+    !entrega.responsavelNome.trim()
 );
 
-function retornarSaldo() {
+const entregaIniciada = computed(
+  () =>
+    entrega.valor.trim().length > 0 ||
+    entrega.valorEspecie.trim().length > 0 ||
+    entrega.valorMoedas.trim().length > 0 ||
+    entrega.lacreId.length > 0 ||
+    entrega.observacao.trim().length > 0
+);
+
+const mensagemErroEntrega = computed(() => {
+  if (!entregaIniciada.value) return "";
+  if (entregaAcimaDoSaldoLivre.value) return `Máximo disponível: ${dinheiro(saldoLivre.value)}.`;
+  if (entregaComposicaoInvalida.value) return "Dinheiro físico + moedas deve ser igual ao valor entregue.";
+  if (lacreEntregaPendente.value) return "Informe o lacre do retorno / sangria.";
+  if (!entrega.responsavelNome.trim()) return "Informe o responsável pela sangria.";
+  if (valorEntregaEfetivo.value <= 0) return "Informe um valor para a transferência.";
+  return "";
+});
+
+function retornarSaldo(fecharModalAoSalvar = false) {
   const caixa = caixaAberto.value;
   // Guarda de duplo clique: enquanto `salvando` estiver ligado o ato nao repete. O botao tambem
   // fica em loading/disabled, mas Enter no campo e clique rapido furam o visual.
   if (!caixa || entregaBloqueada.value) return;
   const valor = valorEntregaEfetivo.value;
-  const lacre = entrega.lacre || null;
+  const lacreId = entrega.lacreId;
+  const lacreNumero = lacresRetornoDisponiveis.value.find((lacre) => lacre.id === lacreId)?.numero ?? "";
   const observacao = entrega.observacao || null;
   emit("retornarSaldo", {
     caixaId: caixa.id,
     valor,
-    lacre,
+    valorEspecie: Number(entrega.valorEspecie || 0),
+    valorMoedas: Number(entrega.valorMoedas || 0),
+    lacreId,
+    lacreNumero,
+    responsavelNome: entrega.responsavelNome.trim(),
     observacao,
-    idempotenciaChave: chaveParaIntencao(`avulsa|${caixa.id}|${valor}|${lacre ?? ""}|${observacao ?? ""}`),
+    idempotenciaChave: chaveParaIntencao(
+      `avulsa|${caixa.id}|${valor}|${entrega.valorEspecie}|${entrega.valorMoedas}|${lacreId}|${entrega.responsavelNome.trim()}|${observacao ?? ""}`
+    ),
     // Limpa SO no sucesso confirmado. Em erro (ou confirmacao negada) valor, lacre, observacao e
     // a chave ficam de pe: o operador tenta de novo com um clique, e o retry carrega a MESMA
     // chave — que e o que impede a segunda entrega do mesmo envelope.
     aoConcluir: (sucesso: boolean) => {
-      if (sucesso) limparEntrega();
+      if (!sucesso) return;
+      lacresRetornoDisponiveis.value = lacresRetornoDisponiveis.value.filter((lacre) => lacre.id !== lacreId);
+      limparEntrega();
+      if (fecharModalAoSalvar) modalRetornoSangriaAberto.value = false;
     }
   });
+}
+
+function categoriaTemUltimos(chave: string): chave is CategoriaComUltimos {
+  return chave === "despesas" || chave === "mercadorias" || chave === "retiradas";
+}
+
+function abrirUltimosLancamentos(chave: string, valor: number) {
+  if (chave === "sangrias") {
+    modalSangriasAberto.value = true;
+    return;
+  }
+  if (categoriaTemUltimos(chave) && valor !== 0) {
+    categoriaUltimosLancamentos.value = chave;
+    return;
+  }
+  const categoria = categorias.value.find((item) => item.chave === chave);
+  if (!categoria) return;
+  categoriaResumoSelecionada.value = {
+    ...categoria,
+    detalhe: categoria.detalhe || "Valor registrado no turno atual."
+  };
+  modalCategoriaResumoAberto.value = true;
+}
+
+function atualizarDialogUltimosLancamentos(aberto: boolean) {
+  if (!aberto) categoriaUltimosLancamentos.value = null;
+}
+
+async function abrirRetornoSangria() {
+  const caixa = caixaAberto.value;
+  if (!caixa) return;
+  entrega.responsavelNome = caixa.caixaResponsavelNomeAbertura || caixa.usuarioCaixaNome;
+  try {
+    lacresRetornoDisponiveis.value = await apiGet<Array<{ id: string; numero: string }>>(
+      `/api/caixa/${encodeURIComponent(caixa.id)}/lacres-retorno`
+    );
+  } catch {
+    lacresRetornoDisponiveis.value = [];
+  }
+  modalRetornoSangriaAberto.value = true;
 }
 
 // D6: um unico ato. Se ainda ha sobra, o servidor devolve o restante ao cofre dentro da MESMA
@@ -306,12 +594,33 @@ function fechar() {
     return;
   }
   // Mesma guarda de duplo clique da entrega: fechar duas vezes nao pode nem chegar a sair da tela.
-  if (!caixa || props.salvando || observacaoObrigatoriaPendente.value || lacreFechamentoPendente.value) return;
+  if (
+    !caixa ||
+    props.salvando ||
+    observacaoObrigatoriaPendente.value ||
+    fechamentoComposicaoInvalida.value ||
+    lacreFechamentoPendente.value ||
+    responsaveisFechamentoPendentes.value ||
+    !fechamentoComposicaoInformada.value ||
+    !folhaFechamentoEnviada.value
+  )
+    return;
+  revisaoFechamentoAberta.value = true;
+}
+
+function confirmarFechamento() {
+  const caixa = caixaAberto.value;
+  if (!caixa || props.salvando) return;
+  revisaoFechamentoAberta.value = false;
   emit("fecharCaixa", {
     caixaId: caixa.id,
     observacao: fechamento.observacao || null,
     lacreFechamento: fechamento.lacreFechamento.trim(),
-    lacreRetorno: fechamento.lacreRetorno || null
+    caixaResponsavelNome: fechamento.caixaResponsavelNome.trim(),
+    supervisorResponsavelNome: fechamento.supervisorResponsavelNome.trim(),
+    valorEspecieFechamento: Number(fechamento.valorEspecie || 0),
+    valorMoedasFechamento: Number(fechamento.valorMoedas || 0),
+    confirmadoPelaRevisao: true
   });
 }
 </script>
@@ -326,7 +635,7 @@ function fechar() {
 
       <!-- Abertura de Caixa fiel ao desenho do Rodrigo (FOTO 5): enxuta, 4 campos em 2x2. -->
       <template v-if="!caixaAberto">
-        <v-row dense>
+        <v-row dense class="caixa-abertura-form">
           <v-col cols="12" md="6">
             <v-select v-model="abertura.pdvId" :items="pdvs" item-title="nome" item-value="id" label="Ponto de Venda" />
           </v-col>
@@ -340,16 +649,117 @@ function fechar() {
               clearable
             />
           </v-col>
-          <v-col cols="12" md="6">
+          <v-col cols="12">
             <v-text-field
               v-model="aberturaExtra.numeroLacre"
               label="Transf. Entrada / N° Lacre"
               placeholder="Ex.: 001"
               hint="Identifica o lacre do malote que trouxe o fundo ao caixa. Não é o lacre usado no fechamento."
               persistent-hint
+              color="error"
+              base-color="error"
+              :error="lacreAberturaPendente"
+              :error-messages="lacreAberturaPendente ? 'Informe o lacre para consultar e conferir o malote.' : ''"
+              prepend-inner-icon="mdi-lock-alert-outline"
+              required
             />
           </v-col>
           <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.caixaResponsavelNome"
+              label="Caixa responsavel (obrigatorio)"
+              placeholder="Digite o nome do responsavel pelo caixa"
+              :error="!aberturaExtra.caixaResponsavelNome.trim()"
+              :error-messages="!aberturaExtra.caixaResponsavelNome.trim() ? 'Informe o caixa responsavel.' : ''"
+              prepend-inner-icon="mdi-account-cash-outline"
+              required
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="aberturaExtra.supervisorResponsavelNome"
+              label="Supervisor responsavel (obrigatorio)"
+              placeholder="Digite o nome do supervisor"
+              :error="!aberturaExtra.supervisorResponsavelNome.trim()"
+              :error-messages="
+                !aberturaExtra.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsavel.' : ''
+              "
+              prepend-inner-icon="mdi-account-supervisor-outline"
+              required
+            />
+          </v-col>
+          <v-col v-if="aberturaExtra.numeroLacre" cols="12">
+            <v-alert v-if="carregandoMalote" type="info" density="compact"
+              >Consultando a composição declarada do malote…</v-alert
+            >
+            <v-alert v-else-if="maloteDeclarado" :type="aberturaDivergente ? 'warning' : 'success'" density="compact">
+              Malote declarado: {{ dinheiro(maloteDeclarado.valor) }} — dinheiro
+              {{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }} e moedas
+              {{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}.
+              <span v-if="maloteDeclarado.lacresRetorno.length">
+                {{ maloteDeclarado.lacresRetorno.length }} lacre(s) de retorno:
+                {{ maloteDeclarado.lacresRetorno.map((lacre) => lacre.numero).join(", ") }}.
+              </span>
+              <span v-if="maloteDeclarado.lacreFechamento">
+                Lacre reservado para fechar este caixa: <strong>{{ maloteDeclarado.lacreFechamento.numero }}</strong
+                >. Mantenha-o aberto e digite esse número ao fechar.
+              </span>
+              <span v-if="aberturaDivergente">
+                A contagem diverge; descreva o motivo para abrir com o valor contado.</span
+              >
+            </v-alert>
+            <v-alert v-else-if="erroMalote" type="error" density="compact">{{ erroMalote }}</v-alert>
+          </v-col>
+          <template v-if="maloteDeclarado">
+            <v-col cols="12">
+              <div class="abertura-conferencia">
+                <div class="abertura-conferencia__titulo">Conferência do malote recebido</div>
+                <div class="abertura-conferencia__esperado">
+                  Esperado: <strong>{{ dinheiro(maloteDeclarado.valor) }}</strong> — espécie
+                  <strong>{{ dinheiro(maloteDeclarado.valorEspecieDeclarado) }}</strong> e moedas
+                  <strong>{{ dinheiro(maloteDeclarado.valorMoedasDeclarado) }}</strong
+                  >.
+                </div>
+                <v-row dense class="abertura-conferencia__campos">
+                  <v-col cols="12" md="6">
+                    <CampoDinheiro
+                      v-model="aberturaExtra.valorEspecie"
+                      label="Dinheiro físico contado (obrigatório)"
+                      icone="mdi-cash"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <CampoDinheiro
+                      v-model="aberturaExtra.valorMoedas"
+                      label="Moedas contadas (obrigatório)"
+                      icone="mdi-circle-multiple-outline"
+                    />
+                  </v-col>
+                  <v-col v-if="aberturaDivergente" cols="12">
+                    <v-text-field
+                      v-model="aberturaExtra.observacaoDivergencia"
+                      label="Motivo da divergência"
+                      :hint="
+                        aberturaDivergente
+                          ? 'Obrigatório: explique a diferença encontrada.'
+                          : 'Preencha somente se a conferência divergir.'
+                      "
+                      :persistent-hint="aberturaDivergente"
+                      :error="observacaoAberturaPendente"
+                      :error-messages="
+                        observacaoAberturaPendente ? 'Informe o motivo da divergência para continuar.' : ''
+                      "
+                      :required="aberturaDivergente"
+                    />
+                  </v-col>
+                </v-row>
+                <p v-if="aberturaComposicaoPendente" class="abertura-conferencia__erro mb-0">
+                  Informe espécie e moedas contadas para conferir o malote.
+                </p>
+              </div>
+            </v-col>
+          </template>
+          <v-col v-if="exibirMaquininhaNaAbertura" cols="12" md="6">
             <v-select
               v-model="aberturaExtra.maquininhaId"
               :items="maquininhasSelect"
@@ -382,7 +792,7 @@ function fechar() {
               color="primary"
               prepend-icon="mdi-cash-register"
               :loading="salvando"
-              :disabled="!abertura.pdvId"
+              :disabled="aberturaBloqueada"
               @click="abrir"
             >
               Abrir caixa
@@ -395,8 +805,24 @@ function fechar() {
         <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
           <v-alert type="success" variant="tonal" class="flex-grow-1 mb-0">
             Caixa aberto em {{ formatarDataHora(caixaAberto.dataHoraAbertura) }} no {{ caixaAberto.pdvNome }}.
+            <span v-if="caixaAberto.caixaResponsavelNomeAbertura">
+              <v-icon icon="mdi-account-cash-outline" size="small" class="ms-2" />
+              Caixa responsável: {{ caixaAberto.caixaResponsavelNomeAbertura }}.
+            </span>
+            <span v-if="caixaAberto.supervisorResponsavelNomeAbertura">
+              <v-icon icon="mdi-account-supervisor-outline" size="small" class="ms-2" />
+              Supervisor: {{ caixaAberto.supervisorResponsavelNomeAbertura }}.
+            </span>
             <span v-if="caixaAberto.maquininhaId">
               Maquininha: {{ caixaAberto.maquininhaApelido }} · {{ caixaAberto.maquininhaNumeroSerie }}.
+            </span>
+            <span v-if="lacresRetornoDisponiveis.length">
+              · {{ lacresRetornoDisponiveis.length }} lacre(s) de sangria disponível(is):
+              {{ lacresRetornoDisponiveis.map((lacre) => lacre.numero).join(", ") }}.
+            </span>
+            <span v-if="lacreFechamentoReservado">
+              · Lacre reservado para fechamento: <strong>{{ lacreFechamentoReservado }}</strong
+              >. Confirme o número físico e digite-o no fechamento.
             </span>
           </v-alert>
         </div>
@@ -405,7 +831,17 @@ function fechar() {
              Grid auto-responsivo (nunca aperta) — restyle da grade real, sem o cockpit pesado
              que foi revertido. Totais vindos da API; "Resultado" e o card-ancora. -->
         <div v-if="resumoAtual" class="cat-grid">
-          <div v-for="cat in categorias" :key="cat.chave" class="cat-card" :class="`cat-${cat.chave}`">
+          <div
+            v-for="cat in categorias"
+            :key="cat.chave"
+            class="cat-card"
+            :class="['cat-card--clicavel', `cat-${cat.chave}`]"
+            role="button"
+            tabindex="0"
+            @click="abrirUltimosLancamentos(cat.chave, cat.valor)"
+            @keydown.enter.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
+            @keydown.space.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
+          >
             <span class="cat-bar" aria-hidden="true" />
             <div class="cat-body">
               <div class="cat-head">
@@ -414,6 +850,35 @@ function fechar() {
               </div>
               <div class="cat-valor">{{ dinheiro(cat.valor) }}</div>
               <div v-if="cat.detalhe" class="cat-detalhe">{{ cat.detalhe }}</div>
+              <div v-if="categoriaTemUltimos(cat.chave) && cat.valor !== 0" class="cat-card__acao">
+                Ver últimas movimentações <v-icon icon="mdi-chevron-right" size="14" />
+              </div>
+              <CaixaResumoMaloteAbertura
+                v-if="cat.chave === 'transferencias' && caixaAberto"
+                :caixa-id="caixaAberto.id"
+              />
+            </div>
+          </div>
+
+          <div
+            class="cat-card cat-canceladas cat-card--clicavel"
+            role="button"
+            tabindex="0"
+            @click="modalVendasCanceladasAberto = true"
+            @keydown.enter.prevent="modalVendasCanceladasAberto = true"
+            @keydown.space.prevent="modalVendasCanceladasAberto = true"
+          >
+            <span class="cat-bar" aria-hidden="true" />
+            <div class="cat-body">
+              <div class="cat-head">
+                <span class="cat-chip"><v-icon icon="mdi-cancel" size="18" /></span>
+                <span class="cat-titulo">Vendas canceladas</span>
+              </div>
+              <div class="cat-valor">{{ vendasCanceladasQuantidade }}</div>
+              <div class="cat-detalhe">
+                {{ vendasCanceladasQuantidade === 1 ? "venda cancelada" : "vendas canceladas" }}
+              </div>
+              <div class="cat-card__acao">Ver detalhes <v-icon icon="mdi-chevron-right" size="14" /></div>
             </div>
           </div>
 
@@ -463,27 +928,27 @@ function fechar() {
           :dia="caixaAberto.dataMovimento"
         />
 
-        <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
-           fecha e o servidor devolve o restante no mesmo ato. -->
-        <v-alert v-if="temSobra" type="info" variant="tonal" class="my-5">
-          <template v-if="planejamentosPendentes.length">
-            Há {{ dinheiro(saldoAtual) }} em espécie no caixa; {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão
-            reservados para as transferências de retorno programadas. Somente os {{ dinheiro(saldoLivre) }}
-            livres podem ser transferidos à parte.
-          </template>
-          <template v-else>
-            Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode transferir parte agora ou fechar o caixa — ao
-            fechar, o restante volta ao cofre automaticamente, no mesmo ato.
-          </template>
-        </v-alert>
-
         <!-- D7: o deficit e o evento mais grave do modulo. O operador precisa saber ANTES de
            confirmar que vai ficar com uma quebra no nome dele — nao descobrir por snackbar. -->
-        <v-alert v-if="temDeficit" type="error" variant="tonal" class="my-5" data-teste="alerta-quebra">
-          <div class="text-subtitle-2 mb-1">Falta {{ dinheiro(deficitAbsoluto) }} no caixa</div>
-          Ao fechar, será registrada uma <strong>quebra de caixa</strong> de {{ dinheiro(deficitAbsoluto) }}, atribuída
-          a <strong>{{ caixaAberto?.usuarioCaixaNome ?? "o operador do caixa" }}</strong
-          >, e a Tesouraria será notificada. A observação abaixo é obrigatória e será registrada junto com a quebra.
+        <v-alert
+          v-if="fechamentoDivergente"
+          :type="diferencaFechamento < 0 ? 'error' : 'warning'"
+          variant="tonal"
+          class="my-5"
+          data-teste="alerta-quebra"
+        >
+          <div class="text-subtitle-2 mb-1">
+            Conferência física: {{ dinheiro(totalFechamentoContado) }} contado para {{ dinheiro(saldoAtual) }} esperado
+          </div>
+          <template v-if="diferencaFechamento < 0"
+            >A falta de <strong>{{ dinheiro(Math.abs(diferencaFechamento)) }}</strong> gera quebra de caixa e notifica a
+            Tesouraria.</template
+          >
+          <template v-else
+            >Há sobra de <strong>{{ dinheiro(diferencaFechamento) }}</strong
+            >; não há quebra positiva, mas a Tesouraria será notificada.</template
+          >
+          A observação é obrigatória e fica registrada com o responsável e o horário do servidor.
         </v-alert>
 
         <!-- G1/R-171 · o que ja saiu e ninguem conferiu: a unica coisa que trava o fechamento.
@@ -524,107 +989,244 @@ function fechar() {
         </div>
 
         <v-row dense>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <label class="caixa-valor-entrega">
-              <span class="caixa-valor-entrega__rotulo">Valor a entregar (vazio = tudo)</span>
-              <CampoDinheiro
-                v-model="entrega.valor"
-                class="caixa-valor-entrega__input"
-                :class="{ 'caixa-valor-entrega__input--erro': entregaAcimaDoSaldoLivre }"
-                :aria-invalid="entregaAcimaDoSaldoLivre ? 'true' : undefined"
-                :aria-describedby="entregaAcimaDoSaldoLivre ? 'erro-valor-entrega' : undefined"
-                data-teste="valor-entrega"
-              />
-              <span v-if="entregaAcimaDoSaldoLivre" id="erro-valor-entrega" class="caixa-valor-entrega__erro">
-                Máximo livre após os retornos planejados: {{ dinheiro(saldoLivre) }}
+          <v-col v-if="temSaldoLivre" cols="12" class="pt-0 pb-5">
+            <div class="retorno-sangria-faixa">
+              <v-btn
+                color="warning"
+                prepend-icon="mdi-bank-transfer-out"
+                class="botao-retorno-sangria"
+                data-teste="botao-entregar"
+                @click="abrirRetornoSangria"
+              >
+                <span class="botao-retorno-sangria__conteudo">
+                  <span>Transferência de retorno / sangria</span>
+                  <span class="botao-retorno-sangria__subtitulo">Retire dinheiro do caixa para o cofre</span>
+                </span>
+              </v-btn>
+            </div>
+          </v-col>
+          <v-col cols="12" class="fechamento-caixa">
+            <v-alert v-if="temSobra" type="warning" variant="tonal" class="mb-4">
+              <template v-if="planejamentosPendentes.length">
+                Há {{ dinheiro(saldoAtual) }} em espécie no caixa;
+                {{ dinheiro(deCentavos(totalPlanejadoCentavos)) }} estão reservados para as transferências de retorno
+                programadas. Somente os {{ dinheiro(saldoLivre) }}
+                livres podem ser transferidos à parte.
+              </template>
+              <template v-else>
+                Há {{ dinheiro(saldoAtual) }} em espécie no caixa. Você pode transferir parte agora ou fechar o caixa —
+                ao fechar, o restante volta ao cofre automaticamente, no mesmo ato.
+              </template>
+            </v-alert>
+            <div class="text-h6 mb-1">Fechamento do caixa</div>
+            <v-alert type="info" variant="tonal" density="compact" class="mb-4" data-teste="valor-esperado-fechamento">
+              Valor esperado para fechar: <strong>{{ dinheiro(saldoAtual) }}</strong>
+            </v-alert>
+            <div class="text-body-2 mb-4">Conte o físico, anexe a folha obrigatória e os comprovantes de cartão.</div>
+            <div
+              v-if="caixaAberto.caixaResponsavelNomeAbertura || caixaAberto.supervisorResponsavelNomeAbertura"
+              class="fechamento-abertura-responsavel mb-4"
+            >
+              <v-icon icon="mdi-account-cash-outline" size="small" />
+              <span v-if="caixaAberto.caixaResponsavelNomeAbertura">
+                Caixa que abriu: <strong>{{ caixaAberto.caixaResponsavelNomeAbertura }}</strong>
               </span>
-            </label>
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <v-text-field
-              v-model="entrega.lacre"
-              label="Lacre do retorno imediato (opcional)"
-              hint="Identifica o lacre desta transferência de dinheiro do caixa para o cofre."
-              persistent-hint
-              data-teste="lacre-entrega"
-            />
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12" md="4">
-            <v-btn
-              color="warning"
-              prepend-icon="mdi-bank-transfer-out"
-              :disabled="entregaBloqueada"
-              :loading="salvando"
-              data-teste="botao-entregar"
-              @click="retornarSaldo"
-            >
-              Transferência de retorno
-            </v-btn>
-          </v-col>
-          <v-col v-if="temSaldoLivre" cols="12">
-            <v-text-field
-              v-model="entrega.observacao"
-              label="Observação da transferência de retorno (opcional)"
-              data-teste="observacao-entrega"
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.observacao"
-              :label="temDeficit ? 'Observação da quebra (obrigatória)' : 'Observação do fechamento'"
-              :error="observacaoObrigatoriaPendente"
-              :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
-              data-teste="observacao-fechamento"
-            />
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.lacreFechamento"
-              label="Lacre de fechamento (obrigatório)"
-              placeholder="Ex.: FCH-001"
-              hint="Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento."
-              persistent-hint
-              color="error"
-              base-color="error"
-              :error="lacreFechamentoPendente"
-              :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
-              prepend-inner-icon="mdi-lock-alert-outline"
-              required
-              data-teste="lacre-fechamento"
-            />
-          </v-col>
-          <v-col v-if="temSobra" cols="12" md="4">
-            <v-text-field
-              v-model="fechamento.lacreRetorno"
-              label="Lacre do retorno no fechamento (opcional)"
-              hint="Identifica o lacre do dinheiro devolvido ao cofre junto com o fechamento. É diferente do lacre de fechamento."
-              persistent-hint
-            />
-          </v-col>
-          <v-col cols="12">
-            <v-btn
-              :color="temDeficit ? 'error' : 'primary'"
-              prepend-icon="mdi-lock"
-              :disabled="observacaoObrigatoriaPendente || lacreFechamentoPendente"
-              :aria-disabled="fechamentoTravado ? 'true' : undefined"
-              :class="{ 'botao-travado': fechamentoTravado }"
-              :loading="salvando"
-              :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
-              data-teste="botao-fechar"
-              @click="fechar"
-            >
-              {{ temDeficit ? "Fechar com quebra" : "Fechar caixa" }}
-            </v-btn>
-            <p
-              v-if="fechamentoTravado"
-              id="motivo-fechamento-travado"
-              class="text-caption mt-2 mb-0"
-              data-teste="motivo-fechamento-travado"
-            >
-              Fechamento travado: {{ motivoTravado }}
-            </p>
+              <span v-if="caixaAberto.supervisorResponsavelNomeAbertura">
+                · Supervisor na abertura: <strong>{{ caixaAberto.supervisorResponsavelNomeAbertura }}</strong>
+              </span>
+            </div>
+            <v-row dense>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="fechamento.observacao"
+                  :label="fechamentoDivergente ? 'Observação da divergência (obrigatória)' : 'Observação do fechamento'"
+                  :error="observacaoObrigatoriaPendente"
+                  :messages="observacaoObrigatoriaPendente ? 'Explique a falta antes de fechar o caixa.' : ''"
+                  data-teste="observacao-fechamento"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="fechamento.lacreFechamento"
+                  :label="
+                    lacreFechamentoReservado
+                      ? 'Lacre reservado para fechamento (obrigatório)'
+                      : 'Lacre de fechamento (obrigatório)'
+                  "
+                  placeholder="Ex.: FCH-001"
+                  :hint="
+                    lacreFechamentoReservado
+                      ? 'Digite manualmente o número físico reservado no malote. Ele precisa ser exatamente igual ao informado pela Tesouraria.'
+                      : 'Identifica o lacre físico colocado ao fechar a gaveta. Obrigatório em todo fechamento.'
+                  "
+                  persistent-hint
+                  :color="lacreFechamentoPendente ? 'error' : 'primary'"
+                  :base-color="lacreFechamentoPendente ? 'error' : undefined"
+                  :error="lacreFechamentoPendente"
+                  :error-messages="lacreFechamentoPendente ? 'Informe o lacre antes de fechar o caixa.' : ''"
+                  prepend-inner-icon="mdi-lock-alert-outline"
+                  required
+                  data-teste="lacre-fechamento"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="fechamento.caixaResponsavelNome"
+                  label="Caixa responsavel no fechamento (obrigatorio)"
+                  placeholder="Digite o nome do responsavel pelo caixa"
+                  :error="!fechamento.caixaResponsavelNome.trim()"
+                  :error-messages="!fechamento.caixaResponsavelNome.trim() ? 'Informe o caixa responsavel.' : ''"
+                  prepend-inner-icon="mdi-account-cash-outline"
+                  required
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="fechamento.supervisorResponsavelNome"
+                  label="Supervisor responsavel no fechamento (obrigatorio)"
+                  placeholder="Digite o nome do supervisor"
+                  :error="!fechamento.supervisorResponsavelNome.trim()"
+                  :error-messages="
+                    !fechamento.supervisorResponsavelNome.trim() ? 'Informe o supervisor responsavel.' : ''
+                  "
+                  prepend-inner-icon="mdi-account-supervisor-outline"
+                  required
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro
+                  v-model="fechamento.valorTotal"
+                  label="Valor total contado no fechamento"
+                  icone="mdi-cash-multiple"
+                  :hint="`Esperado para fechar: ${dinheiro(saldoAtual)}`"
+                  persistent-hint
+                  :error="fechamentoComposicaoInvalida"
+                  :error-messages="
+                    fechamentoComposicaoInvalida ? 'Total deve ser igual a dinheiro físico mais moedas.' : ''
+                  "
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro
+                  v-model="fechamento.valorEspecie"
+                  label="Dinheiro fisico contado no fechamento"
+                  icone="mdi-cash"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <CampoDinheiro
+                  v-model="fechamento.valorMoedas"
+                  label="Moedas contadas no fechamento"
+                  icone="mdi-circle-multiple-outline"
+                />
+              </v-col>
+              <v-col cols="12">
+                <CaixaFechamentoAnexos
+                  :caixa-id="caixaAberto?.id ?? null"
+                  @folha-enviada="folhaFechamentoEnviada = $event"
+                  @anexos-atualizados="anexosFechamento = $event"
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-btn
+                  :color="temDeficit ? 'error' : 'primary'"
+                  prepend-icon="mdi-lock"
+                  :disabled="
+                    observacaoObrigatoriaPendente ||
+                    fechamentoComposicaoInvalida ||
+                    lacreFechamentoPendente ||
+                    responsaveisFechamentoPendentes ||
+                    !fechamentoComposicaoInformada ||
+                    !folhaFechamentoEnviada
+                  "
+                  :aria-disabled="fechamentoTravado ? 'true' : undefined"
+                  :class="{ 'botao-travado': fechamentoTravado }"
+                  :loading="salvando"
+                  :aria-describedby="fechamentoTravado ? 'motivo-fechamento-travado' : undefined"
+                  data-teste="botao-fechar"
+                  @click="fechar"
+                >
+                  {{ fechamentoComQuebra ? "Fechar com quebra" : "Fechar caixa" }}
+                </v-btn>
+                <p
+                  v-if="fechamentoTravado"
+                  id="motivo-fechamento-travado"
+                  class="text-caption mt-2 mb-0"
+                  data-teste="motivo-fechamento-travado"
+                >
+                  Fechamento travado: {{ motivoTravado }}
+                </p>
+              </v-col>
+            </v-row>
           </v-col>
         </v-row>
+
+        <CaixaRetornoSangriaDialog
+          v-if="caixaAberto"
+          :aberto="modalRetornoSangriaAberto"
+          :saldo-livre="saldoLivre"
+          :valor="entrega.valor"
+          :valor-especie="entrega.valorEspecie"
+          :valor-moedas="entrega.valorMoedas"
+          :lacre-id="entrega.lacreId"
+          :lacres-disponiveis="lacresRetornoDisponiveis"
+          :observacao="entrega.observacao"
+          :responsavel-nome="entrega.responsavelNome"
+          :bloqueado="entregaBloqueada"
+          :mensagem-erro="mensagemErroEntrega"
+          :salvando="salvando ?? false"
+          @update:aberto="modalRetornoSangriaAberto = $event"
+          @update:valor="entrega.valor = $event"
+          @update:valor-especie="entrega.valorEspecie = $event"
+          @update:valor-moedas="entrega.valorMoedas = $event"
+          @update:lacre-id="entrega.lacreId = $event"
+          @update:responsavel-nome="entrega.responsavelNome = $event"
+          @update:observacao="entrega.observacao = $event"
+          @salvar="retornarSaldo($event)"
+        />
+        <CaixaSangriasDialog
+          v-if="caixaAberto"
+          :aberto="modalSangriasAberto"
+          :caixa-id="caixaAberto.id"
+          @update:aberto="modalSangriasAberto = $event"
+        />
+        <CaixaVendasCanceladasDialog
+          v-if="caixaAberto"
+          :aberto="modalVendasCanceladasAberto"
+          :caixa-id="caixaAberto.id"
+          @update:aberto="modalVendasCanceladasAberto = $event"
+        />
+        <CaixaCategoriaResumoDialog
+          v-if="categoriaResumoSelecionada"
+          :aberto="modalCategoriaResumoAberto"
+          :titulo="categoriaResumoSelecionada.titulo"
+          :icone="categoriaResumoSelecionada.icone"
+          :valor="categoriaResumoSelecionada.valor"
+          :detalhe="categoriaResumoSelecionada.detalhe"
+          @update:aberto="modalCategoriaResumoAberto = $event"
+        />
+        <CaixaUltimosLancamentosDialog
+          v-if="caixaAberto && categoriaUltimosLancamentos"
+          :aberto="true"
+          :caixa-id="caixaAberto.id"
+          :empresa-id="empresaId"
+          :categoria="categoriaUltimosLancamentos"
+          @update:aberto="atualizarDialogUltimosLancamentos"
+        />
+        <CaixaFechamentoConfirmacaoDialog
+          :aberto="revisaoFechamentoAberta"
+          :saldo-esperado="saldoAtual"
+          :observacao="fechamento.observacao"
+          :lacre-fechamento="fechamento.lacreFechamento.trim()"
+          :caixa-responsavel-nome="fechamento.caixaResponsavelNome.trim()"
+          :supervisor-responsavel-nome="fechamento.supervisorResponsavelNome.trim()"
+          :valor-total="Number(fechamento.valorTotal || 0)"
+          :valor-especie="Number(fechamento.valorEspecie || 0)"
+          :valor-moedas="Number(fechamento.valorMoedas || 0)"
+          :anexos="anexosFechamento"
+          @editar="revisaoFechamentoAberta = false"
+          @confirmar="confirmarFechamento"
+        />
       </template>
     </v-card-text>
   </v-card>
@@ -638,65 +1240,90 @@ function fechar() {
   cursor: not-allowed;
 }
 
-/* CampoDinheiro e um input nativo para preservar a digitacao monetaria brasileira. Aqui ele era
-   usado sem a moldura que os outros formularios fornecem e, no tema escuro, sobrava apenas o
-   placeholder `0,00`. O rotulo, a borda e o estado de erro pertencem a este formulario do Caixa. */
-.caixa-valor-entrega {
-  position: relative;
+.botao-retorno-sangria {
+  min-height: 52px;
+  padding-block: 8px;
+}
+
+.retorno-sangria-faixa {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-warning), 0.14);
+}
+
+.botao-retorno-sangria__conteudo {
+  display: grid;
+  text-align: left;
+}
+
+.botao-retorno-sangria__subtitulo {
   display: block;
-  width: 100%;
-}
-
-.caixa-valor-entrega__rotulo {
-  position: absolute;
-  z-index: 1;
-  top: -7px;
-  left: 12px;
-  padding-inline: 4px;
-  background: rgb(var(--v-theme-surface));
-  color: rgba(var(--v-theme-on-surface), 0.78);
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 0.7rem;
   font-weight: 500;
-  line-height: 14px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
-.caixa-valor-entrega__input {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 56px;
-  padding: 0 16px;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.58);
-  border-radius: 4px;
-  outline: none;
-  background: transparent;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 16px;
+.abertura-conferencia {
+  border: 1px solid rgb(var(--v-theme-primary));
+  border-radius: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 7%, transparent);
 }
 
-.caixa-valor-entrega__input:hover {
-  border-color: rgba(var(--v-theme-on-surface), 0.72);
+/* Respiro moderado e constante: separa os grupos operacionais sem alongar a tela do PDV. */
+.caixa-abertura-form > :deep(.v-col) {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
-.caixa-valor-entrega__input:focus {
-  border-width: 2px;
-  border-color: rgb(var(--v-theme-primary));
+.abertura-conferencia__campos {
+  margin-top: 12px;
 }
 
-.caixa-valor-entrega__input--erro {
-  border-color: rgb(var(--v-theme-error));
+.abertura-conferencia__titulo {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
-.caixa-valor-entrega__erro {
-  padding-inline: 16px;
+.abertura-conferencia__esperado {
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  font-size: 0.875rem;
+}
+
+.abertura-conferencia__erro {
   color: rgb(var(--v-theme-error));
-  font-size: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.fechamento-caixa {
+  border: 1px solid rgb(var(--v-theme-error));
+  border-radius: 12px;
+  padding: 20px;
+  background: color-mix(in srgb, rgb(var(--v-theme-error)) 8%, transparent);
+}
+
+.fechamento-abertura-responsavel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.9);
+  font-size: 0.875rem;
 }
 
 /* Grade auto-responsiva: cada card tem largura minima confortavel e quebra sozinho — nunca aperta
    como no cockpit "fiel ao mockup" que foi revertido no contexto real. */
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(174px, 1fr));
   gap: 12px;
 }
 
@@ -712,6 +1339,34 @@ function fechar() {
   border: 1px solid var(--cat);
   border-radius: 14px;
   background: var(--cat-soft);
+}
+
+.cat-card--clicavel {
+  cursor: pointer;
+}
+
+.cat-card--clicavel:hover {
+  filter: brightness(1.08);
+}
+
+.cat-card--clicavel:focus-visible {
+  outline: 3px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+.cat-canceladas {
+  --cat: rgb(var(--v-theme-error));
+  --cat-soft: rgba(var(--v-theme-error), 0.12);
+  --cat-faixa: rgb(var(--v-theme-error));
+  --cat-tinta: rgb(var(--v-theme-error));
+}
+
+.cat-card__acao {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .cat-bar {
@@ -797,6 +1452,12 @@ function fechar() {
   --cat-soft: var(--cat-transferencias-soft);
   --cat-tinta: var(--cat-transferencias-tinta);
   --cat-faixa: var(--cat-transferencias-faixa);
+}
+.cat-sangrias {
+  --cat: rgb(var(--v-theme-warning));
+  --cat-soft: color-mix(in srgb, rgb(var(--v-theme-warning)) 16%, transparent);
+  --cat-tinta: rgb(var(--v-theme-warning));
+  --cat-faixa: rgb(var(--v-theme-warning));
 }
 .cat-despesas {
   --cat: var(--cat-despesas-base);
@@ -943,6 +1604,42 @@ function fechar() {
 @media (width <= 560px) {
   .cat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) {
+    height: 68px;
+    min-height: 68px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-body {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-head {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-chip {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-valor {
+    flex: 0 0 auto;
+    margin-top: 0;
+    font-size: 18px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-detalhe,
+  .cat-grid .cat-card:not(.cat-resultado) .cat-card__acao,
+  .cat-grid .cat-card:not(.cat-resultado) :deep(.malote-abertura) {
+    display: none;
   }
 }
 </style>

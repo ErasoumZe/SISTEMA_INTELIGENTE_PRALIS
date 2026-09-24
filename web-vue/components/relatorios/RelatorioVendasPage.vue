@@ -251,7 +251,12 @@ watch(
               <!-- "-" quando nao ha dataVenda: venda manual so tem a data contabil. -->
               <td>{{ formatarHora(linha.dataVenda) }}</td>
               <td>
-                <div>{{ linha.descricao }}</div>
+                <div class="d-flex align-center flex-wrap ga-1">
+                  <span>{{ linha.descricao }}</span>
+                  <v-chip v-if="linha.status === 'cancelado'" size="x-small" color="error" variant="tonal">
+                    Cancelada
+                  </v-chip>
+                </div>
                 <v-btn
                   size="x-small"
                   variant="text"
@@ -321,7 +326,7 @@ watch(
 
     <VendaDetalheDialog v-model="detalheVendaAberto" :venda="vendaDetalheSelecionada" />
 
-    <v-dialog v-model="modalAberto" max-width="680">
+    <v-dialog v-model="modalAberto" max-width="680" persistent no-click-animation>
       <v-card>
         <v-card-title>Comprovantes</v-card-title>
         <v-card-subtitle>{{ vendaSelecionada?.descricao }}</v-card-subtitle>

@@ -54,7 +54,13 @@ onBeforeUnmount(limparVisualizacao);
 </script>
 
 <template>
-  <v-dialog :model-value="aberto" max-width="860" @update:model-value="emit('update:aberto', $event)">
+  <v-dialog
+    :model-value="aberto"
+    max-width="860"
+    persistent
+    no-click-animation
+    @update:model-value="emit('update:aberto', $event)"
+  >
     <v-card>
       <v-card-title class="d-flex align-center ga-2">
         <v-icon icon="mdi-paperclip" />

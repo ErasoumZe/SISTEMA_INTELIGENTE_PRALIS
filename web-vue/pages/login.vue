@@ -26,23 +26,27 @@ async function login() {
   loading.value = true;
   error.value = "";
 
-  const response = await fetch(`${apiUrl}/api/auth/sign-in/email`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: email.value, password: password.value, rememberMe: true })
-  });
+  try {
+    const response = await fetch(`${apiUrl}/api/auth/sign-in/email`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.value, password: password.value, rememberMe: true })
+    });
 
-  if (response.ok) {
-    // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
-    // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
-    limparEstadoWorkspace(useNuxtApp().payload.state);
-    await router.push("/");
-  } else {
-    error.value = "E-mail ou senha inválidos.";
+    if (response.ok) {
+      // Segunda barreira, independente do logout: quem entra AGORA nunca herda estado de quem estava
+      // antes. Cobre tambem a saida por expiracao de sessao ou por navegacao direta para /login.
+      limparEstadoWorkspace(useNuxtApp().payload.state);
+      await router.push("/");
+    } else {
+      error.value = "E-mail ou senha inválidos.";
+    }
+  } catch {
+    error.value = "Nao foi possivel conectar ao sistema. Verifique a rede e tente novamente.";
+  } finally {
+    loading.value = false;
   }
-
-  loading.value = false;
 }
 </script>
 

@@ -74,7 +74,7 @@ describe("seguranca default-deny integration", () => {
       method: "OPTIONS",
       url: "/api/vendas",
       headers: {
-        origin: "http://localhost:5174",
+        origin: "http://127.0.0.1:5174",
         "access-control-request-method": "POST"
       }
     });

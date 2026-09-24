@@ -61,7 +61,8 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      apiUrl: process.env.NUXT_PUBLIC_API_URL || process.env.PUBLIC_API_URL || "http://localhost:4100"
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || process.env.PUBLIC_API_URL || "http://localhost:4100",
+      apiUrlLan: process.env.NUXT_PUBLIC_API_URL_LAN || ""
     }
   },
   vuetify: {

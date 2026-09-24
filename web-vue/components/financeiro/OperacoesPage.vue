@@ -458,6 +458,8 @@ function limparFiltrosSaidas() {
     <v-dialog
       :model-value="Boolean(observacaoAberta)"
       max-width="560"
+      persistent
+      no-click-animation
       @update:model-value="(aberto) => !aberto && (observacaoAberta = null)"
     >
       <v-card>

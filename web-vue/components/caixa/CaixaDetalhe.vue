@@ -7,17 +7,40 @@ import { formatarDataHora, formatarDataSomenteDia } from "~/utils/formatacao";
 
 const props = defineProps<{ caixa: LinhaHistoricoCaixa; empresaId: string }>();
 
-const { apiGet } = useApi();
+const { apiGet, apiUrl } = useApi();
 
 const detalhe = ref<DetalheCaixaResponse | null>(null);
 const carregando = ref(false);
 const erro = ref("");
+const anexos = ref<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>([]);
+const conferencias = ref<
+  Array<{
+    id: string;
+    etapa: "abertura" | "retorno_sangria";
+    resultado: "convergente" | "divergente";
+    valorEspecieDeclarado: number;
+    valorMoedasDeclarado: number;
+    valorEspecieContado: number;
+    valorMoedasContado: number;
+    observacao: string | null;
+    conferidoEm: string;
+  }>
+>([]);
 
 async function carregar() {
   carregando.value = true;
   erro.value = "";
   try {
-    detalhe.value = await apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`);
+    const [detalheCarregado, anexosCarregados, conferenciasCarregadas] = await Promise.all([
+      apiGet<DetalheCaixaResponse>(`/api/caixa/${props.caixa.id}/detalhe`),
+      apiGet<Array<{ id: string; tipo: "folha_fechamento" | "comprovante_cartao"; nomeOriginal: string }>>(
+        `/api/caixa/${props.caixa.id}/anexos`
+      ),
+      apiGet<typeof conferencias.value>(`/api/caixa/${props.caixa.id}/conferencias-fisicas`)
+    ]);
+    detalhe.value = detalheCarregado;
+    anexos.value = anexosCarregados ?? [];
+    conferencias.value = conferenciasCarregadas ?? [];
   } catch (error) {
     erro.value = mensagemErro(error);
   } finally {
@@ -61,6 +84,60 @@ onMounted(carregar);
         </v-card-text>
       </v-card>
 
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Responsáveis declarados</div>
+          <div class="d-flex flex-column ga-2 text-body-2">
+            <div>
+              <strong>Abertura:</strong>
+              Caixa {{ caixa.caixaResponsavelNomeAbertura || "Não registrado" }} · Supervisor
+              {{ caixa.supervisorResponsavelNomeAbertura || "Não registrado" }}.
+            </div>
+            <div>
+              <strong>Fechamento:</strong>
+              Caixa {{ caixa.caixaResponsavelNomeFechamento || "Ainda aberto / não registrado" }} · Supervisor
+              {{ caixa.supervisorResponsavelNomeFechamento || "Ainda aberto / não registrado" }}.
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Conferências físicas</div>
+          <p v-if="!conferencias.length" class="text-body-2 text-medium-emphasis mb-0">
+            Nenhuma conferência física registrada.
+          </p>
+          <div v-for="conferencia in conferencias" :key="conferencia.id" class="text-body-2 mb-2">
+            <strong>{{ conferencia.etapa === "abertura" ? "Abertura do malote" : "Retorno / sangria" }}</strong>
+            — {{ conferencia.resultado }} em {{ formatarDataHora(conferencia.conferidoEm) }}.<br />
+            Declarado: dinheiro {{ dinheiro(conferencia.valorEspecieDeclarado) }}, moedas
+            {{ dinheiro(conferencia.valorMoedasDeclarado) }}. Contado: dinheiro
+            {{ dinheiro(conferencia.valorEspecieContado) }}, moedas {{ dinheiro(conferencia.valorMoedasContado) }}.
+            <template v-if="conferencia.observacao"> Motivo: {{ conferencia.observacao }}</template>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-card variant="tonal" class="mb-4">
+        <v-card-text class="py-3">
+          <div class="text-subtitle-2 mb-2">Provas do fechamento</div>
+          <p v-if="!anexos.length" class="text-body-2 text-medium-emphasis mb-0">Nenhum anexo foi registrado.</p>
+          <div v-else class="d-flex flex-column ga-2">
+            <a
+              v-for="anexo in anexos"
+              :key="anexo.id"
+              :href="`${apiUrl}/api/caixa/${caixa.id}/anexos/${anexo.id}`"
+              target="_blank"
+              rel="noopener"
+            >
+              {{ anexo.tipo === "folha_fechamento" ? "Folha de fechamento" : "Comprovante de cartão" }} —
+              {{ anexo.nomeOriginal }}
+            </a>
+          </div>
+        </v-card-text>
+      </v-card>
+
       <v-alert
         v-if="detalhe.alteracoesPosFechamento.length"
         type="warning"
@@ -76,6 +153,60 @@ onMounted(carregar);
           {{ dinheiro(alteracao.valor) }}).
         </div>
       </v-alert>
+
+      <div class="text-subtitle-2 mb-2">Vendas canceladas</div>
+      <v-expansion-panels variant="accordion" class="mb-4">
+        <v-expansion-panel :disabled="!detalhe.vendasCanceladas.length">
+          <v-expansion-panel-title>
+            <div class="d-flex align-center ga-3 flex-grow-1">
+              <span>Auditoria — não entram nos totais</span>
+              <v-chip size="x-small" variant="tonal">{{ detalhe.vendasCanceladas.length }}</v-chip>
+            </div>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <div v-for="venda in detalhe.vendasCanceladas" :key="venda.id" class="mb-4">
+              <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-2">
+                <div>
+                  <strong>{{ venda.descricao }}</strong>
+                  <span class="text-caption text-medium-emphasis ml-2">
+                    {{ venda.dataHora ? formatarDataHora(venda.dataHora) : formatarDataSomenteDia(venda.data) }}
+                  </span>
+                  <span v-if="venda.identificadorExterno" class="text-caption text-medium-emphasis ml-2">
+                    · {{ venda.identificadorExterno }}
+                  </span>
+                </div>
+                <strong>{{ dinheiro(venda.valor) }}</strong>
+              </div>
+              <div v-if="venda.produtos.length" class="responsive-table-shell">
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th class="text-end">Qtd.</th>
+                      <th class="text-end">Unitário</th>
+                      <th class="text-end">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="produto in venda.produtos" :key="produto.id">
+                      <td>
+                        {{ produto.descricao
+                        }}<v-chip v-if="produto.cancelado" size="x-small" variant="tonal" class="ml-2"
+                          >Cancelado</v-chip
+                        >
+                      </td>
+                      <td class="text-end">{{ produto.quantidade }}</td>
+                      <td class="text-end">{{ dinheiro(produto.valorUnitario) }}</td>
+                      <td class="text-end">{{ dinheiro(produto.valorTotal) }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+              <p v-else class="text-body-2 text-medium-emphasis mb-0">Produtos não registrados.</p>
+            </div>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
 
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../api/index.js";
-import { deCentavos } from "../dinheiro/index.js";
+import { deCentavos, paraCentavos } from "../dinheiro/index.js";
 import {
   saldoCaixaCentavos,
   saldoProprioCentavos,
@@ -17,22 +17,51 @@ export const caixaStatusQuerySchema = z.object({
   empresaId: uuidSchema
 });
 
-export const abrirCaixaPayloadSchema = z.object({
-  empresaId: uuidSchema,
-  pdvId: uuidSchema,
-  usuarioCaixaId: z.string().min(1),
-  // R-184: a abertura usa exclusivamente o relogio do servidor no instante do POST. O cliente
-  // nao envia data/hora e, por isso, nao consegue retroagir ou antecipar o inicio do turno.
-  // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
-  turnoId: uuidSchema.optional().nullable(),
-  // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
-  maquininhaId: uuidSchema.optional().nullable(),
-  // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
-  // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
-  // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
-  lacreAbertura: z.string().trim().min(1).optional().nullable(),
-  observacao: z.string().optional().nullable()
-});
+export const abrirCaixaPayloadSchema = z
+  .object({
+    empresaId: uuidSchema,
+    pdvId: uuidSchema,
+    usuarioCaixaId: z.string().min(1),
+    // R-184: a abertura usa exclusivamente o relogio do servidor no instante do POST. O cliente
+    // nao envia data/hora e, por isso, nao consegue retroagir ou antecipar o inicio do turno.
+    // Turno da abertura: se ausente, o servidor usa o turno padrao do colaborador.
+    turnoId: uuidSchema.optional().nullable(),
+    // R-039: equipamento usado neste PDV/turno. Opcional por decisao de negocio.
+    maquininhaId: uuidSchema.optional().nullable(),
+    // R-040: o lacre da IDA. Informa-lo E o ato de confirmar o recebimento da transferencia pendente
+    // — o caixa vence a disputa (R-030), o dinheiro entra aqui e o lacre e rompido, tudo na mesma
+    // transacao. Opcional porque a R-033 permite abrir zerado e receber o fundo depois.
+    lacreAbertura: z.string().trim().min(1, "Lacre de abertura obrigatorio"),
+    // R-207: nomes livres declarados na folha; a identidade autenticada permanece nos IDs do ato.
+    caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
+    supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
+    // R-205: quando recebe malote, o caixa declara sua propria contagem fisica.
+    valorEspecieContado: z.coerce.number().nonnegative().optional(),
+    valorMoedasContado: z.coerce.number().nonnegative().optional(),
+    observacaoDivergencia: z.string().trim().max(500).optional().nullable(),
+    observacao: z.string().optional().nullable()
+  })
+  .superRefine((dados, ctx) => {
+    const temLacre = Boolean(dados.lacreAbertura);
+    const informouContagem = dados.valorEspecieContado !== undefined || dados.valorMoedasContado !== undefined;
+    if (
+      temLacre &&
+      (!informouContagem || dados.valorEspecieContado === undefined || dados.valorMoedasContado === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["valorEspecieContado"],
+        message: "Informe especie e moedas conferidas"
+      });
+    }
+    if (!temLacre && informouContagem) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["lacreAbertura"],
+        message: "Contagem so existe com malote identificado por lacre"
+      });
+    }
+  });
 
 export const caixaParamsSchema = z.object({
   caixaId: uuidSchema
@@ -44,9 +73,35 @@ export const caixaParamsSchema = z.object({
 // (R-026). O lacre do fechamento (R-200) e outro objeto fisico e sempre obrigatorio, inclusive
 // sem retorno financeiro.
 export const fecharCaixaPayloadSchema = z.object({
-  observacao: z.string().optional().nullable(),
+  observacao: z.string().trim().max(500).optional().nullable(),
   lacreFechamento: z.string().trim().min(1, "Lacre de fechamento obrigatorio"),
-  lacreRetorno: z.string().trim().min(1).optional().nullable()
+  caixaResponsavelNome: z.string().trim().min(1, "Informe o caixa responsavel").max(160),
+  supervisorResponsavelNome: z.string().trim().min(1, "Informe o supervisor responsavel").max(160),
+  valorEspecieFechamento: z.coerce.number().nonnegative(),
+  valorMoedasFechamento: z.coerce.number().nonnegative()
+});
+
+// Leitura assistida de UM relatório de maquininha anexado no fechamento. A sugestão nunca entra
+// no saldo físico do caixa: ela é evidência editável para a conferência de recebíveis/cartões.
+const valorRelatorioMaquininhaSchema = z.coerce.number().nonnegative().nullable();
+export const relatorioMaquininhaIaSchema = z.object({
+  documentoLegivel: z.boolean(),
+  numeroMaquininha: z.string().trim().max(160).nullable(),
+  dataEmissao: z.string().trim().max(32).nullable(),
+  credito: valorRelatorioMaquininhaSchema,
+  debito: valorRelatorioMaquininhaSchema,
+  pix: valorRelatorioMaquininhaSchema,
+  voucher: valorRelatorioMaquininhaSchema,
+  total: valorRelatorioMaquininhaSchema,
+  trocaInicial: valorRelatorioMaquininhaSchema,
+  saldoFinalDinheiro: valorRelatorioMaquininhaSchema,
+  camposDuvidosos: z.array(z.string().trim().max(100)).max(30).default([]),
+  observacoes: z.array(z.string().trim().max(300)).max(20).default([])
+});
+export type RelatorioMaquininhaIa = z.infer<typeof relatorioMaquininhaIaSchema>;
+
+export const salvarRelatorioMaquininhaSchema = relatorioMaquininhaIaSchema.extend({
+  anexosConsiderados: z.array(uuidSchema).min(1).max(12)
 });
 
 // Status gravados pelo sistema hoje: "aberto" (abertura) e "fechado" (fechamento). "ajustado" e
@@ -100,6 +155,10 @@ export const linhaHistoricoCaixaSchema = z.object({
   fechadoPorNome: z.string().nullable(),
   lacreAbertura: z.string().nullable(),
   lacreFechamento: z.string().nullable(),
+  caixaResponsavelNomeAbertura: z.string().nullable(),
+  supervisorResponsavelNomeAbertura: z.string().nullable(),
+  caixaResponsavelNomeFechamento: z.string().nullable(),
+  supervisorResponsavelNomeFechamento: z.string().nullable(),
   totalEntradas: z.number(),
   totalTransferencias: z.number(),
   totalTransferenciasEntrada: z.number(),
@@ -174,8 +233,31 @@ export const alteracaoPosFechamentoCaixaSchema = z.object({
   alteradoEm: z.string()
 });
 
+// Venda cancelada nao compoe nenhum total do Caixa. Ela viaja separada para que o operador e a
+// gerencia consigam auditar a venda que foi removida do saldo, inclusive seus produtos, sem dar a
+// impressao de que aquele valor ainda esta disponivel no malote.
+export const vendaCanceladaCaixaSchema = z.object({
+  id: uuidSchema,
+  identificadorExterno: z.string().nullable(),
+  descricao: z.string(),
+  data: z.string().nullable(),
+  dataHora: z.string().nullable(),
+  valor: z.number(),
+  produtos: z.array(
+    z.object({
+      id: uuidSchema,
+      descricao: z.string(),
+      quantidade: z.number(),
+      valorUnitario: z.number(),
+      valorTotal: z.number(),
+      cancelado: z.boolean()
+    })
+  )
+});
+
 export const detalheCaixaResponseSchema = z.object({
   lancamentos: z.array(categoriaLancamentosCaixaSchema),
+  vendasCanceladas: z.array(vendaCanceladaCaixaSchema),
   alteracoesPosFechamento: z.array(alteracaoPosFechamentoCaixaSchema),
   edicoes: z.array(edicaoHorarioCaixaSchema),
   ajuste: ajusteCaixaSchema.nullable()
@@ -223,12 +305,34 @@ const idempotenciaChaveSchema = uuidSchema;
 
 // R-187 — Transferencia de retorno avulsa/final do Caixa para o Cofre. O servidor resolve a conta,
 // a ordem e, quando informado, consome o lacre opcional da R-026.
-export const transferenciaCofrePayloadSchema = z.object({
-  valor: z.coerce.number().positive(),
-  lacre: z.string().trim().min(1).optional().nullable(),
-  observacao: z.string().trim().max(500).optional().nullable(),
-  idempotenciaChave: idempotenciaChaveSchema
-});
+export const transferenciaCofrePayloadSchema = z
+  .object({
+    valor: z.coerce.number().positive(),
+    valorEspecie: z.coerce.number().nonnegative(),
+    valorMoedas: z.coerce.number().nonnegative(),
+    // R-208: o Caixa nao digita um lacre novo. Ele escolhe uma bolsa que a Tesouraria mandou
+    // aberta dentro do malote recebido; o servidor confere que ela pertence a este caixa.
+    lacreId: uuidSchema,
+    // O modal operacional exige o nome. Opcional no contrato durante a transição para manter os
+    // registros e integrações históricas compatíveis; quando informado, nunca aceita texto vazio.
+    responsavelNome: z
+      .string()
+      .trim()
+      .min(1, "Responsavel pela transferencia de retorno / sangria obrigatorio")
+      .max(120)
+      .optional(),
+    observacao: z.string().trim().max(500).optional().nullable(),
+    idempotenciaChave: idempotenciaChaveSchema
+  })
+  .superRefine((dados, ctx) => {
+    if (paraCentavos(dados.valorEspecie) + paraCentavos(dados.valorMoedas) !== paraCentavos(dados.valor)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["valor"],
+        message: "Especie mais moedas deve ser igual ao valor da transferencia"
+      });
+    }
+  });
 
 // R-185: estas rotas nao criam ordens; apenas operam linhas que ja nasceram junto da transferencia inicial.
 export const planejamentoRetornoSchema = z.object({
@@ -282,6 +386,8 @@ export const transferenciaCaixaLinhaSchema = z.object({
   tipo: z.enum(["abertura", "suprimento", "sangria", "retorno"]),
   ordem: z.number().nullable(),
   valor: z.number(),
+  valorEspecie: z.number().nullable(),
+  valorMoedas: z.number().nullable(),
   sentido: z.enum(["saida", "entrada"]),
   lacre: z.string().nullable(),
   dataTransferencia: z.string().nullable()
@@ -315,9 +421,13 @@ export const caixaOperacionalSchema = z.object({
   fechadoEm: z.string().nullable(),
   tokenEdicao: z.string().nullable(),
   turnoId: z.string().nullable(),
+  turnoNome: z.string().nullable(),
   maquininhaId: uuidSchema.nullable(),
   maquininhaApelido: z.string().nullable(),
   maquininhaNumeroSerie: z.string().nullable(),
+  // Retrato dos responsáveis informados no ato da abertura. Nulo apenas para caixas legados.
+  caixaResponsavelNomeAbertura: z.string().nullable(),
+  supervisorResponsavelNomeAbertura: z.string().nullable(),
   observacao: z.string().nullable(),
   status: z.string()
 });
@@ -325,6 +435,7 @@ export const caixaOperacionalSchema = z.object({
 export const caixaStatusSchema = z.object({
   caixaAberto: caixaOperacionalSchema.nullable(),
   resumo: resumoCaixaSchema.nullable(),
+  lacreFechamentoReservado: z.string().nullable(),
   // G1: viaja junto com o resumo de proposito — a tela precisa saber que o fechamento esta travado
   // ANTES do operador clicar, e no MESMO instante em que le o saldo. Campo obrigatorio, nunca
   // opcional: ausente teria de significar "nao ha", e um dia significaria "esqueci de preencher".
@@ -347,6 +458,7 @@ export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
 export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
 export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
+export type VendaCanceladaCaixa = z.infer<typeof vendaCanceladaCaixaSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
 export type PlanejamentoRetorno = z.infer<typeof planejamentoRetornoSchema>;

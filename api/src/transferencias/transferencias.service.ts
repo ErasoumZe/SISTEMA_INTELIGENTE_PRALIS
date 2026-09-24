@@ -10,12 +10,17 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
+import { caminhoAbsolutoDocumento } from "../lancamentos/foto-documento.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
+  buscarAnexoFechamentoCaixaRepository,
+  buscarResumoFechamentoCaixaRepository,
   buscarContaCofreEmpresaRepository,
+  criarConferenciaFisicaTransferenciaRepository,
   criarQuebraCaixaRepository,
   listarUsuariosTesourariaRepository,
+  listarAnexosFechamentoCaixaRepository,
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
 import { ehMovimentoDoCaixaParaOCofre } from "./entrega-cofre.repository.js";
@@ -52,9 +57,9 @@ import {
   encerrarDivergenciaRepository,
   contasPertencemEmpresaRepository,
   criarTransferenciaRepository,
-  criarRetornosPlanejadosRepository,
   contaEhPdvDaEmpresaRepository,
   transferenciaTemPlanejamentoRepository,
+  transferenciaPossuiLacreFechamentoPlanejadoRepository,
   transferenciaPossuiRetornosPlanejadosRepository,
   efetivarTransferenciaAgendadaRepository,
   listarAgendadasVencidasRepository,
@@ -83,19 +88,31 @@ export function validarTransferencia(dados: TransferenciaPayload): void {
   if (dados.contasDestinoIds.length && dados.tempoConfirmacao) {
     throw new Error("Tempo de confirmacao e valido somente para transferencia direta");
   }
-  if (dados.retornosPlanejados.length) {
-    if (dados.agendadaPara) throw new Error("Transferencia com planejamento nao pode ser agendada");
-    if (dados.contasDestinoIds.length) throw new Error("Planejamento de retorno nao aceita multiplo destino");
-    if (dados.tempoConfirmacao) throw new Error("Planejamento de retorno nao aceita tempo de confirmacao");
-    const totalPlanejadoCentavos = dados.retornosPlanejados.reduce(
-      (total, plano) => total + paraCentavos(plano.valor),
-      0
-    );
-    if (totalPlanejadoCentavos > paraCentavos(dados.valorOriginal)) {
-      throw new Error("Total planejado nao pode ultrapassar a transferencia inicial");
+  const informouComposicao = dados.valorEspecieDeclarado !== undefined || dados.valorMoedasDeclarado !== undefined;
+  if (informouComposicao) {
+    if (dados.valorEspecieDeclarado === undefined || dados.valorMoedasDeclarado === undefined) {
+      throw new Error("Informe especie e moedas do malote");
     }
-    const lacres = [dados.nLacreDoc, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)];
-    if (new Set(lacres).size !== lacres.length) throw new Error("Cada transferencia planejada precisa de lacre unico");
+    if (
+      paraCentavos(dados.valorEspecieDeclarado) + paraCentavos(dados.valorMoedasDeclarado) !==
+      paraCentavos(dados.valorOriginal)
+    ) {
+      throw new Error("Especie mais moedas deve ser igual ao valor da transferencia");
+    }
+  }
+  const lacresRetorno = dados.lacresRetorno.map((lacre) => lacre.trim());
+  if (new Set(lacresRetorno).size !== lacresRetorno.length) {
+    throw new Error("Os lacres de retorno / sangria nao podem se repetir");
+  }
+  if (dados.nLacreDoc?.trim() && lacresRetorno.includes(dados.nLacreDoc.trim())) {
+    throw new Error("O lacre do malote nao pode se repetir como lacre de retorno / sangria");
+  }
+  const lacreFechamentoPlanejado = dados.lacreFechamentoPlanejado?.trim();
+  if (lacreFechamentoPlanejado && dados.nLacreDoc?.trim() === lacreFechamentoPlanejado) {
+    throw new Error("O lacre do malote de fechamento deve ser diferente do lacre principal");
+  }
+  if (lacreFechamentoPlanejado && lacresRetorno.includes(lacreFechamentoPlanejado)) {
+    throw new Error("O lacre do malote de fechamento nao pode se repetir como lacre de retorno / sangria");
   }
 }
 
@@ -164,12 +181,11 @@ export async function criarTransferencia(
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_criar");
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
-  if (dados.retornosPlanejados.length && !podeLancarSemCaixa(perfil)) {
-    throw new Error("Planejamento de retorno e exclusivo da retaguarda");
-  }
   try {
     return await executarEmTransacao(async (tx) => {
-      for (const lacre of [dados.nLacreDoc!, ...dados.retornosPlanejados.map((plano) => plano.nLacreDoc)]) {
+      for (const lacre of [dados.nLacreDoc!, ...dados.lacresRetorno, dados.lacreFechamentoPlanejado?.trim()].filter(
+        (numero): numero is string => Boolean(numero)
+      )) {
         const lacreExistente = await existeNumeroLacreRepository(dados.empresaId, lacre, tx);
         if (lacreExistente) throw new Error("Lacre ja utilizado em outro movimento");
       }
@@ -182,14 +198,26 @@ export async function criarTransferencia(
       );
       if (!contasValidas) throw new Error("Conta de origem ou destino nao pertence a empresa informada");
 
-      if (dados.retornosPlanejados.length) {
-        const contaCofreId = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
-        if (!contaCofreId || dados.contaOrigemId !== contaCofreId) {
-          throw new Error("Planejamento de retorno exige transferencia inicial do Cofre");
-        }
-        if (!(await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx))) {
-          throw new Error("Planejamento de retorno exige conta de PDV como destino inicial");
-        }
+      // Malote Cofre -> PDV so pode nascer com a composicao que o Caixa ira conferir. Aceitar a
+      // transferencia sem isso e deixa um pendente impossivel de abrir depois.
+      const contaCofreDaEmpresa = await buscarContaCofreEmpresaRepository(dados.empresaId, tx);
+      const ehMaloteCofreParaPdv =
+        contaCofreDaEmpresa === dados.contaOrigemId &&
+        (await contaEhPdvDaEmpresaRepository(dados.empresaId, dados.contaDestinoId, tx));
+      if (
+        ehMaloteCofreParaPdv &&
+        (dados.valorEspecieDeclarado === undefined || dados.valorMoedasDeclarado === undefined)
+      ) {
+        throw new Error("Informe dinheiro fisico e moedas ao preparar o malote para o Caixa");
+      }
+      if (ehMaloteCofreParaPdv && !dados.lacreFechamentoPlanejado?.trim()) {
+        throw new Error("Informe o lacre aberto reservado para o fechamento do Caixa");
+      }
+      if (!ehMaloteCofreParaPdv && dados.lacresRetorno.length) {
+        throw new Error("Lacres de retorno / sangria so podem seguir em um malote do Cofre para o Caixa");
+      }
+      if (!ehMaloteCofreParaPdv && dados.lacreFechamentoPlanejado?.trim()) {
+        throw new Error("O lacre de fechamento so pode seguir em um malote do Cofre para o Caixa");
       }
 
       const transferenciaLivre = podeLancarSemCaixa(perfil);
@@ -203,7 +231,7 @@ export async function criarTransferencia(
       // uma transferencia direta sem planejamento, a conta de destino identifica o caixa que vai
       // receber o dinheiro. Sem esta busca o movimento nascia com `caixa_id` nulo e desaparecia
       // do resumo do PDV, embora a conferencia tenha sido concluida corretamente.
-      if (transferenciaLivre && !caixa && !dados.contasDestinoIds.length && !dados.retornosPlanejados.length) {
+      if (transferenciaLivre && !caixa && !dados.contasDestinoIds.length) {
         caixa = await travarCaixaAbertoDaContaPdv(dados.empresaId, dados.contaDestinoId, tx);
       }
       // Q2: na transferencia a conta do PDV vale como origem OU destino (dinheiro entra e sai).
@@ -249,21 +277,7 @@ export async function criarTransferencia(
         resolverObservacaoDoLancamento(dados),
         computar,
         perfil.usuarioId,
-        dados.retornosPlanejados.length ? null : envolveContaPdv ? caixa!.id : null,
-        tx
-      );
-      await criarRetornosPlanejadosRepository(
-        {
-          empresaId: dados.empresaId,
-          transferenciaOrigemId: transferencia.id,
-          dataReferencia: dados.dataReferencia,
-          contaOrigemId: dados.contaDestinoId,
-          contaDestinoId: dados.contaOrigemId,
-          planos: dados.retornosPlanejados,
-          computar,
-          criadoPor: perfil.usuarioId,
-          observacao: dados.observacao?.trim() || dados.descricao?.trim() || null
-        },
+        envolveContaPdv ? caixa!.id : null,
         tx
       );
       return { id: transferencia.id, computar };
@@ -336,15 +350,27 @@ export async function confirmarTransferencia(
     }
 
     if (contexto?.ehRetornoDoCaixa) {
-      if (dados.valorRecebido == null) {
+      if (dados.valorRecebido == null || dados.valorEspecieContado == null || dados.valorMoedasContado == null) {
         throw erroValidacao(
-          "Informe o valor recebido para conferir uma entrega do Caixa",
+          "Informe valor, especie e moedas para conferir uma entrega do Caixa",
           "VALOR_RECEBIDO_OBRIGATORIO"
         );
       }
+      if (
+        paraCentavos(dados.valorEspecieContado) + paraCentavos(dados.valorMoedasContado) !==
+        paraCentavos(dados.valorRecebido)
+      ) {
+        throw erroValidacao("Especie mais moedas deve ser igual ao valor recebido", "COMPOSICAO_INVALIDA");
+      }
       const divergeValor = paraCentavos(dados.valorRecebido) !== contexto.valorCentavos;
       const divergeLacre = (contexto.lacre ?? null) !== (dados.nLacreDoc?.trim() || null);
-      if (divergeValor || divergeLacre) {
+      const divergeEspecie =
+        contexto.valorEspecieDeclaradoCentavos !== null &&
+        paraCentavos(dados.valorEspecieContado) !== contexto.valorEspecieDeclaradoCentavos;
+      const divergeMoedas =
+        contexto.valorMoedasDeclaradoCentavos !== null &&
+        paraCentavos(dados.valorMoedasContado) !== contexto.valorMoedasDeclaradoCentavos;
+      if (divergeValor || divergeLacre || divergeEspecie || divergeMoedas) {
         throw new ErroDominio(
           "Conferencia divergente: registre a recusa com o motivo em /recusar-conferencia",
           409,
@@ -361,6 +387,31 @@ export async function confirmarTransferencia(
       tx
     );
     if (!confirmada) throw new Error("Somente operador de uma conta destino pode confirmar uma unica vez");
+    if (
+      contexto?.ehRetornoDoCaixa &&
+      contexto.caixaId &&
+      contexto.valorEspecieDeclaradoCentavos !== null &&
+      contexto.valorMoedasDeclaradoCentavos !== null
+    ) {
+      await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: contexto.empresaId,
+          transferenciaId,
+          fechamentoCaixaId: contexto.caixaId,
+          etapa: "retorno_sangria",
+          resultado: "convergente",
+          encerraConferencia: true,
+          valorEspecieDeclaradoCentavos: contexto.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: contexto.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos: paraCentavos(dados.valorEspecieContado),
+          valorMoedasContadoCentavos: paraCentavos(dados.valorMoedasContado),
+          observacao: null,
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: new Date()
+        },
+        tx
+      );
+    }
 
     // Caminho GENERICO preservado: divergencia de valor confirma e notifica, como sempre foi.
     // O ramo estrito acima ja saiu com 409, entao esta notificacao nunca dispara para Caixa -> Cofre.
@@ -439,6 +490,16 @@ export async function recusarConferencia(
     // o declarado inteiro virar quebra. Por isso `null` (nao informado) e recusado no encerramento:
     // sem numero nao ha o que creditar nem o que quebrar.
     const contadoCentavos = dados.valorRecebido == null ? null : paraCentavos(dados.valorRecebido);
+    const especieContadaCentavos = dados.valorEspecieContado == null ? null : paraCentavos(dados.valorEspecieContado);
+    const moedasContadasCentavos = dados.valorMoedasContado == null ? null : paraCentavos(dados.valorMoedasContado);
+    if (contadoCentavos !== null || especieContadaCentavos !== null || moedasContadasCentavos !== null) {
+      if (contadoCentavos === null || especieContadaCentavos === null || moedasContadasCentavos === null) {
+        throw erroValidacao("Informe valor, especie e moedas da contagem", "COMPOSICAO_OBRIGATORIA");
+      }
+      if (especieContadaCentavos + moedasContadasCentavos !== contadoCentavos) {
+        throw erroValidacao("Especie mais moedas deve ser igual ao valor contado", "COMPOSICAO_INVALIDA");
+      }
+    }
     if (dados.encerrar) {
       if (contadoCentavos === null) {
         throw erroValidacao(
@@ -468,6 +529,32 @@ export async function recusarConferencia(
       },
       tx
     );
+    if (
+      atual.caixaId &&
+      atual.valorEspecieDeclaradoCentavos !== null &&
+      atual.valorMoedasDeclaradoCentavos !== null &&
+      especieContadaCentavos !== null &&
+      moedasContadasCentavos !== null
+    ) {
+      await criarConferenciaFisicaTransferenciaRepository(
+        {
+          empresaId: atual.empresaId,
+          transferenciaId,
+          fechamentoCaixaId: atual.caixaId,
+          etapa: "retorno_sangria",
+          resultado: "divergente",
+          encerraConferencia: dados.encerrar,
+          valorEspecieDeclaradoCentavos: atual.valorEspecieDeclaradoCentavos,
+          valorMoedasDeclaradoCentavos: atual.valorMoedasDeclaradoCentavos,
+          valorEspecieContadoCentavos: especieContadaCentavos,
+          valorMoedasContadoCentavos: moedasContadasCentavos,
+          observacao: dados.motivo.trim(),
+          conferidoPor: perfil.usuarioId,
+          conferidoEm: new Date()
+        },
+        tx
+      );
+    }
 
     // R-183 · o DESFECHO. Sem `encerrar`, nada muda: a entrega continua `pendente`, o fechamento
     // continua travado e o cofre pode reconferir — que e o comportamento de sempre.
@@ -711,6 +798,45 @@ export async function obterTransferencia(
   return transferencia;
 }
 
+// As provas pertencem ao fechamento do Caixa, nao a transferencia. A consulta por transferencia
+// impede que um conferente acesse anexos de outro caixa apenas conhecendo seu UUID.
+async function caixaDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  const contexto = await buscarContextoConferenciaRepository(transferenciaId);
+  if (!contexto?.ehRetornoDoCaixa || !contexto.caixaId || !podeAcessarEmpresa(perfil, contexto.empresaId)) {
+    throw new Error("Registro nao encontrado");
+  }
+  return { caixaId: contexto.caixaId, empresaId: contexto.empresaId };
+}
+
+export async function listarAnexosDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  return listarAnexosFechamentoCaixaRepository(caixaId, empresaId);
+}
+
+export async function obterResumoFechamentoDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  const fechamento = await buscarResumoFechamentoCaixaRepository(caixaId, empresaId);
+  if (!fechamento) throw new Error("Fechamento do caixa nao encontrado");
+  return {
+    ...fechamento,
+    dataHoraFechamento: fechamento.dataHoraFechamento?.toISOString() ?? null,
+    fechadoEm: fechamento.fechadoEm?.toISOString() ?? null,
+    valorEspecieFechamento:
+      fechamento.valorEspecieFechamento === null ? null : Number(fechamento.valorEspecieFechamento),
+    valorMoedasFechamento: fechamento.valorMoedasFechamento === null ? null : Number(fechamento.valorMoedasFechamento)
+  };
+}
+
+export async function obterAnexoDaConferencia(transferenciaId: string, anexoId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  const anexo = await buscarAnexoFechamentoCaixaRepository(caixaId, anexoId, empresaId);
+  if (!anexo) throw new Error("Registro nao encontrado");
+  return { ...anexo, caminhoAbsoluto: caminhoAbsolutoDocumento(anexo.caminho) };
+}
+
 export async function atualizarTransferencia(
   transferenciaId: string,
   dados: TransferenciaPayload,
@@ -720,8 +846,11 @@ export async function atualizarTransferencia(
   validarTransferencia(dados);
   const computar = resolverComputarLancamento(dados.computar, perfil.permissoes);
   return executarEmTransacao(async (tx) => {
-    if (dados.retornosPlanejados.length || (await transferenciaTemPlanejamentoRepository(transferenciaId, tx))) {
+    if (await transferenciaTemPlanejamentoRepository(transferenciaId, tx)) {
       throw new Error("Transferencia com retorno planejado nao pode ser editada");
+    }
+    if (await transferenciaPossuiLacreFechamentoPlanejadoRepository(transferenciaId, tx)) {
+      throw new Error("Transferencia com lacre de fechamento reservado nao pode ser editada");
     }
     // Leitura sem lock so para o 404/empresa vir antes dos erros de caixa, como sempre foi.
     const previa = await buscarTransferenciaDetalheRepository(transferenciaId, tx);

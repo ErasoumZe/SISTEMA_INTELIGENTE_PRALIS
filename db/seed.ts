@@ -25,6 +25,8 @@ import {
   edicoesCaixa,
   empresas,
   fechamentosCaixa,
+  fechamentosCaixaAnexos,
+  fechamentosCaixaRelatoriosMaquininha,
   formasPagamento,
   fornecedores,
   gruposDespesas,
@@ -54,6 +56,7 @@ import {
   setores,
   transferencias,
   transferenciasConferenciasRecusadas,
+  transferenciasConferenciasFisicas,
   unidadesMedida,
   usuarioAutenticacao,
   usuariosEmpresas,
@@ -661,12 +664,21 @@ if (transferenciaIds.length) {
   await banco
     .delete(transferenciasConferenciasRecusadas)
     .where(inArray(transferenciasConferenciasRecusadas.transferenciaId, transferenciaIds));
+  await banco
+    .delete(transferenciasConferenciasFisicas)
+    .where(inArray(transferenciasConferenciasFisicas.transferenciaId, transferenciaIds));
 }
 await banco.delete(quebrasCaixa).where(eq(quebrasCaixa.empresaId, empresaId));
 await banco.delete(transferencias).where(eq(transferencias.empresaId, empresaId));
 await banco.delete(vendas).where(eq(vendas.empresaId, empresaId));
 await banco.delete(clientes).where(eq(clientes.empresaId, empresaId));
-if (caixaIds.length) await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+if (caixaIds.length) {
+  await banco.delete(fechamentosCaixaAnexos).where(inArray(fechamentosCaixaAnexos.fechamentoCaixaId, caixaIds));
+  await banco
+    .delete(fechamentosCaixaRelatoriosMaquininha)
+    .where(inArray(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, caixaIds));
+  await banco.delete(fechamentosCaixa).where(inArray(fechamentosCaixa.id, caixaIds));
+}
 if (setorIds.length) await banco.delete(permissoesSetores).where(inArray(permissoesSetores.setorId, setorIds));
 
 await banco.delete(colaboradores).where(
@@ -741,8 +753,9 @@ await banco.delete(colaboradores).where(
   )
 );
 await banco.delete(cargos).where(and(eq(cargos.empresaId, empresaId), inArray(cargos.nome, nomesCargosSeed)));
-await banco.delete(setores).where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")));
-await banco.delete(areas).where(and(eq(areas.empresaId, empresaId), eq(areas.nome, "Operacao")));
+// Area e setor podem ser referenciados por colaboradores criados durante testes locais.
+// O seed deve ser repetivel sem apagar esses colaboradores: reutiliza os registros base em
+// vez de removê-los e recriá-los a cada execução.
 await banco.delete(unidadesMedida).where(and(eq(unidadesMedida.empresaId, empresaId), eq(unidadesMedida.sigla, "un")));
 await banco
   .delete(gruposRetiradas)
@@ -806,10 +819,21 @@ if (!pdv) throw new Error("PDV nao foi criado");
 // cofre respondia 400 e o modulo Caixa nao podia ser demonstrado nem testado ponta a ponta neste
 // ambiente. Sao DOIS vinculos, e nao um, porque quem entrega nao confere a propria entrega — com um
 // so, a entrega feita por ele mesmo continuaria bloqueada.
-for (const email of ["tesouraria@email.com", "gerencia@email.com"]) {
+for (const email of ["gerencia@email.com"]) {
   const usuarioId = usuarioIds.get(email);
   if (!usuarioId) throw new Error(`Usuario ${email} nao foi criado`);
   await banco.insert(contasUsuarios).values({ empresaId, contaId: contaCofre.id, usuarioId }).onConflictDoNothing();
+}
+
+// Ambiente de demonstracao: a Tesouraria precisa enxergar e operar todas as contas financeiras
+// que o seed cria para executar o fluxo completo Caixa <-> Cofre sem uma preparacao manual extra.
+const usuarioTesourariaId = usuarioIds.get("tesouraria@email.com");
+if (!usuarioTesourariaId) throw new Error("Usuario Tesouraria nao foi criado");
+for (const contaId of [contaCaixa.id, contaBanco.id, contaCofre.id]) {
+  await banco
+    .insert(contasUsuarios)
+    .values({ empresaId, contaId, usuarioId: usuarioTesourariaId })
+    .onConflictDoNothing();
 }
 
 await banco
@@ -924,12 +948,29 @@ const unidade = (
 )[0];
 if (!unidade) throw new Error("Unidade de medida nao foi criada");
 
-const area = (await banco.insert(areas).values({ empresaId, nome: "Operacao" }).returning({ id: areas.id }))[0];
+const [areaExistente] = await banco
+  .select({ id: areas.id })
+  .from(areas)
+  .where(and(eq(areas.empresaId, empresaId), eq(areas.nome, "Operacao")))
+  .limit(1);
+const area =
+  areaExistente ?? (await banco.insert(areas).values({ empresaId, nome: "Operacao" }).returning({ id: areas.id }))[0];
 if (!area) throw new Error("Area nao foi criada");
 
-const setor = (
-  await banco.insert(setores).values({ empresaId, areaId: area.id, nome: "Loja" }).returning({ id: setores.id })
-)[0];
+const [setorExistente] = await banco
+  .select({ id: setores.id })
+  .from(setores)
+  .where(and(eq(setores.empresaId, empresaId), eq(setores.nome, "Loja")))
+  .limit(1);
+const setor = setorExistente
+  ? (
+      await banco
+        .update(setores)
+        .set({ areaId: area.id })
+        .where(eq(setores.id, setorExistente.id))
+        .returning({ id: setores.id })
+    )[0]
+  : (await banco.insert(setores).values({ empresaId, areaId: area.id, nome: "Loja" }).returning({ id: setores.id }))[0];
 if (!setor) throw new Error("Setor nao foi criado");
 
 await banco

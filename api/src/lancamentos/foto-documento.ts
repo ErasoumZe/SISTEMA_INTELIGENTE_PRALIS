@@ -59,7 +59,7 @@ const storageRoot = path.resolve(process.cwd(), "storage");
 // Salva o arquivo em storage/<tipo>/<id>/<uuid>.ext e devolve o caminho RELATIVO (persistido em
 // foto_documento_url) + o mime.
 export async function salvarFotoDocumento(
-  tipo: "mercadorias" | "despesas" | "retiradas",
+  tipo: "mercadorias" | "despesas" | "retiradas" | "fechamentos-caixa",
   id: string,
   arquivo: MultipartFile
 ): Promise<{ caminhoRelativo: string; mimeType: string }> {

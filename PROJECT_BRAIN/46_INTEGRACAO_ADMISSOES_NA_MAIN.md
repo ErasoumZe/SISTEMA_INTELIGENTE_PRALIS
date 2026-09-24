@@ -13,10 +13,11 @@ funções operacionais), preservando as verticais do Caixa e os contratos que j�
 
 ## Decisão de migrations
 
-A `main` já tinha as migrations `0000` a `0041`, incluindo alterações recentes do Caixa. A branch
-de admissões também usava os números `0034` a `0040`; renumerar snapshots antigos criaria uma
-sequência falsa e poderia divergir do banco. Por isso o schema final combinado foi gerado como uma
-única migration nova, `0042_fearless_bulldozer.sql`, com snapshot e journal correspondentes.
+A `main` tinha as migrations `0000` a `0041` quando a integração começou, mas recebeu as migrations
+`0042` a `0047` do Caixa antes do fechamento. A branch de admissões também usava os números `0034`
+a `0040`; renumerar snapshots antigos criaria uma sequência falsa e poderia divergir do banco. Por
+isso o schema final combinado foi regenerado como uma única migration nova, `0048_overjoyed_pride.sql`,
+com snapshot e journal correspondentes, depois das seis migrations do Caixa.
 
 Essa migration contém as tabelas e índices de admissões, o catálogo de funções, os campos e regras
 de turno e os seis triggers manuais de `atualizado_em`. A unicidade composta de `turnos (id,
@@ -39,7 +40,7 @@ descartáveis podem ser usados.
 - Nenhum push, PR, merge remoto ou deploy faz parte da integração local até os gates fecharem.
 - Os documentos 35–45 registram a história das verticais de admissões; este documento é a camada de
   integração na `main` e corrige a leitura dos números de migration: os artefatos ativos no tronco
-  são os `0000–0041` originais mais o `0042` consolidado.
+  são os `0000–0047` originais mais o `0048` consolidado.
 - O próximo trabalho pode partir da `main` para ponto, efetivação, documentos, importação e
   Conplus, sem voltar para a branch histórica.
 

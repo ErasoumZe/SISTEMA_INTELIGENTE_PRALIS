@@ -27,6 +27,9 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32).default(segredoDev),
   AUTH_BASE_URL: z.string().url().default("http://localhost:4100"),
   WEB_ORIGIN: z.string().url().default("http://localhost:5174"),
+  // Origem adicional exclusivamente para desenvolvimento na rede local (ex.: celular no Wi-Fi).
+  // Produção continua declarando sua única origem canônica em WEB_ORIGIN.
+  WEB_ORIGIN_ADICIONAL: z.string().url().optional(),
   PORT: z.coerce.number().default(4100),
   HOST: z.string().default("0.0.0.0"),
   // Observabilidade opcional: sem DSN, o rastreamento de erros e no-op.
@@ -56,6 +59,9 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+export const origensWebPermitidas = [
+  ...new Set([env.WEB_ORIGIN, env.WEB_ORIGIN_ADICIONAL].filter((origem): origem is string => Boolean(origem)))
+];
 
 // Gate de producao: os defaults acima existem para conveniencia de dev/teste.
 // Subir producao com qualquer um deles seria assinar sessoes com segredo publico

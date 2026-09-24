@@ -182,8 +182,17 @@ describe("contas-usuarios integration", () => {
         headers: { cookie }
       });
       assertOk(resposta);
-      const contas = json<{ data: Array<{ id: string }> }>(resposta).data;
+      const contas = json<{ data: Array<{ id: string; saldoAtual: number; saldoPendente: number }> }>(resposta).data;
       expect([...contas.map((c) => c.id)].sort()).toEqual([idsTeste.contaCofre, idsTeste.contaLivre].sort());
+      expect(contas).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: idsTeste.contaCofre,
+            saldoAtual: expect.any(Number),
+            saldoPendente: expect.any(Number)
+          })
+        ])
+      );
     });
 
     it("Deve_VerTodasAsContas_Quando_UsuarioAdmin", async () => {

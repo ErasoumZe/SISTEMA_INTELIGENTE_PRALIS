@@ -32,7 +32,14 @@ function quando(iso: string) {
 <template>
   <!-- `persistent`: some so pelos dois botoes. Clique fora fecharia sem registrar nada, e o
        administrador ficaria sem saber se a mensagem foi lida ou so espantada da tela. -->
-  <v-dialog :model-value="aberto" persistent max-width="520" scrollable class="mensagem-admin-dialog">
+  <v-dialog
+    :model-value="aberto"
+    persistent
+    no-click-animation
+    max-width="520"
+    scrollable
+    class="mensagem-admin-dialog"
+  >
     <v-card v-if="mensagem" class="mensagem-admin" data-teste="mensagem-admin-popup">
       <div class="mensagem-admin__faixa">
         <v-icon size="20">mdi-bullhorn-variant-outline</v-icon>

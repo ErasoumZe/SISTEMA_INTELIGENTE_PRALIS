@@ -20,7 +20,14 @@ function montarDeps(over: Partial<DepsAcoesCaixa> = {}) {
 }
 
 describe("abrirCaixaOperacional", () => {
-  const payload = { pdvId: "pdv-1", usuarioCaixaId: "u-1", observacao: null };
+  const payload = {
+    pdvId: "pdv-1",
+    usuarioCaixaId: "u-1",
+    lacreAbertura: "MALOTE-001",
+    caixaResponsavelNome: "Caixa teste",
+    supervisorResponsavelNome: "Supervisor teste",
+    observacao: null
+  };
 
   it("posta em /abrir com empresaId, re-busca status, recarrega tela, notifica e retorna true", async () => {
     const deps = montarDeps();
@@ -73,12 +80,16 @@ describe("retornarSaldoOperacional", () => {
   const payload = {
     caixaId: "cx-1",
     valor: 15,
-    lacre: "LAC-9",
+    valorEspecie: 10,
+    valorMoedas: 5,
+    lacreId: "11111111-1111-4111-8111-111111111111",
+    lacreNumero: "LAC-9",
+    responsavelNome: "Marina",
     observacao: null,
     idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
   };
 
-  it("com confirmacao posta retorno ao cofre com lacre e chave, notifica e re-busca status", async () => {
+  it("com confirmacao posta retorno ao cofre com lacre selecionado e chave, notifica e re-busca status", async () => {
     const deps = montarDeps({ confirmar: vi.fn().mockResolvedValue(true) });
     const ok = await criarAcoesCaixa(deps).retornarSaldoOperacional(payload);
 
@@ -86,22 +97,15 @@ describe("retornarSaldoOperacional", () => {
     expect(deps.confirmar).toHaveBeenCalledOnce();
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-1/transferencia-cofre", {
       valor: 15,
-      lacre: "LAC-9",
+      valorEspecie: 10,
+      valorMoedas: 5,
+      lacreId: "11111111-1111-4111-8111-111111111111",
+      responsavelNome: "Marina",
       observacao: null,
       idempotenciaChave: "3f1a1d5e-0a2b-4c3d-8e4f-5a6b7c8d9e0f"
     });
     expect(deps.notificar).toHaveBeenCalledWith("Retorno ao cofre lançado com sucesso.");
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
-  });
-
-  it("sem lacre manda null explicito (R-026: lacre e opcional)", async () => {
-    const deps = montarDeps();
-    await criarAcoesCaixa(deps).retornarSaldoOperacional({ ...payload, lacre: undefined });
-
-    expect(deps.api.post).toHaveBeenCalledWith(
-      "/api/caixa/cx-1/transferencia-cofre",
-      expect.objectContaining({ lacre: null })
-    );
   });
 
   it("aborta sem chamar a API se a confirmacao for negada", async () => {
@@ -149,13 +153,16 @@ describe("retornarSaldoOperacional", () => {
 // `retornarSaldoOperacional` acima — mesmo dinheiro, mesmas contas, outra porta. A factory nao
 // expoe mais essa acao, e a rota nao existe: ver `entrega-cofre-caminho-unico.test.ts`.
 describe("fecharCaixaOperacional", () => {
-  it("posta em /:id/fechar com o lacre do retorno final, re-busca status e recarrega tela", async () => {
+  it("posta em /:id/fechar com lacre e composicao fisica, re-busca status e recarrega tela", async () => {
     const deps = montarDeps();
     const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
       caixaId: "cx-2",
       observacao: "fim",
       lacreFechamento: "FCH-001",
-      lacreRetorno: "LAC-FIM"
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
 
     expect(ok).toBe(true);
@@ -164,7 +171,10 @@ describe("fecharCaixaOperacional", () => {
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: "fim",
       lacreFechamento: "FCH-001",
-      lacreRetorno: "LAC-FIM"
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
     expect(deps.carregarStatusCaixa).toHaveBeenCalledWith("emp-1");
     expect(deps.notificar).toHaveBeenCalledWith("Caixa fechado com sucesso.");
@@ -177,7 +187,11 @@ describe("fecharCaixaOperacional", () => {
     const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
       caixaId: "cx-2",
       observacao: null,
-      lacreFechamento: "FCH-002"
+      lacreFechamento: "FCH-002",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
 
     expect(ok).toBe(false);
@@ -185,18 +199,25 @@ describe("fecharCaixaOperacional", () => {
     expect(deps.setSalvando).not.toHaveBeenCalled();
   });
 
-  it("manda lacre de fechamento e preserva retorno opcional (R-026/R-200)", async () => {
+  it("manda lacre de fechamento e composicao fisica", async () => {
     const deps = montarDeps();
     await criarAcoesCaixa(deps).fecharCaixaOperacional({
       caixaId: "cx-2",
       observacao: null,
-      lacreFechamento: "FCH-003"
+      lacreFechamento: "FCH-003",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
 
     expect(deps.api.post).toHaveBeenCalledWith("/api/caixa/cx-2/fechar", {
       observacao: null,
       lacreFechamento: "FCH-003",
-      lacreRetorno: null
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
   });
 
@@ -205,7 +226,11 @@ describe("fecharCaixaOperacional", () => {
     const ok = await criarAcoesCaixa(deps).fecharCaixaOperacional({
       caixaId: "cx-2",
       observacao: null,
-      lacreFechamento: "FCH-004"
+      lacreFechamento: "FCH-004",
+      caixaResponsavelNome: "Caixa teste",
+      supervisorResponsavelNome: "Supervisor teste",
+      valorEspecieFechamento: 0,
+      valorMoedasFechamento: 0
     });
 
     expect(ok).toBe(false);

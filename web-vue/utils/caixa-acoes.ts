@@ -25,15 +25,25 @@ export type AberturaCaixaPayload = {
   usuarioCaixaId: string;
   turnoId?: string | null;
   maquininhaId?: string | null;
+  lacreAbertura: string;
+  caixaResponsavelNome: string;
+  supervisorResponsavelNome: string;
+  valorEspecieContado?: number;
+  valorMoedasContado?: number;
+  observacaoDivergencia?: string | null;
   observacao: string | null;
 };
-// R-200: `lacreFechamento` sela a gaveta e e obrigatorio em todo fechamento. Ele nao se mistura
-// ao `lacreRetorno`, que identifica apenas a transferencia final ao Cofre e segue opcional (R-026).
 export type FechamentoPayload = {
   caixaId: string;
   observacao: string | null;
   lacreFechamento: string;
-  lacreRetorno?: string | null;
+  caixaResponsavelNome: string;
+  supervisorResponsavelNome: string;
+  valorEspecieFechamento: number;
+  valorMoedasFechamento: number;
+  // A tela do Caixa possui uma revisão própria com todos os campos e anexos. Este marcador evita
+  // um segundo popup genérico depois que a operadora já confirmou o retrato completo.
+  confirmadoPelaRevisao?: true;
 };
 // B2: `idempotenciaChave` e da INTENCAO, nao da requisicao. Quem a gera e a tela (uma vez, e a
 // conserva no retry); aqui ela so trafega. Sem ela o servidor nao tem como distinguir "entregar
@@ -44,7 +54,11 @@ export type FechamentoPayload = {
 export type RetornoSaldoPayload = {
   caixaId: string;
   valor: number;
-  lacre?: string | null;
+  valorEspecie: number;
+  valorMoedas: number;
+  lacreId: string;
+  lacreNumero: string;
+  responsavelNome: string;
   observacao: string | null;
   idempotenciaChave: string;
   aoConcluir?: (sucesso: boolean) => void;
@@ -97,11 +111,12 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
   }
 
   async function postarRetorno(payload: RetornoSaldoPayload): Promise<boolean> {
+    const observacao = payload.observacao ? `\nObservação: ${payload.observacao}` : "";
     if (
       !(await deps.confirmar(
-        `Confirma a entrega de ${dinheiro(payload.valor)} ao cofre principal?`,
-        "Transferência de retorno",
-        "Transferência de retorno"
+        `Confirme a saída ao cofre:\nValor total: ${dinheiro(payload.valor)}\nDinheiro físico: ${dinheiro(payload.valorEspecie)}\nMoedas: ${dinheiro(payload.valorMoedas)}\nLacre: ${payload.lacreNumero}\nResponsável: ${payload.responsavelNome}${observacao}`,
+        "Confirmar retorno / sangria",
+        "Confirmar e salvar"
       ))
     ) {
       return false;
@@ -110,8 +125,10 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
     try {
       await deps.api.post(`/api/caixa/${payload.caixaId}/transferencia-cofre`, {
         valor: payload.valor,
-        // D5: cada entrega fisica leva o proprio lacre. Opcional pela R-026.
-        lacre: payload.lacre ?? null,
+        valorEspecie: payload.valorEspecie,
+        valorMoedas: payload.valorMoedas,
+        lacreId: payload.lacreId,
+        responsavelNome: payload.responsavelNome,
         observacao: payload.observacao,
         idempotenciaChave: payload.idempotenciaChave
       });
@@ -129,6 +146,7 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
 
   async function fecharCaixaOperacional(payload: FechamentoPayload): Promise<boolean> {
     if (
+      !payload.confirmadoPelaRevisao &&
       !(await deps.confirmar(
         "Confirma o fechamento deste caixa? Se ainda houver dinheiro físico, o retorno ao Cofre será registrado no mesmo ato.",
         "Fechar caixa",
@@ -145,7 +163,10 @@ export function criarAcoesCaixa(deps: DepsAcoesCaixa) {
       await deps.api.post(`/api/caixa/${payload.caixaId}/fechar`, {
         observacao: payload.observacao,
         lacreFechamento: payload.lacreFechamento,
-        lacreRetorno: payload.lacreRetorno ?? null
+        caixaResponsavelNome: payload.caixaResponsavelNome,
+        supervisorResponsavelNome: payload.supervisorResponsavelNome,
+        valorEspecieFechamento: payload.valorEspecieFechamento,
+        valorMoedasFechamento: payload.valorMoedasFechamento
       });
       await deps.carregarStatusCaixa(deps.empresaId());
       deps.notificar("Caixa fechado com sucesso.");

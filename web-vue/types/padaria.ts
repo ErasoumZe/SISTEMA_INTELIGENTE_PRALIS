@@ -30,7 +30,11 @@ export type Opcao = {
   // nunca ha coluna de saldo. Ausentes no GET /api/contas comum (lista de opcao de formulario).
   saldoInicial?: number;
   saldoAtual?: number;
+  saldoPendente?: number;
   usuariosIds?: string[];
+  /** Derivados da configuração da empresa; usados para orientar o malote Cofre → PDV. */
+  ehCofre?: boolean;
+  ehContaPdv?: boolean;
   // Patrimonio (D2)
   sig?: string;
   grupoPatrimonioId?: string | null;
@@ -196,6 +200,8 @@ export type OperacaoResumo = {
   valorOriginal: string;
   // R-183 (transferencia): o que o cofre CONTOU. Null em tudo que nao e `divergente`.
   valorRecebido?: number | null;
+  valorEspecieDeclarado?: number | null;
+  valorMoedasDeclarado?: number | null;
   // Venda: o que de fato entrou (original - desconto + acrescimo). E o que bate com o rodape do
   // relatorio, com o resumo do caixa e com o VALOR_TOTAL do CREARE.
   valorLiquido?: string;
@@ -208,6 +214,7 @@ export type OperacaoResumo = {
   contaOrigemNome?: string;
   contaDestinoNome?: string;
   nLacreDoc?: string | null;
+  lacreFechamentoPlanejado?: string | null;
   prazoConfirmacaoEm?: string | null;
   dataRecebimento?: string | null;
   confirmadoPor?: string | null;
@@ -285,9 +292,12 @@ export type CaixaOperacional = {
   fechadoEm: string | null;
   tokenEdicao: string | null;
   turnoId: string | null;
+  turnoNome: string | null;
   maquininhaId: string | null;
   maquininhaApelido: string | null;
   maquininhaNumeroSerie: string | null;
+  caixaResponsavelNomeAbertura: string | null;
+  supervisorResponsavelNomeAbertura: string | null;
   observacao: string | null;
   status: string;
 };
@@ -319,6 +329,7 @@ export type PlanejamentoRetorno = {
 export type CaixaStatus = {
   caixaAberto: CaixaOperacional | null;
   resumo: ResumoCaixa | null;
+  lacreFechamentoReservado: string | null;
   // Lista VAZIA quando nao ha nada travando. Nunca ausente: ausente teria de significar "nao ha",
   // e um dia significaria "a rota esqueceu de mandar".
   entregasPendentes: EntregaCofrePendente[];
@@ -373,6 +384,9 @@ export type OperacaoForm = {
   descricao: string;
   observacao: string;
   valorOriginal: string;
+  /** Composição física obrigatória no malote Cofre → PDV. */
+  valorEspecieDeclarado: string;
+  valorMoedasDeclarado: string;
   valorAcrescimo: string;
   descricaoAcrescimo: string;
   // R-041: juros. O tipo vazio significa "sem juros" — o payload converte para null.
@@ -397,11 +411,12 @@ export type OperacaoForm = {
   grupoRetiradaId: string;
   numeroLacre: string;
   nLacreDoc: string;
+  lacresRetorno: string[];
+  lacreFechamentoPlanejado: string;
   agendadaPara: string;
   dataRecebimento: string;
   tempoConfirmacao: "5min" | "10min" | "30min" | "1h" | "1dia" | "10dias" | "30dias" | null;
   contasDestinoIds: string[];
-  retornosPlanejados: Array<{ valor: string; nLacreDoc: string }>;
   recorrenciaId: string;
   documento: string;
   numeroNotaFiscal: string;

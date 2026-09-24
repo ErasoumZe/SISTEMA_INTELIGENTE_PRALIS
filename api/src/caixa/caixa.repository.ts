@@ -1,4 +1,4 @@
-import type { DadosExternos } from "@padaria/shared/api";
+import type { DadosExternos, JsonValue } from "@padaria/shared/api";
 import {
   and,
   asc,
@@ -36,14 +36,17 @@ import {
   ajustesFechamentoCaixa,
   debitosColaboradores,
   edicoesCaixa,
+  fechamentosCaixaAnexos,
+  fechamentosCaixaRelatoriosMaquininha,
   fechamentosCaixa,
-  quebrasCaixa
+  quebrasCaixa,
+  transferenciasConferenciasFisicas
 } from "@padaria/db/schema/caixa";
 import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
-import { vendas, vendasPagamentos } from "@padaria/db/schema/venda";
+import { vendas, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import {
   transferenciaContaComoEntrada,
   valorEntradaCentavos,
@@ -153,9 +156,12 @@ export async function buscarCaixaAbertoUsuarioRepository(
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      turnoNome: turnos.nome,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -164,6 +170,7 @@ export async function buscarCaixaAbertoUsuarioRepository(
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
     .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(
       and(
         eq(fechamentosCaixa.empresaId, empresaId),
@@ -196,9 +203,12 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
       fechadoPor: fechamentosCaixa.fechadoPor,
       tokenEdicao: fechamentosCaixa.tokenEdicao,
       turnoId: fechamentosCaixa.turnoId,
+      turnoNome: turnos.nome,
       maquininhaId: fechamentosCaixa.maquininhaId,
       maquininhaApelido: maquininhas.apelido,
       maquininhaNumeroSerie: maquininhas.numeroSerie,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
       observacao: fechamentosCaixa.observacao,
       dividaCofre: fechamentosCaixa.dividaCofre,
       status: fechamentosCaixa.status
@@ -207,9 +217,46 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
     .innerJoin(pdvs, eq(pdvs.id, fechamentosCaixa.pdvId))
     .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
     .leftJoin(maquininhas, eq(maquininhas.id, fechamentosCaixa.maquininhaId))
+    .leftJoin(turnos, eq(turnos.id, fechamentosCaixa.turnoId))
     .where(eq(fechamentosCaixa.id, caixaId))
     .limit(1);
   return caixa ?? null;
+}
+
+/** Dados do fechamento expostos somente por uma transferencia vinculada ao caixa.
+ *  A listagem historica ja possui estes campos, mas o tesoureiro nao deve precisar
+ *  de permissao de auditoria de caixas para conferir o recebimento.
+ */
+export async function buscarResumoFechamentoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [fechamento] = await db
+    .select({
+      id: fechamentosCaixa.id,
+      status: fechamentosCaixa.status,
+      dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
+      fechadoPorNome: perfilFechador.nome,
+      usuarioCaixaId: fechamentosCaixa.usuarioCaixaId,
+      usuarioCaixaNome: perfisUsuarios.nome,
+      colaboradorNome: colaboradores.nome,
+      lacreFechamento: fechamentosCaixa.lacreFechamento,
+      caixaResponsavelNomeFechamento: fechamentosCaixa.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
+      valorEspecieFechamento: fechamentosCaixa.valorEspecieFechamento,
+      valorMoedasFechamento: fechamentosCaixa.valorMoedasFechamento,
+      observacao: fechamentosCaixa.observacao
+    })
+    .from(fechamentosCaixa)
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(perfilFechador, eq(perfilFechador.usuarioId, fechamentosCaixa.fechadoPor))
+    .leftJoin(colaboradores, eq(colaboradores.id, fechamentosCaixa.colaboradorId))
+    .where(and(eq(fechamentosCaixa.id, caixaId), eq(fechamentosCaixa.empresaId, empresaId)))
+    .limit(1);
+  return fechamento ?? null;
 }
 
 export async function existeCaixaAbertoPdvRepository(
@@ -277,6 +324,8 @@ export async function criarCaixaRepository(
     // R-040: o lacre digitado na abertura, que identificou a transferencia confirmada. R-001: o
     // fundo NAO e emprestimo, entao dividaCofre nasce zero (coluna legado, ver 18 D-08).
     lacreAbertura?: string | null;
+    caixaResponsavelNomeAbertura: string;
+    supervisorResponsavelNomeAbertura: string;
     maquininhaId?: string | null;
   },
   db: ExecutorBanco = banco
@@ -297,6 +346,8 @@ export async function criarCaixaRepository(
       tokenEdicao: input.tokenEdicao,
       observacao: input.observacao,
       lacreAbertura: input.lacreAbertura ?? null,
+      caixaResponsavelNomeAbertura: input.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: input.supervisorResponsavelNomeAbertura,
       maquininhaId: input.maquininhaId ?? null,
       dividaCofre: centavosParaDecimalBanco(0),
       status: "aberto",
@@ -383,6 +434,8 @@ export async function buscarTransferenciaPorLacreAberturaRepository(
       transferenciaId: transferencias.id,
       status: transferencias.status,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       contaOrigemId: transferencias.contaOrigemId,
       caixaId: transferencias.caixaId,
       criadoPor: transferencias.criadoPor,
@@ -413,6 +466,7 @@ export async function confirmarTransferenciaAberturaRepository(
     contaCaixaId: string;
     caixaId: string;
     usuarioId: string;
+    valorRecebidoCentavos: number;
     agora: Date;
   },
   db: ExecutorBanco = banco
@@ -428,6 +482,7 @@ export async function confirmarTransferenciaAberturaRepository(
       status: "recebido",
       confirmadoPor: input.usuarioId,
       dataRecebimento: input.agora,
+      valorRecebido: centavosParaDecimalBanco(input.valorRecebidoCentavos),
       atualizadoEm: input.agora
     })
     .where(
@@ -449,6 +504,72 @@ export async function confirmarTransferenciaAberturaRepository(
     .where(and(eq(lacres.id, input.lacreId), eq(lacres.rompido, false)))
     .returning({ id: lacres.id });
   return lacre ? vencedora : null;
+}
+
+export async function criarConferenciaFisicaTransferenciaRepository(
+  input: {
+    empresaId: string;
+    transferenciaId: string;
+    fechamentoCaixaId: string;
+    etapa: "abertura" | "retorno_sangria";
+    resultado: "convergente" | "divergente";
+    encerraConferencia: boolean;
+    valorEspecieDeclaradoCentavos: number;
+    valorMoedasDeclaradoCentavos: number;
+    valorEspecieContadoCentavos: number;
+    valorMoedasContadoCentavos: number;
+    observacao: string | null;
+    conferidoPor: string;
+    conferidoEm: Date;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [conferencia] = await db
+    .insert(transferenciasConferenciasFisicas)
+    .values({
+      empresaId: input.empresaId,
+      transferenciaId: input.transferenciaId,
+      fechamentoCaixaId: input.fechamentoCaixaId,
+      etapa: input.etapa,
+      resultado: input.resultado,
+      encerraConferencia: input.encerraConferencia,
+      valorEspecieDeclarado: centavosParaDecimalBanco(input.valorEspecieDeclaradoCentavos),
+      valorMoedasDeclarado: centavosParaDecimalBanco(input.valorMoedasDeclaradoCentavos),
+      valorEspecieContado: centavosParaDecimalBanco(input.valorEspecieContadoCentavos),
+      valorMoedasContado: centavosParaDecimalBanco(input.valorMoedasContadoCentavos),
+      observacao: input.observacao,
+      conferidoPor: input.conferidoPor,
+      conferidoEm: input.conferidoEm
+    })
+    .returning({ id: transferenciasConferenciasFisicas.id });
+  return conferencia!;
+}
+
+export async function listarConferenciasFisicasCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: transferenciasConferenciasFisicas.id,
+      etapa: transferenciasConferenciasFisicas.etapa,
+      resultado: transferenciasConferenciasFisicas.resultado,
+      valorEspecieDeclarado: transferenciasConferenciasFisicas.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferenciasConferenciasFisicas.valorMoedasDeclarado,
+      valorEspecieContado: transferenciasConferenciasFisicas.valorEspecieContado,
+      valorMoedasContado: transferenciasConferenciasFisicas.valorMoedasContado,
+      observacao: transferenciasConferenciasFisicas.observacao,
+      conferidoEm: transferenciasConferenciasFisicas.conferidoEm
+    })
+    .from(transferenciasConferenciasFisicas)
+    .where(
+      and(
+        eq(transferenciasConferenciasFisicas.fechamentoCaixaId, fechamentoCaixaId),
+        eq(transferenciasConferenciasFisicas.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(transferenciasConferenciasFisicas.conferidoEm));
 }
 
 // --- Concorrencia do caixa (B1/B2) ------------------------------------------------------------
@@ -584,6 +705,167 @@ export async function criarLacreRetornoRepository(
   });
 }
 
+export type LacreRetornoDisponivel = { id: string; numero: string };
+
+// Bolsas vazias entregues no malote que ESTE caixa abriu. O pai precisa estar ligado ao caixa
+// aberto; isso impede que um lacre de outra gaveta seja adivinhado por ID e consumido aqui.
+export async function listarLacresRetornoDisponiveisDoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<LacreRetornoDisponivel[]> {
+  return db
+    .select({ id: lacres.id, numero: lacres.numero })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaDistribuicaoId))
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.origem, "retorno"),
+        eq(transferencias.caixaId, caixaId),
+        eq(transferencias.status, "recebido"),
+        isNull(lacres.transferenciaId),
+        eq(lacres.rompido, false)
+      )
+    )
+    .orderBy(asc(lacres.numero));
+}
+
+export async function listarLacresRetornoDaDistribuicaoRepository(
+  transferenciaDistribuicaoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<LacreRetornoDisponivel[]> {
+  return db
+    .select({ id: lacres.id, numero: lacres.numero })
+    .from(lacres)
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.transferenciaDistribuicaoId, transferenciaDistribuicaoId),
+        eq(lacres.origem, "retorno")
+      )
+    )
+    .orderBy(asc(lacres.numero));
+}
+
+// Selo enviado aberto pela Tesouraria dentro do malote de ida. Ele pertence à transferencia que
+// abriu este Caixa, não à uma sangria: por isso usa `transferenciaId`, nunca a distribuicao.
+export async function buscarLacreFechamentoPlanejadoDoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string; numero: string; rompido: boolean } | null> {
+  const [lacre] = await db
+    .select({ id: lacres.id, numero: lacres.numero, rompido: lacres.rompido })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaId))
+    .where(
+      and(
+        eq(lacres.empresaId, empresaId),
+        eq(lacres.origem, "fechamento"),
+        eq(transferencias.caixaId, caixaId),
+        eq(transferencias.status, "recebido")
+      )
+    )
+    .limit(1);
+  return lacre ?? null;
+}
+
+export async function buscarLacreFechamentoPlanejadoDaTransferenciaRepository(
+  transferenciaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<{ id: string; numero: string; rompido: boolean } | null> {
+  const [lacre] = await db
+    .select({ id: lacres.id, numero: lacres.numero, rompido: lacres.rompido })
+    .from(lacres)
+    .where(
+      and(eq(lacres.empresaId, empresaId), eq(lacres.transferenciaId, transferenciaId), eq(lacres.origem, "fechamento"))
+    )
+    .limit(1);
+  return lacre ?? null;
+}
+
+// A guarda `rompido = false` torna o consumo idempotente sob corrida: somente um fechamento pode
+// usar o selo reservado, e qualquer falha posterior reverte tudo com a transacao do fechamento.
+export async function consumirLacreFechamentoPlanejadoRepository(
+  input: { lacreId: string; empresaId: string; numero: string },
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [consumido] = await db
+    .update(lacres)
+    .set({ rompido: true })
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.origem, "fechamento"),
+        eq(lacres.numero, input.numero),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  return Boolean(consumido);
+}
+
+export async function buscarLacreRetornoDoCaixaRepository(
+  input: { lacreId: string; caixaId: string; empresaId: string },
+  db: ExecutorBanco = banco
+): Promise<{
+  id: string;
+  numero: string;
+  transferenciaId: string | null;
+  transferenciaDistribuicaoId: string;
+  rompido: boolean;
+} | null> {
+  const [lacre] = await db
+    .select({
+      id: lacres.id,
+      numero: lacres.numero,
+      transferenciaId: lacres.transferenciaId,
+      transferenciaDistribuicaoId: lacres.transferenciaDistribuicaoId,
+      rompido: lacres.rompido
+    })
+    .from(lacres)
+    .innerJoin(transferencias, eq(transferencias.id, lacres.transferenciaDistribuicaoId))
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.origem, "retorno"),
+        eq(transferencias.caixaId, input.caixaId),
+        eq(transferencias.status, "recebido")
+      )
+    )
+    .limit(1);
+  const transferenciaDistribuicaoId = lacre?.transferenciaDistribuicaoId;
+  if (!lacre || !transferenciaDistribuicaoId) return null;
+  return { ...lacre, transferenciaDistribuicaoId };
+}
+
+// Guarda final da corrida: mesmo que dois clientes vejam a mesma bolsa antes do refresh, somente
+// uma transferencia consegue ligar o lacre ainda livre ao seu movimento.
+export async function consumirLacreRetornoRepository(
+  input: { lacreId: string; empresaId: string; transferenciaDistribuicaoId: string; transferenciaId: string },
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [consumido] = await db
+    .update(lacres)
+    .set({ transferenciaId: input.transferenciaId })
+    .where(
+      and(
+        eq(lacres.id, input.lacreId),
+        eq(lacres.empresaId, input.empresaId),
+        eq(lacres.transferenciaDistribuicaoId, input.transferenciaDistribuicaoId),
+        isNull(lacres.transferenciaId),
+        eq(lacres.rompido, false)
+      )
+    )
+    .returning({ id: lacres.id });
+  return Boolean(consumido);
+}
+
 // B2: a INTENCAO por tras de uma chave de idempotencia. E o que se compara para decidir entre
 // "retry do mesmo ato" (devolve o vencedor) e "chave reaproveitada para outra coisa" (409).
 // Valor em centavos inteiros — comparar a string decimal do banco ("100.00" vs "100.0") daria
@@ -593,8 +875,11 @@ export type IntencaoEntregaCofre = {
   caixaId: string | null;
   tipo: string;
   valorCentavos: number;
+  valorEspecieCentavos: number | null;
+  valorMoedasCentavos: number | null;
   lacre: string | null;
   observacao: string | null;
+  responsavelNome: string | null;
   status: string;
 };
 
@@ -612,16 +897,24 @@ export async function buscarTransferenciaPorIdempotenciaRepository(
       caixaId: transferencias.caixaId,
       tipo: transferencias.tipo,
       valorOriginal: transferencias.valorOriginal,
+      valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+      valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
       lacre: transferencias.nLacreDoc,
       observacao: transferencias.observacao,
+      responsavelNome: transferencias.responsavelNome,
       status: transferencias.status
     })
     .from(transferencias)
     .where(and(eq(transferencias.empresaId, empresaId), eq(transferencias.idempotenciaChave, idempotenciaChave)))
     .limit(1);
   if (!linha) return null;
-  const { valorOriginal, ...resto } = linha;
-  return { ...resto, valorCentavos: paraCentavos(valorOriginal) };
+  const { valorOriginal, valorEspecieDeclarado, valorMoedasDeclarado, ...resto } = linha;
+  return {
+    ...resto,
+    valorCentavos: paraCentavos(valorOriginal),
+    valorEspecieCentavos: valorEspecieDeclarado === null ? null : paraCentavos(valorEspecieDeclarado),
+    valorMoedasCentavos: valorMoedasDeclarado === null ? null : paraCentavos(valorMoedasDeclarado)
+  };
 }
 
 // Transferencia de retorno avulsa/final do Caixa para o Cofre.
@@ -632,12 +925,15 @@ export async function criarTransferenciaCofreRepository(
     contaCaixaId: string;
     contaCofreId: string;
     valorCentavos: number;
+    valorEspecieCentavos: number;
+    valorMoedasCentavos: number;
     ordem: number;
     dataReferencia: string;
     dataTransferencia: string;
     nLacreDoc: string | null;
     descricao: string;
     observacao: string | null;
+    responsavelNome: string | null;
     criadoPor: string;
     // B2: null so no retorno final do fechamento, que e protegido pela trava + guarda de status.
     idempotenciaChave: string | null;
@@ -653,7 +949,10 @@ export async function criarTransferenciaCofreRepository(
       dataTransferencia: input.dataTransferencia,
       descricao: input.descricao,
       observacao: input.observacao,
+      responsavelNome: input.responsavelNome,
       valorOriginal: centavosParaDecimalBanco(input.valorCentavos),
+      valorEspecieDeclarado: centavosParaDecimalBanco(input.valorEspecieCentavos),
+      valorMoedasDeclarado: centavosParaDecimalBanco(input.valorMoedasCentavos),
       contaOrigemId: input.contaCaixaId,
       contaDestinoId: input.contaCofreId,
       nLacreDoc: input.nLacreDoc,
@@ -859,6 +1158,8 @@ export async function listarTransferenciasCaixaRepository(caixaId: string, db: E
         tipo: transferencias.tipo,
         ordem: transferencias.ordem,
         valorOriginal: transferencias.valorOriginal,
+        valorEspecieDeclarado: transferencias.valorEspecieDeclarado,
+        valorMoedasDeclarado: transferencias.valorMoedasDeclarado,
         contaOrigemId: transferencias.contaOrigemId,
         contaDestinoId: transferencias.contaDestinoId,
         // O lacre da linha e o numero digitado na propria transferencia (R-021: fonte externa).
@@ -1022,6 +1323,76 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
   ]);
 
   return { linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias };
+}
+
+export type VendaCanceladaProdutoLinha = {
+  id: string;
+  descricao: string;
+  quantidade: string;
+  valorUnitario: string;
+  valorTotal: string;
+  cancelado: boolean;
+};
+
+export type VendaCanceladaCaixaLinha = {
+  id: string;
+  identificadorExterno: string | null;
+  descricao: string;
+  data: string;
+  dataHora: Date | null;
+  valorOriginal: string;
+  valorDesconto: string;
+  valorAcrescimo: string;
+  produtos: VendaCanceladaProdutoLinha[];
+};
+
+// Auditoria separada dos lancamentos: uma venda cancelada precisa continuar rastreavel com seus
+// produtos, mas nunca pode reaparecer nos totais do Caixa. Por isso esta consulta nao compartilha
+// o filtro `ativo()` acima, que de proposito exclui cancelamentos para bater com o saldo.
+export async function listarVendasCanceladasCaixaRepository(
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<VendaCanceladaCaixaLinha[]> {
+  const filtro = and(eq(vendas.caixaId, caixaId), eq(vendas.status, "cancelado"));
+  const [linhas, produtos] = await Promise.all([
+    db
+      .select({
+        id: vendas.id,
+        identificadorExterno: vendas.identificadorExterno,
+        descricao: vendas.descricao,
+        data: vendas.dataReferencia,
+        dataHora: vendas.dataVenda,
+        valorOriginal: vendas.valorOriginal,
+        valorDesconto: vendas.valorDesconto,
+        valorAcrescimo: vendas.valorAcrescimo
+      })
+      .from(vendas)
+      .where(filtro)
+      .orderBy(desc(vendas.dataVenda), desc(vendas.dataReferencia)),
+    db
+      .select({
+        vendaId: vendasProdutos.vendaId,
+        id: vendasProdutos.id,
+        descricao: vendasProdutos.descricaoProduto,
+        quantidade: vendasProdutos.quantidade,
+        valorUnitario: vendasProdutos.valorUnitario,
+        valorTotal: vendasProdutos.valorTotal,
+        cancelado: vendasProdutos.cancelado
+      })
+      .from(vendasProdutos)
+      .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+      .where(filtro)
+      .orderBy(asc(vendasProdutos.criadoEm), asc(vendasProdutos.id))
+  ]);
+
+  const produtosPorVenda = new Map<string, VendaCanceladaProdutoLinha[]>();
+  for (const produto of produtos) {
+    const atuais: VendaCanceladaProdutoLinha[] = produtosPorVenda.get(produto.vendaId) ?? [];
+    atuais.push(produto);
+    produtosPorVenda.set(produto.vendaId, atuais);
+  }
+
+  return linhas.map((linha) => ({ ...linha, produtos: produtosPorVenda.get(linha.id) ?? [] }));
 }
 
 // Acerto de saldo do caixa (se houve): valor da diferenca e o colaborador que ficou com o debito.
@@ -1223,6 +1594,223 @@ export async function calcularTotaisCaixaOperacionalRepository(
   return totais;
 }
 
+export async function criarAnexoFechamentoCaixaRepository(
+  input: {
+    empresaId: string;
+    fechamentoCaixaId: string;
+    tipo: "folha_fechamento" | "comprovante_cartao";
+    caminho: string;
+    nomeOriginal: string;
+    nomeArquivo: string;
+    mimeType: string;
+    tamanhoBytes: number;
+    sha256: string;
+    criadoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .insert(fechamentosCaixaAnexos)
+    .values({ ...input, iaStatus: "desativada" })
+    .returning({ id: fechamentosCaixaAnexos.id, tipo: fechamentosCaixaAnexos.tipo });
+  return anexo!;
+}
+
+export async function existeFolhaFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+): Promise<boolean> {
+  const [anexo] = await db
+    .select({ id: fechamentosCaixaAnexos.id })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId),
+        eq(fechamentosCaixaAnexos.tipo, "folha_fechamento")
+      )
+    )
+    .limit(1);
+  return Boolean(anexo);
+}
+
+export async function listarAnexosFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado,
+      iaErro: fechamentosCaixaAnexos.iaErro,
+      criadoEm: fechamentosCaixaAnexos.criadoEm
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(fechamentosCaixaAnexos.criadoEm));
+}
+
+// Caminho interno so e necessario para a leitura de IA no servidor. A listagem publica acima nao
+// o devolve ao navegador, evitando expor a estrutura de armazenamento dos anexos.
+export async function listarAnexosFechamentoCaixaComCaminhoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  return db
+    .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
+      caminho: fechamentosCaixaAnexos.caminho,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      tamanhoBytes: fechamentosCaixaAnexos.tamanhoBytes,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado,
+      iaErro: fechamentosCaixaAnexos.iaErro,
+      criadoEm: fechamentosCaixaAnexos.criadoEm
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .orderBy(asc(fechamentosCaixaAnexos.criadoEm));
+}
+
+export async function buscarAnexoFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  anexoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .select({
+      id: fechamentosCaixaAnexos.id,
+      tipo: fechamentosCaixaAnexos.tipo,
+      caminho: fechamentosCaixaAnexos.caminho,
+      mimeType: fechamentosCaixaAnexos.mimeType,
+      nomeOriginal: fechamentosCaixaAnexos.nomeOriginal,
+      iaStatus: fechamentosCaixaAnexos.iaStatus,
+      iaResultado: fechamentosCaixaAnexos.iaResultado
+    })
+    .from(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.id, anexoId),
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .limit(1);
+  return anexo ?? null;
+}
+
+export async function buscarRelatorioMaquininhaFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .select({
+      turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
+      criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
+      atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
+    })
+    .from(fechamentosCaixaRelatoriosMaquininha)
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosMaquininha.empresaId, empresaId)
+      )
+    )
+    .limit(1);
+  return relatorio ?? null;
+}
+
+export async function salvarRelatorioMaquininhaFechamentoRepository(
+  input: {
+    fechamentoCaixaId: string;
+    empresaId: string;
+    turnoNome: string;
+    dadosRevisados: JsonValue;
+    criadoPor: string;
+  },
+  db: ExecutorBanco = banco
+) {
+  const [relatorio] = await db
+    .insert(fechamentosCaixaRelatoriosMaquininha)
+    .values(input)
+    .onConflictDoUpdate({
+      target: fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId,
+      set: {
+        turnoNome: input.turnoNome,
+        dadosRevisados: input.dadosRevisados,
+        criadoPor: input.criadoPor,
+        atualizadoEm: new Date()
+      }
+    })
+    .returning({
+      turnoNome: fechamentosCaixaRelatoriosMaquininha.turnoNome,
+      dadosRevisados: fechamentosCaixaRelatoriosMaquininha.dadosRevisados,
+      criadoEm: fechamentosCaixaRelatoriosMaquininha.criadoEm,
+      atualizadoEm: fechamentosCaixaRelatoriosMaquininha.atualizadoEm
+    });
+  if (!relatorio) throw new Error("Relatorio da maquininha nao salvo");
+  return relatorio;
+}
+
+export async function invalidarRelatorioMaquininhaFechamentoRepository(
+  fechamentoCaixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  await db
+    .delete(fechamentosCaixaRelatoriosMaquininha)
+    .where(
+      and(
+        eq(fechamentosCaixaRelatoriosMaquininha.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaRelatoriosMaquininha.empresaId, empresaId)
+      )
+    );
+}
+
+// A correção de foto só é permitida durante o caixa aberto. Depois do fechamento o vínculo vira
+// prova histórica e não pode ser retirado por esta rota.
+export async function removerAnexoFechamentoCaixaRepository(
+  fechamentoCaixaId: string,
+  anexoId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [anexo] = await db
+    .delete(fechamentosCaixaAnexos)
+    .where(
+      and(
+        eq(fechamentosCaixaAnexos.id, anexoId),
+        eq(fechamentosCaixaAnexos.fechamentoCaixaId, fechamentoCaixaId),
+        eq(fechamentosCaixaAnexos.empresaId, empresaId)
+      )
+    )
+    .returning({ caminho: fechamentosCaixaAnexos.caminho, tipo: fechamentosCaixaAnexos.tipo });
+  return anexo ?? null;
+}
+
 export async function atualizarFechamentoCaixaRepository(
   input: {
     caixaId: string;
@@ -1230,8 +1818,13 @@ export async function atualizarFechamentoCaixaRepository(
     observacao: string | null;
     fechadoPor: string;
     lacreFechamento: string;
+    caixaResponsavelNomeFechamento: string;
+    supervisorResponsavelNomeFechamento: string;
     totais: TotaisCaixaCentavos;
     saldoCentavos: number;
+    valorFisicoEsperadoCentavos: number;
+    valorEspecieFechamentoCentavos: number;
+    valorMoedasFechamentoCentavos: number;
   },
   db: ExecutorBanco = banco
 ): Promise<number> {
@@ -1243,6 +1836,8 @@ export async function atualizarFechamentoCaixaRepository(
       fechadoPor: input.fechadoPor,
       observacao: input.observacao,
       lacreFechamento: input.lacreFechamento,
+      caixaResponsavelNomeFechamento: input.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: input.supervisorResponsavelNomeFechamento,
       totalEntradas: centavosParaDecimalBanco(input.totais.entradas),
       totalTransferencias: centavosParaDecimalBanco(
         input.totais.transferenciasEntrada - input.totais.transferenciasSaida
@@ -1253,6 +1848,9 @@ export async function atualizarFechamentoCaixaRepository(
       totalRetiradas: centavosParaDecimalBanco(input.totais.retiradas),
       totalMercadorias: centavosParaDecimalBanco(input.totais.mercadorias),
       saldo: centavosParaDecimalBanco(input.saldoCentavos),
+      valorFisicoEsperadoFechamento: centavosParaDecimalBanco(input.valorFisicoEsperadoCentavos),
+      valorEspecieFechamento: centavosParaDecimalBanco(input.valorEspecieFechamentoCentavos),
+      valorMoedasFechamento: centavosParaDecimalBanco(input.valorMoedasFechamentoCentavos),
       status: "fechado"
     })
     // B1: a guarda `status = 'aberto'` no proprio UPDATE e o que impede o segundo fechamento
@@ -1317,6 +1915,10 @@ export async function listarHistoricoCaixaRepository(
       observacao: fechamentosCaixa.observacao,
       lacreAbertura: fechamentosCaixa.lacreAbertura,
       lacreFechamento: fechamentosCaixa.lacreFechamento,
+      caixaResponsavelNomeAbertura: fechamentosCaixa.caixaResponsavelNomeAbertura,
+      supervisorResponsavelNomeAbertura: fechamentosCaixa.supervisorResponsavelNomeAbertura,
+      caixaResponsavelNomeFechamento: fechamentosCaixa.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
       totalEntradas: fechamentosCaixa.totalEntradas,
       totalTransferencias: fechamentosCaixa.totalTransferencias,
       totalTransferenciasEntrada: fechamentosCaixa.totalTransferenciasEntrada,

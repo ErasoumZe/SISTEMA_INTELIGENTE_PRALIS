@@ -367,12 +367,22 @@ export async function listarContasComSaldoRepository(empresasPermitidasIds: stri
   }));
 }
 
-async function saldosComPendenciaDasContasRepository(empresasPermitidasIds: string[] | null) {
-  const disponiveis = await saldosDasContasRepository(empresasPermitidasIds);
+export async function saldosComPendenciaDasContasRepository(
+  empresasPermitidasIds: string[] | null,
+  contasFiltroIds?: string[]
+) {
+  const disponiveis = await saldosDasContasRepository(empresasPermitidasIds, banco, contasFiltroIds);
+  if (!disponiveis.size) return new Map<string, { disponivel: number; pendente: number }>();
   const linhas = await banco
     .select({ contaOrigemId: transferencias.contaOrigemId, valor: transferencias.valorOriginal })
     .from(transferencias)
-    .where(and(eq(transferencias.computar, true), eq(transferencias.status, "pendente")));
+    .where(
+      and(
+        eq(transferencias.computar, true),
+        eq(transferencias.status, "pendente"),
+        contasFiltroIds?.length ? inArray(transferencias.contaOrigemId, contasFiltroIds) : undefined
+      )
+    );
   const pendentes = new Map<string, number>();
   for (const linha of linhas) {
     pendentes.set(linha.contaOrigemId, (pendentes.get(linha.contaOrigemId) ?? 0) + paraCentavos(linha.valor));
