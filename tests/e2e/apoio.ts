@@ -11,7 +11,11 @@ export const USUARIOS = {
   /** Opera caixa e mercadorias, mas NAO tem `cadastro_produtos_visualizar`. */
   semProdutos: { email: "caixa@email.com", senha: "123456" },
   /** Confere retornos e divergencias nas contas de destino do seed de desenvolvimento. */
-  tesouraria: { email: "tesouraria@email.com", senha: "123456" }
+  tesouraria: { email: "tesouraria@email.com", senha: "123456" },
+  /** ADM-003: cargo DP do seed — ve, convida e REVISA a ficha do candidato. */
+  dp: { email: "dp@email.com", senha: "123456" },
+  /** Gerencia: abre o processo, mas NAO tem `admissoes_processos_ver_ficha`. */
+  gerencia: { email: "gerencia@email.com", senha: "123456" }
 } as const;
 
 export async function encerrarCaixaDeTeste(

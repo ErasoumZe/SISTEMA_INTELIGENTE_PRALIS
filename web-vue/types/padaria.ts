@@ -96,6 +96,9 @@ export type Opcao = {
   ativo?: boolean;
   horaInicio?: string | null;
   horaFim?: string | null;
+  /** ADM-003 V1B — turno. Nulos significam TURNO INCOMPLETO: valido no cadastro, mas nao admissivel. */
+  etiqueta?: string | null;
+  diasSemana?: string[] | null;
   turnoPadraoId?: string | null;
   diaDaSemana?: string;
   horaEntrada?: string;

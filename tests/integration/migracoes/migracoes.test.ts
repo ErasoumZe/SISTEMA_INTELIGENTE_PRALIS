@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { consultarTodos, consultarUm } from "../../setup/integracao.js";
+import { consultarTodos } from "../../setup/integracao.js";
 import { COMANDO_POSTGRES_SEM_DURABILIDADE, PARAMETROS_SEM_DURABILIDADE } from "../../setup/postgres-efemero.js";
+import { lerTriggersManuais } from "@padaria/db/triggers-manuais";
 
 const raizRepositorio = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -15,6 +17,50 @@ const journalMigracoes = JSON.parse(
   readFileSync(new URL("../../../db/migrations/meta/_journal.json", import.meta.url), "utf8")
 ) as { entries: unknown[] };
 const totalMigracoesEsperado = journalMigracoes.entries.length;
+
+// --- triggers de `atualizado_em` ----------------------------------------------------------------
+//
+// O conjunto esperado e DERIVADO das migrations, nao digitado. Um numero fixo aqui envelhece a cada
+// tabela nova: era `21`, virou mentira quando a 0034 e a 0035 entraram, e o gate so acusou muito
+// depois do commit.
+//
+// Duas origens, e o teste precisa cobrir as duas:
+//   - a 0002 instala percorrendo um ARRAY LITERAL de nomes de tabela;
+//   - toda tabela criada DEPOIS precisa do `create trigger` escrito a mao na propria migration, porque
+//     a 0002 nao volta atras. Foi assim na 0034 (funcoes_operacionais, admissoes_testes) e na 0035
+//     (admissoes_processos).
+//
+// A segunda metade vem de `lerTriggersManuais`, o MESMO modulo que o provisionamento de dev e o de
+// Testcontainers usam para instalar. Se o teste tivesse a propria varredura, ele poderia passar
+// concordando consigo mesmo enquanto o provisionamento instalava outra coisa.
+const dirMigracoes = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+
+function tabelasDoArrayDa0002(): string[] {
+  const sql = readFileSync(join(dirMigracoes, "0002_hardening_atualizado_em.sql"), "utf8");
+  const inicio = sql.indexOf("array array[");
+  const fim = sql.indexOf("] loop", inicio);
+  if (inicio < 0 || fim < 0) throw new Error("bloco de tabelas da 0002 nao encontrado");
+  return [...sql.slice(inicio, fim).matchAll(/'([a-z_]+)'/g)].map((achado) => achado[1] ?? "");
+}
+
+// Tabelas que TEM a coluna `atualizado_em` e NAO tem o trigger. Nao e o estado desejado — e o estado
+// real, declarado aqui para que a lista nao cresca em silencio: uma quinta tabela nesta situacao
+// quebra o teste e obriga a decisao. Fechar as quatro exige migration propria, fora deste gate.
+const semTriggerConhecidas = ["campanhas", "maquininhas", "notas_fiscais", "pedidos", "regras_recebimento", "turnos"];
+
+const sqlTabelasComTrigger = `
+  select distinct event_object_table as tabela
+  from information_schema.triggers
+  where trigger_name like '%set_atualizado_em'
+  order by 1
+`;
+
+const sqlTabelasComColuna = `
+  select table_name as tabela
+  from information_schema.columns
+  where table_schema = 'public' and column_name = 'atualizado_em'
+  order by 1
+`;
 
 const sqlColunas = `
   select table_name, column_name, data_type, is_nullable, coalesce(column_default, '') as column_default
@@ -27,6 +73,25 @@ const sqlIndices = `
   select indexname
   from pg_indexes
   where schemaname = 'public'
+  order by indexname
+`;
+
+/**
+ * O PREDICADO dos indices, e nao so o nome.
+ *
+ * `sqlIndices` compara `indexname`, e nome nao carrega clausula parcial: um indice `WHERE ...` num
+ * caminho e total no outro passa despercebido, porque os dois se chamam igual. A migration 0038
+ * trocou exatamente o predicado de `admissoes_processos_historico_evento_unico`, entao ela precisa
+ * de uma comparacao que enxergue isso.
+ *
+ * Restrito a `admissoes_%` de proposito: ampliar para o banco inteiro e vertical propria, porque
+ * pode revelar drift preexistente em indices que nada tem a ver com esta mudanca — e um vermelho
+ * herdado esconderia o que este teste existe para provar.
+ */
+const sqlIndicesAdmissoes = `
+  select indexname, indexdef
+  from pg_indexes
+  where schemaname = 'public' and indexname like 'admissoes_%'
   order by indexname
 `;
 
@@ -179,6 +244,28 @@ describe("migracoes integration", () => {
     expect(constraintsMigrate).toEqual(constraintsPush);
   });
 
+  it("P0-0038 Deve_TerOMesmoPredicadoDeIndice_Quando_ProvisionarViaMigrate", async () => {
+    const [defsMigrate, defsPush] = await Promise.all([
+      bancoMigrado
+        .query<{ indexname: string; indexdef: string }>(sqlIndicesAdmissoes)
+        .then((resultado) => resultado.rows),
+      consultarTodos<{ indexname: string; indexdef: string }>(sqlIndicesAdmissoes)
+    ]);
+    expect(defsMigrate).toEqual(defsPush);
+
+    // E o predicado tem de ser o da 0038, nos DOIS caminhos: o schema Drizzle e o arquivo .sql
+    // podem divergir em silencio, e foi essa divergencia que criou o defeito que a 0038 corrige.
+    const alvo = "admissoes_processos_historico_evento_unico";
+    for (const [origem, linhas] of [
+      ["migrate", defsMigrate],
+      ["push", defsPush]
+    ] as const) {
+      const indice = linhas.find((linha) => linha.indexname === alvo);
+      expect(indice, `${alvo} ausente em ${origem}`).toBeDefined();
+      expect(indice?.indexdef, origem).toContain("cpf_revelado");
+    }
+  });
+
   it("Deve_DisponibilizarUuidV7_Quando_ProvisionarViaMigrate", async () => {
     const { rows } = await bancoMigrado.query<{ id: string }>("select uuid_generate_v7()::text as id");
     const id = rows[0]?.id ?? "";
@@ -186,20 +273,52 @@ describe("migracoes integration", () => {
   });
 
   it("Deve_CriarTriggersDeAtualizadoEm_Quando_ProvisionarViaMigrate", async () => {
-    const { rows } = await bancoMigrado.query<{ total: number }>(
-      `select count(distinct event_object_table)::int as total
-       from information_schema.triggers
-       where trigger_name like '%set_atualizado_em'`
+    const aMao = lerTriggersManuais();
+
+    // O nome do trigger CARREGA o nome da tabela. Nao e cosmetico: a consulta acha os triggers por
+    // `like '%set_atualizado_em'`, entao um nome fora da convencao some do gate sem quebrar nada.
+    for (const { arquivo, nome, tabela } of aMao) {
+      expect(nome, arquivo).toBe(`${tabela}_set_atualizado_em`);
+    }
+
+    // Nomeadas de proposito, e nao so contadas: se uma migration perder o bloco de trigger, o teste
+    // diz QUAL tabela ficou sem — a 0002 nao cobre nenhuma delas.
+    //
+    // Esta lista CRESCE a cada tabela nova com `atualizado_em`, e e assim que tem de ser: o gate
+    // disparou quando a 0036 chegou, e acrescentar o nome aqui e a decisao consciente que ele
+    // cobra. Trocar por uma contagem seria voltar ao `21` que envelheceu em silencio.
+    expect(aMao.map((achado) => achado.tabela).sort()).toEqual([
+      "admissoes_processos",
+      // ADM-003 V2/V4. `admissoes_convites` NAO entra: convite nao se edita, entao a tabela nem tem
+      // `atualizado_em` — e sem a coluna, trigger seria mentira.
+      "admissoes_processos_dependentes",
+      "admissoes_processos_ficha",
+      "admissoes_processos_internos",
+      "admissoes_testes",
+      "funcoes_operacionais"
+    ]);
+
+    const esperadas = [...new Set([...tabelasDoArrayDa0002(), ...aMao.map((achado) => achado.tabela)])].sort();
+
+    const comTriggerMigrate = (await bancoMigrado.query<{ tabela: string }>(sqlTabelasComTrigger)).rows.map(
+      (linha) => linha.tabela
     );
-    expect(rows[0]?.total).toBe(21);
+    // Igualdade de CONJUNTO, nos dois sentidos: acusa tanto o trigger que a migration prometeu e nao
+    // criou quanto o que existe no banco sem migration nenhuma pedindo.
+    expect(comTriggerMigrate).toEqual(esperadas);
 
     // O banco global (push + aplicacao pos-push) precisa ter as mesmas triggers.
-    const triggersPush = await consultarUm<{ total: number }>(
-      `select count(distinct event_object_table)::int as total
-       from information_schema.triggers
-       where trigger_name like '%set_atualizado_em'`
+    const comTriggerPush = (await consultarTodos<{ tabela: string }>(sqlTabelasComTrigger)).map(
+      (linha) => linha.tabela
     );
-    expect(triggersPush?.total).toBe(21);
+    expect(comTriggerPush).toEqual(esperadas);
+
+    // A coluna sem o trigger e o defeito silencioso: `atualizado_em` fica parada e ninguem percebe.
+    // A lista de excecoes conhecidas esta declarada em `semTriggerConhecidas` — a quinta quebra aqui.
+    const comColuna = (await bancoMigrado.query<{ tabela: string }>(sqlTabelasComColuna)).rows.map(
+      (linha) => linha.tabela
+    );
+    expect(comColuna.filter((tabela) => !esperadas.includes(tabela))).toEqual(semTriggerConhecidas);
   });
 
   it("Deve_AtualizarAtualizadoEm_Quando_EditarRegistro", async () => {

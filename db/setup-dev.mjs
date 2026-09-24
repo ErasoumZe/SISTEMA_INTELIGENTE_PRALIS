@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { Client } from "pg";
 
+import { aplicarTriggersManuais } from "./triggers-manuais.ts";
+
 const migracaoTriggersUrl = new URL("./migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
 const isWindows = process.platform === "win32";
@@ -128,12 +130,27 @@ async function aplicarMigracaoLegadaSemPrompt() {
   }
 }
 
+/**
+ * Paridade com quem provisiona por migrate. Duas metades, e as duas sao necessarias:
+ *
+ *  1. a 0002 inteira — cria a funcao `set_atualizado_em` e instala os triggers das tabelas que ela
+ *     enumera num array literal;
+ *  2. os triggers escritos a mao nas migrations posteriores — a 0002 nao volta atras, e o push nao
+ *     conhece trigger, entao sem este passo o banco de dev fica sem o que producao tem.
+ *
+ * O passo 2 nao aplica migration nenhuma: le o SQL versionado, aceita so `*_set_atualizado_em`,
+ * exige a funcao ja criada e pula o que ja existe.
+ */
 async function aplicarTriggersAtualizadoEm() {
   const sql = await readFile(migracaoTriggersUrl, "utf8");
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   try {
     await client.query(sql);
+    const manuais = await aplicarTriggersManuais(client);
+    if (manuais.length > 0) {
+      console.info(`[db:setup:dev] triggers manuais instalados: ${manuais.map((t) => t.tabela).join(", ")}`);
+    }
   } finally {
     await client.end();
   }

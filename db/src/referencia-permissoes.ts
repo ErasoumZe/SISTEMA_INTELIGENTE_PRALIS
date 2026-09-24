@@ -15,6 +15,9 @@ const telasSomenteCaixaAberto = new Set<string>([
 ]);
 
 const permissaoAcessoPorTela = {
+  // Catalogo de funcoes operacionais: tela de CADASTRO, ao lado de Turnos. Nao pertence a
+  // Admissoes — a mesma lista responde ao cadastro de colaboradores quando ele chegar.
+  funcoes_operacionais: "cadastro_funcoes_visualizar",
   entradas: "entradas_visualizar",
   transferencias: "transferencias_visualizar",
   despesas: "despesas_visualizar",
@@ -39,6 +42,12 @@ const permissaoAcessoPorTela = {
   fornecedores: "cadastro_fornecedores_visualizar",
   produtos: "cadastro_produtos_visualizar",
   colaboradores: "cadastro_colaboradores_visualizar",
+  // ADM-001. Tela PROPRIA de admissao: nao herda nem concede `cadastro_colaboradores_*`.
+  admissoes_testes: "admissoes_testes_visualizar",
+  // ADM-003 V1A: o processo ganha menu porque a admissao direta nao tem teste de onde ser
+  // alcancada. Sem a tela, um processo direto nasceria inalcancavel. A lista e CONSULTA: a unica
+  // acao de criacao nela e "Novo cadastro", e nao ha segundo verbo para o mesmo ato.
+  admissoes_processos: "admissoes_processos_visualizar",
   folha_ponto: "folha_ponto_visualizar",
   avaliacao_qualidade: "avaliacao_qualidade_visualizar",
   avaliacao_colaboradores: "avaliacao_colaboradores_visualizar",
@@ -181,6 +190,9 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
   }),
   Gerencia: permissoesDoCargo({
     ativas: [
+      // Catalogo de funcoes operacionais. Em `ativas`, e nao em `extras`, porque e TELA: assim
+      // `permissoesDoCargo` deriva a permissao de acesso e a de menu de uma vez so.
+      "funcoes_operacionais",
       "caixa",
       "entradas",
       "transferencias",
@@ -192,11 +204,13 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "promocoes",
       "relatorio_faltas",
       "relatorio_advertencias",
+      "admissoes_processos",
       "pedidos",
       "perdas_sobras",
       "estoque_produtos",
       "relatorio_dre",
-      "clientes"
+      "clientes",
+      "admissoes_testes"
     ],
     // Gerencia acessa o historico completo do caixa (decisao de negocio: pergunta 1 = sim).
     extras: [
@@ -230,6 +244,18 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
       "cadastro_contas_usuarios_excluir",
       // Recorrencia (D3): so Admin, Gerencia e Financeiro criam serie de lancamentos.
       "lancamentos_recorrencia_criar",
+      // ADM-001: a Gerencia opera o periodo de teste junto com o DP (decisao de Marco).
+      "admissoes_testes_criar",
+      "admissoes_testes_editar",
+      "admissoes_testes_encerrar",
+      "admissoes_testes_cancelar",
+      // ADM-002 V0: a Gerencia acompanha e cancela o processo de admissao, junto com o DP.
+      // Nao ha permissao de "iniciar": iniciar e consequencia de efetivar o teste.
+      // `_visualizar` vem de `ativas` na V1A, junto do menu — nao se repete aqui.
+      "admissoes_processos_cancelar",
+      // ADM-003 V1A: a Gerencia INICIA a admissao direta. Nao preenche o bloco interno — CTPS,
+      // PIS/NIT e exame ficam com o DP.
+      "admissoes_processos_criar_direta",
       ...acoesLancamentoPorDominio("efetuar", "conferir", "excluir")
     ]
   }),
@@ -238,8 +264,54 @@ export const permissoesPorCargo: Record<string, Permissao[]> = {
     extras: ["mercadorias_criar", "mercadorias_discriminar", "cadastro_fornecedores_criar", "cadastro_produtos_criar"]
   }),
   DP: permissoesDoCargo({
-    ativas: ["despesas", "colaboradores", "folha_ponto"],
-    extras: ["despesas_criar", "despesas_discriminar", "cadastro_colaboradores_criar", "cadastro_colaboradores_editar"]
+    ativas: [
+      // Catalogo de funcoes operacionais. Em `ativas`, e nao em `extras`, porque e TELA: assim
+      // `permissoesDoCargo` deriva a permissao de acesso e a de menu de uma vez so.
+      "funcoes_operacionais",
+      "despesas",
+      "colaboradores",
+      "folha_ponto",
+      "admissoes_testes",
+      "admissoes_processos"
+    ],
+    // ADM-001: o DP opera o periodo de teste por inteiro. As quatro acoes sao PROPRIAS da
+    // admissao — `cadastro_colaboradores_*` continua sem abrir nada aqui, e vice-versa.
+    extras: [
+      "despesas_criar",
+      "despesas_discriminar",
+      "cadastro_colaboradores_criar",
+      "cadastro_colaboradores_editar",
+      "admissoes_testes_criar",
+      "admissoes_testes_editar",
+      "admissoes_testes_encerrar",
+      "admissoes_testes_cancelar",
+      // ADM-002 V0. `_visualizar` passou para `ativas` na V1A, quando o processo ganhou menu.
+      "admissoes_processos_cancelar",
+      // ADM-003 V1A: o DP opera a admissao direta por inteiro — abre e preenche o bloco interno.
+      "admissoes_processos_criar_direta",
+      "admissoes_processos_editar_internos",
+      // ADM-003 V2: o DP e quem conversa com o candidato, entao e ele quem emite e revoga o convite.
+      "admissoes_processos_convidar",
+      // ADM-003 V3: e e ele quem le e revisa a ficha que volta. A Gerencia nao recebe nenhuma
+      // das duas — mesma fronteira do bloco interno, pelo mesmo motivo.
+      "admissoes_processos_ver_ficha",
+      "admissoes_processos_revisar_ficha",
+      // ADM-003 V1B: o turno e campo OBRIGATORIO da admissao direta, e quem admite precisa poder
+      // cadastrar o turno que falta sem depender da Gerencia no meio do atendimento. Ver e criar,
+      // e so isso: editar e excluir mudam turno de quem ja esta admitido e seguem com a Gerencia.
+      "cadastro_turnos_visualizar",
+      "cadastro_turnos_criar",
+      // Funcoes operacionais: o DP ADMINISTRA o catalogo — ve, cria e edita (decisao de Marco,
+      // 03/09/2026). `editar` cobre renomear, trocar o CBO e DESATIVAR/REATIVAR: sao a mesma
+      // escrita na mesma linha, e tres permissoes para um `UPDATE` so seriam tres nomes para o
+      // mesmo direito. Nao existe `_excluir` porque nao existe exclusao.
+      //
+      // E o INVERSO de Turnos logo acima, de proposito: la a Gerencia tem o ciclo completo e o DP
+      // so ve e cria; aqui quem administra e o DP, porque e ele que descobre a funcao faltando no
+      // meio de uma admissao.
+      "cadastro_funcoes_criar",
+      "cadastro_funcoes_editar"
+    ]
   }),
   RH: permissoesDoCargo({
     ativas: ["avaliacao_qualidade", "avaliacao_colaboradores"]

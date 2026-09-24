@@ -14,6 +14,11 @@
       "development": "./src/schema/index.ts",
       "default": "./dist/src/schema/index.js"
     },
+    "./schema/admissoes": {
+      "types": "./dist/src/schema/admissoes/admissoes.schema.d.ts",
+      "development": "./src/schema/admissoes/admissoes.schema.ts",
+      "default": "./dist/src/schema/admissoes/admissoes.schema.js"
+    },
     "./schema/autenticacao": {
       "types": "./dist/src/schema/autenticacao/autenticacao.schema.d.ts",
       "development": "./src/schema/autenticacao/autenticacao.schema.ts",
@@ -88,6 +93,11 @@
       "types": "./dist/src/sessao.d.ts",
       "development": "./src/sessao.ts",
       "default": "./dist/src/sessao.js"
+    },
+    "./triggers-manuais": {
+      "types": "./dist/triggers-manuais.d.ts",
+      "development": "./triggers-manuais.ts",
+      "default": "./dist/triggers-manuais.js"
     }
   },
   "scripts": {

@@ -124,6 +124,43 @@ export const permissoes = [
   "cadastro_colaboradores_criar",
   "cadastro_colaboradores_editar",
   "cadastro_colaboradores_excluir",
+  // ADM-001 — periodo de teste. DELIBERADAMENTE separadas de `cadastro_colaboradores_*`: quem
+  // cadastra colaborador operacional NAO ganha acesso a admissao, e o inverso tambem vale. O
+  // pre-cadastro carrega CPF e decisao sobre pessoa em avaliacao; ampliar isso para os
+  // consumidores operacionais da lista de colaboradores (Caixa, despesas) seria o oposto da
+  // minimizacao que a CX-M05 fez em `GET /api/colaboradores`.
+  //
+  // `encerrar` e permissao PROPRIA, e nao um caso de `editar`: encerrar exige resultado
+  // (aprovado_para_admissao | nao_prosseguir) e e terminal. Quem corrige um erro de digitacao nao
+  // e necessariamente quem decide o desfecho do teste.
+  "admissoes_testes_visualizar",
+  "admissoes_testes_criar",
+  "admissoes_testes_editar",
+  "admissoes_testes_encerrar",
+  "admissoes_testes_cancelar",
+  // ADM-002 V0. Permissoes PROPRIAS do processo de admissao: `admissoes_testes_visualizar` NAO
+  // abre o processo, e o processo nao abre o teste. A fronteira vale nos dois sentidos, como ja
+  // vale entre Admissoes e o cadastro operacional.
+  //
+  // Iniciar NAO tem permissao propria: quem pode `admissoes_testes_encerrar` inicia, porque
+  // iniciar e consequencia de efetivar, nao um ato separado.
+  "admissoes_processos_visualizar",
+  "admissoes_processos_cancelar",
+  // ADM-003 V1A. `criar_direta` e a UNICA entrada de processo sem teste — e por isso ela existe e
+  // se chama assim: nao ha "criar processo" generico, porque criar a partir de um teste continua
+  // sendo consequencia de efetivar, nunca um ato separado.
+  "admissoes_processos_criar_direta",
+  // Separada de `criar_direta` porque o bloco interno carrega CTPS, PIS/NIT e o exame: a Gerencia
+  // inicia o processo, o DP e quem preenche.
+  "admissoes_processos_editar_internos",
+  // ADM-003 V2. Emitir e revogar o convite do candidato e ato PROPRIO: quem cria a admissao nao
+  // necessariamente e quem manda o link para uma pessoa de fora. Uma permissao para os dois atos,
+  // porque revogar e a correcao de emitir — separa-las deixaria alguem podendo abrir e nao fechar.
+  "admissoes_processos_convidar",
+  // ADM-003 V3. Ver a ficha e revisa-la sao direitos diferentes: conferir o que o candidato
+  // mandou nao e o mesmo que aprovar ou devolver. Quem revisa precisa das duas.
+  "admissoes_processos_ver_ficha",
+  "admissoes_processos_revisar_ficha",
   "cadastro_pdv_visualizar",
   "cadastro_pdv_criar",
   "cadastro_pdv_editar",
@@ -132,6 +169,15 @@ export const permissoes = [
   "cadastro_turnos_criar",
   "cadastro_turnos_editar",
   "cadastro_turnos_excluir",
+  // Catalogo de FUNCOES OPERACIONAIS — o que a pessoa faz. Nao confundir com `cargos`, que e o
+  // catalogo de ACESSO. Sao TRES chaves, e nao quatro: nao existe `_excluir` porque nao existe
+  // exclusao. Funcao sai de circulacao por `ativo = false` e volta pelo mesmo campo — apagar
+  // levaria embora a leitura do periodo de teste e do processo que apontam para ela. Conceder uma
+  // permissao para um ato que nao existe seria abrir a porta hoje para quem criasse a rota amanha
+  // sem reabrir a decisao.
+  "cadastro_funcoes_visualizar",
+  "cadastro_funcoes_criar",
+  "cadastro_funcoes_editar",
   "cadastro_formas_pagamento_visualizar",
   "cadastro_formas_pagamento_criar",
   "cadastro_formas_pagamento_editar",
@@ -222,6 +268,10 @@ export const permissoes = [
   "menu_produtos_desabilitado",
   "menu_colaboradores_mostrar",
   "menu_colaboradores_desabilitado",
+  "menu_admissoes_testes_mostrar",
+  "menu_admissoes_testes_desabilitado",
+  "menu_admissoes_processos_mostrar",
+  "menu_admissoes_processos_desabilitado",
   "menu_folha_ponto_mostrar",
   "menu_folha_ponto_desabilitado",
   "menu_avaliacao_qualidade_mostrar",
@@ -248,6 +298,8 @@ export const permissoes = [
   "menu_pdv_desabilitado",
   "menu_turnos_mostrar",
   "menu_turnos_desabilitado",
+  "menu_funcoes_operacionais_mostrar",
+  "menu_funcoes_operacionais_desabilitado",
   "menu_formas_pagamento_mostrar",
   "menu_formas_pagamento_desabilitado",
   "menu_integracoes_mostrar",

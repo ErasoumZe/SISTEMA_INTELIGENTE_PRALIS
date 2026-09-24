@@ -4,6 +4,7 @@ import pg from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { TestProject } from "vitest/node";
 import { COMANDO_POSTGRES_SEM_DURABILIDADE } from "./postgres-efemero.js";
+import { aplicarTriggersManuais } from "@padaria/db/triggers-manuais";
 
 const migracaoTriggersUrl = new URL("../../db/migrations/0002_hardening_atualizado_em.sql", import.meta.url);
 
@@ -29,12 +30,27 @@ function executar(comando: string, args: string[], env: NodeJS.ProcessEnv) {
   });
 }
 
+/**
+ * Paridade com quem provisiona por migrate. Duas metades, e as duas sao necessarias:
+ *
+ *  1. a 0002 inteira — cria a funcao `set_atualizado_em` e instala os triggers das tabelas que ela
+ *     enumera num array literal;
+ *  2. os triggers escritos a mao nas migrations posteriores — a 0002 nao volta atras, e o push nao
+ *     conhece trigger, entao sem este passo dev e teste rodam com tabelas que producao tem coberta.
+ *
+ * O passo 2 nao aplica migration nenhuma: le o SQL versionado, aceita so `*_set_atualizado_em`,
+ * exige a funcao ja criada e pula o que ja existe.
+ */
 async function aplicarTriggersAtualizadoEm(databaseUrl: string) {
   const sql = await readFile(migracaoTriggersUrl, "utf8");
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   try {
     await client.query(sql);
+    const manuais = await aplicarTriggersManuais(client);
+    if (manuais.length > 0) {
+      console.info(`[tests:integration] triggers manuais instalados: ${manuais.map((t) => t.tabela).join(", ")}`);
+    }
   } finally {
     await client.end();
   }

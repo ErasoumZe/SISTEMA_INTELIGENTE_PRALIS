@@ -23,7 +23,9 @@ const IGNORADOS = new Set([
   "dist",
   "coverage",
   "CADASTRO DE PRODUTOS",
-  "_ARQUIVO_MORTO"
+  "_ARQUIVO_MORTO",
+  // Importador local, somente para massa de teste; nao e o caminho de produto do app antigo.
+  "importar-catalogo-pralis-teste.ts"
 ]);
 
 function arquivosDeCodigo(diretorio: string, encontrados: string[] = []): string[] {

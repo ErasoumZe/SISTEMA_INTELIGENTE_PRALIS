@@ -11,6 +11,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./admissoes": {
+      "types": "./dist/admissoes/index.d.ts",
+      "development": "./src/admissoes/index.ts",
+      "default": "./dist/admissoes/index.js"
+    },
     "./app": {
       "types": "./dist/app/index.d.ts",
       "development": "./src/app/index.ts",
@@ -45,6 +50,11 @@
       "types": "./dist/caixa/index.d.ts",
       "development": "./src/caixa/index.ts",
       "default": "./dist/caixa/index.js"
+    },
+    "./funcoes": {
+      "types": "./dist/funcoes/index.d.ts",
+      "development": "./src/funcoes/index.ts",
+      "default": "./dist/funcoes/index.js"
     },
     "./turnos": {
       "types": "./dist/turnos/index.d.ts",

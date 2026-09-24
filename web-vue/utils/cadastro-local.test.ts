@@ -158,7 +158,9 @@ describe("atualizarCadastroLocal", () => {
     cenario.opcoes.colaboradores.push({ id: "col1", nome: "Ana", setorId: "st1" });
     cenario.atualizarCadastroLocal(
       "usuarios",
-      form({ nome: "Ana", email: "ana@x.com", colaboradorId: "col1", empresaIds: ["emp-1"] }),
+      // O formulario novo nasce com `novoColaborador=true`; este caso prova o caminho de vinculo
+      // a uma pessoa ja existente, portanto declara explicitamente o modo de edicao.
+      form({ nome: "Ana", email: "ana@x.com", novoColaborador: false, colaboradorId: "col1", empresaIds: ["emp-1"] }),
       "u1"
     );
     expect(cenario.opcoes.usuarios[0]).toMatchObject({

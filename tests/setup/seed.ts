@@ -14,6 +14,7 @@ import {
   fechamentosCaixa,
   formasPagamento,
   fornecedores,
+  funcoesOperacionais,
   gruposDespesas,
   gruposMercadorias,
   gruposPatrimonio,
@@ -320,6 +321,19 @@ export async function aplicarSeedIntegracao() {
   await banco
     .insert(setores)
     .values({ id: idsTeste.setorA, empresaId: idsTeste.empresaA, areaId: idsTeste.areaA, nome: "Loja" });
+
+  // Funcao OPERACIONAL sintetica (ADM-001). Nome inventado de proposito: nada aqui vem do catalogo
+  // real da empresa nem da planilha — a fixture existe para exercitar a FK composta
+  // (funcao_id, empresa_id) de `admissoes_testes`, nao para representar o oficio de ninguem.
+  // `cbo` nulo: o CHECK aceita nulo e so exige 6 digitos quando preenchido; deixar nulo prova o
+  // caminho opcional e nao inventa um codigo oficial que nao foi conferido.
+  await banco.insert(funcoesOperacionais).values({
+    id: idsTeste.funcaoOperacionalA,
+    empresaId: idsTeste.empresaA,
+    nome: "Funcao Integracao",
+    cbo: null,
+    ativo: true
+  });
 
   const usuarioIds = new Map<PerfilTeste, string>();
   for (const usuario of usuarios) {

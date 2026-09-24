@@ -1,3 +1,9 @@
+// `funcoesOperacionais` sai por AQUI, e nao por `admissoes`: e catalogo operacional compartilhavel
+// por empresa. Nasceu em Admissoes, mas nao pertence a ela — o cadastro de colaboradores usara a
+// mesma lista quando existir, e uma segunda lista de funcoes seria o defeito que a regra-mae proibe.
+//
+// Nao confundir com `cargos`, que esta nesta mesma lista: aquele e catalogo de ACESSO e chave de
+// `permissoes_cargos`. Nomes parecidos, perguntas diferentes.
 export {
   areas,
   cargos,
@@ -11,6 +17,7 @@ export {
   empresas,
   formasPagamento,
   fornecedores,
+  funcoesOperacionais,
   gruposDespesas,
   gruposMercadorias,
   gruposPatrimonio,

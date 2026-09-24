@@ -4,15 +4,8 @@ import { and, eq, ilike, inArray, isNotNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import {
-  TELA_TEMA_RESUMO_CAIXA,
-  gruposPatrimonioPadrao,
-  permissoes,
-  permissoesAcessoTotal,
-  type Permissao,
-  type RegrasPermissoes,
-  type RoleUsuario
-} from "@padaria/shared";
+import { TELA_TEMA_RESUMO_CAIXA, gruposPatrimonioPadrao, permissoes, type RoleUsuario } from "@padaria/shared";
+import { permissoesDoCargo, permissoesPorCargo, regrasPermissoes } from "./src/referencia-permissoes.js";
 import { schema } from "./src/schema/schema.js";
 import { gerarUuidV7 } from "@padaria/shared/ids";
 import {
@@ -148,7 +141,7 @@ const emailsSeedLegados = [
   "financeiro@padaria.local"
 ];
 
-const telasSomenteCaixaAbertoSeed = new Set<string>([
+/*
   "entradas",
   "transferencias",
   "despesas",
@@ -415,6 +408,8 @@ const permissoesPorCargoSeed: Record<string, Permissao[]> = {
   })
 };
 
+*/
+
 type UsuarioSeed = {
   nome: string;
   email: string;
@@ -492,7 +487,7 @@ const usuariosSeed: UsuarioSeed[] = [
     role: "usuario_comum"
   }
 ];
-const nomesCargosSeed = [...Object.keys(permissoesPorCargoSeed), "Operador de caixa"];
+const nomesCargosSeed = [...Object.keys(permissoesPorCargo), "Operador de caixa"];
 
 async function usuarioPorEmail(email: string) {
   const [usuario] = await banco
@@ -703,7 +698,7 @@ const usuarioFinanceiroId = usuarioIds.get("financeiro@email.com");
 if (!usuarioFinanceiroId) throw new Error("Usuario financeiro nao foi criado");
 await banco
   .insert(permissoesUsuarios)
-  .values({ usuarioId: usuarioFinanceiroId, regras: regrasPermissoesSeed(["contas_pagar_visualizar"]) })
+  .values({ usuarioId: usuarioFinanceiroId, regras: regrasPermissoes(["contas_pagar_visualizar"]) })
   .onConflictDoNothing();
 console.info("[seed] OK Usuarios e perfis cadastrados/atualizados");
 
@@ -944,12 +939,12 @@ await banco
     // Setor "Loja" NAO concede permissoes amplas: cada cargo define seu proprio acesso.
     // (Antes concedia caixa_operar/entradas/relatorio_produtos a TODOS os membros, contaminando
     //  cargos estreitos como Tesouraria/DP/Fiscal. Operar caixa fica so no cargo Caixa.)
-    regras: regrasPermissoesSeed(permissoesDoCargoSeed({}))
+    regras: regrasPermissoes(permissoesDoCargo({}))
   })
   .onConflictDoNothing();
 
 const cargoIds = new Map<string, string>();
-for (const nome of Object.keys(permissoesPorCargoSeed)) {
+for (const nome of Object.keys(permissoesPorCargo)) {
   const cargoSeed = (
     await banco
       .insert(cargos)
@@ -964,11 +959,11 @@ for (const nome of Object.keys(permissoesPorCargoSeed)) {
   cargoIds.set(nome, cargoSeed.id);
 
   await banco.delete(permissoesCargos).where(eq(permissoesCargos.cargoId, cargoSeed.id));
-  const permissoesCargo = permissoesPorCargoSeed[nome] ?? [];
+  const permissoesCargo = permissoesPorCargo[nome] ?? [];
   if (permissoesCargo.length) {
     await banco
       .insert(permissoesCargos)
-      .values({ cargoId: cargoSeed.id, regras: regrasPermissoesSeed(permissoesCargo) })
+      .values({ cargoId: cargoSeed.id, regras: regrasPermissoes(permissoesCargo) })
       .onConflictDoNothing();
   }
 }

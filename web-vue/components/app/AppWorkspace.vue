@@ -119,6 +119,12 @@ type TipoPagina =
   | "notas_fiscais"
   | "tree"
   | "cadastro"
+  | "admissoes_testes"
+  | "admissoes_processos"
+  // Catalogo de funcoes operacionais: entra na uniao so para o `telaInicial` casar. NAO ganha ramo
+  // em lugar nenhum — o componente proprio faz as proprias chamadas, e o seletor de empresa
+  // continua valendo, ao contrario das duas telas de admissao logo acima.
+  | "funcoes_operacionais"
   | "placeholder";
 
 const props = withDefaults(
@@ -285,6 +291,21 @@ const totalLiquidoOperacoes = ref<number | null>(null);
 const diaEntradas = ref("");
 
 const empresasDisponiveis = computed(() => empresas.value);
+
+// ADM-001: nesta tela a empresa NAO vem do navegador — o servidor a deriva de `perfil.empresaId` e
+// ignora qualquer escolha do cliente. Deixar o seletor global visivel aqui induziria o operador a
+// achar que trocar de empresa muda em qual empresa a pessoa esta sendo avaliada. Nao muda.
+//
+// Nao ha prop nova nem branch dentro do AppShell: ele JA mostra um chip estatico (nao clicavel)
+// quando ha no maximo uma empresa. Estreitar a lista para a empresa derivada usa esse suporte que
+// ja existe. `empresasDisponiveis` continua intacto para os formularios de cadastro.
+const empresasDoShell = computed(() => {
+  if (tipoPagina.value !== "admissoes_testes" && tipoPagina.value !== "admissoes_processos") {
+    return empresasDisponiveis.value;
+  }
+  const empresaDerivada = sessao.value?.perfil?.empresaId ?? "";
+  return empresasDisponiveis.value.filter((empresa) => empresa.id === empresaDerivada);
+});
 const empresaId = computed(() => empresaSelecionadaId.value);
 const opcoesEmpresa = computed(() => opcoesFiltradasPorEmpresa(opcoes.value, empresaId.value));
 const empresaAtiva = computed(
@@ -2142,6 +2163,9 @@ const pageContext = computed(() => ({
   pendentesDiscriminacaoAtivo: filtroPendentesDiscriminacao.value,
   podeDiscriminar: podeDiscriminarTela.value,
   podeEditarEntrada: temPermissao("entradas_editar"),
+  // Turnos: o DP cria mas nao edita (ADM-003 V1B). A tela precisa saber disso, senao oferece um
+  // botao que a rota recusa com 403.
+  podeEditarTurno: temPermissao("cadastro_turnos_editar"),
   // #152: o minimo que as telas de roteamento precisam do container generico — a empresa ativa,
   // a permissao dedicada da R-176 e as contas para escolher destino. Toda a UI de roteamento vive
   // em componentes proprios; aqui so passa o contexto.
@@ -2312,7 +2336,7 @@ onBeforeUnmount(() => {
     :sessao="sessao"
     :telas="telasShell"
     :tela-ativa="telaAtiva"
-    :empresas="empresasDisponiveis"
+    :empresas="empresasDoShell"
     :empresa-id="empresaSelecionadaId"
     :caixa-status="caixaStatus"
     :notificacoes="notificacoes"

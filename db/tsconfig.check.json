@@ -15,6 +15,7 @@
     "planilha-xlsx.ts",
     "planilha-inspecionar.ts",
     "baseline-migrations.ts",
+    "triggers-manuais.ts",
     "../shared/src/**/*.ts"
   ]
 }

@@ -19,8 +19,17 @@ import {
   type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import type { Permissao, RegrasPermissoes } from "@padaria/shared";
+import type {
+  AcaoHistoricoProcesso,
+  AcaoHistoricoTeste,
+  MotivoCancelamento,
+  ResultadoTeste,
+  StatusProcesso,
+  StatusTeste
+} from "@padaria/shared/admissoes";
 import type { CampoVinculoIntegracao, TipoIntegracao, TipoRegistroIntegracao } from "@padaria/shared/integracoes";
 import type { ConfiguracaoAparenciaEmpresa } from "@padaria/shared/tema";
+import type { DiaSemana, EtiquetaTurno } from "@padaria/shared/turnos";
 
 const criadoEm = timestamp("criado_em", { withTimezone: true }).notNull().defaultNow();
 const atualizadoEm = timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow();
@@ -459,11 +468,36 @@ export const turnos = pgTable(
     nome: text("nome").notNull(),
     horaInicio: time("hora_inicio").notNull(),
     horaFim: time("hora_fim").notNull(),
+    // ADM-003 V1A/V1B: as duas colunas abaixo sao ANULAVEIS de proposito. Turno que ja existe nao
+    // tem etiqueta nem dias, e exigir de imediato quebraria o cadastro atual. Nenhum valor e
+    // deduzido do nome: preencher e ato do DP na tela de Turnos.
+    //
+    // A consequencia esta em `admissoes_processos`: turno INCOMPLETO (sem etiqueta ou sem dias) nao
+    // pode ser escolhido numa admissao. Essa regra mora no servico e no teste, e nao aqui — um CHECK
+    // nao enxerga a outra tabela, e FK nao aponta para indice parcial.
+    etiqueta: text("etiqueta").$type<EtiquetaTurno>(),
+    diasSemana: text("dias_semana").array().$type<DiaSemana[]>(),
     ativo: boolean("ativo").notNull().default(true),
     criadoEm,
     atualizadoEm
   },
-  (table) => [unique("turnos_empresa_nome_unica").on(table.empresaId, table.nome)]
+  (table) => [
+    unique("turnos_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo da FK COMPOSTA vinda de `admissoes_processos`. Aditivo: nenhuma constraint existente muda,
+    // e as FKs de `colaboradores` e `fechamentos_caixa` seguem `on delete set null` — o Caixa nao
+    // percebe esta migration.
+    unique("turnos_id_empresa_unica").on(table.id, table.empresaId),
+    check("turnos_etiqueta_check", sql`${table.etiqueta} is null or ${table.etiqueta} in ('M', 'T', 'I')`),
+    // Vocabulario REUSADO de `colaboradores_jornadas.dia_da_semana`. Um segundo conjunto de nomes
+    // para dia da semana seria a divergencia da regra-mae, em miniatura.
+    check(
+      "turnos_dias_semana_check",
+      sql`${table.diasSemana} is null or (
+        array_length(${table.diasSemana}, 1) > 0
+        and ${table.diasSemana} <@ array['SEGUNDA','TERCA','QUARTA','QUINTA','SEXTA','SABADO','DOMINGO']::text[]
+      )`
+    )
+  ]
 );
 
 export const cargos = pgTable(
@@ -492,6 +526,68 @@ export const permissoesCargos = pgTable(
       .default(sql`'{}'::jsonb`)
   },
   (table) => [primaryKey({ columns: [table.cargoId] })]
+);
+
+/**
+ * FUNCAO OPERACIONAL — o que a pessoa FAZ. Nao e cargo de acesso.
+ *
+ * Fica AQUI, ao lado de `cargos` e `permissoes_cargos`, de proposito: e ao lado que a diferenca
+ * aparece. As duas tabelas tem nome e empresa, e sao lidas por gente diferente para perguntas
+ * diferentes:
+ *
+ *   `cargos`                -> o que a pessoa PODE VER. Chave primaria de `permissoes_cargos`.
+ *                              Dez valores: Caixa, Tesouraria, Gerencia, Compras, DP, RH, Fiscal,
+ *                              Diretor de Operacoes, Diretor Geral, Financeiro.
+ *   `funcoes_operacionais`  -> o que a pessoa FAZ. PADEIRO, BALCONISTA, FAXINEIRO.
+ *
+ * Apontar admissao para `cargos` significaria que registrar um PADEIRO exige criar um cargo de
+ * ACESSO chamado PADEIRO — e qualquer regra de permissao por cargo passaria a enxerga-lo.
+ *
+ * Catalogo OPERACIONAL COMPARTILHAVEL por empresa: nasceu em Admissoes, mas nao pertence a ela. O
+ * cadastro de colaboradores usara a mesma lista quando existir. Nome sem prefixo de modulo porque
+ * `admissoes_funcoes` convidaria a segunda lista de funcoes no dia em que o cadastro precisasse
+ * dela — e duas listas para a mesma pergunta e o defeito que a regra-mae proibe.
+ *
+ * NUNCA se liga a `cargos`, `permissoes_cargos`, `permissoes_setores` ou `colaboradores_cargos`.
+ *
+ * Nasce VAZIA. A planilha do RH tem 31 funcoes, mas elas sao evidencia sanitizada, nao carga: a
+ * decisao de povoar a tabela e de quem opera, e vai por SQL revisado, nunca por seed automatico.
+ */
+export const funcoesOperacionais = pgTable(
+  "funcoes_operacionais",
+  {
+    id: idUuid,
+    empresaId,
+    nome: text("nome").notNull(),
+    /**
+     * CBO — Classificacao Brasileira de Ocupacoes, 6 digitos.
+     *
+     * Opcional porque o codigo nem sempre e conhecido no momento do teste, e recusar a funcao por
+     * falta dele travaria o DP num dado que nao muda a decisao. Na planilha o CBO e DERIVADO do
+     * cargo por script; aqui ele e um atributo da funcao, que e o mesmo dado sem o gatilho.
+     */
+    cbo: text("cbo"),
+    /**
+     * Situacao da funcao no catalogo.
+     *
+     * Desativar tira a funcao das escolhas NOVAS sem quebrar registro antigo que ja aponta para ela —
+     * excluir apagaria a leitura do historico, que e o mesmo motivo pelo qual "Excluir" no periodo
+     * de teste cancela e arquiva em vez de apagar.
+     */
+    ativo: boolean("ativo").notNull().default(true),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    unique("funcoes_operacionais_empresa_nome_unica").on(table.empresaId, table.nome),
+    // Alvo da FK COMPOSTA de quem referencia a funcao.
+    unique("funcoes_operacionais_id_empresa_unica").on(table.id, table.empresaId),
+    check("funcoes_operacionais_nome_check", sql`length(btrim(${table.nome})) > 0`),
+    // Formato, nao existencia: o banco nao valida CBO contra a tabela do MTE.
+    check("funcoes_operacionais_cbo_check", sql`${table.cbo} is null or ${table.cbo} ~ '^[0-9]{6}$'`),
+    // Ordem do seletor: dentro da empresa, ativas primeiro, por nome.
+    index("funcoes_operacionais_empresa_ativo_nome_idx").on(table.empresaId, table.ativo, table.nome)
+  ]
 );
 
 export const gruposDespesas = pgTable("grupos_despesas", {
@@ -2455,5 +2551,680 @@ export const debitosColaboradores = pgTable(
     check("debitos_colaboradores_tipo_check", sql`${table.tipo} in ('FECHAMENTO_CAIXA', 'DESPESA', 'RETIRADA')`),
     check("debitos_colaboradores_valor_check", sql`${table.valor} >= 0`),
     index("debitos_colaboradores_empresa_colaborador_idx").on(table.empresaId, table.colaboradorId)
+  ]
+);
+
+// =================================================================================================
+// ADM-001 — Controle de periodo de teste (piloto TNP).
+//
+// NAO e o cadastro operacional. `admissoes_testes` NUNCA escreve em `colaboradores`, nao tem
+// `colaborador_id` e nao efetiva ninguem — nem quando o resultado e `aprovado_para_admissao`.
+// Aprovar aqui registra a DECISAO do DP; abrir a admissao e criar/vincular o colaborador sao
+// verticais proprias.
+//
+// A empresa nunca vem do cliente: o servico a deriva de `perfil.empresa_id` e so aceita quando ela
+// esta dentro das empresas permitidas do ator. A coluna existe para o recorte e para as FKs
+// compostas, nao para ser escolhida.
+// =================================================================================================
+
+export const admissoesTestes = pgTable(
+  "admissoes_testes",
+  {
+    id: idUuid,
+    empresaId,
+    status: text("status").$type<StatusTeste>().notNull().default("em_teste"),
+    // Concorrencia otimista. Toda escrita sobre linha existente compara e incrementa; sem isto duas
+    // edicoes simultaneas do DP perderiam uma em silencio ("ultima gravacao vence").
+    versao: integer("versao").notNull().default(1),
+    nomeCompleto: text("nome_completo").notNull(),
+    // Somente digitos. O digito verificador e conferido em `shared/src/admissoes/cpf.ts` (contrato)
+    // — o CHECK abaixo garante o FORMATO no banco, que e o que o banco consegue garantir sozinho.
+    cpf: text("cpf").notNull(),
+    funcaoId: uuid("funcao_id").notNull(),
+    // Texto livre nesta vertical: o Pralis nao tem catalogo de jornada. `turnos` e turno
+    // (nome + hora inicio/fim) e `colaboradores_jornadas` exige um colaborador que ainda nao existe.
+    jornadaHorario: text("jornada_horario").notNull(),
+    inicioEm: timestamp("inicio_em", { withTimezone: true }).notNull(),
+    fimCombinadoEm: timestamp("fim_combinado_em", { withTimezone: true }).notNull(),
+    // Preenchido SO no encerramento, e obrigatorio la (ver a coerencia de status abaixo).
+    resultado: text("resultado").$type<ResultadoTeste>(),
+    // Lista FECHADA. "Excluir" na tela e este cancelamento — nao ha DELETE fisico em lugar nenhum
+    // desta vertical, e o motivo e obrigatorio (ver a coerencia de status abaixo).
+    motivoCancelamento: text("motivo_cancelamento").$type<MotivoCancelamento>(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    atualizadoPor: text("atualizado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    encerradoPor: text("encerrado_por").references(() => perfisUsuarios.usuarioId),
+    canceladoPor: text("cancelado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm,
+    encerradoEm: timestamp("encerrado_em", { withTimezone: true }),
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    // FK COMPOSTA, e nao `references(() => funcoesOperacionais.id)`: assim o banco recusa funcao de
+    // outra empresa por conta propria. A FK simples deixaria a garantia inteira nas maos do
+    // servico — que e como `colaboradores.setor_id` virou um ponteiro estrangeiro representavel.
+    foreignKey({
+      columns: [table.funcaoId, table.empresaId],
+      foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
+      name: "admissoes_testes_funcao_empresa_fk"
+    }),
+    // Alvo da FK composta vinda de `admissoes_testes_historico`.
+    unique("admissoes_testes_id_empresa_unica").on(table.id, table.empresaId),
+    check("admissoes_testes_status_check", sql`${table.status} in ('em_teste', 'encerrado', 'cancelado')`),
+    check("admissoes_testes_versao_check", sql`${table.versao} > 0`),
+    check("admissoes_testes_cpf_check", sql`${table.cpf} ~ '^[0-9]{11}$'`),
+    check("admissoes_testes_nome_check", sql`length(btrim(${table.nomeCompleto})) > 0`),
+    check("admissoes_testes_jornada_check", sql`length(btrim(${table.jornadaHorario})) > 0`),
+    check("admissoes_testes_periodo_check", sql`${table.fimCombinadoEm} > ${table.inicioEm}`),
+    check(
+      "admissoes_testes_resultado_check",
+      sql`${table.resultado} is null or ${table.resultado} in ('aprovado_para_admissao', 'nao_prosseguir')`
+    ),
+    check(
+      "admissoes_testes_motivo_cancelamento_check",
+      sql`${table.motivoCancelamento} is null or ${table.motivoCancelamento} in ('nao_aprovado_no_teste', 'sem_continuidade_apos_dia_de_teste')`
+    ),
+    // Um CHECK unico para os tres estados, em vez de seis condicionais soltos: estado terminal
+    // pela metade (encerrado sem resultado, cancelado sem motivo, cancelado com `encerrado_por`)
+    // deixa de ser representavel. Sem isto, um bug no servico grava a linha incoerente e ela so
+    // aparece meses depois, num relatorio.
+    check(
+      "admissoes_testes_coerencia_status_check",
+      sql`(
+        ${table.status} = 'em_teste'
+        and ${table.resultado} is null
+        and ${table.motivoCancelamento} is null
+        and ${table.encerradoPor} is null and ${table.encerradoEm} is null
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'encerrado'
+        and ${table.resultado} is not null
+        and ${table.motivoCancelamento} is null
+        and ${table.encerradoPor} is not null and ${table.encerradoEm} is not null
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'cancelado'
+        and ${table.resultado} is null
+        and ${table.motivoCancelamento} is not null
+        and ${table.encerradoPor} is null and ${table.encerradoEm} is null
+        and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
+      )`
+    ),
+    // "Bloquear teste aberto duplicado na mesma empresa" enforcado no BANCO, nao so no servico:
+    // duas criacoes simultaneas com o mesmo CPF passariam pelas duas verificacoes previas e
+    // gravariam as duas. O indice PARCIAL e o que permite que o mesmo CPF volte depois — teste
+    // encerrado ou cancelado nao ocupa a vaga.
+    uniqueIndex("admissoes_testes_cpf_em_teste_unico")
+      .on(table.empresaId, table.cpf)
+      .where(sql`${table.status} = 'em_teste'`),
+    // Ordem da fila do DP: o que vence antes aparece antes, dentro da empresa e do status.
+    index("admissoes_testes_empresa_status_fim_idx").on(table.empresaId, table.status, table.fimCombinadoEm, table.id)
+  ]
+);
+
+// Trilha append-only. NUNCA guarda valor de campo — so o NOME dos campos alterados. Gravar
+// antes/depois duplicaria a PII dentro da propria auditoria, que e o oposto do que ela existe para
+// fazer. Quem quiser o valor atual le a linha raiz; valor antigo nao e recuperavel de proposito.
+export const admissoesTestesHistorico = pgTable(
+  "admissoes_testes_historico",
+  {
+    id: idUuid,
+    empresaId,
+    testeId: uuid("teste_id").notNull(),
+    versao: integer("versao").notNull(),
+    acao: text("acao").$type<AcaoHistoricoTeste>().notNull(),
+    atorUsuarioId: text("ator_usuario_id")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    camposAlterados: jsonb("campos_alterados")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ocorridoEm: timestamp("ocorrido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.testeId, table.empresaId],
+      foreignColumns: [admissoesTestes.id, admissoesTestes.empresaId],
+      name: "admissoes_testes_historico_teste_empresa_fk"
+    }).onDelete("cascade"),
+    check(
+      "admissoes_testes_historico_acao_check",
+      sql`${table.acao} in ('criado', 'alterado', 'encerrado', 'cancelado', 'cpf_revelado')`
+    ),
+    check("admissoes_testes_historico_versao_check", sql`${table.versao} > 0`),
+    // Unico PARCIAL, e nao unico simples: transicao de estado tem uma versao propria, entao repetir
+    // um cancelamento nao consegue gravar um segundo evento — a idempotencia fica no banco. Mas
+    // `cpf_revelado` NAO incrementa versao e acontece quantas vezes o DP revelar; um unico simples
+    // recusaria a segunda revelacao e a auditoria perderia justamente o que deve registrar.
+    uniqueIndex("admissoes_testes_historico_evento_unico")
+      .on(table.testeId, table.versao)
+      .where(sql`${table.acao} <> 'cpf_revelado'`),
+    index("admissoes_testes_historico_teste_idx").on(table.empresaId, table.testeId, table.ocorridoEm, table.id)
+  ]
+);
+
+// =================================================================================================
+// ADM-002 V0 — Processo de admissao.
+//
+// Nasce de um teste encerrado com `aprovado_para_admissao`, na MESMA transacao que o encerra. Nao ha
+// acao "iniciar admissao": um segundo caminho para o mesmo ato e o defeito que a regra-mae proibe.
+//
+// NAO tem `colaborador_id` e nao referencia `colaboradores`. O vinculo com o cadastro operacional e
+// escopo inteiro da V7 — incluindo a coluna que o representara. Antecipa-la agora criaria coluna
+// nula que ninguem sabe preencher, e uma FK que exigiria mexer em `colaboradores` antes da hora.
+//
+// Esta vertical e PURAMENTE ADITIVA: nenhuma tabela existente e alterada.
+// =================================================================================================
+
+export const admissoesProcessos = pgTable(
+  "admissoes_processos",
+  {
+    id: idUuid,
+    empresaId,
+    // ADM-003 V1A: DUAS origens, UM processo. Nao ha segunda tabela nem segundo tipo — o que muda
+    // e de onde vieram os dados, e o CHECK de coerencia abaixo torna a mistura irrepresentavel.
+    // O default cobre as linhas que ja existem: todas nasceram de um teste efetivado.
+    // A uniao literal vive aqui por ora; sobe para `shared` quando o service da V1A chegar.
+    origem: text("origem").$type<"teste_efetivado" | "admissao_direta">().notNull().default("teste_efetivado"),
+    /**
+     * A ORIGEM, quando ela e um periodo de teste. NULO na admissao direta — e e o CHECK de
+     * coerencia, nao esta coluna, que garante que nulo so acontece na origem certa.
+     */
+    testeId: uuid("teste_id"),
+    // So na admissao direta. Na origem teste estes sao NULOS por CHECK: identidade, funcao e turno
+    // moram em `admissoes_testes` e sao apenas EXIBIDOS — copiar aqui criaria a segunda fonte que a
+    // regra-mae proibe.
+    nomeCompleto: text("nome_completo"),
+    cpf: text("cpf"),
+    funcaoId: uuid("funcao_id"),
+    turnoId: uuid("turno_id"),
+    /**
+     * `jornada_horario` PERMANECE. Ela e HISTORICO LEGADO dos processos diretos criados na V1A, antes
+     * do catalogo de turnos. Nao e escrita por nenhum caminho novo, nao e convertida e nao e apagada:
+     * converter "seg a sex, 08:00 as 17:00" em turno seria adivinhar qual turno da empresa aquilo era.
+     */
+    jornadaHorario: text("jornada_horario"),
+    /**
+     * RETRATO do turno no ato da criacao. Nao e segunda fonte: responde outra pergunta. O catalogo
+     * responde "o que e o turno M hoje"; o retrato responde "o que foi combinado com esta pessoa".
+     * Quando o DP muda o horario do turno M, a primeira resposta muda e a segunda NAO pode — mesma
+     * razao pela qual uma venda guarda o preco praticado.
+     */
+    turnoRotulo: text("turno_rotulo"),
+    turnoEtiqueta: text("turno_etiqueta"),
+    turnoHoraInicio: time("turno_hora_inicio"),
+    turnoHoraFim: time("turno_hora_fim"),
+    turnoDiasSemana: text("turno_dias_semana").array(),
+    status: text("status").$type<StatusProcesso>().notNull().default("iniciado"),
+    versao: integer("versao").notNull().default(1),
+    // Sem coluna de MOTIVO: a lista real depende de validacao do DP que ainda nao aconteceu, e uma
+    // lista provisoria vira regra definitiva assim que o CHECK roda. O cancelamento e auditado por
+    // ator, data e acao — que e o que a trilha precisa responder.
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    atualizadoPor: text("atualizado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    canceladoPor: text("cancelado_por").references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    atualizadoEm,
+    canceladoEm: timestamp("cancelado_em", { withTimezone: true })
+  },
+  (table) => [
+    // FK COMPOSTA: o banco recusa teste de outra empresa por conta propria.
+    foreignKey({
+      columns: [table.testeId, table.empresaId],
+      foreignColumns: [admissoesTestes.id, admissoesTestes.empresaId],
+      name: "admissoes_processos_teste_empresa_fk"
+    }),
+    // FK COMPOSTA tambem para a funcao: o banco recusa funcao de outra empresa por conta propria.
+    foreignKey({
+      columns: [table.funcaoId, table.empresaId],
+      foreignColumns: [funcoesOperacionais.id, funcoesOperacionais.empresaId],
+      name: "admissoes_processos_funcao_empresa_fk"
+    }),
+    // RESTRICT, e nao SET NULL: turno em uso numa admissao NAO se apaga. O `set null` das FKs de
+    // `colaboradores` e `fechamentos_caixa` continua como esta — ali perder a referencia e aceitavel,
+    // aqui apagaria em silencio o que foi combinado com uma pessoa.
+    //
+    // A traducao do erro 23503 em 409 TURNO_EM_USO e implementacao da vertical, no controller de
+    // Turnos. NAO ha SQL para isso, e nao havia como haver: o banco so sabe recusar.
+    foreignKey({
+      columns: [table.turnoId, table.empresaId],
+      foreignColumns: [turnos.id, turnos.empresaId],
+      name: "admissoes_processos_turno_empresa_fk"
+    }).onDelete("restrict"),
+    // UM teste, UM processo — no banco, nao no servico. E a rede para duas transacoes concorrentes
+    // passarem juntas pelo lock; repeticao e tratada pelo ramo idempotente do servico.
+    // Segue valendo com `teste_id` anulavel: o Postgres permite varios NULL numa unique, entao N
+    // admissoes diretas convivem sem afrouxar a garantia da origem teste.
+    unique("admissoes_processos_teste_unico").on(table.testeId),
+    // Alvo da FK composta vinda do historico. Tabela NOVA — nao fere a regra de nao tocar existentes.
+    unique("admissoes_processos_id_empresa_unica").on(table.id, table.empresaId),
+    // SOMENTE os dois estados alcancaveis na V0. Aceitar um estado antes de a regra dele existir e
+    // gravar vocabulario que ninguem confirmou, e que passa a ser gravavel por qualquer bug.
+    // ADM-003 V1B: `pausado` entra porque `aso_nao_apto` pausa o processo. Continua sem estado de
+    // vertical futura reservado — `aguardando_candidato`, `em_revisao_dp` e `efetivado` seguem fora.
+    check("admissoes_processos_status_check", sql`${table.status} in ('iniciado', 'pausado', 'cancelado')`),
+    check("admissoes_processos_versao_check", sql`${table.versao} > 0`),
+    // Um CHECK unico para os estados: cancelado pela metade deixa de ser representavel.
+    // `pausado` se comporta como `iniciado` aqui — pausado nao esta cancelado.
+    check(
+      "admissoes_processos_coerencia_status_check",
+      sql`(
+        ${table.status} in ('iniciado', 'pausado')
+        and ${table.canceladoPor} is null and ${table.canceladoEm} is null
+      ) or (
+        ${table.status} = 'cancelado'
+        and ${table.canceladoPor} is not null and ${table.canceladoEm} is not null
+      )`
+    ),
+    check(
+      "admissoes_processos_nome_check",
+      sql`${table.nomeCompleto} is null or length(btrim(${table.nomeCompleto})) > 0`
+    ),
+    check("admissoes_processos_cpf_check", sql`${table.cpf} is null or ${table.cpf} ~ '^[0-9]{11}$'`),
+    check("admissoes_processos_origem_check", sql`${table.origem} in ('teste_efetivado', 'admissao_direta')`),
+    // A constraint que impede combinacao incoerente, nos DOIS sentidos:
+    //   origem teste  -> tem teste, e NAO tem copia de funcao/jornada;
+    //   origem direta -> nao tem teste, e funcao/jornada sao obrigatorias no proprio processo.
+    // Com isso, "duas fontes para o mesmo dado" deixa de ser representavel no banco.
+    // ESTRITO, sem NOT VALID. `NOT VALID` pareceria gentil e seria pior: aceitaria a linha legada na
+    // criacao, barraria qualquer UPDATE futuro dela com erro confuso, e deixaria dado invalido
+    // escondido atras de uma constraint que se declara satisfeita. Legado se resolve ANTES, por
+    // preflight que PARA — nunca afrouxando a regra.
+    //
+    // A metade TESTE segue exigindo `jornada_horario` nula: e ela que impede a jornada do teste ser
+    // recopiada. A metade DIRETA deixou de exigi-la — processo novo usa turno, e a linha legada da
+    // V1A continua valida com o texto que tem.
+    check(
+      "admissoes_processos_origem_coerencia_check",
+      sql`(
+        ${table.origem} = 'teste_efetivado'
+        and ${table.testeId} is not null
+        and ${table.nomeCompleto} is null and ${table.cpf} is null
+        and ${table.funcaoId} is null and ${table.turnoId} is null
+        and ${table.jornadaHorario} is null
+      ) or (
+        ${table.origem} = 'admissao_direta'
+        and ${table.testeId} is null
+        and ${table.nomeCompleto} is not null and ${table.cpf} is not null
+        and ${table.funcaoId} is not null and ${table.turnoId} is not null
+      )`
+    ),
+    // Ultima linha de defesa DENTRO desta tabela. A garantia entre teste e processo e o lock
+    // consultivo no servico: indice nao cruza tabelas, e alegar que cruza seria mentira.
+    uniqueIndex("admissoes_processos_cpf_ativo_unico")
+      .on(table.empresaId, table.cpf)
+      .where(sql`${table.cpf} is not null and ${table.status} <> 'cancelado'`),
+    index("admissoes_processos_empresa_status_criado_idx").on(table.empresaId, table.status, table.criadoEm, table.id)
+  ]
+);
+
+/**
+ * ADM-003 V1A — bloco INTERNO do DP. Vale para as duas origens.
+ *
+ * Tudo anulavel menos a situacao do exame: o DP preenche ao longo do tempo, e exigir tudo de uma vez
+ * travaria o processo num dado que ainda nao existe.
+ *
+ * FORA daqui, de proposito: area, setor, CBO e salario (dependem de `unique (id, empresa_id)` em
+ * `areas`/`setores`, que nao existe — sem ele nao ha FK composta, e a garantia de empresa cairia
+ * para o servico) e dados bancarios (dado sensivel sem finalidade antes de haver candidato).
+ */
+export const admissoesProcessosInternos = pgTable(
+  "admissoes_processos_internos",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    dataAdmissao: date("data_admissao"),
+    ctpsNumero: text("ctps_numero"),
+    ctpsSerie: text("ctps_serie"),
+    ctpsUf: text("ctps_uf"),
+    pisPasepNit: text("pis_pasep_nit"),
+    // Os CINCO valores confirmados pelo DP. O ALERTA enquanto nao for 'realizado' e DERIVADO em
+    // `shared`, nunca gravado — nao existe coluna, indice nem filtro paralelo de pendencia.
+    // ADM-003 V1B: `realizado` SAI — virou ambiguo quando o desfecho ganhou dois lados, porque nao
+    // dizia se a pessoa podia ser admitida. `exige_acao` FICA, para a clinica pedir exame complementar.
+    exameSituacao: text("exame_situacao")
+      .$type<"pendente" | "guia_entregue" | "agendado" | "aso_apto" | "aso_nao_apto" | "exige_acao">()
+      .notNull()
+      .default("pendente"),
+    exameAtualizadoEm: timestamp("exame_atualizado_em", { withTimezone: true }),
+    exameAtualizadoPor: text("exame_atualizado_por").references(() => perfisUsuarios.usuarioId),
+    observacoesRh: text("observacoes_rh"),
+    versao: integer("versao").notNull().default(1),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_internos_processo_empresa_fk"
+    }).onDelete("cascade"),
+    unique("admissoes_processos_internos_processo_unico").on(table.processoId),
+    check(
+      "admissoes_processos_internos_exame_check",
+      sql`${table.exameSituacao} in ('pendente', 'guia_entregue', 'agendado', 'aso_apto', 'aso_nao_apto', 'exige_acao')`
+    ),
+    check("admissoes_processos_internos_versao_check", sql`${table.versao} > 0`),
+    check("admissoes_processos_internos_ctps_uf_check", sql`${table.ctpsUf} is null or ${table.ctpsUf} ~ '^[A-Z]{2}$'`),
+    check(
+      "admissoes_processos_internos_pis_check",
+      sql`${table.pisPasepNit} is null or ${table.pisPasepNit} ~ '^[0-9]{11}$'`
+    ),
+    index("admissoes_processos_internos_exame_idx").on(table.empresaId, table.exameSituacao)
+  ]
+);
+
+/**
+ * ADM-003 V2 â€” o convite que leva o candidato a ficha.
+ *
+ * Guarda SO o hash do token. O token em claro e mostrado uma vez a quem o gerou e nao e recuperavel
+ * â€” mesma disciplina de `caixa_autorizacoes`. Guardar o segredo em claro faria do backup uma copia
+ * das chaves.
+ *
+ * Sem `atualizado_em` e sem trigger, de proposito: convite nao se edita. Acesso e revogacao tem
+ * colunas proprias, e a linha nunca muda de identidade.
+ */
+export const admissoesConvites = pgTable(
+  "admissoes_convites",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    // GRAVADO, nao derivado: o prazo combinado com a pessoa nao pode mudar porque a regra mudou.
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    avisoPrivacidadeVersao: text("aviso_privacidade_versao").notNull(),
+    criadoPor: text("criado_por")
+      .notNull()
+      .references(() => perfisUsuarios.usuarioId),
+    criadoEm,
+    primeiroAcessoEm: timestamp("primeiro_acesso_em", { withTimezone: true }),
+    ultimoAcessoEm: timestamp("ultimo_acesso_em", { withTimezone: true }),
+    revogadoEm: timestamp("revogado_em", { withTimezone: true }),
+    revogadoPor: text("revogado_por").references(() => perfisUsuarios.usuarioId)
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_convites_processo_empresa_fk"
+    }).onDelete("cascade"),
+    // Alvo da FK composta da trilha: o evento do candidato aponta para o convite que o produziu.
+    unique("admissoes_convites_id_empresa_unica").on(table.id, table.empresaId),
+    unique("admissoes_convites_token_hash_unico").on(table.tokenHash),
+    check("admissoes_convites_token_hash_check", sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`),
+    check("admissoes_convites_validade_check", sql`${table.expiraEm} > ${table.criadoEm}`),
+    // Revogar tem duas colunas, e elas andam juntas ou nao andam.
+    check("admissoes_convites_revogacao_check", sql`num_nonnulls(${table.revogadoEm}, ${table.revogadoPor}) <> 1`),
+    check(
+      "admissoes_convites_acesso_check",
+      sql`${table.ultimoAcessoEm} is null or ${table.primeiroAcessoEm} is not null`
+    ),
+    // UM convite vigente por processo. Reemitir exige revogar o anterior na MESMA transacao â€” a
+    // pre-checagem sozinha nao segura duas chamadas simultaneas.
+    uniqueIndex("admissoes_convites_processo_vigente_unico")
+      .on(table.processoId)
+      .where(sql`${table.revogadoEm} is null`),
+    index("admissoes_convites_empresa_processo_idx").on(table.empresaId, table.processoId, table.criadoEm)
+  ]
+);
+
+export const admissoesProcessosHistorico = pgTable(
+  "admissoes_processos_historico",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    versao: integer("versao").notNull(),
+    acao: text("acao").$type<AcaoHistoricoProcesso>().notNull(),
+    // ANULAVEL desde a V2: o candidato NAO tem perfil no sistema â€” ele e um estranho com um link.
+    // Quem age por fora aparece pelo convite que o autorizou, e o CHECK abaixo garante que sempre
+    // ha exatamente um autor. Usuario tecnico "sistema" foi recusado: criaria ator falso na
+    // trilha, e a trilha existe justamente para dizer quem fez.
+    atorUsuarioId: text("ator_usuario_id").references(() => perfisUsuarios.usuarioId),
+    conviteId: uuid("convite_id"),
+    // NOMES de campos, nunca valores: gravar antes/depois duplicaria a PII dentro da propria trilha.
+    camposAlterados: jsonb("campos_alterados")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ocorridoEm: timestamp("ocorrido_em", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_historico_processo_empresa_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.conviteId, table.empresaId],
+      foreignColumns: [admissoesConvites.id, admissoesConvites.empresaId],
+      name: "admissoes_processos_historico_convite_empresa_fk"
+    }),
+    // EXATAMENTE um autor: ou o ato e interno e tem usuario, ou veio pelo convite. Nunca os dois,
+    // nunca nenhum â€” trilha sem autor nao e trilha.
+    check(
+      "admissoes_processos_historico_autoria_check",
+      sql`num_nonnulls(${table.atorUsuarioId}, ${table.conviteId}) = 1`
+    ),
+    check(
+      "admissoes_processos_historico_acao_check",
+      sql`${table.acao} in ('criado', 'cancelado', 'internos_alterados', 'exame_alterado', 'pausado', 'retomado', 'cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
+    ),
+    check("admissoes_processos_historico_versao_check", sql`${table.versao} > 0`),
+    // Idempotencia da transicao no banco: repetir um cancelamento nao grava segundo evento.
+    //
+    // PARCIAL, como o irmao de `admissoes_testes_historico` (0034). Ele nasceu simples na 0035, e a
+    // diferenca custava caro: sem versao nova o segundo evento colidia com o primeiro, entao revelar
+    // um CPF precisava AVANCAR a versao — e avancar a versao e um UPDATE na linha raiz, que grava
+    // `atualizado_por` e dispara a trigger de `atualizado_em`. O detalhe passava a mostrar como
+    // "Alterado por" quem apenas LEU o documento.
+    //
+    // `cpf_revelado` nao incrementa versao e acontece quantas vezes o DP revelar. A unicidade das
+    // acoes FUNCIONAIS nao muda: repetir um cancelamento segue recusado pelo banco.
+    //
+    // A V2 amplia a excecao: convite e ficha tambem NAO mexem em `admissoes_processos`, entao
+    // tambem nao consomem versao dele. A forma negativa e deliberada â€” ela diz "o indice vale para
+    // tudo, menos os eventos que nao consomem versao", que e a regra de verdade.
+    uniqueIndex("admissoes_processos_historico_evento_unico")
+      .on(table.processoId, table.versao)
+      .where(
+        sql`${table.acao} not in ('cpf_revelado', 'convite_gerado', 'convite_revogado', 'ficha_enviada', 'ficha_devolvida', 'ficha_aprovada')`
+      ),
+    index("admissoes_processos_historico_processo_idx").on(
+      table.empresaId,
+      table.processoId,
+      table.ocorridoEm,
+      table.id
+    )
+  ]
+);
+
+/**
+ * ADM-003 V3 â€” a ficha que o candidato preenche. Uma por processo.
+ *
+ * `situacao` e PROPRIA da ficha e nao e o status do processo: o processo pode seguir `iniciado`
+ * enquanto a ficha vai de rascunho a aprovada. Misturar os dois faria a lista de admissoes mudar
+ * porque alguem salvou um rascunho.
+ *
+ * Documentos entram como NUMERO, nunca como arquivo â€” anexo e a V5, e depende da politica de
+ * documentos que ainda nao existe.
+ */
+export const admissoesProcessosFicha = pgTable(
+  "admissoes_processos_ficha",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    situacao: text("situacao").notNull().default("rascunho"),
+    versao: integer("versao").notNull().default(1),
+    nomeSocial: text("nome_social"),
+    nascimento: date("nascimento"),
+    sexo: text("sexo"),
+    estadoCivil: text("estado_civil"),
+    racaCor: text("raca_cor"),
+    grauInstrucao: text("grau_instrucao"),
+    nacionalidade: text("nacionalidade"),
+    naturalidade: text("naturalidade"),
+    nomeMae: text("nome_mae"),
+    nomePai: text("nome_pai"),
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    municipio: text("municipio"),
+    uf: text("uf"),
+    telefone: text("telefone"),
+    email: text("email"),
+    rgNumero: text("rg_numero"),
+    rgOrgao: text("rg_orgao"),
+    rgUf: text("rg_uf"),
+    rgEmissao: date("rg_emissao"),
+    tituloEleitor: text("titulo_eleitor"),
+    tituloZona: text("titulo_zona"),
+    tituloSecao: text("titulo_secao"),
+    banco: text("banco"),
+    agencia: text("agencia"),
+    conta: text("conta"),
+    contaDigito: text("conta_digito"),
+    contaTipo: text("conta_tipo"),
+    // Ausencia de dependente e DECLARACAO, nao tabela vazia: tabela vazia tambem e "nao respondeu".
+    semDependentes: boolean("sem_dependentes"),
+    avisoPrivacidadeVersao: text("aviso_privacidade_versao"),
+    avisoAceitoEm: timestamp("aviso_aceito_em", { withTimezone: true }),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    revisadoEm: timestamp("revisado_em", { withTimezone: true }),
+    revisadoPor: text("revisado_por").references(() => perfisUsuarios.usuarioId),
+    revisaoPendencias: text("revisao_pendencias"),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_ficha_processo_empresa_fk"
+    }).onDelete("cascade"),
+    unique("admissoes_processos_ficha_processo_unico").on(table.processoId),
+    check(
+      "admissoes_processos_ficha_situacao_check",
+      sql`${table.situacao} in ('rascunho', 'enviada', 'devolvida', 'aprovada')`
+    ),
+    check("admissoes_processos_ficha_versao_check", sql`${table.versao} > 0`),
+    check("admissoes_processos_ficha_uf_check", sql`${table.uf} is null or ${table.uf} ~ '^[A-Z]{2}$'`),
+    check("admissoes_processos_ficha_rg_uf_check", sql`${table.rgUf} is null or ${table.rgUf} ~ '^[A-Z]{2}$'`),
+    check("admissoes_processos_ficha_cep_check", sql`${table.cep} is null or ${table.cep} ~ '^[0-9]{8}$'`),
+    // O ciclo inteiro num CHECK so: enviada exige aceite e declaracao de dependentes; devolvida
+    // exige pendencia escrita, senao o candidato recebe de volta sem saber o que corrigir.
+    check(
+      "admissoes_processos_ficha_coerencia_check",
+      sql`(
+        (${table.situacao} = 'rascunho' and ${table.enviadoEm} is null and ${table.revisadoEm} is null)
+        or (${table.situacao} = 'enviada' and ${table.enviadoEm} is not null and ${table.revisadoEm} is null
+            and ${table.avisoAceitoEm} is not null and ${table.avisoPrivacidadeVersao} is not null
+            and ${table.semDependentes} is not null)
+        or (${table.situacao} = 'devolvida' and ${table.enviadoEm} is not null
+            and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null
+            and ${table.revisaoPendencias} is not null)
+        or (${table.situacao} = 'aprovada' and ${table.enviadoEm} is not null
+            and ${table.revisadoEm} is not null and ${table.revisadoPor} is not null)
+      )`
+    ),
+    index("admissoes_processos_ficha_empresa_situacao_idx").on(table.empresaId, table.situacao),
+    // Aceite de TESTE tem de ser separavel por consulta, nao por memoria de quem estava la.
+    index("admissoes_processos_ficha_aviso_teste_idx")
+      .on(table.empresaId)
+      .where(sql`${table.avisoPrivacidadeVersao} like 'AVISO-TESTE-%'`)
+  ]
+);
+
+/**
+ * ADM-003 V4 â€” dependentes declarados na ficha. Zero ou muitos.
+ *
+ * Sao dados de TERCEIROS, possivelmente menores, de gente que pode nunca ser admitida. O CPF e
+ * opcional de proposito: crianca costuma nao ter, e exigir criaria dado falso.
+ */
+export const admissoesProcessosDependentes = pgTable(
+  "admissoes_processos_dependentes",
+  {
+    id: idUuid,
+    empresaId,
+    processoId: uuid("processo_id").notNull(),
+    nomeCompleto: text("nome_completo").notNull(),
+    nascimento: date("nascimento").notNull(),
+    parentesco: text("parentesco").notNull(),
+    cpf: text("cpf"),
+    finalidades: text("finalidades")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    criadoEm,
+    atualizadoEm
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.processoId, table.empresaId],
+      foreignColumns: [admissoesProcessos.id, admissoesProcessos.empresaId],
+      name: "admissoes_processos_dependentes_processo_empresa_fk"
+    }).onDelete("cascade"),
+    check("admissoes_processos_dependentes_nome_check", sql`length(btrim(${table.nomeCompleto})) > 0`),
+    // ADM-003 V4 (D-7). O banco confere o DIGITO VERIFICADOR, e nao so o formato.
+    //
+    // Ate aqui a regra vivia so no Zod, e o banco aceitava 11 digitos quaisquer. Um caminho novo que
+    // esquecesse o contrato gravaria CPF invalido de um TERCEIRO — possivelmente uma crianca — e
+    // ninguem descobriria ate alguem precisar do dado. Aqui a regra vale para qualquer caminho.
+    //
+    // A expressao e inline, e nao uma funcao, de proposito: funcao chamada por CHECK precisa existir
+    // ANTES do `drizzle-kit push`, o que obrigaria a cria-la tambem em `db/setup-dev.mjs` e em
+    // `tests/setup/testcontainers.ts` — o mesmo caminho de provisionamento que ja nos custou tabela
+    // sem trigger. Expressao inline nao tem o que faltar no push.
+    //
+    // Modulo 11 da Receita, a mesma conta de `shared/src/admissoes/cpf.ts`: soma ponderada, vezes 10,
+    // resto por 11 — e o resto 10 vira 0, que e o que o resto por 10 no fim faz.
+    //
+    // O CASE nao e enfeite: o Postgres NAO garante ordem de avaliacao dentro de um AND. Com `and`, o
+    // `::int` pode rodar antes do regex, e um valor com letra viraria erro 22P02 em vez de violacao de
+    // CHECK — rejeitado do mesmo jeito, mas por uma porta que o tratamento de erro nao conhece. CASE e
+    // o mecanismo que a documentacao garante: so calcula digito depois de saber que sao 11 digitos.
+    //
+    // A guarda de sequencia repetida NAO e redundante: as onze sequencias (000..., 111...) passam na
+    // aritmetica do modulo 11 e precisam ser recusadas a parte. Ela usa `repeat` em vez do retrovisor
+    // `\1` de regex porque, dentro de template literal, `\1` e escape octal invalido: o texto cozido
+    // chega `undefined` no `sql` do Drizzle e a migration nasceria quebrada sem ninguem ver.
+    check(
+      "admissoes_processos_dependentes_cpf_check",
+      sql`${table.cpf} is null or case
+        when ${table.cpf} !~ '^[0-9]{11}$' then false
+        when ${table.cpf} = repeat(substring(${table.cpf}, 1, 1), 11) then false
+        else
+          substring(${table.cpf}, 10, 1)::int = (((
+            10 * substring(${table.cpf}, 1, 1)::int + 9 * substring(${table.cpf}, 2, 1)::int + 8 * substring(${table.cpf}, 3, 1)::int +
+            7 * substring(${table.cpf}, 4, 1)::int + 6 * substring(${table.cpf}, 5, 1)::int + 5 * substring(${table.cpf}, 6, 1)::int +
+            4 * substring(${table.cpf}, 7, 1)::int + 3 * substring(${table.cpf}, 8, 1)::int + 2 * substring(${table.cpf}, 9, 1)::int
+            ) * 10) % 11) % 10
+          and substring(${table.cpf}, 11, 1)::int = (((
+            11 * substring(${table.cpf}, 1, 1)::int + 10 * substring(${table.cpf}, 2, 1)::int + 9 * substring(${table.cpf}, 3, 1)::int +
+            8 * substring(${table.cpf}, 4, 1)::int + 7 * substring(${table.cpf}, 5, 1)::int + 6 * substring(${table.cpf}, 6, 1)::int +
+            5 * substring(${table.cpf}, 7, 1)::int + 4 * substring(${table.cpf}, 8, 1)::int + 3 * substring(${table.cpf}, 9, 1)::int +
+            2 * substring(${table.cpf}, 10, 1)::int
+            ) * 10) % 11) % 10
+      end`
+    ),
+    uniqueIndex("admissoes_processos_dependentes_cpf_unico")
+      .on(table.processoId, table.cpf)
+      .where(sql`${table.cpf} is not null`),
+    index("admissoes_processos_dependentes_empresa_processo_idx").on(table.empresaId, table.processoId)
   ]
 );

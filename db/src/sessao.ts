@@ -25,3 +25,22 @@ export const sqlTetosDaTransacaoApi = sql`select set_config('lock_timeout', '10s
 export function sqlTravarCadastroDeProdutosDaEmpresa(empresaId: string) {
   return sql`select pg_advisory_xact_lock(hashtext('produtos:cadastro'), hashtext(${empresaId}::text))`;
 }
+
+/**
+ * Serializa, dentro da transacao corrente, tudo que decide sobre a MESMA PESSOA na MESMA empresa —
+ * criar periodo de teste e criar admissao direta.
+ *
+ * Por que advisory e nao indice: a garantia precisa cruzar DUAS tabelas. `admissoes_testes` tem o
+ * seu unique parcial e `admissoes_processos` tem o dele, mas indice nao enxerga a tabela vizinha, e
+ * as duas pre-checagens em READ COMMITTED nao travam nada — duas transacoes simultaneas passam pelas
+ * duas e as duas gravam. Alegar que o indice resolve seria mentira.
+ *
+ * A chave e (empresa, CPF): duas pessoas diferentes nunca esperam uma pela outra, e a mesma pessoa
+ * em empresas diferentes tambem nao — que e o caso real de uma rede. Solta sozinho no commit ou no
+ * rollback.
+ *
+ * Mora aqui porque SQL cru e proibido em `api/src` (scripts/verificar-arquitetura).
+ */
+export function sqlTravarAdmissaoDaPessoa(empresaId: string, cpf: string) {
+  return sql`select pg_advisory_xact_lock(hashtext('admissoes:pessoa'), hashtext(${empresaId}::text || ':' || ${cpf}::text))`;
+}

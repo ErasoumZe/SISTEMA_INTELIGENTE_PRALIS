@@ -34,6 +34,7 @@ export default defineConfig({
   projects: [
     {
       name: "produtos",
+      testMatch: /produtos-.*\.spec\.ts/u,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
@@ -42,6 +43,22 @@ export default defineConfig({
         permissions: ["camera"],
         launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] }
       }
+    },
+    {
+      // ADM-003 V5: a revisao da ficha pelo DP. Sem camera, sem permissao extra — e so navegador.
+      // Roda contra um banco ISOLADO com dados sinteticos (E2E_BASE_URL / E2E_API_URL), nunca em
+      // producao: os testes criam processo, convite e ficha por API a cada rodada.
+      name: "admissoes",
+      // Duas familias no mesmo projeto: a admissao e o catalogo que ela consome. Sao a mesma stack,
+      // o mesmo banco isolado e o mesmo navegador — separar em dois projetos so dobraria o setup.
+      testMatch: /(admissoes|funcoes)-.*\.spec\.ts/u,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
+    },
+    {
+      // Preserva os E2E que ja existiam na main; o filtro de admissoes nao pode silencia-los.
+      name: "sistema",
+      testMatch: /(?:app-sidebar|caixa-.*|usuarios-acessos)\.spec\.ts/u,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } }
     }
   ]
 });

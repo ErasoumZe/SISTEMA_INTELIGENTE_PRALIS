@@ -39,7 +39,8 @@ export default tseslint.config(
             "db/bootstrap-prod.ts",
             "db/seed-referencia-prod.ts",
             "db/backfill-codigos.ts",
-            "db/diagnostico-fuso.ts"
+            "db/diagnostico-fuso.ts",
+            "playwright.config.ts"
           ],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20
         },

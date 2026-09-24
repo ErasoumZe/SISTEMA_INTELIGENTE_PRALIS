@@ -171,6 +171,23 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_colaboradores_visualizar",
     icone: "mdi-account-group"
   },
+  // ADM-001. Vizinha de Colaboradores no menu, mas NAO e cadastro operacional: nao entra em
+  // `telasCrudDiretoria` (nao usa a grade generica) e a permissao e propria da admissao.
+  admissoes_testes: {
+    id: "admissoes_testes",
+    titulo: "Períodos de teste",
+    permissao: "admissoes_testes_visualizar",
+    icone: "mdi-account-clock"
+  },
+  // ADM-003 V1A. UNICO item de menu do processo. A lista e consulta: a unica acao de criacao nela e
+  // "+ Novo cadastro", que abre a admissao direta. Efetivar teste continua criando o processo pela
+  // tela de Periodos de teste, sem passar por aqui.
+  admissoes_processos: {
+    id: "admissoes_processos",
+    titulo: "Processos de admissão",
+    permissao: "admissoes_processos_visualizar",
+    icone: "mdi-clipboard-account"
+  },
   folha_ponto: {
     id: "folha_ponto",
     titulo: "Folhas de ponto",
@@ -266,6 +283,14 @@ export const itemPorTela: Record<string, ItemMenu> = {
     titulo: "Turnos",
     permissao: "cadastro_turnos_visualizar",
     icone: "mdi-clock-outline"
+  },
+  // Catalogo do que a pessoa FAZ. Vizinho de Turnos no menu porque os dois sao catalogo da empresa
+  // que a admissao consome — e longe de "Colaboradores", que e gente, nao lista.
+  funcoes_operacionais: {
+    id: "funcoes_operacionais",
+    titulo: "Funções operacionais",
+    permissao: "cadastro_funcoes_visualizar",
+    icone: "mdi-badge-account-horizontal-outline"
   },
   areas_setores: {
     id: "areas_setores",
@@ -455,6 +480,10 @@ export function categoriaInicialSaida(permissoesUsuario: readonly Permissao[]): 
 }
 
 export const secoesPermissoes = [
+  // Secao PROPRIA, e nao dentro de "Colaboradores": a separacao entre admissao e cadastro
+  // operacional precisa aparecer para quem concede permissao, senao alguem marca a linha errada
+  // achando que e a mesma coisa. Sem esta entrada as sete permissoes cairiam em "Outras".
+  { titulo: "Admissões", prefixos: ["admissoes_", "menu_admissoes"] },
   { titulo: "Áreas e setores", prefixos: ["cadastro_areas_setores", "menu_areas_setores"] },
   { titulo: "Caixa", prefixos: ["caixa_", "caixas_", "menu_caixa"] },
   { titulo: "Clientes", prefixos: ["cadastro_clientes", "menu_clientes"] },
@@ -603,6 +632,8 @@ export function formCadastroVazio(): CadastroForm {
     sigla: "",
     horaInicio: "",
     horaFim: "",
+    etiquetaTurno: "",
+    diasSemanaTurno: [],
     marca: "",
     contaId: "",
     ativo: true,
@@ -777,6 +808,10 @@ export function formCadastroDeLinha(
     sigla: linha.sigla ?? "",
     horaInicio: (linha.inicio ?? "").slice(0, 5),
     horaFim: (linha.fim ?? "").slice(0, 5),
+    // Vem da linha da grade, que ja traz o valor gravado. O formulario SEMPRE mostra o que existe —
+    // e por isso salvar pela tela nunca apaga sem querer: o campo chega preenchido.
+    etiquetaTurno: (linha.etiquetaTurno as CadastroForm["etiquetaTurno"]) || "",
+    diasSemanaTurno: linha.diasSemanaTurno ? linha.diasSemanaTurno.split(",") : [],
     marca: linha.marca ?? "",
     contaId: linha.contaId ?? "",
     ativo: !["Nao", "Não"].includes(linha.ativo ?? ""),

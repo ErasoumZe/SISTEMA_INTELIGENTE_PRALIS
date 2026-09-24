@@ -1,5 +1,6 @@
 export * from "./app.schema.js";
 export * from "./schema.js";
+export * from "./admissoes/admissoes.schema.js";
 export * from "./autenticacao/autenticacao.schema.js";
 export * from "./cadastro/cadastro.schema.js";
 export * from "./caixa/caixa.schema.js";

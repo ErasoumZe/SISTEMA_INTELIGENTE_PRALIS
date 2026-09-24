@@ -28,6 +28,11 @@ import { registrarRotasVendasComprovantes } from "./vendas/comprovantes.controll
 import { registrarRotasProdutosMaisVendidos } from "./vendas/produtos-mais-vendidos.controller.js";
 import { erro } from "@padaria/shared/api";
 import { exigirAutenticacao } from "./auth/guards.js";
+import { registrarRotasAdmissoes } from "./admissoes/admissoes.controller.js";
+import { registrarRotasAdmissoesConvites } from "./admissoes/convites.controller.js";
+import { registrarRotasAdmissaoDependentes } from "./admissoes/dependentes.controller.js";
+import { registrarRotasAdmissaoFicha } from "./admissoes/ficha.controller.js";
+import { registrarRotasAdmissoesProcessos } from "./admissoes/processos.controller.js";
 import { registrarRotasAreas } from "./areas/areas.controller.js";
 import { registrarRotasClientes } from "./clientes/clientes.controller.js";
 import { registrarRotasContas } from "./contas/contas.controller.js";
@@ -45,6 +50,7 @@ import { registrarRotasSetores } from "./setores/setores.controller.js";
 import { registrarRotasSociosGestores } from "./socios-gestores/socios-gestores.controller.js";
 import { registrarRotasMensagensAdmin } from "./mensagens-admin/mensagens-admin.controller.js";
 import { registrarRotasNotificacoes } from "./notificacoes/notificacoes.controller.js";
+import { registrarRotasFuncoesOperacionais } from "./funcoes/funcoes.controller.js";
 import { registrarRotasTurnos } from "./turnos/turnos.controller.js";
 import { registrarRotasUnidadesMedida } from "./unidades-medida/unidades-medida.controller.js";
 import { registrarRotasUsuarios } from "./usuarios/usuarios.controller.js";
@@ -62,7 +68,17 @@ const rotasComAutenticacaoPropria = new Set([
   "/api/me",
   "/api/sessao",
   "/api/integracoes",
-  "/api/integracoes/conciliacao"
+  "/api/integracoes/conciliacao",
+  // ADM-003 V3: a ficha do candidato. Ele NAO tem conta — autentica pelo header
+  // `x-admissao-convite`, cujo hash mora em `admissoes_convites`. Uma entrada por rota
+  // porque a comparacao e exata; e GET e PUT dividem a mesma entrada, porque o Set e por url.
+  "/api/admissao/ficha",
+  "/api/admissao/ficha/enviar",
+  // ADM-003 V4: dependentes, pela mesma porta. Duas entradas para quatro rotas — GET e POST
+  // dividem a primeira, PUT e DELETE dividem a segunda, porque a comparacao e pela url
+  // DECLARADA da rota, com o `:id` literal, e nao pelo caminho ja resolvido.
+  "/api/admissao/dependentes",
+  "/api/admissao/dependentes/:id"
 ]);
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -80,6 +96,10 @@ export async function buildApp(): Promise<FastifyInstance> {
                 "req.headers.cookie",
                 "req.headers.authorization",
                 'req.headers["x-api-key"]',
+                // ADM-003 V3: o link do candidato vive 14 dias. O serializer padrao do Fastify nao
+                // registra headers, mas isto e cinto e suspensorio para o dia em que alguem logar
+                // `req` inteiro ou o Sentry serializar o contexto.
+                'req.headers["x-admissao-convite"]',
                 'res.headers["set-cookie"]'
               ],
               censor: "[redigido]"
@@ -148,7 +168,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     // PATCH e usado por aprovar/recusar NF-e e discriminar lancamentos. Sem ele, o preflight
     // cross-origin (front sistema. -> API api-sistema.) barra o PATCH com net::ERR_FAILED.
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-API-Key"]
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-API-Key",
+      // Sem isto o preflight recusa e o navegador nem chega a mandar a requisicao real —
+      // falha silenciosa, sem nada no log do servidor.
+      "X-Admissao-Convite"
+    ]
   });
   await app.register(helmet);
   await app.register(rateLimit, {
@@ -229,6 +257,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasColaboradores(app);
   await registrarRotasGrupos(app);
   await registrarRotasUnidadesMedida(app);
+  await registrarRotasAdmissoes(app);
+  await registrarRotasAdmissoesProcessos(app);
+  await registrarRotasAdmissoesConvites(app);
+  await registrarRotasAdmissaoFicha(app);
+  await registrarRotasAdmissaoDependentes(app);
   await registrarRotasAreas(app);
   await registrarRotasSetores(app);
   await registrarRotasSociosGestores(app);
@@ -237,6 +270,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registrarRotasMensagensAdmin(app);
   await registrarRotasCampanhas(app);
   await registrarRotasTurnos(app);
+  await registrarRotasFuncoesOperacionais(app);
   await registrarRotasProdutos(app);
   await registrarRotasUsuarios(app);
   await registrarRotasPermissoes(app);

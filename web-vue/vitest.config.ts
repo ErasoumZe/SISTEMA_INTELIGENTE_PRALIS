@@ -16,7 +16,12 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", ".nuxt/**", ".output/**"]
+    exclude: ["node_modules/**", ".nuxt/**", ".output/**"],
+    // O `vuetify` precisa passar pelo Vite, e nao ser externalizado: ele importa `.css` ao lado de
+    // cada componente, e o Node sozinho nao sabe abrir isso ("Unknown file extension .css"). Sem
+    // esta linha, todo teste que monta um componente Vuetify de verdade morre na importacao — e
+    // sobraria stubar `v-dialog`, que provaria o stub e nao a tela.
+    server: { deps: { inline: [/vuetify/] } }
   },
   resolve: {
     alias: {
