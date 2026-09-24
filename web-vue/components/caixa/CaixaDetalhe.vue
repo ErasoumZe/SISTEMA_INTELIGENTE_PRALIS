@@ -86,17 +86,17 @@ onMounted(carregar);
 
       <v-card variant="tonal" class="mb-4">
         <v-card-text class="py-3">
-          <div class="text-subtitle-2 mb-2">ResponsÃ¡veis declarados</div>
+          <div class="text-subtitle-2 mb-2">Responsáveis declarados</div>
           <div class="d-flex flex-column ga-2 text-body-2">
             <div>
               <strong>Abertura:</strong>
-              Caixa {{ caixa.caixaResponsavelNomeAbertura || "NÃ£o registrado" }} Â· Supervisor
-              {{ caixa.supervisorResponsavelNomeAbertura || "NÃ£o registrado" }}.
+              Caixa {{ caixa.caixaResponsavelNomeAbertura || "Não registrado" }} · Supervisor
+              {{ caixa.supervisorResponsavelNomeAbertura || "Não registrado" }}.
             </div>
             <div>
               <strong>Fechamento:</strong>
-              Caixa {{ caixa.caixaResponsavelNomeFechamento || "Ainda aberto / nÃ£o registrado" }} Â· Supervisor
-              {{ caixa.supervisorResponsavelNomeFechamento || "Ainda aberto / nÃ£o registrado" }}.
+              Caixa {{ caixa.caixaResponsavelNomeFechamento || "Ainda aberto / não registrado" }} · Supervisor
+              {{ caixa.supervisorResponsavelNomeFechamento || "Ainda aberto / não registrado" }}.
             </div>
           </div>
         </v-card-text>
