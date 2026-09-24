@@ -36,6 +36,7 @@ export type OperacaoDetalhe = {
   grupoMercadoriaId?: string | null;
   grupoRetiradaId?: string | null;
   nLacreDoc?: string | null;
+  lacreFechamentoPlanejado?: string | null;
   agendadaPara?: string | null;
   dataRecebimento?: string | null;
   tempoConfirmacao?: OperacaoForm["tempoConfirmacao"];
