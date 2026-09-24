@@ -56,6 +56,19 @@
     .empty { padding:28px 14px; text-align:center; color:var(--muted); }
     .toast { position:fixed; right:18px; bottom:18px; max-width:min(420px,calc(100vw - 36px)); padding:12px 15px; border-radius:10px; background:#0a1118; border:1px solid var(--accent); box-shadow:var(--shadow); z-index:20; }
     .toast.error { border-color:var(--danger); color:#ffd4d4; }
+    .lume-fab { position:fixed; right:22px; bottom:22px; width:58px; height:58px; border-radius:50%; border:2px solid #ffd29f; background:linear-gradient(145deg,#ff9e5b,#c34d18); color:#fff; font-weight:900; box-shadow:0 12px 32px #0008; z-index:30; animation:lumePulse 3s ease-in-out infinite; }
+    .lume-fab img { display:block; width:25px; height:25px; margin:0 auto 1px; object-fit:contain; }
+    .lume-fab small { display:block; font-size:.55rem; letter-spacing:.08em; margin-top:2px; }
+    .lume-chat { position:fixed; right:22px; bottom:92px; width:min(360px,calc(100vw - 28px)); border:1px solid #ffad73; border-radius:18px; background:#19232eF2; box-shadow:var(--shadow); overflow:hidden; z-index:31; }
+    .lume-chat[hidden] { display:none; }
+    .lume-chat-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; background:linear-gradient(135deg,#f06a28,#b64216); color:#fff; }
+    .lume-chat-head strong { display:block; }
+    .lume-chat-head small { opacity:.85; }
+    .lume-chat-body { padding:16px; color:var(--ink); }
+    .lume-chat-body p { margin:0 0 12px; line-height:1.45; }
+    .lume-chat-body input { width:100%; color:var(--ink); background:#101820; border:1px solid var(--line); border-radius:9px; padding:.7rem; }
+    .lume-chat-note { color:var(--muted); font-size:.76rem; margin-top:10px !important; }
+    @keyframes lumePulse { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
     @media (max-width: 860px) { .hero { display:block; } .brand { display:block; margin-top:12px; } .layout { grid-template-columns:1fr; } .list { max-height:380px; } .toolbar { position:static; } }
     @media (max-width: 560px) { .app { padding:18px 10px 40px; } .fields { grid-template-columns:1fr; } .field.full { grid-column:auto; } .editor { padding:16px; } .editor-actions { align-items:flex-start; flex-direction:column; } .editor-actions button { width:100%; } .stats { margin-left:0; width:100%; } }
   </style>
@@ -79,6 +92,11 @@
     <section id="editorPanel" class="panel" aria-label="Editor de pergunta"><div class="editor-empty">Selecione uma pergunta ou crie uma nova para começar.</div></section>
   </section>
 </main>
+<button id="lumeFab" class="lume-fab" type="button" aria-label="Abrir prévia da Lume"><img src="../../web-vue/public/cicluz/cicluz-simbolo.png" alt="Cicluz"><small>LUME</small></button>
+<section id="lumeChat" class="lume-chat" hidden aria-label="Prévia do chat Lume">
+  <header class="lume-chat-head"><div><strong>Lume</strong><small>Prévia visual da ajuda</small></div><button id="lumeClose" type="button" aria-label="Fechar prévia">×</button></header>
+  <div class="lume-chat-body"><p>Olá! Esta é uma prévia do botão e do modal da Lume. O chat real só será implementado depois da revisão do catálogo.</p><input type="search" placeholder="Digite uma dúvida (prévia)" aria-label="Pergunta de prévia"><p class="lume-chat-note">Sem IA e sem envio de dados nesta etapa.</p></div>
+</section>
 <div id="toast" class="toast" hidden role="status"></div>
 <script id="seed-data" type="application/json">
 {
@@ -131,6 +149,7 @@
   function exportJson() { const errors=validate(data); if(errors.length){toast(`Não foi possível exportar: ${errors[0]}`,true);return;} const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download='lume-faq-revisado.json'; a.click(); URL.revokeObjectURL(url); toast('JSON validado e exportado.'); }
   function importJson(file) { const reader=new FileReader(); reader.onload=()=>{try{const parsed=JSON.parse(reader.result); const errors=validate(parsed); if(errors.length){toast(`JSON inválido: ${errors[0]}`,true);return;} data={schemaVersion:parsed.schemaVersion||1,produto:parsed.produto||'Lume',observacao:parsed.observacao||'',itens:parsed.itens.map(normalizeItem)}; selected=null; save(); renderList();renderEditor();toast(`${data.itens.length} perguntas importadas.`);}catch(e){toast('Arquivo não é um JSON válido.',true);}}; reader.readAsText(file); }
   $('search').addEventListener('input',renderList); $('categoryFilter').addEventListener('change',renderList); $('statusFilter').addEventListener('change',renderList); $('newBtn').addEventListener('click',newItem); $('exportBtn').addEventListener('click',exportJson); $('importBtn').addEventListener('click',()=>$('fileInput').click()); $('fileInput').addEventListener('change',(e)=>{if(e.target.files[0])importJson(e.target.files[0]);e.target.value='';});
+  $('lumeFab').addEventListener('click',()=>{ $('lumeChat').hidden=false; }); $('lumeClose').addEventListener('click',()=>{ $('lumeChat').hidden=true; });
   try { const stored=localStorage.getItem(STORAGE); const parsed=stored?JSON.parse(stored):null; data=parsed && Array.isArray(parsed.itens) ? {schemaVersion:parsed.schemaVersion||1,produto:parsed.produto||'Lume',observacao:parsed.observacao||'',itens:parsed.itens.map(normalizeItem)} : {schemaVersion:1,itens:fallback}; } catch { data={schemaVersion:1,itens:fallback}; } data.itens=data.itens.map(normalizeItem); renderList(); renderEditor();
 })();
 </script>

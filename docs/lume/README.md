@@ -18,4 +18,6 @@ Use a busca e os filtros de categoria/status para revisar os registros. Cada reg
 3. Clique em **Exportar JSON**. O editor valida campos obrigatórios, IDs duplicados, status e listas antes de gerar `lume-faq-revisado.json`.
 4. Para continuar uma revisão, use **Importar JSON** com um arquivo exportado ou com `lume-faq-inicial.json`.
 
-O navegador precisa permitir `localStorage` para o salvamento automático. O arquivo funciona offline e não implementa o chat da Lume, Gemini ou qualquer outra IA.
+O navegador precisa permitir `localStorage` para o salvamento automático. O arquivo funciona offline.
+Ele contém apenas uma prévia visual local do botão/modal da Lume (sem respostas, API, Gemini ou outra
+IA); o chat definitivo continua fora do escopo até a revisão do JSON.
