@@ -55,30 +55,30 @@ export const MISTURA_SOFT_ESCURO = 18;
 export const CORES_CATEGORIA: Record<Categoria, EscalaCategoria> = {
   // contraste do branco sobre `faixa`, medido: 4,57
   entradas: {
-    base: "#ca8a04",
-    soft: "#fbf6eb",
-    strong: "#a26e03",
-    faixa: "#9e6c03",
-    tinta: "#7d5602",
-    tintaEscura: "#deb663"
+    base: "#efaa00",
+    soft: "#fef8eb",
+    strong: "#bf8800",
+    faixa: "#996f00",
+    tinta: "#946900",
+    tintaEscura: "#f5ca61"
   },
   // 4,53
   transferencias: {
-    base: "#ea580c",
-    soft: "#fdf2ec",
-    strong: "#bb460a",
-    faixa: "#cc4d0a",
-    tinta: "#913707",
-    tintaEscura: "#f29768"
+    base: "#fb4b0b",
+    soft: "#fff1eb",
+    strong: "#c93c09",
+    faixa: "#c13a08",
+    tinta: "#9c2f07",
+    tintaEscura: "#fd8f68"
   },
   // 4,83 — a base já passa
   despesas: {
-    base: "#dc2626",
-    soft: "#fceeee",
-    strong: "#b01e1e",
-    faixa: "#dc2626",
-    tinta: "#881818",
-    tintaEscura: "#e97878"
+    base: "#ef0018",
+    soft: "#feebed",
+    strong: "#bf0013",
+    faixa: "#bf0013",
+    tinta: "#94000f",
+    tintaEscura: "#f56170"
   },
   // 4,61
   mercadorias: {
@@ -91,21 +91,21 @@ export const CORES_CATEGORIA: Record<Categoria, EscalaCategoria> = {
   },
   // 5,17 — a base já passa
   retiradas: {
-    base: "#2563eb",
-    soft: "#eef3fd",
-    strong: "#1e4fbc",
-    faixa: "#2563eb",
-    tinta: "#173d92",
-    tintaEscura: "#789ef3"
+    base: "#2463f5",
+    soft: "#edf3fe",
+    strong: "#1d4fc4",
+    faixa: "#2463f5",
+    tinta: "#163d98",
+    tintaEscura: "#779ef9"
   },
   // 7,10 — a base já passa
   resultado: {
-    base: "#6d28d9",
-    soft: "#f3eefc",
-    strong: "#5720ae",
-    faixa: "#6d28d9",
-    tinta: "#441987",
-    tintaEscura: "#a47ae7"
+    base: "#9700df",
+    soft: "#f7ebfc",
+    strong: "#7900b2",
+    faixa: "#9700df",
+    tinta: "#5e008a",
+    tintaEscura: "#bf61eb"
   }
 };
 

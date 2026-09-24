@@ -7,11 +7,13 @@ import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import ConfirmacaoTransferenciaDialog from "~/components/operacoes/ConfirmacaoTransferenciaDialog.vue";
+import { useApi } from "~/composables/useApi";
 import { dinheiro } from "~/utils/domain";
 
 const {
   modalOperacaoAberto,
   entidadeNova,
+  empresaId,
   operacaoEditandoId,
   form,
   opcoesEmpresa,
@@ -19,6 +21,7 @@ const {
   salvarOperacao,
   abrirOperacao
 } = useWorkspaceContext();
+const { apiGet } = useApi();
 
 const aberto = computed({
   get: () => modalOperacaoAberto.value && entidadeNova.value === "transferencia",
@@ -40,6 +43,7 @@ const {
 // --- Resumo da Saida: calculado no FRONT a partir do campo visivel (nao persistido). ---
 const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
 const erroComposicao = ref("");
+const erroLacre = ref("");
 const novoLacreRetorno = ref("");
 const lacresRetornoAtivos = ref(false);
 const confirmacaoAberta = ref(false);
@@ -70,6 +74,37 @@ const destinosConfirmacao = computed(() =>
     .map((id) => opcoesEmpresa.value.contas.find((conta) => conta.id === id)?.nome)
     .filter((nome): nome is string => Boolean(nome))
 );
+
+watch(
+  () => form.value.nLacreDoc,
+  () => {
+    erroLacre.value = "";
+  }
+);
+
+async function verificarLacreDisponivel(): Promise<boolean> {
+  const numero = form.value.nLacreDoc.trim();
+  erroLacre.value = "";
+  if (!numero || !empresaId.value) return true;
+
+  try {
+    const movimentos = await apiGet<Array<{ id: string; nLacreDoc?: string | null }>>(
+      `/api/transferencias?empresaId=${encodeURIComponent(empresaId.value)}&lacre=${encodeURIComponent(numero)}&page=1&pageSize=100`
+    );
+    const usado = movimentos.some(
+      (movimento) =>
+        movimento.id !== operacaoEditandoId.value &&
+        movimento.nLacreDoc?.trim().toLocaleLowerCase() === numero.toLocaleLowerCase()
+    );
+    if (!usado || form.value.nLacreDoc.trim() !== numero) return !usado;
+    erroLacre.value = `O lacre ${numero} ja foi utilizado em outra transferencia.`;
+    return false;
+  } catch {
+    // A API continua sendo a autoridade final e devolve a mesma mensagem no salvamento. O
+    // preflight e apenas um aviso antecipado, portanto uma falha de leitura nao bloqueia o fluxo.
+    return true;
+  }
+}
 
 watch(preparandoMaloteParaCaixa, (preparando) => {
   erroComposicao.value = "";
@@ -127,7 +162,7 @@ function valorResumo(n: number) {
   return resumoVisivel.value ? `R$ ${br(n)}` : "R$ ••••";
 }
 
-function revisarTransferencia(criarNova = false) {
+async function revisarTransferencia(criarNova = false) {
   if (!destinoValido()) return;
   // A transferência imediata sempre pertence ao dia real do ato. Hora exata já é registrada
   // pelo banco em `criadoEm`; se for agendada, a data/hora escolhida fica em `agendadaPara`.
@@ -144,6 +179,7 @@ function revisarTransferencia(criarNova = false) {
     erroComposicao.value = "Cada lacre de retorno / sangria deve ser informado uma unica vez.";
     return;
   }
+  if (!(await verificarLacreDisponivel())) return;
   erroComposicao.value = "";
   criarNovaAposConfirmacao.value = criarNova;
   confirmacaoAberta.value = true;
@@ -206,7 +242,14 @@ async function confirmarTransferencia() {
 
         <label class="tr-campo tr-campo-lacre-principal">
           <span class="tr-campo-lbl">Lacre do malote <span class="tr-hint">(obrigatório)</span></span>
-          <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+          <input
+            v-model="form.nLacreDoc"
+            required
+            class="tr-input tr-input-lacre"
+            placeholder="Ex.: 001"
+            @blur="void verificarLacreDisponivel()"
+          />
+          <span v-if="erroLacre" class="tr-erro" role="alert">{{ erroLacre }}</span>
           <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
         </label>
 
