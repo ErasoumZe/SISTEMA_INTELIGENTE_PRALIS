@@ -28,23 +28,44 @@ describe("montarPayloadConfirmacao · Caixa -> Cofre", () => {
   // A regressao real: o cockpit mandava `nLacreDoc: ""`, o schema exige `.min(1)`, e um movimento
   // SEM lacre (R-026 permite) ficava impossivel de conferir pela tela.
   it("lacre vazio vira null, nunca string vazia", () => {
-    const campos = { ...camposConferenciaVazios(), valorRecebido: "10", valorEspecieContado: "10", valorMoedasContado: "0" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      valorRecebido: "10",
+      valorEspecieContado: "10",
+      valorMoedasContado: "0"
+    };
     expect(montarPayloadConfirmacao(campos, "conta-padrao", true).nLacreDoc).toBeNull();
     expect(montarPayloadConfirmacao({ ...campos, lacre: "   " }, "conta-padrao", true).nLacreDoc).toBeNull();
   });
 
   it("lacre informado viaja aparado", () => {
-    const campos = { ...camposConferenciaVazios(), lacre: "  LAC-1  ", valorRecebido: "10", valorEspecieContado: "10", valorMoedasContado: "0" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      lacre: "  LAC-1  ",
+      valorRecebido: "10",
+      valorEspecieContado: "10",
+      valorMoedasContado: "0"
+    };
     expect(montarPayloadConfirmacao(campos, "conta-padrao", true).nLacreDoc).toBe("LAC-1");
   });
 
   it("valor 0 e enviado como numero, e nao omitido", () => {
-    const campos = { ...camposConferenciaVazios(), valorRecebido: "0", valorEspecieContado: "0", valorMoedasContado: "0" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      valorRecebido: "0",
+      valorEspecieContado: "0",
+      valorMoedasContado: "0"
+    };
     expect(montarPayloadConfirmacao(campos, "conta-padrao", true).valorRecebido).toBe(0);
   });
 
   it("sem conta digitada usa a conta de destino do movimento", () => {
-    const campos = { ...camposConferenciaVazios(), valorRecebido: "5", valorEspecieContado: "5", valorMoedasContado: "0" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      valorRecebido: "5",
+      valorEspecieContado: "5",
+      valorMoedasContado: "0"
+    };
     expect(montarPayloadConfirmacao(campos, "conta-do-movimento", true).contaDestinoId).toBe("conta-do-movimento");
     expect(
       montarPayloadConfirmacao({ ...campos, contaDestinoId: "outra" }, "conta-do-movimento", true).contaDestinoId
@@ -130,12 +151,24 @@ describe("montarPayloadRecusa", () => {
   // R-183 · sem a flag, a rota so registra a tentativa e o caixa continua travado. O default e
   // deliberado: encerrar e uma escolha da pessoa que contou, nunca um efeito colateral.
   it("nao manda encerrar quando o desfecho nao foi escolhido", () => {
-    const campos = { ...camposConferenciaVazios(), lacre: "L1", valorRecebido: "180", valorEspecieContado: "180", motivo: "faltou" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      lacre: "L1",
+      valorRecebido: "180",
+      valorEspecieContado: "180",
+      motivo: "faltou"
+    };
     expect(montarPayloadRecusa(campos, "conta-padrao")).not.toHaveProperty("encerrar");
   });
 
   it("manda encerrar e o consentimento da sobra quando escolhidos", () => {
-    const campos = { ...camposConferenciaVazios(), lacre: "L1", valorRecebido: "220", valorEspecieContado: "220", motivo: "sobrou" };
+    const campos = {
+      ...camposConferenciaVazios(),
+      lacre: "L1",
+      valorRecebido: "220",
+      valorEspecieContado: "220",
+      motivo: "sobrou"
+    };
     expect(montarPayloadRecusa(campos, "conta-padrao", { encerrar: true, sobraConfirmada: true })).toMatchObject({
       encerrar: true,
       sobraConfirmada: true,
@@ -144,7 +177,13 @@ describe("montarPayloadRecusa", () => {
   });
 
   it("carrega o motivo aparado junto com valor e lacre conferidos", () => {
-    const campos = { ...camposConferenciaVazios(), lacre: "LAC-9", valorRecebido: "80", valorEspecieContado: "80", motivo: "  faltou dinheiro  " };
+    const campos = {
+      ...camposConferenciaVazios(),
+      lacre: "LAC-9",
+      valorRecebido: "80",
+      valorEspecieContado: "80",
+      motivo: "  faltou dinheiro  "
+    };
     expect(montarPayloadRecusa(campos, "conta-padrao")).toMatchObject({
       contaDestinoId: "conta-padrao",
       nLacreDoc: "LAC-9",
@@ -159,7 +198,12 @@ describe("camposConferenciaVazios", () => {
   // levaria alguem a confirmar sem contar.
   it("devolve todos os campos em branco", () => {
     expect(camposConferenciaVazios()).toEqual({
-      contaDestinoId: "", lacre: "", valorRecebido: "", valorEspecieContado: "", valorMoedasContado: "", motivo: ""
+      contaDestinoId: "",
+      lacre: "",
+      valorRecebido: "",
+      valorEspecieContado: "",
+      valorMoedasContado: "",
+      motivo: ""
     });
   });
 });

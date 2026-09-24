@@ -21,7 +21,14 @@ export type CamposConferencia = {
 };
 
 export function camposConferenciaVazios(): CamposConferencia {
-  return { contaDestinoId: "", lacre: "", valorRecebido: "", valorEspecieContado: "", valorMoedasContado: "", motivo: "" };
+  return {
+    contaDestinoId: "",
+    lacre: "",
+    valorRecebido: "",
+    valorEspecieContado: "",
+    valorMoedasContado: "",
+    motivo: ""
+  };
 }
 
 // `0` e valor valido. Por isso o teste e sobre a string ser vazia, e nao sobre o numero ser

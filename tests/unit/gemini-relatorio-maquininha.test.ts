@@ -22,10 +22,13 @@ describe("cliente Gemini do relatório único da maquininha", () => {
     const fetchMock = vi.fn(async (_entrada: string | URL | Request, opcoes?: RequestInit) => {
       if (typeof opcoes?.body !== "string") throw new Error("corpo da requisicao nao e texto");
       corpo = JSON.parse(opcoes.body) as typeof corpo;
-      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(leituraValida) }] } }] }), {
-        status: 200,
-        headers: { "content-type": "application/json" }
-      });
+      return new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(leituraValida) }] } }] }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      );
     });
 
     const resultado = await extrairRelatorioMaquininhaComGemini(
