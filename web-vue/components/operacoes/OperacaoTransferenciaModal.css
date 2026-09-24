@@ -111,6 +111,14 @@
 .tr-malote :deep(.campo-dinheiro__grupo) {
   color: #7c2d12;
 }
+.tr-malote :deep(.campo-dinheiro--com-rotulo) {
+  color: #171717;
+  background: rgb(255 255 255 / 62%);
+  font-weight: 700;
+}
+.tr-malote :deep(.campo-dinheiro--com-rotulo::placeholder) {
+  color: #6b4c3c;
+}
 .tr-ok,
 .tr-erro {
   display: block;
