@@ -13,6 +13,7 @@ import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue"
 import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
 import CaixaRetornoSangriaDialog from "~/components/caixa/CaixaRetornoSangriaDialog.vue";
 import CaixaSangriasDialog from "~/components/caixa/CaixaSangriasDialog.vue";
+import CampoObservacaoVoz from "~/components/caixa/CampoObservacaoVoz.vue";
 import { deCentavos, paraCentavos } from "@padaria/shared";
 const { apiGet } = useApi();
 
@@ -1037,7 +1038,7 @@ function confirmarFechamento() {
             </div>
             <v-row dense>
               <v-col cols="12" md="4">
-                <v-text-field
+                <CampoObservacaoVoz
                   v-model="fechamento.observacao"
                   :label="fechamentoDivergente ? 'Observação da divergência (obrigatória)' : 'Observação do fechamento'"
                   :error="observacaoObrigatoriaPendente"
