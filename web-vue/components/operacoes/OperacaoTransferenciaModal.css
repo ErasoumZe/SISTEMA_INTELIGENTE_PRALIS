@@ -137,10 +137,16 @@
   border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 45%, transparent);
   border-radius: 10px;
   background: rgb(255 255 255 / 45%);
+  color: #7c2d12;
 }
 .tr-lacres-retorno > p {
   margin: 0;
+  color: #7c2d12;
   font-size: 12px;
+}
+.tr-lacres-retorno .tr-input {
+  color: #171717;
+  background: rgb(255 255 255 / 82%);
 }
 .tr-lacre-adicionar {
   display: flex;
@@ -166,11 +172,15 @@
   padding: 4px 7px;
   border-radius: 99px;
   background: rgb(124 45 18 / 10%);
+  color: #7c2d12;
   font-size: 12px;
 }
 .tr-lacre-chip button {
   display: inline-flex;
   color: inherit;
+}
+.tr-lacres-retorno .tr-legenda {
+  color: #8a4b2a;
 }
 .tr-erro {
   color: #b42318;
