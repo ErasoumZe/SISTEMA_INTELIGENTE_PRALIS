@@ -7,6 +7,7 @@ import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
 import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
 import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
+import CaixaCategoriaResumoDialog from "~/components/caixa/CaixaCategoriaResumoDialog.vue";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
 import CaixaFechamentoConfirmacaoDialog from "~/components/caixa/CaixaFechamentoConfirmacaoDialog.vue";
@@ -133,6 +134,8 @@ const entrega = reactive({
 const modalRetornoSangriaAberto = ref(false);
 const modalSangriasAberto = ref(false);
 const modalVendasCanceladasAberto = ref(false);
+const modalCategoriaResumoAberto = ref(false);
+const categoriaResumoSelecionada = ref<CardCategoria | null>(null);
 const vendasCanceladasQuantidade = ref(0);
 const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
@@ -548,8 +551,17 @@ function abrirUltimosLancamentos(chave: string, valor: number) {
     modalSangriasAberto.value = true;
     return;
   }
-  if (!categoriaTemUltimos(chave) || valor === 0) return;
-  categoriaUltimosLancamentos.value = chave;
+  if (categoriaTemUltimos(chave) && valor !== 0) {
+    categoriaUltimosLancamentos.value = chave;
+    return;
+  }
+  const categoria = categorias.value.find((item) => item.chave === chave);
+  if (!categoria) return;
+  categoriaResumoSelecionada.value = {
+    ...categoria,
+    detalhe: categoria.detalhe || "Valor registrado no turno atual."
+  };
+  modalCategoriaResumoAberto.value = true;
 }
 
 function atualizarDialogUltimosLancamentos(aberto: boolean) {
@@ -823,14 +835,9 @@ function confirmarFechamento() {
             v-for="cat in categorias"
             :key="cat.chave"
             class="cat-card"
-            :class="[
-              { 'cat-card--clicavel': (categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' },
-              `cat-${cat.chave}`
-            ]"
-            :role="
-              (categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' ? 'button' : undefined
-            "
-            :tabindex="(categoriaTemUltimos(cat.chave) && cat.valor !== 0) || cat.chave === 'sangrias' ? 0 : undefined"
+            :class="['cat-card--clicavel', `cat-${cat.chave}`]"
+            role="button"
+            tabindex="0"
             @click="abrirUltimosLancamentos(cat.chave, cat.valor)"
             @keydown.enter.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
             @keydown.space.prevent="abrirUltimosLancamentos(cat.chave, cat.valor)"
@@ -1188,6 +1195,15 @@ function confirmarFechamento() {
           :aberto="modalVendasCanceladasAberto"
           :caixa-id="caixaAberto.id"
           @update:aberto="modalVendasCanceladasAberto = $event"
+        />
+        <CaixaCategoriaResumoDialog
+          v-if="categoriaResumoSelecionada"
+          :aberto="modalCategoriaResumoAberto"
+          :titulo="categoriaResumoSelecionada.titulo"
+          :icone="categoriaResumoSelecionada.icone"
+          :valor="categoriaResumoSelecionada.valor"
+          :detalhe="categoriaResumoSelecionada.detalhe"
+          @update:aberto="modalCategoriaResumoAberto = $event"
         />
         <CaixaUltimosLancamentosDialog
           v-if="caixaAberto && categoriaUltimosLancamentos"
@@ -1588,6 +1604,42 @@ function confirmarFechamento() {
 @media (width <= 560px) {
   .cat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) {
+    height: 68px;
+    min-height: 68px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-body {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-head {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-chip {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-valor {
+    flex: 0 0 auto;
+    margin-top: 0;
+    font-size: 18px;
+  }
+
+  .cat-grid .cat-card:not(.cat-resultado) .cat-detalhe,
+  .cat-grid .cat-card:not(.cat-resultado) .cat-card__acao,
+  .cat-grid .cat-card:not(.cat-resultado) :deep(.malote-abertura) {
+    display: none;
   }
 }
 </style>
