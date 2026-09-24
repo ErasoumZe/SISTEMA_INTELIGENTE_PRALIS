@@ -100,6 +100,7 @@ function usarTranscricao() {
           </button>
           <div class="voz-status" aria-live="polite">
             <span v-if="transcrevendo">Transcrevendo sua observação…</span>
+            <span v-else-if="ouvindo && textoReconhecido">Prévia ao vivo… a Groq revisará ao parar</span>
             <span v-else-if="ouvindo">Ouvindo… fale normalmente</span>
             <span v-else-if="erro" class="text-error">{{ erro }}</span>
             <span v-else>Toque na logo para começar a falar</span>
@@ -108,7 +109,7 @@ function usarTranscricao() {
           <v-textarea
             v-model="textoEditavel"
             class="mt-4"
-            label="Transcrição"
+            :label="ouvindo ? 'Prévia ao vivo (a Groq revisará ao parar)' : 'Transcrição'"
             placeholder="A transcrição aparecerá aqui…"
             rows="4"
             auto-grow

@@ -7,6 +7,29 @@ type RespostaTranscricao = {
   erro?: string;
   title?: string;
 };
+type ResultadoReconhecimento = {
+  0?: { transcript?: string };
+  isFinal?: boolean;
+};
+type EventoReconhecimento = {
+  resultIndex: number;
+  results: ArrayLike<ResultadoReconhecimento>;
+};
+type ReconhecimentoNativo = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((evento: EventoReconhecimento) => void) | null;
+  abort: () => void;
+  start: () => void;
+};
+type ConstrutorReconhecimentoNativo = new () => ReconhecimentoNativo;
+type JanelaComReconhecimento = Window & {
+  SpeechRecognition?: ConstrutorReconhecimentoNativo;
+  webkitSpeechRecognition?: ConstrutorReconhecimentoNativo;
+};
 
 const duracaoMaximaMs = 90_000;
 const formatosPreferidos = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
@@ -32,6 +55,7 @@ export function useTranscricaoVoz() {
   const estado = ref<EstadoGravacao>("parado");
   const erro = ref("");
   const finais = ref("");
+  const textoParcial = ref("");
   const nivelVoz = ref(0);
   const gravacaoDisponivel = ref(false);
 
@@ -42,12 +66,14 @@ export function useTranscricaoVoz() {
   let quadroAudio: number | null = null;
   let temporizadorLimite: number | null = null;
   let requisicao: AbortController | null = null;
+  let reconhecimento: ReconhecimentoNativo | null = null;
+  let parcialFinalizada = "";
   let partes: BlobPart[] = [];
   let mimeType = "audio/webm";
 
   const ouvindo = computed(() => estado.value === "gravando");
   const transcrevendo = computed(() => estado.value === "transcrevendo");
-  const textoReconhecido = computed(() => finais.value.trim());
+  const textoReconhecido = computed(() => `${finais.value.trim()} ${textoParcial.value.trim()}`.trim());
   const textoEditavel = computed({
     get: () => textoReconhecido.value,
     set: (value: string) => {
@@ -75,6 +101,64 @@ export function useTranscricaoVoz() {
   function encerrarStream() {
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
+  }
+
+  // A Groq recebe o arquivo completo e devolve a transcrição final somente depois do "Parar".
+  // Esta prévia é opcional e puramente visual: nunca é enviada nem salva sem a confirmação da Groq.
+  function encerrarPreviaAoVivo(limparTexto = false) {
+    const reconhecimentoAtual = reconhecimento;
+    reconhecimento = null;
+    if (limparTexto) textoParcial.value = "";
+    if (!reconhecimentoAtual) return;
+    reconhecimentoAtual.onend = null;
+    reconhecimentoAtual.onerror = null;
+    reconhecimentoAtual.onresult = null;
+    try {
+      reconhecimentoAtual.abort();
+    } catch {
+      // Alguns navegadores já encerram o reconhecimento ao parar o MediaRecorder.
+    }
+  }
+
+  function iniciarPreviaAoVivo() {
+    const janela = window as JanelaComReconhecimento;
+    const ConstrutorReconhecimento = janela.SpeechRecognition ?? janela.webkitSpeechRecognition;
+    if (!ConstrutorReconhecimento) return;
+
+    const proximoReconhecimento = new ConstrutorReconhecimento();
+    parcialFinalizada = "";
+    proximoReconhecimento.lang = "pt-BR";
+    proximoReconhecimento.continuous = true;
+    proximoReconhecimento.interimResults = true;
+    proximoReconhecimento.onresult = (evento) => {
+      if (reconhecimento !== proximoReconhecimento) return;
+      let trechoParcial = "";
+      for (let indice = evento.resultIndex; indice < evento.results.length; indice += 1) {
+        const resultado = evento.results[indice];
+        const trecho = resultado?.[0]?.transcript?.trim() ?? "";
+        if (!trecho) continue;
+        if (resultado?.isFinal) parcialFinalizada = `${parcialFinalizada} ${trecho}`.trim();
+        else trechoParcial = `${trechoParcial} ${trecho}`.trim();
+      }
+      textoParcial.value = `${parcialFinalizada} ${trechoParcial}`.trim();
+    };
+    proximoReconhecimento.onerror = () => {
+      if (reconhecimento === proximoReconhecimento) reconhecimento = null;
+    };
+    proximoReconhecimento.onend = () => {
+      if (reconhecimento !== proximoReconhecimento || estado.value !== "gravando") return;
+      try {
+        proximoReconhecimento.start();
+      } catch {
+        reconhecimento = null;
+      }
+    };
+    reconhecimento = proximoReconhecimento;
+    try {
+      proximoReconhecimento.start();
+    } catch {
+      reconhecimento = null;
+    }
   }
 
   function medirVoz() {
@@ -129,6 +213,7 @@ export function useTranscricaoVoz() {
     limparTemporizador();
     limparMedidor();
     encerrarStream();
+    encerrarPreviaAoVivo();
     const audio = new Blob(partes, { type: mimeType });
     partes = [];
     gravador = null;
@@ -141,6 +226,7 @@ export function useTranscricaoVoz() {
     try {
       const texto = await enviarAudio(audio);
       finais.value = `${finais.value.trim()} ${texto}`.trim();
+      textoParcial.value = "";
       erro.value = "";
     } catch (falha) {
       if (falha instanceof DOMException && falha.name === "AbortError") return;
@@ -162,6 +248,7 @@ export function useTranscricaoVoz() {
     cancelar();
     erro.value = "";
     finais.value = textoAtual.trim();
+    textoParcial.value = "";
     gravacaoDisponivel.value =
       typeof window !== "undefined" && Boolean(navigator.mediaDevices) && typeof MediaRecorder !== "undefined";
   }
@@ -188,6 +275,7 @@ export function useTranscricaoVoz() {
         gravador = null;
         partes = [];
         limparTemporizador();
+        encerrarPreviaAoVivo();
         limparMedidor();
         encerrarStream();
         estado.value = "parado";
@@ -195,6 +283,7 @@ export function useTranscricaoVoz() {
       gravador.onstop = () => void finalizarGravacao();
       estado.value = "gravando";
       await prepararMedidor();
+      iniciarPreviaAoVivo();
       document.addEventListener("visibilitychange", interromperAoOcultar);
       temporizadorLimite = window.setTimeout(() => {
         erro.value = "A gravação atingiu 1 minuto e 30 segundos e será transcrita agora.";
@@ -202,6 +291,7 @@ export function useTranscricaoVoz() {
       }, duracaoMaximaMs);
       gravador.start(250);
     } catch (falha) {
+      encerrarPreviaAoVivo();
       limparMedidor();
       encerrarStream();
       estado.value = "parado";
@@ -216,6 +306,7 @@ export function useTranscricaoVoz() {
     limparTemporizador();
     document.removeEventListener("visibilitychange", interromperAoOcultar);
     if (!gravador || gravador.state === "inactive") {
+      encerrarPreviaAoVivo();
       limparMedidor();
       encerrarStream();
       estado.value = "parado";
@@ -227,6 +318,7 @@ export function useTranscricaoVoz() {
   function cancelar() {
     requisicao?.abort();
     requisicao = null;
+    encerrarPreviaAoVivo(true);
     document.removeEventListener("visibilitychange", interromperAoOcultar);
     limparTemporizador();
     if (gravador) {
