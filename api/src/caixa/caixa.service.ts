@@ -111,13 +111,42 @@ import { buscarPerfilUsuario } from "../auth/perfil.service.js";
 import { caminhoAbsolutoDocumento, salvarFotoDocumento } from "../lancamentos/foto-documento.js";
 import { env } from "../env.js";
 import { extrairRelatorioMaquininhaComGemini } from "./gemini-relatorio-maquininha.js";
+import { transcreverObservacaoComGroq } from "./groq-transcricao-observacao.js";
 
 const erroPeriodo = "A data e hora de abertura ja pertence a outro caixa aberto/fechado";
 const erroOperadorComCaixaAberto = "Usuario do caixa ja possui um caixa aberto";
 const indiceCaixaAbertoPdvUnico = "fechamentos_caixa_pdv_aberto_unico_idx";
 const indiceCaixaAbertoOperadorUnico = "fechamentos_caixa_operador_aberto_unico_idx";
+const tiposAudioTranscricao = new Set(["audio/webm", "audio/mp4", "audio/ogg", "audio/wav", "audio/mpeg"]);
 
 type CaixaLinha = NonNullable<Awaited<ReturnType<typeof buscarCaixaPorIdRepository>>>;
+
+export async function transcreverObservacaoFechamento(arquivo: MultipartFile | undefined) {
+  if (!arquivo) throw new ErroDominio("Gravação de áudio obrigatória.", 400, "TRANSCRICAO_SEM_AUDIO");
+  if (!env.GROQ_API_KEY) {
+    throw new ErroDominio(
+      "A transcrição por voz ainda não foi configurada. Você pode escrever a observação manualmente.",
+      503,
+      "TRANSCRICAO_NAO_CONFIGURADA"
+    );
+  }
+  const mimeType = arquivo.mimetype.toLowerCase().split(";", 1)[0] ?? "";
+  if (!tiposAudioTranscricao.has(mimeType)) {
+    throw new ErroDominio(
+      "Formato de áudio não suportado. Tente gravar novamente.",
+      415,
+      "TRANSCRICAO_FORMATO_INVALIDO"
+    );
+  }
+  const dados = await arquivo.toBuffer();
+  if (!dados.byteLength) throw new ErroDominio("A gravação não contém áudio.", 422, "TRANSCRICAO_SEM_AUDIO");
+  const texto = await transcreverObservacaoComGroq(dados, mimeType, {
+    chave: env.GROQ_API_KEY,
+    modelo: env.GROQ_STT_MODEL,
+    timeoutMs: env.GROQ_STT_TIMEOUT_MS
+  });
+  return { texto };
+}
 
 // Duas aberturas simultaneas do mesmo PDV podem passar pelos pre-checks; o indice unico
 // parcial do banco decide o vencedor e o perdedor recebe o mesmo erro do caminho sequencial.

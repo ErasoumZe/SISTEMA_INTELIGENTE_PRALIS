@@ -37,7 +37,8 @@ import {
   salvarAnexoFechamentoCaixa,
   analisarRelatorioMaquininhaFechamento,
   obterRelatorioMaquininhaFechamento,
-  salvarRelatorioMaquininhaFechamento
+  salvarRelatorioMaquininhaFechamento,
+  transcreverObservacaoFechamento
 } from "./caixa.service.js";
 
 function statusErro(mensagem: string) {
@@ -67,6 +68,23 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       return erro(reply, statusErro(mensagem), mensagem);
     }
   });
+
+  app.post(
+    "/api/caixa/transcricao-observacao",
+    {
+      preHandler: exigirPermissao("caixa_operar"),
+      config: { rateLimit: { max: 12, timeWindow: "1 minute" } }
+    },
+    async (request, reply) => {
+      try {
+        const arquivo = await request.file({ limits: { fileSize: 3 * 1024 * 1024, files: 1 } });
+        return ok(await transcreverObservacaoFechamento(arquivo));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
 
   app.get("/api/caixa/malote", { preHandler: exigirPermissao("caixa_operar") }, async (request, reply) => {
     const query = z

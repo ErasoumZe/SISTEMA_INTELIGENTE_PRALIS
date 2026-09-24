@@ -39,6 +39,11 @@ const envSchema = z.object({
   GEMINI_API_KEY: envOpcionalNaoVazio,
   GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
   GEMINI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(90_000),
+  // Groq roda exclusivamente no backend e transcreve a observação de fechamento. Sem chave,
+  // apenas esse recurso informa indisponibilidade; o fechamento manual segue disponível.
+  GROQ_API_KEY: envOpcionalNaoVazio,
+  GROQ_STT_MODEL: z.enum(["whisper-large-v3", "whisper-large-v3-turbo"]).default("whisper-large-v3-turbo"),
+  GROQ_STT_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(90_000),
   // E-mail transacional (reset de senha + verificacao). Sem chave, os e-mails so vao para o log
   // (dev). Em producao, configure ambos (conta em resend.com). EMAIL_FROM = remetente verificado.
   RESEND_API_KEY: z.string().optional(),
@@ -84,5 +89,8 @@ if (env.NODE_ENV === "production") {
   // Importacao de NF-e e degradavel: sem webhook configurado, apenas a rota de importacao fica indisponivel.
   if (!env.NOTAS_FISCAIS_URL || !env.NOTAS_FISCAIS_TOKEN) {
     console.warn("[env] NOTAS_FISCAIS_URL/TOKEN ausentes: importacao de notas fiscais desativada.");
+  }
+  if (!env.GROQ_API_KEY) {
+    console.warn("[env] GROQ_API_KEY ausente: transcricao de observacao do fechamento desativada.");
   }
 }

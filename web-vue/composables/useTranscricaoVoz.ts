@@ -1,101 +1,84 @@
 import { computed, onBeforeUnmount, ref } from "vue";
+import { useApi } from "~/composables/useApi";
 
-interface RecognitionAlternative {
-  transcript: string;
-}
-
-interface RecognitionResult {
-  isFinal: boolean;
-  [index: number]: RecognitionAlternative;
-}
-
-interface RecognitionResultList {
-  length: number;
-  [index: number]: RecognitionResult;
-}
-
-interface RecognitionEvent extends Event {
-  resultIndex: number;
-  results: RecognitionResultList;
-}
-
-interface RecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  onend: (() => void) | null;
-  onerror: ((event: RecognitionErrorEvent) => void) | null;
-  onresult: ((event: RecognitionEvent) => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-type SpeechWindow = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructor;
-  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+type EstadoGravacao = "parado" | "gravando" | "transcrevendo";
+type RespostaTranscricao = {
+  data?: { texto?: string };
+  erro?: string;
+  title?: string;
 };
 
-type AudioWindow = Window & {
-  AudioContext?: typeof AudioContext;
-  webkitAudioContext?: typeof AudioContext;
-};
+const duracaoMaximaMs = 90_000;
+const formatosPreferidos = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+
+function mensagemErroApi(payload: RespostaTranscricao | undefined) {
+  if (payload?.title) return payload.title;
+  if (payload?.erro) return payload.erro;
+  return "Não foi possível transcrever o áudio.";
+}
+
+function formatoGravacaoPreferido() {
+  return formatosPreferidos.find((formato) => MediaRecorder.isTypeSupported(formato));
+}
+
+function extensaoDoAudio(tipo: string) {
+  if (tipo === "audio/mp4") return "m4a";
+  if (tipo === "audio/ogg") return "ogg";
+  return "webm";
+}
 
 export function useTranscricaoVoz() {
-  const ouvindo = ref(false);
+  const { apiUrl } = useApi();
+  const estado = ref<EstadoGravacao>("parado");
   const erro = ref("");
-  const parcial = ref("");
   const finais = ref("");
   const nivelVoz = ref(0);
-  const reconhecimentoDisponivel = ref(false);
+  const gravacaoDisponivel = ref(false);
 
-  let reconhecimento: SpeechRecognitionLike | null = null;
+  let gravador: MediaRecorder | null = null;
   let stream: MediaStream | null = null;
-  let contextoAudio: AudioContext | null = null;
   let analisador: AnalyserNode | null = null;
+  let contextoAudio: AudioContext | null = null;
   let quadroAudio: number | null = null;
-  let reiniciarAoTerminar = false;
+  let temporizadorLimite: number | null = null;
+  let requisicao: AbortController | null = null;
+  let partes: BlobPart[] = [];
+  let mimeType = "audio/webm";
 
-  const textoReconhecido = computed(() => `${finais.value}${parcial.value}`.trim());
+  const ouvindo = computed(() => estado.value === "gravando");
+  const transcrevendo = computed(() => estado.value === "transcrevendo");
+  const textoReconhecido = computed(() => finais.value.trim());
   const textoEditavel = computed({
     get: () => textoReconhecido.value,
     set: (value: string) => {
       finais.value = value;
-      parcial.value = "";
     }
   });
-  const temTexto = computed(() => textoReconhecido.value.trim().length > 0);
-  const logoGlow = computed(() => (ouvindo.value ? 0.5 + nivelVoz.value * 0.9 : 0.3));
-  const logoSpeed = computed(() => (ouvindo.value ? 1.1 + nivelVoz.value * 1.6 : 0.55));
+  const temTexto = computed(() => textoReconhecido.value.length > 0);
+  const logoGlow = computed(() => (ouvindo.value ? 0.56 + nivelVoz.value * 0.84 : transcrevendo.value ? 0.58 : 0.3));
+  const logoSpeed = computed(() => (ouvindo.value ? 1.12 + nivelVoz.value * 1.55 : transcrevendo.value ? 1.1 : 0.55));
 
-  function obterReconhecimento(): SpeechRecognitionConstructor | null {
-    if (typeof window === "undefined") return null;
-    const navegador = window as SpeechWindow;
-    return navegador.SpeechRecognition ?? navegador.webkitSpeechRecognition ?? null;
+  function limparTemporizador() {
+    if (temporizadorLimite !== null) window.clearTimeout(temporizadorLimite);
+    temporizadorLimite = null;
   }
 
-  function limparAudio() {
+  function limparMedidor() {
     if (quadroAudio !== null) cancelAnimationFrame(quadroAudio);
     quadroAudio = null;
     analisador = null;
-    stream?.getTracks().forEach((track) => track.stop());
-    stream = null;
     if (contextoAudio) void contextoAudio.close();
     contextoAudio = null;
     nivelVoz.value = 0;
   }
 
+  function encerrarStream() {
+    stream?.getTracks().forEach((track) => track.stop());
+    stream = null;
+  }
+
   function medirVoz() {
-    if (!analisador || !ouvindo.value) {
-      nivelVoz.value = 0;
-      return;
-    }
+    if (!analisador || !ouvindo.value) return;
     const dados = new Uint8Array(analisador.fftSize);
     analisador.getByteTimeDomainData(dados);
     let soma = 0;
@@ -103,136 +86,176 @@ export function useTranscricaoVoz() {
       const distancia = (amostra - 128) / 128;
       soma += distancia * distancia;
     }
-    const rms = Math.sqrt(soma / dados.length);
-    nivelVoz.value = Math.min(1, rms * 5.5);
+    nivelVoz.value = Math.min(1, Math.sqrt(soma / dados.length) * 5.5);
     quadroAudio = requestAnimationFrame(medirVoz);
   }
 
   async function prepararMedidor() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
-    const audioWindow = window as AudioWindow;
-    const AudioContextConstructor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
-    if (!AudioContextConstructor) return;
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    contextoAudio = new AudioContextConstructor();
-    const origem = contextoAudio.createMediaStreamSource(stream);
-    analisador = contextoAudio.createAnalyser();
-    analisador.fftSize = 256;
-    origem.connect(analisador);
-    await contextoAudio.resume();
-    medirVoz();
+    if (!stream || !window.AudioContext) {
+      nivelVoz.value = 0.18;
+      return;
+    }
+    try {
+      contextoAudio = new AudioContext();
+      const origem = contextoAudio.createMediaStreamSource(stream);
+      analisador = contextoAudio.createAnalyser();
+      analisador.fftSize = 256;
+      origem.connect(analisador);
+      await contextoAudio.resume();
+      medirVoz();
+    } catch {
+      nivelVoz.value = 0.18;
+    }
   }
 
-  function configurarReconhecimento() {
-    const Constructor = obterReconhecimento();
-    if (!Constructor) {
-      reconhecimentoDisponivel.value = false;
-      throw new Error("Este navegador não oferece transcrição de voz. A integração com a Groq será adicionada depois.");
+  async function enviarAudio(audio: Blob) {
+    const corpo = new FormData();
+    corpo.append("audio", audio, `observacao-${Date.now()}.${extensaoDoAudio(mimeType)}`);
+    requisicao = new AbortController();
+    const resposta = await fetch(`${apiUrl}/api/caixa/transcricao-observacao`, {
+      method: "POST",
+      credentials: "include",
+      body: corpo,
+      signal: requisicao.signal
+    });
+    const payload = (await resposta.json().catch(() => undefined)) as RespostaTranscricao | undefined;
+    if (!resposta.ok) throw new Error(mensagemErroApi(payload));
+    const texto = payload?.data?.texto;
+    if (typeof texto !== "string" || !texto.trim()) throw new Error("A transcrição não retornou texto.");
+    return texto.trim();
+  }
+
+  async function finalizarGravacao() {
+    limparTemporizador();
+    limparMedidor();
+    encerrarStream();
+    const audio = new Blob(partes, { type: mimeType });
+    partes = [];
+    gravador = null;
+    if (audio.size < 500) {
+      estado.value = "parado";
+      erro.value = "Não identificamos fala. Grave novamente e fale um pouco mais perto do microfone.";
+      return;
     }
-    reconhecimentoDisponivel.value = true;
-    reconhecimento = new Constructor();
-    reconhecimento.continuous = true;
-    reconhecimento.interimResults = true;
-    reconhecimento.lang = "pt-BR";
-    reconhecimento.maxAlternatives = 1;
-    reconhecimento.onresult = (event) => {
-      let finaisNovos = "";
-      let parcialNovo = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const resultado = event.results[index];
-        if (!resultado) continue;
-        const transcricao = resultado[0]?.transcript ?? "";
-        if (resultado.isFinal) finaisNovos += `${transcricao.trim()} `;
-        else parcialNovo += transcricao;
-      }
-      finais.value = `${finais.value}${finaisNovos}`;
-      parcial.value = parcialNovo;
-    };
-    reconhecimento.onerror = (event) => {
-      if (event.error === "aborted") return;
-      erro.value =
-        event.error === "not-allowed"
-          ? "Permita o acesso ao microfone para transcrever."
-          : "Não foi possível transcrever o áudio.";
-      ouvindo.value = false;
-      reiniciarAoTerminar = false;
-      limparAudio();
-    };
-    reconhecimento.onend = () => {
-      if (reiniciarAoTerminar && ouvindo.value) {
-        try {
-          reconhecimento?.start();
-          return;
-        } catch {
-          // Alguns navegadores encerram a sessão entre duas frases; o texto já recebido permanece.
-        }
-      }
-      ouvindo.value = false;
-      limparAudio();
-    };
+    estado.value = "transcrevendo";
+    try {
+      const texto = await enviarAudio(audio);
+      finais.value = `${finais.value.trim()} ${texto}`.trim();
+      erro.value = "";
+    } catch (falha) {
+      if (falha instanceof DOMException && falha.name === "AbortError") return;
+      erro.value = falha instanceof Error ? falha.message : "Não foi possível transcrever o áudio.";
+    } finally {
+      requisicao = null;
+      estado.value = "parado";
+    }
+  }
+
+  function interromperAoOcultar() {
+    if (document.visibilityState === "hidden" && ouvindo.value) {
+      erro.value = "A gravação foi finalizada ao trocar de aplicativo. Aguarde a transcrição.";
+      parar();
+    }
   }
 
   function preparar(textoAtual: string) {
+    cancelar();
     erro.value = "";
-    finais.value = textoAtual.trim() ? `${textoAtual.trim()} ` : "";
-    parcial.value = "";
-    reconhecimentoDisponivel.value = Boolean(obterReconhecimento());
+    finais.value = textoAtual.trim();
+    gravacaoDisponivel.value =
+      typeof window !== "undefined" && Boolean(navigator.mediaDevices) && typeof MediaRecorder !== "undefined";
   }
 
   async function iniciar() {
+    if (!gravacaoDisponivel.value || estado.value !== "parado") return;
     erro.value = "";
     try {
-      if (!reconhecimento) configurarReconhecimento();
-      try {
-        await prepararMedidor();
-      } catch {
-        // A transcrição continua mesmo se o medidor visual não puder acessar o microfone.
-        limparAudio();
-      }
-      reiniciarAoTerminar = true;
-      ouvindo.value = true;
-      reconhecimento?.start();
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      const formato = formatoGravacaoPreferido();
+      gravador = formato ? new MediaRecorder(stream, { mimeType: formato }) : new MediaRecorder(stream);
+      mimeType = gravador.mimeType || formato || "audio/webm";
+      partes = [];
+      gravador.ondataavailable = (evento) => {
+        if (evento.data.size > 0) partes.push(evento.data);
+      };
+      gravador.onerror = () => {
+        erro.value = "O navegador interrompeu a gravação. Tente novamente.";
+        const gravadorComErro = gravador;
+        if (gravadorComErro) gravadorComErro.onstop = null;
+        if (gravadorComErro?.state === "recording" || gravadorComErro?.state === "paused") gravadorComErro.stop();
+        gravador = null;
+        partes = [];
+        limparTemporizador();
+        limparMedidor();
+        encerrarStream();
+        estado.value = "parado";
+      };
+      gravador.onstop = () => void finalizarGravacao();
+      estado.value = "gravando";
+      await prepararMedidor();
+      document.addEventListener("visibilitychange", interromperAoOcultar);
+      temporizadorLimite = window.setTimeout(() => {
+        erro.value = "A gravação atingiu 1 minuto e 30 segundos e será transcrita agora.";
+        parar();
+      }, duracaoMaximaMs);
+      gravador.start(250);
     } catch (falha) {
-      ouvindo.value = false;
-      reiniciarAoTerminar = false;
-      limparAudio();
-      erro.value = falha instanceof Error ? falha.message : "Não foi possível acessar o microfone.";
-    }
-  }
-
-  function pararReconhecimentoSeguro() {
-    try {
-      reconhecimento?.stop();
-    } catch {
-      // O reconhecimento pode já ter sido encerrado pelo navegador.
+      limparMedidor();
+      encerrarStream();
+      estado.value = "parado";
+      erro.value =
+        falha instanceof DOMException && falha.name === "NotAllowedError"
+          ? "Permita o microfone para gravar a observação."
+          : "Não foi possível iniciar a gravação. Feche outros aplicativos que usam o microfone e tente novamente.";
     }
   }
 
   function parar() {
-    reiniciarAoTerminar = false;
-    ouvindo.value = false;
-    pararReconhecimentoSeguro();
-    limparAudio();
+    limparTemporizador();
+    document.removeEventListener("visibilitychange", interromperAoOcultar);
+    if (!gravador || gravador.state === "inactive") {
+      limparMedidor();
+      encerrarStream();
+      estado.value = "parado";
+      return;
+    }
+    gravador.stop();
   }
 
-  onBeforeUnmount(() => {
-    reiniciarAoTerminar = false;
-    pararReconhecimentoSeguro();
-    limparAudio();
-  });
+  function cancelar() {
+    requisicao?.abort();
+    requisicao = null;
+    document.removeEventListener("visibilitychange", interromperAoOcultar);
+    limparTemporizador();
+    if (gravador) {
+      gravador.onstop = null;
+      if (gravador.state !== "inactive") gravador.stop();
+    }
+    gravador = null;
+    partes = [];
+    limparMedidor();
+    encerrarStream();
+    estado.value = "parado";
+  }
+
+  onBeforeUnmount(() => cancelar());
 
   return {
+    cancelar,
     erro,
+    gravacaoDisponivel,
+    iniciar,
     logoGlow,
     logoSpeed,
     nivelVoz,
     ouvindo,
-    preparar,
-    reconhecimentoDisponivel,
-    iniciar,
     parar,
+    preparar,
     temTexto,
     textoEditavel,
-    textoReconhecido
+    textoReconhecido,
+    transcrevendo
   };
 }

@@ -24,7 +24,9 @@ const emit = defineEmits<{ (event: "update:modelValue", value: string): void }>(
 const aberto = ref(false);
 let textoInicial = "";
 const {
+  cancelar: descartarGravacao,
   erro,
+  gravacaoDisponivel,
   iniciar,
   logoGlow,
   logoSpeed,
@@ -32,10 +34,10 @@ const {
   ouvindo,
   parar,
   preparar,
-  reconhecimentoDisponivel,
   temTexto,
   textoEditavel,
-  textoReconhecido
+  textoReconhecido,
+  transcrevendo
 } = useTranscricaoVoz();
 
 function abrir() {
@@ -45,7 +47,7 @@ function abrir() {
 }
 
 function cancelar() {
-  parar();
+  descartarGravacao();
   emit("update:modelValue", textoInicial);
   aberto.value = false;
 }
@@ -53,7 +55,7 @@ function cancelar() {
 function usarTranscricao() {
   const texto = textoReconhecido.value.trim();
   if (texto) emit("update:modelValue", texto);
-  parar();
+  descartarGravacao();
   aberto.value = false;
 }
 </script>
@@ -89,15 +91,16 @@ function usarTranscricao() {
             class="voz-orbe"
             :class="{ 'voz-orbe--ouvindo': ouvindo }"
             :style="{ '--voz-nivel': nivelVoz }"
-            :disabled="ouvindo || !reconhecimentoDisponivel"
-            :aria-label="ouvindo ? 'Transcrição em andamento' : 'Iniciar transcrição por voz'"
+            :disabled="ouvindo || transcrevendo || !gravacaoDisponivel"
+            :aria-label="ouvindo ? 'Gravação em andamento' : 'Iniciar transcrição por voz'"
             @click="iniciar"
           >
             <div class="voz-orbe__halo" />
             <AppLogoAnimada :size="142" :glow-intensity="logoGlow" :speed="logoSpeed" />
           </button>
           <div class="voz-status" aria-live="polite">
-            <span v-if="ouvindo">Ouvindo… fale normalmente</span>
+            <span v-if="transcrevendo">Transcrevendo sua observação…</span>
+            <span v-else-if="ouvindo">Ouvindo… fale normalmente</span>
             <span v-else-if="erro" class="text-error">{{ erro }}</span>
             <span v-else>Toque na logo para começar a falar</span>
           </div>
@@ -115,16 +118,22 @@ function usarTranscricao() {
             aria-live="polite"
           />
 
-          <v-alert v-if="!reconhecimentoDisponivel" type="info" variant="tonal" density="compact" class="mt-3">
-            Use Chrome ou Edge no celular. A conexão com a Groq será adicionada depois, sem alterar este fluxo.
+          <v-alert v-if="!gravacaoDisponivel" type="info" variant="tonal" density="compact" class="mt-3">
+            Seu navegador não permite gravar áudio. Use Chrome, Edge ou Safari atualizado e permita o microfone.
           </v-alert>
         </v-card-text>
 
         <v-card-actions class="flex-wrap ga-2 px-4 pb-4">
           <v-btn v-if="ouvindo" color="error" prepend-icon="mdi-stop" @click="parar">Parar gravação</v-btn>
+          <span v-else-if="transcrevendo" class="text-medium-emphasis text-caption">Enviando áudio com segurança…</span>
           <v-spacer />
           <v-btn variant="text" @click="cancelar">Cancelar</v-btn>
-          <v-btn color="primary" variant="flat" :disabled="!temTexto || ouvindo" @click="usarTranscricao">
+          <v-btn
+            color="primary"
+            variant="flat"
+            :disabled="!temTexto || ouvindo || transcrevendo"
+            @click="usarTranscricao"
+          >
             Usar texto
           </v-btn>
         </v-card-actions>
