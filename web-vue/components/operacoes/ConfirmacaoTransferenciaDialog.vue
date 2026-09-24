@@ -61,7 +61,7 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
         </v-sheet>
       </v-card-text>
 
-      <v-card-actions class="px-5 pb-5">
+      <v-card-actions class="confirmacao-transferencia__acoes px-5 pb-5">
         <v-spacer />
         <v-btn variant="text" :disabled="salvando" @click="emit('editar')">Voltar e editar</v-btn>
         <v-btn color="deep-orange-darken-2" variant="flat" :loading="salvando" @click="emit('confirmar')">
@@ -75,16 +75,35 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
 <style scoped>
 .confirmacao-transferencia {
   overflow: hidden;
-  background: rgb(255 255 255 / 94%);
-  backdrop-filter: blur(10px);
+  color: #1f2733;
+  background: #fff;
 }
 .confirmacao-transferencia__faixa {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  overflow: hidden;
   padding: 18px 20px;
   color: #fff;
-  background: linear-gradient(120deg, #c2410c, #ea580c);
+  background: linear-gradient(125deg, rgb(194 65 12 / 88%), rgb(234 88 12 / 78%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+  backdrop-filter: blur(14px) saturate(135%);
+}
+.confirmacao-transferencia__faixa::before {
+  position: absolute;
+  top: -44px;
+  right: -12px;
+  width: 190px;
+  height: 112px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 17%);
+  content: "";
+  filter: blur(12px);
+}
+.confirmacao-transferencia__faixa > * {
+  position: relative;
+  z-index: 1;
 }
 .confirmacao-transferencia__valor {
   display: flex;
@@ -95,5 +114,24 @@ const temComposicao = computed(() => props.valorEspecie > 0 || props.valorMoedas
 }
 .confirmacao-transferencia__valor strong {
   font-size: 22px;
+}
+.confirmacao-transferencia :deep(.v-card-text),
+.confirmacao-transferencia :deep(.v-col) {
+  color: #1f2733;
+}
+.confirmacao-transferencia :deep(.v-sheet) {
+  color: #1f2733;
+  background: #fffaf6;
+}
+.confirmacao-transferencia .confirmacao-transferencia__valor {
+  color: #7c2d12;
+  background: #fff1e8;
+}
+.confirmacao-transferencia :deep(.v-chip) {
+  color: #7c2d12;
+  background: #f6e0c6;
+}
+.confirmacao-transferencia__acoes :deep(.v-btn--variant-text) {
+  color: #4a3327;
 }
 </style>
