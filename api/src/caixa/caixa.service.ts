@@ -1754,6 +1754,11 @@ function serializarVendasCanceladas(vendasCanceladas: VendaCanceladaCaixaLinha[]
     data: venda.data,
     dataHora: serializarData(venda.dataHora),
     valor: deCentavos(liquidoCentavos(venda)),
+    pagamentos: venda.pagamentos.map((pagamento) => ({
+      id: pagamento.id,
+      formaPagamento: pagamento.formaPagamento ?? pagamento.tipoPagamentoAutomacao ?? "Forma não informada pelo CREARE",
+      valor: numero(pagamento.valor)
+    })),
     produtos: venda.produtos.map((produto) => ({
       id: produto.id,
       descricao: produto.descricao,

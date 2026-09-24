@@ -79,6 +79,15 @@ watch(
               </div>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
+              <div class="text-subtitle-2 mb-2">Forma de pagamento</div>
+              <div v-if="venda.pagamentos.length" class="d-flex flex-wrap ga-2 mb-4">
+                <v-chip v-for="pagamento in venda.pagamentos" :key="pagamento.id" size="small" variant="tonal">
+                  {{ pagamento.formaPagamento }}: {{ dinheiro(pagamento.valor) }}
+                </v-chip>
+              </div>
+              <p v-else class="text-body-2 text-medium-emphasis mb-4">
+                Forma de pagamento não informada pelo CREARE.
+              </p>
               <div class="text-subtitle-2 mb-2">Produtos da venda</div>
               <v-table v-if="venda.produtos.length" density="compact">
                 <thead>

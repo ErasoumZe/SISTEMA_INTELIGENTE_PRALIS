@@ -243,6 +243,13 @@ export const vendaCanceladaCaixaSchema = z.object({
   data: z.string().nullable(),
   dataHora: z.string().nullable(),
   valor: z.number(),
+  pagamentos: z.array(
+    z.object({
+      id: uuidSchema,
+      formaPagamento: z.string(),
+      valor: z.number()
+    })
+  ),
   produtos: z.array(
     z.object({
       id: uuidSchema,

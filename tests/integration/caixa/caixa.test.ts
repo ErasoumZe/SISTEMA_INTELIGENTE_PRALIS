@@ -293,6 +293,7 @@ describe("caixa integration", () => {
   it("Deve_AuditarVendaCanceladaComProdutosSemDevolveLaAosTotais", async () => {
     const vendaId = randomUUID();
     const produtoId = randomUUID();
+    const pagamentoId = randomUUID();
     await executarSql(
       `insert into vendas (id, empresa_id, caixa_id, pdv_id, data_referencia, data_venda, descricao, valor_original,
          valor_desconto, valor_acrescimo, identificador_externo, status, computar)
@@ -303,6 +304,11 @@ describe("caixa integration", () => {
       `insert into vendas_produtos (id, venda_id, descricao_produto, quantidade, valor_unitario, valor_total, cancelado)
        values ($1,$2,'Produto cancelado de teste','2','62.50','125.00',true)`,
       [produtoId, vendaId]
+    );
+    await executarSql(
+      `insert into vendas_pagamentos (id, venda_id, tipo_pagamento_automacao, total_pago)
+       values ($1,$2,'Cartão de débito','120.00')`,
+      [pagamentoId, vendaId]
     );
 
     const [status, detalhe, canceladasOperacionais] = await Promise.all([
@@ -336,6 +342,7 @@ describe("caixa integration", () => {
           identificadorExterno: string | null;
           dataHora: string | null;
           valor: number;
+          pagamentos: Array<{ id: string; formaPagamento: string; valor: number }>;
           produtos: Array<{
             id: string;
             descricao: string;
@@ -352,6 +359,7 @@ describe("caixa integration", () => {
         id: vendaId,
         identificadorExterno: "CREARE:CANCELADA-CAIXA",
         valor: 120,
+        pagamentos: [{ id: pagamentoId, formaPagamento: "Cartão de débito", valor: 120 }],
         produtos: [
           expect.objectContaining({
             id: produtoId,
@@ -363,9 +371,12 @@ describe("caixa integration", () => {
         ]
       })
     );
-    expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(
-      vendaId
-    );
+    expect(json<{ data: Array<{ id: string }> }>(canceladasOperacionais).data.map((venda) => venda.id)).toContain(vendaId);
+    expect(
+      json<{ data: Array<{ id: string; pagamentos: Array<{ formaPagamento: string; valor: number }> }> }>(
+        canceladasOperacionais
+      ).data
+    ).toContainEqual(expect.objectContaining({ id: vendaId, pagamentos: [{ formaPagamento: "Cartão de débito", valor: 120 }] }));
 
     await executarSql("delete from vendas where id = $1", [vendaId]);
   });

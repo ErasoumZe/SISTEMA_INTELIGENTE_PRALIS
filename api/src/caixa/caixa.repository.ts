@@ -1334,6 +1334,14 @@ export type VendaCanceladaProdutoLinha = {
   cancelado: boolean;
 };
 
+export type VendaCanceladaPagamentoLinha = {
+  id: string;
+  vendaId: string;
+  formaPagamento: string | null;
+  tipoPagamentoAutomacao: string | null;
+  valor: string;
+};
+
 export type VendaCanceladaCaixaLinha = {
   id: string;
   identificadorExterno: string | null;
@@ -1343,6 +1351,7 @@ export type VendaCanceladaCaixaLinha = {
   valorOriginal: string;
   valorDesconto: string;
   valorAcrescimo: string;
+  pagamentos: VendaCanceladaPagamentoLinha[];
   produtos: VendaCanceladaProdutoLinha[];
 };
 
@@ -1354,7 +1363,7 @@ export async function listarVendasCanceladasCaixaRepository(
   db: ExecutorBanco = banco
 ): Promise<VendaCanceladaCaixaLinha[]> {
   const filtro = and(eq(vendas.caixaId, caixaId), eq(vendas.status, "cancelado"));
-  const [linhas, produtos] = await Promise.all([
+  const [linhas, produtos, pagamentos] = await Promise.all([
     db
       .select({
         id: vendas.id,
@@ -1382,7 +1391,20 @@ export async function listarVendasCanceladasCaixaRepository(
       .from(vendasProdutos)
       .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
       .where(filtro)
-      .orderBy(asc(vendasProdutos.criadoEm), asc(vendasProdutos.id))
+      .orderBy(asc(vendasProdutos.criadoEm), asc(vendasProdutos.id)),
+    db
+      .select({
+        id: vendasPagamentos.id,
+        vendaId: vendasPagamentos.vendaId,
+        formaPagamento: formasPagamento.nome,
+        tipoPagamentoAutomacao: vendasPagamentos.tipoPagamentoAutomacao,
+        valor: vendasPagamentos.totalPago
+      })
+      .from(vendasPagamentos)
+      .innerJoin(vendas, eq(vendas.id, vendasPagamentos.vendaId))
+      .leftJoin(formasPagamento, eq(formasPagamento.id, vendasPagamentos.formaPagamentoId))
+      .where(filtro)
+      .orderBy(asc(vendasPagamentos.criadoEm), asc(vendasPagamentos.id))
   ]);
 
   const produtosPorVenda = new Map<string, VendaCanceladaProdutoLinha[]>();
@@ -1392,7 +1414,18 @@ export async function listarVendasCanceladasCaixaRepository(
     produtosPorVenda.set(produto.vendaId, atuais);
   }
 
-  return linhas.map((linha) => ({ ...linha, produtos: produtosPorVenda.get(linha.id) ?? [] }));
+  const pagamentosPorVenda = new Map<string, VendaCanceladaPagamentoLinha[]>();
+  for (const pagamento of pagamentos) {
+    const atuais: VendaCanceladaPagamentoLinha[] = pagamentosPorVenda.get(pagamento.vendaId) ?? [];
+    atuais.push(pagamento);
+    pagamentosPorVenda.set(pagamento.vendaId, atuais);
+  }
+
+  return linhas.map((linha) => ({
+    ...linha,
+    pagamentos: pagamentosPorVenda.get(linha.id) ?? [],
+    produtos: produtosPorVenda.get(linha.id) ?? []
+  }));
 }
 
 // Acerto de saldo do caixa (se houve): valor da diferenca e o colaborador que ficou com o debito.
