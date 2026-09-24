@@ -69,6 +69,10 @@ a necessidade.
 > venda integrada (migration `0032`), e o `34` registra a governança atual do Caixa. As regras
 > R-174, R-175 e R-178 que os acompanham estão no documento `19`.
 
+## Documento adicional
+
+- [35 — Lume, assistente futuro do Caixa](35_LUME_ASSISTENTE_CAIXA.md): escopo futuro, governança e limites da primeira base de FAQs.
+
 ## Regra de ouro deste brain
 
 > **Funcionamento = planilha. Aparência = Mobills. Escopo = Xmind. Detalhe de tela = anotações do

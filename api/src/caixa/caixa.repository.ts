@@ -223,6 +223,42 @@ export async function buscarCaixaPorIdRepository(caixaId: string, db: ExecutorBa
   return caixa ?? null;
 }
 
+/** Dados do fechamento expostos somente por uma transferencia vinculada ao caixa.
+ *  A listagem historica ja possui estes campos, mas o tesoureiro nao deve precisar
+ *  de permissao de auditoria de caixas para conferir o recebimento.
+ */
+export async function buscarResumoFechamentoCaixaRepository(
+  caixaId: string,
+  empresaId: string,
+  db: ExecutorBanco = banco
+) {
+  const [fechamento] = await db
+    .select({
+      id: fechamentosCaixa.id,
+      status: fechamentosCaixa.status,
+      dataHoraFechamento: fechamentosCaixa.dataHoraFechamento,
+      fechadoEm: fechamentosCaixa.fechadoEm,
+      fechadoPor: fechamentosCaixa.fechadoPor,
+      fechadoPorNome: perfilFechador.nome,
+      usuarioCaixaId: fechamentosCaixa.usuarioCaixaId,
+      usuarioCaixaNome: perfisUsuarios.nome,
+      colaboradorNome: colaboradores.nome,
+      lacreFechamento: fechamentosCaixa.lacreFechamento,
+      caixaResponsavelNomeFechamento: fechamentosCaixa.caixaResponsavelNomeFechamento,
+      supervisorResponsavelNomeFechamento: fechamentosCaixa.supervisorResponsavelNomeFechamento,
+      valorEspecieFechamento: fechamentosCaixa.valorEspecieFechamento,
+      valorMoedasFechamento: fechamentosCaixa.valorMoedasFechamento,
+      observacao: fechamentosCaixa.observacao
+    })
+    .from(fechamentosCaixa)
+    .leftJoin(perfisUsuarios, eq(perfisUsuarios.usuarioId, fechamentosCaixa.usuarioCaixaId))
+    .leftJoin(perfilFechador, eq(perfilFechador.usuarioId, fechamentosCaixa.fechadoPor))
+    .leftJoin(colaboradores, eq(colaboradores.id, fechamentosCaixa.colaboradorId))
+    .where(and(eq(fechamentosCaixa.id, caixaId), eq(fechamentosCaixa.empresaId, empresaId)))
+    .limit(1);
+  return fechamento ?? null;
+}
+
 export async function existeCaixaAbertoPdvRepository(
   pdvId: string,
   caixaIgnoradoId?: string,

@@ -15,6 +15,7 @@ import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
   buscarAnexoFechamentoCaixaRepository,
+  buscarResumoFechamentoCaixaRepository,
   buscarContaCofreEmpresaRepository,
   criarConferenciaFisicaTransferenciaRepository,
   criarQuebraCaixaRepository,
@@ -795,6 +796,21 @@ export async function listarAnexosDaConferencia(transferenciaId: string, perfil:
   exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
   const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
   return listarAnexosFechamentoCaixaRepository(caixaId, empresaId);
+}
+
+export async function obterResumoFechamentoDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  const fechamento = await buscarResumoFechamentoCaixaRepository(caixaId, empresaId);
+  if (!fechamento) throw new Error("Fechamento do caixa nao encontrado");
+  return {
+    ...fechamento,
+    dataHoraFechamento: fechamento.dataHoraFechamento?.toISOString() ?? null,
+    fechadoEm: fechamento.fechadoEm?.toISOString() ?? null,
+    valorEspecieFechamento:
+      fechamento.valorEspecieFechamento === null ? null : Number(fechamento.valorEspecieFechamento),
+    valorMoedasFechamento: fechamento.valorMoedasFechamento === null ? null : Number(fechamento.valorMoedasFechamento)
+  };
 }
 
 export async function obterAnexoDaConferencia(transferenciaId: string, anexoId: string, perfil: PerfilUsuario) {

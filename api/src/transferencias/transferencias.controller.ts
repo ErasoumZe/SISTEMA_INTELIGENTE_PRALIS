@@ -19,6 +19,7 @@ import {
   liberarTravaTransferencia,
   listarTransferencias,
   listarAnexosDaConferencia,
+  obterResumoFechamentoDaConferencia,
   obterAnexoDaConferencia,
   obterTransferencia,
   recusarConferencia
@@ -90,6 +91,20 @@ export async function registrarRotasTransferencias(app: FastifyInstance): Promis
       const { id } = apiIdParamsSchema.parse(request.params);
       try {
         return ok(await listarAnexosDaConferencia(id, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErroValidacao(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/transferencias/:id/fechamento-conferencia",
+    { preHandler: exigirPermissao("transferencias_conferir") },
+    async (request, reply) => {
+      const { id } = apiIdParamsSchema.parse(request.params);
+      try {
+        return ok(await obterResumoFechamentoDaConferencia(id, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErroValidacao(mensagem), mensagem);

@@ -89,10 +89,30 @@ type AnexoConferencia = {
   id: string;
   tipo: "folha_fechamento" | "comprovante_cartao";
   nomeOriginal: string;
+  mimeType?: string;
+};
+type FechamentoConferencia = {
+  status: string;
+  dataHoraFechamento: string | null;
+  fechadoEm: string | null;
+  fechadoPorNome: string | null;
+  usuarioCaixaNome: string | null;
+  colaboradorNome: string | null;
+  lacreFechamento: string | null;
+  caixaResponsavelNomeFechamento: string | null;
+  supervisorResponsavelNomeFechamento: string | null;
+  valorEspecieFechamento: number | null;
+  valorMoedasFechamento: number | null;
+  observacao: string | null;
 };
 const anexosConferencia = ref<AnexoConferencia[]>([]);
 const carregandoAnexos = ref(false);
 const erroAnexos = ref("");
+const fechamentoConferencia = ref<FechamentoConferencia | null>(null);
+const carregandoFechamento = ref(false);
+const erroFechamento = ref("");
+const previewAnexo = ref<AnexoConferencia | null>(null);
+const rotacaoPreview = ref(0);
 const folhasConferencia = computed(() => anexosConferencia.value.filter((anexo) => anexo.tipo === "folha_fechamento"));
 const cartoesConferencia = computed(() =>
   anexosConferencia.value.filter((anexo) => anexo.tipo === "comprovante_cartao")
@@ -119,8 +139,40 @@ function abrirConferencia(operacao: OperacaoResumo) {
   confirmando.value = operacao;
   anexosConferencia.value = [];
   erroAnexos.value = "";
+  fechamentoConferencia.value = null;
+  erroFechamento.value = "";
+  previewAnexo.value = null;
+  rotacaoPreview.value = 0;
   carregandoAnexos.value = Boolean(operacao.caixaId && operacao.ehCaixaParaCofre);
-  if (carregandoAnexos.value) void carregarAnexosConferencia(operacao.id);
+  carregandoFechamento.value = carregandoAnexos.value;
+  if (carregandoAnexos.value) {
+    void carregarAnexosConferencia(operacao.id);
+    void carregarFechamentoConferencia(operacao.id);
+  }
+}
+
+async function carregarFechamentoConferencia(transferenciaId: string) {
+  try {
+    const fechamento = await apiGet<FechamentoConferencia>(
+      `/api/transferencias/${transferenciaId}/fechamento-conferencia`
+    );
+    if (confirmando.value?.id === transferenciaId) fechamentoConferencia.value = fechamento;
+  } catch {
+    if (confirmando.value?.id === transferenciaId) erroFechamento.value = "Fechamento ainda não registrado.";
+  } finally {
+    if (confirmando.value?.id === transferenciaId) carregandoFechamento.value = false;
+  }
+}
+
+function abrirAnexoPreview(anexo: AnexoConferencia) {
+  if (!anexo.mimeType?.startsWith("image/")) return;
+  previewAnexo.value = anexo;
+  rotacaoPreview.value = 0;
+}
+
+function fecharAnexoPreview() {
+  previewAnexo.value = null;
+  rotacaoPreview.value = 0;
 }
 
 async function carregarAnexosConferencia(transferenciaId: string) {
@@ -140,6 +192,10 @@ function fecharConferencia() {
   anexosConferencia.value = [];
   erroAnexos.value = "";
   carregandoAnexos.value = false;
+  fechamentoConferencia.value = null;
+  erroFechamento.value = "";
+  carregandoFechamento.value = false;
+  fecharAnexoPreview();
   modoRecusa.value = false;
   encerrarDivergencia.value = false;
   sobraConfirmada.value = false;
@@ -150,6 +206,15 @@ function fecharConferencia() {
 // O servidor e quem sabe se esta linha e um retorno do Caixa: a tela nao conhece o tipo gravado.
 // Vem no DTO da listagem, calculado com o predicado canonico.
 const ehCaixaParaCofre = computed(() => confirmando.value?.ehCaixaParaCofre === true);
+const tituloConferencia = computed(() => {
+  if (modoRecusa.value) return ehCaixaParaCofre.value ? "Registrar divergência da sangria" : "Registrar divergência";
+  return ehCaixaParaCofre.value ? "Conferir sangria" : "Conferir recebimento";
+});
+const valorFechamentoConferencia = computed(() => {
+  const fechamento = fechamentoConferencia.value;
+  if (!fechamento) return null;
+  return Number(fechamento.valorEspecieFechamento ?? 0) + Number(fechamento.valorMoedasFechamento ?? 0);
+});
 
 // Decisao 5/R-187: o valor so e OBRIGATORIO no retorno do Caixa (e la 0 e legitimo). Na generica ele
 // continua opcional — vazio significa "nao informei", e o payload omite o campo.
@@ -638,9 +703,19 @@ function limparFiltrosTransferencias() {
       no-click-animation
       @update:model-value="(v) => !v && fecharConferencia()"
     >
-      <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4 tes-conferencia-card">
+      <v-card class="pa-4 tes-conferencia-card">
+        <v-card-title class="tes-conferencia-card__title">
+          <span>{{ tituloConferencia }}</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            aria-label="Fechar conferência"
+            @click="fecharConferencia"
+          />
+        </v-card-title>
         <section v-if="confirmando && !modoRecusa" class="tes-conferencia-resumo" data-teste="conferencia-resumo">
-          <div class="tes-conferencia-resumo__titulo">Confira a sangria antes de aceitar</div>
+          <div class="tes-conferencia-resumo__titulo">Resumo da sangria — confira antes de aceitar</div>
           <div class="tes-conferencia-resumo__linha">
             <span>Total enviado</span><strong>{{ dinheiro(Number(confirmando.valorOriginal)) }}</strong>
           </div>
@@ -670,35 +745,108 @@ function limparFiltrosTransferencias() {
             <span>Observação</span><strong>{{ confirmando.observacao?.trim() || "Sem observação" }}</strong>
           </div>
         </section>
-        <section v-if="confirmando?.ehCaixaParaCofre" aria-label="Anexos do fechamento" data-teste="conferencia-anexos">
-          <div class="text-subtitle-2 mb-2">Anexos do fechamento deste caixa</div>
-          <v-progress-linear v-if="carregandoAnexos" indeterminate aria-label="Carregando anexos" />
-          <v-alert v-else-if="erroAnexos" type="warning" variant="tonal" density="compact">{{ erroAnexos }}</v-alert>
-          <template v-else>
-            <div class="text-body-2 mb-1">Folha de fechamento ({{ folhasConferencia.length }})</div>
-            <a
-              v-for="anexo in folhasConferencia"
-              :key="anexo.id"
-              :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="d-block text-body-2 mb-1"
-              >{{ anexo.nomeOriginal }}</a
-            >
-            <div class="text-body-2 mt-2 mb-1">Comprovantes de cartão ({{ cartoesConferencia.length }})</div>
-            <a
-              v-for="anexo in cartoesConferencia"
-              :key="anexo.id"
-              :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="d-block text-body-2 mb-1"
-              >{{ anexo.nomeOriginal }}</a
-            >
-            <p v-if="!anexosConferencia.length" class="text-body-2 mb-2">
-              Nenhum anexo enviado ao fechamento deste caixa até agora.
-            </p>
-          </template>
+        <section v-if="confirmando?.ehCaixaParaCofre" class="tes-fechamento-resumo" aria-label="Fechamento do caixa">
+          <div class="tes-fechamento-resumo__titulo">Fechamento do caixa — conferência separada</div>
+          <v-progress-linear v-if="carregandoFechamento" indeterminate aria-label="Carregando fechamento" />
+          <v-alert v-else-if="erroFechamento && !fechamentoConferencia" type="info" variant="tonal" density="compact">
+            {{ erroFechamento }} Os dados do fechamento aparecerão quando o operador concluir o caixa.
+          </v-alert>
+          <div v-else-if="fechamentoConferencia" class="tes-fechamento-resumo__grid" data-teste="fechamento-resumo">
+            <div>
+              <span>Valor declarado no fechamento</span><strong>{{ dinheiro(valorFechamentoConferencia ?? 0) }}</strong>
+            </div>
+            <div>
+              <span>Dinheiro físico</span
+              ><strong>{{ dinheiro(fechamentoConferencia.valorEspecieFechamento ?? 0) }}</strong>
+            </div>
+            <div>
+              <span>Moedas</span><strong>{{ dinheiro(fechamentoConferencia.valorMoedasFechamento ?? 0) }}</strong>
+            </div>
+            <div>
+              <span>Lacre usado no fechamento</span
+              ><strong>{{ fechamentoConferencia.lacreFechamento || "Não informado" }}</strong>
+            </div>
+            <div>
+              <span>Operador do caixa</span
+              ><strong>{{
+                fechamentoConferencia.usuarioCaixaNome || fechamentoConferencia.colaboradorNome || "Não informado"
+              }}</strong>
+            </div>
+            <div>
+              <span>Responsável</span
+              ><strong>{{ fechamentoConferencia.caixaResponsavelNomeFechamento || "Não informado" }}</strong>
+            </div>
+            <div>
+              <span>Supervisor</span
+              ><strong>{{ fechamentoConferencia.supervisorResponsavelNomeFechamento || "Não informado" }}</strong>
+            </div>
+            <div>
+              <span>Fechado por</span><strong>{{ fechamentoConferencia.fechadoPorNome || "Não informado" }}</strong>
+            </div>
+            <div>
+              <span>Data e hora</span
+              ><strong>{{
+                fechamentoConferencia.dataHoraFechamento
+                  ? formatarDataHora(fechamentoConferencia.dataHoraFechamento)
+                  : "Ainda aberto"
+              }}</strong>
+            </div>
+            <div v-if="fechamentoConferencia.observacao" class="tes-fechamento-resumo__observacao">
+              <span>Observação do fechamento</span><strong>{{ fechamentoConferencia.observacao }}</strong>
+            </div>
+          </div>
+        </section>
+        <section
+          v-if="confirmando?.ehCaixaParaCofre"
+          aria-label="Anexos do fechamento"
+          data-teste="conferencia-anexos"
+          class="tes-anexos"
+        >
+          <details>
+            <summary>
+              <span>Anexos do fechamento</span>
+              <small>{{
+                anexosConferencia.length
+                  ? `${anexosConferencia.length} arquivo(s) disponível(is)`
+                  : "Nenhum arquivo anexado"
+              }}</small>
+            </summary>
+            <v-progress-linear v-if="carregandoAnexos" indeterminate aria-label="Carregando anexos" />
+            <v-alert v-else-if="erroAnexos" type="warning" variant="tonal" density="compact">{{ erroAnexos }}</v-alert>
+            <template v-else>
+              <div class="text-body-2 mb-1">Folha de fechamento ({{ folhasConferencia.length }})</div>
+              <a
+                v-for="anexo in folhasConferencia"
+                :key="anexo.id"
+                :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="tes-anexo-link"
+                @click="
+                  abrirAnexoPreview(anexo);
+                  anexo.mimeType?.startsWith('image/') && $event.preventDefault();
+                "
+                >{{ anexo.nomeOriginal }}</a
+              >
+              <div class="text-body-2 mt-2 mb-1">Comprovantes de cartão ({{ cartoesConferencia.length }})</div>
+              <a
+                v-for="anexo in cartoesConferencia"
+                :key="anexo.id"
+                :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="tes-anexo-link"
+                @click="
+                  abrirAnexoPreview(anexo);
+                  anexo.mimeType?.startsWith('image/') && $event.preventDefault();
+                "
+                >{{ anexo.nomeOriginal }}</a
+              >
+              <p v-if="!anexosConferencia.length" class="text-body-2 mb-2">
+                Nenhum anexo enviado ao fechamento deste caixa até agora.
+              </p>
+            </template>
+          </details>
         </section>
         <v-text-field
           v-if="ehCaixaParaCofre"
@@ -837,6 +985,42 @@ function limparFiltrosTransferencias() {
           >
             {{ modoRecusa ? (encerrarDivergencia ? "Encerrar divergência" : "Registrar divergência") : "Confirmar" }}
           </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog
+      :model-value="Boolean(previewAnexo)"
+      max-width="760"
+      @update:model-value="(v) => !v && fecharAnexoPreview()"
+    >
+      <v-card v-if="previewAnexo" class="tes-preview-card">
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span class="text-truncate">{{ previewAnexo.nomeOriginal }}</span>
+          <v-btn icon="mdi-close" variant="text" aria-label="Fechar prévia" @click="fecharAnexoPreview" />
+        </v-card-title>
+        <v-card-text class="tes-preview-body">
+          <img
+            :src="`${apiUrl}/api/transferencias/${confirmando?.id}/anexos-fechamento/${previewAnexo.id}`"
+            :alt="previewAnexo.nomeOriginal"
+            class="tes-preview-img"
+            :style="{ transform: `rotate(${rotacaoPreview}deg)` }"
+          />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn
+            variant="outlined"
+            prepend-icon="mdi-rotate-left"
+            @click="rotacaoPreview = (rotacaoPreview + 270) % 360"
+            >Virar à esquerda</v-btn
+          >
+          <v-btn
+            variant="outlined"
+            prepend-icon="mdi-rotate-right"
+            @click="rotacaoPreview = (rotacaoPreview + 90) % 360"
+            >Virar à direita</v-btn
+          >
+          <v-btn variant="text" @click="fecharAnexoPreview">Fechar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1123,6 +1307,26 @@ function limparFiltrosTransferencias() {
   background: var(--cx-surface-raised);
   color: var(--cx-ink);
 }
+.tes-conferencia-card__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 0 12px;
+  color: var(--cx-ink);
+  font-size: 20px;
+  font-weight: 800;
+}
+.tes-conferencia-card :deep(.v-card-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tes-conferencia-card :deep(.v-card-actions .v-btn) {
+  max-width: 100%;
+  white-space: normal;
+}
 .tes-conferencia-resumo__titulo {
   margin-bottom: 3px;
   color: var(--cat-transferencias-tinta, #9a3412);
@@ -1149,6 +1353,106 @@ function limparFiltrosTransferencias() {
   padding-top: 6px;
   border-top: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 22%, transparent);
   font-weight: 700;
+}
+.tes-fechamento-resumo {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #fb4b0b) 42%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cx-surface-raised) 94%, var(--cat-transferencias-base, #fb4b0b));
+  color: var(--cx-ink);
+}
+.tes-fechamento-resumo__titulo {
+  color: var(--cat-transferencias-tinta, #9a3412);
+  font-size: 13px;
+  font-weight: 800;
+}
+.tes-fechamento-resumo__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  font-size: 12px;
+}
+.tes-fechamento-resumo__grid > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.tes-fechamento-resumo__grid span {
+  color: var(--cx-ink-soft);
+}
+.tes-fechamento-resumo__grid strong {
+  color: var(--cx-ink);
+  overflow-wrap: anywhere;
+}
+.tes-fechamento-resumo__observacao {
+  grid-column: 1 / -1;
+  border-top: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #fb4b0b) 22%, transparent);
+  padding-top: 6px;
+}
+.tes-anexos {
+  margin: 0 0 12px;
+  color: var(--cx-ink);
+}
+.tes-anexos details {
+  border: 1px solid color-mix(in srgb, var(--cx-ink-soft) 28%, transparent);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.tes-anexos summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--cx-ink);
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+}
+.tes-anexos summary::-webkit-details-marker {
+  display: none;
+}
+.tes-anexos summary::after {
+  content: "⌄";
+  color: var(--cat-transferencias-base, #fb4b0b);
+  font-size: 18px;
+  transition: transform 0.15s ease;
+}
+.tes-anexos details[open] summary::after {
+  transform: rotate(180deg);
+}
+.tes-anexos summary small {
+  margin-left: auto;
+  color: var(--cx-ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+.tes-anexo-link {
+  display: block;
+  margin: 7px 0;
+  color: var(--cat-transferencias-base, #fb4b0b);
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+}
+.tes-preview-body {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  overflow: auto;
+  background: #111820;
+}
+.tes-preview-img {
+  max-width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+.tes-preview-card {
+  background: var(--cx-surface-raised);
+  color: var(--cx-ink);
 }
 
 /* ---- Responsivo (breakpoints do projeto) ---- */
@@ -1196,6 +1500,32 @@ function limparFiltrosTransferencias() {
   }
   .tes-row > [data-col="Criado por"] {
     display: none;
+  }
+  .tes-fechamento-resumo__grid {
+    grid-template-columns: 1fr;
+  }
+  .tes-fechamento-resumo__observacao {
+    grid-column: auto;
+  }
+  .tes-anexos summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .tes-anexos summary small {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  .tes-conferencia-card {
+    padding: 14px !important;
+  }
+  .tes-conferencia-card__title {
+    font-size: 18px;
+  }
+  .tes-conferencia-card :deep(.v-spacer) {
+    display: none;
+  }
+  .tes-conferencia-card :deep(.v-card-actions) {
+    justify-content: flex-end;
   }
   .tes-desc {
     grid-area: desc;
