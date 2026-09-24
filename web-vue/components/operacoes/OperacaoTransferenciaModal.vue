@@ -211,6 +211,30 @@ const hojeISO = computed(() => dataISO(0));
             >Dinheiro físico + moedas deve ser igual ao valor total.</span
           >
           <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
+        </section>
+
+        <div class="tr-dois">
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
+            <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+          </label>
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">Data Lanç</span>
+            <div class="tr-data-row">
+              <button
+                type="button"
+                class="tr-pill"
+                :class="{ ativo: form.dataReferencia === hojeISO }"
+                @click="form.dataReferencia = hojeISO"
+              >
+                Hoje
+              </button>
+              <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
+            </div>
+          </label>
+        </div>
+
+        <template v-if="preparandoMaloteParaCaixa">
           <label class="tr-check tr-lacres-opcao">
             <input v-model="lacresRetornoAtivos" type="checkbox" />
             <span>Lacres de retorno / sangria <span class="tr-hint">(opcional)</span></span>
@@ -244,28 +268,7 @@ const hojeISO = computed(() => dataISO(0));
             </div>
             <span class="tr-legenda">{{ form.lacresRetorno.length }} lacre(s) de sangria adicionado(s).</span>
           </div>
-        </section>
-
-        <div class="tr-dois">
-          <label class="tr-campo">
-            <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
-            <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
-          </label>
-          <label class="tr-campo">
-            <span class="tr-campo-lbl">Data Lanç</span>
-            <div class="tr-data-row">
-              <button
-                type="button"
-                class="tr-pill"
-                :class="{ ativo: form.dataReferencia === hojeISO }"
-                @click="form.dataReferencia = hojeISO"
-              >
-                Hoje
-              </button>
-              <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
-            </div>
-          </label>
-        </div>
+        </template>
 
         <label class="tr-check">
           <input
