@@ -21,7 +21,8 @@ import type {
   TotaisCaixaCentavos,
   TotaisHistoricoCaixa,
   TransferenciaCofrePayload,
-  TransferenciasCaixaResponse
+  TransferenciasCaixaResponse,
+  VendaCanceladaCaixa
 } from "@padaria/shared/caixa";
 import { montarResumoCaixa, saldoCaixaCentavos, statusCaixaSchema } from "@padaria/shared/caixa";
 import { diaNegocio } from "@padaria/shared/datas";
@@ -74,6 +75,7 @@ import {
   listarHistoricoCaixaRepository,
   listarCaixasAbertosHistoricoRepository,
   listarLancamentosCaixaRepository,
+  listarVendasCanceladasCaixaRepository,
   listarPlanejamentosRetornoRepository,
   caixasAlteradosPosFechamentoRepository,
   listarUsuariosTesourariaRepository,
@@ -94,7 +96,8 @@ import {
   listarLacresRetornoDisponiveisDoCaixaRepository,
   listarCandidatosConfirmacaoRepository,
   type FiltrosHistoricoCaixa,
-  type IntencaoEntregaCofre
+  type IntencaoEntregaCofre,
+  type VendaCanceladaCaixaLinha
 } from "./caixa.repository.js";
 import {
   listarRetornosPendentesRepository,
@@ -1659,15 +1662,17 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
   const caixa = await buscarCaixaPorIdRepository(caixaId);
   if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
 
-  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento] = await Promise.all([
+  const [edicoes, ajuste, lancamentos, alteracoesPosFechamento, vendasCanceladas] = await Promise.all([
     listarEdicoesCaixaRepository(caixaId),
     buscarAjusteCaixaRepository(caixaId),
     listarLancamentosCaixaRepository(caixaId),
-    listarAlteracoesPosFechamentoRepository(caixaId)
+    listarAlteracoesPosFechamentoRepository(caixaId),
+    listarVendasCanceladasCaixaRepository(caixaId)
   ]);
 
   return {
     lancamentos: montarLancamentosPorCategoria(lancamentos, caixa.pdvContaId),
+    vendasCanceladas: serializarVendasCanceladas(vendasCanceladas),
     alteracoesPosFechamento: alteracoesPosFechamento.map((alteracao) => ({
       id: alteracao.id,
       vendaId: alteracao.vendaId,
@@ -1702,6 +1707,38 @@ export async function obterDetalheCaixa(caixaId: string, perfil: PerfilUsuario):
         }
       : null
   };
+}
+
+// Rota operacional do proprio caixa: a lista e leitura de auditoria, mas nao transforma o
+// operador em gerente de historico. Ele so pode consultar o caixa ao qual esta vinculado; gerencia
+// continua podendo consultar qualquer caixa permitido da empresa.
+export async function listarVendasCanceladasCaixa(
+  caixaId: string,
+  perfil: PerfilUsuario
+): Promise<VendaCanceladaCaixa[]> {
+  const caixa = await buscarCaixaPorIdRepository(caixaId);
+  if (!caixa || !podeAcessarEmpresa(perfil, caixa.empresaId)) throw new Error("Caixa nao encontrado");
+  if (!podeOperarCaixa(perfil, caixa)) throw new Error("Caixa nao permitido");
+  return serializarVendasCanceladas(await listarVendasCanceladasCaixaRepository(caixaId));
+}
+
+function serializarVendasCanceladas(vendasCanceladas: VendaCanceladaCaixaLinha[]): VendaCanceladaCaixa[] {
+  return vendasCanceladas.map((venda) => ({
+    id: venda.id,
+    identificadorExterno: venda.identificadorExterno,
+    descricao: venda.descricao,
+    data: venda.data,
+    dataHora: serializarData(venda.dataHora),
+    valor: deCentavos(liquidoCentavos(venda)),
+    produtos: venda.produtos.map((produto) => ({
+      id: produto.id,
+      descricao: produto.descricao,
+      quantidade: numero(produto.quantidade),
+      valorUnitario: numero(produto.valorUnitario),
+      valorTotal: numero(produto.valorTotal),
+      cancelado: produto.cancelado
+    }))
+  }));
 }
 
 // Agrupa por categoria, na mesma ordem em que a tela do caixa apresenta os totais.

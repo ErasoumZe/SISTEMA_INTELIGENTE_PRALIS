@@ -6,6 +6,7 @@ import EntregasAguardandoConferencia from "~/components/caixa/EntregasAguardando
 import CaixaCampanhasResumo from "~/components/caixa/CaixaCampanhasResumo.vue";
 import CaixaResumoMaloteAbertura from "~/components/caixa/CaixaResumoMaloteAbertura.vue";
 import CaixaUltimosLancamentosDialog from "~/components/caixa/CaixaUltimosLancamentosDialog.vue";
+import CaixaVendasCanceladasDialog from "~/components/caixa/CaixaVendasCanceladasDialog.vue";
 import { motivoFechamentoTravado } from "~/utils/fechamento-travas";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
 import CaixaFechamentoAnexos from "~/components/caixa/CaixaFechamentoAnexos.vue";
@@ -131,6 +132,7 @@ const entrega = reactive({
 });
 const modalRetornoSangriaAberto = ref(false);
 const modalSangriasAberto = ref(false);
+const modalVendasCanceladasAberto = ref(false);
 const lacresRetornoDisponiveis = ref<Array<{ id: string; numero: string }>>([]);
 type CategoriaComUltimos = "despesas" | "mercadorias" | "retiradas";
 const categoriaUltimosLancamentos = ref<CategoriaComUltimos | null>(null);
@@ -880,6 +882,16 @@ function confirmarFechamento() {
           :dia="caixaAberto.dataMovimento"
         />
 
+        <v-alert v-if="caixaAberto" type="warning" variant="tonal" density="comfortable" class="my-5">
+          <div class="d-flex align-center justify-space-between flex-wrap ga-3">
+            <div>
+              <strong>Vendas canceladas</strong>
+              <div class="text-body-2">Não entram nos totais do caixa. Consulte venda, horário, valor e produtos.</div>
+            </div>
+            <v-btn variant="outlined" color="warning" @click="modalVendasCanceladasAberto = true">Consultar</v-btn>
+          </div>
+        </v-alert>
+
         <!-- D1/D6: a sobra nao bloqueia mais o fechamento. Ou o operador entrega parte agora, ou
            fecha e o servidor devolve o restante no mesmo ato. -->
         <v-alert v-if="temSobra" type="warning" variant="tonal" class="my-5">
@@ -1126,6 +1138,12 @@ function confirmarFechamento() {
           :aberto="modalSangriasAberto"
           :caixa-id="caixaAberto.id"
           @update:aberto="modalSangriasAberto = $event"
+        />
+        <CaixaVendasCanceladasDialog
+          v-if="caixaAberto"
+          :aberto="modalVendasCanceladasAberto"
+          :caixa-id="caixaAberto.id"
+          @update:aberto="modalVendasCanceladasAberto = $event"
         />
         <CaixaUltimosLancamentosDialog
           v-if="caixaAberto && categoriaUltimosLancamentos"

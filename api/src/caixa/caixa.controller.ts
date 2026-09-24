@@ -25,6 +25,7 @@ import {
   executarPlanejamentoRetorno,
   fecharCaixa,
   listarHistoricoCaixa,
+  listarVendasCanceladasCaixa,
   listarPlanejamentosRetorno,
   obterDetalheCaixa,
   obterStatusCaixa,
@@ -334,6 +335,20 @@ export async function registrarRotasCaixa(app: FastifyInstance): Promise<void> {
       const params = caixaParamsSchema.parse(request.params);
       try {
         return ok(await obterDetalheCaixa(params.caixaId, request.perfilUsuario!));
+      } catch (error) {
+        const mensagem = mensagemDominioOuRelancar(error);
+        return erro(reply, statusErro(mensagem), mensagem);
+      }
+    }
+  );
+
+  app.get(
+    "/api/caixa/:caixaId/vendas-canceladas",
+    { preHandler: exigirAlgumaPermissao(["caixa_operar", "caixas_gerenciar"]) },
+    async (request, reply) => {
+      const params = caixaParamsSchema.parse(request.params);
+      try {
+        return ok(await listarVendasCanceladasCaixa(params.caixaId, request.perfilUsuario!));
       } catch (error) {
         const mensagem = mensagemDominioOuRelancar(error);
         return erro(reply, statusErro(mensagem), mensagem);

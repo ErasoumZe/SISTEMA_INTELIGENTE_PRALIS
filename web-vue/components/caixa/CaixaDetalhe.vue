@@ -154,6 +154,60 @@ onMounted(carregar);
         </div>
       </v-alert>
 
+      <div class="text-subtitle-2 mb-2">Vendas canceladas</div>
+      <v-expansion-panels variant="accordion" class="mb-4">
+        <v-expansion-panel :disabled="!detalhe.vendasCanceladas.length">
+          <v-expansion-panel-title>
+            <div class="d-flex align-center ga-3 flex-grow-1">
+              <span>Auditoria — não entram nos totais</span>
+              <v-chip size="x-small" variant="tonal">{{ detalhe.vendasCanceladas.length }}</v-chip>
+            </div>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <div v-for="venda in detalhe.vendasCanceladas" :key="venda.id" class="mb-4">
+              <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-2">
+                <div>
+                  <strong>{{ venda.descricao }}</strong>
+                  <span class="text-caption text-medium-emphasis ml-2">
+                    {{ venda.dataHora ? formatarDataHora(venda.dataHora) : formatarDataSomenteDia(venda.data) }}
+                  </span>
+                  <span v-if="venda.identificadorExterno" class="text-caption text-medium-emphasis ml-2">
+                    · {{ venda.identificadorExterno }}
+                  </span>
+                </div>
+                <strong>{{ dinheiro(venda.valor) }}</strong>
+              </div>
+              <div v-if="venda.produtos.length" class="responsive-table-shell">
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th class="text-end">Qtd.</th>
+                      <th class="text-end">Unitário</th>
+                      <th class="text-end">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="produto in venda.produtos" :key="produto.id">
+                      <td>
+                        {{ produto.descricao
+                        }}<v-chip v-if="produto.cancelado" size="x-small" variant="tonal" class="ml-2"
+                          >Cancelado</v-chip
+                        >
+                      </td>
+                      <td class="text-end">{{ produto.quantidade }}</td>
+                      <td class="text-end">{{ dinheiro(produto.valorUnitario) }}</td>
+                      <td class="text-end">{{ dinheiro(produto.valorTotal) }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+              <p v-else class="text-body-2 text-medium-emphasis mb-0">Produtos não registrados.</p>
+            </div>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
+
       <!-- Lancamentos por categoria. Vem do proprio endpoint de detalhe (caixas_gerenciar): as
            rotas operacionais aplicam o escopo "somente caixa aberto" e trocariam o caixa pedido. -->
       <div class="text-subtitle-2 mb-2">Lançamentos deste caixa</div>

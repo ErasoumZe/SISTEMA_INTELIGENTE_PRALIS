@@ -233,8 +233,31 @@ export const alteracaoPosFechamentoCaixaSchema = z.object({
   alteradoEm: z.string()
 });
 
+// Venda cancelada nao compoe nenhum total do Caixa. Ela viaja separada para que o operador e a
+// gerencia consigam auditar a venda que foi removida do saldo, inclusive seus produtos, sem dar a
+// impressao de que aquele valor ainda esta disponivel no malote.
+export const vendaCanceladaCaixaSchema = z.object({
+  id: uuidSchema,
+  identificadorExterno: z.string().nullable(),
+  descricao: z.string(),
+  data: z.string().nullable(),
+  dataHora: z.string().nullable(),
+  valor: z.number(),
+  produtos: z.array(
+    z.object({
+      id: uuidSchema,
+      descricao: z.string(),
+      quantidade: z.number(),
+      valorUnitario: z.number(),
+      valorTotal: z.number(),
+      cancelado: z.boolean()
+    })
+  )
+});
+
 export const detalheCaixaResponseSchema = z.object({
   lancamentos: z.array(categoriaLancamentosCaixaSchema),
+  vendasCanceladas: z.array(vendaCanceladaCaixaSchema),
   alteracoesPosFechamento: z.array(alteracaoPosFechamentoCaixaSchema),
   edicoes: z.array(edicaoHorarioCaixaSchema),
   ajuste: ajusteCaixaSchema.nullable()
@@ -435,6 +458,7 @@ export type LancamentoCaixa = z.infer<typeof lancamentoCaixaSchema>;
 export type CategoriaLancamentosCaixa = z.infer<typeof categoriaLancamentosCaixaSchema>;
 export type AlteracaoPosFechamentoCaixa = z.infer<typeof alteracaoPosFechamentoCaixaSchema>;
 export type DetalheCaixaResponse = z.infer<typeof detalheCaixaResponseSchema>;
+export type VendaCanceladaCaixa = z.infer<typeof vendaCanceladaCaixaSchema>;
 export type ResumoCaixa = z.infer<typeof resumoCaixaSchema>;
 export type TransferenciaCofrePayload = z.infer<typeof transferenciaCofrePayloadSchema>;
 export type PlanejamentoRetorno = z.infer<typeof planejamentoRetornoSchema>;

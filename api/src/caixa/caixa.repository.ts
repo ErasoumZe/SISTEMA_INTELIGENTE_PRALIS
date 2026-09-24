@@ -46,7 +46,7 @@ import { despesas } from "@padaria/db/schema/despesa";
 import { mercadorias } from "@padaria/db/schema/mercadoria";
 import { retiradas } from "@padaria/db/schema/retirada";
 import { lacres, transferencias, transferenciasDestinosCandidatos } from "@padaria/db/schema/transferencia";
-import { vendas, vendasPagamentos } from "@padaria/db/schema/venda";
+import { vendas, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
 import {
   transferenciaContaComoEntrada,
   valorEntradaCentavos,
@@ -1323,6 +1323,76 @@ export async function listarLancamentosCaixaRepository(caixaId: string, db: Exec
   ]);
 
   return { linhasVendas, linhasTransferencias, linhasDespesas, linhasRetiradas, linhasMercadorias };
+}
+
+export type VendaCanceladaProdutoLinha = {
+  id: string;
+  descricao: string;
+  quantidade: string;
+  valorUnitario: string;
+  valorTotal: string;
+  cancelado: boolean;
+};
+
+export type VendaCanceladaCaixaLinha = {
+  id: string;
+  identificadorExterno: string | null;
+  descricao: string;
+  data: string;
+  dataHora: Date | null;
+  valorOriginal: string;
+  valorDesconto: string;
+  valorAcrescimo: string;
+  produtos: VendaCanceladaProdutoLinha[];
+};
+
+// Auditoria separada dos lancamentos: uma venda cancelada precisa continuar rastreavel com seus
+// produtos, mas nunca pode reaparecer nos totais do Caixa. Por isso esta consulta nao compartilha
+// o filtro `ativo()` acima, que de proposito exclui cancelamentos para bater com o saldo.
+export async function listarVendasCanceladasCaixaRepository(
+  caixaId: string,
+  db: ExecutorBanco = banco
+): Promise<VendaCanceladaCaixaLinha[]> {
+  const filtro = and(eq(vendas.caixaId, caixaId), eq(vendas.status, "cancelado"));
+  const [linhas, produtos] = await Promise.all([
+    db
+      .select({
+        id: vendas.id,
+        identificadorExterno: vendas.identificadorExterno,
+        descricao: vendas.descricao,
+        data: vendas.dataReferencia,
+        dataHora: vendas.dataVenda,
+        valorOriginal: vendas.valorOriginal,
+        valorDesconto: vendas.valorDesconto,
+        valorAcrescimo: vendas.valorAcrescimo
+      })
+      .from(vendas)
+      .where(filtro)
+      .orderBy(desc(vendas.dataVenda), desc(vendas.dataReferencia)),
+    db
+      .select({
+        vendaId: vendasProdutos.vendaId,
+        id: vendasProdutos.id,
+        descricao: vendasProdutos.descricaoProduto,
+        quantidade: vendasProdutos.quantidade,
+        valorUnitario: vendasProdutos.valorUnitario,
+        valorTotal: vendasProdutos.valorTotal,
+        cancelado: vendasProdutos.cancelado
+      })
+      .from(vendasProdutos)
+      .innerJoin(vendas, eq(vendas.id, vendasProdutos.vendaId))
+      .where(filtro)
+      .orderBy(asc(vendasProdutos.criadoEm), asc(vendasProdutos.id))
+  ]);
+
+  const produtosPorVenda = new Map<string, VendaCanceladaProdutoLinha[]>();
+  for (const produto of produtos) {
+    const atuais: VendaCanceladaProdutoLinha[] = produtosPorVenda.get(produto.vendaId) ?? [];
+    atuais.push(produto);
+    produtosPorVenda.set(produto.vendaId, atuais);
+  }
+
+  return linhas.map((linha) => ({ ...linha, produtos: produtosPorVenda.get(linha.id) ?? [] }));
 }
 
 // Acerto de saldo do caixa (se houve): valor da diferenca e o colaborador que ficou com o debito.
