@@ -244,15 +244,12 @@ async function confirmarTransferencia() {
             <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
           </div>
         </div>
-        <v-alert
-          v-if="contaOrigemSelecionada && saldoOrigem !== null"
-          class="tr-saldo-conta"
-          density="compact"
-          variant="tonal"
-        >
-          <v-icon start :icon="contaOrigemSelecionada.ehCofre ? 'mdi-safe-square-outline' : 'mdi-wallet-outline'" />
-          Disponível em {{ contaOrigemSelecionada.nome }}: <strong>{{ dinheiro(saldoOrigem) }}</strong>
-        </v-alert>
+        <div v-if="contaOrigemSelecionada && saldoOrigem !== null" class="tr-saldo-conta">
+          <v-icon size="16" :icon="contaOrigemSelecionada.ehCofre ? 'mdi-safe-square-outline' : 'mdi-wallet-outline'" />
+          <span
+            >Disponível em {{ contaOrigemSelecionada.nome }}: <strong>{{ dinheiro(saldoOrigem) }}</strong></span
+          >
+        </div>
 
         <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">
           <strong>Composição do malote <span>(obrigatória)</span></strong>
@@ -344,12 +341,6 @@ async function confirmarTransferencia() {
           />
         </label>
 
-        <label class="tr-campo">
-          <span class="tr-campo-lbl">Data Recebimento</span>
-          <input :value="form.dataRecebimento" class="tr-input tr-input-ro" readonly placeholder="—" />
-          <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
-        </label>
-
         <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
            conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
         <div class="tr-opcoes">
@@ -389,6 +380,9 @@ async function confirmarTransferencia() {
           <span class="tr-campo-lbl">Observação</span>
           <input v-model="form.observacao" class="tr-input" placeholder="Ex.: Suprimento CX1 — reforço de troco" />
         </label>
+        <p class="tr-recebimento">
+          Recebimento: <strong>{{ form.dataRecebimento || "aguardando confirmação do destinatário" }}</strong>
+        </p>
       </div>
 
       <div class="tr-acoes">
