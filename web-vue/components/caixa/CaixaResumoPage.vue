@@ -1307,7 +1307,7 @@ function confirmarFechamento() {
    como no cockpit "fiel ao mockup" que foi revertido no contexto real. */
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(174px, 1fr));
   gap: 12px;
 }
 
