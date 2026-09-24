@@ -196,9 +196,9 @@ function configurarReconhecimento() {
 function abrir() {
   aberto.value = true;
   erro.value = "";
-  finais.value = "";
-  parcial.value = "";
   textoInicial = props.modelValue;
+  finais.value = textoInicial.trim() ? `${textoInicial.trim()} ` : "";
+  parcial.value = "";
   reconhecimentoDisponivel.value = Boolean(obterReconhecimento());
 }
 
