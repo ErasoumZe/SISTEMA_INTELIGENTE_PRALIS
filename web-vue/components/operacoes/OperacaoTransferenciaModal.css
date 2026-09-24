@@ -2,9 +2,11 @@
 .tr-modal {
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 0.5px solid #e4e8ef;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid rgb(255 255 255 / 72%);
   border-radius: 16px;
+  box-shadow: 0 20px 54px rgb(76 28 10 / 24%);
+  backdrop-filter: blur(10px) saturate(115%);
   /* Nunca ultrapassa a viewport: quem rola e o .tr-corpo. */
   max-height: calc(100dvh - 48px);
   overflow: hidden;
@@ -300,6 +302,43 @@
 .tr-rota .tr-campo {
   flex: 1;
 }
+.tr-rota .tr-campo-lbl,
+.tr-campo-lacre-principal .tr-campo-lbl {
+  color: #171717;
+  font-size: 12px;
+  font-weight: 700;
+}
+.tr-campo-lacre-principal .tr-hint {
+  color: #b42318;
+  font-weight: 800;
+}
+.tr-saldo-conta {
+  margin: -2px 0 14px;
+  color: #8a3b12;
+  background: rgb(255 237 213 / 80%);
+}
+.tr-previsao-composicao {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.tr-previsao-composicao > div {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgb(124 45 18 / 16%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 48%);
+}
+.tr-previsao-composicao span {
+  font-size: 10px;
+  color: #9a4c20;
+}
+.tr-previsao-composicao strong {
+  color: #7c2d12;
+  font-size: 13px;
+}
 .tr-seta {
   margin-bottom: 9px;
   color: var(--cat-transferencias-base, #c2410c);
@@ -516,6 +555,9 @@
     flex-direction: column;
     align-items: stretch;
     gap: 2px;
+  }
+  .tr-previsao-composicao {
+    grid-template-columns: 1fr;
   }
   .tr-seta {
     margin: 2px auto;

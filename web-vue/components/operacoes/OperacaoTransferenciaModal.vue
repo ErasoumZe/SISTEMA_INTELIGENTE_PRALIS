@@ -6,6 +6,8 @@ import { diaNegocio, paraCentavos } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
+import ConfirmacaoTransferenciaDialog from "~/components/operacoes/ConfirmacaoTransferenciaDialog.vue";
+import { dinheiro } from "~/utils/domain";
 
 const {
   modalOperacaoAberto,
@@ -40,6 +42,8 @@ const totalSaida = computed(() => Number(form.value.valorOriginal || 0));
 const erroComposicao = ref("");
 const novoLacreRetorno = ref("");
 const lacresRetornoAtivos = ref(false);
+const confirmacaoAberta = ref(false);
+const criarNovaAposConfirmacao = ref(false);
 const contaOrigemSelecionada = computed(() =>
   opcoesEmpresa.value.contas.find((conta) => conta.id === form.value.contaOrigemId)
 );
@@ -57,6 +61,14 @@ const composicaoMaloteBate = computed(
     composicaoMaloteInformada.value &&
     paraCentavos(form.value.valorEspecieDeclarado) + paraCentavos(form.value.valorMoedasDeclarado) ===
       paraCentavos(form.value.valorOriginal)
+);
+const valorEspecieDeclarado = computed(() => paraCentavos(form.value.valorEspecieDeclarado) / 100);
+const valorMoedasDeclarado = computed(() => paraCentavos(form.value.valorMoedasDeclarado) / 100);
+const saldoOrigem = computed(() => contaOrigemSelecionada.value?.saldoAtual ?? null);
+const destinosConfirmacao = computed(() =>
+  destinosSelecionados.value
+    .map((id) => opcoesEmpresa.value.contas.find((conta) => conta.id === id)?.nome)
+    .filter((nome): nome is string => Boolean(nome))
 );
 
 watch(preparandoMaloteParaCaixa, (preparando) => {
@@ -115,7 +127,7 @@ function valorResumo(n: number) {
   return resumoVisivel.value ? `R$ ${br(n)}` : "R$ ••••";
 }
 
-async function salvarTransferenciaCompleta(criarNova = false) {
+function revisarTransferencia(criarNova = false) {
   if (!destinoValido()) return;
   // A transferência imediata sempre pertence ao dia real do ato. Hora exata já é registrada
   // pelo banco em `criadoEm`; se for agendada, a data/hora escolhida fica em `agendadaPara`.
@@ -133,8 +145,15 @@ async function salvarTransferenciaCompleta(criarNova = false) {
     return;
   }
   erroComposicao.value = "";
+  criarNovaAposConfirmacao.value = criarNova;
+  confirmacaoAberta.value = true;
+}
+
+async function confirmarTransferencia() {
   const resultado = await salvarOperacao();
-  if (criarNova && resultado) await abrirOperacao("transferencia");
+  if (!resultado) return;
+  confirmacaoAberta.value = false;
+  if (criarNovaAposConfirmacao.value) await abrirOperacao("transferencia");
 }
 </script>
 
@@ -225,6 +244,15 @@ async function salvarTransferenciaCompleta(criarNova = false) {
             <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
           </div>
         </div>
+        <v-alert
+          v-if="contaOrigemSelecionada && saldoOrigem !== null"
+          class="tr-saldo-conta"
+          density="compact"
+          variant="tonal"
+        >
+          <v-icon start :icon="contaOrigemSelecionada.ehCofre ? 'mdi-safe-square-outline' : 'mdi-wallet-outline'" />
+          Disponível em {{ contaOrigemSelecionada.nome }}: <strong>{{ dinheiro(saldoOrigem) }}</strong>
+        </v-alert>
 
         <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">
           <strong>Composição do malote <span>(obrigatória)</span></strong>
@@ -248,6 +276,17 @@ async function salvarTransferenciaCompleta(criarNova = false) {
             >Dinheiro físico + moedas deve ser igual ao valor total.</span
           >
           <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
+          <div class="tr-previsao-composicao" aria-label="Prévia da composição do malote">
+            <div>
+              <span>Total</span><strong>{{ dinheiro(totalSaida) }}</strong>
+            </div>
+            <div>
+              <span>Dinheiro físico</span><strong>{{ dinheiro(valorEspecieDeclarado) }}</strong>
+            </div>
+            <div>
+              <span>Moedas</span><strong>{{ dinheiro(valorMoedasDeclarado) }}</strong>
+            </div>
+          </div>
         </section>
 
         <template v-if="preparandoMaloteParaCaixa">
@@ -353,24 +392,29 @@ async function salvarTransferenciaCompleta(criarNova = false) {
       </div>
 
       <div class="tr-acoes">
-        <button
-          type="button"
-          class="tr-salvar-nova"
-          :disabled="salvandoOperacao"
-          @click="salvarTransferenciaCompleta(true)"
-        >
+        <button type="button" class="tr-salvar-nova" :disabled="salvandoOperacao" @click="revisarTransferencia(true)">
           Salvar e criar nova
         </button>
-        <button
-          type="button"
-          class="tr-salvar"
-          :disabled="salvandoOperacao"
-          @click="salvarTransferenciaCompleta(false)"
-        >
+        <button type="button" class="tr-salvar" :disabled="salvandoOperacao" @click="revisarTransferencia(false)">
           Salvar
         </button>
       </div>
     </div>
+
+    <ConfirmacaoTransferenciaDialog
+      :aberto="confirmacaoAberta"
+      :salvando="salvandoOperacao"
+      :valor-total="totalSaida"
+      :valor-especie="valorEspecieDeclarado"
+      :valor-moedas="valorMoedasDeclarado"
+      :lacre-malote="form.nLacreDoc"
+      :lacres-retorno="form.lacresRetorno"
+      :origem="contaOrigemSelecionada?.nome ?? 'Não informada'"
+      :destinos="destinosConfirmacao"
+      :agendada-para="form.agendadaPara"
+      @editar="confirmacaoAberta = false"
+      @confirmar="confirmarTransferencia"
+    />
   </v-dialog>
 </template>
 

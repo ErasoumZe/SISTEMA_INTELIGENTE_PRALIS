@@ -30,6 +30,7 @@ export type Opcao = {
   // nunca ha coluna de saldo. Ausentes no GET /api/contas comum (lista de opcao de formulario).
   saldoInicial?: number;
   saldoAtual?: number;
+  saldoPendente?: number;
   usuariosIds?: string[];
   /** Derivados da configuração da empresa; usados para orientar o malote Cofre → PDV. */
   ehCofre?: boolean;

@@ -2,6 +2,7 @@ import type { ContaUsuarioPayload } from "@padaria/shared/contas-usuarios";
 import { erroValidacao, naoEncontrado, proibido } from "../erros.js";
 import { executarEmTransacao } from "../banco/conexao.js";
 import { listarContas } from "../contas/contas.service.js";
+import { saldosComPendenciaDasContasRepository } from "../contas/contas.repository.js";
 import { buscarContaCofreEmpresaRepository } from "../caixa/caixa.repository.js";
 import { listarPdvsRepository } from "../pdvs/pdvs.repository.js";
 import {
@@ -28,11 +29,17 @@ export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas
   const contas =
     perfil.role === "usuario_admin"
       ? await listarContas(escopoEmpresas)
-      : (await listarContasDoUsuarioRepository(perfil.usuarioId)).filter((conta) => escopoEmpresas.includes(conta.empresaId));
+      : (await listarContasDoUsuarioRepository(perfil.usuarioId)).filter((conta) =>
+          escopoEmpresas.includes(conta.empresaId)
+        );
   const empresasDasContas = [...new Set(contas.map((conta) => conta.empresaId))];
-  const [cofres, pdvs] = await Promise.all([
+  const [cofres, pdvs, saldos] = await Promise.all([
     Promise.all(empresasDasContas.map((empresaId) => buscarContaCofreEmpresaRepository(empresaId))),
-    listarPdvsRepository()
+    listarPdvsRepository(),
+    saldosComPendenciaDasContasRepository(
+      escopoEmpresas,
+      contas.map((conta) => conta.id)
+    )
   ]);
   const contasCofreIds = new Set(cofres.filter((id): id is string => Boolean(id)));
   const contasPdvIds = new Set(
@@ -40,6 +47,8 @@ export async function listarContasOperaveis(perfil: PerfilEscopo, escopoEmpresas
   );
   return contas.map((conta) => ({
     ...conta,
+    saldoAtual: saldos.get(conta.id)?.disponivel ?? 0,
+    saldoPendente: saldos.get(conta.id)?.pendente ?? 0,
     ehCofre: contasCofreIds.has(conta.id),
     ehContaPdv: contasPdvIds.has(conta.id)
   }));
