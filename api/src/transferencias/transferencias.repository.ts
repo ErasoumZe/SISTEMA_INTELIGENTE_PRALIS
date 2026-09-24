@@ -63,6 +63,7 @@ export async function listarTransferenciasRepository(
       criadoPor: transferencias.criadoPor,
       criadoPorNome: criador.nome,
       criadoEm: transferencias.criadoEm,
+      observacao: transferencias.observacao,
       // Os ingredientes do predicado canonico. Vem crus para a borda decidir uma vez so,
       // com a MESMA regra de `buscarContextoConferenciaRepository` — ver `ehCaixaParaCofre`.
       caixaId: transferencias.caixaId,

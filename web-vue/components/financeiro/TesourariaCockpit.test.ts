@@ -1,4 +1,4 @@
-import { shallowMount } from "@vue/test-utils";
+import { flushPromises, shallowMount } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TesourariaCockpit from "./TesourariaCockpit.vue";
@@ -37,15 +37,17 @@ const base: OperacaoResumo = {
   criadoPorNome: "Tesoureiro"
 };
 
+const apiGet = vi.fn();
 beforeEach(() => {
-  vi.stubGlobal("useApi", () => ({ apiPost: vi.fn() }));
+  apiGet.mockReset();
+  vi.stubGlobal("useApi", () => ({ apiGet, apiPost: vi.fn(), apiUrl: "http://localhost:4100" }));
 });
 
-function montar(podeCancelarPlanejamento: boolean) {
+function montar(podeCancelarPlanejamento: boolean, comumOverrides: Partial<OperacaoResumo> = {}) {
   const operacoes: OperacaoResumo[] = [
     { ...base, id: "pai", possuiPlanejamentoRetorno: true },
     { ...base, id: "filha", status: "agendada", ehPlanejamentoRetorno: true },
-    { ...base, id: "comum" }
+    { ...base, id: "comum", ...comumOverrides }
   ];
   return shallowMount(TesourariaCockpit, {
     props: {
@@ -121,5 +123,25 @@ describe("TesourariaCockpit - planejamento de retorno", () => {
     expect(resumo.text()).toContain("Moedas");
     expect(resumo.text()).toContain("Tesoureiro");
     expect(resumo.text()).toContain("L-1");
+  });
+
+  it("mostra observacao e provas do fechamento vinculadas a sangria", async () => {
+    apiGet.mockResolvedValue([
+      { id: "folha-1", tipo: "folha_fechamento", nomeOriginal: "folha.jpg" },
+      { id: "cartao-1", tipo: "comprovante_cartao", nomeOriginal: "cartao.jpg" }
+    ]);
+    const wrapper = montar(false, { caixaId: "caixa-1", ehCaixaParaCofre: true, observacao: "Sangria do turno" });
+    await wrapper.get('[data-operacao-id="comum"] [data-teste="botao-conferir"]').trigger("click");
+    await flushPromises();
+
+    expect(apiGet).toHaveBeenCalledWith("/api/transferencias/comum/anexos-fechamento");
+    expect(wrapper.get('[data-teste="conferencia-observacao"]').text()).toContain("Sangria do turno");
+    const anexos = wrapper.get('[data-teste="conferencia-anexos"]');
+    expect(anexos.text()).toContain("Folha de fechamento (1)");
+    expect(anexos.text()).toContain("Comprovantes de cartão (1)");
+    expect(anexos.findAll("a").map((link) => link.attributes("href"))).toEqual([
+      "http://localhost:4100/api/transferencias/comum/anexos-fechamento/folha-1",
+      "http://localhost:4100/api/transferencias/comum/anexos-fechamento/cartao-1"
+    ]);
   });
 });

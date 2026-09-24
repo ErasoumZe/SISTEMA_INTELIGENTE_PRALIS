@@ -10,13 +10,16 @@ import type {
   TransferenciasQuery
 } from "@padaria/shared/transferencias";
 import { ErroDominio, erroValidacao } from "../erros.js";
+import { caminhoAbsolutoDocumento } from "../lancamentos/foto-documento.js";
 import { executarEmTransacao, type TransacaoBanco } from "../banco/conexao.js";
 import {
   buscarCaixaPorIdRepository,
+  buscarAnexoFechamentoCaixaRepository,
   buscarContaCofreEmpresaRepository,
   criarConferenciaFisicaTransferenciaRepository,
   criarQuebraCaixaRepository,
   listarUsuariosTesourariaRepository,
+  listarAnexosFechamentoCaixaRepository,
   travarCaixaCompartilhadoRepository
 } from "../caixa/caixa.repository.js";
 import { ehMovimentoDoCaixaParaOCofre } from "./entrega-cofre.repository.js";
@@ -383,8 +386,8 @@ export async function confirmarTransferencia(
           encerraConferencia: true,
           valorEspecieDeclaradoCentavos: contexto.valorEspecieDeclaradoCentavos,
           valorMoedasDeclaradoCentavos: contexto.valorMoedasDeclaradoCentavos,
-          valorEspecieContadoCentavos: paraCentavos(dados.valorEspecieContado!),
-          valorMoedasContadoCentavos: paraCentavos(dados.valorMoedasContado!),
+          valorEspecieContadoCentavos: paraCentavos(dados.valorEspecieContado),
+          valorMoedasContadoCentavos: paraCentavos(dados.valorMoedasContado),
           observacao: null,
           conferidoPor: perfil.usuarioId,
           conferidoEm: new Date()
@@ -776,6 +779,30 @@ export async function obterTransferencia(
     throw new Error("Registro nao encontrado");
   }
   return transferencia;
+}
+
+// As provas pertencem ao fechamento do Caixa, nao a transferencia. A consulta por transferencia
+// impede que um conferente acesse anexos de outro caixa apenas conhecendo seu UUID.
+async function caixaDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  const contexto = await buscarContextoConferenciaRepository(transferenciaId);
+  if (!contexto?.ehRetornoDoCaixa || !contexto.caixaId || !podeAcessarEmpresa(perfil, contexto.empresaId)) {
+    throw new Error("Registro nao encontrado");
+  }
+  return { caixaId: contexto.caixaId, empresaId: contexto.empresaId };
+}
+
+export async function listarAnexosDaConferencia(transferenciaId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  return listarAnexosFechamentoCaixaRepository(caixaId, empresaId);
+}
+
+export async function obterAnexoDaConferencia(transferenciaId: string, anexoId: string, perfil: PerfilUsuario) {
+  exigirPermissaoLancamento(perfil.permissoes, "transferencias_conferir");
+  const { caixaId, empresaId } = await caixaDaConferencia(transferenciaId, perfil);
+  const anexo = await buscarAnexoFechamentoCaixaRepository(caixaId, anexoId, empresaId);
+  if (!anexo) throw new Error("Registro nao encontrado");
+  return { ...anexo, caminhoAbsoluto: caminhoAbsolutoDocumento(anexo.caminho) };
 }
 
 export async function atualizarTransferencia(

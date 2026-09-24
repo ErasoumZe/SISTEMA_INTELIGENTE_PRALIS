@@ -82,6 +82,7 @@ export const transferenciaDtoSchema = z.object({
   criadoPor: z.string().nullable(),
   criadoPorNome: z.string().nullable(),
   criadoEm: z.string(),
+  observacao: z.string().nullable(),
   possuiPlanejamentoRetorno: z.boolean(),
   ehPlanejamentoRetorno: z.boolean(),
   // Esta linha esta sob as regras ESTRITAS da Transferencia de retorno (valor obrigatorio na conferencia,

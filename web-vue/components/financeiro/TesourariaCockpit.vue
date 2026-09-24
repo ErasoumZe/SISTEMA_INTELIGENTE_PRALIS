@@ -666,6 +666,39 @@ function limparFiltrosTransferencias() {
           <div class="tes-conferencia-resumo__rota">
             {{ confirmando.contaOrigemNome || "-" }} -> {{ confirmando.contaDestinoNome || "-" }}
           </div>
+          <div class="tes-conferencia-resumo__linha" data-teste="conferencia-observacao">
+            <span>Observação</span><strong>{{ confirmando.observacao?.trim() || "Sem observação" }}</strong>
+          </div>
+        </section>
+        <section v-if="confirmando?.ehCaixaParaCofre" aria-label="Anexos do fechamento" data-teste="conferencia-anexos">
+          <div class="text-subtitle-2 mb-2">Anexos do fechamento deste caixa</div>
+          <v-progress-linear v-if="carregandoAnexos" indeterminate aria-label="Carregando anexos" />
+          <v-alert v-else-if="erroAnexos" type="warning" variant="tonal" density="compact">{{ erroAnexos }}</v-alert>
+          <template v-else>
+            <div class="text-body-2 mb-1">Folha de fechamento ({{ folhasConferencia.length }})</div>
+            <a
+              v-for="anexo in folhasConferencia"
+              :key="anexo.id"
+              :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="d-block text-body-2 mb-1"
+              >{{ anexo.nomeOriginal }}</a
+            >
+            <div class="text-body-2 mt-2 mb-1">Comprovantes de cartão ({{ cartoesConferencia.length }})</div>
+            <a
+              v-for="anexo in cartoesConferencia"
+              :key="anexo.id"
+              :href="`${apiUrl}/api/transferencias/${confirmando.id}/anexos-fechamento/${anexo.id}`"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="d-block text-body-2 mb-1"
+              >{{ anexo.nomeOriginal }}</a
+            >
+            <p v-if="!anexosConferencia.length" class="text-body-2 mb-2">
+              Nenhum anexo enviado ao fechamento deste caixa até agora.
+            </p>
+          </template>
         </section>
         <v-text-field
           v-if="ehCaixaParaCofre"
