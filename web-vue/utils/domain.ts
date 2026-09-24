@@ -1,5 +1,6 @@
 import {
   acentuarMensagemExibida,
+  diaNegocio,
   TELA_TEMA_RESUMO_CAIXA,
   permissoes as permissoesCompartilhadas,
   rolesUsuario,
@@ -532,7 +533,7 @@ export function opcoesVazias(): Opcoes {
 }
 
 export function formOperacaoVazio(): OperacaoForm {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = diaNegocio(new Date());
   return {
     dataReferencia: hoje,
     dataVencimento: hoje,

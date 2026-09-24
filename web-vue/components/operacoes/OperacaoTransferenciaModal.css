@@ -215,6 +215,21 @@
   border-color: var(--cat-transferencias-base, #c2410c);
   font-weight: 500;
 }
+.tr-campo-lacre-principal {
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 48%, transparent);
+  border-radius: 10px;
+  background: var(--cat-transferencias-soft, #fff1e8);
+}
+.tr-campo-lacre-principal .tr-campo-lbl {
+  color: #9a4c20;
+  font-weight: 700;
+}
+.tr-campo-lacre-principal .tr-input-lacre {
+  padding: 11px;
+  border-width: 1px;
+  font-size: 15px;
+}
 .tr-input-ro {
   background: #f4f6fa;
   color: #94a3b8;

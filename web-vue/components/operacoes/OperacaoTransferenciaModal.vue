@@ -2,7 +2,7 @@
 // Transferencia / Malote fiel ao desenho do Rodrigo (PROJECT_BRAIN/14, FOTO 1).
 // Cor: token de categoria --cat-transferencias.
 import { computed, onMounted, ref, watch } from "vue";
-import { paraCentavos } from "@padaria/shared";
+import { diaNegocio, paraCentavos } from "@padaria/shared";
 import { useWorkspaceContext } from "~/components/workspace/workspace-context";
 import { useTransferenciaModal } from "~/composables/useTransferenciaModal";
 import CampoDinheiro from "~/components/comum/CampoDinheiro.vue";
@@ -117,6 +117,9 @@ function valorResumo(n: number) {
 
 async function salvarTransferenciaCompleta(criarNova = false) {
   if (!destinoValido()) return;
+  // A transferência imediata sempre pertence ao dia real do ato. Hora exata já é registrada
+  // pelo banco em `criadoEm`; se for agendada, a data/hora escolhida fica em `agendadaPara`.
+  if (!form.value.agendadaPara) form.value.dataReferencia = diaNegocio(new Date());
   if (preparandoMaloteParaCaixa.value && !composicaoMaloteInformada.value) {
     erroComposicao.value = "Informe dinheiro físico e moedas do malote.";
     return;
@@ -133,13 +136,6 @@ async function salvarTransferenciaCompleta(criarNova = false) {
   const resultado = await salvarOperacao();
   if (criarNova && resultado) await abrirOperacao("transferencia");
 }
-
-function dataISO(offset: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
-}
-const hojeISO = computed(() => dataISO(0));
 </script>
 
 <template>
@@ -189,6 +185,47 @@ const hojeISO = computed(() => dataISO(0));
           <CampoDinheiro v-model="form.valorOriginal" class="tr-valor" />
         </div>
 
+        <label class="tr-campo tr-campo-lacre-principal">
+          <span class="tr-campo-lbl">Lacre do malote <span class="tr-hint">(obrigatório)</span></span>
+          <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
+          <span class="tr-legenda">Identifica o malote que será entregue ao Caixa.</span>
+        </label>
+
+        <!-- A rota vem junto da identificação do malote: o tesoureiro enxerga antes de declarar o físico. -->
+        <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
+          <v-icon icon="mdi-alert-circle-outline" size="18" />
+          <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
+        </div>
+        <div v-else class="tr-rota" :class="{ 'tr-rota-lista': multiploDestino }">
+          <label class="tr-campo">
+            <span class="tr-campo-lbl">Origem / Saída</span>
+            <select v-model="form.contaOrigemId" class="tr-input">
+              <option value="">—</option>
+              <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
+            </select>
+          </label>
+          <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
+          <div class="tr-campo">
+            <span class="tr-campo-lbl">Destino / Entrada</span>
+            <select
+              v-if="!multiploDestino"
+              v-model="form.contaDestinoId"
+              class="tr-input"
+              aria-label="Destino / Entrada"
+            >
+              <option value="">—</option>
+              <option v-for="c in contasCandidatas" :key="c.id" :value="c.id">{{ c.nome }}</option>
+            </select>
+            <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
+              <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
+                <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
+                <span>{{ c.nome }}</span>
+              </label>
+            </div>
+            <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
+          </div>
+        </div>
+
         <section v-if="preparandoMaloteParaCaixa" class="tr-malote" aria-label="Composição do malote para abertura">
           <strong>Composição do malote <span>(obrigatória)</span></strong>
           <p>Informe o dinheiro físico e as moedas que seguem para o caixa.</p>
@@ -212,27 +249,6 @@ const hojeISO = computed(() => dataISO(0));
           >
           <span v-else-if="composicaoMaloteBate" class="tr-ok">Composição do malote conferida.</span>
         </section>
-
-        <div class="tr-dois">
-          <label class="tr-campo">
-            <span class="tr-campo-lbl">N° Lacre / Doc <span class="tr-hint">(do setor)</span></span>
-            <input v-model="form.nLacreDoc" required class="tr-input tr-input-lacre" placeholder="Ex.: 001" />
-          </label>
-          <label class="tr-campo">
-            <span class="tr-campo-lbl">Data Lanç</span>
-            <div class="tr-data-row">
-              <button
-                type="button"
-                class="tr-pill"
-                :class="{ ativo: form.dataReferencia === hojeISO }"
-                @click="form.dataReferencia = hojeISO"
-              >
-                Hoje
-              </button>
-              <input v-model="form.dataReferencia" type="date" class="tr-input tr-data-input" />
-            </div>
-          </label>
-        </div>
 
         <template v-if="preparandoMaloteParaCaixa">
           <label class="tr-check tr-lacres-opcao">
@@ -294,45 +310,6 @@ const hojeISO = computed(() => dataISO(0));
           <input :value="form.dataRecebimento" class="tr-input tr-input-ro" readonly placeholder="—" />
           <span class="tr-legenda">Preenchido quando confirmado pelo destinatário.</span>
         </label>
-
-        <!-- Sem contas vinculadas ao usuario (contas_usuarios): aviso claro no lugar de selects vazios. -->
-        <div v-if="!opcoesEmpresa.contas.length" class="tr-aviso-contas" role="alert">
-          <v-icon icon="mdi-alert-circle-outline" size="18" />
-          <span>Nenhuma conta vinculada ao seu usuário — peça ao administrador.</span>
-        </div>
-        <div v-else class="tr-rota" :class="{ 'tr-rota-lista': multiploDestino }">
-          <label class="tr-campo">
-            <span class="tr-campo-lbl">Origem / Saída</span>
-            <select v-model="form.contaOrigemId" class="tr-input">
-              <option value="">—</option>
-              <option v-for="c in opcoesEmpresa.contas" :key="c.id" :value="c.id">{{ c.nome }}</option>
-            </select>
-          </label>
-          <v-icon class="tr-seta" size="17">mdi-arrow-right</v-icon>
-          <!-- <div>, nao <label>: com Multiplo Destino este campo contem <label> por conta, e label
-             aninhado rouba o clique das checkboxes de dentro. -->
-          <div class="tr-campo">
-            <span class="tr-campo-lbl">Destino / Entrada</span>
-            <select
-              v-if="!multiploDestino"
-              v-model="form.contaDestinoId"
-              class="tr-input"
-              aria-label="Destino / Entrada"
-            >
-              <option value="">—</option>
-              <option v-for="c in contasCandidatas" :key="c.id" :value="c.id">{{ c.nome }}</option>
-            </select>
-            <!-- R-030: candidatas, todas iguais. A primeira que confirmar com o lacre leva o valor
-               INTEIRO — por isso a lista so marca contas e nao tem valor por destino. -->
-            <div v-else class="tr-destinos" role="group" aria-label="Destino / Entrada — contas candidatas">
-              <label v-for="c in contasCandidatas" :key="c.id" class="tr-check tr-destino-item">
-                <input v-model="destinosSelecionados" type="checkbox" :value="c.id" />
-                <span>{{ c.nome }}</span>
-              </label>
-            </div>
-            <span v-if="erroDestino" class="tr-erro" role="alert">{{ erroDestino }}</span>
-          </div>
-        </div>
 
         <!-- R-188: uma unica opcao declara varias linhas de valor+lacre. O destino e sempre a
            conta de origem da transferencia inicial e a execucao financeira ocorre no Caixa. -->
