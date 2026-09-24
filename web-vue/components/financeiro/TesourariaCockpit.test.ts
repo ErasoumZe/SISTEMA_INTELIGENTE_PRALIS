@@ -30,7 +30,11 @@ const base: OperacaoResumo = {
   contaDestinoId: "destino",
   contaOrigemNome: "Cofre",
   contaDestinoNome: "PDV",
-  nLacreDoc: "L-1"
+  nLacreDoc: "L-1",
+  valorEspecieDeclarado: 80,
+  valorMoedasDeclarado: 20,
+  criadoEm: "2026-09-12T21:45:44.000Z",
+  criadoPorNome: "Tesoureiro"
 };
 
 beforeEach(() => {
@@ -103,5 +107,19 @@ describe("TesourariaCockpit - planejamento de retorno", () => {
     expect(wrapper.emitted("cancelarPlanejamento")).toEqual([[payloadCancelamento]]);
 
     expect(montar(false).find('[data-teste="cancelar-planejamento-retorno"]').exists()).toBe(false);
+  });
+
+  it("exibe o resumo completo antes de aceitar uma transferencia", async () => {
+    const wrapper = montar(false);
+
+    await wrapper.get('[data-operacao-id="comum"] [data-teste="botao-conferir"]').trigger("click");
+
+    const resumo = wrapper.get('[data-teste="conferencia-resumo"]');
+    expect(resumo.text()).toContain("Total enviado");
+    expect(resumo.text()).toContain("100,00");
+    expect(resumo.text()).toContain("Dinheiro fisico");
+    expect(resumo.text()).toContain("Moedas");
+    expect(resumo.text()).toContain("Tesoureiro");
+    expect(resumo.text()).toContain("L-1");
   });
 });

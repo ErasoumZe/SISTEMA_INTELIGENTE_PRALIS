@@ -178,11 +178,26 @@ function textoConfirmacaoConferencia(operacao: OperacaoResumo): { titulo: string
   const contado = informouValor ? dinheiro(Number(campos.valorRecebido)) : null;
 
   if (!modoRecusa.value) {
+    const tipoMovimento = ehCaixaParaCofre.value ? "sangria" : "transferencia";
+    const resumo = [
+      `Total enviado: ${declarado}`,
+      `Dinheiro fisico: ${dinheiro(Number(operacao.valorEspecieDeclarado ?? 0))}`,
+      `Moedas: ${dinheiro(Number(operacao.valorMoedasDeclarado ?? 0))}`,
+      `Data do movimento: ${formatarDataSomenteDia(operacao.dataReferencia)}`,
+      `Registrado em: ${operacao.criadoEm ? formatarDataHora(operacao.criadoEm) : "-"}`,
+      `Feito por: ${operacao.criadoPorNome || "Nao informado"}`,
+      `Lacre do malote: ${operacao.nLacreDoc || "Sem lacre"}`,
+      `Origem -> destino: ${operacao.contaOrigemNome || "-"} -> ${destino}`
+    ];
+    if (contado) {
+      resumo.push(`Valor conferido: ${contado}`);
+      resumo.push(
+        `Conferencia: dinheiro ${dinheiro(Number(campos.valorEspecieContado || 0))} · moedas ${dinheiro(Number(campos.valorMoedasContado || 0))}`
+      );
+    }
     return {
       titulo: "Confirmar recebimento",
-      mensagem: contado
-        ? `Confirma o recebimento de ${contado} para uma entrega declarada em ${declarado}?`
-        : "Confirma o recebimento sem informar valor contado?",
+      mensagem: `${resumo.join("\n")}\n\nConfirma o recebimento desta ${tipoMovimento}?`,
       botao: "Confirmar recebimento"
     };
   }
@@ -593,6 +608,34 @@ function limparFiltrosTransferencias() {
       @update:model-value="(v) => !v && fecharConferencia()"
     >
       <v-card :title="modoRecusa ? 'Registrar divergência' : 'Conferir recebimento'" class="pa-4">
+        <section v-if="confirmando && !modoRecusa" class="tes-conferencia-resumo" data-teste="conferencia-resumo">
+          <div class="tes-conferencia-resumo__titulo">Confira a sangria antes de aceitar</div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Total enviado</span><strong>{{ dinheiro(Number(confirmando.valorOriginal)) }}</strong>
+          </div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Dinheiro fisico</span><strong>{{ dinheiro(Number(confirmando.valorEspecieDeclarado ?? 0)) }}</strong>
+          </div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Moedas</span><strong>{{ dinheiro(Number(confirmando.valorMoedasDeclarado ?? 0)) }}</strong>
+          </div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Data e hora</span
+            ><strong
+              >{{ formatarDataSomenteDia(confirmando.dataReferencia) }} ·
+              {{ confirmando.criadoEm ? formatarDataHora(confirmando.criadoEm) : "-" }}</strong
+            >
+          </div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Feito por</span><strong>{{ confirmando.criadoPorNome || "Nao informado" }}</strong>
+          </div>
+          <div class="tes-conferencia-resumo__linha">
+            <span>Lacre do malote</span><strong>{{ confirmando.nLacreDoc || "Sem lacre" }}</strong>
+          </div>
+          <div class="tes-conferencia-resumo__rota">
+            {{ confirmando.contaOrigemNome || "-" }} -> {{ confirmando.contaDestinoNome || "-" }}
+          </div>
+        </section>
         <v-text-field
           v-if="ehCaixaParaCofre"
           :model-value="confirmando?.contaDestinoNome || 'Conta de destino'"
@@ -999,6 +1042,42 @@ function limparFiltrosTransferencias() {
   color: var(--cat-transferencias-tinta);
   border-radius: 5px;
   padding: 1px 5px;
+}
+
+.tes-conferencia-resumo {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 35%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cat-transferencias-soft, #fff1e8) 86%, transparent);
+  color: var(--shell-ink, #1f2733);
+  font-size: 12px;
+}
+.tes-conferencia-resumo__titulo {
+  margin-bottom: 3px;
+  color: var(--cat-transferencias-tinta, #9a3412);
+  font-size: 13px;
+  font-weight: 800;
+}
+.tes-conferencia-resumo__linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tes-conferencia-resumo__linha span {
+  color: var(--shell-ink-soft, #64748b);
+}
+.tes-conferencia-resumo__linha strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tes-conferencia-resumo__rota {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--cat-transferencias-base, #c2410c) 22%, transparent);
+  font-weight: 700;
 }
 
 /* ---- Responsivo (breakpoints do projeto) ---- */
