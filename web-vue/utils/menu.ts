@@ -17,29 +17,7 @@ export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   ids: ["despesas", "mercadorias", "retiradas"]
 };
 
-// Departamento pessoal concentra a jornada do colaborador: admissão, cadastros que a admissão
-// consome e, quando suas telas forem entregues, ponto/faltas/avaliações. As permissões continuam
-// sendo de cada item; a categoria nunca amplia o que um perfil pode acessar.
-export const CATEGORIA_DEPARTAMENTO_PESSOAL: CategoriaMenu = {
-  id: "departamento_pessoal",
-  titulo: "Departamento pessoal",
-  icone: "mdi-account-tie",
-  ids: [
-    "admissoes_processos",
-    "admissoes_testes",
-    "colaboradores",
-    "funcoes_operacionais",
-    "areas_setores",
-    "turnos",
-    "folha_ponto",
-    "relatorio_faltas",
-    "relatorio_advertencias",
-    "avaliacao_qualidade",
-    "avaliacao_colaboradores"
-  ]
-};
-
-export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS, CATEGORIA_DEPARTAMENTO_PESSOAL];
+export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
 
 const categoriaPorId = new Map(CATEGORIAS_MENU.map((categoria) => [categoria.id, categoria] as const));
 
@@ -79,7 +57,19 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
     titulo: "Departamento pessoal",
-    ids: [CATEGORIA_DEPARTAMENTO_PESSOAL.id]
+    ids: [
+      "admissoes_processos",
+      "admissoes_testes",
+      "colaboradores",
+      "funcoes_operacionais",
+      "areas_setores",
+      "turnos",
+      "folha_ponto",
+      "relatorio_faltas",
+      "relatorio_advertencias",
+      "avaliacao_qualidade",
+      "avaliacao_colaboradores"
+    ]
   },
   {
     // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).

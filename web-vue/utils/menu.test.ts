@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ehPermissaoRestricao, permissoesAcessoTotal, permissoesRestricao, type Permissao } from "@padaria/shared";
 import { acoesNovoPermitidas, categoriaInicialSaida, itemPorTela, podeExecutarAcaoCadastro } from "./domain";
-import { CATEGORIA_DEPARTAMENTO_PESSOAL, CATEGORIA_LANCAMENTOS, agruparTelasMenu } from "./menu";
+import { CATEGORIA_LANCAMENTOS, agruparTelasMenu } from "./menu";
 import { usePermissoes } from "~/composables/usePermissoes";
 
 // Regressao do bug de producao: a tela /caixa (alterar horario / solicitar autorizacao) existia e
@@ -24,11 +24,6 @@ function idsNaRaiz(menu: ReturnType<typeof menuDoPerfil>) {
 // A categoria "Lancamentos" e as telas que ela guarda (undefined = categoria nao aparece).
 function categoriaLancamentos(menu: ReturnType<typeof menuDoPerfil>) {
   const no = menu.flatMap((secao) => secao.itens).find((item) => item.id === CATEGORIA_LANCAMENTOS.id);
-  return no?.tipo === "categoria" ? no : undefined;
-}
-
-function categoriaDepartamentoPessoal(menu: ReturnType<typeof menuDoPerfil>) {
-  const no = menu.flatMap((secao) => secao.itens).find((item) => item.id === CATEGORIA_DEPARTAMENTO_PESSOAL.id);
   return no?.tipo === "categoria" ? no : undefined;
 }
 
@@ -212,9 +207,7 @@ describe("categoria Departamento pessoal no menu", () => {
 
   it("concentra as telas de admissão e cadastros de pessoas em menu principal próprio", () => {
     const menu = menuDoPerfil(permissoesDepartamentoPessoal);
-    expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([CATEGORIA_DEPARTAMENTO_PESSOAL.id]);
-    expect(idsDaSecao(menu, "Configuração")).toEqual([]);
-    expect(categoriaDepartamentoPessoal(menu)?.itens.map((tela) => tela.id)).toEqual([
+    expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([
       "admissoes_processos",
       "admissoes_testes",
       "colaboradores",
@@ -222,19 +215,18 @@ describe("categoria Departamento pessoal no menu", () => {
       "areas_setores",
       "turnos"
     ]);
+    expect(idsDaSecao(menu, "Configuração")).toEqual([]);
   });
 
-  it("remove os caminhos soltos antigos sem criar permissão nova", () => {
+  it("não replica telas em Configuração nem cria permissão nova", () => {
     const raiz = idsNaRaiz(menuDoPerfil(permissoesDepartamentoPessoal));
-    expect(raiz).not.toContain("colaboradores");
-    expect(raiz).not.toContain("turnos");
-    expect(raiz).not.toContain("admissoes_processos");
-    expect(raiz).not.toContain("admissoes_testes");
-    expect(raiz).not.toContain("areas_setores");
+    expect(raiz).toContain("colaboradores");
+    expect(raiz).toContain("turnos");
+    expect(idsDaSecao(menuDoPerfil(permissoesDepartamentoPessoal), "Configuração")).toEqual([]);
   });
 
   it("não aparece para perfil sem nenhuma tela de departamento pessoal", () => {
-    expect(categoriaDepartamentoPessoal(menuDoPerfil(["cadastro_clientes_visualizar"]))).toBeUndefined();
+    expect(idsDaSecao(menuDoPerfil(["cadastro_clientes_visualizar"]), "Departamento pessoal")).toEqual([]);
   });
 });
 
