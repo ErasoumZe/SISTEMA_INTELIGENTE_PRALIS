@@ -14,8 +14,10 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
   const DIA_MULTI = "2026-08-03"; // dia isolado para a venda multi-forma
   const DIA_PAGINADO = "2026-08-04"; // paginação no banco, sem carregar o filtro inteiro
   const DIA_HORARIO = "2026-08-05"; // janela por hora, minuto e segundo
+  const DIA_BUSCA = "2026-08-06"; // busca por identificador CREARE e produto
   const FORMA_PIX = "11111111-1111-4111-8111-111111111718";
   let vendaMultiId = "";
+  let vendaBuscaId = "";
 
   async function totaisDoDia(dia: string, formaPagamentoId?: string) {
     const filtroForma = formaPagamentoId ? `&formaPagamentoId=${formaPagamentoId}` : "";
@@ -96,6 +98,18 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
               ($1,$2,'2026-08-05T10:00:00.000Z','Venda dentro da janela','20.00','aprovado',true),
               ($1,$2,'2026-08-05T11:05:01.000Z','Venda depois da janela','30.00','aprovado',true)`,
       [idsTeste.empresaA, DIA_HORARIO]
+    );
+
+    const vendaBusca = await consultarUm<{ id: string }>(
+      `insert into vendas (empresa_id, data_referencia, identificador_externo, descricao, valor_original, status, computar)
+       values ($1,$2,'CREARE:999001','Venda para busca por produto','41.93','aprovado',true) returning id`,
+      [idsTeste.empresaA, DIA_BUSCA]
+    );
+    vendaBuscaId = vendaBusca!.id;
+    await executarSql(
+      `insert into vendas_produtos (venda_id, descricao_produto, quantidade, valor_unitario, valor_total)
+       values ($1,'Queijo Minas Padrao Pequeno','1','41.93','41.93')`,
+      [vendaBuscaId]
     );
   }, 120_000);
 
@@ -220,6 +234,37 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
     expect(json<{ data: { quantidade: number; totalGeral: number } }>(totais).data).toMatchObject({
       quantidade: 1,
       totalGeral: 20
+    });
+  });
+
+  it("filtra por ID CREARE e nome de produto sem alterar os totais", async () => {
+    const base = `empresaId=${idsTeste.empresaA}&dataInicio=${DIA_BUSCA}&dataFim=${DIA_BUSCA}`;
+    const [porId, porProduto, totais] = await Promise.all([
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/relatorios/vendas?${base}&idVenda=999001`,
+        headers: { cookie: cookieAdmin }
+      }),
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/relatorios/vendas?${base}&produto=queijo%20minas`,
+        headers: { cookie: cookieAdmin }
+      }),
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/relatorios/vendas/totais?${base}&produto=queijo%20minas`,
+        headers: { cookie: cookieAdmin }
+      })
+    ]);
+
+    expect(porId.statusCode, porId.body).toBe(200);
+    expect(porProduto.statusCode, porProduto.body).toBe(200);
+    expect(totais.statusCode, totais.body).toBe(200);
+    expect(json<{ data: Array<{ id: string }> }>(porId).data.map((venda) => venda.id)).toEqual([vendaBuscaId]);
+    expect(json<{ data: Array<{ id: string }> }>(porProduto).data.map((venda) => venda.id)).toEqual([vendaBuscaId]);
+    expect(json<{ data: { quantidade: number; totalGeral: number } }>(totais).data).toMatchObject({
+      quantidade: 1,
+      totalGeral: 41.93
     });
   });
 });

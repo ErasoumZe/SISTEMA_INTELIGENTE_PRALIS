@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sum } from "drizzle-orm";
 import { clientes, colaboradores, formasPagamento, pdvs } from "@padaria/db/schema/cadastro";
 import { fechamentosCaixa } from "@padaria/db/schema/caixa";
 import { vendas, vendasComprovantes, vendasPagamentos, vendasProdutos } from "@padaria/db/schema/venda";
@@ -42,6 +42,14 @@ async function filtrosDasVendas(query: VendasQuery, empresasPermitidasIds: strin
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
   if (query.dataHoraInicio) filtros.push(gte(vendas.dataVenda, new Date(query.dataHoraInicio)));
   if (query.dataHoraFim) filtros.push(lte(vendas.dataVenda, new Date(query.dataHoraFim)));
+  if (query.idVenda) filtros.push(ilike(vendas.identificadorExterno, `%${query.idVenda}%`));
+  if (query.produto) {
+    const vendaIdsDoProduto = banco
+      .select({ vendaId: vendasProdutos.vendaId })
+      .from(vendasProdutos)
+      .where(ilike(vendasProdutos.descricaoProduto, `%${query.produto}%`));
+    filtros.push(inArray(vendas.id, vendaIdsDoProduto));
+  }
   if (query.caixaId) filtros.push(eq(vendas.caixaId, query.caixaId));
   if (query.pdvId) filtros.push(eq(vendas.pdvId, query.pdvId));
   if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));

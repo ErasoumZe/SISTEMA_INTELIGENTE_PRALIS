@@ -36,6 +36,8 @@ const filtros = reactive({
   dataFim: "",
   horaInicio: "",
   horaFim: "",
+  idVenda: "",
+  produto: "",
   pdvId: "",
   turnoId: "",
   clienteId: "",
@@ -171,7 +173,7 @@ watch(
   <v-card>
     <v-card-title class="d-flex align-center justify-space-between ga-3 report-card-head">
       <div>
-        <div class="text-body-2 text-muted">Vendas com filtros por período, PDV, cliente e pagamento.</div>
+        <div class="text-body-2 text-muted">Vendas com filtros por período, ID, produto, PDV, cliente e pagamento.</div>
       </div>
       <v-btn color="primary" prepend-icon="mdi-magnify" :loading="carregando" @click="aplicarFiltros">Buscar</v-btn>
     </v-card-title>
@@ -185,6 +187,10 @@ watch(
         <v-col cols="12" md="3">
           <v-text-field v-model="filtros.horaFim" type="time" step="1" label="Hora de fechamento" />
         </v-col>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filtros.idVenda" label="ID da venda (CREARE)" clearable />
+        </v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="filtros.produto" label="Produto" clearable /></v-col>
         <v-col cols="12" md="3">
           <v-select v-model="filtros.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" clearable />
         </v-col>

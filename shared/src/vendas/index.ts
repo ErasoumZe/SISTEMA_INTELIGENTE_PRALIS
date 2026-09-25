@@ -12,6 +12,8 @@ export const vendasQuerySchema = z
     dataFim: z.string().min(10).optional(),
     dataHoraInicio: dataHoraComFusoSchema.optional(),
     dataHoraFim: dataHoraComFusoSchema.optional(),
+    idVenda: z.string().trim().min(1).max(120).optional(),
+    produto: z.string().trim().min(1).max(200).optional(),
     caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
     turnoId: uuidSchema.optional(),
