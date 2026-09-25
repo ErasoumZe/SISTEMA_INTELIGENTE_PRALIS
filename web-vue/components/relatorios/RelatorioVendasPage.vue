@@ -34,6 +34,8 @@ const ordem = ref<"asc" | "desc">("asc");
 const filtros = reactive({
   dataInicio: "",
   dataFim: "",
+  horaInicio: "",
+  horaFim: "",
   pdvId: "",
   turnoId: "",
   clienteId: "",
@@ -60,7 +62,13 @@ const arquivoInput = ref<File | null>(null);
 function paramsFiltro() {
   const params = new URLSearchParams({ empresaId: props.empresaId });
   for (const [chave, valor] of Object.entries(filtros)) {
-    if (valor) params.set(chave, valor);
+    if (valor && chave !== "horaInicio" && chave !== "horaFim") params.set(chave, valor);
+  }
+  if (filtros.dataInicio && filtros.horaInicio) {
+    params.set("dataHoraInicio", `${filtros.dataInicio}T${filtros.horaInicio}-03:00`);
+  }
+  if (filtros.dataFim && filtros.horaFim) {
+    params.set("dataHoraFim", `${filtros.dataFim}T${filtros.horaFim}-03:00`);
   }
   return params;
 }
@@ -170,7 +178,13 @@ watch(
     <v-card-text>
       <v-row dense class="mb-4">
         <v-col cols="12" md="3"><v-text-field v-model="filtros.dataInicio" type="date" label="Data inicial" /></v-col>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filtros.horaInicio" type="time" step="1" label="Hora de abertura" />
+        </v-col>
         <v-col cols="12" md="3"><v-text-field v-model="filtros.dataFim" type="date" label="Data final" /></v-col>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filtros.horaFim" type="time" step="1" label="Hora de fechamento" />
+        </v-col>
         <v-col cols="12" md="3">
           <v-select v-model="filtros.pdvId" :items="pdvs" item-title="nome" item-value="id" label="PDV" clearable />
         </v-col>

@@ -3,12 +3,15 @@ import { paginationQuerySchema } from "../api/index.js";
 
 const uuidSchema = z.string().uuid();
 const dinheiroSchema = z.coerce.number().min(0);
+const dataHoraComFusoSchema = z.string().datetime({ offset: true });
 
 export const vendasQuerySchema = z
   .object({
     empresaId: uuidSchema.optional(),
     dataInicio: z.string().min(10).optional(),
     dataFim: z.string().min(10).optional(),
+    dataHoraInicio: dataHoraComFusoSchema.optional(),
+    dataHoraFim: dataHoraComFusoSchema.optional(),
     caixaId: uuidSchema.optional(),
     pdvId: uuidSchema.optional(),
     turnoId: uuidSchema.optional(),

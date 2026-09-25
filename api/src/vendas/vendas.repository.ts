@@ -40,6 +40,8 @@ async function filtrosDasVendas(query: VendasQuery, empresasPermitidasIds: strin
   const filtros = filtrosEmpresa(vendas, query, empresasPermitidasIds);
   if (query.dataInicio) filtros.push(gte(vendas.dataReferencia, query.dataInicio));
   if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
+  if (query.dataHoraInicio) filtros.push(gte(vendas.dataVenda, new Date(query.dataHoraInicio)));
+  if (query.dataHoraFim) filtros.push(lte(vendas.dataVenda, new Date(query.dataHoraFim)));
   if (query.caixaId) filtros.push(eq(vendas.caixaId, query.caixaId));
   if (query.pdvId) filtros.push(eq(vendas.pdvId, query.pdvId));
   if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
@@ -210,29 +212,9 @@ export async function totaisVendasRepository(
   query: VendasQuery,
   empresasPermitidasIds: string[] | null
 ): Promise<TotaisVendas> {
-  const filtros = filtrosEmpresa(vendas, query, empresasPermitidasIds);
-  if (query.dataInicio) filtros.push(gte(vendas.dataReferencia, query.dataInicio));
-  if (query.dataFim) filtros.push(lte(vendas.dataReferencia, query.dataFim));
-  if (query.caixaId) filtros.push(eq(vendas.caixaId, query.caixaId));
-  if (query.pdvId) filtros.push(eq(vendas.pdvId, query.pdvId));
-  if (query.clienteId) filtros.push(eq(vendas.clienteId, query.clienteId));
-  if (query.colaboradorId) filtros.push(eq(vendas.colaboradorId, query.colaboradorId));
-  if (query.status) filtros.push(eq(vendas.status, query.status));
-  if (query.turnoId) {
-    const caixaIds = await caixaIdsPorTurno(query.turnoId);
-    if (!caixaIds.length) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
-    filtros.push(inArray(vendas.caixaId, caixaIds));
-  }
-
-  if (query.formaPagamentoId) {
-    const comForma = await banco
-      .select({ vendaId: vendasPagamentos.vendaId })
-      .from(vendasPagamentos)
-      .where(eq(vendasPagamentos.formaPagamentoId, query.formaPagamentoId));
-    const vendaIds = comForma.map((item) => item.vendaId);
-    if (!vendaIds.length) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
-    filtros.push(inArray(vendas.id, vendaIds));
-  }
+  // Totais e tabela compartilham os mesmos filtros, inclusive a janela de hora.
+  const filtros = await filtrosDasVendas(query, empresasPermitidasIds);
+  if (!filtros) return { totalGeral: 0, quantidade: 0, porFormaPagamento: [] };
   const where = filtros.length ? and(...filtros) : undefined;
 
   // Total geral. Soma e linear, entao somamos as tres colunas e combinamos no liquido — evita

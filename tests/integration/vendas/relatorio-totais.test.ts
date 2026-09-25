@@ -13,6 +13,7 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
   const DIA_LIQUIDO = "2026-08-02"; // dia isolado para desconto/acrescimo
   const DIA_MULTI = "2026-08-03"; // dia isolado para a venda multi-forma
   const DIA_PAGINADO = "2026-08-04"; // paginação no banco, sem carregar o filtro inteiro
+  const DIA_HORARIO = "2026-08-05"; // janela por hora, minuto e segundo
   const FORMA_PIX = "11111111-1111-4111-8111-111111111718";
   let vendaMultiId = "";
 
@@ -87,6 +88,14 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
               ($1,$2,'Venda paginada 2','20.00','aprovado',true),
               ($1,$2,'Venda paginada 3','30.00','aprovado',true)`,
       [idsTeste.empresaA, DIA_PAGINADO]
+    );
+
+    await executarSql(
+      `insert into vendas (empresa_id, data_referencia, data_venda, descricao, valor_original, status, computar)
+       values ($1,$2,'2026-08-05T09:15:30.000Z','Venda antes da janela','10.00','aprovado',true),
+              ($1,$2,'2026-08-05T10:00:00.000Z','Venda dentro da janela','20.00','aprovado',true),
+              ($1,$2,'2026-08-05T11:05:01.000Z','Venda depois da janela','30.00','aprovado',true)`,
+      [idsTeste.empresaA, DIA_HORARIO]
     );
   }, 120_000);
 
@@ -188,5 +197,29 @@ describe("relatorio de vendas: totais (geral + por forma de pagamento)", () => {
     expect(corpo.meta.pagination).toMatchObject({ total: 3, page: 2 });
     expect(corpo.data).toHaveLength(1);
     expect(corpo.data[0]?.descricao).toMatch(/^Venda paginada/u);
+  });
+
+  it("filtra tabela e totais por hora com segundos", async () => {
+    const janela =
+      `empresaId=${idsTeste.empresaA}&dataInicio=${DIA_HORARIO}&dataFim=${DIA_HORARIO}` +
+      "&dataHoraInicio=2026-08-05T06%3A30%3A00-03%3A00&dataHoraFim=2026-08-05T08%3A00%3A00-03%3A00";
+    const [lista, totais] = await Promise.all([
+      contexto.app.inject({ method: "GET", url: `/api/relatorios/vendas?${janela}`, headers: { cookie: cookieAdmin } }),
+      contexto.app.inject({
+        method: "GET",
+        url: `/api/relatorios/vendas/totais?${janela}`,
+        headers: { cookie: cookieAdmin }
+      })
+    ]);
+
+    expect(lista.statusCode, lista.body).toBe(200);
+    expect(totais.statusCode, totais.body).toBe(200);
+    expect(json<{ data: Array<{ descricao: string }> }>(lista).data.map((venda) => venda.descricao)).toEqual([
+      "Venda dentro da janela"
+    ]);
+    expect(json<{ data: { quantidade: number; totalGeral: number } }>(totais).data).toMatchObject({
+      quantidade: 1,
+      totalGeral: 20
+    });
   });
 });
