@@ -77,6 +77,11 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
     ids: ["fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
   },
   {
+    // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
+    titulo: "Departamento pessoal",
+    ids: [CATEGORIA_DEPARTAMENTO_PESSOAL.id]
+  },
+  {
     // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).
     titulo: "Configuração",
     ids: [
@@ -87,7 +92,6 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "fornecedores",
       "socios_gestores",
       "clientes",
-      CATEGORIA_DEPARTAMENTO_PESSOAL.id,
       "promocoes",
       "ficha_tecnica",
       "ingredientes",

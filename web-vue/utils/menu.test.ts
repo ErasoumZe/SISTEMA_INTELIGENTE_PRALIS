@@ -210,9 +210,10 @@ describe("categoria Departamento pessoal no menu", () => {
     "cadastro_turnos_visualizar"
   ];
 
-  it("concentra as telas de admissão e cadastros de pessoas dentro de Configuração", () => {
+  it("concentra as telas de admissão e cadastros de pessoas em menu principal próprio", () => {
     const menu = menuDoPerfil(permissoesDepartamentoPessoal);
-    expect(idsDaSecao(menu, "Configuração")).toEqual([CATEGORIA_DEPARTAMENTO_PESSOAL.id]);
+    expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([CATEGORIA_DEPARTAMENTO_PESSOAL.id]);
+    expect(idsDaSecao(menu, "Configuração")).toEqual([]);
     expect(categoriaDepartamentoPessoal(menu)?.itens.map((tela) => tela.id)).toEqual([
       "admissoes_processos",
       "admissoes_testes",
