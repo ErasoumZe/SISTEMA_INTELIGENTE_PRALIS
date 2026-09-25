@@ -17,7 +17,29 @@ export const CATEGORIA_LANCAMENTOS: CategoriaMenu = {
   ids: ["despesas", "mercadorias", "retiradas"]
 };
 
-export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS];
+// Departamento pessoal concentra a jornada do colaborador: admissão, cadastros que a admissão
+// consome e, quando suas telas forem entregues, ponto/faltas/avaliações. As permissões continuam
+// sendo de cada item; a categoria nunca amplia o que um perfil pode acessar.
+export const CATEGORIA_DEPARTAMENTO_PESSOAL: CategoriaMenu = {
+  id: "departamento_pessoal",
+  titulo: "Departamento pessoal",
+  icone: "mdi-account-tie",
+  ids: [
+    "admissoes_processos",
+    "admissoes_testes",
+    "colaboradores",
+    "funcoes_operacionais",
+    "areas_setores",
+    "turnos",
+    "folha_ponto",
+    "relatorio_faltas",
+    "relatorio_advertencias",
+    "avaliacao_qualidade",
+    "avaliacao_colaboradores"
+  ]
+};
+
+export const CATEGORIAS_MENU: CategoriaMenu[] = [CATEGORIA_LANCAMENTOS, CATEGORIA_DEPARTAMENTO_PESSOAL];
 
 const categoriaPorId = new Map(CATEGORIAS_MENU.map((categoria) => [categoria.id, categoria] as const));
 
@@ -52,15 +74,7 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
   {
     // Resultados – Relatorios + Diferenca de fechamento.
     titulo: "Resultados",
-    ids: [
-      "fechamento",
-      "relatorio_vendas",
-      "relatorio_produtos",
-      "relatorio_dre",
-      "relatorio_faltas",
-      "relatorio_advertencias",
-      "relatorio_fiscal"
-    ]
+    ids: ["fechamento", "relatorio_vendas", "relatorio_produtos", "relatorio_dre", "relatorio_fiscal"]
   },
   {
     // Configuracao – Cadastros / Gerais (tudo que e cadastro, admin e formularios/avaliacoes).
@@ -69,18 +83,11 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "produtos",
       "grupos",
       "unidades",
-      "funcoes_operacionais",
-      "turnos",
       "formas_pagamento",
       "fornecedores",
       "socios_gestores",
       "clientes",
-      "colaboradores",
-      "admissoes_testes",
-      "admissoes_processos",
-      "folha_ponto",
-      "avaliacao_qualidade",
-      "avaliacao_colaboradores",
+      CATEGORIA_DEPARTAMENTO_PESSOAL.id,
       "promocoes",
       "ficha_tecnica",
       "ingredientes",
@@ -88,7 +95,6 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
       "patrimonio",
       "notas_fiscais",
       "pdv",
-      "areas_setores",
       "empresas",
       "usuarios",
       "permissoes",
