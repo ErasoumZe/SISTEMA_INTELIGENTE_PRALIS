@@ -1351,6 +1351,9 @@ export type VendaCanceladaCaixaLinha = {
   valorOriginal: string;
   valorDesconto: string;
   valorAcrescimo: string;
+  cancelamentoAutorizadoPorAutomacao: string | null;
+  cancelamentoJustificativa: string | null;
+  cancelamentoMotivo: string | null;
   pagamentos: VendaCanceladaPagamentoLinha[];
   produtos: VendaCanceladaProdutoLinha[];
 };
@@ -1373,7 +1376,10 @@ export async function listarVendasCanceladasCaixaRepository(
         dataHora: vendas.dataVenda,
         valorOriginal: vendas.valorOriginal,
         valorDesconto: vendas.valorDesconto,
-        valorAcrescimo: vendas.valorAcrescimo
+        valorAcrescimo: vendas.valorAcrescimo,
+        cancelamentoAutorizadoPorAutomacao: vendas.cancelamentoAutorizadoPorAutomacao,
+        cancelamentoJustificativa: vendas.cancelamentoJustificativa,
+        cancelamentoMotivo: vendas.cancelamentoMotivo
       })
       .from(vendas)
       .where(filtro)

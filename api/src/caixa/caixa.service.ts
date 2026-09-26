@@ -1754,6 +1754,9 @@ function serializarVendasCanceladas(vendasCanceladas: VendaCanceladaCaixaLinha[]
     data: venda.data,
     dataHora: serializarData(venda.dataHora),
     valor: deCentavos(liquidoCentavos(venda)),
+    canceladoPor: venda.cancelamentoAutorizadoPorAutomacao,
+    justificativaCancelamento: venda.cancelamentoJustificativa,
+    motivoCancelamento: venda.cancelamentoMotivo,
     pagamentos: venda.pagamentos.map((pagamento) => ({
       id: pagamento.id,
       formaPagamento: pagamento.formaPagamento ?? pagamento.tipoPagamentoAutomacao ?? "Forma não informada pelo CREARE",

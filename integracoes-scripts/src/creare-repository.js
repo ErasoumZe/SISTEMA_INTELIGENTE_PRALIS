@@ -43,6 +43,19 @@ export async function buscarVendasDia(pool, dataOrigem) {
   return { vendas, itens, pagamentos };
 }
 
+// Rele exclusivamente vendas hoje marcadas como canceladas em uma janela de datas de venda. O
+// CREARE atualiza o status da venda original sem manter aqui a data do ato de cancelamento.
+export async function buscarVendasCanceladasDesde(pool, dataInicial, dataFinal) {
+  const vendas = await executar(pool, "vendas-canceladas-intervalo.sql", [dataInicial, dataFinal]);
+  const ids = normalizarIds(vendas.map((venda) => venda.idVendaBalcao));
+  if (!ids.length) return { vendas: [], itens: [], pagamentos: [] };
+  const [itens, pagamentos] = await Promise.all([
+    executarPorIds(pool, "itens-ids.sql", ids),
+    executarPorIds(pool, "pagamentos-ids.sql", ids)
+  ]);
+  return { vendas, itens, pagamentos };
+}
+
 // Normaliza uma lista de IDs de venda (string "1,2,3" ou array) para inteiros positivos unicos, na
 // ordem informada. Lanca em qualquer token nao-numerico — usado tanto na validacao do CLI quanto na
 // leitura por IDs, para nunca montar SQL com entrada suja (os IDs vao como parametros, nunca no texto).
@@ -122,6 +135,11 @@ export function diasParaProcessar(hoje, ultimoDia, diasIniciais = 1) {
     dias.add(subtrairDias(hoje, 1));
   }
   return [...dias].sort();
+}
+
+export function inicioJanelaCancelamentos(hoje, diasCancelamentos = 90) {
+  const dias = Math.max(1, Math.floor(Number(diasCancelamentos) || 1));
+  return subtrairDias(hoje, dias - 1);
 }
 
 // Dia contabil no fuso do NEGOCIO (nao o da maquina): a API deriva data_referencia com a mesma

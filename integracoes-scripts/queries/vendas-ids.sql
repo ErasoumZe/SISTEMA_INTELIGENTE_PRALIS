@@ -16,10 +16,16 @@ SELECT
   vb.VALOR_TOTAL AS valorTotal,
   vb.VALOR_PAGO AS valorPago,
   vb.STATUS AS statusVenda,
-  vb.NUMERO_NFCE AS numeroNotaFiscal
+  vb.NUMERO_NFCE AS numeroNotaFiscal,
+  nfc.ID_USUARIO_CANCELAMENTO AS cancelamentoUsuarioId,
+  uc.USUARIO AS cancelamentoUsuarioNome,
+  nfc.JUSTIFICATIVA AS cancelamentoJustificativa,
+  nfc.MOTIVO AS cancelamentoMotivo
 FROM venda_balcao vb
 LEFT JOIN dispositivo d ON d.ID_DISPOSITIVO = vb.ID_DISPOSITIVO
 LEFT JOIN cliente c ON c.ID_CLIENTE = vb.ID_CLIENTE
 LEFT JOIN usuario u ON u.ID_USUARIO = vb.ID_USUARIO
+LEFT JOIN nota_fiscal_consumidor nfc ON nfc.ORIGEM = CONCAT('VENDABALCAO_', vb.ID_VENDA_BALCAO)
+LEFT JOIN usuario uc ON uc.ID_USUARIO = nfc.ID_USUARIO_CANCELAMENTO
 WHERE vb.ID_VENDA_BALCAO IN (/*IDS*/)
 ORDER BY vb.DTHR_VENDABALCAO, vb.ID_VENDA_BALCAO;

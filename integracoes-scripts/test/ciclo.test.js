@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buscarVendasDias, diasParaProcessar, subtrairDias } from "../src/creare-repository.js";
+import { buscarVendasDias, diasParaProcessar, inicioJanelaCancelamentos, subtrairDias } from "../src/creare-repository.js";
 
 test("subtrairDias: ancorado em UTC, atravessa virada de mes/ano", () => {
   assert.equal(subtrairDias("2026-07-18", 1), "2026-07-17");
@@ -22,6 +22,11 @@ test("diasParaProcessar: na virada do dia reprocessa tambem o dia anterior (uma 
 test("diasParaProcessar: 1a execucao respeita diasIniciais (backfill)", () => {
   assert.deepEqual(diasParaProcessar("2026-07-18", null, 1), ["2026-07-18"]);
   assert.deepEqual(diasParaProcessar("2026-07-18", null, 3), ["2026-07-16", "2026-07-17", "2026-07-18"]);
+});
+
+test("inicioJanelaCancelamentos: inclui hoje e limita a janela configurada", () => {
+  assert.equal(inicioJanelaCancelamentos("2026-09-26", 1), "2026-09-26");
+  assert.equal(inicioJanelaCancelamentos("2026-09-26", 90), "2026-06-29");
 });
 
 // Fake do pool do mysql2: roteia por tabela na SQL e devolve as linhas do dia pedido (params[0]).

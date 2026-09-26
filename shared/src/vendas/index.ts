@@ -100,6 +100,10 @@ export const vendaDtoSchema = z.object({
   valorLiquido: z.string().optional(),
   computar: z.boolean(),
   status: z.string(),
+  // Auditoria externa do cancelamento no CREARE. Nao representa usuario do Pralis e nunca inclui senha.
+  cancelamentoAutorizadoPorAutomacao: z.string().nullable().optional(),
+  cancelamentoJustificativa: z.string().nullable().optional(),
+  cancelamentoMotivo: z.string().nullable().optional(),
   pdvId: z.string().nullable().optional(),
   pdvNome: z.string().nullable().optional(),
   clienteId: z.string().nullable().optional(),

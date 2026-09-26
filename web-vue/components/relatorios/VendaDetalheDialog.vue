@@ -51,6 +51,13 @@ function nomePagamento(pagamento: NonNullable<OperacaoResumo["pagamentos"]>[numb
           <v-col cols="12" sm="4"><strong>Data de pagamento:</strong> {{ venda.dataPagamento ?? "-" }}</v-col>
         </v-row>
 
+        <v-alert v-if="venda.status === 'cancelado'" type="warning" variant="tonal" class="mb-4" data-teste="auditoria-cancelamento-creare">
+          <div><strong>Cancelamento no CREARE</strong></div>
+          <div><strong>Autorizado por:</strong> {{ venda.cancelamentoAutorizadoPorAutomacao ?? "Não informado" }}</div>
+          <div><strong>Motivo:</strong> {{ venda.cancelamentoMotivo ?? "Não informado" }}</div>
+          <div><strong>Justificativa:</strong> {{ venda.cancelamentoJustificativa ?? "Não informada" }}</div>
+        </v-alert>
+
         <v-divider class="my-4" />
         <div class="text-subtitle-1 font-weight-bold mb-2">Produtos</div>
         <v-table v-if="venda.itensVenda?.length" density="compact">

@@ -344,6 +344,13 @@
       "when": 1790266805020,
       "tag": "0048_overjoyed_pride",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790428631219,
+      "tag": "0049_keen_chimera",
+      "breakpoints": true
     }
   ]
 }

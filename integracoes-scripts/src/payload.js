@@ -8,6 +8,11 @@ function texto(valor, fallback) {
   return normalizado || fallback;
 }
 
+function textoOpcional(valor) {
+  const normalizado = valor == null ? "" : String(valor).trim();
+  return normalizado || null;
+}
+
 function dataHojeLocal() {
   const agora = new Date();
   const ano = agora.getFullYear();
@@ -95,6 +100,18 @@ function montarVendedor(venda) {
   return { identificador: identificador || null, nome: nome || null };
 }
 
+// A senha do gerente e usada somente pelo CREARE para autorizar o cancelamento e nunca e lida pelo
+// agente. Esta estrutura leva apenas a auditoria persistida pela automacao.
+function montarCancelamento(venda) {
+  if (!vendaCancelada(venda.statusVenda)) return null;
+  const usuarioId = textoOpcional(venda.cancelamentoUsuarioId);
+  const usuarioNome = textoOpcional(venda.cancelamentoUsuarioNome);
+  const justificativa = textoOpcional(venda.cancelamentoJustificativa);
+  const motivo = textoOpcional(venda.cancelamentoMotivo);
+  if (!usuarioId && !usuarioNome && !justificativa && !motivo) return null;
+  return { usuarioId, usuarioNome, justificativa, motivo };
+}
+
 function agruparPorVenda(linhas) {
   const grupos = new Map();
   for (const linha of linhas) {
@@ -136,7 +153,8 @@ export function montarPayloads({ vendas, itens, pagamentos }, { offsetFuso = OFF
         acrescimo: dinheiro(venda.valorAcrescimo),
         valorTotal: dinheiro(venda.valorTotal),
         statusVenda: vendaCancelada(venda.statusVenda) ? "CANCELADA" : "FINALIZADA",
-        numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal)
+        numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal),
+        cancelamento: montarCancelamento(venda)
       },
       ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) =>
         montarItem(item, dataHoraParaIso(item.dataHoraItem ?? venda.dataHoraVenda, offsetFuso))
@@ -184,7 +202,8 @@ export function montarPayloadsTeste({ vendas, itens, pagamentos, dataOrigem, dat
         acrescimo: dinheiro(venda.valorAcrescimo),
         valorTotal: dinheiro(venda.valorTotal),
         statusVenda: vendaCancelada(venda.statusVenda) ? "CANCELADA" : "FINALIZADA",
-        numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal)
+        numeroNotaFiscal: venda.numeroNotaFiscal == null ? null : String(venda.numeroNotaFiscal),
+        cancelamento: montarCancelamento(venda)
       },
       ItensVenda: (itensPorVenda.get(idVendaOriginal) ?? []).map((item) =>
         montarItem(item, trocarDataPreservandoHora(item.dataHoraItem ?? venda.dataHoraVenda, dataDestino))

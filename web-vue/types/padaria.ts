@@ -209,6 +209,9 @@ export type OperacaoResumo = {
   valorAcrescimo?: string;
   computar: boolean;
   status: string;
+  cancelamentoAutorizadoPorAutomacao?: string | null;
+  cancelamentoJustificativa?: string | null;
+  cancelamentoMotivo?: string | null;
   contaOrigemId?: string;
   contaDestinoId?: string;
   contaOrigemNome?: string;

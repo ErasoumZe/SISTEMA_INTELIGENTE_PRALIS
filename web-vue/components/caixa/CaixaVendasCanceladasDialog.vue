@@ -79,6 +79,19 @@ watch(
               </div>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
+              <v-alert
+                v-if="venda.canceladoPor || venda.justificativaCancelamento || venda.motivoCancelamento"
+                type="warning"
+                variant="tonal"
+                density="compact"
+                class="mb-4"
+                data-teste="auditoria-cancelamento-creare"
+              >
+                <div><strong>Cancelamento no CREARE</strong></div>
+                <div><strong>Autorizado por:</strong> {{ venda.canceladoPor ?? "Não informado" }}</div>
+                <div><strong>Motivo:</strong> {{ venda.motivoCancelamento ?? "Não informado" }}</div>
+                <div><strong>Justificativa:</strong> {{ venda.justificativaCancelamento ?? "Não informada" }}</div>
+              </v-alert>
               <div class="text-subtitle-2 mb-2">Forma de pagamento</div>
               <div v-if="venda.pagamentos.length" class="d-flex flex-wrap ga-2 mb-4">
                 <v-chip v-for="pagamento in venda.pagamentos" :key="pagamento.id" size="small" variant="tonal">

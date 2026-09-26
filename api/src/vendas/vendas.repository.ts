@@ -85,6 +85,9 @@ const colunasResumoVenda = {
   valorDesconto: vendas.valorDesconto,
   computar: vendas.computar,
   status: vendas.status,
+  cancelamentoAutorizadoPorAutomacao: vendas.cancelamentoAutorizadoPorAutomacao,
+  cancelamentoJustificativa: vendas.cancelamentoJustificativa,
+  cancelamentoMotivo: vendas.cancelamentoMotivo,
   pdvId: vendas.pdvId,
   pdvNome: pdvs.nome,
   clienteId: vendas.clienteId,
@@ -105,6 +108,9 @@ type LinhaResumoVenda = {
   valorDesconto: string;
   computar: boolean;
   status: string;
+  cancelamentoAutorizadoPorAutomacao: string | null;
+  cancelamentoJustificativa: string | null;
+  cancelamentoMotivo: string | null;
   pdvId: string | null;
   pdvNome: string | null;
   clienteId: string | null;

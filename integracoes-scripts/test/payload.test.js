@@ -164,6 +164,32 @@ test("montarPayloads: venda cancelada vira CANCELADA", () => {
   assert.equal(payload.Venda.statusVenda, "CANCELADA");
 });
 
+test("montarPayloads: cancelamento leva usuario, motivo e justificativa, sem senha", () => {
+  const [payload] = montarPayloads({
+    vendas: [
+      {
+        idVendaBalcao: 9,
+        dataHoraVenda: "2026-07-05 10:00:00",
+        statusVenda: "C",
+        valorTotal: 5,
+        cancelamentoUsuarioId: 12,
+        cancelamentoUsuarioNome: "GERENTE",
+        cancelamentoMotivo: "Cancelamento autorizado",
+        cancelamentoJustificativa: "Cliente desistiu da compra"
+      }
+    ],
+    itens: [],
+    pagamentos: []
+  });
+  assert.deepEqual(payload.Venda.cancelamento, {
+    usuarioId: "12",
+    usuarioNome: "GERENTE",
+    motivo: "Cancelamento autorizado",
+    justificativa: "Cliente desistiu da compra"
+  });
+  assert.equal("senha" in payload.Venda.cancelamento, false);
+});
+
 test("dataHoraParaIso: default de Brasilia e offset explicito geram UTC real", () => {
   assert.equal(dataHoraParaIso("2026-07-05 14:30:00"), "2026-07-05T17:30:00.000Z");
   assert.equal(dataHoraParaIso("2026-07-05 14:30:00", "-03:00"), "2026-07-05T17:30:00.000Z");

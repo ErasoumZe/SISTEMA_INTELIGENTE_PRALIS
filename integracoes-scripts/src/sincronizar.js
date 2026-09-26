@@ -4,9 +4,11 @@ import { enviarConciliacao, enviarVendaIntegracao, verificarApi } from "./api-cl
 import {
   buscarConciliacaoDia,
   buscarIdsVendasFechadasDia,
+  buscarVendasCanceladasDesde,
   buscarVendasDias,
   diaNegocioHoje,
-  diasParaProcessar
+  diasParaProcessar,
+  inicioJanelaCancelamentos
 } from "./creare-repository.js";
 import { criarPoolCreare } from "./database.js";
 import { obterConfig } from "./env.js";
@@ -73,7 +75,16 @@ export async function executarCiclo(config, caminhos) {
       { tentativas: sync.retryTentativas, baseMs: sync.retryBaseMs }
     );
 
-  const contagem = { recebidas: 0, filaReprocessada: 0, criadas: 0, atualizadas: 0, semNovidade: 0, erros: 0 };
+  const contagem = {
+    recebidas: 0,
+    cancelamentosDetectados: 0,
+    cancelamentosReenviados: 0,
+    filaReprocessada: 0,
+    criadas: 0,
+    atualizadas: 0,
+    semNovidade: 0,
+    erros: 0
+  };
   const falhas = [];
 
   async function processar(payload, ehReplay) {
@@ -112,8 +123,19 @@ export async function executarCiclo(config, caminhos) {
     contagem.recebidas = vendas.length;
 
     const payloads = montarPayloads({ vendas, itens, pagamentos }, { offsetFuso: sync.offsetFuso });
+    const idsEnviadosNoReprocessoNormal = new Set(payloads.map((payload) => payload.Venda.idVenda));
     for (const payload of payloads) {
       await processar(payload, false);
+    }
+
+    const inicioCancelamentos = inicioJanelaCancelamentos(hoje, sync.diasCancelamentos);
+    const cancelamentos = await buscarVendasCanceladasDesde(pool, inicioCancelamentos, hoje);
+    const payloadsCancelados = montarPayloads(cancelamentos, { offsetFuso: sync.offsetFuso });
+    contagem.cancelamentosDetectados = payloadsCancelados.length;
+    for (const payload of payloadsCancelados) {
+      if (idsEnviadosNoReprocessoNormal.has(payload.Venda.idVenda)) continue;
+      await processar(payload, false);
+      contagem.cancelamentosReenviados += 1;
     }
 
     // Le o agregado + IDs DEPOIS de enviar as vendas do ciclo: assim compara o estado ja sincronizado.
@@ -132,7 +154,8 @@ export async function executarCiclo(config, caminhos) {
 
   // 4) Log resumido do ciclo.
   console.log(
-    `[sincronizar] dias=${dias.join(",")} recebidas=${contagem.recebidas} fila_reprocessada=${contagem.filaReprocessada} ` +
+    `[sincronizar] dias=${dias.join(",")} recebidas=${contagem.recebidas} cancelamentos_detectados=${contagem.cancelamentosDetectados} ` +
+      `cancelamentos_reenviados=${contagem.cancelamentosReenviados} fila_reprocessada=${contagem.filaReprocessada} ` +
       `criadas=${contagem.criadas} atualizadas=${contagem.atualizadas} sem_novidade=${contagem.semNovidade} ` +
       `erros=${contagem.erros} fila_pendente=${falhas.length}`
   );

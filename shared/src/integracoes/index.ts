@@ -75,6 +75,15 @@ export const vendedorIntegracaoPayloadSchema = z.object({
   nome: z.string().trim().optional().nullable()
 });
 
+// Auditoria que o CREARE grava ao cancelar a venda. A senha nunca sai da automacao: ela apenas
+// autoriza o ato la; o Pralis recebe o usuario identificado, o motivo e a justificativa digitada.
+export const cancelamentoIntegracaoPayloadSchema = z.object({
+  usuarioId: z.string().trim().optional().nullable(),
+  usuarioNome: z.string().trim().optional().nullable(),
+  justificativa: z.string().trim().optional().nullable(),
+  motivo: z.string().trim().optional().nullable()
+});
+
 export const vendaIntegracaoPayloadSchema = z.object({
   idVenda: textoObrigatorioSchema,
   idCaixa: textoObrigatorioSchema,
@@ -89,7 +98,8 @@ export const vendaIntegracaoPayloadSchema = z.object({
   acrescimo: dinheiroSchema.default(0),
   valorTotal: dinheiroSchema,
   statusVenda: textoObrigatorioSchema,
-  numeroNotaFiscal: z.string().trim().optional().nullable()
+  numeroNotaFiscal: z.string().trim().optional().nullable(),
+  cancelamento: cancelamentoIntegracaoPayloadSchema.optional().nullable()
 });
 
 export const itemVendaIntegracaoPayloadSchema = z.object({

@@ -32,6 +32,9 @@ export function obterConfig() {
       // o MySQL em ciclo apertado nem pressionar a API. A reexecucao idempotente captura escrita
       // tardia do CREARE e a fila absorve quedas de rede.
       intervaloMinutos: obterNumero("SYNC_INTERVALO_MINUTOS", 1),
+      // O CREARE nao expoe uma data de cancelamento confiavel nesta integracao. A varredura por
+      // status atual captura tambem a venda antiga cancelada hoje, fora do reprocesso diario.
+      diasCancelamentos: obterNumero("SYNC_DIAS_CANCELAMENTOS", 90),
       lockMaxMinutos: obterNumero("SYNC_LOCK_MAX_MINUTOS", 30),
       retryTentativas: obterNumero("SYNC_RETRY_TENTATIVAS", 4),
       retryBaseMs: obterNumero("SYNC_RETRY_BASE_MS", 500),

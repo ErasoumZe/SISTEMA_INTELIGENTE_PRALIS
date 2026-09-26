@@ -1091,6 +1091,12 @@ export const vendas = pgTable(
     hashIntegracao: text("hash_integracao"),
     statusExterno: text("status_externo"),
     numeroNotaFiscal: text("numero_nota_fiscal"),
+    // Auditoria de cancelamento recebida da automacao. Nao e usuario do Pralis: e o identificador
+    // cru do gerente no CREARE, mantido para rastreabilidade sem importar senha ou credencial.
+    cancelamentoAutorizadoPorAutomacaoId: text("cancelamento_autorizado_por_automacao_id"),
+    cancelamentoAutorizadoPorAutomacao: text("cancelamento_autorizado_por_automacao"),
+    cancelamentoJustificativa: text("cancelamento_justificativa"),
+    cancelamentoMotivo: text("cancelamento_motivo"),
     pdvAutomacaoId: text("pdv_automacao_id"),
     pdvAutomacao: text("pdv_automacao"),
     clienteAutomacaoId: text("cliente_automacao_id"),
