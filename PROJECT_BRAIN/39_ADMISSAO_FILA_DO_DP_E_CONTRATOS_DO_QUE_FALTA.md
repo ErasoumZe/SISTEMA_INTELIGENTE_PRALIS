@@ -255,7 +255,14 @@ sem CHECK de formato. Efetivar sem resolver isso cria o segundo cadastro da mesm
 mês. Resolver exige **contar em produção** quantos estão vazios, quantos repetem e quantos estão fora
 de formato — leitura que não foi feita e que precisa de autorização própria.
 
-**Também aberto:** momento e regra da efetivação, recontratação, e o que fazer quando o CPF já existe.
+**Decisão operacional (26/09/2026, Marco):** ao encerrar o vínculo, o cadastro do colaborador
+permanece no sistema como **inativo**. Ele não é excluído e o DP pode editar os seus dados cadastrais.
+"Inativo" é a situação exibida na operação; o fato trabalhista que a originou e seu histórico
+continuam sendo modelagem própria, para não apagar ou reescrever o passado.
+
+**Ainda aberto:** o momento da efetivação e, na recontratação, se o mesmo cadastro inativo apenas
+volta a ativo ou se também nasce um novo vínculo histórico. A decisão acima não autoriza duplicar
+CPF nem apagar o cadastro anterior.
 
 ## 3.3 Status trabalhista
 
