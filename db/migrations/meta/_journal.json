@@ -351,6 +351,13 @@
       "when": 1790428631219,
       "tag": "0049_keen_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790440100394,
+      "tag": "0050_low_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

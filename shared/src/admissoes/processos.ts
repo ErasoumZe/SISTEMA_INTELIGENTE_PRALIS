@@ -112,7 +112,10 @@ export const acoesHistoricoProcesso = [
   "convite_revogado",
   "ficha_enviada",
   "ficha_devolvida",
-  "ficha_aprovada"
+  "ficha_aprovada",
+  // A efetivacao cria o vinculo e o cadastro operacional. O processo nao ganha status persistido:
+  // a existencia desse vinculo unico e que prova a conclusao da etapa.
+  "efetivado"
 ] as const;
 export const acaoHistoricoProcessoSchema = z.enum(acoesHistoricoProcesso);
 export type AcaoHistoricoProcesso = z.infer<typeof acaoHistoricoProcessoSchema>;
