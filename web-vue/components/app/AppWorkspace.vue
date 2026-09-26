@@ -121,6 +121,7 @@ type TipoPagina =
   | "cadastro"
   | "admissoes_testes"
   | "admissoes_processos"
+  | "departamento_pessoal"
   // Catalogo de funcoes operacionais: entra na uniao so para o `telaInicial` casar. NAO ganha ramo
   // em lugar nenhum — o componente proprio faz as proprias chamadas, e o seletor de empresa
   // continua valendo, ao contrario das duas telas de admissao logo acima.
@@ -300,7 +301,11 @@ const empresasDisponiveis = computed(() => empresas.value);
 // quando ha no maximo uma empresa. Estreitar a lista para a empresa derivada usa esse suporte que
 // ja existe. `empresasDisponiveis` continua intacto para os formularios de cadastro.
 const empresasDoShell = computed(() => {
-  if (tipoPagina.value !== "admissoes_testes" && tipoPagina.value !== "admissoes_processos") {
+  if (
+    tipoPagina.value !== "admissoes_testes" &&
+    tipoPagina.value !== "admissoes_processos" &&
+    tipoPagina.value !== "departamento_pessoal"
+  ) {
     return empresasDisponiveis.value;
   }
   const empresaDerivada = sessao.value?.perfil?.empresaId ?? "";

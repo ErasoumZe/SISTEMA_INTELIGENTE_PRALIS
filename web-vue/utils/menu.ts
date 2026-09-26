@@ -58,17 +58,13 @@ export const SECOES_MENU: { titulo: string; ids: string[] }[] = [
     // Departamento pessoal e um eixo proprio: nao faz parte de Configuracao.
     titulo: "Departamento pessoal",
     ids: [
+      "departamento_pessoal",
       "admissoes_processos",
       "admissoes_testes",
       "colaboradores",
       "funcoes_operacionais",
       "areas_setores",
-      "turnos",
-      "folha_ponto",
-      "relatorio_faltas",
-      "relatorio_advertencias",
-      "avaliacao_qualidade",
-      "avaliacao_colaboradores"
+      "turnos"
     ]
   },
   {

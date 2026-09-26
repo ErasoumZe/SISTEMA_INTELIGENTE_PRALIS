@@ -208,6 +208,7 @@ describe("categoria Departamento pessoal no menu", () => {
   it("concentra as telas de admissão e cadastros de pessoas em menu principal próprio", () => {
     const menu = menuDoPerfil(permissoesDepartamentoPessoal);
     expect(idsDaSecao(menu, "Departamento pessoal")).toEqual([
+      "departamento_pessoal",
       "admissoes_processos",
       "admissoes_testes",
       "colaboradores",

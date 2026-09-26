@@ -172,6 +172,22 @@ export const itemPorTela: Record<string, ItemMenu> = {
     permissao: "cadastro_colaboradores_visualizar",
     icone: "mdi-account-group"
   },
+  // Central do DP. Ela nao cria um novo fluxo: organiza os caminhos de admissao e os catalogos
+  // que ja existem. Pode ser aberta por quem tenha AO MENOS uma das telas do departamento, sem
+  // criar uma permissao administrativa paralela so para uma pagina de navegacao.
+  departamento_pessoal: {
+    id: "departamento_pessoal",
+    titulo: "Visao geral",
+    permissao: "admissoes_processos_visualizar",
+    permissoesAlternativas: [
+      "admissoes_testes_visualizar",
+      "cadastro_colaboradores_visualizar",
+      "cadastro_funcoes_visualizar",
+      "cadastro_areas_setores_visualizar",
+      "cadastro_turnos_visualizar"
+    ],
+    icone: "mdi-view-dashboard-outline"
+  },
   // ADM-001. Vizinha de Colaboradores no menu, mas NAO e cadastro operacional: nao entra em
   // `telasCrudDiretoria` (nao usa a grade generica) e a permissao e propria da admissao.
   admissoes_testes: {
